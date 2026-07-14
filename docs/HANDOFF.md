@@ -10,10 +10,11 @@
 ## Current implementation boundary
 
 P0-A and the incorporated P0-B Codex-lineage surface are complete under
-`docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`. The next M1
-work is P0-C: specify and implement the pure bounded replay classifier before any
-SQLite replay migration. The complete approved order and audit decisions are in
-`docs/AUDIT_AND_MASTER_PLAN.md`.
+`docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`. The P0-C pure
+classifier is complete under
+`docs/superpowers/plans/2026-07-14-tokenmaster-p0-c-replay-classifier.md`. The next M1
+work is P0-D: design and implement the non-destructive replay archive and durable
+continuation state. The complete approved order is in `docs/AUDIT_AND_MASTER_PLAN.md`.
 
 Tasks 3+ in `2026-07-14-tokenmaster-p0-replay-correctness.md` are superseded. Do not
 execute its Codex-owned fingerprint/signature or destructive migration steps. Do not
@@ -29,6 +30,7 @@ archive read-only and build v2 state in a separate staging generation.
 pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
 cargo +1.97.0 test -p tokenmaster-store --test usage_ingest_contract --locked
 cargo +1.97.0 test -p tokenmaster-accounting --locked
+cargo +1.97.0 test -p tokenmaster-accounting --test replay_classifier_contract --locked
 cargo +1.97.0 test -p tokenmaster-codex --locked
 cargo +1.97.0 test --workspace --locked
 $env:RUSTFLAGS = '-Dwarnings'; cargo +1.97.0 clippy --workspace --all-targets --locked
@@ -40,7 +42,7 @@ For M0 developer evidence, Pester 5.7.1 and a validated GNU linker are required:
 pwsh -NoProfile -File scripts\verify-m0.ps1 -RepositoryRoot (Get-Location).Path
 ```
 
-The P0 authority/lineage slice passed focused contracts, full locked workspace tests,
-strict workspace Clippy, clean-root, documentation consistency, privacy, formatting,
-and diff gates on 2026-07-14. This does not accept M0 or package a product release.
-See `M0_ACCEPTANCE.md`.
+The P0 authority/lineage/classifier slices passed focused contracts, full locked
+workspace tests, strict workspace Clippy, clean-root, documentation consistency,
+privacy, formatting, and diff gates on 2026-07-14. This does not accept M0 or package
+a product release. See `M0_ACCEPTANCE.md`.

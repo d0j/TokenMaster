@@ -17,6 +17,8 @@ All notable changes are recorded here.
 - Exclusive `tokenmaster-accounting` crate with versioned deterministic fingerprint
   and replay identities, evidence, opaque canonical events, and compile-fail authority
   proofs.
+- Allocation-free provider-neutral replay classifier with explicit typed states,
+  scope/ordinal validation, conservative weak evidence, and bounded-work semantics.
 
 ### Fixed
 

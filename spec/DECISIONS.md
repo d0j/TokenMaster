@@ -63,4 +63,5 @@ external providers cannot diverge from or bypass accounting identity rules.
 Implementation status: active. `tokenmaster-accounting` is the exclusive constructor;
 Codex emits drafts/late session relations, and the store accepts opaque canonical
 events only. Fingerprint v2 and replay signature v1 are versioned deterministic
-framed hashes.
+framed hashes. The same crate owns the pure bounded replay transition so storage and
+providers cannot introduce competing replay semantics.

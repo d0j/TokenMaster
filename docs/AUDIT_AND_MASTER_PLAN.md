@@ -1,6 +1,6 @@
 # TokenMaster Critical Audit and Approved Master Plan
 
-Status: architecture approved; P0-A and P0-B implemented; P0-C is the active gate.
+Status: architecture approved; P0-A through P0-C implemented; P0-D is the active gate.
 Date: 2026-07-14.
 
 ## 1. Executive decision
@@ -159,7 +159,7 @@ contracts are stable.
 
 The completed P0-A/P0-B executable plan is
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`. The immediate
-implementation gate is P0-C, the pure replay classifier; no replay schema migration
-is authorized before it passes.
+P0-C plan is `docs/superpowers/plans/2026-07-14-tokenmaster-p0-c-replay-classifier.md`.
+The immediate implementation gate is P0-D, the non-destructive replay archive.
 The older replay plan remains historical evidence for completed Tasks 1-2, but its
 Codex-owned Tasks 3+ are superseded and must not be executed.

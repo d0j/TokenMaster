@@ -18,6 +18,11 @@ events. The accounting crate is their only constructor. The store persists only
 path-private identities and approved usage metadata. Current-generation batches are
 one SQLite transaction; staging promotion is a separate atomic boundary.
 
+The allocation-free accounting replay classifier is also store-independent. It
+validates provider/profile/parent/ordinal scope and returns only typed disposition and
+next-state values. Weak evidence and exhausted traversal budgets remain pending;
+cycles and contradictory facts become conflict; proven divergence is irreversible.
+
 Ancestry metadata may arrive after usage. The reader therefore emits a separate
 bounded session-relation draft in addition to observation drafts; reconciliation can
 apply it to earlier observations without retaining raw JSONL. Parser resume v2 stores

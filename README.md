@@ -19,8 +19,8 @@ M1 has bounded Codex source discovery, streaming JSONL parsing, revalidation,
 checkpoints, strict SQLite schema, and atomic current-generation ingest. Provider
 output now crosses a bounded neutral draft boundary; only `tokenmaster-accounting`
 can create fingerprint/replay identities and canonical events, and Codex preserves
-late ancestry separately. The next slice is the pure bounded replay classifier before
-any staging migration.
+late ancestry separately. The pure bounded replay classifier is implemented; the next
+slice is its non-destructive versioned SQLite archive and staging integration.
 
 ## Build and verify
 

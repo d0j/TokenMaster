@@ -70,6 +70,11 @@ normalized model, emitted delta, and provider cumulative snapshot. A weak signat
 covers model and delta only and cannot suppress a pre-divergence event by itself.
 Once a child diverges from a fixed parent relation, later events remain eligible.
 
+The pure classifier validates matching provider/profile scope, declared parent
+session, and equal child/parent ordinal before comparing signatures. Depth or direct
+fanout exhaustion is `pending` and requires continuation; it is not evidence of a
+cycle or contradictory relation.
+
 If a child's ordinal is beyond the observed tail of a parent that has not been proved
 complete, the child remains `pending`. Only completed scan/session evidence from the
 staging runtime may prove that the child outgrew its parent.

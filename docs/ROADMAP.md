@@ -17,11 +17,11 @@ accounting, physical/logical identities, reader framing/checkpoints/revalidation
 strict SQLite archive, keyset reads, and atomic current-generation append.
 
 Completed: P0-A provider-neutral observation drafts and exclusive accounting
-authority, plus P0-B Codex ancestry compatibility, late relation emission, resume v2,
-ordinals, and cumulative facts.
+authority; P0-B Codex ancestry compatibility, late relation emission, resume v2,
+ordinals, and cumulative facts; P0-C allocation-free bounded replay classification.
 
-Next: P0-C bounded replay classification; P0-D non-destructive replay archive; P0-E
-pipeline proof. Then add staging generations, scan epochs, source reconciliation, and
+Next: P0-D non-destructive replay archive; P0-E pipeline proof. Then add staging
+generations, scan epochs, source reconciliation, and
 the provider-neutral runtime engine before indexed analytics, pricing, quota, Git
 output, automation, and complete UI work.
 

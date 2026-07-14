@@ -15,7 +15,8 @@ M1 реализует ограниченное обнаружение Codex-ис
 checkpoint, строгую SQLite-схему и атомарный append. Теперь Codex выдаёт только
 provider-neutral observation/session-relation drafts, а fingerprint, replay identity
 и canonical event создаёт исключительно `tokenmaster-accounting`. Следующий участок —
-чистый ограниченный replay-классификатор до любых миграций staging.
+недеструктивное versioned-хранилище результатов уже готового ограниченного
+replay-классификатора и его staging-интеграция.
 
 ```powershell
 cargo +1.97.0 test --workspace --locked

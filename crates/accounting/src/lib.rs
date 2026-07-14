@@ -15,6 +15,7 @@
 
 mod event;
 mod hash;
+mod replay;
 
 use std::fmt;
 
@@ -22,6 +23,11 @@ use tokenmaster_domain::{ObservationDraft, TokenCount};
 
 pub use event::{
     CanonicalUsageEvent, EventFingerprint, EventId, ReplayEvidence, ReplaySignature, UsageLineage,
+};
+pub use replay::{
+    MAX_REPLAY_DEPTH, MAX_REPLAY_FANOUT, ParentOrdinal, ReplayClassification,
+    ReplayClassificationInput, ReplayClassifier, ReplayDisposition, ReplayTraversalFacts,
+    SessionReplayState,
 };
 
 pub const CANONICALIZER_VERSION: u16 = 1;

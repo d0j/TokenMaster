@@ -141,5 +141,20 @@ Verification included focused RED/GREEN contracts, deterministic hash vectors,
 compile-fail authority proofs, the complete locked Codex/store/domain/accounting
 suites, full locked workspace tests, strict workspace Clippy, clean-root,
 documentation-consistency, privacy, format, and diff gates. P0-C replay
-classification remains next; no replay schema migration or replay-safe totals are
-claimed.
+At that checkpoint P0-C classification remained next; no replay schema migration or
+replay-safe totals were claimed.
+
+## 2026-07-14 — pure bounded replay classifier
+
+Implemented P0-C inside `tokenmaster-accounting`, keeping replay semantics independent
+of SQLite and provider adapters. The allocation-free transition validates provider,
+profile, declared parent session, and ordinal before comparing strong signatures.
+Equal strong prefixes are replay; strong mismatches and completed parent tails lock
+divergence; weak evidence stays pending without blocking a later strong divergence.
+Cycles, contradictory facts, and corrupt state combinations fail closed as conflict.
+Depth 33 or fanout 257 is pending work, not false conflict.
+
+The public contract covers root, replay, divergence, weak/missing evidence,
+irreversibility, scope/session/ordinal mismatch, cycle/conflict, and both work bounds.
+SQLite persistence, durable continuation, descendant reclassification, and replay-safe
+totals remain P0-D/P0-E work and are not claimed here.
