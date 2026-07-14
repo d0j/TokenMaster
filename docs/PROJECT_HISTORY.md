@@ -283,5 +283,49 @@ all-registered-source revision without an application manifest vector, and seal 
 source states in 256-row keyset pages. The exact migration follows SQLite's safe
 create-new/copy/drop/rename procedure and restores foreign-key enforcement on every
 outcome. The original explicit 256-key manifest remains only a bounded test/repair API
-and cannot seal a subset. This milestone is design-only; the cap is still present in
-code until the corrective TDD plan passes.
+and cannot seal a subset. At this design-only milestone, the cap was still present in
+code pending the corrective TDD plan recorded next.
+
+## 2026-07-14 — scalable replay manifest implemented
+
+Completed P0-D.1. Strict schema v3 removes the historical upper-256 revision count;
+fresh/v1 archives create v3 directly, while an exact populated v2 archive is rebuilt
+non-destructively with SQLite's create-new/copy/drop/rename order. Tests preserve rows
+from every replay child table and immutable legacy data. Injected faults after create,
+copy, and drop all roll back to exact v2 and restore `foreign_keys=ON`; malformed v2 is
+rejected before enforcement is disabled.
+
+The product `begin_replay_revision_all_sources` path now creates one staging generation
+and manifest row per registered source with set-based SQL in one immediate transaction.
+Stored counts are checked `u64` values bounded by SQLite's signed integer range and are
+never collection capacity. The explicit `ReplayManifest` remains capped at 256 only
+for focused tests/repair and still cannot seal an omitted registered source.
+
+Final manifest proof retains one 256-row `file_key` keyset page, validates every
+checkpoint and chunk range, and compares checked aggregate/mutation counts. A
+300-source contract completes, seals, promotes, and reopens across two pages. A source
+registered after begin blocks seal without writes, and exact discard restores the
+pre-rebuild archive. Continuation uses a cheap closed-source aggregate; final seal and
+promotion always repeat full paged validation.
+
+Verification:
+
+```powershell
+cargo +1.97.0 test -p tokenmaster-store --test usage_schema_contract --locked
+cargo +1.97.0 test -p tokenmaster-store --test replay_archive_contract --locked
+cargo +1.97.0 test -p tokenmaster-store --test usage_ingest_contract --locked
+cargo +1.97.0 test -p tokenmaster-accounting --test replay_classifier_contract --locked
+pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
+cargo +1.97.0 fmt --all -- --check
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy --workspace --all-targets --locked
+Remove-Item Env:RUSTFLAGS
+cargo +1.97.0 test --workspace --locked
+git diff --check
+```
+
+Focused suites passed 14 schema, 33 replay archive, 4 ingest, and 6 classifier tests.
+Clean-root, formatting, strict workspace Clippy, and the full locked workspace passed.
+The normal workspace run retained exactly one pre-existing explicitly ignored
+one-million-row M0 scale test. No P0-E engine behavior, M0 acceptance, interactive
+Windows result, package, or release is claimed. P0-E is now the next implementation
+gate.

@@ -42,9 +42,13 @@ Current-generation append writes observations, canonical selections, chunk cover
 checkpoint, and source metadata in one transaction. A stale generation, identity,
 offset, scan position, or partial proof MUST write nothing.
 
-Staging generations MUST remain invisible to canonical reads. Seal MUST prove the
-entire fixed source manifest, exact checkpoint/chunk coverage, replay-overlay
-coverage, accounting versions, exhausted durable work, and foreign-key integrity.
+Staging generations MUST remain invisible to canonical reads. The product replay
+begin snapshots every registered source into SQLite in one immediate transaction;
+the stored checked 64-bit source count is never an application allocation authority.
+The explicit 256-key manifest remains only a bounded test/repair input and cannot seal
+a subset. Seal MUST prove the entire fixed all-registered-source manifest, exact
+checkpoint/chunk coverage, replay-overlay coverage, accounting versions, exhausted
+durable work, and foreign-key integrity.
 Promotion MUST require zero pending observations, account for every previously visible
 event in the replacement overlay or immutable legacy snapshot, replace canonical
 selections and source generations atomically, and leave the previous current state
@@ -54,9 +58,14 @@ event page.
 
 ## TM-DATA-005 — SQLite policy
 
-The usage archive has a strict versioned schema. File-backed connections MUST use WAL,
+The usage archive has a strict versioned schema. Schema v3 removes the historical
+256-source revision constraint. Exact v2 archives migrate with the safe
+create-new/copy/drop/rename sequence while foreign keys are disabled only outside the
+migration transaction, checked before commit, and restored on every tested exit.
+File-backed connections MUST use WAL,
 FULL synchronous writes, foreign keys, a bounded busy timeout, bounded journal/cache
-policy, and disabled mmap. Collections are keyset-paged at no more than 256 rows.
+policy, and disabled mmap. Collections and complete-manifest validation are
+keyset-paged at no more than 256 rows.
 
 ## TM-DATA-006 — Bounds
 

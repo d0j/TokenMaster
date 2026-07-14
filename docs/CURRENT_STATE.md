@@ -22,7 +22,9 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 - P0-C pure replay classifier: root/matching/diverged/pending/conflict transitions,
   strong/weak proof rules, provider/profile/parent/ordinal validation, irreversible
   divergence, and pending (not conflict) depth/fanout exhaustion.
-- P0-D replay archive: strict SQLite schema v2, transactional exact-v1 migration,
+- P0-D/P0-D.1 replay archive: strict SQLite schema v3, transactional exact-v1
+  migration, non-destructive exact-v2 migration with fault-tested foreign-key policy
+  restoration,
   immutable legacy snapshot, explicit archive modes, fixed/version-owned replay
   manifests, invisible staging generations, transactional classified replay append,
   deterministic eligible selection, epoch CAS, and fail-closed persisted-version
@@ -30,7 +32,11 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   restart-safe ordinal/child keyset work capped at 32 ancestry links and 256 direct
   descendants per transaction. Conflicts/cycles are permanent; bound exhaustion is
   durable pending work without epoch spin. Staging rows never affect current event
-  pages or source metadata. Exact all-source seal validates full-prefix checkpoints,
+  pages or source metadata. Product begin snapshots every registered source with
+  set-based SQLite operations and checked 64-bit counts without a history-sized Rust
+  manifest. The explicit 256-key manifest remains bounded test/repair input and cannot
+  seal a subset. Exact all-source seal validates 256-row `file_key` keyset pages,
+  full-prefix checkpoints,
   chunk and overlay coverage, exhausted work, and foreign keys. Zero-pending promotion
   atomically materializes eligible rows and swaps generations with injected-failure
   rollback; incomplete replacements cannot silently omit prior visible evidence.
@@ -53,16 +59,12 @@ The repeated critical audit is recorded in `docs/AUDIT_AND_MASTER_PLAN.md`. P0-A
 the P0-B Codex-lineage surface are implemented under the completed executable TDD plan
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`.
 
-P0-D transactional semantics are complete at the store boundary, but the P0-E
-preflight found one product blocker: its fixed manifest is capped at 256 store sources,
-while one store source is one JSONL file and Codex history can legitimately contain
-many more. P0-D.1 must migrate the schema to a checked 64-bit source count, add a
-disk-backed all-registered-source begin path, and keyset-page seal validation before
-P0-E can be honest. The corrective design is
-`docs/superpowers/specs/2026-07-14-tokenmaster-scalable-replay-manifest-design.md`.
-
-After P0-D.1, P0-E proves discovery, enumeration, reader, accounting, continuation,
-seal, promotion, restart, and truncate/replace behavior together on synthetic
+P0-D.1 is complete under
+`docs/superpowers/plans/2026-07-14-tokenmaster-scalable-replay-manifest.md`. Its
+300-source contract crosses two manifest pages, promotes, reopens, and preserves
+late-source fail-closed behavior. P0-E now proves discovery, enumeration, reader,
+accounting, continuation, seal, promotion, restart, and truncate/replace behavior
+together on synthetic
 fixtures exceeding both 256 files and 256 events. This is a transactional cross-crate
 proof, not the production scheduler. P1 still owns scan epochs, missing-source
 finalization, coalescing, cancellation policy, writer lease, sleep/resume, and

@@ -76,3 +76,20 @@ quality-only staging can be discarded only by exact revision/epoch CAS, without
 touching current or legacy state. Rationale: rebuilds remain crash-safe and retryable
 without allowing partial scans, stale workers, or incomplete replacements to erase
 user-visible accounting.
+
+## ADR-011 — SQLite-owned scalable replay manifests
+
+Decision: the product begins a replay revision by snapshotting every registered
+source with set-based SQL in one immediate transaction. Revision source counts are
+stored and exposed as checked `u64` values within SQLite's signed-integer ceiling, but
+never size an application collection. Exact seal and promotion validate deterministic
+`file_key` keyset pages of at most 256 rows; continuation uses only a cheap
+closed-source aggregate and cannot promote data. The explicit 256-key
+`ReplayManifest` remains a bounded test/repair API and cannot seal a subset.
+
+Exact schema v2 archives migrate to v3 by validate, foreign-keys-off outside a
+transaction, create-new, copy, drop-old, rename-new, recreate indexes, foreign-key
+check, commit, and guaranteed policy restoration. `writable_schema` and
+rename-old-first are forbidden. Rationale: normal Codex histories may contain
+thousands of JSONL files, so a 256-source product limit is invalid, while collecting
+all source identities in Rust would violate the stable-memory target.

@@ -16,13 +16,14 @@ classifier is complete under
 v2, exact-v1 immutable migration, explicit archive state, fixed-manifest staging, and
 classified replay append, durable continuation, exact seal, rollback-safe promotion,
 and staging recovery are implemented under
-`docs/superpowers/plans/2026-07-14-tokenmaster-p0-d-replay-archive.md`. The immediate
-next task is P0-D.1, not P0-E implementation: remove the invalid 256-file product cap
-through schema v3, a disk-backed all-source begin, and keyset-paged seal validation as
-specified in
-`docs/superpowers/specs/2026-07-14-tokenmaster-scalable-replay-manifest-design.md`.
-Then P0-E proves the transactional Codex-to-archive path with more than 256 files and
-events. It must not grow into the P1 scheduler. The complete approved order is in
+`docs/superpowers/plans/2026-07-14-tokenmaster-p0-d-replay-archive.md`. P0-D.1 is also
+complete under
+`docs/superpowers/plans/2026-07-14-tokenmaster-scalable-replay-manifest.md`: strict
+schema v3, exact non-destructive v2 migration, SQLite-owned all-source begin, checked
+`u64` counts, and 256-row keyset validation remove the historical product cap. The
+immediate next task is P0-E, which proves the transactional Codex-to-archive path with
+more than 256 files and events. It must remain a test-only cross-crate proof and must
+not grow into the P1 scheduler. The complete approved order is in
 `docs/AUDIT_AND_MASTER_PLAN.md`.
 
 Tasks 3+ in `2026-07-14-tokenmaster-p0-replay-correctness.md` are superseded. Do not
@@ -30,8 +31,8 @@ execute its Codex-owned fingerprint/signature or destructive migration steps. Do
 add Wasmtime to the GUI or current Codex path.
 
 Codex parser resume v1 is deliberately rejected: it cannot recover a trustworthy
-event ordinal. Do not reinterpret it as ordinal zero. P0-D must preserve the old
-archive read-only and build v2 state in a separate staging generation.
+event ordinal. Do not reinterpret it as ordinal zero. Immutable legacy rows remain
+read-only; rebuild current schema state in a separate staging generation.
 
 Do not expose a staging revision as current truth. Replay append advances a
 store-owned evidence epoch and must reject stale CAS, altered duplicate observations,
@@ -62,9 +63,12 @@ For M0 developer evidence, Pester 5.7.1 and a validated GNU linker are required:
 pwsh -NoProfile -File scripts\verify-m0.ps1 -RepositoryRoot (Get-Location).Path
 ```
 
-The P0 authority/lineage/classifier and P0-D archive slices passed focused contracts,
-full locked workspace tests, strict workspace Clippy, clean-root, documentation
-consistency, privacy, formatting, and diff gates on 2026-07-14. The one-million-row
-M0 scale test remains explicitly ignored in the normal workspace run. This does not
-accept M0, prove interactive Windows behavior, or package a product release. See
-`M0_ACCEPTANCE.md`.
+The P0 authority/lineage/classifier, P0-D archive, and P0-D.1 scalable-manifest slices
+passed focused contracts on 2026-07-14. P0-D.1 evidence includes exact populated-v2
+migration and three injected rollback boundaries, 300-source set-based begin, a
+two-page seal/promotion/reopen lifecycle, late-source seal rejection, and exact discard.
+Clean-root, formatting, strict workspace Clippy, and the full locked workspace passed;
+see the final P0-D.1 history entry for exact commands and focused counts. The
+one-million-row M0 scale test remains explicitly ignored in the normal workspace run.
+This does not accept M0, prove interactive Windows behavior, or package a product
+release. See `M0_ACCEPTANCE.md`.

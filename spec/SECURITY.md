@@ -30,10 +30,13 @@ Archive writes use explicit transactions and compare expected generation, identi
 checkpoint, and proof state. Failed writes roll back completely. Incomplete, cancelled,
 or failed scans MUST NOT authorize destructive source reconciliation.
 
-Replay rebuilds use a fixed bounded source manifest, store-owned accounting versions,
-and an evidence-epoch compare-and-swap. Legacy v1 rows are copied into an immutable
-snapshot before v2 becomes current. Replay observations, classifications, selections,
-and checkpoints remain private staging state until an explicit sealed promotion.
+Replay rebuilds use a SQLite-owned fixed all-registered-source manifest, store-owned
+accounting versions, and an evidence-epoch compare-and-swap. The product path stages
+all sources with set-based SQL and retains at most one 256-row validation page; stored
+source counts never size application collections. Legacy v1 rows are copied into an
+immutable snapshot, and exact v2 archives are migrated non-destructively to strict v3.
+Replay observations, classifications, selections, and checkpoints remain private
+staging state until an explicit sealed promotion.
 Stored parent facts from another accounting version MUST fail closed; staging MUST NOT
 change current event pages, current source metadata, or externally visible totals.
 
@@ -44,7 +47,9 @@ never source content or paths. Continuation rejects any stale durable-work epoch
 writing. Parent disagreement and confirmed cycles are irreversible conflict; ancestry
 or fanout bounds remain explicit pending work and cannot be treated as proof.
 
-Seal proves exact all-registered-source manifest completion, full-prefix checkpoint
+Continuation may use only the transactional closed-source aggregate; it cannot
+authorize promotion. Seal and promotion repeat keyset-paged exact
+all-registered-source manifest completion, full-prefix checkpoint
 and chunk coverage, one replay row per staged observation, eligible-only selections,
 compiled accounting versions, exhausted work, and foreign-key integrity in one
 immediate transaction. Promotion additionally requires zero pending rows and complete

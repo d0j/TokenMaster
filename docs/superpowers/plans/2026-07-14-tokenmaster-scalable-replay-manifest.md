@@ -1,5 +1,8 @@
 # TokenMaster Scalable Replay Manifest Implementation Plan
 
+**Status:** Implemented and verified on 2026-07-14; final documentation commit and
+remote identity verification are the only remaining checklist item.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:subagent-driven-development` (recommended) or
 > `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox
@@ -55,7 +58,7 @@ schema v3, PowerShell, existing TokenMaster store/accounting/domain crates.
 - Produces: `USAGE_SCHEMA_VERSION = 3`, exact v2 validator, exact v3 validator, direct
   v1-to-v3 migration, fault-tested v2-to-v3 migration, and restored foreign-key policy.
 
-- [ ] **Step 1: Write the failing public schema assertions**
+- [x] **Step 1: Write the failing public schema assertions**
 
 In `usage_schema_contract.rs`, change the fresh/current expectations to schema 3 and
 replace the old upper-bound assertion with exact v3 checks:
@@ -73,7 +76,7 @@ assert!(!revision_sql.contains("expected_source_count BETWEEN 1 AND 256"));
 Retain every existing table, index, trigger, strict-mode, privacy, malformed-schema,
 legacy-copy, and immutability assertion.
 
-- [ ] **Step 2: Run the public contract and record RED**
+- [x] **Step 2: Run the public contract and record RED**
 
 Run:
 
@@ -84,7 +87,7 @@ cargo +1.97.0 test -p tokenmaster-store --test usage_schema_contract --locked
 Expected: failures show actual schema/user version `2` and the old
 `BETWEEN 1 AND 256` constraint.
 
-- [ ] **Step 3: Add internal exact-v2 migration and fault tests**
+- [x] **Step 3: Add internal exact-v2 migration and fault tests**
 
 In `migration.rs` add a `#[cfg(test)]` module that uses private schema constants to
 create exact v2 in memory. Seed:
@@ -122,7 +125,7 @@ MigrationFault::AfterDropRevision
 After every injected failure require `user_version = 2`, exact-v2 validation succeeds,
 all seed rows match, and `PRAGMA foreign_keys = 1`.
 
-- [ ] **Step 4: Run the internal migration tests and record RED**
+- [x] **Step 4: Run the internal migration tests and record RED**
 
 Run:
 
@@ -133,7 +136,7 @@ cargo +1.97.0 test -p tokenmaster-store usage::migration::tests --locked
 Expected: compile failures because v3 constants, migration fault seam, and v2 branch do
 not exist.
 
-- [ ] **Step 5: Split replay schema strings without changing v2 SQL**
+- [x] **Step 5: Split replay schema strings without changing v2 SQL**
 
 In `schema.rs` retain exact historical v2 SQL by splitting the current
 `V2_REPLAY_SCHEMA` at the revision table:
@@ -186,7 +189,7 @@ searches `V3_REPLAY_REVISION_SCHEMA`; every other table uses the two common exac
 fragments. The integration schema contract verifies that this mechanical split changes
 no table/index/trigger other than the intended count constraint.
 
-- [ ] **Step 6: Implement v2-to-v3 migration with guaranteed policy restoration**
+- [x] **Step 6: Implement v2-to-v3 migration with guaranteed policy restoration**
 
 Refactor `migrate_schema` into version-specific paths. Versions 0, 1, and 3 may use the
 existing immediate-transaction helper. Version 2 must validate before mutation, then
@@ -277,7 +280,7 @@ Never enable `legacy_alter_table` or `writable_schema`.
 Fresh creation and v1 migration execute common replay auxiliary SQL, the v3 revision
 SQL, common child SQL, legacy copy when applicable, and immutability triggers.
 
-- [ ] **Step 7: Verify schema/migration GREEN**
+- [x] **Step 7: Verify schema/migration GREEN**
 
 Run:
 
@@ -290,7 +293,7 @@ cargo +1.97.0 test -p tokenmaster-store --locked
 Expected: exact fresh/v1/v2/v3, rollback, immutability, policy, and prior store tests
 pass. The one-million-row test may remain explicitly ignored.
 
-- [ ] **Step 8: Commit schema v3**
+- [x] **Step 8: Commit schema v3**
 
 ```powershell
 git add -- crates/store/src/usage/schema.rs crates/store/src/usage/migration.rs crates/store/tests/usage_schema_contract.rs
@@ -317,7 +320,7 @@ git commit -m "feat(store): migrate replay manifest to schema v3"
 - Produces: `UsageStore::begin_replay_revision_all_sources()`, `u64` expected source
   counts, atomic set-based staging over every registered source.
 
-- [ ] **Step 1: Write failing >256 all-source begin tests**
+- [x] **Step 1: Write failing >256 all-source begin tests**
 
 Add path-private helpers in `replay_archive_contract.rs`:
 
@@ -390,7 +393,7 @@ generation is `i64::MAX`. To create the overflow fixture without violating forei
 keys, clear the source pointer, remove generation zero, insert a current generation at
 `i64::MAX`, then repoint the source. Each case must leave zero replay/staging rows.
 
-- [ ] **Step 2: Run the focused test and record RED**
+- [x] **Step 2: Run the focused test and record RED**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-store --test replay_archive_contract all_source_begin --locked
@@ -398,7 +401,7 @@ cargo +1.97.0 test -p tokenmaster-store --test replay_archive_contract all_sourc
 
 Expected: compile failure because `begin_replay_revision_all_sources` does not exist.
 
-- [ ] **Step 3: Widen count types without widening explicit manifest input**
+- [x] **Step 3: Widen count types without widening explicit manifest input**
 
 In `types.rs` change only revision count storage/access:
 
@@ -427,7 +430,7 @@ to `u64`. Read SQLite counts with checked `u64::try_from`, reject zero and value
 `i64::MAX`, and compare SQL mutation counts through checked `u64::try_from(usize)`.
 Never convert the stored count to `usize` for capacity/allocation.
 
-- [ ] **Step 4: Implement all-source begin in a focused module**
+- [x] **Step 4: Implement all-source begin in a focused module**
 
 Register `mod replay_manifest;` in `usage/mod.rs`. In the new file define the empty
 SHA-256 digest and implement the public method
@@ -475,7 +478,7 @@ overflowed arithmetic value. Insert replay-source rows by joining the new
 
 The existing explicit begin remains behavior-compatible and uses the widened count.
 
-- [ ] **Step 5: Verify all-source begin GREEN and regressions**
+- [x] **Step 5: Verify all-source begin GREEN and regressions**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-store --test replay_archive_contract all_source_begin --locked
@@ -485,7 +488,7 @@ cargo +1.97.0 test -p tokenmaster-store --locked
 
 Expected: 300-source begin is atomic/invisible and every prior P0-D test passes.
 
-- [ ] **Step 6: Commit disk-backed begin**
+- [x] **Step 6: Commit disk-backed begin**
 
 ```powershell
 git add -- crates/store/src/usage/replay_manifest.rs crates/store/src/usage/mod.rs crates/store/src/usage/types.rs crates/store/src/usage/replay.rs crates/store/tests/replay_archive_contract.rs
@@ -510,7 +513,7 @@ git commit -m "feat(store): stage all registered replay sources"
 - Produces: aggregate closed-source check for continuation, full 256-row keyset
   validation for seal/promotion, successful >256-source lifecycle.
 
-- [ ] **Step 1: Write failing paged lifecycle tests**
+- [x] **Step 1: Write failing paged lifecycle tests**
 
 Add:
 
@@ -536,7 +539,7 @@ The second test begins over 300, registers source 301 afterward, and proves seal
 `IncompleteManifest`, epoch/page/pointers/staging counts remain unchanged, and exact
 discard still restores the prior archive.
 
-- [ ] **Step 2: Run the lifecycle tests and record RED**
+- [x] **Step 2: Run the lifecycle tests and record RED**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-store --test replay_archive_contract three_hundred --locked
@@ -546,7 +549,7 @@ cargo +1.97.0 test -p tokenmaster-store --test replay_archive_contract source_re
 Expected: current complete-manifest validation stops at `LIMIT 257`/narrow count or
 rejects the large lifecycle.
 
-- [ ] **Step 3: Add cheap closed-source aggregate for continuation**
+- [x] **Step 3: Add cheap closed-source aggregate for continuation**
 
 In `replay_manifest.rs` implement:
 
@@ -567,7 +570,7 @@ Change `continue_replay` to call this cheap aggregate when deciding whether
 missing-parent work is actionable. Do not full-scan chunk rows for every continuation
 item. Final seal/promotion still perform exact validation.
 
-- [ ] **Step 4: Implement 256-row keyset full validation**
+- [x] **Step 4: Implement 256-row keyset full validation**
 
 Move `ManifestSourceState`, `replay_manifest_is_complete`, `source_chunks_cover`, and
 `validate_complete_manifest` from the 3,000-line `replay.rs` into
@@ -598,7 +601,7 @@ Keep exact chunk rules: zero offset requires zero chunks; nonzero coverage requi
 contiguous indices from zero, full 1 MiB chunks except the final exact length, and total
 covered bytes equal committed offset.
 
-- [ ] **Step 5: Make promotion count checks 64-bit safe**
+- [x] **Step 5: Make promotion count checks 64-bit safe**
 
 Change all promotion comparisons from `usize::from(expected_source_count)` or
 `i64::from(expected_source_count)` to checked conversions:
@@ -611,7 +614,7 @@ fn mutation_count(value: usize) -> Result<u64, StoreError> {
 
 Use checked stored-count helpers for SQL aggregates. Do not cast with `as`.
 
-- [ ] **Step 6: Verify paged lifecycle GREEN**
+- [x] **Step 6: Verify paged lifecycle GREEN**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-store --test replay_archive_contract three_hundred --locked
@@ -626,7 +629,7 @@ Expected: large lifecycle crosses at least two validation pages, all existing re
 and rollback tests pass, Clippy is warning-free, and the normal scale test remains
 explicitly ignored unless run separately.
 
-- [ ] **Step 7: Commit paged validation**
+- [x] **Step 7: Commit paged validation**
 
 ```powershell
 git add -- crates/store/src/usage/replay_manifest.rs crates/store/src/usage/replay.rs crates/store/tests/replay_archive_contract.rs
@@ -659,7 +662,7 @@ git commit -m "feat(store): validate replay manifests in pages"
   focused/full verification evidence.
 - Produces: consistent durable project truth with P0-D.1 complete and P0-E unblocked.
 
-- [ ] **Step 1: Update contracts and history**
+- [x] **Step 1: Update contracts and history**
 
 Record exactly:
 
@@ -676,7 +679,7 @@ Record exactly:
 Add an ADR for disk-backed all-source manifests and exact schema v3 migration. Mark the
 scalable-manifest design/plan complete only after the gates below pass.
 
-- [ ] **Step 2: Run focused and full verification from fresh commands**
+- [x] **Step 2: Run focused and full verification from fresh commands**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-store --test usage_schema_contract --locked
@@ -694,7 +697,7 @@ git diff --check
 Expected: all commands pass; report the existing ignored one-million-row M0 test
 without implying it ran.
 
-- [ ] **Step 3: Run privacy, schema, and scalability audits**
+- [x] **Step 3: Run privacy, schema, and scalability audits**
 
 Verify changed Rust/schema contains no forbidden retained-content identifiers or
 absolute user paths; diff contains no secret-like values; `rg` finds no product claim
@@ -711,7 +714,7 @@ git diff --name-only
 git diff --check
 ```
 
-- [ ] **Step 4: Perform an independent root review**
+- [x] **Step 4: Perform an independent root review**
 
 Review every diff against the scalable-manifest design and SQLite migration order.
 Confirm no allocation uses `expected_source_count`, no full source list is collected,

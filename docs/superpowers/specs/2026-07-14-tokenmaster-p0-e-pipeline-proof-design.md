@@ -1,7 +1,7 @@
 # TokenMaster P0-E Transactional Pipeline Proof Design
 
-**Status:** Approved but blocked until the scalable all-source replay-manifest
-correction in `2026-07-14-tokenmaster-scalable-replay-manifest-design.md` passes.
+**Status:** Approved and unblocked. The scalable all-source replay-manifest correction
+passed on 2026-07-14; this is the next implementation gate.
 
 ## 1. Goal and boundary
 

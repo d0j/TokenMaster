@@ -1,7 +1,6 @@
 # TokenMaster Scalable Replay Manifest Correction Design
 
-**Status:** Approved corrective prerequisite for P0-E under the operator's delegated
-autonomous architecture authority.
+**Status:** Implemented and verified on 2026-07-14. P0-E is unblocked.
 
 ## 1. Finding and impact
 
@@ -201,5 +200,8 @@ existing P0-D behavior remains green, strict Clippy and full workspace tests pas
 privacy/diff/clean-root gates pass, and all durable documents state that the 256-source
 product blocker is removed.
 
+All acceptance gates passed: exact schema migration/fault contracts, 300-source begin
+and two-page lifecycle, late-source fail-closed recovery, existing P0-D regressions,
+strict workspace Clippy, full locked workspace tests, privacy/diff, and clean-root.
 The next step is the separately specified P0-E transactional pipeline proof. P1 live
 engine semantics remain out of scope.

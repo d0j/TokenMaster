@@ -24,9 +24,11 @@ Completed: P0-D strict v2 replay archive, immutable v1 fallback, invisible fixed
 staging, bounded restart-safe reconciliation, exact seal, rollback-safe atomic
 promotion, and staging recovery.
 
-Current corrective gate: P0-D.1 removes the 256-file replay-manifest blocker with
-schema v3, disk-backed all-source staging, and keyset-paged validation. Then P0-E
-exercises discovery, enumeration, reader, accounting, archive epochs,
+Completed: P0-D.1 removes the historical 256-file replay-manifest blocker with exact
+schema-v2-to-v3 migration, disk-backed all-source staging, checked 64-bit counts, and
+256-row keyset-paged validation.
+
+Current gate: P0-E exercises discovery, enumeration, reader, accounting, archive epochs,
 continuation/seal/promotion, restart, cancellation, append, truncate, and replacement
 fixtures beyond 256 files/events without introducing the live engine. P1 then adds the
 provider-neutral runtime engine, scan epochs, source finalization, coalescing, writer
