@@ -27,6 +27,7 @@
 **Files:**
 
 - Modify: `crates/accounting/tests/replay_classifier_contract.rs`
+- Modify: `crates/accounting/src/event.rs`
 - Modify: `crates/accounting/src/replay.rs`
 - Modify: `crates/accounting/src/lib.rs`
 
@@ -56,6 +57,8 @@ Add a borrowed, `Clone + Copy` `ReplayEventFacts<'a>` with private fields and th
 - read-only getters for every fact.
 
 Change `ParentOrdinal::Present` to contain `ReplayEventFacts<'a>` by value and change `ReplayClassificationInput` to contain child facts by value. Update structural validation and matching classification to use fact getters. Re-export `ReplayEventFacts` from `crates/accounting/src/lib.rs`.
+
+Add only a crate-private borrowed replay-signature byte accessor in `event.rs` so `ReplayEventFacts::from_event` does not borrow a temporary `ReplaySignature`. Do not add a public signature or canonical constructor.
 
 The constructor must not create an event ID, fingerprint, signature, canonical event, or write authority.
 

@@ -269,6 +269,10 @@ impl CanonicalUsageEvent {
     pub const fn lineage(&self) -> &UsageLineage {
         &self.lineage
     }
+
+    pub(crate) const fn replay_signature_bytes(&self) -> &[u8; 32] {
+        self.lineage.signature.as_bytes()
+    }
 }
 
 impl fmt::Debug for CanonicalUsageEvent {

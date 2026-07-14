@@ -25,9 +25,104 @@ pub enum SessionReplayState {
 }
 
 #[derive(Clone, Copy)]
+pub struct ReplayEventFacts<'a> {
+    provider_id: &'a str,
+    profile_id: &'a str,
+    session_id: &'a str,
+    parent_session_id: Option<&'a str>,
+    session_ordinal: u64,
+    replay_signature: &'a [u8; 32],
+    evidence: ReplayEvidence,
+    declared_conflict: bool,
+}
+
+impl<'a> ReplayEventFacts<'a> {
+    #[allow(clippy::too_many_arguments)]
+    #[must_use]
+    pub const fn new(
+        provider_id: &'a str,
+        profile_id: &'a str,
+        session_id: &'a str,
+        parent_session_id: Option<&'a str>,
+        session_ordinal: u64,
+        replay_signature: &'a [u8; 32],
+        evidence: ReplayEvidence,
+        declared_conflict: bool,
+    ) -> Self {
+        Self {
+            provider_id,
+            profile_id,
+            session_id,
+            parent_session_id,
+            session_ordinal,
+            replay_signature,
+            evidence,
+            declared_conflict,
+        }
+    }
+
+    #[must_use]
+    pub fn from_event(event: &'a CanonicalUsageEvent) -> Self {
+        Self::new(
+            event.provider_id().as_str(),
+            event.profile_id().as_str(),
+            event.session_id().as_str(),
+            event
+                .lineage()
+                .parent_session_id()
+                .map(|value| value.as_str()),
+            event.lineage().session_ordinal(),
+            event.replay_signature_bytes(),
+            event.lineage().evidence(),
+            event.lineage().declared_conflict(),
+        )
+    }
+
+    #[must_use]
+    pub const fn provider_id(self) -> &'a str {
+        self.provider_id
+    }
+
+    #[must_use]
+    pub const fn profile_id(self) -> &'a str {
+        self.profile_id
+    }
+
+    #[must_use]
+    pub const fn session_id(self) -> &'a str {
+        self.session_id
+    }
+
+    #[must_use]
+    pub const fn parent_session_id(self) -> Option<&'a str> {
+        self.parent_session_id
+    }
+
+    #[must_use]
+    pub const fn session_ordinal(self) -> u64 {
+        self.session_ordinal
+    }
+
+    #[must_use]
+    pub const fn replay_signature(self) -> &'a [u8; 32] {
+        self.replay_signature
+    }
+
+    #[must_use]
+    pub const fn evidence(self) -> ReplayEvidence {
+        self.evidence
+    }
+
+    #[must_use]
+    pub const fn declared_conflict(self) -> bool {
+        self.declared_conflict
+    }
+}
+
+#[derive(Clone, Copy)]
 pub enum ParentOrdinal<'a> {
     NotApplicable,
-    Present(&'a CanonicalUsageEvent),
+    Present(ReplayEventFacts<'a>),
     MissingOpen,
     MissingComplete,
 }
@@ -84,7 +179,7 @@ impl ReplayTraversalFacts {
 #[derive(Clone, Copy)]
 pub struct ReplayClassificationInput<'a> {
     prior_state: SessionReplayState,
-    child: &'a CanonicalUsageEvent,
+    child: ReplayEventFacts<'a>,
     parent: ParentOrdinal<'a>,
     traversal: ReplayTraversalFacts,
 }
@@ -93,7 +188,7 @@ impl<'a> ReplayClassificationInput<'a> {
     #[must_use]
     pub const fn new(
         prior_state: SessionReplayState,
-        child: &'a CanonicalUsageEvent,
+        child: ReplayEventFacts<'a>,
         parent: ParentOrdinal<'a>,
         traversal: ReplayTraversalFacts,
     ) -> Self {
@@ -136,7 +231,7 @@ impl ReplayClassifier {
     #[must_use]
     pub fn classify(&self, input: ReplayClassificationInput<'_>) -> ReplayClassification {
         if input.prior_state == SessionReplayState::Conflict
-            || input.child.lineage().declared_conflict()
+            || input.child.declared_conflict()
             || input.traversal.cycle
             || input.traversal.relation_conflict
             || !structurally_valid(&input)
@@ -167,11 +262,7 @@ impl ReplayClassifier {
 
 fn structurally_valid(input: &ReplayClassificationInput<'_>) -> bool {
     let child = input.child;
-    match (
-        child.lineage().parent_session_id(),
-        input.prior_state,
-        input.parent,
-    ) {
+    match (child.parent_session_id(), input.prior_state, input.parent) {
         (None, SessionReplayState::Root, ParentOrdinal::NotApplicable) => {
             input.traversal.depth == 0
         }
@@ -182,11 +273,11 @@ fn structurally_valid(input: &ReplayClassificationInput<'_>) -> bool {
             | SessionReplayState::Pending,
             ParentOrdinal::Present(parent),
         ) => {
-            !parent.lineage().declared_conflict()
+            !parent.declared_conflict()
                 && parent.provider_id() == child.provider_id()
                 && parent.profile_id() == child.profile_id()
                 && parent.session_id() == parent_session_id
-                && parent.lineage().session_ordinal() == child.lineage().session_ordinal()
+                && parent.session_ordinal() == child.session_ordinal()
         }
         (
             Some(_),
@@ -202,14 +293,12 @@ fn structurally_valid(input: &ReplayClassificationInput<'_>) -> bool {
 fn classify_matching(input: ReplayClassificationInput<'_>) -> ReplayClassification {
     match input.parent {
         ParentOrdinal::Present(parent) => {
-            let child_lineage = input.child.lineage();
-            let parent_lineage = parent.lineage();
-            if child_lineage.evidence() != ReplayEvidence::StrongCumulative
-                || parent_lineage.evidence() != ReplayEvidence::StrongCumulative
+            if input.child.evidence() != ReplayEvidence::StrongCumulative
+                || parent.evidence() != ReplayEvidence::StrongCumulative
             {
                 return classification(ReplayDisposition::Pending, SessionReplayState::Matching);
             }
-            if child_lineage.signature() == parent_lineage.signature() {
+            if input.child.replay_signature() == parent.replay_signature() {
                 classification(ReplayDisposition::Replay, SessionReplayState::Matching)
             } else {
                 classification(ReplayDisposition::Eligible, SessionReplayState::Diverged)

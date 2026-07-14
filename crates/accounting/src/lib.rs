@@ -26,8 +26,8 @@ pub use event::{
 };
 pub use replay::{
     MAX_REPLAY_DEPTH, MAX_REPLAY_FANOUT, ParentOrdinal, ReplayClassification,
-    ReplayClassificationInput, ReplayClassifier, ReplayDisposition, ReplayTraversalFacts,
-    SessionReplayState,
+    ReplayClassificationInput, ReplayClassifier, ReplayDisposition, ReplayEventFacts,
+    ReplayTraversalFacts, SessionReplayState,
 };
 
 pub const CANONICALIZER_VERSION: u16 = 1;

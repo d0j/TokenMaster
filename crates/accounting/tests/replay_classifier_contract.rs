@@ -1,7 +1,7 @@
 use tokenmaster_accounting::{
     CanonicalUsageEvent, Canonicalizer, MAX_REPLAY_DEPTH, MAX_REPLAY_FANOUT, ParentOrdinal,
-    ReplayClassificationInput, ReplayClassifier, ReplayDisposition, ReplayTraversalFacts,
-    SessionReplayState,
+    ReplayClassificationInput, ReplayClassifier, ReplayDisposition, ReplayEventFacts,
+    ReplayTraversalFacts, SessionReplayState,
 };
 use tokenmaster_domain::{
     ActivityCounts, LongContextState, ModelKey, ObservationDraft, ObservationDraftParts,
@@ -90,7 +90,7 @@ fn classify(
 ) -> (ReplayDisposition, SessionReplayState) {
     let result = ReplayClassifier::new().classify(ReplayClassificationInput::new(
         prior_state,
-        child,
+        ReplayEventFacts::from_event(child),
         parent,
         traversal,
     ));
@@ -123,7 +123,7 @@ fn roots_matches_and_divergence_follow_the_fail_closed_table() {
         classify(
             SessionReplayState::Matching,
             &replay,
-            ParentOrdinal::Present(&parent),
+            ParentOrdinal::Present(ReplayEventFacts::from_event(&parent)),
             clear(1, 1),
         ),
         (ReplayDisposition::Replay, SessionReplayState::Matching)
@@ -141,7 +141,7 @@ fn roots_matches_and_divergence_follow_the_fail_closed_table() {
         classify(
             SessionReplayState::Matching,
             &mismatch,
-            ParentOrdinal::Present(&parent),
+            ParentOrdinal::Present(ReplayEventFacts::from_event(&parent)),
             clear(1, 1),
         ),
         (ReplayDisposition::Eligible, SessionReplayState::Diverged)
@@ -167,7 +167,7 @@ fn weak_evidence_stays_pending_but_later_strong_mismatch_can_diverge() {
     let weak = classify(
         SessionReplayState::Matching,
         &weak_child,
-        ParentOrdinal::Present(&weak_parent),
+        ParentOrdinal::Present(ReplayEventFacts::from_event(&weak_parent)),
         clear(1, 1),
     );
     assert_eq!(
@@ -189,7 +189,7 @@ fn weak_evidence_stays_pending_but_later_strong_mismatch_can_diverge() {
         classify(
             weak.1,
             &strong_child,
-            ParentOrdinal::Present(&strong_parent),
+            ParentOrdinal::Present(ReplayEventFacts::from_event(&strong_parent)),
             clear(1, 1),
         ),
         (ReplayDisposition::Eligible, SessionReplayState::Diverged)
@@ -296,7 +296,7 @@ fn conflicts_corrupt_combinations_and_cycles_fail_closed() {
         classify(
             SessionReplayState::Matching,
             &child,
-            ParentOrdinal::Present(&valid_parent),
+            ParentOrdinal::Present(ReplayEventFacts::from_event(&valid_parent)),
             ReplayTraversalFacts::new(1, 1, true, false),
         ),
         classify(
@@ -314,25 +314,25 @@ fn conflicts_corrupt_combinations_and_cycles_fail_closed() {
         classify(
             SessionReplayState::Matching,
             &child,
-            ParentOrdinal::Present(&wrong_ordinal),
+            ParentOrdinal::Present(ReplayEventFacts::from_event(&wrong_ordinal)),
             clear(1, 1),
         ),
         classify(
             SessionReplayState::Matching,
             &child,
-            ParentOrdinal::Present(&wrong_session),
+            ParentOrdinal::Present(ReplayEventFacts::from_event(&wrong_session)),
             clear(1, 1),
         ),
         classify(
             SessionReplayState::Matching,
             &child,
-            ParentOrdinal::Present(&wrong_provider),
+            ParentOrdinal::Present(ReplayEventFacts::from_event(&wrong_provider)),
             clear(1, 1),
         ),
         classify(
             SessionReplayState::Matching,
             &child,
-            ParentOrdinal::Present(&wrong_profile),
+            ParentOrdinal::Present(ReplayEventFacts::from_event(&wrong_profile)),
             clear(1, 1),
         ),
     ] {
@@ -367,4 +367,62 @@ fn exhausted_depth_or_fanout_is_pending_not_conflict() {
             (ReplayDisposition::Pending, SessionReplayState::Pending)
         );
     }
+}
+
+#[test]
+fn persisted_replay_facts_match_live_event_classification() {
+    let parent = event("parent", None, 0, usage(10, 2), Some(usage(100, 20)), false);
+    let child = event(
+        "child",
+        Some("parent"),
+        0,
+        usage(10, 2),
+        Some(usage(100, 20)),
+        false,
+    );
+    let child_signature = *child.lineage().signature().as_bytes();
+    let parent_signature = *parent.lineage().signature().as_bytes();
+    let persisted_child = ReplayEventFacts::new(
+        child.provider_id().as_str(),
+        child.profile_id().as_str(),
+        child.session_id().as_str(),
+        child
+            .lineage()
+            .parent_session_id()
+            .map(|value| value.as_str()),
+        child.lineage().session_ordinal(),
+        &child_signature,
+        child.lineage().evidence(),
+        child.lineage().declared_conflict(),
+    );
+    let persisted_parent = ReplayEventFacts::new(
+        parent.provider_id().as_str(),
+        parent.profile_id().as_str(),
+        parent.session_id().as_str(),
+        parent
+            .lineage()
+            .parent_session_id()
+            .map(|value| value.as_str()),
+        parent.lineage().session_ordinal(),
+        &parent_signature,
+        parent.lineage().evidence(),
+        parent.lineage().declared_conflict(),
+    );
+
+    let live = ReplayClassifier::new().classify(ReplayClassificationInput::new(
+        SessionReplayState::Matching,
+        ReplayEventFacts::from_event(&child),
+        ParentOrdinal::Present(ReplayEventFacts::from_event(&parent)),
+        clear(1, 1),
+    ));
+    let restarted = ReplayClassifier::new().classify(ReplayClassificationInput::new(
+        SessionReplayState::Matching,
+        persisted_child,
+        ParentOrdinal::Present(persisted_parent),
+        clear(1, 1),
+    ));
+
+    assert_eq!(restarted, live);
+    assert_eq!(restarted.disposition(), ReplayDisposition::Replay);
+    assert_eq!(restarted.next_state(), SessionReplayState::Matching);
 }
