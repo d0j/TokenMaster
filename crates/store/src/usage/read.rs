@@ -14,8 +14,116 @@ const CURSOR_EVENT_PAGE_SQL: &str =
      WHERE (timestamp_seconds, timestamp_nanos, fingerprint) < (?1, ?2, ?3)
      ORDER BY timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC
      LIMIT ?4";
+const FIRST_LEGACY_EVENT_PAGE_SQL: &str =
+    "SELECT event_id, timestamp_seconds, timestamp_nanos, model, total_tokens, fingerprint
+     FROM usage_legacy_event
+     WHERE snapshot_id = 1
+     ORDER BY timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC
+     LIMIT ?1";
+const CURSOR_LEGACY_EVENT_PAGE_SQL: &str =
+    "SELECT event_id, timestamp_seconds, timestamp_nanos, model, total_tokens, fingerprint
+     FROM usage_legacy_event
+     WHERE snapshot_id = 1
+       AND (timestamp_seconds, timestamp_nanos, fingerprint) < (?1, ?2, ?3)
+     ORDER BY timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC
+     LIMIT ?4";
+
+#[derive(Clone, Copy)]
+enum VisibleEventSource {
+    Materialized,
+    Legacy,
+}
 
 impl UsageStore {
+    pub fn archive_state(&self) -> Result<ArchiveState, StoreError> {
+        let current = self
+            .connection
+            .query_row(
+                "SELECT
+                   revision_id, canonicalizer_version, fingerprint_version,
+                   replay_signature_version
+                 FROM usage_replay_revision
+                 WHERE status = 'current'",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, i64>(3)?,
+                    ))
+                },
+            )
+            .optional()?;
+        let (staging_count, legacy_count): (i64, i64) = self.connection.query_row(
+            "SELECT
+               (SELECT count(*) FROM usage_replay_revision WHERE status = 'staging'),
+               (SELECT count(*) FROM usage_legacy_snapshot WHERE snapshot_id = 1)",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        let rebuild_staging = boolean(staging_count)?;
+        let has_legacy = boolean(legacy_count)?;
+
+        let (mode, active_revision) = match current {
+            Some((revision_id, canonicalizer, fingerprint, replay_signature)) => {
+                let revision_id = ReplayRevisionId::from_stored(revision_id)?;
+                let versions =
+                    AccountingVersions::from_stored(canonicalizer, fingerprint, replay_signature)?;
+                let mode = if versions == AccountingVersions::compiled() {
+                    ArchiveMode::ReplayVerified
+                } else {
+                    ArchiveMode::ReplayVersionStale
+                };
+                (mode, Some(revision_id))
+            }
+            None if has_legacy => (ArchiveMode::LegacyUnverified, None),
+            None => (ArchiveMode::Empty, None),
+        };
+        Ok(ArchiveState {
+            mode,
+            active_revision,
+            rebuild_staging,
+        })
+    }
+
+    pub fn replay_quality(
+        &self,
+        revision_id: ReplayRevisionId,
+    ) -> Result<ReplayQualityCounts, StoreError> {
+        let raw = self
+            .connection
+            .query_row(
+                "SELECT
+                   coalesce(sum(CASE WHEN o.disposition = 'eligible' THEN 1 ELSE 0 END), 0),
+                   coalesce(sum(CASE WHEN o.disposition = 'replay' THEN 1 ELSE 0 END), 0),
+                   coalesce(sum(CASE WHEN o.disposition = 'pending' THEN 1 ELSE 0 END), 0),
+                   coalesce(sum(CASE WHEN o.disposition = 'conflict' THEN 1 ELSE 0 END), 0)
+                 FROM usage_replay_revision AS r
+                 LEFT JOIN usage_replay_observation AS o
+                   ON o.revision_id = r.revision_id
+                 WHERE r.revision_id = ?1
+                 GROUP BY r.revision_id",
+                [revision_id.as_sql()?],
+                |row| {
+                    Ok([
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, i64>(3)?,
+                    ])
+                },
+            )
+            .optional()?
+            .ok_or_else(|| StoreError::new(StoreErrorCode::StaleRevision))?;
+        Ok(ReplayQualityCounts {
+            eligible: nonnegative(raw[0])?,
+            replay: nonnegative(raw[1])?,
+            pending: nonnegative(raw[2])?,
+            conflict: nonnegative(raw[3])?,
+        })
+    }
+
     pub fn counts(&self) -> Result<UsageStoreCounts, StoreError> {
         let counts = self.connection.query_row(
             "SELECT
@@ -104,27 +212,59 @@ impl UsageStore {
         let page_size = requested_size.clamp(1, MAX_USAGE_EVENT_PAGE_SIZE);
         let limit =
             i64::try_from(page_size).map_err(|_| StoreError::new(StoreErrorCode::InvalidValue))?;
-        match before {
-            None => {
+        let source = if self.archive_state()?.mode() == ArchiveMode::LegacyUnverified {
+            VisibleEventSource::Legacy
+        } else {
+            VisibleEventSource::Materialized
+        };
+        match (source, before) {
+            (VisibleEventSource::Materialized, None) => {
                 let mut statement = self.connection.prepare_cached(FIRST_EVENT_PAGE_SQL)?;
                 query_events(&mut statement, params![limit], page_size)
             }
-            Some(cursor) => {
-                let fingerprint = cursor.fingerprint();
-                let mut statement = self.connection.prepare_cached(CURSOR_EVENT_PAGE_SQL)?;
-                query_events(
-                    &mut statement,
-                    params![
-                        cursor.timestamp_seconds(),
-                        i64::from(cursor.timestamp_nanos()),
-                        fingerprint.as_slice(),
-                        limit
-                    ],
-                    page_size,
-                )
+            (VisibleEventSource::Legacy, None) => {
+                let mut statement = self
+                    .connection
+                    .prepare_cached(FIRST_LEGACY_EVENT_PAGE_SQL)?;
+                query_events(&mut statement, params![limit], page_size)
             }
+            (VisibleEventSource::Materialized, Some(cursor)) => query_event_page_before_cursor(
+                &self.connection,
+                CURSOR_EVENT_PAGE_SQL,
+                cursor,
+                limit,
+                page_size,
+            ),
+            (VisibleEventSource::Legacy, Some(cursor)) => query_event_page_before_cursor(
+                &self.connection,
+                CURSOR_LEGACY_EVENT_PAGE_SQL,
+                cursor,
+                limit,
+                page_size,
+            ),
         }
     }
+}
+
+fn query_event_page_before_cursor(
+    connection: &rusqlite::Connection,
+    sql: &'static str,
+    cursor: EventCursor,
+    limit: i64,
+    page_size: usize,
+) -> Result<Vec<StoredUsageEvent>, StoreError> {
+    let fingerprint = cursor.fingerprint();
+    let mut statement = connection.prepare_cached(sql)?;
+    query_events(
+        &mut statement,
+        params![
+            cursor.timestamp_seconds(),
+            i64::from(cursor.timestamp_nanos()),
+            fingerprint.as_slice(),
+            limit
+        ],
+        page_size,
+    )
 }
 
 fn query_events(

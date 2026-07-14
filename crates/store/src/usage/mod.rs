@@ -13,11 +13,12 @@ mod write;
 
 pub use schema::USAGE_SCHEMA_VERSION;
 pub use types::{
-    AppendBatch, AppendBatchParts, EventCursor, GenerationSnapshot, GenerationStatus,
-    MAX_APPEND_CHUNK_UPDATES, MAX_APPEND_EVENTS, MAX_RESUME_BYTES, MAX_USAGE_EVENT_PAGE_SIZE,
-    SOURCE_CHUNK_BYTES, SourceKey, SourceKind, SourceRegistration, SourceRegistrationParts,
-    StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk, StoredUsageEvent,
-    StoredVerification, UsageStoreCounts,
+    AccountingVersions, AppendBatch, AppendBatchParts, ArchiveMode, ArchiveState, EventCursor,
+    GenerationSnapshot, GenerationStatus, MAX_APPEND_CHUNK_UPDATES, MAX_APPEND_EVENTS,
+    MAX_RESUME_BYTES, MAX_USAGE_EVENT_PAGE_SIZE, ReplayEpoch, ReplayQualityCounts,
+    ReplayRevisionId, SOURCE_CHUNK_BYTES, SourceKey, SourceKind, SourceRegistration,
+    SourceRegistrationParts, StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk,
+    StoredUsageEvent, StoredVerification, UsageStoreCounts,
 };
 
 use migration::migrate_schema;

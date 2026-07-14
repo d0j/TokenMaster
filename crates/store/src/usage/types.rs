@@ -1,6 +1,9 @@
 use std::fmt;
 
 use tokenmaster_accounting::CanonicalUsageEvent;
+use tokenmaster_accounting::{
+    CANONICALIZER_VERSION, EVENT_FINGERPRINT_VERSION, REPLAY_SIGNATURE_VERSION,
+};
 
 use crate::{StoreError, StoreErrorCode};
 
@@ -603,6 +606,174 @@ impl UsageStoreCounts {
             .saturating_add(self.canonical_events)
             .saturating_add(self.chunks)
             .saturating_add(self.scans)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AccountingVersions {
+    canonicalizer: u16,
+    fingerprint: u16,
+    replay_signature: u16,
+}
+
+impl AccountingVersions {
+    pub(super) const fn compiled() -> Self {
+        Self {
+            canonicalizer: CANONICALIZER_VERSION,
+            fingerprint: EVENT_FINGERPRINT_VERSION,
+            replay_signature: REPLAY_SIGNATURE_VERSION,
+        }
+    }
+
+    pub(super) fn from_stored(
+        canonicalizer: i64,
+        fingerprint: i64,
+        replay_signature: i64,
+    ) -> Result<Self, StoreError> {
+        let versions = Self {
+            canonicalizer: u16::try_from(canonicalizer)
+                .ok()
+                .filter(|value| *value != 0)
+                .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?,
+            fingerprint: u16::try_from(fingerprint)
+                .ok()
+                .filter(|value| *value != 0)
+                .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?,
+            replay_signature: u16::try_from(replay_signature)
+                .ok()
+                .filter(|value| *value != 0)
+                .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?,
+        };
+        Ok(versions)
+    }
+
+    #[must_use]
+    pub const fn canonicalizer(self) -> u16 {
+        self.canonicalizer
+    }
+
+    #[must_use]
+    pub const fn fingerprint(self) -> u16 {
+        self.fingerprint
+    }
+
+    #[must_use]
+    pub const fn replay_signature(self) -> u16 {
+        self.replay_signature
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct ReplayRevisionId(u64);
+
+impl ReplayRevisionId {
+    pub fn new(value: u64) -> Result<Self, StoreError> {
+        if value > i64::MAX as u64 {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self(value))
+    }
+
+    pub(super) fn from_stored(value: i64) -> Result<Self, StoreError> {
+        let value = u64::try_from(value)
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+        Ok(Self(value))
+    }
+
+    pub(super) fn as_sql(self) -> Result<i64, StoreError> {
+        i64::try_from(self.0).map_err(|_| StoreError::new(StoreErrorCode::InvalidValue))
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct ReplayEpoch(u64);
+
+impl ReplayEpoch {
+    pub fn new(value: u64) -> Result<Self, StoreError> {
+        if value > i64::MAX as u64 {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self(value))
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ArchiveMode {
+    Empty,
+    LegacyUnverified,
+    ReplayVerified,
+    ReplayVersionStale,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ArchiveState {
+    pub(super) mode: ArchiveMode,
+    pub(super) active_revision: Option<ReplayRevisionId>,
+    pub(super) rebuild_staging: bool,
+}
+
+impl ArchiveState {
+    #[must_use]
+    pub const fn mode(self) -> ArchiveMode {
+        self.mode
+    }
+
+    #[must_use]
+    pub const fn active_revision(self) -> Option<ReplayRevisionId> {
+        self.active_revision
+    }
+
+    #[must_use]
+    pub const fn rebuild_staging(self) -> bool {
+        self.rebuild_staging
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ReplayQualityCounts {
+    pub(super) eligible: u64,
+    pub(super) replay: u64,
+    pub(super) pending: u64,
+    pub(super) conflict: u64,
+}
+
+impl ReplayQualityCounts {
+    #[must_use]
+    pub const fn eligible(self) -> u64 {
+        self.eligible
+    }
+
+    #[must_use]
+    pub const fn replay(self) -> u64 {
+        self.replay
+    }
+
+    #[must_use]
+    pub const fn pending(self) -> u64 {
+        self.pending
+    }
+
+    #[must_use]
+    pub const fn conflict(self) -> u64 {
+        self.conflict
+    }
+
+    #[must_use]
+    pub const fn total(self) -> u64 {
+        self.eligible
+            .saturating_add(self.replay)
+            .saturating_add(self.pending)
+            .saturating_add(self.conflict)
     }
 }
 

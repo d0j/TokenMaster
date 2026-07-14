@@ -17,9 +17,10 @@ mod usage;
 pub use error::{StoreError, StoreErrorCode};
 pub use session_store::{EXPECTED_SQLITE_VERSION, MAX_PAGE_SIZE, MAX_SEED_SESSIONS, ProbeStore};
 pub use usage::{
-    AppendBatch, AppendBatchParts, EventCursor, GenerationSnapshot, GenerationStatus, JournalMode,
-    MAX_APPEND_CHUNK_UPDATES, MAX_APPEND_EVENTS, MAX_RESUME_BYTES, MAX_USAGE_EVENT_PAGE_SIZE,
-    RuntimePolicy, SOURCE_CHUNK_BYTES, SourceKey, SourceKind, SourceRegistration,
+    AccountingVersions, AppendBatch, AppendBatchParts, ArchiveMode, ArchiveState, EventCursor,
+    GenerationSnapshot, GenerationStatus, JournalMode, MAX_APPEND_CHUNK_UPDATES, MAX_APPEND_EVENTS,
+    MAX_RESUME_BYTES, MAX_USAGE_EVENT_PAGE_SIZE, ReplayEpoch, ReplayQualityCounts,
+    ReplayRevisionId, RuntimePolicy, SOURCE_CHUNK_BYTES, SourceKey, SourceKind, SourceRegistration,
     SourceRegistrationParts, StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk,
     StoredUsageEvent, StoredVerification, USAGE_SCHEMA_VERSION, UsageStore, UsageStoreCounts,
 };
