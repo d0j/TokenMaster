@@ -12,8 +12,19 @@ All notable changes are recorded here.
 - TokenMaster-only contracts, handoff, roadmap, feature matrix, and provenance.
 - Critical architecture audit with a single approved delivery rail.
 - Provider-neutral observation/canonicalization TDD plan and complete requirement status matrix.
+- Provider-neutral observation and late session-relation drafts with Codex ancestry,
+  ordinal, cumulative, and resume-v2 contracts.
+- Exclusive `tokenmaster-accounting` crate with versioned deterministic fingerprint
+  and replay identities, evidence, opaque canonical events, and compile-fail authority
+  proofs.
 
 ### Fixed
 
 - M0 verification no longer depends on foreign runtime toolchains.
 - Corrected the stale M0 development decision reference to ADR-006.
+- Removed public canonical/replay constructors from domain and Codex-owned
+  fingerprinting; the store now accepts accounting output only.
+- Made legacy parser resume fail closed instead of guessing an ordinal that could
+  collide with prior events.
+- Made store append fail closed when a canonical event provider does not match the
+  registered source provider, in addition to existing profile/source checks.

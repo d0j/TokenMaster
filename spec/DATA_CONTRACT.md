@@ -31,6 +31,11 @@ Adapter checkpoints are versioned, opaque outside their provider adapter, and ca
 by the common checkpoint bound. They MUST NOT contain source content, credentials, or
 unbounded transport state.
 
+Codex resume v2 carries bounded lineage state and the next zero-based usage ordinal.
+Resume v1 MUST fail closed and be rebuilt through a new non-destructive generation;
+the ordinal MUST NOT be guessed. Late ancestry is a separate bounded session-relation
+draft so it can reconcile prior observations without retaining source content.
+
 ## TM-DATA-004 — Current and staging generations
 
 Current-generation append writes observations, canonical selections, chunk coverage,

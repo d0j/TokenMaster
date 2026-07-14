@@ -16,9 +16,11 @@ virtualized presentation models, and resource gates. It is not a product release
 an accepted interactive Windows validation.
 
 M1 has bounded Codex source discovery, streaming JSONL parsing, revalidation,
-checkpoints, strict SQLite schema, and atomic current-generation ingest. The next
-slice moves parser output through a provider-neutral draft and exclusive accounting
-canonicalizer before replay classification or staging migration.
+checkpoints, strict SQLite schema, and atomic current-generation ingest. Provider
+output now crosses a bounded neutral draft boundary; only `tokenmaster-accounting`
+can create fingerprint/replay identities and canonical events, and Codex preserves
+late ancestry separately. The next slice is the pure bounded replay classifier before
+any staging migration.
 
 ## Build and verify
 

@@ -12,9 +12,10 @@ WhereMyTokens задаёт полноту интерфейса и сценари
 Сейчас готов M0 — доказательство стека с мгновенной сменой layout/skin/locale,
 виртуализированными моделями, tray lifecycle и измеряемыми ограничениями ресурсов.
 M1 реализует ограниченное обнаружение Codex-источников, потоковый JSONL reader,
-checkpoint, строгую SQLite-схему и атомарный append. Следующий участок вводит
-provider-neutral draft и единственный accounting canonicalizer до replay-классификации
-и любых миграций staging.
+checkpoint, строгую SQLite-схему и атомарный append. Теперь Codex выдаёт только
+provider-neutral observation/session-relation drafts, а fingerprint, replay identity
+и canonical event создаёт исключительно `tokenmaster-accounting`. Следующий участок —
+чистый ограниченный replay-классификатор до любых миграций staging.
 
 ```powershell
 cargo +1.97.0 test --workspace --locked

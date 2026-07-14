@@ -43,7 +43,7 @@ pub use identity::profile_id_for_root;
 pub use parser::{
     LONG_CONTEXT_THRESHOLD, MAX_LINE_BYTES, MAX_TOOL_NAME_BYTES, MAX_TOOL_NAMES,
     PARSER_SCHEMA_VERSION, ParseContext, ParseOutcome, ParserDiagnosticCode, ParserDiagnostics,
-    ParserResumeError, ParserResumeErrorCode, ParserResumeStateV1, ParserState, ToolCountEntry,
+    ParserResumeError, ParserResumeErrorCode, ParserResumeState, ParserState, ToolCountEntry,
     parse_line,
 };
 pub use provider::CodexProvider;

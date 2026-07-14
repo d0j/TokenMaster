@@ -12,6 +12,12 @@ JSONL, configuration, archive files, CLI/MCP requests, generated reports, and fu
 provider output are untrusted. Each boundary MUST validate type, size, count, encoding,
 path safety, timeout, and allowed values before allocation or interpretation.
 
+Providers emit bounded observation/session-relation drafts only. They cannot create
+event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or
+canonical events. Those values are created only by TokenMaster accounting code. Store
+append MUST reject canonical events whose provider, profile, or source identity does
+not match the registered source.
+
 ## TM-SEC-003 — Path privacy
 
 Source descriptors are path-private. Public errors, debug surfaces, serialized values,

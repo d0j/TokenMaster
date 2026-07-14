@@ -15,6 +15,10 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   reparse-safe streaming enumeration, typed bounded JSONL parser, cumulative token
   state, physical/logical source identity, byte framing, revalidation, strict SQLite
   usage schema, keyset reads, and atomic current-generation append.
+- P0 authority and Codex-lineage boundary: provider-neutral bounded observation and
+  session-relation drafts, parser resume v2 with ordinals/cumulative snapshots,
+  exclusive `tokenmaster-accounting` canonicalization, fingerprint v2, replay
+  signature v1/evidence, opaque canonical events, and store-only canonical input.
 
 ## Next implementation slice
 
@@ -27,21 +31,16 @@ or UI to Codex JSONL. The selected future format is a `.tmplugin` WebAssembly
 Component executed in an isolated on-demand host; Codex remains compiled in and pays
 no plugin runtime cost. No plugin implementation is claimed by that design.
 
-The repeated critical audit is recorded in `docs/AUDIT_AND_MASTER_PLAN.md`. It closes
-the remaining architectural ambiguities and approves one sequence. P0-A first adds a
-provider-neutral `ObservationDraft` and an exclusive `tokenmaster-accounting`
-canonicalizer, then moves Codex and store APIs onto that boundary. Its executable TDD
-plan is `docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`.
+The repeated critical audit is recorded in `docs/AUDIT_AND_MASTER_PLAN.md`. P0-A and
+the P0-B Codex-lineage surface are implemented under the completed executable TDD plan
+`docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`.
 
-The authoritative product, data, security, decision, traceability, and roadmap
-contracts now define this sequence. Runtime replay classification and engine source
-ports are still unimplemented.
-
-The provider-neutral replay value prototype is implemented and tested, but its
-placement is superseded by the approved authority boundary. Current Codex code still
-computes fingerprints and the store still accepts publicly constructed canonical
-events. P0-A is therefore not yet implemented and current canonical totals remain not
-replay-safe. No SQLite replay migration is allowed before P0-A through P0-C pass.
+The next slice is P0-C: a pure bounded replay classifier with explicit
+root/matching/diverged/pending/conflict outcomes and continuation instead of
+depth/fanout-as-conflict. Current archive totals remain not replay-safe until P0-C
+through P0-E complete. Parser resume v1 fails closed because its event ordinal cannot
+be inferred safely; P0-D must rebuild legacy data non-destructively. No SQLite replay
+migration is allowed before the P0-C classifier contract passes.
 
 ## Release truth
 

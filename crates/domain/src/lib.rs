@@ -12,9 +12,9 @@ pub use quota::{DomainError, QuotaTarget};
 pub use session::SessionSummary;
 pub use state::AppState;
 pub use usage::{
-    ActivityCounts, ActivityKind, CanonicalUsageEvent, CanonicalUsageEventParts, EventFingerprint,
-    EventId, LongContextState, MAX_METADATA_BYTES, MAX_MODEL_KEY_BYTES, MAX_SESSION_ID_BYTES,
-    MAX_USAGE_ID_BYTES, MetadataValue, ModelKey, ProjectAlias, ReplayEvidence, ReplaySignature,
-    TokenCount, TokenUsage, UsageError, UsageLineage, UsageProfileId, UsageSessionId,
-    UsageSourceId, UtcTimestamp,
+    ActivityCounts, ActivityKind, LongContextState, MAX_METADATA_BYTES, MAX_MODEL_KEY_BYTES,
+    MAX_PROVIDER_ID_BYTES, MAX_SESSION_ID_BYTES, MAX_USAGE_ID_BYTES, MetadataValue, ModelKey,
+    ObservationDraft, ObservationDraftParts, ObservationVerification, ProjectAlias,
+    SessionRelationDraft, SessionRelationDraftParts, TokenCount, TokenUsage, UsageError,
+    UsageProfileId, UsageProviderId, UsageSessionId, UsageSourceId, UtcTimestamp,
 };

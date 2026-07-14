@@ -4,7 +4,7 @@ use tempfile::TempDir;
 use tokenmaster_codex::{
     BoundaryAnchor, LogicalFileIdentity, MAX_ANCHOR_BYTES, MAX_BATCH_COMPLETE_BYTES,
     MAX_BATCH_EVENTS, MAX_LINE_BYTES, MAX_RESUME_BYTES, PARSER_SCHEMA_VERSION,
-    ParserDiagnosticCode, ParserResumeStateV1, ParserState, READ_BUFFER_BYTES,
+    ParserDiagnosticCode, ParserResumeState, ParserState, READ_BUFFER_BYTES,
     READER_CHECKPOINT_SCHEMA_VERSION, ReadBatch, ReaderCheckpointErrorCode, ReaderCheckpointParts,
     ReaderCheckpointV1, ReaderDiagnosticCode, ReaderOutcome, SOURCE_CHUNK_BYTES, SinkDecision,
     SourceFileDescriptor, VerificationLevel, enumerate_profile_sources, logical_file_identity,
@@ -201,7 +201,7 @@ fn checkpoint_rejects_invalid_anchor_and_resume_values() {
     let mut resume_json =
         serde_json::to_value(ParserState::new().snapshot()).expect("resume fixture must serialize");
     resume_json["version"] = serde_json::json!(PARSER_SCHEMA_VERSION + 1);
-    let invalid_resume: ParserResumeStateV1 =
+    let invalid_resume: ParserResumeState =
         serde_json::from_value(resume_json).expect("unsupported resume must decode structurally");
     let mut parts = checkpoint_parts();
     parts.resume = invalid_resume;
@@ -474,5 +474,29 @@ fn one_valid_line_may_exceed_soft_byte_budget_and_still_reach_snapshot_end() {
     );
     assert_eq!(batch.events().len(), 1);
     assert_eq!(batch.checkpoint().committed_offset(), line.len() as u64);
+    assert!(batch.reached_snapshot_end());
+}
+
+#[test]
+fn reader_preserves_late_session_relation_as_a_separate_bounded_output() {
+    let root = TempDir::new().expect("temporary directory");
+    let path = root.path().join("lineage.jsonl");
+    let usage = usage_line("2026-07-14T14:00:00Z", 60);
+    let relation = br#"{"type":"session_meta","payload":{"id":"child","forked_from_id":"parent"}}"#;
+    let mut bytes = usage;
+    bytes.push(b'\n');
+    bytes.extend_from_slice(relation);
+    bytes.push(b'\n');
+    std::fs::write(&path, bytes).expect("write lineage fixture");
+    let descriptor = only_descriptor(&source(SourceKind::Direct, root.path(), "lineage"));
+
+    let batch = expect_batch(
+        read_source_batch(&descriptor, None, || false).expect("lineage read must pass"),
+    );
+    assert_eq!(batch.events().len(), 1);
+    assert_eq!(batch.relations().len(), 1);
+    assert_eq!(batch.relations()[0].session_id().as_str(), "child");
+    assert_eq!(batch.relations()[0].parent_session_id().as_str(), "parent");
+    assert!(!batch.relations()[0].declared_conflict());
     assert!(batch.reached_snapshot_end());
 }

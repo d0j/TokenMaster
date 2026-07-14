@@ -1,5 +1,6 @@
 use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
-use tokenmaster_domain::{CanonicalUsageEvent, LongContextState, TokenCount};
+use tokenmaster_accounting::CanonicalUsageEvent;
+use tokenmaster_domain::{LongContextState, TokenCount};
 
 use super::{AppendBatch, SourceRegistration, StoredCheckpoint, StoredSourceChunk, UsageStore};
 use crate::{StoreError, StoreErrorCode};
@@ -83,7 +84,8 @@ impl UsageStore {
             .query_row(
                 "SELECT
                    s.current_generation, g.committed_offset, g.scan_offset,
-                   g.logical_identity, g.physical_identity, s.profile_id, s.source_id
+                   g.logical_identity, g.physical_identity, s.provider_id,
+                   s.profile_id, s.source_id
                  FROM usage_source AS s
                  JOIN usage_generation AS g
                    ON g.file_key = s.file_key AND g.generation = s.current_generation
@@ -96,8 +98,9 @@ impl UsageStore {
                         scan_offset: row.get(2)?,
                         logical_identity: row.get(3)?,
                         physical_identity: row.get(4)?,
-                        profile_id: row.get(5)?,
-                        source_id: row.get(6)?,
+                        provider_id: row.get(5)?,
+                        profile_id: row.get(6)?,
+                        source_id: row.get(7)?,
                     })
                 },
             )
@@ -121,7 +124,8 @@ impl UsageStore {
         )?;
 
         for event in &parts.events {
-            if event.profile_id().as_str() != current.profile_id
+            if event.provider_id().as_str() != current.provider_id
+                || event.profile_id().as_str() != current.profile_id
                 || event.source_id().as_str() != current.source_id
             {
                 return Err(StoreError::new(StoreErrorCode::InvalidValue));
@@ -195,6 +199,7 @@ struct CurrentSource {
     scan_offset: i64,
     logical_identity: Vec<u8>,
     physical_identity: Option<Vec<u8>>,
+    provider_id: String,
     profile_id: String,
     source_id: String,
 }
@@ -540,9 +545,11 @@ fn stored_digest(value: &[u8]) -> Result<[u8; 32], StoreError> {
 
 #[cfg(test)]
 mod tests {
+    use tokenmaster_accounting::Canonicalizer;
     use tokenmaster_domain::{
-        ActivityCounts, CanonicalUsageEventParts, EventFingerprint, MetadataValue, ModelKey,
-        ProjectAlias, TokenUsage, UsageProfileId, UsageSessionId, UsageSourceId, UtcTimestamp,
+        ActivityCounts, MetadataValue, ModelKey, ObservationDraft, ObservationDraftParts,
+        ObservationVerification, ProjectAlias, TokenUsage, UsageProfileId, UsageProviderId,
+        UsageSessionId, UsageSourceId, UtcTimestamp,
     };
 
     use super::*;
@@ -587,31 +594,35 @@ mod tests {
     }
 
     fn event(fingerprint: u8) -> TestResult<CanonicalUsageEvent> {
-        Ok(CanonicalUsageEvent::new(
-            CanonicalUsageEventParts {
-                profile_id: UsageProfileId::new("default")?,
-                session_id: UsageSessionId::new("session")?,
-                source_id: UsageSourceId::new("fixture")?,
-                source_offset: 10,
-                timestamp: UtcTimestamp::new(100, 0)?,
-                model: ModelKey::new("gpt-test")?,
-                raw_model: Some(MetadataValue::new("gpt-test")?),
-                usage: TokenUsage::new(
-                    TokenCount::Available(10),
-                    TokenCount::Unavailable,
-                    TokenCount::Available(2),
-                    TokenCount::Unavailable,
-                    TokenCount::Available(12),
-                ),
-                fallback_model: false,
-                long_context: LongContextState::No,
-                service_tier: None,
-                project: Some(ProjectAlias::new("tokenmaster")?),
-                originator: None,
-                activity: ActivityCounts::default(),
-            },
-            EventFingerprint::new([fingerprint; 32]),
-        ))
+        let draft = ObservationDraft::new(ObservationDraftParts {
+            provider_id: UsageProviderId::new("codex")?,
+            profile_id: UsageProfileId::new("default")?,
+            session_id: UsageSessionId::new("session")?,
+            parent_session_id: None,
+            session_ordinal: u64::from(fingerprint),
+            lineage_conflict: false,
+            source_id: UsageSourceId::new("fixture")?,
+            source_offset: 10,
+            source_verification: ObservationVerification::Incremental,
+            timestamp: UtcTimestamp::new(100, 0)?,
+            model: ModelKey::new("gpt-test")?,
+            raw_model: Some(MetadataValue::new("gpt-test")?),
+            delta_usage: TokenUsage::new(
+                TokenCount::Available(10),
+                TokenCount::Unavailable,
+                TokenCount::Available(2),
+                TokenCount::Unavailable,
+                TokenCount::Available(12),
+            ),
+            cumulative_usage: None,
+            fallback_model: false,
+            long_context: LongContextState::No,
+            service_tier: None,
+            project: Some(ProjectAlias::new("tokenmaster")?),
+            originator: None,
+            activity: ActivityCounts::default(),
+        })?;
+        Ok(Canonicalizer::new().canonicalize(&draft)?)
     }
 
     fn batch(seed: u8, fingerprint: u8) -> TestResult<AppendBatch> {
@@ -655,6 +666,7 @@ mod tests {
     #[test]
     fn canonical_rebuild_selects_remaining_smallest_current_observation() -> TestResult {
         let mut store = UsageStore::in_memory()?;
+        let fingerprint = *event(3)?.fingerprint().as_bytes();
         for seed in [9_u8, 1_u8] {
             store.register_source(&registration(seed)?)?;
             store.apply_append_batch(&batch(seed, 3)?)?;
@@ -664,19 +676,19 @@ mod tests {
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         transaction.execute(
             "DELETE FROM usage_event WHERE fingerprint = ?1",
-            params![[3_u8; 32].as_slice()],
+            params![fingerprint.as_slice()],
         )?;
         transaction.execute(
             "DELETE FROM usage_observation
              WHERE file_key = ?1 AND generation = 0 AND fingerprint = ?2",
-            params![[1_u8; 32].as_slice(), [3_u8; 32].as_slice()],
+            params![[1_u8; 32].as_slice(), fingerprint.as_slice()],
         )?;
-        refresh_canonical(&transaction, &[3_u8; 32])?;
+        refresh_canonical(&transaction, &fingerprint)?;
         transaction.commit()?;
 
         let selected: Vec<u8> = store.connection.query_row(
             "SELECT selected_file_key FROM usage_event WHERE fingerprint = ?1",
-            params![[3_u8; 32].as_slice()],
+            params![fingerprint.as_slice()],
             |row| row.get(0),
         )?;
         assert_eq!(selected, [9_u8; 32]);

@@ -34,11 +34,11 @@
 - `ObservationDraft::new(parts: ObservationDraftParts) -> Result<ObservationDraft, UsageError>` validates only bounded structural relations; accounting owns identity derivation.
 - Accessors expose typed facts and never expose a mutable parts object.
 
-- [ ] **Step 1: write failing contract tests** for provider ID alphabet/bounds, source verification serialization, parent/session relation, zero-based ordinal, delta/cumulative access, redacted debug output, and absence of canonical identity fields.
-- [ ] **Step 2: run RED:** `cargo +1.97.0 test -p tokenmaster-domain --test usage_contract observation_draft_is_bounded_provider_neutral_and_private -- --exact`; expect unresolved imports.
-- [ ] **Step 3: implement the minimal bounded draft types** in `usage.rs`, reusing existing text/token/activity value types. `Debug` prints identifiers and numeric metadata but replaces token values and source evidence with `[redacted]`.
-- [ ] **Step 4: run GREEN:** rerun the exact test, then `cargo +1.97.0 test -p tokenmaster-domain --locked`; expect pass.
-- [ ] **Step 5: run** `cargo +1.97.0 fmt --all -- --check` and `git diff --check`; expect exit 0.
+- [x] **Step 1: write failing contract tests** for provider ID alphabet/bounds, source verification serialization, parent/session relation, zero-based ordinal, delta/cumulative access, redacted debug output, and absence of canonical identity fields.
+- [x] **Step 2: run RED:** `cargo +1.97.0 test -p tokenmaster-domain --test usage_contract observation_draft_is_bounded_provider_neutral_and_private -- --exact`; unresolved imports were observed.
+- [x] **Step 3: implement the minimal bounded draft types** in `usage.rs`, reusing existing text/token/activity value types. `Debug` prints identifiers and numeric metadata but replaces token values and source evidence with `[redacted]`.
+- [x] **Step 4: run GREEN:** the exact test and locked domain suite pass.
+- [x] **Step 5: run** format and diff checks; both pass.
 
 ### Task 2: Add the exclusive accounting canonicalizer
 
@@ -56,13 +56,13 @@
 - Produces opaque read-only `CanonicalUsageEvent`, `EventFingerprint`, `EventId`, `ReplaySignature`, `ReplayEvidence`, and `UsageLineage`.
 - Constants: `CANONICALIZER_VERSION = 1`, `EVENT_FINGERPRINT_VERSION = 2`, `REPLAY_SIGNATURE_VERSION = 1`.
 
-- [ ] **Step 1: write failing tests** proving deterministic vectors, provider/session/ordinal separation, timestamp/source-insensitive duplicate identity, replay timestamp/source independence, strong/weak evidence, self-parent rejection, cumulative inconsistency rejection, empty usage rejection, and redacted digest debug output.
-- [ ] **Step 2: run RED:** `cargo +1.97.0 test -p tokenmaster-accounting --test canonicalizer_contract`; expect package/target absence.
-- [ ] **Step 3: create the crate and opaque event API.** Constructors for fingerprints, replay signatures, event IDs, lineage, and canonical events remain private to the crate. Public APIs are accessors plus `Canonicalizer::canonicalize`.
-- [ ] **Step 4: implement framed hashing.** Each hash starts with its ASCII-NUL domain tag; each text is encoded as `u32` big-endian length plus bytes; each ordinal/count uses fixed big-endian bytes; each `TokenCount` uses one availability byte plus `u64` when available.
-- [ ] **Step 5: run GREEN:** rerun the contract test and `cargo +1.97.0 test -p tokenmaster-accounting --locked`; expect pass.
-- [ ] **Step 6: compile-fail proof:** add rustdoc examples showing downstream crates cannot construct canonical identity/event values; run `cargo +1.97.0 test -p tokenmaster-accounting --doc --locked`.
-- [ ] **Step 7: run** format and diff checks; expect exit 0.
+- [x] **Step 1: write failing tests** proving deterministic vectors, provider/session/ordinal separation, timestamp/source-insensitive duplicate identity, replay timestamp/source independence, strong/weak evidence, self-parent rejection, cumulative inconsistency rejection, empty usage rejection, and redacted digest debug output.
+- [x] **Step 2: run RED:** the accounting package/target absence was observed.
+- [x] **Step 3: create the crate and opaque event API.** Constructors for fingerprints, replay signatures, event IDs, lineage, and canonical events remain private to the crate. Public APIs are accessors plus `Canonicalizer::canonicalize`.
+- [x] **Step 4: implement framed hashing.** Each hash starts with its ASCII-NUL domain tag; each text is encoded as `u32` big-endian length plus bytes; each ordinal/count uses fixed big-endian bytes; each `TokenCount` uses one availability byte plus `u64` when available.
+- [x] **Step 5: run GREEN:** the accounting contract and locked suite pass.
+- [x] **Step 6: compile-fail proof:** downstream construction examples fail to compile and accounting doc tests pass.
+- [x] **Step 7: run** format and diff checks; both pass.
 
 ### Task 3: Make Codex emit drafts and persist lineage state
 
@@ -78,19 +78,21 @@
 - Modify: `crates/codex/tests/parser_usage_contract.rs`
 - Modify: `crates/codex/tests/parser_state_contract.rs`
 - Create: `crates/codex/tests/parser_lineage_contract.rs`
+- Modify: `crates/codex/tests/reader_contract.rs`
 
 **Interfaces:**
 - `ParseOutcome::Emitted(ObservationDraft)` and `ReadBatch::events() -> &[ObservationDraft]`.
 - `ParseContext` carries the fixed `codex` `UsageProviderId`.
-- Parser resume schema v2 carries optional parent, conflict marker, and next usage ordinal; v1 resumes through an explicit validated upgrade with no inferred lineage.
+- Parser resume schema v2 carries optional parent, conflict marker, and next usage ordinal. A v1 resume fails closed because its ordinal cannot be inferred safely; P0-D must rebuild it non-destructively instead of risking identity collision.
+- Late ancestry is emitted as a separate bounded `SessionRelationDraft`, so metadata discovered after usage remains available for later reconciliation.
 
-- [ ] **Step 1: add failing lineage compatibility tests** for top-level/payload `forked_from_id`, top-level/payload `parent_thread_id`, structured subagent parent, equal duplicate declarations, conflicting parents, invalid types, controls/oversize, and ancestry arriving after earlier usage.
-- [ ] **Step 2: run RED:** exact lineage test; expect no draft/lineage API.
-- [ ] **Step 3: decode bounded ancestry only.** Define a precedence-independent collector: zero unique valid parents means none, one means that parent, more than one sets conflict. Invalid values increment stable diagnostics without echoing source text.
-- [ ] **Step 4: persist resume v2 state** and increment ordinal only after a positive usage draft is emitted. Preserve the provider cumulative snapshot on the draft and keep unrelated JSON fields borrowed/ignored.
-- [ ] **Step 5: delete Codex fingerprinting** and return drafts through parser/reader. Update existing tests to assert draft facts rather than canonical authority.
-- [ ] **Step 6: run GREEN:** focused lineage, parser usage/state/adversarial, reader contracts, then `cargo +1.97.0 test -p tokenmaster-codex --locked`; expect pass.
-- [ ] **Step 7: run** format, strict Codex Clippy, and diff checks; expect exit 0.
+- [x] **Step 1: add failing lineage compatibility tests** for top-level/payload `forked_from_id`, top-level/payload `parent_thread_id`, structured subagent parent, equal duplicate declarations, conflicting parents, invalid types, controls/oversize, and ancestry arriving after earlier usage.
+- [x] **Step 2: run RED:** the missing draft/relation API failure was observed.
+- [x] **Step 3: decode bounded ancestry only.** The collector is precedence-independent: zero unique valid parents means none, one means that parent, and more than one sets conflict. Invalid values increment stable diagnostics without echoing source text.
+- [x] **Step 4: persist resume v2 state** and increment ordinal only after a positive usage draft is emitted. Preserve the provider cumulative snapshot on the draft and keep unrelated JSON fields borrowed/ignored.
+- [x] **Step 5: delete Codex fingerprinting** and return drafts plus separate late relations through parser/reader. Existing tests assert draft facts and canonicalize only through accounting when identity is under test.
+- [x] **Step 6: run GREEN:** focused lineage/reader coverage and the complete locked Codex suite pass.
+- [x] **Step 7: run** format, strict workspace Clippy, and diff checks; all pass.
 
 ### Task 4: Make the store accept only accounting output
 
@@ -107,11 +109,11 @@
 - `AppendBatchParts.events: Box<[tokenmaster_accounting::CanonicalUsageEvent]>`.
 - Domain no longer exports `CanonicalUsageEvent`, `CanonicalUsageEventParts`, `EventFingerprint`, `EventId`, `ReplaySignature`, `ReplayEvidence`, or `UsageLineage`.
 
-- [ ] **Step 1: convert store fixtures to canonicalize drafts** and add a compile-fail rustdoc proving store consumers cannot construct a canonical event directly.
-- [ ] **Step 2: run RED:** store test compilation must fail until the dependency/API migration is complete.
-- [ ] **Step 3: update store imports and event accessors,** then remove the superseded canonical/replay authority types from domain. No schema change occurs in this task.
-- [ ] **Step 4: run GREEN:** domain, accounting, Codex, store ingest/schema tests, then `cargo +1.97.0 test --workspace --no-run --locked`; expect pass.
-- [ ] **Step 5: search authority bypasses:** `rg -n "CanonicalUsageEvent::new|EventFingerprint::new|ReplaySignature::new|canonical_fingerprint" crates`; expect no downstream construction or Codex fingerprint function.
+- [x] **Step 1: convert store fixtures to canonicalize drafts** and add compile-fail rustdocs proving store consumers cannot construct a canonical event directly.
+- [x] **Step 2: run RED:** the locked store build rejected the missing dependency edge before migration.
+- [x] **Step 3: update store imports and event accessors,** then remove the superseded canonical/replay authority types from domain. No schema change occurs in this task.
+- [x] **Step 4: run GREEN:** domain, accounting, Codex, store, and workspace validation pass.
+- [x] **Step 5: search authority bypasses:** no downstream constructor or Codex fingerprint implementation remains; only compile-fail examples intentionally mention forbidden constructors.
 
 ### Task 5: Record truth and close the slice
 
@@ -128,11 +130,11 @@
 - Modify: `README.md`
 - Modify: `README_RU.md`
 
-- [ ] **Step 1: update all status documents** to identify P0-A as implemented only after code/tests pass and P0-B Codex lineage as the next task.
-- [ ] **Step 2: add a traceability row for every normative `TM-*` requirement,** including explicit `planned` entries with no invented evidence.
-- [ ] **Step 3: run a docs consistency scan** for nonexistent ADR references, stale staging-as-next text, unfinished markers, and every normative requirement ID missing from traceability; expect no findings.
-- [ ] **Step 4: run the quality gate:** clean-root audit, format, strict workspace Clippy, locked workspace tests, `git diff --check`, and a tracked sensitive-content scan; expect pass or report the exact failing boundary.
-- [ ] **Step 5: inspect `git status --short`** and commit only the intended P0-A files with `feat(accounting): enforce canonicalization authority` after all gates pass.
+- [x] **Step 1: update all status documents** to identify P0-A and its incorporated Codex lineage slice as implemented, with P0-C as next.
+- [x] **Step 2: retain one traceability row for every normative `TM-*` requirement,** including explicit planned/open-evidence entries.
+- [x] **Step 3: run a docs consistency scan** for nonexistent ADR references, stale next-slice text, unfinished markers, and normative requirement IDs missing from traceability; no findings.
+- [x] **Step 4: run the quality gate:** clean-root audit, format, strict workspace Clippy, locked workspace tests, `git diff --check`, and tracked sensitive-content scan pass.
+- [x] **Step 5: inspect `git status --short`** and commit only the intended authority/lineage files with `feat(accounting): enforce canonicalization authority`.
 
 ## Acceptance gate
 

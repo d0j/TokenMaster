@@ -121,6 +121,16 @@ impl<const MAX_BYTES: usize> BoundedText<'_, MAX_BYTES> {
     pub(crate) const fn is_invalid(&self) -> bool {
         matches!(self, Self::Invalid)
     }
+
+    pub(crate) fn from_owned(value: String) -> BoundedText<'static, MAX_BYTES> {
+        classify_owned_text(value)
+    }
+}
+
+impl<'a, const MAX_BYTES: usize> BoundedText<'a, MAX_BYTES> {
+    pub(crate) fn from_borrowed(value: &'a str) -> Self {
+        classify_borrowed_text(value)
+    }
 }
 
 impl<'de: 'a, 'a, const MAX_BYTES: usize> Deserialize<'de> for BoundedText<'a, MAX_BYTES> {

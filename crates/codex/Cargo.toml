@@ -16,3 +16,4 @@ tokenmaster-provider = { path = "../provider" }
 
 [dev-dependencies]
 tempfile.workspace = true
+tokenmaster-accounting = { path = "../accounting" }

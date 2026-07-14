@@ -1,3 +1,11 @@
+//! Usage append batches accept only canonical accounting output.
+//!
+//! Canonical events cannot be constructed by store callers:
+//!
+//! ```compile_fail
+//! let _ = tokenmaster_accounting::CanonicalUsageEvent::new();
+//! ```
+
 #![forbid(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 

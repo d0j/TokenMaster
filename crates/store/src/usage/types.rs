@@ -1,6 +1,6 @@
 use std::fmt;
 
-use tokenmaster_domain::CanonicalUsageEvent;
+use tokenmaster_accounting::CanonicalUsageEvent;
 
 use crate::{StoreError, StoreErrorCode};
 

@@ -1,7 +1,7 @@
 use std::io::BufRead;
 
 use sha2::{Digest, Sha256};
-use tokenmaster_domain::CanonicalUsageEvent;
+use tokenmaster_domain::{ObservationDraft, ObservationVerification, SessionRelationDraft};
 
 use super::{
     MAX_BATCH_COMPLETE_BYTES, MAX_BATCH_EVENTS, READ_BUFFER_BYTES, ReaderDiagnosticCode,
@@ -14,7 +14,8 @@ use crate::{
 
 pub(super) struct FramingResult {
     pub(super) state: ParserState,
-    pub(super) events: Vec<CanonicalUsageEvent>,
+    pub(super) events: Vec<ObservationDraft>,
+    pub(super) relations: Vec<SessionRelationDraft>,
     pub(super) diagnostics: ReaderDiagnostics,
     pub(super) parser_diagnostics: ParserDiagnostics,
     pub(super) committed_offset: u64,
@@ -33,6 +34,7 @@ pub(super) struct FramingInput<'a> {
     pub(super) state: ParserState,
     pub(super) snapshot_end_offset: u64,
     pub(super) discarding_oversized_line: bool,
+    pub(super) source_verification: ObservationVerification,
 }
 
 pub(super) fn read_lines(
@@ -47,16 +49,19 @@ pub(super) fn read_lines(
         mut state,
         snapshot_end_offset,
         discarding_oversized_line: initial_discarding_oversized_line,
+        source_verification,
     } = input;
     let context = ParseContext::new(
         descriptor.profile_id().clone(),
         descriptor.source_id().clone(),
         descriptor.filename_session_hint().cloned(),
         descriptor.hashed_session_hint().clone(),
-    );
+    )
+    .with_source_verification(source_verification);
     let mut diagnostics = ReaderDiagnostics::default();
     let mut parser_diagnostics = ParserDiagnostics::new();
     let mut events = Vec::with_capacity(MAX_BATCH_EVENTS);
+    let mut relations = Vec::with_capacity(MAX_BATCH_EVENTS);
     let mut line = Vec::with_capacity(READ_BUFFER_BYTES.min(MAX_LINE_BYTES));
     let mut discarding_oversized_line = initial_discarding_oversized_line;
     let mut absolute_offset = start_offset;
@@ -127,23 +132,30 @@ pub(super) fn read_lines(
                 } else {
                     line.as_slice()
                 };
-                if !parse_bytes.is_empty()
-                    && let ParseOutcome::Emitted(event) = parse_line(
+                if !parse_bytes.is_empty() {
+                    match parse_line(
                         &context,
                         &mut state,
                         &mut parser_diagnostics,
                         committed_offset,
                         parse_bytes,
-                    )
-                {
-                    events.push(event);
+                    ) {
+                        ParseOutcome::Emitted(event) => events.push(event),
+                        ParseOutcome::SessionRelation(relation) => relations.push(relation),
+                        ParseOutcome::MetadataOnly
+                        | ParseOutcome::ToolOnly
+                        | ParseOutcome::Skipped
+                        | ParseOutcome::Rejected(_) => {}
+                    }
                 }
             }
             committed_offset = absolute_offset;
             complete_bytes = complete_bytes.saturating_add(current_line_batch_bytes);
             current_line_batch_bytes = 0;
             line.clear();
-            if events.len() >= MAX_BATCH_EVENTS || complete_bytes >= MAX_BATCH_COMPLETE_BYTES {
+            if events.len().saturating_add(relations.len()) >= MAX_BATCH_EVENTS
+                || complete_bytes >= MAX_BATCH_COMPLETE_BYTES
+            {
                 reached_snapshot_end = absolute_offset >= snapshot_end_offset;
                 break;
             }
@@ -165,6 +177,7 @@ pub(super) fn read_lines(
     Ok(FramingResult {
         state,
         events,
+        relations,
         diagnostics,
         parser_diagnostics,
         committed_offset,

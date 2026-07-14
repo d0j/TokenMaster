@@ -20,6 +20,8 @@ pub(super) struct MetadataUpdate {
     pub(super) source_alias: Option<MetadataValue>,
     pub(super) git_branch: Option<MetadataValue>,
     pub(super) context_window: Option<u64>,
+    pub(super) parent_session_id: Option<UsageSessionId>,
+    pub(super) lineage_conflict: bool,
 }
 
 impl MetadataUpdate {
@@ -32,6 +34,8 @@ impl MetadataUpdate {
             || self.source_alias.is_some()
             || self.git_branch.is_some()
             || self.context_window.is_some()
+            || self.parent_session_id.is_some()
+            || self.lineage_conflict
     }
 }
 
@@ -61,16 +65,55 @@ pub(super) fn metadata_update(
             diagnostics,
         )
     });
+    let (parent_session_id, lineage_conflict) = lineage_metadata(raw, payload, diagnostics);
     MetadataUpdate {
         current_model: current_model.flatten(),
         service_tier: display_metadata(&payload.service_tier, diagnostics),
         session_id: session_metadata(raw.kind.value(), payload, diagnostics),
         project: project_alias(&payload.cwd, diagnostics),
         originator: display_metadata(&payload.originator, diagnostics),
-        source_alias: display_metadata(&payload.source, diagnostics),
+        source_alias: display_metadata(payload.source.display(), diagnostics),
         git_branch: display_metadata(&payload.git.branch, diagnostics),
         context_window: context_window(payload.model_context_window, diagnostics),
+        parent_session_id,
+        lineage_conflict,
     }
+}
+
+fn lineage_metadata(
+    raw: &RawLine<'_>,
+    payload: &RawPayload<'_>,
+    diagnostics: &mut ParserDiagnostics,
+) -> (Option<UsageSessionId>, bool) {
+    let mut parent = None;
+    let mut conflict = false;
+    for candidate in [
+        &raw.forked_from_id,
+        &raw.parent_thread_id,
+        &payload.forked_from_id,
+        &payload.parent_thread_id,
+        payload.source.structured_parent_thread_id(),
+    ] {
+        if candidate.is_invalid() {
+            diagnostics.record(ParserDiagnosticCode::InvalidMetadata);
+            continue;
+        }
+        let Some(value) = candidate.value() else {
+            continue;
+        };
+        let Some(candidate) = UsageSessionId::new(value.to_owned())
+            .map_err(|_| diagnostics.record(ParserDiagnosticCode::InvalidMetadata))
+            .ok()
+        else {
+            continue;
+        };
+        match parent.as_ref() {
+            None => parent = Some(candidate),
+            Some(existing) if existing == &candidate => {}
+            Some(_) => conflict = true,
+        }
+    }
+    (parent, conflict)
 }
 
 fn normalize_metadata_model(
@@ -278,6 +321,14 @@ fn truncate_utf8(value: &str, max_bytes: usize) -> (&str, bool) {
 }
 
 pub(super) fn apply_metadata(state: &mut ParserState, update: MetadataUpdate) {
+    if let Some(parent) = update.parent_session_id {
+        match state.parent_session_id.as_ref() {
+            None => state.parent_session_id = Some(parent),
+            Some(existing) if existing == &parent => {}
+            Some(_) => state.lineage_conflict = true,
+        }
+    }
+    state.lineage_conflict |= update.lineage_conflict;
     if let Some(value) = update.current_model {
         state.current_model = Some(value);
     }

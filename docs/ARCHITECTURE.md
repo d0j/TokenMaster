@@ -3,7 +3,7 @@
 ```text
 Codex JSONL sources
   -> bounded discovery and streaming reader
-  -> typed Codex decoder and provider-neutral ObservationDraft
+  -> typed Codex decoder and provider-neutral ObservationDraft/SessionRelationDraft
   -> exclusive TokenMaster accounting canonicalizer
   -> replay classifier and revalidation/runtime engine
   -> transactional current/staging SQLite archive
@@ -17,6 +17,12 @@ fingerprints, replay signatures/evidence, event IDs, dispositions, or canonical
 events. The accounting crate is their only constructor. The store persists only
 path-private identities and approved usage metadata. Current-generation batches are
 one SQLite transaction; staging promotion is a separate atomic boundary.
+
+Ancestry metadata may arrive after usage. The reader therefore emits a separate
+bounded session-relation draft in addition to observation drafts; reconciliation can
+apply it to earlier observations without retaining raw JSONL. Parser resume v2 stores
+the next ordinal and bounded lineage state. Resume v1 fails closed because assigning
+ordinal zero after prior emissions would create false identity collisions.
 
 The UI receives bounded view models rather than owning archive state. Skin, layout,
 and locale selection alter presentation state only, so switching remains immediate and

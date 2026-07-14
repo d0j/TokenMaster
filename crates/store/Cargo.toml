@@ -8,6 +8,7 @@ rust-version.workspace = true
 [dependencies]
 libsqlite3-sys.workspace = true
 rusqlite.workspace = true
+tokenmaster-accounting = { path = "../accounting" }
 tokenmaster-domain = { path = "../domain" }
 
 [dev-dependencies]

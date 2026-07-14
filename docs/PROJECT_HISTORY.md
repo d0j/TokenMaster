@@ -118,4 +118,28 @@ bounded models, native tray lifecycle, modular skins, layouts, and localization.
 - M1 established bounded Codex discovery, streaming parse/revalidation, strict
 path-private SQLite storage, checkpoint CAS, and atomic current-generation ingest.
 - M1 staging-generation promotion and scan reconciliation remain deliberately
-unimplemented until their transactional contract tests are written.
+  unimplemented until their transactional contract tests are written.
+
+## 2026-07-14 — exclusive accounting authority and Codex lineage
+
+Implemented the audited P0-A authority correction and the P0-B Codex-lineage input
+surface. `tokenmaster-domain` now owns only bounded provider-neutral observation and
+session-relation drafts. The new `tokenmaster-accounting` crate exclusively creates
+fingerprint v2, replay signature v1/evidence, event IDs, lineage, and opaque canonical
+events. Public domain constructors and Codex-owned fingerprinting were removed, and
+the store accepts accounting output only. Store append also verifies that canonical
+provider, profile, and source identities match the registered source before writing.
+
+Codex now recognizes bounded ancestry from top-level/payload `forked_from_id`,
+top-level/payload `parent_thread_id`, and structured subagent spawn metadata without
+precedence. Multiple distinct valid parents become an explicit conflict. Parser resume
+v2 retains parent/conflict/next ordinal and cumulative facts; ancestry arriving after
+usage is emitted as a separate bounded relation. Resume v1 fails closed because its
+ordinal cannot be reconstructed safely.
+
+Verification included focused RED/GREEN contracts, deterministic hash vectors,
+compile-fail authority proofs, the complete locked Codex/store/domain/accounting
+suites, full locked workspace tests, strict workspace Clippy, clean-root,
+documentation-consistency, privacy, format, and diff gates. P0-C replay
+classification remains next; no replay schema migration or replay-safe totals are
+claimed.

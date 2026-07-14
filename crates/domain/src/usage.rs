@@ -3,6 +3,7 @@ use std::fmt;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 pub const MAX_USAGE_ID_BYTES: usize = 128;
+pub const MAX_PROVIDER_ID_BYTES: usize = 64;
 pub const MAX_SESSION_ID_BYTES: usize = 512;
 pub const MAX_MODEL_KEY_BYTES: usize = 64;
 pub const MAX_METADATA_BYTES: usize = 512;
@@ -297,6 +298,12 @@ macro_rules! trimmed_value {
 }
 
 ascii_value!(
+    UsageProviderId,
+    "provider_id",
+    MAX_PROVIDER_ID_BYTES,
+    is_usage_id_byte
+);
+ascii_value!(
     UsageProfileId,
     "profile_id",
     MAX_USAGE_ID_BYTES,
@@ -311,91 +318,6 @@ ascii_value!(
 ascii_value!(ModelKey, "model", MAX_MODEL_KEY_BYTES, is_model_key_byte);
 trimmed_value!(UsageSessionId, "session_id", MAX_SESSION_ID_BYTES);
 trimmed_value!(MetadataValue, "metadata", MAX_METADATA_BYTES);
-
-#[derive(Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ReplaySignature([u8; 32]);
-
-impl ReplaySignature {
-    #[must_use]
-    pub const fn new(bytes: [u8; 32]) -> Self {
-        Self(bytes)
-    }
-
-    #[must_use]
-    pub const fn as_bytes(&self) -> &[u8; 32] {
-        &self.0
-    }
-}
-
-impl fmt::Debug for ReplaySignature {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("ReplaySignature([redacted])")
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ReplayEvidence {
-    StrongCumulative,
-    WeakUsageOnly,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct UsageLineage {
-    parent_session_id: Option<UsageSessionId>,
-    session_ordinal: u64,
-    signature: ReplaySignature,
-    evidence: ReplayEvidence,
-    declared_conflict: bool,
-}
-
-impl UsageLineage {
-    pub fn new(
-        current_session_id: &UsageSessionId,
-        parent_session_id: Option<UsageSessionId>,
-        session_ordinal: u64,
-        signature: ReplaySignature,
-        evidence: ReplayEvidence,
-        declared_conflict: bool,
-    ) -> Result<Self, UsageError> {
-        if !declared_conflict && parent_session_id.as_ref() == Some(current_session_id) {
-            return Err(UsageError::InvalidLineage);
-        }
-        Ok(Self {
-            parent_session_id,
-            session_ordinal,
-            signature,
-            evidence,
-            declared_conflict,
-        })
-    }
-
-    #[must_use]
-    pub const fn parent_session_id(&self) -> Option<&UsageSessionId> {
-        self.parent_session_id.as_ref()
-    }
-
-    #[must_use]
-    pub const fn session_ordinal(&self) -> u64 {
-        self.session_ordinal
-    }
-
-    #[must_use]
-    pub const fn signature(&self) -> ReplaySignature {
-        self.signature
-    }
-
-    #[must_use]
-    pub const fn evidence(&self) -> ReplayEvidence {
-        self.evidence
-    }
-
-    #[must_use]
-    pub const fn declared_conflict(&self) -> bool {
-        self.declared_conflict
-    }
-}
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize)]
 #[serde(transparent)]
@@ -426,89 +348,40 @@ impl<'de> Deserialize<'de> for ProjectAlias {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct CanonicalUsageEventParts {
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ObservationVerification {
+    Incremental,
+    FullPrefix,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct SessionRelationDraftParts {
+    pub provider_id: UsageProviderId,
     pub profile_id: UsageProfileId,
     pub session_id: UsageSessionId,
+    pub parent_session_id: UsageSessionId,
+    pub declared_conflict: bool,
     pub source_id: UsageSourceId,
     pub source_offset: u64,
-    pub timestamp: UtcTimestamp,
-    pub model: ModelKey,
-    pub raw_model: Option<MetadataValue>,
-    pub usage: TokenUsage,
-    pub fallback_model: bool,
-    pub long_context: LongContextState,
-    pub service_tier: Option<MetadataValue>,
-    pub project: Option<ProjectAlias>,
-    pub originator: Option<MetadataValue>,
-    pub activity: ActivityCounts,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub struct EventFingerprint([u8; 32]);
+#[derive(Clone, Eq, PartialEq)]
+pub struct SessionRelationDraft {
+    parts: SessionRelationDraftParts,
+}
 
-impl EventFingerprint {
-    #[must_use]
-    pub const fn new(bytes: [u8; 32]) -> Self {
-        Self(bytes)
-    }
-
-    #[must_use]
-    pub const fn as_bytes(&self) -> &[u8; 32] {
-        &self.0
-    }
-
-    #[must_use]
-    pub fn to_hex(&self) -> String {
-        let mut output = String::with_capacity(64);
-        for byte in self.0 {
-            push_hex_byte(&mut output, byte);
+impl SessionRelationDraft {
+    pub fn new(parts: SessionRelationDraftParts) -> Result<Self, UsageError> {
+        if !parts.declared_conflict && parts.parent_session_id == parts.session_id {
+            return Err(UsageError::InvalidLineage);
         }
-        output
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize)]
-#[serde(transparent)]
-pub struct EventId(Box<str>);
-
-impl EventId {
-    fn from_fingerprint(fingerprint: EventFingerprint) -> Self {
-        let mut value = String::with_capacity(26);
-        value.push_str("event_");
-        for byte in fingerprint.0.into_iter().take(10) {
-            push_hex_byte(&mut value, byte);
-        }
-        Self(value.into_boxed_str())
+        Ok(Self { parts })
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-fn push_hex_byte(output: &mut String, byte: u8) {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    output.push(char::from(HEX[usize::from(byte >> 4)]));
-    output.push(char::from(HEX[usize::from(byte & 0x0f)]));
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct CanonicalUsageEvent {
-    parts: CanonicalUsageEventParts,
-    fingerprint: EventFingerprint,
-    id: EventId,
-}
-
-impl CanonicalUsageEvent {
-    #[must_use]
-    pub fn new(parts: CanonicalUsageEventParts, fingerprint: EventFingerprint) -> Self {
-        Self {
-            parts,
-            fingerprint,
-            id: EventId::from_fingerprint(fingerprint),
-        }
+    pub const fn provider_id(&self) -> &UsageProviderId {
+        &self.parts.provider_id
     }
 
     #[must_use]
@@ -522,6 +395,16 @@ impl CanonicalUsageEvent {
     }
 
     #[must_use]
+    pub const fn parent_session_id(&self) -> &UsageSessionId {
+        &self.parts.parent_session_id
+    }
+
+    #[must_use]
+    pub const fn declared_conflict(&self) -> bool {
+        self.parts.declared_conflict
+    }
+
+    #[must_use]
     pub const fn source_id(&self) -> &UsageSourceId {
         &self.parts.source_id
     }
@@ -529,6 +412,103 @@ impl CanonicalUsageEvent {
     #[must_use]
     pub const fn source_offset(&self) -> u64 {
         self.parts.source_offset
+    }
+}
+
+impl fmt::Debug for SessionRelationDraft {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("SessionRelationDraft")
+            .field("provider_id", &self.parts.provider_id)
+            .field("profile_id", &self.parts.profile_id)
+            .field("session_id", &self.parts.session_id)
+            .field("parent_session_id", &self.parts.parent_session_id)
+            .field("declared_conflict", &self.parts.declared_conflict)
+            .field("source", &"[redacted]")
+            .finish()
+    }
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct ObservationDraftParts {
+    pub provider_id: UsageProviderId,
+    pub profile_id: UsageProfileId,
+    pub session_id: UsageSessionId,
+    pub parent_session_id: Option<UsageSessionId>,
+    pub session_ordinal: u64,
+    pub lineage_conflict: bool,
+    pub source_id: UsageSourceId,
+    pub source_offset: u64,
+    pub source_verification: ObservationVerification,
+    pub timestamp: UtcTimestamp,
+    pub model: ModelKey,
+    pub raw_model: Option<MetadataValue>,
+    pub delta_usage: TokenUsage,
+    pub cumulative_usage: Option<TokenUsage>,
+    pub fallback_model: bool,
+    pub long_context: LongContextState,
+    pub service_tier: Option<MetadataValue>,
+    pub project: Option<ProjectAlias>,
+    pub originator: Option<MetadataValue>,
+    pub activity: ActivityCounts,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct ObservationDraft {
+    parts: ObservationDraftParts,
+}
+
+impl ObservationDraft {
+    pub fn new(parts: ObservationDraftParts) -> Result<Self, UsageError> {
+        if !parts.lineage_conflict && parts.parent_session_id.as_ref() == Some(&parts.session_id) {
+            return Err(UsageError::InvalidLineage);
+        }
+        Ok(Self { parts })
+    }
+
+    #[must_use]
+    pub const fn provider_id(&self) -> &UsageProviderId {
+        &self.parts.provider_id
+    }
+
+    #[must_use]
+    pub const fn profile_id(&self) -> &UsageProfileId {
+        &self.parts.profile_id
+    }
+
+    #[must_use]
+    pub const fn session_id(&self) -> &UsageSessionId {
+        &self.parts.session_id
+    }
+
+    #[must_use]
+    pub const fn parent_session_id(&self) -> Option<&UsageSessionId> {
+        self.parts.parent_session_id.as_ref()
+    }
+
+    #[must_use]
+    pub const fn session_ordinal(&self) -> u64 {
+        self.parts.session_ordinal
+    }
+
+    #[must_use]
+    pub const fn lineage_conflict(&self) -> bool {
+        self.parts.lineage_conflict
+    }
+
+    #[must_use]
+    pub const fn source_id(&self) -> &UsageSourceId {
+        &self.parts.source_id
+    }
+
+    #[must_use]
+    pub const fn source_offset(&self) -> u64 {
+        self.parts.source_offset
+    }
+
+    #[must_use]
+    pub const fn source_verification(&self) -> ObservationVerification {
+        self.parts.source_verification
     }
 
     #[must_use]
@@ -547,8 +527,19 @@ impl CanonicalUsageEvent {
     }
 
     #[must_use]
+    pub const fn delta_usage(&self) -> &TokenUsage {
+        &self.parts.delta_usage
+    }
+
+    /// Compatibility accessor for consumers that treat draft usage as the emitted delta.
+    #[must_use]
     pub const fn usage(&self) -> &TokenUsage {
-        &self.parts.usage
+        self.delta_usage()
+    }
+
+    #[must_use]
+    pub const fn cumulative_usage(&self) -> Option<&TokenUsage> {
+        self.parts.cumulative_usage.as_ref()
     }
 
     #[must_use]
@@ -580,14 +571,22 @@ impl CanonicalUsageEvent {
     pub const fn activity(&self) -> &ActivityCounts {
         &self.parts.activity
     }
+}
 
-    #[must_use]
-    pub const fn fingerprint(&self) -> &EventFingerprint {
-        &self.fingerprint
-    }
-
-    #[must_use]
-    pub const fn id(&self) -> &EventId {
-        &self.id
+impl fmt::Debug for ObservationDraft {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ObservationDraft")
+            .field("provider_id", &self.parts.provider_id)
+            .field("profile_id", &self.parts.profile_id)
+            .field("session_id", &self.parts.session_id)
+            .field("parent_session_id", &self.parts.parent_session_id)
+            .field("session_ordinal", &self.parts.session_ordinal)
+            .field("lineage_conflict", &self.parts.lineage_conflict)
+            .field("source", &"[redacted]")
+            .field("source_verification", &self.parts.source_verification)
+            .field("model", &self.parts.model)
+            .field("usage", &"[redacted]")
+            .finish()
     }
 }

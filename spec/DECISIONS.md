@@ -59,3 +59,8 @@ Decision: providers emit observation drafts containing normalized facts and repl
 basis; a provider-neutral TokenMaster canonicalizer computes fingerprints, replay
 signatures/evidence, event IDs, and canonical-event values. Rationale: built-in and
 external providers cannot diverge from or bypass accounting identity rules.
+
+Implementation status: active. `tokenmaster-accounting` is the exclusive constructor;
+Codex emits drafts/late session relations, and the store accepts opaque canonical
+events only. Fingerprint v2 and replay signature v1 are versioned deterministic
+framed hashes.

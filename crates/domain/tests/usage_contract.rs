@@ -1,33 +1,143 @@
 use tokenmaster_domain::{
-    ActivityCounts, ActivityKind, CanonicalUsageEvent, CanonicalUsageEventParts, EventFingerprint,
-    LongContextState, MetadataValue, ModelKey, ProjectAlias, ReplayEvidence, ReplaySignature,
-    TokenCount, TokenUsage, UsageLineage, UsageProfileId, UsageSessionId, UsageSourceId,
-    UtcTimestamp,
+    ActivityCounts, ActivityKind, LongContextState, MetadataValue, ModelKey, ObservationDraft,
+    ObservationDraftParts, ObservationVerification, ProjectAlias, SessionRelationDraft,
+    SessionRelationDraftParts, TokenCount, TokenUsage, UsageProfileId, UsageProviderId,
+    UsageSessionId, UsageSourceId, UtcTimestamp,
 };
 
-fn sample_parts() -> CanonicalUsageEventParts {
-    CanonicalUsageEventParts {
-        profile_id: UsageProfileId::new("profile_fixture").expect("valid profile"),
-        session_id: UsageSessionId::new("session_fixture").expect("valid session"),
+#[test]
+fn observation_draft_is_bounded_provider_neutral_and_private() {
+    let session_id = UsageSessionId::new("session_child").expect("valid child session");
+    let delta = TokenUsage::new(
+        TokenCount::Available(10),
+        TokenCount::Unavailable,
+        TokenCount::Available(2),
+        TokenCount::Unavailable,
+        TokenCount::Available(12),
+    );
+    let cumulative = TokenUsage::new(
+        TokenCount::Available(100),
+        TokenCount::Available(40),
+        TokenCount::Available(20),
+        TokenCount::Available(5),
+        TokenCount::Available(125),
+    );
+    let draft = ObservationDraft::new(ObservationDraftParts {
+        provider_id: UsageProviderId::new("codex").expect("valid provider"),
+        profile_id: UsageProfileId::new("default").expect("valid profile"),
+        session_id: session_id.clone(),
+        parent_session_id: Some(
+            UsageSessionId::new("session_parent").expect("valid parent session"),
+        ),
+        session_ordinal: 0,
+        lineage_conflict: false,
         source_id: UsageSourceId::new("source_fixture").expect("valid source"),
         source_offset: 17,
+        source_verification: ObservationVerification::FullPrefix,
         timestamp: UtcTimestamp::new(1_720_598_400, 123_000_000).expect("valid timestamp"),
         model: ModelKey::new("gpt-5.6-sol").expect("valid model"),
         raw_model: Some(MetadataValue::new("gpt-5.6-sol").expect("valid raw model")),
-        usage: TokenUsage::new(
-            TokenCount::Available(10),
-            TokenCount::Unavailable,
-            TokenCount::Available(2),
-            TokenCount::Unavailable,
-            TokenCount::Available(12),
-        ),
+        delta_usage: delta,
+        cumulative_usage: Some(cumulative),
         fallback_model: false,
         long_context: LongContextState::No,
         service_tier: Some(MetadataValue::new("priority").expect("valid tier")),
         project: Some(ProjectAlias::new("tokenmaster").expect("valid project")),
         originator: Some(MetadataValue::new("codex_cli").expect("valid originator")),
         activity: ActivityCounts::default(),
-    }
+    })
+    .expect("valid observation draft");
+
+    assert_eq!(draft.provider_id().as_str(), "codex");
+    assert_eq!(draft.profile_id().as_str(), "default");
+    assert_eq!(draft.session_id(), &session_id);
+    assert_eq!(
+        draft.parent_session_id().map(UsageSessionId::as_str),
+        Some("session_parent")
+    );
+    assert_eq!(draft.session_ordinal(), 0);
+    assert!(!draft.lineage_conflict());
+    assert_eq!(
+        draft.source_verification(),
+        ObservationVerification::FullPrefix
+    );
+    assert_eq!(draft.delta_usage(), &delta);
+    assert_eq!(draft.cumulative_usage(), Some(&cumulative));
+
+    let debug = format!("{draft:?}");
+    assert!(debug.contains("provider_id"));
+    assert!(debug.contains("session_ordinal"));
+    assert!(!debug.contains("source_fixture"));
+    assert!(!debug.contains("125"));
+
+    assert!(UsageProviderId::new("provider/path").is_err());
+    assert!(UsageProviderId::new("p".repeat(65)).is_err());
+    assert_eq!(
+        serde_json::to_string(&ObservationVerification::Incremental)
+            .expect("verification serializes"),
+        r#""incremental""#
+    );
+
+    let self_parent = ObservationDraft::new(ObservationDraftParts {
+        provider_id: UsageProviderId::new("codex").expect("valid provider"),
+        profile_id: UsageProfileId::new("default").expect("valid profile"),
+        session_id: session_id.clone(),
+        parent_session_id: Some(session_id),
+        session_ordinal: 0,
+        lineage_conflict: false,
+        source_id: UsageSourceId::new("source_fixture").expect("valid source"),
+        source_offset: 17,
+        source_verification: ObservationVerification::Incremental,
+        timestamp: UtcTimestamp::new(1_720_598_400, 0).expect("valid timestamp"),
+        model: ModelKey::new("gpt-5.6-sol").expect("valid model"),
+        raw_model: None,
+        delta_usage: delta,
+        cumulative_usage: None,
+        fallback_model: false,
+        long_context: LongContextState::No,
+        service_tier: None,
+        project: None,
+        originator: None,
+        activity: ActivityCounts::default(),
+    });
+    assert!(self_parent.is_err());
+}
+
+#[test]
+fn session_relation_draft_preserves_late_lineage_without_source_content() {
+    let relation = SessionRelationDraft::new(SessionRelationDraftParts {
+        provider_id: UsageProviderId::new("codex").expect("valid provider"),
+        profile_id: UsageProfileId::new("default").expect("valid profile"),
+        session_id: UsageSessionId::new("session_child").expect("valid session"),
+        parent_session_id: UsageSessionId::new("session_parent").expect("valid parent"),
+        declared_conflict: false,
+        source_id: UsageSourceId::new("source_private").expect("valid source"),
+        source_offset: 41,
+    })
+    .expect("valid session relation");
+
+    assert_eq!(relation.provider_id().as_str(), "codex");
+    assert_eq!(relation.profile_id().as_str(), "default");
+    assert_eq!(relation.session_id().as_str(), "session_child");
+    assert_eq!(relation.parent_session_id().as_str(), "session_parent");
+    assert!(!relation.declared_conflict());
+    assert_eq!(relation.source_offset(), 41);
+    let debug = format!("{relation:?}");
+    assert!(!debug.contains("source_private"));
+
+    let session = UsageSessionId::new("same").expect("valid session");
+    assert!(
+        SessionRelationDraft::new(SessionRelationDraftParts {
+            provider_id: UsageProviderId::new("codex").expect("valid provider"),
+            profile_id: UsageProfileId::new("default").expect("valid profile"),
+            session_id: session.clone(),
+            parent_session_id: session,
+            declared_conflict: false,
+            source_id: UsageSourceId::new("source_private").expect("valid source"),
+            source_offset: 41,
+        })
+        .is_err()
+    );
 }
 
 #[test]
@@ -140,126 +250,4 @@ fn timestamp_and_long_context_preserve_explicit_state() {
     assert!(UtcTimestamp::new(1_700_000_000, 1_000_000_000).is_err());
     assert_ne!(LongContextState::Unavailable, LongContextState::No);
     assert_ne!(LongContextState::Unavailable, LongContextState::Yes);
-}
-
-#[test]
-fn event_id_is_derived_from_the_full_fingerprint() {
-    let fingerprint = EventFingerprint::new([0xab; 32]);
-    let event = CanonicalUsageEvent::new(sample_parts(), fingerprint);
-
-    assert_eq!(
-        event.fingerprint().to_hex(),
-        "abababababababababababababababababababababababababababababababab"
-    );
-    assert_eq!(event.fingerprint().as_bytes(), &[0xab; 32]);
-    assert_eq!(event.id().as_str(), "event_abababababababababab");
-    assert_eq!(event.profile_id().as_str(), "profile_fixture");
-    assert_eq!(event.session_id().as_str(), "session_fixture");
-    assert_eq!(event.source_id().as_str(), "source_fixture");
-    assert_eq!(event.source_offset(), 17);
-    assert_eq!(event.timestamp().subsec_nanos(), 123_000_000);
-    assert_eq!(event.model().as_str(), "gpt-5.6-sol");
-    assert_eq!(
-        event.raw_model().map(MetadataValue::as_str),
-        Some("gpt-5.6-sol")
-    );
-    assert_eq!(event.usage().total(), TokenCount::Available(12));
-    assert!(!event.fallback_model());
-    assert_eq!(event.long_context(), LongContextState::No);
-    assert_eq!(
-        event.service_tier().map(MetadataValue::as_str),
-        Some("priority")
-    );
-    assert_eq!(
-        event.project().map(ProjectAlias::as_str),
-        Some("tokenmaster")
-    );
-    assert_eq!(
-        event.originator().map(MetadataValue::as_str),
-        Some("codex_cli")
-    );
-    assert_eq!(event.activity().as_array(), &[0; 8]);
-}
-
-#[test]
-fn canonical_event_serialization_contains_only_the_allowed_shape() {
-    let event = CanonicalUsageEvent::new(sample_parts(), EventFingerprint::new([0x11; 32]));
-    let value = serde_json::to_value(event).expect("canonical event serializes");
-    let object = value.as_object().expect("canonical event is an object");
-
-    assert_eq!(
-        object.keys().map(String::as_str).collect::<Vec<_>>(),
-        ["fingerprint", "id", "parts"]
-    );
-    let parts = object["parts"]
-        .as_object()
-        .expect("event parts are an object");
-    assert_eq!(parts["source_offset"], 17);
-    assert_eq!(parts["usage"]["cached"], serde_json::Value::Null);
-}
-
-#[test]
-fn replay_lineage_is_bounded_serializable_and_private() {
-    let session = UsageSessionId::new("child-session").expect("valid child session");
-    let parent = UsageSessionId::new("parent-session").expect("valid parent session");
-    let signature = ReplaySignature::new([0xab; 32]);
-    let lineage = UsageLineage::new(
-        &session,
-        Some(parent.clone()),
-        0,
-        signature,
-        ReplayEvidence::StrongCumulative,
-        false,
-    )
-    .expect("valid lineage");
-
-    assert_eq!(lineage.parent_session_id(), Some(&parent));
-    assert_eq!(lineage.session_ordinal(), 0);
-    assert_eq!(lineage.signature(), signature);
-    assert_eq!(lineage.evidence(), ReplayEvidence::StrongCumulative);
-    assert!(!lineage.declared_conflict());
-    assert_eq!(signature.as_bytes(), &[0xab; 32]);
-    assert_eq!(format!("{signature:?}"), "ReplaySignature([redacted])");
-
-    let first = serde_json::to_string(&lineage).expect("lineage serializes");
-    let second = serde_json::to_string(&lineage).expect("lineage serializes twice");
-    assert_eq!(first, second);
-    let value: serde_json::Value = serde_json::from_str(&first).expect("lineage JSON");
-    assert_eq!(value["parent_session_id"], "parent-session");
-    assert_eq!(value["session_ordinal"], 0);
-    assert_eq!(value["evidence"], "strong_cumulative");
-    assert_eq!(value["declared_conflict"], false);
-    assert_eq!(
-        value["signature"]
-            .as_array()
-            .expect("signature bytes")
-            .len(),
-        32
-    );
-
-    let short_signature = serde_json::to_string(&vec![0_u8; 31]).expect("short signature JSON");
-    assert!(serde_json::from_str::<ReplaySignature>(&short_signature).is_err());
-    assert!(
-        UsageLineage::new(
-            &session,
-            Some(session.clone()),
-            0,
-            signature,
-            ReplayEvidence::WeakUsageOnly,
-            false,
-        )
-        .is_err()
-    );
-    assert!(
-        UsageLineage::new(
-            &session,
-            Some(session.clone()),
-            0,
-            signature,
-            ReplayEvidence::WeakUsageOnly,
-            true,
-        )
-        .is_ok()
-    );
-    assert!(UsageSessionId::new("p".repeat(513)).is_err());
 }

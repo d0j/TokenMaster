@@ -4,7 +4,7 @@ use std::path::Component;
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use tokenmaster_domain::CanonicalUsageEvent;
+use tokenmaster_domain::{ObservationDraft, ObservationVerification, SessionRelationDraft};
 use tokenmaster_platform::PhysicalFileIdentity;
 use tokenmaster_provider::SourceKind;
 
@@ -250,7 +250,8 @@ impl fmt::Debug for ReaderOutcome {
 
 pub struct ReadBatch {
     checkpoint: ReaderCheckpointV1,
-    events: Vec<CanonicalUsageEvent>,
+    events: Vec<ObservationDraft>,
+    relations: Vec<SessionRelationDraft>,
     diagnostics: ReaderDiagnostics,
     parser_diagnostics: ParserDiagnostics,
     bytes_read: u64,
@@ -266,8 +267,13 @@ impl ReadBatch {
     }
 
     #[must_use]
-    pub fn events(&self) -> &[CanonicalUsageEvent] {
+    pub fn events(&self) -> &[ObservationDraft] {
         &self.events
+    }
+
+    #[must_use]
+    pub fn relations(&self) -> &[SessionRelationDraft] {
+        &self.relations
     }
 
     #[must_use]
@@ -307,6 +313,7 @@ impl fmt::Debug for ReadBatch {
             .debug_struct("ReadBatch")
             .field("checkpoint", &self.checkpoint)
             .field("events_count", &self.events.len())
+            .field("relations_count", &self.relations.len())
             .field("diagnostics", &self.diagnostics)
             .field("parser_diagnostics", &self.parser_diagnostics)
             .field("bytes_read", &self.bytes_read)
@@ -491,6 +498,10 @@ pub fn read_source_batch(
             snapshot_end_offset: source.file_length,
             discarding_oversized_line: checkpoint
                 .is_some_and(ReaderCheckpointV1::discarding_oversized_line),
+            source_verification: match verification {
+                VerificationLevel::Incremental => ObservationVerification::Incremental,
+                VerificationLevel::FullPrefix => ObservationVerification::FullPrefix,
+            },
         },
         &mut should_cancel,
     )?;
@@ -571,6 +582,7 @@ pub fn read_source_batch(
     Ok(ReaderOutcome::Batch(ReadBatch {
         checkpoint,
         events: framed.events,
+        relations: framed.relations,
         diagnostics: framed.diagnostics,
         parser_diagnostics: framed.parser_diagnostics,
         bytes_read: framed.bytes_read,

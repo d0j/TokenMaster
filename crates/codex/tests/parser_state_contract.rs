@@ -1,10 +1,10 @@
 use tokenmaster_codex::{
     MAX_TOOL_NAME_BYTES, MAX_TOOL_NAMES, PARSER_SCHEMA_VERSION, ParseContext, ParseOutcome,
-    ParserDiagnosticCode, ParserDiagnostics, ParserResumeErrorCode, ParserResumeStateV1,
-    ParserState, parse_line,
+    ParserDiagnosticCode, ParserDiagnostics, ParserResumeErrorCode, ParserResumeState, ParserState,
+    parse_line,
 };
 use tokenmaster_domain::{
-    ActivityKind, CanonicalUsageEvent, TokenCount, UsageProfileId, UsageSessionId, UsageSourceId,
+    ActivityKind, ObservationDraft, TokenCount, UsageProfileId, UsageSessionId, UsageSourceId,
 };
 
 fn context() -> ParseContext {
@@ -31,7 +31,7 @@ fn emitted(
     diagnostics: &mut ParserDiagnostics,
     offset: u64,
     line: &[u8],
-) -> CanonicalUsageEvent {
+) -> ObservationDraft {
     match parse(context, state, diagnostics, offset, line) {
         ParseOutcome::Emitted(event) => event,
         other => panic!("event expected, got {other:?}"),
@@ -42,7 +42,7 @@ fn seed_metadata_and_tool(
     context: &ParseContext,
     state: &mut ParserState,
     diagnostics: &mut ParserDiagnostics,
-) -> CanonicalUsageEvent {
+) -> ObservationDraft {
     let metadata = br#"{"timestamp":"2026-07-10T08:00:00Z","type":"session_meta","payload":{"id":"real-session-id","session_id":"general-session-id","requested_model":"gpt-5.6-sol","service_tier":"priority","cwd":"C:\\PRIVATE_PARENT_MARKER\\customer-api","originator":"codex_win","source":"cli","git":{"branch":"feature/usage"},"model_context_window":1050000,"prompt":"PROMPT_SECRET","reasoning":"REASONING_SECRET"},"unknown":{"response":"RESPONSE_SECRET"}}"#;
     assert!(matches!(
         parse(context, state, diagnostics, 0, metadata),
@@ -106,7 +106,7 @@ fn metadata_activity_and_privacy_follow_the_bounded_contract() {
     assert_eq!(diagnostics.metadata_lines(), 1);
     assert_eq!(diagnostics.tool_events(), 1);
 
-    let event_json = serde_json::to_string(&event).expect("event serializes");
+    let event_debug = format!("{event:?}");
     let resume_json = serde_json::to_string(&state.snapshot()).expect("resume serializes");
     for marker in [
         "PRIVATE_PARENT_MARKER",
@@ -116,7 +116,7 @@ fn metadata_activity_and_privacy_follow_the_bounded_contract() {
         "ARGUMENT_SECRET",
         "OUTPUT_SECRET",
     ] {
-        assert!(!event_json.contains(marker), "event leaked {marker}");
+        assert!(!event_debug.contains(marker), "event leaked {marker}");
         assert!(!resume_json.contains(marker), "resume leaked {marker}");
     }
     assert!(resume_json.contains("real-session-id"));
@@ -295,7 +295,7 @@ fn resume_is_deterministic_strict_and_revalidated() {
     assert_eq!(first_json, second_json);
     assert!(first_json.contains(&format!("\"version\":{PARSER_SCHEMA_VERSION}")));
 
-    let decoded: ParserResumeStateV1 =
+    let decoded: ParserResumeState =
         serde_json::from_str(&first_json).expect("resume deserializes");
     let restored = ParserState::from_resume(decoded).expect("valid resume restores");
     assert_eq!(restored.snapshot(), snapshot);
@@ -319,12 +319,12 @@ fn resume_is_deterministic_strict_and_revalidated() {
         .as_object_mut()
         .expect("resume object")
         .insert("raw_tail".to_owned(), serde_json::json!("TAIL_SECRET"));
-    assert!(serde_json::from_value::<ParserResumeStateV1>(unknown).is_err());
+    assert!(serde_json::from_value::<ParserResumeState>(unknown).is_err());
 
     let mut unsupported: serde_json::Value =
         serde_json::from_str(&first_json).expect("resume json value");
     unsupported["version"] = serde_json::json!(PARSER_SCHEMA_VERSION + 1);
-    let unsupported: ParserResumeStateV1 =
+    let unsupported: ParserResumeState =
         serde_json::from_value(unsupported).expect("shape remains valid");
     let error = ParserState::from_resume(unsupported).expect_err("version must fail");
     assert_eq!(error.code(), ParserResumeErrorCode::UnsupportedVersion);
@@ -335,7 +335,7 @@ fn resume_is_deterministic_strict_and_revalidated() {
         .as_array_mut()
         .expect("tool count array");
     tools.push(serde_json::json!({"name":"aaa","count":1}));
-    let unsorted: ParserResumeStateV1 =
+    let unsorted: ParserResumeState =
         serde_json::from_value(unsorted).expect("bounded shape deserializes");
     let error = ParserState::from_resume(unsorted).expect_err("order must fail");
     assert_eq!(error.code(), ParserResumeErrorCode::InvalidState);
@@ -343,7 +343,7 @@ fn resume_is_deterministic_strict_and_revalidated() {
     let mut invalid_cached: serde_json::Value =
         serde_json::from_str(&first_json).expect("resume json value");
     invalid_cached["previous_totals"]["cached"] = serde_json::json!(101);
-    let invalid_cached: ParserResumeStateV1 =
+    let invalid_cached: ParserResumeState =
         serde_json::from_value(invalid_cached).expect("bounded shape deserializes");
     let error = ParserState::from_resume(invalid_cached).expect_err("cached bound must fail");
     assert_eq!(error.code(), ParserResumeErrorCode::InvalidState);
@@ -352,7 +352,7 @@ fn resume_is_deterministic_strict_and_revalidated() {
         serde_json::from_str(&first_json).expect("resume json value");
     impossible_other["tool_counts"] = serde_json::json!([]);
     impossible_other["other_tools"] = serde_json::json!(1);
-    let impossible_other: ParserResumeStateV1 =
+    let impossible_other: ParserResumeState =
         serde_json::from_value(impossible_other).expect("bounded shape deserializes");
     let error =
         ParserState::from_resume(impossible_other).expect_err("other tools require full capacity");
@@ -362,7 +362,7 @@ fn resume_is_deterministic_strict_and_revalidated() {
         serde_json::from_str(&first_json).expect("resume json value");
     impossible_activity["pending_activity"][0] = serde_json::json!(2);
     impossible_activity["aggregate_activity"][0] = serde_json::json!(1);
-    let impossible_activity: ParserResumeStateV1 =
+    let impossible_activity: ParserResumeState =
         serde_json::from_value(impossible_activity).expect("bounded shape deserializes");
     let error = ParserState::from_resume(impossible_activity)
         .expect_err("pending activity cannot exceed aggregate activity");
@@ -386,7 +386,7 @@ fn resume_is_deterministic_strict_and_revalidated() {
             .collect::<Vec<_>>(),
         "other_tools": 0
     });
-    assert!(serde_json::from_value::<ParserResumeStateV1>(oversized_tools).is_err());
+    assert!(serde_json::from_value::<ParserResumeState>(oversized_tools).is_err());
 }
 
 #[test]
