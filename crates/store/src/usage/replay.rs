@@ -21,6 +21,40 @@ const EMPTY_SHA256: [u8; 32] = [
     0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
 ];
 
+const MATERIALIZE_REPLAY_SELECTION_SQL: &str = r#"
+INSERT INTO usage_event(
+  fingerprint, event_id, selected_file_key, selected_generation,
+  selected_source_offset, profile_id, session_id, source_id,
+  timestamp_seconds, timestamp_nanos, model, raw_model, input_tokens,
+  cached_tokens, output_tokens, reasoning_tokens, total_tokens,
+  fallback_model, long_context, service_tier, project_alias, originator,
+  activity_read, activity_edit_write, activity_search, activity_git,
+  activity_build_test, activity_web, activity_subagents, activity_terminal
+)
+SELECT
+  observation.fingerprint, observation.event_id, observation.file_key,
+  observation.generation, observation.source_offset, observation.profile_id,
+  observation.session_id, observation.source_id, observation.timestamp_seconds,
+  observation.timestamp_nanos, observation.model, observation.raw_model,
+  observation.input_tokens, observation.cached_tokens, observation.output_tokens,
+  observation.reasoning_tokens, observation.total_tokens,
+  observation.fallback_model, observation.long_context,
+  observation.service_tier, observation.project_alias, observation.originator,
+  observation.activity_read, observation.activity_edit_write,
+  observation.activity_search, observation.activity_git,
+  observation.activity_build_test, observation.activity_web,
+  observation.activity_subagents, observation.activity_terminal
+FROM usage_replay_selection AS selection
+JOIN usage_observation AS observation
+  ON observation.file_key = selection.file_key
+ AND observation.generation = selection.generation
+ AND observation.source_offset = selection.source_offset
+ AND observation.fingerprint = selection.fingerprint
+WHERE selection.revision_id = ?1
+ORDER BY observation.profile_id, observation.file_key,
+         observation.generation, observation.source_offset
+"#;
+
 impl UsageStore {
     pub fn begin_replay_revision(
         &mut self,
@@ -430,7 +464,10 @@ impl UsageStore {
         let revision = load_staging_revision(&transaction, revision_id)?;
         validate_replay_revision(&revision, expected_epoch, AccountingVersions::compiled())?;
         reject_stale_work(&transaction, revision_id, expected_epoch)?;
-        let Some(work) = load_next_actionable_work(&transaction, revision_id)? else {
+        let manifest_complete =
+            replay_manifest_is_complete(&transaction, revision_id, revision.expected_source_count)?;
+        let Some(work) = load_next_actionable_work(&transaction, revision_id, manifest_complete)?
+        else {
             let remaining_work = replay_work_exists(&transaction, revision_id)?;
             return Ok(ReplayContinuationResult {
                 processed_count: 0,
@@ -446,6 +483,7 @@ impl UsageStore {
                 revision.versions,
                 &work,
                 next_epoch,
+                manifest_complete,
             )?,
             "scan_children" => process_child_scan(&transaction, revision_id, &work, next_epoch)?,
             _ => return Err(StoreError::new(StoreErrorCode::InvalidStoredValue)),
@@ -461,12 +499,585 @@ impl UsageStore {
             epoch: next_epoch,
         })
     }
+
+    pub fn seal_replay_revision(
+        &mut self,
+        revision_id: ReplayRevisionId,
+        expected_epoch: ReplayEpoch,
+    ) -> Result<ReplayRevisionSnapshot, StoreError> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let revision = load_staging_revision(&transaction, revision_id)?;
+        if revision.versions != AccountingVersions::compiled() {
+            return Err(StoreError::new(StoreErrorCode::AccountingVersionMismatch));
+        }
+        if revision.epoch != expected_epoch {
+            return Err(StoreError::new(StoreErrorCode::StaleRevision));
+        }
+        if revision.sealed {
+            return Err(StoreError::new(StoreErrorCode::ArchiveModeMismatch));
+        }
+        validate_complete_manifest(&transaction, revision_id, revision.expected_source_count)?;
+        if replay_work_exists(&transaction, revision_id)? {
+            return Err(StoreError::new(StoreErrorCode::PendingContinuation));
+        }
+        validate_replay_overlay(&transaction, revision_id, revision.versions)?;
+        let unresolved_strong: i64 = transaction.query_row(
+            "SELECT count(*) FROM usage_replay_observation
+             WHERE revision_id = ?1 AND disposition = 'pending'
+               AND evidence = 'strong_cumulative'",
+            [revision_id.as_sql()?],
+            |row| row.get(0),
+        )?;
+        if unresolved_strong != 0 {
+            return Err(StoreError::new(StoreErrorCode::PendingContinuation));
+        }
+        let next_epoch = next_replay_epoch(revision.epoch)?;
+        transaction.execute(
+            "UPDATE usage_replay_session SET
+               completion_state = 'sealed_complete', evidence_epoch = ?1
+             WHERE revision_id = ?2",
+            params![next_epoch.as_sql()?, revision_id.as_sql()?],
+        )?;
+        let updated = transaction.execute(
+            "UPDATE usage_replay_revision SET sealed = 1, evidence_epoch = ?1
+             WHERE revision_id = ?2 AND status = 'staging' AND sealed = 0
+               AND promoted = 0 AND evidence_epoch = ?3",
+            params![
+                next_epoch.as_sql()?,
+                revision_id.as_sql()?,
+                expected_epoch.as_sql()?,
+            ],
+        )?;
+        if updated != 1 {
+            return Err(StoreError::new(StoreErrorCode::StaleRevision));
+        }
+        validate_foreign_keys(&transaction)?;
+        transaction.commit()?;
+        Ok(replay_revision_snapshot(
+            revision_id,
+            next_epoch,
+            ReplayRevisionStatus::Staging,
+            &revision,
+            true,
+            false,
+        ))
+    }
+
+    pub fn discard_replay_revision(
+        &mut self,
+        revision_id: ReplayRevisionId,
+        expected_epoch: ReplayEpoch,
+    ) -> Result<(), StoreError> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let revision = load_staging_revision(&transaction, revision_id)?;
+        if revision.epoch != expected_epoch {
+            return Err(StoreError::new(StoreErrorCode::StaleRevision));
+        }
+        let deleted = transaction.execute(
+            "DELETE FROM usage_replay_revision
+             WHERE revision_id = ?1 AND status = 'staging'
+               AND evidence_epoch = ?2",
+            params![revision_id.as_sql()?, expected_epoch.as_sql()?],
+        )?;
+        if deleted != 1 {
+            return Err(StoreError::new(StoreErrorCode::StaleRevision));
+        }
+        transaction.execute("DELETE FROM usage_generation WHERE status = 'staging'", [])?;
+        validate_foreign_keys(&transaction)?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn promote_replay_revision(
+        &mut self,
+        revision_id: ReplayRevisionId,
+        expected_epoch: ReplayEpoch,
+    ) -> Result<ReplayRevisionSnapshot, StoreError> {
+        self.promote_replay_revision_inner(revision_id, expected_epoch, PromotionFault::None)
+    }
+
+    fn promote_replay_revision_inner(
+        &mut self,
+        revision_id: ReplayRevisionId,
+        expected_epoch: ReplayEpoch,
+        fault: PromotionFault,
+    ) -> Result<ReplayRevisionSnapshot, StoreError> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let revision = load_staging_revision(&transaction, revision_id)?;
+        if revision.versions != AccountingVersions::compiled() {
+            return Err(StoreError::new(StoreErrorCode::AccountingVersionMismatch));
+        }
+        if revision.epoch != expected_epoch {
+            return Err(StoreError::new(StoreErrorCode::StaleRevision));
+        }
+        if !revision.sealed {
+            return Err(StoreError::new(StoreErrorCode::UnsealedRevision));
+        }
+        validate_complete_manifest(&transaction, revision_id, revision.expected_source_count)?;
+        if replay_work_exists(&transaction, revision_id)? {
+            return Err(StoreError::new(StoreErrorCode::PendingContinuation));
+        }
+        validate_replay_overlay(&transaction, revision_id, revision.versions)?;
+        let pending: i64 = transaction.query_row(
+            "SELECT count(*) FROM usage_replay_observation
+             WHERE revision_id = ?1 AND disposition = 'pending'",
+            [revision_id.as_sql()?],
+            |row| row.get(0),
+        )?;
+        if pending != 0 {
+            return Err(StoreError::new(StoreErrorCode::PendingContinuation));
+        }
+        validate_prior_projection_coverage(&transaction, revision_id)?;
+        materialize_replay_selection(&transaction, revision_id)?;
+        promotion_fault(fault, PromotionFault::AfterMaterialization)?;
+
+        transaction.execute(
+            "DELETE FROM usage_replay_revision
+             WHERE status = 'current' AND revision_id <> ?1",
+            [revision_id.as_sql()?],
+        )?;
+        transaction.execute(
+            "UPDATE usage_source SET current_generation = NULL
+             WHERE file_key IN (
+               SELECT file_key FROM usage_replay_source WHERE revision_id = ?1
+             )",
+            [revision_id.as_sql()?],
+        )?;
+        transaction.execute(
+            "DELETE FROM usage_generation
+             WHERE status = 'current' AND file_key IN (
+               SELECT file_key FROM usage_replay_source WHERE revision_id = ?1
+             )",
+            [revision_id.as_sql()?],
+        )?;
+        let promoted_generations = transaction.execute(
+            "UPDATE usage_generation SET status = 'current'
+             WHERE status = 'staging' AND (file_key, generation) IN (
+               SELECT file_key, generation FROM usage_replay_source
+               WHERE revision_id = ?1
+             )",
+            [revision_id.as_sql()?],
+        )?;
+        if promoted_generations != usize::from(revision.expected_source_count) {
+            return Err(StoreError::new(StoreErrorCode::IncompleteManifest));
+        }
+        let promoted_sources = transaction.execute(
+            "UPDATE usage_source SET
+               current_generation = (
+                 SELECT replay.generation FROM usage_replay_source AS replay
+                 WHERE replay.revision_id = ?1
+                   AND replay.file_key = usage_source.file_key
+               ),
+               missing = 0,
+               last_error_code = NULL,
+               verification_level = 'full_prefix'
+             WHERE file_key IN (
+               SELECT file_key FROM usage_replay_source WHERE revision_id = ?1
+             )",
+            [revision_id.as_sql()?],
+        )?;
+        if promoted_sources != usize::from(revision.expected_source_count) {
+            return Err(StoreError::new(StoreErrorCode::IncompleteManifest));
+        }
+        promotion_fault(fault, PromotionFault::AfterGenerationSwap)?;
+
+        let promoted_revision = transaction.execute(
+            "UPDATE usage_replay_revision SET status = 'current', promoted = 1
+             WHERE revision_id = ?1 AND status = 'staging' AND sealed = 1
+               AND promoted = 0 AND evidence_epoch = ?2",
+            params![revision_id.as_sql()?, expected_epoch.as_sql()?],
+        )?;
+        if promoted_revision != 1 {
+            return Err(StoreError::new(StoreErrorCode::StaleRevision));
+        }
+        promotion_fault(fault, PromotionFault::AfterRevisionStatus)?;
+        validate_promoted_state(&transaction, revision_id, revision.expected_source_count)?;
+        validate_foreign_keys(&transaction)?;
+        transaction.commit()?;
+        Ok(replay_revision_snapshot(
+            revision_id,
+            expected_epoch,
+            ReplayRevisionStatus::Current,
+            &revision,
+            true,
+            true,
+        ))
+    }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum PromotionFault {
+    None,
+    AfterMaterialization,
+    AfterGenerationSwap,
+    AfterRevisionStatus,
+}
+
+fn promotion_fault(actual: PromotionFault, boundary: PromotionFault) -> Result<(), StoreError> {
+    if actual == boundary {
+        return Err(StoreError::new(StoreErrorCode::Database));
+    }
+    Ok(())
 }
 
 struct StoredRevision {
     epoch: ReplayEpoch,
     versions: AccountingVersions,
+    expected_source_count: u16,
     sealed: bool,
+}
+
+fn replay_revision_snapshot(
+    revision_id: ReplayRevisionId,
+    epoch: ReplayEpoch,
+    status: ReplayRevisionStatus,
+    revision: &StoredRevision,
+    sealed: bool,
+    promoted: bool,
+) -> ReplayRevisionSnapshot {
+    ReplayRevisionSnapshot {
+        id: revision_id,
+        epoch,
+        status,
+        versions: revision.versions,
+        expected_source_count: revision.expected_source_count,
+        sealed,
+        promoted,
+    }
+}
+
+struct ManifestSourceState {
+    file_key: [u8; 32],
+    generation: u64,
+    state: String,
+    generation_status: String,
+    committed_offset: u64,
+    scan_offset: u64,
+    observed_file_length: u64,
+    discarding: bool,
+    incomplete: bool,
+    verification: StoredVerification,
+}
+
+fn replay_manifest_is_complete(
+    transaction: &Transaction<'_>,
+    revision_id: ReplayRevisionId,
+    expected_source_count: u16,
+) -> Result<bool, StoreError> {
+    let registered_sources: i64 =
+        transaction.query_row("SELECT count(*) FROM usage_source", [], |row| row.get(0))?;
+    if registered_sources != i64::from(expected_source_count) {
+        return Ok(false);
+    }
+    let mut statement = transaction.prepare(
+        "SELECT replay.file_key, replay.generation, replay.state,
+                generation.status, generation.committed_offset,
+                generation.scan_offset, generation.observed_file_length,
+                generation.discarding_oversized_line, generation.incomplete_tail,
+                generation.verification_level
+         FROM usage_replay_source AS replay
+         JOIN usage_generation AS generation
+           ON generation.file_key = replay.file_key
+          AND generation.generation = replay.generation
+         WHERE replay.revision_id = ?1
+         ORDER BY replay.file_key
+         LIMIT 257",
+    )?;
+    let sources = statement
+        .query_map([revision_id.as_sql()?], |row| {
+            Ok((
+                row.get::<_, Vec<u8>>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, i64>(5)?,
+                row.get::<_, i64>(6)?,
+                row.get::<_, i64>(7)?,
+                row.get::<_, i64>(8)?,
+                row.get::<_, String>(9)?,
+            ))
+        })?
+        .map(|row| {
+            let raw = row?;
+            Ok(ManifestSourceState {
+                file_key: stored_digest(&raw.0)?,
+                generation: stored_nonnegative(raw.1)?,
+                state: raw.2,
+                generation_status: raw.3,
+                committed_offset: stored_nonnegative(raw.4)?,
+                scan_offset: stored_nonnegative(raw.5)?,
+                observed_file_length: stored_nonnegative(raw.6)?,
+                discarding: stored_bool(raw.7)?,
+                incomplete: stored_bool(raw.8)?,
+                verification: StoredVerification::from_sql(&raw.9)?,
+            })
+        })
+        .collect::<Result<Vec<_>, StoreError>>()?;
+    if sources.len() != usize::from(expected_source_count) {
+        return Ok(false);
+    }
+    for source in sources {
+        if source.state != "complete"
+            || source.generation_status != "staging"
+            || source.verification != StoredVerification::FullPrefix
+            || source.discarding
+            || source.incomplete
+            || source.committed_offset != source.scan_offset
+            || source.scan_offset != source.observed_file_length
+            || !source_chunks_cover(
+                transaction,
+                &source.file_key,
+                source.generation,
+                source.committed_offset,
+            )?
+        {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+fn source_chunks_cover(
+    transaction: &Transaction<'_>,
+    file_key: &[u8; 32],
+    generation: u64,
+    committed_offset: u64,
+) -> Result<bool, StoreError> {
+    let (count, minimum, maximum, covered): (i64, Option<i64>, Option<i64>, i64) = transaction
+        .query_row(
+            "SELECT count(*), min(chunk_index), max(chunk_index),
+                    coalesce(sum(covered_len), 0)
+             FROM usage_source_chunk
+             WHERE file_key = ?1 AND generation = ?2",
+            params![file_key.as_slice(), sql_u64(generation)?],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )?;
+    if committed_offset == 0 {
+        return Ok(count == 0 && covered == 0 && minimum.is_none() && maximum.is_none());
+    }
+    let final_index = (committed_offset - 1) / SOURCE_CHUNK_BYTES;
+    let final_length = committed_offset - final_index * SOURCE_CHUNK_BYTES;
+    if count
+        != i64::try_from(final_index + 1)
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?
+        || minimum != Some(0)
+        || maximum != Some(sql_u64(final_index)?)
+        || covered != sql_u64(committed_offset)?
+    {
+        return Ok(false);
+    }
+    let invalid: i64 = transaction.query_row(
+        "SELECT count(*) FROM usage_source_chunk
+         WHERE file_key = ?1 AND generation = ?2
+           AND ((chunk_index < ?3 AND covered_len <> ?4)
+                OR (chunk_index = ?3 AND covered_len <> ?5)
+                OR chunk_index > ?3)",
+        params![
+            file_key.as_slice(),
+            sql_u64(generation)?,
+            sql_u64(final_index)?,
+            sql_u64(SOURCE_CHUNK_BYTES)?,
+            sql_u64(final_length)?,
+        ],
+        |row| row.get(0),
+    )?;
+    Ok(invalid == 0)
+}
+
+fn validate_complete_manifest(
+    transaction: &Transaction<'_>,
+    revision_id: ReplayRevisionId,
+    expected_source_count: u16,
+) -> Result<(), StoreError> {
+    if !replay_manifest_is_complete(transaction, revision_id, expected_source_count)? {
+        return Err(StoreError::new(StoreErrorCode::IncompleteManifest));
+    }
+    Ok(())
+}
+
+fn validate_replay_overlay(
+    transaction: &Transaction<'_>,
+    revision_id: ReplayRevisionId,
+    versions: AccountingVersions,
+) -> Result<(), StoreError> {
+    let (staged, overlay, missing, extra, version_mismatch): (i64, i64, i64, i64, i64) =
+        transaction.query_row(
+            "SELECT
+               (SELECT count(*) FROM usage_observation AS observation
+                JOIN usage_replay_source AS source
+                  ON source.file_key = observation.file_key
+                 AND source.generation = observation.generation
+                WHERE source.revision_id = ?1),
+               (SELECT count(*) FROM usage_replay_observation WHERE revision_id = ?1),
+               (SELECT count(*) FROM usage_observation AS observation
+                JOIN usage_replay_source AS source
+                  ON source.file_key = observation.file_key
+                 AND source.generation = observation.generation
+                WHERE source.revision_id = ?1 AND NOT EXISTS(
+                  SELECT 1 FROM usage_replay_observation AS replay
+                  WHERE replay.revision_id = ?1
+                    AND replay.file_key = observation.file_key
+                    AND replay.generation = observation.generation
+                    AND replay.source_offset = observation.source_offset
+                    AND replay.fingerprint = observation.fingerprint
+                )),
+               (SELECT count(*) FROM usage_replay_observation AS replay
+                WHERE replay.revision_id = ?1 AND NOT EXISTS(
+                  SELECT 1 FROM usage_replay_source AS source
+                  WHERE source.revision_id = replay.revision_id
+                    AND source.file_key = replay.file_key
+                    AND source.generation = replay.generation
+                )),
+               (SELECT count(*) FROM usage_replay_observation
+                WHERE revision_id = ?1 AND
+                  (canonicalizer_version <> ?2 OR fingerprint_version <> ?3
+                   OR replay_signature_version <> ?4))",
+            params![
+                revision_id.as_sql()?,
+                i64::from(versions.canonicalizer()),
+                i64::from(versions.fingerprint()),
+                i64::from(versions.replay_signature()),
+            ],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )?;
+    if staged != overlay || missing != 0 || extra != 0 || version_mismatch != 0 {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    let (eligible, selections, invalid_selections, selection_versions): (i64, i64, i64, i64) =
+        transaction.query_row(
+            "SELECT
+               (SELECT count(DISTINCT fingerprint) FROM usage_replay_observation
+                WHERE revision_id = ?1 AND disposition = 'eligible'),
+               (SELECT count(*) FROM usage_replay_selection WHERE revision_id = ?1),
+               (SELECT count(*) FROM usage_replay_selection AS selection
+                JOIN usage_replay_observation AS replay
+                  ON replay.revision_id = selection.revision_id
+                 AND replay.file_key = selection.file_key
+                 AND replay.generation = selection.generation
+                 AND replay.source_offset = selection.source_offset
+                 AND replay.fingerprint = selection.fingerprint
+                WHERE selection.revision_id = ?1 AND replay.disposition <> 'eligible'),
+               (SELECT count(*) FROM usage_replay_selection
+                WHERE revision_id = ?1 AND
+                  (canonicalizer_version <> ?2 OR fingerprint_version <> ?3
+                   OR replay_signature_version <> ?4))",
+            params![
+                revision_id.as_sql()?,
+                i64::from(versions.canonicalizer()),
+                i64::from(versions.fingerprint()),
+                i64::from(versions.replay_signature()),
+            ],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )?;
+    if eligible != selections || invalid_selections != 0 || selection_versions != 0 {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    let nondeterministic: i64 = transaction.query_row(
+        "SELECT count(*) FROM usage_replay_selection AS selection
+         WHERE selection.revision_id = ?1 AND
+           (selection.file_key, selection.generation, selection.source_offset) <>
+           (SELECT replay.file_key, replay.generation, replay.source_offset
+            FROM usage_replay_observation AS replay
+            WHERE replay.revision_id = selection.revision_id
+              AND replay.fingerprint = selection.fingerprint
+              AND replay.disposition = 'eligible'
+            ORDER BY replay.profile_id, replay.file_key,
+                     replay.generation, replay.source_offset
+            LIMIT 1)",
+        [revision_id.as_sql()?],
+        |row| row.get(0),
+    )?;
+    if nondeterministic != 0 {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    Ok(())
+}
+
+fn validate_prior_projection_coverage(
+    transaction: &Transaction<'_>,
+    revision_id: ReplayRevisionId,
+) -> Result<(), StoreError> {
+    let missing: i64 = transaction.query_row(
+        "SELECT count(*) FROM usage_event AS event
+         WHERE NOT EXISTS(
+           SELECT 1 FROM usage_replay_observation AS replay
+           WHERE replay.revision_id = ?1 AND replay.fingerprint = event.fingerprint
+         ) AND NOT EXISTS(
+           SELECT 1 FROM usage_legacy_event AS legacy
+           WHERE legacy.snapshot_id = 1 AND legacy.fingerprint = event.fingerprint
+         )",
+        [revision_id.as_sql()?],
+        |row| row.get(0),
+    )?;
+    if missing != 0 {
+        return Err(StoreError::new(StoreErrorCode::IncompleteManifest));
+    }
+    Ok(())
+}
+
+fn materialize_replay_selection(
+    transaction: &Transaction<'_>,
+    revision_id: ReplayRevisionId,
+) -> Result<(), StoreError> {
+    transaction.execute("DELETE FROM usage_event", [])?;
+    let inserted =
+        transaction.execute(MATERIALIZE_REPLAY_SELECTION_SQL, [revision_id.as_sql()?])?;
+    let expected: i64 = transaction.query_row(
+        "SELECT count(*) FROM usage_replay_selection WHERE revision_id = ?1",
+        [revision_id.as_sql()?],
+        |row| row.get(0),
+    )?;
+    if inserted
+        != usize::try_from(expected)
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?
+    {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    Ok(())
+}
+
+fn validate_promoted_state(
+    transaction: &Transaction<'_>,
+    revision_id: ReplayRevisionId,
+    expected_source_count: u16,
+) -> Result<(), StoreError> {
+    let state: (i64, i64, i64, i64) = transaction.query_row(
+        "SELECT
+           (SELECT count(*) FROM usage_replay_revision
+            WHERE revision_id = ?1 AND status = 'current'
+              AND sealed = 1 AND promoted = 1),
+           (SELECT count(*) FROM usage_replay_revision WHERE status = 'staging'),
+           (SELECT count(*) FROM usage_generation WHERE status = 'staging'),
+           (SELECT count(*) FROM usage_source AS source
+            JOIN usage_replay_source AS replay
+              ON replay.revision_id = ?1 AND replay.file_key = source.file_key
+             AND replay.generation = source.current_generation
+            JOIN usage_generation AS generation
+              ON generation.file_key = replay.file_key
+             AND generation.generation = replay.generation
+            WHERE generation.status = 'current')",
+        [revision_id.as_sql()?],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+    )?;
+    if state != (1, 0, 0, i64::from(expected_source_count)) {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    Ok(())
 }
 
 fn validate_replay_revision(
@@ -536,7 +1147,7 @@ fn load_staging_revision(
         .query_row(
             "SELECT
                status, canonicalizer_version, fingerprint_version,
-               replay_signature_version, evidence_epoch, sealed
+               replay_signature_version, expected_source_count, evidence_epoch, sealed
              FROM usage_replay_revision WHERE revision_id = ?1",
             [revision_id.as_sql()?],
             |row| {
@@ -547,6 +1158,7 @@ fn load_staging_revision(
                     row.get::<_, i64>(3)?,
                     row.get::<_, i64>(4)?,
                     row.get::<_, i64>(5)?,
+                    row.get::<_, i64>(6)?,
                 ))
             },
         )
@@ -557,12 +1169,16 @@ fn load_staging_revision(
     }
     Ok(StoredRevision {
         versions: AccountingVersions::from_stored(raw.1, raw.2, raw.3)?,
+        expected_source_count: u16::try_from(raw.4)
+            .ok()
+            .filter(|value| *value != 0)
+            .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?,
         epoch: ReplayEpoch::new(
-            u64::try_from(raw.4)
+            u64::try_from(raw.5)
                 .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?,
         )
         .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?,
-        sealed: stored_bool(raw.5)?,
+        sealed: stored_bool(raw.6)?,
     })
 }
 
@@ -1411,6 +2027,7 @@ struct ReplayWork {
 fn load_next_actionable_work(
     transaction: &Transaction<'_>,
     revision_id: ReplayRevisionId,
+    manifest_complete: bool,
 ) -> Result<Option<ReplayWork>, StoreError> {
     transaction
         .query_row(
@@ -1419,11 +2036,12 @@ fn load_next_actionable_work(
              FROM usage_replay_work
              WHERE revision_id = ?1
                AND (work_kind = 'scan_children'
-                    OR reason IN ('late_relation','parent_changed'))
+                    OR reason IN ('late_relation','parent_changed')
+                    OR (?2 = 1 AND reason = 'missing_parent'))
              ORDER BY CASE work_kind WHEN 'scan_children' THEN 0 ELSE 1 END,
                       provider_id, profile_id, session_id
              LIMIT 1",
-            [revision_id.as_sql()?],
+            params![revision_id.as_sql()?, sql_bool(manifest_complete)],
             |row| {
                 Ok((
                     row.get::<_, String>(0)?,
@@ -1507,6 +2125,7 @@ fn process_session_classification(
     versions: AccountingVersions,
     work: &ReplayWork,
     epoch: ReplayEpoch,
+    manifest_complete: bool,
 ) -> Result<u16, StoreError> {
     let session = load_replay_session(transaction, revision_id, work)?;
     let next_ordinal = transaction
@@ -1565,6 +2184,7 @@ fn process_session_classification(
     let missing_parent = session.parent.is_some() && parent.is_none();
     let parent_ordinal = match parent.as_ref() {
         Some(parent) => ParentOrdinal::Present(parent.as_facts()),
+        None if session.parent.is_some() && manifest_complete => ParentOrdinal::MissingComplete,
         None if session.parent.is_some() => ParentOrdinal::MissingOpen,
         None => ParentOrdinal::NotApplicable,
     };
@@ -1613,7 +2233,7 @@ fn process_session_classification(
         refresh_replay_selection(transaction, revision_id, &observation.fingerprint)?;
     }
     update_persisted_session_state(transaction, revision_id, work, state, ordinal, epoch)?;
-    if missing_parent && state != SessionReplayState::Conflict {
+    if missing_parent && !manifest_complete && state != SessionReplayState::Conflict {
         update_work_position(transaction, revision_id, work, "missing_parent", ordinal)?;
     } else if traversal.depth_exhausted {
         update_work_position(transaction, revision_id, work, "depth_bound", ordinal)?;
@@ -2182,5 +2802,296 @@ fn stored_bool(value: i64) -> Result<bool, StoreError> {
         0 => Ok(false),
         1 => Ok(true),
         _ => Err(StoreError::new(StoreErrorCode::InvalidStoredValue)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tokenmaster_accounting::Canonicalizer;
+    use tokenmaster_domain::{
+        ActivityCounts, LongContextState, ModelKey, ObservationDraft, ObservationDraftParts,
+        ObservationVerification, TokenCount, TokenUsage, UsageProfileId, UsageProviderId,
+        UsageSessionId, UsageSourceId, UtcTimestamp,
+    };
+
+    use super::*;
+    use crate::{
+        AppendBatchParts, SourceKind, SourceRegistrationParts, StoredCheckpointParts,
+        StoredSourceChunk,
+    };
+
+    type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
+
+    fn checkpoint(seed: u8, offset: u64) -> Result<StoredCheckpoint, StoreError> {
+        StoredCheckpoint::new(StoredCheckpointParts {
+            parser_schema_version: 1,
+            physical_identity: Some([seed; 32]),
+            logical_identity: [seed.wrapping_add(1); 32],
+            committed_offset: offset,
+            scan_offset: offset,
+            observed_file_length: offset,
+            modified_time_ns: Some(i64::from(seed)),
+            anchor_start: 0,
+            anchor_len: u16::try_from(offset.min(100))
+                .map_err(|_| StoreError::new(StoreErrorCode::InvalidValue))?,
+            anchor_sha256: [seed.wrapping_add(2); 32],
+            resume: Box::default(),
+            discarding_oversized_line: false,
+            incomplete_tail: false,
+            verification: StoredVerification::FullPrefix,
+        })
+    }
+
+    fn registration(seed: u8) -> Result<SourceRegistration, StoreError> {
+        SourceRegistration::new(SourceRegistrationParts {
+            source_key: SourceKey::from_bytes([seed; 32]),
+            provider_id: "codex".into(),
+            profile_id: "default".into(),
+            source_id: "fixture".into(),
+            source_kind: SourceKind::Active,
+            logical_identity: [seed.wrapping_add(1); 32],
+            physical_identity: Some([seed; 32]),
+            initial_checkpoint: checkpoint(seed, 0)?,
+        })
+    }
+
+    fn event() -> TestResult<CanonicalUsageEvent> {
+        let usage = TokenUsage::new(
+            TokenCount::Available(10),
+            TokenCount::Unavailable,
+            TokenCount::Available(2),
+            TokenCount::Unavailable,
+            TokenCount::Available(12),
+        );
+        let draft = ObservationDraft::new(ObservationDraftParts {
+            provider_id: UsageProviderId::new("codex")?,
+            profile_id: UsageProfileId::new("default")?,
+            session_id: UsageSessionId::new("session")?,
+            parent_session_id: None,
+            session_ordinal: 0,
+            lineage_conflict: false,
+            source_id: UsageSourceId::new("fixture")?,
+            source_offset: 10,
+            source_verification: ObservationVerification::FullPrefix,
+            timestamp: UtcTimestamp::new(100, 0)?,
+            model: ModelKey::new("gpt-test")?,
+            raw_model: None,
+            delta_usage: usage,
+            cumulative_usage: Some(usage),
+            fallback_model: false,
+            long_context: LongContextState::No,
+            service_tier: None,
+            project: None,
+            originator: None,
+            activity: ActivityCounts::default(),
+        })?;
+        Ok(Canonicalizer::new().canonicalize(&draft)?)
+    }
+
+    fn promotion_ready_store() -> TestResult<(UsageStore, ReplayRevisionId, ReplayEpoch)> {
+        let seed = 11_u8;
+        let mut store = UsageStore::in_memory()?;
+        store.register_source(&registration(seed)?)?;
+        let current = AppendBatch::new(AppendBatchParts {
+            source_key: SourceKey::from_bytes([seed; 32]),
+            expected_generation: 0,
+            expected_committed_offset: 0,
+            expected_scan_offset: 0,
+            events: vec![event()?].into_boxed_slice(),
+            previous_partial_chunk: None,
+            chunk_updates: vec![StoredSourceChunk::new(0, 100, [14; 32])?].into_boxed_slice(),
+            next_checkpoint: checkpoint(seed, 100)?,
+            last_seen_scan_id: None,
+            diagnostic_count_delta: 0,
+        })?;
+        store.apply_append_batch(&current)?;
+        let revision = store.begin_replay_revision(&ReplayManifest::new(
+            vec![SourceKey::from_bytes([seed; 32])].into_boxed_slice(),
+        )?)?;
+        let append = AppendBatch::new(AppendBatchParts {
+            source_key: SourceKey::from_bytes([seed; 32]),
+            expected_generation: 1,
+            expected_committed_offset: 0,
+            expected_scan_offset: 0,
+            events: vec![event()?].into_boxed_slice(),
+            previous_partial_chunk: None,
+            chunk_updates: vec![StoredSourceChunk::new(0, 100, [14; 32])?].into_boxed_slice(),
+            next_checkpoint: checkpoint(seed, 100)?,
+            last_seen_scan_id: None,
+            diagnostic_count_delta: 0,
+        })?;
+        let epoch =
+            store.apply_replay_append_batch(&ReplayAppendBatch::new(ReplayAppendBatchParts {
+                revision_id: revision.id(),
+                expected_epoch: revision.epoch(),
+                append_batch: append,
+            }))?;
+        let sealed = store.seal_replay_revision(revision.id(), epoch)?;
+        Ok((store, revision.id(), sealed.epoch()))
+    }
+
+    fn replacement_promotion_ready_store() -> TestResult<(UsageStore, ReplayRevisionId, ReplayEpoch)>
+    {
+        let seed = 12_u8;
+        let mut store = UsageStore::in_memory()?;
+        store.register_source(&registration(seed)?)?;
+        let manifest =
+            ReplayManifest::new(vec![SourceKey::from_bytes([seed; 32])].into_boxed_slice())?;
+        let first = store.begin_replay_revision(&manifest)?;
+        let first_append = AppendBatch::new(AppendBatchParts {
+            source_key: SourceKey::from_bytes([seed; 32]),
+            expected_generation: 1,
+            expected_committed_offset: 0,
+            expected_scan_offset: 0,
+            events: vec![event()?].into_boxed_slice(),
+            previous_partial_chunk: None,
+            chunk_updates: vec![StoredSourceChunk::new(0, 100, [15; 32])?].into_boxed_slice(),
+            next_checkpoint: checkpoint(seed, 100)?,
+            last_seen_scan_id: None,
+            diagnostic_count_delta: 0,
+        })?;
+        let first_epoch =
+            store.apply_replay_append_batch(&ReplayAppendBatch::new(ReplayAppendBatchParts {
+                revision_id: first.id(),
+                expected_epoch: first.epoch(),
+                append_batch: first_append,
+            }))?;
+        let first_sealed = store.seal_replay_revision(first.id(), first_epoch)?;
+        store.promote_replay_revision(first.id(), first_sealed.epoch())?;
+
+        let replacement = store.begin_replay_revision(&manifest)?;
+        let replacement_append = AppendBatch::new(AppendBatchParts {
+            source_key: SourceKey::from_bytes([seed; 32]),
+            expected_generation: 2,
+            expected_committed_offset: 0,
+            expected_scan_offset: 0,
+            events: vec![event()?].into_boxed_slice(),
+            previous_partial_chunk: None,
+            chunk_updates: vec![StoredSourceChunk::new(0, 100, [15; 32])?].into_boxed_slice(),
+            next_checkpoint: checkpoint(seed, 100)?,
+            last_seen_scan_id: None,
+            diagnostic_count_delta: 0,
+        })?;
+        let replacement_epoch =
+            store.apply_replay_append_batch(&ReplayAppendBatch::new(ReplayAppendBatchParts {
+                revision_id: replacement.id(),
+                expected_epoch: replacement.epoch(),
+                append_batch: replacement_append,
+            }))?;
+        let replacement_sealed = store.seal_replay_revision(replacement.id(), replacement_epoch)?;
+        Ok((store, replacement.id(), replacement_sealed.epoch()))
+    }
+
+    fn promotion_state(store: &UsageStore) -> TestResult<(i64, i64, i64, String, i64, i64)> {
+        Ok(store.connection.query_row(
+            "SELECT
+               (SELECT count(*) FROM usage_event),
+               (SELECT current_generation FROM usage_source),
+               (SELECT count(*) FROM usage_generation WHERE status = 'staging'),
+               (SELECT status FROM usage_replay_revision),
+               (SELECT sealed FROM usage_replay_revision),
+               (SELECT promoted FROM usage_replay_revision)",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            },
+        )?)
+    }
+
+    #[test]
+    fn every_promotion_fault_boundary_rolls_back_all_visible_state() -> TestResult {
+        for fault in [
+            PromotionFault::AfterMaterialization,
+            PromotionFault::AfterGenerationSwap,
+            PromotionFault::AfterRevisionStatus,
+        ] {
+            let (mut store, revision_id, epoch) = promotion_ready_store()?;
+            let before = promotion_state(&store)?;
+            let page_before = store
+                .event_page_before(None, 256)?
+                .into_iter()
+                .map(|event| event.event_id().to_owned())
+                .collect::<Vec<_>>();
+            let error = match store.promote_replay_revision_inner(revision_id, epoch, fault) {
+                Ok(_) => return Err("faulted promotion unexpectedly committed".into()),
+                Err(error) => error,
+            };
+            assert_eq!(error.code(), StoreErrorCode::Database);
+            assert_eq!(promotion_state(&store)?, before);
+            let page_after = store
+                .event_page_before(None, 256)?
+                .into_iter()
+                .map(|event| event.event_id().to_owned())
+                .collect::<Vec<_>>();
+            assert_eq!(page_after, page_before);
+            assert_eq!(store.replay_quality(revision_id)?.eligible(), 1);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn replacement_promotion_faults_restore_prior_current_revision() -> TestResult {
+        for fault in [
+            PromotionFault::AfterMaterialization,
+            PromotionFault::AfterGenerationSwap,
+            PromotionFault::AfterRevisionStatus,
+        ] {
+            let (mut store, revision_id, epoch) = replacement_promotion_ready_store()?;
+            let before: (i64, i64, i64, i64, i64, i64) = store.connection.query_row(
+                "SELECT
+                   (SELECT revision_id FROM usage_replay_revision WHERE status = 'current'),
+                   (SELECT revision_id FROM usage_replay_revision WHERE status = 'staging'),
+                   (SELECT current_generation FROM usage_source),
+                   (SELECT count(*) FROM usage_generation WHERE status = 'current'),
+                   (SELECT count(*) FROM usage_generation WHERE status = 'staging'),
+                   (SELECT count(*) FROM usage_event)",
+                [],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                    ))
+                },
+            )?;
+            assert_eq!(before, (0, 1, 1, 1, 1, 1));
+            let error = match store.promote_replay_revision_inner(revision_id, epoch, fault) {
+                Ok(_) => return Err("faulted replacement unexpectedly committed".into()),
+                Err(error) => error,
+            };
+            assert_eq!(error.code(), StoreErrorCode::Database);
+            let after: (i64, i64, i64, i64, i64, i64) = store.connection.query_row(
+                "SELECT
+                   (SELECT revision_id FROM usage_replay_revision WHERE status = 'current'),
+                   (SELECT revision_id FROM usage_replay_revision WHERE status = 'staging'),
+                   (SELECT current_generation FROM usage_source),
+                   (SELECT count(*) FROM usage_generation WHERE status = 'current'),
+                   (SELECT count(*) FROM usage_generation WHERE status = 'staging'),
+                   (SELECT count(*) FROM usage_event)",
+                [],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                    ))
+                },
+            )?;
+            assert_eq!(after, before);
+        }
+        Ok(())
     }
 }

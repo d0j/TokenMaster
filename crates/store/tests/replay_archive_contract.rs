@@ -159,9 +159,20 @@ fn replay_append_to(
     events: Vec<CanonicalUsageEvent>,
     next_offset: u64,
 ) -> ReplayAppendBatch {
+    replay_append_generation(seed, revision, epoch, 1, events, next_offset)
+}
+
+fn replay_append_generation(
+    seed: u8,
+    revision: tokenmaster_store::ReplayRevisionId,
+    epoch: tokenmaster_store::ReplayEpoch,
+    generation: u64,
+    events: Vec<CanonicalUsageEvent>,
+    next_offset: u64,
+) -> ReplayAppendBatch {
     let append = AppendBatch::new(AppendBatchParts {
         source_key: SourceKey::from_bytes([seed; 32]),
-        expected_generation: 1,
+        expected_generation: generation,
         expected_committed_offset: 0,
         expected_scan_offset: 0,
         events: events.into_boxed_slice(),
@@ -208,6 +219,43 @@ fn replay_relation(
     .expect("session relation");
     ReplayRelation::new(revision, epoch, SourceKey::from_bytes([seed; 32]), &draft)
         .expect("replay relation")
+}
+
+fn seal_ready_store(
+    path: &std::path::Path,
+    seed: u8,
+) -> (
+    UsageStore,
+    tokenmaster_store::ReplayRevisionSnapshot,
+    tokenmaster_store::ReplayEpoch,
+) {
+    let mut store = UsageStore::open(path).expect("usage store");
+    store
+        .register_source(&registration(seed))
+        .expect("registered source");
+    let revision = store
+        .begin_replay_revision(
+            &ReplayManifest::new(vec![SourceKey::from_bytes([seed; 32])].into_boxed_slice())
+                .expect("manifest"),
+        )
+        .expect("begin replay revision");
+    let epoch = store
+        .apply_replay_append_batch(&replay_append(
+            seed,
+            revision.id(),
+            revision.epoch(),
+            vec![replay_event(
+                seed,
+                "seal-root",
+                None,
+                0,
+                10,
+                Some(100),
+                false,
+            )],
+        ))
+        .expect("append seal fixture");
+    (store, revision, epoch)
 }
 
 fn create_v1_event_fixture(path: &std::path::Path) {
@@ -1597,6 +1645,654 @@ fn depth_exhaustion_stays_pending_and_durable_without_epoch_spin() {
         )
         .expect("durable depth work");
     assert_eq!(work, ("depth_bound".to_owned(), 1));
+}
+
+#[test]
+fn seal_and_promotion_publish_only_selected_eligible_events_atomically() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("seal-promote.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    store
+        .register_source(&registration(4))
+        .expect("registered source");
+    let revision = store
+        .begin_replay_revision(
+            &ReplayManifest::new(vec![SourceKey::from_bytes([4; 32])].into_boxed_slice())
+                .expect("manifest"),
+        )
+        .expect("begin replay revision");
+    let parent = replay_event(4, "parent", None, 0, 10, Some(100), false);
+    let parent_event_id = parent.id().as_str().to_owned();
+    let append_epoch = store
+        .apply_replay_append_batch(&replay_append(
+            4,
+            revision.id(),
+            revision.epoch(),
+            vec![
+                parent,
+                replay_event(4, "child", Some("parent"), 0, 20, Some(100), false),
+                replay_event(
+                    4,
+                    "conflict-child",
+                    Some("other-parent"),
+                    0,
+                    30,
+                    Some(100),
+                    true,
+                ),
+            ],
+        ))
+        .expect("append replay states");
+    let quality = store
+        .replay_quality(revision.id())
+        .expect("staging quality");
+    assert_eq!(quality.eligible(), 1);
+    assert_eq!(quality.replay(), 1);
+    assert_eq!(quality.conflict(), 1);
+
+    let sealed = store
+        .seal_replay_revision(revision.id(), append_epoch)
+        .expect("seal replay revision");
+    assert!(sealed.sealed());
+    assert!(!sealed.promoted());
+    assert_eq!(sealed.status(), ReplayRevisionStatus::Staging);
+    let promoted = store
+        .promote_replay_revision(revision.id(), sealed.epoch())
+        .expect("promote replay revision");
+    assert!(promoted.sealed());
+    assert!(promoted.promoted());
+    assert_eq!(promoted.status(), ReplayRevisionStatus::Current);
+    assert_eq!(
+        store.archive_state().expect("archive state").mode(),
+        ArchiveMode::ReplayVerified
+    );
+    let page = store.event_page_before(None, 256).expect("promoted page");
+    assert_eq!(page.len(), 1);
+    assert_eq!(page[0].event_id(), parent_event_id);
+    assert_eq!(
+        store
+            .generation_snapshot(SourceKey::from_bytes([4; 32]))
+            .expect("promoted generation")
+            .expect("current generation")
+            .generation(),
+        1
+    );
+    drop(store);
+
+    let reopened = UsageStore::open(&path).expect("reopen promoted archive");
+    let state = reopened.archive_state().expect("reopened archive state");
+    assert_eq!(state.mode(), ArchiveMode::ReplayVerified);
+    assert_eq!(state.active_revision(), Some(revision.id()));
+    assert!(!state.rebuild_staging());
+    assert_eq!(
+        reopened
+            .event_page_before(None, 256)
+            .expect("reopened promoted page")
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn complete_manifest_turns_missing_parent_into_divergence_before_seal() {
+    let mut store = UsageStore::in_memory().expect("usage store");
+    store
+        .register_source(&registration(2))
+        .expect("registered source");
+    let revision = store
+        .begin_replay_revision(
+            &ReplayManifest::new(vec![SourceKey::from_bytes([2; 32])].into_boxed_slice())
+                .expect("manifest"),
+        )
+        .expect("begin replay revision");
+    let append_epoch = store
+        .apply_replay_append_batch(&replay_append(
+            2,
+            revision.id(),
+            revision.epoch(),
+            vec![replay_event(
+                2,
+                "missing-child",
+                Some("absent-parent"),
+                0,
+                10,
+                Some(100),
+                false,
+            )],
+        ))
+        .expect("append missing parent");
+    let blocked = store
+        .seal_replay_revision(revision.id(), append_epoch)
+        .expect_err("unfinished missing-parent work blocks seal");
+    assert_eq!(blocked.code(), StoreErrorCode::PendingContinuation);
+
+    let completed = store
+        .continue_replay(revision.id(), append_epoch)
+        .expect("classify missing complete");
+    assert_eq!(completed.processed_count(), 1);
+    let drained = store
+        .continue_replay(revision.id(), completed.epoch())
+        .expect("drain child scan");
+    assert!(!drained.remaining_work());
+    let quality = store
+        .replay_quality(revision.id())
+        .expect("completed quality");
+    assert_eq!(quality.eligible(), 1);
+    assert_eq!(quality.pending(), 0);
+    let sealed = store
+        .seal_replay_revision(revision.id(), drained.epoch())
+        .expect("seal completed manifest");
+    assert!(sealed.sealed());
+}
+
+#[test]
+fn sealed_weak_pending_revision_cannot_be_promoted() {
+    let mut store = UsageStore::in_memory().expect("usage store");
+    store
+        .register_source(&registration(3))
+        .expect("registered source");
+    let revision = store
+        .begin_replay_revision(
+            &ReplayManifest::new(vec![SourceKey::from_bytes([3; 32])].into_boxed_slice())
+                .expect("manifest"),
+        )
+        .expect("begin replay revision");
+    let epoch = store
+        .apply_replay_append_batch(&replay_append(
+            3,
+            revision.id(),
+            revision.epoch(),
+            vec![
+                replay_event(3, "parent", None, 0, 10, Some(100), false),
+                replay_event(3, "weak-child", Some("parent"), 0, 20, None, false),
+            ],
+        ))
+        .expect("append weak pending evidence");
+    let sealed = store
+        .seal_replay_revision(revision.id(), epoch)
+        .expect("seal reporting-quality revision");
+    let error = store
+        .promote_replay_revision(revision.id(), sealed.epoch())
+        .expect_err("pending revision cannot become canonical");
+    assert_eq!(error.code(), StoreErrorCode::PendingContinuation);
+    assert_eq!(
+        store.archive_state().expect("staging archive state").mode(),
+        ArchiveMode::Empty
+    );
+    assert!(
+        store
+            .event_page_before(None, 256)
+            .expect("current page")
+            .is_empty()
+    );
+}
+
+#[test]
+fn discard_replay_revision_removes_only_staging_and_unblocks_rebuild() {
+    let mut store = UsageStore::in_memory().expect("usage store");
+    store
+        .register_source(&registration(4))
+        .expect("registered source");
+    let manifest = ReplayManifest::new(vec![SourceKey::from_bytes([4; 32])].into_boxed_slice())
+        .expect("manifest");
+
+    let first = store
+        .begin_replay_revision(&manifest)
+        .expect("begin current replay");
+    let current_event = replay_event(4, "current-root", None, 0, 10, Some(100), false);
+    let first_epoch = store
+        .apply_replay_append_batch(&replay_append(
+            4,
+            first.id(),
+            first.epoch(),
+            vec![current_event.clone()],
+        ))
+        .expect("append current replay");
+    let first_sealed = store
+        .seal_replay_revision(first.id(), first_epoch)
+        .expect("seal current replay");
+    store
+        .promote_replay_revision(first.id(), first_sealed.epoch())
+        .expect("promote current replay");
+    let current_page = store
+        .event_page_before(None, 256)
+        .expect("current canonical page");
+
+    let staging = store
+        .begin_replay_revision(&manifest)
+        .expect("begin replacement replay");
+    let staging_epoch = store
+        .apply_replay_append_batch(&replay_append_generation(
+            4,
+            staging.id(),
+            staging.epoch(),
+            2,
+            vec![
+                current_event,
+                replay_event(4, "weak-child", Some("current-root"), 0, 20, None, false),
+            ],
+            100,
+        ))
+        .expect("append pending replacement");
+    let staging_sealed = store
+        .seal_replay_revision(staging.id(), staging_epoch)
+        .expect("seal reporting-quality replacement");
+
+    let stale = store
+        .discard_replay_revision(staging.id(), staging_epoch)
+        .expect_err("stale discard must fail closed");
+    assert_eq!(stale.code(), StoreErrorCode::StaleRevision);
+    assert_eq!(
+        store
+            .event_page_before(None, 256)
+            .expect("page after stale discard"),
+        current_page
+    );
+
+    store
+        .discard_replay_revision(staging.id(), staging_sealed.epoch())
+        .expect("discard staging revision");
+    let recovered = store.archive_state().expect("recovered archive state");
+    assert_eq!(recovered.mode(), ArchiveMode::ReplayVerified);
+    assert_eq!(recovered.active_revision(), Some(first.id()));
+    assert!(!recovered.rebuild_staging());
+    assert_eq!(
+        store
+            .event_page_before(None, 256)
+            .expect("page after discard"),
+        current_page
+    );
+    assert!(
+        store.begin_replay_revision(&manifest).is_ok(),
+        "discarded staging must not block a fresh rebuild"
+    );
+}
+
+#[test]
+fn seal_rejects_omitted_registered_source_and_missing_overlay() {
+    let mut store = UsageStore::in_memory().expect("usage store");
+    for seed in [1_u8, 2_u8] {
+        store
+            .register_source(&registration(seed))
+            .expect("registered source");
+    }
+    let revision = store
+        .begin_replay_revision(
+            &ReplayManifest::new(vec![SourceKey::from_bytes([1; 32])].into_boxed_slice())
+                .expect("partial manifest"),
+        )
+        .expect("begin partial replay");
+    let epoch = store
+        .apply_replay_append_batch(&replay_append(
+            1,
+            revision.id(),
+            revision.epoch(),
+            vec![replay_event(1, "root", None, 0, 10, Some(100), false)],
+        ))
+        .expect("append partial manifest");
+    let omitted = store
+        .seal_replay_revision(revision.id(), epoch)
+        .expect_err("omitted registered source must block seal");
+    assert_eq!(omitted.code(), StoreErrorCode::IncompleteManifest);
+
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("missing-overlay.sqlite3");
+    let (ready, revision, epoch) = seal_ready_store(&path, 4);
+    drop(ready);
+    let connection = Connection::open(&path).expect("tamper replay overlay");
+    connection
+        .execute(
+            "DELETE FROM usage_replay_observation WHERE revision_id = 0",
+            [],
+        )
+        .expect("delete replay overlay");
+    drop(connection);
+    let mut reopened = UsageStore::open(&path).expect("reopen missing-overlay archive");
+    let missing = reopened
+        .seal_replay_revision(revision.id(), epoch)
+        .expect_err("missing overlay must fail closed");
+    assert_eq!(missing.code(), StoreErrorCode::InvalidStoredValue);
+}
+
+#[test]
+fn seal_rejects_each_incomplete_checkpoint_and_chunk_shape() {
+    let cases = [
+        (
+            "missing-generation",
+            "DELETE FROM usage_generation WHERE status = 'staging'",
+        ),
+        (
+            "incremental-verification",
+            "UPDATE usage_generation SET verification_level = 'incremental' WHERE status = 'staging'",
+        ),
+        (
+            "incomplete-tail",
+            "UPDATE usage_generation SET incomplete_tail = 1 WHERE status = 'staging'",
+        ),
+        (
+            "length-mismatch",
+            "UPDATE usage_generation SET observed_file_length = 101 WHERE status = 'staging'",
+        ),
+        (
+            "oversized-discard",
+            "UPDATE usage_generation SET committed_offset = 99, scan_offset = 100,
+                    observed_file_length = 100, discarding_oversized_line = 1,
+                    incomplete_tail = 1, anchor_len = 99 WHERE status = 'staging'",
+        ),
+        (
+            "chunk-gap",
+            "UPDATE usage_source_chunk SET covered_len = 99 WHERE generation = 1",
+        ),
+    ];
+    for (name, tamper) in cases {
+        let directory = TempDir::new().expect("temporary directory");
+        let path = directory.path().join(format!("{name}.sqlite3"));
+        let (ready, revision, epoch) = seal_ready_store(&path, 5);
+        drop(ready);
+        let connection = Connection::open(&path).expect("tamper checkpoint fixture");
+        connection
+            .pragma_update(None, "foreign_keys", "OFF")
+            .expect("disable foreign keys for corruption fixture");
+        connection
+            .execute_batch(tamper)
+            .expect("apply checkpoint tamper");
+        drop(connection);
+        let mut reopened = match UsageStore::open(&path) {
+            Ok(store) => store,
+            Err(error) => {
+                assert_eq!(name, "missing-generation");
+                assert_eq!(error.code(), StoreErrorCode::SchemaMismatch);
+                continue;
+            }
+        };
+        let error = reopened
+            .seal_replay_revision(revision.id(), epoch)
+            .expect_err("invalid source proof must block seal");
+        assert_eq!(error.code(), StoreErrorCode::IncompleteManifest, "{name}");
+    }
+}
+
+#[test]
+fn seal_and_promotion_fail_closed_on_version_epoch_and_foreign_key_tamper() {
+    let directory = TempDir::new().expect("temporary directory");
+    let stale_path = directory.path().join("stale-seal.sqlite3");
+    let (mut stale_store, revision, epoch) = seal_ready_store(&stale_path, 6);
+    let stale = stale_store
+        .seal_replay_revision(revision.id(), revision.epoch())
+        .expect_err("stale seal epoch");
+    assert_eq!(stale.code(), StoreErrorCode::StaleRevision);
+    let unsealed = stale_store
+        .promote_replay_revision(revision.id(), epoch)
+        .expect_err("unsealed promotion");
+    assert_eq!(unsealed.code(), StoreErrorCode::UnsealedRevision);
+    drop(stale_store);
+
+    let version_path = directory.path().join("version-seal.sqlite3");
+    let (version_store, version_revision, version_epoch) = seal_ready_store(&version_path, 7);
+    drop(version_store);
+    let connection = Connection::open(&version_path).expect("tamper version");
+    connection
+        .execute(
+            "UPDATE usage_replay_revision
+             SET fingerprint_version = fingerprint_version + 1 WHERE revision_id = 0",
+            [],
+        )
+        .expect("tamper revision version");
+    drop(connection);
+    let mut reopened = UsageStore::open(&version_path).expect("reopen version fixture");
+    let mismatch = reopened
+        .seal_replay_revision(version_revision.id(), version_epoch)
+        .expect_err("version mismatch");
+    assert_eq!(mismatch.code(), StoreErrorCode::AccountingVersionMismatch);
+    drop(reopened);
+
+    let foreign_path = directory.path().join("foreign-seal.sqlite3");
+    let (foreign_store, _foreign_revision, _foreign_epoch) = seal_ready_store(&foreign_path, 8);
+    drop(foreign_store);
+    let connection = Connection::open(&foreign_path).expect("tamper foreign key");
+    connection
+        .pragma_update(None, "foreign_keys", "OFF")
+        .expect("disable foreign keys for corruption fixture");
+    connection
+        .execute(
+            "UPDATE usage_replay_session SET revision_id = 999 WHERE revision_id = 0",
+            [],
+        )
+        .expect("orphan replay session");
+    drop(connection);
+    let foreign = UsageStore::open(&foreign_path).expect_err("foreign key corruption must fail");
+    assert_eq!(foreign.code(), StoreErrorCode::SchemaMismatch);
+}
+
+#[test]
+fn promotion_retains_immutable_migrated_legacy_snapshot() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("legacy-promotion.sqlite3");
+    create_v1_event_fixture(&path);
+    drop(UsageStore::open(&path).expect("migrate v1 archive"));
+    let connection = Connection::open(&path).expect("align migrated source fixture");
+    connection
+        .execute(
+            "UPDATE usage_source SET source_id = 'fixture-0', logical_identity = ?1",
+            [[1_u8; 32].as_slice()],
+        )
+        .expect("align migrated source");
+    connection
+        .execute(
+            "UPDATE usage_generation SET logical_identity = ?1 WHERE generation = 0",
+            [[1_u8; 32].as_slice()],
+        )
+        .expect("align migrated generation");
+    drop(connection);
+
+    let mut store = UsageStore::open(&path).expect("open migrated archive");
+    assert_eq!(
+        store
+            .event_page_before(None, 256)
+            .expect("legacy page before replay")[0]
+            .event_id(),
+        "legacy-event"
+    );
+    let revision = store
+        .begin_replay_revision(
+            &ReplayManifest::new(vec![SourceKey::from_bytes([0; 32])].into_boxed_slice())
+                .expect("manifest"),
+        )
+        .expect("begin replay revision");
+    let event = replay_event(0, "new-root", None, 0, 10, Some(100), false);
+    let new_event_id = event.id().as_str().to_owned();
+    let epoch = store
+        .apply_replay_append_batch(&replay_append(
+            0,
+            revision.id(),
+            revision.epoch(),
+            vec![event],
+        ))
+        .expect("append migrated replay");
+    let sealed = store
+        .seal_replay_revision(revision.id(), epoch)
+        .expect("seal migrated replay");
+    store
+        .promote_replay_revision(revision.id(), sealed.epoch())
+        .expect("promote migrated replay");
+    assert_eq!(
+        store.event_page_before(None, 256).expect("promoted page")[0].event_id(),
+        new_event_id
+    );
+    drop(store);
+
+    let connection = Connection::open(&path).expect("inspect retained legacy snapshot");
+    let legacy: (i64, String, i64) = connection
+        .query_row(
+            "SELECT snapshot.event_count, event.event_id,
+                    (SELECT count(*) FROM usage_legacy_event WHERE snapshot_id = 1)
+             FROM usage_legacy_snapshot AS snapshot
+             JOIN usage_legacy_event AS event ON event.snapshot_id = snapshot.snapshot_id
+             WHERE snapshot.snapshot_id = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("legacy snapshot state");
+    assert_eq!(legacy, (1, "legacy-event".to_owned(), 1));
+}
+
+#[test]
+fn second_promotion_replaces_prior_revision_without_losing_covered_projection() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("second-promotion.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    store
+        .register_source(&registration(9))
+        .expect("registered source");
+    let manifest = ReplayManifest::new(vec![SourceKey::from_bytes([9; 32])].into_boxed_slice())
+        .expect("manifest");
+    let first = store
+        .begin_replay_revision(&manifest)
+        .expect("begin first replay");
+    let first_event = replay_event(9, "first-root", None, 0, 10, Some(100), false);
+    let first_epoch = store
+        .apply_replay_append_batch(&replay_append(
+            9,
+            first.id(),
+            first.epoch(),
+            vec![first_event],
+        ))
+        .expect("append first replay");
+    let first_sealed = store
+        .seal_replay_revision(first.id(), first_epoch)
+        .expect("seal first replay");
+    store
+        .promote_replay_revision(first.id(), first_sealed.epoch())
+        .expect("promote first replay");
+
+    let second = store
+        .begin_replay_revision(&manifest)
+        .expect("begin second replay");
+    assert_eq!(second.id().get(), 1);
+    let second_epoch = store
+        .apply_replay_append_batch(&replay_append_generation(
+            9,
+            second.id(),
+            second.epoch(),
+            2,
+            vec![
+                replay_event(9, "first-root", None, 0, 10, Some(100), false),
+                replay_event(9, "second-root", None, 0, 20, Some(200), false),
+            ],
+            100,
+        ))
+        .expect("append complete replacement replay");
+    let second_sealed = store
+        .seal_replay_revision(second.id(), second_epoch)
+        .expect("seal second replay");
+    store
+        .promote_replay_revision(second.id(), second_sealed.epoch())
+        .expect("promote second replay");
+    assert_eq!(
+        store
+            .event_page_before(None, 256)
+            .expect("second promoted page")
+            .len(),
+        2
+    );
+    let repeated = store
+        .promote_replay_revision(second.id(), second_sealed.epoch())
+        .expect_err("repeated promotion must fail");
+    assert_eq!(repeated.code(), StoreErrorCode::ArchiveModeMismatch);
+    drop(store);
+
+    let connection = Connection::open(&path).expect("inspect replacement state");
+    let state: (i64, i64, i64, i64) = connection
+        .query_row(
+            "SELECT
+               (SELECT count(*) FROM usage_replay_revision),
+               (SELECT revision_id FROM usage_replay_revision WHERE status = 'current'),
+               (SELECT count(*) FROM usage_generation),
+               (SELECT generation FROM usage_generation WHERE status = 'current')",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .expect("replacement state");
+    assert_eq!(state, (1, 1, 1, 2));
+}
+
+#[test]
+fn replacement_promotion_rejects_missing_prior_projection_without_mutation() {
+    let mut store = UsageStore::in_memory().expect("usage store");
+    store
+        .register_source(&registration(6))
+        .expect("registered source");
+    let manifest = ReplayManifest::new(vec![SourceKey::from_bytes([6; 32])].into_boxed_slice())
+        .expect("manifest");
+    let first = store
+        .begin_replay_revision(&manifest)
+        .expect("begin first replay");
+    let first_epoch = store
+        .apply_replay_append_batch(&replay_append(
+            6,
+            first.id(),
+            first.epoch(),
+            vec![replay_event(
+                6,
+                "retained-root",
+                None,
+                0,
+                10,
+                Some(100),
+                false,
+            )],
+        ))
+        .expect("append first replay");
+    let first_sealed = store
+        .seal_replay_revision(first.id(), first_epoch)
+        .expect("seal first replay");
+    store
+        .promote_replay_revision(first.id(), first_sealed.epoch())
+        .expect("promote first replay");
+    let current_page = store
+        .event_page_before(None, 256)
+        .expect("current canonical page");
+
+    let second = store
+        .begin_replay_revision(&manifest)
+        .expect("begin incomplete replacement replay");
+    let second_epoch = store
+        .apply_replay_append_batch(&replay_append_generation(
+            6,
+            second.id(),
+            second.epoch(),
+            2,
+            vec![replay_event(
+                6,
+                "replacement-root",
+                None,
+                0,
+                20,
+                Some(200),
+                false,
+            )],
+            100,
+        ))
+        .expect("append incomplete replacement replay");
+    let second_sealed = store
+        .seal_replay_revision(second.id(), second_epoch)
+        .expect("seal incomplete replacement replay");
+    let error = store
+        .promote_replay_revision(second.id(), second_sealed.epoch())
+        .expect_err("missing prior projection must block promotion");
+    assert_eq!(error.code(), StoreErrorCode::IncompleteManifest);
+    let state = store
+        .archive_state()
+        .expect("archive state after rejection");
+    assert_eq!(state.mode(), ArchiveMode::ReplayVerified);
+    assert_eq!(state.active_revision(), Some(first.id()));
+    assert!(state.rebuild_staging());
+    assert_eq!(
+        store
+            .event_page_before(None, 256)
+            .expect("canonical page after rejection"),
+        current_page
+    );
 }
 
 #[test]
