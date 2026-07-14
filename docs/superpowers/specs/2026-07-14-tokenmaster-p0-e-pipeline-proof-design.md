@@ -141,8 +141,8 @@ upgrades, cancellation, and restart without teaching SQLite any provider format.
 
 The driver uses two deterministic streaming enumeration passes. In the first pass, a
 bounded initial read supplies each newly observed file's physical/logical identity;
-registration uses a zero-offset checkpoint with those identities, empty anchor, empty
-parser resume, and incremental verification, then drops the read batch. After exact
+registration uses a zero-offset checkpoint with those identities, empty anchor, a
+valid serialized empty parser resume, and incremental verification, then drops the read batch. After exact
 complete enumeration, `begin_replay_revision_all_sources` snapshots all registered
 files on disk. The second pass rereads each file from its zero-offset staging
 checkpoint and drives append. This deliberately trades test I/O for bounded memory and
@@ -225,12 +225,15 @@ After a promoted append result:
 - truncate the synthetic file to an earlier complete-line boundary and rebuild;
 - replace the file atomically with a different physical file and complete content;
 - prove old canonical state remains visible throughout staging;
-- prove only complete successful promotion removes/reclassifies superseded evidence;
+- prove a complete replacement that covers prior evidence can promote, while a
+  truncation that omits prior visible evidence fails promotion and exact discard keeps
+  the old projection current;
 - prove reader `RebuildRequired` classifications are observed when current checkpoints
   are probed, without treating them as permission for partial destructive writes.
 
-File deletion/missing-source reconciliation is excluded because its authority belongs
-to P1 scan finalization.
+File deletion/missing-source reconciliation and explicit carry-forward of prior
+evidence are excluded because their authority belongs to P1 scan finalization and
+retention policy. Reader rebuild classifications alone never authorize erasure.
 
 ### 6.5 Cancellation and failure
 

@@ -28,12 +28,16 @@ Completed: P0-D.1 removes the historical 256-file replay-manifest blocker with e
 schema-v2-to-v3 migration, disk-backed all-source staging, checked 64-bit counts, and
 256-row keyset-paged validation.
 
-Current gate: P0-E exercises discovery, enumeration, reader, accounting, archive epochs,
-continuation/seal/promotion, restart, cancellation, append, truncate, and replacement
-fixtures beyond 256 files/events without introducing the live engine. P1 then adds the
-provider-neutral runtime engine, scan epochs, source finalization, coalescing, writer
-lease, and continuous recovery before indexed analytics, pricing, quota, Git output,
-automation, and complete UI work.
+Completed: P0-E exercises discovery, enumeration, reader, accounting, archive epochs,
+continuation/seal/promotion, restart, cancellation, append, truncation, and Windows
+atomic replacement beyond 256 files/events without introducing a live engine. It also
+adds only bounded path-private restart reads and exact-epoch preparation of untouched
+staging.
+
+Current gate: P1 adds the provider-neutral runtime engine, scan epochs, source-set
+finalization, explicit prior-evidence carry-forward/retention, coalescing, writer lease,
+sleep/resume, and continuous recovery before indexed analytics, pricing, quota, Git
+output, automation, and complete UI work.
 
 ## 0.9 — complete desktop product
 

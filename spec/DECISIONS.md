@@ -93,3 +93,20 @@ check, commit, and guaranteed policy restoration. `writable_schema` and
 rename-old-first are forbidden. Rationale: normal Codex histories may contain
 thousands of JSONL files, so a 256-source product limit is invalid, while collecting
 all source identities in Rust would violate the stable-memory target.
+
+## ADR-012 — Adapter-prepared staging and non-destructive replacement
+
+Decision: replay begin remains provider-neutral and creates empty invisible staging,
+then the adapter prepares each untouched source through exact revision/epoch CAS using
+a validated zero-offset checkpoint with its live path-private physical identity and
+valid bounded resume payload. The store never manufactures provider state. A reader
+truncate/replace classification does not authorize removal: promotion still requires
+coverage of every previously visible event, and an omitted prior event leaves the old
+projection current.
+
+Rationale: copying an old physical identity while clearing offsets makes legitimate
+atomic replacement unrecoverable, while an empty opaque resume cannot be decoded
+after restart. Constrained preparation solves both without coupling SQLite to Codex.
+Fail-closed prior coverage prevents a truncated, cancelled, incomplete, or parser-bug
+rebuild from erasing real accounted usage; P1 must define explicit carry-forward and
+retention authority before continuous reconciliation.

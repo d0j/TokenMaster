@@ -45,6 +45,12 @@ offset, scan position, or partial proof MUST write nothing.
 Staging generations MUST remain invisible to canonical reads. The product replay
 begin snapshots every registered source into SQLite in one immediate transaction;
 the stored checked 64-bit source count is never an application allocation authority.
+Before the first staging append, an adapter may prepare only its exact untouched
+pending source with a validated zero-offset incremental checkpoint. Preparation is
+revision/epoch compare-and-swap, may replace only path-private physical identity,
+parser version, and bounded opaque resume state, MUST preserve the registered logical
+identity, and advances the evidence epoch atomically. It cannot modify a current
+generation, a touched source, observations, chunks, selections, or canonical pages.
 The explicit 256-key manifest remains only a bounded test/repair input and cannot seal
 a subset. Seal MUST prove the entire fixed all-registered-source manifest, exact
 checkpoint/chunk coverage, replay-overlay coverage, accounting versions, exhausted
@@ -55,6 +61,11 @@ selections and source generations atomically, and leave the previous current sta
 intact on failure. An explicit epoch-checked discard may remove only unpublished
 staging state; it MUST NOT mutate the current revision, legacy snapshot, or canonical
 event page.
+
+Truncation or physical replacement is not destructive authority. If a complete new
+overlay omits a previously visible event, promotion fails closed and the prior page
+remains current. A future retention/carry-forward policy must account for that prior
+evidence explicitly; it may not infer deletion from a reader rebuild classification.
 
 ## TM-DATA-005 — SQLite policy
 

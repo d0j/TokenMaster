@@ -1,5 +1,8 @@
 # TokenMaster P0-E Transactional Pipeline Proof Implementation Plan
 
+**Status:** Implemented and fully verified on 2026-07-14. P1 is the next slice; this
+test driver must not become the production scheduler.
+
 > **Execution mode:** root-only, test-first, one writer, current feature branch. The
 > plan is implemented inline because the user explicitly asked to continue
 > autonomously and model/role routing is not provable on the available spawn surface.

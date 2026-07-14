@@ -329,3 +329,53 @@ The normal workspace run retained exactly one pre-existing explicitly ignored
 one-million-row M0 scale test. No P0-E engine behavior, M0 acceptance, interactive
 Windows result, package, or release is claimed. P0-E is now the next implementation
 gate.
+
+## 2026-07-14 — transactional Codex-to-archive proof implemented
+
+Completed P0-E without adding a production scheduler or changing the normal Codex
+dependency graph. A development-only integration driver now sends real synthetic
+JSONL through Codex discovery, streaming enumeration, bounded reader batches,
+TokenMaster accounting canonicalization, replay staging/relations/continuation,
+full-prefix proof, exact seal, and atomic promotion. Independent baseline oracles prove
+two eligible events, one replay observation, exact total tokens, and replay-quality
+counts after reopen.
+
+The preflight exposed two restart gaps and closed them with narrow reusable seams.
+`PhysicalFileIdentity` can reconstruct only its opaque fixed 32-byte persisted digest.
+Store reads return one exact unsealed staging generation and one exact chunk. The new
+`prepare_replay_source` CAS accepts only a validated zero-offset incremental checkpoint
+for an untouched pending staging source, preserves logical identity, binds the live
+physical identity plus valid adapter resume, synchronizes work epochs, and leaves
+current data untouched.
+
+Seven pipeline contracts cover baseline replay, append, reopen after the first of
+multiple batches, 300 observations, 300 JSONL files, Windows `ReplaceFileW` atomic
+physical replacement, streaming enumeration cancellation, reader cancellation,
+malformed relevant JSON, incomplete tail, and complete-line truncation. Batches and
+pages cap at 256; expected chunks are fetched one at a time. Truncation and replacement
+are classification, not deletion authority: an overlay omitting prior visible evidence
+cannot promote, exact discard removes staging, and the old 2-event/26-token page remains
+current. P1 must add explicit bounded carry-forward/retention policy.
+
+Verification:
+
+```powershell
+cargo +1.97.0 test -p tokenmaster-platform --locked
+cargo +1.97.0 test -p tokenmaster-store --test replay_archive_contract --locked
+cargo +1.97.0 test -p tokenmaster-codex --test pipeline_contract --locked
+cargo +1.97.0 test -p tokenmaster-codex --locked
+cargo +1.97.0 test -p tokenmaster-accounting --locked
+pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
+cargo +1.97.0 fmt --all -- --check
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy --workspace --all-targets --locked
+Remove-Item Env:RUSTFLAGS -ErrorAction SilentlyContinue
+cargo +1.97.0 test --workspace --locked
+```
+
+All commands passed. Focused evidence is 2 platform identity, 38 replay archive, and
+7 cross-crate pipeline tests, plus the complete Codex and accounting suites. Clean-root
+returned `TM-CLEAN-PASS`; formatting and strict workspace Clippy passed. The full
+workspace retained exactly one pre-existing explicitly ignored one-million-row M0
+scale test. Normal dependency-tree inspection found no store/accounting dependency in
+the Codex production graph. No M0 acceptance, interactive Windows product result,
+package, signing, or release is claimed.

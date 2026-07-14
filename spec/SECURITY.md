@@ -40,6 +40,13 @@ staging state until an explicit sealed promotion.
 Stored parent facts from another accounting version MUST fail closed; staging MUST NOT
 change current event pages, current source metadata, or externally visible totals.
 
+Provider checkpoint preparation is allowed only for the exact unsealed revision,
+evidence epoch, source key, and untouched pending staging generation. The checkpoint
+must be zero-offset, empty-anchor, incremental, bounded, and match the registered
+logical identity. It may carry only opaque path-private physical identity and adapter
+resume bytes. Stale, touched, complete, malformed, or current-generation targets write
+nothing. Preparation synchronizes durable-work epochs before committing.
+
 Late relations are accepted only from a fixed-manifest source whose validated provider,
 profile, source ID, committed range, revision, and evidence epoch match. The archive
 stores only bounded identifiers plus the deterministic first source-key/offset tuple,
@@ -59,6 +66,11 @@ generation, and source-pointer state atomically. Injected failure at every mutat
 phase MUST roll back to the prior canonical page. Recovery may discard only an exact
 epoch-matched staging revision and staging generations; current and immutable legacy
 state remain untouched, and any integrity failure rolls the discard back.
+
+Reader `Truncated`, `IdentityChanged`, or rewrite classifications never authorize
+erasure. A replacement that omits prior visible evidence is rejected and discarded;
+the future runtime must use an explicit retention/carry-forward contract rather than
+weakening prior-projection coverage.
 
 ## TM-SEC-005 — Extensibility
 

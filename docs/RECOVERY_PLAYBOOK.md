@@ -14,7 +14,11 @@
    or stale replay revision, immutable legacy snapshot, or empty state; they never
    read the staging overlay.
 2. For an unsealed staging revision, resume only with its exact revision ID and
-   evidence epoch. Run bounded continuation until no actionable work remains, then
+   evidence epoch. Before its first append, prepare each untouched pending source with
+   its validated zero-offset adapter checkpoint; this binds the live path-private
+   physical identity and a valid bounded resume payload without touching current.
+   After any append/reopen, recover only through `replay_generation_snapshot` and
+   fetch full-prefix proofs one chunk at a time through `source_chunk`. Run bounded continuation until no actionable work remains, then
    seal only after the complete SQLite-owned all-registered-source manifest has been
    proven. Product rebuilds use `begin_replay_revision_all_sources`; the explicit
    256-key manifest is test/repair-only and cannot authorize a subset.
@@ -25,9 +29,13 @@
    staging generations in one immediate transaction, validates foreign keys, and
    leaves current events, current source pointers, and the immutable legacy snapshot
    unchanged. A stale epoch or integrity fault writes nothing.
-5. Never delete SQLite rows, generations, the legacy snapshot, or the archive file to
-   recover a rebuild. P0-E must expose this store operation through bounded runtime
-   policy; no user-facing recovery command exists yet.
+5. Never treat `Truncated`, `IdentityChanged`, or rewrite detection as permission to
+   erase prior visible usage. If replacement coverage is incomplete, discard staging
+   and keep the old current page. P1 must provide explicit bounded carry-forward and
+   retention authority.
+6. Never delete SQLite rows, generations, the legacy snapshot, or the archive file to
+   recover a rebuild. P0-E proves exact discard through a test-only driver; no
+   user-facing recovery command exists yet.
 
 ## Schema recovery
 

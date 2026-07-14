@@ -43,6 +43,17 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   Replay reclassification may intentionally change which accounted events are
   canonical. Exact-epoch
   discard removes only unpublished staging and leaves current/legacy state unchanged.
+- P0-E transactional composition proof: real synthetic Codex JSONL discovery and
+  streaming enumeration feed bounded reader batches through the accounting authority
+  into the replay archive. The proof includes exact replay/eligible totals and quality,
+  staging invisibility, append rebuild, reopen after the first of multiple batches,
+  300 observations, 300 files, one-chunk-at-a-time full-prefix verification, Windows
+  atomic physical replacement, cancellation, malformed JSON, incomplete tail, and
+  complete-line truncation. A constrained exact-epoch `prepare_replay_source` supplies
+  a valid adapter-owned empty resume and live physical identity only to untouched
+  staging; two bounded reads recover its checkpoint and one chunk after restart.
+  Truncation/omitted prior evidence fails promotion and exact discard leaves the old
+  canonical page current.
 
 ## Next implementation slice
 
@@ -62,13 +73,12 @@ the P0-B Codex-lineage surface are implemented under the completed executable TD
 P0-D.1 is complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-scalable-replay-manifest.md`. Its
 300-source contract crosses two manifest pages, promotes, reopens, and preserves
-late-source fail-closed behavior. P0-E now proves discovery, enumeration, reader,
-accounting, continuation, seal, promotion, restart, and truncate/replace behavior
-together on synthetic
-fixtures exceeding both 256 files and 256 events. This is a transactional cross-crate
-proof, not the production scheduler. P1 still owns scan epochs, missing-source
-finalization, coalescing, cancellation policy, writer lease, sleep/resume, and
-continuous runtime recovery.
+late-source fail-closed behavior. P0-E is complete under
+`docs/superpowers/plans/2026-07-14-tokenmaster-p0-e-pipeline-proof.md`; it is a
+transactional cross-crate proof, not the production scheduler. P1 is now the next
+slice and owns scan epochs, source-set finalization, prior-evidence carry-forward,
+coalescing, cancellation policy, writer lease, sleep/resume, and continuous runtime
+recovery.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 
