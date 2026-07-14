@@ -158,3 +158,35 @@ The public contract covers root, replay, divergence, weak/missing evidence,
 irreversibility, scope/session/ordinal mismatch, cycle/conflict, and both work bounds.
 SQLite persistence, durable continuation, descendant reclassification, and replay-safe
 totals remain P0-D/P0-E work and are not claimed here.
+
+## 2026-07-14 — replay archive v2 and classified staging append
+
+Implemented the first P0-D archive slices under the approved replay-archive design and
+executable plan. SQLite schema v2 adds an immutable exact-v1 legacy snapshot, private
+version-owned replay revisions, fixed source manifests, staging generations, persisted
+observations/sessions/selections, and durable bounded work rows. Exact v1 migration is
+transactional and fails closed on altered schema; archive reads expose explicit empty,
+legacy-unverified, replay-verified, stale-version, and rebuild-staging state without
+using staging data as current product truth.
+
+Replay append now shares the existing identity/chunk/checkpoint proof path but writes
+only to staging. It validates provider/source/accounting scope, persists replay facts,
+classifies through `tokenmaster-accounting`, records deterministic eligible selection,
+advances a store-owned evidence epoch, and rolls the whole transaction back on stale
+CAS, mismatched duplicate content, invalid persisted accounting versions, or foreign
+key failure. It cannot change current event pages or visible source metadata.
+
+Verification:
+
+```powershell
+cargo +1.97.0 fmt --all -- --check
+$env:RUSTFLAGS='-Dwarnings'
+cargo +1.97.0 test -p tokenmaster-store --test replay_archive_contract --locked
+cargo +1.97.0 clippy --workspace --all-targets --locked
+cargo +1.97.0 test --workspace --locked
+```
+
+All commands passed. The store replay contract has 11 passing tests. The workspace
+run retains the explicitly ignored one-million-row M0 scale gate; it was not rerun for
+this archive slice. Late ancestry continuation, sealing, promotion, and P0-E pipeline
+integration remain unimplemented and are not claimed.

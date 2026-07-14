@@ -610,6 +610,54 @@ impl UsageStoreCounts {
     }
 }
 
+#[derive(Clone)]
+pub struct ReplayAppendBatchParts {
+    pub revision_id: ReplayRevisionId,
+    pub expected_epoch: ReplayEpoch,
+    pub append_batch: AppendBatch,
+}
+
+impl fmt::Debug for ReplayAppendBatchParts {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        replay_append_debug("ReplayAppendBatchParts", self, formatter)
+    }
+}
+
+#[derive(Clone)]
+pub struct ReplayAppendBatch {
+    parts: ReplayAppendBatchParts,
+}
+
+impl ReplayAppendBatch {
+    #[must_use]
+    pub const fn new(parts: ReplayAppendBatchParts) -> Self {
+        Self { parts }
+    }
+
+    pub(super) const fn parts(&self) -> &ReplayAppendBatchParts {
+        &self.parts
+    }
+}
+
+impl fmt::Debug for ReplayAppendBatch {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        replay_append_debug("ReplayAppendBatch", &self.parts, formatter)
+    }
+}
+
+fn replay_append_debug(
+    name: &str,
+    parts: &ReplayAppendBatchParts,
+    formatter: &mut fmt::Formatter<'_>,
+) -> fmt::Result {
+    formatter
+        .debug_struct(name)
+        .field("revision_id", &parts.revision_id)
+        .field("expected_epoch", &parts.expected_epoch)
+        .field("append_batch", &parts.append_batch)
+        .finish()
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AccountingVersions {
     canonicalizer: u16,

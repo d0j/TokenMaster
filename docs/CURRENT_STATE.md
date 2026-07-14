@@ -22,6 +22,11 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 - P0-C pure replay classifier: root/matching/diverged/pending/conflict transitions,
   strong/weak proof rules, provider/profile/parent/ordinal validation, irreversible
   divergence, and pending (not conflict) depth/fanout exhaustion.
+- P0-D archive foundation: strict SQLite schema v2, transactional exact-v1 migration,
+  immutable legacy snapshot, explicit archive modes, fixed/version-owned replay
+  manifests, invisible staging generations, transactional classified replay append,
+  deterministic eligible selection, epoch CAS, and fail-closed persisted-version
+  validation. Staging rows never affect current event pages or source metadata.
 
 ## Next implementation slice
 
@@ -38,11 +43,11 @@ The repeated critical audit is recorded in `docs/AUDIT_AND_MASTER_PLAN.md`. P0-A
 the P0-B Codex-lineage surface are implemented under the completed executable TDD plan
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`.
 
-The next slice is P0-D: persist provider/versioned replay facts and classifier output
-through a non-destructive legacy snapshot plus invisible v2 staging. Current archive
-totals remain not replay-safe until P0-D and P0-E complete. Parser resume v1 fails
-closed because its event ordinal cannot be inferred safely; P0-D must rebuild legacy
-data rather than mutate or reinterpret it.
+P0-D is in progress. Its next slice is durable late-relation/descendant continuation
+with bounded fanout/depth, followed by seal and atomic promotion. Current archive
+totals remain not replay-safe until those gates and P0-E pipeline proof complete.
+Parser resume v1 still fails closed because its event ordinal cannot be inferred
+safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 
 ## Release truth
 

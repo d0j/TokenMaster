@@ -30,6 +30,13 @@ Archive writes use explicit transactions and compare expected generation, identi
 checkpoint, and proof state. Failed writes roll back completely. Incomplete, cancelled,
 or failed scans MUST NOT authorize destructive source reconciliation.
 
+Replay rebuilds use a fixed bounded source manifest, store-owned accounting versions,
+and an evidence-epoch compare-and-swap. Legacy v1 rows are copied into an immutable
+snapshot before v2 becomes current. Replay observations, classifications, selections,
+and checkpoints remain private staging state until an explicit sealed promotion.
+Stored parent facts from another accounting version MUST fail closed; staging MUST NOT
+change current event pages, current source metadata, or externally visible totals.
+
 ## TM-SEC-005 — Extensibility
 
 Skins are declarative data only. They MUST NOT execute code, call external processes,

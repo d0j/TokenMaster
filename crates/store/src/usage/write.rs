@@ -267,7 +267,7 @@ fn insert_generation(
     Ok(())
 }
 
-fn verify_chunk_proof(
+pub(super) fn verify_chunk_proof(
     transaction: &Transaction<'_>,
     source_key: super::SourceKey,
     generation: u64,
@@ -283,7 +283,7 @@ fn verify_chunk_proof(
     Ok(())
 }
 
-fn verify_chunk_conflicts(
+pub(super) fn verify_chunk_conflicts(
     transaction: &Transaction<'_>,
     source_key: super::SourceKey,
     generation: u64,
@@ -332,7 +332,7 @@ fn read_chunk(
     .transpose()
 }
 
-fn insert_observation(
+pub(super) fn insert_observation(
     transaction: &Transaction<'_>,
     source_key: super::SourceKey,
     generation: u64,
@@ -403,7 +403,7 @@ fn refresh_canonical(
     Ok(())
 }
 
-fn upsert_chunk(
+pub(super) fn upsert_chunk(
     transaction: &Transaction<'_>,
     source_key: super::SourceKey,
     generation: u64,
@@ -435,6 +435,26 @@ fn update_checkpoint(
     expected_scan_offset: u64,
     checkpoint: &StoredCheckpoint,
 ) -> Result<(), StoreError> {
+    update_checkpoint_for_status(
+        transaction,
+        source_key,
+        generation,
+        expected_committed_offset,
+        expected_scan_offset,
+        checkpoint,
+        "current",
+    )
+}
+
+pub(super) fn update_checkpoint_for_status(
+    transaction: &Transaction<'_>,
+    source_key: super::SourceKey,
+    generation: u64,
+    expected_committed_offset: u64,
+    expected_scan_offset: u64,
+    checkpoint: &StoredCheckpoint,
+    status: &str,
+) -> Result<(), StoreError> {
     let updated = transaction.execute(
         "UPDATE usage_generation SET
            parser_schema_version = ?1,
@@ -451,7 +471,7 @@ fn update_checkpoint(
            discarding_oversized_line = ?12,
            incomplete_tail = ?13,
            verification_level = ?14
-         WHERE file_key = ?15 AND generation = ?16 AND status = 'current'
+         WHERE file_key = ?15 AND generation = ?16 AND status = ?19
            AND committed_offset = ?17 AND scan_offset = ?18",
         params![
             i64::from(checkpoint.parser_schema_version()),
@@ -472,6 +492,7 @@ fn update_checkpoint(
             sql_u64(generation)?,
             sql_u64(expected_committed_offset)?,
             sql_u64(expected_scan_offset)?,
+            status,
         ],
     )?;
     if updated != 1 {
@@ -480,7 +501,7 @@ fn update_checkpoint(
     Ok(())
 }
 
-fn update_source_metadata(
+pub(super) fn update_source_metadata(
     transaction: &Transaction<'_>,
     source_key: super::SourceKey,
     last_seen_scan_id: Option<u64>,
@@ -512,22 +533,22 @@ fn update_source_metadata(
     Ok(())
 }
 
-fn sql_u64(value: u64) -> Result<i64, StoreError> {
+pub(super) fn sql_u64(value: u64) -> Result<i64, StoreError> {
     i64::try_from(value).map_err(|_| StoreError::new(StoreErrorCode::InvalidValue))
 }
 
-const fn sql_bool(value: bool) -> i64 {
+pub(super) const fn sql_bool(value: bool) -> i64 {
     if value { 1 } else { 0 }
 }
 
-fn sql_token(value: TokenCount) -> Result<Option<i64>, StoreError> {
+pub(super) fn sql_token(value: TokenCount) -> Result<Option<i64>, StoreError> {
     match value {
         TokenCount::Available(value) => sql_u64(value).map(Some),
         TokenCount::Unavailable => Ok(None),
     }
 }
 
-const fn long_context_sql(value: LongContextState) -> &'static str {
+pub(super) const fn long_context_sql(value: LongContextState) -> &'static str {
     match value {
         LongContextState::Yes => "yes",
         LongContextState::No => "no",
@@ -539,7 +560,7 @@ fn stored_u64(value: i64) -> Result<u64, StoreError> {
     u64::try_from(value).map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))
 }
 
-fn stored_digest(value: &[u8]) -> Result<[u8; 32], StoreError> {
+pub(super) fn stored_digest(value: &[u8]) -> Result<[u8; 32], StoreError> {
     <[u8; 32]>::try_from(value).map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))
 }
 
