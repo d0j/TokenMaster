@@ -14,6 +14,7 @@ pub use state::AppState;
 pub use usage::{
     ActivityCounts, ActivityKind, CanonicalUsageEvent, CanonicalUsageEventParts, EventFingerprint,
     EventId, LongContextState, MAX_METADATA_BYTES, MAX_MODEL_KEY_BYTES, MAX_SESSION_ID_BYTES,
-    MAX_USAGE_ID_BYTES, MetadataValue, ModelKey, ProjectAlias, TokenCount, TokenUsage, UsageError,
-    UsageProfileId, UsageSessionId, UsageSourceId, UtcTimestamp,
+    MAX_USAGE_ID_BYTES, MetadataValue, ModelKey, ProjectAlias, ReplayEvidence, ReplaySignature,
+    TokenCount, TokenUsage, UsageError, UsageLineage, UsageProfileId, UsageSessionId,
+    UsageSourceId, UtcTimestamp,
 };

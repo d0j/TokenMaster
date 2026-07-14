@@ -1,7 +1,8 @@
 use tokenmaster_domain::{
     ActivityCounts, ActivityKind, CanonicalUsageEvent, CanonicalUsageEventParts, EventFingerprint,
-    LongContextState, MetadataValue, ModelKey, ProjectAlias, TokenCount, TokenUsage,
-    UsageProfileId, UsageSessionId, UsageSourceId, UtcTimestamp,
+    LongContextState, MetadataValue, ModelKey, ProjectAlias, ReplayEvidence, ReplaySignature,
+    TokenCount, TokenUsage, UsageLineage, UsageProfileId, UsageSessionId, UsageSourceId,
+    UtcTimestamp,
 };
 
 fn sample_parts() -> CanonicalUsageEventParts {
@@ -195,4 +196,70 @@ fn canonical_event_serialization_contains_only_the_allowed_shape() {
         .expect("event parts are an object");
     assert_eq!(parts["source_offset"], 17);
     assert_eq!(parts["usage"]["cached"], serde_json::Value::Null);
+}
+
+#[test]
+fn replay_lineage_is_bounded_serializable_and_private() {
+    let session = UsageSessionId::new("child-session").expect("valid child session");
+    let parent = UsageSessionId::new("parent-session").expect("valid parent session");
+    let signature = ReplaySignature::new([0xab; 32]);
+    let lineage = UsageLineage::new(
+        &session,
+        Some(parent.clone()),
+        0,
+        signature,
+        ReplayEvidence::StrongCumulative,
+        false,
+    )
+    .expect("valid lineage");
+
+    assert_eq!(lineage.parent_session_id(), Some(&parent));
+    assert_eq!(lineage.session_ordinal(), 0);
+    assert_eq!(lineage.signature(), signature);
+    assert_eq!(lineage.evidence(), ReplayEvidence::StrongCumulative);
+    assert!(!lineage.declared_conflict());
+    assert_eq!(signature.as_bytes(), &[0xab; 32]);
+    assert_eq!(format!("{signature:?}"), "ReplaySignature([redacted])");
+
+    let first = serde_json::to_string(&lineage).expect("lineage serializes");
+    let second = serde_json::to_string(&lineage).expect("lineage serializes twice");
+    assert_eq!(first, second);
+    let value: serde_json::Value = serde_json::from_str(&first).expect("lineage JSON");
+    assert_eq!(value["parent_session_id"], "parent-session");
+    assert_eq!(value["session_ordinal"], 0);
+    assert_eq!(value["evidence"], "strong_cumulative");
+    assert_eq!(value["declared_conflict"], false);
+    assert_eq!(
+        value["signature"]
+            .as_array()
+            .expect("signature bytes")
+            .len(),
+        32
+    );
+
+    let short_signature = serde_json::to_string(&vec![0_u8; 31]).expect("short signature JSON");
+    assert!(serde_json::from_str::<ReplaySignature>(&short_signature).is_err());
+    assert!(
+        UsageLineage::new(
+            &session,
+            Some(session.clone()),
+            0,
+            signature,
+            ReplayEvidence::WeakUsageOnly,
+            false,
+        )
+        .is_err()
+    );
+    assert!(
+        UsageLineage::new(
+            &session,
+            Some(session.clone()),
+            0,
+            signature,
+            ReplayEvidence::WeakUsageOnly,
+            true,
+        )
+        .is_ok()
+    );
+    assert!(UsageSessionId::new("p".repeat(513)).is_err());
 }

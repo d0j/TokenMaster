@@ -78,9 +78,9 @@
 - Modify: `crates/domain/src/lib.rs`
 - Modify: `crates/domain/tests/usage_contract.rs`
 
-- [ ] Add failing domain tests that require deterministic serialization, redacted debug output, exact 32-byte signatures, parent/session bounds, and zero-based monotonic ordinals.
-- [ ] Run `cargo test -p tokenmaster-domain --test usage_contract replay_lineage_is_bounded_serializable_and_private -- --exact`; expect a compile failure because the replay types do not exist.
-- [ ] Add these source-neutral types:
+- [x] Add failing domain tests that require deterministic serialization, redacted debug output, exact 32-byte signatures, parent/session bounds, and zero-based ordinals.
+- [x] Run `cargo test -p tokenmaster-domain --test usage_contract replay_lineage_is_bounded_serializable_and_private`; observed the expected unresolved-import failure because the replay types did not exist.
+- [x] Add these source-neutral types:
 
 ```rust
 #[derive(Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize)]
@@ -103,13 +103,13 @@ pub struct UsageLineage {
 }
 ```
 
-- [ ] Implement `ReplaySignature::new`, `as_bytes`, and private `Debug`; implement `UsageLineage::new` plus accessors. Construction must not accept a parent equal to the current event session ID unless `declared_conflict` is true; add the event session ID to the constructor for that validation.
-- [ ] Run the focused test again; expect pass.
-- [ ] Run `cargo test -p tokenmaster-domain`; expect all domain tests pass.
+- [x] Implement `ReplaySignature::new`, `as_bytes`, and private `Debug`; implement `UsageLineage::new` plus accessors. Construction does not accept a parent equal to the current event session ID unless `declared_conflict` is true.
+- [x] Run the focused test again; one focused test passed.
+- [x] Run `cargo test -p tokenmaster-domain`; all domain tests passed.
 
 **Commit:**
 
-- [ ] Commit `crates/domain/src/usage.rs`, `crates/domain/src/lib.rs`, and `crates/domain/tests/usage_contract.rs` as `feat(domain): add replay lineage contract`.
+- [x] Commit the domain implementation, contract test, and required project-truth updates as `feat(domain): add replay lineage contract`.
 
 ## Task 3: Decode explicit Codex ancestry without retaining source payloads
 
@@ -129,7 +129,7 @@ pub struct UsageLineage {
 ```
 
 - [ ] Add internal adversarial cases for oversized/control-character parent IDs, a scalar/object type mismatch, and conflicting ancestry fields. Self-parent validation belongs to parser state in Task 4. Tests must assert bounded diagnostic codes and must not echo the rejected value.
-- [ ] Run `cargo test -p tokenmaster-codex parser::effects::tests::explicit_parent_metadata_is_bounded_and_shape_compatible -- --exact`; expect failure because parent metadata is not decoded.
+- [ ] Run `cargo test -p tokenmaster-codex parser::effects::tests::explicit_parent_metadata_is_bounded_and_shape_compatible`; expect failure because parent metadata is not decoded.
 - [ ] Replace the current source-only scalar field with a custom bounded visitor that extracts only:
   - a bounded display alias when `source` is a scalar string;
   - `subagent.thread_spawn.parent_thread_id` when `source` is an object;
@@ -155,7 +155,7 @@ pub struct UsageLineage {
 
 - [ ] Add failing resume tests requiring `parent_session_id`, `next_usage_ordinal`, and `lineage_conflict` to survive a serialize/restore cycle exactly.
 - [ ] Add invalid-state tests for a self-parent, an ordinal above `i64::MAX`, a parent change after emission, and unknown resume fields.
-- [ ] Run `cargo test -p tokenmaster-codex --test parser_state_contract resume_preserves_bounded_lineage_state -- --exact`; expect failure because resume schema v1 lacks the fields.
+- [ ] Run `cargo test -p tokenmaster-codex --test parser_state_contract resume_preserves_bounded_lineage_state`; expect failure because resume schema v1 lacks the fields.
 - [ ] Rename the public resume type to `ParserResumeStateV2`, set `PARSER_SCHEMA_VERSION` to `2`, and update reader checkpoint types/exports. Do not silently accept v1 parser state; a stored v1 checkpoint must trigger the existing parser-schema reparse path.
 - [ ] Add to `ParserState`:
 
@@ -193,7 +193,7 @@ lineage_conflict: bool,
   - non-cumulative usage produces `WeakUsageOnly`;
   - event fingerprints still differ when timestamps differ;
   - ordinals advance exactly once per emitted event.
-- [ ] Run `cargo test -p tokenmaster-codex --test parser_replay_contract rewritten_timestamps_keep_strong_replay_identity -- --exact`; expect failure because no lineage is emitted.
+- [ ] Run `cargo test -p tokenmaster-codex --test parser_replay_contract rewritten_timestamps_keep_strong_replay_identity`; expect failure because no lineage is emitted.
 - [ ] Preserve `LineEffect::baseline_update` long enough to generate a signature after model resolution. Hash an unambiguous fixed-width stream:
 
 ```text
@@ -223,7 +223,7 @@ cumulative token fields when present
 - Create: `crates/store/tests/usage_replay_classifier_contract.rs`
 
 - [ ] Add table-driven failing tests for root, strong match, strong mismatch/divergence, missing parent ordinal, weak pre-divergence match, post-divergence weak event, cycle, conflicting parent, ancestry depth 33, and fanout 257.
-- [ ] Run `cargo test -p tokenmaster-store --test usage_replay_classifier_contract strong_prefix_match_is_replay_and_mismatch_diverges -- --exact`; expect a compile failure because the classifier does not exist.
+- [ ] Run `cargo test -p tokenmaster-store --test usage_replay_classifier_contract strong_prefix_match_is_replay_and_mismatch_diverges`; expect a compile failure because the classifier does not exist.
 - [ ] Implement a pure state transition with these stable states:
 
 ```rust
@@ -264,7 +264,7 @@ enum SessionReplayState { Root, Matching, Diverged, Pending, Conflict }
   - old canonical rows are removed because their lineage was never captured;
   - no v1 row is silently treated as replay-safe;
   - a later reparse can attach replay metadata to an existing observation.
-- [ ] Run `cargo test -p tokenmaster-store --test usage_schema_contract v1_migration_preserves_observations_and_fails_canonical_closed -- --exact`; expect failure because schema version is 1.
+- [ ] Run `cargo test -p tokenmaster-store --test usage_schema_contract v1_migration_preserves_observations_and_fails_canonical_closed`; expect failure because schema version is 1.
 - [ ] Set `USAGE_SCHEMA_VERSION` to `2` and add strict tables:
 
 ```sql
@@ -304,7 +304,7 @@ usage_replay_observation(
 - Create: `crates/store/tests/usage_replay_ingest_contract.rs`
 
 - [ ] Add failing transaction tests for a normal root, child strong-prefix replay, rewritten child timestamps, first mismatch divergence, pending parent tail, duplicate observations, and an injected rollback after replay metadata insertion.
-- [ ] Run `cargo test -p tokenmaster-store --test usage_replay_ingest_contract rewritten_child_prefix_never_enters_canonical_totals -- --exact`; expect failure because canonical selection ignores replay state.
+- [ ] Run `cargo test -p tokenmaster-store --test usage_replay_ingest_contract rewritten_child_prefix_never_enters_canonical_totals`; expect failure because canonical selection ignores replay state.
 - [ ] Change append order inside the existing immediate transaction:
   1. insert or retain `usage_observation`;
   2. validate/upsert the session-parent relation;
@@ -330,7 +330,7 @@ usage_replay_observation(
 - Modify: `crates/store/tests/usage_replay_ingest_contract.rs`
 
 - [ ] Add failing tests where a child arrives before its parent, a nested grandchild arrives before both ancestors, a parent is later extended, a session declares two parents, a cycle is formed, and limits are reached.
-- [ ] Run `cargo test -p tokenmaster-store --test usage_replay_ingest_contract late_parent_reclassifies_bounded_nested_descendants -- --exact`; expect failure because pending descendants are not revisited.
+- [ ] Run `cargo test -p tokenmaster-store --test usage_replay_ingest_contract late_parent_reclassifies_bounded_nested_descendants`; expect failure because pending descendants are not revisited.
 - [ ] After inserting a parent ordinal, find at most 256 direct pending children for that `(profile_id, parent_session_id, session_ordinal)` and re-run classification. Traverse at most 32 ancestry levels in one transaction using an explicit fixed-capacity queue.
 - [ ] For every changed disposition, refresh that observation's fingerprint. Re-evaluation must use raw replay-observation sequences, including rows already classified as `replay`, so nested children compare against the parent's complete observed stream rather than only canonical events.
 - [ ] If a session-parent relation changes, self-references, cycles, exceeds depth, or exceeds bounded fanout, mark the entire affected session `conflict`, mark all its replay observations `conflict`, and remove their canonical contributions in the same transaction.

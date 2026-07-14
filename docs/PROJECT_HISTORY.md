@@ -50,6 +50,26 @@ git diff --check
 The clean-root audit returned `TM-CLEAN-PASS`, the diff check exited zero, and the
 changed contracts contained no unfinished drafting markers.
 
+## 2026-07-14 — replay lineage domain contract
+
+Added provider-neutral fixed-size replay signatures, strong/weak evidence, bounded
+parent session identity, zero-based ordinal, and an explicit declared-conflict bit.
+The replay signature has redacted debug output and rejects non-32-byte deserialization;
+self-parenting is accepted only when already marked conflict. Canonical events do not
+carry the new value yet, so no runtime accounting claim is made.
+
+Verification:
+
+```powershell
+cargo test -p tokenmaster-domain --test usage_contract replay_lineage_is_bounded_serializable_and_private
+cargo fmt --all -- --check
+cargo test -p tokenmaster-domain
+git diff --check
+```
+
+The focused test first failed on missing replay types, then passed after the minimal
+implementation. All domain tests, formatting, and the diff check passed.
+
 ## Architecture milestones
 
 - M0 selected and proved Rust 1.97, Slint 1.17, bundled SQLite, the software renderer,

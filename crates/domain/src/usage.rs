@@ -1,3 +1,5 @@
+use std::fmt;
+
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 pub const MAX_USAGE_ID_BYTES: usize = 128;
@@ -16,6 +18,8 @@ pub enum UsageError {
     InvalidCharacters { field: &'static str },
     #[error("timestamp nanoseconds must be below one billion")]
     InvalidTimestamp,
+    #[error("usage lineage is internally inconsistent")]
+    InvalidLineage,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -307,6 +311,91 @@ ascii_value!(
 ascii_value!(ModelKey, "model", MAX_MODEL_KEY_BYTES, is_model_key_byte);
 trimmed_value!(UsageSessionId, "session_id", MAX_SESSION_ID_BYTES);
 trimmed_value!(MetadataValue, "metadata", MAX_METADATA_BYTES);
+
+#[derive(Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ReplaySignature([u8; 32]);
+
+impl ReplaySignature {
+    #[must_use]
+    pub const fn new(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    #[must_use]
+    pub const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+impl fmt::Debug for ReplaySignature {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("ReplaySignature([redacted])")
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReplayEvidence {
+    StrongCumulative,
+    WeakUsageOnly,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct UsageLineage {
+    parent_session_id: Option<UsageSessionId>,
+    session_ordinal: u64,
+    signature: ReplaySignature,
+    evidence: ReplayEvidence,
+    declared_conflict: bool,
+}
+
+impl UsageLineage {
+    pub fn new(
+        current_session_id: &UsageSessionId,
+        parent_session_id: Option<UsageSessionId>,
+        session_ordinal: u64,
+        signature: ReplaySignature,
+        evidence: ReplayEvidence,
+        declared_conflict: bool,
+    ) -> Result<Self, UsageError> {
+        if !declared_conflict && parent_session_id.as_ref() == Some(current_session_id) {
+            return Err(UsageError::InvalidLineage);
+        }
+        Ok(Self {
+            parent_session_id,
+            session_ordinal,
+            signature,
+            evidence,
+            declared_conflict,
+        })
+    }
+
+    #[must_use]
+    pub const fn parent_session_id(&self) -> Option<&UsageSessionId> {
+        self.parent_session_id.as_ref()
+    }
+
+    #[must_use]
+    pub const fn session_ordinal(&self) -> u64 {
+        self.session_ordinal
+    }
+
+    #[must_use]
+    pub const fn signature(&self) -> ReplaySignature {
+        self.signature
+    }
+
+    #[must_use]
+    pub const fn evidence(&self) -> ReplayEvidence {
+        self.evidence
+    }
+
+    #[must_use]
+    pub const fn declared_conflict(&self) -> bool {
+        self.declared_conflict
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize)]
 #[serde(transparent)]

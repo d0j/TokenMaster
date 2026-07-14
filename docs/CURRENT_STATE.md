@@ -37,6 +37,10 @@ The authoritative product, data, security, decision, traceability, and roadmap
 contracts now define this sequence. Runtime replay classification and engine source
 ports are still unimplemented.
 
+The provider-neutral `ReplaySignature`, `ReplayEvidence`, and `UsageLineage` domain
+contracts are implemented and tested. They are not yet attached to parser events or
+persisted in SQLite, so current canonical totals are not yet replay-safe.
+
 ## Release truth
 
 M0 is not accepted. The required interactive Windows/DPI/accessibility receipt and an
