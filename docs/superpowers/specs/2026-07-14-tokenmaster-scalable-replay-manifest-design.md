@@ -130,6 +130,14 @@ manifest row. It:
 - returns false/error on duplicate, missing, extra, changed-registration, or malformed
   state.
 
+Bounded continuation does not repeat full chunk validation for every work item. It
+uses a cheap aggregate `replay_manifest_sources_closed` check: registered count,
+manifest count, staging-generation ownership, and zero `pending` source states must all
+match the stored expected count. A source reaches `complete` only in the transactional
+append that accepts its full-prefix checkpoint and chunk proofs. Final seal and every
+promotion still repeat the full keyset-paged checkpoint/chunk validation, so tampered
+staging can never become canonical.
+
 Promotion continues as one transaction. SQLite mutation row counts are checked by
 fallible conversion to `u64`, never by narrowing the stored count to `usize` or
 `u16`. Discard remains set-based and O(1) application memory.
