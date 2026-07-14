@@ -96,6 +96,14 @@ surfaces remain redacted. They expose no path, raw JSON, source bytes, prompt,
 response, reasoning, command, output, or credential. They are provider-neutral and are
 expected to be reused by P1.
 
+The stored checkpoint contains the already hashed 32-byte physical identity, while the
+platform type originally supported only live handle discovery. P0-E therefore also
+adds `PhysicalFileIdentity::from_persisted_bytes([u8; 32])`. This is an explicit,
+infallible reconstruction of an opaque fixed-size digest, symmetric with
+`LogicalFileIdentity::from_bytes`; it does not accept OS fields or paths and cannot
+mint an identity from variable-length untrusted input. `ReaderCheckpointV1::new`
+continues to validate the reconstructed checkpoint as a whole.
+
 No arbitrary SQL, source enumeration, bulk chunk vector, or mutation is added.
 
 ## 5. Deterministic proof-driver algorithm
@@ -248,7 +256,8 @@ or tracked files outside the test literal. No real user Codex data is read or co
 P0-E is complete only when:
 
 1. P0-D.1 schema v3/all-source/paged-manifest gates pass first;
-2. focused RED/GREEN tests prove both new store reads and the cross-crate pipeline;
+2. focused RED/GREEN tests prove persisted physical-identity reconstruction, both new
+   store reads, and the cross-crate pipeline;
 3. replay, append, restart, truncate, replacement, cancellation, and incomplete-tail
    fixtures all preserve exact atomic behavior;
 4. independent expected counts/totals and `ReplayQualityCounts` match after reopen;
