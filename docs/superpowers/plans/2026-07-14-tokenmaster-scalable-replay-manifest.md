@@ -1,7 +1,7 @@
 # TokenMaster Scalable Replay Manifest Implementation Plan
 
-**Status:** Implemented and verified on 2026-07-14; final documentation commit and
-remote identity verification are the only remaining checklist item.
+**Status:** Complete. Implemented, verified, documented, committed, and pushed on
+2026-07-14.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:subagent-driven-development` (recommended) or
@@ -721,7 +721,7 @@ Confirm no allocation uses `expected_source_count`, no full source list is colle
 foreign keys are restored on all tested exits, and no P0-E/P1 behavior leaked into
 P0-D.1. Agents remain deferred unless the operator explicitly re-enables them.
 
-- [ ] **Step 5: Commit, push, and verify remote identity**
+- [x] **Step 5: Commit, push, and verify remote identity**
 
 ```powershell
 git add -- spec/DATA_CONTRACT.md spec/SECURITY.md spec/DECISIONS.md spec/TRACEABILITY.md docs/CURRENT_STATE.md docs/PROJECT_HISTORY.md docs/HANDOFF.md docs/ROADMAP.md docs/RECOVERY_PLAYBOOK.md docs/superpowers/specs/2026-07-14-tokenmaster-scalable-replay-manifest-design.md docs/superpowers/specs/2026-07-14-tokenmaster-p0-e-pipeline-proof-design.md docs/superpowers/plans/2026-07-14-tokenmaster-scalable-replay-manifest.md
