@@ -8,6 +8,7 @@ use crate::{EXPECTED_SQLITE_VERSION, StoreError, StoreErrorCode};
 mod migration;
 mod read;
 mod replay;
+mod replay_manifest;
 mod schema;
 mod types;
 mod write;

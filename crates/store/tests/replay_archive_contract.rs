@@ -1,4 +1,4 @@
-use rusqlite::Connection;
+use rusqlite::{Connection, params};
 use tempfile::TempDir;
 use tokenmaster_accounting::{
     CANONICALIZER_VERSION, CanonicalUsageEvent, Canonicalizer, EVENT_FINGERPRINT_VERSION,
@@ -44,6 +44,49 @@ fn registration(seed: u8) -> SourceRegistration {
         .expect("initial checkpoint"),
     })
     .expect("source registration")
+}
+
+fn source_key_for_index(index: u32) -> SourceKey {
+    let mut bytes = [0_u8; 32];
+    bytes[..4].copy_from_slice(&index.to_be_bytes());
+    SourceKey::from_bytes(bytes)
+}
+
+fn digest_for_index(index: u32, tag: u8) -> [u8; 32] {
+    let mut bytes = [0_u8; 32];
+    bytes[..4].copy_from_slice(&index.to_be_bytes());
+    bytes[4] = tag;
+    bytes
+}
+
+fn registration_for_index(index: u32) -> SourceRegistration {
+    SourceRegistration::new(SourceRegistrationParts {
+        source_key: source_key_for_index(index),
+        provider_id: "codex".into(),
+        profile_id: "large-fixture".into(),
+        source_id: format!("fixture-{index}").into_boxed_str(),
+        source_kind: SourceKind::Active,
+        logical_identity: digest_for_index(index, 1),
+        physical_identity: Some(digest_for_index(index, 2)),
+        initial_checkpoint: StoredCheckpoint::new(StoredCheckpointParts {
+            parser_schema_version: 1,
+            physical_identity: Some(digest_for_index(index, 2)),
+            logical_identity: digest_for_index(index, 1),
+            committed_offset: 0,
+            scan_offset: 0,
+            observed_file_length: 0,
+            modified_time_ns: None,
+            anchor_start: 0,
+            anchor_len: 0,
+            anchor_sha256: digest_for_index(index, 3),
+            resume: Box::default(),
+            discarding_oversized_line: false,
+            incomplete_tail: false,
+            verification: StoredVerification::Incremental,
+        })
+        .expect("valid large-fixture checkpoint"),
+    })
+    .expect("valid large-fixture registration")
 }
 
 fn checkpoint(seed: u8, offset: u64, verification: StoredVerification) -> StoredCheckpoint {
@@ -627,6 +670,184 @@ fn replay_manifest_bounds_and_begin_are_atomic_invisible_and_version_owned() {
         })
         .expect("count replay manifest rows");
     assert_eq!(manifest_rows, 2);
+}
+
+#[test]
+fn all_source_begin_stages_three_hundred_sources_without_a_manifest_vector() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("all-source-begin-private.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    for index in 0..300 {
+        store
+            .register_source(&registration_for_index(index))
+            .expect("register large fixture source");
+    }
+    let page_before = store
+        .event_page_before(None, 256)
+        .expect("canonical page before all-source begin");
+    let counts_before = store.counts().expect("counts before all-source begin");
+
+    let revision = store
+        .begin_replay_revision_all_sources()
+        .expect("begin all-source revision");
+    assert_eq!(revision.expected_source_count(), 300_u64);
+    assert_eq!(revision.status(), ReplayRevisionStatus::Staging);
+    assert_eq!(
+        store
+            .event_page_before(None, 256)
+            .expect("canonical page after all-source begin"),
+        page_before
+    );
+    let counts_after = store.counts().expect("counts after all-source begin");
+    assert_eq!(counts_after.sources(), counts_before.sources());
+    assert_eq!(
+        counts_after.generations(),
+        counts_before.generations() + 300
+    );
+    assert_eq!(counts_after.observations(), counts_before.observations());
+    assert_eq!(
+        counts_after.canonical_events(),
+        counts_before.canonical_events()
+    );
+    assert_eq!(counts_after.chunks(), counts_before.chunks());
+    assert_eq!(counts_after.scans(), counts_before.scans());
+
+    let error = store
+        .begin_replay_revision_all_sources()
+        .expect_err("second all-source staging begin must fail");
+    assert_eq!(error.code(), StoreErrorCode::ArchiveModeMismatch);
+    drop(store);
+
+    let connection = Connection::open(&path).expect("inspect all-source staging");
+    let state: (i64, i64, i64, i64, i64) = connection
+        .query_row(
+            "SELECT
+               (SELECT count(*) FROM usage_source),
+               (SELECT count(*) FROM usage_source WHERE current_generation = 0),
+               (SELECT count(*) FROM usage_generation WHERE status = 'current'),
+               (SELECT count(*) FROM usage_generation WHERE status = 'staging'),
+               (SELECT count(*) FROM usage_replay_source)",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .expect("all-source staging state");
+    assert_eq!(state, (300, 300, 300, 300, 300));
+    drop(connection);
+    let reopened = UsageStore::open(&path).expect("reopen all-source staging archive");
+    assert!(
+        reopened
+            .archive_state()
+            .expect("reopened archive state")
+            .rebuild_staging()
+    );
+}
+
+#[test]
+fn all_source_begin_is_atomic_on_empty_missing_current_and_generation_overflow() {
+    let mut empty = UsageStore::in_memory().expect("empty usage store");
+    let empty_error = empty
+        .begin_replay_revision_all_sources()
+        .expect_err("empty all-source begin must fail");
+    assert_eq!(empty_error.code(), StoreErrorCode::InvalidValue);
+    assert!(
+        !empty
+            .archive_state()
+            .expect("empty archive state")
+            .rebuild_staging()
+    );
+
+    let directory = TempDir::new().expect("temporary directory");
+    let missing_path = directory.path().join("missing-current-private.sqlite3");
+    let mut missing_store = UsageStore::open(&missing_path).expect("missing-current store");
+    missing_store
+        .register_source(&registration_for_index(1))
+        .expect("register missing-current source");
+    drop(missing_store);
+    let missing_connection = Connection::open(&missing_path).expect("damage current pointer");
+    missing_connection
+        .execute(
+            "UPDATE usage_source SET current_generation = NULL WHERE file_key = ?1",
+            [source_key_for_index(1).as_bytes().as_slice()],
+        )
+        .expect("clear current pointer");
+    drop(missing_connection);
+    let mut missing_store = UsageStore::open(&missing_path).expect("reopen missing-current store");
+    let missing_error = missing_store
+        .begin_replay_revision_all_sources()
+        .expect_err("missing current generation must fail");
+    assert_eq!(missing_error.code(), StoreErrorCode::InvalidStoredValue);
+    drop(missing_store);
+    let missing_connection = Connection::open(&missing_path).expect("inspect missing failure");
+    let missing_staging: (i64, i64) = missing_connection
+        .query_row(
+            "SELECT
+               (SELECT count(*) FROM usage_replay_revision),
+               (SELECT count(*) FROM usage_generation WHERE status = 'staging')",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("missing failure state");
+    assert_eq!(missing_staging, (0, 0));
+
+    let overflow_path = directory.path().join("generation-overflow-private.sqlite3");
+    let mut overflow_store = UsageStore::open(&overflow_path).expect("overflow store");
+    overflow_store
+        .register_source(&registration_for_index(2))
+        .expect("register overflow source");
+    drop(overflow_store);
+    let mut overflow_connection = Connection::open(&overflow_path).expect("open overflow fixture");
+    overflow_connection
+        .pragma_update(None, "foreign_keys", "ON")
+        .expect("enable overflow fixture foreign keys");
+    let transaction = overflow_connection
+        .transaction()
+        .expect("overflow fixture transaction");
+    transaction
+        .execute(
+            "UPDATE usage_source SET current_generation = NULL WHERE file_key = ?1",
+            [source_key_for_index(2).as_bytes().as_slice()],
+        )
+        .expect("clear overflow source pointer");
+    transaction
+        .execute(
+            "UPDATE usage_generation SET generation = ?2 WHERE file_key = ?1",
+            params![source_key_for_index(2).as_bytes().as_slice(), i64::MAX],
+        )
+        .expect("set maximum generation");
+    transaction
+        .execute(
+            "UPDATE usage_source SET current_generation = ?2 WHERE file_key = ?1",
+            params![source_key_for_index(2).as_bytes().as_slice(), i64::MAX],
+        )
+        .expect("select maximum generation");
+    transaction.commit().expect("commit overflow fixture");
+    drop(overflow_connection);
+    let mut overflow_store = UsageStore::open(&overflow_path).expect("reopen overflow store");
+    let overflow_error = overflow_store
+        .begin_replay_revision_all_sources()
+        .expect_err("generation overflow must fail");
+    assert_eq!(overflow_error.code(), StoreErrorCode::InvalidStoredValue);
+    drop(overflow_store);
+    let overflow_connection = Connection::open(&overflow_path).expect("inspect overflow failure");
+    let overflow_state: (i64, i64, i64) = overflow_connection
+        .query_row(
+            "SELECT
+               (SELECT count(*) FROM usage_replay_revision),
+               (SELECT count(*) FROM usage_generation WHERE status = 'staging'),
+               (SELECT count(*) FROM usage_generation WHERE generation = ?1 AND status = 'current')",
+            [i64::MAX],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("overflow failure state");
+    assert_eq!(overflow_state, (0, 0, 1));
 }
 
 #[test]

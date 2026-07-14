@@ -903,7 +903,7 @@ pub struct ReplayRevisionSnapshot {
     pub(super) epoch: ReplayEpoch,
     pub(super) status: ReplayRevisionStatus,
     pub(super) versions: AccountingVersions,
-    pub(super) expected_source_count: u16,
+    pub(super) expected_source_count: u64,
     pub(super) sealed: bool,
     pub(super) promoted: bool,
 }
@@ -930,7 +930,7 @@ impl ReplayRevisionSnapshot {
     }
 
     #[must_use]
-    pub const fn expected_source_count(self) -> u16 {
+    pub const fn expected_source_count(self) -> u64 {
         self.expected_source_count
     }
 

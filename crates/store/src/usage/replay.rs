@@ -9,17 +9,13 @@ use crate::{StoreError, StoreErrorCode};
 
 use super::{
     UsageStore,
+    replay_manifest::EMPTY_SHA256,
     types::*,
     write::{
         insert_observation, long_context_sql, sql_bool, sql_token, sql_u64, stored_digest,
         update_checkpoint_for_status, upsert_chunk, verify_chunk_conflicts, verify_chunk_proof,
     },
 };
-
-const EMPTY_SHA256: [u8; 32] = [
-    0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
-    0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
-];
 
 const MATERIALIZE_REPLAY_SELECTION_SQL: &str = r#"
 INSERT INTO usage_event(
@@ -88,7 +84,7 @@ impl UsageStore {
         let revision_id = ReplayRevisionId::from_stored(revision_value)?;
         let epoch = ReplayEpoch::new(0)?;
         let versions = AccountingVersions::compiled();
-        let expected_source_count = u16::try_from(manifest.source_count())
+        let expected_source_count = u64::try_from(manifest.source_count())
             .map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))?;
         let status = ReplayRevisionStatus::Staging;
         transaction.execute(
@@ -103,7 +99,8 @@ impl UsageStore {
                 i64::from(versions.canonicalizer()),
                 i64::from(versions.fingerprint()),
                 i64::from(versions.replay_signature()),
-                i64::from(expected_source_count),
+                i64::try_from(expected_source_count)
+                    .map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))?,
                 epoch.as_sql()?,
             ],
         )?;
@@ -176,7 +173,8 @@ impl UsageStore {
             transaction.query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |row| {
                 row.get(0)
             })?;
-        if manifest_rows != i64::from(expected_source_count) || foreign_key_failures != 0 {
+        if stored_nonnegative(manifest_rows)? != expected_source_count || foreign_key_failures != 0
+        {
             return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
         }
 
@@ -664,7 +662,7 @@ impl UsageStore {
              )",
             [revision_id.as_sql()?],
         )?;
-        if promoted_generations != usize::from(revision.expected_source_count) {
+        if mutation_count(promoted_generations)? != revision.expected_source_count {
             return Err(StoreError::new(StoreErrorCode::IncompleteManifest));
         }
         let promoted_sources = transaction.execute(
@@ -682,7 +680,7 @@ impl UsageStore {
              )",
             [revision_id.as_sql()?],
         )?;
-        if promoted_sources != usize::from(revision.expected_source_count) {
+        if mutation_count(promoted_sources)? != revision.expected_source_count {
             return Err(StoreError::new(StoreErrorCode::IncompleteManifest));
         }
         promotion_fault(fault, PromotionFault::AfterGenerationSwap)?;
@@ -729,7 +727,7 @@ fn promotion_fault(actual: PromotionFault, boundary: PromotionFault) -> Result<(
 struct StoredRevision {
     epoch: ReplayEpoch,
     versions: AccountingVersions,
-    expected_source_count: u16,
+    expected_source_count: u64,
     sealed: bool,
 }
 
@@ -768,11 +766,11 @@ struct ManifestSourceState {
 fn replay_manifest_is_complete(
     transaction: &Transaction<'_>,
     revision_id: ReplayRevisionId,
-    expected_source_count: u16,
+    expected_source_count: u64,
 ) -> Result<bool, StoreError> {
     let registered_sources: i64 =
         transaction.query_row("SELECT count(*) FROM usage_source", [], |row| row.get(0))?;
-    if registered_sources != i64::from(expected_source_count) {
+    if stored_nonnegative(registered_sources)? != expected_source_count {
         return Ok(false);
     }
     let mut statement = transaction.prepare(
@@ -820,7 +818,10 @@ fn replay_manifest_is_complete(
             })
         })
         .collect::<Result<Vec<_>, StoreError>>()?;
-    if sources.len() != usize::from(expected_source_count) {
+    if u64::try_from(sources.len())
+        .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?
+        != expected_source_count
+    {
         return Ok(false);
     }
     for source in sources {
@@ -894,7 +895,7 @@ fn source_chunks_cover(
 fn validate_complete_manifest(
     transaction: &Transaction<'_>,
     revision_id: ReplayRevisionId,
-    expected_source_count: u16,
+    expected_source_count: u64,
 ) -> Result<(), StoreError> {
     if !replay_manifest_is_complete(transaction, revision_id, expected_source_count)? {
         return Err(StoreError::new(StoreErrorCode::IncompleteManifest));
@@ -1054,7 +1055,7 @@ fn materialize_replay_selection(
 fn validate_promoted_state(
     transaction: &Transaction<'_>,
     revision_id: ReplayRevisionId,
-    expected_source_count: u16,
+    expected_source_count: u64,
 ) -> Result<(), StoreError> {
     let state: (i64, i64, i64, i64) = transaction.query_row(
         "SELECT
@@ -1074,7 +1075,11 @@ fn validate_promoted_state(
         [revision_id.as_sql()?],
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
     )?;
-    if state != (1, 0, 0, i64::from(expected_source_count)) {
+    if state.0 != 1
+        || state.1 != 0
+        || state.2 != 0
+        || stored_nonnegative(state.3)? != expected_source_count
+    {
         return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
     }
     Ok(())
@@ -1169,7 +1174,7 @@ fn load_staging_revision(
     }
     Ok(StoredRevision {
         versions: AccountingVersions::from_stored(raw.1, raw.2, raw.3)?,
-        expected_source_count: u16::try_from(raw.4)
+        expected_source_count: u64::try_from(raw.4)
             .ok()
             .filter(|value| *value != 0)
             .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?,
@@ -2794,6 +2799,10 @@ fn validate_replay_text(value: &str, max_bytes: usize) -> Result<(), StoreError>
 }
 
 fn stored_nonnegative(value: i64) -> Result<u64, StoreError> {
+    u64::try_from(value).map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))
+}
+
+fn mutation_count(value: usize) -> Result<u64, StoreError> {
     u64::try_from(value).map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))
 }
 
