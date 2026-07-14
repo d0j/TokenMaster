@@ -8,6 +8,10 @@
 
 **Tech Stack:** Rust 1.97.0, rusqlite with bundled SQLite, strict SQLite tables and deferred foreign keys, existing TokenMaster domain/accounting/store crates, PowerShell quality scripts.
 
+**Execution status:** Complete on 2026-07-14. Tasks 1-8 passed their focused and full
+gates. P0-E runtime orchestration is the next critical path; this status does not claim
+M0 acceptance, interactive Windows evidence, packaging, or release.
+
 ## Global constraints
 
 - Work only on `cx/tokenmaster-product-architecture`; do not touch `main`.
@@ -384,7 +388,9 @@ Prove each condition independently blocks seal or promotion without mutation:
 - accounting version mismatch;
 - foreign-key failure.
 
-Prove missing parent is `MissingOpen` before seal reconciliation and becomes `MissingComplete` only after the complete manifest is proven.
+Prove missing parent is `MissingOpen` before complete-manifest reconciliation and
+becomes `MissingComplete` only after the complete manifest is proven and bounded
+continuation runs.
 
 **Step 2: Implement seal**
 
@@ -392,9 +398,10 @@ Implement `UsageStore::seal_replay_revision(revision_id, expected_epoch)`:
 
 - reject if durable work remains;
 - verify every fixed manifest source and full-prefix checkpoint;
-- mark sessions complete only inside this transaction;
-- reclassify missing parent ordinals as complete divergence;
-- refresh overlays/selections and quality counts;
+- allow complete-manifest continuation to reclassify missing-parent ordinals as
+  complete divergence before the final seal transaction;
+- mark reconciled sessions complete only inside the final seal transaction;
+- validate refreshed overlays/selections and quality counts;
 - validate exact overlay coverage, version tuple, and foreign keys;
 - record sealed state and increment epoch.
 

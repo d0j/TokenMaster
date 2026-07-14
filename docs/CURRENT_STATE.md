@@ -22,7 +22,7 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 - P0-C pure replay classifier: root/matching/diverged/pending/conflict transitions,
   strong/weak proof rules, provider/profile/parent/ordinal validation, irreversible
   divergence, and pending (not conflict) depth/fanout exhaustion.
-- P0-D archive foundation: strict SQLite schema v2, transactional exact-v1 migration,
+- P0-D replay archive: strict SQLite schema v2, transactional exact-v1 migration,
   immutable legacy snapshot, explicit archive modes, fixed/version-owned replay
   manifests, invisible staging generations, transactional classified replay append,
   deterministic eligible selection, epoch CAS, and fail-closed persisted-version
@@ -30,7 +30,13 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   restart-safe ordinal/child keyset work capped at 32 ancestry links and 256 direct
   descendants per transaction. Conflicts/cycles are permanent; bound exhaustion is
   durable pending work without epoch spin. Staging rows never affect current event
-  pages or source metadata.
+  pages or source metadata. Exact all-source seal validates full-prefix checkpoints,
+  chunk and overlay coverage, exhausted work, and foreign keys. Zero-pending promotion
+  atomically materializes eligible rows and swaps generations with injected-failure
+  rollback; incomplete replacements cannot silently omit prior visible evidence.
+  Replay reclassification may intentionally change which accounted events are
+  canonical. Exact-epoch
+  discard removes only unpublished staging and leaves current/legacy state unchanged.
 
 ## Next implementation slice
 
@@ -47,9 +53,12 @@ The repeated critical audit is recorded in `docs/AUDIT_AND_MASTER_PLAN.md`. P0-A
 the P0-B Codex-lineage surface are implemented under the completed executable TDD plan
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`.
 
-P0-D is in progress. Its next slice is seal validation and atomic promotion. Current
-archive totals remain not replay-safe until that gate and P0-E pipeline proof
-complete.
+P0-D is complete at the store boundary. A compatible promoted revision is
+replay-filtered canonical truth; an immutable migrated legacy snapshot remains
+explicitly unverified. P0-E is now the critical path: connect bounded Codex discovery,
+enumeration, reader, accounting, continuation, seal, promotion, cancellation, and
+truncate/replace recovery into one restart-safe runtime pipeline. No automatic
+Codex-to-promoted-archive orchestration is claimed yet.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 

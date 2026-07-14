@@ -117,8 +117,8 @@ milestone changes documents only; runtime authority is not yet fixed.
 bounded models, native tray lifecycle, modular skins, layouts, and localization.
 - M1 established bounded Codex discovery, streaming parse/revalidation, strict
 path-private SQLite storage, checkpoint CAS, and atomic current-generation ingest.
-- M1 staging-generation promotion and scan reconciliation remain deliberately
-  unimplemented until their transactional contract tests are written.
+- M1 P0-D staging, bounded replay reconciliation, and atomic promotion are now
+  implemented under transactional contracts; P0-E runtime scan orchestration remains.
 
 ## 2026-07-14 — exclusive accounting authority and Codex lineage
 
@@ -140,8 +140,8 @@ ordinal cannot be reconstructed safely.
 Verification included focused RED/GREEN contracts, deterministic hash vectors,
 compile-fail authority proofs, the complete locked Codex/store/domain/accounting
 suites, full locked workspace tests, strict workspace Clippy, clean-root,
-documentation-consistency, privacy, format, and diff gates. P0-C replay
-At that checkpoint P0-C classification remained next; no replay schema migration or
+documentation-consistency, privacy, format, and diff gates. At that checkpoint P0-C
+classification remained next; no replay schema migration or
 replay-safe totals were claimed.
 
 ## 2026-07-14 — pure bounded replay classifier
@@ -222,3 +222,48 @@ cargo +1.97.0 test -p tokenmaster-store --locked
 The focused restart, stale epoch, conflict, cycle, deterministic identity, nested
 ordinal, depth, and fanout contracts passed. Seal, promotion, and P0-E remain outside
 this milestone and are not claimed.
+
+## 2026-07-14 — exact seal, atomic promotion, and staging recovery
+
+Completed the P0-D store lifecycle. A seal now requires every registered source in
+the fixed manifest, exact full-prefix checkpoint/chunk coverage, no durable work,
+complete replay-overlay/selection coverage, compiled accounting versions, and clean
+foreign keys. Once the complete manifest exists, bounded continuation converts an
+outgrown missing parent from open pending evidence to deterministic divergence before
+seal. Weak unresolved evidence may remain sealed for quality inspection, but
+zero-pending remains mandatory for promotion.
+
+Promotion rematerializes only deterministic eligible selections and swaps revision,
+generation, and source-pointer state in one immediate transaction. It rejects a
+replacement that does not account for every prior visible fingerprint in the new
+evidence overlay or immutable legacy snapshot. Test-only faults after materialization,
+generation swap, and revision-state mutation prove full rollback both for first
+promotion and replacement of an existing current replay revision. The legacy snapshot
+remains immutable across successful promotion.
+
+Added exact revision/epoch staging discard for cancelled, obsolete, or quality-only
+rebuilds. It removes only unpublished replay/staging state, validates foreign keys,
+preserves the current canonical page and revision, and permits a clean retry. No CLI
+or automatic Codex runtime invokes this yet; that is the P0-E boundary.
+
+Verification:
+
+```powershell
+cargo +1.97.0 test -p tokenmaster-accounting --test replay_classifier_contract --locked
+cargo +1.97.0 test -p tokenmaster-store --test usage_schema_contract --locked
+cargo +1.97.0 test -p tokenmaster-store --test replay_archive_contract --locked
+cargo +1.97.0 test -p tokenmaster-store --test usage_ingest_contract --locked
+pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
+cargo +1.97.0 fmt --all -- --check
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy --workspace --all-targets --locked
+Remove-Item Env:RUSTFLAGS -ErrorAction SilentlyContinue
+cargo +1.97.0 test --workspace --locked
+git diff --check
+```
+
+All commands passed. The focused replay archive contract has 29 passing tests; the
+store unit suite also covers five internal rollback/read/write boundaries. The full
+workspace run passed with only the pre-existing one-million-row M0 scale test
+explicitly ignored. Changed-Rust forbidden-storage scans, secret-value pattern scans,
+absolute-user-path scans, and tracked legacy-language extension checks returned no
+findings. No M0 acceptance, interactive Windows result, package, or release is claimed.

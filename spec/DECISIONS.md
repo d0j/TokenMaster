@@ -65,3 +65,14 @@ Codex emits drafts/late session relations, and the store accepts opaque canonica
 events only. Fingerprint v2 and replay signature v1 are versioned deterministic
 framed hashes. The same crate owns the pure bounded replay transition so storage and
 providers cannot introduce competing replay semantics.
+
+## ADR-010 — Fail-closed replay promotion and recoverable staging
+
+Decision: a replay revision becomes current only after exact fixed-manifest seal,
+zero-pending promotion, and proof that the replacement accounts for every previously
+visible event in its evidence overlay or immutable legacy snapshot. Promotion is
+one immediate transaction with fault-tested rollback. Failed, obsolete, or
+quality-only staging can be discarded only by exact revision/epoch CAS, without
+touching current or legacy state. Rationale: rebuilds remain crash-safe and retryable
+without allowing partial scans, stale workers, or incomplete replacements to erase
+user-visible accounting.

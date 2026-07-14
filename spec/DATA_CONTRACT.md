@@ -42,9 +42,15 @@ Current-generation append writes observations, canonical selections, chunk cover
 checkpoint, and source metadata in one transaction. A stale generation, identity,
 offset, scan position, or partial proof MUST write nothing.
 
-Future staging generations MUST remain invisible to canonical reads. Promotion MUST
-verify complete staged input, replace the affected canonical selections atomically, and
-leave the previous current generation intact on failure.
+Staging generations MUST remain invisible to canonical reads. Seal MUST prove the
+entire fixed source manifest, exact checkpoint/chunk coverage, replay-overlay
+coverage, accounting versions, exhausted durable work, and foreign-key integrity.
+Promotion MUST require zero pending observations, account for every previously visible
+event in the replacement overlay or immutable legacy snapshot, replace canonical
+selections and source generations atomically, and leave the previous current state
+intact on failure. An explicit epoch-checked discard may remove only unpublished
+staging state; it MUST NOT mutate the current revision, legacy snapshot, or canonical
+event page.
 
 ## TM-DATA-005 — SQLite policy
 
@@ -76,5 +82,6 @@ fanout exhaustion is `pending` and requires continuation; it is not evidence of 
 cycle or contradictory relation.
 
 If a child's ordinal is beyond the observed tail of a parent that has not been proved
-complete, the child remains `pending`. Only completed scan/session evidence from the
-staging runtime may prove that the child outgrew its parent.
+complete, the child remains `pending`. Only a complete fixed manifest and exact
+full-prefix source proof may make that missing-parent work actionable and prove that
+the child outgrew its parent before final seal.

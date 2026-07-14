@@ -14,11 +14,12 @@ P0-A and the incorporated P0-B Codex-lineage surface are complete under
 classifier is complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-c-replay-classifier.md`. P0-D schema
 v2, exact-v1 immutable migration, explicit archive state, fixed-manifest staging, and
-classified replay append are implemented under
+classified replay append, durable continuation, exact seal, rollback-safe promotion,
+and staging recovery are implemented under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-d-replay-archive.md`. The immediate
-next task is P0-D seal validation and rollback-safe atomic promotion. Durable
-late-relation/descendant continuation is implemented with 32/256 bounds and restart
-keysets. The complete approved order is in `docs/AUDIT_AND_MASTER_PLAN.md`.
+next task is P0-E runtime orchestration from bounded Codex discovery through promoted
+archive state, including cancellation and truncate/replace recovery. The complete
+approved order is in `docs/AUDIT_AND_MASTER_PLAN.md`.
 
 Tasks 3+ in `2026-07-14-tokenmaster-p0-replay-correctness.md` are superseded. Do not
 execute its Codex-owned fingerprint/signature or destructive migration steps. Do not
@@ -32,7 +33,10 @@ Do not expose a staging revision as current truth. Replay append advances a
 store-owned evidence epoch and must reject stale CAS, altered duplicate observations,
 mixed accounting versions, or stale durable work atomically. Late explicit relations
 use deterministic first-source identity; conflicting parents and confirmed cycles are
-permanent conflict. Promotion is not implemented yet.
+permanent conflict. Seal requires exact complete manifest evidence. Promotion requires
+zero pending rows and complete prior-projection coverage and swaps all visible state in
+one transaction. A blocked/obsolete staging revision is recovered only through the
+exact revision/epoch discard API; never delete archive rows or the database manually.
 
 ## Commands
 
@@ -41,6 +45,7 @@ pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location
 cargo +1.97.0 test -p tokenmaster-store --test usage_ingest_contract --locked
 cargo +1.97.0 test -p tokenmaster-accounting --locked
 cargo +1.97.0 test -p tokenmaster-accounting --test replay_classifier_contract --locked
+cargo +1.97.0 test -p tokenmaster-store --test usage_schema_contract --locked
 cargo +1.97.0 test -p tokenmaster-store --test replay_archive_contract --locked
 cargo +1.97.0 test -p tokenmaster-codex --locked
 cargo +1.97.0 test --workspace --locked
@@ -53,7 +58,9 @@ For M0 developer evidence, Pester 5.7.1 and a validated GNU linker are required:
 pwsh -NoProfile -File scripts\verify-m0.ps1 -RepositoryRoot (Get-Location).Path
 ```
 
-The P0 authority/lineage/classifier slices passed focused contracts, full locked
-workspace tests, strict workspace Clippy, clean-root, documentation consistency,
-privacy, formatting, and diff gates on 2026-07-14. This does not accept M0 or package
-a product release. See `M0_ACCEPTANCE.md`.
+The P0 authority/lineage/classifier and P0-D archive slices passed focused contracts,
+full locked workspace tests, strict workspace Clippy, clean-root, documentation
+consistency, privacy, formatting, and diff gates on 2026-07-14. The one-million-row
+M0 scale test remains explicitly ignored in the normal workspace run. This does not
+accept M0, prove interactive Windows behavior, or package a product release. See
+`M0_ACCEPTANCE.md`.

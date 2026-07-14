@@ -44,6 +44,17 @@ never source content or paths. Continuation rejects any stale durable-work epoch
 writing. Parent disagreement and confirmed cycles are irreversible conflict; ancestry
 or fanout bounds remain explicit pending work and cannot be treated as proof.
 
+Seal proves exact all-registered-source manifest completion, full-prefix checkpoint
+and chunk coverage, one replay row per staged observation, eligible-only selections,
+compiled accounting versions, exhausted work, and foreign-key integrity in one
+immediate transaction. Promotion additionally requires zero pending rows and complete
+evidence coverage of the prior visible projection, then materializes the newly
+eligible events and swaps revision,
+generation, and source-pointer state atomically. Injected failure at every mutation
+phase MUST roll back to the prior canonical page. Recovery may discard only an exact
+epoch-matched staging revision and staging generations; current and immutable legacy
+state remain untouched, and any integrity failure rolls the discard back.
+
 ## TM-SEC-005 — Extensibility
 
 Skins are declarative data only. They MUST NOT execute code, call external processes,

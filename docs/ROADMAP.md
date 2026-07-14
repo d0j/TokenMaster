@@ -20,10 +20,15 @@ Completed: P0-A provider-neutral observation drafts and exclusive accounting
 authority; P0-B Codex ancestry compatibility, late relation emission, resume v2,
 ordinals, and cumulative facts; P0-C allocation-free bounded replay classification.
 
-Current: finish P0-D seal validation and atomic promotion; P0-E pipeline proof follows.
-Then add scan epochs, source reconciliation, and
-the provider-neutral runtime engine before indexed analytics, pricing, quota, Git
-output, automation, and complete UI work.
+Completed: P0-D strict v2 replay archive, immutable v1 fallback, invisible fixed
+staging, bounded restart-safe reconciliation, exact seal, rollback-safe atomic
+promotion, and staging recovery.
+
+Current: P0-E end-to-end Codex pipeline proof. Connect discovery, enumeration,
+reader, accounting, archive epochs, continuation, seal/promotion, cancellation, and
+truncate/replace recovery through the provider-neutral runtime engine. Then add scan
+epochs/source reconciliation before indexed analytics, pricing, quota, Git output,
+automation, and complete UI work.
 
 ## 0.9 — complete desktop product
 

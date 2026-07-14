@@ -8,6 +8,25 @@
    synthetic fixture; never persist or attach private JSONL content.
 6. Run the workspace gate before updating handoff documents.
 
+## Replay staging recovery
+
+1. Read `archive_state()` first. Canonical reads continue from the current compatible
+   or stale replay revision, immutable legacy snapshot, or empty state; they never
+   read the staging overlay.
+2. For an unsealed staging revision, resume only with its exact revision ID and
+   evidence epoch. Run bounded continuation until no actionable work remains, then
+   seal only after the complete fixed manifest has been proven.
+3. A sealed revision with pending quality evidence is intentionally not promotable.
+   Preserve it for bounded `replay_quality()` inspection or explicitly call
+   `discard_replay_revision` with its exact revision ID and latest epoch.
+4. Discard is the only supported retry reset. It removes the staging revision and all
+   staging generations in one immediate transaction, validates foreign keys, and
+   leaves current events, current source pointers, and the immutable legacy snapshot
+   unchanged. A stale epoch or integrity fault writes nothing.
+5. Never delete SQLite rows, generations, the legacy snapshot, or the archive file to
+   recover a rebuild. P0-E must expose this store operation through bounded runtime
+   policy; no user-facing recovery command exists yet.
+
 Generated `target/`, `reports/`, and `dist/` content is disposable developer output.
 Do not use it as a release claim. M0 acceptance requires the exact external receipts
 listed in `M0_ACCEPTANCE.md`.
