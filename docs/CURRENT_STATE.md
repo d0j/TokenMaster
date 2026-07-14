@@ -33,6 +33,10 @@ by invisible staging generations, atomic promotion, safe scan epochs, and the ru
 engine. A staging write must never affect canonical events, and only a completed scan
 may mark unseen sources missing.
 
+The authoritative product, data, security, decision, traceability, and roadmap
+contracts now define this sequence. Runtime replay classification and engine source
+ports are still unimplemented.
+
 ## Release truth
 
 M0 is not accepted. The required interactive Windows/DPI/accessibility receipt and an

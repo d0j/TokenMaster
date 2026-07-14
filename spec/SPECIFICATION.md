@@ -50,6 +50,24 @@ Future CLI and MCP surfaces MUST read the same indexed state as the UI, return s
 bounded results, and expose no arbitrary SQL, shell, HTTP, filesystem, credential, or
 transcript operation.
 
+### TM-FUNC-007 — Replay-safe canonical accounting
+
+Forked and subagent histories can repeat an ancestor's usage prefix under different
+timestamps and source identities. TokenMaster MUST retain each bounded observation
+but MUST admit only observations classified `eligible` by explicit session-lineage
+evidence to canonical totals. Strong prefix matches are replay, the first proved
+mismatch locks divergence, and missing parent tails, weak pre-divergence matches,
+cycles, conflicting parents, or exhausted bounds remain pending or conflict rather
+than being counted twice.
+
+### TM-FUNC-008 — Provider-neutral ingestion boundary
+
+The 1.0 product MUST implement local Codex ingestion through bounded source catalog,
+sequential reader, and provider decoder contracts. Engine, archive, query, automation,
+and UI code MUST depend on provider-neutral observations and snapshots rather than
+Codex paths or JSONL wire shapes. Future allowlisted source adapters MUST be addable
+at this boundary without replacing downstream accounting or presentation contracts.
+
 ## UX requirements
 
 ### TM-UI-001 — Reference-quality information design

@@ -34,3 +34,19 @@ crash consistency, deterministic canonical selection, and safe rollback.
 Decision: bounded M1 work may continue while M0 external evidence is open, but no M0
 acceptance or package claim is permitted. Rationale: development can progress without
 weakening real interactive and long-run validation.
+
+## ADR-007 — Explicit replay lineage before analytics
+
+Decision: canonical totals are selected from retained observations using explicit
+session ancestry, versioned structural replay signatures, and fail-closed
+pending/conflict states. Rationale: timestamp/fingerprint deduplication alone cannot
+detect copied fork/subagent prefixes, while time or filename heuristics can suppress
+legitimate equal-valued usage.
+
+## ADR-008 — Codex-first provider-neutral source seam
+
+Decision: local Codex discovery/reader/decoder is the only 1.0 ingestion adapter, but
+engine and downstream crates consume provider-neutral bounded contracts. Adapters are
+statically linked and allowlisted rather than runtime code plugins. Rationale: later
+file, import, remote, or API sources can be added without rewriting the archive,
+analytics, automation, or UI and without creating an arbitrary I/O surface.

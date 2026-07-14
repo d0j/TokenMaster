@@ -1,6 +1,6 @@
 # TokenMaster Product Architecture Design
 
-Status: chosen design, pending written-spec review before implementation planning.
+Status: approved; P0 replay-correctness implementation planning is complete.
 Date: 2026-07-14.
 
 ## 1. Product decision

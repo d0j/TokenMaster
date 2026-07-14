@@ -54,21 +54,21 @@
 - Modify: `docs/ROADMAP.md`
 - Modify: `docs/superpowers/specs/2026-07-14-tokenmaster-product-architecture-design.md`
 
-- [ ] Add a P0 accounting requirement that defines observation, canonical contribution, explicit ancestry, divergence, `pending`, and `conflict` states.
-- [ ] State that canonical totals include only `eligible` observations; pending/conflict counts remain available to future quality snapshots and never become zero silently.
-- [ ] Record the source-adapter seam: bounded source catalog, sequential reader, provider decoder, and optional quota adapter; only the local Codex adapter is implemented in 1.0.
-- [ ] State the security boundary: statically linked allowlisted adapters, no arbitrary filesystem/network/command surface, opaque size-bounded checkpoints, engine-owned cancellation/backpressure.
-- [ ] Record the deliberate P0 boundary: proving a child outgrew a still-open parent requires complete-scan/session-finalization evidence from the following staging/runtime-engine slice.
+- [x] Add a P0 accounting requirement that defines observation, canonical contribution, explicit ancestry, divergence, `pending`, and `conflict` states.
+- [x] State that canonical totals include only `eligible` observations; pending/conflict counts remain available to future quality snapshots and never become zero silently.
+- [x] Record the source-adapter seam: bounded source catalog, sequential reader, provider decoder, and optional quota adapter; only the local Codex adapter is implemented in 1.0.
+- [x] State the security boundary: statically linked allowlisted adapters, no arbitrary filesystem/network/command surface, opaque size-bounded checkpoints, engine-owned cancellation/backpressure.
+- [x] Record the deliberate P0 boundary: proving a child outgrew a still-open parent requires complete-scan/session-finalization evidence from the following staging/runtime-engine slice.
 
 **Verification:**
 
-- [ ] Build a PowerShell marker regex from split string fragments and scan the changed contracts for unfinished drafting markers; expect no matches.
-- [ ] Run `pwsh -NoLogo -NoProfile -File scripts/audit-clean-root.ps1`; expect `TM-CLEAN-PASS`.
-- [ ] Run `git diff --check`; expect exit code 0.
+- [x] Build a PowerShell marker regex from split string fragments and scan the changed contracts for unfinished drafting markers; no matches were found.
+- [x] Run `pwsh -NoLogo -NoProfile -File scripts/audit-clean-root.ps1`; returned `TM-CLEAN-PASS`.
+- [x] Run `git diff --check`; exited with code 0.
 
 **Commit:**
 
-- [ ] Commit the reviewed contract normalization as `docs: define replay-safe accounting contract`.
+- [x] Commit the reviewed contract normalization as `docs: define replay-safe accounting contract`.
 
 ## Task 2: Add provider-neutral replay value types
 

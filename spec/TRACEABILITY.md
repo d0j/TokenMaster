@@ -13,6 +13,8 @@
 | TM-SEC-003 | provider/codex/store error and type boundaries | serialized/debug privacy contracts |
 | TM-REL-001 / TM-REL-002 | `scripts/`, `M0_ACCEPTANCE.md` | Pester M0 script and soak-helper contracts; external receipts remain open |
 | Clean-root invariant | `scripts/audit-clean-root.ps1` | audit-clean-root Pester contracts and root developer gate |
+| TM-FUNC-007 / TM-DATA-007 | P0 plan only | replay lineage, disposition, and migration implementation pending |
+| TM-FUNC-008 / TM-SEC-006 | architecture contract only | local Codex adapter exists; provider-neutral engine ports pending |
 
 Staging generation promotion, scan epochs, full analytics, quota transport, all product
 views, CLI, and MCP have no implementation row yet and must be added test-first.

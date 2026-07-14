@@ -16,8 +16,9 @@ Completed: provider discovery, safe streaming enumeration, parser and cumulative
 accounting, physical/logical identities, reader framing/checkpoints/revalidation,
 strict SQLite archive, keyset reads, and atomic current-generation append.
 
-Next: staging generation writes, atomic promotion, scan epochs, source reconciliation,
-then indexed analytics and quota integration.
+Next: replay-safe fork/subagent lineage and canonical classification. Then add staging
+generation writes, atomic promotion, scan epochs, source reconciliation, and the
+provider-neutral runtime source ports before indexed analytics and quota integration.
 
 ## 0.9 — complete desktop product
 

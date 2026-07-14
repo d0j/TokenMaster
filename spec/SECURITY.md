@@ -28,3 +28,15 @@ or failed scans MUST NOT authorize destructive source reconciliation.
 
 Skins are declarative data only. They MUST NOT execute code, call external processes,
 or introduce filesystem, network, SQL, or script expressions.
+
+## TM-SEC-006 — Source adapter capabilities
+
+Ingestion adapters are statically linked, allowlisted, and capability-bounded. The
+engine owns cancellation, timeouts, backpressure, and maximum chunk/count sizes. No
+generic arbitrary filesystem, network, HTTP, SSH, command, SQL, executable-plugin, or
+credential interface may be exposed to UI, CLI, MCP, configuration, or skin data.
+
+A future remote or authenticated provider adapter requires its own reviewed allowlist,
+transport bounds, secret-lifetime rules, and tests. Raw provider responses and
+credentials MUST NOT cross the adapter boundary or enter the archive, snapshots,
+diagnostics, logs, or external interfaces.

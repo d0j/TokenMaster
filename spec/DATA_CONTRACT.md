@@ -14,11 +14,20 @@ bounded model metadata, explicit token availability and values, service tier, bo
 project/activity metadata, and a full deterministic fingerprint. The shortened public
 event ID is not a uniqueness key.
 
+Each observation also carries a zero-based session ordinal, fixed-size replay
+signature, signature-evidence level, optional bounded parent session identity, and an
+explicit lineage-conflict marker. Replay identity is distinct from the event
+fingerprint and excludes timestamp, source identity, display metadata, and activity.
+
 ## TM-DATA-003 — Source state and checkpoints
 
 Source keys, physical/logical identity, fingerprints, anchors, and chunk hashes are
 fixed-size path-private values. Checkpoints record complete-line committed and numeric
 scan offsets. A partial replacement requires exact prior length and digest proof.
+
+Adapter checkpoints are versioned, opaque outside their provider adapter, and capped
+by the common checkpoint bound. They MUST NOT contain source content, credentials, or
+unbounded transport state.
 
 ## TM-DATA-004 — Current and staging generations
 
@@ -41,3 +50,19 @@ policy, and disabled mmap. Collections are keyset-paged at no more than 256 rows
 Reader lines are limited to 16 MiB. Resume metadata is capped at 32 KiB. General
 display metadata is UTF-8 bounded; tool names, collection counts, profile roots,
 source directories, and UI snapshots have explicit contract limits.
+
+## TM-DATA-007 — Replay classification
+
+Every current observation has one replay disposition: `eligible`, `replay`, `pending`,
+or `conflict`. Canonical selection uses only `eligible`. All observations remain
+available for bounded reconciliation and quality counts. Session ancestry traversal
+is capped at 32 levels and one transaction re-evaluates at most 256 direct children.
+
+Only explicit provider ancestry identifies a parent. A strong signature covers the
+normalized model, emitted delta, and provider cumulative snapshot. A weak signature
+covers model and delta only and cannot suppress a pre-divergence event by itself.
+Once a child diverges from a fixed parent relation, later events remain eligible.
+
+If a child's ordinal is beyond the observed tail of a parent that has not been proved
+complete, the child remains `pending`. Only completed scan/session evidence from the
+staging runtime may prove that the child outgrew its parent.
