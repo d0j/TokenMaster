@@ -8,9 +8,11 @@
 
 **Tech Stack:** Rust 1.97.0, rusqlite with bundled SQLite, strict SQLite tables and deferred foreign keys, existing TokenMaster domain/accounting/store crates, PowerShell quality scripts.
 
-**Execution status:** Complete on 2026-07-14. Tasks 1-8 passed their focused and full
-gates. P0-E runtime orchestration is the next critical path; this status does not claim
-M0 acceptance, interactive Windows evidence, packaging, or release.
+**Execution status:** Original Tasks 1-8 completed on 2026-07-14, but P0-E preflight
+reopened one product gate: the explicit 256-source manifest cannot cover large valid
+Codex histories. The transaction semantics remain complete; product-scale begin/seal
+is superseded by the P0-D.1 scalable-manifest design. This status does not claim M0
+acceptance, interactive Windows evidence, packaging, or release.
 
 ## Global constraints
 

@@ -53,12 +53,20 @@ The repeated critical audit is recorded in `docs/AUDIT_AND_MASTER_PLAN.md`. P0-A
 the P0-B Codex-lineage surface are implemented under the completed executable TDD plan
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`.
 
-P0-D is complete at the store boundary. A compatible promoted revision is
-replay-filtered canonical truth; an immutable migrated legacy snapshot remains
-explicitly unverified. P0-E is now the critical path: connect bounded Codex discovery,
-enumeration, reader, accounting, continuation, seal, promotion, cancellation, and
-truncate/replace recovery into one restart-safe runtime pipeline. No automatic
-Codex-to-promoted-archive orchestration is claimed yet.
+P0-D transactional semantics are complete at the store boundary, but the P0-E
+preflight found one product blocker: its fixed manifest is capped at 256 store sources,
+while one store source is one JSONL file and Codex history can legitimately contain
+many more. P0-D.1 must migrate the schema to a checked 64-bit source count, add a
+disk-backed all-registered-source begin path, and keyset-page seal validation before
+P0-E can be honest. The corrective design is
+`docs/superpowers/specs/2026-07-14-tokenmaster-scalable-replay-manifest-design.md`.
+
+After P0-D.1, P0-E proves discovery, enumeration, reader, accounting, continuation,
+seal, promotion, restart, and truncate/replace behavior together on synthetic
+fixtures exceeding both 256 files and 256 events. This is a transactional cross-crate
+proof, not the production scheduler. P1 still owns scan epochs, missing-source
+finalization, coalescing, cancellation policy, writer lease, sleep/resume, and
+continuous runtime recovery.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 

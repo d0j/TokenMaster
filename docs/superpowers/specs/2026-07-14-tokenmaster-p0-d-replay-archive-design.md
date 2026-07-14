@@ -1,5 +1,11 @@
 # TokenMaster P0-D Replay Archive Design
 
+> **Scalability correction:** Sections that cap a complete revision at 256 sources are
+> superseded by
+> `2026-07-14-tokenmaster-scalable-replay-manifest-design.md`. One store source is one
+> JSONL file, so the product path must use a disk-backed all-source manifest and paged
+> validation. The original bound remains only for the explicit test/repair API.
+
 Status: approved design recorded for implementation on 2026-07-14.
 
 ## 1. Goal

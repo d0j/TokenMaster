@@ -24,10 +24,13 @@ Completed: P0-D strict v2 replay archive, immutable v1 fallback, invisible fixed
 staging, bounded restart-safe reconciliation, exact seal, rollback-safe atomic
 promotion, and staging recovery.
 
-Current: P0-E end-to-end Codex pipeline proof. Connect discovery, enumeration,
-reader, accounting, archive epochs, continuation, seal/promotion, cancellation, and
-truncate/replace recovery through the provider-neutral runtime engine. Then add scan
-epochs/source reconciliation before indexed analytics, pricing, quota, Git output,
+Current corrective gate: P0-D.1 removes the 256-file replay-manifest blocker with
+schema v3, disk-backed all-source staging, and keyset-paged validation. Then P0-E
+exercises discovery, enumeration, reader, accounting, archive epochs,
+continuation/seal/promotion, restart, cancellation, append, truncate, and replacement
+fixtures beyond 256 files/events without introducing the live engine. P1 then adds the
+provider-neutral runtime engine, scan epochs, source finalization, coalescing, writer
+lease, and continuous recovery before indexed analytics, pricing, quota, Git output,
 automation, and complete UI work.
 
 ## 0.9 — complete desktop product

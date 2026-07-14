@@ -17,9 +17,13 @@ v2, exact-v1 immutable migration, explicit archive state, fixed-manifest staging
 classified replay append, durable continuation, exact seal, rollback-safe promotion,
 and staging recovery are implemented under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-d-replay-archive.md`. The immediate
-next task is P0-E runtime orchestration from bounded Codex discovery through promoted
-archive state, including cancellation and truncate/replace recovery. The complete
-approved order is in `docs/AUDIT_AND_MASTER_PLAN.md`.
+next task is P0-D.1, not P0-E implementation: remove the invalid 256-file product cap
+through schema v3, a disk-backed all-source begin, and keyset-paged seal validation as
+specified in
+`docs/superpowers/specs/2026-07-14-tokenmaster-scalable-replay-manifest-design.md`.
+Then P0-E proves the transactional Codex-to-archive path with more than 256 files and
+events. It must not grow into the P1 scheduler. The complete approved order is in
+`docs/AUDIT_AND_MASTER_PLAN.md`.
 
 Tasks 3+ in `2026-07-14-tokenmaster-p0-replay-correctness.md` are superseded. Do not
 execute its Codex-owned fingerprint/signature or destructive migration steps. Do not

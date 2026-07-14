@@ -118,7 +118,8 @@ bounded models, native tray lifecycle, modular skins, layouts, and localization.
 - M1 established bounded Codex discovery, streaming parse/revalidation, strict
 path-private SQLite storage, checkpoint CAS, and atomic current-generation ingest.
 - M1 P0-D staging, bounded replay reconciliation, and atomic promotion are now
-  implemented under transactional contracts; P0-E runtime scan orchestration remains.
+  implemented under transactional contracts; P0-E is the cross-crate proof and P1
+  owns runtime scan orchestration.
 
 ## 2026-07-14 — exclusive accounting authority and Codex lineage
 
@@ -244,7 +245,8 @@ remains immutable across successful promotion.
 Added exact revision/epoch staging discard for cancelled, obsolete, or quality-only
 rebuilds. It removes only unpublished replay/staging state, validates foreign keys,
 preserves the current canonical page and revision, and permits a clean retry. No CLI
-or automatic Codex runtime invokes this yet; that is the P0-E boundary.
+or automatic Codex runtime invokes this yet. P0-E first proves the cross-crate
+transactional path with synthetic fixtures; P1 owns the automatic runtime.
 
 Verification:
 
@@ -267,3 +269,19 @@ workspace run passed with only the pre-existing one-million-row M0 scale test
 explicitly ignored. Changed-Rust forbidden-storage scans, secret-value pattern scans,
 absolute-user-path scans, and tracked legacy-language extension checks returned no
 findings. No M0 acceptance, interactive Windows result, package, or release is claimed.
+
+## 2026-07-14 — scalable-manifest preflight correction
+
+The P0-E preflight mapped real Codex enumeration semantics to the P0-D schema and found
+that the 256-entry replay manifest caps JSONL files, not provider roots. That bound can
+be exceeded by valid long-lived profiles, so a small synthetic pipeline test would not
+have represented the product. No user file path or content was inspected or recorded;
+only an aggregate local file count was used to confirm the mismatch.
+
+Selected P0-D.1 before P0-E: schema v3 widens the checked count, SQLite creates the
+all-registered-source revision without an application manifest vector, and seal walks
+source states in 256-row keyset pages. The exact migration follows SQLite's safe
+create-new/copy/drop/rename procedure and restores foreign-key enforcement on every
+outcome. The original explicit 256-key manifest remains only a bounded test/repair API
+and cannot seal a subset. This milestone is design-only; the cap is still present in
+code until the corrective TDD plan passes.
