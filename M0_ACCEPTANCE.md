@@ -41,5 +41,5 @@ The long run's 5,588.6-second sample gap exceeded the 75-second hard limit, so i
 not a 24-hour pass and produced no `soak-24h.json`.
 
 Only after both external JSON receipts say `result: pass` may `package-m0.ps1` create a
-non-release architecture-proof ZIP. ADR-011 permits bounded M1 development while this
+non-release architecture-proof ZIP. ADR-006 permits bounded M1 development while this
 boundary remains open; it does not authorize M0 acceptance, packaging, or release.

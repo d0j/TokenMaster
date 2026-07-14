@@ -27,27 +27,21 @@ or UI to Codex JSONL. The selected future format is a `.tmplugin` WebAssembly
 Component executed in an isolated on-demand host; Codex remains compiled in and pays
 no plugin runtime cost. No plugin implementation is claimed by that design.
 
-The reviewed implementation sequence starts with accounting correctness: add
-fork/subagent replay fixtures and canonical lineage rules before analytics. The
-test-driven task plan is
-`docs/superpowers/plans/2026-07-14-tokenmaster-p0-replay-correctness.md`. It is followed
-by invisible staging generations, atomic promotion, safe scan epochs, and the runtime
-engine. A staging write must never affect canonical events, and only a completed scan
-may mark unseen sources missing.
+The repeated critical audit is recorded in `docs/AUDIT_AND_MASTER_PLAN.md`. It closes
+the remaining architectural ambiguities and approves one sequence. P0-A first adds a
+provider-neutral `ObservationDraft` and an exclusive `tokenmaster-accounting`
+canonicalizer, then moves Codex and store APIs onto that boundary. Its executable TDD
+plan is `docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`.
 
 The authoritative product, data, security, decision, traceability, and roadmap
 contracts now define this sequence. Runtime replay classification and engine source
 ports are still unimplemented.
 
-The provider-neutral `ReplaySignature`, `ReplayEvidence`, and `UsageLineage` domain
-contracts are implemented and tested. They are not yet attached to parser events or
-persisted in SQLite, so current canonical totals are not yet replay-safe.
-
-The approved plugin architecture requires the next replay-plan revision to introduce a
-provider-neutral observation draft and core-owned canonicalizer. Codex and future
-plugins must not compute or supply authoritative fingerprints/replay identities
-independently. The current P0 plan must be revised before its Codex signature task is
-executed.
+The provider-neutral replay value prototype is implemented and tested, but its
+placement is superseded by the approved authority boundary. Current Codex code still
+computes fingerprints and the store still accepts publicly constructed canonical
+events. P0-A is therefore not yet implemented and current canonical totals remain not
+replay-safe. No SQLite replay migration is allowed before P0-A through P0-C pass.
 
 ## Release truth
 

@@ -97,6 +97,20 @@ git diff --check
 The clean-root audit returned `TM-CLEAN-PASS`; the diff check, unfinished-marker scan,
 obsolete-contract scan, and sensitive-marker scan all passed.
 
+## 2026-07-14 — critical audit and P0 authority replan
+
+Re-audited every normative contract, architecture design, active P0 plan, current
+implementation boundary, and pinned WhereMyTokens/ccusage feature surface. The Rust,
+Slint, and SQLite stack remains approved; a complete rewrite was rejected. Sixteen
+contract/product/documentation gaps were resolved in `docs/AUDIT_AND_MASTER_PLAN.md`.
+
+The binding correction is P0-A: Codex and future adapters emit bounded
+`ObservationDraft` values, while a new provider-neutral accounting crate exclusively
+constructs fingerprint v2, replay signature/evidence, event IDs, lineage, and
+canonical events. The old replay plan's Tasks 3+ are superseded. SQLite migration is
+deferred until the authority, Codex ancestry, and pure classifier gates pass. This
+milestone changes documents only; runtime authority is not yet fixed.
+
 ## Architecture milestones
 
 - M0 selected and proved Rust 1.97, Slint 1.17, bundled SQLite, the software renderer,

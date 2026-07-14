@@ -9,17 +9,15 @@
 
 ## Current implementation boundary
 
-The next M1 work is replay-safe canonical accounting under
-`docs/superpowers/plans/2026-07-14-tokenmaster-p0-replay-correctness.md`. Existing
-timestamp-based fingerprints handle exact duplicates but do not yet prove copied
-fork/subagent prefixes when timestamps change. Complete that fail-safe lineage slice
-before staging generations, scan epochs, analytics, automation, or product UI.
+The next M1 work is P0-A under
+`docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`. Implement
+bounded provider-neutral drafts and the exclusive accounting canonicalizer before
+Codex lineage/classifier/schema work. The complete approved order and audit decisions
+are in `docs/AUDIT_AND_MASTER_PLAN.md`.
 
-Before continuing the Codex parser tasks, revise the P0 plan against
-`docs/superpowers/specs/2026-07-14-tokenmaster-provider-plugin-system-design.md`:
-providers emit bounded observation drafts and a provider-neutral TokenMaster
-canonicalizer computes fingerprint/replay authority. External plugin runtime work
-remains later; do not add Wasmtime to the GUI or current Codex path.
+Tasks 3+ in `2026-07-14-tokenmaster-p0-replay-correctness.md` are superseded. Do not
+execute its Codex-owned fingerprint/signature or destructive migration steps. Do not
+add Wasmtime to the GUI or current Codex path.
 
 ## Commands
 

@@ -16,8 +16,9 @@ virtualized presentation models, and resource gates. It is not a product release
 an accepted interactive Windows validation.
 
 M1 has bounded Codex source discovery, streaming JSONL parsing, revalidation,
-checkpoints, strict SQLite schema, and atomic current-generation ingest. Staging
-generation promotion and scan reconciliation are the next slice.
+checkpoints, strict SQLite schema, and atomic current-generation ingest. The next
+slice moves parser output through a provider-neutral draft and exclusive accounting
+canonicalizer before replay classification or staging migration.
 
 ## Build and verify
 
@@ -47,5 +48,6 @@ for diagnostic comparison and cannot be the default renderer.
 - Instant modular skin/layout/locale switching without rebuilding the archive.
 - Measured memory, CPU, handle, thread, USER, GDI, and latency gates.
 
-See [the architecture](docs/ARCHITECTURE.md), [feature matrix](docs/FEATURE_PARITY.md),
+See [the approved audit and master plan](docs/AUDIT_AND_MASTER_PLAN.md),
+[architecture](docs/ARCHITECTURE.md), [feature matrix](docs/FEATURE_PARITY.md),
 [roadmap](docs/ROADMAP.md), and [current handoff](docs/HANDOFF.md).

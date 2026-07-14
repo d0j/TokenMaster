@@ -1,35 +1,43 @@
 # TokenMaster traceability
 
-| Requirement | Implementation | Evidence |
-| --- | --- | --- |
-| TM-FUNC-001 | `crates/provider`, `crates/codex/src/roots.rs`, `files/` | provider, discovery, enumeration contracts |
-| TM-FUNC-002 | `crates/codex/src/reader`, `reader_revalidation_contract.rs` | framing, checkpoint, append/truncate/rewrite contracts |
-| TM-FUNC-003 | `crates/domain/src/usage.rs`, `crates/codex/src/parser` | usage, parser-state, parser-adversarial contracts |
-| TM-FUNC-005 / TM-UI-002 | `crates/probe-app` | lifecycle, presentation, skin-runtime, metrics, stress contracts |
-| TM-PERF-001 | parser, reader, domain bounds | adversarial and fixed-capacity contracts |
-| TM-PERF-003 / TM-DATA-005 | `crates/store/src/usage` | schema, SQLite, ingest contracts |
-| TM-DATA-003 | `crates/codex/src/file_identity.rs`, reader checkpoint | physical identity and reader contracts |
-| TM-DATA-004 current append | `crates/store/src/usage/write.rs` | usage-ingest rollback/CAS/determinism contracts |
-| TM-SEC-003 | provider/codex/store error and type boundaries | serialized/debug privacy contracts |
-| TM-REL-001 / TM-REL-002 | `scripts/`, `M0_ACCEPTANCE.md` | Pester M0 script and soak-helper contracts; external receipts remain open |
-| Clean-root invariant | `scripts/audit-clean-root.ps1` | audit-clean-root Pester contracts and root developer gate |
-| TM-FUNC-007 / TM-DATA-007 domain | `crates/domain/src/usage.rs` | replay lineage value contract passes; parser emission, disposition, and migration pending |
-| TM-FUNC-008 / TM-SEC-006 | plugin system design only | local Codex adapter exists; shared draft/canonicalizer, engine ports, Wasm host, and SDK pending |
+Status values are explicit: `implemented`, `partial`, `planned`, or `open evidence`.
+A design or plan is not implementation evidence.
 
-Staging generation promotion, scan epochs, full analytics, quota transport, all product
-views, CLI, and MCP have no implementation row yet and must be added test-first.
+| Requirement | Status | Implementation or planned owner | Evidence or next gate |
+| --- | --- | --- | --- |
+| TM-FUNC-001 | implemented | `crates/provider`, Codex roots/files | provider, discovery, enumeration contracts |
+| TM-FUNC-002 | implemented | `crates/codex/src/reader` | framing, checkpoint, append/truncate/rewrite/revalidation contracts |
+| TM-FUNC-003 | partial | domain usage, Codex parser; pricing/analytics planned | usage, parser-state, parser-adversarial contracts |
+| TM-FUNC-004 | planned | query snapshots and complete Slint product routes | P4 UI plan after P2/P3 contracts |
+| TM-FUNC-005 | partial | `crates/probe-app`; product shell later | lifecycle, presentation, skin-runtime, metrics, stress contracts |
+| TM-FUNC-006 | planned | separate CLI and MCP adapters over query facade | P3 strict JSON/stdin MCP conformance tests |
+| TM-FUNC-007 | partial | domain lineage values exist; accounting/store replay pending | P0-A through P0-E plans and replay fixtures |
+| TM-FUNC-008 | partial | built-in provider/discovery exists; neutral draft/engine/plugin host pending | P0-A/P1; plugin design is 1.1 planning only |
+| TM-UI-001 | planned | complete Slint board and supporting views | granular parity matrix and P4 accessibility/UI tests |
+| TM-UI-002 | partial | `crates/probe-app` presentation generations | presentation/skin contracts; archive-independent product snapshots pending |
+| TM-PERF-001 | partial | parser, reader, domain, store bounds | adversarial/fixed-capacity tests; future engine/query/plugin bounds pending |
+| TM-PERF-002 | open evidence | software renderer and M0 resource gates | uninterrupted soak and interactive receipts remain absent |
+| TM-PERF-003 | partial | keyset store reads implemented; immutable snapshots planned | SQLite/read contracts; P2 query snapshot gates pending |
+| TM-REL-001 | partial | M0 scripts and receipt schemas | identity checks exist; final product packaging evidence pending |
+| TM-REL-002 | open evidence | `M0_ACCEPTANCE.md` | interactive Windows/DPI/accessibility and uninterrupted soak receipts absent |
+| TM-DATA-001 | partial | domain/provider/Codex/store privacy boundaries | adversarial/debug/path privacy tests; future surfaces must repeat gates |
+| TM-DATA-002 | partial | current canonical event exists but authority boundary is unsafe | P0-A replaces it with draft plus exclusive canonicalizer |
+| TM-DATA-003 | implemented | file identity and reader checkpoint | physical identity, checkpoint, resume bound contracts |
+| TM-DATA-004 | partial | atomic current append implemented; staging planned | usage-ingest rollback/CAS tests; P0-D/P1 promotion pending |
+| TM-DATA-005 | implemented | `crates/store/src/usage` | strict schema, pragmas, keyset paging, ingest contracts |
+| TM-DATA-006 | partial | reader/parser/store limits | line/resume/batch/page bounds; full UI/query/plugin limits pending |
+| TM-DATA-007 | partial | domain replay values only | P0-B through P0-E classifier/schema/pipeline tests pending |
+| TM-SEC-001 | partial | local-only product and no listener today | future quota HTTPS opt-in and MCP stdio security tests pending |
+| TM-SEC-002 | partial | current JSONL/store boundaries validate types and sizes | future config/CLI/MCP/plugin boundary suites pending |
+| TM-SEC-003 | implemented | provider/Codex/store errors and value types | serialized/debug privacy and path-redaction contracts |
+| TM-SEC-004 | partial | current append transaction/CAS | staging promotion and failed-scan reconciliation tests pending |
+| TM-SEC-005 | partial | M0 skins are declarative application data | external skin package schema/validation not implemented |
+| TM-SEC-006 | planned | built-in Codex exists; isolated plugin host deferred | provider plugin design and future 1.1 conformance/security gates |
 
-The chosen design for replay correctness, runtime engine, immutable queries, universal
-MCP/CLI automation, full UI, dynamic bars, modular presentation, localization, and
-release gates is recorded in
-`docs/superpowers/specs/2026-07-14-tokenmaster-product-architecture-design.md`.
-This is design traceability only; it is not implementation evidence.
+The approved audit resolutions and delivery order are in
+`docs/AUDIT_AND_MASTER_PLAN.md`. P0-A is executable through
+`docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`. Tasks 3+
+in the older replay plan are historical and superseded.
 
-The approved P0 execution breakdown and its focused validators are recorded in
-`docs/superpowers/plans/2026-07-14-tokenmaster-p0-replay-correctness.md`. The plan also
-preserves a provider-neutral ingest boundary: local Codex input is first, while later
-sandboxed `.tmplugin` adapters terminate at the same bounded observation-draft
-contract. The selected external-provider architecture is recorded in
-`docs/superpowers/specs/2026-07-14-tokenmaster-provider-plugin-system-design.md`.
-This is design/planning evidence, not a completed canonicalizer, plugin host, or SDK
-implementation row.
+The clean-root invariant is implemented by `scripts/audit-clean-root.ps1` and its
+Pester contracts.

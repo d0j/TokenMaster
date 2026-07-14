@@ -1,6 +1,6 @@
 # TokenMaster Product Architecture Design
 
-Status: approved; P0 replay-correctness implementation planning is complete.
+Status: approved; the corrected P0 sequence begins with the core accounting authority boundary.
 Date: 2026-07-14.
 
 ## 1. Product decision

@@ -8,12 +8,11 @@
 
 **Tech Stack:** Rust 1.97, serde/serde_json, sha2, rusqlite with bundled SQLite, existing TokenMaster domain/Codex/store crates, Cargo tests and Clippy.
 
-**Execution status:** Tasks 1 and 2 are complete. Tasks 3 onward are paused until
-this plan is revised through `writing-plans` against
-`docs/superpowers/specs/2026-07-14-tokenmaster-provider-plugin-system-design.md`.
-The current Codex-owned signature steps are superseded: providers must emit bounded
-observation drafts and a provider-neutral TokenMaster canonicalizer must compute
-fingerprint/replay authority. Do not execute the unrevised steps below.
+**Execution status:** Tasks 1 and 2 are historical and complete. Tasks 3 onward in
+this document are permanently superseded and must not be executed. The approved
+replacement sequence starts with
+`docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`; the complete
+delivery order and resolved ambiguities are in `docs/AUDIT_AND_MASTER_PLAN.md`.
 
 ## Global Constraints
 
