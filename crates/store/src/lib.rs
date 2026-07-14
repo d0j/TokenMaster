@@ -19,8 +19,9 @@ pub use session_store::{EXPECTED_SQLITE_VERSION, MAX_PAGE_SIZE, MAX_SEED_SESSION
 pub use usage::{
     AccountingVersions, AppendBatch, AppendBatchParts, ArchiveMode, ArchiveState, EventCursor,
     GenerationSnapshot, GenerationStatus, JournalMode, MAX_APPEND_CHUNK_UPDATES, MAX_APPEND_EVENTS,
-    MAX_RESUME_BYTES, MAX_USAGE_EVENT_PAGE_SIZE, ReplayEpoch, ReplayQualityCounts,
-    ReplayRevisionId, RuntimePolicy, SOURCE_CHUNK_BYTES, SourceKey, SourceKind, SourceRegistration,
+    MAX_REPLAY_SOURCES, MAX_RESUME_BYTES, MAX_USAGE_EVENT_PAGE_SIZE, ReplayEpoch, ReplayManifest,
+    ReplayQualityCounts, ReplayRevisionId, ReplayRevisionSnapshot, ReplayRevisionStatus,
+    RuntimePolicy, SOURCE_CHUNK_BYTES, SourceKey, SourceKind, SourceRegistration,
     SourceRegistrationParts, StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk,
     StoredUsageEvent, StoredVerification, USAGE_SCHEMA_VERSION, UsageStore, UsageStoreCounts,
 };

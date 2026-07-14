@@ -11,6 +11,7 @@ pub const MAX_RESUME_BYTES: usize = 32 * 1024;
 pub const MAX_USAGE_EVENT_PAGE_SIZE: usize = 256;
 pub const MAX_APPEND_EVENTS: usize = 256;
 pub const MAX_APPEND_CHUNK_UPDATES: usize = 18;
+pub const MAX_REPLAY_SOURCES: usize = 256;
 pub const SOURCE_CHUNK_BYTES: u64 = 1 << 20;
 const MAX_ANCHOR_BYTES: u16 = 4096;
 
@@ -701,9 +702,121 @@ impl ReplayEpoch {
         Ok(Self(value))
     }
 
+    pub(super) fn as_sql(self) -> Result<i64, StoreError> {
+        i64::try_from(self.0).map_err(|_| StoreError::new(StoreErrorCode::InvalidValue))
+    }
+
     #[must_use]
     pub const fn get(self) -> u64 {
         self.0
+    }
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct ReplayManifest {
+    source_keys: Box<[SourceKey]>,
+}
+
+impl ReplayManifest {
+    pub fn new(source_keys: Box<[SourceKey]>) -> Result<Self, StoreError> {
+        if source_keys.is_empty() {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        if source_keys.len() > MAX_REPLAY_SOURCES {
+            return Err(StoreError::with_limit(
+                StoreErrorCode::CapacityExceeded,
+                MAX_REPLAY_SOURCES as u64,
+            ));
+        }
+        let mut source_keys = source_keys.into_vec();
+        source_keys.sort_unstable_by(|left, right| left.as_bytes().cmp(right.as_bytes()));
+        if source_keys.windows(2).any(|pair| pair[0] == pair[1]) {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self {
+            source_keys: source_keys.into_boxed_slice(),
+        })
+    }
+
+    pub(super) const fn source_keys(&self) -> &[SourceKey] {
+        &self.source_keys
+    }
+
+    #[must_use]
+    pub const fn source_count(&self) -> usize {
+        self.source_keys.len()
+    }
+}
+
+impl fmt::Debug for ReplayManifest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ReplayManifest")
+            .field("source_count", &self.source_keys.len())
+            .finish()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReplayRevisionStatus {
+    Staging,
+    Current,
+}
+
+impl ReplayRevisionStatus {
+    pub(super) const fn as_sql(self) -> &'static str {
+        match self {
+            Self::Staging => "staging",
+            Self::Current => "current",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReplayRevisionSnapshot {
+    pub(super) id: ReplayRevisionId,
+    pub(super) epoch: ReplayEpoch,
+    pub(super) status: ReplayRevisionStatus,
+    pub(super) versions: AccountingVersions,
+    pub(super) expected_source_count: u16,
+    pub(super) sealed: bool,
+    pub(super) promoted: bool,
+}
+
+impl ReplayRevisionSnapshot {
+    #[must_use]
+    pub const fn id(self) -> ReplayRevisionId {
+        self.id
+    }
+
+    #[must_use]
+    pub const fn epoch(self) -> ReplayEpoch {
+        self.epoch
+    }
+
+    #[must_use]
+    pub const fn status(self) -> ReplayRevisionStatus {
+        self.status
+    }
+
+    #[must_use]
+    pub const fn versions(self) -> AccountingVersions {
+        self.versions
+    }
+
+    #[must_use]
+    pub const fn expected_source_count(self) -> u16 {
+        self.expected_source_count
+    }
+
+    #[must_use]
+    pub const fn sealed(self) -> bool {
+        self.sealed
+    }
+
+    #[must_use]
+    pub const fn promoted(self) -> bool {
+        self.promoted
     }
 }
 

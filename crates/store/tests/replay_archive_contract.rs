@@ -3,7 +3,41 @@ use tempfile::TempDir;
 use tokenmaster_accounting::{
     CANONICALIZER_VERSION, EVENT_FINGERPRINT_VERSION, REPLAY_SIGNATURE_VERSION,
 };
-use tokenmaster_store::{ArchiveMode, StoreErrorCode, UsageStore};
+use tokenmaster_store::{
+    ArchiveMode, GenerationStatus, ReplayManifest, ReplayRevisionStatus, SourceKey, SourceKind,
+    SourceRegistration, SourceRegistrationParts, StoreErrorCode, StoredCheckpoint,
+    StoredCheckpointParts, StoredVerification, UsageStore,
+};
+
+fn registration(seed: u8) -> SourceRegistration {
+    SourceRegistration::new(SourceRegistrationParts {
+        source_key: SourceKey::from_bytes([seed; 32]),
+        provider_id: "codex".into(),
+        profile_id: "default".into(),
+        source_id: format!("fixture-{seed}").into_boxed_str(),
+        source_kind: SourceKind::Active,
+        logical_identity: [seed.wrapping_add(1); 32],
+        physical_identity: Some([seed; 32]),
+        initial_checkpoint: StoredCheckpoint::new(StoredCheckpointParts {
+            parser_schema_version: 1,
+            physical_identity: Some([seed; 32]),
+            logical_identity: [seed.wrapping_add(1); 32],
+            committed_offset: 0,
+            scan_offset: 0,
+            observed_file_length: 0,
+            modified_time_ns: None,
+            anchor_start: 0,
+            anchor_len: 0,
+            anchor_sha256: [seed.wrapping_add(2); 32],
+            resume: Box::default(),
+            discarding_oversized_line: false,
+            incomplete_tail: false,
+            verification: StoredVerification::Incremental,
+        })
+        .expect("initial checkpoint"),
+    })
+    .expect("source registration")
+}
 
 fn create_v1_event_fixture(path: &std::path::Path) {
     let connection = Connection::open(path).expect("create v1 archive fixture");
@@ -268,4 +302,138 @@ fn replay_quality_counts_each_disposition_without_returning_rows() {
     assert_eq!(quality.pending(), 1);
     assert_eq!(quality.conflict(), 1);
     assert_eq!(quality.total(), 4);
+}
+
+#[test]
+fn replay_manifest_bounds_and_begin_are_atomic_invisible_and_version_owned() {
+    let empty_error = ReplayManifest::new(Box::default()).expect_err("empty manifest");
+    assert_eq!(empty_error.code(), StoreErrorCode::InvalidValue);
+
+    let oversized = (0..=256)
+        .map(|value| {
+            let mut bytes = [0_u8; 32];
+            bytes[..8].copy_from_slice(&(value as u64).to_be_bytes());
+            SourceKey::from_bytes(bytes)
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let oversized_error = ReplayManifest::new(oversized).expect_err("oversized manifest");
+    assert_eq!(oversized_error.code(), StoreErrorCode::CapacityExceeded);
+    assert_eq!(oversized_error.limit(), Some(256));
+
+    let duplicate_error = ReplayManifest::new(
+        vec![
+            SourceKey::from_bytes([1; 32]),
+            SourceKey::from_bytes([1; 32]),
+        ]
+        .into_boxed_slice(),
+    )
+    .expect_err("duplicate manifest key");
+    assert_eq!(duplicate_error.code(), StoreErrorCode::InvalidValue);
+
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("replay-begin-private.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    store.register_source(&registration(2)).expect("source 2");
+    store.register_source(&registration(1)).expect("source 1");
+    let before_page = store
+        .event_page_before(None, 256)
+        .expect("page before begin");
+    let manifest = ReplayManifest::new(
+        vec![
+            SourceKey::from_bytes([2; 32]),
+            SourceKey::from_bytes([1; 32]),
+        ]
+        .into_boxed_slice(),
+    )
+    .expect("bounded manifest");
+    let manifest_debug = format!("{manifest:?}");
+    assert!(manifest_debug.contains("source_count: 2"));
+    assert!(!manifest_debug.contains("SourceKey"));
+    assert!(!manifest_debug.contains("[1, 1"));
+
+    let revision = store
+        .begin_replay_revision(&manifest)
+        .expect("begin replay revision");
+    assert_eq!(revision.id().get(), 0);
+    assert_eq!(revision.epoch().get(), 0);
+    assert_eq!(revision.status(), ReplayRevisionStatus::Staging);
+    assert_eq!(revision.expected_source_count(), 2);
+    assert!(!revision.sealed());
+    assert!(!revision.promoted());
+    assert_eq!(revision.versions().canonicalizer(), CANONICALIZER_VERSION);
+    assert_eq!(revision.versions().fingerprint(), EVENT_FINGERPRINT_VERSION);
+    assert_eq!(
+        revision.versions().replay_signature(),
+        REPLAY_SIGNATURE_VERSION
+    );
+    assert_eq!(
+        store
+            .event_page_before(None, 256)
+            .expect("page after begin"),
+        before_page
+    );
+    let state = store.archive_state().expect("rebuild archive state");
+    assert_eq!(state.mode(), ArchiveMode::Empty);
+    assert!(state.rebuild_staging());
+    for seed in [1_u8, 2_u8] {
+        let current = store
+            .generation_snapshot(SourceKey::from_bytes([seed; 32]))
+            .expect("current generation")
+            .expect("registered current generation");
+        assert_eq!(current.generation(), 0);
+        assert_eq!(current.status(), GenerationStatus::Current);
+    }
+    let before_repeat = store.counts().expect("counts before repeat");
+    let repeat_error = store
+        .begin_replay_revision(&manifest)
+        .expect_err("second staging revision must fail");
+    assert_eq!(repeat_error.code(), StoreErrorCode::ArchiveModeMismatch);
+    assert_eq!(store.counts().expect("counts after repeat"), before_repeat);
+    drop(store);
+
+    let connection = Connection::open(&path).expect("inspect staging generations");
+    let staging: i64 = connection
+        .query_row(
+            "SELECT count(*) FROM usage_generation
+             WHERE generation = 1 AND status = 'staging'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count staging generations");
+    assert_eq!(staging, 2);
+    let manifest_rows: i64 = connection
+        .query_row("SELECT count(*) FROM usage_replay_source", [], |row| {
+            row.get(0)
+        })
+        .expect("count replay manifest rows");
+    assert_eq!(manifest_rows, 2);
+}
+
+#[test]
+fn replay_begin_rejects_an_unregistered_source_without_partial_state() {
+    let mut store = UsageStore::in_memory().expect("usage store");
+    store
+        .register_source(&registration(4))
+        .expect("registered source");
+    let manifest = ReplayManifest::new(
+        vec![
+            SourceKey::from_bytes([4; 32]),
+            SourceKey::from_bytes([9; 32]),
+        ]
+        .into_boxed_slice(),
+    )
+    .expect("bounded manifest");
+    let before = store.counts().expect("counts before rejected begin");
+    let error = store
+        .begin_replay_revision(&manifest)
+        .expect_err("unregistered source must fail");
+    assert_eq!(error.code(), StoreErrorCode::InvalidValue);
+    assert_eq!(store.counts().expect("counts after rejected begin"), before);
+    assert!(
+        !store
+            .archive_state()
+            .expect("archive state")
+            .rebuild_staging()
+    );
 }

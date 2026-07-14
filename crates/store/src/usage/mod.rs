@@ -7,6 +7,7 @@ use crate::{EXPECTED_SQLITE_VERSION, StoreError, StoreErrorCode};
 
 mod migration;
 mod read;
+mod replay;
 mod schema;
 mod types;
 mod write;
@@ -15,10 +16,11 @@ pub use schema::USAGE_SCHEMA_VERSION;
 pub use types::{
     AccountingVersions, AppendBatch, AppendBatchParts, ArchiveMode, ArchiveState, EventCursor,
     GenerationSnapshot, GenerationStatus, MAX_APPEND_CHUNK_UPDATES, MAX_APPEND_EVENTS,
-    MAX_RESUME_BYTES, MAX_USAGE_EVENT_PAGE_SIZE, ReplayEpoch, ReplayQualityCounts,
-    ReplayRevisionId, SOURCE_CHUNK_BYTES, SourceKey, SourceKind, SourceRegistration,
-    SourceRegistrationParts, StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk,
-    StoredUsageEvent, StoredVerification, UsageStoreCounts,
+    MAX_REPLAY_SOURCES, MAX_RESUME_BYTES, MAX_USAGE_EVENT_PAGE_SIZE, ReplayEpoch, ReplayManifest,
+    ReplayQualityCounts, ReplayRevisionId, ReplayRevisionSnapshot, ReplayRevisionStatus,
+    SOURCE_CHUNK_BYTES, SourceKey, SourceKind, SourceRegistration, SourceRegistrationParts,
+    StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk, StoredUsageEvent,
+    StoredVerification, UsageStoreCounts,
 };
 
 use migration::migrate_schema;
