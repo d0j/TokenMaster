@@ -108,11 +108,15 @@ impl ReopenableStore {
         })
     }
 
-    fn record_batch_and_maybe_reopen(&mut self) -> Result<(), PipelineError> {
+    fn record_batch(&mut self) -> Result<(), PipelineError> {
         self.applied_batches = self
             .applied_batches
             .checked_add(1)
             .ok_or(PipelineError::Capacity)?;
+        Ok(())
+    }
+
+    fn maybe_reopen_after_batch(&mut self) -> Result<(), PipelineError> {
         if self.restart_after_batches == Some(self.applied_batches) {
             self.store = UsageStore::open(&self.path)?;
             self.restarts = self
@@ -417,6 +421,8 @@ fn rebuild_descriptor(
     )?;
     let mut reached_end = first.reached_snapshot_end();
     apply_reader_batch(archive, state, source_key, &first)?;
+    drop(first);
+    archive.maybe_reopen_after_batch()?;
 
     while !reached_end {
         let cancel_read = state
@@ -431,6 +437,8 @@ fn rebuild_descriptor(
         })?)?;
         reached_end = batch.reached_snapshot_end();
         apply_reader_batch(archive, state, source_key, &batch)?;
+        drop(batch);
+        archive.maybe_reopen_after_batch()?;
     }
 
     let snapshot = archive
@@ -494,7 +502,8 @@ fn rebuild_descriptor(
             expected_epoch: state.epoch,
             append_batch: append,
         }))?;
-    archive.record_batch_and_maybe_reopen()?;
+    archive.record_batch()?;
+    archive.maybe_reopen_after_batch()?;
     Ok(())
 }
 
@@ -558,7 +567,7 @@ fn apply_reader_batch(
             expected_epoch: state.epoch,
             append_batch: append,
         }))?;
-    archive.record_batch_and_maybe_reopen()?;
+    archive.record_batch()?;
 
     for relation in batch.relations() {
         let relation = ReplayRelation::new(state.revision_id, state.epoch, source_key, relation)?;
