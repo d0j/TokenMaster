@@ -88,13 +88,17 @@ The alternatives were rejected deliberately:
 ## 3. Target architecture
 
 ```text
-Codex local active/archive/direct adapter (1.0)
-future allowlisted source adapters
-        |
-        v
-source catalog -> bounded reader -> provider decoder -> replay canonicalizer
-        |                                              |
-        +----------------------------------------------+
+native CodexProvider (1.0)       future sandboxed .tmplugin
+           |                         WasmProviderProxy
+           |                               |
+           |                    tokenmaster-plugin-host
+           |                               |
+           +---------------+---------------+
+                           v
+            provider-neutral ObservationDraft
+                           |
+                           v
+              TokenMaster replay canonicalizer
                        |
                        v
        staging generations and scan reconciliation
@@ -135,26 +139,45 @@ split into typed capability boundaries:
   profile, logical-source, kind, identity, and capability fields;
 - a source reader returns bounded sequential chunks, identity evidence, and opaque
   adapter checkpoints under engine-owned cancellation, timeout, and backpressure;
-- a provider decoder converts those chunks into source-neutral canonical
-  observations, lineage evidence, and bounded diagnostic codes;
+- a provider decoder converts those chunks into source-neutral observation drafts,
+  lineage basis, and bounded diagnostic codes;
 - an optional quota adapter returns provider-defined immutable quota snapshots and
   never exposes credentials or raw provider responses.
 
-The engine depends on these contracts, not on Codex paths or JSONL shapes. The store
-persists stable provider-neutral identities and canonical observations. Queries and
-all presentation surfaces consume provider-neutral snapshots. A later local-file,
-import, remote-agent, SSH, authenticated API, or other provider adapter can therefore
-be added without changing accounting, storage, analytics, automation, or UI
-contracts.
+The engine depends on these contracts, not on Codex paths or JSONL shapes. A
+provider-neutral TokenMaster canonicalizer validates drafts and computes event
+fingerprints, replay signatures/evidence, and canonical-event values. Providers cannot
+supply those authority fields. The store persists stable provider-neutral identities
+and canonical observations. Queries and all presentation surfaces consume
+provider-neutral snapshots.
 
-These are statically linked, allowlisted adapters with explicit capabilities and
-per-adapter bounds. TokenMaster does not expose a generic arbitrary filesystem,
-network, command, or executable-plugin interface. The source contract uses bounded
-owned data and streaming pull so a slow or remote adapter cannot create an unbounded
-queue or retain complete history. Adapter-specific checkpoint payloads are versioned,
-size-bounded, and opaque outside that adapter.
+Codex is the statically linked default adapter. Future third-party providers are
+portable `.tmplugin` WebAssembly Components executed one package per on-demand
+`tokenmaster-plugin-host` process. They implement the same source semantics through a
+versioned WIT contract and explicit host capabilities. This allows a later local-file,
+import, remote-agent, or authenticated HTTPS provider without changing accounting,
+storage, analytics, automation, or UI contracts.
 
-### 3.3 Runtime model
+The source contract uses bounded owned data and streaming pull so a slow or remote
+adapter cannot create an unbounded queue or retain complete history. Adapter-specific
+checkpoint payloads are versioned, size-bounded, and opaque outside that adapter.
+Native DLL/executable plugins, ambient filesystem/network access, plugin-supplied UI,
+and arbitrary command/SQL interfaces are forbidden. The complete future package,
+host, permissions, SDK, hot-replacement, and gate design is recorded in
+`docs/superpowers/specs/2026-07-14-tokenmaster-provider-plugin-system-design.md`.
+
+### 3.3 External provider isolation
+
+The GUI and normal Codex path do not depend on Wasmtime or start a plugin process.
+When an external provider is enabled, the engine talks through strict length-prefixed
+stdio frames to a separate `tokenmaster-plugin-host`. Each host loads one component,
+has bounded memory/instances/tables/stack/time, exposes only user-granted read-only
+filesystem, allowlisted HTTPS, host-injected credential, and clock capabilities, and
+exits after bounded work or idle timeout. Plugin failure affects only that provider
+request and cannot hold a UI object, writer transaction, or source-reconciliation
+authority.
+
+### 3.4 Runtime model
 
 The desktop process uses a small fixed set of workers and bounded channels. Filesystem
 events are hints, not authority: they are coalesced and backed by periodic bounded
@@ -164,7 +187,8 @@ older asynchronous result may never overwrite a newer generation.
 No permanent companion daemon is installed. The GUI owns its live engine while it is
 running. CLI and MCP open the archive in query-only mode for normal reads. An explicit
 refresh may run a bounded one-shot engine operation under the same generation and
-writer-lease rules as the GUI.
+writer-lease rules as the GUI. The future plugin host is an on-demand child, not a
+daemon, and is absent from Codex-only operation.
 
 ## 4. Accounting correctness before analytics
 
@@ -609,12 +633,19 @@ No unbounded collection, cache, channel, watcher queue, chart series, timer set,
 diagnostic buffer, MCP body, or string interner is permitted. Bounds are executable
 contracts, not comments.
 
+The GUI binary and Codex-only runtime do not link or instantiate Wasmtime. External
+plugin host memory/CPU/process gates are measured separately and must not cause
+monotonic GUI growth. One external component runs per host, at most two hosts execute
+concurrently, and package/frame/guest/process/time limits are enforced before an
+external provider can publish a snapshot.
+
 ## 13. Security and privacy
 
 - Local-first, no telemetry, cloud sync, automatic upload, or analytics SDK.
 - TokenMaster connector v1 uses MCP stdio only and opens no network listener.
-- Provider credentials may be used only by an explicit allowlisted quota adapter, in
-  memory, and are never returned to UI, CLI, MCP, logs, or archive.
+- Provider credentials may be used only through an explicit built-in adapter or a
+  host-injected named external-plugin credential slot. Secret bytes are never returned
+  through the component ABI, UI, CLI, MCP, logs, or archive.
 - Prompts, responses, reasoning, commands, command output, source contents, raw tails,
   and absolute paths are prohibited from all retained or external surfaces.
 - Provider strings are bounded and treated as untrusted display data.
@@ -623,6 +654,8 @@ contracts, not comments.
 - Untrusted display strings reject control characters, are escaped by each frontend,
   and are never interpolated into MCP tool descriptions or server instructions.
 - Skins and policies are declarative data, never authority or executable code.
+- External provider components execute only in the isolated plugin host with declared
+  capabilities. Native plugins and plugin-provided UI/commands are not accepted.
 - Automation decisions are advisory. TokenMaster cannot invoke an agent, shell,
   scheduler, browser, filesystem mutation, HTTP request, purchase, or credential flow.
 
@@ -636,7 +669,9 @@ A failed or cancelled scan cannot reconcile missing sources. A failed staging
 generation remains invisible. A failed skin reload retains the last valid skin. A
 failed locale switch retains the current locale. A stale UI request cannot replace a
 newer snapshot. An MCP timeout terminates that request without leaving a worker,
-transaction, or refresh lease behind.
+transaction, or refresh lease behind. A plugin trap, timeout, OOM, crash, protocol
+violation, invalid draft, or failed update terminates/quarantines only that package
+generation, commits no partial staging data, and retains the last validated version.
 
 ## 15. Testing and acceptance
 
@@ -658,6 +693,9 @@ test families are:
 - startup, input-to-paint, switch, query, append, memory, handle, thread, USER/GDI,
   and CPU gates;
 - repeated MCP process start/query/shutdown stress;
+- provider WIT/manifest compatibility, package/signature/archive validation,
+  capability denial, malicious component, hot-replacement/rollback/quarantine,
+  core-canonicalizer, host start/stop, and plugin resource stress;
 - interactive Windows/DPI/screen-reader evidence and uninterrupted soak receipts.
 
 Client absence is reported as unverified; protocol conformance never implies a named
@@ -713,6 +751,15 @@ Deliver single instance, tray, startup, hotkey, notifications, Explorer/sleep/re
 recovery, fast/heavy CI split, dependency/license audit, Slint attribution, SBOM,
 package rehearsal, interactive matrix, and 24/72-hour evidence.
 
+### I. Provider plugin system (1.1)
+
+After the Codex-only release freezes observation/query/quota contracts, deliver
+WIT/manifest schemas, deterministic `.tmplugin` packages, isolated Wasmtime host,
+capability grants, hot installation/update/rollback, quarantine, signatures, SDK
+templates, and conformance tools. Gate: no Codex-only GUI/resource regression;
+malicious components fail closed; plugin hosts have bounded resources and no ambient
+authority.
+
 Linux and macOS product packaging follow Windows 1.0. Core/query/provider crates must
 avoid new unconditional Windows dependencies so portability is not designed out.
 
@@ -733,12 +780,14 @@ identity outside tracked project truth.
 ## 18. Explicit non-goals for 1.0
 
 - Multi-provider ingestion beyond Codex.
-- Runtime-loaded ingestion code or a generic arbitrary filesystem/network adapter.
+- Shipping the external provider runtime before observation/query/quota contracts and
+  plugin security/resource gates are stable.
 - Electron, Tauri, webview, Go, or Node runtime.
 - Remote/cloud MCP or public local HTTP listener.
 - A background daemon required for normal operation.
 - Arbitrary SQL, shell, HTTP, filesystem, prompt, transcript, or credential tools.
-- Executable skins, policy expressions, plugins, or downloaded code.
+- Native/in-process plugins, plugin-supplied UI, executable skins, policy expressions,
+  or ambient plugin filesystem/network/command authority.
 - TokenMaster starting or controlling an LLM agent.
 - Silent edits to Hermes, Codex, Claude, Gemini, or OpenCode configuration.
 - Exact future-task token prediction presented as fact.

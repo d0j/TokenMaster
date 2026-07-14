@@ -30,3 +30,11 @@ compact widget, notifications, settings, modular skins, en/ru, and migration too
 Require privacy/dependency review, deterministic package rehearsal, complete evidence,
 performance reference runs, 72-hour soak, signed-build rehearsal, and the full
 interactive Windows matrix before a stable claim.
+
+## 1.1 — provider plugin ecosystem
+
+After the observation, engine, query, quota, and quality contracts are stable, deliver
+the versioned WIT API, deterministic `.tmplugin` package, isolated on-demand Wasmtime
+host, capability grants, hot installation/update/rollback, quarantine, signatures,
+Rust/TypeScript SDK templates, conformance kit, and plugin-specific resource/security
+gates. Codex remains built in and pays no plugin runtime cost.

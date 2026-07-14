@@ -22,8 +22,10 @@ The product architecture, universal automation connector, complete UI, dynamic q
 bars, skins, layouts, density, and localization are approved in
 `docs/superpowers/specs/2026-07-14-tokenmaster-product-architecture-design.md`. Its
 source-adapter seam keeps the current local Codex reader replaceable by future
-allowlisted bounded adapters without coupling storage, analytics, automation, or UI
-to Codex JSONL. No implementation is claimed by that design.
+sandboxed bounded provider plugins without coupling storage, analytics, automation,
+or UI to Codex JSONL. The selected future format is a `.tmplugin` WebAssembly
+Component executed in an isolated on-demand host; Codex remains compiled in and pays
+no plugin runtime cost. No plugin implementation is claimed by that design.
 
 The reviewed implementation sequence starts with accounting correctness: add
 fork/subagent replay fixtures and canonical lineage rules before analytics. The
@@ -40,6 +42,12 @@ ports are still unimplemented.
 The provider-neutral `ReplaySignature`, `ReplayEvidence`, and `UsageLineage` domain
 contracts are implemented and tested. They are not yet attached to parser events or
 persisted in SQLite, so current canonical totals are not yet replay-safe.
+
+The approved plugin architecture requires the next replay-plan revision to introduce a
+provider-neutral observation draft and core-owned canonicalizer. Codex and future
+plugins must not compute or supply authoritative fingerprints/replay identities
+independently. The current P0 plan must be revised before its Codex signature task is
+executed.
 
 ## Release truth
 

@@ -65,8 +65,14 @@ than being counted twice.
 The 1.0 product MUST implement local Codex ingestion through bounded source catalog,
 sequential reader, and provider decoder contracts. Engine, archive, query, automation,
 and UI code MUST depend on provider-neutral observations and snapshots rather than
-Codex paths or JSONL wire shapes. Future allowlisted source adapters MUST be addable
-at this boundary without replacing downstream accounting or presentation contracts.
+Codex paths or JSONL wire shapes. Codex MUST remain a compiled-in native adapter.
+
+The future external-provider surface MUST accept versioned WebAssembly Component
+packages through an isolated on-demand host implementing the same source contract.
+Adding a valid provider package MUST NOT require rebuilding TokenMaster or changing
+downstream accounting/presentation contracts. External packages MUST NOT execute in
+the GUI process or supply canonical identities, SQL, UI code, commands, or ambient OS
+access.
 
 ## UX requirements
 

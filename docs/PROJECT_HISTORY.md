@@ -70,6 +70,33 @@ git diff --check
 The focused test first failed on missing replay types, then passed after the minimal
 implementation. All domain tests, formatting, and the diff check passed.
 
+## 2026-07-14 — sandboxed provider plugin architecture
+
+Selected a future language-neutral provider extension system: Codex stays compiled in
+as the zero-overhead default adapter, while external `.tmplugin` WebAssembly
+Components run one package per isolated on-demand host process. Native DLL/executable
+plugins and plugin-provided UI are excluded. Packages use a versioned WIT API, strict
+manifest/signature/permission rules, scoped host capabilities, transactional hot
+replacement, quarantine, and explicit process/guest resource gates.
+
+Providers return bounded observation drafts. A shared TokenMaster canonicalizer owns
+fingerprints, replay signatures/evidence, event IDs, and canonical-event construction,
+so neither built-in nor external providers can bypass accounting rules. The design is
+recorded in
+`docs/superpowers/specs/2026-07-14-tokenmaster-provider-plugin-system-design.md`.
+This milestone changes no plugin runtime behavior; the current P0 plan requires a
+written revision before Codex signature implementation continues.
+
+Design verification:
+
+```powershell
+pwsh -NoLogo -NoProfile -File scripts\audit-clean-root.ps1
+git diff --check
+```
+
+The clean-root audit returned `TM-CLEAN-PASS`; the diff check, unfinished-marker scan,
+obsolete-contract scan, and sensitive-marker scan all passed.
+
 ## Architecture milestones
 
 - M0 selected and proved Rust 1.97, Slint 1.17, bundled SQLite, the software renderer,

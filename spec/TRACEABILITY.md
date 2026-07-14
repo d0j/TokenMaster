@@ -14,7 +14,7 @@
 | TM-REL-001 / TM-REL-002 | `scripts/`, `M0_ACCEPTANCE.md` | Pester M0 script and soak-helper contracts; external receipts remain open |
 | Clean-root invariant | `scripts/audit-clean-root.ps1` | audit-clean-root Pester contracts and root developer gate |
 | TM-FUNC-007 / TM-DATA-007 domain | `crates/domain/src/usage.rs` | replay lineage value contract passes; parser emission, disposition, and migration pending |
-| TM-FUNC-008 / TM-SEC-006 | architecture contract only | local Codex adapter exists; provider-neutral engine ports pending |
+| TM-FUNC-008 / TM-SEC-006 | plugin system design only | local Codex adapter exists; shared draft/canonicalizer, engine ports, Wasm host, and SDK pending |
 
 Staging generation promotion, scan epochs, full analytics, quota transport, all product
 views, CLI, and MCP have no implementation row yet and must be added test-first.
@@ -28,5 +28,8 @@ This is design traceability only; it is not implementation evidence.
 The approved P0 execution breakdown and its focused validators are recorded in
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-replay-correctness.md`. The plan also
 preserves a provider-neutral ingest boundary: local Codex input is first, while later
-allowlisted source adapters must terminate at the same bounded observation contract.
-This is planning evidence, not a completed replay or adapter implementation row.
+sandboxed `.tmplugin` adapters terminate at the same bounded observation-draft
+contract. The selected external-provider architecture is recorded in
+`docs/superpowers/specs/2026-07-14-tokenmaster-provider-plugin-system-design.md`.
+This is design/planning evidence, not a completed canonicalizer, plugin host, or SDK
+implementation row.

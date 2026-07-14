@@ -14,10 +14,12 @@ bounded model metadata, explicit token availability and values, service tier, bo
 project/activity metadata, and a full deterministic fingerprint. The shortened public
 event ID is not a uniqueness key.
 
-Each observation also carries a zero-based session ordinal, fixed-size replay
-signature, signature-evidence level, optional bounded parent session identity, and an
-explicit lineage-conflict marker. Replay identity is distinct from the event
-fingerprint and excludes timestamp, source identity, display metadata, and activity.
+A provider observation draft carries a zero-based session ordinal, optional bounded
+parent session identity, explicit lineage-conflict marker, delta usage, and optional
+cumulative usage. The TokenMaster canonicalizer, not the provider, derives the
+fixed-size replay signature, evidence level, event fingerprint, and public event ID.
+Replay identity is distinct from the event fingerprint and excludes timestamp, source
+identity, display metadata, and activity.
 
 ## TM-DATA-003 — Source state and checkpoints
 

@@ -31,12 +31,20 @@ or introduce filesystem, network, SQL, or script expressions.
 
 ## TM-SEC-006 — Source adapter capabilities
 
-Ingestion adapters are statically linked, allowlisted, and capability-bounded. The
-engine owns cancellation, timeouts, backpressure, and maximum chunk/count sizes. No
-generic arbitrary filesystem, network, HTTP, SSH, command, SQL, executable-plugin, or
-credential interface may be exposed to UI, CLI, MCP, configuration, or skin data.
+The Codex adapter is statically linked. External provider packages are WebAssembly
+Components executed one package per on-demand isolated host process. Native DLL,
+shared-library, and arbitrary executable plugins are forbidden in the normal product.
+The engine owns cancellation, timeouts, backpressure, package generations, and maximum
+chunk/count sizes.
 
-A future remote or authenticated provider adapter requires its own reviewed allowlist,
-transport bounds, secret-lifetime rules, and tests. Raw provider responses and
-credentials MUST NOT cross the adapter boundary or enter the archive, snapshots,
-diagnostics, logs, or external interfaces.
+External components receive no ambient filesystem, network, HTTP, SSH, environment,
+subprocess, SQL, archive, UI, MCP, or credential authority. Host imports expose only
+user-granted read-only filesystem scopes, allowlisted bounded HTTPS requests,
+host-injected credential slots, and clocks. A component requesting both local raw data
+and outbound HTTPS requires a separate data-egress grant.
+
+Raw source/provider content may exist only within one bounded adapter request and MUST
+NOT enter the archive, snapshots, diagnostics, logs, crash reports, or external
+interfaces. Credential bytes are attached by the host and MUST NOT cross the component
+ABI. Plugin traps, timeouts, OOM, protocol violations, and crashes fail only that
+provider operation and cannot commit a partial staging generation.

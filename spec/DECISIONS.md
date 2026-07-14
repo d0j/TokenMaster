@@ -46,7 +46,16 @@ legitimate equal-valued usage.
 ## ADR-008 — Codex-first provider-neutral source seam
 
 Decision: local Codex discovery/reader/decoder is the only 1.0 ingestion adapter, but
-engine and downstream crates consume provider-neutral bounded contracts. Adapters are
-statically linked and allowlisted rather than runtime code plugins. Rationale: later
-file, import, remote, or API sources can be added without rewriting the archive,
-analytics, automation, or UI and without creating an arbitrary I/O surface.
+engine and downstream crates consume provider-neutral bounded drafts/snapshots. Codex
+is compiled in. Future third-party providers use versioned WebAssembly Components in
+one isolated on-demand host process per package; native DLL/executable plugins are not
+supported. Rationale: providers can be installed without rebuilding TokenMaster while
+the default Codex path stays fast, the GUI carries no Wasmtime runtime, and untrusted
+code receives only explicit bounded capabilities.
+
+## ADR-009 — Core-owned canonical identities
+
+Decision: providers emit observation drafts containing normalized facts and replay
+basis; a provider-neutral TokenMaster canonicalizer computes fingerprints, replay
+signatures/evidence, event IDs, and canonical-event values. Rationale: built-in and
+external providers cannot diverge from or bypass accounting identity rules.
