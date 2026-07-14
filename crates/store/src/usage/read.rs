@@ -204,6 +204,69 @@ impl UsageStore {
         raw.map(|raw| raw.validate(source_key)).transpose()
     }
 
+    pub fn replay_generation_snapshot(
+        &self,
+        revision_id: ReplayRevisionId,
+        source_key: SourceKey,
+    ) -> Result<GenerationSnapshot, StoreError> {
+        let raw = self
+            .connection
+            .query_row(
+                "SELECT
+                   g.generation, g.status, g.parser_schema_version,
+                   g.physical_identity, g.logical_identity,
+                   g.committed_offset, g.scan_offset, g.observed_file_length,
+                   g.modified_time_ns, g.anchor_start, g.anchor_len, g.anchor_sha256,
+                   g.resume_payload, g.discarding_oversized_line, g.incomplete_tail,
+                   g.verification_level
+                 FROM usage_replay_revision AS r
+                 JOIN usage_replay_source AS rs ON rs.revision_id = r.revision_id
+                 JOIN usage_generation AS g
+                   ON g.file_key = rs.file_key AND g.generation = rs.generation
+                 WHERE r.revision_id = ?1 AND r.status = 'staging' AND r.sealed = 0
+                   AND rs.file_key = ?2 AND g.status = 'staging'",
+                params![revision_id.as_sql()?, source_key.as_bytes().as_slice(),],
+                raw_generation,
+            )
+            .optional()?
+            .ok_or_else(|| StoreError::new(StoreErrorCode::StaleRevision))?;
+        raw.validate(source_key)
+    }
+
+    pub fn source_chunk(
+        &self,
+        source_key: SourceKey,
+        generation: u64,
+        chunk_index: u64,
+    ) -> Result<Option<StoredSourceChunk>, StoreError> {
+        let generation =
+            i64::try_from(generation).map_err(|_| StoreError::new(StoreErrorCode::InvalidValue))?;
+        let chunk_index = i64::try_from(chunk_index)
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidValue))?;
+        let raw = self
+            .connection
+            .query_row(
+                "SELECT covered_len, sha256
+                 FROM usage_source_chunk
+                 WHERE file_key = ?1 AND generation = ?2 AND chunk_index = ?3",
+                params![source_key.as_bytes().as_slice(), generation, chunk_index,],
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Vec<u8>>(1)?)),
+            )
+            .optional()?;
+        raw.map(|(covered_len, sha256)| {
+            let covered_len = u32::try_from(covered_len)
+                .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+            StoredSourceChunk::new(
+                u64::try_from(chunk_index)
+                    .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?,
+                covered_len,
+                digest(&sha256)?,
+            )
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))
+        })
+        .transpose()
+    }
+
     pub fn event_page_before(
         &self,
         before: Option<EventCursor>,
@@ -288,6 +351,27 @@ fn raw_event(row: &Row<'_>) -> rusqlite::Result<RawEvent> {
         model: row.get(3)?,
         total_tokens: row.get(4)?,
         fingerprint: row.get(5)?,
+    })
+}
+
+fn raw_generation(row: &Row<'_>) -> rusqlite::Result<RawGeneration> {
+    Ok(RawGeneration {
+        generation: row.get(0)?,
+        status: row.get(1)?,
+        parser_schema_version: row.get(2)?,
+        physical_identity: row.get(3)?,
+        logical_identity: row.get(4)?,
+        committed_offset: row.get(5)?,
+        scan_offset: row.get(6)?,
+        observed_file_length: row.get(7)?,
+        modified_time_ns: row.get(8)?,
+        anchor_start: row.get(9)?,
+        anchor_len: row.get(10)?,
+        anchor_sha256: row.get(11)?,
+        resume: row.get(12)?,
+        discarding: row.get(13)?,
+        incomplete: row.get(14)?,
+        verification: row.get(15)?,
     })
 }
 

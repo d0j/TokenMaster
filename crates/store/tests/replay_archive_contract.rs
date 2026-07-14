@@ -792,6 +792,151 @@ fn all_source_begin_stages_three_hundred_sources_without_a_manifest_vector() {
 }
 
 #[test]
+fn replay_generation_snapshot_is_exact_staging_revision_state() {
+    let mut store = UsageStore::in_memory().expect("usage store");
+    store.register_source(&registration(1)).expect("source 1");
+    store.register_source(&registration(2)).expect("source 2");
+    let revision = store
+        .begin_replay_revision_all_sources()
+        .expect("begin replay revision");
+
+    let snapshot = store
+        .replay_generation_snapshot(revision.id(), SourceKey::from_bytes([1; 32]))
+        .expect("exact staging snapshot");
+    assert_eq!(snapshot.source_key(), SourceKey::from_bytes([1; 32]));
+    assert_eq!(snapshot.generation(), 1);
+    assert_eq!(snapshot.status(), GenerationStatus::Staging);
+    assert_eq!(snapshot.checkpoint().committed_offset(), 0);
+    let debug = format!("{snapshot:?}");
+    assert!(!debug.contains("private"));
+    assert!(!debug.contains("[1, 1"));
+
+    let wrong_source = store
+        .replay_generation_snapshot(revision.id(), SourceKey::from_bytes([9; 32]))
+        .expect_err("unowned source must not fall back to current");
+    assert_eq!(wrong_source.code(), StoreErrorCode::StaleRevision);
+    let wrong_revision = store
+        .replay_generation_snapshot(
+            tokenmaster_store::ReplayRevisionId::new(999).expect("bounded revision"),
+            SourceKey::from_bytes([1; 32]),
+        )
+        .expect_err("wrong revision must not expose staging state");
+    assert_eq!(wrong_revision.code(), StoreErrorCode::StaleRevision);
+
+    store
+        .discard_replay_revision(revision.id(), revision.epoch())
+        .expect("discard exact staging revision");
+    let discarded = store
+        .replay_generation_snapshot(revision.id(), SourceKey::from_bytes([1; 32]))
+        .expect_err("discarded revision must be stale");
+    assert_eq!(discarded.code(), StoreErrorCode::StaleRevision);
+
+    let mut promoted_store = UsageStore::in_memory().expect("promoted usage store");
+    promoted_store
+        .register_source(&registration(4))
+        .expect("promoted source");
+    let promoted_revision = promoted_store
+        .begin_replay_revision_all_sources()
+        .expect("begin promoted revision");
+    let promoted_epoch = promoted_store
+        .apply_replay_append_batch(&replay_append(
+            4,
+            promoted_revision.id(),
+            promoted_revision.epoch(),
+            vec![replay_event(4, "promoted", None, 0, 10, Some(100), false)],
+        ))
+        .expect("complete promoted source");
+    let sealed = promoted_store
+        .seal_replay_revision(promoted_revision.id(), promoted_epoch)
+        .expect("seal promoted revision");
+    let sealed_error = promoted_store
+        .replay_generation_snapshot(promoted_revision.id(), SourceKey::from_bytes([4; 32]))
+        .expect_err("sealed staging state must not be resumed");
+    assert_eq!(sealed_error.code(), StoreErrorCode::StaleRevision);
+    promoted_store
+        .promote_replay_revision(promoted_revision.id(), sealed.epoch())
+        .expect("promote revision");
+    let promoted_error = promoted_store
+        .replay_generation_snapshot(promoted_revision.id(), SourceKey::from_bytes([4; 32]))
+        .expect_err("promoted revision must not expose staging state");
+    assert_eq!(promoted_error.code(), StoreErrorCode::StaleRevision);
+}
+
+#[test]
+fn source_chunk_reads_one_exact_proof_and_validates_bounds() {
+    let mut store = UsageStore::in_memory().expect("usage store");
+    store.register_source(&registration(3)).expect("source");
+    let revision = store
+        .begin_replay_revision_all_sources()
+        .expect("begin replay revision");
+    store
+        .apply_replay_append_batch(&replay_append(
+            3,
+            revision.id(),
+            revision.epoch(),
+            vec![replay_event(3, "chunk", None, 0, 10, Some(100), false)],
+        ))
+        .expect("append chunk fixture");
+
+    let chunk = store
+        .source_chunk(SourceKey::from_bytes([3; 32]), 1, 0)
+        .expect("chunk lookup")
+        .expect("exact chunk");
+    assert_eq!(chunk.index(), 0);
+    assert_eq!(chunk.covered_len(), 100);
+    assert_eq!(chunk.sha256(), &[6; 32]);
+    assert_eq!(
+        store
+            .source_chunk(SourceKey::from_bytes([3; 32]), 1, 1)
+            .expect("absent chunk lookup"),
+        None
+    );
+    assert_eq!(
+        store
+            .source_chunk(SourceKey::from_bytes([3; 32]), 0, 0)
+            .expect("wrong generation lookup"),
+        None
+    );
+    let overflow = store
+        .source_chunk(SourceKey::from_bytes([3; 32]), i64::MAX as u64 + 1, 0)
+        .expect_err("SQLite generation overflow must fail before query");
+    assert_eq!(overflow.code(), StoreErrorCode::InvalidValue);
+}
+
+#[test]
+fn source_chunk_fails_closed_on_invalid_stored_shape() {
+    for (name, tamper) in [
+        (
+            "zero-length",
+            "UPDATE usage_source_chunk SET covered_len = 0 WHERE generation = 1",
+        ),
+        (
+            "short-digest",
+            "UPDATE usage_source_chunk SET sha256 = zeroblob(31) WHERE generation = 1",
+        ),
+    ] {
+        let directory = TempDir::new().expect("temporary directory");
+        let path = directory.path().join(format!("chunk-{name}.sqlite3"));
+        let (ready, _, _) = seal_ready_store(&path, 7);
+        drop(ready);
+        let connection = Connection::open(&path).expect("open corruption fixture");
+        connection
+            .pragma_update(None, "ignore_check_constraints", "ON")
+            .expect("allow deliberate corruption fixture");
+        connection
+            .execute_batch(tamper)
+            .expect("tamper exact chunk row");
+        drop(connection);
+        let reopened = UsageStore::open(&path).expect("reopen corruption fixture");
+
+        let error = reopened
+            .source_chunk(SourceKey::from_bytes([7; 32]), 1, 0)
+            .expect_err("invalid stored chunk must fail closed");
+        assert_eq!(error.code(), StoreErrorCode::InvalidStoredValue, "{name}");
+    }
+}
+
+#[test]
 fn all_source_begin_is_atomic_on_empty_missing_current_and_generation_overflow() {
     let mut empty = UsageStore::in_memory().expect("empty usage store");
     let empty_error = empty
