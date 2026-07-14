@@ -16,3 +16,9 @@
 
 Staging generation promotion, scan epochs, full analytics, quota transport, all product
 views, CLI, and MCP have no implementation row yet and must be added test-first.
+
+The chosen design for replay correctness, runtime engine, immutable queries, universal
+MCP/CLI automation, full UI, dynamic bars, modular presentation, localization, and
+release gates is recorded in
+`docs/superpowers/specs/2026-07-14-tokenmaster-product-architecture-design.md`.
+This is design traceability only; it is not implementation evidence.

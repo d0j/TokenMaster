@@ -18,9 +18,16 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 
 ## Next implementation slice
 
-Implement invisible staging generations, atomic promotion, and safe scan epochs. A
-staging write must never affect canonical events. Promotion must replace one current
-generation atomically, and only a completed scan may mark unseen sources missing.
+The product architecture, universal automation connector, complete UI, dynamic quota
+bars, skins, layouts, density, and localization are specified in
+`docs/superpowers/specs/2026-07-14-tokenmaster-product-architecture-design.md` and are
+pending written-spec review. No implementation is claimed by that design.
+
+The first implementation slice remains accounting correctness: add fork/subagent
+replay fixtures and canonical lineage rules before analytics. It is followed by
+invisible staging generations, atomic promotion, safe scan epochs, and the runtime
+engine. A staging write must never affect canonical events, and only a completed scan
+may mark unseen sources missing.
 
 ## Release truth
 
