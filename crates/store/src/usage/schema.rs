@@ -1,4 +1,5 @@
-pub const USAGE_SCHEMA_VERSION: i64 = 1;
+pub const USAGE_SCHEMA_VERSION: i64 = 2;
+pub(super) const V1_SCHEMA_VERSION: i64 = 1;
 
 pub(super) struct TableContract {
     pub(super) name: &'static str,
@@ -10,7 +11,14 @@ pub(super) struct IndexContract {
     pub(super) sql: &'static str,
 }
 
-pub(super) const USAGE_INDEX_CONTRACTS: &[IndexContract] = &[
+pub(super) struct TriggerContract {
+    pub(super) name: &'static str,
+    pub(super) sql: &'static str,
+}
+
+pub(super) const V1_TABLE_COUNT: usize = 6;
+
+pub(super) const V1_INDEX_CONTRACTS: &[IndexContract] = &[
     IndexContract {
         name: "usage_event_model_time",
         sql: "CREATE INDEX usage_event_model_time ON usage_event(model, timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC)",
@@ -30,6 +38,76 @@ pub(super) const USAGE_INDEX_CONTRACTS: &[IndexContract] = &[
     IndexContract {
         name: "usage_observation_fingerprint",
         sql: "CREATE INDEX usage_observation_fingerprint ON usage_observation(fingerprint, profile_id, file_key, generation, source_offset)",
+    },
+];
+
+pub(super) const USAGE_INDEX_CONTRACTS: &[IndexContract] = &[
+    IndexContract {
+        name: "usage_event_model_time",
+        sql: "CREATE INDEX usage_event_model_time ON usage_event(model, timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC)",
+    },
+    IndexContract {
+        name: "usage_event_time_desc",
+        sql: "CREATE INDEX usage_event_time_desc ON usage_event(timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC)",
+    },
+    IndexContract {
+        name: "usage_generation_one_current",
+        sql: "CREATE UNIQUE INDEX usage_generation_one_current ON usage_generation(file_key) WHERE status = 'current'",
+    },
+    IndexContract {
+        name: "usage_generation_one_staging",
+        sql: "CREATE UNIQUE INDEX usage_generation_one_staging ON usage_generation(file_key) WHERE status = 'staging'",
+    },
+    IndexContract {
+        name: "usage_legacy_event_model_time",
+        sql: "CREATE INDEX usage_legacy_event_model_time ON usage_legacy_event(snapshot_id, model, timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC)",
+    },
+    IndexContract {
+        name: "usage_legacy_event_time_desc",
+        sql: "CREATE INDEX usage_legacy_event_time_desc ON usage_legacy_event(snapshot_id, timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC)",
+    },
+    IndexContract {
+        name: "usage_observation_fingerprint",
+        sql: "CREATE INDEX usage_observation_fingerprint ON usage_observation(fingerprint, profile_id, file_key, generation, source_offset)",
+    },
+    IndexContract {
+        name: "usage_replay_observation_children",
+        sql: "CREATE INDEX usage_replay_observation_children ON usage_replay_observation(revision_id, provider_id, profile_id, parent_session_id, session_ordinal, disposition, session_id)",
+    },
+    IndexContract {
+        name: "usage_replay_observation_disposition",
+        sql: "CREATE INDEX usage_replay_observation_disposition ON usage_replay_observation(revision_id, disposition)",
+    },
+    IndexContract {
+        name: "usage_replay_observation_fingerprint",
+        sql: "CREATE INDEX usage_replay_observation_fingerprint ON usage_replay_observation(revision_id, fingerprint, disposition, file_key, generation, source_offset)",
+    },
+    IndexContract {
+        name: "usage_replay_observation_parent",
+        sql: "CREATE INDEX usage_replay_observation_parent ON usage_replay_observation(revision_id, provider_id, profile_id, session_id, session_ordinal)",
+    },
+    IndexContract {
+        name: "usage_replay_revision_one_current",
+        sql: "CREATE UNIQUE INDEX usage_replay_revision_one_current ON usage_replay_revision(status) WHERE status = 'current'",
+    },
+    IndexContract {
+        name: "usage_replay_revision_one_staging",
+        sql: "CREATE UNIQUE INDEX usage_replay_revision_one_staging ON usage_replay_revision(status) WHERE status = 'staging'",
+    },
+];
+
+pub(super) const USAGE_TRIGGER_CONTRACTS: &[TriggerContract] = &[
+    TriggerContract {
+        name: "usage_legacy_event_no_delete",
+        sql: "CREATE TRIGGER usage_legacy_event_no_delete BEFORE DELETE ON usage_legacy_event BEGIN SELECT RAISE(ABORT, 'immutable legacy snapshot'); END",
+    },
+    TriggerContract {
+        name: "usage_legacy_event_no_insert",
+        sql: "CREATE TRIGGER usage_legacy_event_no_insert BEFORE INSERT ON usage_legacy_event BEGIN SELECT RAISE(ABORT, 'immutable legacy snapshot'); END",
+    },
+    TriggerContract {
+        name: "usage_legacy_event_no_update",
+        sql: "CREATE TRIGGER usage_legacy_event_no_update BEFORE UPDATE ON usage_legacy_event BEGIN SELECT RAISE(ABORT, 'immutable legacy snapshot'); END",
     },
 ];
 
@@ -169,9 +247,139 @@ pub(super) const USAGE_TABLE_CONTRACTS: &[TableContract] = &[
             "activity_terminal",
         ],
     },
+    TableContract {
+        name: "usage_legacy_snapshot",
+        columns: &[
+            "snapshot_id",
+            "source_schema_version",
+            "quality_state",
+            "event_count",
+        ],
+    },
+    TableContract {
+        name: "usage_legacy_event",
+        columns: &[
+            "snapshot_id",
+            "fingerprint",
+            "event_id",
+            "selected_file_key",
+            "selected_generation",
+            "selected_source_offset",
+            "profile_id",
+            "session_id",
+            "source_id",
+            "timestamp_seconds",
+            "timestamp_nanos",
+            "model",
+            "raw_model",
+            "input_tokens",
+            "cached_tokens",
+            "output_tokens",
+            "reasoning_tokens",
+            "total_tokens",
+            "fallback_model",
+            "long_context",
+            "service_tier",
+            "project_alias",
+            "originator",
+            "activity_read",
+            "activity_edit_write",
+            "activity_search",
+            "activity_git",
+            "activity_build_test",
+            "activity_web",
+            "activity_subagents",
+            "activity_terminal",
+        ],
+    },
+    TableContract {
+        name: "usage_replay_revision",
+        columns: &[
+            "revision_id",
+            "status",
+            "canonicalizer_version",
+            "fingerprint_version",
+            "replay_signature_version",
+            "expected_source_count",
+            "evidence_epoch",
+            "sealed",
+            "promoted",
+        ],
+    },
+    TableContract {
+        name: "usage_replay_source",
+        columns: &["revision_id", "file_key", "generation", "state"],
+    },
+    TableContract {
+        name: "usage_replay_session",
+        columns: &[
+            "revision_id",
+            "provider_id",
+            "profile_id",
+            "session_id",
+            "parent_session_id",
+            "relation_conflict",
+            "state",
+            "completion_state",
+            "first_relation_file_key",
+            "first_relation_source_offset",
+            "last_classified_ordinal",
+            "evidence_epoch",
+        ],
+    },
+    TableContract {
+        name: "usage_replay_observation",
+        columns: &[
+            "revision_id",
+            "file_key",
+            "generation",
+            "source_offset",
+            "fingerprint",
+            "provider_id",
+            "profile_id",
+            "session_id",
+            "parent_session_id",
+            "session_ordinal",
+            "canonicalizer_version",
+            "fingerprint_version",
+            "replay_signature_version",
+            "replay_signature",
+            "evidence",
+            "disposition",
+            "declared_conflict",
+            "evidence_epoch",
+        ],
+    },
+    TableContract {
+        name: "usage_replay_selection",
+        columns: &[
+            "revision_id",
+            "fingerprint",
+            "file_key",
+            "generation",
+            "source_offset",
+            "canonicalizer_version",
+            "fingerprint_version",
+            "replay_signature_version",
+        ],
+    },
+    TableContract {
+        name: "usage_replay_work",
+        columns: &[
+            "revision_id",
+            "work_kind",
+            "provider_id",
+            "profile_id",
+            "session_id",
+            "reason",
+            "next_ordinal",
+            "child_session_cursor",
+            "expected_evidence_epoch",
+        ],
+    },
 ];
 
-pub(super) const USAGE_SCHEMA: &str = r#"
+pub(super) const V1_SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS usage_scan (
   scan_id INTEGER PRIMARY KEY CHECK(scan_id >= 0),
   profile_id TEXT NOT NULL CHECK(length(CAST(profile_id AS BLOB)) BETWEEN 1 AND 128),
@@ -326,4 +534,215 @@ CREATE INDEX IF NOT EXISTS usage_event_time_desc
   ON usage_event(timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC);
 CREATE INDEX IF NOT EXISTS usage_event_model_time
   ON usage_event(model, timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC);
+"#;
+
+pub(super) const V2_REPLAY_SCHEMA: &str = r#"
+CREATE TABLE usage_legacy_snapshot (
+  snapshot_id INTEGER PRIMARY KEY CHECK(snapshot_id = 1),
+  source_schema_version INTEGER NOT NULL CHECK(source_schema_version = 1),
+  quality_state TEXT NOT NULL CHECK(quality_state = 'legacy_unverified'),
+  event_count INTEGER NOT NULL CHECK(event_count >= 0)
+) STRICT;
+
+CREATE TABLE usage_legacy_event (
+  snapshot_id INTEGER NOT NULL CHECK(snapshot_id = 1),
+  fingerprint BLOB NOT NULL CHECK(length(fingerprint) = 32),
+  event_id TEXT NOT NULL CHECK(length(CAST(event_id AS BLOB)) BETWEEN 1 AND 128),
+  selected_file_key BLOB NOT NULL CHECK(length(selected_file_key) = 32),
+  selected_generation INTEGER NOT NULL CHECK(selected_generation >= 0),
+  selected_source_offset INTEGER NOT NULL CHECK(selected_source_offset >= 0),
+  profile_id TEXT NOT NULL CHECK(length(CAST(profile_id AS BLOB)) BETWEEN 1 AND 128),
+  session_id TEXT NOT NULL CHECK(length(CAST(session_id AS BLOB)) BETWEEN 1 AND 512),
+  source_id TEXT NOT NULL CHECK(length(CAST(source_id AS BLOB)) BETWEEN 1 AND 128),
+  timestamp_seconds INTEGER NOT NULL,
+  timestamp_nanos INTEGER NOT NULL CHECK(timestamp_nanos BETWEEN 0 AND 999999999),
+  model TEXT NOT NULL CHECK(length(CAST(model AS BLOB)) BETWEEN 1 AND 64),
+  raw_model TEXT CHECK(raw_model IS NULL OR length(CAST(raw_model AS BLOB)) BETWEEN 1 AND 512),
+  input_tokens INTEGER CHECK(input_tokens IS NULL OR input_tokens >= 0),
+  cached_tokens INTEGER CHECK(cached_tokens IS NULL OR cached_tokens >= 0),
+  output_tokens INTEGER CHECK(output_tokens IS NULL OR output_tokens >= 0),
+  reasoning_tokens INTEGER CHECK(reasoning_tokens IS NULL OR reasoning_tokens >= 0),
+  total_tokens INTEGER CHECK(total_tokens IS NULL OR total_tokens >= 0),
+  fallback_model INTEGER NOT NULL CHECK(fallback_model IN (0,1)),
+  long_context TEXT NOT NULL CHECK(long_context IN ('yes','no','unavailable')),
+  service_tier TEXT CHECK(service_tier IS NULL OR length(CAST(service_tier AS BLOB)) BETWEEN 1 AND 512),
+  project_alias TEXT CHECK(project_alias IS NULL OR length(CAST(project_alias AS BLOB)) BETWEEN 1 AND 512),
+  originator TEXT CHECK(originator IS NULL OR length(CAST(originator AS BLOB)) BETWEEN 1 AND 512),
+  activity_read INTEGER NOT NULL CHECK(activity_read >= 0),
+  activity_edit_write INTEGER NOT NULL CHECK(activity_edit_write >= 0),
+  activity_search INTEGER NOT NULL CHECK(activity_search >= 0),
+  activity_git INTEGER NOT NULL CHECK(activity_git >= 0),
+  activity_build_test INTEGER NOT NULL CHECK(activity_build_test >= 0),
+  activity_web INTEGER NOT NULL CHECK(activity_web >= 0),
+  activity_subagents INTEGER NOT NULL CHECK(activity_subagents >= 0),
+  activity_terminal INTEGER NOT NULL CHECK(activity_terminal >= 0),
+  PRIMARY KEY(snapshot_id, fingerprint),
+  FOREIGN KEY(snapshot_id) REFERENCES usage_legacy_snapshot(snapshot_id)
+) STRICT;
+
+CREATE INDEX usage_legacy_event_time_desc
+  ON usage_legacy_event(snapshot_id, timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC);
+CREATE INDEX usage_legacy_event_model_time
+  ON usage_legacy_event(snapshot_id, model, timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC);
+
+CREATE TABLE usage_replay_revision (
+  revision_id INTEGER PRIMARY KEY CHECK(revision_id >= 0),
+  status TEXT NOT NULL CHECK(status IN ('staging','current')),
+  canonicalizer_version INTEGER NOT NULL CHECK(canonicalizer_version BETWEEN 1 AND 65535),
+  fingerprint_version INTEGER NOT NULL CHECK(fingerprint_version BETWEEN 1 AND 65535),
+  replay_signature_version INTEGER NOT NULL CHECK(replay_signature_version BETWEEN 1 AND 65535),
+  expected_source_count INTEGER NOT NULL CHECK(expected_source_count BETWEEN 1 AND 256),
+  evidence_epoch INTEGER NOT NULL CHECK(evidence_epoch >= 0),
+  sealed INTEGER NOT NULL CHECK(sealed IN (0,1)),
+  promoted INTEGER NOT NULL CHECK(promoted IN (0,1)),
+  CHECK((status = 'staging' AND promoted = 0) OR
+        (status = 'current' AND sealed = 1 AND promoted = 1))
+) STRICT;
+
+CREATE UNIQUE INDEX usage_replay_revision_one_current
+  ON usage_replay_revision(status) WHERE status = 'current';
+CREATE UNIQUE INDEX usage_replay_revision_one_staging
+  ON usage_replay_revision(status) WHERE status = 'staging';
+
+CREATE TABLE usage_replay_source (
+  revision_id INTEGER NOT NULL CHECK(revision_id >= 0),
+  file_key BLOB NOT NULL CHECK(length(file_key) = 32),
+  generation INTEGER NOT NULL CHECK(generation >= 0),
+  state TEXT NOT NULL CHECK(state IN ('pending','complete')),
+  PRIMARY KEY(revision_id, file_key),
+  FOREIGN KEY(revision_id) REFERENCES usage_replay_revision(revision_id) ON DELETE CASCADE,
+  FOREIGN KEY(file_key) REFERENCES usage_source(file_key),
+  FOREIGN KEY(file_key, generation)
+    REFERENCES usage_generation(file_key, generation)
+    DEFERRABLE INITIALLY DEFERRED
+) STRICT;
+
+CREATE TABLE usage_replay_session (
+  revision_id INTEGER NOT NULL CHECK(revision_id >= 0),
+  provider_id TEXT NOT NULL CHECK(length(CAST(provider_id AS BLOB)) BETWEEN 1 AND 64),
+  profile_id TEXT NOT NULL CHECK(length(CAST(profile_id AS BLOB)) BETWEEN 1 AND 128),
+  session_id TEXT NOT NULL CHECK(length(CAST(session_id AS BLOB)) BETWEEN 1 AND 512),
+  parent_session_id TEXT CHECK(parent_session_id IS NULL OR length(CAST(parent_session_id AS BLOB)) BETWEEN 1 AND 512),
+  relation_conflict INTEGER NOT NULL CHECK(relation_conflict IN (0,1)),
+  state TEXT NOT NULL CHECK(state IN ('root','matching','diverged','pending','conflict')),
+  completion_state TEXT NOT NULL CHECK(completion_state IN ('open','sealed_complete')),
+  first_relation_file_key BLOB CHECK(first_relation_file_key IS NULL OR length(first_relation_file_key) = 32),
+  first_relation_source_offset INTEGER CHECK(first_relation_source_offset IS NULL OR first_relation_source_offset >= 0),
+  last_classified_ordinal INTEGER CHECK(last_classified_ordinal IS NULL OR last_classified_ordinal >= 0),
+  evidence_epoch INTEGER NOT NULL CHECK(evidence_epoch >= 0),
+  PRIMARY KEY(revision_id, provider_id, profile_id, session_id),
+  CHECK((first_relation_file_key IS NULL) = (first_relation_source_offset IS NULL)),
+  CHECK(parent_session_id IS NULL OR parent_session_id <> session_id OR relation_conflict = 1),
+  FOREIGN KEY(revision_id) REFERENCES usage_replay_revision(revision_id) ON DELETE CASCADE
+) STRICT;
+
+CREATE TABLE usage_replay_observation (
+  revision_id INTEGER NOT NULL CHECK(revision_id >= 0),
+  file_key BLOB NOT NULL CHECK(length(file_key) = 32),
+  generation INTEGER NOT NULL CHECK(generation >= 0),
+  source_offset INTEGER NOT NULL CHECK(source_offset >= 0),
+  fingerprint BLOB NOT NULL CHECK(length(fingerprint) = 32),
+  provider_id TEXT NOT NULL CHECK(length(CAST(provider_id AS BLOB)) BETWEEN 1 AND 64),
+  profile_id TEXT NOT NULL CHECK(length(CAST(profile_id AS BLOB)) BETWEEN 1 AND 128),
+  session_id TEXT NOT NULL CHECK(length(CAST(session_id AS BLOB)) BETWEEN 1 AND 512),
+  parent_session_id TEXT CHECK(parent_session_id IS NULL OR length(CAST(parent_session_id AS BLOB)) BETWEEN 1 AND 512),
+  session_ordinal INTEGER NOT NULL CHECK(session_ordinal >= 0),
+  canonicalizer_version INTEGER NOT NULL CHECK(canonicalizer_version BETWEEN 1 AND 65535),
+  fingerprint_version INTEGER NOT NULL CHECK(fingerprint_version BETWEEN 1 AND 65535),
+  replay_signature_version INTEGER NOT NULL CHECK(replay_signature_version BETWEEN 1 AND 65535),
+  replay_signature BLOB NOT NULL CHECK(length(replay_signature) = 32),
+  evidence TEXT NOT NULL CHECK(evidence IN ('strong_cumulative','weak_usage_only')),
+  disposition TEXT NOT NULL CHECK(disposition IN ('eligible','replay','pending','conflict')),
+  declared_conflict INTEGER NOT NULL CHECK(declared_conflict IN (0,1)),
+  evidence_epoch INTEGER NOT NULL CHECK(evidence_epoch >= 0),
+  PRIMARY KEY(revision_id, file_key, generation, source_offset, fingerprint),
+  FOREIGN KEY(revision_id) REFERENCES usage_replay_revision(revision_id) ON DELETE CASCADE,
+  FOREIGN KEY(file_key, generation, source_offset, fingerprint)
+    REFERENCES usage_observation(file_key, generation, source_offset, fingerprint)
+    ON DELETE CASCADE
+) STRICT;
+
+CREATE INDEX usage_replay_observation_parent
+  ON usage_replay_observation(revision_id, provider_id, profile_id, session_id, session_ordinal);
+CREATE INDEX usage_replay_observation_children
+  ON usage_replay_observation(revision_id, provider_id, profile_id, parent_session_id, session_ordinal, disposition, session_id);
+CREATE INDEX usage_replay_observation_disposition
+  ON usage_replay_observation(revision_id, disposition);
+CREATE INDEX usage_replay_observation_fingerprint
+  ON usage_replay_observation(revision_id, fingerprint, disposition, file_key, generation, source_offset);
+
+CREATE TABLE usage_replay_selection (
+  revision_id INTEGER NOT NULL CHECK(revision_id >= 0),
+  fingerprint BLOB NOT NULL CHECK(length(fingerprint) = 32),
+  file_key BLOB NOT NULL CHECK(length(file_key) = 32),
+  generation INTEGER NOT NULL CHECK(generation >= 0),
+  source_offset INTEGER NOT NULL CHECK(source_offset >= 0),
+  canonicalizer_version INTEGER NOT NULL CHECK(canonicalizer_version BETWEEN 1 AND 65535),
+  fingerprint_version INTEGER NOT NULL CHECK(fingerprint_version BETWEEN 1 AND 65535),
+  replay_signature_version INTEGER NOT NULL CHECK(replay_signature_version BETWEEN 1 AND 65535),
+  PRIMARY KEY(revision_id, fingerprint),
+  FOREIGN KEY(revision_id, file_key, generation, source_offset, fingerprint)
+    REFERENCES usage_replay_observation(revision_id, file_key, generation, source_offset, fingerprint)
+    ON DELETE CASCADE
+) STRICT;
+
+CREATE TABLE usage_replay_work (
+  revision_id INTEGER NOT NULL CHECK(revision_id >= 0),
+  work_kind TEXT NOT NULL CHECK(work_kind IN ('classify_session','scan_children')),
+  provider_id TEXT NOT NULL CHECK(length(CAST(provider_id AS BLOB)) BETWEEN 1 AND 64),
+  profile_id TEXT NOT NULL CHECK(length(CAST(profile_id AS BLOB)) BETWEEN 1 AND 128),
+  session_id TEXT NOT NULL CHECK(length(CAST(session_id AS BLOB)) BETWEEN 1 AND 512),
+  reason TEXT NOT NULL CHECK(reason IN ('late_relation','missing_parent','parent_changed','depth_bound','fanout_bound')),
+  next_ordinal INTEGER NOT NULL CHECK(next_ordinal >= 0),
+  child_session_cursor TEXT CHECK(child_session_cursor IS NULL OR length(CAST(child_session_cursor AS BLOB)) BETWEEN 1 AND 512),
+  expected_evidence_epoch INTEGER NOT NULL CHECK(expected_evidence_epoch >= 0),
+  PRIMARY KEY(revision_id, work_kind, provider_id, profile_id, session_id),
+  FOREIGN KEY(revision_id) REFERENCES usage_replay_revision(revision_id) ON DELETE CASCADE
+) STRICT;
+"#;
+
+pub(super) const LEGACY_IMMUTABILITY_TRIGGERS: &str = r#"
+CREATE TRIGGER usage_legacy_event_no_insert
+BEFORE INSERT ON usage_legacy_event
+BEGIN
+  SELECT RAISE(ABORT, 'immutable legacy snapshot');
+END;
+
+CREATE TRIGGER usage_legacy_event_no_update
+BEFORE UPDATE ON usage_legacy_event
+BEGIN
+  SELECT RAISE(ABORT, 'immutable legacy snapshot');
+END;
+
+CREATE TRIGGER usage_legacy_event_no_delete
+BEFORE DELETE ON usage_legacy_event
+BEGIN
+  SELECT RAISE(ABORT, 'immutable legacy snapshot');
+END;
+"#;
+
+pub(super) const LEGACY_COPY_SQL: &str = r#"
+INSERT INTO usage_legacy_snapshot(
+  snapshot_id, source_schema_version, quality_state, event_count
+)
+SELECT 1, 1, 'legacy_unverified', count(*) FROM usage_event;
+
+INSERT INTO usage_legacy_event(
+  snapshot_id, fingerprint, event_id, selected_file_key, selected_generation,
+  selected_source_offset, profile_id, session_id, source_id, timestamp_seconds,
+  timestamp_nanos, model, raw_model, input_tokens, cached_tokens, output_tokens,
+  reasoning_tokens, total_tokens, fallback_model, long_context, service_tier,
+  project_alias, originator, activity_read, activity_edit_write, activity_search,
+  activity_git, activity_build_test, activity_web, activity_subagents,
+  activity_terminal
+)
+SELECT
+  1, fingerprint, event_id, selected_file_key, selected_generation,
+  selected_source_offset, profile_id, session_id, source_id, timestamp_seconds,
+  timestamp_nanos, model, raw_model, input_tokens, cached_tokens, output_tokens,
+  reasoning_tokens, total_tokens, fallback_model, long_context, service_tier,
+  project_alias, originator, activity_read, activity_edit_write, activity_search,
+  activity_git, activity_build_test, activity_web, activity_subagents,
+  activity_terminal
+FROM usage_event;
 "#;

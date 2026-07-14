@@ -11,6 +11,12 @@ pub enum StoreErrorCode {
     CapacityExceeded,
     InvalidStoredValue,
     StaleCheckpoint,
+    StaleRevision,
+    AccountingVersionMismatch,
+    IncompleteManifest,
+    UnsealedRevision,
+    PendingContinuation,
+    ArchiveModeMismatch,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -54,6 +60,12 @@ impl fmt::Display for StoreError {
             StoreErrorCode::CapacityExceeded => "store capacity was exceeded",
             StoreErrorCode::InvalidStoredValue => "stored value is invalid",
             StoreErrorCode::StaleCheckpoint => "stored checkpoint changed",
+            StoreErrorCode::StaleRevision => "replay revision changed",
+            StoreErrorCode::AccountingVersionMismatch => "accounting version mismatched",
+            StoreErrorCode::IncompleteManifest => "replay source manifest is incomplete",
+            StoreErrorCode::UnsealedRevision => "replay revision is not sealed",
+            StoreErrorCode::PendingContinuation => "replay continuation is pending",
+            StoreErrorCode::ArchiveModeMismatch => "archive mode mismatched",
         };
         formatter.write_str(message)
     }

@@ -1,10 +1,11 @@
 use std::fmt;
 use std::path::Path;
 
-use rusqlite::{Connection, TransactionBehavior};
+use rusqlite::Connection;
 
 use crate::{EXPECTED_SQLITE_VERSION, StoreError, StoreErrorCode};
 
+mod migration;
 mod read;
 mod schema;
 mod types;
@@ -19,7 +20,7 @@ pub use types::{
     StoredVerification, UsageStoreCounts,
 };
 
-use schema::{USAGE_INDEX_CONTRACTS, USAGE_SCHEMA, USAGE_TABLE_CONTRACTS};
+use migration::migrate_schema;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum JournalMode {
@@ -201,86 +202,6 @@ fn apply_runtime_policy(connection: &Connection, in_memory: bool) -> Result<(), 
     connection.pragma_update(None, "temp_store", "FILE")?;
     connection.pragma_update(None, "mmap_size", 0_i64)?;
     Ok(())
-}
-
-fn migrate_schema(connection: &mut Connection) -> Result<(), StoreError> {
-    let version = pragma_i64(connection, "PRAGMA user_version")?;
-    if version > USAGE_SCHEMA_VERSION {
-        return Err(StoreError::new(StoreErrorCode::SchemaTooNew));
-    }
-    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    transaction.execute_batch(USAGE_SCHEMA)?;
-    if version < USAGE_SCHEMA_VERSION {
-        transaction.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
-    }
-    validate_schema(&transaction)?;
-    transaction.commit()?;
-    Ok(())
-}
-
-fn validate_schema(connection: &Connection) -> Result<(), StoreError> {
-    let mut table_list = connection.prepare("PRAGMA table_list")?;
-    let rows = table_list.query_map([], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, String>(2)?,
-            row.get::<_, i64>(5)?,
-        ))
-    })?;
-    let mut actual_tables = Vec::new();
-    for row in rows {
-        let (schema, name, kind, strict) = row?;
-        if schema == "main" && kind == "table" && !name.starts_with("sqlite_") {
-            if strict != 1 {
-                return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
-            }
-            actual_tables.push(name);
-        }
-    }
-    actual_tables.sort_unstable();
-    let mut expected_tables = USAGE_TABLE_CONTRACTS
-        .iter()
-        .map(|contract| contract.name)
-        .collect::<Vec<_>>();
-    expected_tables.sort_unstable();
-    if actual_tables != expected_tables {
-        return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
-    }
-
-    for contract in USAGE_TABLE_CONTRACTS {
-        let sql = format!("SELECT * FROM {} LIMIT 0", contract.name);
-        let statement = connection.prepare(&sql)?;
-        if statement.column_names().as_slice() != contract.columns {
-            return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
-        }
-    }
-
-    let mut index_list = connection.prepare(
-        "SELECT name, sql FROM sqlite_schema
-         WHERE type = 'index' AND name NOT LIKE 'sqlite_%'
-         ORDER BY name",
-    )?;
-    let rows = index_list.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-    })?;
-    let mut actual_indexes = Vec::new();
-    for row in rows {
-        actual_indexes.push(row?);
-    }
-    if actual_indexes.len() != USAGE_INDEX_CONTRACTS.len() {
-        return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
-    }
-    for ((actual_name, actual_sql), expected) in actual_indexes.iter().zip(USAGE_INDEX_CONTRACTS) {
-        if actual_name != expected.name || normalize_schema_sql(actual_sql) != expected.sql {
-            return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
-        }
-    }
-    Ok(())
-}
-
-fn normalize_schema_sql(sql: &str) -> String {
-    sql.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn pragma_i64(connection: &Connection, sql: &str) -> Result<i64, StoreError> {

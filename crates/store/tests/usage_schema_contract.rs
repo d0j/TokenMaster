@@ -8,13 +8,26 @@ use tokenmaster_store::{
     USAGE_SCHEMA_VERSION, UsageStore,
 };
 
-const USAGE_TABLES: [&str; 6] = [
+const USAGE_TABLES: [&str; 14] = [
     "usage_source",
     "usage_generation",
     "usage_source_chunk",
     "usage_observation",
     "usage_event",
     "usage_scan",
+    "usage_legacy_snapshot",
+    "usage_legacy_event",
+    "usage_replay_revision",
+    "usage_replay_source",
+    "usage_replay_session",
+    "usage_replay_observation",
+    "usage_replay_selection",
+    "usage_replay_work",
+];
+const LEGACY_TRIGGERS: [&str; 3] = [
+    "usage_legacy_event_no_delete",
+    "usage_legacy_event_no_insert",
+    "usage_legacy_event_no_update",
 ];
 const FIXTURE_SOURCE_KEY: [u8; 32] = [7; 32];
 
@@ -39,6 +52,10 @@ fn checkpoint_parts() -> StoredCheckpointParts {
 
 fn seed_usage_fixture(path: &Path, event_count: u32) {
     drop(UsageStore::open(path).expect("create usage schema"));
+    seed_existing_usage_fixture(path, event_count);
+}
+
+fn seed_existing_usage_fixture(path: &Path, event_count: u32) {
     let mut connection = Connection::open(path).expect("open usage fixture");
     connection
         .pragma_update(None, "foreign_keys", "ON")
@@ -144,6 +161,33 @@ fn seed_usage_fixture(path: &Path, event_count: u32) {
     transaction.commit().expect("commit usage fixture");
 }
 
+fn create_v1_fixture(path: &Path, event_count: u32) {
+    let connection = Connection::open(path).expect("create v1 fixture");
+    connection
+        .execute_batch(include_str!("fixtures/usage_v1.sql"))
+        .expect("create exact v1 schema");
+    drop(connection);
+    seed_existing_usage_fixture(path, event_count);
+}
+
+fn rewrite_table_schema(path: &Path, table: &str, from: &str, to: &str) {
+    let connection = Connection::open(path).expect("open schema rewrite fixture");
+    connection
+        .pragma_update(None, "writable_schema", "ON")
+        .expect("enable fixture schema rewrite");
+    let changed = connection
+        .execute(
+            "UPDATE sqlite_schema SET sql = replace(sql, ?2, ?3)
+             WHERE type = 'table' AND name = ?1 AND instr(sql, ?2) > 0",
+            params![table, from, to],
+        )
+        .expect("rewrite fixture table schema");
+    assert_eq!(changed, 1, "fixture rewrite must change exactly one table");
+    connection
+        .pragma_update(None, "writable_schema", "OFF")
+        .expect("disable fixture schema rewrite");
+}
+
 #[test]
 fn file_store_enforces_exact_runtime_policy_and_reopens() {
     let directory = TempDir::new().expect("temporary directory");
@@ -229,6 +273,21 @@ fn schema_is_strict_path_free_and_has_exact_usage_tables() {
     expected.sort();
     assert_eq!(observed, expected);
 
+    let mut trigger_statement = connection
+        .prepare(
+            "SELECT name FROM sqlite_schema
+             WHERE type = 'trigger' AND name LIKE 'usage_%'
+             ORDER BY name",
+        )
+        .expect("prepare trigger list");
+    let trigger_rows = trigger_statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .expect("query trigger list");
+    let triggers = trigger_rows
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect trigger names");
+    assert_eq!(triggers, LEGACY_TRIGGERS);
+
     for table in USAGE_TABLES {
         let pragma = format!("PRAGMA table_info({table})");
         let mut columns = connection.prepare(&pragma).expect("prepare table info");
@@ -282,6 +341,177 @@ fn schema_is_strict_path_free_and_has_exact_usage_tables() {
             .contains("ON DELETE SET NULL"),
         "generation deletion must not rewrite source identity columns"
     );
+}
+
+#[test]
+fn exact_v1_migration_preserves_an_immutable_legacy_snapshot() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("v1-migration-private.sqlite3");
+    create_v1_fixture(&path, 2);
+
+    let before = Connection::open(&path).expect("inspect v1 fixture");
+    let before_events: Vec<(Vec<u8>, String)> = before
+        .prepare("SELECT fingerprint, event_id FROM usage_event ORDER BY fingerprint")
+        .expect("prepare v1 event read")
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .expect("query v1 events")
+        .collect::<Result<_, _>>()
+        .expect("collect v1 events");
+    drop(before);
+
+    drop(UsageStore::open(&path).expect("migrate exact v1 archive"));
+    let connection = Connection::open(&path).expect("inspect migrated archive");
+    let version: i64 = connection
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .expect("migrated version");
+    assert_eq!(version, 2);
+    let snapshot: (i64, String, i64) = connection
+        .query_row(
+            "SELECT source_schema_version, quality_state, event_count
+             FROM usage_legacy_snapshot WHERE snapshot_id = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("legacy snapshot metadata");
+    assert_eq!(snapshot, (1, "legacy_unverified".to_owned(), 2));
+    let legacy_events: Vec<(Vec<u8>, String)> = connection
+        .prepare(
+            "SELECT fingerprint, event_id
+             FROM usage_legacy_event WHERE snapshot_id = 1 ORDER BY fingerprint",
+        )
+        .expect("prepare legacy event read")
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .expect("query legacy events")
+        .collect::<Result<_, _>>()
+        .expect("collect legacy events");
+    assert_eq!(legacy_events, before_events);
+    let live_event_count: i64 = connection
+        .query_row("SELECT count(*) FROM usage_event", [], |row| row.get(0))
+        .expect("preserved live event count");
+    assert_eq!(live_event_count, 2);
+
+    for statement in [
+        "INSERT INTO usage_legacy_event DEFAULT VALUES",
+        "UPDATE usage_legacy_event SET event_id = event_id WHERE snapshot_id = 1",
+        "DELETE FROM usage_legacy_event WHERE snapshot_id = 1",
+    ] {
+        let error = connection
+            .execute(statement, [])
+            .expect_err("legacy event mutation must fail");
+        assert!(
+            error.to_string().contains("immutable legacy snapshot"),
+            "immutability trigger must reject mutation"
+        );
+    }
+    drop(connection);
+
+    let reopened = UsageStore::open(&path).expect("reopen migrated archive");
+    assert_eq!(
+        reopened
+            .counts()
+            .expect("reopened counts")
+            .canonical_events(),
+        2
+    );
+}
+
+#[test]
+fn malformed_v1_rolls_back_without_creating_v2_objects() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("malformed-v1-private.sqlite3");
+    create_v1_fixture(&path, 1);
+    let connection = Connection::open(&path).expect("damage v1 fixture");
+    connection
+        .execute("DROP INDEX usage_observation_fingerprint", [])
+        .expect("drop required v1 index");
+    drop(connection);
+
+    let error = UsageStore::open(&path).expect_err("malformed v1 must fail closed");
+    assert_eq!(error.code(), StoreErrorCode::SchemaMismatch);
+
+    let connection = Connection::open(&path).expect("inspect failed migration");
+    let version: i64 = connection
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .expect("rolled-back version");
+    assert_eq!(version, 1);
+    let replay_objects: i64 = connection
+        .query_row(
+            "SELECT count(*) FROM sqlite_schema
+             WHERE name IN (
+               'usage_legacy_snapshot', 'usage_legacy_event',
+               'usage_replay_revision', 'usage_replay_source',
+               'usage_replay_session', 'usage_replay_observation',
+               'usage_replay_selection', 'usage_replay_work'
+             )",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count rolled-back v2 objects");
+    assert_eq!(replay_objects, 0);
+}
+
+#[test]
+fn v1_with_weakened_deferred_foreign_key_rolls_back() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("weakened-v1-fk-private.sqlite3");
+    create_v1_fixture(&path, 1);
+    rewrite_table_schema(
+        &path,
+        "usage_event",
+        "DEFERRABLE INITIALLY DEFERRED",
+        "NOT DEFERRABLE INITIALLY IMMEDIATE",
+    );
+
+    let error = UsageStore::open(&path).expect_err("weakened v1 foreign key must fail");
+    assert_eq!(error.code(), StoreErrorCode::SchemaMismatch);
+    let connection = Connection::open(&path).expect("inspect rejected v1 archive");
+    let version: i64 = connection
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .expect("preserved v1 version");
+    assert_eq!(version, 1);
+    let legacy_table_count: i64 = connection
+        .query_row(
+            "SELECT count(*) FROM sqlite_schema WHERE name = 'usage_legacy_snapshot'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count rejected migration tables");
+    assert_eq!(legacy_table_count, 0);
+}
+
+#[test]
+fn current_v2_with_weakened_constraint_fails_closed() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("weakened-v2-check-private.sqlite3");
+    drop(UsageStore::open(&path).expect("create valid v2 schema"));
+    rewrite_table_schema(
+        &path,
+        "usage_replay_revision",
+        "expected_source_count BETWEEN 1 AND 256",
+        "expected_source_count >= 0",
+    );
+
+    let error = UsageStore::open(&path).expect_err("weakened v2 constraint must fail");
+    assert_eq!(error.code(), StoreErrorCode::SchemaMismatch);
+}
+
+#[test]
+fn legacy_snapshot_count_tampering_fails_closed_on_reopen() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("legacy-count-tamper-private.sqlite3");
+    create_v1_fixture(&path, 2);
+    drop(UsageStore::open(&path).expect("migrate v1 fixture"));
+    let connection = Connection::open(&path).expect("tamper legacy metadata");
+    connection
+        .execute(
+            "UPDATE usage_legacy_snapshot SET event_count = 99 WHERE snapshot_id = 1",
+            [],
+        )
+        .expect("change legacy event count");
+    drop(connection);
+
+    let error = UsageStore::open(&path).expect_err("legacy count mismatch must fail");
+    assert_eq!(error.code(), StoreErrorCode::InvalidStoredValue);
 }
 
 #[test]
