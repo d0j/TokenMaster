@@ -37,6 +37,13 @@ and checkpoints remain private staging state until an explicit sealed promotion.
 Stored parent facts from another accounting version MUST fail closed; staging MUST NOT
 change current event pages, current source metadata, or externally visible totals.
 
+Late relations are accepted only from a fixed-manifest source whose validated provider,
+profile, source ID, committed range, revision, and evidence epoch match. The archive
+stores only bounded identifiers plus the deterministic first source-key/offset tuple,
+never source content or paths. Continuation rejects any stale durable-work epoch before
+writing. Parent disagreement and confirmed cycles are irreversible conflict; ancestry
+or fanout bounds remain explicit pending work and cannot be treated as proof.
+
 ## TM-SEC-005 — Extensibility
 
 Skins are declarative data only. They MUST NOT execute code, call external processes,

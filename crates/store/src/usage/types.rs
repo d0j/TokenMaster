@@ -4,6 +4,7 @@ use tokenmaster_accounting::CanonicalUsageEvent;
 use tokenmaster_accounting::{
     CANONICALIZER_VERSION, EVENT_FINGERPRINT_VERSION, REPLAY_SIGNATURE_VERSION,
 };
+use tokenmaster_domain::SessionRelationDraft;
 
 use crate::{StoreError, StoreErrorCode};
 
@@ -626,6 +627,82 @@ impl fmt::Debug for ReplayAppendBatchParts {
 #[derive(Clone)]
 pub struct ReplayAppendBatch {
     parts: ReplayAppendBatchParts,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct ReplayRelation {
+    pub(super) revision_id: ReplayRevisionId,
+    pub(super) expected_epoch: ReplayEpoch,
+    pub(super) source_key: SourceKey,
+    pub(super) provider_id: Box<str>,
+    pub(super) profile_id: Box<str>,
+    pub(super) session_id: Box<str>,
+    pub(super) parent_session_id: Option<Box<str>>,
+    pub(super) declared_conflict: bool,
+    pub(super) source_id: Box<str>,
+    pub(super) source_offset: u64,
+}
+
+impl ReplayRelation {
+    pub fn new(
+        revision_id: ReplayRevisionId,
+        expected_epoch: ReplayEpoch,
+        source_key: SourceKey,
+        relation: &SessionRelationDraft,
+    ) -> Result<Self, StoreError> {
+        if relation.source_offset() > i64::MAX as u64 {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self {
+            revision_id,
+            expected_epoch,
+            source_key,
+            provider_id: relation.provider_id().as_str().into(),
+            profile_id: relation.profile_id().as_str().into(),
+            session_id: relation.session_id().as_str().into(),
+            parent_session_id: Some(relation.parent_session_id().as_str().into()),
+            declared_conflict: relation.declared_conflict(),
+            source_id: relation.source_id().as_str().into(),
+            source_offset: relation.source_offset(),
+        })
+    }
+}
+
+impl fmt::Debug for ReplayRelation {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ReplayRelation")
+            .field("revision_id", &self.revision_id)
+            .field("expected_epoch", &self.expected_epoch)
+            .field("source", &Redacted)
+            .field("relation", &Redacted)
+            .field("declared_conflict", &self.declared_conflict)
+            .finish()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReplayContinuationResult {
+    pub(super) processed_count: u16,
+    pub(super) remaining_work: bool,
+    pub(super) epoch: ReplayEpoch,
+}
+
+impl ReplayContinuationResult {
+    #[must_use]
+    pub const fn processed_count(self) -> u16 {
+        self.processed_count
+    }
+
+    #[must_use]
+    pub const fn remaining_work(self) -> bool {
+        self.remaining_work
+    }
+
+    #[must_use]
+    pub const fn epoch(self) -> ReplayEpoch {
+        self.epoch
+    }
 }
 
 impl ReplayAppendBatch {

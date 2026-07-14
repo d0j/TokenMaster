@@ -16,8 +16,9 @@ classifier is complete under
 v2, exact-v1 immutable migration, explicit archive state, fixed-manifest staging, and
 classified replay append are implemented under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-d-replay-archive.md`. The immediate
-next task is bounded durable late-relation/descendant continuation; seal/promotion
-follows. The complete approved order is in `docs/AUDIT_AND_MASTER_PLAN.md`.
+next task is P0-D seal validation and rollback-safe atomic promotion. Durable
+late-relation/descendant continuation is implemented with 32/256 bounds and restart
+keysets. The complete approved order is in `docs/AUDIT_AND_MASTER_PLAN.md`.
 
 Tasks 3+ in `2026-07-14-tokenmaster-p0-replay-correctness.md` are superseded. Do not
 execute its Codex-owned fingerprint/signature or destructive migration steps. Do not
@@ -29,7 +30,9 @@ archive read-only and build v2 state in a separate staging generation.
 
 Do not expose a staging revision as current truth. Replay append advances a
 store-owned evidence epoch and must reject stale CAS, altered duplicate observations,
-or mixed accounting versions atomically. Promotion is not implemented yet.
+mixed accounting versions, or stale durable work atomically. Late explicit relations
+use deterministic first-source identity; conflicting parents and confirmed cycles are
+permanent conflict. Promotion is not implemented yet.
 
 ## Commands
 

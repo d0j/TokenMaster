@@ -6,13 +6,13 @@ use tokenmaster_accounting::{
 };
 use tokenmaster_domain::{
     ActivityCounts, LongContextState, ModelKey, ObservationDraft, ObservationDraftParts,
-    ObservationVerification, TokenCount, TokenUsage, UsageProfileId, UsageProviderId,
-    UsageSessionId, UsageSourceId, UtcTimestamp,
+    ObservationVerification, SessionRelationDraft, SessionRelationDraftParts, TokenCount,
+    TokenUsage, UsageProfileId, UsageProviderId, UsageSessionId, UsageSourceId, UtcTimestamp,
 };
 use tokenmaster_store::{
     AppendBatch, AppendBatchParts, ArchiveMode, GenerationStatus, ReplayAppendBatch,
-    ReplayAppendBatchParts, ReplayManifest, ReplayRevisionStatus, SourceKey, SourceKind,
-    SourceRegistration, SourceRegistrationParts, StoreErrorCode, StoredCheckpoint,
+    ReplayAppendBatchParts, ReplayManifest, ReplayRelation, ReplayRevisionStatus, SourceKey,
+    SourceKind, SourceRegistration, SourceRegistrationParts, StoreErrorCode, StoredCheckpoint,
     StoredCheckpointParts, StoredSourceChunk, StoredVerification, UsageStore,
 };
 
@@ -149,6 +149,16 @@ fn replay_append(
     epoch: tokenmaster_store::ReplayEpoch,
     events: Vec<CanonicalUsageEvent>,
 ) -> ReplayAppendBatch {
+    replay_append_to(seed, revision, epoch, events, 100)
+}
+
+fn replay_append_to(
+    seed: u8,
+    revision: tokenmaster_store::ReplayRevisionId,
+    epoch: tokenmaster_store::ReplayEpoch,
+    events: Vec<CanonicalUsageEvent>,
+    next_offset: u64,
+) -> ReplayAppendBatch {
     let append = AppendBatch::new(AppendBatchParts {
         source_key: SourceKey::from_bytes([seed; 32]),
         expected_generation: 1,
@@ -157,10 +167,15 @@ fn replay_append(
         events: events.into_boxed_slice(),
         previous_partial_chunk: None,
         chunk_updates: vec![
-            StoredSourceChunk::new(0, 100, [seed.wrapping_add(3); 32]).expect("source chunk"),
+            StoredSourceChunk::new(
+                0,
+                u32::try_from(next_offset).expect("fixture chunk length"),
+                [seed.wrapping_add(3); 32],
+            )
+            .expect("source chunk"),
         ]
         .into_boxed_slice(),
-        next_checkpoint: checkpoint(seed, 100, StoredVerification::FullPrefix),
+        next_checkpoint: checkpoint(seed, next_offset, StoredVerification::FullPrefix),
         last_seen_scan_id: None,
         diagnostic_count_delta: 0,
     })
@@ -170,6 +185,29 @@ fn replay_append(
         expected_epoch: epoch,
         append_batch: append,
     })
+}
+
+fn replay_relation(
+    seed: u8,
+    revision: tokenmaster_store::ReplayRevisionId,
+    epoch: tokenmaster_store::ReplayEpoch,
+    session: &str,
+    parent: &str,
+    source_offset: u64,
+    declared_conflict: bool,
+) -> ReplayRelation {
+    let draft = SessionRelationDraft::new(SessionRelationDraftParts {
+        provider_id: UsageProviderId::new("codex").expect("provider"),
+        profile_id: UsageProfileId::new("default").expect("profile"),
+        session_id: UsageSessionId::new(session).expect("session"),
+        parent_session_id: UsageSessionId::new(parent).expect("parent"),
+        declared_conflict,
+        source_id: UsageSourceId::new(format!("fixture-{seed}")).expect("source"),
+        source_offset,
+    })
+    .expect("session relation");
+    ReplayRelation::new(revision, epoch, SourceKey::from_bytes([seed; 32]), &draft)
+        .expect("replay relation")
 }
 
 fn create_v1_event_fixture(path: &std::path::Path) {
@@ -870,6 +908,695 @@ fn replay_append_rejects_parent_facts_from_a_different_accounting_version() {
         )
         .expect("rolled-back child state");
     assert_eq!(state, (1, 0, 0));
+}
+
+#[test]
+fn late_relation_invalidates_root_selection_and_reclassifies_after_restart() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("late-relation-private.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    store
+        .register_source(&registration(4))
+        .expect("registered source");
+    let manifest = ReplayManifest::new(vec![SourceKey::from_bytes([4; 32])].into_boxed_slice())
+        .expect("manifest");
+    let revision = store
+        .begin_replay_revision(&manifest)
+        .expect("begin replay revision");
+    let epoch = store
+        .apply_replay_append_batch(&replay_append(
+            4,
+            revision.id(),
+            revision.epoch(),
+            vec![
+                replay_event(4, "parent", None, 0, 10, Some(100), false),
+                replay_event(4, "child", None, 0, 20, Some(100), false),
+            ],
+        ))
+        .expect("append roots");
+    assert_eq!(
+        store
+            .replay_quality(revision.id())
+            .expect("root quality")
+            .eligible(),
+        2
+    );
+
+    let relation_epoch = store
+        .apply_replay_relation(&replay_relation(
+            4,
+            revision.id(),
+            epoch,
+            "child",
+            "parent",
+            90,
+            false,
+        ))
+        .expect("apply late relation");
+    drop(store);
+
+    let connection = Connection::open(&path).expect("inspect invalidation boundary");
+    let invalidated: (i64, String, String, i64) = connection
+        .query_row(
+            "SELECT
+               (SELECT count(*) FROM usage_replay_selection WHERE revision_id = 0),
+               parent_session_id,
+               state,
+               (SELECT count(*) FROM usage_replay_work
+                WHERE revision_id = 0 AND session_id = 'child')
+             FROM usage_replay_session
+             WHERE revision_id = 0 AND session_id = 'child'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .expect("late relation state");
+    assert_eq!(
+        invalidated,
+        (1, "parent".to_owned(), "matching".to_owned(), 1)
+    );
+    drop(connection);
+
+    let mut reopened = UsageStore::open(&path).expect("reopen usage store");
+    let classified = reopened
+        .continue_replay(revision.id(), relation_epoch)
+        .expect("continue session classification");
+    assert_eq!(classified.processed_count(), 1);
+    assert!(classified.remaining_work());
+    let drained = reopened
+        .continue_replay(revision.id(), classified.epoch())
+        .expect("drain child scan");
+    assert_eq!(drained.processed_count(), 0);
+    assert!(!drained.remaining_work());
+    let quality = reopened
+        .replay_quality(revision.id())
+        .expect("reclassified quality");
+    assert_eq!(quality.eligible(), 1);
+    assert_eq!(quality.replay(), 1);
+    assert_eq!(quality.pending(), 0);
+    assert_eq!(quality.conflict(), 0);
+}
+
+#[test]
+fn stale_and_disagreeing_late_relations_are_atomic_and_conflict_is_permanent() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("late-relation-conflict.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    store
+        .register_source(&registration(7))
+        .expect("registered source");
+    let revision = store
+        .begin_replay_revision(
+            &ReplayManifest::new(vec![SourceKey::from_bytes([7; 32])].into_boxed_slice())
+                .expect("manifest"),
+        )
+        .expect("begin replay revision");
+    let append_epoch = store
+        .apply_replay_append_batch(&replay_append(
+            7,
+            revision.id(),
+            revision.epoch(),
+            vec![replay_event(7, "child", None, 0, 10, Some(100), false)],
+        ))
+        .expect("append child root");
+    let first_epoch = store
+        .apply_replay_relation(&replay_relation(
+            7,
+            revision.id(),
+            append_epoch,
+            "child",
+            "parent-a",
+            90,
+            false,
+        ))
+        .expect("first parent relation");
+
+    let stale = store
+        .apply_replay_relation(&replay_relation(
+            7,
+            revision.id(),
+            append_epoch,
+            "child",
+            "parent-b",
+            80,
+            false,
+        ))
+        .expect_err("stale relation must not write");
+    assert_eq!(stale.code(), StoreErrorCode::StaleRevision);
+    let conflict_epoch = store
+        .apply_replay_relation(&replay_relation(
+            7,
+            revision.id(),
+            first_epoch,
+            "child",
+            "parent-b",
+            80,
+            false,
+        ))
+        .expect("disagreeing relation");
+    let permanent_epoch = store
+        .apply_replay_relation(&replay_relation(
+            7,
+            revision.id(),
+            conflict_epoch,
+            "child",
+            "parent-a",
+            70,
+            false,
+        ))
+        .expect("earlier relation cannot clear conflict");
+    let classified = store
+        .continue_replay(revision.id(), permanent_epoch)
+        .expect("classify permanent conflict");
+    assert_eq!(classified.processed_count(), 1);
+    let drained = store
+        .continue_replay(revision.id(), classified.epoch())
+        .expect("drain conflict child scan");
+    assert!(!drained.remaining_work());
+    assert_eq!(
+        store
+            .replay_quality(revision.id())
+            .expect("conflict quality")
+            .conflict(),
+        1
+    );
+    drop(store);
+
+    let connection = Connection::open(&path).expect("inspect permanent relation conflict");
+    let state: (String, i64, i64, i64) = connection
+        .query_row(
+            "SELECT parent_session_id, relation_conflict,
+                    (SELECT count(*) FROM usage_replay_selection WHERE revision_id = 0),
+                    (SELECT evidence_epoch FROM usage_replay_revision WHERE revision_id = 0)
+             FROM usage_replay_session
+             WHERE revision_id = 0 AND session_id = 'child'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .expect("permanent conflict state");
+    assert_eq!(state, ("parent-a".to_owned(), 1, 0, 6));
+}
+
+#[test]
+fn stale_persisted_work_epoch_rejects_continuation_without_writes() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("stale-work-epoch.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    store
+        .register_source(&registration(6))
+        .expect("registered source");
+    let revision = store
+        .begin_replay_revision(
+            &ReplayManifest::new(vec![SourceKey::from_bytes([6; 32])].into_boxed_slice())
+                .expect("manifest"),
+        )
+        .expect("begin replay revision");
+    let append_epoch = store
+        .apply_replay_append_batch(&replay_append(
+            6,
+            revision.id(),
+            revision.epoch(),
+            vec![replay_event(6, "child", None, 0, 10, Some(100), false)],
+        ))
+        .expect("append child root");
+    let relation_epoch = store
+        .apply_replay_relation(&replay_relation(
+            6,
+            revision.id(),
+            append_epoch,
+            "child",
+            "parent",
+            90,
+            false,
+        ))
+        .expect("late relation");
+    drop(store);
+
+    let connection = Connection::open(&path).expect("tamper work epoch");
+    connection
+        .execute(
+            "UPDATE usage_replay_work SET expected_evidence_epoch = 1
+             WHERE revision_id = 0 AND session_id = 'child'",
+            [],
+        )
+        .expect("make work stale");
+    drop(connection);
+
+    let mut reopened = UsageStore::open(&path).expect("reopen usage store");
+    let error = reopened
+        .continue_replay(revision.id(), relation_epoch)
+        .expect_err("stale durable work must fail closed");
+    assert_eq!(error.code(), StoreErrorCode::StaleRevision);
+    drop(reopened);
+
+    let connection = Connection::open(&path).expect("inspect stale-work rollback");
+    let state: (i64, String, i64, i64) = connection
+        .query_row(
+            "SELECT
+               (SELECT evidence_epoch FROM usage_replay_revision WHERE revision_id = 0),
+               disposition,
+               (SELECT count(*) FROM usage_replay_selection WHERE revision_id = 0),
+               (SELECT expected_evidence_epoch FROM usage_replay_work
+                WHERE revision_id = 0 AND session_id = 'child')
+             FROM usage_replay_observation
+             WHERE revision_id = 0 AND session_id = 'child'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .expect("stale-work state");
+    assert_eq!(state, (2, "eligible".to_owned(), 0, 1));
+}
+
+#[test]
+fn nested_descendants_reclassify_in_session_and_ordinal_order() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("nested-continuation.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    store
+        .register_source(&registration(5))
+        .expect("registered source");
+    let revision = store
+        .begin_replay_revision(
+            &ReplayManifest::new(vec![SourceKey::from_bytes([5; 32])].into_boxed_slice())
+                .expect("manifest"),
+        )
+        .expect("begin replay revision");
+    let append_epoch = store
+        .apply_replay_append_batch(&replay_append_to(
+            5,
+            revision.id(),
+            revision.epoch(),
+            vec![
+                replay_event(5, "parent", None, 0, 1, Some(100), false),
+                replay_event(5, "parent", None, 1, 2, Some(110), false),
+                replay_event(5, "child", None, 0, 3, Some(100), false),
+                replay_event(5, "child", None, 1, 4, Some(110), false),
+                replay_event(5, "grandchild", Some("child"), 0, 5, Some(100), false),
+            ],
+            1_000,
+        ))
+        .expect("append nested sessions");
+    let relation_epoch = store
+        .apply_replay_relation(&replay_relation(
+            5,
+            revision.id(),
+            append_epoch,
+            "child",
+            "parent",
+            900,
+            false,
+        ))
+        .expect("late child relation");
+    let child_zero = store
+        .continue_replay(revision.id(), relation_epoch)
+        .expect("classify child ordinal zero");
+    assert_eq!(child_zero.processed_count(), 1);
+    let child_one = store
+        .continue_replay(revision.id(), child_zero.epoch())
+        .expect("classify child ordinal one");
+    assert_eq!(child_one.processed_count(), 1);
+    let child_scan = store
+        .continue_replay(revision.id(), child_one.epoch())
+        .expect("scan direct grandchild");
+    assert_eq!(child_scan.processed_count(), 1);
+    let grandchild = store
+        .continue_replay(revision.id(), child_scan.epoch())
+        .expect("reclassify grandchild");
+    assert_eq!(grandchild.processed_count(), 1);
+    let drained = store
+        .continue_replay(revision.id(), grandchild.epoch())
+        .expect("drain nested continuation");
+    assert_eq!(drained.processed_count(), 0);
+    assert!(!drained.remaining_work());
+    drop(store);
+
+    let connection = Connection::open(&path).expect("inspect nested ordering");
+    let epochs: Vec<(String, i64, i64)> = connection
+        .prepare(
+            "SELECT session_id, session_ordinal, evidence_epoch
+             FROM usage_replay_observation
+             WHERE revision_id = 0 AND session_id IN ('child','grandchild')
+             ORDER BY evidence_epoch",
+        )
+        .expect("prepare evidence ordering")
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .expect("query evidence ordering")
+        .collect::<Result<_, _>>()
+        .expect("collect evidence ordering");
+    assert_eq!(
+        epochs,
+        vec![
+            ("child".to_owned(), 0, 3),
+            ("child".to_owned(), 1, 4),
+            ("grandchild".to_owned(), 0, 6),
+        ]
+    );
+}
+
+#[test]
+fn confirmed_relation_cycle_fails_closed_without_continuation_loop() {
+    let mut store = UsageStore::in_memory().expect("usage store");
+    store
+        .register_source(&registration(3))
+        .expect("registered source");
+    let revision = store
+        .begin_replay_revision(
+            &ReplayManifest::new(vec![SourceKey::from_bytes([3; 32])].into_boxed_slice())
+                .expect("manifest"),
+        )
+        .expect("begin replay revision");
+    let append_epoch = store
+        .apply_replay_append_batch(&replay_append(
+            3,
+            revision.id(),
+            revision.epoch(),
+            vec![
+                replay_event(3, "cycle-a", None, 0, 10, Some(100), false),
+                replay_event(3, "cycle-b", None, 0, 20, Some(100), false),
+            ],
+        ))
+        .expect("append cycle roots");
+    let first_epoch = store
+        .apply_replay_relation(&replay_relation(
+            3,
+            revision.id(),
+            append_epoch,
+            "cycle-a",
+            "cycle-b",
+            80,
+            false,
+        ))
+        .expect("first cycle edge");
+    let mut epoch = store
+        .apply_replay_relation(&replay_relation(
+            3,
+            revision.id(),
+            first_epoch,
+            "cycle-b",
+            "cycle-a",
+            90,
+            false,
+        ))
+        .expect("closing cycle edge");
+    let mut steps = 0_u8;
+    loop {
+        let result = store
+            .continue_replay(revision.id(), epoch)
+            .expect("bounded cycle continuation");
+        steps = steps.saturating_add(1);
+        epoch = result.epoch();
+        if !result.remaining_work() {
+            break;
+        }
+        assert!(steps < 8, "cycle continuation must converge");
+    }
+    assert_eq!(steps, 4);
+    let quality = store.replay_quality(revision.id()).expect("cycle quality");
+    assert_eq!(quality.conflict(), 2);
+    assert_eq!(quality.eligible(), 0);
+}
+
+#[test]
+fn first_relation_identity_is_deterministic_across_arrival_order() {
+    fn run(order: [u8; 2]) -> (String, Vec<u8>, i64, i64) {
+        let directory = TempDir::new().expect("temporary directory");
+        let path = directory.path().join("relation-order.sqlite3");
+        let mut store = UsageStore::open(&path).expect("usage store");
+        for seed in [9_u8, 1_u8] {
+            store
+                .register_source(&registration(seed))
+                .expect("registered source");
+        }
+        let revision = store
+            .begin_replay_revision(
+                &ReplayManifest::new(
+                    vec![
+                        SourceKey::from_bytes([9; 32]),
+                        SourceKey::from_bytes([1; 32]),
+                    ]
+                    .into_boxed_slice(),
+                )
+                .expect("manifest"),
+            )
+            .expect("begin replay revision");
+        let first_epoch = store
+            .apply_replay_append_batch(&replay_append(
+                9,
+                revision.id(),
+                revision.epoch(),
+                vec![replay_event(9, "child", None, 0, 10, Some(100), false)],
+            ))
+            .expect("append child root");
+        let mut epoch = store
+            .apply_replay_append_batch(&replay_append(
+                1,
+                revision.id(),
+                first_epoch,
+                vec![replay_event(1, "marker", None, 0, 10, Some(100), false)],
+            ))
+            .expect("advance second source");
+        for seed in order {
+            let (parent, offset) = if seed == 1 {
+                ("parent-one", 80)
+            } else {
+                ("parent-nine", 90)
+            };
+            epoch = store
+                .apply_replay_relation(&replay_relation(
+                    seed,
+                    revision.id(),
+                    epoch,
+                    "child",
+                    parent,
+                    offset,
+                    false,
+                ))
+                .expect("apply ordered relation");
+        }
+        drop(store);
+        let connection = Connection::open(&path).expect("inspect relation order");
+        connection
+            .query_row(
+                "SELECT parent_session_id, first_relation_file_key,
+                        first_relation_source_offset, relation_conflict
+                 FROM usage_replay_session
+                 WHERE revision_id = 0 AND session_id = 'child'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("deterministic relation state")
+    }
+
+    let forward = run([9, 1]);
+    let reverse = run([1, 9]);
+    assert_eq!(forward, reverse);
+    assert_eq!(forward, ("parent-one".to_owned(), vec![1_u8; 32], 80, 1));
+}
+
+#[test]
+fn fanout_continuation_is_keyset_bounded_and_resumes_after_reopen() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("fanout-continuation.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    for seed in [9_u8, 1_u8, 2_u8] {
+        store
+            .register_source(&registration(seed))
+            .expect("registered source");
+    }
+    let revision = store
+        .begin_replay_revision(
+            &ReplayManifest::new(
+                vec![
+                    SourceKey::from_bytes([9; 32]),
+                    SourceKey::from_bytes([1; 32]),
+                    SourceKey::from_bytes([2; 32]),
+                ]
+                .into_boxed_slice(),
+            )
+            .expect("manifest"),
+        )
+        .expect("begin replay revision");
+    let parent_epoch = store
+        .apply_replay_append_batch(&replay_append_to(
+            9,
+            revision.id(),
+            revision.epoch(),
+            vec![
+                replay_event(9, "grandparent", None, 0, 1, Some(100), false),
+                replay_event(9, "parent", None, 0, 2, Some(100), false),
+            ],
+            1_000,
+        ))
+        .expect("append parent roots");
+    let children = (0_u64..256)
+        .map(|index| {
+            replay_event(
+                1,
+                &format!("child-{index:03}"),
+                Some("parent"),
+                0,
+                index,
+                Some(100),
+                false,
+            )
+        })
+        .collect();
+    let first_children_epoch = store
+        .apply_replay_append_batch(&replay_append_to(
+            1,
+            revision.id(),
+            parent_epoch,
+            children,
+            1_000,
+        ))
+        .expect("append first child page");
+    let all_children_epoch = store
+        .apply_replay_append_batch(&replay_append_to(
+            2,
+            revision.id(),
+            first_children_epoch,
+            vec![replay_event(
+                2,
+                "child-256",
+                Some("parent"),
+                0,
+                1,
+                Some(100),
+                false,
+            )],
+            1_000,
+        ))
+        .expect("append final child");
+    let relation_epoch = store
+        .apply_replay_relation(&replay_relation(
+            9,
+            revision.id(),
+            all_children_epoch,
+            "parent",
+            "grandparent",
+            900,
+            false,
+        ))
+        .expect("late parent relation");
+    let parent_reclassified = store
+        .continue_replay(revision.id(), relation_epoch)
+        .expect("reclassify parent");
+    assert_eq!(parent_reclassified.processed_count(), 1);
+    let first_page = store
+        .continue_replay(revision.id(), parent_reclassified.epoch())
+        .expect("scan first bounded child page");
+    assert_eq!(first_page.processed_count(), 256);
+    assert!(first_page.remaining_work());
+    drop(store);
+
+    let connection = Connection::open(&path).expect("inspect durable fanout cursor");
+    let cursor: (String, String, i64) = connection
+        .query_row(
+            "SELECT reason, child_session_cursor, expected_evidence_epoch
+             FROM usage_replay_work
+             WHERE revision_id = 0 AND work_kind = 'scan_children'
+               AND session_id = 'parent'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("fanout cursor");
+    assert_eq!(
+        cursor,
+        (
+            "fanout_bound".to_owned(),
+            "child-255".to_owned(),
+            i64::try_from(first_page.epoch().get()).expect("fixture epoch"),
+        )
+    );
+    drop(connection);
+
+    let mut reopened = UsageStore::open(&path).expect("reopen fanout archive");
+    let second_page = reopened
+        .continue_replay(revision.id(), first_page.epoch())
+        .expect("resume child keyset cursor");
+    assert_eq!(second_page.processed_count(), 1);
+    assert!(second_page.remaining_work());
+    drop(reopened);
+
+    let connection = Connection::open(&path).expect("inspect resumed child work");
+    let work: (i64, i64, i64) = connection
+        .query_row(
+            "SELECT
+               (SELECT count(*) FROM usage_replay_work
+                WHERE revision_id = 0 AND work_kind = 'scan_children'
+                  AND session_id = 'parent'),
+               (SELECT count(*) FROM usage_replay_work
+                WHERE revision_id = 0 AND work_kind = 'classify_session'
+                  AND session_id LIKE 'child-%'),
+               (SELECT count(DISTINCT session_id) FROM usage_replay_work
+                WHERE revision_id = 0 AND work_kind = 'classify_session'
+                  AND session_id LIKE 'child-%')",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("bounded fanout work");
+    assert_eq!(work, (0, 257, 257));
+}
+
+#[test]
+fn depth_exhaustion_stays_pending_and_durable_without_epoch_spin() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("depth-bound.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    store
+        .register_source(&registration(8))
+        .expect("registered source");
+    let revision = store
+        .begin_replay_revision(
+            &ReplayManifest::new(vec![SourceKey::from_bytes([8; 32])].into_boxed_slice())
+                .expect("manifest"),
+        )
+        .expect("begin replay revision");
+    let mut events = vec![replay_event(8, "depth-00", None, 0, 0, Some(100), false)];
+    for depth in 1_u64..=33 {
+        events.push(replay_event(
+            8,
+            &format!("depth-{depth:02}"),
+            Some(&format!("depth-{:02}", depth - 1)),
+            0,
+            depth,
+            Some(100),
+            false,
+        ));
+    }
+    let epoch = store
+        .apply_replay_append_batch(&replay_append_to(
+            8,
+            revision.id(),
+            revision.epoch(),
+            events,
+            1_000,
+        ))
+        .expect("append deep ancestry");
+    let continuation = store
+        .continue_replay(revision.id(), epoch)
+        .expect("blocked depth continuation is observable");
+    assert_eq!(continuation.processed_count(), 0);
+    assert!(continuation.remaining_work());
+    assert_eq!(continuation.epoch(), epoch);
+    drop(store);
+
+    let reopened = UsageStore::open(&path).expect("reopen depth-bound archive");
+    let quality = reopened
+        .replay_quality(revision.id())
+        .expect("depth-bound quality");
+    assert_eq!(quality.pending(), 1);
+    drop(reopened);
+    let connection = Connection::open(&path).expect("inspect depth-bound work");
+    let work: (String, i64) = connection
+        .query_row(
+            "SELECT reason, expected_evidence_epoch FROM usage_replay_work
+             WHERE revision_id = 0 AND work_kind = 'classify_session'
+               AND session_id = 'depth-33'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("durable depth work");
+    assert_eq!(work, ("depth_bound".to_owned(), 1));
 }
 
 #[test]

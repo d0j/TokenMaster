@@ -190,3 +190,35 @@ All commands passed. The store replay contract has 11 passing tests. The workspa
 run retains the explicitly ignored one-million-row M0 scale gate; it was not rerun for
 this archive slice. Late ancestry continuation, sealing, promotion, and P0-E pipeline
 integration remain unimplemented and are not claimed.
+
+## 2026-07-14 — durable late ancestry reconciliation
+
+Added a bounded `ReplayRelation` adapter derived from validated provider-neutral
+`SessionRelationDraft` values plus `apply_replay_relation` and `continue_replay` store
+transactions. A late explicit relation records the lexicographically first
+source-key/offset identity, permanently records parent disagreement or a confirmed
+cycle as conflict, invalidates the affected staging selection in the same transaction,
+and advances the store-owned evidence epoch. Stale API or persisted work epochs write
+nothing.
+
+Continuation reclassifies one session ordinal page at a time and scans direct child
+sessions with a deterministic keyset cursor. One transaction retains at most 256
+observations/children and traverses at most 32 ancestry links. A 257-child scan persists
+its cursor across reopen without duplicate or skipped child work; depth 33 remains a
+non-spinning durable pending item. Nested descendants are reconsidered in stable
+session/ordinal order, and already-conflicted cycles converge instead of recursively
+re-enqueuing each other.
+
+Verification:
+
+```powershell
+cargo +1.97.0 fmt --all -- --check
+$env:RUSTFLAGS='-Dwarnings'
+cargo +1.97.0 test -p tokenmaster-store --test replay_archive_contract --locked
+cargo +1.97.0 clippy -p tokenmaster-store --all-targets --locked
+cargo +1.97.0 test -p tokenmaster-store --locked
+```
+
+The focused restart, stale epoch, conflict, cycle, deterministic identity, nested
+ordinal, depth, and fanout contracts passed. Seal, promotion, and P0-E remain outside
+this milestone and are not claimed.

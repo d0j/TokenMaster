@@ -17,10 +17,11 @@ pub use types::{
     AccountingVersions, AppendBatch, AppendBatchParts, ArchiveMode, ArchiveState, EventCursor,
     GenerationSnapshot, GenerationStatus, MAX_APPEND_CHUNK_UPDATES, MAX_APPEND_EVENTS,
     MAX_REPLAY_SOURCES, MAX_RESUME_BYTES, MAX_USAGE_EVENT_PAGE_SIZE, ReplayAppendBatch,
-    ReplayAppendBatchParts, ReplayEpoch, ReplayManifest, ReplayQualityCounts, ReplayRevisionId,
-    ReplayRevisionSnapshot, ReplayRevisionStatus, SOURCE_CHUNK_BYTES, SourceKey, SourceKind,
-    SourceRegistration, SourceRegistrationParts, StoredCheckpoint, StoredCheckpointParts,
-    StoredSourceChunk, StoredUsageEvent, StoredVerification, UsageStoreCounts,
+    ReplayAppendBatchParts, ReplayContinuationResult, ReplayEpoch, ReplayManifest,
+    ReplayQualityCounts, ReplayRelation, ReplayRevisionId, ReplayRevisionSnapshot,
+    ReplayRevisionStatus, SOURCE_CHUNK_BYTES, SourceKey, SourceKind, SourceRegistration,
+    SourceRegistrationParts, StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk,
+    StoredUsageEvent, StoredVerification, UsageStoreCounts,
 };
 
 use migration::migrate_schema;

@@ -26,7 +26,11 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   immutable legacy snapshot, explicit archive modes, fixed/version-owned replay
   manifests, invisible staging generations, transactional classified replay append,
   deterministic eligible selection, epoch CAS, and fail-closed persisted-version
-  validation. Staging rows never affect current event pages or source metadata.
+  validation. Late explicit relations invalidate old selections atomically and use
+  restart-safe ordinal/child keyset work capped at 32 ancestry links and 256 direct
+  descendants per transaction. Conflicts/cycles are permanent; bound exhaustion is
+  durable pending work without epoch spin. Staging rows never affect current event
+  pages or source metadata.
 
 ## Next implementation slice
 
@@ -43,9 +47,9 @@ The repeated critical audit is recorded in `docs/AUDIT_AND_MASTER_PLAN.md`. P0-A
 the P0-B Codex-lineage surface are implemented under the completed executable TDD plan
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`.
 
-P0-D is in progress. Its next slice is durable late-relation/descendant continuation
-with bounded fanout/depth, followed by seal and atomic promotion. Current archive
-totals remain not replay-safe until those gates and P0-E pipeline proof complete.
+P0-D is in progress. Its next slice is seal validation and atomic promotion. Current
+archive totals remain not replay-safe until that gate and P0-E pipeline proof
+complete.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 
