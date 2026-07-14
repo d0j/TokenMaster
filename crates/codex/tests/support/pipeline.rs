@@ -81,7 +81,11 @@ impl From<StoreError> for PipelineError {
 
 impl From<ReaderError> for PipelineError {
     fn from(error: ReaderError) -> Self {
-        Self::Reader(error.code())
+        if error.code() == ReaderErrorCode::Cancelled {
+            Self::Cancelled
+        } else {
+            Self::Reader(error.code())
+        }
     }
 }
 
@@ -186,10 +190,29 @@ pub fn run_pipeline(
         return Err(error);
     }
 
-    let before = visible_summary(&archive.store, false)?;
-    let sealed = archive
+    let before = match visible_summary(&archive.store, false) {
+        Ok(summary) => summary,
+        Err(error) => {
+            archive
+                .store
+                .discard_replay_revision(state.revision_id, state.epoch)
+                .map_err(PipelineError::from)?;
+            return Err(error);
+        }
+    };
+    let sealed = match archive
         .store
-        .seal_replay_revision(state.revision_id, state.epoch)?;
+        .seal_replay_revision(state.revision_id, state.epoch)
+    {
+        Ok(sealed) => sealed,
+        Err(error) => {
+            archive
+                .store
+                .discard_replay_revision(state.revision_id, state.epoch)
+                .map_err(PipelineError::from)?;
+            return Err(error.into());
+        }
+    };
     state.epoch = sealed.epoch();
     if let Err(error) = archive
         .store
@@ -396,17 +419,16 @@ fn rebuild_descriptor(
     apply_reader_batch(archive, state, source_key, &first)?;
 
     while !reached_end {
-        if state
+        let cancel_read = state
             .cancel_reader_after_batches
-            .is_some_and(|limit| archive.applied_batches >= limit)
-        {
-            return Err(PipelineError::Cancelled);
-        }
+            .is_some_and(|limit| archive.applied_batches >= limit);
         let snapshot = archive
             .store
             .replay_generation_snapshot(state.revision_id, source_key)?;
         let checkpoint = reader_checkpoint(snapshot.checkpoint())?;
-        let batch = expect_batch(read_source_batch(descriptor, Some(&checkpoint), || false)?)?;
+        let batch = expect_batch(read_source_batch(descriptor, Some(&checkpoint), || {
+            cancel_read
+        })?)?;
         reached_end = batch.reached_snapshot_end();
         apply_reader_batch(archive, state, source_key, &batch)?;
     }
