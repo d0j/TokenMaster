@@ -26,6 +26,14 @@ declarative skin inheritance, complete English/Russian localization, performance
 privacy, conformance, and delivery gates. This milestone is design-only and does not
 claim those surfaces are implemented.
 
+The design was approved with execution ordered by correctness first: replay-safe
+canonical accounting, then staging/runtime engine, with automation connector and
+presentation work later. A provider-neutral source-adapter seam was added so local
+Codex JSONL is the first bounded adapter rather than a dependency of the store,
+queries, automation, or UI. The detailed P0 TDD plan is recorded in
+`docs/superpowers/plans/2026-07-14-tokenmaster-p0-replay-correctness.md`; this planning
+milestone changes no runtime behavior.
+
 ## Architecture milestones
 
 - M0 selected and proved Rust 1.97, Slint 1.17, bundled SQLite, the software renderer,

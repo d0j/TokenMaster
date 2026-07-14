@@ -9,9 +9,11 @@
 
 ## Current implementation boundary
 
-The next M1 work is staging generations and scan epochs in `crates/store`. Existing
-current-generation append is atomic and path-private; staging and reconciliation do
-not exist yet. Preserve current canonical events if a staging write or promotion fails.
+The next M1 work is replay-safe canonical accounting under
+`docs/superpowers/plans/2026-07-14-tokenmaster-p0-replay-correctness.md`. Existing
+timestamp-based fingerprints handle exact duplicates but do not yet prove copied
+fork/subagent prefixes when timestamps change. Complete that fail-safe lineage slice
+before staging generations, scan epochs, analytics, automation, or product UI.
 
 ## Commands
 

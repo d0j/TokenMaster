@@ -88,12 +88,13 @@ The alternatives were rejected deliberately:
 ## 3. Target architecture
 
 ```text
-Codex active/archive/direct sources
+Codex local active/archive/direct adapter (1.0)
+future allowlisted source adapters
         |
         v
-bounded discovery -> reader -> parser -> replay canonicalizer
-        |                              |
-        +------------------------------+
+source catalog -> bounded reader -> provider decoder -> replay canonicalizer
+        |                                              |
+        +----------------------------------------------+
                        |
                        v
        staging generations and scan reconciliation
@@ -124,7 +125,36 @@ bounded discovery -> reader -> parser -> replay canonicalizer
 - UI, CLI, and MCP are adapters. They do not parse provider files or issue arbitrary
   SQL.
 
-### 3.2 Runtime model
+### 3.2 Source adapter seam
+
+Codex local files are the only ingestion promise for 1.0, but they are not an
+architectural dependency of the engine, store, query facade, or UI. Ingestion is
+split into typed capability boundaries:
+
+- a source catalog returns bounded `SourceDescriptor` values with stable provider,
+  profile, logical-source, kind, identity, and capability fields;
+- a source reader returns bounded sequential chunks, identity evidence, and opaque
+  adapter checkpoints under engine-owned cancellation, timeout, and backpressure;
+- a provider decoder converts those chunks into source-neutral canonical
+  observations, lineage evidence, and bounded diagnostic codes;
+- an optional quota adapter returns provider-defined immutable quota snapshots and
+  never exposes credentials or raw provider responses.
+
+The engine depends on these contracts, not on Codex paths or JSONL shapes. The store
+persists stable provider-neutral identities and canonical observations. Queries and
+all presentation surfaces consume provider-neutral snapshots. A later local-file,
+import, remote-agent, SSH, authenticated API, or other provider adapter can therefore
+be added without changing accounting, storage, analytics, automation, or UI
+contracts.
+
+These are statically linked, allowlisted adapters with explicit capabilities and
+per-adapter bounds. TokenMaster does not expose a generic arbitrary filesystem,
+network, command, or executable-plugin interface. The source contract uses bounded
+owned data and streaming pull so a slow or remote adapter cannot create an unbounded
+queue or retain complete history. Adapter-specific checkpoint payloads are versioned,
+size-bounded, and opaque outside that adapter.
+
+### 3.3 Runtime model
 
 The desktop process uses a small fixed set of workers and bounded channels. Filesystem
 events are hints, not authority: they are coalesced and backed by periodic bounded
@@ -639,7 +669,7 @@ client was run. Release claims remain bound to one clean commit and executable h
 
 Merge this reviewed design into `SPECIFICATION`, `DATA_CONTRACT`, `API_CONTRACT`,
 `SECURITY`, `DECISIONS`, `TRACEABILITY`, `ROADMAP`, and `FEATURE_PARITY`. Add no
-behavior until contradictions and placeholders are absent.
+behavior until contradictions and unresolved drafting markers are absent.
 
 ### B. Canonical replay correctness
 
@@ -703,6 +733,7 @@ identity outside tracked project truth.
 ## 18. Explicit non-goals for 1.0
 
 - Multi-provider ingestion beyond Codex.
+- Runtime-loaded ingestion code or a generic arbitrary filesystem/network adapter.
 - Electron, Tauri, webview, Go, or Node runtime.
 - Remote/cloud MCP or public local HTTP listener.
 - A background daemon required for normal operation.

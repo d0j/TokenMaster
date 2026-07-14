@@ -19,13 +19,17 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 ## Next implementation slice
 
 The product architecture, universal automation connector, complete UI, dynamic quota
-bars, skins, layouts, density, and localization are specified in
-`docs/superpowers/specs/2026-07-14-tokenmaster-product-architecture-design.md` and are
-pending written-spec review. No implementation is claimed by that design.
+bars, skins, layouts, density, and localization are approved in
+`docs/superpowers/specs/2026-07-14-tokenmaster-product-architecture-design.md`. Its
+source-adapter seam keeps the current local Codex reader replaceable by future
+allowlisted bounded adapters without coupling storage, analytics, automation, or UI
+to Codex JSONL. No implementation is claimed by that design.
 
-The first implementation slice remains accounting correctness: add fork/subagent
-replay fixtures and canonical lineage rules before analytics. It is followed by
-invisible staging generations, atomic promotion, safe scan epochs, and the runtime
+The reviewed implementation sequence starts with accounting correctness: add
+fork/subagent replay fixtures and canonical lineage rules before analytics. The
+test-driven task plan is
+`docs/superpowers/plans/2026-07-14-tokenmaster-p0-replay-correctness.md`. It is followed
+by invisible staging generations, atomic promotion, safe scan epochs, and the runtime
 engine. A staging write must never affect canonical events, and only a completed scan
 may mark unseen sources missing.
 

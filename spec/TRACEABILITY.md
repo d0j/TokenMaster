@@ -22,3 +22,9 @@ MCP/CLI automation, full UI, dynamic bars, modular presentation, localization, a
 release gates is recorded in
 `docs/superpowers/specs/2026-07-14-tokenmaster-product-architecture-design.md`.
 This is design traceability only; it is not implementation evidence.
+
+The approved P0 execution breakdown and its focused validators are recorded in
+`docs/superpowers/plans/2026-07-14-tokenmaster-p0-replay-correctness.md`. The plan also
+preserves a provider-neutral ingest boundary: local Codex input is first, while later
+allowlisted source adapters must terminate at the same bounded observation contract.
+This is planning evidence, not a completed replay or adapter implementation row.
