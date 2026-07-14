@@ -863,6 +863,201 @@ fn replay_generation_snapshot_is_exact_staging_revision_state() {
 }
 
 #[test]
+fn prepare_replay_source_rebinds_only_untouched_staging_by_epoch() {
+    let mut store = UsageStore::in_memory().expect("usage store");
+    store.register_source(&registration(5)).expect("source");
+    let current_before = store
+        .generation_snapshot(SourceKey::from_bytes([5; 32]))
+        .expect("current snapshot")
+        .expect("current generation");
+    let revision = store
+        .begin_replay_revision_all_sources()
+        .expect("begin replay revision");
+    let prepared_checkpoint = StoredCheckpoint::new(StoredCheckpointParts {
+        parser_schema_version: 2,
+        physical_identity: Some([99; 32]),
+        logical_identity: [6; 32],
+        committed_offset: 0,
+        scan_offset: 0,
+        observed_file_length: 0,
+        modified_time_ns: None,
+        anchor_start: 0,
+        anchor_len: 0,
+        anchor_sha256: [0; 32],
+        resume: br#"{"provider":"empty-v2"}"#.to_vec().into_boxed_slice(),
+        discarding_oversized_line: false,
+        incomplete_tail: false,
+        verification: StoredVerification::Incremental,
+    })
+    .expect("prepared zero checkpoint");
+
+    let prepared_epoch = store
+        .prepare_replay_source(
+            revision.id(),
+            revision.epoch(),
+            SourceKey::from_bytes([5; 32]),
+            &prepared_checkpoint,
+        )
+        .expect("prepare untouched staging source");
+    assert_eq!(prepared_epoch.get(), revision.epoch().get() + 1);
+    let staging = store
+        .replay_generation_snapshot(revision.id(), SourceKey::from_bytes([5; 32]))
+        .expect("prepared staging snapshot");
+    assert_eq!(staging.checkpoint().parser_schema_version(), 2);
+    assert_eq!(staging.checkpoint().physical_identity(), Some(&[99; 32]));
+    assert_eq!(staging.checkpoint().resume(), br#"{"provider":"empty-v2"}"#);
+    assert_eq!(
+        store
+            .generation_snapshot(SourceKey::from_bytes([5; 32]))
+            .expect("current snapshot after prepare")
+            .expect("current generation after prepare"),
+        current_before
+    );
+
+    let stale = store
+        .prepare_replay_source(
+            revision.id(),
+            revision.epoch(),
+            SourceKey::from_bytes([5; 32]),
+            &prepared_checkpoint,
+        )
+        .expect_err("stale preparation epoch must fail");
+    assert_eq!(stale.code(), StoreErrorCode::StaleRevision);
+
+    let wrong_logical = StoredCheckpoint::new(StoredCheckpointParts {
+        parser_schema_version: 2,
+        physical_identity: Some([99; 32]),
+        logical_identity: [88; 32],
+        committed_offset: 0,
+        scan_offset: 0,
+        observed_file_length: 0,
+        modified_time_ns: None,
+        anchor_start: 0,
+        anchor_len: 0,
+        anchor_sha256: [0; 32],
+        resume: Box::default(),
+        discarding_oversized_line: false,
+        incomplete_tail: false,
+        verification: StoredVerification::Incremental,
+    })
+    .expect("bounded wrong-logical checkpoint");
+    let mismatch = store
+        .prepare_replay_source(
+            revision.id(),
+            prepared_epoch,
+            SourceKey::from_bytes([5; 32]),
+            &wrong_logical,
+        )
+        .expect_err("logical identity cannot be rebound");
+    assert_eq!(mismatch.code(), StoreErrorCode::StaleCheckpoint);
+    let after_mismatch = store
+        .replay_generation_snapshot(revision.id(), SourceKey::from_bytes([5; 32]))
+        .expect("staging after rejected preparation");
+    assert_eq!(after_mismatch, staging);
+}
+
+#[test]
+fn prepare_replay_source_rejects_completed_or_non_incremental_state_without_writes() {
+    let mut touched = UsageStore::in_memory().expect("touched store");
+    touched.register_source(&registration(6)).expect("source");
+    let revision = touched
+        .begin_replay_revision_all_sources()
+        .expect("begin touched revision");
+    let empty = StoredCheckpoint::new(StoredCheckpointParts {
+        parser_schema_version: 1,
+        physical_identity: Some([6; 32]),
+        logical_identity: [7; 32],
+        committed_offset: 0,
+        scan_offset: 0,
+        observed_file_length: 0,
+        modified_time_ns: None,
+        anchor_start: 0,
+        anchor_len: 0,
+        anchor_sha256: [0; 32],
+        resume: Box::default(),
+        discarding_oversized_line: false,
+        incomplete_tail: false,
+        verification: StoredVerification::Incremental,
+    })
+    .expect("empty provider checkpoint");
+    let prepared = touched
+        .prepare_replay_source(
+            revision.id(),
+            revision.epoch(),
+            SourceKey::from_bytes([6; 32]),
+            &empty,
+        )
+        .expect("prepare source");
+    let appended = touched
+        .apply_replay_append_batch(&replay_append(
+            6,
+            revision.id(),
+            prepared,
+            vec![replay_event(6, "touched", None, 0, 10, Some(100), false)],
+        ))
+        .expect("touch staging generation");
+    let before_retry = touched
+        .replay_generation_snapshot(revision.id(), SourceKey::from_bytes([6; 32]))
+        .expect("touched staging snapshot");
+    let retry = touched
+        .prepare_replay_source(
+            revision.id(),
+            appended,
+            SourceKey::from_bytes([6; 32]),
+            &empty,
+        )
+        .expect_err("touched staging source cannot be rebound");
+    assert_eq!(retry.code(), StoreErrorCode::StaleCheckpoint);
+    assert_eq!(
+        touched
+            .replay_generation_snapshot(revision.id(), SourceKey::from_bytes([6; 32]))
+            .expect("snapshot after rejected retry"),
+        before_retry
+    );
+
+    let mut invalid = UsageStore::in_memory().expect("invalid store");
+    invalid.register_source(&registration(8)).expect("source");
+    let invalid_revision = invalid
+        .begin_replay_revision_all_sources()
+        .expect("begin invalid revision");
+    let full_prefix = StoredCheckpoint::new(StoredCheckpointParts {
+        parser_schema_version: 1,
+        physical_identity: Some([8; 32]),
+        logical_identity: [9; 32],
+        committed_offset: 0,
+        scan_offset: 0,
+        observed_file_length: 0,
+        modified_time_ns: None,
+        anchor_start: 0,
+        anchor_len: 0,
+        anchor_sha256: [0; 32],
+        resume: Box::default(),
+        discarding_oversized_line: false,
+        incomplete_tail: false,
+        verification: StoredVerification::FullPrefix,
+    })
+    .expect("bounded full-prefix checkpoint");
+    let before_invalid = invalid
+        .replay_generation_snapshot(invalid_revision.id(), SourceKey::from_bytes([8; 32]))
+        .expect("staging before invalid preparation");
+    let error = invalid
+        .prepare_replay_source(
+            invalid_revision.id(),
+            invalid_revision.epoch(),
+            SourceKey::from_bytes([8; 32]),
+            &full_prefix,
+        )
+        .expect_err("full-prefix preparation must fail");
+    assert_eq!(error.code(), StoreErrorCode::InvalidValue);
+    assert_eq!(
+        invalid
+            .replay_generation_snapshot(invalid_revision.id(), SourceKey::from_bytes([8; 32]),)
+            .expect("staging after invalid preparation"),
+        before_invalid
+    );
+}
+
+#[test]
 fn source_chunk_reads_one_exact_proof_and_validates_bounds() {
     let mut store = UsageStore::in_memory().expect("usage store");
     store.register_source(&registration(3)).expect("source");

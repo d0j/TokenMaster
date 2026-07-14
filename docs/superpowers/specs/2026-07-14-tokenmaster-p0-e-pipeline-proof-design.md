@@ -104,7 +104,24 @@ infallible reconstruction of an opaque fixed-size digest, symmetric with
 mint an identity from variable-length untrusted input. `ReaderCheckpointV1::new`
 continues to validate the reconstructed checkpoint as a whole.
 
-No arbitrary SQL, source enumeration, bulk chunk vector, or mutation is added.
+No arbitrary SQL, source enumeration, or bulk chunk vector is added.
+
+Replay begin is provider-neutral and therefore cannot manufacture a valid empty Codex
+resume payload or know that an atomic file replacement has a new physical identity.
+Copying the old physical identity while clearing offsets makes the first reader call
+classify a legitimate replacement as stale, and an empty opaque resume cannot be
+decoded after restart. P0-E therefore adds one constrained mutation:
+
+- `prepare_replay_source(revision_id, expected_epoch, source_key, checkpoint)` accepts
+  only a validated zero-offset, empty-anchor, incremental checkpoint for an untouched
+  pending staging generation. It requires the registered logical identity, rejects
+  observations/chunks/work or a stale/sealed revision, updates only that invisible
+  generation, and advances the evidence epoch by CAS.
+
+The adapter obtains the live path-private physical identity and its own valid empty
+resume state from an initial bounded read, prepares staging, and may apply that same
+batch immediately. This supports unchanged files, atomic replacement, parser schema
+upgrades, cancellation, and restart without teaching SQLite any provider format.
 
 ## 5. Deterministic proof-driver algorithm
 
@@ -257,7 +274,7 @@ P0-E is complete only when:
 
 1. P0-D.1 schema v3/all-source/paged-manifest gates pass first;
 2. focused RED/GREEN tests prove persisted physical-identity reconstruction, both new
-   store reads, and the cross-crate pipeline;
+   store reads, exact staging preparation, and the cross-crate pipeline;
 3. replay, append, restart, truncate, replacement, cancellation, and incomplete-tail
    fixtures all preserve exact atomic behavior;
 4. independent expected counts/totals and `ReplayQualityCounts` match after reopen;

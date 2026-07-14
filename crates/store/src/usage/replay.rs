@@ -399,6 +399,84 @@ impl UsageStore {
         Ok(next_epoch)
     }
 
+    pub fn prepare_replay_source(
+        &mut self,
+        revision_id: ReplayRevisionId,
+        expected_epoch: ReplayEpoch,
+        source_key: SourceKey,
+        checkpoint: &StoredCheckpoint,
+    ) -> Result<ReplayEpoch, StoreError> {
+        if checkpoint.committed_offset() != 0
+            || checkpoint.scan_offset() != 0
+            || checkpoint.observed_file_length() != 0
+            || checkpoint.modified_time_ns().is_some()
+            || checkpoint.anchor_start() != 0
+            || checkpoint.anchor_len() != 0
+            || checkpoint.discarding_oversized_line()
+            || checkpoint.incomplete_tail()
+            || checkpoint.verification() != StoredVerification::Incremental
+        {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let revision = load_staging_revision(&transaction, revision_id)?;
+        validate_replay_revision(&revision, expected_epoch, AccountingVersions::compiled())?;
+        let source = load_replay_source(&transaction, revision_id, source_key)?;
+        if source.logical_identity != *checkpoint.logical_identity() {
+            return Err(StoreError::new(StoreErrorCode::StaleCheckpoint));
+        }
+        let state: (String, i64, i64) = transaction.query_row(
+            "SELECT
+               replay.state,
+               (SELECT count(*) FROM usage_observation AS observation
+                WHERE observation.file_key = replay.file_key
+                  AND observation.generation = replay.generation),
+               (SELECT count(*) FROM usage_source_chunk AS chunk
+                WHERE chunk.file_key = replay.file_key
+                  AND chunk.generation = replay.generation)
+             FROM usage_replay_source AS replay
+             WHERE replay.revision_id = ?1 AND replay.file_key = ?2
+               AND replay.generation = ?3",
+            params![
+                revision_id.as_sql()?,
+                source_key.as_bytes().as_slice(),
+                sql_u64(source.generation)?,
+            ],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        if state != ("pending".to_owned(), 0, 0)
+            || source.committed_offset != 0
+            || source.scan_offset != 0
+        {
+            return Err(StoreError::new(StoreErrorCode::StaleCheckpoint));
+        }
+
+        let next_epoch = next_replay_epoch(revision.epoch)?;
+        update_checkpoint_for_status(
+            &transaction,
+            source_key,
+            source.generation,
+            0,
+            0,
+            checkpoint,
+            "staging",
+        )?;
+        synchronize_work_epochs(&transaction, revision_id, next_epoch)?;
+        advance_revision_epoch(&transaction, revision_id, expected_epoch, next_epoch)?;
+        let foreign_key_failures: i64 =
+            transaction.query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |row| {
+                row.get(0)
+            })?;
+        if foreign_key_failures != 0 {
+            return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+        }
+        transaction.commit()?;
+        Ok(next_epoch)
+    }
+
     pub fn apply_replay_relation(
         &mut self,
         relation: &ReplayRelation,

@@ -9,10 +9,11 @@ streaming enumeration, restart-safe reader batches, accounting canonicalization,
 the transactional replay archive with exact atomic outcomes and bounded working
 state.
 
-**Architecture:** Keep all production dependency edges unchanged. Add three narrow
+**Architecture:** Keep all production dependency edges unchanged. Add four narrow
 restart seams (`PhysicalFileIdentity::from_persisted_bytes`, one exact staging
-generation read, one exact chunk read), then implement a development-only integration
-driver in `tokenmaster-codex`. The driver streams two enumeration passes, holds one
+generation read, one exact chunk read, and exact-epoch preparation of an untouched
+staging source), then implement a development-only integration driver in
+`tokenmaster-codex`. The driver streams two enumeration passes, holds one
 reader/canonical batch at a time, uses only public production APIs, and is never
 compiled into a product scheduler.
 
@@ -154,6 +155,25 @@ Return `Ok(None)` only for a genuinely absent key.
 
 **Step 5: Run store gates**
 
+Before the read gates, add a RED/GREEN contract for:
+
+```rust
+pub fn prepare_replay_source(
+    &mut self,
+    revision_id: ReplayRevisionId,
+    expected_epoch: ReplayEpoch,
+    source_key: SourceKey,
+    checkpoint: &StoredCheckpoint,
+) -> Result<ReplayEpoch, StoreError>
+```
+
+The method accepts only a validated zero-offset, empty-anchor, incremental checkpoint
+for the exact untouched pending staging generation; requires the registered logical
+identity; rejects stale epoch/revision, sealed state, prior observations/chunks/work,
+and nonzero/incomplete/full-prefix checkpoints; updates only staging; and advances the
+revision epoch atomically. Prove rollback and successful replacement of the physical
+identity plus opaque resume payload.
+
 ```powershell
 cargo +1.97.0 test -p tokenmaster-store --test replay_archive_contract --locked
 cargo +1.97.0 test -p tokenmaster-store --test usage_ingest_contract --locked
@@ -233,11 +253,14 @@ The driver must:
 
 1. require one available discovered profile and complete enumeration;
 2. derive `SourceKey` from `logical_file_identity`;
-3. register each emitted descriptor immediately in pass one and drop its initial
+3. register each new emitted descriptor immediately in pass one and drop its initial
    reader batch;
 4. begin the disk-backed all-source revision only after complete enumeration;
-5. in pass two, obtain the exact staging snapshot, repeatedly read/canonicalize/apply
-   at most `MAX_BATCH_EVENTS`, then apply relations in emitted order with exact epoch;
+5. in pass two, perform one bounded read without a checkpoint, prepare the exact
+   untouched staging source with a valid empty provider checkpoint and live physical
+   identity, apply that same batch, then obtain exact staging snapshots and repeatedly
+   read/canonicalize/apply at most `MAX_BATCH_EVENTS`; apply relations in emitted order
+   with exact epoch;
 6. verify a complete prefix using `source_chunk` one chunk at a time and apply an
    otherwise unchanged full-prefix checkpoint;
 7. run bounded continuation until `remaining_work == false`, then exact seal/promote;
