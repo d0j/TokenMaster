@@ -1,0 +1,11 @@
+[ccusage]
+repository = "https://github.com/ccusage/ccusage"
+commit = "997ad7f90189867d9f218aa0e7401586e3b9fde8"
+license = "MIT"
+notes = "Codex JSONL parsing, model normalization and pricing behavior were adapted, not vendored as a binary."
+
+[where_my_tokens]
+repository = "https://github.com/jeongwookie/WhereMyTokens"
+commit = "2bcedf1df4bf7c1acb096cfafc4a453152986f98"
+license = "MIT"
+notes = "Live Codex quota parsing and UI concepts were adapted; Electron code was not retained."

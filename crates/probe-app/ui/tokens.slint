@@ -1,0 +1,12 @@
+export global Theme {
+    in-out property <int> mode: 0;
+    out property <color> background: mode == 2 ? #f5f7fb : (mode == 1 ? #16181d : #090d16);
+    out property <color> surface: mode == 2 ? #ffffff : (mode == 1 ? #20242b : #111827);
+    out property <color> surface-raised: mode == 2 ? #eef2f8 : (mode == 1 ? #292e37 : #172033);
+    out property <color> text-primary: mode == 2 ? #172033 : #f4f7fb;
+    out property <color> text-muted: mode == 2 ? #596579 : #98a6ba;
+    out property <color> accent: mode == 2 ? #006ee6 : (mode == 1 ? #6ea8ff : #55d6be);
+    out property <color> border: mode == 2 ? #d8deea : (mode == 1 ? #363d48 : #26334a);
+    out property <length> spacing: 12px;
+    out property <length> radius: 10px;
+}

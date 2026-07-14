@@ -1,0 +1,32 @@
+import { QuotaRow } from "../models.slint";
+import { Theme } from "../tokens.slint";
+
+export component QuotaCard inherits Rectangle {
+    in property <QuotaRow> quota;
+    min-width: 190px;
+    min-height: 112px;
+    background: Theme.surface;
+    border-color: Theme.border;
+    border-width: 1px;
+    border-radius: Theme.radius;
+    accessible-role: groupbox;
+    accessible-label: quota.label;
+
+    VerticalLayout {
+        padding: Theme.spacing;
+        spacing: 6px;
+        Text { text: quota.label; color: Theme.text-primary; font-weight: 700; }
+        Text { text: quota.usage-label; color: Theme.text-muted; }
+        Rectangle {
+            height: 6px;
+            background: Theme.surface-raised;
+            border-radius: 3px;
+            Rectangle {
+                width: quota.used-ratio * parent.width;
+                background: Theme.accent;
+                border-radius: 3px;
+            }
+        }
+        Text { text: quota.reset-label; color: Theme.text-muted; font-size: 12px; }
+    }
+}

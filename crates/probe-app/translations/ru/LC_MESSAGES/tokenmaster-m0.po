@@ -1,0 +1,34 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: ru\n"
+
+msgid "Usage"
+msgstr "Использование"
+
+msgid "Usage trend"
+msgstr "Тренд использования"
+
+msgid "Sessions"
+msgstr "Сессии"
+
+msgid "Refined"
+msgstr "Обзор"
+
+msgid "Control center"
+msgstr "Центр управления"
+
+msgid "Workbench"
+msgstr "Рабочая панель"
+
+msgid "Theme"
+msgstr "Тема"
+
+msgid "Show"
+msgstr "Показать"
+
+msgid "Hide"
+msgstr "Скрыть"
+
+msgid "Quit"
+msgstr "Выход"

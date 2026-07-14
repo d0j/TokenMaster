@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="102" height="24" viewBox="0 0 102 24" role="img" aria-label="Slint: 1.17">
+  <title>Slint: 1.17</title>
+  <rect width="102" height="24" rx="6" fill="#020807"/>
+  <rect width="46" height="24" rx="6" fill="#9BFF00"/>
+  <rect x="40" width="10" height="24" fill="#9BFF00"/>
+  <text x="8" y="16" fill="#020807" font-size="11" font-family="Segoe UI,Arial,sans-serif">Slint</text>
+  <text x="56" y="16" fill="#f8fafc" font-size="11" font-family="Segoe UI,Arial,sans-serif">1.17</text>
+</svg>

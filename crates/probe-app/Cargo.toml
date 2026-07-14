@@ -1,0 +1,24 @@
+[package]
+name = "tokenmaster-m0"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+build = "build.rs"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+slint.workspace = true
+tokenmaster-domain = { path = "../domain" }
+tokenmaster-gates = { path = "../gates" }
+tokenmaster-store = { path = "../store" }
+windows.workspace = true
+
+[build-dependencies]
+slint-build.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -1,0 +1,53 @@
+name: Feature request
+description: Propose a bounded TokenMaster improvement
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the user problem before the implementation. TokenMaster must remain
+        local-only, responsive, bounded in memory, and explicit about unfinished gates.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What decision or workflow is difficult today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Define the smallest useful behavior and its user-facing states.
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Boundaries and non-goals
+      description: Include portability, compatibility, and release implications.
+    validations:
+      required: true
+  - type: textarea
+    id: resource_impact
+    attributes:
+      label: Memory and performance impact
+      description: State expected retained state, hot-path work, and a measurable gate.
+    validations:
+      required: true
+  - type: textarea
+    id: privacy_impact
+    attributes:
+      label: Privacy and security impact
+      description: Explain which data crosses each boundary and why it remains bounded.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance evidence
+      description: Name the focused tests and broader verification required.
+    validations:
+      required: true

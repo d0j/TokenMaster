@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 512 512" role="img" aria-label="TokenMaster mark">
+  <title>TokenMaster mark</title>
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0A1B13"/>
+      <stop offset="0.52" stop-color="#020807"/>
+      <stop offset="1" stop-color="#000403"/>
+    </linearGradient>
+    <linearGradient id="limeGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#D8FF52"/>
+      <stop offset="0.42" stop-color="#9BFF00"/>
+      <stop offset="1" stop-color="#36BE00"/>
+    </linearGradient>
+    <linearGradient id="silverGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.48" stop-color="#F0F3F1"/>
+      <stop offset="1" stop-color="#AEB8B3"/>
+    </linearGradient>
+    <linearGradient id="markBg" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#11241A"/>
+      <stop offset="0.55" stop-color="#07110C"/>
+      <stop offset="1" stop-color="#010504"/>
+    </linearGradient>
+  </defs>
+  <g>
+    <polygon points="256,38 420,133 420,323 256,474 92,323 92,133" fill="url(#markBg)" stroke="#001B0B" stroke-width="22" stroke-linejoin="round"/>
+    <polygon points="256,38 420,133 420,323 256,474 92,323 92,133" fill="none" stroke="#9BFF00" stroke-width="14" stroke-linejoin="round"/>
+    <polygon points="256,38 420,133 420,323 256,474 92,323 92,133" fill="none" stroke="#183B20" stroke-width="4" stroke-linejoin="round" opacity="0.95"/>
+    <path d="M 256.00,77.00 L 265.90,109.10 L 298.00,119.00 L 265.90,128.90 L 256.00,161.00 L 246.10,128.90 L 214.00,119.00 L 246.10,109.10 Z" fill="#9BFF00"/>
+    <polygon points="150,187 192,166 256,215 320,166 362,187 280,253 280,361 232,361 232,253" fill="#F7FAF7"/>
+    <polygon points="145,234 190,260 190,350 145,324" fill="#F7FAF7"/>
+    <polygon points="322,260 367,234 367,324 322,350" fill="#F7FAF7"/>
+  </g>
+</svg>

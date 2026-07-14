@@ -1,0 +1,60 @@
+import { Button } from "std-widgets.slint";
+import { QuotaRow, ChartPoint, SessionRow } from "models.slint";
+import { Theme } from "tokens.slint";
+import { RefinedLayout } from "layouts/refined.slint";
+import { ControlCenterLayout } from "layouts/control-center.slint";
+import { WorkbenchLayout } from "layouts/workbench.slint";
+export { TokenMasterTray } from "tray.slint";
+
+export component MainWindow inherits Window {
+    in-out property <int> layout-id: 0;
+    in-out property <int> theme-id: 0;
+    in-out property <string> locale-id: "en";
+    in property <[QuotaRow]> quota-targets;
+    in property <[ChartPoint]> chart-points;
+    in property <[SessionRow]> session-rows;
+    callback switch-layout(int);
+    callback switch-theme(int);
+    callback switch-locale(string);
+    callback load-before(int);
+
+    title: "TokenMaster M0";
+    width: 1100px;
+    height: 720px;
+    background: Theme.background;
+    init => { Theme.mode = root.theme-id; }
+    changed theme-id => { Theme.mode = root.theme-id; }
+
+    VerticalLayout {
+        Rectangle {
+            height: 48px;
+            background: Theme.surface;
+            HorizontalLayout {
+                padding-left: Theme.spacing;
+                padding-right: Theme.spacing;
+                spacing: 8px;
+                Text { text: "TokenMaster"; color: Theme.text-primary; font-weight: 700; horizontal-stretch: 1; }
+                Button { text: @tr("Refined"); clicked => { root.switch-layout(0); } }
+                Button { text: @tr("Control center"); clicked => { root.switch-layout(1); } }
+                Button { text: @tr("Workbench"); clicked => { root.switch-layout(2); } }
+                Button { text: @tr("Theme"); clicked => { root.switch-theme(mod(root.theme-id + 1, 3)); } }
+                Button { text: root.locale-id == "ru" ? "EN" : "RU"; clicked => { root.switch-locale(root.locale-id == "ru" ? "en" : "ru"); } }
+            }
+        }
+        if root.layout-id == 0: RefinedLayout {
+            quotas: root.quota-targets;
+            points: root.chart-points;
+            sessions: root.session-rows;
+        }
+        if root.layout-id == 1: ControlCenterLayout {
+            quotas: root.quota-targets;
+            points: root.chart-points;
+            sessions: root.session-rows;
+        }
+        if root.layout-id == 2: WorkbenchLayout {
+            quotas: root.quota-targets;
+            points: root.chart-points;
+            sessions: root.session-rows;
+        }
+    }
+}

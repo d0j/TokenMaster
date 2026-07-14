@@ -1,0 +1,5 @@
+[build]
+target = "x86_64-pc-windows-gnu"
+
+[env]
+SLINT_BACKEND = { value = "winit-software", force = false }

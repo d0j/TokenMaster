@@ -1,0 +1,31 @@
+[workspace]
+resolver = "3"
+members = [
+  "crates/domain",
+  "crates/platform",
+  "crates/codex",
+  "crates/provider",
+  "crates/store",
+  "crates/gates",
+  "crates/probe-app",
+]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+rust-version = "1.97"
+
+[workspace.dependencies]
+anyhow = "=1.0.103"
+chrono = { version = "=0.4.45", default-features = false, features = ["std"] }
+clap = { version = "=4.6.1", features = ["derive"] }
+libsqlite3-sys = { version = "=0.38.1", features = ["bundled"] }
+rusqlite = { version = "=0.40.1", features = ["bundled"] }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.150"
+sha2 = "=0.11.0"
+slint = { version = "=1.17.1", default-features = false, features = ["accessibility", "backend-winit", "compat-1-2", "renderer-femtovg", "renderer-software", "std", "system-tray"] }
+slint-build = "=1.17.1"
+tempfile = "=3.27.0"
+thiserror = "=2.0.18"
+windows = { version = "=0.62.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Diagnostics_ToolHelp", "Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }

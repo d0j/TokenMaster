@@ -1,0 +1,28 @@
+import { QuotaRow, ChartPoint, SessionRow } from "../models.slint";
+import { Theme } from "../tokens.slint";
+import { QuotaCard } from "../components/quota-card.slint";
+import { BoundedChart } from "../components/bounded-chart.slint";
+import { SessionList } from "../components/session-list.slint";
+
+export component ControlCenterLayout inherits Rectangle {
+    in property <[QuotaRow]> quotas;
+    in property <[ChartPoint]> points;
+    in property <[SessionRow]> sessions;
+    background: Theme.background;
+
+    HorizontalLayout {
+        padding: Theme.spacing;
+        spacing: Theme.spacing;
+        VerticalLayout {
+            spacing: Theme.spacing;
+            min-width: 300px;
+            for quota in root.quotas: QuotaCard { quota: quota; }
+        }
+        VerticalLayout {
+            spacing: Theme.spacing;
+            horizontal-stretch: 2;
+            BoundedChart { points: root.points; vertical-stretch: 1; }
+            SessionList { rows: root.sessions; vertical-stretch: 2; }
+        }
+    }
+}

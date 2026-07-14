@@ -1,0 +1,303 @@
+use std::fmt;
+use std::path::Path;
+
+use rusqlite::{Connection, TransactionBehavior};
+
+use crate::{EXPECTED_SQLITE_VERSION, StoreError, StoreErrorCode};
+
+mod read;
+mod schema;
+mod types;
+mod write;
+
+pub use schema::USAGE_SCHEMA_VERSION;
+pub use types::{
+    AppendBatch, AppendBatchParts, EventCursor, GenerationSnapshot, GenerationStatus,
+    MAX_APPEND_CHUNK_UPDATES, MAX_APPEND_EVENTS, MAX_RESUME_BYTES, MAX_USAGE_EVENT_PAGE_SIZE,
+    SOURCE_CHUNK_BYTES, SourceKey, SourceKind, SourceRegistration, SourceRegistrationParts,
+    StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk, StoredUsageEvent,
+    StoredVerification, UsageStoreCounts,
+};
+
+use schema::{USAGE_INDEX_CONTRACTS, USAGE_SCHEMA, USAGE_TABLE_CONTRACTS};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum JournalMode {
+    Wal,
+    Memory,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RuntimePolicy {
+    journal_mode: JournalMode,
+    synchronous: i64,
+    foreign_keys: bool,
+    busy_timeout_ms: u64,
+    wal_autocheckpoint_pages: u64,
+    journal_size_limit_bytes: u64,
+    cache_size_kib: u64,
+    temp_store: i64,
+    mmap_size_bytes: u64,
+}
+
+impl RuntimePolicy {
+    #[must_use]
+    pub const fn journal_mode(&self) -> JournalMode {
+        self.journal_mode
+    }
+
+    #[must_use]
+    pub const fn synchronous(&self) -> i64 {
+        self.synchronous
+    }
+
+    #[must_use]
+    pub const fn foreign_keys(&self) -> bool {
+        self.foreign_keys
+    }
+
+    #[must_use]
+    pub const fn busy_timeout_ms(&self) -> u64 {
+        self.busy_timeout_ms
+    }
+
+    #[must_use]
+    pub const fn wal_autocheckpoint_pages(&self) -> u64 {
+        self.wal_autocheckpoint_pages
+    }
+
+    #[must_use]
+    pub const fn journal_size_limit_bytes(&self) -> u64 {
+        self.journal_size_limit_bytes
+    }
+
+    #[must_use]
+    pub const fn cache_size_kib(&self) -> u64 {
+        self.cache_size_kib
+    }
+
+    #[must_use]
+    pub const fn temp_store(&self) -> i64 {
+        self.temp_store
+    }
+
+    #[must_use]
+    pub const fn mmap_size_bytes(&self) -> u64 {
+        self.mmap_size_bytes
+    }
+}
+
+pub struct UsageStore {
+    pub(super) connection: Connection,
+    in_memory: bool,
+}
+
+impl UsageStore {
+    pub fn in_memory() -> Result<Self, StoreError> {
+        Self::initialize(Connection::open_in_memory()?, true)
+    }
+
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
+        Self::initialize(Connection::open(path)?, false)
+    }
+
+    fn initialize(mut connection: Connection, in_memory: bool) -> Result<Self, StoreError> {
+        let actual: String =
+            connection.query_row("SELECT sqlite_version()", [], |row| row.get(0))?;
+        if actual != EXPECTED_SQLITE_VERSION {
+            return Err(StoreError::new(StoreErrorCode::VersionMismatch));
+        }
+        apply_runtime_policy(&connection, in_memory)?;
+        migrate_schema(&mut connection)?;
+        let store = Self {
+            connection,
+            in_memory,
+        };
+        store.runtime_policy()?;
+        Ok(store)
+    }
+
+    pub fn sqlite_version(&self) -> Result<String, StoreError> {
+        Ok(self
+            .connection
+            .query_row("SELECT sqlite_version()", [], |row| row.get(0))?)
+    }
+
+    pub fn runtime_policy(&self) -> Result<RuntimePolicy, StoreError> {
+        let journal_mode_text: String =
+            self.connection
+                .query_row("PRAGMA journal_mode", [], |row| row.get(0))?;
+        let journal_mode = match journal_mode_text.to_ascii_lowercase().as_str() {
+            "wal" => JournalMode::Wal,
+            "memory" => JournalMode::Memory,
+            _ => return Err(StoreError::new(StoreErrorCode::PolicyMismatch)),
+        };
+        let synchronous = pragma_i64(&self.connection, "PRAGMA synchronous")?;
+        let foreign_keys = pragma_i64(&self.connection, "PRAGMA foreign_keys")? == 1;
+        let busy_timeout = pragma_nonnegative(&self.connection, "PRAGMA busy_timeout")?;
+        let wal_autocheckpoint = pragma_nonnegative(&self.connection, "PRAGMA wal_autocheckpoint")?;
+        let journal_size_limit = pragma_nonnegative(&self.connection, "PRAGMA journal_size_limit")?;
+        let cache_size = pragma_i64(&self.connection, "PRAGMA cache_size")?;
+        let temp_store = pragma_i64(&self.connection, "PRAGMA temp_store")?;
+        let mmap_size = pragma_nonnegative_or_zero(&self.connection, "PRAGMA mmap_size")?;
+        let cache_size_kib = cache_size
+            .checked_neg()
+            .and_then(|value| u64::try_from(value).ok())
+            .ok_or_else(|| StoreError::new(StoreErrorCode::PolicyMismatch))?;
+        let policy = RuntimePolicy {
+            journal_mode,
+            synchronous,
+            foreign_keys,
+            busy_timeout_ms: busy_timeout,
+            wal_autocheckpoint_pages: wal_autocheckpoint,
+            journal_size_limit_bytes: journal_size_limit,
+            cache_size_kib,
+            temp_store,
+            mmap_size_bytes: mmap_size,
+        };
+        let expected_journal = if self.in_memory {
+            JournalMode::Memory
+        } else {
+            JournalMode::Wal
+        };
+        if policy.journal_mode != expected_journal
+            || policy.synchronous != 2
+            || !policy.foreign_keys
+            || policy.busy_timeout_ms != 250
+            || policy.wal_autocheckpoint_pages != 1_000
+            || policy.journal_size_limit_bytes != 16 * 1024 * 1024
+            || policy.cache_size_kib != 8 * 1024
+            || policy.temp_store != 1
+            || policy.mmap_size_bytes != 0
+        {
+            return Err(StoreError::new(StoreErrorCode::PolicyMismatch));
+        }
+        Ok(policy)
+    }
+}
+
+impl fmt::Debug for UsageStore {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("UsageStore")
+            .field("in_memory", &self.in_memory)
+            .finish_non_exhaustive()
+    }
+}
+
+fn apply_runtime_policy(connection: &Connection, in_memory: bool) -> Result<(), StoreError> {
+    let requested_journal = if in_memory { "MEMORY" } else { "WAL" };
+    let _: String = connection.query_row(
+        &format!("PRAGMA journal_mode = {requested_journal}"),
+        [],
+        |row| row.get(0),
+    )?;
+    connection.pragma_update(None, "synchronous", "FULL")?;
+    connection.pragma_update(None, "foreign_keys", "ON")?;
+    connection.pragma_update(None, "busy_timeout", 250_i64)?;
+    connection.pragma_update(None, "wal_autocheckpoint", 1_000_i64)?;
+    connection.pragma_update(None, "journal_size_limit", 16_777_216_i64)?;
+    connection.pragma_update(None, "cache_size", -8_192_i64)?;
+    connection.pragma_update(None, "temp_store", "FILE")?;
+    connection.pragma_update(None, "mmap_size", 0_i64)?;
+    Ok(())
+}
+
+fn migrate_schema(connection: &mut Connection) -> Result<(), StoreError> {
+    let version = pragma_i64(connection, "PRAGMA user_version")?;
+    if version > USAGE_SCHEMA_VERSION {
+        return Err(StoreError::new(StoreErrorCode::SchemaTooNew));
+    }
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    transaction.execute_batch(USAGE_SCHEMA)?;
+    if version < USAGE_SCHEMA_VERSION {
+        transaction.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
+    }
+    validate_schema(&transaction)?;
+    transaction.commit()?;
+    Ok(())
+}
+
+fn validate_schema(connection: &Connection) -> Result<(), StoreError> {
+    let mut table_list = connection.prepare("PRAGMA table_list")?;
+    let rows = table_list.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, i64>(5)?,
+        ))
+    })?;
+    let mut actual_tables = Vec::new();
+    for row in rows {
+        let (schema, name, kind, strict) = row?;
+        if schema == "main" && kind == "table" && !name.starts_with("sqlite_") {
+            if strict != 1 {
+                return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
+            }
+            actual_tables.push(name);
+        }
+    }
+    actual_tables.sort_unstable();
+    let mut expected_tables = USAGE_TABLE_CONTRACTS
+        .iter()
+        .map(|contract| contract.name)
+        .collect::<Vec<_>>();
+    expected_tables.sort_unstable();
+    if actual_tables != expected_tables {
+        return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
+    }
+
+    for contract in USAGE_TABLE_CONTRACTS {
+        let sql = format!("SELECT * FROM {} LIMIT 0", contract.name);
+        let statement = connection.prepare(&sql)?;
+        if statement.column_names().as_slice() != contract.columns {
+            return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
+        }
+    }
+
+    let mut index_list = connection.prepare(
+        "SELECT name, sql FROM sqlite_schema
+         WHERE type = 'index' AND name NOT LIKE 'sqlite_%'
+         ORDER BY name",
+    )?;
+    let rows = index_list.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    let mut actual_indexes = Vec::new();
+    for row in rows {
+        actual_indexes.push(row?);
+    }
+    if actual_indexes.len() != USAGE_INDEX_CONTRACTS.len() {
+        return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
+    }
+    for ((actual_name, actual_sql), expected) in actual_indexes.iter().zip(USAGE_INDEX_CONTRACTS) {
+        if actual_name != expected.name || normalize_schema_sql(actual_sql) != expected.sql {
+            return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
+        }
+    }
+    Ok(())
+}
+
+fn normalize_schema_sql(sql: &str) -> String {
+    sql.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn pragma_i64(connection: &Connection, sql: &str) -> Result<i64, StoreError> {
+    Ok(connection.query_row(sql, [], |row| row.get(0))?)
+}
+
+fn pragma_nonnegative(connection: &Connection, sql: &str) -> Result<u64, StoreError> {
+    let value = pragma_i64(connection, sql)?;
+    u64::try_from(value).map_err(|_| StoreError::new(StoreErrorCode::PolicyMismatch))
+}
+
+fn pragma_nonnegative_or_zero(connection: &Connection, sql: &str) -> Result<u64, StoreError> {
+    match connection.query_row(sql, [], |row| row.get::<_, i64>(0)) {
+        Ok(value) => {
+            u64::try_from(value).map_err(|_| StoreError::new(StoreErrorCode::PolicyMismatch))
+        }
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(0),
+        Err(error) => Err(error.into()),
+    }
+}

@@ -1,0 +1,30 @@
+import { SessionRow } from "../models.slint";
+import { Theme } from "../tokens.slint";
+import { ListView } from "std-widgets.slint";
+
+export component SessionList inherits Rectangle {
+    in property <[SessionRow]> rows;
+    min-height: 180px;
+    background: Theme.surface;
+    border-color: Theme.border;
+    border-width: 1px;
+    border-radius: Theme.radius;
+    accessible-role: list;
+    accessible-label: @tr("Sessions");
+
+    ListView {
+        viewport-width: self.width;
+        for row[i] in root.rows: Rectangle {
+            height: 36px;
+            background: mod(i, 2) == 0 ? Theme.surface : Theme.surface-raised;
+            accessible-role: list-item;
+            accessible-label: row.label + " " + row.tokens-label;
+            HorizontalLayout {
+                padding-left: Theme.spacing;
+                padding-right: Theme.spacing;
+                Text { text: row.label; color: Theme.text-primary; horizontal-stretch: 1; }
+                Text { text: row.tokens-label; color: Theme.text-muted; }
+            }
+        }
+    }
+}

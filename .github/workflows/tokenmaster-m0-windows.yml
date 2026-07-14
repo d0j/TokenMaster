@@ -1,0 +1,53 @@
+name: TokenMaster M0 Windows
+
+on:
+  push:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - "scripts/**"
+      - "spec/**"
+      - "docs/**"
+      - ".github/workflows/tokenmaster-m0-windows.yml"
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - "scripts/**"
+      - "spec/**"
+      - "docs/**"
+      - ".github/workflows/tokenmaster-m0-windows.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Install Pester 5.7.1
+        shell: pwsh
+        run: Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -SkipPublisherCheck
+      - name: Install Rust 1.97.0
+        shell: pwsh
+        run: rustup toolchain install 1.97.0 --profile minimal --component rustfmt --component clippy --target x86_64-pc-windows-gnu
+      - name: Verify TokenMaster M0
+        shell: pwsh
+        run: ./scripts/verify-m0.ps1 -RepositoryRoot $PWD.Path
+      - name: Upload developer receipts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: tokenmaster-m0-developer-receipts
+          path: reports/*.json
+          if-no-files-found: warn
+          retention-days: 14
+      - name: External boundary
+        shell: pwsh
+        run: Write-Host "Interactive Windows/DPI/accessibility and 24-hour soak remain external M0 gates."
