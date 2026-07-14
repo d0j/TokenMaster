@@ -1,5 +1,6 @@
-pub const USAGE_SCHEMA_VERSION: i64 = 2;
+pub const USAGE_SCHEMA_VERSION: i64 = 3;
 pub(super) const V1_SCHEMA_VERSION: i64 = 1;
+pub(super) const V2_SCHEMA_VERSION: i64 = 2;
 
 pub(super) struct TableContract {
     pub(super) name: &'static str,
@@ -536,7 +537,7 @@ CREATE INDEX IF NOT EXISTS usage_event_model_time
   ON usage_event(model, timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC);
 "#;
 
-pub(super) const V2_REPLAY_SCHEMA: &str = r#"
+pub(super) const REPLAY_AUX_SCHEMA: &str = r#"
 CREATE TABLE usage_legacy_snapshot (
   snapshot_id INTEGER PRIMARY KEY CHECK(snapshot_id = 1),
   source_schema_version INTEGER NOT NULL CHECK(source_schema_version = 1),
@@ -584,7 +585,9 @@ CREATE INDEX usage_legacy_event_time_desc
   ON usage_legacy_event(snapshot_id, timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC);
 CREATE INDEX usage_legacy_event_model_time
   ON usage_legacy_event(snapshot_id, model, timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC);
+"#;
 
+pub(super) const V2_REPLAY_REVISION_SCHEMA: &str = r#"
 CREATE TABLE usage_replay_revision (
   revision_id INTEGER PRIMARY KEY CHECK(revision_id >= 0),
   status TEXT NOT NULL CHECK(status IN ('staging','current')),
@@ -598,7 +601,25 @@ CREATE TABLE usage_replay_revision (
   CHECK((status = 'staging' AND promoted = 0) OR
         (status = 'current' AND sealed = 1 AND promoted = 1))
 ) STRICT;
+"#;
 
+pub(super) const V3_REPLAY_REVISION_SCHEMA: &str = r#"
+CREATE TABLE usage_replay_revision (
+  revision_id INTEGER PRIMARY KEY CHECK(revision_id >= 0),
+  status TEXT NOT NULL CHECK(status IN ('staging','current')),
+  canonicalizer_version INTEGER NOT NULL CHECK(canonicalizer_version BETWEEN 1 AND 65535),
+  fingerprint_version INTEGER NOT NULL CHECK(fingerprint_version BETWEEN 1 AND 65535),
+  replay_signature_version INTEGER NOT NULL CHECK(replay_signature_version BETWEEN 1 AND 65535),
+  expected_source_count INTEGER NOT NULL CHECK(expected_source_count >= 1),
+  evidence_epoch INTEGER NOT NULL CHECK(evidence_epoch >= 0),
+  sealed INTEGER NOT NULL CHECK(sealed IN (0,1)),
+  promoted INTEGER NOT NULL CHECK(promoted IN (0,1)),
+  CHECK((status = 'staging' AND promoted = 0) OR
+        (status = 'current' AND sealed = 1 AND promoted = 1))
+) STRICT;
+"#;
+
+pub(super) const REPLAY_CHILD_SCHEMA: &str = r#"
 CREATE UNIQUE INDEX usage_replay_revision_one_current
   ON usage_replay_revision(status) WHERE status = 'current';
 CREATE UNIQUE INDEX usage_replay_revision_one_staging
