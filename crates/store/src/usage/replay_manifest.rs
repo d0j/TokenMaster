@@ -1,8 +1,14 @@
-use rusqlite::{TransactionBehavior, params};
+use rusqlite::{Transaction, TransactionBehavior, params};
 
 use crate::{StoreError, StoreErrorCode};
 
-use super::{UsageStore, types::*};
+use super::{
+    UsageStore,
+    types::*,
+    write::{sql_u64, stored_digest},
+};
+
+const MANIFEST_VALIDATION_PAGE_SIZE: usize = 256;
 
 pub(super) const EMPTY_SHA256: [u8; 32] = [
     0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
@@ -158,8 +164,243 @@ impl UsageStore {
     }
 }
 
+pub(super) fn replay_manifest_sources_closed(
+    transaction: &Transaction<'_>,
+    revision_id: ReplayRevisionId,
+    expected_source_count: u64,
+) -> Result<bool, StoreError> {
+    let counts: (i64, i64, i64, i64) = transaction.query_row(
+        "SELECT
+           (SELECT count(*) FROM usage_source),
+           (SELECT count(*) FROM usage_replay_source WHERE revision_id = ?1),
+           (SELECT count(*) FROM usage_replay_source
+            WHERE revision_id = ?1 AND state = 'complete'),
+           (SELECT count(*) FROM usage_replay_source AS replay
+            JOIN usage_generation AS generation
+              ON generation.file_key = replay.file_key
+             AND generation.generation = replay.generation
+            WHERE replay.revision_id = ?1 AND generation.status = 'staging')",
+        [revision_id.as_sql()?],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+    )?;
+    Ok(stored_count(counts.0)? == expected_source_count
+        && stored_count(counts.1)? == expected_source_count
+        && stored_count(counts.2)? == expected_source_count
+        && stored_count(counts.3)? == expected_source_count)
+}
+
+pub(super) fn validate_complete_manifest(
+    transaction: &Transaction<'_>,
+    revision_id: ReplayRevisionId,
+    expected_source_count: u64,
+) -> Result<(), StoreError> {
+    if !replay_manifest_is_complete(transaction, revision_id, expected_source_count)? {
+        return Err(StoreError::new(StoreErrorCode::IncompleteManifest));
+    }
+    Ok(())
+}
+
+struct ManifestSourceState {
+    file_key: [u8; 32],
+    generation: u64,
+    state: String,
+    generation_status: String,
+    committed_offset: u64,
+    scan_offset: u64,
+    observed_file_length: u64,
+    discarding: bool,
+    incomplete: bool,
+    verification: StoredVerification,
+}
+
+fn replay_manifest_is_complete(
+    transaction: &Transaction<'_>,
+    revision_id: ReplayRevisionId,
+    expected_source_count: u64,
+) -> Result<bool, StoreError> {
+    let counts: (i64, i64, i64) = transaction.query_row(
+        "SELECT
+           (SELECT count(*) FROM usage_source),
+           (SELECT count(*) FROM usage_replay_source WHERE revision_id = ?1),
+           (SELECT count(*) FROM usage_replay_source AS replay
+            JOIN usage_generation AS generation
+              ON generation.file_key = replay.file_key
+             AND generation.generation = replay.generation
+            WHERE replay.revision_id = ?1 AND generation.status = 'staging')",
+        [revision_id.as_sql()?],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    if stored_count(counts.0)? != expected_source_count
+        || stored_count(counts.1)? != expected_source_count
+        || stored_count(counts.2)? != expected_source_count
+    {
+        return Ok(false);
+    }
+
+    let mut cursor = None;
+    let mut visited = 0_u64;
+    loop {
+        let page = load_manifest_page(transaction, revision_id, cursor.as_ref())?;
+        if page.is_empty() {
+            break;
+        }
+        for source in &page {
+            if source.state != "complete"
+                || source.generation_status != "staging"
+                || source.verification != StoredVerification::FullPrefix
+                || source.discarding
+                || source.incomplete
+                || source.committed_offset != source.scan_offset
+                || source.scan_offset != source.observed_file_length
+                || !source_chunks_cover(
+                    transaction,
+                    &source.file_key,
+                    source.generation,
+                    source.committed_offset,
+                )?
+            {
+                return Ok(false);
+            }
+        }
+        visited = visited
+            .checked_add(mutation_count(page.len())?)
+            .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?;
+        cursor = page.last().map(|source| source.file_key);
+        if page.len() < MANIFEST_VALIDATION_PAGE_SIZE {
+            break;
+        }
+    }
+    Ok(visited == expected_source_count)
+}
+
+fn load_manifest_page(
+    transaction: &Transaction<'_>,
+    revision_id: ReplayRevisionId,
+    cursor: Option<&[u8; 32]>,
+) -> Result<Vec<ManifestSourceState>, StoreError> {
+    const SELECT: &str = "SELECT replay.file_key, replay.generation, replay.state,
+                generation.status, generation.committed_offset,
+                generation.scan_offset, generation.observed_file_length,
+                generation.discarding_oversized_line, generation.incomplete_tail,
+                generation.verification_level
+         FROM usage_replay_source AS replay
+         JOIN usage_generation AS generation
+           ON generation.file_key = replay.file_key
+          AND generation.generation = replay.generation";
+    let mut page = Vec::with_capacity(MANIFEST_VALIDATION_PAGE_SIZE);
+    if let Some(cursor) = cursor {
+        let sql = format!(
+            "{SELECT}
+             WHERE replay.revision_id = ?1 AND replay.file_key > ?2
+             ORDER BY replay.file_key
+             LIMIT ?3"
+        );
+        let mut statement = transaction.prepare(&sql)?;
+        let mut rows = statement.query(params![
+            revision_id.as_sql()?,
+            cursor.as_slice(),
+            i64::try_from(MANIFEST_VALIDATION_PAGE_SIZE)
+                .map_err(|_| StoreError::new(StoreErrorCode::InvalidValue))?,
+        ])?;
+        while let Some(row) = rows.next()? {
+            page.push(manifest_source_from_row(row)?);
+        }
+    } else {
+        let sql = format!(
+            "{SELECT}
+             WHERE replay.revision_id = ?1
+             ORDER BY replay.file_key
+             LIMIT ?2"
+        );
+        let mut statement = transaction.prepare(&sql)?;
+        let mut rows = statement.query(params![
+            revision_id.as_sql()?,
+            i64::try_from(MANIFEST_VALIDATION_PAGE_SIZE)
+                .map_err(|_| StoreError::new(StoreErrorCode::InvalidValue))?,
+        ])?;
+        while let Some(row) = rows.next()? {
+            page.push(manifest_source_from_row(row)?);
+        }
+    }
+    Ok(page)
+}
+
+fn manifest_source_from_row(row: &rusqlite::Row<'_>) -> Result<ManifestSourceState, StoreError> {
+    Ok(ManifestSourceState {
+        file_key: stored_digest(&row.get::<_, Vec<u8>>(0)?)?,
+        generation: stored_nonnegative(row.get(1)?)?,
+        state: row.get(2)?,
+        generation_status: row.get(3)?,
+        committed_offset: stored_nonnegative(row.get(4)?)?,
+        scan_offset: stored_nonnegative(row.get(5)?)?,
+        observed_file_length: stored_nonnegative(row.get(6)?)?,
+        discarding: stored_bool(row.get(7)?)?,
+        incomplete: stored_bool(row.get(8)?)?,
+        verification: StoredVerification::from_sql(&row.get::<_, String>(9)?)?,
+    })
+}
+
+fn source_chunks_cover(
+    transaction: &Transaction<'_>,
+    file_key: &[u8; 32],
+    generation: u64,
+    committed_offset: u64,
+) -> Result<bool, StoreError> {
+    let (count, minimum, maximum, covered): (i64, Option<i64>, Option<i64>, i64) = transaction
+        .query_row(
+            "SELECT count(*), min(chunk_index), max(chunk_index),
+                    coalesce(sum(covered_len), 0)
+             FROM usage_source_chunk
+             WHERE file_key = ?1 AND generation = ?2",
+            params![file_key.as_slice(), sql_u64(generation)?],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )?;
+    if committed_offset == 0 {
+        return Ok(count == 0 && covered == 0 && minimum.is_none() && maximum.is_none());
+    }
+    let final_index = (committed_offset - 1) / SOURCE_CHUNK_BYTES;
+    let final_length = committed_offset - final_index * SOURCE_CHUNK_BYTES;
+    if count
+        != i64::try_from(final_index + 1)
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?
+        || minimum != Some(0)
+        || maximum != Some(sql_u64(final_index)?)
+        || covered != sql_u64(committed_offset)?
+    {
+        return Ok(false);
+    }
+    let invalid: i64 = transaction.query_row(
+        "SELECT count(*) FROM usage_source_chunk
+         WHERE file_key = ?1 AND generation = ?2
+           AND ((chunk_index < ?3 AND covered_len <> ?4)
+                OR (chunk_index = ?3 AND covered_len <> ?5)
+                OR chunk_index > ?3)",
+        params![
+            file_key.as_slice(),
+            sql_u64(generation)?,
+            sql_u64(final_index)?,
+            sql_u64(SOURCE_CHUNK_BYTES)?,
+            sql_u64(final_length)?,
+        ],
+        |row| row.get(0),
+    )?;
+    Ok(invalid == 0)
+}
+
 fn stored_count(value: i64) -> Result<u64, StoreError> {
     u64::try_from(value).map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))
+}
+
+fn stored_nonnegative(value: i64) -> Result<u64, StoreError> {
+    u64::try_from(value).map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))
+}
+
+fn stored_bool(value: i64) -> Result<bool, StoreError> {
+    match value {
+        0 => Ok(false),
+        1 => Ok(true),
+        _ => Err(StoreError::new(StoreErrorCode::InvalidStoredValue)),
+    }
 }
 
 fn mutation_count(value: usize) -> Result<u64, StoreError> {

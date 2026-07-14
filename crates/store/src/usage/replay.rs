@@ -9,7 +9,7 @@ use crate::{StoreError, StoreErrorCode};
 
 use super::{
     UsageStore,
-    replay_manifest::EMPTY_SHA256,
+    replay_manifest::{EMPTY_SHA256, replay_manifest_sources_closed, validate_complete_manifest},
     types::*,
     write::{
         insert_observation, long_context_sql, sql_bool, sql_token, sql_u64, stored_digest,
@@ -462,8 +462,11 @@ impl UsageStore {
         let revision = load_staging_revision(&transaction, revision_id)?;
         validate_replay_revision(&revision, expected_epoch, AccountingVersions::compiled())?;
         reject_stale_work(&transaction, revision_id, expected_epoch)?;
-        let manifest_complete =
-            replay_manifest_is_complete(&transaction, revision_id, revision.expected_source_count)?;
+        let manifest_complete = replay_manifest_sources_closed(
+            &transaction,
+            revision_id,
+            revision.expected_source_count,
+        )?;
         let Some(work) = load_next_actionable_work(&transaction, revision_id, manifest_complete)?
         else {
             let remaining_work = replay_work_exists(&transaction, revision_id)?;
@@ -748,159 +751,6 @@ fn replay_revision_snapshot(
         sealed,
         promoted,
     }
-}
-
-struct ManifestSourceState {
-    file_key: [u8; 32],
-    generation: u64,
-    state: String,
-    generation_status: String,
-    committed_offset: u64,
-    scan_offset: u64,
-    observed_file_length: u64,
-    discarding: bool,
-    incomplete: bool,
-    verification: StoredVerification,
-}
-
-fn replay_manifest_is_complete(
-    transaction: &Transaction<'_>,
-    revision_id: ReplayRevisionId,
-    expected_source_count: u64,
-) -> Result<bool, StoreError> {
-    let registered_sources: i64 =
-        transaction.query_row("SELECT count(*) FROM usage_source", [], |row| row.get(0))?;
-    if stored_nonnegative(registered_sources)? != expected_source_count {
-        return Ok(false);
-    }
-    let mut statement = transaction.prepare(
-        "SELECT replay.file_key, replay.generation, replay.state,
-                generation.status, generation.committed_offset,
-                generation.scan_offset, generation.observed_file_length,
-                generation.discarding_oversized_line, generation.incomplete_tail,
-                generation.verification_level
-         FROM usage_replay_source AS replay
-         JOIN usage_generation AS generation
-           ON generation.file_key = replay.file_key
-          AND generation.generation = replay.generation
-         WHERE replay.revision_id = ?1
-         ORDER BY replay.file_key
-         LIMIT 257",
-    )?;
-    let sources = statement
-        .query_map([revision_id.as_sql()?], |row| {
-            Ok((
-                row.get::<_, Vec<u8>>(0)?,
-                row.get::<_, i64>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, i64>(4)?,
-                row.get::<_, i64>(5)?,
-                row.get::<_, i64>(6)?,
-                row.get::<_, i64>(7)?,
-                row.get::<_, i64>(8)?,
-                row.get::<_, String>(9)?,
-            ))
-        })?
-        .map(|row| {
-            let raw = row?;
-            Ok(ManifestSourceState {
-                file_key: stored_digest(&raw.0)?,
-                generation: stored_nonnegative(raw.1)?,
-                state: raw.2,
-                generation_status: raw.3,
-                committed_offset: stored_nonnegative(raw.4)?,
-                scan_offset: stored_nonnegative(raw.5)?,
-                observed_file_length: stored_nonnegative(raw.6)?,
-                discarding: stored_bool(raw.7)?,
-                incomplete: stored_bool(raw.8)?,
-                verification: StoredVerification::from_sql(&raw.9)?,
-            })
-        })
-        .collect::<Result<Vec<_>, StoreError>>()?;
-    if u64::try_from(sources.len())
-        .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?
-        != expected_source_count
-    {
-        return Ok(false);
-    }
-    for source in sources {
-        if source.state != "complete"
-            || source.generation_status != "staging"
-            || source.verification != StoredVerification::FullPrefix
-            || source.discarding
-            || source.incomplete
-            || source.committed_offset != source.scan_offset
-            || source.scan_offset != source.observed_file_length
-            || !source_chunks_cover(
-                transaction,
-                &source.file_key,
-                source.generation,
-                source.committed_offset,
-            )?
-        {
-            return Ok(false);
-        }
-    }
-    Ok(true)
-}
-
-fn source_chunks_cover(
-    transaction: &Transaction<'_>,
-    file_key: &[u8; 32],
-    generation: u64,
-    committed_offset: u64,
-) -> Result<bool, StoreError> {
-    let (count, minimum, maximum, covered): (i64, Option<i64>, Option<i64>, i64) = transaction
-        .query_row(
-            "SELECT count(*), min(chunk_index), max(chunk_index),
-                    coalesce(sum(covered_len), 0)
-             FROM usage_source_chunk
-             WHERE file_key = ?1 AND generation = ?2",
-            params![file_key.as_slice(), sql_u64(generation)?],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-        )?;
-    if committed_offset == 0 {
-        return Ok(count == 0 && covered == 0 && minimum.is_none() && maximum.is_none());
-    }
-    let final_index = (committed_offset - 1) / SOURCE_CHUNK_BYTES;
-    let final_length = committed_offset - final_index * SOURCE_CHUNK_BYTES;
-    if count
-        != i64::try_from(final_index + 1)
-            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?
-        || minimum != Some(0)
-        || maximum != Some(sql_u64(final_index)?)
-        || covered != sql_u64(committed_offset)?
-    {
-        return Ok(false);
-    }
-    let invalid: i64 = transaction.query_row(
-        "SELECT count(*) FROM usage_source_chunk
-         WHERE file_key = ?1 AND generation = ?2
-           AND ((chunk_index < ?3 AND covered_len <> ?4)
-                OR (chunk_index = ?3 AND covered_len <> ?5)
-                OR chunk_index > ?3)",
-        params![
-            file_key.as_slice(),
-            sql_u64(generation)?,
-            sql_u64(final_index)?,
-            sql_u64(SOURCE_CHUNK_BYTES)?,
-            sql_u64(final_length)?,
-        ],
-        |row| row.get(0),
-    )?;
-    Ok(invalid == 0)
-}
-
-fn validate_complete_manifest(
-    transaction: &Transaction<'_>,
-    revision_id: ReplayRevisionId,
-    expected_source_count: u64,
-) -> Result<(), StoreError> {
-    if !replay_manifest_is_complete(transaction, revision_id, expected_source_count)? {
-        return Err(StoreError::new(StoreErrorCode::IncompleteManifest));
-    }
-    Ok(())
 }
 
 fn validate_replay_overlay(

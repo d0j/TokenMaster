@@ -89,6 +89,47 @@ fn registration_for_index(index: u32) -> SourceRegistration {
     .expect("valid large-fixture registration")
 }
 
+fn empty_replay_append_for_index(
+    index: u32,
+    revision_id: tokenmaster_store::ReplayRevisionId,
+    epoch: tokenmaster_store::ReplayEpoch,
+) -> ReplayAppendBatch {
+    let append = AppendBatch::new(AppendBatchParts {
+        source_key: source_key_for_index(index),
+        expected_generation: 1,
+        expected_committed_offset: 0,
+        expected_scan_offset: 0,
+        events: Box::default(),
+        previous_partial_chunk: None,
+        chunk_updates: Box::default(),
+        next_checkpoint: StoredCheckpoint::new(StoredCheckpointParts {
+            parser_schema_version: 1,
+            physical_identity: Some(digest_for_index(index, 2)),
+            logical_identity: digest_for_index(index, 1),
+            committed_offset: 0,
+            scan_offset: 0,
+            observed_file_length: 0,
+            modified_time_ns: None,
+            anchor_start: 0,
+            anchor_len: 0,
+            anchor_sha256: digest_for_index(index, 3),
+            resume: Box::default(),
+            discarding_oversized_line: false,
+            incomplete_tail: false,
+            verification: StoredVerification::FullPrefix,
+        })
+        .expect("valid empty replay checkpoint"),
+        last_seen_scan_id: None,
+        diagnostic_count_delta: 0,
+    })
+    .expect("valid empty replay append");
+    ReplayAppendBatch::new(ReplayAppendBatchParts {
+        revision_id,
+        expected_epoch: epoch,
+        append_batch: append,
+    })
+}
+
 fn checkpoint(seed: u8, offset: u64, verification: StoredVerification) -> StoredCheckpoint {
     StoredCheckpoint::new(StoredCheckpointParts {
         parser_schema_version: 1,
@@ -848,6 +889,186 @@ fn all_source_begin_is_atomic_on_empty_missing_current_and_generation_overflow()
         )
         .expect("overflow failure state");
     assert_eq!(overflow_state, (0, 0, 1));
+}
+
+#[test]
+fn three_hundred_sources_complete_seal_promote_and_reopen_in_pages() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("large-replay-lifecycle-private.sqlite3");
+    let mut store = UsageStore::open(&path).expect("large lifecycle store");
+    for index in 0..300 {
+        store
+            .register_source(&registration_for_index(index))
+            .expect("register large lifecycle source");
+    }
+    let revision = store
+        .begin_replay_revision_all_sources()
+        .expect("begin large lifecycle revision");
+    let mut epoch = revision.epoch();
+    for index in 0..300 {
+        epoch = store
+            .apply_replay_append_batch(&empty_replay_append_for_index(index, revision.id(), epoch))
+            .expect("complete large lifecycle source");
+    }
+    let sealed = store
+        .seal_replay_revision(revision.id(), epoch)
+        .expect("seal large lifecycle revision");
+    let promoted = store
+        .promote_replay_revision(revision.id(), sealed.epoch())
+        .expect("promote large lifecycle revision");
+    assert_eq!(promoted.status(), ReplayRevisionStatus::Current);
+    assert_eq!(promoted.expected_source_count(), 300);
+    assert!(promoted.sealed());
+    assert!(promoted.promoted());
+    assert!(
+        store
+            .event_page_before(None, 256)
+            .expect("empty promoted canonical page")
+            .is_empty()
+    );
+    drop(store);
+
+    let connection = Connection::open(&path).expect("inspect promoted large lifecycle");
+    let promoted_state: (i64, i64, i64, i64, i64, i64, i64) = connection
+        .query_row(
+            "SELECT
+               (SELECT count(*) FROM usage_replay_revision
+                WHERE status = 'current' AND sealed = 1 AND promoted = 1),
+               (SELECT expected_source_count FROM usage_replay_revision
+                WHERE status = 'current'),
+               (SELECT count(*) FROM usage_replay_source),
+               (SELECT count(*) FROM usage_source
+                WHERE current_generation = 1 AND verification_level = 'full_prefix'),
+               (SELECT count(*) FROM usage_generation
+                WHERE generation = 1 AND status = 'current'
+                  AND verification_level = 'full_prefix'),
+               (SELECT count(*) FROM usage_generation WHERE status = 'staging'),
+               (SELECT count(*) FROM pragma_foreign_key_check)",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                ))
+            },
+        )
+        .expect("promoted large lifecycle state");
+    assert_eq!(promoted_state, (1, 300, 300, 300, 300, 0, 0));
+    drop(connection);
+
+    let reopened = UsageStore::open(&path).expect("reopen promoted large lifecycle");
+    let archive = reopened.archive_state().expect("reopened archive state");
+    assert_eq!(archive.mode(), ArchiveMode::ReplayVerified);
+    assert_eq!(archive.active_revision(), Some(revision.id()));
+    assert!(!archive.rebuild_staging());
+}
+
+#[test]
+fn source_registered_after_all_source_begin_blocks_seal_without_mutation() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("late-source-private.sqlite3");
+    let mut store = UsageStore::open(&path).expect("late-source store");
+    for index in 0..300 {
+        store
+            .register_source(&registration_for_index(index))
+            .expect("register initial late-source fixture");
+    }
+    let revision = store
+        .begin_replay_revision_all_sources()
+        .expect("begin late-source revision");
+    let mut epoch = revision.epoch();
+    for index in 0..300 {
+        epoch = store
+            .apply_replay_append_batch(&empty_replay_append_for_index(index, revision.id(), epoch))
+            .expect("complete initial late-source fixture");
+    }
+    store
+        .register_source(&registration_for_index(300))
+        .expect("register source after all-source begin");
+    drop(store);
+
+    let connection = Connection::open(&path).expect("inspect state before blocked seal");
+    let before: (i64, i64, i64, i64, i64, i64) = connection
+        .query_row(
+            "SELECT
+               (SELECT evidence_epoch FROM usage_replay_revision),
+               (SELECT sealed FROM usage_replay_revision),
+               (SELECT count(*) FROM usage_replay_source),
+               (SELECT count(*) FROM usage_generation WHERE status = 'staging'),
+               (SELECT count(*) FROM usage_source WHERE current_generation = 0),
+               (SELECT count(*) FROM usage_event)",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            },
+        )
+        .expect("state before blocked seal");
+    drop(connection);
+    let mut store = UsageStore::open(&path).expect("reopen before blocked seal");
+    let error = store
+        .seal_replay_revision(revision.id(), epoch)
+        .expect_err("late source must block seal");
+    assert_eq!(error.code(), StoreErrorCode::IncompleteManifest);
+    drop(store);
+
+    let connection = Connection::open(&path).expect("inspect state after blocked seal");
+    let after: (i64, i64, i64, i64, i64, i64) = connection
+        .query_row(
+            "SELECT
+               (SELECT evidence_epoch FROM usage_replay_revision),
+               (SELECT sealed FROM usage_replay_revision),
+               (SELECT count(*) FROM usage_replay_source),
+               (SELECT count(*) FROM usage_generation WHERE status = 'staging'),
+               (SELECT count(*) FROM usage_source WHERE current_generation = 0),
+               (SELECT count(*) FROM usage_event)",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            },
+        )
+        .expect("state after blocked seal");
+    assert_eq!(after, before);
+    drop(connection);
+
+    let mut store = UsageStore::open(&path).expect("reopen for exact discard");
+    store
+        .discard_replay_revision(revision.id(), epoch)
+        .expect("discard blocked late-source revision");
+    drop(store);
+    let connection = Connection::open(&path).expect("inspect exact discard");
+    let discarded: (i64, i64, i64, i64) = connection
+        .query_row(
+            "SELECT
+               (SELECT count(*) FROM usage_replay_revision),
+               (SELECT count(*) FROM usage_generation WHERE status = 'staging'),
+               (SELECT count(*) FROM usage_source WHERE current_generation = 0),
+               (SELECT count(*) FROM pragma_foreign_key_check)",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .expect("discarded late-source state");
+    assert_eq!(discarded, (0, 0, 301, 0));
 }
 
 #[test]
