@@ -17,3 +17,7 @@ tokenmaster-provider = { path = "../provider" }
 [dev-dependencies]
 tempfile.workspace = true
 tokenmaster-accounting = { path = "../accounting" }
+tokenmaster-store = { path = "../store" }
+
+[target.'cfg(windows)'.dev-dependencies]
+windows.workspace = true

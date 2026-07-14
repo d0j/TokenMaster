@@ -5077,6 +5077,8 @@ dependencies = [
  "tokenmaster-domain",
  "tokenmaster-platform",
  "tokenmaster-provider",
+ "tokenmaster-store",
+ "windows",
 ]
 
 [[package]]
