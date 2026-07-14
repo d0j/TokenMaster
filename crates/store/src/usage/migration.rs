@@ -3,11 +3,11 @@ use rusqlite::{Connection, TransactionBehavior};
 use crate::{StoreError, StoreErrorCode};
 
 use super::schema::{
-    IndexContract, LEGACY_COPY_SQL, LEGACY_IMMUTABILITY_TRIGGERS, REPLAY_AUX_SCHEMA,
-    REPLAY_CHILD_SCHEMA, TableContract, TriggerContract, USAGE_INDEX_CONTRACTS,
+    IndexContract, LEGACY_COPY_SQL, LEGACY_IMMUTABILITY_TRIGGERS, PRE_V4_USAGE_EVENT_CONTRACT,
+    REPLAY_AUX_SCHEMA, REPLAY_CHILD_SCHEMA, TableContract, TriggerContract, USAGE_INDEX_CONTRACTS,
     USAGE_SCHEMA_VERSION, USAGE_TABLE_CONTRACTS, USAGE_TRIGGER_CONTRACTS, V1_INDEX_CONTRACTS,
     V1_SCHEMA, V1_SCHEMA_VERSION, V1_TABLE_COUNT, V2_REPLAY_REVISION_SCHEMA, V2_SCHEMA_VERSION,
-    V3_REPLAY_REVISION_SCHEMA,
+    V3_REPLAY_REVISION_SCHEMA, V3_SCHEMA_VERSION, V4_USAGE_EVENT_SCHEMA,
 };
 
 pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreError> {
@@ -18,13 +18,14 @@ pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreErr
 
     match version {
         V2_SCHEMA_VERSION => migrate_v2(connection),
+        V3_SCHEMA_VERSION => migrate_v3(connection),
         0 | V1_SCHEMA_VERSION | USAGE_SCHEMA_VERSION => {
             let transaction =
                 connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
             match version {
-                0 => create_fresh_v3(&transaction)?,
+                0 => create_fresh_v4(&transaction)?,
                 V1_SCHEMA_VERSION => migrate_v1(&transaction)?,
-                USAGE_SCHEMA_VERSION => validate_v3(&transaction)?,
+                USAGE_SCHEMA_VERSION => validate_v4(&transaction)?,
                 _ => return Err(StoreError::new(StoreErrorCode::SchemaMismatch)),
             }
             transaction.commit()?;
@@ -34,7 +35,7 @@ pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreErr
     }
 }
 
-fn create_fresh_v3(connection: &Connection) -> Result<(), StoreError> {
+fn create_fresh_v4(connection: &Connection) -> Result<(), StoreError> {
     if count_application_objects(connection)? != 0 {
         return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
     }
@@ -43,8 +44,9 @@ fn create_fresh_v3(connection: &Connection) -> Result<(), StoreError> {
     connection.execute_batch(V3_REPLAY_REVISION_SCHEMA)?;
     connection.execute_batch(REPLAY_CHILD_SCHEMA)?;
     connection.execute_batch(LEGACY_IMMUTABILITY_TRIGGERS)?;
+    migrate_usage_event_v4(connection, MigrationFault::None)?;
     connection.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
-    validate_v3(connection)
+    validate_v4(connection)
 }
 
 fn migrate_v1(connection: &Connection) -> Result<(), StoreError> {
@@ -54,6 +56,7 @@ fn migrate_v1(connection: &Connection) -> Result<(), StoreError> {
         V1_INDEX_CONTRACTS,
         &[],
         &[V1_SCHEMA],
+        &[PRE_V4_USAGE_EVENT_CONTRACT],
     )?;
     connection.execute_batch(REPLAY_AUX_SCHEMA)?;
     connection.execute_batch(V3_REPLAY_REVISION_SCHEMA)?;
@@ -70,8 +73,9 @@ fn migrate_v1(connection: &Connection) -> Result<(), StoreError> {
         return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
     }
     connection.execute_batch(LEGACY_IMMUTABILITY_TRIGGERS)?;
+    migrate_usage_event_v4(connection, MigrationFault::None)?;
     connection.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
-    validate_v3(connection)
+    validate_v4(connection)
 }
 
 fn validate_v2(connection: &Connection) -> Result<(), StoreError> {
@@ -86,6 +90,7 @@ fn validate_v2(connection: &Connection) -> Result<(), StoreError> {
             V2_REPLAY_REVISION_SCHEMA,
             REPLAY_CHILD_SCHEMA,
         ],
+        &[PRE_V4_USAGE_EVENT_CONTRACT],
     )?;
     validate_legacy_snapshot(connection)
 }
@@ -102,6 +107,25 @@ fn validate_v3(connection: &Connection) -> Result<(), StoreError> {
             V3_REPLAY_REVISION_SCHEMA,
             REPLAY_CHILD_SCHEMA,
         ],
+        &[PRE_V4_USAGE_EVENT_CONTRACT],
+    )?;
+    validate_legacy_snapshot(connection)
+}
+
+fn validate_v4(connection: &Connection) -> Result<(), StoreError> {
+    validate_schema(
+        connection,
+        USAGE_TABLE_CONTRACTS,
+        USAGE_INDEX_CONTRACTS,
+        USAGE_TRIGGER_CONTRACTS,
+        &[
+            V4_USAGE_EVENT_SCHEMA,
+            V1_SCHEMA,
+            REPLAY_AUX_SCHEMA,
+            V3_REPLAY_REVISION_SCHEMA,
+            REPLAY_CHILD_SCHEMA,
+        ],
+        &[],
     )?;
     validate_legacy_snapshot(connection)
 }
@@ -115,6 +139,12 @@ enum MigrationFault {
     AfterCopyRevision,
     #[cfg(test)]
     AfterDropRevision,
+    #[cfg(test)]
+    AfterCreateEvent,
+    #[cfg(test)]
+    AfterCopyEvent,
+    #[cfg(test)]
+    AfterDropEvent,
 }
 
 fn migrate_v2(connection: &mut Connection) -> Result<(), StoreError> {
@@ -153,7 +183,10 @@ fn migrate_v2_with_fault(
     })();
     let restored = restore_foreign_keys(connection);
     match (migration, restored) {
-        (Ok(()), Ok(())) => validate_v3(connection),
+        (Ok(()), Ok(())) => {
+            validate_v3(connection)?;
+            migrate_v3(connection)
+        }
         (Err(error), Ok(())) | (Ok(()), Err(error)) => Err(error),
         (Err(_), Err(_)) => Err(StoreError::new(StoreErrorCode::PolicyMismatch)),
     }
@@ -220,7 +253,7 @@ fn migrate_v2_revision_table(
     if foreign_key_failures != 0 {
         return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
     }
-    connection.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
+    connection.pragma_update(None, "user_version", V3_SCHEMA_VERSION)?;
     validate_v3(connection)
 }
 
@@ -229,6 +262,9 @@ enum MigrationBoundary {
     Created,
     Copied,
     Dropped,
+    EventCreated,
+    EventCopied,
+    EventDropped,
 }
 
 fn migration_fault(fault: MigrationFault, boundary: MigrationBoundary) -> Result<(), StoreError> {
@@ -243,6 +279,18 @@ fn migration_fault(fault: MigrationFault, boundary: MigrationBoundary) -> Result
                 MigrationFault::AfterDropRevision,
                 MigrationBoundary::Dropped
             )
+            | (
+                MigrationFault::AfterCreateEvent,
+                MigrationBoundary::EventCreated
+            )
+            | (
+                MigrationFault::AfterCopyEvent,
+                MigrationBoundary::EventCopied
+            )
+            | (
+                MigrationFault::AfterDropEvent,
+                MigrationBoundary::EventDropped
+            )
     );
     #[cfg(not(test))]
     let triggered = {
@@ -254,6 +302,120 @@ fn migration_fault(fault: MigrationFault, boundary: MigrationBoundary) -> Result
     } else {
         Ok(())
     }
+}
+
+fn migrate_v3(connection: &mut Connection) -> Result<(), StoreError> {
+    migrate_v3_with_fault(connection, MigrationFault::None)
+}
+
+fn migrate_v3_with_fault(
+    connection: &mut Connection,
+    fault: MigrationFault,
+) -> Result<(), StoreError> {
+    validate_v3(connection)?;
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    migrate_usage_event_v4(&transaction, fault)?;
+    transaction.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
+    validate_v4(&transaction)?;
+    transaction.commit()?;
+    Ok(())
+}
+
+fn migrate_usage_event_v4(
+    connection: &Connection,
+    fault: MigrationFault,
+) -> Result<(), StoreError> {
+    let old_count = pragma_i64(connection, "SELECT count(*) FROM usage_event")?;
+    let temporary_schema = V4_USAGE_EVENT_SCHEMA.replacen(
+        "CREATE TABLE usage_event (",
+        "CREATE TABLE usage_event_v4 (",
+        1,
+    );
+    connection.execute_batch(&temporary_schema)?;
+    migration_fault(fault, MigrationBoundary::EventCreated)?;
+    connection.execute_batch(
+        "INSERT INTO usage_event_v4(
+           fingerprint, event_id, selected_file_key, selected_generation,
+           selected_source_offset, projection_revision_id, origin_revision_id,
+           retained, profile_id, session_id, source_id, timestamp_seconds,
+           timestamp_nanos, model, raw_model, input_tokens, cached_tokens,
+           output_tokens, reasoning_tokens, total_tokens, fallback_model,
+           long_context, service_tier, project_alias, originator, activity_read,
+           activity_edit_write, activity_search, activity_git,
+           activity_build_test, activity_web, activity_subagents, activity_terminal
+         )
+         SELECT
+           fingerprint, event_id, selected_file_key, selected_generation,
+           selected_source_offset,
+           (SELECT revision_id FROM usage_replay_revision WHERE status = 'current'),
+           (SELECT revision_id FROM usage_replay_revision WHERE status = 'current'),
+           0, profile_id, session_id, source_id, timestamp_seconds,
+           timestamp_nanos, model, raw_model, input_tokens, cached_tokens,
+           output_tokens, reasoning_tokens, total_tokens, fallback_model,
+           long_context, service_tier, project_alias, originator, activity_read,
+           activity_edit_write, activity_search, activity_git,
+           activity_build_test, activity_web, activity_subagents, activity_terminal
+         FROM usage_event;",
+    )?;
+    let new_count = pragma_i64(connection, "SELECT count(*) FROM usage_event_v4")?;
+    let logical_difference = pragma_i64(
+        connection,
+        "SELECT count(*) FROM (
+           SELECT fingerprint, event_id, selected_file_key, selected_generation,
+                  selected_source_offset, profile_id, session_id, source_id,
+                  timestamp_seconds, timestamp_nanos, model, raw_model, input_tokens,
+                  cached_tokens, output_tokens, reasoning_tokens, total_tokens,
+                  fallback_model, long_context, service_tier, project_alias,
+                  originator, activity_read, activity_edit_write, activity_search,
+                  activity_git, activity_build_test, activity_web,
+                  activity_subagents, activity_terminal
+           FROM usage_event
+           EXCEPT
+           SELECT fingerprint, event_id, selected_file_key, selected_generation,
+                  selected_source_offset, profile_id, session_id, source_id,
+                  timestamp_seconds, timestamp_nanos, model, raw_model, input_tokens,
+                  cached_tokens, output_tokens, reasoning_tokens, total_tokens,
+                  fallback_model, long_context, service_tier, project_alias,
+                  originator, activity_read, activity_edit_write, activity_search,
+                  activity_git, activity_build_test, activity_web,
+                  activity_subagents, activity_terminal
+           FROM usage_event_v4
+           UNION ALL
+           SELECT fingerprint, event_id, selected_file_key, selected_generation,
+                  selected_source_offset, profile_id, session_id, source_id,
+                  timestamp_seconds, timestamp_nanos, model, raw_model, input_tokens,
+                  cached_tokens, output_tokens, reasoning_tokens, total_tokens,
+                  fallback_model, long_context, service_tier, project_alias,
+                  originator, activity_read, activity_edit_write, activity_search,
+                  activity_git, activity_build_test, activity_web,
+                  activity_subagents, activity_terminal
+           FROM usage_event_v4
+           EXCEPT
+           SELECT fingerprint, event_id, selected_file_key, selected_generation,
+                  selected_source_offset, profile_id, session_id, source_id,
+                  timestamp_seconds, timestamp_nanos, model, raw_model, input_tokens,
+                  cached_tokens, output_tokens, reasoning_tokens, total_tokens,
+                  fallback_model, long_context, service_tier, project_alias,
+                  originator, activity_read, activity_edit_write, activity_search,
+                  activity_git, activity_build_test, activity_web,
+                  activity_subagents, activity_terminal
+           FROM usage_event
+         )",
+    )?;
+    if old_count < 0 || old_count != new_count || logical_difference != 0 {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    migration_fault(fault, MigrationBoundary::EventCopied)?;
+    connection.execute_batch("DROP TABLE usage_event;")?;
+    migration_fault(fault, MigrationBoundary::EventDropped)?;
+    connection.execute_batch(
+        "ALTER TABLE usage_event_v4 RENAME TO usage_event;
+         CREATE INDEX usage_event_time_desc
+           ON usage_event(timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC);
+         CREATE INDEX usage_event_model_time
+           ON usage_event(model, timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC);",
+    )?;
+    Ok(())
 }
 
 fn validate_legacy_snapshot(connection: &Connection) -> Result<(), StoreError> {
@@ -283,6 +445,7 @@ fn validate_schema(
     index_contracts: &[IndexContract],
     trigger_contracts: &[TriggerContract],
     table_schema_sources: &[&str],
+    column_overrides: &[TableContract],
 ) -> Result<(), StoreError> {
     let mut table_list = connection.prepare("PRAGMA table_list")?;
     let rows = table_list.query_map([], |row| {
@@ -314,9 +477,13 @@ fn validate_schema(
     }
 
     for contract in table_contracts {
+        let column_contract = column_overrides
+            .iter()
+            .find(|override_contract| override_contract.name == contract.name)
+            .unwrap_or(contract);
         let sql = format!("SELECT * FROM {} LIMIT 0", contract.name);
         let statement = connection.prepare(&sql)?;
-        if statement.column_names().as_slice() != contract.columns {
+        if statement.column_names().as_slice() != column_contract.columns {
             return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
         }
         let actual_sql: String = connection.query_row(
@@ -435,7 +602,8 @@ mod tests {
     use rusqlite::{Connection, params};
 
     use super::{
-        MigrationFault, migrate_schema, migrate_v2_with_fault, pragma_i64, validate_v2, validate_v3,
+        MigrationFault, migrate_schema, migrate_v2_revision_table, migrate_v2_with_fault,
+        migrate_v3_with_fault, pragma_i64, validate_v2, validate_v3, validate_v4,
     };
     use crate::{StoreErrorCode, usage::schema};
 
@@ -717,18 +885,39 @@ mod tests {
         })
     }
 
+    fn exact_v3_fixture(current_revision: bool) -> TestResult<Connection> {
+        let mut connection = exact_v2_fixture(current_revision)?;
+        connection.pragma_update(None, "foreign_keys", "OFF")?;
+        let transaction = connection.transaction()?;
+        migrate_v2_revision_table(&transaction, MigrationFault::None)?;
+        transaction.commit()?;
+        connection.pragma_update(None, "foreign_keys", "ON")?;
+        validate_v3(&connection)?;
+        Ok(connection)
+    }
+
+    fn event_provenance(connection: &Connection) -> TestResult<(Option<i64>, Option<i64>, i64)> {
+        Ok(connection.query_row(
+            "SELECT projection_revision_id, origin_revision_id, retained FROM usage_event",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?)
+    }
+
     #[test]
-    fn exact_v2_rebuilds_only_revision_table_and_preserves_all_rows() -> TestResult {
+    fn exact_v2_migrates_to_v4_and_preserves_all_rows() -> TestResult {
         let mut connection = exact_v2_fixture(true)?;
         let before = fixture_snapshot(&connection)?;
         migrate_schema(&mut connection)?;
-        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 3);
+        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 4);
         assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
         assert_eq!(fixture_snapshot(&connection)?, before);
-        validate_v3(&connection)?;
+        assert_eq!(event_provenance(&connection)?, (Some(5), Some(5), 0));
+        validate_v4(&connection)?;
         let temporary_names: i64 = connection.query_row(
             "SELECT count(*) FROM sqlite_schema
-             WHERE instr(sql, 'usage_replay_revision_v3') > 0",
+             WHERE instr(sql, 'usage_replay_revision_v3') > 0
+                OR instr(sql, 'usage_event_v4') > 0",
             [],
             |row| row.get(0),
         )?;
@@ -739,6 +928,53 @@ mod tests {
             "DELETE FROM usage_legacy_event WHERE snapshot_id = 1",
         ] {
             assert!(connection.execute(statement, []).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn exact_v3_migrates_legacy_and_current_projection_provenance() -> TestResult {
+        for (current_revision, expected) in [
+            (false, (None, None, 0_i64)),
+            (true, (Some(5_i64), Some(5_i64), 0_i64)),
+        ] {
+            let mut connection = exact_v3_fixture(current_revision)?;
+            let before = fixture_snapshot(&connection)?;
+            migrate_schema(&mut connection)?;
+            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 4);
+            assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
+            assert_eq!(fixture_snapshot(&connection)?, before);
+            assert_eq!(event_provenance(&connection)?, expected);
+            validate_v4(&connection)?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn every_v3_event_migration_fault_rolls_back_exactly() -> TestResult {
+        for fault in [
+            MigrationFault::AfterCreateEvent,
+            MigrationFault::AfterCopyEvent,
+            MigrationFault::AfterDropEvent,
+        ] {
+            let mut connection = exact_v3_fixture(true)?;
+            let before = fixture_snapshot(&connection)?;
+            let error = match migrate_v3_with_fault(&mut connection, fault) {
+                Ok(()) => return Err("faulted event migration unexpectedly committed".into()),
+                Err(error) => error,
+            };
+            assert_eq!(error.code(), StoreErrorCode::Database);
+            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 3);
+            assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
+            validate_v3(&connection)?;
+            assert_eq!(fixture_snapshot(&connection)?, before);
+            let temporary_names: i64 = connection.query_row(
+                "SELECT count(*) FROM sqlite_schema
+                 WHERE name = 'usage_event_v4' OR instr(sql, 'usage_event_v4') > 0",
+                [],
+                |row| row.get(0),
+            )?;
+            assert_eq!(temporary_names, 0);
         }
         Ok(())
     }

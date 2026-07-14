@@ -261,8 +261,8 @@ fn schema_is_strict_path_free_and_has_exact_usage_tables() {
     let version: i64 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user version");
-    assert_eq!(USAGE_SCHEMA_VERSION, 3);
-    assert_eq!(version, 3);
+    assert_eq!(USAGE_SCHEMA_VERSION, 4);
+    assert_eq!(version, 4);
     assert_eq!(version, USAGE_SCHEMA_VERSION);
 
     let revision_sql = table_sql(&path, "usage_replay_revision");
@@ -271,6 +271,24 @@ fn schema_is_strict_path_free_and_has_exact_usage_tables() {
             .contains("expected_source_count INTEGER NOT NULL CHECK(expected_source_count >= 1)")
     );
     assert!(!revision_sql.contains("expected_source_count BETWEEN 1 AND 256"));
+
+    let event_sql = table_sql(&path, "usage_event");
+    let normalized_event_sql = event_sql.split_whitespace().collect::<Vec<_>>().join(" ");
+    for required in [
+        "projection_revision_id INTEGER",
+        "origin_revision_id INTEGER",
+        "retained INTEGER NOT NULL CHECK(retained IN (0,1))",
+        "FOREIGN KEY(projection_revision_id) REFERENCES usage_replay_revision(revision_id) DEFERRABLE INITIALLY DEFERRED",
+    ] {
+        assert!(
+            normalized_event_sql.contains(required),
+            "missing usage_event contract: {required}"
+        );
+    }
+    assert!(
+        !normalized_event_sql.contains("REFERENCES usage_observation"),
+        "canonical projection must not retain a foreign key to a deletable generation"
+    );
 
     let mut table_list = connection
         .prepare("PRAGMA table_list")
@@ -384,7 +402,7 @@ fn exact_v1_migration_preserves_an_immutable_legacy_snapshot() {
     let version: i64 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("migrated version");
-    assert_eq!(version, 3);
+    assert_eq!(version, 4);
     let snapshot: (i64, String, i64) = connection
         .query_row(
             "SELECT source_schema_version, quality_state, event_count
@@ -500,7 +518,7 @@ fn v1_with_weakened_deferred_foreign_key_rolls_back() {
 }
 
 #[test]
-fn current_v3_with_weakened_constraint_fails_closed() {
+fn current_v4_with_weakened_constraint_fails_closed() {
     let directory = TempDir::new().expect("temporary directory");
     let path = directory.path().join("weakened-v3-check-private.sqlite3");
     drop(UsageStore::open(&path).expect("create valid v3 schema"));

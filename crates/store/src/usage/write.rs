@@ -8,7 +8,8 @@ use crate::{StoreError, StoreErrorCode};
 const REFRESH_CANONICAL_SQL: &str = r#"
 INSERT INTO usage_event(
   fingerprint, event_id, selected_file_key, selected_generation,
-  selected_source_offset, profile_id, session_id, source_id,
+  selected_source_offset, projection_revision_id, origin_revision_id, retained,
+  profile_id, session_id, source_id,
   timestamp_seconds, timestamp_nanos, model, raw_model, input_tokens,
   cached_tokens, output_tokens, reasoning_tokens, total_tokens,
   fallback_model, long_context, service_tier, project_alias, originator,
@@ -17,6 +18,7 @@ INSERT INTO usage_event(
 )
 SELECT
   o.fingerprint, o.event_id, o.file_key, o.generation, o.source_offset,
+  current_revision.revision_id, current_revision.revision_id, 0,
   o.profile_id, o.session_id, o.source_id, o.timestamp_seconds,
   o.timestamp_nanos, o.model, o.raw_model, o.input_tokens, o.cached_tokens,
   o.output_tokens, o.reasoning_tokens, o.total_tokens, o.fallback_model,
@@ -26,6 +28,8 @@ SELECT
 FROM usage_observation AS o
 JOIN usage_generation AS g
   ON g.file_key = o.file_key AND g.generation = o.generation
+LEFT JOIN usage_replay_revision AS current_revision
+  ON current_revision.status = 'current'
 WHERE o.fingerprint = ?1 AND g.status = 'current'
 ORDER BY o.profile_id, o.file_key, o.generation, o.source_offset
 LIMIT 1
@@ -162,7 +166,7 @@ impl UsageStore {
             &parts.next_checkpoint,
         )?;
         #[cfg(test)]
-        if _fault == ApplyFault::DeferredForeignKey {
+        if _fault == ApplyFault::ProjectionIntegrity {
             let event = parts
                 .events
                 .first()
@@ -173,16 +177,19 @@ impl UsageStore {
                 params![event.fingerprint().as_bytes().as_slice()],
             )?;
         }
+        for event in &parts.events {
+            validate_direct_projection(&transaction, event.fingerprint().as_bytes())?;
+        }
         transaction.commit()?;
         Ok(())
     }
 
     #[cfg(test)]
-    fn apply_append_batch_with_deferred_fk_failure(
+    fn apply_append_batch_with_projection_integrity_failure(
         &mut self,
         batch: &AppendBatch,
     ) -> Result<(), StoreError> {
-        self.apply_append_batch_inner(batch, ApplyFault::DeferredForeignKey)
+        self.apply_append_batch_inner(batch, ApplyFault::ProjectionIntegrity)
     }
 }
 
@@ -190,7 +197,7 @@ impl UsageStore {
 enum ApplyFault {
     None,
     #[cfg(test)]
-    DeferredForeignKey,
+    ProjectionIntegrity,
 }
 
 struct CurrentSource {
@@ -399,6 +406,41 @@ fn refresh_canonical(
     let inserted = transaction.execute(REFRESH_CANONICAL_SQL, params![fingerprint.as_slice()])?;
     if inserted != 1 {
         return Err(StoreError::new(StoreErrorCode::Database));
+    }
+    Ok(())
+}
+
+fn validate_direct_projection(
+    transaction: &Transaction<'_>,
+    fingerprint: &[u8; 32],
+) -> Result<(), StoreError> {
+    let valid: i64 = transaction.query_row(
+        "SELECT count(*)
+         FROM usage_event AS event
+         JOIN usage_observation AS observation
+           ON observation.file_key = event.selected_file_key
+          AND observation.generation = event.selected_generation
+          AND observation.source_offset = event.selected_source_offset
+          AND observation.fingerprint = event.fingerprint
+         WHERE event.fingerprint = ?1
+           AND event.retained = 0
+           AND (
+             (event.projection_revision_id IS NULL
+              AND event.origin_revision_id IS NULL
+              AND NOT EXISTS(
+                SELECT 1 FROM usage_replay_revision WHERE status = 'current'
+              ))
+             OR
+             (event.projection_revision_id = event.origin_revision_id
+              AND event.projection_revision_id = (
+                SELECT revision_id FROM usage_replay_revision WHERE status = 'current'
+              ))
+           )",
+        [fingerprint.as_slice()],
+        |row| row.get(0),
+    )?;
+    if valid != 1 {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
     }
     Ok(())
 }
@@ -662,17 +704,17 @@ mod tests {
     }
 
     #[test]
-    fn deferred_foreign_key_fault_rolls_back_every_append_write() -> TestResult {
+    fn projection_integrity_fault_rolls_back_every_append_write() -> TestResult {
         let mut store = UsageStore::in_memory()?;
         store.register_source(&registration(7)?)?;
         let before = store.counts()?;
         let batch = batch(7, 1)?;
 
-        let error = match store.apply_append_batch_with_deferred_fk_failure(&batch) {
-            Ok(()) => return Err("deferred foreign key unexpectedly committed".into()),
+        let error = match store.apply_append_batch_with_projection_integrity_failure(&batch) {
+            Ok(()) => return Err("invalid canonical projection unexpectedly committed".into()),
             Err(error) => error,
         };
-        assert_eq!(error.code(), StoreErrorCode::Database);
+        assert_eq!(error.code(), StoreErrorCode::InvalidStoredValue);
         assert_eq!(store.counts()?, before);
         let snapshot = store
             .generation_snapshot(SourceKey::from_bytes([7; 32]))?

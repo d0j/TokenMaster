@@ -1,6 +1,7 @@
-pub const USAGE_SCHEMA_VERSION: i64 = 3;
+pub const USAGE_SCHEMA_VERSION: i64 = 4;
 pub(super) const V1_SCHEMA_VERSION: i64 = 1;
 pub(super) const V2_SCHEMA_VERSION: i64 = 2;
+pub(super) const V3_SCHEMA_VERSION: i64 = 3;
 
 pub(super) struct TableContract {
     pub(super) name: &'static str,
@@ -221,6 +222,9 @@ pub(super) const USAGE_TABLE_CONTRACTS: &[TableContract] = &[
             "selected_file_key",
             "selected_generation",
             "selected_source_offset",
+            "projection_revision_id",
+            "origin_revision_id",
+            "retained",
             "profile_id",
             "session_id",
             "source_id",
@@ -379,6 +383,42 @@ pub(super) const USAGE_TABLE_CONTRACTS: &[TableContract] = &[
         ],
     },
 ];
+
+pub(super) const PRE_V4_USAGE_EVENT_CONTRACT: TableContract = TableContract {
+    name: "usage_event",
+    columns: &[
+        "fingerprint",
+        "event_id",
+        "selected_file_key",
+        "selected_generation",
+        "selected_source_offset",
+        "profile_id",
+        "session_id",
+        "source_id",
+        "timestamp_seconds",
+        "timestamp_nanos",
+        "model",
+        "raw_model",
+        "input_tokens",
+        "cached_tokens",
+        "output_tokens",
+        "reasoning_tokens",
+        "total_tokens",
+        "fallback_model",
+        "long_context",
+        "service_tier",
+        "project_alias",
+        "originator",
+        "activity_read",
+        "activity_edit_write",
+        "activity_search",
+        "activity_git",
+        "activity_build_test",
+        "activity_web",
+        "activity_subagents",
+        "activity_terminal",
+    ],
+};
 
 pub(super) const V1_SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS usage_scan (
@@ -616,6 +656,55 @@ CREATE TABLE usage_replay_revision (
   promoted INTEGER NOT NULL CHECK(promoted IN (0,1)),
   CHECK((status = 'staging' AND promoted = 0) OR
         (status = 'current' AND sealed = 1 AND promoted = 1))
+) STRICT;
+"#;
+
+pub(super) const V4_USAGE_EVENT_SCHEMA: &str = r#"
+CREATE TABLE usage_event (
+  fingerprint BLOB PRIMARY KEY CHECK(length(fingerprint) = 32),
+  event_id TEXT NOT NULL CHECK(length(CAST(event_id AS BLOB)) BETWEEN 1 AND 128),
+  selected_file_key BLOB NOT NULL CHECK(length(selected_file_key) = 32),
+  selected_generation INTEGER NOT NULL CHECK(selected_generation >= 0),
+  selected_source_offset INTEGER NOT NULL CHECK(selected_source_offset >= 0),
+  projection_revision_id INTEGER CHECK(projection_revision_id IS NULL OR projection_revision_id >= 0),
+  origin_revision_id INTEGER CHECK(origin_revision_id IS NULL OR origin_revision_id >= 0),
+  retained INTEGER NOT NULL CHECK(retained IN (0,1)) DEFAULT 0,
+  profile_id TEXT NOT NULL CHECK(length(CAST(profile_id AS BLOB)) BETWEEN 1 AND 128),
+  session_id TEXT NOT NULL CHECK(length(CAST(session_id AS BLOB)) BETWEEN 1 AND 512),
+  source_id TEXT NOT NULL CHECK(length(CAST(source_id AS BLOB)) BETWEEN 1 AND 128),
+  timestamp_seconds INTEGER NOT NULL,
+  timestamp_nanos INTEGER NOT NULL CHECK(timestamp_nanos BETWEEN 0 AND 999999999),
+  model TEXT NOT NULL CHECK(length(CAST(model AS BLOB)) BETWEEN 1 AND 64),
+  raw_model TEXT CHECK(raw_model IS NULL OR length(CAST(raw_model AS BLOB)) BETWEEN 1 AND 512),
+  input_tokens INTEGER CHECK(input_tokens IS NULL OR input_tokens >= 0),
+  cached_tokens INTEGER CHECK(cached_tokens IS NULL OR cached_tokens >= 0),
+  output_tokens INTEGER CHECK(output_tokens IS NULL OR output_tokens >= 0),
+  reasoning_tokens INTEGER CHECK(reasoning_tokens IS NULL OR reasoning_tokens >= 0),
+  total_tokens INTEGER CHECK(total_tokens IS NULL OR total_tokens >= 0),
+  fallback_model INTEGER NOT NULL CHECK(fallback_model IN (0,1)),
+  long_context TEXT NOT NULL CHECK(long_context IN ('yes','no','unavailable')),
+  service_tier TEXT CHECK(service_tier IS NULL OR length(CAST(service_tier AS BLOB)) BETWEEN 1 AND 512),
+  project_alias TEXT CHECK(project_alias IS NULL OR length(CAST(project_alias AS BLOB)) BETWEEN 1 AND 512),
+  originator TEXT CHECK(originator IS NULL OR length(CAST(originator AS BLOB)) BETWEEN 1 AND 512),
+  activity_read INTEGER NOT NULL CHECK(activity_read >= 0),
+  activity_edit_write INTEGER NOT NULL CHECK(activity_edit_write >= 0),
+  activity_search INTEGER NOT NULL CHECK(activity_search >= 0),
+  activity_git INTEGER NOT NULL CHECK(activity_git >= 0),
+  activity_build_test INTEGER NOT NULL CHECK(activity_build_test >= 0),
+  activity_web INTEGER NOT NULL CHECK(activity_web >= 0),
+  activity_subagents INTEGER NOT NULL CHECK(activity_subagents >= 0),
+  activity_terminal INTEGER NOT NULL CHECK(activity_terminal >= 0),
+  CHECK(
+    (projection_revision_id IS NULL AND origin_revision_id IS NULL AND retained = 0)
+    OR
+    (projection_revision_id IS NOT NULL AND (
+      (retained = 0 AND origin_revision_id = projection_revision_id)
+      OR
+      (retained = 1 AND (origin_revision_id IS NULL OR origin_revision_id < projection_revision_id))
+    ))
+  ),
+  FOREIGN KEY(projection_revision_id) REFERENCES usage_replay_revision(revision_id)
+    DEFERRABLE INITIALLY DEFERRED
 ) STRICT;
 "#;
 
