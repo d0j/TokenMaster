@@ -35,3 +35,19 @@ fn identity_tracks_the_open_file_not_its_path_or_length() {
     assert_ne!(before, replacement);
     assert_eq!(format!("{before:?}"), "PhysicalFileIdentity([redacted])");
 }
+
+#[test]
+fn persisted_identity_round_trips_without_exposing_os_fields() {
+    let root = tempdir().expect("temporary directory");
+    let path = root.path().join("private-identity.jsonl");
+    std::fs::write(&path, b"fixture\n").expect("write fixture");
+    let file = File::open(&path).expect("open fixture");
+    let live = PhysicalFileIdentity::from_file(&file).expect("identity");
+
+    let restored = PhysicalFileIdentity::from_persisted_bytes(*live.as_bytes());
+
+    assert_eq!(restored, live);
+    let debug = format!("{restored:?}");
+    assert_eq!(debug, "PhysicalFileIdentity([redacted])");
+    assert!(!debug.contains(path.to_string_lossy().as_ref()));
+}

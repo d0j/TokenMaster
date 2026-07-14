@@ -21,6 +21,12 @@ impl PhysicalFileIdentity {
         platform_identity(file)
     }
 
+    /// Reconstructs an opaque identity from its controlled persistent representation.
+    #[must_use]
+    pub const fn from_persisted_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
     /// Returns the opaque identity bytes for equality checks and persistence.
     pub const fn as_bytes(&self) -> &[u8; 32] {
         &self.0
