@@ -11,6 +11,7 @@ use crate::{StoreError, StoreErrorCode};
 pub const MAX_RESUME_BYTES: usize = 32 * 1024;
 pub const MAX_USAGE_EVENT_PAGE_SIZE: usize = 256;
 pub const MAX_APPEND_EVENTS: usize = 256;
+pub const MAX_APPEND_RELATIONS: usize = 256;
 pub const MAX_APPEND_CHUNK_UPDATES: usize = 18;
 pub const MAX_REPLAY_SOURCES: usize = 256;
 pub const MAX_SCAN_SCOPES: usize = 256;
@@ -929,6 +930,7 @@ pub struct ReplayAppendBatchParts {
     pub revision_id: ReplayRevisionId,
     pub expected_epoch: ReplayEpoch,
     pub append_batch: AppendBatch,
+    pub relations: Box<[SessionRelationDraft]>,
 }
 
 impl fmt::Debug for ReplayAppendBatchParts {
@@ -1019,9 +1021,21 @@ impl ReplayContinuationResult {
 }
 
 impl ReplayAppendBatch {
-    #[must_use]
-    pub const fn new(parts: ReplayAppendBatchParts) -> Self {
-        Self { parts }
+    pub fn new(parts: ReplayAppendBatchParts) -> Result<Self, StoreError> {
+        if parts.relations.len() > MAX_APPEND_RELATIONS {
+            return Err(StoreError::with_limit(
+                StoreErrorCode::CapacityExceeded,
+                MAX_APPEND_RELATIONS as u64,
+            ));
+        }
+        if parts
+            .relations
+            .iter()
+            .any(|relation| relation.source_offset() > i64::MAX as u64)
+        {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self { parts })
     }
 
     pub(super) const fn parts(&self) -> &ReplayAppendBatchParts {
@@ -1045,6 +1059,7 @@ fn replay_append_debug(
         .field("revision_id", &parts.revision_id)
         .field("expected_epoch", &parts.expected_epoch)
         .field("append_batch", &parts.append_batch)
+        .field("relation_count", &parts.relations.len())
         .finish()
 }
 

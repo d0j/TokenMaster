@@ -102,6 +102,14 @@ progress, port fault, or stale state after replay begin invokes exact discard of
 last confirmed unpublished handle; a failed discard remains an explicit recovery
 state and never authorizes publication.
 
+Canonical replay events and late session relations from one reader batch are one
+`ReplayAppendBatch` authority unit. Both collections are independently capped at 256.
+They share the same expected revision/epoch and source/checkpoint boundary; event
+overlay, relation/session state, replay selection, work queue, chunks, checkpoint,
+source completion state, and evidence epoch are committed atomically. The epoch
+advances exactly once for the entire batch, never once per relation. A failure after
+event work or after relation work leaves the exact pre-batch state.
+
 The worker retains one coordinator, one optional not-yet-started permit, one wake
 token, one completion, one owned thread handle, and fixed phase/supersession counters.
 Ten thousand active-time hints still retain only one merged follow-up. Completion

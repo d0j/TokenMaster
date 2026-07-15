@@ -26,6 +26,11 @@
    If a later scan changes membership, discard the stale revision and restart from
    the newer complete set. A zero-source bound revision has no source checkpoint work
    and may seal/promote retention-only without changing missing-source generations.
+   Submit canonical events and late session relations from one reader pull only as one
+   bounded `ReplayAppendBatch`; never restore the old per-relation commit loop. One
+   successful batch advances the evidence epoch once. Any batch error leaves events,
+   relation/session state, selections, work, chunks, checkpoint, source state, and
+   epoch unchanged, so retry only with the same exact prior handle and input.
 3. A sealed revision with pending quality evidence is intentionally not promotable.
    Preserve it for bounded `replay_quality()` inspection or explicitly call
    `discard_replay_revision` with its exact revision ID and latest epoch.

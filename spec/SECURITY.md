@@ -160,6 +160,13 @@ misuse of that code fails the operation. Replay failure attempts exact
 last-confirmed-handle discard, and cleanup failure is reported separately without
 exposing data or masking the initiating stable code.
 
+Store replay append binds at most 256 late relation drafts to the same source,
+checkpoint, revision, and epoch as its at-most-256 canonical events. Provider/profile/
+source mismatches and out-of-range relation offsets fail before commit. Events,
+relations, selections, queued continuation, chunks, checkpoint, and epoch share one
+transaction, preventing a fault from advancing archive authority while the engine
+still holds the prior handle. Debug exposes only the bounded relation count.
+
 The deterministic worker uses only capacity-one standard-library wake/result
 channels and the constant-state coordinator. External clock and execution callbacks
 run outside the worker mutex. Stale cancellation cannot affect a newer request;

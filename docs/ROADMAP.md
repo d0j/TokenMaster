@@ -53,8 +53,9 @@ unreferenced sets per transaction, preserves running/source/replay references, r
 older backlogs in bounded passes, and fails atomically on pruning or ID exhaustion.
 P1-C is the completed provider-neutral runtime engine core. P1-D.0 has corrected its
 real multi-file boundary with fixed logical-file identity and two linear streaming
-passes with one temporary descriptor-bound reader. P1-D.1+ and P1-E next add atomic
-event/relation replay append, live Codex composition, the real writer lease,
+passes with one temporary descriptor-bound reader. P1-D.1 atomically binds events,
+late relations, checkpoint, replay work, and one epoch advance. P1-D.2+ and P1-E next
+add bootstrap/live Codex composition, the real writer lease,
 sleep/resume, continuous recovery, and
 immutable publication before indexed
 analytics, pricing, quota, Git output, automation, and complete UI work.
@@ -72,8 +73,11 @@ supersession, cooperative cancel/wake/join shutdown and `Drop`, stale-ID safety,
 pre-execution deadline/cancellation, and redacted panic/fault containment. Completed
 P1-D.0: source identity is exact per logical file, archive page/cursor descriptor
 recovery is removed, and 300 same-root files rebuild with a maximum of one live reader
-and no engine descriptor collection. The current gate is P1-D.1 atomic replay
-event/relation append, then the built-in Codex adapter, real portable writer lease,
+and no engine descriptor collection. Completed P1-D.1: a 256+256 bounded replay fact
+batch applies events and relations in one immediate transaction, rolls every fact and
+checkpoint/epoch back at both injected boundaries, and advances epoch once. The
+current gate is P1-D.2 bootstrap runtime composition, then the built-in live Codex
+adapter, real portable writer lease,
 incremental tail path, watcher/periodic hints, and lifecycle cancellation without
 adding provider/platform/UI dependencies to the engine core.
 

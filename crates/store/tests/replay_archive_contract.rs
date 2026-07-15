@@ -10,11 +10,11 @@ use tokenmaster_domain::{
     TokenUsage, UsageProfileId, UsageProviderId, UsageSessionId, UsageSourceId, UtcTimestamp,
 };
 use tokenmaster_store::{
-    AppendBatch, AppendBatchParts, ArchiveMode, GenerationStatus, ReplayAppendBatch,
-    ReplayAppendBatchParts, ReplayManifest, ReplayRelation, ReplayRevisionStatus, ScanCounters,
-    ScanOutcome, ScanScope, ScanSetId, ScanSetManifest, SourceKey, SourceKind, SourceRegistration,
-    SourceRegistrationParts, StoreErrorCode, StoredCheckpoint, StoredCheckpointParts,
-    StoredSourceChunk, StoredVerification, UsageStore,
+    AppendBatch, AppendBatchParts, ArchiveMode, GenerationStatus, MAX_APPEND_RELATIONS,
+    ReplayAppendBatch, ReplayAppendBatchParts, ReplayManifest, ReplayRelation,
+    ReplayRevisionStatus, ScanCounters, ScanOutcome, ScanScope, ScanSetId, ScanSetManifest,
+    SourceKey, SourceKind, SourceRegistration, SourceRegistrationParts, StoreErrorCode,
+    StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk, StoredVerification, UsageStore,
 };
 
 fn registration(seed: u8) -> SourceRegistration {
@@ -160,7 +160,9 @@ fn empty_replay_append_for_index(
         revision_id,
         expected_epoch: epoch,
         append_batch: append,
+        relations: Box::default(),
     })
+    .expect("valid empty replay append")
 }
 
 fn checkpoint(seed: u8, offset: u64, verification: StoredVerification) -> StoredCheckpoint {
@@ -287,6 +289,27 @@ fn replay_append_generation(
     events: Vec<CanonicalUsageEvent>,
     next_offset: u64,
 ) -> ReplayAppendBatch {
+    replay_append_generation_with_relations(
+        seed,
+        revision,
+        epoch,
+        generation,
+        events,
+        next_offset,
+        Box::default(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn replay_append_generation_with_relations(
+    seed: u8,
+    revision: tokenmaster_store::ReplayRevisionId,
+    epoch: tokenmaster_store::ReplayEpoch,
+    generation: u64,
+    events: Vec<CanonicalUsageEvent>,
+    next_offset: u64,
+    relations: Box<[SessionRelationDraft]>,
+) -> ReplayAppendBatch {
     let append = AppendBatch::new(AppendBatchParts {
         source_key: SourceKey::from_bytes([seed; 32]),
         expected_generation: generation,
@@ -311,7 +334,9 @@ fn replay_append_generation(
         revision_id: revision,
         expected_epoch: epoch,
         append_batch: append,
+        relations,
     })
+    .expect("valid replay append")
 }
 
 fn replay_relation(
@@ -323,7 +348,19 @@ fn replay_relation(
     source_offset: u64,
     declared_conflict: bool,
 ) -> ReplayRelation {
-    let draft = SessionRelationDraft::new(SessionRelationDraftParts {
+    let draft = replay_relation_draft(seed, session, parent, source_offset, declared_conflict);
+    ReplayRelation::new(revision, epoch, SourceKey::from_bytes([seed; 32]), &draft)
+        .expect("replay relation")
+}
+
+fn replay_relation_draft(
+    seed: u8,
+    session: &str,
+    parent: &str,
+    source_offset: u64,
+    declared_conflict: bool,
+) -> SessionRelationDraft {
+    SessionRelationDraft::new(SessionRelationDraftParts {
         provider_id: UsageProviderId::new("codex").expect("provider"),
         profile_id: UsageProfileId::new("default").expect("profile"),
         session_id: UsageSessionId::new(session).expect("session"),
@@ -332,9 +369,7 @@ fn replay_relation(
         source_id: UsageSourceId::new(format!("fixture-{seed}")).expect("source"),
         source_offset,
     })
-    .expect("session relation");
-    ReplayRelation::new(revision, epoch, SourceKey::from_bytes([seed; 32]), &draft)
-        .expect("replay relation")
+    .expect("session relation")
 }
 
 fn seal_ready_store(
@@ -540,6 +575,76 @@ fn replay_quality_rejects_an_unknown_revision() {
         .replay_quality(unknown)
         .expect_err("unknown revision must fail closed");
     assert_eq!(error.code(), StoreErrorCode::StaleRevision);
+}
+
+#[test]
+fn replay_append_relations_share_one_transaction_and_one_epoch_increment() {
+    let seed = 5_u8;
+    let mut store = UsageStore::in_memory().expect("usage store");
+    store
+        .register_source(&registration(seed))
+        .expect("register source");
+    let revision = store
+        .begin_replay_revision(
+            &ReplayManifest::new(vec![SourceKey::from_bytes([seed; 32])].into_boxed_slice())
+                .expect("manifest"),
+        )
+        .expect("begin replay");
+    let batch = replay_append_generation_with_relations(
+        seed,
+        revision.id(),
+        revision.epoch(),
+        1,
+        vec![
+            replay_event(seed, "child-a", None, 0, 10, Some(100), false),
+            replay_event(seed, "child-b", None, 0, 20, Some(100), false),
+        ],
+        100,
+        vec![
+            replay_relation_draft(seed, "child-a", "missing-a", 10, false),
+            replay_relation_draft(seed, "child-b", "missing-b", 20, false),
+        ]
+        .into_boxed_slice(),
+    );
+
+    let epoch = store
+        .apply_replay_append_batch(&batch)
+        .expect("atomic event and relation batch");
+    assert_eq!(epoch.get(), revision.epoch().get() + 1);
+    let seal_error = store
+        .seal_replay_revision(revision.id(), epoch)
+        .expect_err("relation work must block seal");
+    assert_eq!(seal_error.code(), StoreErrorCode::PendingContinuation);
+}
+
+#[test]
+fn replay_append_relation_count_is_hard_bounded() {
+    let seed = 4_u8;
+    let append = AppendBatch::new(AppendBatchParts {
+        source_key: SourceKey::from_bytes([seed; 32]),
+        expected_generation: 1,
+        expected_committed_offset: 0,
+        expected_scan_offset: 0,
+        events: Box::default(),
+        previous_partial_chunk: None,
+        chunk_updates: vec![StoredSourceChunk::new(0, 100, [7; 32]).expect("chunk")]
+            .into_boxed_slice(),
+        next_checkpoint: checkpoint(seed, 100, StoredVerification::FullPrefix),
+        diagnostic_count_delta: 0,
+    })
+    .expect("append batch");
+    let relation = replay_relation_draft(seed, "child", "parent", 10, false);
+
+    let error = ReplayAppendBatch::new(ReplayAppendBatchParts {
+        revision_id: tokenmaster_store::ReplayRevisionId::new(1).expect("revision"),
+        expected_epoch: tokenmaster_store::ReplayEpoch::new(1).expect("epoch"),
+        append_batch: append,
+        relations: vec![relation; MAX_APPEND_RELATIONS + 1].into_boxed_slice(),
+    })
+    .expect_err("oversized relation batch");
+
+    assert_eq!(error.code(), StoreErrorCode::CapacityExceeded);
+    assert_eq!(error.limit(), Some(MAX_APPEND_RELATIONS as u64));
 }
 
 #[test]

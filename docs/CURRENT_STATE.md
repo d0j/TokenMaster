@@ -137,6 +137,13 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   three times, proves 300 appends, one maximum live reader, zero retained reader after
   each run, and exact promotion. This supersedes the P1-C replay-page/cursor
   assumption; it does not implement live Codex scheduling or tail-only refresh.
+- P1-D.1 atomic replay facts: `ReplayAppendBatch` now owns independently bounded
+  256-event and 256-late-relation collections. Observation/overlay state, relation
+  reconciliation, selection invalidation, continuation work, chunks, checkpoint,
+  source completion, and evidence epoch commit in one immediate transaction and
+  advance the epoch exactly once. Faults after event work and after relation work
+  restore the exact pre-batch rows/checkpoint/epoch. The real synthetic Codex pipeline
+  submits reader relations in that batch and no longer commits them one by one.
 
 ## Next implementation slice
 
@@ -175,9 +182,10 @@ scan-history retention, ID exhaustion, and recovery. P1-C.1 supplies the
 constant-state coordinator, P1-C.2 supplies bounded adapter/archive/clock/
 writer-lease ports, P1-C.3 supplies the one-shot executor, and P1-C.4 supplies the
 bounded deterministic worker. P1-D.0 corrects the real per-file/two-pass seam under
-`docs/superpowers/plans/2026-07-15-tokenmaster-p1-d-live-runtime.md`. The next gate is
-P1-D.1: make replay events and late relations one atomic store batch before building
-the runtime crate, portable writer lease, built-in live Codex adapter, incremental
+`docs/superpowers/plans/2026-07-15-tokenmaster-p1-d-live-runtime.md`. P1-D.1 makes
+replay events and late relations one atomic store batch. The next gate is P1-D.2:
+build the runtime crate and bootstrap Codex adapter/store composition before the
+portable writer lease, built-in live Codex adapter, incremental
 tail path, watcher/periodic hints, and lifecycle cancellation. P1-E
 then adds sleep/resume, immutable publication, race generations, and continuous
 runtime recovery.

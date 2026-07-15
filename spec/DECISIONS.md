@@ -251,3 +251,19 @@ unbounded path cache or repeated enumeration. Two O(N) streaming passes preserve
 provider separation and memory stability. Full rebuild remains bootstrap/repair;
 P1-D's steady-state path must be incremental tail-only rather than replaying every
 JSONL file after each watcher hint.
+
+## ADR-018 — Atomic replay facts per reader batch
+
+Decision: `ReplayAppendBatch` owns both its bounded canonical events and at most 256
+late `SessionRelationDraft` values. The store applies observation and replay overlays,
+session relation reconciliation, selection invalidation, continuation work, chunk
+proofs, checkpoint/source state, and evidence epoch in one immediate transaction.
+The batch validates one expected revision/epoch and advances it exactly once,
+independent of relation count. Fault boundaries after event-overlay work and after
+relation work must restore every affected table and the prior checkpoint/epoch.
+
+Rationale: the P0-E driver previously committed the event batch and then each late
+relation separately. A failure after the first commit could leave SQLite at a newer
+epoch while the engine retained an older exact replay handle, making cleanup stale and
+recovery ambiguous. One bounded fact batch matches one reader pull, removes that
+partial-commit state, and preserves deterministic restart without enlarging memory.

@@ -52,6 +52,13 @@ Only lease acquisition may produce terminal `busy`; a `busy` code from any later
 is an execution failure. Failure after replay begin attempts exact discard and reports
 whether cleanup succeeded without masking the original stable error code.
 
+A replay append accepts at most 256 canonical events and at most 256 late session
+relations. Observation/overlay work, relation reconciliation, selection invalidation,
+continuation work, chunks, checkpoint, source state, and evidence epoch commit in one
+immediate transaction. One accepted batch advances the epoch exactly once regardless
+of relation count; any validation, database, or injected boundary failure rolls every
+component back together.
+
 `RefreshWorker` owns exactly one dedicated thread, one capacity-one wake channel, and
 one capacity-one latest-only completion channel. Admission mutates the shared
 constant-state coordinator directly; a coalesced hint allocates no command node and

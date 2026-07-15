@@ -230,6 +230,14 @@ impl UsageStore {
         &mut self,
         batch: &ReplayAppendBatch,
     ) -> Result<ReplayEpoch, StoreError> {
+        self.apply_replay_append_batch_inner(batch, ReplayAppendFault::None)
+    }
+
+    fn apply_replay_append_batch_inner(
+        &mut self,
+        batch: &ReplayAppendBatch,
+        fault: ReplayAppendFault,
+    ) -> Result<ReplayEpoch, StoreError> {
         let replay_parts = batch.parts();
         let append = replay_parts.append_batch.parts();
         if append.diagnostic_count_delta != 0 {
@@ -370,6 +378,27 @@ impl UsageStore {
                 )?;
             }
         }
+
+        replay_append_fault(fault, ReplayAppendFault::AfterEventOverlay)?;
+
+        for relation in &replay_parts.relations {
+            let relation = ReplayRelation::new(
+                replay_parts.revision_id,
+                replay_parts.expected_epoch,
+                append.source_key,
+                relation,
+            )?;
+            if source.provider_id != relation.provider_id.as_ref()
+                || source.profile_id != relation.profile_id.as_ref()
+                || source.source_id != relation.source_id.as_ref()
+                || relation.source_offset >= append.next_checkpoint.committed_offset()
+            {
+                return Err(StoreError::new(StoreErrorCode::InvalidValue));
+            }
+            apply_replay_relation_in_transaction(&transaction, &relation, next_epoch)?;
+        }
+
+        replay_append_fault(fault, ReplayAppendFault::AfterRelations)?;
 
         for chunk in &append.chunk_updates {
             upsert_chunk(
@@ -535,24 +564,7 @@ impl UsageStore {
             return Err(StoreError::new(StoreErrorCode::InvalidValue));
         }
         let next_epoch = next_replay_epoch(revision.epoch)?;
-        persist_late_relation(&transaction, relation, next_epoch)?;
-        invalidate_session_selections(
-            &transaction,
-            relation.revision_id,
-            &relation.provider_id,
-            &relation.profile_id,
-            &relation.session_id,
-        )?;
-        enqueue_classification(
-            &transaction,
-            relation.revision_id,
-            &relation.provider_id,
-            &relation.profile_id,
-            &relation.session_id,
-            "late_relation",
-            0,
-            next_epoch,
-        )?;
+        apply_replay_relation_in_transaction(&transaction, relation, next_epoch)?;
         synchronize_work_epochs(&transaction, relation.revision_id, next_epoch)?;
         advance_revision_epoch(
             &transaction,
@@ -835,6 +847,23 @@ impl UsageStore {
             true,
         ))
     }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ReplayAppendFault {
+    None,
+    AfterEventOverlay,
+    AfterRelations,
+}
+
+fn replay_append_fault(
+    actual: ReplayAppendFault,
+    boundary: ReplayAppendFault,
+) -> Result<(), StoreError> {
+    if actual == boundary {
+        return Err(StoreError::new(StoreErrorCode::Database));
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -1869,6 +1898,31 @@ fn relation_traversal(
         validate_replay_text(&next_parent, 512)?;
         current = next_parent;
     }
+}
+
+fn apply_replay_relation_in_transaction(
+    transaction: &Transaction<'_>,
+    relation: &ReplayRelation,
+    epoch: ReplayEpoch,
+) -> Result<(), StoreError> {
+    persist_late_relation(transaction, relation, epoch)?;
+    invalidate_session_selections(
+        transaction,
+        relation.revision_id,
+        &relation.provider_id,
+        &relation.profile_id,
+        &relation.session_id,
+    )?;
+    enqueue_classification(
+        transaction,
+        relation.revision_id,
+        &relation.provider_id,
+        &relation.profile_id,
+        &relation.session_id,
+        "late_relation",
+        0,
+        epoch,
+    )
 }
 
 fn persist_late_relation(
@@ -2920,8 +2974,8 @@ mod tests {
     use tokenmaster_accounting::Canonicalizer;
     use tokenmaster_domain::{
         ActivityCounts, LongContextState, ModelKey, ObservationDraft, ObservationDraftParts,
-        ObservationVerification, TokenCount, TokenUsage, UsageProfileId, UsageProviderId,
-        UsageSessionId, UsageSourceId, UtcTimestamp,
+        ObservationVerification, SessionRelationDraft, SessionRelationDraftParts, TokenCount,
+        TokenUsage, UsageProfileId, UsageProviderId, UsageSessionId, UsageSourceId, UtcTimestamp,
     };
 
     use super::*;
@@ -2932,6 +2986,7 @@ mod tests {
 
     type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
     type ProjectionProvenance = (Vec<u8>, i64, Option<i64>, Option<i64>, i64);
+    type ReplayAppendAtomicState = (i64, i64, i64, i64, i64, i64, i64, i64);
 
     fn checkpoint(seed: u8, offset: u64) -> Result<StoredCheckpoint, StoreError> {
         StoredCheckpoint::new(StoredCheckpointParts {
@@ -2999,6 +3054,94 @@ mod tests {
         Ok(Canonicalizer::new().canonicalize(&draft)?)
     }
 
+    fn relation() -> TestResult<SessionRelationDraft> {
+        Ok(SessionRelationDraft::new(SessionRelationDraftParts {
+            provider_id: UsageProviderId::new("codex")?,
+            profile_id: UsageProfileId::new("default")?,
+            session_id: UsageSessionId::new("session")?,
+            parent_session_id: UsageSessionId::new("missing-parent")?,
+            declared_conflict: false,
+            source_id: UsageSourceId::new("fixture")?,
+            source_offset: 10,
+        })?)
+    }
+
+    fn replay_append_fault_fixture() -> TestResult<(UsageStore, ReplayAppendBatch)> {
+        let seed = 10_u8;
+        let mut store = UsageStore::in_memory()?;
+        store.register_source(&registration(seed)?)?;
+        let revision = store.begin_replay_revision(&ReplayManifest::new(
+            vec![SourceKey::from_bytes([seed; 32])].into_boxed_slice(),
+        )?)?;
+        let append = AppendBatch::new(AppendBatchParts {
+            source_key: SourceKey::from_bytes([seed; 32]),
+            expected_generation: 1,
+            expected_committed_offset: 0,
+            expected_scan_offset: 0,
+            events: vec![event()?].into_boxed_slice(),
+            previous_partial_chunk: None,
+            chunk_updates: vec![StoredSourceChunk::new(0, 100, [13; 32])?].into_boxed_slice(),
+            next_checkpoint: checkpoint(seed, 100)?,
+            diagnostic_count_delta: 0,
+        })?;
+        let batch = ReplayAppendBatch::new(ReplayAppendBatchParts {
+            revision_id: revision.id(),
+            expected_epoch: revision.epoch(),
+            append_batch: append,
+            relations: vec![relation()?].into_boxed_slice(),
+        })?;
+        Ok((store, batch))
+    }
+
+    fn replay_append_atomic_state(store: &UsageStore) -> TestResult<ReplayAppendAtomicState> {
+        Ok(store.connection.query_row(
+            "SELECT
+               (SELECT count(*) FROM usage_observation),
+               (SELECT count(*) FROM usage_replay_observation),
+               (SELECT count(*) FROM usage_replay_selection),
+               (SELECT count(*) FROM usage_replay_session),
+               (SELECT count(*) FROM usage_replay_work),
+               (SELECT count(*) FROM usage_source_chunk),
+               (SELECT committed_offset FROM usage_generation WHERE status = 'staging'),
+               (SELECT evidence_epoch FROM usage_replay_revision WHERE status = 'staging')",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                ))
+            },
+        )?)
+    }
+
+    #[test]
+    fn every_replay_append_fault_rolls_back_events_relations_checkpoint_and_epoch() -> TestResult {
+        for fault in [
+            ReplayAppendFault::AfterEventOverlay,
+            ReplayAppendFault::AfterRelations,
+        ] {
+            let (mut store, batch) = replay_append_fault_fixture()?;
+            let before = replay_append_atomic_state(&store)?;
+
+            let error = match store.apply_replay_append_batch_inner(&batch, fault) {
+                Ok(_) => return Err("faulted replay append committed".into()),
+                Err(error) => error,
+            };
+
+            assert_eq!(error.code(), StoreErrorCode::Database);
+            assert_eq!(replay_append_atomic_state(&store)?, before);
+            let next = store.apply_replay_append_batch(&batch)?;
+            assert_eq!(next.get(), batch.parts().expected_epoch.get() + 1);
+        }
+        Ok(())
+    }
+
     fn promotion_ready_store() -> TestResult<(UsageStore, ReplayRevisionId, ReplayEpoch)> {
         let seed = 11_u8;
         let mut store = UsageStore::in_memory()?;
@@ -3034,7 +3177,8 @@ mod tests {
                 revision_id: revision.id(),
                 expected_epoch: revision.epoch(),
                 append_batch: append,
-            }))?;
+                relations: Box::default(),
+            })?)?;
         let sealed = store.seal_replay_revision(revision.id(), epoch)?;
         Ok((store, revision.id(), sealed.epoch()))
     }
@@ -3063,7 +3207,8 @@ mod tests {
                 revision_id: first.id(),
                 expected_epoch: first.epoch(),
                 append_batch: first_append,
-            }))?;
+                relations: Box::default(),
+            })?)?;
         let first_sealed = store.seal_replay_revision(first.id(), first_epoch)?;
         store.promote_replay_revision(first.id(), first_sealed.epoch())?;
 
@@ -3084,7 +3229,8 @@ mod tests {
                 revision_id: replacement.id(),
                 expected_epoch: replacement.epoch(),
                 append_batch: replacement_append,
-            }))?;
+                relations: Box::default(),
+            })?)?;
         let replacement_sealed = store.seal_replay_revision(replacement.id(), replacement_epoch)?;
         Ok((store, replacement.id(), replacement_sealed.epoch()))
     }

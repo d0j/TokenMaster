@@ -824,3 +824,41 @@ workspace retains exactly one pre-existing explicitly ignored one-million-row M0
 test. P1-D.1 atomic event/relation replay append, the runtime crate, live Codex,
 incremental tail refresh, OS lease, watcher, sleep/resume, P1-E, M0 acceptance,
 packaging, signing, and release remain unclaimed.
+
+## 2026-07-15 — P1-D.1 replay facts made transaction-atomic
+
+The runtime preflight found a second exact-handle hazard: P0-E committed a replay event
+batch, then committed every late session relation separately. A fault between commits
+could advance SQLite's evidence epoch while the engine still held the prior handle.
+`ReplayAppendBatch` now carries independently bounded collections of at most 256
+canonical events and 256 `SessionRelationDraft` values. One immediate transaction
+applies observations, replay overlay/session state, relation reconciliation, selection
+invalidation, continuation work, chunks, checkpoint/source state, and one evidence
+epoch advance. Debug exposes only relation count.
+
+Two injected boundaries, after event-overlay work and after relation work, compare the
+full pre/post state and prove rollback of observations, overlays, selections, sessions,
+work, chunks, checkpoint, and epoch. The success contract applies two relations yet
+advances epoch exactly once and leaves required continuation visible; a 257-relation
+batch fails with the exact capacity limit. The real synthetic Codex pipeline now
+submits `ReadBatch` events and relations together and removes its per-relation commit
+loop while all seven JSONL pipeline contracts remain green.
+
+Verification:
+
+```powershell
+cargo +1.97.0 test -p tokenmaster-store --test replay_archive_contract --locked
+cargo +1.97.0 test -p tokenmaster-codex --test pipeline_contract --locked
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy -p tokenmaster-store -p tokenmaster-codex --all-targets --locked
+pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
+cargo +1.97.0 fmt --all -- --check
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy --workspace --all-targets --locked
+cargo +1.97.0 test --workspace --locked
+git diff --check
+```
+
+All gates passed. Store evidence is 17 unit tests and 47 replay contracts; the Codex
+pipeline retains seven passing contracts. The workspace has exactly the pre-existing
+explicitly ignored one-million-row M0 scale test. P1-D.2 bootstrap runtime composition,
+incremental tail refresh, OS lease, watcher, sleep/resume, P1-E, M0 acceptance,
+packaging, signing, and release remain unclaimed.

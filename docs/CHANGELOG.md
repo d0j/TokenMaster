@@ -53,6 +53,9 @@ All notable changes are recorded here.
   seam that lends one temporary source reader at a time. Contracts cover shared
   provider source IDs, extra/duplicate/omitted or mismatched second-pass input,
   incomplete quality, and repeated 300-file promotion with one maximum live reader.
+- Bounded atomic replay fact batches containing up to 256 canonical events and 256
+  late relations with one revision/epoch advance and full event/relation/selection/
+  work/chunk/checkpoint rollback at two injected transaction boundaries.
 - Approved a provider-neutral weekly quota reset history: immutable pre/post epochs,
   scheduled/early/repeated reset transitions, allowance-change separation, bounded
   retention, and shared UI/CLI/MCP semantics for P2.
@@ -81,6 +84,9 @@ All notable changes are recorded here.
 - Removed the archive replay-page/cursor descriptor-recovery assumption, which aliased
   real Codex files sharing one source ID and could not recover a live path-private
   descriptor without unbounded caching or repeated enumeration.
+- Removed the synthetic Codex pipeline's per-relation transaction loop; reader events
+  and relations now reach the store as one exact batch, preventing stale engine handles
+  after a partial fact commit.
 - Reserved terminal `busy` for writer-lease admission so later port faults cannot be
   mislabeled as harmless backpressure.
 - Prevented external Clock or execution callbacks from running under the worker state

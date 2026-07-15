@@ -14,11 +14,10 @@ use tokenmaster_platform::PhysicalFileIdentity;
 use tokenmaster_provider::{DiscoveryProvider, SourceKind as ProviderSourceKind};
 use tokenmaster_store::{
     AppendBatch, AppendBatchParts, EventCursor, ReplayAppendBatch, ReplayAppendBatchParts,
-    ReplayEpoch, ReplayQualityCounts, ReplayRelation, ReplayRevisionId, ScanCounters, ScanId,
-    ScanOutcome, ScanScope, ScanSetId, ScanSetManifest, ScanSnapshot, SourceKey,
-    SourceKind as StoreSourceKind, SourceRegistration, SourceRegistrationParts, StoreError,
-    StoreErrorCode, StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk, StoredUsageEvent,
-    StoredVerification, UsageStore,
+    ReplayEpoch, ReplayQualityCounts, ReplayRevisionId, ScanCounters, ScanId, ScanOutcome,
+    ScanScope, ScanSetId, ScanSetManifest, ScanSnapshot, SourceKey, SourceKind as StoreSourceKind,
+    SourceRegistration, SourceRegistrationParts, StoreError, StoreErrorCode, StoredCheckpoint,
+    StoredCheckpointParts, StoredSourceChunk, StoredUsageEvent, StoredVerification, UsageStore,
 };
 
 const CONTINUATION_LIMIT: usize = 16_384;
@@ -576,7 +575,8 @@ fn rebuild_descriptor(
             revision_id: state.revision_id,
             expected_epoch: state.epoch,
             append_batch: append,
-        }))?;
+            relations: Box::default(),
+        })?)?;
     archive.record_batch()?;
     archive.maybe_reopen_after_batch()?;
     Ok(())
@@ -640,13 +640,9 @@ fn apply_reader_batch(
             revision_id: state.revision_id,
             expected_epoch: state.epoch,
             append_batch: append,
-        }))?;
+            relations: batch.relations().to_vec().into_boxed_slice(),
+        })?)?;
     archive.record_batch()?;
-
-    for relation in batch.relations() {
-        let relation = ReplayRelation::new(state.revision_id, state.epoch, source_key, relation)?;
-        state.epoch = archive.store.apply_replay_relation(&relation)?;
-    }
     Ok(())
 }
 

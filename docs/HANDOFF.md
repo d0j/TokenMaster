@@ -31,9 +31,11 @@ P1-C.3 adds the synchronous one-shot executor over those contracts. P1-C.4 compl
 that plan with the bounded deterministic worker shell. P1-D.0 is complete under
 `docs/superpowers/plans/2026-07-15-tokenmaster-p1-d-live-runtime.md`: it repairs exact
 logical-file identity and replaces archive-page descriptor recovery with two linear
-passes and one temporary descriptor-bound reader. The immediate next task is P1-D.1:
-make replay event plus late-relation application atomic before adding the runtime
-crate, built-in Codex composition, portable writer lease, incremental tail refresh,
+passes and one temporary descriptor-bound reader. P1-D.1 is also complete: one bounded
+replay fact batch atomically applies canonical events, late relations, derived replay
+state, checkpoint, and one epoch increment. The immediate next task is P1-D.2: add the
+runtime crate and bootstrap Codex composition before the portable writer lease,
+incremental tail refresh,
 watcher/periodic hints, and lifecycle cancellation.
 P2 now also has an approved separate banked-reset inventory/expiry/reminder/activation
 design in `docs/superpowers/plans/2026-07-15-tokenmaster-banked-reset-inventory.md`.
@@ -150,7 +152,10 @@ one-shot executor; P1-C.4 adds ten worker burst/backpressure/stale/deadline/shut
 drop/panic/lock-order contracts. P1-D.0 brings the executor suite to 23 contracts,
 including same-source-ID logical files, cross-file batches, extra/omitted second-pass
 files, incomplete second-pass quality, and repeated 300-file/one-live-reader proof.
-This does not claim live Codex composition, incremental tail refresh, watcher
+P1-D.1 adds a 47-test replay suite with two atomic fault boundaries, a 256 relation
+cap, one epoch advance regardless of relation count, and the seven green real-JSONL
+pipeline contracts without the prior per-relation commit loop. This does not claim
+live Codex composition, incremental tail refresh, watcher
 scheduling, or a real OS lease.
 Clean-root, formatting, strict workspace Clippy, and the full locked workspace passed;
 see the P1-A history entry for exact commands and focused counts. The
