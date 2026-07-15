@@ -124,6 +124,13 @@ snapshots; interactive hibernation/soak stay in the frozen-candidate M0 gate.
 - **1.1 — providers:** isolated signed WebAssembly Component packages after 1.0
   observation/query/quota contracts freeze.
 
+P2-A query foundation is approved under
+`docs/superpowers/plans/2026-07-16-tokenmaster-p2-query-foundation.md`. It first freezes
+two-dimensional publication/dataset identity, bounded immutable values, a dedicated
+query-only SQLite connection, exact short transactions, keyset paging, and deadline/
+privacy/resource gates. Materialized aggregates remain P2-B and are not replaced by
+view-time full scans.
+
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset
 epochs. The weekly view preserves last-before/first-after state, maximum use before
 reset, old/new reset time, early/repeated reset markers, confidence, and simultaneous

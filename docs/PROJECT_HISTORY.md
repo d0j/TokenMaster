@@ -1122,3 +1122,21 @@ soak, package, sign, or release the product. An explicit MSVC check stopped befo
 TokenMaster code because this machine has the Rust MSVC target but no `cl.exe`, Visual
 Studio installation, or `vswhere`; canonical MSVC setup/comparison remains P6 rather
 than a claimed validation result.
+
+## 2026-07-16 — P2-A immutable query foundation approved
+
+Audited the existing store indexes, publication state, product query contract, UI/CLI/
+MCP bounds, and million-row latency target before starting P2. The approved design adds
+a separate synchronous `tokenmaster-query` facade and dedicated SQLite read-only/
+query-only store. Each response is captured in one short read transaction and returned
+as owned bounded data with stable errors, progress-handler deadline, injected clock,
+and no writer/UI/source handle.
+
+The key planning correction is two-dimensional identity: archive publication generation
+orders freshness/quality updates, while `empty`, immutable legacy, or replay-revision
+dataset identity binds keyset cursors. A no-change scan may refresh `dataThrough`
+without resetting scroll; a changed revision rejects the old cursor rather than mixing
+pages. P2-A starts with indexed latest activity and proves `pageSize + 1` lookahead,
+privacy, deadlines, and resources. P2-B will add schema-v7 transactional materialized
+aggregates; UI code is never allowed to full-scan/group the event table. This is an
+approved executable plan, not P2 implementation evidence.

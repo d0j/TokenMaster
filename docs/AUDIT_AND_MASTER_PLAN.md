@@ -223,11 +223,17 @@ pause/resume, and ordered joined shutdown. P1-E.1 now publishes one startup-seed
 strictly generation-ordered immutable engine snapshot with exact archive revision,
 scan-set/data-through truth, fixed checked diagnostics, and busy/older-result rejection.
 P1-E.2 now closes no-change, pause/resume, restart, malformed-truncation recovery,
-canonical-retention, and successful-repair publication semantics. The immediate next
-P1-E.3 adds a static capacity-one Windows power callback, idempotent runtime lifecycle
+canonical-retention, and successful-repair publication semantics. P1-E.3 adds a static
+capacity-one Windows power callback, idempotent runtime lifecycle
 command, forced resume reconciliation, and 4,096-cycle private-memory/handle/thread/
 USER/GDI bounds. P1 is implemented; the immediate next gate is P2 immutable indexed
 query snapshots. M0 interactive/soak evidence remains separate.
+P2-A now has an executable approved design in
+`docs/superpowers/specs/2026-07-16-tokenmaster-p2-query-design.md`: publication
+generation is independent from dataset identity, every result is transaction-exact and
+owned, frontends receive no SQLite access, and latest activity uses the existing
+composite keyset index. P2-B will add transactional materialized aggregates instead of
+view-time full scans.
 The older replay plan remains historical evidence for
 completed Tasks 1-2, but its Codex-owned Tasks 3+ are superseded and must not be
 executed.

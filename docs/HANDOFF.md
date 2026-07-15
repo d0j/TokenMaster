@@ -54,13 +54,15 @@ archive, worker, scheduler and watcher lifecycle, selects incremental versus reb
 and implements admission-safe pause/resume plus ordered joined shutdown. P1-E.1 is now
 complete: one startup-seeded immutable `EngineSnapshot` advances only for a strictly
 newer archive generation and exposes exact revision/scan/data-through/quality plus
-  fixed checked diagnostics. Equal/older and writer-busy candidates cannot replace it;
-  focused store/runtime tests are green. P1-E.2 now closes no-change, pause/resume,
-  restart, malformed-truncation recovery, canonical-retention, and successful-repair
-  publication behavior. P1-E.3 completes the Windows 8+ static capacity-one power
-  callback, narrow runtime command, forced resume reconciliation, and 4,096-cycle
-  resource proof without helper thread/window or callback heap state. P1 is implemented;
-  the immediate next task is P2 immutable indexed query snapshots.
+fixed checked diagnostics. Equal/older and writer-busy candidates cannot replace it;
+focused store/runtime tests are green. P1-E.2 now closes no-change, pause/resume,
+restart, malformed-truncation recovery, canonical-retention, and successful-repair
+publication behavior. P1-E.3 completes the Windows 8+ static capacity-one power
+callback, narrow runtime command, forced resume reconciliation, and 4,096-cycle
+resource proof without helper thread/window or callback heap state. P1 is implemented;
+the immediate next task is Task 1 of
+`docs/superpowers/plans/2026-07-16-tokenmaster-p2-query-foundation.md`: bounded public
+query values before any SQLite query implementation.
 The 2026-07-16 closure review also freezes the remaining plan ambiguities: P3 is the
 complete UI, P4 presentation/localization, P5 read-only automation, and P6 the
 canonical MSVC signed portable release. It selects the Slint attribution route,

@@ -282,6 +282,12 @@ live input fail closed. P1-E.3 completes the isolated Windows power binding and
 deterministic resource evidence. The next implementation gate is P2 immutable indexed
 query snapshots; M0 interactive hibernation and uninterrupted-soak receipts remain
 separate frozen-candidate acceptance work.
+P2-A is now executable under
+`docs/superpowers/plans/2026-07-16-tokenmaster-p2-query-foundation.md`. Its approved
+design separates publication generation from dataset identity, uses a dedicated
+query-only SQLite store and short exact read transactions, keeps the facade synchronous,
+and starts with the existing composite-index latest-activity page. No P2 query code is
+claimed yet.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 

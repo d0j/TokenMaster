@@ -99,6 +99,10 @@ All notable changes are recorded here.
   lots, a selectable 7d/24h/12h/6h/1h default profile plus bounded custom reminders,
   truthful notification coverage, assisted activation, and official-capability-only
   crash-safe automatic policy for P2.
+- Approved the executable P2-A query foundation: separate publication and dataset
+  identity, dedicated SQLite read-only/query-only store, short exact transactions,
+  injected clock/deadline, bounded immutable envelopes, and composite keyset activity
+  paging before materialized aggregates.
 
 ### Fixed
 

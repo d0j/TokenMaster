@@ -19,7 +19,7 @@ A design or plan is not implementation evidence.
 | TM-UI-002 | partial | `crates/probe-app` presentation generations plus immutable runtime engine snapshot | strictly newer consumer predicate, exact archive identity/data-through, equal/older rejection; product query/presentation snapshots pending |
 | TM-PERF-001 | partial | bounded parser/reader/store/engine plus live runtime | unchanged payload bytes=0; exact tail; 300-event batches; 10,000-hint aggregate/one follow-up; one <=256-byte publication state across 10,000 candidates; watcher/live/power 4,096-cycle resource baselines; query/UI/plugin evidence pending |
 | TM-PERF-002 | open evidence | software renderer and M0 resource gates | uninterrupted soak and interactive receipts remain absent |
-| TM-PERF-003 | partial | keyset store reads plus immutable generation-ordered engine publication | P1-E archive identity/data-through/busy/older/no-change/restart/recovery contracts; P2 indexed query snapshot gates pending |
+| TM-PERF-003 | partial | keyset store reads plus immutable generation-ordered engine publication; P2-A query design approved | P1-E contracts pass; P2-A exact transaction/two-axis identity/index/deadline/resource contracts pending |
 | TM-REL-001 | partial | M0 scripts and receipt schemas | identity checks exist; final product packaging evidence pending |
 | TM-REL-002 | open evidence | `M0_ACCEPTANCE.md` | interactive Windows/DPI/accessibility and uninterrupted soak receipts absent |
 | TM-REL-003 | planned | P6 explicit MSVC signed portable package and supply-chain gates | GNU/MSVC comparison, notices/SBOM, advisory/source/license/secret/action/attestation audits, deterministic package and clean-room launch pending |
