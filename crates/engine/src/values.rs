@@ -68,13 +68,22 @@ impl fmt::Debug for ScopeIdentity {
 pub struct SourceIdentity {
     scope: ScopeIdentity,
     source_id: Box<str>,
+    logical_file_key: [u8; 32],
 }
 
 impl SourceIdentity {
-    pub fn new(scope: ScopeIdentity, source_id: impl Into<Box<str>>) -> Result<Self, EngineError> {
+    pub fn new(
+        scope: ScopeIdentity,
+        source_id: impl Into<Box<str>>,
+        logical_file_key: [u8; 32],
+    ) -> Result<Self, EngineError> {
         let source_id = source_id.into();
         validate_id(&source_id, MAX_SOURCE_ID_BYTES)?;
-        Ok(Self { scope, source_id })
+        Ok(Self {
+            scope,
+            source_id,
+            logical_file_key,
+        })
     }
 
     #[must_use]
@@ -85,6 +94,11 @@ impl SourceIdentity {
     #[must_use]
     pub const fn source_id(&self) -> &str {
         &self.source_id
+    }
+
+    #[must_use]
+    pub const fn logical_file_key(&self) -> &[u8; 32] {
+        &self.logical_file_key
     }
 }
 
@@ -105,21 +119,12 @@ pub enum SourceKind {
 pub struct DiscoveredSource {
     identity: SourceIdentity,
     kind: SourceKind,
-    logical_identity: [u8; 32],
 }
 
 impl DiscoveredSource {
     #[must_use]
-    pub const fn new(
-        identity: SourceIdentity,
-        kind: SourceKind,
-        logical_identity: [u8; 32],
-    ) -> Self {
-        Self {
-            identity,
-            kind,
-            logical_identity,
-        }
+    pub const fn new(identity: SourceIdentity, kind: SourceKind) -> Self {
+        Self { identity, kind }
     }
 
     #[must_use]
@@ -134,7 +139,7 @@ impl DiscoveredSource {
 
     #[must_use]
     pub const fn logical_identity(&self) -> &[u8; 32] {
-        &self.logical_identity
+        self.identity.logical_file_key()
     }
 }
 

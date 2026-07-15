@@ -115,6 +115,7 @@ fn source_identity() -> SourceIdentity {
     SourceIdentity::new(
         ScopeIdentity::new("codex", "profile-a").expect("scope"),
         "source-a",
+        [7; 32],
     )
     .expect("source")
 }
@@ -205,7 +206,7 @@ impl Adapter for FakeAdapter {
             .is_some_and(|source| source.scope() == _scope)
         {
             let source = self.source.as_ref().expect("checked source");
-            let discovered = DiscoveredSource::new(source.clone(), SourceKind::Active, [7; 32]);
+            let discovered = DiscoveredSource::new(source.clone(), SourceKind::Active);
             let _ = sink.on_source(discovered, checkpoint(1))?;
             1
         } else {
@@ -321,8 +322,7 @@ impl Adapter for CrossScopeDiscoveryAdapter {
     ) -> Result<AdapterCompletion, PortError> {
         record(&self.inner.log, "sources");
         control.check()?;
-        let discovered =
-            DiscoveredSource::new(self.foreign_source.clone(), SourceKind::Active, [7; 32]);
+        let discovered = DiscoveredSource::new(self.foreign_source.clone(), SourceKind::Active);
         let _ = sink.on_source(discovered, checkpoint(1))?;
         AdapterCompletion::new(
             CompletionQuality::Complete,
@@ -999,6 +999,7 @@ fn cross_scope_discovery_is_rejected_before_archive_observation() {
     let foreign_source = SourceIdentity::new(
         ScopeIdentity::new("codex", "profile-b").expect("foreign scope"),
         "source-b",
+        [8; 32],
     )
     .expect("foreign source");
     let mut lease = FakeLease {

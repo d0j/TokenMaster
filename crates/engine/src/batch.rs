@@ -28,6 +28,7 @@ pub struct AdapterBatchParts {
 }
 
 pub struct AdapterBatch {
+    source_identity: SourceIdentity,
     parts: AdapterBatchParts,
 }
 
@@ -46,7 +47,15 @@ impl AdapterBatch {
             return Err(EngineError::new(EngineErrorCode::InvalidValue));
         }
         validate_counts(parts.observations.len(), parts.counters, &parts.diagnostics)?;
-        Ok(Self { parts })
+        Ok(Self {
+            source_identity: source.clone(),
+            parts,
+        })
+    }
+
+    #[must_use]
+    pub const fn source_identity(&self) -> &SourceIdentity {
+        &self.source_identity
     }
 
     #[must_use]
@@ -122,6 +131,7 @@ pub struct CanonicalBatchParts {
 }
 
 pub struct CanonicalBatch {
+    source_identity: SourceIdentity,
     parts: CanonicalBatchParts,
 }
 
@@ -140,7 +150,15 @@ impl CanonicalBatch {
             return Err(EngineError::new(EngineErrorCode::InvalidValue));
         }
         validate_counts(parts.events.len(), parts.counters, &parts.diagnostics)?;
-        Ok(Self { parts })
+        Ok(Self {
+            source_identity: source.clone(),
+            parts,
+        })
+    }
+
+    #[must_use]
+    pub const fn source_identity(&self) -> &SourceIdentity {
+        &self.source_identity
     }
 
     #[must_use]

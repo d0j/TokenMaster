@@ -12,13 +12,17 @@ fn scope(profile: &str) -> ScopeIdentity {
 #[test]
 fn identities_are_bounded_provider_neutral_and_debug_private() {
     let scope = scope("profile-a");
-    let source = SourceIdentity::new(scope.clone(), "source-1").expect("valid source");
-    let discovered = DiscoveredSource::new(source.clone(), SourceKind::Active, [7; 32]);
+    let source = SourceIdentity::new(scope.clone(), "source-1", [7; 32]).expect("valid source");
+    let sibling = SourceIdentity::new(scope.clone(), "source-1", [8; 32]).expect("sibling source");
+    let discovered = DiscoveredSource::new(source.clone(), SourceKind::Active);
 
     assert_eq!(scope.provider_id(), "codex");
     assert_eq!(scope.profile_id(), "profile-a");
     assert_eq!(source.scope(), &scope);
     assert_eq!(source.source_id(), "source-1");
+    assert_eq!(source.logical_file_key(), &[7; 32]);
+    assert_eq!(sibling.source_id(), source.source_id());
+    assert_ne!(source, sibling);
     assert_eq!(discovered.identity(), &source);
     assert_eq!(discovered.kind(), SourceKind::Active);
     assert_eq!(discovered.logical_identity(), &[7; 32]);
@@ -35,7 +39,8 @@ fn identities_are_bounded_provider_neutral_and_debug_private() {
     assert_eq!(invalid.to_string(), "invalid_value");
     assert!(!format!("{invalid:?}").contains("private"));
 
-    let oversized = SourceIdentity::new(scope, "s".repeat(129)).expect_err("oversized source ID");
+    let oversized =
+        SourceIdentity::new(scope, "s".repeat(129), [0; 32]).expect_err("oversized source ID");
     assert_eq!(oversized.code(), EngineErrorCode::CapacityExceeded);
 }
 

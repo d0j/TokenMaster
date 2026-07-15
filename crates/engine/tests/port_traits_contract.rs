@@ -15,6 +15,7 @@ fn source_identity() -> SourceIdentity {
     SourceIdentity::new(
         ScopeIdentity::new("codex", "profile-a").expect("scope"),
         "source-a",
+        [7; 32],
     )
     .expect("source")
 }
@@ -120,7 +121,7 @@ impl Adapter for FakeAdapter {
         if scope != self.source.scope() {
             return Err(PortError::new(PortErrorCode::InvalidData));
         }
-        let discovered = DiscoveredSource::new(self.source.clone(), SourceKind::Active, [7; 32]);
+        let discovered = DiscoveredSource::new(self.source.clone(), SourceKind::Active);
         let checkpoint =
             AdapterCheckpoint::new(vec![1, 2, 3].into_boxed_slice()).map_err(PortError::from)?;
         let _ = sink.on_source(discovered, checkpoint)?;

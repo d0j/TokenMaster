@@ -11,9 +11,19 @@ use tokenmaster_engine::{
 };
 
 fn source_identity(provider: &str, profile: &str, source: &str) -> SourceIdentity {
+    source_identity_with_key(provider, profile, source, [3; 32])
+}
+
+fn source_identity_with_key(
+    provider: &str,
+    profile: &str,
+    source: &str,
+    logical_file_key: [u8; 32],
+) -> SourceIdentity {
     SourceIdentity::new(
         ScopeIdentity::new(provider, profile).expect("scope"),
         source,
+        logical_file_key,
     )
     .expect("source")
 }
@@ -92,6 +102,7 @@ fn adapter_batch_is_scope_exact_bounded_and_debug_private() {
     )
     .expect("adapter batch");
 
+    assert_eq!(batch.source_identity(), &source);
     assert_eq!(batch.observations().len(), 1);
     assert_eq!(batch.relations().len(), 1);
     assert_eq!(batch.state(), BatchState::SnapshotEnd);
@@ -102,6 +113,9 @@ fn adapter_batch_is_scope_exact_bounded_and_debug_private() {
     assert!(!debug.contains("profile-a"));
     assert!(!debug.contains("source-a"));
     assert!(!debug.contains("session-a"));
+
+    let sibling = source_identity_with_key("codex", "profile-a", "source-a", [4; 32]);
+    assert_ne!(batch.source_identity(), &sibling);
 
     let foreign = source_identity("hermes", "profile-a", "source-a");
     let mismatch = AdapterBatch::new(
@@ -193,6 +207,7 @@ fn canonical_batch_accepts_only_scope_exact_accounting_output() {
         },
     )
     .expect("canonical batch");
+    assert_eq!(batch.source_identity(), &source);
     assert_eq!(batch.events().len(), 1);
     assert_eq!(batch.relations().len(), 1);
     assert_eq!(batch.state(), BatchState::SnapshotEnd);
