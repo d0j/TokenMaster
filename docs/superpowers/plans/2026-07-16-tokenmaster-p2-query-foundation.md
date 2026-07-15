@@ -32,6 +32,9 @@ Implement the minimum validated values and stable errors. Do not open SQLite yet
 
 ## Task 2 — Add a separate query-only store
 
+Status: complete on 2026-07-16. Exact read transaction, legacy/current paging,
+read-only policy, deadline cleanup, stale identity, and query-plan contracts pass.
+
 Files:
 
 - add `crates/store/src/usage/query.rs`;

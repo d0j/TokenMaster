@@ -7,6 +7,7 @@ use crate::{EXPECTED_SQLITE_VERSION, StoreError, StoreErrorCode};
 
 mod incremental;
 mod migration;
+mod query;
 mod read;
 mod replay;
 mod replay_manifest;
@@ -15,6 +16,10 @@ mod schema;
 mod types;
 mod write;
 
+pub use query::{
+    UsageActivityQuery, UsageQueryCapture, UsageQueryDatasetIdentity, UsageQueryEvent,
+    UsageQueryPublication, UsageReadRuntimePolicy, UsageReadStore,
+};
 pub use schema::USAGE_SCHEMA_VERSION;
 pub use types::{
     AccountingVersions, AppendBatch, AppendBatchParts, ArchiveGeneration, ArchiveMode,

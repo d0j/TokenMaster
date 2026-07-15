@@ -234,6 +234,10 @@ generation is independent from dataset identity, every result is transaction-exa
 owned, frontends receive no SQLite access, and latest activity uses the existing
 composite keyset index. P2-B will add transactional materialized aggregates instead of
 view-time full scans.
+P2-A Tasks 1-2 now implement the bounded public values and a separate defensive
+read-only/query-only schema-v6 store. Current/legacy activity, exact publication and
+scan truth, stale identity, indexed lookahead, deadline cleanup, and a concurrent-
+commit snapshot contract pass. Task 3 composes `QueryService`; no frontend owns SQLite.
 The older replay plan remains historical evidence for
 completed Tasks 1-2, but its Codex-owned Tasks 3+ are superseded and must not be
 executed.

@@ -21,6 +21,7 @@ pub enum StoreErrorCode {
     StaleScan,
     PendingScan,
     ArchiveModeMismatch,
+    DeadlineExceeded,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -74,6 +75,7 @@ impl fmt::Display for StoreError {
             StoreErrorCode::StaleScan => "scan state changed",
             StoreErrorCode::PendingScan => "scan set still has running scopes",
             StoreErrorCode::ArchiveModeMismatch => "archive mode mismatched",
+            StoreErrorCode::DeadlineExceeded => "query deadline exceeded",
         };
         formatter.write_str(message)
     }

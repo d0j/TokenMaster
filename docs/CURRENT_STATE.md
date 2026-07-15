@@ -290,7 +290,12 @@ and starts with the existing composite-index latest-activity page. P2-A Task 1 i
 implemented in `tokenmaster-query`: schema-v1 headers/envelopes, checked generations,
 publication/dataset identity, an injected exact clock sample, stable path-free errors,
 bounded scopes/warnings/pages, and fingerprint-redacted activity cursors. Task 2, the
-separate query-only SQLite store and exact transaction capture, is next.
+separate query-only SQLite store and exact transaction capture, is also complete.
+`UsageReadStore` opens schema v6 read-only without migration, enforces defensive
+query-only policy with a 4 MiB cache, captures publication/scan truth and current or
+legacy keyset pages in one deferred transaction, rejects stale continuation identity,
+uses indexed `pageSize + 1`, and clears its deadline handler on every result. Task 3,
+`QueryService` composition and freshness/quality mapping, is next.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 

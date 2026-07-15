@@ -181,7 +181,7 @@ fn validate_v5(connection: &Connection) -> Result<(), StoreError> {
     validate_legacy_snapshot(connection)
 }
 
-fn validate_v6(connection: &Connection) -> Result<(), StoreError> {
+pub(super) fn validate_v6(connection: &Connection) -> Result<(), StoreError> {
     validate_schema(
         connection,
         USAGE_TABLE_CONTRACTS,

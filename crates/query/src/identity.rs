@@ -62,7 +62,7 @@ pub struct ReplayRevision(u64);
 
 impl ReplayRevision {
     pub fn new(value: u64) -> Result<Self, QueryError> {
-        if value == 0 || value > i64::MAX as u64 {
+        if value > i64::MAX as u64 {
             return Err(QueryError::new(QueryErrorCode::InvalidValue));
         }
         Ok(Self(value))

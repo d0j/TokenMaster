@@ -1582,9 +1582,9 @@ impl ReplayQualityCounts {
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct EventCursor {
-    timestamp_seconds: i64,
-    timestamp_nanos: u32,
-    fingerprint: [u8; 32],
+    pub(super) timestamp_seconds: i64,
+    pub(super) timestamp_nanos: u32,
+    pub(super) fingerprint: [u8; 32],
 }
 
 impl EventCursor {

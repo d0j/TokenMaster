@@ -73,8 +73,11 @@ fn identity_and_generation_are_checked_and_ordered() {
         DatasetIdentity::LegacySnapshotV1.stable_code(),
         "legacy_snapshot_v1"
     );
+    assert_eq!(ReplayRevision::new(0).expect("first revision").get(), 0);
     assert_eq!(
-        ReplayRevision::new(0).expect_err("zero revision").code(),
+        ReplayRevision::new(i64::MAX as u64 + 1)
+            .expect_err("SQLite cannot store revision")
+            .code(),
         QueryErrorCode::InvalidValue
     );
     assert_eq!(

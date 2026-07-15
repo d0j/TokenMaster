@@ -423,3 +423,27 @@ would introduce lock order and SQLite lifetime hazards. A static last-event-wins
 is callback-lifetime safe, constant-state, non-blocking, and preserves resume recovery
 when suspend/resume notifications coalesce. Periodic exact reconciliation remains the
 backstop when registration is unavailable.
+
+## ADR-026 — Separate exact query-only archive reader
+
+Decision: `tokenmaster-query` owns synchronous bounded frontend values, while
+`tokenmaster-store::UsageReadStore` owns one separate SQLite `READ_ONLY|NO_MUTEX`
+connection. It requires exact schema v6 and bundled SQLite, applies WAL/query-only/
+defensive/QPSG/no-checkpoint policy with trusted schema and DQS disabled, a 250 ms busy
+timeout, 4 MiB cache and zero mmap, and never migrates. One short deferred transaction
+captures publication generation, independent dataset identity, exact scan truth and a
+current or immutable-legacy activity page. Continuations require dataset identity and
+use composite keyset seek with one lookahead row. A progress deadline is removed on
+every result before connection reuse.
+
+Public envelope scopes mean explicitly applied filters, with empty meaning all; the
+exact internal scan manifest may contain up to 256 scopes and is not copied into each
+frontend result. P3 owns one bounded worker around the synchronous facade. UI, CLI and
+MCP never receive a SQLite handle or permission for arbitrary SQL.
+
+Rationale: sharing the writer couples UI latency to mutation and exposes write/schema
+authority; opening the writable store can migrate; long-lived transactions retain WAL
+history; offset pages degrade and can mix revisions; copying a 256-scope authority set
+into every header conflicts with the 32-filter API bound. Separate identity, ownership,
+and exact short snapshots preserve responsiveness, paging continuity, privacy and
+bounded memory without another daemon or async runtime.

@@ -29,5 +29,7 @@ pub use usage::{
     SOURCE_CHUNK_BYTES, ScanCounters, ScanId, ScanOutcome, ScanScope, ScanSetId, ScanSetManifest,
     ScanSetSnapshot, ScanSnapshot, SourceKey, SourceKind, SourceRegistration,
     SourceRegistrationParts, StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk,
-    StoredUsageEvent, StoredVerification, USAGE_SCHEMA_VERSION, UsageStore, UsageStoreCounts,
+    StoredUsageEvent, StoredVerification, USAGE_SCHEMA_VERSION, UsageActivityQuery,
+    UsageQueryCapture, UsageQueryDatasetIdentity, UsageQueryEvent, UsageQueryPublication,
+    UsageReadRuntimePolicy, UsageReadStore, UsageStore, UsageStoreCounts,
 };

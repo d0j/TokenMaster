@@ -162,11 +162,21 @@ freshness states and never directly receives source paths or raw source content.
 `tokenmaster-query` owns the shared schema-v1 read values for UI, CLI, and MCP. Every
 envelope carries a checked process-local snapshot generation, persisted publication
 generation, separate dataset identity, exact generated/data-through time, freshness,
-quality, at most 32 scopes and 16 stable warnings, and one owned payload. Activity
-pages contain at most 256 items and expose only a fingerprint-redacted opaque cursor.
+quality, at most 32 explicitly applied scope filters and 16 stable warnings, and one
+owned payload. An empty scope-filter list means all scopes; the internal exact scan
+manifest remains separately bounded and is not copied into every frontend snapshot.
+Activity pages contain at most 256 items and expose only a fingerprint-redacted opaque
+cursor.
 Invalid bounds, capacity, stale identity, deadline, archive, version, overflow, and
 internal failures use stable path-free codes. The facade clock supplies one exact wall/
 monotonic sample; frontends do not supply publication time.
+
+`UsageReadStore` is the only archive-read implementation behind that facade. It opens
+an existing exact schema-v6 archive read-only, applies query-only/defensive/no-checkpoint
+policy, performs no migration, and returns owned data after one short deferred read
+transaction. Continuation requires its dataset identity. Current and immutable legacy
+pages use composite keyset seek and at most one lookahead row; progress interruption is
+cleared before the connection can serve another query.
 
 Quota snapshots expose current window epochs and a bounded transition page. Full
 weekly resets include before/after values, maximum pre-reset use, old/new reset times,

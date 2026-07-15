@@ -210,6 +210,15 @@ policy, and disabled mmap. Collections and complete-manifest validation are
 keyset-paged at no more than 256 rows. Scan-history cleanup uses only scan-related
 foreign-key checks rather than rescanning the complete usage-event archive.
 
+The query path uses a distinct `READ_ONLY|NO_MUTEX` connection and never calls the
+writable open/migration path. It requires exact schema v6 and bundled SQLite identity,
+WAL, foreign keys, query-only and defensive modes, trusted-schema/DQS disabled,
+query-planner stability, no checkpoint on close, 250 ms busy timeout, 4 MiB cache,
+file-backed temporary storage, and zero mmap. Each result captures archive generation,
+dataset identity, scan completion/manifest, and at most 256 events plus one lookahead in
+one deferred transaction, then returns only owned data. Continuation without the exact
+dataset identity is invalid.
+
 ## TM-DATA-006 — Bounds
 
 Reader lines are limited to 16 MiB. Resume metadata is capped at 32 KiB. General

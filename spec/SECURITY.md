@@ -40,6 +40,14 @@ messages.
 
 ## TM-SEC-004 — Archive integrity
 
+The frontend query path cannot receive `UsageStore`, a SQLite connection, transaction,
+statement, archive path, source key, or raw fingerprint. `UsageReadStore` opens only an
+existing read-only archive, enables SQLite query-only/defensive/no-checkpoint policy,
+disables trusted schema and double-quoted compatibility, validates exact schema before
+reads, and exposes fixed queries only. Every public error and Debug value is path-free;
+activity/cursor fingerprints are redacted. Deadline interruption is cleared on every
+success/error path before reuse.
+
 Archive writes use explicit transactions and compare expected generation, identity,
 checkpoint, and proof state. Failed writes roll back completely. Incomplete, cancelled,
 or failed scans MUST NOT authorize destructive source reconciliation.
@@ -237,9 +245,9 @@ Windows suspend/resume registration uses one static callback and capacity-one at
 signal. The callback ignores context/setting pointers, maps only documented power-event
 codes, returns a stable success code, and cannot call runtime, SQLite, logging, UI, or
 allocation. The OS registration handle remains private to the platform guard. Explicit
-shutdown reports stable unregistration failure and keeps the guard retryable; a failed drop leaves the singleton
-closed to further registrations rather than allowing repeated handle growth or unsafe
-callback-context reuse.
+shutdown reports stable unregistration failure and keeps the guard retryable; a failed
+drop leaves the singleton closed to further registrations rather than allowing repeated
+handle growth or unsafe callback-context reuse.
 
 `LiveRuntime` acquires the writer lease before SQLite open, migration, orphan-scan
 closure, or staging recovery. It resumes only the exact staging revision whose status,

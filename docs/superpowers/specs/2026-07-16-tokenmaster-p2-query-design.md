@@ -27,7 +27,7 @@ Every facade call:
 1. validates page/filter/deadline bounds before SQLite work and samples its injected
    query clock;
 2. starts one short deferred read transaction;
-3. reads archive publication, dataset identity, exact scan completion, scopes, and the
+3. reads archive publication, dataset identity, exact scan completion/manifest, and the
    requested indexed payload inside that same SQLite snapshot;
 4. rejects a caller-supplied stale dataset identity before returning continuation data;
 5. commits/ends the read transaction;
@@ -64,7 +64,8 @@ Every `QueryEnvelope<T>` contains:
 - exact optional `dataThroughMs` from the publication's complete scan set;
 - freshness: `fresh`, `aging`, `stale`, or `unavailable`;
 - quality: `authoritative`, `derived`, `estimated`, `partial`, `conflict`, or `unknown`;
-- at most 32 stable provider/profile scopes;
+- at most 32 explicitly applied provider/profile filter scopes; an empty list means
+  all scopes, while the internal exact scan manifest remains independently bounded;
 - at most 16 stable ASCII warning/reason codes;
 - one bounded payload.
 
@@ -98,9 +99,10 @@ requests. `hasMore` is proven by fetching at most `pageSize + 1`, never by `COUN
 
 `UsageReadStore` opens an existing archive with SQLite read-only flags, sets
 `query_only=ON`, `foreign_keys=ON`, `busy_timeout=250`, `mmap_size=0`, and a bounded
-cache, then validates the exact bundled SQLite version and schema version without
-migration. Missing, old, new, malformed, or policy-mismatched archives fail with stable
-codes and are never modified.
+4 MiB cache. It disables trusted-schema and double-quoted SQL compatibility, enables
+defensive mode, query-planner stability and no-checkpoint-on-close, then validates the
+exact bundled SQLite version and schema version without migration. Missing, old, new,
+malformed, or policy-mismatched archives fail with stable codes and are never modified.
 
 Queries install a SQLite progress handler tied to a facade-owned monotonic deadline,
 then clear it on every success/error path. The normal public maximum is two seconds.
@@ -112,7 +114,8 @@ Slint callbacks never execute SQLite.
 ## Performance and memory invariants
 
 - maximum page: 256 items plus one transient lookahead row;
-- maximum scopes: 32; warnings: 16; requested breakdown dimensions later: 4;
+- maximum applied scope filters: 32; internal scan scopes: 256; warnings: 16;
+  requested breakdown dimensions later: 4;
 - one read connection per facade instance and no retained result history;
 - one short read transaction per call; no writer lease or schema mutation;
 - keyset seek must show the expected index in `EXPLAIN QUERY PLAN`;

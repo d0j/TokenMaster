@@ -1154,3 +1154,20 @@ capacities, or continuation shape fail closed.
 All six focused value contracts and strict package clippy pass. This is Task 1 only:
 there is still no query SQLite connection, exact transaction capture, deadline handler,
 service mapping, frontend worker, CLI/MCP surface, aggregate, pricing, or quota claim.
+
+## 2026-07-16 — P2-A exact query-only store implemented
+
+Added `UsageReadStore` as a separate exact schema-v6 reader. It uses SQLite read-only/
+no-mutex plus query-only, foreign-key, defensive, QPSG and no-checkpoint-on-close
+controls; trusted schema and DQS are disabled, mmap is zero, busy timeout is 250 ms and
+the cache is fixed at 4 MiB. It validates but never migrates or exposes a write method.
+
+One deferred transaction captures archive generation, empty/legacy/replay dataset
+identity, complete scan time/manifest and the current or immutable-legacy event page.
+Composite keyset SQL fetches only `pageSize + 1`, continuation without exact dataset
+identity fails, optional token components stay absent, and activity/cursor fingerprints
+remain redacted. Contracts prove unchanged archive bytes, missing/old/new/malformed
+failure, revision zero compatibility, legacy ownership after store drop, stale identity,
+concurrent-commit snapshot isolation, expected index/no offset/temp sort, deterministic
+deadline interruption and handler cleanup. Store and query strict gates pass. Query
+service/freshness mapping, P2-B aggregates, UI, automation and release remain unclaimed.

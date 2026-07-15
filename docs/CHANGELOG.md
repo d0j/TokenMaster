@@ -107,6 +107,10 @@ All notable changes are recorded here.
   envelopes, checked publication/dataset identities, injected exact clock samples,
   bounded pages/scopes/warnings, stable path-free errors, and fingerprint-redacted
   activity cursors.
+- Added the separate schema-v6 `UsageReadStore`: SQLite read-only/query-only and
+  defensive policy, fixed 4 MiB cache, exact short read transactions, current/legacy
+  composite-keyset pages, `pageSize + 1` lookahead, stale dataset rejection, and
+  deadline interruption with guaranteed handler cleanup.
 
 ### Fixed
 

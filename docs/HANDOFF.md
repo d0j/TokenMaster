@@ -63,8 +63,12 @@ resource proof without helper thread/window or callback heap state. P1 is implem
 P2-A Task 1 adds the new `tokenmaster-query` crate with checked two-axis identity,
 immutable bounded headers/envelopes/pages, stable path-free errors, injected clock
 sampling, and redacted cursors. Its six focused contracts and strict package clippy
-pass. The immediate next task is P2-A Task 2: a separate query-only SQLite store and
-one exact short transaction per query.
+pass. Task 2 is now complete: `UsageReadStore` is read-only/no-migration, query-only/
+defensive, fixed-cache and no-checkpoint-on-close; one short deferred transaction owns
+exact publication/scan/current-or-legacy keyset capture, stale cursor rejection,
+deadline cancellation/cleanup, and `pageSize + 1`. The immediate next task is P2-A
+Task 3, composing this store into `QueryService` with facade-owned clock, freshness/
+quality mapping, and immutable public envelopes.
 The 2026-07-16 closure review also freezes the remaining plan ambiguities: P3 is the
 complete UI, P4 presentation/localization, P5 read-only automation, and P6 the
 canonical MSVC signed portable release. It selects the Slint attribution route,
