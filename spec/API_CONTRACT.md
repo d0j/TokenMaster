@@ -49,6 +49,25 @@ Only lease acquisition may produce terminal `busy`; a `busy` code from any later
 is an execution failure. Failure after replay begin attempts exact discard and reports
 whether cleanup succeeded without masking the original stable error code.
 
+`RefreshWorker` owns exactly one dedicated thread, one capacity-one wake channel, and
+one capacity-one latest-only completion channel. Admission mutates the shared
+constant-state coordinator directly; a coalesced hint allocates no command node and
+wakes no additional worker. If the completion slot is occupied, publication removes
+only that older completion, increments a checked fixed supersession counter, and
+publishes the newer fixed result without blocking. Completion and snapshot values
+contain only request identity, phase/outcome/kind, aggregate flags, and counters.
+
+Worker phases are `running`, `shutting_down`, `stopped`, or `faulted`. Callback and
+worker-boundary panics are contained, expose no panic payload through worker results,
+and close admission; callback panic is reported as `failed`/`panicked` and abandons
+the one allocated follow-up. The first worker spawn installs one process panic-hook
+wrapper that delegates every non-worker panic to the prior hook and suppresses output
+only for the thread-local marked TokenMaster worker. Product lifecycle code MUST
+install any custom process hook before the first worker and MUST NOT replace it while
+a worker exists. `shutdown` and `Drop` cancel cooperatively, wake idle work, and join
+the owned thread; there is no detach or forced transaction interruption. The engine
+rejects `panic=abort` builds at compile time because they cannot satisfy this API.
+
 Automatic scan-history retention is an internal maintenance detail. Public refresh
 results remain bound to their returned scan-set identity even if an older unreferenced
 set is later pruned; no CLI or MCP surface exposes arbitrary pruning or row deletion.

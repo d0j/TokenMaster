@@ -45,6 +45,9 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
+#[cfg(not(panic = "unwind"))]
+compile_error!("tokenmaster-engine requires panic=unwind for bounded worker fault containment");
+
 mod archive;
 mod batch;
 mod coordinator;
@@ -53,6 +56,7 @@ mod executor;
 mod ports;
 mod time;
 mod values;
+mod worker;
 
 pub use archive::{
     Archive, ArchiveEpoch, ArchiveReplay, ArchiveRevisionId, ArchiveScanSetId, ArchiveSourceCursor,
@@ -83,4 +87,8 @@ pub use values::{
     MAX_CHUNK_PROOFS_PER_BATCH, MAX_PROFILE_ID_BYTES, MAX_PROVIDER_ID_BYTES,
     MAX_SCOPE_MANIFEST_ENTRIES, MAX_SOURCE_ID_BYTES, SOURCE_CHUNK_BYTES, ScopeIdentity,
     ScopeManifest, SourceIdentity, SourceKind,
+};
+pub use worker::{
+    RefreshWorker, WorkerCompletion, WorkerCompletionKind, WorkerError, WorkerErrorCode,
+    WorkerPhase, WorkerSnapshot,
 };

@@ -730,3 +730,54 @@ store contracts remain the evidence that staging and fault paths preserve prior
 canonical readability. This completes P1-C Task 3 only. The bounded deterministic
 worker, live Codex composition, OS writer lease, sleep/resume, immutable product
 snapshot, M0 acceptance, packaging, signing, and release remain unclaimed.
+
+## 2026-07-15 — P1-C.4 bounded deterministic worker implemented
+
+Completed the provider-neutral engine core with one optional `RefreshWorker`. It owns
+one named thread, a capacity-one wake token, a capacity-one latest-only completion,
+one shared constant-state coordinator, and one `JoinHandle`. Submission updates the
+coordinator directly, so a blocked refresh plus 10,000 hints retains one aggregate and
+executes exactly one follow-up. Unread completion replacement never blocks, retains no
+history, and increments one checked fixed supersession counter.
+
+Focused TDD exposed and corrected the lifecycle edges before integration: shutdown
+must cancel an allocated follow-up without invoking its callback; stale cancellation
+must not affect a newer request; a callback mutex must not block cancellation; panic
+must dominate concurrent shutdown as fixed `failed`/`panicked`; and external Clock
+calls must not run under worker state lock or execute on a stopped worker. Explicit
+shutdown and `Drop` now cancel/wake/join without detach. Ordinary `failed` remains
+recoverable; callback panic abandons the one follow-up and closes admission as
+`faulted`. An outer boundary also cancels and clears fixed coordinator state if another
+worker port panics.
+
+Rust invokes its panic hook before `catch_unwind`, so first worker creation installs
+one fixed process hook wrapper. A thread-local flag suppresses payload/location output
+only for TokenMaster's marked worker and delegates all other panics to the prior hook.
+Worker completions, snapshots, errors, and debug values contain only typed IDs, enums,
+flags, and counters. Application crash hooks must be composed before first worker
+creation and not replaced during its lifetime. A compile-time guard rejects
+`panic=abort`, which cannot provide the promised contained fault transition.
+
+Verification:
+
+```powershell
+cargo +1.97.0 test -p tokenmaster-engine --test worker_contract --locked
+cargo +1.97.0 test -p tokenmaster-engine --locked
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy -p tokenmaster-engine --all-targets --locked
+cargo +1.97.0 tree -p tokenmaster-engine --locked
+pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
+cargo +1.97.0 fmt --all -- --check
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy --workspace --all-targets --locked
+cargo +1.97.0 test --workspace --locked
+git diff --check
+```
+
+Engine evidence is 2 unit tests, 50 public coordinator/value/batch/port/executor/worker
+contracts, and 3 compile-fail doctests. Ten worker contracts cover burst/backpressure,
+ordinary-failure follow-up, latest-only replacement, cooperative shutdown, stale IDs,
+idempotent close, `Drop` join, pending deadline, callback and port panic, concurrent
+panic/shutdown, and external-callback lock order. The normal engine graph remains
+domain/accounting/thiserror only; Codex, platform, filesystem, Slint, async-runtime,
+Wasmtime, and UI dependencies remain absent. P1-C is complete. Live Codex composition,
+the real OS writer lease, watcher scheduling, sleep/resume, immutable publication, M0
+acceptance, packaging, signing, and release remain unclaimed; P1-D is next.

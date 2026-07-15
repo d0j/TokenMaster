@@ -1,6 +1,6 @@
 # TokenMaster P1-C Provider-Neutral Engine Core Plan
 
-**Status:** In progress. Tasks 1 through 3 are implemented and verified; Task 4 is next. Execute
+**Status:** Complete. Tasks 1 through 5 are implemented and verified. Execution was
 root-only, test-first, one writer, on the current feature branch. The available
 task-name-only child surface cannot prove requested model routing, so
 `MODEL_ROUTING_DRIFT` remains explicit.
@@ -123,6 +123,13 @@ worker `Faulted`, abandons any newly allocated follow-up, and exits; callers rec
 the worker after archive recovery. An ordinary `Failed` outcome remains recoverable
 and may run the one coalesced follow-up.
 
+Because Rust invokes the process panic hook before `catch_unwind`, first worker spawn
+installs one wrapper that delegates non-worker panics to the prior hook and suppresses
+output only for the thread-local marked worker. Application hooks must be installed
+first and not replaced while workers exist. An outer boundary faults and clears the
+fixed coordinator state for a non-callback worker-port panic. The engine rejects
+`panic=abort` builds because they cannot implement this contract.
+
 `shutdown` stops admission, cancels the exact active permit, wakes an idle worker, and
 joins the owned `JoinHandle`. `Drop` performs the same cancel/wake/join fallback, so a
 thread is never detached. Shutdown relies on the existing cooperative cancellation
@@ -144,38 +151,38 @@ contract and never force-terminates a task or transaction.
 - `cancel(RefreshRequestId)`, `try_completion()`, and `snapshot()` expose only fixed
   state and stable errors.
 
-- [ ] Write contracts showing a blocked first task plus 10,000 hints retain one
+- [x] Write contracts showing a blocked first task plus 10,000 hints retain one
   follow-up and execute exactly twice; a normal failed first task still permits that
   follow-up; and an unread result slot is replaced by the newest completion.
-- [ ] Run
+- [x] Run
   `cargo +1.97.0 test -p tokenmaster-engine --test worker_contract --locked` and verify
   RED because the worker API is absent.
-- [ ] Implement the capacity-one wake/result topology, fixed public values, stable
+- [x] Implement the capacity-one wake/result topology, fixed public values, stable
   error mapping, coordinator submission/finish loop, and non-blocking latest-only
   publication.
-- [ ] Re-run the focused contract and verify the burst/backpressure cases are GREEN.
+- [x] Re-run the focused contract and verify the burst/backpressure cases are GREEN.
 
 ### Task 4.2 — shutdown, stale IDs, panic, and ownership RED/GREEN
 
-- [ ] Add contracts proving cancellation before execution, stale cancellation cannot
+- [x] Add contracts proving cancellation before execution, stale cancellation cannot
   affect a newer active request, explicit shutdown cancels cooperatively and joins,
   `Drop` also joins, callback panic becomes bounded `Panicked`/`Faulted` state, and
   submissions after shutdown/fault fail with stable codes.
-- [ ] Run the focused contract and verify the new cases fail for missing behavior.
-- [ ] Implement pre-execution cancellation/deadline checks, phase transitions,
+- [x] Run the focused contract and verify the new cases fail for missing behavior.
+- [x] Implement pre-execution cancellation/deadline checks, phase transitions,
   panic containment without panic-payload exposure, idempotent shutdown, and the
   no-detach `Drop` fallback.
-- [ ] Re-run the focused contract, then
+- [x] Re-run the focused contract, then
   `cargo +1.97.0 test -p tokenmaster-engine --locked` and strict engine Clippy.
 
 ### Task 4.3 — review and project truth
 
-- [ ] Review fixed memory/channel/thread ownership, race boundaries, stable Debug/error
+- [x] Review fixed memory/channel/thread ownership, race boundaries, stable Debug/error
   output, follow-up behavior, and worker recreation after panic against the approved
   P1 design.
-- [ ] Update API/data/security/decisions/traceability plus current state, roadmap,
+- [x] Update API/data/security/decisions/traceability plus current state, roadmap,
   handoff, recovery, changelog, history, and this plan without adding a commit hash.
-- [ ] Run dependency/privacy audits and the full root quality gate before committing.
+- [x] Run dependency/privacy audits and the full root quality gate before committing.
 
 ## Task 5 — documentation and acceptance
 

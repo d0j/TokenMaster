@@ -117,6 +117,16 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   seals/promotes one small result. Cancellation and deadlines are proven across every
   execution boundary; replay faults discard only the last confirmed unpublished
   handle and report cleanup failure separately. Eighteen focused contracts pass.
+- P1-C.4 deterministic worker: `RefreshWorker` owns one named thread, a capacity-one
+  wake token, and a capacity-one latest completion. Ten thousand hints retain one
+  aggregate and execute at most one follow-up; unread completion replacement is
+  non-blocking and counted. Stale cancellation, pre-execution deadline/cancellation,
+  idempotent shutdown, `Drop` join, and external Clock lock order are deterministic.
+  Callback panic becomes fixed `failed`/`panicked`, abandons its follow-up, redacts
+  process-hook payload output only on the marked worker thread, and closes admission
+  as `faulted`; an outer boundary also clears state for other worker-port panics. Ten
+  focused worker contracts pass without async, provider, filesystem, platform, Slint,
+  or UI dependencies; incompatible `panic=abort` builds fail at compile time.
 
 ## Next implementation slice
 
@@ -153,10 +163,12 @@ P1-B.2 now own strict scan-set presence and exact replay binding, including a
 zero-present-source retention-only revision. P1-B.3 completes reference-safe 32/64
 scan-history retention, ID exhaustion, and recovery. P1-C.1 supplies the
 constant-state coordinator, P1-C.2 supplies bounded adapter/archive/clock/
-writer-lease ports, and P1-C.3 supplies the one-shot executor. P1-C.4 bounded worker
-shell is next. P1-D/P1-E later add Codex live
-integration, the real writer
-lease, sleep/resume, immutable publication, and continuous runtime recovery.
+writer-lease ports, P1-C.3 supplies the one-shot executor, and P1-C.4 supplies the
+bounded deterministic worker. P1-C is complete. The next implementation gate is P1-D:
+compose the built-in Codex adapter, real portable writer lease, watcher/periodic hints,
+and lifecycle cancellation without changing the engine dependency direction. P1-E
+then adds sleep/resume, immutable publication, race generations, and continuous
+runtime recovery.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 

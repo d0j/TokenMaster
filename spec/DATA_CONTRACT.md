@@ -97,6 +97,14 @@ fault, or stale state after replay begin invokes exact discard of the last confi
 unpublished handle; a failed discard remains an explicit recovery state and never
 authorizes publication.
 
+The worker retains one coordinator, one optional not-yet-started permit, one wake
+token, one completion, one owned thread handle, and fixed phase/supersession counters.
+Ten thousand active-time hints still retain only one merged follow-up. Completion
+replacement never stores a result history, and panic/fault state stores no payload,
+provider/source identity, path, checkpoint, observation, or adapter error text.
+Worker state is runtime-only and is not archive, settings, diagnostic, or recovery
+authority.
+
 Truncation, physical replacement, or source absence is not destructive authority. A
 complete sealed overlay may promote while carrying omitted prior replay-verified
 events. Incomplete, partial, cancelled, pending, mismatched, or invalid evidence still

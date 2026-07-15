@@ -186,6 +186,11 @@ state admission/coalescing/deadline/cancellation and P1-C.2 bounded
 adapter/archive/clock/writer-lease ports are implemented. P1-C.3 now adds lease-first,
 scope-exact streamed discovery, all-complete replay, bounded canonical batches, exact
 revision/epoch continuity, all-phase cancellation/deadline handling, and last-confirmed
-unpublished cleanup. P1-C.4 bounded deterministic worker shell is next. The older replay
-plan remains historical evidence for completed Tasks 1-2, but its Codex-owned Tasks
-3+ are superseded and must not be executed.
+unpublished cleanup. P1-C.4 now completes the engine core with one owned worker,
+capacity-one wake/latest-result channels, constant-state coalescing, checked
+supersession, cancel/wake/join ownership, stale/deadline safety, and redacted
+panic/fault containment. The immediate next gate is a fresh P1-D executable plan for
+built-in Codex composition, the real portable writer lease, watcher/periodic hints,
+and lifecycle cancellation. The older replay plan remains historical evidence for
+completed Tasks 1-2, but its Codex-owned Tasks 3+ are superseded and must not be
+executed.

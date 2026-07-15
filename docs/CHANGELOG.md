@@ -45,6 +45,10 @@ All notable changes are recorded here.
   scope-exact discovery, all-complete replay, core canonicalization, exact replay-handle
   continuity, bounded continuation, phase-complete cancellation/deadline handling, and
   explicit last-confirmed staging cleanup.
+- Deterministic provider-neutral refresh worker with one owned thread, capacity-one
+  wake/latest-result channels, non-blocking checked supersession, constant-state
+  10,000-hint coalescing, cooperative shutdown/Drop join, stale-ID safety, fixed
+  completion/snapshot values, and redacted panic/fault containment.
 - Approved a provider-neutral weekly quota reset history: immutable pre/post epochs,
   scheduled/early/repeated reset transitions, allowance-change separation, bounded
   retention, and shared UI/CLI/MCP semantics for P2.
@@ -72,3 +76,9 @@ All notable changes are recorded here.
   they can loop or mutate the wrong archive scope.
 - Reserved terminal `busy` for writer-lease admission so later port faults cannot be
   mislabeled as harmless backpressure.
+- Prevented external Clock or execution callbacks from running under the worker state
+  mutex, and made stopped/faulted admission reject before consulting the Clock.
+- Made callback panic dominate concurrent cancellation as fixed `failed`/`panicked`,
+  abandon the one follow-up, suppress worker-only panic payload output, clear runtime
+  state on other worker-port panics, preserve faulted join ownership, and reject
+  incompatible `panic=abort` engine builds.

@@ -157,6 +157,21 @@ that code fails the operation. Replay failure attempts exact last-confirmed-hand
 discard, and cleanup failure is reported separately without exposing data or masking
 the initiating stable code.
 
+The deterministic worker uses only capacity-one standard-library wake/result
+channels and the constant-state coordinator. External clock and execution callbacks
+run outside the worker mutex. Stale cancellation cannot affect a newer request;
+shutdown and `Drop` cancel the exact active permit and join the owned thread. Caught
+callback panic publishes only fixed `failed`/`panicked` state, abandons the single
+follow-up, and closes admission. An outer redacted boundary also faults and clears
+runtime state if another worker port panics. One thread-local-filtered process hook is
+installed on first spawn: non-worker panics retain the prior application hook, while
+worker panic payload/location output is suppressed. Application code MUST compose its
+custom hook before worker creation and MUST NOT replace the hook while workers exist.
+No panic payload, wrapped error, path, checkpoint, or provider content enters the
+completion channel, snapshot, archive, or diagnostics. `tokenmaster-engine` fails
+compilation under `panic=abort`; only unwind builds can provide the required contained
+fault transition.
+
 ## TM-SEC-007 — Benefit activation authority
 
 Banked-reset inventory read, official activation link, idempotent activation,

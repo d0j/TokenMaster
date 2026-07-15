@@ -80,6 +80,27 @@
    Do not retry the same adapter/archive state indefinitely. Preserve bounded codes
    and synthetic reproduction evidence; never log the source, checkpoint, or path.
 
+## Worker recovery
+
+1. `running` accepts work; `shutting_down` and `stopped` return `closed`; `faulted`
+   returns `faulted`. A `coalesced` admission is one aggregate hint, not a queued job.
+   Drain the capacity-one latest completion and use `superseded_results` to know that
+   an older unread completion was intentionally replaced; there is no hidden history
+   to recover.
+2. On ordinary `failed`, the one merged follow-up may still run. On `panicked`, the
+   callback result is fixed `failed`/`panicked`, its allocated follow-up is abandoned,
+   admission closes, and the worker thread exits. First inspect the one-shot cleanup
+   and scan/replay state above; then drop or shut down the faulted worker and create one
+   new worker. Never reset SQLite rows or reuse a stale request ID as recovery.
+3. `shutdown` and `Drop` are cooperative: they cancel the exact active permit, wake an
+   idle worker, and join. The adapter/executor must observe its token at documented
+   boundaries; never force-terminate the thread or interrupt a SQLite transaction.
+4. First worker creation wraps the current process panic hook and suppresses payload
+   output only on TokenMaster's thread-local marked worker. Install any application
+   crash hook before creating the worker and do not replace it while workers exist.
+   A non-callback worker-port panic yields `faulted` with cleared runtime coordinator
+   state and no completion payload; reproduce only with synthetic data and fixed codes.
+
 ## Schema recovery
 
 - Opening an exact schema-v1, v2, v3, or v4 archive performs the non-destructive

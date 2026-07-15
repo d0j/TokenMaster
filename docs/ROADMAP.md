@@ -51,9 +51,9 @@ synthetic Codex pipeline onto this path.
 Completed: P1-B.3 keeps the newest 32 closed sets per scope, prunes at most 64 whole
 unreferenced sets per transaction, preserves running/source/replay references, recovers
 older backlogs in bounded passes, and fails atomically on pruning or ID exhaustion.
-Current gate P1-C is the provider-neutral runtime engine core. P1-C through
-P1-E then add the provider-neutral runtime engine, coalescing, cancellation, writer
-lease, sleep/resume, continuous recovery, and immutable publication before indexed
+P1-C is the completed provider-neutral runtime engine core. P1-D/P1-E next add live
+Codex composition, the real writer lease, sleep/resume, continuous recovery, and
+immutable publication before indexed
 analytics, pricing, quota, Git output, automation, and complete UI work.
 
 Completed P1-C.1: a no-async, constant-state coordinator with checked monotonic IDs,
@@ -63,8 +63,13 @@ batches, and object-safe adapter/archive/clock/lease ports with compile-fail pri
 boundaries. Completed P1-C.3: one truthful lease-first execution streams discovery,
 closes scan outcomes, replays/canonicalizes bounded batches, validates exact handle
 progress, and seals/promotes or discards the unpublished revision under full phase
-cancellation/deadline coverage. The current gate is the bounded deterministic worker
-shell in P1-C.4 under the same plan.
+cancellation/deadline coverage. Completed P1-C.4: one owned deterministic worker uses
+capacity-one wake/latest-result channels, constant-state burst coalescing, checked
+supersession, cooperative cancel/wake/join shutdown and `Drop`, stale-ID safety,
+pre-execution deadline/cancellation, and redacted panic/fault containment. The current
+gate is P1-D: compose the built-in Codex adapter, real portable writer lease,
+watcher/periodic hints, and lifecycle cancellation without adding provider/platform/UI
+dependencies to the engine core.
 
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset
 epochs. The weekly view preserves last-before/first-after state, maximum use before

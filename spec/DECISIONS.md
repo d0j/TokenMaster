@@ -195,6 +195,21 @@ Rationale: this keeps memory independent of source/history size, prevents adapte
 archive boundary confusion from becoming canonical truth, and preserves exact recovery
 evidence without adding async, Codex, OS, or UI dependencies.
 
+P1-C.4 adds one optional `RefreshWorker` over the same coordinator: one dedicated
+owned thread, capacity-one wake and latest-result channels, immediate execution of at
+most one aggregate follow-up, and non-blocking checked result supersession. Explicit
+shutdown and `Drop` both cancel/wake/join; no thread is detached. Ordinary `failed`
+remains recoverable, while a callback panic publishes fixed `failed`/`panicked`,
+abandons its allocated follow-up, faults the worker, and requires recreation after
+archive recovery. A process-global hook wrapper is installed once because Rust invokes
+the panic hook before `catch_unwind`; thread-local filtering suppresses only worker
+payload output and delegates all other panics to the previous hook. Custom application
+hooks must therefore be installed before the first worker and not replaced during its
+lifetime. The engine rejects `panic=abort` at compile time rather than silently losing
+fault containment. Rationale: this closes the last P1-C ownership/backpressure/privacy
+gap without an async runtime, per-hint allocation, unbounded result queue, or
+provider/UI coupling.
+
 ## ADR-016 — Separate banked reset inventory with capability-gated activation
 
 Decision: provider-granted banked rate-limit resets are typed independently from quota
