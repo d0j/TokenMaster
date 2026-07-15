@@ -45,8 +45,11 @@ recovers any unadmitted provisional source without trusting its abandoned checkp
 P1-D.4 is complete: a persistent empty local sidecar and Rust 1.97 `File::try_lock`
 provide one non-blocking process-owned writer guard. Contention alone maps to `busy`;
 normal exit, forced termination, and guard drop release the lock; paths and OS errors
-remain private. The immediate next task is P1-D.5, bounded watcher/periodic hints,
-before lifecycle cancellation.
+remain private. P1-D.5 is complete: a fixed pathless atomic hint aggregate,
+capacity-one wake, one scheduler thread, 250 ms quiet window, 15 minute healthy/60
+second degraded reconciliation, checked clock rollback, and bounded `notify = 8.2.0`
+root generations now feed only refresh urgency into the existing worker. The immediate
+next task is P1-D.6 live recovery/lifecycle assembly.
 P2 now also has an approved separate banked-reset inventory/expiry/reminder/activation
 design in `docs/superpowers/plans/2026-07-15-tokenmaster-banked-reset-inventory.md`.
 It does not change the immediate P1-D gate and no current provider discovery,
@@ -178,8 +181,12 @@ contracts, one Windows drive-classification unit contract, and two runtime lease
 contracts covering same/cross-process contention, normal/forced process release,
 canonical aliasing, empty persistence, unsupported/remote locations, privacy, and
 bridge mapping; the eighth integration contract proves no handle-count growth across
-4,096 acquire/drop cycles. This does not claim watcher scheduling or live lifecycle
-assembly.
+4,096 acquire/drop cycles. P1-D.5 adds five scheduler and five watcher contracts:
+10,000 hints collapse into one aggregate and one real worker follow-up, healthy/
+degraded timing and clock rollback are deterministic, create/append/rename is reduced
+to a pathless hint, missing/invalid/oversized generations fail closed, and 32 Windows
+root replacements return process handles and threads to baseline. This does not claim
+live archive/worker/watcher lifecycle assembly.
 Clean-root, formatting, strict workspace Clippy, and the full locked workspace passed;
 see the P1-A history entry for exact commands and focused counts. The
 one-million-row M0 scale test remains explicitly ignored in the normal workspace run.

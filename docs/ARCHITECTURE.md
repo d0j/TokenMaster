@@ -2,6 +2,8 @@
 
 ```text
 Codex JSONL sources
+  -> bounded native watcher paths reduced immediately to one pathless hint aggregate
+  -> capacity-one scheduler wake plus mandatory periodic reconciliation
   -> bounded discovery and streaming reader
   -> typed Codex decoder and provider-neutral ObservationDraft/SessionRelationDraft
   -> exclusive TokenMaster accounting canonicalizer
@@ -37,6 +39,12 @@ ordinal zero after prior emissions would create false identity collisions.
 The UI receives bounded view models rather than owning archive state. Skin, layout,
 and locale selection alter presentation state only, so switching remains immediate and
 does not reparse sources or rebuild the archive.
+
+The watcher is never source authority. Its callback discards `notify` event/error paths
+before touching shared state; one atomic aggregate retains only dirty/force/urgency,
+latest monotonic tick, health, lifecycle, and fixed counters. A 250 ms quiet window and
+15 minute healthy or 60 second degraded poll trigger authoritative discovery. Missing
+roots are not replaced by broad ancestor watches.
 
 Provider-benefit inventory read does not imply activation authority. A future banked
 reset mutation is a separate host-owned official capability with explicit local

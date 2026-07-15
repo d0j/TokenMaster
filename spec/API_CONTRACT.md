@@ -78,8 +78,18 @@ batch/diagnostic counters and archive generation. It performs an exact complete 
 preflights every present source before tail writes, reads only after persisted
 checkpoints, reports profile-scope drift as `rebuild_required`, and never exposes paths
 or checkpoint bytes. Full rebuild may replace only an exact unadmitted provisional
-generation left by interrupted admission. Watcher, scheduler, and lifecycle assembly
-remain separate later layers.
+generation left by interrupted admission. Live lifecycle assembly remains a separate
+later layer.
+
+`RefreshScheduler` owns one thread and one capacity-one wake. Its clonable
+`RefreshHintSink` accepts only pathless filesystem/force/health signals and exposes no
+event, root, source, request, or backend error. The fixed 250 ms quiet window, 15 minute
+healthy poll, 60 second degraded poll, monotonic rollback handling, pause/resume, and
+shutdown produce only `RefreshUrgency`. `BoundedFilesystemWatcher` owns at most one
+current `notify` backend generation for at most 64 canonical roots. Replacement
+invalidates old callbacks before dropping the old backend; snapshots expose only
+generation and root count. Missing roots create no watch. Scheduler/watcher errors are
+stable path-free codes.
 
 `RefreshWorker` owns exactly one dedicated thread, one capacity-one wake channel, and
 one capacity-one latest-only completion channel. Admission mutates the shared

@@ -92,6 +92,11 @@ Codex paths or JSONL wire shapes. Codex MUST remain a compiled-in native adapter
 Refresh coordination MUST use checked monotonic request IDs, cooperative cancellation,
 monotonic deadlines, and one bounded active/follow-up aggregate rather than retaining
 one queued item per filesystem or caller hint.
+Filesystem events MUST be treated only as pathless lossy hints. The runtime MUST retain
+one fixed aggregate and capacity-one wake, apply a bounded quiet window, reconcile
+periodically even while the watcher is healthy, degrade to a shorter poll after watcher
+failure, and cap configured watch roots. Event paths and backend errors MUST NOT enter
+engine, archive, diagnostics, query, UI, CLI, or MCP state.
 
 The future external-provider surface MUST accept versioned WebAssembly Component
 packages through an isolated on-demand host implementing the same source contract.
@@ -124,6 +129,8 @@ chart points, UI lists, and external request bodies MUST have explicit limits. N
 production path may allocate solely from an untrusted declared size.
 An active refresh may retain at most one aggregate follow-up. Burst size MUST NOT
 increase retained coordinator memory or create a worker, timer, or queue node per hint.
+A filesystem burst MUST NOT retain event/path history; watcher generation replacement
+and shutdown MUST return backend threads and handles rather than accumulating them.
 
 ### TM-PERF-002 — Long-run stability
 

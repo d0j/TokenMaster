@@ -963,3 +963,30 @@ the engine port.
 Focused strict Clippy and all platform/runtime targets pass. P1-D.5 watcher/scheduler,
 P1-D.6 lifecycle assembly, P1-E, M0 acceptance, packaging, signing, and release remain
 unclaimed.
+
+## 2026-07-15 — P1-D.5 bounded scheduler and filesystem hints added
+
+Pinned `notify = 8.2.0` as the only new direct runtime dependency and isolated it
+inside `tokenmaster-runtime`. `RefreshHintSink` reduces filesystem activity, rescan,
+watcher health, and forced reconciliation to one atomic flag word, latest monotonic
+tick, fixed health/lifecycle bytes, checked counters, and a capacity-one non-blocking
+wake. It retains no event, path, source, request, timer node, backend error, or history.
+`RefreshScheduler` owns one named thread and enforces immediate startup recovery, a
+250 ms quiet window, 15 minute healthy and 60 second degraded reconciliation, checked
+clock rollback, stable pause/resume/stop/fault phases, redacted panic output, and joined
+shutdown.
+
+`BoundedFilesystemWatcher` canonicalizes at most 64 existing roots, rejects duplicate,
+oversized, relative, unsupported-namespace, symlink, and reparse ambiguity, creates no
+backend for missing roots, and publishes root replacement as one recovery hint. Each
+callback first checks its generation and then inspects only the rescan flag before the
+complete event/error object is dropped. The backend is not source authority; mandatory
+periodic exact discovery repairs missed hints.
+
+Five scheduler contracts prove exact timing, 10,000-hint fixed-state collapse, one
+real `RefreshWorker` follow-up, clock rollback, pause/resume, submission fault, and
+joined shutdown. Five watcher contracts prove real create/append/rename reduction,
+root bounds, missing-root degradation, latest-generation replacement, and return of
+Windows process handles/threads to baseline after 32 replacements. P1-D.6 live
+archive/lease/worker/scheduler/watcher recovery and lifecycle assembly, P1-E, M0
+acceptance, packaging, signing, and release remain unclaimed.

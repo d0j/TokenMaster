@@ -143,6 +143,24 @@
    work, chunks, checkpoint, source state, revision epoch, archive generation, and
    publication quality; never compensate with ad hoc SQL.
 
+## Watcher and scheduler recovery
+
+1. Watcher events are only lossy hints. Never recover a source, checkpoint, archive
+   generation, or scan membership from an event path or kind. The callback discards
+   event/error paths and retains only fixed dirty/force/urgency/health state.
+2. A watcher error, rescan flag, root/settings generation change, resume, or monotonic
+   rollback forces one `recovery` urgency. A missing configured root creates no broad
+   ancestor watch and uses the 60 second degraded reconciliation until discovery finds
+   it. A healthy watcher still receives a mandatory 15 minute reconciliation.
+3. Invalid, duplicate, oversized, reparse/symlink, unsupported-namespace, or over-64
+   root sets fail closed without replacing the prior generation. Backend setup failure
+   degrades scheduling but does not authorize deletion or make old callback generations
+   authoritative.
+4. Scheduler `faulted` means its submission callback failed or fixed counters/time
+   arithmetic exhausted. Stop watcher admission, join/drop the scheduler and watcher,
+   inspect the worker/archive through fixed codes, and construct a fresh runtime. Do
+   not replay queued event paths: none exist.
+
 ## Worker recovery
 
 1. `running` accepts work; `shutting_down` and `stopped` return `closed`; `faulted`

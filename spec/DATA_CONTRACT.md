@@ -143,6 +143,16 @@ provider/source identity, path, checkpoint, observation, or adapter error text.
 Worker state is runtime-only and is not archive, settings, diagnostic, or recovery
 authority.
 
+The scheduler retains one atomic flag word, latest monotonic hint tick, watcher-health
+byte, lifecycle byte, two checked scalar counters, one capacity-one wake, and one owned
+thread. The flag word contains only dirty, force, highest-urgency, overflow, and clock-
+discontinuity bits. Ten thousand hints allocate no event/path queue and yield at most
+one worker follow-up. A watcher generation retains at most 64 canonical configured
+roots inside the pinned backend; callback events and errors are dropped immediately.
+Missing roots retain no backend watch, and old generation callbacks are non-authority.
+No scheduler/watcher state is persisted or treated as scan, replay, checkpoint, or
+publication evidence.
+
 Truncation, physical replacement, or source absence is not destructive authority. A
 complete sealed overlay may promote while carrying omitted prior replay-verified
 events. Incomplete, partial, cancelled, pending, mismatched, or invalid evidence still

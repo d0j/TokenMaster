@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Instant;
 
 use tokenmaster_engine::{Clock, MonotonicTime};
@@ -12,6 +13,11 @@ impl SystemClock {
         Self {
             origin: Instant::now(),
         }
+    }
+
+    #[must_use]
+    pub fn shared() -> Arc<Self> {
+        Arc::new(Self::new())
     }
 }
 

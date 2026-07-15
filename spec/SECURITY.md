@@ -199,6 +199,23 @@ the newly opened descriptor. Provisional-admission overflow fails into the same
 non-destructive recovery path before retaining an over-bound key. No path, raw line,
 incomplete tail, descriptor, or checkpoint bytes enter SQLite or reports.
 
+The pinned `notify = 8.2.0` backend is isolated inside `tokenmaster-runtime`. Callback
+code inspects only the rescan bit, discards every event/error object immediately, and
+updates one fixed atomic pathless aggregate through a capacity-one non-blocking wake.
+It never logs, formats, stores, forwards, or publishes event paths, backend errors, or
+event history. Root replacement is capped at 64, validates length/local namespace,
+canonicalizes existing directories, rejects duplicates and reparse/symlink ancestry,
+and never watches a broad ancestor for a missing root. Old callback generations fail
+their atomic generation check. Watcher errors and clock rollback only force
+authoritative reconciliation; they cannot mutate archive truth.
+
+The scheduler submission callback receives only `RefreshUrgency`. Its owned thread has
+a thread-local panic-output filter, checked counters/time arithmetic, fixed phase, and
+joined shutdown. A failed submit faults without retry. Tests prove one aggregate and
+one engine follow-up for 10,000 hints and eventual return of process handles/threads to
+baseline after 32 Windows watcher replacements. Live lifecycle ordering and archive
+composition remain P1-D.6 and are not claimed by this slice.
+
 The deterministic worker uses only capacity-one standard-library wake/result
 channels and the constant-state coordinator. External clock and execution callbacks
 run outside the worker mutex. Stale cancellation cannot affect a newer request;

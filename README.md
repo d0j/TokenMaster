@@ -49,6 +49,8 @@ for diagnostic comparison and cannot be the default renderer.
 - No persistence or exposure of prompts, responses, reasoning, commands, source
   contents, credentials, or absolute user paths.
 - Instant modular skin/layout/locale switching without rebuilding the archive.
+- Pathless filesystem hints collapse into one fixed atomic aggregate and one bounded
+  scheduler wake; periodic reconciliation remains the source of liveness.
 - Measured memory, CPU, handle, thread, USER, GDI, and latency gates.
 
 See [the approved audit and master plan](docs/AUDIT_AND_MASTER_PLAN.md),

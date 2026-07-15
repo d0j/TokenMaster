@@ -59,11 +59,11 @@ built-in Codex bootstrap/store composition and strict path-free checkpoint codec
 P1-D.3 adds strict schema-v6 publication generations, exact scan freshness and new
 source admission, paired-CAS replay-aware tail append, targeted materialization,
 bounded partial restart, and durable rebuild-required state. P1-D.4 adds the persistent
-empty-sidecar `File::try_lock` writer lease with process-death release. P1-D.5+ and P1-E
-next add bounded watcher/scheduler hints,
-sleep/resume, continuous recovery, and
-immutable publication before indexed
-analytics, pricing, quota, Git output, automation, and complete UI work.
+empty-sidecar `File::try_lock` writer lease with process-death release. P1-D.5 adds the
+fixed pathless hint aggregate, capacity-one scheduler, exact quiet/periodic policy, and
+bounded watcher generations. P1-D.6 and P1-E next add live assembly, sleep/resume,
+continuous recovery, and immutable publication before indexed analytics, pricing,
+quota, Git output, automation, and complete UI work.
 
 Completed P1-C.1: a no-async, constant-state coordinator with checked monotonic IDs,
 deadline/cancellation semantics, one active refresh, and one aggregate follow-up.
@@ -89,8 +89,10 @@ tail bytes with paired CAS, resume bounded partial work, and preserve old truth 
 durable `recovery_pending` on replacement, truncation, or profile-scope changes; a
 full rebuild safely recovers provisional admission state. P1-D.4 adds the persistent
 empty-sidecar writer lease with same-process/cross-process contention and death-release
-proof. The current gate is P1-D.5, watcher/periodic hints, then lifecycle cancellation
-without adding provider/platform/UI dependencies to the engine core.
+proof. P1-D.5 adds exact `notify = 8.2.0`, a fixed atomic pathless aggregate, one
+scheduler thread, deterministic quiet/healthy/degraded policy, bounded root
+generations, and shutdown resource evidence. The current gate is P1-D.6 lifecycle and
+recovery assembly without adding provider/platform/UI dependencies to the engine core.
 
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset
 epochs. The weekly view preserves last-before/first-after state, maximum use before

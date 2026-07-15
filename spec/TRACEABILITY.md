@@ -12,12 +12,12 @@ A design or plan is not implementation evidence.
 | TM-FUNC-005 | partial | `crates/probe-app`; product shell later | lifecycle, presentation, skin-runtime, metrics, stress contracts |
 | TM-FUNC-006 | planned | separate CLI and MCP adapters over query facade | P3 strict JSON/stdin MCP conformance tests |
 | TM-FUNC-007 | implemented | accounting lineage/classifier, scalable replay archive, P0-E composition, and P1-A retention | real JSONL baseline/append/restart/replay/quality/atomic-replacement/truncation-retention/failure contracts pass; live scheduling remains TM-FUNC-008/P1 |
-| TM-FUNC-008 | partial | provider-neutral drafts/engine, Codex bootstrap, replay-aware incremental runtime, portable writer lease; scheduler/lifecycle/plugin host pending | P1-C plus P1-D.0-P1-D.4 logical-file, codec, bootstrap, exact-scan, paired-CAS, tail/recovery/lease contracts |
+| TM-FUNC-008 | partial | provider-neutral drafts/engine, Codex bootstrap, replay-aware incremental runtime, writer lease, bounded scheduler/watcher; lifecycle/plugin host pending | P1-C plus P1-D.0-P1-D.5 logical-file, codec, bootstrap, exact-scan, paired-CAS, tail/recovery/lease/scheduling contracts |
 | TM-FUNC-009 | planned | immutable provider quota epochs and weekly full-reset transitions | P2 quota reset plan; scheduled/early/repeated/reset+allowance/restart/UI/API fixtures pending |
 | TM-FUNC-010 | planned | banked reset lots, selectable default/custom expiry reminders, activation intents/receipts | P2 banked reset plan; inventory/profile/reminder/reconciliation/UI/security fixtures pending |
 | TM-UI-001 | planned | complete Slint board and supporting views | granular parity matrix and P4 accessibility/UI tests |
 | TM-UI-002 | partial | `crates/probe-app` presentation generations | presentation/skin contracts; archive-independent product snapshots pending |
-| TM-PERF-001 | partial | bounded parser/reader/store/engine plus P1-D.2 bootstrap and P1-D.3 tail runtime | unchanged payload bytes=0; exact one-line bytes; 300-event multi-batch; bounded scopes/new-source list/checkpoint/chunks/continuation; query/UI/plugin evidence pending |
+| TM-PERF-001 | partial | bounded parser/reader/store/engine plus bootstrap/tail runtime and fixed watcher/scheduler | unchanged payload bytes=0; exact tail; 300-event batches; 10,000-hint aggregate/one follow-up; 32-generation handle/thread baseline; query/UI/plugin evidence pending |
 | TM-PERF-002 | open evidence | software renderer and M0 resource gates | uninterrupted soak and interactive receipts remain absent |
 | TM-PERF-003 | partial | keyset store reads implemented; immutable snapshots planned | SQLite/read contracts; P2 query snapshot gates pending |
 | TM-REL-001 | partial | M0 scripts and receipt schemas | identity checks exist; final product packaging evidence pending |
@@ -27,14 +27,14 @@ A design or plan is not implementation evidence.
 | TM-DATA-003 | implemented | file identity and reader checkpoint | physical identity live/persisted round-trip, checkpoint conversion, resume bound, and restart contracts |
 | TM-DATA-004 | implemented | scoped scan/rebuild plus replay-aware current publication, paired-CAS tail facts, exact admission, durable partial/recovery, retained promotion/discard | atomic faults, stale CAS, unchanged/append/multi-batch/new/missing/restart/deadline/rebuild contracts pass |
 | TM-DATA-005 | implemented | `crates/store/src/usage` | strict schema v6, exact v1-v5 migration, singleton publication state, provider-qualified scans, pragmas, keyset paging |
-| TM-DATA-006 | partial | reader/parser/store plus engine value/batch/temporary-reader/execution/worker limits | line/resume, 32-KiB opaque checkpoint, independent 256 event/relation batches, one temporary replay reader, 18 chunk-update, 4,096 continuation, fixed-result, one active/aggregate follow-up, capacity-one channels, and SQLite-i64 counter bounds; full UI/query/plugin limits pending |
+| TM-DATA-006 | partial | reader/parser/store plus engine/runtime fixed-state limits | line/resume, 32-KiB checkpoint, 256 event/relation batches, one reader, 18 chunks, 4,096 continuation, one active/follow-up, capacity-one channels, one atomic hint aggregate, 64 watcher roots, and checked counters; UI/query/plugin limits pending |
 | TM-DATA-007 | implemented | replay facts/classifier in a private overlay plus schema-v4 self-contained canonical projection with deterministic selection/retention | v1/v2/v3-to-v4 migration plus replay/append/restart/300-file/atomic-replacement/truncation truth-table/failure contracts pass |
 | TM-DATA-008 | planned | immutable quota samples, epochs, reset and allowance transitions | P2 quota reset history schema/detection/retention contracts pending |
 | TM-DATA-009 | planned | typed provider benefit inventory, versioned reminder profiles/delivery, activation intent/receipt projection | P2 banked reset schema/expiry/profile/dedup/CAS/retention contracts pending |
 | TM-SEC-001 | partial | local-only product and no listener today | future quota HTTPS opt-in and MCP stdio security tests pending |
 | TM-SEC-002 | partial | current JSONL/store boundaries validate types and sizes | future config/CLI/MCP/plugin boundary suites pending |
 | TM-SEC-003 | implemented | provider/Codex/store/engine errors, value types, and redacted worker panic boundary | serialized/debug privacy, path-redaction, sealed identity, path-substitution, raw-archive-write compile-fail, fixed panic/fault completion, and panic-strategy compile guard contracts |
-| TM-SEC-004 | partial | transactional scan/replay/current authority, paired CAS, preflight, atomic targeted projection, durable recovery, immutable legacy, exact rebuild, OS writer lease | P1-D.3 path-free rollback/recovery plus P1-D.4 same/cross-process, death-release, empty-sidecar, namespace/privacy contracts; lifecycle remains |
+| TM-SEC-004 | partial | transactional archive authority, exact rebuild, OS lease, pathless lossy watcher hints | P1-D.3 rollback/recovery, P1-D.4 process lease, and P1-D.5 callback privacy/generation/fault/resource contracts; live lifecycle remains |
 | TM-SEC-005 | partial | M0 skins are declarative application data | external skin package schema/validation not implemented |
 | TM-SEC-006 | planned | built-in Codex exists; isolated plugin host deferred | provider plugin design and future 1.1 conformance/security gates |
 | TM-SEC-007 | planned | host-owned banked reset activation capability and policy boundary | no-scrape/no-authority-escalation/idempotency/ambiguous-outcome security gates pending |
@@ -68,8 +68,9 @@ admission, paired-CAS replay-aware tail append, bounded continuation, durable pa
 recovery state, and real Codex zero-payload/append/multi-batch/restart/replacement
 plus profile-scope/full-rebuild recovery contracts. P1-D.4 adds the portable empty-
 sidecar process-owned writer lease, mapped-remote fail-closed classification, and a
-4,096-cycle Windows handle-plateau contract. P1-D.5 bounded watcher/scheduler is next,
-followed by lifecycle assembly.
+4,096-cycle Windows handle-plateau contract. P1-D.5 adds the pinned pathless watcher,
+fixed atomic aggregate, quiet/periodic scheduler, 10,000-hint one-follow-up proof, and
+32-generation Windows resource return. P1-D.6 lifecycle assembly is next.
 Tasks 3+ in the older replay plan are historical and superseded.
 
 The clean-root invariant is implemented by `scripts/audit-clean-root.ps1` and its

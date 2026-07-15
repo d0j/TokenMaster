@@ -4,11 +4,11 @@
 > this plan task-by-task. Use `superpowers:test-driven-development` for every behavior
 > change and `superpowers:verification-before-completion` before each completion claim.
 
-**Status:** Active. P1-D.5 is the immediate execution slice. Work remains root-only
+**Status:** Active. P1-D.6 is the immediate execution slice. Work remains root-only
 because the available task-name-only child surface cannot prove configured role/model
 routing; `MODEL_ROUTING_DRIFT` remains explicit.
 
-**Progress:** Tasks 1-8 (P1-D.0/P1-D.1/P1-D.2/P1-D.3/P1-D.4) are implemented.
+**Progress:** Tasks 1-9 (P1-D.0/P1-D.1/P1-D.2/P1-D.3/P1-D.4/P1-D.5) are implemented.
 Task 5 applies events and late relations in one bounded store transaction with one epoch
 advance. Task 6 adds the real Codex bootstrap adapter, strict checkpoint codec, and
 checked store
@@ -17,8 +17,10 @@ paired-CAS replay-aware tail append, bounded partial recovery, and durable rebui
 selection. Focused store/runtime tests cover zero-byte unchanged, exact append,
 multi-batch, new/missing sources, cancellation/deadline resume, replacement/truncation,
 and transaction faults. Task 8 adds the real persistent empty-sidecar OS writer lease
-and process-death recovery proof. No watcher, lifecycle assembly, P1-E, M0 acceptance,
-or release is claimed.
+and process-death recovery proof. Task 9 adds the fixed pathless hint aggregate,
+capacity-one scheduler, pinned bounded watcher, timing/fault/lifecycle contracts, and
+Windows resource-return evidence. No live lifecycle assembly, P1-E, M0 acceptance, or
+release is claimed.
 
 **Goal:** Compose a live built-in Codex runtime whose normal refresh is tail-only,
 whose memory and watcher state are fixed/bounded, and whose writer/recovery behavior
@@ -460,10 +462,19 @@ Commit: `feat(platform): add portable writer lease`.
 
 ## Task 9: P1-D.5 bounded scheduler and filesystem hints
 
+**Completed:** five scheduler and five watcher contracts prove immediate startup,
+10,000-hint fixed-state collapse, at most one real engine follow-up, exact 250 ms/15
+minute/60 second policy, clock rollback, pause/resume/fault/join, real create/append/
+rename reduction, root capacity/generation/missing-root behavior, and return of Windows
+handles/threads after 32 generation replacements.
+
 **Files:**
 
 - Modify: root `Cargo.toml` with exact `notify = "=8.2.0"`
+- Modify: root `Cargo.lock`
 - Modify: `crates/runtime/Cargo.toml`
+- Modify: `crates/runtime/src/clock.rs`
+- Modify: `crates/runtime/src/lib.rs`
 - Create: `crates/runtime/src/hints.rs`
 - Create: `crates/runtime/src/scheduler.rs`
 - Create: `crates/runtime/src/watcher.rs`

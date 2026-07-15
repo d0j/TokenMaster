@@ -174,8 +174,20 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   persistence, redacted Debug, reacquisition, and runtime `busy` mapping are proven. A
   4,096-cycle Windows acquire/drop contract also proves that the process handle count
   does not grow. No PID, timestamp, path, owner payload, polling thread, or retained
-  lock history exists. Watcher/scheduler and live lifecycle assembly remain
-  unimplemented.
+  lock history exists. This slice does not contain watcher/scheduler or live lifecycle
+  assembly; the watcher/scheduler is delivered separately below.
+- P1-D.5 bounded scheduler and filesystem hints: exact `notify = 8.2.0` is isolated
+  inside `tokenmaster-runtime`. Its callback drops event/error paths immediately and
+  updates only one fixed atomic aggregate plus a capacity-one wake. One owned scheduler
+  thread enforces immediate startup recovery, a 250 ms quiet window, 15 minute healthy
+  and 60 second degraded reconciliation, monotonic rollback recovery, fixed pause/
+  resume/stopping state, and stable fault handling. Root sets are capped at 64,
+  canonicalized, reparse/symlink/duplicate/unsupported namespaces fail closed, missing
+  roots create no backend watch, and generation replacement invalidates old callbacks.
+  Five scheduler contracts prove 10,000-hint collapse and at most one real engine
+  follow-up; five watcher contracts prove real create/append/rename hints, bounded
+  generations, missing-root recovery, and return of Windows handles/threads to baseline
+  after 32 replacements. Live archive/worker/watcher assembly remains P1-D.6.
 
 ## Next implementation slice
 
@@ -217,9 +229,10 @@ bounded deterministic worker. P1-D.0 corrects the real per-file/two-pass seam un
 `docs/superpowers/plans/2026-07-15-tokenmaster-p1-d-live-runtime.md`. P1-D.1 makes
 replay events and late relations one atomic store batch, and P1-D.2 composes the real
 Codex bootstrap reader with the store archive. P1-D.3 adds the replay-aware current
-archive and real tail-only refresh, and P1-D.4 adds the portable process-owned writer
-lease. The next gate is P1-D.5: implement bounded watcher/periodic hints before
-lifecycle cancellation. P1-E
+archive and real tail-only refresh, P1-D.4 adds the portable process-owned writer
+lease, and P1-D.5 adds bounded pathless watcher/periodic scheduling. The next gate is
+P1-D.6: assemble startup recovery, lease, incremental/rebuild selection, worker,
+scheduler, watcher, pause/resume, and exact shutdown. P1-E
 then adds sleep/resume, immutable publication, race generations, and continuous
 runtime recovery.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred

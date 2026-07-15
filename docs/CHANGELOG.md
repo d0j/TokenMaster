@@ -69,6 +69,10 @@ All notable changes are recorded here.
   `File::try_lock`, with same-process/cross-process contention, normal/forced process
   release, canonical parent alias, unsupported namespace/mapped remote drive, privacy,
   and runtime bridge contracts.
+- Bounded pathless filesystem scheduling with exact `notify = 8.2.0`, one fixed atomic
+  hint aggregate, capacity-one wake, one scheduler thread, 250 ms quiet coalescing,
+  15 minute healthy/60 second degraded reconciliation, checked clock rollback,
+  64-root generation bounds, and Windows handle/thread return-to-baseline evidence.
 - Approved a provider-neutral weekly quota reset history: immutable pre/post epochs,
   scheduled/early/repeated reset transitions, allowance-change separation, bounded
   retention, and shared UI/CLI/MCP semantics for P2.

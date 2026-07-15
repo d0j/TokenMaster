@@ -335,3 +335,22 @@ permanent ownership, while deleting a lock file can split Unix inode identity be
 writers. A persistent empty sidecar plus an OS-owned handle preserves one lock identity,
 recovers automatically after process death, consumes constant memory, and exposes no
 private owner data.
+
+## ADR-022 — Pathless atomic hints with mandatory periodic reconciliation
+
+Decision: pin `notify = 8.2.0` inside `tokenmaster-runtime`, discard event/error paths
+inside the callback, and retain only one atomic dirty/force/urgency/health/lifecycle
+aggregate with one capacity-one wake. One owned scheduler thread applies a 250 ms quiet
+window, 15 minute healthy poll, 60 second degraded poll, checked clock rollback, and
+stable pause/resume/stop/fault transitions. Root generations contain at most 64
+canonical existing configured directories; missing roots create no ancestor watch and
+old callbacks are invalidated by generation. Watcher events never become source or
+archive authority.
+
+Rationale: poll-only scheduling either delays UI updates or repeatedly scans unchanged
+history, while event/path queues grow with activity and expose private filesystem data.
+Lossy pathless hints provide fast reaction at constant retained state; mandatory
+periodic exact discovery repairs missed events. The pinned backend-owned internal
+thread receives its stop signal when the watcher is dropped; resource contracts require
+backend threads and handles to return to baseline after replacement/shutdown. Failure
+of that gate blocks P1-D rather than weakening the bound.
