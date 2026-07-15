@@ -180,3 +180,20 @@ Rationale: one synchronous coordinator plus cooperative boundaries gives determi
 ownership, shutdown, and memory behavior while still coalescing bursts and allowing a
 single follow-up. Keeping the OS lease and Codex reader behind later ports preserves
 portability and prevents platform/UI concerns from entering the engine core.
+
+## ADR-016 — Separate banked reset inventory with capability-gated activation
+
+Decision: provider-granted banked rate-limit resets are typed independently from quota
+epochs, credits, and temporary usage. Inventory uses separate expiry lots, immutable
+change points, one indexed reminder queue, and normalized activation intents/receipts.
+Assisted activation may open an official provider surface. Automatic activation is
+disabled unless a connector exposes official idempotent mutation and status
+capabilities; it additionally requires explicit versioned policy, fresh evidence,
+CAS, durable intent, and reconciliation. Scraping, browser automation, session reuse,
+and generic plugin/LLM mutation authority are rejected.
+
+Rationale: the provider can grant several resets with different expirations, while a
+normal weekly reset can occur without consuming any grant. Modeling these as one bar
+would lose expiry safety and corrupt history. Capability separation permits useful
+manual inventory and reminders now, preserves portability, and leaves a safe path to
+future automation without binding TokenMaster to unstable private web behavior.

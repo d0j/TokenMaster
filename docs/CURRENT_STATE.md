@@ -110,6 +110,12 @@ bars, skins, layouts, density, and localization are approved in
 weekly quota contract now keeps immutable before/after epochs for scheduled, early,
 and repeated full resets under the P2 plan
 `docs/superpowers/plans/2026-07-15-tokenmaster-quota-reset-history.md`.
+The separately approved P2 banked-reset plan models multiple quantities/expirations,
+bounded reminders, notification coverage, immutable activation receipts, and a future
+official-capability-only automatic policy:
+`docs/superpowers/plans/2026-07-15-tokenmaster-banked-reset-inventory.md`. It is design
+only; current reset discovery, notifications, assisted activation, and automatic
+activation are not implemented.
 The source-adapter seam keeps the current local Codex reader replaceable by future
 sandboxed bounded provider plugins without coupling storage, analytics, automation,
 or UI to Codex JSONL. The selected future format is a `.tmplugin` WebAssembly

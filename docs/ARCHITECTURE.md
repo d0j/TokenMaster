@@ -9,6 +9,11 @@ Codex JSONL sources
   -> transactional current/staging SQLite archive
   -> immutable query snapshots
   -> Slint desktop UI, future CLI, future MCP
+
+Built-in Codex quota/benefit adapter or future sandboxed read-only provider component
+  -> immutable quota epochs and typed banked-reset/credit/temporary-use lots
+  -> bounded query snapshots, expiry queue, reminders, and pure policy evaluation
+  -> the same Slint UI and read-only CLI/MCP projections
 ```
 
 The reader handles append, truncation, rewrite, incomplete tails, and bounded
@@ -32,3 +37,9 @@ ordinal zero after prior emissions would create false identity collisions.
 The UI receives bounded view models rather than owning archive state. Skin, layout,
 and locale selection alter presentation state only, so switching remains immediate and
 does not reparse sources or rebuild the archive.
+
+Provider-benefit inventory read does not imply activation authority. A future banked
+reset mutation is a separate host-owned official capability with explicit local
+policy, compare-and-swap admission, durable intent, provider idempotency/status, and
+post-action inventory/quota reconciliation. Browser/session automation and generic
+plugin/LLM mutation are outside the product boundary.

@@ -94,6 +94,13 @@ contracts are stable.
     pre-reset use, old/new reset time, evidence/confidence, and allowance changes.
     The approved executable plan is
     `docs/superpowers/plans/2026-07-15-tokenmaster-quota-reset-history.md`.
+    Banked rate-limit resets are a separate P2 inventory, not a quota window or credit:
+    different expirations remain separate lots, one bounded due queue drives truthful
+    reminders, and confirmed consumption links to the quota transition. Automatic
+    activation defaults off and exists only behind an official idempotent/status
+    capability, explicit policy, fresh evidence, CAS, durable intent, and reconciliation;
+    browser/session automation is forbidden. The approved plan is
+    `docs/superpowers/plans/2026-07-15-tokenmaster-banked-reset-inventory.md`.
 12. Code Output needs its own bounded Git metrics subsystem. It must not expose a shell
     or retain file contents. It owns repository association, author filtering,
     worktree/submodule/rename/merge semantics, incremental cache, and explicit

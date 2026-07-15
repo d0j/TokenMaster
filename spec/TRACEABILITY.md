@@ -14,6 +14,7 @@ A design or plan is not implementation evidence.
 | TM-FUNC-007 | implemented | accounting lineage/classifier, scalable replay archive, P0-E composition, and P1-A retention | real JSONL baseline/append/restart/replay/quality/atomic-replacement/truncation-retention/failure contracts pass; live scheduling remains TM-FUNC-008/P1 |
 | TM-FUNC-008 | partial | built-in provider/neutral drafts plus constant-state engine coordinator; adapter/archive ports and plugin host pending | provider/Codex/accounting contracts plus P1-C.1 coordinator burst/deadline/cancellation/overflow contracts |
 | TM-FUNC-009 | planned | immutable provider quota epochs and weekly full-reset transitions | P2 quota reset plan; scheduled/early/repeated/reset+allowance/restart/UI/API fixtures pending |
+| TM-FUNC-010 | planned | banked reset lots, expiry reminders, activation intents/receipts | P2 banked reset plan; inventory/reminder/reconciliation/UI/security fixtures pending |
 | TM-UI-001 | planned | complete Slint board and supporting views | granular parity matrix and P4 accessibility/UI tests |
 | TM-UI-002 | partial | `crates/probe-app` presentation generations | presentation/skin contracts; archive-independent product snapshots pending |
 | TM-PERF-001 | partial | parser, reader, domain, store bounds, P0-E composition, and P1-C.1 one-active/one-follow-up coordinator | 300-file/300-event, 256-batch/page, reopen, and 10,000-hint constant-state contracts pass; future adapter/query/plugin bounds pending |
@@ -28,12 +29,15 @@ A design or plan is not implementation evidence.
 | TM-DATA-005 | implemented | `crates/store/src/usage` | strict schema v5, exact v1/v2/v3/v4 migration, provider-qualified scan sets, pragmas, keyset paging, ingest contracts |
 | TM-DATA-006 | partial | reader/parser/store limits | line/resume/batch/page bounds; full UI/query/plugin limits pending |
 | TM-DATA-007 | implemented | replay facts/classifier in a private overlay plus schema-v4 self-contained canonical projection with deterministic selection/retention | v1/v2/v3-to-v4 migration plus replay/append/restart/300-file/atomic-replacement/truncation truth-table/failure contracts pass |
+| TM-DATA-008 | planned | immutable quota samples, epochs, reset and allowance transitions | P2 quota reset history schema/detection/retention contracts pending |
+| TM-DATA-009 | planned | typed provider benefit inventory, reminder delivery, activation intent/receipt projection | P2 banked reset schema/expiry/dedup/CAS/retention contracts pending |
 | TM-SEC-001 | partial | local-only product and no listener today | future quota HTTPS opt-in and MCP stdio security tests pending |
 | TM-SEC-002 | partial | current JSONL/store boundaries validate types and sizes | future config/CLI/MCP/plugin boundary suites pending |
 | TM-SEC-003 | implemented | provider/Codex/store errors and value types | serialized/debug privacy and path-redaction contracts |
 | TM-SEC-004 | partial | transactional scoped scan and replay authority, bounded reference-safe pruning, CAS/preparation, immutable legacy, exact paged seal, explicit carry-forward, atomic rollback, and exact-epoch discard | P1-B proves complete-only presence, exact binding, zero-source retention, 32/64 pruning bounds, running/reference preservation, and fault rollback; live runtime remains |
 | TM-SEC-005 | partial | M0 skins are declarative application data | external skin package schema/validation not implemented |
 | TM-SEC-006 | planned | built-in Codex exists; isolated plugin host deferred | provider plugin design and future 1.1 conformance/security gates |
+| TM-SEC-007 | planned | host-owned banked reset activation capability and policy boundary | no-scrape/no-authority-escalation/idempotency/ambiguous-outcome security gates pending |
 
 The approved audit resolutions and delivery order are in
 `docs/AUDIT_AND_MASTER_PLAN.md`. P0-A/P0-B and P0-C have completed executable plans.

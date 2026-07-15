@@ -598,3 +598,49 @@ scale test. Clean-root returns `TM-CLEAN-PASS`; formatting and strict Clippy pas
 This completes P1-C Task 1 only. Bounded adapter/archive/clock/writer-lease ports,
 one-shot orchestration, worker shell, Codex integration, and the OS lease remain. No
 M0 acceptance, interactive product result, package, signing, or release is claimed.
+
+## 2026-07-15 — banked reset expiry and activation architecture approved
+
+Separated provider-granted banked rate-limit resets from automatic quota epochs,
+credits, and temporary usage. The P2 plan keeps different expirations as different
+typed lots, preserves immutable award/quantity/activation/expiry/revocation change
+points, links confirmed consumption to `manual_or_banked_reset` quota transitions,
+and never invents provider capacity from local token usage.
+
+Expiry safety uses configurable bounded lead times, recommended at 7 days, 24 hours,
+and 1 hour, one durable indexed due queue, one nearest-due runtime timer, persistent
+delivery deduplication, bounded snooze, quiet hours, and explicit in-app/tray/OS
+notification coverage. Restart, sleep/hibernation, clock/time-zone change, date-only
+expiry, and multiple-account behavior are acceptance fixtures rather than implicit
+platform assumptions.
+
+Activation has four modes: off, remind-only, confirm-each, and automatic policy.
+Automatic policy defaults off and is impossible for manual data, external plugins,
+or read-only CLI/MCP/LLM access. It requires an official host-owned idempotent/status
+capability, explicit versioned scope policy, fresh high-confidence inventory/quota,
+known effect and adequate expiry precision, CAS, durable intent before mutation, one
+in-flight action, and bounded post-action reconciliation. Ambiguous results never
+blindly retry or become false success. Browser scraping, synthetic clicks, cookie/
+session reuse, private endpoint replay, and raw provider payload retention are
+forbidden.
+
+The contracts, product architecture, provider-plugin ABI, feature matrix, roadmap,
+current state, handoff, audit, changelog, and traceability now point to the approved
+plan. This is design-only P2 scope; no current account discovery, reminder delivery,
+or activation implementation is claimed. P1-C.2 remains the immediate code gate.
+
+Verification:
+
+```powershell
+pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
+cargo +1.97.0 fmt --all -- --check
+$env:RUSTFLAGS = '-Dwarnings'; cargo +1.97.0 clippy --workspace --all-targets --locked
+cargo +1.97.0 test --workspace --locked
+git diff --check
+```
+
+The clean-root audit returned `TM-CLEAN-PASS`; formatting, strict workspace Clippy,
+and the full locked workspace passed. The workspace retained exactly one explicitly
+ignored one-million-row M0 scale gate. Requirement/traceability and ADR consistency
+checks found 33 traced specification/security/data IDs and 16 unique ADR headings.
+No M0 acceptance, interactive product result, package, signing, or release is claimed.

@@ -28,6 +28,10 @@ failure discard without changing production dependency direction. P1-C.1 now add
 constant-state provider-neutral refresh coordinator. The immediate next task is P1-C.2
 bounded adapter/archive/clock/writer-lease ports under
 `docs/superpowers/plans/2026-07-15-tokenmaster-p1-c-engine-core.md`.
+P2 now also has an approved separate banked-reset inventory/expiry/reminder/activation
+design in `docs/superpowers/plans/2026-07-15-tokenmaster-banked-reset-inventory.md`.
+It does not change the immediate P1-C.2 gate and no current provider discovery,
+notification delivery, or activation capability is claimed.
 P1-A is complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p1-retained-projection.md`: strict
 schema v4, exact v1/v2/v3 migration, and atomic retained projection now handle

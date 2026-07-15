@@ -135,3 +135,19 @@ The engine coordinator stores no provider ID, source ID, path, descriptor, paylo
 request history. One active cancellation token uses an atomic flag; active and pending
 deadlines use caller-supplied monotonic ticks, never wall clock. Stale request IDs fail
 without cancelling or completing newer work, and ID exhaustion cannot wrap.
+
+## TM-SEC-007 — Benefit activation authority
+
+Banked-reset inventory read, official activation link, idempotent activation,
+activation status, and provider lot selection are separate narrow capabilities.
+Inventory read or generic allowlisted HTTPS MUST NOT imply mutation. Manual inventory,
+browser page state, provider-supplied UI, CLI/MCP/LLM access, and external plugins MUST
+NOT authorize automatic activation.
+
+Automatic activation defaults off and requires explicit scoped local policy, fresh
+high-confidence inventory and quota evidence, known expiry/effect, compare-and-swap
+admission, a durable pre-action intent, one in-flight action per scope, official
+idempotency/status semantics, and bounded reconciliation. Ambiguous outcomes MUST NOT
+be retried blindly or reported as success. Browser scraping, synthetic clicks, session
+cookies, private endpoint replay, raw response storage, and secret-bearing diagnostics
+are forbidden.

@@ -47,6 +47,17 @@ scheduled/early/unknown semantics. Repeated resets MUST create distinct transiti
 instead of overwriting history. Unavailable absolute limits MUST remain unavailable;
 local token totals MUST NOT be presented as provider quota capacity.
 
+### TM-FUNC-010 — Banked reset inventory and expiry safety
+
+Provider-granted banked rate-limit resets MUST be represented separately from normal
+quota resets, credits, and temporary usage. Separate expirations MUST remain separate
+lots with explicit precision, source, freshness, and state. TokenMaster MUST support
+bounded configurable reminders, truthful notification coverage, and linked activation
+receipts. Automatic activation MUST default off and MUST be unavailable without an
+official narrow idempotent provider capability, fresh high-confidence evidence,
+explicit local policy, compare-and-swap admission, durable intent, and post-action
+reconciliation. Manual inventory and read-only automation MUST NOT authorize it.
+
 ### TM-FUNC-005 — Native interaction
 
 The product MUST provide single-instance tray behavior, dashboard/compact access,

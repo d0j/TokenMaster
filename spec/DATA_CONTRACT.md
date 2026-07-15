@@ -144,6 +144,22 @@ transitions and may accompany a reset. Transition identity is deterministic so
 restart/retry cannot duplicate it. Poll samples, epochs, transitions, and aggregates
 have explicit per-window retention/page bounds.
 
+## TM-DATA-009 — Banked reset inventory and activation receipts
+
+A provider benefit lot is immutable evidence scoped by provider, account/workspace,
+benefit kind, target window, identity, observation revision, quantity, typed expiry,
+state, source, freshness, and confidence. Banked rate-limit resets, credits, temporary
+usage, and unknown benefits are distinct kinds. Different expirations remain separate;
+date-only and timezone-unknown expirations are never silently promoted to exact UTC.
+
+Current inventory is a bounded projection over immutable change points. Reminder
+delivery is deduplicated by lot revision, threshold, and channel. An activation writes
+a deterministic intent before external mutation and a normalized receipt afterward.
+Unresolved or ambiguous intents survive retention. A confirmed receipt may reference
+one `manual_or_banked_reset` quota transition, but neither inventory nor local usage
+may invent provider capacity. Current lots, changes, reminders, intents, receipts,
+pages, and maintenance work have explicit per-scope bounds.
+
 Only explicit provider ancestry identifies a parent. A strong signature covers the
 normalized model, emitted delta, and provider cumulative snapshot. A weak signature
 covers model and delta only and cannot suppress a pre-divergence event by itself.

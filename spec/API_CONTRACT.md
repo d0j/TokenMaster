@@ -48,12 +48,27 @@ CLI and MCP use the same fields and stable transition sequence so automation can
 idempotently. Unavailable provider capacity remains `null`/unavailable, not zero or an
 estimate derived from local token usage.
 
+Benefit inventory snapshots expose bounded typed lots separately from quota windows:
+benefit kind, quantity, target window, expiration value and precision, state, source,
+freshness, confidence, activation capability, reminder coverage, and nearest due time.
+Bounded transition and activation-receipt pages use stable sequences. An identical
+schema serves UI, CLI, and MCP reads; manual facts are explicitly marked and never
+become official evidence.
+
+The 1.0 CLI/MCP boundary is read-only for benefit inventory and pure policy evaluation.
+Future activation is a separate host-owned mutation capability, not arbitrary HTTP or
+browser control. It requires a strict provider/account/window scope, local consent,
+expected inventory/policy revisions, deterministic idempotency key, durable intent,
+and a reconciled receipt. No plugin or LLM may infer mutation authority from inventory
+read access.
+
 ## Provider plugin ABI
 
 The future external-provider ABI is `tokenmaster:provider@1` expressed in WIT and
 executed only by an isolated `tokenmaster-plugin-host`. A provider component may expose
 bounded metadata, health, discovery, scan-page, and quota-page operations. It returns
-provider-neutral observation drafts and opaque checkpoints, never canonical events,
+provider-neutral observation drafts, read-only benefit lots, and opaque checkpoints,
+never canonical events,
 fingerprints, replay dispositions, SQL, UI components, commands, or MCP tools.
 
 Plugins receive no ambient WASI filesystem, network, environment, subprocess, or

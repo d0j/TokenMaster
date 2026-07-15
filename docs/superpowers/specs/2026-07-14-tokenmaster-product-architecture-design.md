@@ -298,6 +298,13 @@ authorization to proceed, and that no prompt/transcript/credential data is avail
 - Optional provider/profile filters are enumerated from capabilities.
 - Read-only, closed-world.
 
+`tokenmaster_get_benefits`
+
+- Returns bounded typed benefit lots, nearest expirations, precision, freshness,
+  notification coverage, and stable transition/receipt sequences.
+- Keeps banked resets, credits, temporary usage, and unknown benefits distinct.
+- Read-only, closed-world; it does not activate or reserve a benefit.
+
 `tokenmaster_get_usage_summary`
 
 - Returns today, day, week, month, or bounded custom-range usage and cost.
@@ -547,6 +554,34 @@ task complexity, model, and execution surface, with reset options exposed throug
 [banked rate-limit resets](https://help.openai.com/en/articles/20001271) are also
 distinct from credits. Therefore TokenMaster never hard-codes a five-hour or weekly
 capacity and never treats local token totals as the provider allowance.
+
+### 8.2 Banked reset inventory and expiry safety
+
+Banked rate-limit resets are a separate provider-benefit inventory, not another quota
+bar. Different expiration dates remain separate lots with typed expiry precision,
+quantity, target quota window, source, freshness, confidence, and lifecycle state.
+Awards, quantity changes, activation, expiry, revocation, and correction are immutable
+change points. Consuming a lot may link to a `manual_or_banked_reset` quota transition,
+but an automatic weekly reset does not imply consumption and a count decrease alone
+does not prove a quota reset.
+
+The quota board shows the total available count, nearest expiration, next lot,
+reminder coverage, and source freshness. A FEFO-sorted inventory drawer exposes all
+lots and their activation availability without confusing resets with credits or
+temporary usage. Recommended configurable reminders are 7 days, 24 hours, and 1 hour
+before the conservative expiration boundary. One durable due queue and one nearest-due
+runtime timer cover all lots; restart, sleep/hibernation, clock changes, quiet hours,
+snooze, delivery deduplication, and truthful offline coverage are explicit contracts.
+
+Activation defaults to reminders only. Assisted activation may open an exact official
+provider surface. Automatic activation is available only through a narrow official
+idempotent/status connector capability and additionally requires explicit versioned
+policy, fresh high-confidence inventory and quota evidence, a known effect, CAS,
+durable pre-action intent, one in-flight action per scope, and bounded reconciliation.
+Browser scraping, synthetic clicks, cookie/session reuse, private endpoint replay, and
+generic plugin/LLM mutation authority are forbidden. The full P2 design and fixture
+matrix are in
+`docs/superpowers/plans/2026-07-15-tokenmaster-banked-reset-inventory.md`.
 
 ## 9. Modular presentation system
 

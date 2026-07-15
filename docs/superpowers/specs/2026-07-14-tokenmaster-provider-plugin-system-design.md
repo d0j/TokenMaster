@@ -165,7 +165,7 @@ for future sources.
 ## 5. Component API
 
 The first stable WIT package is `tokenmaster:provider@1.0.0`. Its provider world
-exports five bounded operations:
+exports six bounded operations:
 
 - `metadata()` returns plugin/provider identity, display label, provider capabilities,
   declared permission classes, and checkpoint schema version.
@@ -176,6 +176,9 @@ exports five bounded operations:
   completion state, and bounded diagnostic counters.
 - `quota(request)` returns at most 32 provider-defined quota windows with observation
   time, reset semantics, freshness evidence, and availability reasons.
+- `benefits(request)` returns at most 64 read-only typed benefit lots with quantity,
+  target window, expiry precision, state, freshness evidence, and availability reason.
+  It cannot activate, reserve, or mutate a provider benefit.
 
 Every WIT list/string/byte payload has a corresponding host-side byte/count bound.
 Continuation and checkpoint tokens are opaque byte arrays capped at 32 KiB. Unknown
@@ -283,8 +286,8 @@ history unless the user separately requests bounded data deletion.
   attribution are unambiguous.
 - At most two external plugin hosts execute concurrently; additional work remains in a
   bounded engine queue.
-- A host starts only for validation, discovery, scan, or quota work and exits after the
-  bounded request session or 60 seconds idle.
+- A host starts only for validation, discovery, scan, quota, or benefit-inventory work
+  and exits after the bounded request session or 60 seconds idle.
 - The component cache is content-addressed by component hash, Wasmtime version,
   target, and CPU features; it has a bounded disk LRU and is never part of plugin trust.
 - Guest linear memory defaults to 32 MiB and cannot exceed 64 MiB without an explicit
@@ -297,8 +300,14 @@ history unless the user separately requests bounded data deletion.
 - Wasmtime store limits cap memories, tables, instances, stack, and linear growth.
   Epoch interruption plus an outer host timeout stops runaway guest execution;
   blocking host calls use separately timed asynchronous operations.
-- Results are capped at 256 observations, 32 quota windows, 1 MiB per child-process
-  frame, and the existing provider/profile/source/string limits.
+- Results are capped at 256 observations, 32 quota windows, 64 benefit lots, 1 MiB per
+  child-process frame, and the existing provider/profile/source/string limits.
+
+External components never receive benefit-activation imports. Inventory read,
+allowlisted HTTPS, metadata, or a declared benefit lot cannot imply mutation. A future
+official activation implementation is a separate host-owned built-in connector
+capability with the policy, idempotency, intent, and reconciliation gates defined in
+`docs/superpowers/plans/2026-07-15-tokenmaster-banked-reset-inventory.md`.
 
 The exact pinned Wasmtime/toolchain versions live in Cargo.lock and generated SDK
 metadata. Upgrades require conformance, adversarial, startup, memory, and compatibility

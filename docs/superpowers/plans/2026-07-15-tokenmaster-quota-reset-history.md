@@ -11,6 +11,13 @@ and see exactly what TokenMaster knew immediately before and after it, how much 
 weekly allowance had been consumed, whether the advertised next-reset time changed,
 and whether the conclusion is explicit or inferred.
 
+Provider-granted banked reset inventory is a separate lifecycle. Its quantities and
+expirations are defined in
+`docs/superpowers/plans/2026-07-15-tokenmaster-banked-reset-inventory.md`. A confirmed
+consumption can link to this plan's `manual_or_banked_reset` transition, but an ordinary
+weekly reset must not consume inventory implicitly and an inventory decrease alone is
+not sufficient reset evidence.
+
 When OpenAI does not expose an absolute allowance, the honest exact answer is a ratio:
 for example, `84% used / 16% remaining -> 0% used / 100% remaining`. TokenMaster must
 not convert local token totals, task counts, or message counts into a fictitious Codex

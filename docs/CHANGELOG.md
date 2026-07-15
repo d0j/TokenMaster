@@ -40,6 +40,9 @@ All notable changes are recorded here.
 - Approved a provider-neutral weekly quota reset history: immutable pre/post epochs,
   scheduled/early/repeated reset transitions, allowance-change separation, bounded
   retention, and shared UI/CLI/MCP semantics for P2.
+- Approved separate banked reset inventory and expiry safety: independently expiring
+  lots, bounded deduplicated reminders, truthful notification coverage, assisted
+  activation, and official-capability-only crash-safe automatic policy for P2.
 
 ### Fixed
 
