@@ -1,6 +1,7 @@
 use std::{fmt, sync::Arc};
 
 use tokenmaster_domain::{ModelKey, TokenUsage};
+use tokenmaster_store::EventCursor;
 
 use crate::{QueryError, QueryErrorCode, QueryScope};
 
@@ -26,9 +27,7 @@ impl PageSize {
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct ActivityCursor {
-    timestamp_seconds: i64,
-    timestamp_nanos: u32,
-    fingerprint: [u8; 32],
+    inner: EventCursor,
 }
 
 impl ActivityCursor {
@@ -37,14 +36,17 @@ impl ActivityCursor {
         timestamp_nanos: u32,
         fingerprint: [u8; 32],
     ) -> Result<Self, QueryError> {
-        if timestamp_nanos >= 1_000_000_000 {
-            return Err(QueryError::new(QueryErrorCode::InvalidValue));
-        }
-        Ok(Self {
-            timestamp_seconds,
-            timestamp_nanos,
-            fingerprint,
-        })
+        EventCursor::new(timestamp_seconds, timestamp_nanos, fingerprint)
+            .map(|inner| Self { inner })
+            .map_err(|_| QueryError::new(QueryErrorCode::InvalidValue))
+    }
+
+    pub(crate) const fn from_store(inner: EventCursor) -> Self {
+        Self { inner }
+    }
+
+    pub(crate) const fn store_cursor(self) -> EventCursor {
+        self.inner
     }
 }
 
@@ -52,8 +54,8 @@ impl fmt::Debug for ActivityCursor {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ActivityCursor")
-            .field("timestamp_seconds", &self.timestamp_seconds)
-            .field("timestamp_nanos", &self.timestamp_nanos)
+            .field("timestamp_seconds", &self.inner.timestamp_seconds())
+            .field("timestamp_nanos", &self.inner.timestamp_nanos())
             .field("fingerprint", &Redacted)
             .finish()
     }
@@ -73,26 +75,43 @@ pub struct ActivityItemParts {
 pub struct ActivityItem {
     scope: QueryScope,
     event_id: Box<str>,
-    timestamp_seconds: i64,
-    timestamp_nanos: u32,
     model: ModelKey,
     usage: TokenUsage,
-    fingerprint: [u8; 32],
+    cursor: ActivityCursor,
 }
 
 impl ActivityItem {
     pub fn new(parts: ActivityItemParts) -> Result<Self, QueryError> {
-        if !valid_event_id(&parts.event_id) || parts.timestamp_nanos >= 1_000_000_000 {
+        let cursor = ActivityCursor::new(
+            parts.timestamp_seconds,
+            parts.timestamp_nanos,
+            parts.fingerprint,
+        )?;
+        Self::new_with_cursor(
+            parts.scope,
+            parts.event_id,
+            parts.model,
+            parts.usage,
+            cursor,
+        )
+    }
+
+    pub(crate) fn new_with_cursor(
+        scope: QueryScope,
+        event_id: String,
+        model: ModelKey,
+        usage: TokenUsage,
+        cursor: ActivityCursor,
+    ) -> Result<Self, QueryError> {
+        if !valid_event_id(&event_id) {
             return Err(QueryError::new(QueryErrorCode::InvalidValue));
         }
         Ok(Self {
-            scope: parts.scope,
-            event_id: parts.event_id.into_boxed_str(),
-            timestamp_seconds: parts.timestamp_seconds,
-            timestamp_nanos: parts.timestamp_nanos,
-            model: parts.model,
-            usage: parts.usage,
-            fingerprint: parts.fingerprint,
+            scope,
+            event_id: event_id.into_boxed_str(),
+            model,
+            usage,
+            cursor,
         })
     }
 
@@ -108,12 +127,12 @@ impl ActivityItem {
 
     #[must_use]
     pub const fn timestamp_seconds(&self) -> i64 {
-        self.timestamp_seconds
+        self.cursor.inner.timestamp_seconds()
     }
 
     #[must_use]
     pub const fn timestamp_nanos(&self) -> u32 {
-        self.timestamp_nanos
+        self.cursor.inner.timestamp_nanos()
     }
 
     #[must_use]
@@ -128,11 +147,7 @@ impl ActivityItem {
 
     #[must_use]
     pub const fn cursor(&self) -> ActivityCursor {
-        ActivityCursor {
-            timestamp_seconds: self.timestamp_seconds,
-            timestamp_nanos: self.timestamp_nanos,
-            fingerprint: self.fingerprint,
-        }
+        self.cursor
     }
 }
 
@@ -142,8 +157,8 @@ impl fmt::Debug for ActivityItem {
             .debug_struct("ActivityItem")
             .field("scope", &self.scope)
             .field("event_id", &self.event_id)
-            .field("timestamp_seconds", &self.timestamp_seconds)
-            .field("timestamp_nanos", &self.timestamp_nanos)
+            .field("timestamp_seconds", &self.timestamp_seconds())
+            .field("timestamp_nanos", &self.timestamp_nanos())
             .field("model", &self.model)
             .field("usage", &self.usage)
             .field("fingerprint", &Redacted)

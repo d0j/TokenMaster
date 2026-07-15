@@ -279,9 +279,9 @@ lease-first startup recovery and live lifecycle assembly. P1-E.1 now exposes the
 immutable bounded engine publication without sharing the writer connection with UI,
 CLI, or MCP readers. P1-E.2 closes the race/recovery/restart matrix and makes degraded
 live input fail closed. P1-E.3 completes the isolated Windows power binding and
-deterministic resource evidence. The next implementation gate is P2 immutable indexed
-query snapshots; M0 interactive hibernation and uninterrupted-soak receipts remain
-separate frozen-candidate acceptance work.
+deterministic resource evidence. P2-A now completes the first immutable indexed query
+snapshot. M0 interactive hibernation and uninterrupted-soak receipts remain separate
+frozen-candidate acceptance work.
 P2-A is now executable under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-query-foundation.md`. Its approved
 design separates publication generation from dataset identity, uses a dedicated
@@ -294,8 +294,15 @@ separate query-only SQLite store and exact transaction capture, is also complete
 `UsageReadStore` opens schema v6 read-only without migration, enforces defensive
 query-only policy with a 4 MiB cache, captures publication/scan truth and current or
 legacy keyset pages in one deferred transaction, rejects stale continuation identity,
-uses indexed `pageSize + 1`, and clears its deadline handler on every result. Task 3,
-`QueryService` composition and freshness/quality mapping, is next.
+uses indexed `pageSize + 1`, and clears its deadline handler on every result.
+`QueryService` now completes Tasks 3-5: successful captures receive strictly ordered
+process-local generations; freshness uses the 20-minute/2-hour policy; partial,
+recovery, legacy, clock-discontinuity, and obsolete accounting-version states remain
+truthful; no-change publication preserves cursor identity; and one consumer slot
+retains no history. Focused contracts prove a 100,000-event cold first page in 35.65 ms,
+a warm cursor page in 1.10 ms, and a 256-cycle Windows open/query/drop resource plateau.
+The next implementation gate is P2-B schema-v7 transactional materialized aggregates,
+not view-time grouping of the full event table.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 

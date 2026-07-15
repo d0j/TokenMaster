@@ -16,10 +16,10 @@ A design or plan is not implementation evidence.
 | TM-FUNC-009 | planned | immutable provider quota epochs and weekly full-reset transitions | P2 quota reset plan; scheduled/early/repeated/reset+allowance/restart/UI/API fixtures pending |
 | TM-FUNC-010 | planned | banked reset lots, selectable default/custom expiry reminders, activation intents/receipts | P2 banked reset plan; inventory/profile/reminder/reconciliation/UI/security fixtures pending |
 | TM-UI-001 | planned | complete Slint board and supporting views | granular parity ledger and P3 accessibility/UI tests |
-| TM-UI-002 | partial | `crates/probe-app` presentation generations plus immutable runtime engine snapshot | strictly newer consumer predicate, exact archive identity/data-through, equal/older rejection; product query/presentation snapshots pending |
-| TM-PERF-001 | partial | bounded parser/reader/store/engine plus live runtime | unchanged payload bytes=0; exact tail; 300-event batches; 10,000-hint aggregate/one follow-up; one <=256-byte publication state across 10,000 candidates; watcher/live/power 4,096-cycle resource baselines; query/UI/plugin evidence pending |
+| TM-UI-002 | partial | `crates/probe-app`, immutable runtime publication, and P2-A query snapshots | strictly newer consumer predicate, exact archive identity/data-through, equal/older rejection, no-change cursor continuity, and one-retained-envelope contract pass; product presentation snapshots pending |
+| TM-PERF-001 | partial | bounded parser/reader/store/engine plus live runtime and query facade | unchanged payload bytes=0; exact tail; 300-event batches; 10,000-hint aggregate/one follow-up; one retained result across 10,000 candidates; watcher/live/power baselines and 256-cycle query resource plateau pass; UI/plugin evidence pending |
 | TM-PERF-002 | open evidence | software renderer and M0 resource gates | uninterrupted soak and interactive receipts remain absent |
-| TM-PERF-003 | partial | immutable engine publication plus P2-A bounded values and exact query-only keyset store | checked identity/envelope/page, concurrent-commit transaction, composite-index/no-offset, lookahead, deadline cleanup and privacy pass; facade/performance/resource contracts pending |
+| TM-PERF-003 | partial | immutable engine publication plus complete P2-A activity query foundation | checked identity/envelope/page, concurrent-commit transaction, composite-index/no-offset, lookahead, deadline cleanup, truthful version quality, privacy, 100K latency (35.65 ms cold first page; 1.10 ms warm cursor), and 256-cycle resource contracts pass; P2-B million-row materialized aggregates and P3 UI evidence pending |
 | TM-REL-001 | partial | M0 scripts and receipt schemas | identity checks exist; final product packaging evidence pending |
 | TM-REL-002 | open evidence | `M0_ACCEPTANCE.md` | interactive Windows/DPI/accessibility and uninterrupted soak receipts absent |
 | TM-REL-003 | planned | P6 explicit MSVC signed portable package and supply-chain gates | GNU/MSVC comparison, notices/SBOM, advisory/source/license/secret/action/attestation audits, deterministic package and clean-room launch pending |
@@ -81,7 +81,8 @@ process-restart, malformed-truncation `recovery_pending`, canonical-retention, a
 successful-repair publication contracts. P1-E.3 adds real Windows callback
 registration, capacity-one event reduction, resume-without-suspend reconciliation,
 duplicate/shutdown behavior, and 4,096-cycle private-memory/handle/thread/USER/GDI
-resource bounds. P1 is implemented; M0 interactive/soak and P2 query evidence remain.
+resource bounds. P1 and P2-A are implemented; M0 interactive/soak and P2-B product-data
+evidence remain.
 Tasks 3+ in the older replay plan are historical and superseded.
 
 The clean-root invariant is implemented by `scripts/audit-clean-root.ps1` and its

@@ -60,15 +60,17 @@ restart, malformed-truncation recovery, canonical-retention, and successful-repa
 publication behavior. P1-E.3 completes the Windows 8+ static capacity-one power
 callback, narrow runtime command, forced resume reconciliation, and 4,096-cycle
 resource proof without helper thread/window or callback heap state. P1 is implemented.
-P2-A Task 1 adds the new `tokenmaster-query` crate with checked two-axis identity,
+P2-A adds the new `tokenmaster-query` crate with checked two-axis identity,
 immutable bounded headers/envelopes/pages, stable path-free errors, injected clock
-sampling, and redacted cursors. Its six focused contracts and strict package clippy
-pass. Task 2 is now complete: `UsageReadStore` is read-only/no-migration, query-only/
+sampling, and redacted cursors. `UsageReadStore` is read-only/no-migration, query-only/
 defensive, fixed-cache and no-checkpoint-on-close; one short deferred transaction owns
 exact publication/scan/current-or-legacy keyset capture, stale cursor rejection,
-deadline cancellation/cleanup, and `pageSize + 1`. The immediate next task is P2-A
-Task 3, composing this store into `QueryService` with facade-owned clock, freshness/
-quality mapping, and immutable public envelopes.
+deadline cancellation/cleanup, and `pageSize + 1`. `QueryService` now maps exact
+freshness/quality and accounting-version staleness, preserves cursors across no-change
+publication, rejects changed datasets, and publishes only successful strictly newer
+owned envelopes. The 100K latency and 256-cycle Windows resource contracts pass. P2-A
+is implemented; the immediate next task is P2-B schema-v7 transactional materialized
+aggregates. Do not replace them with view-time full scans.
 The 2026-07-16 closure review also freezes the remaining plan ambiguities: P3 is the
 complete UI, P4 presentation/localization, P5 read-only automation, and P6 the
 canonical MSVC signed portable release. It selects the Slint attribution route,

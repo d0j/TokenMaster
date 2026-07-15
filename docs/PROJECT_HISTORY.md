@@ -1171,3 +1171,32 @@ failure, revision zero compatibility, legacy ownership after store drop, stale i
 concurrent-commit snapshot isolation, expected index/no offset/temp sort, deterministic
 deadline interruption and handler cleanup. Store and query strict gates pass. Query
 service/freshness mapping, P2-B aggregates, UI, automation and release remain unclaimed.
+
+## 2026-07-16 — P2-A immutable activity query completed
+
+Composed the exact read store into the synchronous `QueryService`. Successful captures
+receive checked process-local generations; failed stale continuations consume no
+generation. The facade maps empty/current/partial/recovery/legacy and clock rollback
+without fabricated values, applies the documented 20-minute/2-hour usage freshness
+policy, and marks current revisions built with obsolete accounting versions `unknown`
+plus `accounting_version_stale`. A publication-only generation advance retains dataset
+identity and cursor validity; a changed dataset fails with stable `stale_snapshot`.
+
+Added a one-envelope consumer slot that rejects older candidates, coalesces equal
+generations, and retained exactly one payload across 10,000 replacements. Owned result
+and privacy contracts survive service drop and exclude archive paths, source IDs, raw
+fingerprints, SQLite text, prompts, responses, commands, and reasoning content from
+public Debug/error surfaces. The exact composite-index plan remains offset/count-free.
+
+A generated 100,000-event schema-v6 archive measured 35.65 ms for a new read connection
+plus first 256-row page and 1.10 ms for the warm cursor page, below the 1 s/250 ms gates.
+A 256-cycle Windows open/query/drop test returned handles, threads, USER/GDI objects,
+and private memory to the strict plateau. Focused store/query tests and strict Clippy
+pass. The first full workspace gate exposed one missing store-to-runtime mapping for
+the new query deadline code; a focused contract now preserves it as
+`DeadlineExceeded`, and the repeated full gate passes clean-root, formatting, strict
+workspace Clippy, normal locked workspace tests, doctests, and diff-check. The one
+pre-existing explicitly ignored million-row M0 scale test remains outside that normal
+gate. P2-A does not claim P2-B aggregates/pricing/quota, P3 UI, P5 automation, M0
+acceptance, packaging, signing, or release; P2-B transactional materialized aggregates
+are next.

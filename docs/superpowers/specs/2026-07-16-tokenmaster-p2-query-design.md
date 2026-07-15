@@ -1,6 +1,6 @@
 # TokenMaster P2 Query Foundation Design
 
-Status: approved for implementation.
+Status: implemented and verified.
 Date: 2026-07-16.
 
 ## Goal
@@ -104,10 +104,11 @@ defensive mode, query-planner stability and no-checkpoint-on-close, then validat
 exact bundled SQLite version and schema version without migration. Missing, old, new,
 malformed, or policy-mismatched archives fail with stable codes and are never modified.
 
-Queries install a SQLite progress handler tied to a facade-owned monotonic deadline,
-then clear it on every success/error path. The normal public maximum is two seconds.
-P2 tests use an injected deterministic query clock and operation-budget cancellation in
-addition to elapsed-time bench evidence. The query crate remains synchronous by design:
+The facade owns the bounded duration policy and samples one wall/monotonic clock value;
+the read store enforces that duration with its process-monotonic clock in a SQLite
+progress handler, then clears the handler on every success/error path. The normal public
+maximum is two seconds. P2 tests use an injected deterministic query clock and
+operation-budget cancellation in addition to elapsed-time evidence. The query crate remains synchronous by design:
 P3 owns one bounded desktop query worker, while CLI/MCP call the same facade directly;
 Slint callbacks never execute SQLite.
 
@@ -125,6 +126,10 @@ Slint callbacks never execute SQLite.
 - repeated page/snapshot replacement retains only the caller's current immutable data;
 - public errors and Debug exclude SQLite text, archive path, fingerprints, and inner
   errors.
+
+The current in-process cursor is opaque and fingerprint-redacted. CLI/MCP wire
+serialization is deliberately not part of P2-A; its future versioned schema must not
+emit the canonical fingerprint or accept unbounded cursor text.
 
 ## P2 rail after the foundation
 

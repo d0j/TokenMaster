@@ -219,6 +219,14 @@ dataset identity, scan completion/manifest, and at most 256 events plus one look
 one deferred transaction, then returns only owned data. Continuation without the exact
 dataset identity is invalid.
 
+The capture also reads the current replay revision's stored canonicalizer, fingerprint,
+and replay-signature versions in the same snapshot. A revision with obsolete accounting
+versions remains readable for bounded diagnosis but the query facade MUST mark it
+`unknown` with `accounting_version_stale`; it MUST NOT describe that data as
+authoritative. Query consumers retain at most one immutable result. The P2-A
+100,000-event contract covers a 256-row first/cursor page; million-row dashboards are
+served only by the future transactional materialized aggregates in P2-B.
+
 ## TM-DATA-006 — Bounds
 
 Reader lines are limited to 16 MiB. Resume metadata is capped at 32 KiB. General

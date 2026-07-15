@@ -178,6 +178,16 @@ transaction. Continuation requires its dataset identity. Current and immutable l
 pages use composite keyset seek and at most one lookahead row; progress interruption is
 cleared before the connection can serve another query.
 
+`QueryService` is the only public archive facade in this contour. It allocates a
+strictly increasing process-local snapshot generation only after a successful capture,
+maps complete/partial/recovery/legacy truth explicitly, applies the 20-minute/2-hour
+usage freshness policy, and downgrades a readable current revision with obsolete
+accounting versions to `unknown` plus `accounting_version_stale`. A no-change
+publication may advance publication/freshness while retaining dataset identity and a
+valid cursor. `QuerySnapshotSlot` retains one candidate and rejects older generations;
+P3 wraps the synchronous facade with one bounded worker rather than calling SQLite from
+a Slint callback.
+
 Quota snapshots expose current window epochs and a bounded transition page. Full
 weekly resets include before/after values, maximum pre-reset use, old/new reset times,
 transition kind, evidence source, confidence, and an exact or bounded detection time.

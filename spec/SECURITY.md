@@ -48,6 +48,13 @@ reads, and exposes fixed queries only. Every public error and Debug value is pat
 activity/cursor fingerprints are redacted. Deadline interruption is cleared on every
 success/error path before reuse.
 
+The facade exports fixed request methods only and never arbitrary SQL, filesystem,
+shell, HTTP, plugin, or provider-mutation authority. Public query results omit source
+IDs and private source content. Obsolete accounting versions fail truthful quality
+authority with a stable warning instead of silently blessing old interpretation rules.
+The future CLI/MCP cursor wire format must repeat these bounds and redaction tests; P2-A
+does not claim a serialized cursor schema.
+
 Archive writes use explicit transactions and compare expected generation, identity,
 checkpoint, and proof state. Failed writes roll back completely. Incomplete, cancelled,
 or failed scans MUST NOT authorize destructive source reconciliation.

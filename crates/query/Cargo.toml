@@ -8,3 +8,9 @@ rust-version.workspace = true
 [dependencies]
 thiserror.workspace = true
 tokenmaster-domain = { path = "../domain" }
+tokenmaster-store = { path = "../store" }
+
+[dev-dependencies]
+rusqlite.workspace = true
+tempfile.workspace = true
+windows.workspace = true

@@ -59,8 +59,13 @@ pub(crate) fn provider_port_error(error: &ProviderError) -> PortError {
 }
 
 pub(crate) fn store_port_error(error: &StoreError) -> PortError {
-    let code = match error.code() {
+    PortError::new(store_port_error_code(error.code()))
+}
+
+const fn store_port_error_code(code: StoreErrorCode) -> PortErrorCode {
+    match code {
         StoreErrorCode::CapacityExceeded => PortErrorCode::CapacityExceeded,
+        StoreErrorCode::DeadlineExceeded => PortErrorCode::DeadlineExceeded,
         StoreErrorCode::RebuildRequired => PortErrorCode::RebuildRequired,
         StoreErrorCode::StaleCheckpoint
         | StoreErrorCode::StaleRevision
@@ -79,6 +84,18 @@ pub(crate) fn store_port_error(error: &StoreError) -> PortError {
         | StoreErrorCode::IncompleteManifest
         | StoreErrorCode::UnsealedRevision
         | StoreErrorCode::ArchiveModeMismatch => PortErrorCode::InvalidData,
-    };
-    PortError::new(code)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn query_deadline_remains_a_deadline_across_the_store_port() {
+        assert_eq!(
+            store_port_error_code(StoreErrorCode::DeadlineExceeded),
+            PortErrorCode::DeadlineExceeded
+        );
+    }
 }

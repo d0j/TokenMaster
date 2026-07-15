@@ -111,9 +111,17 @@ All notable changes are recorded here.
   defensive policy, fixed 4 MiB cache, exact short read transactions, current/legacy
   composite-keyset pages, `pageSize + 1` lookahead, stale dataset rejection, and
   deadline interruption with guaranteed handler cleanup.
+- Completed P2-A `QueryService`: exact freshness/quality mapping, explicit stale-
+  accounting downgrade, no-change cursor continuity, changed-dataset rejection,
+  successful-only snapshot generations, and one-result older/equal/newer ordering.
+- Added P2-A evidence for a 100,000-event activity archive (35.65 ms new connection plus
+  first page; 1.10 ms warm cursor page), 10,000 candidate replacements with one retained
+  payload, private Debug/error fixtures, and a 256-cycle Windows resource plateau.
 
 ### Fixed
 
+- Preserved query deadline semantics across the store-to-runtime port mapping; the full
+  workspace gate exposed and now covers the previously missing exhaustive error case.
 - M0 verification no longer depends on foreign runtime toolchains.
 - Corrected the stale M0 development decision reference to ADR-006.
 - Removed public canonical/replay constructors from domain and Codex-owned

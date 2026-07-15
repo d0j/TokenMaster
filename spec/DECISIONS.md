@@ -441,6 +441,13 @@ exact internal scan manifest may contain up to 256 scopes and is not copied into
 frontend result. P3 owns one bounded worker around the synchronous facade. UI, CLI and
 MCP never receive a SQLite handle or permission for arbitrary SQL.
 
+`QueryService` allocates process-local generations only after successful captures and
+maps a current revision whose accounting versions differ from the compiled versions to
+`unknown` plus `accounting_version_stale`. The facade owns the two-second duration
+policy; `UsageReadStore` enforces it using a process-monotonic SQLite progress handler.
+P2-A keeps cursors opaque in process; versioned CLI/MCP serialization remains a later
+adapter contract and may not reveal raw fingerprint bytes.
+
 Rationale: sharing the writer couples UI latency to mutation and exposes write/schema
 authority; opening the writable store can migrate; long-lived transactions retain WAL
 history; offset pages degrade and can mix revisions; copying a 256-scope authority set

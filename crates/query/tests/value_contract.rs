@@ -6,7 +6,7 @@ use tokenmaster_query::{
     MAX_QUERY_PAGE_SIZE, MAX_QUERY_SCOPES, MAX_QUERY_WARNINGS, PageSize, PublicationGeneration,
     QUERY_SCHEMA_VERSION, QueryClock, QueryEnvelope, QueryError, QueryErrorCode, QueryFreshness,
     QueryHeader, QueryHeaderParts, QueryQuality, QueryScope, QueryTimeSample, QueryWarningCode,
-    ReplayRevision, SnapshotGeneration,
+    ReplayRevision, SnapshotGeneration, SystemQueryClock,
 };
 
 fn scope(index: usize) -> QueryScope {
@@ -202,6 +202,10 @@ fn stable_codes_do_not_include_inner_or_path_text() {
         QueryWarningCode::ClockDiscontinuity.stable_code(),
         "clock_discontinuity"
     );
+    assert_eq!(
+        QueryWarningCode::AccountingVersionStale.stable_code(),
+        "accounting_version_stale"
+    );
 
     for code in [
         QueryErrorCode::InvalidValue,
@@ -235,4 +239,14 @@ fn facade_clock_is_injected_as_one_exact_sample() {
     let sample = FixedClock.sample().expect("fixed sample");
     assert_eq!(sample.wall_time_ms(), 42);
     assert_eq!(sample.monotonic_ms(), 7);
+}
+
+#[test]
+fn system_clock_is_monotonic_and_debug_private() {
+    let clock = SystemQueryClock::new();
+    let first = clock.sample().expect("first sample");
+    let second = clock.sample().expect("second sample");
+    assert!(first.wall_time_ms() > 0);
+    assert!(second.monotonic_ms() >= first.monotonic_ms());
+    assert_eq!(format!("{clock:?}"), "SystemQueryClock([redacted])");
 }

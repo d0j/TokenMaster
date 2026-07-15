@@ -1,6 +1,6 @@
 # P2-A Immutable Query Foundation Plan
 
-Status: in progress; Task 1 complete.
+Status: complete and verified on 2026-07-16.
 
 ## Goal
 
@@ -57,6 +57,9 @@ RED contracts:
 
 ## Task 3 — Compose `QueryService`
 
+Status: complete on 2026-07-16. Freshness/quality mapping, stale-accounting downgrade,
+cursor continuity, stale-dataset rejection, and owned-result contracts pass.
+
 Files:
 
 - add `crates/query/src/service.rs`;
@@ -74,6 +77,9 @@ RED contracts:
 
 ## Task 4 — Add bounded consumer ordering without a query daemon
 
+Status: complete on 2026-07-16. Older/equal/newer ordering and 10,000-candidate
+constant-retention contracts pass.
+
 Files:
 
 - add `crates/query/src/publication.rs` and focused tests;
@@ -89,17 +95,26 @@ Contracts:
 
 ## Task 5 — Performance, privacy, and resource evidence
 
+Status: complete on 2026-07-16. The 100,000-event developer fixture measured 35.65 ms
+for a new read connection plus first page and 1.10 ms for the warm cursor page. The
+256-cycle Windows open/query/drop resource plateau passed.
+
 - `EXPLAIN QUERY PLAN` proves composite keyset search;
 - 100K fixture latest/cursor page stays bounded and records elapsed evidence;
 - repeated open/query/drop returns handles and private memory to a stable plateau;
-- Debug/error/serialized fixtures contain no archive path, source ID, fingerprint,
-  SQLite text, prompt, response, command, or reasoning;
+- public Debug/error fixtures contain no archive path, source ID, fingerprint, SQLite
+  text, prompt, response, command, or reasoning content; future CLI/MCP serialization
+  must repeat the same gate over its explicit wire schema;
 - normal query deadline remains at most two seconds.
 
 The one-million-row cached dashboard is P2-B materialized-aggregate evidence, not a
 P2-A event-page blocker or permission to full-scan from a frontend.
 
 ## Task 6 — Project truth and full gate
+
+Status: complete on 2026-07-16. Clean-root, formatting, strict workspace Clippy, normal
+locked workspace tests, doctests, and diff-check pass. One pre-existing explicitly
+ignored million-row M0 scale test remains outside the normal gate.
 
 Update `spec/API_CONTRACT.md`, `spec/DATA_CONTRACT.md`, `spec/SECURITY.md`,
 `spec/TRACEABILITY.md`, `spec/DECISIONS.md`, `docs/CURRENT_STATE.md`,

@@ -5235,8 +5235,12 @@ dependencies = [
 name = "tokenmaster-query"
 version = "0.1.0"
 dependencies = [
+ "rusqlite",
+ "tempfile",
  "thiserror 2.0.18",
  "tokenmaster-domain",
+ "tokenmaster-store",
+ "windows",
 ]
 
 [[package]]

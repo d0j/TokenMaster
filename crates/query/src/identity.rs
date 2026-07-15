@@ -142,6 +142,7 @@ pub enum QueryWarningCode {
     Partial,
     RecoveryPending,
     ClockDiscontinuity,
+    AccountingVersionStale,
 }
 
 impl QueryWarningCode {
@@ -152,6 +153,7 @@ impl QueryWarningCode {
             Self::Partial => "partial",
             Self::RecoveryPending => "recovery_pending",
             Self::ClockDiscontinuity => "clock_discontinuity",
+            Self::AccountingVersionStale => "accounting_version_stale",
         }
     }
 }

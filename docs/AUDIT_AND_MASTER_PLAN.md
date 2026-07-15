@@ -226,18 +226,20 @@ P1-E.2 now closes no-change, pause/resume, restart, malformed-truncation recover
 canonical-retention, and successful-repair publication semantics. P1-E.3 adds a static
 capacity-one Windows power callback, idempotent runtime lifecycle
 command, forced resume reconciliation, and 4,096-cycle private-memory/handle/thread/
-USER/GDI bounds. P1 is implemented; the immediate next gate is P2 immutable indexed
-query snapshots. M0 interactive/soak evidence remains separate.
+USER/GDI bounds. P1 is implemented; P2-A now supplies the first immutable indexed
+query snapshot. M0 interactive/soak evidence remains separate.
 P2-A now has an executable approved design in
 `docs/superpowers/specs/2026-07-16-tokenmaster-p2-query-design.md`: publication
 generation is independent from dataset identity, every result is transaction-exact and
 owned, frontends receive no SQLite access, and latest activity uses the existing
 composite keyset index. P2-B will add transactional materialized aggregates instead of
 view-time full scans.
-P2-A Tasks 1-2 now implement the bounded public values and a separate defensive
-read-only/query-only schema-v6 store. Current/legacy activity, exact publication and
-scan truth, stale identity, indexed lookahead, deadline cleanup, and a concurrent-
-commit snapshot contract pass. Task 3 composes `QueryService`; no frontend owns SQLite.
+P2-A now implements the bounded public values, separate defensive read-only/query-only
+schema-v6 store, synchronous `QueryService`, and one-result consumer ordering. Current/
+legacy activity, exact publication and scan truth, stale accounting downgrade, stale
+identity, indexed lookahead, deadline cleanup, concurrent-commit isolation, 100K
+latency, Debug/privacy, 10,000-candidate retention, and 256-cycle Windows resource
+contracts pass. No frontend owns SQLite. P2-B materialized aggregates are the next gate.
 The older replay plan remains historical evidence for
 completed Tasks 1-2, but its Codex-owned Tasks 3+ are superseded and must not be
 executed.

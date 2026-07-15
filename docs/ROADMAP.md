@@ -130,10 +130,14 @@ two-dimensional publication/dataset identity, bounded immutable values, a dedica
 query-only SQLite connection, exact short transactions, keyset paging, and deadline/
 privacy/resource gates. Materialized aggregates remain P2-B and are not replaced by
 view-time full scans.
-P2-A Tasks 1-2 are complete: `tokenmaster-query` owns schema-v1 bounded immutable
-values and checked identity, while `UsageReadStore` supplies isolated defensive
-read-only/query-only exact transaction capture with composite keyset/deadline evidence.
-Task 3 composes the facade; no frontend/database coupling is accepted.
+P2-A is complete: `tokenmaster-query` owns schema-v1 bounded immutable values, checked
+identity, truthful freshness/quality, strict consumer ordering and the synchronous
+facade, while `UsageReadStore` supplies isolated defensive read-only/query-only exact
+transaction capture with composite keyset/deadline evidence. The 100K activity-page
+latency and repeated resource-return contracts pass. P2-B is next: schema-v7
+transactional materialized aggregates with availability counts, bounded rebuild and
+million-row cached-dashboard evidence. No frontend/database coupling or view-time full
+event grouping is accepted.
 
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset
 epochs. The weekly view preserves last-before/first-after state, maximum use before

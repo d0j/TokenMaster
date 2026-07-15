@@ -65,7 +65,7 @@ fn seed_current_archive(path: &Path) {
                revision_id, status, canonicalizer_version, fingerprint_version,
                replay_signature_version, expected_source_count, evidence_epoch,
                sealed, promoted, scan_set_id
-             ) VALUES (0, 'current', 1, 1, 1, 1, 1, 1, 1, 1)",
+             ) VALUES (0, 'current', 1, 2, 1, 1, 1, 1, 1, 1)",
             [],
         )
         .expect("revision");
@@ -331,6 +331,7 @@ fn capture_is_exact_keyset_bounded_and_rejects_stale_dataset() {
     assert_eq!(first.publication().generation(), 4);
     assert_eq!(first.publication().dataset_identity(), identity);
     assert_eq!(first.publication().data_through_ms(), Some(2_000));
+    assert!(first.publication().accounting_versions_current());
     assert_eq!(first.publication().scopes().len(), 1);
     assert_eq!(first.events().len(), 2);
     assert_eq!(first.events()[0].event_id(), "event-2");

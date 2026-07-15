@@ -1603,11 +1603,13 @@ impl EventCursor {
         })
     }
 
-    pub(super) const fn timestamp_seconds(self) -> i64 {
+    #[must_use]
+    pub const fn timestamp_seconds(self) -> i64 {
         self.timestamp_seconds
     }
 
-    pub(super) const fn timestamp_nanos(self) -> u32 {
+    #[must_use]
+    pub const fn timestamp_nanos(self) -> u32 {
         self.timestamp_nanos
     }
 

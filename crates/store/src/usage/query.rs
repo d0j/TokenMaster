@@ -8,7 +8,7 @@ use super::{
     JournalMode, MAX_SCAN_SCOPES, MAX_USAGE_EVENT_PAGE_SIZE,
     migration::validate_v6,
     schema::USAGE_SCHEMA_VERSION,
-    types::{ArchivePublicationQuality, EventCursor, ScanScope},
+    types::{AccountingVersions, ArchivePublicationQuality, EventCursor, ScanScope},
 };
 use crate::{EXPECTED_SQLITE_VERSION, StoreError, StoreErrorCode};
 
@@ -109,6 +109,7 @@ impl UsageActivityQuery {
 pub struct UsageQueryPublication {
     generation: u64,
     dataset_identity: UsageQueryDatasetIdentity,
+    accounting_versions_current: bool,
     data_through_ms: Option<i64>,
     quality: ArchivePublicationQuality,
     scopes: Box<[ScanScope]>,
@@ -123,6 +124,11 @@ impl UsageQueryPublication {
     #[must_use]
     pub const fn dataset_identity(&self) -> UsageQueryDatasetIdentity {
         self.dataset_identity
+    }
+
+    #[must_use]
+    pub const fn accounting_versions_current(&self) -> bool {
+        self.accounting_versions_current
     }
 
     #[must_use]
@@ -530,6 +536,7 @@ where
         publication: UsageQueryPublication {
             generation: nonnegative(raw_publication.archive_generation)?,
             dataset_identity,
+            accounting_versions_current: raw_publication.accounting_versions_current()?,
             data_through_ms,
             quality: ArchivePublicationQuality::from_sql(&raw_publication.quality)?,
             scopes: scopes.into_boxed_slice(),
@@ -547,6 +554,9 @@ struct RawPublication {
     current_revision_id: Option<i64>,
     latest_complete_scan_set_id: Option<i64>,
     quality: String,
+    canonicalizer_version: Option<i64>,
+    fingerprint_version: Option<i64>,
+    replay_signature_version: Option<i64>,
     has_legacy: bool,
 }
 
@@ -560,14 +570,35 @@ impl RawPublication {
             None => Ok(UsageQueryDatasetIdentity::Empty),
         }
     }
+
+    fn accounting_versions_current(&self) -> Result<bool, StoreError> {
+        match (
+            self.current_revision_id,
+            self.canonicalizer_version,
+            self.fingerprint_version,
+            self.replay_signature_version,
+        ) {
+            (None, None, None, None) => Ok(true),
+            (Some(_), Some(canonicalizer), Some(fingerprint), Some(replay_signature)) => Ok(
+                AccountingVersions::from_stored(canonicalizer, fingerprint, replay_signature)?
+                    == AccountingVersions::compiled(),
+            ),
+            _ => Err(StoreError::new(StoreErrorCode::InvalidStoredValue)),
+        }
+    }
 }
 
 fn load_raw_publication(connection: &Connection) -> Result<RawPublication, StoreError> {
     map_sql(connection.query_row(
         "SELECT archive.archive_generation, archive.current_revision_id,
                 archive.latest_complete_scan_set_id, archive.incremental_state,
+                revision.canonicalizer_version, revision.fingerprint_version,
+                revision.replay_signature_version,
                 EXISTS(SELECT 1 FROM usage_legacy_snapshot WHERE snapshot_id = 1)
-         FROM usage_archive_state AS archive WHERE archive.singleton_id = 1",
+         FROM usage_archive_state AS archive
+         LEFT JOIN usage_replay_revision AS revision
+           ON revision.revision_id = archive.current_revision_id
+         WHERE archive.singleton_id = 1",
         [],
         |row| {
             Ok(RawPublication {
@@ -575,7 +606,10 @@ fn load_raw_publication(connection: &Connection) -> Result<RawPublication, Store
                 current_revision_id: row.get(1)?,
                 latest_complete_scan_set_id: row.get(2)?,
                 quality: row.get(3)?,
-                has_legacy: row.get::<_, i64>(4)? == 1,
+                canonicalizer_version: row.get(4)?,
+                fingerprint_version: row.get(5)?,
+                replay_signature_version: row.get(6)?,
+                has_legacy: row.get::<_, i64>(7)? == 1,
             })
         },
     ))
