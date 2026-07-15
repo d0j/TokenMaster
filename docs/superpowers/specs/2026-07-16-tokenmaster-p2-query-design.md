@@ -42,14 +42,16 @@ One scalar cannot represent both freshness updates and row-set continuity.
 
 - `publicationGeneration` is the persisted archive generation. A consumer replaces its
   current header/snapshot only with a strictly newer publication generation.
-- `datasetIdentity` is `empty`, `legacy_snapshot_v1`, or
-  `replay_revision(<checked u64>)`. It changes only when the visible canonical row set
-  can change.
+- `datasetIdentity` is `empty`, `legacy_snapshot_v1`, or a pair of checked
+  `replay_revision` and `dataset_generation`. The revision changes on rebuilt
+  promotion; schema v7 advances the generation after every canonical event
+  insert/delete/update.
 
-No-change scans may advance publication generation, scan identity, `dataThrough`, and
-freshness while retaining the same dataset identity. Keyset cursors are bound to the
+No-change scans may advance publication generation, scan identity, `dataThrough`, replay
+evidence epoch, and freshness while retaining the same revision/dataset-generation
+pair. Keyset cursors are bound to the
 dataset identity, not publication generation, so a freshness-only update does not reset
-scroll position. A changed dataset rejects the continuation with fixed
+scroll position. A changed revision or dataset generation rejects the continuation with fixed
 `stale_snapshot`; the frontend discards the old page rather than mixing revisions.
 
 ## Query schema v1
@@ -135,7 +137,7 @@ emit the canonical fingerprint or accept unbounded cursor text.
 
 1. **P2-A:** exact query identity, read-only store, latest activity keyset page,
    deadlines, ordering, and privacy.
-2. **P2-B:** schema-v7 transactional materialized daily/model/project/session/activity
+2. **P2-B:** schema-v8 transactional materialized daily/model/project/session/activity
    aggregates with availability counts; no view-time full scans.
 3. **P2-C:** embedded release-pinned pricing catalog, validated overrides, provenance,
    and cost availability/conflict semantics.

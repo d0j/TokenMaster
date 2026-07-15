@@ -17,9 +17,10 @@ pub use activity::{
 pub use clock::{QueryClock, QueryTimeSample, SystemQueryClock};
 pub use error::{QueryError, QueryErrorCode};
 pub use identity::{
-    DatasetIdentity, MAX_QUERY_SCOPES, MAX_QUERY_WARNINGS, PublicationGeneration,
-    QUERY_SCHEMA_VERSION, QueryEnvelope, QueryFreshness, QueryHeader, QueryHeaderParts,
-    QueryQuality, QueryScope, QueryWarningCode, ReplayRevision, SnapshotGeneration,
+    DatasetGeneration, DatasetIdentity, MAX_QUERY_SCOPES, MAX_QUERY_WARNINGS,
+    PublicationGeneration, QUERY_SCHEMA_VERSION, QueryEnvelope, QueryFreshness, QueryHeader,
+    QueryHeaderParts, QueryQuality, QueryScope, QueryWarningCode, ReplayRevision,
+    SnapshotGeneration,
 };
 pub use publication::{PublishOutcome, QuerySnapshotSlot};
 pub use service::{

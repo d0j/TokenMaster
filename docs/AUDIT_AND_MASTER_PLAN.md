@@ -230,12 +230,13 @@ USER/GDI bounds. P1 is implemented; P2-A now supplies the first immutable indexe
 query snapshot. M0 interactive/soak evidence remains separate.
 P2-A now has an executable approved design in
 `docs/superpowers/specs/2026-07-16-tokenmaster-p2-query-design.md`: publication
-generation is independent from dataset identity, every result is transaction-exact and
+generation is independent from dataset identity; current identity includes replay
+revision plus schema-v7 dataset generation; every result is transaction-exact and
 owned, frontends receive no SQLite access, and latest activity uses the existing
 composite keyset index. P2-B will add transactional materialized aggregates instead of
 view-time full scans.
 P2-A now implements the bounded public values, separate defensive read-only/query-only
-schema-v6 store, synchronous `QueryService`, and one-result consumer ordering. Current/
+schema-v7 store, synchronous `QueryService`, and one-result consumer ordering. Current/
 legacy activity, exact publication and scan truth, stale accounting downgrade, stale
 identity, indexed lookahead, deadline cleanup, concurrent-commit isolation, 100K
 latency, Debug/privacy, 10,000-candidate retention, and 256-cycle Windows resource

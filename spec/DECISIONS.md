@@ -428,13 +428,21 @@ backstop when registration is unavailable.
 
 Decision: `tokenmaster-query` owns synchronous bounded frontend values, while
 `tokenmaster-store::UsageReadStore` owns one separate SQLite `READ_ONLY|NO_MUTEX`
-connection. It requires exact schema v6 and bundled SQLite, applies WAL/query-only/
+connection. It requires exact schema v7 and bundled SQLite, applies WAL/query-only/
 defensive/QPSG/no-checkpoint policy with trusted schema and DQS disabled, a 250 ms busy
 timeout, 4 MiB cache and zero mmap, and never migrates. One short deferred transaction
 captures publication generation, independent dataset identity, exact scan truth and a
 current or immutable-legacy activity page. Continuations require dataset identity and
 use composite keyset seek with one lookahead row. A progress deadline is removed on
 every result before connection reuse.
+
+For a current replay, dataset identity is `(revision_id, dataset_generation)`. Revision
+ID alone is insufficient because a bounded live tail append can mutate the canonical
+row set inside the current revision. Replay evidence epoch is also insufficient because
+an exact no-change scan can advance replay/CAS evidence without changing visible rows.
+Schema v7 therefore advances a dedicated dataset generation transactionally after
+every canonical event insert/delete/update, while a no-change scan advances publication
+freshness without changing the pair.
 
 Public envelope scopes mean explicitly applied filters, with empty meaning all; the
 exact internal scan manifest may contain up to 256 scopes and is not copied into each

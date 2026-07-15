@@ -126,15 +126,17 @@ snapshots; interactive hibernation/soak stay in the frozen-candidate M0 gate.
 
 P2-A query foundation is approved under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-query-foundation.md`. It first freezes
-two-dimensional publication/dataset identity, bounded immutable values, a dedicated
+two-dimensional publication/dataset identity (with replay revision plus schema-v7
+dataset generation inside current dataset identity), bounded immutable values, a dedicated
 query-only SQLite connection, exact short transactions, keyset paging, and deadline/
 privacy/resource gates. Materialized aggregates remain P2-B and are not replaced by
 view-time full scans.
-P2-A is complete: `tokenmaster-query` owns schema-v1 bounded immutable values, checked
+P2-A and its audited schema-v7 dataset-generation correction are complete:
+`tokenmaster-query` owns schema-v1 bounded immutable values, checked
 identity, truthful freshness/quality, strict consumer ordering and the synchronous
 facade, while `UsageReadStore` supplies isolated defensive read-only/query-only exact
 transaction capture with composite keyset/deadline evidence. The 100K activity-page
-latency and repeated resource-return contracts pass. P2-B is next: schema-v7
+latency and repeated resource-return contracts pass. P2-B is next: schema-v8
 transactional materialized aggregates with availability counts, bounded rebuild and
 million-row cached-dashboard evidence. No frontend/database coupling or view-time full
 event grouping is accepted.

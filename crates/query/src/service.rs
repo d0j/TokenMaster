@@ -7,7 +7,7 @@ use tokenmaster_store::{
 };
 
 use crate::{
-    ActivityCursor, ActivityItem, DatasetIdentity, LatestActivityPage, PageSize,
+    ActivityCursor, ActivityItem, DatasetGeneration, DatasetIdentity, LatestActivityPage, PageSize,
     PublicationGeneration, QueryClock, QueryEnvelope, QueryError, QueryErrorCode, QueryFreshness,
     QueryHeader, QueryHeaderParts, QueryQuality, QueryScope, QueryWarningCode, ReplayRevision,
     SnapshotGeneration,
@@ -237,9 +237,13 @@ const fn to_store_identity(identity: DatasetIdentity) -> UsageQueryDatasetIdenti
     match identity {
         DatasetIdentity::Empty => UsageQueryDatasetIdentity::Empty,
         DatasetIdentity::LegacySnapshotV1 => UsageQueryDatasetIdentity::LegacySnapshotV1,
-        DatasetIdentity::ReplayRevision(revision) => {
-            UsageQueryDatasetIdentity::ReplayRevision(revision.get())
-        }
+        DatasetIdentity::ReplayRevision {
+            revision,
+            dataset_generation,
+        } => UsageQueryDatasetIdentity::ReplayRevision {
+            revision_id: revision.get(),
+            dataset_generation: dataset_generation.get(),
+        },
     }
 }
 
@@ -247,10 +251,15 @@ fn from_store_identity(identity: UsageQueryDatasetIdentity) -> Result<DatasetIde
     match identity {
         UsageQueryDatasetIdentity::Empty => Ok(DatasetIdentity::Empty),
         UsageQueryDatasetIdentity::LegacySnapshotV1 => Ok(DatasetIdentity::LegacySnapshotV1),
-        UsageQueryDatasetIdentity::ReplayRevision(revision) => Ok(DatasetIdentity::ReplayRevision(
-            ReplayRevision::new(revision)
+        UsageQueryDatasetIdentity::ReplayRevision {
+            revision_id,
+            dataset_generation,
+        } => Ok(DatasetIdentity::ReplayRevision {
+            revision: ReplayRevision::new(revision_id)
                 .map_err(|_| QueryError::new(QueryErrorCode::CorruptArchive))?,
-        )),
+            dataset_generation: DatasetGeneration::new(dataset_generation)
+                .map_err(|_| QueryError::new(QueryErrorCode::CorruptArchive))?,
+        }),
     }
 }
 
@@ -301,7 +310,10 @@ mod tests {
         let mut partial_warnings = Vec::new();
         assert_eq!(
             map_quality(
-                DatasetIdentity::ReplayRevision(ReplayRevision::new(0)?),
+                DatasetIdentity::ReplayRevision {
+                    revision: ReplayRevision::new(0)?,
+                    dataset_generation: DatasetGeneration::new(1)?,
+                },
                 ArchivePublicationQuality::Partial,
                 true,
                 &mut partial_warnings,

@@ -3,14 +3,16 @@ use rusqlite::{Connection, OptionalExtension, TransactionBehavior};
 use crate::{StoreError, StoreErrorCode};
 
 use super::schema::{
-    IndexContract, LEGACY_COPY_SQL, LEGACY_IMMUTABILITY_TRIGGERS, PRE_V4_USAGE_EVENT_CONTRACT,
-    REPLAY_AUX_SCHEMA, REPLAY_CHILD_SCHEMA, TableContract, TriggerContract, USAGE_INDEX_CONTRACTS,
-    USAGE_SCHEMA_VERSION, USAGE_TABLE_CONTRACTS, USAGE_TRIGGER_CONTRACTS, V1_INDEX_CONTRACTS,
-    V1_SCHEMA, V1_SCHEMA_VERSION, V1_TABLE_COUNT, V2_REPLAY_REVISION_SCHEMA, V2_SCHEMA_VERSION,
-    V3_REPLAY_REVISION_SCHEMA, V3_SCHEMA_VERSION, V4_SCHEMA_VERSION, V4_USAGE_EVENT_SCHEMA,
-    V5_INDEX_CONTRACTS, V5_REPLAY_REVISION_CONTRACT, V5_REPLAY_REVISION_SCHEMA,
-    V5_SCAN_SET_CONTRACT, V5_SCAN_SET_SCHEMA, V5_SCHEMA_VERSION, V5_USAGE_SCAN_CONTRACT,
-    V5_USAGE_SCAN_SCHEMA, V6_ARCHIVE_STATE_CONTRACT, V6_ARCHIVE_STATE_SCHEMA,
+    IndexContract, LEGACY_COPY_SQL, LEGACY_IMMUTABILITY_TRIGGERS, LEGACY_TRIGGER_CONTRACTS,
+    PRE_V4_USAGE_EVENT_CONTRACT, REPLAY_AUX_SCHEMA, REPLAY_CHILD_SCHEMA, TableContract,
+    TriggerContract, USAGE_INDEX_CONTRACTS, USAGE_SCHEMA_VERSION, USAGE_TABLE_CONTRACTS,
+    USAGE_TRIGGER_CONTRACTS, V1_INDEX_CONTRACTS, V1_SCHEMA, V1_SCHEMA_VERSION, V1_TABLE_COUNT,
+    V2_REPLAY_REVISION_SCHEMA, V2_SCHEMA_VERSION, V3_REPLAY_REVISION_SCHEMA, V3_SCHEMA_VERSION,
+    V4_SCHEMA_VERSION, V4_USAGE_EVENT_SCHEMA, V5_INDEX_CONTRACTS, V5_REPLAY_REVISION_CONTRACT,
+    V5_REPLAY_REVISION_SCHEMA, V5_SCAN_SET_CONTRACT, V5_SCAN_SET_SCHEMA, V5_SCHEMA_VERSION,
+    V5_USAGE_SCAN_CONTRACT, V5_USAGE_SCAN_SCHEMA, V6_ARCHIVE_STATE_CONTRACT,
+    V6_ARCHIVE_STATE_SCHEMA, V6_SCHEMA_VERSION, V7_ARCHIVE_STATE_CONTRACT, V7_ARCHIVE_STATE_SCHEMA,
+    V7_DATASET_GENERATION_TRIGGERS,
 };
 
 pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreError> {
@@ -23,16 +25,19 @@ pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreErr
         V2_SCHEMA_VERSION => {
             migrate_v2(connection)?;
             migrate_v4(connection)?;
-            migrate_v5(connection)
+            migrate_v5(connection)?;
+            migrate_v6(connection)
         }
         V3_SCHEMA_VERSION => {
             migrate_v3(connection)?;
             migrate_v4(connection)?;
-            migrate_v5(connection)
+            migrate_v5(connection)?;
+            migrate_v6(connection)
         }
         V4_SCHEMA_VERSION => {
             migrate_v4(connection)?;
-            migrate_v5(connection)
+            migrate_v5(connection)?;
+            migrate_v6(connection)
         }
         0 | V1_SCHEMA_VERSION => {
             let transaction =
@@ -44,13 +49,18 @@ pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreErr
             }
             transaction.commit()?;
             migrate_v4(connection)?;
-            migrate_v5(connection)
+            migrate_v5(connection)?;
+            migrate_v6(connection)
         }
-        V5_SCHEMA_VERSION => migrate_v5(connection),
+        V5_SCHEMA_VERSION => {
+            migrate_v5(connection)?;
+            migrate_v6(connection)
+        }
+        V6_SCHEMA_VERSION => migrate_v6(connection),
         USAGE_SCHEMA_VERSION => {
             let transaction =
                 connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-            validate_v6(&transaction)?;
+            validate_v7(&transaction)?;
             transaction.commit()?;
             Ok(())
         }
@@ -107,7 +117,7 @@ fn validate_v2(connection: &Connection) -> Result<(), StoreError> {
         connection,
         USAGE_TABLE_CONTRACTS,
         USAGE_INDEX_CONTRACTS,
-        USAGE_TRIGGER_CONTRACTS,
+        LEGACY_TRIGGER_CONTRACTS,
         &[
             V1_SCHEMA,
             REPLAY_AUX_SCHEMA,
@@ -125,7 +135,7 @@ fn validate_v3(connection: &Connection) -> Result<(), StoreError> {
         connection,
         USAGE_TABLE_CONTRACTS,
         USAGE_INDEX_CONTRACTS,
-        USAGE_TRIGGER_CONTRACTS,
+        LEGACY_TRIGGER_CONTRACTS,
         &[
             V1_SCHEMA,
             REPLAY_AUX_SCHEMA,
@@ -143,7 +153,7 @@ fn validate_v4(connection: &Connection) -> Result<(), StoreError> {
         connection,
         USAGE_TABLE_CONTRACTS,
         USAGE_INDEX_CONTRACTS,
-        USAGE_TRIGGER_CONTRACTS,
+        LEGACY_TRIGGER_CONTRACTS,
         &[
             V4_USAGE_EVENT_SCHEMA,
             V1_SCHEMA,
@@ -162,7 +172,7 @@ fn validate_v5(connection: &Connection) -> Result<(), StoreError> {
         connection,
         USAGE_TABLE_CONTRACTS,
         USAGE_INDEX_CONTRACTS,
-        USAGE_TRIGGER_CONTRACTS,
+        LEGACY_TRIGGER_CONTRACTS,
         &[
             V5_SCAN_SET_SCHEMA,
             V5_USAGE_SCAN_SCHEMA,
@@ -186,7 +196,7 @@ pub(super) fn validate_v6(connection: &Connection) -> Result<(), StoreError> {
         connection,
         USAGE_TABLE_CONTRACTS,
         USAGE_INDEX_CONTRACTS,
-        USAGE_TRIGGER_CONTRACTS,
+        LEGACY_TRIGGER_CONTRACTS,
         &[
             V6_ARCHIVE_STATE_SCHEMA,
             V5_SCAN_SET_SCHEMA,
@@ -200,6 +210,32 @@ pub(super) fn validate_v6(connection: &Connection) -> Result<(), StoreError> {
         &[V5_USAGE_SCAN_CONTRACT, V5_REPLAY_REVISION_CONTRACT],
         SchemaExtensions {
             tables: &[V5_SCAN_SET_CONTRACT, V6_ARCHIVE_STATE_CONTRACT],
+            indexes: V5_INDEX_CONTRACTS,
+        },
+    )?;
+    validate_legacy_snapshot(connection)?;
+    validate_archive_publication(connection)
+}
+
+pub(super) fn validate_v7(connection: &Connection) -> Result<(), StoreError> {
+    validate_schema(
+        connection,
+        USAGE_TABLE_CONTRACTS,
+        USAGE_INDEX_CONTRACTS,
+        USAGE_TRIGGER_CONTRACTS,
+        &[
+            V7_ARCHIVE_STATE_SCHEMA,
+            V5_SCAN_SET_SCHEMA,
+            V5_USAGE_SCAN_SCHEMA,
+            V5_REPLAY_REVISION_SCHEMA,
+            V4_USAGE_EVENT_SCHEMA,
+            V1_SCHEMA,
+            REPLAY_AUX_SCHEMA,
+            REPLAY_CHILD_SCHEMA,
+        ],
+        &[V5_USAGE_SCAN_CONTRACT, V5_REPLAY_REVISION_CONTRACT],
+        SchemaExtensions {
+            tables: &[V5_SCAN_SET_CONTRACT, V7_ARCHIVE_STATE_CONTRACT],
             indexes: V5_INDEX_CONTRACTS,
         },
     )?;
@@ -232,6 +268,12 @@ enum MigrationFault {
     AfterCreateArchiveState,
     #[cfg(test)]
     AfterSeedArchiveState,
+    #[cfg(test)]
+    AfterCreateDatasetState,
+    #[cfg(test)]
+    AfterSeedDatasetState,
+    #[cfg(test)]
+    AfterCreateDatasetTriggers,
 }
 
 fn migrate_v2(connection: &mut Connection) -> Result<(), StoreError> {
@@ -357,6 +399,9 @@ enum MigrationBoundary {
     ScanAuthorityDropped,
     ArchiveStateCreated,
     ArchiveStateSeeded,
+    DatasetStateCreated,
+    DatasetStateSeeded,
+    DatasetTriggersCreated,
 }
 
 fn migration_fault(fault: MigrationFault, boundary: MigrationBoundary) -> Result<(), StoreError> {
@@ -403,6 +448,18 @@ fn migration_fault(fault: MigrationFault, boundary: MigrationBoundary) -> Result
                 MigrationFault::AfterSeedArchiveState,
                 MigrationBoundary::ArchiveStateSeeded
             )
+            | (
+                MigrationFault::AfterCreateDatasetState,
+                MigrationBoundary::DatasetStateCreated
+            )
+            | (
+                MigrationFault::AfterSeedDatasetState,
+                MigrationBoundary::DatasetStateSeeded
+            )
+            | (
+                MigrationFault::AfterCreateDatasetTriggers,
+                MigrationBoundary::DatasetTriggersCreated
+            )
     );
     #[cfg(not(test))]
     let triggered = {
@@ -439,6 +496,42 @@ fn migrate_v4(connection: &mut Connection) -> Result<(), StoreError> {
 
 fn migrate_v5(connection: &mut Connection) -> Result<(), StoreError> {
     migrate_v5_with_fault(connection, MigrationFault::None)
+}
+
+fn migrate_v6(connection: &mut Connection) -> Result<(), StoreError> {
+    migrate_v6_with_fault(connection, MigrationFault::None)
+}
+
+fn migrate_v6_with_fault(
+    connection: &mut Connection,
+    fault: MigrationFault,
+) -> Result<(), StoreError> {
+    validate_v6(connection)?;
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    transaction
+        .execute_batch("ALTER TABLE usage_archive_state RENAME TO usage_archive_state_v6;")?;
+    transaction.execute_batch(V7_ARCHIVE_STATE_SCHEMA)?;
+    migration_fault(fault, MigrationBoundary::DatasetStateCreated)?;
+    transaction.execute(
+        "INSERT INTO usage_archive_state(
+           singleton_id, archive_generation, dataset_generation, current_revision_id,
+           latest_complete_scan_set_id, incremental_state
+         )
+         SELECT singleton_id, archive_generation,
+                CASE WHEN current_revision_id IS NULL
+                     THEN 0 ELSE (SELECT count(*) FROM usage_event) END,
+                current_revision_id, latest_complete_scan_set_id, incremental_state
+         FROM usage_archive_state_v6",
+        [],
+    )?;
+    transaction.execute_batch("DROP TABLE usage_archive_state_v6;")?;
+    migration_fault(fault, MigrationBoundary::DatasetStateSeeded)?;
+    transaction.execute_batch(V7_DATASET_GENERATION_TRIGGERS)?;
+    migration_fault(fault, MigrationBoundary::DatasetTriggersCreated)?;
+    transaction.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
+    validate_v7(&transaction)?;
+    transaction.commit()?;
+    Ok(())
 }
 
 fn migrate_v5_with_fault(
@@ -496,7 +589,7 @@ fn migrate_v5_with_fault(
         rusqlite::params![current_revision, complete_scan_set, quality],
     )?;
     migration_fault(fault, MigrationBoundary::ArchiveStateSeeded)?;
-    transaction.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
+    transaction.pragma_update(None, "user_version", V6_SCHEMA_VERSION)?;
     validate_v6(&transaction)?;
     transaction.commit()?;
     Ok(())
@@ -1042,8 +1135,9 @@ mod tests {
 
     use super::{
         MigrationFault, migrate_schema, migrate_v2_revision_table, migrate_v2_with_fault,
-        migrate_v3_with_fault, migrate_v4_with_fault, migrate_v5_with_fault, pragma_i64,
-        validate_v2, validate_v3, validate_v4, validate_v5, validate_v6,
+        migrate_v3_with_fault, migrate_v4_with_fault, migrate_v5_with_fault, migrate_v6,
+        migrate_v6_with_fault, pragma_i64, validate_v2, validate_v3, validate_v4, validate_v5,
+        validate_v6, validate_v7,
     };
     use crate::{StoreErrorCode, usage::schema};
 
@@ -1365,15 +1459,22 @@ mod tests {
     }
 
     #[test]
-    fn exact_v2_migrates_to_v6_and_preserves_all_rows() -> TestResult {
+    fn exact_v2_migrates_to_v7_and_preserves_all_rows() -> TestResult {
         let mut connection = exact_v2_fixture(true)?;
         let before = fixture_snapshot(&connection)?;
         migrate_schema(&mut connection)?;
-        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 6);
+        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 7);
         assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
         assert_eq!(fixture_snapshot(&connection)?, before);
         assert_eq!(event_provenance(&connection)?, (Some(5), Some(5), 0));
-        validate_v6(&connection)?;
+        assert_eq!(
+            pragma_i64(
+                &connection,
+                "SELECT dataset_generation FROM usage_archive_state"
+            )?,
+            1
+        );
+        validate_v7(&connection)?;
         let temporary_names: i64 = connection.query_row(
             "SELECT count(*) FROM sqlite_schema
              WHERE instr(sql, 'usage_replay_revision_v3') > 0
@@ -1393,7 +1494,7 @@ mod tests {
     }
 
     #[test]
-    fn exact_v3_migrates_to_v6_with_legacy_and_current_projection_provenance() -> TestResult {
+    fn exact_v3_migrates_to_v7_with_legacy_and_current_projection_provenance() -> TestResult {
         for (current_revision, expected) in [
             (false, (None, None, 0_i64)),
             (true, (Some(5_i64), Some(5_i64), 0_i64)),
@@ -1401,11 +1502,18 @@ mod tests {
             let mut connection = exact_v3_fixture(current_revision)?;
             let before = fixture_snapshot(&connection)?;
             migrate_schema(&mut connection)?;
-            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 6);
+            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 7);
             assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
             assert_eq!(fixture_snapshot(&connection)?, before);
             assert_eq!(event_provenance(&connection)?, expected);
-            validate_v6(&connection)?;
+            assert_eq!(
+                pragma_i64(
+                    &connection,
+                    "SELECT dataset_generation FROM usage_archive_state"
+                )?,
+                i64::from(current_revision)
+            );
+            validate_v7(&connection)?;
         }
         Ok(())
     }
@@ -1440,10 +1548,10 @@ mod tests {
     }
 
     #[test]
-    fn exact_v4_scan_and_revision_migrate_to_scoped_v6() -> TestResult {
+    fn exact_v4_scan_and_revision_migrate_to_scoped_v7() -> TestResult {
         let mut connection = exact_v4_fixture_with_scan()?;
         migrate_schema(&mut connection)?;
-        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 6);
+        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 7);
         assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
         let scan: (
             i64,
@@ -1526,7 +1634,14 @@ mod tests {
                 row.get(0)
             })?;
         assert_eq!(revision_scan_set, None);
-        validate_v6(&connection)?;
+        assert_eq!(
+            pragma_i64(
+                &connection,
+                "SELECT dataset_generation FROM usage_archive_state"
+            )?,
+            1
+        );
+        validate_v7(&connection)?;
         Ok(())
     }
 
@@ -1565,6 +1680,81 @@ mod tests {
                 (0, Some(5), expected_scan, expected_quality.to_owned())
             );
             validate_v6(&connection)?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn exact_v6_migration_seeds_dataset_generation_and_triggers() -> TestResult {
+        let mut connection = exact_v5_fixture(true)?;
+        migrate_v5_with_fault(&mut connection, MigrationFault::None)?;
+        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 6);
+        migrate_v6(&mut connection)?;
+        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 7);
+        assert_eq!(
+            pragma_i64(
+                &connection,
+                "SELECT dataset_generation FROM usage_archive_state"
+            )?,
+            1
+        );
+        validate_v7(&connection)?;
+
+        connection.execute(
+            "UPDATE usage_event SET timestamp_seconds = timestamp_seconds + 1",
+            [],
+        )?;
+        assert_eq!(
+            pragma_i64(
+                &connection,
+                "SELECT dataset_generation FROM usage_archive_state"
+            )?,
+            2
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn every_v6_dataset_generation_fault_rolls_back_exactly() -> TestResult {
+        for fault in [
+            MigrationFault::AfterCreateDatasetState,
+            MigrationFault::AfterSeedDatasetState,
+            MigrationFault::AfterCreateDatasetTriggers,
+        ] {
+            let mut connection = exact_v5_fixture(true)?;
+            migrate_v5_with_fault(&mut connection, MigrationFault::None)?;
+            let before: (i64, Option<i64>, Option<i64>, String) = connection.query_row(
+                "SELECT archive_generation, current_revision_id,
+                        latest_complete_scan_set_id, incremental_state
+                 FROM usage_archive_state WHERE singleton_id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )?;
+
+            let error = match migrate_v6_with_fault(&mut connection, fault) {
+                Ok(()) => return Err("faulted dataset migration unexpectedly committed".into()),
+                Err(error) => error,
+            };
+            assert_eq!(error.code(), StoreErrorCode::Database);
+            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 6);
+            validate_v6(&connection)?;
+            let after: (i64, Option<i64>, Option<i64>, String) = connection.query_row(
+                "SELECT archive_generation, current_revision_id,
+                        latest_complete_scan_set_id, incremental_state
+                 FROM usage_archive_state WHERE singleton_id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )?;
+            assert_eq!(after, before);
+            assert_eq!(
+                pragma_i64(
+                    &connection,
+                    "SELECT count(*) FROM sqlite_schema
+                     WHERE name = 'usage_archive_state_v6'
+                        OR name LIKE 'usage_event_dataset_generation_%'",
+                )?,
+                0
+            );
         }
         Ok(())
     }

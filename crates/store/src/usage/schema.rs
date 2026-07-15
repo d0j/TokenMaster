@@ -1,9 +1,10 @@
-pub const USAGE_SCHEMA_VERSION: i64 = 6;
+pub const USAGE_SCHEMA_VERSION: i64 = 7;
 pub(super) const V1_SCHEMA_VERSION: i64 = 1;
 pub(super) const V2_SCHEMA_VERSION: i64 = 2;
 pub(super) const V3_SCHEMA_VERSION: i64 = 3;
 pub(super) const V4_SCHEMA_VERSION: i64 = 4;
 pub(super) const V5_SCHEMA_VERSION: i64 = 5;
+pub(super) const V6_SCHEMA_VERSION: i64 = 6;
 
 pub(super) struct TableContract {
     pub(super) name: &'static str,
@@ -115,7 +116,34 @@ pub(super) const V5_INDEX_CONTRACTS: &[IndexContract] = &[
     },
 ];
 
+pub(super) const LEGACY_TRIGGER_CONTRACTS: &[TriggerContract] = &[
+    TriggerContract {
+        name: "usage_legacy_event_no_delete",
+        sql: "CREATE TRIGGER usage_legacy_event_no_delete BEFORE DELETE ON usage_legacy_event BEGIN SELECT RAISE(ABORT, 'immutable legacy snapshot'); END",
+    },
+    TriggerContract {
+        name: "usage_legacy_event_no_insert",
+        sql: "CREATE TRIGGER usage_legacy_event_no_insert BEFORE INSERT ON usage_legacy_event BEGIN SELECT RAISE(ABORT, 'immutable legacy snapshot'); END",
+    },
+    TriggerContract {
+        name: "usage_legacy_event_no_update",
+        sql: "CREATE TRIGGER usage_legacy_event_no_update BEFORE UPDATE ON usage_legacy_event BEGIN SELECT RAISE(ABORT, 'immutable legacy snapshot'); END",
+    },
+];
+
 pub(super) const USAGE_TRIGGER_CONTRACTS: &[TriggerContract] = &[
+    TriggerContract {
+        name: "usage_event_dataset_generation_after_delete",
+        sql: "CREATE TRIGGER usage_event_dataset_generation_after_delete AFTER DELETE ON usage_event BEGIN SELECT CASE WHEN (SELECT count(*) FROM usage_archive_state WHERE singleton_id = 1) <> 1 THEN RAISE(ABORT, 'dataset generation unavailable') WHEN (SELECT dataset_generation FROM usage_archive_state WHERE singleton_id = 1) = 9223372036854775807 THEN RAISE(ABORT, 'dataset generation exhausted') END; UPDATE usage_archive_state SET dataset_generation = dataset_generation + 1 WHERE singleton_id = 1; END",
+    },
+    TriggerContract {
+        name: "usage_event_dataset_generation_after_insert",
+        sql: "CREATE TRIGGER usage_event_dataset_generation_after_insert AFTER INSERT ON usage_event BEGIN SELECT CASE WHEN (SELECT count(*) FROM usage_archive_state WHERE singleton_id = 1) <> 1 THEN RAISE(ABORT, 'dataset generation unavailable') WHEN (SELECT dataset_generation FROM usage_archive_state WHERE singleton_id = 1) = 9223372036854775807 THEN RAISE(ABORT, 'dataset generation exhausted') END; UPDATE usage_archive_state SET dataset_generation = dataset_generation + 1 WHERE singleton_id = 1; END",
+    },
+    TriggerContract {
+        name: "usage_event_dataset_generation_after_update",
+        sql: "CREATE TRIGGER usage_event_dataset_generation_after_update AFTER UPDATE ON usage_event BEGIN SELECT CASE WHEN (SELECT count(*) FROM usage_archive_state WHERE singleton_id = 1) <> 1 THEN RAISE(ABORT, 'dataset generation unavailable') WHEN (SELECT dataset_generation FROM usage_archive_state WHERE singleton_id = 1) = 9223372036854775807 THEN RAISE(ABORT, 'dataset generation exhausted') END; UPDATE usage_archive_state SET dataset_generation = dataset_generation + 1 WHERE singleton_id = 1; END",
+    },
     TriggerContract {
         name: "usage_legacy_event_no_delete",
         sql: "CREATE TRIGGER usage_legacy_event_no_delete BEFORE DELETE ON usage_legacy_event BEGIN SELECT RAISE(ABORT, 'immutable legacy snapshot'); END",
@@ -451,6 +479,18 @@ pub(super) const V6_ARCHIVE_STATE_CONTRACT: TableContract = TableContract {
     columns: &[
         "singleton_id",
         "archive_generation",
+        "current_revision_id",
+        "latest_complete_scan_set_id",
+        "incremental_state",
+    ],
+};
+
+pub(super) const V7_ARCHIVE_STATE_CONTRACT: TableContract = TableContract {
+    name: "usage_archive_state",
+    columns: &[
+        "singleton_id",
+        "archive_generation",
+        "dataset_generation",
         "current_revision_id",
         "latest_complete_scan_set_id",
         "incremental_state",
@@ -801,6 +841,72 @@ CREATE TABLE usage_archive_state (
   FOREIGN KEY(current_revision_id) REFERENCES usage_replay_revision(revision_id),
   FOREIGN KEY(latest_complete_scan_set_id) REFERENCES usage_scan_set(scan_set_id)
 ) STRICT;
+"#;
+
+pub(super) const V7_ARCHIVE_STATE_SCHEMA: &str = r#"
+CREATE TABLE usage_archive_state (
+  singleton_id INTEGER PRIMARY KEY CHECK(singleton_id = 1),
+  archive_generation INTEGER NOT NULL CHECK(archive_generation >= 0),
+  dataset_generation INTEGER NOT NULL DEFAULT 0 CHECK(dataset_generation >= 0),
+  current_revision_id INTEGER CHECK(current_revision_id IS NULL OR current_revision_id >= 0),
+  latest_complete_scan_set_id INTEGER CHECK(latest_complete_scan_set_id IS NULL OR latest_complete_scan_set_id >= 0),
+  incremental_state TEXT NOT NULL CHECK(incremental_state IN ('empty','complete','partial','recovery_pending')),
+  CHECK(incremental_state <> 'empty' OR
+        (current_revision_id IS NULL AND latest_complete_scan_set_id IS NULL)),
+  CHECK(incremental_state <> 'complete' OR
+        (current_revision_id IS NOT NULL AND latest_complete_scan_set_id IS NOT NULL)),
+  CHECK(incremental_state NOT IN ('partial','recovery_pending') OR
+        current_revision_id IS NOT NULL),
+  FOREIGN KEY(current_revision_id) REFERENCES usage_replay_revision(revision_id),
+  FOREIGN KEY(latest_complete_scan_set_id) REFERENCES usage_scan_set(scan_set_id)
+) STRICT;
+"#;
+
+pub(super) const V7_DATASET_GENERATION_TRIGGERS: &str = r#"
+CREATE TRIGGER usage_event_dataset_generation_after_delete
+AFTER DELETE ON usage_event
+BEGIN
+  SELECT CASE
+    WHEN (SELECT count(*) FROM usage_archive_state WHERE singleton_id = 1) <> 1
+    THEN RAISE(ABORT, 'dataset generation unavailable')
+    WHEN (SELECT dataset_generation FROM usage_archive_state WHERE singleton_id = 1)
+         = 9223372036854775807
+    THEN RAISE(ABORT, 'dataset generation exhausted')
+  END;
+  UPDATE usage_archive_state
+  SET dataset_generation = dataset_generation + 1
+  WHERE singleton_id = 1;
+END;
+
+CREATE TRIGGER usage_event_dataset_generation_after_insert
+AFTER INSERT ON usage_event
+BEGIN
+  SELECT CASE
+    WHEN (SELECT count(*) FROM usage_archive_state WHERE singleton_id = 1) <> 1
+    THEN RAISE(ABORT, 'dataset generation unavailable')
+    WHEN (SELECT dataset_generation FROM usage_archive_state WHERE singleton_id = 1)
+         = 9223372036854775807
+    THEN RAISE(ABORT, 'dataset generation exhausted')
+  END;
+  UPDATE usage_archive_state
+  SET dataset_generation = dataset_generation + 1
+  WHERE singleton_id = 1;
+END;
+
+CREATE TRIGGER usage_event_dataset_generation_after_update
+AFTER UPDATE ON usage_event
+BEGIN
+  SELECT CASE
+    WHEN (SELECT count(*) FROM usage_archive_state WHERE singleton_id = 1) <> 1
+    THEN RAISE(ABORT, 'dataset generation unavailable')
+    WHEN (SELECT dataset_generation FROM usage_archive_state WHERE singleton_id = 1)
+         = 9223372036854775807
+    THEN RAISE(ABORT, 'dataset generation exhausted')
+  END;
+  UPDATE usage_archive_state
+  SET dataset_generation = dataset_generation + 1
+  WHERE singleton_id = 1;
+END;
 "#;
 
 pub(super) const V4_USAGE_EVENT_SCHEMA: &str = r#"

@@ -103,11 +103,15 @@ All notable changes are recorded here.
   identity, dedicated SQLite read-only/query-only store, short exact transactions,
   injected clock/deadline, bounded immutable envelopes, and composite keyset activity
   paging before materialized aggregates.
+- Approved the self-reviewed P2-B schema-v8 aggregate design: provider-self-contained
+  current events, exact missing-token algebra, UTC hour/minute and session rollups,
+  resumable generation-bound rebuild, explicit IANA/DST rules, independently capped
+  breakdowns, and blocking migration/performance/storage/privacy/resource gates.
 - Added the first `tokenmaster-query` slice with schema-v1 immutable headers and
   envelopes, checked publication/dataset identities, injected exact clock samples,
   bounded pages/scopes/warnings, stable path-free errors, and fingerprint-redacted
   activity cursors.
-- Added the separate schema-v6 `UsageReadStore`: SQLite read-only/query-only and
+- Added the separate schema-v7 `UsageReadStore`: SQLite read-only/query-only and
   defensive policy, fixed 4 MiB cache, exact short read transactions, current/legacy
   composite-keyset pages, `pageSize + 1` lookahead, stale dataset rejection, and
   deadline interruption with guaranteed handler cleanup.
@@ -120,6 +124,10 @@ All notable changes are recorded here.
 
 ### Fixed
 
+- Bound current replay cursors to revision ID plus the dedicated schema-v7 dataset
+  generation. Insert/update/delete advance it transactionally; real no-change scan
+  publication may advance replay evidence but keeps dataset identity stable. Exact v6
+  migration rollback and generation overflow fail closed.
 - Preserved query deadline semantics across the store-to-runtime port mapping; the full
   workspace gate exposed and now covers the previously missing exhaustive error case.
 - M0 verification no longer depends on foreign runtime toolchains.

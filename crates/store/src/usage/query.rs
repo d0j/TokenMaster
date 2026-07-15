@@ -6,7 +6,7 @@ use rusqlite::{
 
 use super::{
     JournalMode, MAX_SCAN_SCOPES, MAX_USAGE_EVENT_PAGE_SIZE,
-    migration::validate_v6,
+    migration::validate_v7,
     schema::USAGE_SCHEMA_VERSION,
     types::{AccountingVersions, ArchivePublicationQuality, EventCursor, ScanScope},
 };
@@ -66,7 +66,10 @@ const CURSOR_LEGACY_ACTIVITY_SQL: &str =
 pub enum UsageQueryDatasetIdentity {
     Empty,
     LegacySnapshotV1,
-    ReplayRevision(u64),
+    ReplayRevision {
+        revision_id: u64,
+        dataset_generation: u64,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -90,8 +93,10 @@ impl UsageActivityQuery {
             || (before.is_some() && expected_dataset.is_none())
             || matches!(
                 expected_dataset,
-                Some(UsageQueryDatasetIdentity::ReplayRevision(value))
-                    if value > i64::MAX as u64
+                Some(UsageQueryDatasetIdentity::ReplayRevision {
+                    revision_id,
+                    dataset_generation,
+                }) if revision_id > i64::MAX as u64 || dataset_generation > i64::MAX as u64
             )
         {
             return Err(StoreError::new(StoreErrorCode::InvalidValue));
@@ -371,7 +376,7 @@ impl UsageReadStore {
         if version != USAGE_SCHEMA_VERSION {
             return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
         }
-        validate_v6(&connection)?;
+        validate_v7(&connection)?;
         let store = Self { connection };
         store.runtime_policy()?;
         Ok(store)
@@ -552,6 +557,7 @@ where
 struct RawPublication {
     archive_generation: i64,
     current_revision_id: Option<i64>,
+    dataset_generation: i64,
     latest_complete_scan_set_id: Option<i64>,
     quality: String,
     canonicalizer_version: Option<i64>,
@@ -563,9 +569,10 @@ struct RawPublication {
 impl RawPublication {
     fn dataset_identity(&self) -> Result<UsageQueryDatasetIdentity, StoreError> {
         match self.current_revision_id {
-            Some(revision) => Ok(UsageQueryDatasetIdentity::ReplayRevision(nonnegative(
-                revision,
-            )?)),
+            Some(revision_id) => Ok(UsageQueryDatasetIdentity::ReplayRevision {
+                revision_id: nonnegative(revision_id)?,
+                dataset_generation: nonnegative(self.dataset_generation)?,
+            }),
             None if self.has_legacy => Ok(UsageQueryDatasetIdentity::LegacySnapshotV1),
             None => Ok(UsageQueryDatasetIdentity::Empty),
         }
@@ -591,7 +598,8 @@ impl RawPublication {
 fn load_raw_publication(connection: &Connection) -> Result<RawPublication, StoreError> {
     map_sql(connection.query_row(
         "SELECT archive.archive_generation, archive.current_revision_id,
-                archive.latest_complete_scan_set_id, archive.incremental_state,
+                archive.dataset_generation, archive.latest_complete_scan_set_id,
+                archive.incremental_state,
                 revision.canonicalizer_version, revision.fingerprint_version,
                 revision.replay_signature_version,
                 EXISTS(SELECT 1 FROM usage_legacy_snapshot WHERE snapshot_id = 1)
@@ -604,12 +612,13 @@ fn load_raw_publication(connection: &Connection) -> Result<RawPublication, Store
             Ok(RawPublication {
                 archive_generation: row.get(0)?,
                 current_revision_id: row.get(1)?,
-                latest_complete_scan_set_id: row.get(2)?,
-                quality: row.get(3)?,
-                canonicalizer_version: row.get(4)?,
-                fingerprint_version: row.get(5)?,
-                replay_signature_version: row.get(6)?,
-                has_legacy: row.get::<_, i64>(7)? == 1,
+                dataset_generation: row.get(2)?,
+                latest_complete_scan_set_id: row.get(3)?,
+                quality: row.get(4)?,
+                canonicalizer_version: row.get(5)?,
+                fingerprint_version: row.get(6)?,
+                replay_signature_version: row.get(7)?,
+                has_legacy: row.get::<_, i64>(8)? == 1,
             })
         },
     ))
@@ -675,7 +684,7 @@ fn load_activity_events(
         i64::try_from(limit).map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))?;
     match (dataset_identity, before) {
         (UsageQueryDatasetIdentity::Empty, _) => Ok(Vec::new()),
-        (UsageQueryDatasetIdentity::ReplayRevision(_), None) => query_events(
+        (UsageQueryDatasetIdentity::ReplayRevision { .. }, None) => query_events(
             connection,
             FIRST_CURRENT_ACTIVITY_SQL,
             params![limit],
@@ -684,7 +693,7 @@ fn load_activity_events(
         (UsageQueryDatasetIdentity::LegacySnapshotV1, None) => {
             query_events(connection, FIRST_LEGACY_ACTIVITY_SQL, params![limit], limit)
         }
-        (UsageQueryDatasetIdentity::ReplayRevision(_), Some(cursor)) => {
+        (UsageQueryDatasetIdentity::ReplayRevision { .. }, Some(cursor)) => {
             query_cursor_events(connection, CURSOR_CURRENT_ACTIVITY_SQL, cursor, limit)
         }
         (UsageQueryDatasetIdentity::LegacySnapshotV1, Some(cursor)) => {

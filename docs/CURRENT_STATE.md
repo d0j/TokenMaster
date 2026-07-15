@@ -284,14 +284,15 @@ snapshot. M0 interactive hibernation and uninterrupted-soak receipts remain sepa
 frozen-candidate acceptance work.
 P2-A is now executable under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-query-foundation.md`. Its approved
-design separates publication generation from dataset identity, uses a dedicated
+design separates publication generation from dataset identity, where a current dataset
+is replay revision plus schema-v7 dataset generation, and uses a dedicated
 query-only SQLite store and short exact read transactions, keeps the facade synchronous,
 and starts with the existing composite-index latest-activity page. P2-A Task 1 is now
 implemented in `tokenmaster-query`: schema-v1 headers/envelopes, checked generations,
 publication/dataset identity, an injected exact clock sample, stable path-free errors,
 bounded scopes/warnings/pages, and fingerprint-redacted activity cursors. Task 2, the
 separate query-only SQLite store and exact transaction capture, is also complete.
-`UsageReadStore` opens schema v6 read-only without migration, enforces defensive
+`UsageReadStore` opens schema v7 read-only without migration, enforces defensive
 query-only policy with a 4 MiB cache, captures publication/scan truth and current or
 legacy keyset pages in one deferred transaction, rejects stale continuation identity,
 uses indexed `pageSize + 1`, and clears its deadline handler on every result.
@@ -301,8 +302,11 @@ recovery, legacy, clock-discontinuity, and obsolete accounting-version states re
 truthful; no-change publication preserves cursor identity; and one consumer slot
 retains no history. Focused contracts prove a 100,000-event cold first page in 35.65 ms,
 a warm cursor page in 1.10 ms, and a 256-cycle Windows open/query/drop resource plateau.
-The next implementation gate is P2-B schema-v7 transactional materialized aggregates,
-not view-time grouping of the full event table.
+The audited cursor correction is complete: replay evidence can advance on a no-change
+scan, so it is no longer dataset identity. Schema v7 adds a dedicated transactional
+dataset generation with exact v6 migration/rollback, overflow, real no-change scan,
+and current append proofs. The next implementation gate is P2-B schema-v8
+transactional materialized aggregates, not view-time grouping of the full event table.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 

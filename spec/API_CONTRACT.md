@@ -161,7 +161,8 @@ freshness states and never directly receives source paths or raw source content.
 
 `tokenmaster-query` owns the shared schema-v1 read values for UI, CLI, and MCP. Every
 envelope carries a checked process-local snapshot generation, persisted publication
-generation, separate dataset identity, exact generated/data-through time, freshness,
+generation, separate dataset identity (`empty`, immutable legacy, or replay revision
+plus dataset generation), exact generated/data-through time, freshness,
 quality, at most 32 explicitly applied scope filters and 16 stable warnings, and one
 owned payload. An empty scope-filter list means all scopes; the internal exact scan
 manifest remains separately bounded and is not copied into every frontend snapshot.
@@ -172,7 +173,7 @@ internal failures use stable path-free codes. The facade clock supplies one exac
 monotonic sample; frontends do not supply publication time.
 
 `UsageReadStore` is the only archive-read implementation behind that facade. It opens
-an existing exact schema-v6 archive read-only, applies query-only/defensive/no-checkpoint
+an existing exact schema-v7 archive read-only, applies query-only/defensive/no-checkpoint
 policy, performs no migration, and returns owned data after one short deferred read
 transaction. Continuation requires its dataset identity. Current and immutable legacy
 pages use composite keyset seek and at most one lookahead row; progress interruption is
@@ -184,7 +185,11 @@ maps complete/partial/recovery/legacy truth explicitly, applies the 20-minute/2-
 usage freshness policy, and downgrades a readable current revision with obsolete
 accounting versions to `unknown` plus `accounting_version_stale`. A no-change
 publication may advance publication/freshness while retaining dataset identity and a
-valid cursor. `QuerySnapshotSlot` retains one candidate and rejects older generations;
+valid cursor. Every canonical event mutation advances dataset generation in the same
+transaction, so a cursor cannot cross a row-set mutation inside the same replay
+revision. Replay evidence epoch remains separate CAS/provenance state and may advance
+during a no-change scan without invalidating the cursor.
+`QuerySnapshotSlot` retains one candidate and rejects older generations;
 P3 wraps the synchronous facade with one bounded worker rather than calling SQLite from
 a Slint callback.
 

@@ -57,7 +57,10 @@ does not claim a serialized cursor schema.
 
 Archive writes use explicit transactions and compare expected generation, identity,
 checkpoint, and proof state. Failed writes roll back completely. Incomplete, cancelled,
-or failed scans MUST NOT authorize destructive source reconciliation.
+or failed scans MUST NOT authorize destructive source reconciliation. Overflowed
+canonical event mutations also roll back schema-v7 dataset generation; the generation
+reveals only a monotonic mutation count and no event, path, or source content. Replay
+evidence remains separate and cannot silently invalidate a cursor on a no-change scan.
 
 Scan authority is provider/profile qualified and store-owned. One bounded scan set
 contains one child per exact scope; an observation may update only the matching

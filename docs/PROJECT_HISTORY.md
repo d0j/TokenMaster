@@ -1137,7 +1137,7 @@ orders freshness/quality updates, while `empty`, immutable legacy, or replay-rev
 dataset identity binds keyset cursors. A no-change scan may refresh `dataThrough`
 without resetting scroll; a changed revision rejects the old cursor rather than mixing
 pages. P2-A starts with indexed latest activity and proves `pageSize + 1` lookahead,
-privacy, deadlines, and resources. P2-B will add schema-v7 transactional materialized
+privacy, deadlines, and resources. P2-B will add schema-v8 transactional materialized
 aggregates; UI code is never allowed to full-scan/group the event table. This is an
 approved executable plan, not P2 implementation evidence.
 
@@ -1157,7 +1157,7 @@ service mapping, frontend worker, CLI/MCP surface, aggregate, pricing, or quota 
 
 ## 2026-07-16 — P2-A exact query-only store implemented
 
-Added `UsageReadStore` as a separate exact schema-v6 reader. It uses SQLite read-only/
+Added `UsageReadStore` as a separate exact schema-v7 reader. It uses SQLite read-only/
 no-mutex plus query-only, foreign-key, defensive, QPSG and no-checkpoint-on-close
 controls; trusted schema and DQS are disabled, mmap is zero, busy timeout is 250 ms and
 the cache is fixed at 4 MiB. It validates but never migrates or exposes a write method.
@@ -1188,7 +1188,7 @@ and privacy contracts survive service drop and exclude archive paths, source IDs
 fingerprints, SQLite text, prompts, responses, commands, and reasoning content from
 public Debug/error surfaces. The exact composite-index plan remains offset/count-free.
 
-A generated 100,000-event schema-v6 archive measured 35.65 ms for a new read connection
+A generated 100,000-event schema-v7 archive measured 35.65 ms for a new read connection
 plus first 256-row page and 1.10 ms for the warm cursor page, below the 1 s/250 ms gates.
 A 256-cycle Windows open/query/drop test returned handles, threads, USER/GDI objects,
 and private memory to the strict plateau. Focused store/query tests and strict Clippy
@@ -1200,3 +1200,14 @@ pre-existing explicitly ignored million-row M0 scale test remains outside that n
 gate. P2-A does not claim P2-B aggregates/pricing/quota, P3 UI, P5 automation, M0
 acceptance, packaging, signing, or release; P2-B transactional materialized aggregates
 are next.
+
+## 2026-07-16 — P2-A current-tail cursor identity corrected
+
+The P2-B write-path audit found that a current tail append can mutate `usage_event`
+without promoting a new replay revision. Revision ID alone therefore could not bind a
+keyset cursor safely. The deeper audit then proved replay evidence epoch is unsuitable
+because it can advance during a complete no-change scan. Current dataset identity now
+includes replay revision ID plus schema-v7 `dataset_generation`, which advances after
+every canonical event insert/update/delete in the same transaction and stays fixed for
+scan/publication-only work. Exact v6 migration fault rollback, overflow, real no-change
+scan, append, store, and facade contracts prove the corrected boundary.

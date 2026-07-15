@@ -211,13 +211,20 @@ keyset-paged at no more than 256 rows. Scan-history cleanup uses only scan-relat
 foreign-key checks rather than rescanning the complete usage-event archive.
 
 The query path uses a distinct `READ_ONLY|NO_MUTEX` connection and never calls the
-writable open/migration path. It requires exact schema v6 and bundled SQLite identity,
+writable open/migration path. It requires exact schema v7 and bundled SQLite identity,
 WAL, foreign keys, query-only and defensive modes, trusted-schema/DQS disabled,
 query-planner stability, no checkpoint on close, 250 ms busy timeout, 4 MiB cache,
 file-backed temporary storage, and zero mmap. Each result captures archive generation,
 dataset identity, scan completion/manifest, and at most 256 events plus one lookahead in
 one deferred transaction, then returns only owned data. Continuation without the exact
 dataset identity is invalid.
+
+Current dataset identity is the checked pair
+`(replay_revision_id, dataset_generation)`, not revision ID or replay evidence epoch
+alone. Schema v7 advances dataset generation inside the same transaction after every
+canonical event insert, delete, or update. Freshness-only scan publication changes
+neither member even when replay/CAS evidence advances. This makes old keyset cursors
+fail closed after every row-set mutation without resetting them for a no-change scan.
 
 The capture also reads the current replay revision's stored canonicalizer, fingerprint,
 and replay-signature versions in the same snapshot. A revision with obsolete accounting

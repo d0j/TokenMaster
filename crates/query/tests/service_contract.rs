@@ -4,7 +4,7 @@ use rusqlite::{Connection, params};
 use tempfile::TempDir;
 use tokenmaster_domain::TokenCount;
 use tokenmaster_query::{
-    DatasetIdentity, LatestActivityRequest, PageSize, QUERY_FRESH_MAX_AGE_MS,
+    DatasetGeneration, DatasetIdentity, LatestActivityRequest, PageSize, QUERY_FRESH_MAX_AGE_MS,
     QUERY_STALE_MIN_AGE_MS, QueryClock, QueryError, QueryErrorCode, QueryFreshness, QueryQuality,
     QueryService, QueryTimeSample, QueryWarningCode,
 };
@@ -300,9 +300,10 @@ fn activity_mapping_paging_and_failed_generation_are_exact() {
     let stale = service
         .latest_activity(LatestActivityRequest::continuation(
             page_size,
-            DatasetIdentity::ReplayRevision(
-                tokenmaster_query::ReplayRevision::new(1).expect("revision"),
-            ),
+            DatasetIdentity::ReplayRevision {
+                revision: tokenmaster_query::ReplayRevision::new(1).expect("revision"),
+                dataset_generation: DatasetGeneration::new(1).expect("generation"),
+            },
             cursor,
         ))
         .expect_err("stale dataset");
@@ -330,4 +331,31 @@ fn activity_mapping_paging_and_failed_generation_are_exact() {
     assert_eq!(second.payload().items().len(), 1);
     assert_eq!(second.payload().items()[0].event_id(), "event-0");
     assert!(!second.payload().has_more());
+
+    let connection = Connection::open(&path).expect("dataset mutation connection");
+    connection
+        .execute_batch(
+            "BEGIN IMMEDIATE;
+             UPDATE usage_event SET timestamp_seconds = 3000 WHERE event_id = 'event-2';
+             UPDATE usage_archive_state SET archive_generation = 6 WHERE singleton_id = 1;
+             COMMIT;",
+        )
+        .expect("mutate current revision dataset");
+    drop(connection);
+    let stale_epoch = service
+        .latest_activity(LatestActivityRequest::continuation(
+            page_size,
+            first.header().dataset_identity(),
+            cursor,
+        ))
+        .expect_err("stale dataset generation");
+    assert_eq!(stale_epoch.code(), QueryErrorCode::StaleSnapshot);
+    let changed = service
+        .latest_activity(LatestActivityRequest::first(page_size))
+        .expect("changed dataset first page");
+    assert_eq!(changed.header().snapshot_generation().get(), 3);
+    assert_ne!(
+        changed.header().dataset_identity(),
+        first.header().dataset_identity()
+    );
 }

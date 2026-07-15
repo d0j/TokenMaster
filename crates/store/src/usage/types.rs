@@ -1337,6 +1337,29 @@ impl ArchiveGeneration {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct DatasetGeneration(u64);
+
+impl DatasetGeneration {
+    pub fn new(value: u64) -> Result<Self, StoreError> {
+        if value > i64::MAX as u64 {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self(value))
+    }
+
+    pub(super) fn from_stored(value: i64) -> Result<Self, StoreError> {
+        let value = u64::try_from(value)
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+        Ok(Self(value))
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ArchivePublicationQuality {
     Empty,
@@ -1369,6 +1392,7 @@ impl ArchivePublicationQuality {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ArchivePublication {
     pub(super) generation: ArchiveGeneration,
+    pub(super) dataset_generation: DatasetGeneration,
     pub(super) current_revision: Option<ReplayRevisionId>,
     pub(super) latest_complete_scan_set: Option<ScanSetId>,
     pub(super) quality: ArchivePublicationQuality,
@@ -1378,6 +1402,11 @@ impl ArchivePublication {
     #[must_use]
     pub const fn generation(self) -> ArchiveGeneration {
         self.generation
+    }
+
+    #[must_use]
+    pub const fn dataset_generation(self) -> DatasetGeneration {
+        self.dataset_generation
     }
 
     #[must_use]

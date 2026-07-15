@@ -74,11 +74,31 @@ impl ReplayRevision {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct DatasetGeneration(u64);
+
+impl DatasetGeneration {
+    pub fn new(value: u64) -> Result<Self, QueryError> {
+        if value > i64::MAX as u64 {
+            return Err(QueryError::new(QueryErrorCode::InvalidValue));
+        }
+        Ok(Self(value))
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DatasetIdentity {
     Empty,
     LegacySnapshotV1,
-    ReplayRevision(ReplayRevision),
+    ReplayRevision {
+        revision: ReplayRevision,
+        dataset_generation: DatasetGeneration,
+    },
 }
 
 impl DatasetIdentity {
@@ -87,7 +107,7 @@ impl DatasetIdentity {
         match self {
             Self::Empty => "empty",
             Self::LegacySnapshotV1 => "legacy_snapshot_v1",
-            Self::ReplayRevision(_) => "replay_revision",
+            Self::ReplayRevision { .. } => "replay_revision",
         }
     }
 }

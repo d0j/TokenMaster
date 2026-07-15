@@ -2,11 +2,11 @@ use std::sync::Arc;
 
 use tokenmaster_domain::{ModelKey, TokenCount, TokenUsage, UsageProfileId, UsageProviderId};
 use tokenmaster_query::{
-    ActivityCursor, ActivityItem, ActivityItemParts, DatasetIdentity, LatestActivityPage,
-    MAX_QUERY_PAGE_SIZE, MAX_QUERY_SCOPES, MAX_QUERY_WARNINGS, PageSize, PublicationGeneration,
-    QUERY_SCHEMA_VERSION, QueryClock, QueryEnvelope, QueryError, QueryErrorCode, QueryFreshness,
-    QueryHeader, QueryHeaderParts, QueryQuality, QueryScope, QueryTimeSample, QueryWarningCode,
-    ReplayRevision, SnapshotGeneration, SystemQueryClock,
+    ActivityCursor, ActivityItem, ActivityItemParts, DatasetGeneration, DatasetIdentity,
+    LatestActivityPage, MAX_QUERY_PAGE_SIZE, MAX_QUERY_SCOPES, MAX_QUERY_WARNINGS, PageSize,
+    PublicationGeneration, QUERY_SCHEMA_VERSION, QueryClock, QueryEnvelope, QueryError,
+    QueryErrorCode, QueryFreshness, QueryHeader, QueryHeaderParts, QueryQuality, QueryScope,
+    QueryTimeSample, QueryWarningCode, ReplayRevision, SnapshotGeneration, SystemQueryClock,
 };
 
 fn scope(index: usize) -> QueryScope {
@@ -75,13 +75,29 @@ fn identity_and_generation_are_checked_and_ordered() {
     );
     assert_eq!(ReplayRevision::new(0).expect("first revision").get(), 0);
     assert_eq!(
+        DatasetGeneration::new(0)
+            .expect("first dataset generation")
+            .get(),
+        0
+    );
+    assert_eq!(
         ReplayRevision::new(i64::MAX as u64 + 1)
             .expect_err("SQLite cannot store revision")
             .code(),
         QueryErrorCode::InvalidValue
     );
     assert_eq!(
-        DatasetIdentity::ReplayRevision(ReplayRevision::new(7).expect("revision")).stable_code(),
+        DatasetGeneration::new(i64::MAX as u64 + 1)
+            .expect_err("SQLite cannot store dataset generation")
+            .code(),
+        QueryErrorCode::InvalidValue
+    );
+    assert_eq!(
+        DatasetIdentity::ReplayRevision {
+            revision: ReplayRevision::new(7).expect("revision"),
+            dataset_generation: DatasetGeneration::new(9).expect("dataset generation"),
+        }
+        .stable_code(),
         "replay_revision"
     );
 }
@@ -138,9 +154,10 @@ fn envelope_is_owned_and_uses_snapshot_generation_for_consumer_ordering() {
     let header = QueryHeader::new(QueryHeaderParts {
         snapshot_generation: SnapshotGeneration::new(2).expect("generation"),
         publication_generation: PublicationGeneration::new(9).expect("publication"),
-        dataset_identity: DatasetIdentity::ReplayRevision(
-            ReplayRevision::new(7).expect("revision"),
-        ),
+        dataset_identity: DatasetIdentity::ReplayRevision {
+            revision: ReplayRevision::new(7).expect("revision"),
+            dataset_generation: DatasetGeneration::new(9).expect("dataset generation"),
+        },
         generated_at_ms: 1_000,
         data_through_ms: Some(900),
         freshness: QueryFreshness::Fresh,

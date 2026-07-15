@@ -163,6 +163,7 @@ fn current_tail_append_is_atomic_and_advances_both_cas_tokens() {
     let (mut store, revision) = promoted_store();
     let publication = store.archive_publication().unwrap();
     assert_eq!(publication.generation(), ArchiveGeneration::new(1).unwrap());
+    assert_eq!(publication.dataset_generation().get(), 1);
     assert_eq!(publication.quality(), ArchivePublicationQuality::Complete);
     let batch = CurrentReplayAppendBatch::new(CurrentReplayAppendBatchParts {
         revision_id: revision.id(),
@@ -185,6 +186,14 @@ fn current_tail_append_is_atomic_and_advances_both_cas_tokens() {
     assert_eq!(committed.quality(), ArchivePublicationQuality::Complete);
     assert!(!committed.remaining_work());
     assert_eq!(store.event_page_before(None, 256).unwrap().len(), 2);
+    assert_eq!(
+        store
+            .archive_publication()
+            .unwrap()
+            .dataset_generation()
+            .get(),
+        2
+    );
 
     let stale = store
         .apply_current_replay_append_batch(&batch)
@@ -224,6 +233,7 @@ fn rebuild_requirement_is_a_durable_generation_checked_publication_state() {
 
     assert_eq!(generation.get(), before.generation().get() + 1);
     let after = store.archive_publication().unwrap();
+    assert_eq!(after.dataset_generation(), before.dataset_generation());
     assert_eq!(after.generation(), generation);
     assert_eq!(after.current_revision(), Some(revision.id()));
     assert_eq!(after.quality(), ArchivePublicationQuality::RecoveryPending);
@@ -345,6 +355,7 @@ fn exact_complete_scan_publishes_freshness_with_the_same_current_revision() {
         before.generation().get() + 1
     );
     let after = store.archive_publication().unwrap();
+    assert_eq!(after.dataset_generation(), before.dataset_generation());
     assert_eq!(after.current_revision(), Some(revision.id()));
     assert_eq!(after.latest_complete_scan_set(), Some(scan_set.id()));
     assert_eq!(after.quality(), ArchivePublicationQuality::Complete);

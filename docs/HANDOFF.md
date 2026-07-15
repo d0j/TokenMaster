@@ -67,10 +67,12 @@ defensive, fixed-cache and no-checkpoint-on-close; one short deferred transactio
 exact publication/scan/current-or-legacy keyset capture, stale cursor rejection,
 deadline cancellation/cleanup, and `pageSize + 1`. `QueryService` now maps exact
 freshness/quality and accounting-version staleness, preserves cursors across no-change
-publication, rejects changed datasets, and publishes only successful strictly newer
-owned envelopes. The 100K latency and 256-cycle Windows resource contracts pass. P2-A
-is implemented; the immediate next task is P2-B schema-v7 transactional materialized
-aggregates. Do not replace them with view-time full scans.
+publication, rejects changed replay revision or dataset generation, and publishes only
+successful strictly newer owned envelopes. The 100K latency and 256-cycle Windows
+resource contracts pass. P2-A plus the audited schema-v7 dataset-generation correction
+are implemented; exact migration rollback, insert/update/delete/overflow, real
+no-change scan, and append contracts pass. The immediate next task is P2-B schema-v8
+transactional materialized aggregates. Do not replace them with view-time full scans.
 The 2026-07-16 closure review also freezes the remaining plan ambiguities: P3 is the
 complete UI, P4 presentation/localization, P5 read-only automation, and P6 the
 canonical MSVC signed portable release. It selects the Slint attribution route,

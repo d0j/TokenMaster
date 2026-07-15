@@ -26,7 +26,10 @@ const USAGE_TABLES: [&str; 16] = [
     "usage_replay_selection",
     "usage_replay_work",
 ];
-const LEGACY_TRIGGERS: [&str; 3] = [
+const USAGE_TRIGGERS: [&str; 6] = [
+    "usage_event_dataset_generation_after_delete",
+    "usage_event_dataset_generation_after_insert",
+    "usage_event_dataset_generation_after_update",
     "usage_legacy_event_no_delete",
     "usage_legacy_event_no_insert",
     "usage_legacy_event_no_update",
@@ -263,8 +266,8 @@ fn schema_is_strict_path_free_and_has_exact_usage_tables() {
     let version: i64 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user version");
-    assert_eq!(USAGE_SCHEMA_VERSION, 6);
-    assert_eq!(version, 6);
+    assert_eq!(USAGE_SCHEMA_VERSION, 7);
+    assert_eq!(version, 7);
     assert_eq!(version, USAGE_SCHEMA_VERSION);
 
     let publication_sql = table_sql(&path, "usage_archive_state")
@@ -274,6 +277,7 @@ fn schema_is_strict_path_free_and_has_exact_usage_tables() {
     for required in [
         "singleton_id INTEGER PRIMARY KEY CHECK(singleton_id = 1)",
         "archive_generation INTEGER NOT NULL CHECK(archive_generation >= 0)",
+        "dataset_generation INTEGER NOT NULL DEFAULT 0 CHECK(dataset_generation >= 0)",
         "incremental_state TEXT NOT NULL CHECK(incremental_state IN ('empty','complete','partial','recovery_pending'))",
         "FOREIGN KEY(current_revision_id) REFERENCES usage_replay_revision(revision_id)",
         "FOREIGN KEY(latest_complete_scan_set_id) REFERENCES usage_scan_set(scan_set_id)",
@@ -374,7 +378,7 @@ fn schema_is_strict_path_free_and_has_exact_usage_tables() {
     let triggers = trigger_rows
         .collect::<Result<Vec<_>, _>>()
         .expect("collect trigger names");
-    assert_eq!(triggers, LEGACY_TRIGGERS);
+    assert_eq!(triggers, USAGE_TRIGGERS);
 
     for table in USAGE_TABLES {
         let pragma = format!("PRAGMA table_info({table})");
@@ -429,6 +433,132 @@ fn schema_is_strict_path_free_and_has_exact_usage_tables() {
             .contains("ON DELETE SET NULL"),
         "generation deletion must not rewrite source identity columns"
     );
+}
+
+#[test]
+fn dataset_generation_changes_only_with_canonical_event_mutations() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("dataset-generation-private.sqlite3");
+    drop(UsageStore::open(&path).expect("create schema"));
+    let mut connection = Connection::open(&path).expect("open schema");
+
+    let generation = |connection: &Connection| -> i64 {
+        connection
+            .query_row(
+                "SELECT dataset_generation FROM usage_archive_state WHERE singleton_id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("dataset generation")
+    };
+    assert_eq!(generation(&connection), 0);
+
+    connection
+        .execute(
+            "INSERT INTO usage_event(
+               fingerprint, event_id, selected_file_key, selected_generation,
+               selected_source_offset, profile_id, session_id, source_id,
+               timestamp_seconds, timestamp_nanos, model, fallback_model, long_context,
+               activity_read, activity_edit_write, activity_search, activity_git,
+               activity_build_test, activity_web, activity_subagents, activity_terminal
+             ) VALUES (?1, 'event', ?2, 0, 0, 'default', 'session', 'source',
+                       1, 0, 'model', 0, 'no', 0, 0, 0, 0, 0, 0, 0, 0)",
+            params![[1_u8; 32].as_slice(), [2_u8; 32].as_slice()],
+        )
+        .expect("insert canonical event");
+    assert_eq!(generation(&connection), 1);
+
+    connection
+        .execute(
+            "UPDATE usage_archive_state SET archive_generation = 1 WHERE singleton_id = 1",
+            [],
+        )
+        .expect("freshness-only publication");
+    assert_eq!(generation(&connection), 1);
+
+    connection
+        .execute(
+            "UPDATE usage_event SET timestamp_seconds = 2 WHERE event_id = 'event'",
+            [],
+        )
+        .expect("update canonical event");
+    assert_eq!(generation(&connection), 2);
+
+    let transaction = connection.transaction().expect("begin rollback proof");
+    transaction
+        .execute("DELETE FROM usage_event WHERE event_id = 'event'", [])
+        .expect("delete inside transaction");
+    assert_eq!(generation(&transaction), 3);
+    transaction.rollback().expect("rollback event mutation");
+    assert_eq!(generation(&connection), 2);
+
+    connection
+        .execute("DELETE FROM usage_event WHERE event_id = 'event'", [])
+        .expect("delete canonical event");
+    assert_eq!(generation(&connection), 3);
+}
+
+#[test]
+fn dataset_generation_overflow_aborts_the_event_mutation() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("dataset-generation-overflow-private.sqlite3");
+    drop(UsageStore::open(&path).expect("create schema"));
+    let connection = Connection::open(&path).expect("open schema");
+    connection
+        .execute(
+            "UPDATE usage_archive_state SET dataset_generation = ?1 WHERE singleton_id = 1",
+            [i64::MAX],
+        )
+        .expect("seed exhausted generation");
+
+    let result = connection.execute(
+        "INSERT INTO usage_event(
+           fingerprint, event_id, selected_file_key, selected_generation,
+           selected_source_offset, profile_id, session_id, source_id,
+           timestamp_seconds, timestamp_nanos, model, fallback_model, long_context,
+           activity_read, activity_edit_write, activity_search, activity_git,
+           activity_build_test, activity_web, activity_subagents, activity_terminal
+         ) VALUES (?1, 'overflow', ?2, 0, 0, 'default', 'session', 'source',
+                   1, 0, 'model', 0, 'no', 0, 0, 0, 0, 0, 0, 0, 0)",
+        params![[3_u8; 32].as_slice(), [4_u8; 32].as_slice()],
+    );
+    assert!(result.is_err(), "overflow must fail closed");
+    let event_count: i64 = connection
+        .query_row("SELECT count(*) FROM usage_event", [], |row| row.get(0))
+        .expect("event count");
+    assert_eq!(event_count, 0);
+}
+
+#[test]
+fn missing_dataset_state_aborts_the_event_mutation() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("missing-dataset-state-private.sqlite3");
+    drop(UsageStore::open(&path).expect("create schema"));
+    let connection = Connection::open(&path).expect("open schema");
+    connection
+        .execute("DELETE FROM usage_archive_state WHERE singleton_id = 1", [])
+        .expect("remove state to simulate corruption");
+
+    let result = connection.execute(
+        "INSERT INTO usage_event(
+           fingerprint, event_id, selected_file_key, selected_generation,
+           selected_source_offset, profile_id, session_id, source_id,
+           timestamp_seconds, timestamp_nanos, model, fallback_model, long_context,
+           activity_read, activity_edit_write, activity_search, activity_git,
+           activity_build_test, activity_web, activity_subagents, activity_terminal
+         ) VALUES (?1, 'missing-state', ?2, 0, 0, 'default', 'session', 'source',
+                   1, 0, 'model', 0, 'no', 0, 0, 0, 0, 0, 0, 0, 0)",
+        params![[5_u8; 32].as_slice(), [6_u8; 32].as_slice()],
+    );
+    assert!(result.is_err(), "missing state must fail closed");
+    let event_count: i64 = connection
+        .query_row("SELECT count(*) FROM usage_event", [], |row| row.get(0))
+        .expect("event count");
+    assert_eq!(event_count, 0);
 }
 
 #[test]

@@ -44,7 +44,7 @@ Files:
 
 RED contracts:
 
-- open existing schema-v6 archive read-only and leave file/WAL content unchanged;
+- open existing schema-v7 archive read-only and leave file/WAL content unchanged;
 - missing archive, old/new schema, malformed state, and wrong SQLite version fail with
   stable codes and never migrate;
 - `PRAGMA query_only=ON`, bounded cache, foreign keys, busy timeout, and mmap policy;
@@ -71,7 +71,8 @@ RED contracts:
 - exact `dataThrough`, scopes, and generated-at freshness policy;
 - wall-clock rollback becomes unavailable/clock-discontinuity;
 - no-change publication advances header generation but preserves dataset/cursor;
-- changed revision rejects an old cursor with `stale_snapshot`;
+- changed replay revision or dataset generation rejects an old cursor with
+  `stale_snapshot`;
 - latest and continuation pages map explicit token availability without zeros;
 - every result is owned after the transaction and remains valid after service drop.
 

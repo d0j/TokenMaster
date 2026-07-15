@@ -263,6 +263,20 @@ fn read_store_is_query_only_bounded_and_does_not_modify_archive() {
         .code(),
         StoreErrorCode::InvalidValue
     );
+    assert_eq!(
+        UsageActivityQuery::new(
+            Some(UsageQueryDatasetIdentity::ReplayRevision {
+                revision_id: 0,
+                dataset_generation: i64::MAX as u64 + 1,
+            }),
+            None,
+            1,
+            Duration::from_secs(2),
+        )
+        .expect_err("dataset generation exceeds SQLite range")
+        .code(),
+        StoreErrorCode::InvalidValue
+    );
 }
 
 #[test]
@@ -323,7 +337,10 @@ fn capture_is_exact_keyset_bounded_and_rejects_stale_dataset() {
     let path = directory.path().join("usage.sqlite3");
     seed_current_archive(&path);
     let mut store = UsageReadStore::open(&path).expect("read store");
-    let identity = UsageQueryDatasetIdentity::ReplayRevision(0);
+    let identity = UsageQueryDatasetIdentity::ReplayRevision {
+        revision_id: 0,
+        dataset_generation: 3,
+    };
 
     let first = store
         .capture_activity_page(query(Some(identity), None, 2))
@@ -352,12 +369,42 @@ fn capture_is_exact_keyset_bounded_and_rejects_stale_dataset() {
 
     let stale = store
         .capture_activity_page(query(
-            Some(UsageQueryDatasetIdentity::ReplayRevision(1)),
+            Some(UsageQueryDatasetIdentity::ReplayRevision {
+                revision_id: 1,
+                dataset_generation: 3,
+            }),
             Some(cursor),
             2,
         ))
         .expect_err("stale dataset");
     assert_eq!(stale.code(), StoreErrorCode::StaleRevision);
+
+    let writer = Connection::open(&path).expect("append identity writer");
+    writer
+        .execute_batch(
+            "BEGIN IMMEDIATE;
+             UPDATE usage_event SET timestamp_seconds = 3000 WHERE event_id = 'event-2';
+             UPDATE usage_archive_state SET archive_generation = 5 WHERE singleton_id = 1;
+             COMMIT;",
+        )
+        .expect("simulate current revision append publication");
+    drop(writer);
+    let stale_after_append = store
+        .capture_activity_page(query(Some(identity), Some(cursor), 2))
+        .expect_err("old cursor after current-revision mutation");
+    assert_eq!(stale_after_append.code(), StoreErrorCode::StaleRevision);
+    let appended_identity = UsageQueryDatasetIdentity::ReplayRevision {
+        revision_id: 0,
+        dataset_generation: 4,
+    };
+    assert_eq!(
+        store
+            .capture_activity_page(query(Some(appended_identity), None, 2))
+            .expect("new dataset identity")
+            .publication()
+            .dataset_identity(),
+        appended_identity
+    );
 }
 
 #[test]

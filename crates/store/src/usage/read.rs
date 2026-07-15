@@ -116,20 +116,30 @@ impl UsageStore {
     }
 
     pub fn archive_publication(&self) -> Result<ArchivePublication, StoreError> {
-        let (generation, current_revision, complete_scan_set, quality): (
+        let (generation, dataset_generation, current_revision, complete_scan_set, quality): (
+            i64,
             i64,
             Option<i64>,
             Option<i64>,
             String,
         ) = self.connection.query_row(
-            "SELECT archive_generation, current_revision_id,
+            "SELECT archive_generation, dataset_generation, current_revision_id,
                     latest_complete_scan_set_id, incremental_state
              FROM usage_archive_state WHERE singleton_id = 1",
             [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
         )?;
         Ok(ArchivePublication {
             generation: ArchiveGeneration::from_stored(generation)?,
+            dataset_generation: DatasetGeneration::from_stored(dataset_generation)?,
             current_revision: current_revision
                 .map(ReplayRevisionId::from_stored)
                 .transpose()?,
