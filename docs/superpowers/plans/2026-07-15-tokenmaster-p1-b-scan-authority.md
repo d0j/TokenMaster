@@ -1,6 +1,7 @@
 # TokenMaster P1-B Scan Authority Implementation Plan
 
-**Status:** Approved for autonomous execution on 2026-07-15.
+**Status:** In progress. Tasks 1-3 implemented and verified on 2026-07-15; Task 4 is
+next. Do not claim complete until Tasks 4-6 pass.
 
 > **Execution mode:** root-only, test-first, one writer, current feature branch. The
 > available task-name-only child surface cannot prove requested model routing, so
@@ -13,6 +14,16 @@ Add the store-owned source-discovery authority required by the live engine: exac
 provider/profile scan scopes, complete-only missing-source finalization, bounded scan
 history, and replay revisions bound to one complete scan set. Preserve all P0 and
 P1-A archive truth, privacy, rollback, and memory bounds.
+
+## Progress evidence
+
+- Tasks 1-2: strict schema v5, exact v1-v4 migration, populated scan/source/replay
+  preservation, and every v4 create/copy/drop rollback boundary pass.
+- Task 3: provider-qualified lifecycle, idempotent observation, complete-only
+  presence, partial preservation, reopen, post-scan registration safety, and injected
+  parent/finalization rollback pass.
+- Remaining: scan-bound replay including zero sources, bounded pruning/recovery,
+  integration documentation, and full workspace acceptance.
 
 ## Corrected architecture
 

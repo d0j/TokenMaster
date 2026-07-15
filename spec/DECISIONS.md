@@ -137,3 +137,25 @@ the full canonical page into every staging revision doubles large archives. A
 self-contained indexed projection with explicit origin/retained state preserves
 history in set-based bounded-memory SQL and supports atomic rollback without those
 costs or false claims.
+
+## ADR-014 — Provider-qualified scan-set authority
+
+Decision: schema v5 groups one bounded, duplicate-free manifest of
+`(provider_id, profile_id)` scopes under a `scan_set_id` and creates one typed child
+scan per scope. The store owns observation membership through
+`usage_source.last_seen_scan_id`. Only a complete child may derive `missing`; all
+other outcomes preserve the prior value. A new source registered after any complete
+scan for its scope starts missing until a later complete scan observes it. Ordinary
+append has no scan authority. Parent/child creation and complete-only finalization are
+immediate transactions with explicit fault rollback.
+
+Historical v4 scans are migrated only when their provider can be derived from exact
+referenced sources; otherwise they are isolated as `legacy-unverified`. Replay
+revisions gain nullable scan-set provenance for migration compatibility, while the
+future production replay begin requires one exact complete scan set. Closed scan
+history will be pruned only when unreferenced and beyond a fixed bounded window.
+
+Rationale: a profile ID is not globally unique across providers, one archive replay
+can cover several scopes, and append activity is not proof of complete enumeration.
+A scan set provides one archive-wide authority boundary without retaining a
+scan-by-source history table or allowing partial enumeration to erase evidence.

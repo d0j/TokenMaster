@@ -141,7 +141,6 @@ fn append_batch(
         ]
         .into_boxed_slice(),
         next_checkpoint: checkpoint(source_key, next_offset),
-        last_seen_scan_id: None,
         diagnostic_count_delta: 0,
     })
     .expect("valid append batch")
@@ -171,7 +170,6 @@ fn discard_batch(
         ]
         .into_boxed_slice(),
         next_checkpoint: discard_checkpoint(source_key, 100, next_scan_offset),
-        last_seen_scan_id: None,
         diagnostic_count_delta: 1,
     })
     .expect("valid discard batch")
@@ -194,6 +192,42 @@ fn append_rejects_canonical_events_from_a_different_provider() {
         store.counts().expect("counts after rejected append"),
         before
     );
+}
+
+#[test]
+fn append_cannot_clear_complete_scan_missing_authority() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("append-missing-private.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    store
+        .register_source(&registration(4))
+        .expect("register source");
+    drop(store);
+
+    let connection = Connection::open(&path).expect("mark source missing");
+    connection
+        .execute(
+            "UPDATE usage_source SET missing = 1 WHERE file_key = ?1",
+            [[4_u8; 32].as_slice()],
+        )
+        .expect("mark missing");
+    drop(connection);
+
+    let mut store = UsageStore::open(&path).expect("reopen missing source");
+    store
+        .apply_append_batch(&append_batch(4, 0, 100, vec![event(8, 10)], None))
+        .expect("ordinary append remains valid");
+    drop(store);
+
+    let missing: i64 = Connection::open(&path)
+        .expect("inspect missing state")
+        .query_row(
+            "SELECT missing FROM usage_source WHERE file_key = ?1",
+            [[4_u8; 32].as_slice()],
+            |row| row.get(0),
+        )
+        .expect("missing state");
+    assert_eq!(missing, 1, "only a complete scan may restore presence");
 }
 
 #[test]

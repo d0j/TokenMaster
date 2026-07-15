@@ -231,7 +231,7 @@ impl UsageStore {
     ) -> Result<ReplayEpoch, StoreError> {
         let replay_parts = batch.parts();
         let append = replay_parts.append_batch.parts();
-        if append.last_seen_scan_id.is_some() || append.diagnostic_count_delta != 0 {
+        if append.diagnostic_count_delta != 0 {
             return Err(StoreError::new(StoreErrorCode::InvalidValue));
         }
         let transaction = self
@@ -2992,7 +2992,6 @@ mod tests {
             previous_partial_chunk: None,
             chunk_updates: vec![StoredSourceChunk::new(0, 100, [14; 32])?].into_boxed_slice(),
             next_checkpoint: checkpoint(seed, 100)?,
-            last_seen_scan_id: None,
             diagnostic_count_delta: 0,
         })?;
         store.apply_append_batch(&current)?;
@@ -3008,7 +3007,6 @@ mod tests {
             previous_partial_chunk: None,
             chunk_updates: vec![StoredSourceChunk::new(0, 100, [14; 32])?].into_boxed_slice(),
             next_checkpoint: checkpoint(seed, 100)?,
-            last_seen_scan_id: None,
             diagnostic_count_delta: 0,
         })?;
         let epoch =
@@ -3038,7 +3036,6 @@ mod tests {
             previous_partial_chunk: None,
             chunk_updates: vec![StoredSourceChunk::new(0, 100, [15; 32])?].into_boxed_slice(),
             next_checkpoint: checkpoint(seed, 100)?,
-            last_seen_scan_id: None,
             diagnostic_count_delta: 0,
         })?;
         let first_epoch =
@@ -3060,7 +3057,6 @@ mod tests {
             previous_partial_chunk: None,
             chunk_updates: vec![StoredSourceChunk::new(0, 100, [15; 32])?].into_boxed_slice(),
             next_checkpoint: checkpoint(seed, 100)?,
-            last_seen_scan_id: None,
             diagnostic_count_delta: 0,
         })?;
         let replacement_epoch =

@@ -30,12 +30,23 @@ Archive writes use explicit transactions and compare expected generation, identi
 checkpoint, and proof state. Failed writes roll back completely. Incomplete, cancelled,
 or failed scans MUST NOT authorize destructive source reconciliation.
 
+Scan authority is provider/profile qualified and store-owned. One bounded scan set
+contains one child per exact scope; an observation may update only the matching
+running child. Only successful completion of that child may derive presence from its
+exact `last_seen_scan_id` set. Ordinary append, late registration, partial results,
+and caller-supplied counters cannot clear `missing`. Parent/child creation and
+complete-only presence finalization are atomic; injected failures after their first
+mutation prove rollback. This presence signal still cannot delete canonical usage.
+
 Replay rebuilds use a SQLite-owned fixed all-registered-source manifest, store-owned
 accounting versions, and an evidence-epoch compare-and-swap. The product path stages
 all sources with set-based SQL and retains at most one 256-row validation page; stored
 source counts never size application collections. Legacy v1 rows are copied into an
 immutable snapshot, exact v2 archives are migrated non-destructively through strict
 v3, and exact v3 canonical rows migrate transactionally to strict v4 provenance.
+Exact v4 scan/replay rows migrate transactionally to strict v5 provider-qualified
+scan sets; ambiguous scope ownership, incoherent terminal state, or altered schema
+fails closed.
 Replay observations, classifications, selections, and checkpoints remain private
 staging state until an explicit sealed promotion.
 Stored parent facts from another accounting version MUST fail closed; staging MUST NOT

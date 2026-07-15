@@ -23,6 +23,9 @@ All notable changes are recorded here.
   publishing/origin/retained provenance.
 - Atomic carry-forward for absent or conflicting replay-verified evidence, with
   truth-table, truncation, reopen, tamper, and fault-rollback contracts.
+- Strict SQLite schema v5 with exact v1-v4 migration, bounded provider-qualified
+  scan sets, complete-only source presence, coherent terminal state, and lifecycle
+  rollback contracts.
 - Approved a provider-neutral weekly quota reset history: immutable pre/post epochs,
   scheduled/early/repeated reset transitions, allowance-change separation, bounded
   retention, and shared UI/CLI/MCP semantics for P2.
@@ -40,3 +43,5 @@ All notable changes are recorded here.
 - Removed the canonical page's lifetime dependency on obsolete source generations;
   complete truncation/replacement now preserves accounted usage without synthetic
   observations or unbounded generation retention.
+- Removed scan authority from ordinary append and made post-scan source registration
+  remain missing until a later complete matching-scope scan observes it.

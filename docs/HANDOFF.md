@@ -25,12 +25,21 @@ complete under `docs/superpowers/plans/2026-07-14-tokenmaster-p0-e-pipeline-proo
 the test-only driver proves the real synthetic Codex-to-archive path with more than
 256 files/events, restart, append, atomic replacement, exact totals/quality, and
 failure discard without changing production dependency direction. The immediate next
-task is P1-B scan epochs/source-set finalization, not expansion of the test driver.
+task is P1-B.2 scan-bound replay, not expansion of the test driver.
 P1-A is complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p1-retained-projection.md`: strict
 schema v4, exact v1/v2/v3 migration, and atomic retained projection now handle
 complete truncation/replacement without retaining obsolete generations. The complete
 approved order is in `docs/AUDIT_AND_MASTER_PLAN.md`.
+
+P1-B.1 is implemented under
+`docs/superpowers/plans/2026-07-15-tokenmaster-p1-b-scan-authority.md`: strict schema
+v5 migrates exact v1-v4 archives and adds a bounded provider/profile-qualified scan
+set. Only a complete child derives presence from exact last-seen membership. Partial
+or failed outcomes, append, and late registration cannot invent presence. Parent
+creation and missing-state finalization have injected rollback proofs. The remaining
+P1-B.2 work binds replay begin/seal/promotion to one complete set and supports a
+zero-present-source retention-only revision; P1-B.3 owns bounded pruning/recovery.
 
 Tasks 3+ in `2026-07-14-tokenmaster-p0-replay-correctness.md` are superseded. Do not
 execute its Codex-owned fingerprint/signature or destructive migration steps. Do not
@@ -62,6 +71,7 @@ pending, stale, or invalid rebuilds remain blocked.
 ```powershell
 pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
 cargo +1.97.0 test -p tokenmaster-store --test usage_ingest_contract --locked
+cargo +1.97.0 test -p tokenmaster-store --test scan_contract --locked
 cargo +1.97.0 test -p tokenmaster-accounting --locked
 cargo +1.97.0 test -p tokenmaster-accounting --test replay_classifier_contract --locked
 cargo +1.97.0 test -p tokenmaster-store --test usage_schema_contract --locked
@@ -80,8 +90,8 @@ pwsh -NoProfile -File scripts\verify-m0.ps1 -RepositoryRoot (Get-Location).Path
 ```
 
 The P0 authority/lineage/classifier, P0-D archive, P0-D.1 scalable manifest, P0-E
-transactional composition, and P1-A retained projection slices passed focused
-contracts. P0-D.1 evidence includes exact populated-v2
+transactional composition, P1-A retained projection, and P1-B.1 scoped scan
+authority slices passed focused contracts. P0-D.1 evidence includes exact populated-v2
 migration and three injected rollback boundaries, 300-source set-based begin, a
 two-page seal/promotion/reopen lifecycle, late-source seal rejection, and exact discard.
 P0-E adds persisted physical-identity reconstruction, bounded staging/chunk reads,
@@ -90,6 +100,10 @@ bounds, reopen after batch one, and Windows atomic replacement. P1-A adds exact
 v1/v2/v3-to-v4 migration, truth-table retention, provenance/fault rollback, and
 successful complete-line truncation carry-forward; cancellation, malformed data,
 incomplete tails, and pending evidence remain fail-closed.
+P1-B.1 adds exact v4-to-v5 populated migration plus create/copy/drop rollback,
+provider-qualified lifecycle, complete-only presence, late-registration safety, and
+two lifecycle fault rollback contracts. It does not yet claim scan-bound replay or
+bounded scan-history pruning.
 Clean-root, formatting, strict workspace Clippy, and the full locked workspace passed;
 see the P1-A history entry for exact commands and focused counts. The
 one-million-row M0 scale test remains explicitly ignored in the normal workspace run.

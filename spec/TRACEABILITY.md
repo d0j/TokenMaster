@@ -24,14 +24,14 @@ A design or plan is not implementation evidence.
 | TM-DATA-001 | partial | domain/provider/Codex/store privacy boundaries | adversarial/debug/path privacy tests; future surfaces must repeat gates |
 | TM-DATA-002 | implemented | domain drafts plus exclusive `tokenmaster-accounting` canonicalizer | canonicalizer vectors, compile-fail authority tests, Codex/store contracts |
 | TM-DATA-003 | implemented | file identity and reader checkpoint | physical identity live/persisted round-trip, checkpoint conversion, resume bound, and restart contracts |
-| TM-DATA-004 | implemented | atomic current append, SQLite-owned all-source staging, exact preparation, paged seal, retained projection promotion, and staging discard | migration/fault/all-source/300-source/P0-E/P1-A lifecycle/reopen/cancellation contracts pass |
-| TM-DATA-005 | implemented | `crates/store/src/usage` | strict schema v4, exact v1/v2/v3 migration, pragmas, keyset paging, ingest contracts |
+| TM-DATA-004 | implemented | atomic current append, scoped complete-only scan finalization, SQLite-owned all-source staging, exact preparation, paged seal, retained projection promotion, and staging discard | scan lifecycle/fault/migration/all-source/300-source/P0-E/P1-A contracts pass; scan-bound replay remains P1-B.2 |
+| TM-DATA-005 | implemented | `crates/store/src/usage` | strict schema v5, exact v1/v2/v3/v4 migration, provider-qualified scan sets, pragmas, keyset paging, ingest contracts |
 | TM-DATA-006 | partial | reader/parser/store limits | line/resume/batch/page bounds; full UI/query/plugin limits pending |
 | TM-DATA-007 | implemented | replay facts/classifier in a private overlay plus schema-v4 self-contained canonical projection with deterministic selection/retention | v1/v2/v3-to-v4 migration plus replay/append/restart/300-file/atomic-replacement/truncation truth-table/failure contracts pass |
 | TM-SEC-001 | partial | local-only product and no listener today | future quota HTTPS opt-in and MCP stdio security tests pending |
 | TM-SEC-002 | partial | current JSONL/store boundaries validate types and sizes | future config/CLI/MCP/plugin boundary suites pending |
 | TM-SEC-003 | implemented | provider/Codex/store errors and value types | serialized/debug privacy and path-redaction contracts |
-| TM-SEC-004 | partial | transactional CAS/preparation, immutable legacy, exact paged seal, explicit carry-forward, atomic rollback, and exact-epoch discard | P1-A proves direct/replay/conflict/absent policy and truncation recovery; P1 still owns live scan/runtime authority |
+| TM-SEC-004 | partial | transactional scoped scan authority, CAS/preparation, immutable legacy, exact paged seal, explicit carry-forward, atomic rollback, and exact-epoch discard | P1-B.1 proves complete-only presence and scan transaction rollback; scan-bound replay/pruning plus live runtime remain |
 | TM-SEC-005 | partial | M0 skins are declarative application data | external skin package schema/validation not implemented |
 | TM-SEC-006 | planned | built-in Codex exists; isolated plugin host deferred | provider plugin design and future 1.1 conformance/security gates |
 
@@ -43,8 +43,9 @@ schema-v2-to-v3 migration, disk-backed all-source begin, checked 64-bit counts, 
 256-row keyset-paged validation. P0-E proves the real synthetic Codex-to-archive path,
 including bounded restart, atomic replacement, failure discard, totals, and quality.
 P1-A adds schema-v4 provenance and explicit prior-evidence carry-forward without
-retaining obsolete generations. The production runtime engine, scan epochs, and
-source-set finalization remain P1-B and later.
+retaining obsolete generations. P1-B.1 adds strict schema v5 and provider-qualified,
+complete-only scan-set presence authority. Scan-bound replay, bounded scan-history
+pruning, and the production runtime engine remain P1-B.2/P1-B.3 and later.
 Tasks 3+ in the older replay plan are historical and superseded.
 
 The clean-root invariant is implemented by `scripts/audit-clean-root.ps1` and its

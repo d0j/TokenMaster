@@ -39,17 +39,30 @@
    recover a rebuild. P0-E proves exact discard through a test-only driver; no
    user-facing recovery command exists yet.
 
+## Scan-set recovery
+
+1. Read `running_scan_set()` after reopen. Resume only that exact set and its exact
+   provider/profile child scans; never synthesize replacement IDs or treat append
+   activity as observation.
+2. A running child may accept idempotent observations only for registered sources in
+   its own scope. Finish it with the truthful explicit outcome. Only `complete`
+   finalizes presence; every other outcome preserves the prior `missing` values.
+3. Close the parent only after every child is terminal. A mixed parent truthfully
+   aggregates to failed, timed out, cancelled, or partial and cannot authorize the
+   future production replay path. Do not edit scan or source rows manually.
+
 ## Schema recovery
 
-- Opening an exact schema-v1, v2, or v3 archive performs the non-destructive schema-v4
+- Opening an exact schema-v1, v2, v3, or v4 archive performs the non-destructive schema-v5
   migration automatically. Preserve the original archive and reproduce any failure
   against a synthetic copy; do not edit `sqlite_schema`, rename tables manually, or
   disable foreign keys in an operator workflow.
 - Migration validates the exact source schema before mutation. V2 revision migration
-  restores `foreign_keys=ON` after every outcome; v3 canonical projection migration
-  runs in one immediate transaction. Create/copy/drop faults roll back to the exact
-  prior schema and logical rows. A migration error is fail-closed; never delete the
-  database to bypass it.
+  restores `foreign_keys=ON` after every outcome; v3 canonical projection and v4
+  scan-set migrations run in immediate transactions. Create/copy/drop faults roll
+  back to the exact prior schema and logical rows. Ambiguous migrated scan ownership
+  or incoherent terminal state fails closed. Never delete the database to bypass a
+  migration error.
 
 Generated `target/`, `reports/`, and `dist/` content is disposable developer output.
 Do not use it as a release claim. M0 acceptance requires the exact external receipts

@@ -43,7 +43,17 @@ checkpoint, and source metadata in one transaction. A stale generation, identity
 offset, scan position, or partial proof MUST write nothing.
 
 Staging generations MUST remain invisible to canonical reads. The product replay
-begin snapshots every registered source into SQLite in one immediate transaction;
+begin currently supports a compatibility all-registered-source snapshot in one
+immediate transaction; the production P1-B path MUST instead bind to one exact
+complete scan set. A scan set contains a bounded duplicate-free manifest of
+provider/profile scopes and exactly one child scan per scope. Only a complete child
+may set unseen sources missing or restore observed sources present. Registration and
+ordinary append never manufacture presence: after a scope has complete-scan
+authority, a newly registered source starts missing until a later complete child
+observes it. Partial, cancelled, failed, timed-out, pending, stale, or foreign-scope
+scans preserve prior missing state. Scan-set creation and source finalization are
+single immediate transactions with fault-tested rollback. The compatibility replay
+path still snapshots every registered source into SQLite;
 the stored checked 64-bit source count is never an application allocation authority.
 Before the first staging append, an adapter may prepare only its exact untouched
 pending source with a validated zero-offset incremental checkpoint. Preparation is
@@ -78,12 +88,16 @@ original source still exists.
 The usage archive has a strict versioned schema. Schema v3 removed the historical
 256-source revision constraint. Schema v4 makes the canonical projection
 self-contained and adds publishing revision, origin revision, and retained state, so
-obsolete generations can be removed without fabricating provenance. Exact v1, v2,
-and v3 archives migrate non-destructively through validated create/copy/drop/rename
-steps; v2 foreign keys are disabled only outside the revision-table migration
-transaction, checked before commit, and restored on every tested exit. V3-to-v4
-event migration is one immediate transaction with exact logical-copy and rollback
-checks.
+obsolete generations can be removed without fabricating provenance. Schema v5 adds
+provider-qualified scan sets, coherent child terminal state, exact last-seen
+references, running-scope exclusivity, and optional scan-set provenance for migrated
+replay revisions. Exact v1-v4 archives migrate non-destructively through validated
+create/copy/drop/rename steps; populated v4 scan ownership is derived only from its
+exact referenced sources, otherwise marked `legacy-unverified`. Ambiguous or
+incoherent state fails closed. V2 foreign keys are disabled only outside the
+revision-table migration transaction, checked before commit, and restored on every
+tested exit. V3-to-v4 and v4-to-v5 migrations use immediate transactions with exact
+logical-copy and injected rollback checks.
 File-backed connections MUST use WAL,
 FULL synchronous writes, foreign keys, a bounded busy timeout, bounded journal/cache
 policy, and disabled mmap. Collections and complete-manifest validation are

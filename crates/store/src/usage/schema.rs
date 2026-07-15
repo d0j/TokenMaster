@@ -1,7 +1,8 @@
-pub const USAGE_SCHEMA_VERSION: i64 = 4;
+pub const USAGE_SCHEMA_VERSION: i64 = 5;
 pub(super) const V1_SCHEMA_VERSION: i64 = 1;
 pub(super) const V2_SCHEMA_VERSION: i64 = 2;
 pub(super) const V3_SCHEMA_VERSION: i64 = 3;
+pub(super) const V4_SCHEMA_VERSION: i64 = 4;
 
 pub(super) struct TableContract {
     pub(super) name: &'static str,
@@ -95,6 +96,21 @@ pub(super) const USAGE_INDEX_CONTRACTS: &[IndexContract] = &[
     IndexContract {
         name: "usage_replay_revision_one_staging",
         sql: "CREATE UNIQUE INDEX usage_replay_revision_one_staging ON usage_replay_revision(status) WHERE status = 'staging'",
+    },
+];
+
+pub(super) const V5_INDEX_CONTRACTS: &[IndexContract] = &[
+    IndexContract {
+        name: "usage_scan_one_running_scope",
+        sql: "CREATE UNIQUE INDEX usage_scan_one_running_scope ON usage_scan(provider_id, profile_id) WHERE completion_state = 'running'",
+    },
+    IndexContract {
+        name: "usage_scan_set_one_running",
+        sql: "CREATE UNIQUE INDEX usage_scan_set_one_running ON usage_scan_set(completion_state) WHERE completion_state = 'running'",
+    },
+    IndexContract {
+        name: "usage_source_scope_missing",
+        sql: "CREATE INDEX usage_source_scope_missing ON usage_source(provider_id, profile_id, missing, file_key)",
     },
 ];
 
@@ -384,6 +400,51 @@ pub(super) const USAGE_TABLE_CONTRACTS: &[TableContract] = &[
     },
 ];
 
+pub(super) const V5_SCAN_SET_CONTRACT: TableContract = TableContract {
+    name: "usage_scan_set",
+    columns: &[
+        "scan_set_id",
+        "started_at_ms",
+        "completed_at_ms",
+        "completion_state",
+        "expected_scope_count",
+    ],
+};
+
+pub(super) const V5_USAGE_SCAN_CONTRACT: TableContract = TableContract {
+    name: "usage_scan",
+    columns: &[
+        "scan_id",
+        "scan_set_id",
+        "provider_id",
+        "profile_id",
+        "started_at_ms",
+        "completed_at_ms",
+        "completion_state",
+        "sources_seen",
+        "files_read",
+        "bytes_read",
+        "events_observed",
+        "diagnostics",
+    ],
+};
+
+pub(super) const V5_REPLAY_REVISION_CONTRACT: TableContract = TableContract {
+    name: "usage_replay_revision",
+    columns: &[
+        "revision_id",
+        "status",
+        "canonicalizer_version",
+        "fingerprint_version",
+        "replay_signature_version",
+        "expected_source_count",
+        "evidence_epoch",
+        "sealed",
+        "promoted",
+        "scan_set_id",
+    ],
+};
+
 pub(super) const PRE_V4_USAGE_EVENT_CONTRACT: TableContract = TableContract {
     name: "usage_event",
     columns: &[
@@ -656,6 +717,59 @@ CREATE TABLE usage_replay_revision (
   promoted INTEGER NOT NULL CHECK(promoted IN (0,1)),
   CHECK((status = 'staging' AND promoted = 0) OR
         (status = 'current' AND sealed = 1 AND promoted = 1))
+) STRICT;
+"#;
+
+pub(super) const V5_SCAN_SET_SCHEMA: &str = r#"
+CREATE TABLE usage_scan_set (
+  scan_set_id INTEGER PRIMARY KEY CHECK(scan_set_id >= 0),
+  started_at_ms INTEGER NOT NULL,
+  completed_at_ms INTEGER,
+  completion_state TEXT NOT NULL CHECK(completion_state IN ('running','complete','partial','cancelled','failed','timed_out')),
+  expected_scope_count INTEGER NOT NULL CHECK(expected_scope_count BETWEEN 1 AND 256),
+  CHECK((completion_state = 'running' AND completed_at_ms IS NULL) OR
+        (completion_state <> 'running' AND completed_at_ms IS NOT NULL)),
+  CHECK(completed_at_ms IS NULL OR completed_at_ms >= started_at_ms)
+) STRICT;
+"#;
+
+pub(super) const V5_USAGE_SCAN_SCHEMA: &str = r#"
+CREATE TABLE usage_scan (
+  scan_id INTEGER PRIMARY KEY CHECK(scan_id >= 0),
+  scan_set_id INTEGER NOT NULL CHECK(scan_set_id >= 0),
+  provider_id TEXT NOT NULL CHECK(length(CAST(provider_id AS BLOB)) BETWEEN 1 AND 64),
+  profile_id TEXT NOT NULL CHECK(length(CAST(profile_id AS BLOB)) BETWEEN 1 AND 128),
+  started_at_ms INTEGER NOT NULL,
+  completed_at_ms INTEGER,
+  completion_state TEXT NOT NULL CHECK(completion_state IN ('running','complete','partial','cancelled','failed','timed_out')),
+  sources_seen INTEGER NOT NULL DEFAULT 0 CHECK(sources_seen >= 0),
+  files_read INTEGER NOT NULL DEFAULT 0 CHECK(files_read >= 0),
+  bytes_read INTEGER NOT NULL DEFAULT 0 CHECK(bytes_read >= 0),
+  events_observed INTEGER NOT NULL DEFAULT 0 CHECK(events_observed >= 0),
+  diagnostics INTEGER NOT NULL DEFAULT 0 CHECK(diagnostics >= 0),
+  UNIQUE(scan_set_id, provider_id, profile_id),
+  CHECK((completion_state = 'running' AND completed_at_ms IS NULL) OR
+        (completion_state <> 'running' AND completed_at_ms IS NOT NULL)),
+  CHECK(completed_at_ms IS NULL OR completed_at_ms >= started_at_ms),
+  FOREIGN KEY(scan_set_id) REFERENCES usage_scan_set(scan_set_id)
+) STRICT;
+"#;
+
+pub(super) const V5_REPLAY_REVISION_SCHEMA: &str = r#"
+CREATE TABLE usage_replay_revision (
+  revision_id INTEGER PRIMARY KEY CHECK(revision_id >= 0),
+  status TEXT NOT NULL CHECK(status IN ('staging','current')),
+  canonicalizer_version INTEGER NOT NULL CHECK(canonicalizer_version BETWEEN 1 AND 65535),
+  fingerprint_version INTEGER NOT NULL CHECK(fingerprint_version BETWEEN 1 AND 65535),
+  replay_signature_version INTEGER NOT NULL CHECK(replay_signature_version BETWEEN 1 AND 65535),
+  expected_source_count INTEGER NOT NULL CHECK(expected_source_count >= 0),
+  evidence_epoch INTEGER NOT NULL CHECK(evidence_epoch >= 0),
+  sealed INTEGER NOT NULL CHECK(sealed IN (0,1)),
+  promoted INTEGER NOT NULL CHECK(promoted IN (0,1)),
+  scan_set_id INTEGER CHECK(scan_set_id IS NULL OR scan_set_id >= 0),
+  CHECK((status = 'staging' AND promoted = 0) OR
+        (status = 'current' AND sealed = 1 AND promoted = 1)),
+  FOREIGN KEY(scan_set_id) REFERENCES usage_scan_set(scan_set_id)
 ) STRICT;
 "#;
 

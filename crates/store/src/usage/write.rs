@@ -47,7 +47,15 @@ impl UsageStore {
                file_key, provider_id, profile_id, source_id, source_kind,
                logical_identity, physical_identity, current_generation,
                missing, verification_level, diagnostic_count
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, 0, ?8, 0)",
+             ) VALUES (
+               ?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL,
+               CASE WHEN EXISTS(
+                 SELECT 1 FROM usage_scan
+                 WHERE provider_id = ?2 AND profile_id = ?3
+                   AND completion_state = 'complete'
+               ) THEN 1 ELSE 0 END,
+               ?8, 0
+             )",
             params![
                 parts.source_key.as_bytes().as_slice(),
                 parts.provider_id.as_ref(),
@@ -161,7 +169,6 @@ impl UsageStore {
         update_source_metadata(
             &transaction,
             parts.source_key,
-            parts.last_seen_scan_id,
             parts.diagnostic_count_delta,
             &parts.next_checkpoint,
         )?;
@@ -546,24 +553,20 @@ pub(super) fn update_checkpoint_for_status(
 pub(super) fn update_source_metadata(
     transaction: &Transaction<'_>,
     source_key: super::SourceKey,
-    last_seen_scan_id: Option<u64>,
     diagnostic_count_delta: u64,
     checkpoint: &StoredCheckpoint,
 ) -> Result<(), StoreError> {
     let delta = sql_u64(diagnostic_count_delta)?;
     let updated = transaction.execute(
         "UPDATE usage_source SET
-           last_seen_scan_id = COALESCE(?1, last_seen_scan_id),
-           missing = 0,
-           verification_level = ?2,
+           verification_level = ?1,
            diagnostic_count = CASE
-             WHEN diagnostic_count > 9223372036854775807 - ?3
+             WHEN diagnostic_count > 9223372036854775807 - ?2
                THEN 9223372036854775807
-             ELSE diagnostic_count + ?3
+             ELSE diagnostic_count + ?2
            END
-         WHERE file_key = ?4",
+         WHERE file_key = ?3",
         params![
-            last_seen_scan_id.map(sql_u64).transpose()?,
             checkpoint.verification().as_sql(),
             delta,
             source_key.as_bytes().as_slice(),
@@ -698,7 +701,6 @@ mod tests {
             previous_partial_chunk: None,
             chunk_updates: vec![StoredSourceChunk::new(0, 100, [8; 32])?].into_boxed_slice(),
             next_checkpoint: checkpoint(seed, 100)?,
-            last_seen_scan_id: None,
             diagnostic_count_delta: 0,
         })?)
     }

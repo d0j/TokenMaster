@@ -16,6 +16,12 @@ only bounded TokenMaster queries and an idempotent non-destructive refresh opera
 It MUST NOT expose arbitrary SQL, shell, HTTP, filesystem, credential, prompt,
 response, or transcript operations.
 
+A refresh result reports explicit scan-set and per-scope outcomes. Only an all-complete
+set may advance archive freshness or start the production replay path; partial,
+cancelled, failed, and timed-out results remain visible quality states and never
+silently become success. Public surfaces expose bounded IDs, counts, timestamps, and
+stable codes, not source keys or paths.
+
 ## UI data boundary
 
 The UI consumes immutable bounded snapshots. It receives stable data-quality and

@@ -8,7 +8,8 @@ use tokenmaster_store::{
     USAGE_SCHEMA_VERSION, UsageStore,
 };
 
-const USAGE_TABLES: [&str; 14] = [
+const USAGE_TABLES: [&str; 15] = [
+    "usage_scan_set",
     "usage_source",
     "usage_generation",
     "usage_source_chunk",
@@ -261,14 +262,45 @@ fn schema_is_strict_path_free_and_has_exact_usage_tables() {
     let version: i64 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user version");
-    assert_eq!(USAGE_SCHEMA_VERSION, 4);
-    assert_eq!(version, 4);
+    assert_eq!(USAGE_SCHEMA_VERSION, 5);
+    assert_eq!(version, 5);
     assert_eq!(version, USAGE_SCHEMA_VERSION);
+
+    let scan_set_sql = table_sql(&path, "usage_scan_set")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    for required in [
+        "completion_state TEXT NOT NULL CHECK(completion_state IN ('running','complete','partial','cancelled','failed','timed_out'))",
+        "expected_scope_count INTEGER NOT NULL CHECK(expected_scope_count BETWEEN 1 AND 256)",
+        "CHECK((completion_state = 'running' AND completed_at_ms IS NULL) OR (completion_state <> 'running' AND completed_at_ms IS NOT NULL))",
+    ] {
+        assert!(
+            scan_set_sql.contains(required),
+            "missing scan-set contract: {required}"
+        );
+    }
+
+    let scan_sql = table_sql(&path, "usage_scan")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    for required in [
+        "scan_set_id INTEGER NOT NULL CHECK(scan_set_id >= 0)",
+        "provider_id TEXT NOT NULL CHECK(length(CAST(provider_id AS BLOB)) BETWEEN 1 AND 64)",
+        "UNIQUE(scan_set_id, provider_id, profile_id)",
+        "FOREIGN KEY(scan_set_id) REFERENCES usage_scan_set(scan_set_id)",
+    ] {
+        assert!(
+            scan_sql.contains(required),
+            "missing scoped scan contract: {required}"
+        );
+    }
 
     let revision_sql = table_sql(&path, "usage_replay_revision");
     assert!(
         revision_sql
-            .contains("expected_source_count INTEGER NOT NULL CHECK(expected_source_count >= 1)")
+            .contains("expected_source_count INTEGER NOT NULL CHECK(expected_source_count >= 0)")
     );
     assert!(!revision_sql.contains("expected_source_count BETWEEN 1 AND 256"));
 
@@ -359,12 +391,12 @@ fn schema_is_strict_path_free_and_has_exact_usage_tables() {
     assert_eq!(foreign_key_failures, 0);
     let partial_indexes: i64 = connection
         .query_row(
-            "SELECT count(*) FROM sqlite_schema WHERE type = 'index' AND name IN ('usage_generation_one_current', 'usage_generation_one_staging') AND sql LIKE '% WHERE status = %'",
+            "SELECT count(*) FROM sqlite_schema WHERE type = 'index' AND name IN ('usage_generation_one_current', 'usage_generation_one_staging', 'usage_scan_set_one_running', 'usage_scan_one_running_scope') AND sql LIKE '% WHERE %'",
             [],
             |row| row.get(0),
         )
         .expect("partial indexes");
-    assert_eq!(partial_indexes, 2);
+    assert_eq!(partial_indexes, 4);
 
     let source_schema: String = connection
         .query_row(
@@ -402,7 +434,7 @@ fn exact_v1_migration_preserves_an_immutable_legacy_snapshot() {
     let version: i64 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("migrated version");
-    assert_eq!(version, 4);
+    assert_eq!(version, USAGE_SCHEMA_VERSION);
     let snapshot: (i64, String, i64) = connection
         .query_row(
             "SELECT source_schema_version, quality_state, event_count
@@ -518,18 +550,18 @@ fn v1_with_weakened_deferred_foreign_key_rolls_back() {
 }
 
 #[test]
-fn current_v4_with_weakened_constraint_fails_closed() {
+fn current_v5_with_weakened_constraint_fails_closed() {
     let directory = TempDir::new().expect("temporary directory");
-    let path = directory.path().join("weakened-v3-check-private.sqlite3");
-    drop(UsageStore::open(&path).expect("create valid v3 schema"));
+    let path = directory.path().join("weakened-v5-check-private.sqlite3");
+    drop(UsageStore::open(&path).expect("create valid v5 schema"));
     rewrite_table_schema(
         &path,
         "usage_replay_revision",
-        "expected_source_count >= 1",
         "expected_source_count >= 0",
+        "expected_source_count >= -1",
     );
 
-    let error = UsageStore::open(&path).expect_err("weakened v3 constraint must fail");
+    let error = UsageStore::open(&path).expect_err("weakened v5 constraint must fail");
     assert_eq!(error.code(), StoreErrorCode::SchemaMismatch);
 }
 

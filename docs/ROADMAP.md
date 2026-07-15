@@ -39,7 +39,10 @@ v1/v2/v3 migration and explicit prior-evidence carry-forward. Complete promotion
 selects eligible events, suppresses replay-only contributions, retains absent/conflict
 history, removes obsolete generations, and rolls back provenance atomically.
 
-Current gate: P1-B adds scan epochs and complete-source-set finalization. P1-C through
+Completed: P1-B.1 adds strict schema v5, provider-qualified scan sets, exact
+complete-only presence finalization, late-registration safety, and transactional
+rollback proofs. Current gate P1-B.2 binds replay to a complete set and supports
+zero-present-source retention; P1-B.3 bounds scan history and recovery. P1-C through
 P1-E then add the provider-neutral runtime engine, coalescing, cancellation, writer
 lease, sleep/resume, continuous recovery, and immutable publication before indexed
 analytics, pricing, quota, Git output, automation, and complete UI work.

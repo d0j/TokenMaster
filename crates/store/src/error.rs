@@ -16,6 +16,9 @@ pub enum StoreErrorCode {
     IncompleteManifest,
     UnsealedRevision,
     PendingContinuation,
+    ScanInProgress,
+    StaleScan,
+    PendingScan,
     ArchiveModeMismatch,
 }
 
@@ -65,6 +68,9 @@ impl fmt::Display for StoreError {
             StoreErrorCode::IncompleteManifest => "replay source manifest is incomplete",
             StoreErrorCode::UnsealedRevision => "replay revision is not sealed",
             StoreErrorCode::PendingContinuation => "replay continuation is pending",
+            StoreErrorCode::ScanInProgress => "a scan set is already running",
+            StoreErrorCode::StaleScan => "scan state changed",
+            StoreErrorCode::PendingScan => "scan set still has running scopes",
             StoreErrorCode::ArchiveModeMismatch => "archive mode mismatched",
         };
         formatter.write_str(message)

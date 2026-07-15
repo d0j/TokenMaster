@@ -13,6 +13,7 @@ pub const MAX_USAGE_EVENT_PAGE_SIZE: usize = 256;
 pub const MAX_APPEND_EVENTS: usize = 256;
 pub const MAX_APPEND_CHUNK_UPDATES: usize = 18;
 pub const MAX_REPLAY_SOURCES: usize = 256;
+pub const MAX_SCAN_SCOPES: usize = 256;
 pub const SOURCE_CHUNK_BYTES: u64 = 1 << 20;
 const MAX_ANCHOR_BYTES: u16 = 4096;
 
@@ -40,6 +41,321 @@ impl SourceKey {
 impl fmt::Debug for SourceKey {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("SourceKey([redacted])")
+    }
+}
+
+#[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ScanScope {
+    provider_id: Box<str>,
+    profile_id: Box<str>,
+}
+
+impl ScanScope {
+    pub fn new(
+        provider_id: impl Into<Box<str>>,
+        profile_id: impl Into<Box<str>>,
+    ) -> Result<Self, StoreError> {
+        let provider_id = provider_id.into();
+        let profile_id = profile_id.into();
+        if !valid_ascii_id(&provider_id, 64) || !valid_ascii_id(&profile_id, 128) {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self {
+            provider_id,
+            profile_id,
+        })
+    }
+
+    #[must_use]
+    pub const fn provider_id(&self) -> &str {
+        &self.provider_id
+    }
+
+    #[must_use]
+    pub const fn profile_id(&self) -> &str {
+        &self.profile_id
+    }
+}
+
+impl fmt::Debug for ScanScope {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ScanScope")
+            .field("provider_id", &Redacted)
+            .field("profile_id", &Redacted)
+            .finish()
+    }
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct ScanSetManifest {
+    scopes: Box<[ScanScope]>,
+}
+
+impl ScanSetManifest {
+    pub fn new(scopes: Box<[ScanScope]>) -> Result<Self, StoreError> {
+        if scopes.is_empty() {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        if scopes.len() > MAX_SCAN_SCOPES {
+            return Err(StoreError::with_limit(
+                StoreErrorCode::CapacityExceeded,
+                MAX_SCAN_SCOPES as u64,
+            ));
+        }
+        let mut scopes = scopes.into_vec();
+        scopes.sort_unstable();
+        if scopes.windows(2).any(|pair| pair[0] == pair[1]) {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self {
+            scopes: scopes.into_boxed_slice(),
+        })
+    }
+
+    #[must_use]
+    pub const fn scopes(&self) -> &[ScanScope] {
+        &self.scopes
+    }
+
+    #[must_use]
+    pub const fn scope_count(&self) -> usize {
+        self.scopes.len()
+    }
+}
+
+impl fmt::Debug for ScanSetManifest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ScanSetManifest")
+            .field("scope_count", &self.scopes.len())
+            .finish()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct ScanSetId(u64);
+
+impl ScanSetId {
+    pub fn new(value: u64) -> Result<Self, StoreError> {
+        if value > i64::MAX as u64 {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self(value))
+    }
+
+    pub(super) fn from_stored(value: i64) -> Result<Self, StoreError> {
+        let value = u64::try_from(value)
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+        Ok(Self(value))
+    }
+
+    pub(super) fn as_sql(self) -> Result<i64, StoreError> {
+        i64::try_from(self.0).map_err(|_| StoreError::new(StoreErrorCode::InvalidValue))
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct ScanId(u64);
+
+impl ScanId {
+    pub fn new(value: u64) -> Result<Self, StoreError> {
+        if value > i64::MAX as u64 {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self(value))
+    }
+
+    pub(super) fn from_stored(value: i64) -> Result<Self, StoreError> {
+        let value = u64::try_from(value)
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+        Ok(Self(value))
+    }
+
+    pub(super) fn as_sql(self) -> Result<i64, StoreError> {
+        i64::try_from(self.0).map_err(|_| StoreError::new(StoreErrorCode::InvalidValue))
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ScanOutcome {
+    Complete,
+    Partial,
+    Cancelled,
+    Failed,
+    TimedOut,
+}
+
+impl ScanOutcome {
+    pub(super) const fn as_sql(self) -> &'static str {
+        match self {
+            Self::Complete => "complete",
+            Self::Partial => "partial",
+            Self::Cancelled => "cancelled",
+            Self::Failed => "failed",
+            Self::TimedOut => "timed_out",
+        }
+    }
+
+    pub(super) fn from_sql(value: &str) -> Result<Self, StoreError> {
+        match value {
+            "complete" => Ok(Self::Complete),
+            "partial" => Ok(Self::Partial),
+            "cancelled" => Ok(Self::Cancelled),
+            "failed" => Ok(Self::Failed),
+            "timed_out" => Ok(Self::TimedOut),
+            _ => Err(StoreError::new(StoreErrorCode::InvalidStoredValue)),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ScanCounters {
+    files_read: u64,
+    bytes_read: u64,
+    events_observed: u64,
+    diagnostics: u64,
+}
+
+impl ScanCounters {
+    pub fn new(
+        files_read: u64,
+        bytes_read: u64,
+        events_observed: u64,
+        diagnostics: u64,
+    ) -> Result<Self, StoreError> {
+        if [files_read, bytes_read, events_observed, diagnostics]
+            .into_iter()
+            .any(|value| value > i64::MAX as u64)
+        {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self {
+            files_read,
+            bytes_read,
+            events_observed,
+            diagnostics,
+        })
+    }
+
+    #[must_use]
+    pub const fn files_read(self) -> u64 {
+        self.files_read
+    }
+
+    #[must_use]
+    pub const fn bytes_read(self) -> u64 {
+        self.bytes_read
+    }
+
+    #[must_use]
+    pub const fn events_observed(self) -> u64 {
+        self.events_observed
+    }
+
+    #[must_use]
+    pub const fn diagnostics(self) -> u64 {
+        self.diagnostics
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ScanSnapshot {
+    pub(super) id: ScanId,
+    pub(super) scan_set_id: ScanSetId,
+    pub(super) scope: ScanScope,
+    pub(super) started_at_ms: i64,
+    pub(super) completed_at_ms: Option<i64>,
+    pub(super) outcome: Option<ScanOutcome>,
+    pub(super) sources_seen: u64,
+    pub(super) counters: ScanCounters,
+}
+
+impl ScanSnapshot {
+    #[must_use]
+    pub const fn id(&self) -> ScanId {
+        self.id
+    }
+
+    #[must_use]
+    pub const fn scan_set_id(&self) -> ScanSetId {
+        self.scan_set_id
+    }
+
+    #[must_use]
+    pub const fn scope(&self) -> &ScanScope {
+        &self.scope
+    }
+
+    #[must_use]
+    pub const fn started_at_ms(&self) -> i64 {
+        self.started_at_ms
+    }
+
+    #[must_use]
+    pub const fn completed_at_ms(&self) -> Option<i64> {
+        self.completed_at_ms
+    }
+
+    #[must_use]
+    pub const fn outcome(&self) -> Option<ScanOutcome> {
+        self.outcome
+    }
+
+    #[must_use]
+    pub const fn sources_seen(&self) -> u64 {
+        self.sources_seen
+    }
+
+    #[must_use]
+    pub const fn counters(&self) -> ScanCounters {
+        self.counters
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ScanSetSnapshot {
+    pub(super) id: ScanSetId,
+    pub(super) started_at_ms: i64,
+    pub(super) completed_at_ms: Option<i64>,
+    pub(super) outcome: Option<ScanOutcome>,
+    pub(super) expected_scope_count: u64,
+}
+
+impl ScanSetSnapshot {
+    #[must_use]
+    pub const fn id(self) -> ScanSetId {
+        self.id
+    }
+
+    #[must_use]
+    pub const fn started_at_ms(self) -> i64 {
+        self.started_at_ms
+    }
+
+    #[must_use]
+    pub const fn completed_at_ms(self) -> Option<i64> {
+        self.completed_at_ms
+    }
+
+    #[must_use]
+    pub const fn outcome(self) -> Option<ScanOutcome> {
+        self.outcome
+    }
+
+    #[must_use]
+    pub const fn expected_scope_count(self) -> u64 {
+        self.expected_scope_count
     }
 }
 
@@ -223,7 +539,6 @@ pub struct AppendBatchParts {
     pub previous_partial_chunk: Option<StoredSourceChunk>,
     pub chunk_updates: Box<[StoredSourceChunk]>,
     pub next_checkpoint: StoredCheckpoint,
-    pub last_seen_scan_id: Option<u64>,
     pub diagnostic_count_delta: u64,
 }
 
@@ -250,10 +565,7 @@ impl AppendBatch {
                 return Err(StoreError::new(StoreErrorCode::InvalidValue));
             }
         }
-        if parts
-            .last_seen_scan_id
-            .is_some_and(|value| value > i64::MAX as u64)
-            || parts.events.len() > MAX_APPEND_EVENTS
+        if parts.events.len() > MAX_APPEND_EVENTS
             || parts.chunk_updates.len() > MAX_APPEND_CHUNK_UPDATES
             || parts.expected_scan_offset < parts.expected_committed_offset
             || parts.next_checkpoint.committed_offset() < parts.expected_committed_offset
@@ -345,7 +657,6 @@ fn append_debug(
         .field("previous_partial_chunk", &parts.previous_partial_chunk)
         .field("chunk_updates_count", &parts.chunk_updates.len())
         .field("next_checkpoint", &parts.next_checkpoint)
-        .field("last_seen_scan_id", &parts.last_seen_scan_id)
         .field("diagnostic_count_delta", &parts.diagnostic_count_delta)
         .finish()
 }

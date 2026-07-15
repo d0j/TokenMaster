@@ -436,3 +436,46 @@ were not misreported as leaks. This completes P1-A only. P1-B scan epochs/source
 finalization and the P1-C+ live engine remain. No M0 acceptance, interactive Windows
 product result,
 package, signing, or release is claimed.
+
+## 2026-07-15 — P1-B.1 scoped scan authority implemented
+
+Added strict schema v5 and exact non-destructive v1-v4 migration. A bounded global
+scan set owns one provider/profile-qualified child per scope; typed IDs, outcomes,
+counters, and immutable snapshots reject invalid or oversized values. Running-set
+and running-scope indexes prevent competing authority. Populated v4 scans derive a
+provider only from exact referenced sources and otherwise migrate as
+`legacy-unverified`; ambiguous ownership or incoherent terminal state fails closed.
+Replay revisions preserve migrated state with nullable scan-set provenance.
+
+The store now begins and recovers a scan set, pages children, records exact
+scope-matching observations idempotently, finishes each child, and truthfully
+aggregates the parent. Only a complete child updates `missing`; partial, cancelled,
+failed, and timed-out children preserve prior presence. Ordinary append no longer
+sets last-seen authority or clears missing state. A source registered after complete
+scope authority starts missing until a later complete scan observes it. Injected
+failures after parent creation and after presence mutation roll back every row and
+terminal state. The v4 migration has create/copy/drop rollback proofs with foreign-key
+restoration. Schema v5 permits a future zero-source replay revision while existing
+compatibility begin paths still reject empty manifests.
+
+Verification:
+
+```powershell
+cargo +1.97.0 test -p tokenmaster-store --locked
+cargo +1.97.0 test -p tokenmaster-codex --test pipeline_contract --locked
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy -p tokenmaster-store -p tokenmaster-codex --all-targets --locked
+pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
+cargo +1.97.0 fmt --all -- --check
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy --workspace --all-targets --locked
+cargo +1.97.0 test --workspace --locked
+git diff --check
+```
+
+All commands passed. Store evidence includes 14 unit tests, 40 replay contracts, 5
+scan contracts, 5 ingest contracts, 14 schema contracts, and the compile-fail API
+contract. Seven real synthetic Codex pipeline contracts pass. The full workspace has
+exactly one pre-existing explicitly ignored one-million-row M0 scale test. Clean-root
+returns `TM-CLEAN-PASS`; formatting and strict Clippy pass. This completes P1-B.1
+only. Scan-bound replay, zero-source retention promotion, bounded scan-history
+pruning, and live scheduling remain P1-B.2/P1-B.3/P1-C. No M0 acceptance,
+interactive product result, package, signing, or release is claimed.

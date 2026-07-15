@@ -492,7 +492,6 @@ fn rebuild_descriptor(
         previous_partial_chunk: None,
         chunk_updates: Box::default(),
         next_checkpoint: stored_checkpoint(&verified)?,
-        last_seen_scan_id: None,
         diagnostic_count_delta: 0,
     })?;
     state.epoch = archive
@@ -557,7 +556,6 @@ fn apply_reader_batch(
         previous_partial_chunk,
         chunk_updates,
         next_checkpoint: stored_checkpoint(batch.checkpoint())?,
-        last_seen_scan_id: None,
         diagnostic_count_delta: 0,
     })?;
     state.epoch = archive

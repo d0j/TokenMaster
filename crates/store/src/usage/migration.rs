@@ -7,7 +7,9 @@ use super::schema::{
     REPLAY_AUX_SCHEMA, REPLAY_CHILD_SCHEMA, TableContract, TriggerContract, USAGE_INDEX_CONTRACTS,
     USAGE_SCHEMA_VERSION, USAGE_TABLE_CONTRACTS, USAGE_TRIGGER_CONTRACTS, V1_INDEX_CONTRACTS,
     V1_SCHEMA, V1_SCHEMA_VERSION, V1_TABLE_COUNT, V2_REPLAY_REVISION_SCHEMA, V2_SCHEMA_VERSION,
-    V3_REPLAY_REVISION_SCHEMA, V3_SCHEMA_VERSION, V4_USAGE_EVENT_SCHEMA,
+    V3_REPLAY_REVISION_SCHEMA, V3_SCHEMA_VERSION, V4_SCHEMA_VERSION, V4_USAGE_EVENT_SCHEMA,
+    V5_INDEX_CONTRACTS, V5_REPLAY_REVISION_CONTRACT, V5_REPLAY_REVISION_SCHEMA,
+    V5_SCAN_SET_CONTRACT, V5_SCAN_SET_SCHEMA, V5_USAGE_SCAN_CONTRACT, V5_USAGE_SCAN_SCHEMA,
 };
 
 pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreError> {
@@ -17,17 +19,30 @@ pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreErr
     }
 
     match version {
-        V2_SCHEMA_VERSION => migrate_v2(connection),
-        V3_SCHEMA_VERSION => migrate_v3(connection),
-        0 | V1_SCHEMA_VERSION | USAGE_SCHEMA_VERSION => {
+        V2_SCHEMA_VERSION => {
+            migrate_v2(connection)?;
+            migrate_v4(connection)
+        }
+        V3_SCHEMA_VERSION => {
+            migrate_v3(connection)?;
+            migrate_v4(connection)
+        }
+        V4_SCHEMA_VERSION => migrate_v4(connection),
+        0 | V1_SCHEMA_VERSION => {
             let transaction =
                 connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
             match version {
                 0 => create_fresh_v4(&transaction)?,
                 V1_SCHEMA_VERSION => migrate_v1(&transaction)?,
-                USAGE_SCHEMA_VERSION => validate_v4(&transaction)?,
                 _ => return Err(StoreError::new(StoreErrorCode::SchemaMismatch)),
             }
+            transaction.commit()?;
+            migrate_v4(connection)
+        }
+        USAGE_SCHEMA_VERSION => {
+            let transaction =
+                connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+            validate_v5(&transaction)?;
             transaction.commit()?;
             Ok(())
         }
@@ -45,7 +60,7 @@ fn create_fresh_v4(connection: &Connection) -> Result<(), StoreError> {
     connection.execute_batch(REPLAY_CHILD_SCHEMA)?;
     connection.execute_batch(LEGACY_IMMUTABILITY_TRIGGERS)?;
     migrate_usage_event_v4(connection, MigrationFault::None)?;
-    connection.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
+    connection.pragma_update(None, "user_version", V4_SCHEMA_VERSION)?;
     validate_v4(connection)
 }
 
@@ -57,6 +72,7 @@ fn migrate_v1(connection: &Connection) -> Result<(), StoreError> {
         &[],
         &[V1_SCHEMA],
         &[PRE_V4_USAGE_EVENT_CONTRACT],
+        SchemaExtensions::EMPTY,
     )?;
     connection.execute_batch(REPLAY_AUX_SCHEMA)?;
     connection.execute_batch(V3_REPLAY_REVISION_SCHEMA)?;
@@ -74,7 +90,7 @@ fn migrate_v1(connection: &Connection) -> Result<(), StoreError> {
     }
     connection.execute_batch(LEGACY_IMMUTABILITY_TRIGGERS)?;
     migrate_usage_event_v4(connection, MigrationFault::None)?;
-    connection.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
+    connection.pragma_update(None, "user_version", V4_SCHEMA_VERSION)?;
     validate_v4(connection)
 }
 
@@ -91,6 +107,7 @@ fn validate_v2(connection: &Connection) -> Result<(), StoreError> {
             REPLAY_CHILD_SCHEMA,
         ],
         &[PRE_V4_USAGE_EVENT_CONTRACT],
+        SchemaExtensions::EMPTY,
     )?;
     validate_legacy_snapshot(connection)
 }
@@ -108,6 +125,7 @@ fn validate_v3(connection: &Connection) -> Result<(), StoreError> {
             REPLAY_CHILD_SCHEMA,
         ],
         &[PRE_V4_USAGE_EVENT_CONTRACT],
+        SchemaExtensions::EMPTY,
     )?;
     validate_legacy_snapshot(connection)
 }
@@ -126,6 +144,31 @@ fn validate_v4(connection: &Connection) -> Result<(), StoreError> {
             REPLAY_CHILD_SCHEMA,
         ],
         &[],
+        SchemaExtensions::EMPTY,
+    )?;
+    validate_legacy_snapshot(connection)
+}
+
+fn validate_v5(connection: &Connection) -> Result<(), StoreError> {
+    validate_schema(
+        connection,
+        USAGE_TABLE_CONTRACTS,
+        USAGE_INDEX_CONTRACTS,
+        USAGE_TRIGGER_CONTRACTS,
+        &[
+            V5_SCAN_SET_SCHEMA,
+            V5_USAGE_SCAN_SCHEMA,
+            V5_REPLAY_REVISION_SCHEMA,
+            V4_USAGE_EVENT_SCHEMA,
+            V1_SCHEMA,
+            REPLAY_AUX_SCHEMA,
+            REPLAY_CHILD_SCHEMA,
+        ],
+        &[V5_USAGE_SCAN_CONTRACT, V5_REPLAY_REVISION_CONTRACT],
+        SchemaExtensions {
+            tables: std::slice::from_ref(&V5_SCAN_SET_CONTRACT),
+            indexes: V5_INDEX_CONTRACTS,
+        },
     )?;
     validate_legacy_snapshot(connection)
 }
@@ -145,6 +188,12 @@ enum MigrationFault {
     AfterCopyEvent,
     #[cfg(test)]
     AfterDropEvent,
+    #[cfg(test)]
+    AfterCreateScanAuthority,
+    #[cfg(test)]
+    AfterCopyScanAuthority,
+    #[cfg(test)]
+    AfterDropScanAuthority,
 }
 
 fn migrate_v2(connection: &mut Connection) -> Result<(), StoreError> {
@@ -265,6 +314,9 @@ enum MigrationBoundary {
     EventCreated,
     EventCopied,
     EventDropped,
+    ScanAuthorityCreated,
+    ScanAuthorityCopied,
+    ScanAuthorityDropped,
 }
 
 fn migration_fault(fault: MigrationFault, boundary: MigrationBoundary) -> Result<(), StoreError> {
@@ -291,6 +343,18 @@ fn migration_fault(fault: MigrationFault, boundary: MigrationBoundary) -> Result
                 MigrationFault::AfterDropEvent,
                 MigrationBoundary::EventDropped
             )
+            | (
+                MigrationFault::AfterCreateScanAuthority,
+                MigrationBoundary::ScanAuthorityCreated
+            )
+            | (
+                MigrationFault::AfterCopyScanAuthority,
+                MigrationBoundary::ScanAuthorityCopied
+            )
+            | (
+                MigrationFault::AfterDropScanAuthority,
+                MigrationBoundary::ScanAuthorityDropped
+            )
     );
     #[cfg(not(test))]
     let triggered = {
@@ -315,10 +379,205 @@ fn migrate_v3_with_fault(
     validate_v3(connection)?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     migrate_usage_event_v4(&transaction, fault)?;
-    transaction.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
+    transaction.pragma_update(None, "user_version", V4_SCHEMA_VERSION)?;
     validate_v4(&transaction)?;
     transaction.commit()?;
     Ok(())
+}
+
+fn migrate_v4(connection: &mut Connection) -> Result<(), StoreError> {
+    migrate_v4_with_fault(connection, MigrationFault::None)
+}
+
+fn migrate_v4_with_fault(
+    connection: &mut Connection,
+    fault: MigrationFault,
+) -> Result<(), StoreError> {
+    validate_v4(connection)?;
+    if connection
+        .pragma_update(None, "foreign_keys", "OFF")
+        .is_err()
+    {
+        let _restore_attempt = restore_foreign_keys(connection);
+        return Err(StoreError::new(StoreErrorCode::Database));
+    }
+    match pragma_i64(connection, "PRAGMA foreign_keys") {
+        Ok(0) => {}
+        Ok(_) => {
+            let _restore_attempt = restore_foreign_keys(connection);
+            return Err(StoreError::new(StoreErrorCode::PolicyMismatch));
+        }
+        Err(error) => {
+            let _restore_attempt = restore_foreign_keys(connection);
+            return Err(error);
+        }
+    }
+
+    let migration: Result<(), StoreError> = (|| {
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        migrate_scan_authority_v5(&transaction, fault)?;
+        transaction.commit()?;
+        Ok(())
+    })();
+    let restored = restore_foreign_keys(connection);
+    match (migration, restored) {
+        (Ok(()), Ok(())) => validate_v5(connection),
+        (Err(error), Ok(())) | (Ok(()), Err(error)) => Err(error),
+        (Err(_), Err(_)) => Err(StoreError::new(StoreErrorCode::PolicyMismatch)),
+    }
+}
+
+fn migrate_scan_authority_v5(
+    connection: &Connection,
+    fault: MigrationFault,
+) -> Result<(), StoreError> {
+    let invalid_scan_state: i64 = connection.query_row(
+        "SELECT count(*) FROM usage_scan
+         WHERE (completion_state = 'running' AND completed_at_ms IS NOT NULL)
+            OR (completion_state <> 'running' AND completed_at_ms IS NULL)
+            OR (completed_at_ms IS NOT NULL AND completed_at_ms < started_at_ms)
+            OR EXISTS (
+              SELECT 1 FROM usage_source AS source
+              WHERE source.last_seen_scan_id = usage_scan.scan_id
+                AND source.profile_id <> usage_scan.profile_id
+            )
+            OR 1 < (
+              SELECT count(DISTINCT source.provider_id)
+              FROM usage_source AS source
+              WHERE source.last_seen_scan_id = usage_scan.scan_id
+            )",
+        [],
+        |row| row.get(0),
+    )?;
+    let running_scans: i64 = connection.query_row(
+        "SELECT count(*) FROM usage_scan WHERE completion_state = 'running'",
+        [],
+        |row| row.get(0),
+    )?;
+    if invalid_scan_state != 0 || running_scans > 1 {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+
+    let scan_count = pragma_i64(connection, "SELECT count(*) FROM usage_scan")?;
+    let revision_count = pragma_i64(connection, "SELECT count(*) FROM usage_replay_revision")?;
+    let temporary_scan_schema = V5_USAGE_SCAN_SCHEMA.replacen(
+        "CREATE TABLE usage_scan (",
+        "CREATE TABLE usage_scan_v5 (",
+        1,
+    );
+    let temporary_revision_schema = V5_REPLAY_REVISION_SCHEMA.replacen(
+        "CREATE TABLE usage_replay_revision (",
+        "CREATE TABLE usage_replay_revision_v5 (",
+        1,
+    );
+    connection.execute_batch(V5_SCAN_SET_SCHEMA)?;
+    connection.execute_batch(&temporary_scan_schema)?;
+    connection.execute_batch(&temporary_revision_schema)?;
+    migration_fault(fault, MigrationBoundary::ScanAuthorityCreated)?;
+
+    connection.execute_batch(
+        "INSERT INTO usage_scan_set(
+           scan_set_id, started_at_ms, completed_at_ms, completion_state,
+           expected_scope_count
+         )
+         SELECT scan_id, started_at_ms, completed_at_ms, completion_state, 1
+         FROM usage_scan;
+
+         INSERT INTO usage_scan_v5(
+           scan_id, scan_set_id, provider_id, profile_id, started_at_ms,
+           completed_at_ms, completion_state, sources_seen, files_read,
+           bytes_read, events_observed, diagnostics
+         )
+         SELECT
+           scan.scan_id, scan.scan_id,
+           COALESCE((
+             SELECT min(source.provider_id)
+             FROM usage_source AS source
+             WHERE source.last_seen_scan_id = scan.scan_id
+           ), 'legacy-unverified'),
+           scan.profile_id, scan.started_at_ms, scan.completed_at_ms,
+           scan.completion_state, scan.sources_seen, scan.files_read,
+           scan.bytes_read, scan.events_observed, scan.diagnostics
+         FROM usage_scan AS scan;
+
+         INSERT INTO usage_replay_revision_v5(
+           revision_id, status, canonicalizer_version, fingerprint_version,
+           replay_signature_version, expected_source_count, evidence_epoch,
+           sealed, promoted, scan_set_id
+         )
+         SELECT
+           revision_id, status, canonicalizer_version, fingerprint_version,
+           replay_signature_version, expected_source_count, evidence_epoch,
+           sealed, promoted, NULL
+         FROM usage_replay_revision;",
+    )?;
+    let copied: (i64, i64, i64) = connection.query_row(
+        "SELECT
+           (SELECT count(*) FROM usage_scan_set),
+           (SELECT count(*) FROM usage_scan_v5),
+           (SELECT count(*) FROM usage_replay_revision_v5)",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    let scan_difference = pragma_i64(
+        connection,
+        "SELECT count(*) FROM (
+           SELECT scan_id, profile_id, started_at_ms, completed_at_ms,
+                  completion_state, sources_seen, files_read, bytes_read,
+                  events_observed, diagnostics
+           FROM usage_scan
+           EXCEPT
+           SELECT scan_id, profile_id, started_at_ms, completed_at_ms,
+                  completion_state, sources_seen, files_read, bytes_read,
+                  events_observed, diagnostics
+           FROM usage_scan_v5
+         )",
+    )?;
+    let revision_difference = pragma_i64(
+        connection,
+        "SELECT count(*) FROM (
+           SELECT revision_id, status, canonicalizer_version,
+                  fingerprint_version, replay_signature_version,
+                  expected_source_count, evidence_epoch, sealed, promoted
+           FROM usage_replay_revision
+           EXCEPT
+           SELECT revision_id, status, canonicalizer_version,
+                  fingerprint_version, replay_signature_version,
+                  expected_source_count, evidence_epoch, sealed, promoted
+           FROM usage_replay_revision_v5
+         )",
+    )?;
+    if scan_count < 0
+        || revision_count < 0
+        || copied != (scan_count, scan_count, revision_count)
+        || scan_difference != 0
+        || revision_difference != 0
+    {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    migration_fault(fault, MigrationBoundary::ScanAuthorityCopied)?;
+
+    connection.execute_batch(
+        "DROP TABLE usage_scan;
+         DROP TABLE usage_replay_revision;",
+    )?;
+    migration_fault(fault, MigrationBoundary::ScanAuthorityDropped)?;
+    connection.execute_batch(
+        "ALTER TABLE usage_scan_v5 RENAME TO usage_scan;
+         ALTER TABLE usage_replay_revision_v5 RENAME TO usage_replay_revision;
+         CREATE UNIQUE INDEX usage_replay_revision_one_current
+           ON usage_replay_revision(status) WHERE status = 'current';
+         CREATE UNIQUE INDEX usage_replay_revision_one_staging
+           ON usage_replay_revision(status) WHERE status = 'staging';
+         CREATE UNIQUE INDEX usage_scan_one_running_scope
+           ON usage_scan(provider_id, profile_id) WHERE completion_state = 'running';
+         CREATE UNIQUE INDEX usage_scan_set_one_running
+           ON usage_scan_set(completion_state) WHERE completion_state = 'running';
+         CREATE INDEX usage_source_scope_missing
+           ON usage_source(provider_id, profile_id, missing, file_key);",
+    )?;
+    connection.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
+    validate_v5(connection)
 }
 
 fn migrate_usage_event_v4(
@@ -439,6 +698,19 @@ fn validate_legacy_snapshot(connection: &Connection) -> Result<(), StoreError> {
     Ok(())
 }
 
+#[derive(Clone, Copy)]
+struct SchemaExtensions<'a> {
+    tables: &'a [TableContract],
+    indexes: &'a [IndexContract],
+}
+
+impl SchemaExtensions<'_> {
+    const EMPTY: Self = Self {
+        tables: &[],
+        indexes: &[],
+    };
+}
+
 fn validate_schema(
     connection: &Connection,
     table_contracts: &[TableContract],
@@ -446,6 +718,7 @@ fn validate_schema(
     trigger_contracts: &[TriggerContract],
     table_schema_sources: &[&str],
     column_overrides: &[TableContract],
+    extensions: SchemaExtensions<'_>,
 ) -> Result<(), StoreError> {
     let mut table_list = connection.prepare("PRAGMA table_list")?;
     let rows = table_list.query_map([], |row| {
@@ -469,6 +742,7 @@ fn validate_schema(
     actual_tables.sort_unstable();
     let mut expected_tables = table_contracts
         .iter()
+        .chain(extensions.tables)
         .map(|contract| contract.name)
         .collect::<Vec<_>>();
     expected_tables.sort_unstable();
@@ -476,7 +750,7 @@ fn validate_schema(
         return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
     }
 
-    for contract in table_contracts {
+    for contract in table_contracts.iter().chain(extensions.tables) {
         let column_contract = column_overrides
             .iter()
             .find(|override_contract| override_contract.name == contract.name)
@@ -498,7 +772,7 @@ fn validate_schema(
         }
     }
 
-    validate_named_sql(connection, "index", index_contracts)?;
+    validate_named_sql(connection, "index", index_contracts, extensions.indexes)?;
     validate_triggers(connection, trigger_contracts)?;
     let foreign_key_failures: i64 =
         connection.query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |row| {
@@ -514,6 +788,7 @@ fn validate_named_sql(
     connection: &Connection,
     kind: &str,
     contracts: &[IndexContract],
+    extra_contracts: &[IndexContract],
 ) -> Result<(), StoreError> {
     let mut statement = connection.prepare(
         "SELECT name, sql FROM sqlite_schema
@@ -524,10 +799,12 @@ fn validate_named_sql(
         Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
     })?;
     let actual = rows.collect::<Result<Vec<_>, _>>()?;
-    if actual.len() != contracts.len() {
+    if actual.len() != contracts.len() + extra_contracts.len() {
         return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
     }
-    for ((actual_name, actual_sql), expected) in actual.iter().zip(contracts) {
+    for ((actual_name, actual_sql), expected) in
+        actual.iter().zip(contracts.iter().chain(extra_contracts))
+    {
         if actual_name != expected.name || normalize_schema_sql(actual_sql) != expected.sql {
             return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
         }
@@ -603,7 +880,8 @@ mod tests {
 
     use super::{
         MigrationFault, migrate_schema, migrate_v2_revision_table, migrate_v2_with_fault,
-        migrate_v3_with_fault, pragma_i64, validate_v2, validate_v3, validate_v4,
+        migrate_v3_with_fault, migrate_v4_with_fault, pragma_i64, validate_v2, validate_v3,
+        validate_v4, validate_v5,
     };
     use crate::{StoreErrorCode, usage::schema};
 
@@ -896,6 +1174,26 @@ mod tests {
         Ok(connection)
     }
 
+    fn exact_v4_fixture_with_scan() -> TestResult<Connection> {
+        let mut connection = exact_v3_fixture(true)?;
+        migrate_v3_with_fault(&mut connection, MigrationFault::None)?;
+        connection.execute(
+            "INSERT INTO usage_scan(
+               scan_id, profile_id, started_at_ms, completed_at_ms,
+               completion_state, sources_seen, files_read, bytes_read,
+               events_observed, diagnostics
+             ) VALUES (9, 'default', 100, 200, 'complete', 1, 2, 3, 4, 5)",
+            [],
+        )?;
+        connection.execute(
+            "UPDATE usage_source SET last_seen_scan_id = 9, missing = 1
+             WHERE file_key = ?1",
+            [[7_u8; 32].as_slice()],
+        )?;
+        validate_v4(&connection)?;
+        Ok(connection)
+    }
+
     fn event_provenance(connection: &Connection) -> TestResult<(Option<i64>, Option<i64>, i64)> {
         Ok(connection.query_row(
             "SELECT projection_revision_id, origin_revision_id, retained FROM usage_event",
@@ -905,15 +1203,15 @@ mod tests {
     }
 
     #[test]
-    fn exact_v2_migrates_to_v4_and_preserves_all_rows() -> TestResult {
+    fn exact_v2_migrates_to_v5_and_preserves_all_rows() -> TestResult {
         let mut connection = exact_v2_fixture(true)?;
         let before = fixture_snapshot(&connection)?;
         migrate_schema(&mut connection)?;
-        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 4);
+        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 5);
         assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
         assert_eq!(fixture_snapshot(&connection)?, before);
         assert_eq!(event_provenance(&connection)?, (Some(5), Some(5), 0));
-        validate_v4(&connection)?;
+        validate_v5(&connection)?;
         let temporary_names: i64 = connection.query_row(
             "SELECT count(*) FROM sqlite_schema
              WHERE instr(sql, 'usage_replay_revision_v3') > 0
@@ -933,7 +1231,7 @@ mod tests {
     }
 
     #[test]
-    fn exact_v3_migrates_legacy_and_current_projection_provenance() -> TestResult {
+    fn exact_v3_migrates_to_v5_with_legacy_and_current_projection_provenance() -> TestResult {
         for (current_revision, expected) in [
             (false, (None, None, 0_i64)),
             (true, (Some(5_i64), Some(5_i64), 0_i64)),
@@ -941,11 +1239,11 @@ mod tests {
             let mut connection = exact_v3_fixture(current_revision)?;
             let before = fixture_snapshot(&connection)?;
             migrate_schema(&mut connection)?;
-            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 4);
+            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 5);
             assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
             assert_eq!(fixture_snapshot(&connection)?, before);
             assert_eq!(event_provenance(&connection)?, expected);
-            validate_v4(&connection)?;
+            validate_v5(&connection)?;
         }
         Ok(())
     }
@@ -971,6 +1269,130 @@ mod tests {
             let temporary_names: i64 = connection.query_row(
                 "SELECT count(*) FROM sqlite_schema
                  WHERE name = 'usage_event_v4' OR instr(sql, 'usage_event_v4') > 0",
+                [],
+                |row| row.get(0),
+            )?;
+            assert_eq!(temporary_names, 0);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn exact_v4_scan_and_revision_migrate_to_scoped_v5() -> TestResult {
+        let mut connection = exact_v4_fixture_with_scan()?;
+        migrate_schema(&mut connection)?;
+        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 5);
+        assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
+        let scan: (
+            i64,
+            i64,
+            String,
+            String,
+            i64,
+            i64,
+            String,
+            i64,
+            i64,
+            i64,
+            i64,
+            i64,
+        ) = connection.query_row(
+            "SELECT scan_id, scan_set_id, provider_id, profile_id,
+                        started_at_ms, completed_at_ms, completion_state,
+                        sources_seen, files_read, bytes_read, events_observed,
+                        diagnostics
+                 FROM usage_scan WHERE scan_id = 9",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                    row.get(9)?,
+                    row.get(10)?,
+                    row.get(11)?,
+                ))
+            },
+        )?;
+        assert_eq!(
+            scan,
+            (
+                9,
+                9,
+                "codex".to_owned(),
+                "default".to_owned(),
+                100,
+                200,
+                "complete".to_owned(),
+                1,
+                2,
+                3,
+                4,
+                5,
+            )
+        );
+        let scan_set: (i64, i64, i64, String, i64) = connection.query_row(
+            "SELECT scan_set_id, started_at_ms, completed_at_ms,
+                    completion_state, expected_scope_count
+             FROM usage_scan_set WHERE scan_set_id = 9",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )?;
+        assert_eq!(scan_set, (9, 100, 200, "complete".to_owned(), 1));
+        let source: (i64, i64) = connection.query_row(
+            "SELECT last_seen_scan_id, missing FROM usage_source",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        assert_eq!(source, (9, 1));
+        let revision_scan_set: Option<i64> =
+            connection.query_row("SELECT scan_set_id FROM usage_replay_revision", [], |row| {
+                row.get(0)
+            })?;
+        assert_eq!(revision_scan_set, None);
+        validate_v5(&connection)?;
+        Ok(())
+    }
+
+    #[test]
+    fn every_v4_scan_authority_fault_rolls_back_and_restores_foreign_keys() -> TestResult {
+        for fault in [
+            MigrationFault::AfterCreateScanAuthority,
+            MigrationFault::AfterCopyScanAuthority,
+            MigrationFault::AfterDropScanAuthority,
+        ] {
+            let mut connection = exact_v4_fixture_with_scan()?;
+            let before = fixture_snapshot(&connection)?;
+            let error = match migrate_v4_with_fault(&mut connection, fault) {
+                Ok(()) => return Err("faulted scan-authority migration committed".into()),
+                Err(error) => error,
+            };
+            assert_eq!(error.code(), StoreErrorCode::Database);
+            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 4);
+            assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
+            validate_v4(&connection)?;
+            assert_eq!(fixture_snapshot(&connection)?, before);
+            let temporary_names: i64 = connection.query_row(
+                "SELECT count(*) FROM sqlite_schema
+                 WHERE name IN (
+                   'usage_scan_set', 'usage_scan_v5',
+                   'usage_replay_revision_v5'
+                 ) OR instr(sql, 'usage_scan_v5') > 0
+                    OR instr(sql, 'usage_replay_revision_v5') > 0",
                 [],
                 |row| row.get(0),
             )?;

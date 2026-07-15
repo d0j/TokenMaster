@@ -67,6 +67,14 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   Codex JSONL truncation fixture now promotes while preserving the 2-event/26-token
   canonical result; cancellation, malformed data, incomplete tails, and pending work
   remain non-promotable.
+- P1-B.1 scoped scan authority: strict schema v5 adds one bounded global scan set
+  with one provider/profile-qualified child per scope, coherent terminal states,
+  exact last-seen references, and exclusive running indexes. Exact v1-v4 migrations
+  preserve populated source/scan/replay state and fault-test every v4 create/copy/drop
+  boundary. Store-owned lifecycle contracts prove multi-provider scope isolation,
+  idempotent observation, complete-only missing finalization, later restoration,
+  reopen, late registration, and atomic rollback after parent creation or presence
+  mutation. Ordinary append no longer creates or clears scan authority.
 
 ## Next implementation slice
 
@@ -76,7 +84,7 @@ bars, skins, layouts, density, and localization are approved in
 weekly quota contract now keeps immutable before/after epochs for scheduled, early,
 and repeated full resets under the P2 plan
 `docs/superpowers/plans/2026-07-15-tokenmaster-quota-reset-history.md`.
-source-adapter seam keeps the current local Codex reader replaceable by future
+The source-adapter seam keeps the current local Codex reader replaceable by future
 sandboxed bounded provider plugins without coupling storage, analytics, automation,
 or UI to Codex JSONL. The selected future format is a `.tmplugin` WebAssembly
 Component executed in an isolated on-demand host; Codex remains compiled in and pays
@@ -92,9 +100,11 @@ P0-D.1 is complete under
 late-source fail-closed behavior. P0-E is complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-e-pipeline-proof.md`; it is a
 transactional cross-crate proof, not the production scheduler. P1-A is complete under
-`docs/superpowers/plans/2026-07-14-tokenmaster-p1-retained-projection.md`. P1-B is now
-the next slice and owns scan epochs plus complete-source-set finalization. P1-C and
-later then add the provider-neutral engine, coalescing, cancellation policy, writer
+`docs/superpowers/plans/2026-07-14-tokenmaster-p1-retained-projection.md`. P1-B.1 now
+owns strict scoped scan-set lifecycle and complete-only presence. P1-B.2 is next and
+must bind replay to one complete set, including a zero-present-source retention-only
+revision; P1-B.3 then bounds history and recovery. P1-C and later add the
+provider-neutral engine, coalescing, cancellation policy, writer
 lease, sleep/resume, immutable publication, and continuous runtime recovery.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.

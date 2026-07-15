@@ -119,7 +119,6 @@ fn empty_replay_append_for_index(
             verification: StoredVerification::FullPrefix,
         })
         .expect("valid empty replay checkpoint"),
-        last_seen_scan_id: None,
         diagnostic_count_delta: 0,
     })
     .expect("valid empty replay append");
@@ -271,7 +270,6 @@ fn replay_append_generation(
         ]
         .into_boxed_slice(),
         next_checkpoint: checkpoint(seed, next_offset, StoredVerification::FullPrefix),
-        last_seen_scan_id: None,
         diagnostic_count_delta: 0,
     })
     .expect("append batch");
