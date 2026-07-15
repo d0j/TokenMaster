@@ -56,6 +56,11 @@ P1-E then add the provider-neutral runtime engine, coalescing, cancellation, wri
 lease, sleep/resume, continuous recovery, and immutable publication before indexed
 analytics, pricing, quota, Git output, automation, and complete UI work.
 
+Completed P1-C.1: a no-async, constant-state coordinator with checked monotonic IDs,
+deadline/cancellation semantics, one active refresh, and one aggregate follow-up. The
+current P1-C.2 gate defines bounded provider-neutral adapter/archive/clock/lease ports;
+one-shot execution and the worker shell follow under the same P1-C plan.
+
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset
 epochs. The weekly view preserves last-before/first-after state, maximum use before
 reset, old/new reset time, early/repeated reset markers, confidence, and simultaneous

@@ -564,3 +564,37 @@ Go/JavaScript/TypeScript/Python source, secret-value patterns, actual user-profi
 paths, and new forbidden storage identifiers are absent. This completes P1-B only;
 P1-C provider-neutral engine core is next. No M0 acceptance, interactive product
 result, package, signing, or release is claimed.
+
+## 2026-07-15 — P1-C.1 constant-state refresh coordinator implemented
+
+Added the root-workspace `tokenmaster-engine` crate with no Codex, platform, Slint, or
+async-runtime dependency. Refresh admission is distinct from terminal execution:
+started/coalesced/deadline-exceeded admissions and completed/busy/cancelled/deadline-
+exceeded/failed terminal outcomes cannot be conflated. Request IDs are non-zero,
+checked, monotonic `u64`; deadlines use caller-supplied monotonic milliseconds only.
+
+The coordinator retains one active permit with an `Arc<AtomicBool>` cancellation token
+and at most one pending aggregate. Ten thousand active-time hints collapse to one
+highest-urgency follow-up; deadlines merge so work remains live while any coalesced
+request remains live. Completion starts at most one new permit. Stale completion or
+cancellation cannot mutate a newer request. Active cancellation/deadline overrides a
+nominal success, and direct or follow-up ID exhaustion never wraps or reopens a slot.
+
+Verification:
+
+```powershell
+cargo +1.97.0 test -p tokenmaster-engine --locked
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy -p tokenmaster-engine --all-targets --locked
+pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
+cargo +1.97.0 fmt --all -- --check
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy --workspace --all-targets --locked
+cargo +1.97.0 test --workspace --locked
+git diff --check
+```
+
+All commands passed. Engine evidence is 2 unit and 10 public coordinator contracts;
+the full workspace retains exactly one pre-existing explicitly ignored million-row M0
+scale test. Clean-root returns `TM-CLEAN-PASS`; formatting and strict Clippy pass.
+This completes P1-C Task 1 only. Bounded adapter/archive/clock/writer-lease ports,
+one-shot orchestration, worker shell, Codex integration, and the OS lease remain. No
+M0 acceptance, interactive product result, package, signing, or release is claimed.

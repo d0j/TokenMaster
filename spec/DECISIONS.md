@@ -165,3 +165,18 @@ A scan set provides one archive-wide authority boundary without retaining a
 scan-by-source history table or allowing partial enumeration to erase evidence.
 The fixed 32/64 policy keeps steady-state refresh cost and database growth bounded
 without a full usage-event foreign-key scan or a history-sized Rust allocation.
+
+## ADR-015 — Constant-state synchronous refresh coordination
+
+Decision: `tokenmaster-engine` owns one active refresh permit and at most one pending
+aggregate containing only highest urgency and merged live deadline. Admission and
+terminal outcomes are separate, IDs are checked and monotonic, cancellation is an
+`Arc<AtomicBool>`, and deadlines use caller-supplied monotonic milliseconds. No async
+runtime, path, provider descriptor, request history, or per-hint allocation is retained.
+P1-C defines fake-tested adapter/archive/clock/writer-lease ports; P1-D supplies Codex
+and OS implementations.
+
+Rationale: one synchronous coordinator plus cooperative boundaries gives deterministic
+ownership, shutdown, and memory behavior while still coalescing bursts and allowing a
+single follow-up. Keeping the OS lease and Codex reader behind later ports preserves
+portability and prevents platform/UI concerns from entering the engine core.

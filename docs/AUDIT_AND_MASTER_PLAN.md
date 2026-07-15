@@ -173,6 +173,9 @@ implemented. P1-B.3 completes reference-safe scan-history retention with a 32-se
 per-scope window, 64-set transaction batch, reference/running preservation, recovery,
 ID-exhaustion, and rollback proofs under
 `docs/superpowers/plans/2026-07-15-tokenmaster-p1-b-scan-authority.md`. The immediate
-implementation gate is P1-C provider-neutral engine core. The older replay
+implementation rail is P1-C provider-neutral engine core under
+`docs/superpowers/plans/2026-07-15-tokenmaster-p1-c-engine-core.md`. P1-C.1 constant-
+state admission/coalescing/deadline/cancellation is implemented; P1-C.2 bounded
+adapter/archive/clock/writer-lease ports are next. The older replay
 plan remains historical evidence for completed Tasks 1-2, but its Codex-owned Tasks
 3+ are superseded and must not be executed.

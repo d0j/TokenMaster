@@ -75,6 +75,9 @@ The 1.0 product MUST implement local Codex ingestion through bounded source cata
 sequential reader, and provider decoder contracts. Engine, archive, query, automation,
 and UI code MUST depend on provider-neutral observations and snapshots rather than
 Codex paths or JSONL wire shapes. Codex MUST remain a compiled-in native adapter.
+Refresh coordination MUST use checked monotonic request IDs, cooperative cancellation,
+monotonic deadlines, and one bounded active/follow-up aggregate rather than retaining
+one queued item per filesystem or caller hint.
 
 The future external-provider surface MUST accept versioned WebAssembly Component
 packages through an isolated on-demand host implementing the same source contract.
@@ -105,6 +108,8 @@ asynchronous result MUST NOT overwrite a newer UI generation.
 Input lines, retained parser metadata, reader batches, checkpoint data, SQLite pages,
 chart points, UI lists, and external request bodies MUST have explicit limits. No
 production path may allocate solely from an untrusted declared size.
+An active refresh may retain at most one aggregate follow-up. Burst size MUST NOT
+increase retained coordinator memory or create a worker, timer, or queue node per hint.
 
 ### TM-PERF-002 — Long-run stability
 

@@ -182,9 +182,11 @@ created per source.
 
 ## 5. Scheduling, coalescing, and cancellation
 
-Refresh requests have monotonically increasing request IDs and one of four outcomes:
-`completed`, `coalesced`, `busy`, or `deadline_exceeded`. While a refresh is active,
-additional hints set one bounded dirty flag plus the highest requested urgency; they
+Refresh admission and execution results are distinct. Admission is `started`,
+`coalesced`, or `deadline_exceeded`. A started execution terminates as `completed`,
+`busy`, `cancelled`, `deadline_exceeded`, or `failed`. Requests have monotonically
+increasing checked IDs. While a refresh is active, additional hints set one bounded
+dirty aggregate plus the highest requested urgency and a merged live deadline; they
 do not queue paths or duplicate work. At most one follow-up refresh is scheduled after
 the current operation.
 
@@ -201,7 +203,8 @@ bounded status result. It never interrupts a SQLite commit in the middle.
 ## 6. Writer lease and restart recovery
 
 The GUI, CLI refresh, and future MCP refresh share one cross-process writer lease.
-P1-C first uses an OS-owned exclusive lock scoped to the archive identity, not a
+P1-C defines and fake-tests the writer-lease port; P1-D supplies the portable platform
+implementation using an OS-owned exclusive lock scoped to the archive identity, not a
 timestamp-only SQLite row. Process death releases it automatically, so a suspended or
 crashed writer cannot leave a false permanent owner. SQLite still supplies the final
 transactional exclusion and bounded busy timeout.

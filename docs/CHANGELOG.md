@@ -34,6 +34,9 @@ All notable changes are recorded here.
 - Reference-safe scan-history retention: 32 closed sets per scope, at most 64 whole
   unreferenced sets pruned per transaction, running/source/replay protection, bounded
   backlog recovery, checked ID exhaustion, and injected rollback proof.
+- Provider-neutral constant-state refresh coordinator with monotonic checked IDs and
+  deadlines, cooperative cancellation, explicit admission/terminal outcomes, one
+  active permit, and one aggregate follow-up across 10,000-hint bursts.
 - Approved a provider-neutral weekly quota reset history: immutable pre/post epochs,
   scheduled/early/repeated reset transitions, allowance-change separation, bounded
   retention, and shared UI/CLI/MCP semantics for P2.

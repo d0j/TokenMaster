@@ -5091,6 +5091,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokenmaster-engine"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "tokenmaster-gates"
 version = "0.1.0"
 dependencies = [

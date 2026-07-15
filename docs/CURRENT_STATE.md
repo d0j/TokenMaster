@@ -94,6 +94,13 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   Contracts prove steady-state plateau, repeated bounded backlog recovery, preservation
   of running/replay-referenced sets, checked parent/child ID exhaustion, reopen, and
   rollback of both close and pruning after an injected fault.
+- P1-C.1 constant-state refresh coordinator: the new provider-neutral
+  `tokenmaster-engine` crate separates admission from terminal execution, uses checked
+  monotonic request IDs/deadlines and cooperative atomic cancellation, and retains one
+  active permit plus at most one aggregate follow-up. Ten thousand hints collapse to
+  one highest-urgency follow-up without path/source/request history. Contracts cover
+  immediate and active deadline expiry, cancellation precedence, busy, stale IDs,
+  exactly-one follow-up, and both direct and follow-up ID exhaustion without wrap.
 
 ## Next implementation slice
 
@@ -122,9 +129,10 @@ transactional cross-crate proof, not the production scheduler. P1-A is complete 
 `docs/superpowers/plans/2026-07-14-tokenmaster-p1-retained-projection.md`. P1-B.1 and
 P1-B.2 now own strict scan-set presence and exact replay binding, including a
 zero-present-source retention-only revision. P1-B.3 completes reference-safe 32/64
-scan-history retention, ID exhaustion, and recovery. P1-C is next and adds the
-provider-neutral engine core, coalescing, cancellation policy, deadlines, and
-one-shot refresh. P1-D/P1-E later add the writer
+scan-history retention, ID exhaustion, and recovery. P1-C.1 now supplies the
+constant-state coordinator. P1-C.2 is next and adds bounded adapter/archive/clock/
+writer-lease ports before one-shot orchestration. P1-D/P1-E later add Codex live
+integration, the real writer
 lease, sleep/resume, immutable publication, and continuous runtime recovery.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.

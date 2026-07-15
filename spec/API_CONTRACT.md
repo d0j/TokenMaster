@@ -22,6 +22,12 @@ cancelled, failed, and timed-out results remain visible quality states and never
 silently become success. Public surfaces expose bounded IDs, counts, timestamps, and
 stable codes, not source keys or paths.
 
+Refresh admission is `started`, `coalesced`, or `deadline_exceeded`. A started refresh
+terminates as `completed`, `busy`, `cancelled`, `deadline_exceeded`, or `failed`.
+Request IDs are checked and monotonic within one engine lifetime. Coalesced admission
+does not imply a second queued operation; it contributes only to one bounded follow-up
+aggregate.
+
 Automatic scan-history retention is an internal maintenance detail. Public refresh
 results remain bound to their returned scan-set identity even if an older unreferenced
 set is later pruned; no CLI or MCP surface exposes arbitrary pruning or row deletion.

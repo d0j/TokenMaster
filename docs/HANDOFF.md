@@ -24,9 +24,10 @@ schema v3, exact non-destructive v2 migration, SQLite-owned all-source begin, ch
 complete under `docs/superpowers/plans/2026-07-14-tokenmaster-p0-e-pipeline-proof.md`:
 the test-only driver proves the real synthetic Codex-to-archive path with more than
 256 files/events, restart, append, atomic replacement, exact totals/quality, and
-failure discard without changing production dependency direction. The immediate next
-task is P1-C provider-neutral engine core: bounded one-shot refresh, coalescing,
-cancellation, and deadlines over the completed store authority.
+failure discard without changing production dependency direction. P1-C.1 now adds the
+constant-state provider-neutral refresh coordinator. The immediate next task is P1-C.2
+bounded adapter/archive/clock/writer-lease ports under
+`docs/superpowers/plans/2026-07-15-tokenmaster-p1-c-engine-core.md`.
 P1-A is complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p1-retained-projection.md`: strict
 schema v4, exact v1/v2/v3 migration, and atomic retained projection now handle
@@ -46,6 +47,12 @@ exercises this path and closes cancelled enumeration partial. P1-B.3 keeps 32 cl
 sets per scope, removes at most 64 whole unreferenced sets per transaction, preserves
 running/source/replay references, and proves bounded backlog recovery, parent/child
 ID exhaustion, reopen, and rollback after an injected pruning fault.
+
+The new `tokenmaster-engine` crate currently owns coordination only: checked monotonic
+IDs/deadlines, one active permit, one highest-urgency merged follow-up, cooperative
+atomic cancellation, explicit admission/terminal outcomes, and stale/overflow
+rejection. Ten thousand hints remain one pending aggregate. Do not yet claim adapter
+execution, archive orchestration, a worker, Codex live integration, or an OS lease.
 
 Tasks 3+ in `2026-07-14-tokenmaster-p0-replay-correctness.md` are superseded. Do not
 execute its Codex-owned fingerprint/signature or destructive migration steps. Do not
@@ -84,6 +91,7 @@ cargo +1.97.0 test -p tokenmaster-store --test usage_schema_contract --locked
 cargo +1.97.0 test -p tokenmaster-store --test replay_archive_contract --locked
 cargo +1.97.0 test -p tokenmaster-codex --test pipeline_contract --locked
 cargo +1.97.0 test -p tokenmaster-codex --locked
+cargo +1.97.0 test -p tokenmaster-engine --locked
 cargo +1.97.0 test -p tokenmaster-platform --locked
 cargo +1.97.0 test --workspace --locked
 $env:RUSTFLAGS = '-Dwarnings'; cargo +1.97.0 clippy --workspace --all-targets --locked
