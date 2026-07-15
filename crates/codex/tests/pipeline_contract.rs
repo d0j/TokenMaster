@@ -313,7 +313,7 @@ fn visible_totals(database: &Path) -> (u64, u64, bool) {
 }
 
 #[test]
-fn truncation_is_classified_and_rejected_without_erasing_current_projection() {
+fn truncation_is_classified_and_promotes_with_retained_prior_usage() {
     let directory = TempDir::new().expect("temporary directory");
     let root = directory.path().join("truncate-root");
     fs::create_dir(&root).expect("create truncate root");
@@ -331,9 +331,15 @@ fn truncation_is_classified_and_rejected_without_erasing_current_projection() {
         Some(RebuildReason::Truncated)
     );
 
-    let error = run_pipeline(&root, &database, PipelineOptions::default())
-        .expect_err("replacement missing a prior visible event must fail closed");
-    assert!(matches!(error, PipelineError::Store(_)));
+    let truncated_result = run_pipeline(&root, &database, PipelineOptions::default())
+        .expect("complete truncation rebuild must retain prior accounted usage");
+    assert_eq!(truncated_result.visible_before_promotion, 2);
+    assert_eq!(truncated_result.visible_events, 2);
+    assert_eq!(truncated_result.visible_total_tokens, 26);
+    assert_eq!(truncated_result.quality.eligible(), 1);
+    assert_eq!(truncated_result.quality.replay(), 1);
+    assert_eq!(truncated_result.quality.pending(), 0);
+    assert_eq!(truncated_result.quality.conflict(), 0);
     assert_eq!(visible_totals(&database), (2, 26, false));
 }
 
