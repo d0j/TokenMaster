@@ -781,3 +781,46 @@ domain/accounting/thiserror only; Codex, platform, filesystem, Slint, async-runt
 Wasmtime, and UI dependencies remain absent. P1-C is complete. Live Codex composition,
 the real OS writer lease, watcher scheduling, sleep/resume, immutable publication, M0
 acceptance, packaging, signing, and release remain unclaimed; P1-D is next.
+
+## 2026-07-15 — P1-D.0 real multi-file engine seam repaired
+
+The P1-D preflight found that P1-C's provider/profile/source identity was not unique
+per real Codex JSONL file and that archive-page replay could not recover a path-private
+live descriptor without a history-sized cache or repeated enumeration. `SourceIdentity`
+now includes a fixed redacted 32-byte logical-file key. Full rebuild performs two
+linear adapter passes: discovery streams directly into the scan set, then each exact
+scope lends one temporary descriptor-bound `SourceBatchReader` while the adapter still
+owns the path. The engine receives no descriptor, path, file handle, or raw bytes and
+retains no replay-source list.
+
+The executor validates scope and complete logical identity before append, rejects
+unchanged non-terminal checkpoints, requires complete second-pass quality, and keeps
+only the latest exact replay handle. Store preparation remains exact membership and
+duplicate authority; store seal remains the disk-backed omission proof. Contracts
+cover two files sharing one provider source ID, cross-logical batch substitution,
+extra and omitted second-pass files, partial/cancelled/failed replay quality, every
+cancellation/deadline boundary, and repeated 300-file rebuilds with exactly one
+maximum live reader and zero remaining after each run. The historical engine
+page/cursor seam is explicitly superseded.
+
+Verification:
+
+```powershell
+cargo +1.97.0 test -p tokenmaster-engine --test one_shot_executor_contract --locked
+cargo +1.97.0 test -p tokenmaster-engine --locked
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy -p tokenmaster-engine --all-targets --locked
+cargo +1.97.0 tree -p tokenmaster-engine --edges normal
+pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
+cargo +1.97.0 fmt --all -- --check
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy --workspace --all-targets --locked
+cargo +1.97.0 test --workspace --locked
+git diff --check
+```
+
+All gates passed. The engine executor suite has 23 passing contracts; the repeated
+300-file case performs 300 archive appends with one maximum live temporary reader.
+The engine normal dependency tree remains domain/accounting/thiserror only. The full
+workspace retains exactly one pre-existing explicitly ignored one-million-row M0 scale
+test. P1-D.1 atomic event/relation replay append, the runtime crate, live Codex,
+incremental tail refresh, OS lease, watcher, sleep/resume, P1-E, M0 acceptance,
+packaging, signing, and release remain unclaimed.

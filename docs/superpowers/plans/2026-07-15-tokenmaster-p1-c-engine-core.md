@@ -68,11 +68,12 @@ callback/pull ports; the adapter never receives a store handle and the archive n
 receives a provider descriptor or raw source bytes. Add compile-fail dependency and
 privacy checks plus exact count/byte bounds.
 
-Completed: sealed scope/source/checkpoint/proof/counter/diagnostic values, scope-exact
-draft and canonical batches, object-safe callback/pull adapter plus archive/clock/lease
-ports, bounded replay pages, stable coded errors, and compile-fail privacy/dependency
-contracts. The normal engine graph contains domain/accounting only and excludes
-Codex, platform, Slint, Tokio, Wasmtime, filesystem, and UI dependencies.
+Historical completion: sealed scope/source/checkpoint/proof/counter/diagnostic values,
+scope-exact draft and canonical batches, object-safe callback/pull adapter plus
+archive/clock/lease ports, bounded replay pages, stable coded errors, and compile-fail
+privacy/dependency contracts. P1-D.0 supersedes the replay page/cursor seam with exact
+logical-file identity and a temporary descriptor-bound reader; the provider-neutral
+dependency boundary remains unchanged.
 
 ## Task 3 — one-shot executor TDD
 
@@ -87,13 +88,15 @@ Contracts cover complete, zero-source retention, partial discovery, adapter fail
 busy lease, cancellation at every phase, deadline at every phase, store fault, stale
 epoch, continuation bound, and prior-canonical readability.
 
-Completed: the synchronous executor acquires the writer lease before provider work,
+Historical completion: the synchronous executor acquires the writer lease before provider work,
 streams scope-exact discovery directly into one scan set, starts replay only from an
 all-complete set, canonicalizes bounded batches, validates replay revision/epoch
 continuity, and promotes one small result. Eighteen public contracts cover the listed
 success/failure cases plus cross-scope rejection, non-progressing cursors/checkpoints,
-cleanup failure, and lease-only `busy` semantics. Existing store contracts remain the
-evidence that staging and failed exact discard leave prior canonical truth readable.
+cleanup failure, and lease-only `busy` semantics. P1-D.0 removes cursor-driven replay,
+adds per-file and exact second-pass contracts, and preserves the stated staging safety.
+Existing store contracts remain the evidence that staging and failed exact discard
+leave prior canonical truth readable.
 
 ## Task 4 — deterministic worker shell
 

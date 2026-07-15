@@ -4,9 +4,13 @@
 > this plan task-by-task. Use `superpowers:test-driven-development` for every behavior
 > change and `superpowers:verification-before-completion` before each completion claim.
 
-**Status:** Active. P1-D.0 is the immediate execution slice. Work remains root-only
+**Status:** Active. P1-D.1 is the immediate execution slice. Work remains root-only
 because the available task-name-only child surface cannot prove configured role/model
 routing; `MODEL_ROUTING_DRIFT` remains explicit.
+
+**Progress:** Tasks 1-4 (P1-D.0) are implemented, documented, and root-gate green.
+Task 5 (P1-D.1 atomic replay event/relation batch) is the next code slice. No live adapter, incremental runtime,
+watcher, OS lease, lifecycle assembly, P1-E, M0 acceptance, or release is claimed.
 
 **Goal:** Compose a live built-in Codex runtime whose normal refresh is tail-only,
 whose memory and watcher state are fixed/bounded, and whose writer/recovery behavior

@@ -31,20 +31,23 @@ aggregate.
 The synchronous engine boundary is provider-neutral and object-safe. `Adapter`
 streams owned validated scopes and discovered sources through callbacks and returns
 at most 256 observations, 256 relations, 18 chunk-proof updates, and a 32-KiB opaque
-checkpoint per pull batch. `Archive` receives only discovered normalized identity,
-opaque checkpoint state, completion summaries, and canonical accounting batches; it
-never receives a provider descriptor, path, store handle, or raw source bytes.
-Replay-source reads return at most 256 normalized records per keyset page and release
-archive work before provider I/O. Stable port errors contain only enumerated codes.
+checkpoint per pull batch. Every source identity includes a fixed logical-file key,
+so files under one provider source root remain distinct. During full rebuild the
+adapter lends one temporary `SourceBatchReader` while it still owns the path-private
+descriptor; that reader cannot escape the callback. `Archive` receives only
+discovered normalized identity, opaque checkpoint state, completion summaries, and
+canonical accounting batches; it never receives a provider descriptor, path, store
+handle, or raw source bytes. Stable port errors contain only enumerated codes.
 Cancellation/deadline checks use the operation's caller-supplied monotonic clock and
 occur between callbacks, pulls, and archive calls, never by interrupting a transaction.
 
 `OneShotExecutor` acquires `WriterLease` before adapter or archive work. It retains
-only the bounded scope manifest, one replay page, one adapter/canonical batch, opaque
-checkpoints, fixed counters, and the latest exact replay handle. Discovery sources are
-written through to the archive and never collected in an engine list. Cross-scope
-discovery, unchanged non-terminal checkpoints, repeated cursors, changed replay
-revision identity, regressed epochs, and exhausted continuation work fail closed.
+only the bounded scope manifest, one temporary reader/batch, opaque checkpoints,
+fixed counters, and the latest exact replay handle. Discovery and rebuild sources are
+written through and never collected in an engine list. Exact archive preparation and
+seal prove second-pass membership; extra, duplicate, omitted, cross-scope, or
+cross-logical-file input cannot publish. Unchanged non-terminal checkpoints, changed
+replay revision identity, regressed epochs, and exhausted continuation work fail closed.
 Only lease acquisition may produce terminal `busy`; a `busy` code from any later port
 is an execution failure. Failure after replay begin attempts exact discard and reports
 whether cleanup succeeded without masking the original stable error code.

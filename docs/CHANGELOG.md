@@ -39,7 +39,7 @@ All notable changes are recorded here.
   active permit, and one aggregate follow-up across 10,000-hint bursts.
 - Bounded provider-neutral engine runtime contracts: sealed scope/source identities,
   32-KiB opaque checkpoints, 18 chunk-proof updates, scope-exact 256-item adapter and
-  canonical batches, 256-record replay pages, stable coded errors, and object-safe
+  canonical batches, temporary source readers, stable coded errors, and object-safe
   synchronous adapter/archive/clock/writer-lease ports with compile-fail privacy gates.
 - Provider-neutral one-shot refresh execution with lease-first admission, streamed
   scope-exact discovery, all-complete replay, core canonicalization, exact replay-handle
@@ -49,6 +49,10 @@ All notable changes are recorded here.
   wake/latest-result channels, non-blocking checked supersession, constant-state
   10,000-hint coalescing, cooperative shutdown/Drop join, stale-ID safety, fixed
   completion/snapshot values, and redacted panic/fault containment.
+- Exact per-logical-file engine identity plus a descriptor-private two-pass rebuild
+  seam that lends one temporary source reader at a time. Contracts cover shared
+  provider source IDs, extra/duplicate/omitted or mismatched second-pass input,
+  incomplete quality, and repeated 300-file promotion with one maximum live reader.
 - Approved a provider-neutral weekly quota reset history: immutable pre/post epochs,
   scheduled/early/repeated reset transitions, allowance-change separation, bounded
   retention, and shared UI/CLI/MCP semantics for P2.
@@ -72,8 +76,11 @@ All notable changes are recorded here.
   observations or unbounded generation retention.
 - Removed scan authority from ordinary append and made post-scan source registration
   remain missing until a later complete matching-scope scan observes it.
-- Rejected cross-scope adapter discovery and non-progressing checkpoints/cursors before
-  they can loop or mutate the wrong archive scope.
+- Rejected cross-scope adapter discovery and non-progressing checkpoints before they
+  can loop or mutate the wrong archive scope.
+- Removed the archive replay-page/cursor descriptor-recovery assumption, which aliased
+  real Codex files sharing one source ID and could not recover a live path-private
+  descriptor without unbounded caching or repeated enumeration.
 - Reserved terminal `busy` for writer-lease admission so later port faults cannot be
   mislabeled as harmless backpressure.
 - Prevented external Clock or execution callbacks from running under the worker state

@@ -28,9 +28,13 @@ failure discard without changing production dependency direction. P1-C.1 adds th
 constant-state provider-neutral refresh coordinator and P1-C.2 adds sealed bounded
 values, scope-exact batches, and object-safe adapter/archive/clock/writer-lease ports.
 P1-C.3 adds the synchronous one-shot executor over those contracts. P1-C.4 completes
-that plan with the bounded deterministic worker shell. The immediate next task is a
-fresh executable P1-D plan for built-in Codex composition,
-the real portable writer lease, watcher/periodic hints, and lifecycle cancellation.
+that plan with the bounded deterministic worker shell. P1-D.0 is complete under
+`docs/superpowers/plans/2026-07-15-tokenmaster-p1-d-live-runtime.md`: it repairs exact
+logical-file identity and replaces archive-page descriptor recovery with two linear
+passes and one temporary descriptor-bound reader. The immediate next task is P1-D.1:
+make replay event plus late-relation application atomic before adding the runtime
+crate, built-in Codex composition, portable writer lease, incremental tail refresh,
+watcher/periodic hints, and lifecycle cancellation.
 P2 now also has an approved separate banked-reset inventory/expiry/reminder/activation
 design in `docs/superpowers/plans/2026-07-15-tokenmaster-banked-reset-inventory.md`.
 It does not change the immediate P1-D gate and no current provider discovery,
@@ -66,8 +70,11 @@ handle. `RefreshWorker` adds one owned named thread, capacity-one wake/latest-re
 channels, checked result supersession, cooperative cancel/wake/join shutdown and
 `Drop`, stable stale/closed/faulted errors, redacted panic containment, and a compile
 guard against incompatible `panic=abort`. Ten thousand hints remain one pending
-aggregate; checkpoints cap at 32 KiB, event/relation batches and replay pages at 256,
-chunk updates at 18, and continuation calls at 4,096 per execution. Do not yet claim
+aggregate; checkpoints cap at 32 KiB, event/relation batches at 256,
+chunk updates at 18, and continuation calls at 4,096 per execution. P1-D.0 removes
+the engine replay-page API: full rebuild now validates fixed per-file identity and
+lends one temporary reader at a time, while exact store seal remains completeness
+authority. Do not yet claim
 Codex is composed into this worker, live scheduling exists, or the OS lease is
 implemented.
 
@@ -139,10 +146,12 @@ boundaries, zero-source reopen/promotion, and the seven scan-bound Codex pipelin
 contracts. P1-B.3 adds the repeated-scan 32-row plateau, 64+remainder backlog passes,
 running/replay-reference preservation, checked ID exhaustion, and close+prune rollback.
 P1-C.1/P1-C.2 add coordinator and port contracts; P1-C.3 adds the provider-neutral
-one-shot executor and eighteen complete/failure/bounds contracts; P1-C.4 adds ten
-worker burst/backpressure/stale/deadline/shutdown/drop/panic/lock-order contracts. P1-C
-is complete, but this does not claim live Codex composition, watcher scheduling, or a
-real OS lease.
+one-shot executor; P1-C.4 adds ten worker burst/backpressure/stale/deadline/shutdown/
+drop/panic/lock-order contracts. P1-D.0 brings the executor suite to 23 contracts,
+including same-source-ID logical files, cross-file batches, extra/omitted second-pass
+files, incomplete second-pass quality, and repeated 300-file/one-live-reader proof.
+This does not claim live Codex composition, incremental tail refresh, watcher
+scheduling, or a real OS lease.
 Clean-root, formatting, strict workspace Clippy, and the full locked workspace passed;
 see the P1-A history entry for exact commands and focused counts. The
 one-million-row M0 scale test remains explicitly ignored in the normal workspace run.

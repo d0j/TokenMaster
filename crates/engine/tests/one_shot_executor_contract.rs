@@ -168,6 +168,43 @@ struct FakeSourceReader {
     reads: u64,
 }
 
+#[derive(Default)]
+struct LiveReaderStats {
+    live: AtomicU64,
+    max_live: AtomicU64,
+    callbacks: AtomicU64,
+}
+
+struct TrackingSourceReader {
+    inner: FakeSourceReader,
+    stats: Arc<LiveReaderStats>,
+}
+
+impl TrackingSourceReader {
+    fn new(inner: FakeSourceReader, stats: Arc<LiveReaderStats>) -> Self {
+        let live = stats.live.fetch_add(1, Ordering::AcqRel) + 1;
+        stats.max_live.fetch_max(live, Ordering::AcqRel);
+        stats.callbacks.fetch_add(1, Ordering::AcqRel);
+        Self { inner, stats }
+    }
+}
+
+impl Drop for TrackingSourceReader {
+    fn drop(&mut self) {
+        self.stats.live.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+impl SourceBatchReader for TrackingSourceReader {
+    fn read_batch(
+        &mut self,
+        current_checkpoint: &AdapterCheckpoint,
+        control: &OperationControl<'_>,
+    ) -> Result<AdapterBatch, PortError> {
+        self.inner.read_batch(current_checkpoint, control)
+    }
+}
+
 impl SourceBatchReader for FakeSourceReader {
     fn read_batch(
         &mut self,
@@ -451,6 +488,7 @@ struct SequenceAdapter {
     discovery_sources: Vec<SourceIdentity>,
     replay_sources: Vec<SourceIdentity>,
     replay_quality: CompletionQuality,
+    reader_stats: Option<Arc<LiveReaderStats>>,
 }
 
 impl Adapter for SequenceAdapter {
@@ -516,7 +554,7 @@ impl Adapter for SequenceAdapter {
             .iter()
             .filter(|source| source.scope() == scope)
         {
-            let mut reader = FakeSourceReader {
+            let reader = FakeSourceReader {
                 log: self.log.clone(),
                 source: source.clone(),
                 batch_source: None,
@@ -524,7 +562,13 @@ impl Adapter for SequenceAdapter {
                 reads: 0,
             };
             let discovered = DiscoveredSource::new(source.clone(), SourceKind::Active);
-            let _ = sink.on_source(discovered, checkpoint(1), &mut reader)?;
+            if let Some(stats) = &self.reader_stats {
+                let mut reader = TrackingSourceReader::new(reader, stats.clone());
+                let _ = sink.on_source(discovered, checkpoint(1), &mut reader)?;
+            } else {
+                let mut reader = reader;
+                let _ = sink.on_source(discovered, checkpoint(1), &mut reader)?;
+            }
             files_read += 1;
         }
         AdapterCompletion::new(
@@ -758,6 +802,15 @@ fn run_sequence_fixture(
     replay_sources: Vec<SourceIdentity>,
     replay_quality: CompletionQuality,
 ) -> (tokenmaster_engine::OneShotResult, FakeArchive, Log) {
+    run_sequence_fixture_with_stats(discovery_sources, replay_sources, replay_quality, None)
+}
+
+fn run_sequence_fixture_with_stats(
+    discovery_sources: Vec<SourceIdentity>,
+    replay_sources: Vec<SourceIdentity>,
+    replay_quality: CompletionQuality,
+    reader_stats: Option<Arc<LiveReaderStats>>,
+) -> (tokenmaster_engine::OneShotResult, FakeArchive, Log) {
     let log = Log::default();
     let clock = FakeClock::new(0);
     let mut coordinator = RefreshCoordinator::new();
@@ -771,6 +824,7 @@ fn run_sequence_fixture(
         discovery_sources: discovery_sources.clone(),
         replay_sources,
         replay_quality,
+        reader_stats,
     };
     let mut archive = FakeArchive {
         log: log.clone(),
@@ -1015,6 +1069,56 @@ fn two_logical_files_with_one_provider_source_id_are_both_replayed() {
             .count(),
         2
     );
+}
+
+#[test]
+fn three_hundred_shared_root_files_use_one_temporary_reader_at_a_time() {
+    for _ in 0..3 {
+        let scope = source_identity().scope().clone();
+        let sources = (0_u64..300)
+            .map(|index| {
+                let mut logical_file_key = [0_u8; 32];
+                logical_file_key[..8].copy_from_slice(&index.to_le_bytes());
+                SourceIdentity::new(scope.clone(), "source-a", logical_file_key)
+                    .expect("logical file")
+            })
+            .collect::<Vec<_>>();
+        let stats = Arc::new(LiveReaderStats::default());
+
+        let (result, archive, log) = run_sequence_fixture_with_stats(
+            sources.clone(),
+            sources,
+            CompletionQuality::Complete,
+            Some(stats.clone()),
+        );
+
+        assert_eq!(result.outcome(), RefreshOutcome::Completed);
+        assert_eq!(
+            result.counts(),
+            ExecutionCounts::new(300, 300, 300, 1).expect("counts")
+        );
+        assert_eq!(archive.observed_sources, 300);
+        assert_eq!(archive.prepared_sources.len(), 300);
+        assert_eq!(archive.appended_events, 300);
+        assert_eq!(stats.callbacks.load(Ordering::Acquire), 300);
+        assert_eq!(stats.max_live.load(Ordering::Acquire), 1);
+        assert_eq!(stats.live.load(Ordering::Acquire), 0);
+        let events = log.lock().expect("log lock");
+        assert_eq!(
+            events.iter().filter(|event| **event == "sources").count(),
+            1
+        );
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| **event == "replay_sources")
+                .count(),
+            1
+        );
+        assert_eq!(events.iter().filter(|event| **event == "read").count(), 300);
+        assert!(!events.contains(&"page"));
+        assert!(events.contains(&"promote"));
+    }
 }
 
 #[test]

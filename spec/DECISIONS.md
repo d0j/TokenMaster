@@ -175,7 +175,7 @@ terminal outcomes are separate, IDs are checked and monotonic, cancellation is a
 runtime, path, provider descriptor, request history, or per-hint allocation is retained.
 P1-C.2 provides object-safe adapter/archive/clock/writer-lease ports with sealed
 provider-neutral identities, scope-exact canonical batches, 32-KiB checkpoints,
-256-item batch/page limits, and stable path-free errors. Adapter callbacks never
+256-item observation/relation batch limits, and stable path-free errors. Adapter callbacks never
 receive archive/store authority; archive calls never receive provider descriptors or
 raw source bytes. P1-D supplies Codex and OS implementations.
 
@@ -230,3 +230,24 @@ normal weekly reset can occur without consuming any grant. Modeling these as one
 would lose expiry safety and corrupt history. Capability separation permits useful
 manual inventory and reminders now, preserves portability, and leaves a safe path to
 future automation without binding TokenMaster to unstable private web behavior.
+
+## ADR-017 — Descriptor-bound two-pass full rebuild
+
+Decision: engine source identity includes one fixed 32-byte logical-file key in
+addition to provider, profile, and provider source ID. A full rebuild uses two linear
+adapter enumeration passes. The first writes discoveries directly into the exact scan
+set. The second lends one temporary descriptor-bound `SourceBatchReader` through an
+object-safe callback, allowing the engine to pull bounded batches without receiving or
+retaining a path, file handle, descriptor, raw bytes, or source list. Every batch must
+match the complete source identity. Exact archive preparation rejects sources outside
+the completed set and duplicates; exact seal remains the disk-backed proof that no
+source was omitted. Any incomplete second-pass quality discards the latest confirmed
+unpublished replay handle and cannot seal or promote.
+
+This supersedes P1-C's archive replay-page/cursor assumption. Real Codex session files
+share one provider source ID, so that older identity could alias valid files, while
+archive-driven paging could not recover a path-private live descriptor without an
+unbounded path cache or repeated enumeration. Two O(N) streaming passes preserve
+provider separation and memory stability. Full rebuild remains bootstrap/repair;
+P1-D's steady-state path must be incremental tail-only rather than replaying every
+JSONL file after each watcher hint.

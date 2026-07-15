@@ -90,12 +90,17 @@ the current revision, legacy snapshot, or canonical event page.
 
 The one-shot engine begins replay only after the archive closes the exact scan set as
 complete. It streams discoveries directly to that set and verifies every discovered
-source belongs to the currently enumerated scope. During replay it retains only the
-latest exact revision/epoch handle and accepts a returned handle only for the same
-revision with a non-regressing epoch. Cancellation, deadline, invalid progress, port
-fault, or stale state after replay begin invokes exact discard of the last confirmed
-unpublished handle; a failed discard remains an explicit recovery state and never
-authorizes publication.
+source belongs to the currently enumerated scope. A fixed 32-byte logical-file key is
+part of engine source identity; provider/profile/source ID alone is not file identity.
+Full rebuild re-enumerates each scope and lends one descriptor-bound reader at a time.
+The engine retains no descriptor list, validates every returned batch against the
+exact logical file, and relies on archive preparation plus final seal for complete
+disk-backed second-pass membership. During replay it retains only the latest exact
+revision/epoch handle and accepts a returned handle only for the same revision with a
+non-regressing epoch. Cancellation, deadline, incomplete second-pass quality, invalid
+progress, port fault, or stale state after replay begin invokes exact discard of the
+last confirmed unpublished handle; a failed discard remains an explicit recovery
+state and never authorizes publication.
 
 The worker retains one coordinator, one optional not-yet-started permit, one wake
 token, one completion, one owned thread handle, and fixed phase/supersession counters.

@@ -75,8 +75,12 @@
    only when the archive itself rejected closure. Follow scan-set recovery above. A
    failure after replay begin never authorizes publication; prior canonical state
    remains the read surface under the archive transaction contract.
-4. `InvalidData` for cross-scope discovery, repeated cursor, unchanged non-terminal
-   checkpoint, changed revision, or regressed epoch is a boundary/integrity fault.
+4. `InvalidData` for cross-scope discovery, cross-logical-file batch identity,
+   extra/duplicate second-pass source, omitted source at exact seal, unchanged
+   non-terminal checkpoint, changed revision, or regressed epoch is a boundary/
+   integrity fault. Full rebuild must re-enumerate the exact completed scopes and lend
+   one fresh descriptor-bound reader per source; never reconstruct descriptors from
+   archive rows or cache a history-sized path list.
    Do not retry the same adapter/archive state indefinitely. Preserve bounded codes
    and synthetic reproduction evidence; never log the source, checkpoint, or path.
 

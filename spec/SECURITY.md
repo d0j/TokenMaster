@@ -142,20 +142,23 @@ drafts, opaque checkpoints, chunk proofs, counters, diagnostics, and completion
 quality. `Archive` has no provider descriptor/raw-input operation and accepts only
 normalized discovery state or scope-exact canonical batches. Adapter checkpoints are
 opaque and capped at 32 KiB; observation and relation batches cap independently at
-256; chunk updates cap at 18; replay source pages cap at 256; every persisted counter
-fits SQLite `i64`. Debug and error surfaces redact identities, checkpoint/proof bytes,
-and keyset cursors. Compile-fail contracts reject private-field construction, path
-substitution for source identity, and raw byte archive writes.
+256; chunk updates cap at 18; every persisted counter fits SQLite `i64`. Full rebuild
+lends exactly one temporary descriptor-bound source reader per callback and exposes no
+path, file handle, raw bytes, or replay-source collection to the engine. Debug and
+error surfaces redact identities and checkpoint/proof bytes. Compile-fail contracts
+reject private-field construction, path substitution for source identity, and raw
+byte archive writes.
 
 The one-shot executor validates scope ownership before an adapter discovery reaches
 the archive and validates revision identity/epoch monotonicity before trusting every
-returned replay handle. It rejects non-progressing adapter checkpoints and replay
-cursors, caps continuation calls per execution, and never retains a source list or
-history-sized batch. Cancellation and deadline are checked across the full execution
-phase matrix. Only writer-lease contention is exposed as `busy`; later port misuse of
-that code fails the operation. Replay failure attempts exact last-confirmed-handle
-discard, and cleanup failure is reported separately without exposing data or masking
-the initiating stable code.
+returned replay handle. It rejects non-progressing adapter checkpoints and mismatched
+replay-batch identity, caps continuation calls per execution, and never retains a source
+list or history-sized batch. Exact archive preparation rejects extra/duplicate files;
+exact seal rejects omissions. Cancellation and deadline are checked across the full
+execution phase matrix. Only writer-lease contention is exposed as `busy`; later port
+misuse of that code fails the operation. Replay failure attempts exact
+last-confirmed-handle discard, and cleanup failure is reported separately without
+exposing data or masking the initiating stable code.
 
 The deterministic worker uses only capacity-one standard-library wake/result
 channels and the constant-state coordinator. External clock and execution callbacks

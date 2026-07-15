@@ -104,7 +104,7 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 - P1-C.2 bounded runtime ports: sealed provider/profile/source identities, opaque
   checkpoints capped at 32 KiB, fixed diagnostic counters, 18-update chunk-proof
   batches, scope-exact 256-observation/256-relation adapter and canonical batches,
-  and 256-record replay-source pages. Object-safe synchronous `Adapter`, `Archive`,
+  and the original bounded replay-page seam. Object-safe synchronous `Adapter`, `Archive`,
   monotonic `Clock`, and `WriterLease` contracts keep provider I/O, archive authority,
   raw bytes, paths, Slint, OS handles, and async runtimes structurally separate.
   Compile-fail contracts prove sealed identity, path rejection, and canonical-only
@@ -127,6 +127,16 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   as `faulted`; an outer boundary also clears state for other worker-port panics. Ten
   focused worker contracts pass without async, provider, filesystem, platform, Slint,
   or UI dependencies; incompatible `panic=abort` builds fail at compile time.
+- P1-D.0 real-source port repair: the engine now distinguishes every logical file by
+  a fixed 32-byte key even when many Codex JSONL files share one provider source ID.
+  Full rebuild performs two linear streaming passes and receives at most one temporary
+  descriptor-bound reader at a time; path/file-handle/raw bytes never cross the port.
+  Exact preparation rejects extra or duplicate sources, exact seal rejects omissions,
+  and cross-scope/cross-file batches or incomplete second-pass quality fail closed with
+  exact staging cleanup. The focused contract repeats a 300-file shared-root rebuild
+  three times, proves 300 appends, one maximum live reader, zero retained reader after
+  each run, and exact promotion. This supersedes the P1-C replay-page/cursor
+  assumption; it does not implement live Codex scheduling or tail-only refresh.
 
 ## Next implementation slice
 
@@ -164,9 +174,11 @@ zero-present-source retention-only revision. P1-B.3 completes reference-safe 32/
 scan-history retention, ID exhaustion, and recovery. P1-C.1 supplies the
 constant-state coordinator, P1-C.2 supplies bounded adapter/archive/clock/
 writer-lease ports, P1-C.3 supplies the one-shot executor, and P1-C.4 supplies the
-bounded deterministic worker. P1-C is complete. The next implementation gate is P1-D:
-compose the built-in Codex adapter, real portable writer lease, watcher/periodic hints,
-and lifecycle cancellation without changing the engine dependency direction. P1-E
+bounded deterministic worker. P1-D.0 corrects the real per-file/two-pass seam under
+`docs/superpowers/plans/2026-07-15-tokenmaster-p1-d-live-runtime.md`. The next gate is
+P1-D.1: make replay events and late relations one atomic store batch before building
+the runtime crate, portable writer lease, built-in live Codex adapter, incremental
+tail path, watcher/periodic hints, and lifecycle cancellation. P1-E
 then adds sleep/resume, immutable publication, race generations, and continuous
 runtime recovery.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
