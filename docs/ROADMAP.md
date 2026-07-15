@@ -44,6 +44,12 @@ P1-E then add the provider-neutral runtime engine, coalescing, cancellation, wri
 lease, sleep/resume, continuous recovery, and immutable publication before indexed
 analytics, pricing, quota, Git output, automation, and complete UI work.
 
+Approved P2 quota gate: provider-defined current windows plus immutable full-reset
+epochs. The weekly view preserves last-before/first-after state, maximum use before
+reset, old/new reset time, early/repeated reset markers, confidence, and simultaneous
+allowance changes. Ratios remain exact when absolute capacity is unavailable. See
+`docs/superpowers/plans/2026-07-15-tokenmaster-quota-reset-history.md`.
+
 ## 0.9 — complete desktop product
 
 Complete the six-section board and supporting exploration views, tray/hotkey/startup,

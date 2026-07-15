@@ -38,6 +38,15 @@ sessions, models, projects, activity, data health, notifications, settings, agen
 help, command palette, and compact-widget views. Users MUST be able to reorder, hide,
 and collapse board sections without data loss.
 
+### TM-FUNC-009 — Quota reset history
+
+Provider quota windows MUST be versioned as immutable epochs. A detected full weekly
+reset MUST preserve the last trustworthy state before reset, the first state after,
+maximum use in the closed epoch, old/new reset times, evidence source, confidence, and
+scheduled/early/unknown semantics. Repeated resets MUST create distinct transitions
+instead of overwriting history. Unavailable absolute limits MUST remain unavailable;
+local token totals MUST NOT be presented as provider quota capacity.
+
 ### TM-FUNC-005 — Native interaction
 
 The product MUST provide single-instance tray behavior, dashboard/compact access,

@@ -13,6 +13,7 @@ A design or plan is not implementation evidence.
 | TM-FUNC-006 | planned | separate CLI and MCP adapters over query facade | P3 strict JSON/stdin MCP conformance tests |
 | TM-FUNC-007 | implemented | accounting lineage/classifier, scalable replay archive, P0-E composition, and P1-A retention | real JSONL baseline/append/restart/replay/quality/atomic-replacement/truncation-retention/failure contracts pass; live scheduling remains TM-FUNC-008/P1 |
 | TM-FUNC-008 | partial | built-in provider and neutral draft seam implemented; engine/plugin host pending | provider/Codex/accounting contracts; P1 and 1.1 remain |
+| TM-FUNC-009 | planned | immutable provider quota epochs and weekly full-reset transitions | P2 quota reset plan; scheduled/early/repeated/reset+allowance/restart/UI/API fixtures pending |
 | TM-UI-001 | planned | complete Slint board and supporting views | granular parity matrix and P4 accessibility/UI tests |
 | TM-UI-002 | partial | `crates/probe-app` presentation generations | presentation/skin contracts; archive-independent product snapshots pending |
 | TM-PERF-001 | partial | parser, reader, domain, store bounds plus P0-E bounded composition | 300-file/300-event, 256-batch/page, reopen contracts pass; future engine/query/plugin bounds pending |

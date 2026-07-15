@@ -73,6 +73,9 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 The product architecture, universal automation connector, complete UI, dynamic quota
 bars, skins, layouts, density, and localization are approved in
 `docs/superpowers/specs/2026-07-14-tokenmaster-product-architecture-design.md`. Its
+weekly quota contract now keeps immutable before/after epochs for scheduled, early,
+and repeated full resets under the P2 plan
+`docs/superpowers/plans/2026-07-15-tokenmaster-quota-reset-history.md`.
 source-adapter seam keeps the current local Codex reader replaceable by future
 sandboxed bounded provider plugins without coupling storage, analytics, automation,
 or UI to Codex JSONL. The selected future format is a `.tmplugin` WebAssembly

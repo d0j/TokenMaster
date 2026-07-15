@@ -23,6 +23,9 @@ All notable changes are recorded here.
   publishing/origin/retained provenance.
 - Atomic carry-forward for absent or conflicting replay-verified evidence, with
   truth-table, truncation, reopen, tamper, and fault-rollback contracts.
+- Approved a provider-neutral weekly quota reset history: immutable pre/post epochs,
+  scheduled/early/repeated reset transitions, allowance-change separation, bounded
+  retention, and shared UI/CLI/MCP semantics for P2.
 
 ### Fixed
 

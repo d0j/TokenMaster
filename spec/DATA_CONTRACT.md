@@ -102,6 +102,22 @@ or `conflict`. Canonical selection uses only `eligible`. All observations remain
 available for bounded reconciliation and quality counts. Session ancestry traversal
 is capped at 32 levels and one transaction re-evaluates at most 256 direct children.
 
+## TM-DATA-008 — Quota epochs and reset transitions
+
+A provider quota sample is immutable and keyed by provider, account/workspace scope,
+stable window ID, observation ID, and observation time. It carries provider-defined
+window/reset semantics, optional used/remaining ratios, optional capacity/units,
+advertised reset time, freshness, quality, evidence source, and confidence. Missing
+values are never inferred from local usage.
+
+A full-reset transition references the last trustworthy pre-reset sample and first
+trustworthy post-reset sample and records the closed epoch's maximum observed use,
+old/new advertised reset times, scheduled/early/manual-or-banked/unknown kind, and an
+observation interval if the exact instant is unknown. Capacity changes are orthogonal
+transitions and may accompany a reset. Transition identity is deterministic so
+restart/retry cannot duplicate it. Poll samples, epochs, transitions, and aggregates
+have explicit per-window retention/page bounds.
+
 Only explicit provider ancestry identifies a parent. A strong signature covers the
 normalized model, emitted delta, and provider cumulative snapshot. A weak signature
 covers model and delta only and cannot suppress a pre-divergence event by itself.

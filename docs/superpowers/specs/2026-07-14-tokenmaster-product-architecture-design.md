@@ -505,6 +505,49 @@ mode disables it. There are no per-card timers. One shared visible-window clock 
 once per minute, increasing to once per second only for a visible reset countdown
 under five minutes. It suspends when the window is hidden.
 
+### 8.1 Weekly full-reset history
+
+The Codex weekly window is not treated as one mutable bar. Every full reset starts a
+new immutable quota epoch, including an early or repeated reset inside the previously
+advertised week. The prior epoch is closed with:
+
+- the last trustworthy pre-reset sample and its observation time;
+- the maximum used ratio observed in that epoch;
+- available used/remaining units and capacity without inventing unavailable values;
+- the old advertised reset timestamp and window duration;
+- the first trustworthy post-reset sample, new reset timestamp, and new duration;
+- a transition kind (`scheduled_reset`, `early_full_reset`, `manual_or_banked_reset`,
+  `allowance_changed`, or `unknown_reset`), evidence source, and confidence;
+- an observed time interval when polling cannot prove the exact reset instant.
+
+Strong detection requires an explicit provider epoch/reset signal or a coherent
+transition from the same weekly window: usage falls to the provider-defined reset
+floor, remaining headroom returns to the reset ceiling, and/or the advertised reset
+time advances. A lower value alone is insufficient because rolling recovery, stale
+samples, account/workspace changes, and provider errors can look similar. An
+allowance/capacity change is recorded separately even when it accompanies a reset.
+
+The weekly card shows the current epoch plus a visible `Reset detected` action. Its
+detail displays `before -> after`, maximum use before reset, scheduled versus early,
+old/new reset times, source freshness, confidence, and the detection interval. A
+timeline uses vertical reset markers and keeps repeated resets distinct. If OpenAI
+exposes only ratios, TokenMaster says `84% used -> 0% used`; it never fabricates an
+absolute message, token, or credit limit.
+
+UI, CLI, and MCP consume the same bounded `QuotaEpochSnapshot` and
+`QuotaTransitionSnapshot`. Automation may react to a new reset sequence only once and
+may require a minimum confidence. Restart deduplication uses provider/window identity,
+prior/current epoch identity when available, and the two observation IDs. The store
+retains a fixed recent transition/epoch window per provider quota window and bounded
+older aggregates, never an unbounded poll history.
+
+This is deliberately data-driven. OpenAI documents Codex usage as dependent on plan,
+task complexity, model, and execution surface, with reset options exposed through the
+[usage page or limit banner](https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan/);
+[banked rate-limit resets](https://help.openai.com/en/articles/20001271) are also
+distinct from credits. Therefore TokenMaster never hard-codes a five-hour or weekly
+capacity and never treats local token totals as the provider allowance.
+
 ## 9. Modular presentation system
 
 Presentation is five orthogonal axes:

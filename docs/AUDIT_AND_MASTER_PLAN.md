@@ -89,6 +89,11 @@ contracts are stable.
     origins are allowlisted; custom origins never receive credentials; requests have
     strict time/body bounds, backoff, jitter, auth-change invalidation, and stale
     fallback. Quota windows are provider data, never hard-coded `5h`/`1w` UI fields.
+    Every full weekly reset, including an early or repeated reset, closes an immutable
+    quota epoch and preserves exact available before/after ratios or units, maximum
+    pre-reset use, old/new reset time, evidence/confidence, and allowance changes.
+    The approved executable plan is
+    `docs/superpowers/plans/2026-07-15-tokenmaster-quota-reset-history.md`.
 12. Code Output needs its own bounded Git metrics subsystem. It must not expose a shell
     or retain file contents. It owns repository association, author filtering,
     worktree/submodule/rename/merge semantics, incremental cache, and explicit
@@ -128,8 +133,9 @@ contracts are stable.
 6. **P1 — runtime engine:** scan epochs, source finalization, staging promotion,
    coalescing, cancellation, sleep/resume, writer lease, recovery, and immutable
    snapshot revisions.
-7. **P2 — product data:** Codex quota transport, pricing catalog/overrides, bounded Git
-   output metrics, indexed analytics, and data-quality semantics.
+7. **P2 — product data:** Codex quota transport, immutable weekly reset epochs and
+   before/after history, pricing catalog/overrides, bounded Git output metrics,
+   indexed analytics, and data-quality semantics.
 8. **P3 — automation:** strict JSON CLI, separate stdio MCP process, capabilities,
    bounded queries, idempotent refresh, and declarative advisory policy for Hermes and
    other clients.

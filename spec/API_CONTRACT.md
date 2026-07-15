@@ -21,6 +21,13 @@ response, or transcript operations.
 The UI consumes immutable bounded snapshots. It receives stable data-quality and
 freshness states and never directly receives source paths or raw source content.
 
+Quota snapshots expose current window epochs and a bounded transition page. Full
+weekly resets include before/after values, maximum pre-reset use, old/new reset times,
+transition kind, evidence source, confidence, and an exact or bounded detection time.
+CLI and MCP use the same fields and stable transition sequence so automation can react
+idempotently. Unavailable provider capacity remains `null`/unavailable, not zero or an
+estimate derived from local token usage.
+
 ## Provider plugin ABI
 
 The future external-provider ABI is `tokenmaster:provider@1` expressed in WIT and
