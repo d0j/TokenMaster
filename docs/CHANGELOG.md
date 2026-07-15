@@ -41,8 +41,9 @@ All notable changes are recorded here.
   scheduled/early/repeated reset transitions, allowance-change separation, bounded
   retention, and shared UI/CLI/MCP semantics for P2.
 - Approved separate banked reset inventory and expiry safety: independently expiring
-  lots, bounded deduplicated reminders, truthful notification coverage, assisted
-  activation, and official-capability-only crash-safe automatic policy for P2.
+  lots, a selectable 7d/24h/12h/6h/1h default profile plus bounded custom reminders,
+  truthful notification coverage, assisted activation, and official-capability-only
+  crash-safe automatic policy for P2.
 
 ### Fixed
 

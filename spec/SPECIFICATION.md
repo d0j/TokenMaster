@@ -51,9 +51,12 @@ local token totals MUST NOT be presented as provider quota capacity.
 
 Provider-granted banked rate-limit resets MUST be represented separately from normal
 quota resets, credits, and temporary usage. Separate expirations MUST remain separate
-lots with explicit precision, source, freshness, and state. TokenMaster MUST support
-bounded configurable reminders, truthful notification coverage, and linked activation
-receipts. Automatic activation MUST default off and MUST be unavailable without an
+lots with explicit precision, source, freshness, and state. TokenMaster MUST initialize
+reminders at 7 days, 24 hours, 12 hours, 6 hours, and 1 hour, while allowing users to
+select any subset or replace it with up to eight unique bounded custom lead times.
+Reminder profiles MUST remain bounded, deduplicated, and independently configurable.
+TokenMaster MUST expose truthful notification coverage and linked activation receipts.
+Automatic activation MUST default off and MUST be unavailable without an
 official narrow idempotent provider capability, fresh high-confidence evidence,
 explicit local policy, compare-and-swap admission, durable intent, and post-action
 reconciliation. Manual inventory and read-only automation MUST NOT authorize it.

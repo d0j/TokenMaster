@@ -152,8 +152,10 @@ state, source, freshness, and confidence. Banked rate-limit resets, credits, tem
 usage, and unknown benefits are distinct kinds. Different expirations remain separate;
 date-only and timezone-unknown expirations are never silently promoted to exact UTC.
 
-Current inventory is a bounded projection over immutable change points. Reminder
-delivery is deduplicated by lot revision, threshold, and channel. An activation writes
+Current inventory is a bounded projection over immutable change points. A reminder
+profile has one revision and at most eight unique normalized lead times; inherited and
+explicitly overridden profiles remain distinguishable. Reminder delivery is
+deduplicated by lot revision, threshold, and channel. An activation writes
 a deterministic intent before external mutation and a normalized receipt afterward.
 Unresolved or ambiguous intents survive retention. A confirmed receipt may reference
 one `manual_or_banked_reset` quota transition, but neither inventory nor local usage

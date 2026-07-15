@@ -68,8 +68,10 @@ allowance changes. Ratios remain exact when absolute capacity is unavailable. Se
 `docs/superpowers/plans/2026-07-15-tokenmaster-quota-reset-history.md`.
 
 The same P2 gate keeps banked rate-limit reset benefits separate from quota epochs and
-credits. It adds independently expiring inventory lots, bounded 7-day/24-hour/1-hour
-reminders, truthful notification coverage, immutable activation receipts, and an
+credits. It adds independently expiring inventory lots, an initial
+7-day/24-hour/12-hour/6-hour/1-hour reminder profile that users can subset or replace
+with bounded custom thresholds, truthful notification coverage, immutable activation
+receipts, and an
 official-capability-only path to future automatic activation. Manual inventory may
 ship first and never authorizes mutation. See
 `docs/superpowers/plans/2026-07-15-tokenmaster-banked-reset-inventory.md`.

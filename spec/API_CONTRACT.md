@@ -50,7 +50,8 @@ estimate derived from local token usage.
 
 Benefit inventory snapshots expose bounded typed lots separately from quota windows:
 benefit kind, quantity, target window, expiration value and precision, state, source,
-freshness, confidence, activation capability, reminder coverage, and nearest due time.
+freshness, confidence, activation capability, active bounded reminder profile and its
+revision, reminder coverage, and nearest due time.
 Bounded transition and activation-receipt pages use stable sequences. An identical
 schema serves UI, CLI, and MCP reads; manual facts are explicitly marked and never
 become official evidence.

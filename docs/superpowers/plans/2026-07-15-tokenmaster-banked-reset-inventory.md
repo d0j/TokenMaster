@@ -155,8 +155,33 @@ reset without correlated quota evidence.
 
 ### 5.1 Policy
 
-Recommended defaults are 7 days, 24 hours, and 1 hour before the conservative expiry
-boundary. Users may disable, add, remove, or reorder up to eight lead times per scope.
+The initial reminder profile contains five recommended lead times: 7 days, 24 hours,
+12 hours, 6 hours, and 1 hour before the conservative expiry boundary. It is a starting
+preset, not a locked mode. The settings present those values as independent toggles
+plus `Add custom`. The user may disable any or all presets, add custom values, and
+therefore replace the profile completely: `3 hours only` and `6 hours + 3 hours` are
+ordinary configurations rather than special cases.
+
+The active profile contains at most eight unique lead times per scope. A custom value
+has one-minute granularity, must be from 1 minute through 365 days, and is normalized to
+checked seconds. Preset and custom duplicates collapse to one threshold. The UI sorts
+lead times from earliest warning to latest warning, provides `Reset to recommended`,
+and stores one settings revision. A global profile is inherited until a user creates a
+provider/account/window override; changing the global profile does not overwrite an
+existing explicit override.
+
+First run seeds recommended profile version 1 with the five defaults. An application
+upgrade never silently adds, removes, or changes thresholds in an existing profile.
+`Reset to recommended` is the explicit action that replaces the active set with the
+current documented recommended profile and advances its settings revision.
+
+Changing a profile transactionally removes obsolete due entries and adds new ones. A
+new threshold whose due time has already passed may produce one immediate most-urgent
+notice if the lot is still available; it never replays every missed threshold. Removing
+and re-adding an already delivered threshold does not bypass delivery deduplication;
+the user can use snooze when another notice is desired. An empty profile is valid and
+means reminders are disabled while inventory remains visible with a warning.
+
 The settings also define:
 
 - in-app and optional OS notification channels;
@@ -379,7 +404,11 @@ gated, not date gated.
 - two resets with different expirations, including the user’s July/next-month case;
 - one aggregate quantity and two separate equal-expiry lots;
 - exact UTC, provider-local, date-only, bounded, and unknown expiry;
-- 7-day/24-hour/1-hour reminders, quiet hours, critical override, snooze, and mute;
+- recommended 7-day/24-hour/12-hour/6-hour/1-hour profile, `3 hours only`, and
+  `6 hours + 3 hours` custom configurations;
+- duplicate preset/custom normalization, 1-minute/365-day custom bounds, empty profile,
+  reset-to-recommended, inheritance/override, and settings-revision changes;
+- quiet hours, critical override, snooze, and mute;
 - restart, duplicate poll, sleep/hibernation, clock rollback/advance, and time-zone
   change without notification duplication;
 - manual inventory and official inventory replacing or disagreeing with manual data;

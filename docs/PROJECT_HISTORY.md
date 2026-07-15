@@ -607,12 +607,14 @@ typed lots, preserves immutable award/quantity/activation/expiry/revocation chan
 points, links confirmed consumption to `manual_or_banked_reset` quota transitions,
 and never invents provider capacity from local token usage.
 
-Expiry safety uses configurable bounded lead times, recommended at 7 days, 24 hours,
-and 1 hour, one durable indexed due queue, one nearest-due runtime timer, persistent
-delivery deduplication, bounded snooze, quiet hours, and explicit in-app/tray/OS
-notification coverage. Restart, sleep/hibernation, clock/time-zone change, date-only
-expiry, and multiple-account behavior are acceptance fixtures rather than implicit
-platform assumptions.
+Expiry safety starts with selectable 7-day, 24-hour, 12-hour, 6-hour, and 1-hour lead
+times. Users may choose any subset or replace it with up to eight unique custom values,
+including `3 hours only` or `6 hours + 3 hours`; duplicates normalize and an empty
+profile explicitly disables reminders. One durable indexed due queue, one nearest-due
+runtime timer, settings revisions, persistent delivery deduplication, bounded snooze,
+quiet hours, and explicit in-app/tray/OS notification coverage prevent per-lot resource
+growth. Restart, sleep/hibernation, clock/time-zone change, date-only expiry, and
+multiple-account behavior are acceptance fixtures rather than platform assumptions.
 
 Activation has four modes: off, remind-only, confirm-each, and automatic policy.
 Automatic policy defaults off and is impossible for manual data, external plugins,

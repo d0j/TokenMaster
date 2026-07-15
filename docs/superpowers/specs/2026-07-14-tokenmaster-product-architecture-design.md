@@ -568,10 +568,16 @@ does not prove a quota reset.
 The quota board shows the total available count, nearest expiration, next lot,
 reminder coverage, and source freshness. A FEFO-sorted inventory drawer exposes all
 lots and their activation availability without confusing resets with credits or
-temporary usage. Recommended configurable reminders are 7 days, 24 hours, and 1 hour
-before the conservative expiration boundary. One durable due queue and one nearest-due
-runtime timer cover all lots; restart, sleep/hibernation, clock changes, quiet hours,
-snooze, delivery deduplication, and truthful offline coverage are explicit contracts.
+temporary usage. The initial reminder profile is 7 days, 24 hours, 12 hours, 6 hours,
+and 1 hour before the conservative expiration boundary. Each preset is independently
+selectable and users may add custom 1-minute-to-365-day values, up to eight unique
+thresholds, so a profile may contain only `3 hours` or exactly `6 hours + 3 hours`.
+Preset/custom duplicates collapse, an empty profile explicitly disables reminders,
+and `Reset to recommended` restores the five defaults. Upgrades preserve the existing
+profile rather than silently introducing new thresholds. One durable due queue and
+one nearest-due runtime timer cover all lots; restart, sleep/hibernation, clock
+changes, quiet hours, snooze, delivery deduplication, settings revisions, and truthful
+offline coverage are explicit contracts.
 
 Activation defaults to reminders only. Assisted activation may open an exact official
 provider surface. Automatic activation is available only through a narrow official

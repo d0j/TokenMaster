@@ -186,6 +186,10 @@ portability and prevents platform/UI concerns from entering the engine core.
 Decision: provider-granted banked rate-limit resets are typed independently from quota
 epochs, credits, and temporary usage. Inventory uses separate expiry lots, immutable
 change points, one indexed reminder queue, and normalized activation intents/receipts.
+The first-run reminder profile is 7 days, 24 hours, 12 hours, 6 hours, and 1 hour, but
+each value is independently selectable and users may replace it with up to eight
+unique bounded custom thresholds. Existing profiles are stable across upgrades and
+change only through an explicit settings revision.
 Assisted activation may open an official provider surface. Automatic activation is
 disabled unless a connector exposes official idempotent mutation and status
 capabilities; it additionally requires explicit versioned policy, fresh evidence,
