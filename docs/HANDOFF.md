@@ -33,10 +33,12 @@ that plan with the bounded deterministic worker shell. P1-D.0 is complete under
 logical-file identity and replaces archive-page descriptor recovery with two linear
 passes and one temporary descriptor-bound reader. P1-D.1 is also complete: one bounded
 replay fact batch atomically applies canonical events, late relations, derived replay
-state, checkpoint, and one epoch increment. The immediate next task is P1-D.2: add the
-runtime crate and bootstrap Codex composition before the portable writer lease,
-incremental tail refresh,
-watcher/periodic hints, and lifecycle cancellation.
+state, checkpoint, and one epoch increment. P1-D.2 is complete: `tokenmaster-runtime`
+now supplies the real built-in Codex bootstrap adapter, strict 32-KiB path-free
+checkpoint codec, checked store bridge, real Windows replacement/reopen/300-file
+contracts, and exact staging cleanup. The immediate next task is P1-D.3 replay-aware
+incremental tail refresh, before the portable writer lease, watcher/periodic hints,
+and lifecycle cancellation.
 P2 now also has an approved separate banked-reset inventory/expiry/reminder/activation
 design in `docs/superpowers/plans/2026-07-15-tokenmaster-banked-reset-inventory.md`.
 It does not change the immediate P1-D gate and no current provider discovery,
@@ -154,8 +156,10 @@ including same-source-ID logical files, cross-file batches, extra/omitted second
 files, incomplete second-pass quality, and repeated 300-file/one-live-reader proof.
 P1-D.1 adds a 47-test replay suite with two atomic fault boundaries, a 256 relation
 cap, one epoch advance regardless of relation count, and the seven green real-JSONL
-pipeline contracts without the prior per-relation commit loop. This does not claim
-live Codex composition, incremental tail refresh, watcher
+pipeline contracts without the prior per-relation commit loop. P1-D.2 adds three
+checkpoint-codec and seven production-bootstrap contracts, including 300 files,
+zero/missing profiles, reopen, Windows replacement, truncation retention, cancellation,
+and exact post-begin discard. This does not claim incremental tail refresh, watcher
 scheduling, or a real OS lease.
 Clean-root, formatting, strict workspace Clippy, and the full locked workspace passed;
 see the P1-A history entry for exact commands and focused counts. The

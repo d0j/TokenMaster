@@ -12,12 +12,12 @@ A design or plan is not implementation evidence.
 | TM-FUNC-005 | partial | `crates/probe-app`; product shell later | lifecycle, presentation, skin-runtime, metrics, stress contracts |
 | TM-FUNC-006 | planned | separate CLI and MCP adapters over query facade | P3 strict JSON/stdin MCP conformance tests |
 | TM-FUNC-007 | implemented | accounting lineage/classifier, scalable replay archive, P0-E composition, and P1-A retention | real JSONL baseline/append/restart/replay/quality/atomic-replacement/truncation-retention/failure contracts pass; live scheduling remains TM-FUNC-008/P1 |
-| TM-FUNC-008 | partial | built-in provider-neutral drafts plus constant-state coordinator, corrected per-file/two-pass synchronous ports, one-shot executor, and deterministic worker; live Codex composition and plugin host pending | provider/Codex/accounting contracts plus P1-C engine and P1-D.0 logical-file/temporary-reader/exact-second-pass contracts |
+| TM-FUNC-008 | partial | built-in provider-neutral drafts, constant-state coordinator, corrected per-file/two-pass ports, one-shot executor, deterministic worker, and production Codex bootstrap composition; incremental live scheduling and plugin host pending | provider/Codex/accounting contracts plus P1-C engine and P1-D.0/P1-D.2 logical-file, checkpoint-codec, real-store bootstrap contracts |
 | TM-FUNC-009 | planned | immutable provider quota epochs and weekly full-reset transitions | P2 quota reset plan; scheduled/early/repeated/reset+allowance/restart/UI/API fixtures pending |
 | TM-FUNC-010 | planned | banked reset lots, selectable default/custom expiry reminders, activation intents/receipts | P2 banked reset plan; inventory/profile/reminder/reconciliation/UI/security fixtures pending |
 | TM-UI-001 | planned | complete Slint board and supporting views | granular parity matrix and P4 accessibility/UI tests |
 | TM-UI-002 | partial | `crates/probe-app` presentation generations | presentation/skin contracts; archive-independent product snapshots pending |
-| TM-PERF-001 | partial | parser, reader, domain, store bounds, P0-E composition, P1-C engine core, and P1-D.0 two-pass repair | 300 shared-root logical files use two linear passes, one live temporary reader, no engine descriptor/page list, 256 observation/relation batches, 32-KiB checkpoints, 18 chunk updates, 4,096 continuation cap, reopen, capacity-one wake/result channels, and 10,000-hint one-follow-up contracts pass; live/query/plugin runtime evidence pending |
+| TM-PERF-001 | partial | parser, reader, domain, store bounds, P0-E composition, P1-C engine core, P1-D.0 two-pass repair, and P1-D.2 runtime bootstrap | real runtime 300-file shared-source rebuild uses no descriptor collection; two linear passes, one temporary reader, 256 observation/relation batches, 32-KiB total checkpoint, 18 chunk updates, 4,096 continuation cap, reopen, capacity-one channels, and 10,000-hint one-follow-up contracts pass; incremental/query/plugin evidence pending |
 | TM-PERF-002 | open evidence | software renderer and M0 resource gates | uninterrupted soak and interactive receipts remain absent |
 | TM-PERF-003 | partial | keyset store reads implemented; immutable snapshots planned | SQLite/read contracts; P2 query snapshot gates pending |
 | TM-REL-001 | partial | M0 scripts and receipt schemas | identity checks exist; final product packaging evidence pending |
@@ -34,7 +34,7 @@ A design or plan is not implementation evidence.
 | TM-SEC-001 | partial | local-only product and no listener today | future quota HTTPS opt-in and MCP stdio security tests pending |
 | TM-SEC-002 | partial | current JSONL/store boundaries validate types and sizes | future config/CLI/MCP/plugin boundary suites pending |
 | TM-SEC-003 | implemented | provider/Codex/store/engine errors, value types, and redacted worker panic boundary | serialized/debug privacy, path-redaction, sealed identity, path-substitution, raw-archive-write compile-fail, fixed panic/fault completion, and panic-strategy compile guard contracts |
-| TM-SEC-004 | partial | transactional scoped scan/replay authority, bounded pruning, CAS/preparation, atomic fact batches, immutable legacy, exact seal/carry-forward/discard, and one-shot fail-closed composition | P1-D.0 adds exact per-file/two-pass failure handling; P1-D.1 proves event/relation/selection/work/chunk/checkpoint/epoch rollback and one epoch advance per accepted batch; live Codex runtime remains |
+| TM-SEC-004 | partial | transactional scoped scan/replay authority, bounded pruning, CAS/preparation, atomic fact batches, immutable legacy, exact seal/carry-forward/discard, one-shot execution, and production bootstrap bridge | P1-D.2 proves path-free strict checkpoint decode, missing/zero-source truth, Windows replacement, truncation retention, reopen, cancellation, and exact post-begin discard; incremental live runtime remains |
 | TM-SEC-005 | partial | M0 skins are declarative application data | external skin package schema/validation not implemented |
 | TM-SEC-006 | planned | built-in Codex exists; isolated plugin host deferred | provider plugin design and future 1.1 conformance/security gates |
 | TM-SEC-007 | planned | host-owned banked reset activation capability and policy boundary | no-scrape/no-authority-escalation/idempotency/ambiguous-outcome security gates pending |
@@ -60,10 +60,11 @@ supersession state, panic/fault containment, stale-ID safety, and cancel/wake/jo
 shutdown/Drop ownership. P1-D.0 then corrects the real multi-file seam with a fixed
 logical-file key and two linear streaming passes that lend at most one temporary
 reader; the 300-file contract proves no engine replay-page/descriptor collection.
-P1-D.1 now applies replay events and late relations as one bounded atomic fact batch
-with two rollback boundaries and one epoch increment. P1-D.2 bootstrap Codex
-composition is next, followed by incremental live composition and the real OS writer
-lease.
+P1-D.1 applies replay events and late relations as one bounded atomic fact batch with
+two rollback boundaries and one epoch increment. P1-D.2 now supplies the real
+path-private Codex adapter, strict checkpoint codec, and store archive bootstrap
+composition. P1-D.3 replay-aware incremental archive is next, followed by the real OS
+writer lease and bounded watcher/scheduler.
 Tasks 3+ in the older replay plan are historical and superseded.
 
 The clean-root invariant is implemented by `scripts/audit-clean-root.ps1` and its

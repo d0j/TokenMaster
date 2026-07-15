@@ -25,6 +25,7 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
+mod checkpoint_codec;
 mod file_identity;
 mod files;
 mod identity;
@@ -34,6 +35,9 @@ mod provider;
 mod reader;
 mod roots;
 
+pub use checkpoint_codec::{
+    CodexCheckpointError, CodexCheckpointErrorCode, CodexCheckpointV1, MAX_CODEX_CHECKPOINT_BYTES,
+};
 pub use files::{
     EnumerationCompletion, EnumerationDiagnosticCode, EnumerationDiagnostics, EnumerationError,
     EnumerationErrorCode, EnumerationReport, FileMetadataHint, MAX_ENUMERATION_DEPTH, SinkDecision,
@@ -53,7 +57,7 @@ pub use reader::{
     READER_CHECKPOINT_SCHEMA_VERSION, ReadBatch, ReaderCheckpointError, ReaderCheckpointErrorCode,
     ReaderCheckpointParts, ReaderCheckpointV1, ReaderDiagnosticCode, ReaderDiagnostics,
     ReaderError, ReaderErrorCode, ReaderOutcome, RebuildReason, SOURCE_CHUNK_BYTES,
-    SourceChunkDigest, SourceProbe, VerificationLevel, logical_file_identity, read_source_batch,
-    verify_full_prefix,
+    SourceChunkDigest, SourceProbe, VerificationLevel, initialize_source_checkpoint,
+    logical_file_identity, read_source_batch, verify_full_prefix,
 };
 pub use roots::{CodexRootInput, ConfiguredCodexRoot, build_discovery_request};

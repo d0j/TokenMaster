@@ -167,6 +167,15 @@ relations, selections, queued continuation, chunks, checkpoint, and epoch share 
 transaction, preventing a fault from advancing archive authority while the engine
 still holds the prior handle. Debug exposes only the bounded relation count.
 
+The built-in runtime checkpoint codec is manual and path-free. Decode checks the
+32-KiB total bound before resume allocation and rejects unknown envelope/reader/parser
+versions, unknown flags, non-canonical absent fields, logical identity mismatch,
+truncated payloads, and trailing bytes. The runtime never formats inner provider,
+reader, or store errors into a port result. Bootstrap keeps descriptors inside
+synchronous adapter callbacks, and `StoreArchive` receives only sealed identity,
+canonical facts, checkpoint state, and checked handles. Bootstrap/full rebuild is not
+exposed as a live watcher path.
+
 The deterministic worker uses only capacity-one standard-library wake/result
 channels and the constant-state coordinator. External clock and execution callbacks
 run outside the worker mutex. Stale cancellation cannot affect a newer request;

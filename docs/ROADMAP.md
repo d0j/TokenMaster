@@ -54,8 +54,9 @@ older backlogs in bounded passes, and fails atomically on pruning or ID exhausti
 P1-C is the completed provider-neutral runtime engine core. P1-D.0 has corrected its
 real multi-file boundary with fixed logical-file identity and two linear streaming
 passes with one temporary descriptor-bound reader. P1-D.1 atomically binds events,
-late relations, checkpoint, replay work, and one epoch advance. P1-D.2+ and P1-E next
-add bootstrap/live Codex composition, the real writer lease,
+late relations, checkpoint, replay work, and one epoch advance. P1-D.2 adds the real
+built-in Codex bootstrap/store composition and strict path-free checkpoint codec.
+P1-D.3+ and P1-E next add incremental live composition, the real writer lease,
 sleep/resume, continuous recovery, and
 immutable publication before indexed
 analytics, pricing, quota, Git output, automation, and complete UI work.
@@ -75,9 +76,11 @@ P1-D.0: source identity is exact per logical file, archive page/cursor descripto
 recovery is removed, and 300 same-root files rebuild with a maximum of one live reader
 and no engine descriptor collection. Completed P1-D.1: a 256+256 bounded replay fact
 batch applies events and relations in one immediate transaction, rolls every fact and
-checkpoint/epoch back at both injected boundaries, and advances epoch once. The
-current gate is P1-D.2 bootstrap runtime composition, then the built-in live Codex
-adapter, real portable writer lease,
+checkpoint/epoch back at both injected boundaries, and advances epoch once. Completed
+P1-D.2: the production runtime composes the Codex adapter and store for bounded
+bootstrap/full rebuild with a strict 32-KiB checkpoint, checked ID bridge, real
+300-file/reopen/replacement/cleanup evidence. The current gate is P1-D.3 replay-aware
+incremental archive, then the real portable writer lease,
 incremental tail path, watcher/periodic hints, and lifecycle cancellation without
 adding provider/platform/UI dependencies to the engine core.
 

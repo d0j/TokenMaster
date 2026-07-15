@@ -267,3 +267,28 @@ relation separately. A failure after the first commit could leave SQLite at a ne
 epoch while the engine retained an older exact replay handle, making cleanup stale and
 recovery ambiguous. One bounded fact batch matches one reader pull, removes that
 partial-commit state, and preserves deterministic restart without enlarging memory.
+
+## ADR-019 — Separate bootstrap composition with a strict Codex checkpoint envelope
+
+Decision: production bootstrap composition lives in a separate `tokenmaster-runtime`
+crate. Its built-in Codex adapter owns only the bounded provider discovery snapshot,
+enumerates JSONL descriptors synchronously, and lends one descriptor-bound reader at
+a time to the provider-neutral engine. A fresh source checkpoint is created by safe
+open/metadata probe without reading source content. It starts at offset zero with a
+full-prefix proof over the empty covered prefix; store preparation receives a distinct
+canonical zero-offset incremental checkpoint and promotes to full-prefix only through
+the atomic replay append.
+
+`CodexCheckpointV1` is a manual little-endian binary envelope capped at 32 KiB total.
+It contains fixed schema/version flags, opaque physical/logical identities, checked
+offsets and file observation metadata, a redacted boundary anchor, verification state,
+and bounded parser resume bytes. It contains no path or source payload. Decode rejects
+oversize input before payload allocation, unknown versions/flags, identity mismatch,
+truncation, and trailing bytes. Runtime maps the store's zero-based IDs to the engine's
+nonzero IDs by checked `+1`/`-1`; failures are stable path-free port codes.
+
+Rationale: bootstrap must exercise the real Codex/store path without pulling provider,
+filesystem, or SQLite dependencies into the engine and without mislabeling a full
+history replay as the future live path. Distinguishing reader probe state from store
+staging state preserves replacement detection and exact CAS. The fixed envelope makes
+restart state portable and inspectable without serializing path-bearing descriptors.

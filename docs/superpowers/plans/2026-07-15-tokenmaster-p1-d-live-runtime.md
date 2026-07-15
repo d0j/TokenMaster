@@ -4,14 +4,15 @@
 > this plan task-by-task. Use `superpowers:test-driven-development` for every behavior
 > change and `superpowers:verification-before-completion` before each completion claim.
 
-**Status:** Active. P1-D.2 is the immediate execution slice. Work remains root-only
+**Status:** Active. P1-D.3 is the immediate execution slice. Work remains root-only
 because the available task-name-only child surface cannot prove configured role/model
 routing; `MODEL_ROUTING_DRIFT` remains explicit.
 
-**Progress:** Tasks 1-5 (P1-D.0/P1-D.1) are implemented, documented, and root-gate
-green. Task 5 applies events and late relations in one bounded store transaction with
-one epoch advance. Task 6 (P1-D.2 bootstrap Codex composition) is the next code slice.
-No live adapter, incremental runtime,
+**Progress:** Tasks 1-6 (P1-D.0/P1-D.1/P1-D.2) are implemented. Task 5 applies events
+and late relations in one bounded store transaction with one epoch advance. Task 6
+adds the real Codex bootstrap adapter, strict checkpoint codec, and checked store
+archive bridge. Focused codec/runtime tests, strict crate Clippy, and the full root
+gate pass. No incremental runtime,
 watcher, OS lease, lifecycle assembly, P1-E, M0 acceptance, or release is claimed.
 
 **Goal:** Compose a live built-in Codex runtime whose normal refresh is tail-only,
@@ -334,6 +335,12 @@ cargo +1.97.0 test -p tokenmaster-codex --test pipeline_contract --locked
 Commit: `fix(store): apply replay facts atomically`.
 
 ## Task 6: P1-D.2 bootstrap Codex composition
+
+**Completed:** implemented with three checkpoint-codec contracts and seven real
+bootstrap contracts. The production path covers 300 shared-source logical files,
+zero/missing profiles, reopen, append, Windows atomic replacement, truncation
+carry-forward, cancellation, and exact post-begin discard. It remains explicitly a
+bootstrap/full-rebuild path.
 
 **Files:**
 

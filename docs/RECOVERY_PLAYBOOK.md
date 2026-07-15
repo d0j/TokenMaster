@@ -89,6 +89,22 @@
    Do not retry the same adapter/archive state indefinitely. Preserve bounded codes
    and synthetic reproduction evidence; never log the source, checkpoint, or path.
 
+## Bootstrap runtime recovery
+
+1. Treat `tokenmaster-runtime` as the bootstrap/full-rebuild composition only. A
+   successful bootstrap must end in exact seal and promotion; do not reuse it as the
+   future watcher or incremental-tail loop.
+2. A Codex checkpoint decode failure is `invalid_data`. Re-enumerate the current
+   configured root and create a fresh zero-offset checkpoint by open/metadata probe.
+   Never edit envelope bytes, restore a path from SQLite, or log checkpoint content.
+3. If bootstrap fails after replay begin, honor the returned `ReplayCleanup`. Exact
+   `Discarded` leaves no staging revision/generation and preserves the prior canonical
+   projection. For `Failed`, inspect the exact stored revision/epoch through replay
+   recovery above; do not guess through the runtime's checked ID translation.
+4. A missing/rejected configured profile is partial and cannot replace prior presence
+   or canonical usage. An available, completely enumerated empty profile is the only
+   zero-source authoritative case.
+
 ## Worker recovery
 
 1. `running` accepts work; `shutting_down` and `stopped` return `closed`; `faulted`

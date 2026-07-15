@@ -56,6 +56,10 @@ All notable changes are recorded here.
 - Bounded atomic replay fact batches containing up to 256 canonical events and 256
   late relations with one revision/epoch advance and full event/relation/selection/
   work/chunk/checkpoint rollback at two injected transaction boundaries.
+- Production `tokenmaster-runtime` bootstrap composition with the built-in Codex
+  adapter, checked SQLite archive bridge, strict path-free 32-KiB checkpoint envelope,
+  300-file/reopen/zero/missing-profile/Windows-replacement/truncation contracts, and
+  exact post-begin staging cleanup.
 - Approved a provider-neutral weekly quota reset history: immutable pre/post epochs,
   scheduled/early/repeated reset transitions, allowance-change separation, bounded
   retention, and shared UI/CLI/MCP semantics for P2.

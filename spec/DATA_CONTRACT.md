@@ -151,6 +151,15 @@ Reader lines are limited to 16 MiB. Resume metadata is capped at 32 KiB. General
 display metadata is UTF-8 bounded; tool names, collection counts, profile roots,
 source directories, and UI snapshots have explicit contract limits.
 
+The encoded Codex adapter checkpoint, including its fixed header and parser resume,
+is capped at 32 KiB total. It stores no path or raw source bytes. Bootstrap retains at
+most the provider discovery bounds, the engine scope manifest, one descriptor-bound
+reader, one reader/canonical batch, and exact store handles. Full rebuild uses two
+linear enumerations; source count does not size a JSONL descriptor collection. The
+store's zero-based scan/revision/epoch values and engine nonzero values are related
+only by checked one-to-one runtime translation and are never persisted in the other
+representation.
+
 ## TM-DATA-007 — Replay classification
 
 Every current observation has one replay disposition: `eligible`, `replay`, `pending`,

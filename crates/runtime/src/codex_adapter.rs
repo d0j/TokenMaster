@@ -1,0 +1,448 @@
+use tokenmaster_codex::{
+    CodexCheckpointV1, CodexProvider, EnumerationCompletion, ParserDiagnosticCode,
+    ReaderDiagnosticCode, ReaderErrorCode, ReaderOutcome, SinkDecision, SourceChunkDigest,
+    SourceFileDescriptor, enumerate_profile_sources, initialize_source_checkpoint,
+    logical_file_identity, read_source_batch,
+};
+use tokenmaster_engine::{
+    Adapter, AdapterBatch, AdapterBatchParts, AdapterCheckpoint, AdapterCompletion,
+    AdapterCounters, AdapterDiagnosticCode, AdapterDiagnostics, BatchState, ChunkProof,
+    ChunkProofBatch, CompletionQuality, DiscoveredSource, OperationControl, PortError,
+    PortErrorCode, ReplaySourceSink, ScopeIdentity, ScopeSink, SinkControl, SourceBatchReader,
+    SourceIdentity, SourceKind, SourceSink,
+};
+use tokenmaster_provider::{
+    DiscoveryProvider, DiscoveryRequest, DiscoverySnapshot, ProfileAvailability, SourceDescriptor,
+};
+
+use crate::error::provider_port_error;
+use crate::{RuntimeError, RuntimeErrorCode};
+
+pub struct CodexAdapter {
+    provider: CodexProvider,
+    request: DiscoveryRequest,
+    snapshot: Option<DiscoverySnapshot>,
+}
+
+impl CodexAdapter {
+    pub fn new(request: DiscoveryRequest) -> Result<Self, RuntimeError> {
+        let provider = CodexProvider::new()
+            .map_err(|_| RuntimeError::new(RuntimeErrorCode::ProviderUnavailable))?;
+        Ok(Self {
+            provider,
+            request,
+            snapshot: None,
+        })
+    }
+
+    fn profile_sources<'a>(
+        snapshot: &'a DiscoverySnapshot,
+        scope: &ScopeIdentity,
+    ) -> Result<
+        (
+            &'a tokenmaster_provider::ProfileDescriptor,
+            Vec<SourceDescriptor>,
+        ),
+        PortError,
+    > {
+        if scope.provider_id() != "codex" {
+            return Err(PortError::new(PortErrorCode::InvalidData));
+        }
+        let profile = snapshot
+            .profiles()
+            .iter()
+            .find(|profile| profile.id().as_str() == scope.profile_id())
+            .ok_or_else(|| PortError::new(PortErrorCode::InvalidData))?;
+        let sources = snapshot
+            .sources()
+            .iter()
+            .filter(|source| source.profile_id() == profile.id())
+            .cloned()
+            .collect();
+        Ok((profile, sources))
+    }
+
+    fn visit_profile(
+        &self,
+        scope: &ScopeIdentity,
+        control: &OperationControl<'_>,
+        mut emit: impl FnMut(
+            DiscoveredSource,
+            AdapterCheckpoint,
+            SourceFileDescriptor,
+        ) -> Result<SinkControl, PortError>,
+    ) -> Result<AdapterCompletion, PortError> {
+        control.check()?;
+        let snapshot = self
+            .snapshot
+            .as_ref()
+            .ok_or_else(|| PortError::new(PortErrorCode::StaleState))?;
+        let (profile, sources) = Self::profile_sources(snapshot, scope)?;
+        if profile.availability() != ProfileAvailability::Available {
+            return completion(CompletionQuality::Partial, 0, true);
+        }
+        if sources.is_empty() {
+            return completion(CompletionQuality::Partial, 0, true);
+        }
+
+        let mut emitted = 0_u64;
+        let mut degraded = false;
+        let mut sink_error = None;
+        let report = enumerate_profile_sources(
+            &sources,
+            || control.check().is_err(),
+            |descriptor| {
+                let initial = match initialize_source_checkpoint(&descriptor) {
+                    Ok(checkpoint) => checkpoint,
+                    Err(_) => {
+                        degraded = true;
+                        return SinkDecision::Continue;
+                    }
+                };
+                let source = match discovered_source(&descriptor) {
+                    Ok(source) => source,
+                    Err(error) => {
+                        sink_error = Some(error);
+                        return SinkDecision::Fail;
+                    }
+                };
+                let checkpoint = match encode_checkpoint(initial) {
+                    Ok(checkpoint) => checkpoint,
+                    Err(error) => {
+                        sink_error = Some(error);
+                        return SinkDecision::Fail;
+                    }
+                };
+                match emit(source, checkpoint, descriptor) {
+                    Ok(SinkControl::Continue) => {
+                        emitted = emitted.saturating_add(1);
+                        SinkDecision::Continue
+                    }
+                    Ok(SinkControl::Stop) => {
+                        degraded = true;
+                        SinkDecision::Cancel
+                    }
+                    Err(error) => {
+                        sink_error = Some(error);
+                        SinkDecision::Fail
+                    }
+                }
+            },
+        )
+        .map_err(|_| sink_error.unwrap_or_else(|| PortError::new(PortErrorCode::InvalidData)))?;
+        if let Some(error) = sink_error {
+            return Err(error);
+        }
+        control.check()?;
+        let quality = match report.completion() {
+            EnumerationCompletion::Complete if !degraded => CompletionQuality::Complete,
+            EnumerationCompletion::Complete | EnumerationCompletion::Partial => {
+                CompletionQuality::Partial
+            }
+            EnumerationCompletion::Cancelled => CompletionQuality::Cancelled,
+        };
+        completion(
+            quality,
+            emitted,
+            degraded || quality != CompletionQuality::Complete,
+        )
+    }
+}
+
+impl Adapter for CodexAdapter {
+    fn visit_scopes(
+        &mut self,
+        control: &OperationControl<'_>,
+        sink: &mut dyn ScopeSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        control.check()?;
+        let snapshot = self
+            .provider
+            .discover(&self.request)
+            .map_err(|error| provider_port_error(&error))?;
+        if snapshot.profiles().is_empty() {
+            self.snapshot = Some(snapshot);
+            return completion(CompletionQuality::Partial, 0, true);
+        }
+        let mut emitted = 0_u64;
+        let mut quality = CompletionQuality::Complete;
+        for profile in snapshot.profiles() {
+            control.check()?;
+            let scope =
+                ScopeIdentity::new("codex", profile.id().as_str()).map_err(PortError::from)?;
+            if sink.on_scope(scope)? == SinkControl::Stop {
+                quality = CompletionQuality::Partial;
+                break;
+            }
+            emitted = emitted.saturating_add(1);
+        }
+        self.snapshot = Some(snapshot);
+        completion(quality, emitted, quality != CompletionQuality::Complete)
+    }
+
+    fn visit_sources(
+        &mut self,
+        scope: &ScopeIdentity,
+        control: &OperationControl<'_>,
+        sink: &mut dyn SourceSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        self.visit_profile(scope, control, |source, checkpoint, _descriptor| {
+            sink.on_source(source, checkpoint)
+        })
+    }
+
+    fn visit_replay_sources(
+        &mut self,
+        scope: &ScopeIdentity,
+        control: &OperationControl<'_>,
+        sink: &mut dyn ReplaySourceSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        self.visit_profile(scope, control, |source, checkpoint, descriptor| {
+            let mut reader = CodexSourceBatchReader {
+                descriptor,
+                source: source.identity().clone(),
+            };
+            sink.on_source(source, checkpoint, &mut reader)
+        })
+    }
+}
+
+impl core::fmt::Debug for CodexAdapter {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_struct("CodexAdapter")
+            .field("has_snapshot", &self.snapshot.is_some())
+            .finish()
+    }
+}
+
+struct CodexSourceBatchReader {
+    descriptor: SourceFileDescriptor,
+    source: SourceIdentity,
+}
+
+impl SourceBatchReader for CodexSourceBatchReader {
+    fn read_batch(
+        &mut self,
+        checkpoint: &AdapterCheckpoint,
+        control: &OperationControl<'_>,
+    ) -> Result<AdapterBatch, PortError> {
+        control.check()?;
+        let logical = logical_file_identity(&self.descriptor);
+        let reader_checkpoint = CodexCheckpointV1::decode(checkpoint.as_bytes(), logical)
+            .map_err(|_| PortError::new(PortErrorCode::InvalidData))?
+            .into_reader();
+        let outcome = read_source_batch(&self.descriptor, Some(&reader_checkpoint), || {
+            control.check().is_err()
+        })
+        .map_err(|error| {
+            if error.code() == ReaderErrorCode::Cancelled {
+                control
+                    .check()
+                    .err()
+                    .unwrap_or_else(|| PortError::new(PortErrorCode::Cancelled))
+            } else {
+                reader_port_error(error.code())
+            }
+        })?;
+
+        match outcome {
+            ReaderOutcome::RebuildRequired(_) => Err(PortError::new(PortErrorCode::StaleState)),
+            ReaderOutcome::Unchanged(_) => AdapterBatch::new(
+                &self.source,
+                AdapterBatchParts {
+                    observations: Box::default(),
+                    relations: Box::default(),
+                    chunk_proofs: ChunkProofBatch::new(None, Box::default())
+                        .map_err(PortError::from)?,
+                    next_checkpoint: checkpoint.clone(),
+                    state: BatchState::SnapshotEnd,
+                    counters: AdapterCounters::default(),
+                    diagnostics: AdapterDiagnostics::default(),
+                },
+            )
+            .map_err(PortError::from),
+            ReaderOutcome::Batch(batch) => {
+                let mut diagnostics = AdapterDiagnostics::default();
+                map_batch_diagnostics(&batch, &mut diagnostics)?;
+                let diagnostic_count = diagnostics.total().map_err(PortError::from)?;
+                let chunk_proofs =
+                    chunk_proofs(batch.previous_partial_chunk(), batch.source_chunks())?;
+                let next_checkpoint = encode_checkpoint(batch.checkpoint().clone())?;
+                let state = if batch.reached_snapshot_end() {
+                    BatchState::SnapshotEnd
+                } else {
+                    BatchState::More
+                };
+                let counters = AdapterCounters::new(
+                    1,
+                    batch.bytes_read(),
+                    u64::try_from(batch.events().len())
+                        .map_err(|_| PortError::new(PortErrorCode::CapacityExceeded))?,
+                    diagnostic_count,
+                )
+                .map_err(PortError::from)?;
+                AdapterBatch::new(
+                    &self.source,
+                    AdapterBatchParts {
+                        observations: batch.events().to_vec().into_boxed_slice(),
+                        relations: batch.relations().to_vec().into_boxed_slice(),
+                        chunk_proofs,
+                        next_checkpoint,
+                        state,
+                        counters,
+                        diagnostics,
+                    },
+                )
+                .map_err(PortError::from)
+            }
+        }
+    }
+}
+
+fn discovered_source(descriptor: &SourceFileDescriptor) -> Result<DiscoveredSource, PortError> {
+    let scope =
+        ScopeIdentity::new("codex", descriptor.profile_id().as_str()).map_err(PortError::from)?;
+    let identity = SourceIdentity::new(
+        scope,
+        descriptor.source_id().as_str(),
+        *logical_file_identity(descriptor).as_bytes(),
+    )
+    .map_err(PortError::from)?;
+    let kind = match descriptor.source_kind() {
+        tokenmaster_provider::SourceKind::Active => SourceKind::Active,
+        tokenmaster_provider::SourceKind::Direct => SourceKind::Direct,
+        tokenmaster_provider::SourceKind::Archived => SourceKind::Archived,
+    };
+    Ok(DiscoveredSource::new(identity, kind))
+}
+
+fn encode_checkpoint(
+    checkpoint: tokenmaster_codex::ReaderCheckpointV1,
+) -> Result<AdapterCheckpoint, PortError> {
+    let encoded = CodexCheckpointV1::new(checkpoint)
+        .encode()
+        .map_err(|_| PortError::new(PortErrorCode::CapacityExceeded))?;
+    AdapterCheckpoint::new(encoded.into_boxed_slice()).map_err(PortError::from)
+}
+
+fn completion(
+    quality: CompletionQuality,
+    files_read: u64,
+    diagnostic: bool,
+) -> Result<AdapterCompletion, PortError> {
+    let mut diagnostics = AdapterDiagnostics::default();
+    if diagnostic {
+        diagnostics
+            .record(AdapterDiagnosticCode::Other)
+            .map_err(PortError::from)?;
+    }
+    let diagnostic_count = diagnostics.total().map_err(PortError::from)?;
+    let counters =
+        AdapterCounters::new(files_read, 0, 0, diagnostic_count).map_err(PortError::from)?;
+    AdapterCompletion::new(quality, counters, diagnostics).map_err(PortError::from)
+}
+
+fn reader_port_error(code: ReaderErrorCode) -> PortError {
+    let code = match code {
+        ReaderErrorCode::Cancelled => PortErrorCode::Cancelled,
+        ReaderErrorCode::CapacityExceeded => PortErrorCode::CapacityExceeded,
+        ReaderErrorCode::OpenFailed | ReaderErrorCode::ReadFailed | ReaderErrorCode::SeekFailed => {
+            PortErrorCode::Unavailable
+        }
+        ReaderErrorCode::SourceChanged => PortErrorCode::StaleState,
+        ReaderErrorCode::InvalidDescriptor
+        | ReaderErrorCode::NonRegular
+        | ReaderErrorCode::ReparsePoint
+        | ReaderErrorCode::CheckpointInvalid
+        | ReaderErrorCode::AnchorMismatch
+        | ReaderErrorCode::ResumeInvalid => PortErrorCode::InvalidData,
+    };
+    PortError::new(code)
+}
+
+fn chunk_proofs(
+    previous: Option<SourceChunkDigest>,
+    updates: &[SourceChunkDigest],
+) -> Result<ChunkProofBatch, PortError> {
+    let previous = previous
+        .map(|proof| {
+            ChunkProof::new(
+                proof.index(),
+                u64::from(proof.covered_len()),
+                *proof.sha256(),
+            )
+        })
+        .transpose()
+        .map_err(PortError::from)?;
+    let updates = updates
+        .iter()
+        .map(|proof| {
+            ChunkProof::new(
+                proof.index(),
+                u64::from(proof.covered_len()),
+                *proof.sha256(),
+            )
+            .map_err(PortError::from)
+        })
+        .collect::<Result<Vec<_>, _>>()?
+        .into_boxed_slice();
+    ChunkProofBatch::new(previous, updates).map_err(PortError::from)
+}
+
+fn map_batch_diagnostics(
+    batch: &tokenmaster_codex::ReadBatch,
+    target: &mut AdapterDiagnostics,
+) -> Result<(), PortError> {
+    record_if(
+        target,
+        batch
+            .diagnostics()
+            .count(ReaderDiagnosticCode::IncompleteTail)
+            > 0,
+        AdapterDiagnosticCode::IncompleteInput,
+    )?;
+    record_if(
+        target,
+        batch
+            .diagnostics()
+            .count(ReaderDiagnosticCode::OversizedLine)
+            > 0
+            || batch
+                .parser_diagnostics()
+                .count(ParserDiagnosticCode::LineTooLarge)
+                > 0,
+        AdapterDiagnosticCode::OversizedInput,
+    )?;
+    let malformed = [
+        ParserDiagnosticCode::MalformedJson,
+        ParserDiagnosticCode::InvalidToken,
+        ParserDiagnosticCode::InvalidTimestamp,
+        ParserDiagnosticCode::InvalidModel,
+        ParserDiagnosticCode::InvalidMetadata,
+        ParserDiagnosticCode::InvalidPath,
+    ]
+    .into_iter()
+    .any(|code| batch.parser_diagnostics().count(code) > 0);
+    record_if(target, malformed, AdapterDiagnosticCode::MalformedInput)?;
+    let other = [
+        ParserDiagnosticCode::ZeroUsage,
+        ParserDiagnosticCode::ModelFallback,
+        ParserDiagnosticCode::MetadataTruncated,
+        ParserDiagnosticCode::ToolCapacity,
+    ]
+    .into_iter()
+    .any(|code| batch.parser_diagnostics().count(code) > 0);
+    record_if(target, other, AdapterDiagnosticCode::Other)
+}
+
+fn record_if(
+    target: &mut AdapterDiagnostics,
+    condition: bool,
+    code: AdapterDiagnosticCode,
+) -> Result<(), PortError> {
+    if condition {
+        target.record(code).map_err(PortError::from)?;
+    }
+    Ok(())
+}

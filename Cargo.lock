@@ -5144,6 +5144,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokenmaster-runtime"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tempfile",
+ "tokenmaster-codex",
+ "tokenmaster-engine",
+ "tokenmaster-provider",
+ "tokenmaster-store",
+ "windows",
+]
+
+[[package]]
 name = "tokenmaster-store"
 version = "0.1.0"
 dependencies = [

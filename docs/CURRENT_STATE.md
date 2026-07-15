@@ -144,6 +144,16 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   advance the epoch exactly once. Faults after event work and after relation work
   restore the exact pre-batch rows/checkpoint/epoch. The real synthetic Codex pipeline
   submits reader relations in that batch and no longer commits them one by one.
+- P1-D.2 production bootstrap composition: the new `tokenmaster-runtime` crate bridges
+  bounded Codex discovery/readers and the real SQLite archive through engine ports.
+  `CodexCheckpointV1` is a strict path-free manual binary envelope capped at 32 KiB
+  total; initial checkpoints use open/metadata probe without reading JSONL content.
+  Runtime/store ID translation is checked and errors remain stable/path-free. Seven
+  real runtime contracts prove baseline/reopen, 300 logical files sharing one source
+  ID, authoritative zero-source, missing-profile partial retention, append rebuild,
+  Windows atomic replacement, truncation carry-forward, pre-start cancellation, and
+  exact staging discard after replay begin. This is bootstrap/full rebuild only; no
+  incremental tail path, watcher, scheduler, or real OS writer lease is claimed.
 
 ## Next implementation slice
 
@@ -183,10 +193,10 @@ constant-state coordinator, P1-C.2 supplies bounded adapter/archive/clock/
 writer-lease ports, P1-C.3 supplies the one-shot executor, and P1-C.4 supplies the
 bounded deterministic worker. P1-D.0 corrects the real per-file/two-pass seam under
 `docs/superpowers/plans/2026-07-15-tokenmaster-p1-d-live-runtime.md`. P1-D.1 makes
-replay events and late relations one atomic store batch. The next gate is P1-D.2:
-build the runtime crate and bootstrap Codex adapter/store composition before the
-portable writer lease, built-in live Codex adapter, incremental
-tail path, watcher/periodic hints, and lifecycle cancellation. P1-E
+replay events and late relations one atomic store batch, and P1-D.2 composes the real
+Codex bootstrap reader with the store archive. The next gate is P1-D.3: add the
+replay-aware incremental tail archive before the portable writer lease,
+watcher/periodic hints, and lifecycle cancellation. P1-E
 then adds sleep/resume, immutable publication, race generations, and continuous
 runtime recovery.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred

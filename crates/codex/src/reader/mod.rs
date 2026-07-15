@@ -416,6 +416,30 @@ pub fn logical_file_identity(descriptor: &SourceFileDescriptor) -> LogicalFileId
     LogicalFileIdentity::from_bytes(hasher.finalize().into())
 }
 
+/// Opens and validates one source, then creates a zero-offset checkpoint without
+/// reading source content.
+pub fn initialize_source_checkpoint(
+    descriptor: &SourceFileDescriptor,
+) -> Result<ReaderCheckpointV1, ReaderError> {
+    let source = source::open_source(descriptor)?;
+    ReaderCheckpointV1::new(ReaderCheckpointParts {
+        parser_schema_version: PARSER_SCHEMA_VERSION,
+        physical_identity: source.physical_identity,
+        logical_identity: logical_file_identity(descriptor),
+        committed_offset: 0,
+        scan_offset: 0,
+        observed_file_length: source.file_length,
+        modified_time_ns: source.modified_time_ns,
+        anchor: BoundaryAnchor::new(0, 0, [0; 32])
+            .map_err(|_| ReaderError::new(ReaderErrorCode::CheckpointInvalid))?,
+        resume: ParserState::new().snapshot(),
+        discarding_oversized_line: false,
+        incomplete_tail: false,
+        verification: VerificationLevel::FullPrefix,
+    })
+    .map_err(|_| ReaderError::new(ReaderErrorCode::CheckpointInvalid))
+}
+
 pub fn read_source_batch(
     descriptor: &SourceFileDescriptor,
     checkpoint: Option<&ReaderCheckpointV1>,

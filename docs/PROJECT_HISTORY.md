@@ -862,3 +862,48 @@ pipeline retains seven passing contracts. The workspace has exactly the pre-exis
 explicitly ignored one-million-row M0 scale test. P1-D.2 bootstrap runtime composition,
 incremental tail refresh, OS lease, watcher, sleep/resume, P1-E, M0 acceptance,
 packaging, signing, and release remain unclaimed.
+
+## 2026-07-15 — P1-D.2 production bootstrap composition added
+
+The test-only P0-E driver is no longer the only real Codex-to-store proof. A separate
+`tokenmaster-runtime` crate now implements the engine adapter/archive/clock bridges
+without adding Codex, SQLite, filesystem, or platform dependencies to the engine.
+The Codex adapter retains only its bounded discovery snapshot and lends one temporary
+descriptor-bound reader per callback. `StoreArchive` maps scan/revision/epoch handles
+through checked zero-based/nonzero conversions and sends only normalized identities,
+canonical facts, chunks, and checkpoints to SQLite.
+
+`initialize_source_checkpoint` performs safe open/metadata probe without reading or
+discarding the first event batch. `CodexCheckpointV1` is a manual path-free binary
+envelope capped at 32 KiB total; decode rejects oversize, unknown versions/flags,
+logical identity mismatch, truncation, and trailing bytes. Bootstrap reading begins
+with a full-prefix proof over the empty covered prefix, while exact store preparation
+receives its required independent incremental zero-offset staging checkpoint.
+
+Focused contracts cover strict codec round-trip/privacy/adversarial decode and seven
+real runtime paths: baseline plus SQLite reopen, 300 logical JSONL files sharing one
+provider source ID, authoritative zero-source, missing-profile partial retention,
+append rebuild, Windows atomic physical replacement, truncation carry-forward,
+pre-start cancellation, and exact discard after a deadline immediately following
+replay begin. The latter proves no staging state or canonical mutation remains.
+
+Verification:
+
+```powershell
+cargo +1.97.0 test -p tokenmaster-codex --test checkpoint_codec_contract --locked
+cargo +1.97.0 test -p tokenmaster-runtime --test bootstrap_contract --locked
+cargo +1.97.0 tree -p tokenmaster-runtime --edges normal
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy -p tokenmaster-codex -p tokenmaster-runtime --all-targets --locked
+pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
+cargo +1.97.0 fmt --all -- --check
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy --workspace --all-targets --locked
+cargo +1.97.0 test --workspace --locked
+git diff --check
+```
+
+All focused and root gates passed. The workspace retains exactly the pre-existing
+explicitly ignored one-million-row M0 scale test.
+
+P1-D.2 is bootstrap/full rebuild only. Replay-aware incremental tail refresh, the real
+OS writer lease, watcher/scheduler, lifecycle/sleep recovery, P1-E, M0 acceptance,
+packaging, signing, and release remain unclaimed.
