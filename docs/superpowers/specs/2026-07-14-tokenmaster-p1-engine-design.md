@@ -19,8 +19,10 @@ The work is split because retention authority must be correct before a scheduler
 exercise it continuously:
 
 1. **P1-A — retained canonical projection:** schema v4 and atomic carry-forward.
-2. **P1-B — scan epochs and source finalization:** complete/partial/cancelled scan
-   lifecycle, exact seen-set authority, and explicit missing-source state.
+2. **P1-B — scan sets, scoped epochs, and source finalization:** exact
+   provider/profile scope manifests, complete/partial/cancelled scan lifecycle,
+   bounded seen-set authority, explicit missing-source state, and scan-set-bound
+   replay revisions.
 3. **P1-C — provider-neutral engine core:** adapter seam, bounded state machine,
    coalescing, cancellation, deadlines, and one-shot refresh.
 4. **P1-D — Codex live integration:** compiled-in adapter, watcher hints, periodic
@@ -108,27 +110,49 @@ swaps source generations, and changes revision status. Expected union counts,
 provenance state, foreign keys, and fault-injection boundaries are validated before
 commit. Any error rolls back the projection, generations, and revision together.
 
-## 3. Scan epochs and source finalization
+## 3. Scan sets, scoped epochs, and source finalization
 
 The existing `usage_scan` and `usage_source.last_seen_scan_id` columns become public
-store contracts in P1-B; append calls do not manufacture scan authority.
+store contracts in P1-B; append calls no longer manufacture scan authority. A scan is
+scoped by the pair `(provider_id, profile_id)`, never by `profile_id` alone. Provider
+scope is required so an external provider cannot collide with the built-in Codex
+profile namespace.
 
-- `begin_scan(profile, started_at)` creates exactly one running epoch per profile and
-  returns a typed monotonically increasing ID.
-- `observe_scan_source(scan_id, source_key)` records a seen source under exact scan
-  ownership. Registration and staging remain separate operations.
-- `finish_scan(scan_id, outcome, counters)` closes the epoch once. Only a complete
-  enumeration may finalize the source set and mark previously registered unseen
-  sources missing.
-- partial, failed, timed-out, or cancelled scans record bounded counters but cannot
-  mark a source missing, delete an event, seal a missing source, or authorize
+A replay revision is global across the archive and may contain several scopes. It
+therefore binds to one `scan_set_id`, not to one profile scan. The scan set owns a
+fixed, bounded, duplicate-free scope manifest and its child scan IDs:
+
+- `begin_scan_set(scopes, started_at)` creates one running set and one running child
+  epoch for each exact provider/profile scope. IDs are typed and monotonically
+  increasing. A second running set or overlapping running scope fails closed.
+- `observe_scan_source(scan_id, source_key)` records a seen source only when the
+  source's provider/profile pair exactly matches the running child scan. Registration,
+  observation, reading, and replay staging remain separate operations.
+- `finish_scan(scan_id, outcome, completed_at, counters)` closes the child exactly
+  once. The store derives the distinct `sources_seen` value instead of trusting a
+  caller counter. Only `complete` finalizes that scope: seen sources become present
+  and registered unseen sources become missing in the same transaction.
+- `finish_scan_set(scan_set_id, completed_at)` closes the set only after every child
+  is terminal. It is `complete` only when every child is complete; other aggregate
+  outcomes cannot authorize a replay revision.
+- partial, failed, timed-out, or cancelled scans retain bounded counters but cannot
+  mark unseen sources missing, delete an event, seal a missing source, or authorize
   promotion.
-- a later complete scan can restore a source from missing without changing its stable
-  key. Missing source evidence is carried forward until the source can be verified or
-  an explicit future user retention operation exists.
+- a later complete scan restores a source from missing without changing its stable
+  key. Missing source evidence and its one current generation remain until the source
+  can be verified or an explicit future user retention operation exists.
 
-Source-set finalization and replay seal use one exact scan ID. A revision cannot mix
-sources or finalization from different epochs.
+`usage_source.last_seen_scan_id` is the bounded seen set: one pointer per registered
+source, not an ever-growing `(scan, source)` history table. Closed unreferenced scan
+history is pruned to a fixed recent window per scope; rows still referenced by a
+source remain. Disk growth is therefore bounded by registered sources plus the fixed
+operational window.
+
+A scan-bound replay revision contains exactly the present sources finalized by its
+complete scan set. Seal revalidates the same scan-set identity and source membership;
+it cannot mix scopes or finalization from another epoch. A complete zero-source set is
+valid and produces a retention-only revision rather than fabricating a source or
+leaving the archive permanently unrefreshable.
 
 ## 4. Provider-neutral engine contract
 
@@ -198,7 +222,7 @@ clock changes never decide source identity or ordering.
 ## 7. Immutable publication contract
 
 Every completed promotion emits one small owned `EngineSnapshot` with a monotonically
-increasing in-process generation, archive revision, scan ID, freshness/quality state,
+increasing in-process generation, archive revision, scan-set ID, freshness/quality state,
 data-through timestamp, and bounded diagnostics counters. It contains no event
 history, path, source contents, SQLite transaction, store connection, or UI handle.
 
@@ -226,7 +250,7 @@ P1-A must first prove exact v1/v2/v3-to-v4 migration, strict current-schema reje
 carry/replay/eligible/conflict truth-table behavior, replacement/truncation integration,
 reopen, fault rollback, bounded SQL operation, and privacy gates.
 
-P1-B then proves complete-scan-only missing authority and scan/revision identity. P1-C
+P1-B then proves complete-scan-only missing authority and scan-set/revision identity. P1-C
 proves the pure engine state machine with a fake adapter. P1-D uses the native Codex
 adapter and real synthetic JSONL. P1-E adds race, burst, sleep/resume, restart,
 cross-process lease, memory, handle, thread, and CPU evidence.
