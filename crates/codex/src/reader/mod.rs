@@ -440,6 +440,59 @@ pub fn initialize_source_checkpoint(
     .map_err(|_| ReaderError::new(ReaderErrorCode::CheckpointInvalid))
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SourceCheckpointStatus {
+    Unchanged,
+    Appended,
+    RebuildRequired(RebuildReason),
+}
+
+pub fn validate_source_checkpoint(
+    descriptor: &SourceFileDescriptor,
+    checkpoint: &ReaderCheckpointV1,
+) -> Result<SourceCheckpointStatus, ReaderError> {
+    let logical_identity = logical_file_identity(descriptor);
+    let mut source = source::open_source(descriptor)?;
+    if checkpoint.logical_identity() != logical_identity
+        || checkpoint.physical_identity() != source.physical_identity
+    {
+        return Ok(SourceCheckpointStatus::RebuildRequired(
+            RebuildReason::IdentityChanged,
+        ));
+    }
+    if source.file_length < checkpoint.observed_file_length() {
+        return Ok(SourceCheckpointStatus::RebuildRequired(
+            RebuildReason::Truncated,
+        ));
+    }
+    if source.file_length == checkpoint.observed_file_length()
+        && source.modified_time_ns != checkpoint.modified_time_ns()
+    {
+        return Ok(SourceCheckpointStatus::RebuildRequired(
+            RebuildReason::RewriteDetected,
+        ));
+    }
+    if !checkpoint.anchor().is_empty() {
+        let anchor = checkpoint.anchor();
+        let observed =
+            source::hash_range(&mut source.file, anchor.start(), u64::from(anchor.len()))?;
+        if &observed != anchor.sha256() {
+            return Ok(SourceCheckpointStatus::RebuildRequired(
+                RebuildReason::AnchorMismatch,
+            ));
+        }
+    }
+    let unchanged = source.file_length == checkpoint.observed_file_length()
+        && source.modified_time_ns == checkpoint.modified_time_ns()
+        && ((checkpoint.incomplete_tail() && !checkpoint.discarding_oversized_line())
+            || checkpoint.scan_offset() == source.file_length);
+    Ok(if unchanged {
+        SourceCheckpointStatus::Unchanged
+    } else {
+        SourceCheckpointStatus::Appended
+    })
+}
+
 pub fn read_source_batch(
     descriptor: &SourceFileDescriptor,
     checkpoint: Option<&ReaderCheckpointV1>,

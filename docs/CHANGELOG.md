@@ -60,6 +60,11 @@ All notable changes are recorded here.
   adapter, checked SQLite archive bridge, strict path-free 32-KiB checkpoint envelope,
   300-file/reopen/zero/missing-profile/Windows-replacement/truncation contracts, and
   exact post-begin staging cleanup.
+- Replay-aware incremental archive and runtime: strict schema v6 publication
+  generations, exact complete-scan freshness and source admission, paired revision/
+  archive CAS, targeted fingerprint materialization, zero-payload unchanged refresh,
+  persisted-offset multi-batch tails, bounded partial restart, multiple new/empty
+  sources, missing-history retention, and durable non-destructive rebuild state.
 - Approved a provider-neutral weekly quota reset history: immutable pre/post epochs,
   scheduled/early/repeated reset transitions, allowance-change separation, bounded
   retention, and shared UI/CLI/MCP semantics for P2.
@@ -88,6 +93,14 @@ All notable changes are recorded here.
 - Removed the archive replay-page/cursor descriptor-recovery assumption, which aliased
   real Codex files sharing one source ID and could not recover a live path-private
   descriptor without unbounded caching or repeated enumeration.
+- Disabled canonical-only append after replay promotion and removed false `complete`
+  windows during new-source admission; current append, checkpoint, replay projection,
+  publication quality, epoch, and archive generation now roll back together.
+- Classified profile-scope changes as durable rebuild requirements and made full
+  rebuild safely recover an unadmitted provisional source instead of leaving the
+  archive blocked after interrupted incremental admission.
+- Converted changed provisional identity and over-bound new-source admission into a
+  typed non-destructive rebuild path instead of a database conflict or retry loop.
 - Removed the synthetic Codex pipeline's per-relation transaction loop; reader events
   and relations now reach the store as one exact batch, preventing stale engine handles
   after a partial fact commit.

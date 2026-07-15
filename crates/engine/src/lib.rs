@@ -72,7 +72,7 @@ pub use coordinator::{
 pub use error::{EngineError, EngineErrorCode};
 pub use executor::{
     ExecutionCounts, MAX_REPLAY_CONTINUATIONS_PER_RUN, OneShotExecutor, OneShotResult,
-    ReplayCleanup,
+    ReplayCleanup, canonicalize_batch,
 };
 pub use ports::{
     Adapter, AdapterCompletion, Clock, OperationControl, OperationStop, PortError, PortErrorCode,

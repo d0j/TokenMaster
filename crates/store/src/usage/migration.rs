@@ -1,4 +1,4 @@
-use rusqlite::{Connection, TransactionBehavior};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior};
 
 use crate::{StoreError, StoreErrorCode};
 
@@ -9,7 +9,8 @@ use super::schema::{
     V1_SCHEMA, V1_SCHEMA_VERSION, V1_TABLE_COUNT, V2_REPLAY_REVISION_SCHEMA, V2_SCHEMA_VERSION,
     V3_REPLAY_REVISION_SCHEMA, V3_SCHEMA_VERSION, V4_SCHEMA_VERSION, V4_USAGE_EVENT_SCHEMA,
     V5_INDEX_CONTRACTS, V5_REPLAY_REVISION_CONTRACT, V5_REPLAY_REVISION_SCHEMA,
-    V5_SCAN_SET_CONTRACT, V5_SCAN_SET_SCHEMA, V5_USAGE_SCAN_CONTRACT, V5_USAGE_SCAN_SCHEMA,
+    V5_SCAN_SET_CONTRACT, V5_SCAN_SET_SCHEMA, V5_SCHEMA_VERSION, V5_USAGE_SCAN_CONTRACT,
+    V5_USAGE_SCAN_SCHEMA, V6_ARCHIVE_STATE_CONTRACT, V6_ARCHIVE_STATE_SCHEMA,
 };
 
 pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreError> {
@@ -21,13 +22,18 @@ pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreErr
     match version {
         V2_SCHEMA_VERSION => {
             migrate_v2(connection)?;
-            migrate_v4(connection)
+            migrate_v4(connection)?;
+            migrate_v5(connection)
         }
         V3_SCHEMA_VERSION => {
             migrate_v3(connection)?;
-            migrate_v4(connection)
+            migrate_v4(connection)?;
+            migrate_v5(connection)
         }
-        V4_SCHEMA_VERSION => migrate_v4(connection),
+        V4_SCHEMA_VERSION => {
+            migrate_v4(connection)?;
+            migrate_v5(connection)
+        }
         0 | V1_SCHEMA_VERSION => {
             let transaction =
                 connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -37,12 +43,14 @@ pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreErr
                 _ => return Err(StoreError::new(StoreErrorCode::SchemaMismatch)),
             }
             transaction.commit()?;
-            migrate_v4(connection)
+            migrate_v4(connection)?;
+            migrate_v5(connection)
         }
+        V5_SCHEMA_VERSION => migrate_v5(connection),
         USAGE_SCHEMA_VERSION => {
             let transaction =
                 connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-            validate_v5(&transaction)?;
+            validate_v6(&transaction)?;
             transaction.commit()?;
             Ok(())
         }
@@ -173,6 +181,32 @@ fn validate_v5(connection: &Connection) -> Result<(), StoreError> {
     validate_legacy_snapshot(connection)
 }
 
+fn validate_v6(connection: &Connection) -> Result<(), StoreError> {
+    validate_schema(
+        connection,
+        USAGE_TABLE_CONTRACTS,
+        USAGE_INDEX_CONTRACTS,
+        USAGE_TRIGGER_CONTRACTS,
+        &[
+            V6_ARCHIVE_STATE_SCHEMA,
+            V5_SCAN_SET_SCHEMA,
+            V5_USAGE_SCAN_SCHEMA,
+            V5_REPLAY_REVISION_SCHEMA,
+            V4_USAGE_EVENT_SCHEMA,
+            V1_SCHEMA,
+            REPLAY_AUX_SCHEMA,
+            REPLAY_CHILD_SCHEMA,
+        ],
+        &[V5_USAGE_SCAN_CONTRACT, V5_REPLAY_REVISION_CONTRACT],
+        SchemaExtensions {
+            tables: &[V5_SCAN_SET_CONTRACT, V6_ARCHIVE_STATE_CONTRACT],
+            indexes: V5_INDEX_CONTRACTS,
+        },
+    )?;
+    validate_legacy_snapshot(connection)?;
+    validate_archive_publication(connection)
+}
+
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum MigrationFault {
     None,
@@ -194,6 +228,10 @@ enum MigrationFault {
     AfterCopyScanAuthority,
     #[cfg(test)]
     AfterDropScanAuthority,
+    #[cfg(test)]
+    AfterCreateArchiveState,
+    #[cfg(test)]
+    AfterSeedArchiveState,
 }
 
 fn migrate_v2(connection: &mut Connection) -> Result<(), StoreError> {
@@ -317,6 +355,8 @@ enum MigrationBoundary {
     ScanAuthorityCreated,
     ScanAuthorityCopied,
     ScanAuthorityDropped,
+    ArchiveStateCreated,
+    ArchiveStateSeeded,
 }
 
 fn migration_fault(fault: MigrationFault, boundary: MigrationBoundary) -> Result<(), StoreError> {
@@ -355,6 +395,14 @@ fn migration_fault(fault: MigrationFault, boundary: MigrationBoundary) -> Result
                 MigrationFault::AfterDropScanAuthority,
                 MigrationBoundary::ScanAuthorityDropped
             )
+            | (
+                MigrationFault::AfterCreateArchiveState,
+                MigrationBoundary::ArchiveStateCreated
+            )
+            | (
+                MigrationFault::AfterSeedArchiveState,
+                MigrationBoundary::ArchiveStateSeeded
+            )
     );
     #[cfg(not(test))]
     let triggered = {
@@ -387,6 +435,71 @@ fn migrate_v3_with_fault(
 
 fn migrate_v4(connection: &mut Connection) -> Result<(), StoreError> {
     migrate_v4_with_fault(connection, MigrationFault::None)
+}
+
+fn migrate_v5(connection: &mut Connection) -> Result<(), StoreError> {
+    migrate_v5_with_fault(connection, MigrationFault::None)
+}
+
+fn migrate_v5_with_fault(
+    connection: &mut Connection,
+    fault: MigrationFault,
+) -> Result<(), StoreError> {
+    validate_v5(connection)?;
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    transaction.execute_batch(V6_ARCHIVE_STATE_SCHEMA)?;
+    migration_fault(fault, MigrationBoundary::ArchiveStateCreated)?;
+
+    let current: Option<(i64, Option<i64>)> = transaction
+        .query_row(
+            "SELECT revision_id, scan_set_id
+             FROM usage_replay_revision WHERE status = 'current'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    let (current_revision, complete_scan_set, quality) = match current {
+        None => (None, None, "empty"),
+        Some((revision_id, scan_set_id)) => {
+            let exact_complete = match scan_set_id {
+                Some(scan_set_id) => transaction
+                    .query_row(
+                        "SELECT completion_state = 'complete'
+                            AND (SELECT count(*) FROM usage_scan
+                                 WHERE scan_set_id = usage_scan_set.scan_set_id)
+                                = expected_scope_count
+                            AND NOT EXISTS (
+                              SELECT 1 FROM usage_scan
+                              WHERE scan_set_id = usage_scan_set.scan_set_id
+                                AND completion_state <> 'complete'
+                            )
+                     FROM usage_scan_set WHERE scan_set_id = ?1",
+                        [scan_set_id],
+                        |row| row.get::<_, bool>(0),
+                    )
+                    .optional()?
+                    .unwrap_or(false),
+                None => false,
+            };
+            if exact_complete {
+                (Some(revision_id), scan_set_id, "complete")
+            } else {
+                (Some(revision_id), None, "recovery_pending")
+            }
+        }
+    };
+    transaction.execute(
+        "INSERT INTO usage_archive_state(
+           singleton_id, archive_generation, current_revision_id,
+           latest_complete_scan_set_id, incremental_state
+         ) VALUES (1, 0, ?1, ?2, ?3)",
+        rusqlite::params![current_revision, complete_scan_set, quality],
+    )?;
+    migration_fault(fault, MigrationBoundary::ArchiveStateSeeded)?;
+    transaction.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
+    validate_v6(&transaction)?;
+    transaction.commit()?;
+    Ok(())
 }
 
 fn migrate_v4_with_fault(
@@ -576,7 +689,7 @@ fn migrate_scan_authority_v5(
          CREATE INDEX usage_source_scope_missing
            ON usage_source(provider_id, profile_id, missing, file_key);",
     )?;
-    connection.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
+    connection.pragma_update(None, "user_version", V5_SCHEMA_VERSION)?;
     validate_v5(connection)
 }
 
@@ -693,6 +806,55 @@ fn validate_legacy_snapshot(connection: &Connection) -> Result<(), StoreError> {
         _ => false,
     };
     if !valid {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    Ok(())
+}
+
+fn validate_archive_publication(connection: &Connection) -> Result<(), StoreError> {
+    let row_count = pragma_i64(
+        connection,
+        "SELECT count(*) FROM usage_archive_state WHERE singleton_id = 1",
+    )?;
+    if row_count != 1 {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    let invalid = pragma_i64(
+        connection,
+        "SELECT count(*)
+         FROM usage_archive_state AS state
+         LEFT JOIN usage_replay_revision AS revision
+           ON revision.revision_id = state.current_revision_id
+          AND revision.status = 'current'
+         LEFT JOIN usage_scan_set AS scan_set
+           ON scan_set.scan_set_id = state.latest_complete_scan_set_id
+         WHERE state.singleton_id <> 1
+            OR (state.current_revision_id IS NOT NULL AND revision.revision_id IS NULL)
+            OR (state.latest_complete_scan_set_id IS NOT NULL AND (
+                 scan_set.scan_set_id IS NULL
+                 OR scan_set.completion_state <> 'complete'
+                 OR revision.scan_set_id <> state.latest_complete_scan_set_id
+                 OR (SELECT count(*) FROM usage_scan
+                     WHERE scan_set_id = scan_set.scan_set_id)
+                    <> scan_set.expected_scope_count
+                 OR EXISTS (
+                   SELECT 1 FROM usage_scan
+                   WHERE scan_set_id = scan_set.scan_set_id
+                     AND completion_state <> 'complete'
+                 )
+               ))
+            OR (state.incremental_state = 'empty' AND (
+                 state.current_revision_id IS NOT NULL
+                 OR state.latest_complete_scan_set_id IS NOT NULL
+               ))
+            OR (state.incremental_state = 'complete' AND (
+                 state.current_revision_id IS NULL
+                 OR state.latest_complete_scan_set_id IS NULL
+               ))
+            OR (state.incremental_state IN ('partial','recovery_pending')
+                AND state.current_revision_id IS NULL)",
+    )?;
+    if invalid != 0 {
         return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
     }
     Ok(())
@@ -880,8 +1042,8 @@ mod tests {
 
     use super::{
         MigrationFault, migrate_schema, migrate_v2_revision_table, migrate_v2_with_fault,
-        migrate_v3_with_fault, migrate_v4_with_fault, pragma_i64, validate_v2, validate_v3,
-        validate_v4, validate_v5,
+        migrate_v3_with_fault, migrate_v4_with_fault, migrate_v5_with_fault, pragma_i64,
+        validate_v2, validate_v3, validate_v4, validate_v5, validate_v6,
     };
     use crate::{StoreErrorCode, usage::schema};
 
@@ -1203,15 +1365,15 @@ mod tests {
     }
 
     #[test]
-    fn exact_v2_migrates_to_v5_and_preserves_all_rows() -> TestResult {
+    fn exact_v2_migrates_to_v6_and_preserves_all_rows() -> TestResult {
         let mut connection = exact_v2_fixture(true)?;
         let before = fixture_snapshot(&connection)?;
         migrate_schema(&mut connection)?;
-        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 5);
+        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 6);
         assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
         assert_eq!(fixture_snapshot(&connection)?, before);
         assert_eq!(event_provenance(&connection)?, (Some(5), Some(5), 0));
-        validate_v5(&connection)?;
+        validate_v6(&connection)?;
         let temporary_names: i64 = connection.query_row(
             "SELECT count(*) FROM sqlite_schema
              WHERE instr(sql, 'usage_replay_revision_v3') > 0
@@ -1231,7 +1393,7 @@ mod tests {
     }
 
     #[test]
-    fn exact_v3_migrates_to_v5_with_legacy_and_current_projection_provenance() -> TestResult {
+    fn exact_v3_migrates_to_v6_with_legacy_and_current_projection_provenance() -> TestResult {
         for (current_revision, expected) in [
             (false, (None, None, 0_i64)),
             (true, (Some(5_i64), Some(5_i64), 0_i64)),
@@ -1239,11 +1401,11 @@ mod tests {
             let mut connection = exact_v3_fixture(current_revision)?;
             let before = fixture_snapshot(&connection)?;
             migrate_schema(&mut connection)?;
-            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 5);
+            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 6);
             assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
             assert_eq!(fixture_snapshot(&connection)?, before);
             assert_eq!(event_provenance(&connection)?, expected);
-            validate_v5(&connection)?;
+            validate_v6(&connection)?;
         }
         Ok(())
     }
@@ -1278,10 +1440,10 @@ mod tests {
     }
 
     #[test]
-    fn exact_v4_scan_and_revision_migrate_to_scoped_v5() -> TestResult {
+    fn exact_v4_scan_and_revision_migrate_to_scoped_v6() -> TestResult {
         let mut connection = exact_v4_fixture_with_scan()?;
         migrate_schema(&mut connection)?;
-        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 5);
+        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 6);
         assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
         let scan: (
             i64,
@@ -1364,7 +1526,73 @@ mod tests {
                 row.get(0)
             })?;
         assert_eq!(revision_scan_set, None);
+        validate_v6(&connection)?;
+        Ok(())
+    }
+
+    fn exact_v5_fixture(complete_publication: bool) -> TestResult<Connection> {
+        let mut connection = exact_v4_fixture_with_scan()?;
+        migrate_v4_with_fault(&mut connection, MigrationFault::None)?;
+        if complete_publication {
+            connection.execute(
+                "UPDATE usage_replay_revision SET scan_set_id = 9
+                 WHERE status = 'current'",
+                [],
+            )?;
+        }
         validate_v5(&connection)?;
+        Ok(connection)
+    }
+
+    #[test]
+    fn exact_v5_migration_seeds_complete_or_recovery_publication() -> TestResult {
+        for (complete_publication, expected_scan, expected_quality) in [
+            (false, None, "recovery_pending"),
+            (true, Some(9_i64), "complete"),
+        ] {
+            let mut connection = exact_v5_fixture(complete_publication)?;
+            migrate_v5_with_fault(&mut connection, MigrationFault::None)?;
+            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 6);
+            let state: (i64, Option<i64>, Option<i64>, String) = connection.query_row(
+                "SELECT archive_generation, current_revision_id,
+                        latest_complete_scan_set_id, incremental_state
+                 FROM usage_archive_state WHERE singleton_id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )?;
+            assert_eq!(
+                state,
+                (0, Some(5), expected_scan, expected_quality.to_owned())
+            );
+            validate_v6(&connection)?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn every_v5_archive_state_fault_rolls_back_exactly() -> TestResult {
+        for fault in [
+            MigrationFault::AfterCreateArchiveState,
+            MigrationFault::AfterSeedArchiveState,
+        ] {
+            let mut connection = exact_v5_fixture(true)?;
+            let before = fixture_snapshot(&connection)?;
+            let error = match migrate_v5_with_fault(&mut connection, fault) {
+                Ok(()) => return Err("faulted archive-state migration committed".into()),
+                Err(error) => error,
+            };
+            assert_eq!(error.code(), StoreErrorCode::Database);
+            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 5);
+            assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
+            validate_v5(&connection)?;
+            assert_eq!(fixture_snapshot(&connection)?, before);
+            let archive_state_tables = pragma_i64(
+                &connection,
+                "SELECT count(*) FROM sqlite_schema
+                 WHERE name = 'usage_archive_state'",
+            )?;
+            assert_eq!(archive_state_tables, 0);
+        }
         Ok(())
     }
 

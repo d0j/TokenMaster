@@ -92,6 +92,16 @@ impl UsageStore {
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let replay_current: i64 = transaction.query_row(
+            "SELECT EXISTS(
+               SELECT 1 FROM usage_replay_revision WHERE status = 'current'
+             )",
+            [],
+            |row| row.get(0),
+        )?;
+        if replay_current != 0 {
+            return Err(StoreError::new(StoreErrorCode::ArchiveModeMismatch));
+        }
         let current = transaction
             .query_row(
                 "SELECT
@@ -241,7 +251,7 @@ impl CurrentSource {
     }
 }
 
-fn insert_generation(
+pub(super) fn insert_generation(
     transaction: &Transaction<'_>,
     source_key: super::SourceKey,
     generation: u64,

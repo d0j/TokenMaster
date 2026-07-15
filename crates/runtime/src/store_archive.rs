@@ -1,24 +1,33 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use tokenmaster_codex::{CodexCheckpointV1, LogicalFileIdentity, VerificationLevel};
+use tokenmaster_codex::{
+    BoundaryAnchor, CodexCheckpointV1, LogicalFileIdentity, ParserResumeState,
+    ReaderCheckpointParts, ReaderCheckpointV1, VerificationLevel,
+};
 use tokenmaster_engine::{
     AdapterCheckpoint, AdapterCompletion, Archive, ArchiveEpoch, ArchiveReplay, ArchiveRevisionId,
     ArchiveScanSetId, CanonicalBatch, CompletionQuality, DiscoveredSource, PortError,
     PortErrorCode, ReplayContinuation, ReplayContinuationState, ScopeIdentity, ScopeManifest,
     SourceIdentity,
 };
+use tokenmaster_platform::PhysicalFileIdentity;
 use tokenmaster_store::{
-    AppendBatch, AppendBatchParts, ReplayAppendBatch, ReplayAppendBatchParts, ReplayEpoch,
-    ReplayRevisionId, ScanCounters, ScanId, ScanOutcome, ScanScope, ScanSetId, ScanSetManifest,
-    SourceKey, SourceRegistration, SourceRegistrationParts, StoredCheckpoint,
-    StoredCheckpointParts, StoredSourceChunk, StoredVerification, UsageStore,
+    AppendBatch, AppendBatchParts, ArchiveGeneration, ArchiveMode, CurrentReplayAppendBatch,
+    CurrentReplayAppendBatchParts, CurrentScanPublication, CurrentScanPublicationParts,
+    ReplayAppendBatch, ReplayAppendBatchParts, ReplayEpoch, ReplayRevisionId, ScanCounters, ScanId,
+    ScanOutcome, ScanScope, ScanSetId, ScanSetManifest, SourceKey, SourceRegistration,
+    SourceRegistrationParts, StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk,
+    StoredVerification, UsageStore,
 };
 
+use crate::codex_adapter::encode_checkpoint;
 use crate::error::store_port_error;
 
 pub struct StoreArchive {
     store: UsageStore,
     last_timestamp_ms: i64,
+    pending_discovered: Vec<SourceKey>,
+    scan_kind: Option<ScanKind>,
 }
 
 impl StoreArchive {
@@ -27,6 +36,8 @@ impl StoreArchive {
         Self {
             store,
             last_timestamp_ms: 0,
+            pending_discovered: Vec::new(),
+            scan_kind: None,
         }
     }
 
@@ -73,10 +84,20 @@ impl StoreArchive {
             .map(tokenmaster_store::ScanSnapshot::id)
             .ok_or_else(|| PortError::new(PortErrorCode::StaleState))
     }
-}
 
-impl Archive for StoreArchive {
-    fn begin_scan_set(&mut self, manifest: &ScopeManifest) -> Result<ArchiveScanSetId, PortError> {
+    pub(crate) fn begin_incremental_scan_set(
+        &mut self,
+        manifest: &ScopeManifest,
+    ) -> Result<ArchiveScanSetId, PortError> {
+        self.begin_scan_set_with_kind(manifest, ScanKind::Incremental)
+    }
+
+    fn begin_scan_set_with_kind(
+        &mut self,
+        manifest: &ScopeManifest,
+        scan_kind: ScanKind,
+    ) -> Result<ArchiveScanSetId, PortError> {
+        self.pending_discovered.clear();
         let scopes = manifest
             .scopes()
             .iter()
@@ -90,7 +111,189 @@ impl Archive for StoreArchive {
             .store
             .begin_scan_set(&manifest, started_at)
             .map_err(|error| store_port_error(&error))?;
+        self.scan_kind = Some(scan_kind);
         engine_scan_set_id(snapshot.id())
+    }
+
+    pub(crate) fn publish_current_scan(
+        &mut self,
+        scan_set: ArchiveScanSetId,
+    ) -> Result<CurrentCursor, PortError> {
+        let revision = self
+            .store
+            .current_replay_revision()
+            .map_err(|error| store_port_error(&error))?
+            .ok_or_else(|| PortError::new(PortErrorCode::StaleState))?;
+        let publication = self
+            .store
+            .archive_publication()
+            .map_err(|error| store_port_error(&error))?;
+        let command = CurrentScanPublication::new(CurrentScanPublicationParts {
+            revision_id: revision.id(),
+            expected_epoch: revision.epoch(),
+            expected_archive_generation: publication.generation(),
+            scan_set_id: store_scan_set_id(scan_set)?,
+            discovered_sources: self.pending_discovered.clone().into_boxed_slice(),
+        })
+        .map_err(|error| store_port_error(&error))?;
+        let committed = self
+            .store
+            .publish_current_scan(&command)
+            .map_err(|error| store_port_error(&error))?;
+        self.pending_discovered.clear();
+        Ok(CurrentCursor {
+            revision_id: revision.id(),
+            epoch: committed.epoch(),
+            archive_generation: committed.archive_generation(),
+        })
+    }
+
+    pub(crate) fn current_cursor(&self) -> Result<CurrentCursor, PortError> {
+        let revision = self
+            .store
+            .current_replay_revision()
+            .map_err(|error| store_port_error(&error))?
+            .ok_or_else(|| PortError::new(PortErrorCode::StaleState))?;
+        let publication = self
+            .store
+            .archive_publication()
+            .map_err(|error| store_port_error(&error))?;
+        if publication.current_revision() != Some(revision.id()) {
+            return Err(PortError::new(PortErrorCode::StaleState));
+        }
+        Ok(CurrentCursor {
+            revision_id: revision.id(),
+            epoch: revision.epoch(),
+            archive_generation: publication.generation(),
+        })
+    }
+
+    pub(crate) fn current_checkpoint(
+        &self,
+        source: &SourceIdentity,
+    ) -> Result<AdapterCheckpoint, PortError> {
+        let snapshot = self
+            .store
+            .generation_snapshot(source_key(source))
+            .map_err(|error| store_port_error(&error))?
+            .ok_or_else(|| PortError::new(PortErrorCode::StaleState))?;
+        encode_stored_checkpoint(snapshot.checkpoint(), source)
+    }
+
+    pub(crate) fn append_current_batch(
+        &mut self,
+        cursor: CurrentCursor,
+        source: &SourceIdentity,
+        batch: CanonicalBatch,
+    ) -> Result<(CurrentCursor, bool, bool), PortError> {
+        let source_key = source_key(source);
+        let current = self
+            .store
+            .generation_snapshot(source_key)
+            .map_err(|error| store_port_error(&error))?
+            .ok_or_else(|| PortError::new(PortErrorCode::StaleState))?;
+        let parts = batch.into_parts();
+        let next_reader = decode_checkpoint(&parts.next_checkpoint, source)?;
+        let next_checkpoint = stored_checkpoint(&next_reader, CheckpointStorage::Progress)?;
+        let source_caught_up = checkpoint_is_caught_up(&next_checkpoint);
+        let previous_partial_chunk = parts
+            .chunk_proofs
+            .previous_partial()
+            .map(stored_chunk)
+            .transpose()?;
+        let chunk_updates = parts
+            .chunk_proofs
+            .updates()
+            .iter()
+            .map(stored_chunk)
+            .collect::<Result<Vec<_>, _>>()?
+            .into_boxed_slice();
+        let append = AppendBatch::new(AppendBatchParts {
+            source_key,
+            expected_generation: current.generation(),
+            expected_committed_offset: current.checkpoint().committed_offset(),
+            expected_scan_offset: current.checkpoint().scan_offset(),
+            events: parts.events,
+            previous_partial_chunk,
+            chunk_updates,
+            next_checkpoint,
+            diagnostic_count_delta: parts.counters.diagnostics(),
+        })
+        .map_err(|error| store_port_error(&error))?;
+        let command = CurrentReplayAppendBatch::new(CurrentReplayAppendBatchParts {
+            revision_id: cursor.revision_id,
+            expected_epoch: cursor.epoch,
+            expected_archive_generation: cursor.archive_generation,
+            append_batch: append,
+            relations: parts.relations,
+        })
+        .map_err(|error| store_port_error(&error))?;
+        let committed = self
+            .store
+            .apply_current_replay_append_batch(&command)
+            .map_err(|error| store_port_error(&error))?;
+        Ok((
+            CurrentCursor {
+                revision_id: cursor.revision_id,
+                epoch: committed.epoch(),
+                archive_generation: committed.archive_generation(),
+            },
+            committed.remaining_work(),
+            source_caught_up,
+        ))
+    }
+
+    pub(crate) fn continue_current(
+        &mut self,
+        cursor: CurrentCursor,
+    ) -> Result<(CurrentCursor, bool, u16, bool), PortError> {
+        let committed = self
+            .store
+            .continue_current_replay(cursor.revision_id, cursor.epoch, cursor.archive_generation)
+            .map_err(|error| store_port_error(&error))?;
+        Ok((
+            CurrentCursor {
+                revision_id: cursor.revision_id,
+                epoch: committed.epoch(),
+                archive_generation: committed.archive_generation(),
+            },
+            committed.remaining_work(),
+            committed.processed_count(),
+            committed.quality() == tokenmaster_store::ArchivePublicationQuality::Complete,
+        ))
+    }
+
+    pub(crate) fn mark_rebuild_required(
+        &mut self,
+        cursor: CurrentCursor,
+    ) -> Result<CurrentCursor, PortError> {
+        let archive_generation = self
+            .store
+            .mark_current_rebuild_required(cursor.revision_id, cursor.archive_generation)
+            .map_err(|error| store_port_error(&error))?;
+        Ok(CurrentCursor {
+            archive_generation,
+            ..cursor
+        })
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct CurrentCursor {
+    pub(crate) revision_id: ReplayRevisionId,
+    pub(crate) epoch: ReplayEpoch,
+    pub(crate) archive_generation: ArchiveGeneration,
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum ScanKind {
+    FullRebuild,
+    Incremental,
+}
+
+impl Archive for StoreArchive {
+    fn begin_scan_set(&mut self, manifest: &ScopeManifest) -> Result<ArchiveScanSetId, PortError> {
+        self.begin_scan_set_with_kind(manifest, ScanKind::FullRebuild)
     }
 
     fn observe_source(
@@ -101,13 +304,28 @@ impl Archive for StoreArchive {
     ) -> Result<(), PortError> {
         let source_key = source_key(source.identity());
         let reader = decode_checkpoint(initial_checkpoint, source.identity())?;
-        let checkpoint = stored_checkpoint(&reader, true)?;
-        if self
+        let is_new = self
             .store
             .generation_snapshot(source_key)
             .map_err(|error| store_port_error(&error))?
-            .is_none()
-        {
+            .is_none();
+        let scan_id = self.scan_for_scope(scan_set, source.identity().scope())?;
+        if is_new {
+            let archive_mode = self
+                .store
+                .archive_state()
+                .map_err(|error| store_port_error(&error))?
+                .mode();
+            let checkpoint = stored_checkpoint(
+                &reader,
+                if self.scan_kind == Some(ScanKind::Incremental)
+                    && archive_mode == ArchiveMode::ReplayVerified
+                {
+                    CheckpointStorage::IncrementalStart
+                } else {
+                    CheckpointStorage::ReplayStart
+                },
+            )?;
             let registration = SourceRegistration::new(SourceRegistrationParts {
                 source_key,
                 provider_id: source.identity().scope().provider_id().into(),
@@ -121,11 +339,26 @@ impl Archive for StoreArchive {
                 initial_checkpoint: checkpoint,
             })
             .map_err(|error| store_port_error(&error))?;
-            self.store
-                .register_source(&registration)
-                .map_err(|error| store_port_error(&error))?;
+            if self.scan_kind == Some(ScanKind::Incremental)
+                && archive_mode == ArchiveMode::ReplayVerified
+            {
+                if !self.pending_discovered.contains(&source_key)
+                    && self.pending_discovered.len() == tokenmaster_store::MAX_REPLAY_SOURCES
+                {
+                    return Err(PortError::new(PortErrorCode::RebuildRequired));
+                }
+                self.store
+                    .register_scan_discovered_source(scan_id, &registration)
+                    .map_err(|error| store_port_error(&error))?;
+                if !self.pending_discovered.contains(&source_key) {
+                    self.pending_discovered.push(source_key);
+                }
+            } else {
+                self.store
+                    .register_rebuild_source(&registration)
+                    .map_err(|error| store_port_error(&error))?;
+            }
         }
-        let scan_id = self.scan_for_scope(scan_set, source.identity().scope())?;
         self.store
             .observe_scan_source(scan_id, source_key)
             .map_err(|error| store_port_error(&error))
@@ -167,6 +400,7 @@ impl Archive for StoreArchive {
             .store
             .finish_scan_set(store_scan_set_id(scan_set)?, completed_at)
             .map_err(|error| store_port_error(&error))?;
+        self.scan_kind = None;
         snapshot
             .outcome()
             .map(completion_quality)
@@ -188,7 +422,7 @@ impl Archive for StoreArchive {
         initial_checkpoint: &AdapterCheckpoint,
     ) -> Result<ArchiveReplay, PortError> {
         let reader = decode_checkpoint(initial_checkpoint, source.identity())?;
-        let checkpoint = stored_checkpoint(&reader, true)?;
+        let checkpoint = stored_checkpoint(&reader, CheckpointStorage::ReplayStart)?;
         let revision = store_revision_id(replay.revision_id())?;
         let next_epoch = self
             .store
@@ -216,7 +450,7 @@ impl Archive for StoreArchive {
             .map_err(|error| store_port_error(&error))?;
         let parts = batch.into_parts();
         let next_reader = decode_checkpoint(&parts.next_checkpoint, source)?;
-        let next_checkpoint = stored_checkpoint(&next_reader, false)?;
+        let next_checkpoint = stored_checkpoint(&next_reader, CheckpointStorage::Progress)?;
         let previous_partial_chunk = parts
             .chunk_proofs
             .previous_partial()
@@ -326,26 +560,83 @@ fn decode_checkpoint(
     .map_err(|_| PortError::new(PortErrorCode::InvalidData))
 }
 
+fn encode_stored_checkpoint(
+    checkpoint: &StoredCheckpoint,
+    source: &SourceIdentity,
+) -> Result<AdapterCheckpoint, PortError> {
+    if checkpoint.logical_identity() != source.logical_file_key() {
+        return Err(PortError::new(PortErrorCode::InvalidData));
+    }
+    let resume: ParserResumeState = serde_json::from_slice(checkpoint.resume())
+        .map_err(|_| PortError::new(PortErrorCode::InvalidData))?;
+    let anchor = BoundaryAnchor::new(
+        checkpoint.anchor_start(),
+        checkpoint.anchor_len(),
+        *checkpoint.anchor_sha256(),
+    )
+    .map_err(|_| PortError::new(PortErrorCode::InvalidData))?;
+    let reader = ReaderCheckpointV1::new(ReaderCheckpointParts {
+        parser_schema_version: checkpoint.parser_schema_version(),
+        physical_identity: checkpoint
+            .physical_identity()
+            .copied()
+            .map(PhysicalFileIdentity::from_persisted_bytes),
+        logical_identity: LogicalFileIdentity::from_bytes(*checkpoint.logical_identity()),
+        committed_offset: checkpoint.committed_offset(),
+        scan_offset: checkpoint.scan_offset(),
+        observed_file_length: checkpoint.observed_file_length(),
+        modified_time_ns: checkpoint.modified_time_ns(),
+        anchor,
+        resume,
+        discarding_oversized_line: checkpoint.discarding_oversized_line(),
+        incomplete_tail: checkpoint.incomplete_tail(),
+        verification: match checkpoint.verification() {
+            StoredVerification::Incremental => VerificationLevel::Incremental,
+            StoredVerification::FullPrefix => VerificationLevel::FullPrefix,
+        },
+    })
+    .map_err(|_| PortError::new(PortErrorCode::InvalidData))?;
+    encode_checkpoint(reader)
+}
+
+#[derive(Clone, Copy)]
+enum CheckpointStorage {
+    ReplayStart,
+    IncrementalStart,
+    Progress,
+}
+
 fn stored_checkpoint(
     checkpoint: &tokenmaster_codex::ReaderCheckpointV1,
-    empty: bool,
+    storage: CheckpointStorage,
 ) -> Result<StoredCheckpoint, PortError> {
-    let (committed_offset, scan_offset, observed_file_length, modified_time_ns, anchor) = if empty {
-        (0, 0, 0, None, (0, 0, [0; 32]))
-    } else {
-        (
-            checkpoint.committed_offset(),
-            checkpoint.scan_offset(),
-            checkpoint.observed_file_length(),
-            checkpoint.modified_time_ns(),
-            (
-                checkpoint.anchor().start(),
-                checkpoint.anchor().len(),
-                *checkpoint.anchor().sha256(),
+    let (committed_offset, scan_offset, observed_file_length, modified_time_ns, anchor) =
+        match storage {
+            CheckpointStorage::ReplayStart => (0, 0, 0, None, (0, 0, [0; 32])),
+            CheckpointStorage::IncrementalStart => (
+                0,
+                0,
+                checkpoint.observed_file_length(),
+                checkpoint.modified_time_ns(),
+                (0, 0, [0; 32]),
             ),
-        )
-    };
-    let verification = if empty || checkpoint.verification() == VerificationLevel::Incremental {
+            CheckpointStorage::Progress => (
+                checkpoint.committed_offset(),
+                checkpoint.scan_offset(),
+                checkpoint.observed_file_length(),
+                checkpoint.modified_time_ns(),
+                (
+                    checkpoint.anchor().start(),
+                    checkpoint.anchor().len(),
+                    *checkpoint.anchor().sha256(),
+                ),
+            ),
+        };
+    let verification = if matches!(
+        storage,
+        CheckpointStorage::ReplayStart | CheckpointStorage::IncrementalStart
+    ) || checkpoint.verification() == VerificationLevel::Incremental
+    {
         StoredVerification::Incremental
     } else {
         StoredVerification::FullPrefix
@@ -367,11 +658,20 @@ fn stored_checkpoint(
         anchor_len: anchor.1,
         anchor_sha256: anchor.2,
         resume,
-        discarding_oversized_line: !empty && checkpoint.discarding_oversized_line(),
-        incomplete_tail: !empty && checkpoint.incomplete_tail(),
+        discarding_oversized_line: matches!(storage, CheckpointStorage::Progress)
+            && checkpoint.discarding_oversized_line(),
+        incomplete_tail: matches!(storage, CheckpointStorage::Progress)
+            && checkpoint.incomplete_tail(),
         verification,
     })
     .map_err(|error| store_port_error(&error))
+}
+
+fn checkpoint_is_caught_up(checkpoint: &StoredCheckpoint) -> bool {
+    !checkpoint.discarding_oversized_line()
+        && !checkpoint.incomplete_tail()
+        && checkpoint.committed_offset() == checkpoint.scan_offset()
+        && checkpoint.scan_offset() == checkpoint.observed_file_length()
 }
 
 fn stored_chunk(proof: &tokenmaster_engine::ChunkProof) -> Result<StoredSourceChunk, PortError> {

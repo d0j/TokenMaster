@@ -17,15 +17,17 @@ mod usage;
 pub use error::{StoreError, StoreErrorCode};
 pub use session_store::{EXPECTED_SQLITE_VERSION, MAX_PAGE_SIZE, MAX_SEED_SESSIONS, ProbeStore};
 pub use usage::{
-    AccountingVersions, AppendBatch, AppendBatchParts, ArchiveMode, ArchiveState, EventCursor,
-    GenerationSnapshot, GenerationStatus, JournalMode, MAX_APPEND_CHUNK_UPDATES, MAX_APPEND_EVENTS,
-    MAX_APPEND_RELATIONS, MAX_REPLAY_SOURCES, MAX_RESUME_BYTES, MAX_SCAN_SCOPES,
-    MAX_USAGE_EVENT_PAGE_SIZE, ReplayAppendBatch, ReplayAppendBatchParts, ReplayContinuationResult,
-    ReplayEpoch, ReplayManifest, ReplayQualityCounts, ReplayRelation, ReplayRevisionId,
-    ReplayRevisionSnapshot, ReplayRevisionStatus, RuntimePolicy, SCAN_HISTORY_PER_SCOPE,
-    SCAN_PRUNE_BATCH_SIZE, SOURCE_CHUNK_BYTES, ScanCounters, ScanId, ScanOutcome, ScanScope,
-    ScanSetId, ScanSetManifest, ScanSetSnapshot, ScanSnapshot, SourceKey, SourceKind,
-    SourceRegistration, SourceRegistrationParts, StoredCheckpoint, StoredCheckpointParts,
-    StoredSourceChunk, StoredUsageEvent, StoredVerification, USAGE_SCHEMA_VERSION, UsageStore,
-    UsageStoreCounts,
+    AccountingVersions, AppendBatch, AppendBatchParts, ArchiveGeneration, ArchiveMode,
+    ArchivePublication, ArchivePublicationQuality, ArchiveState, CurrentReplayAppendBatch,
+    CurrentReplayAppendBatchParts, CurrentReplayCommit, CurrentScanPublication,
+    CurrentScanPublicationParts, EventCursor, GenerationSnapshot, GenerationStatus, JournalMode,
+    MAX_APPEND_CHUNK_UPDATES, MAX_APPEND_EVENTS, MAX_APPEND_RELATIONS, MAX_REPLAY_SOURCES,
+    MAX_RESUME_BYTES, MAX_SCAN_SCOPES, MAX_USAGE_EVENT_PAGE_SIZE, ReplayAppendBatch,
+    ReplayAppendBatchParts, ReplayContinuationResult, ReplayEpoch, ReplayManifest,
+    ReplayQualityCounts, ReplayRelation, ReplayRevisionId, ReplayRevisionSnapshot,
+    ReplayRevisionStatus, RuntimePolicy, SCAN_HISTORY_PER_SCOPE, SCAN_PRUNE_BATCH_SIZE,
+    SOURCE_CHUNK_BYTES, ScanCounters, ScanId, ScanOutcome, ScanScope, ScanSetId, ScanSetManifest,
+    ScanSetSnapshot, ScanSnapshot, SourceKey, SourceKind, SourceRegistration,
+    SourceRegistrationParts, StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk,
+    StoredUsageEvent, StoredVerification, USAGE_SCHEMA_VERSION, UsageStore, UsageStoreCounts,
 };

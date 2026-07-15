@@ -53,6 +53,7 @@ pub(crate) fn provider_port_error(error: &ProviderError) -> PortError {
 pub(crate) fn store_port_error(error: &StoreError) -> PortError {
     let code = match error.code() {
         StoreErrorCode::CapacityExceeded => PortErrorCode::CapacityExceeded,
+        StoreErrorCode::RebuildRequired => PortErrorCode::RebuildRequired,
         StoreErrorCode::StaleCheckpoint
         | StoreErrorCode::StaleRevision
         | StoreErrorCode::StaleScan

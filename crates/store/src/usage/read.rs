@@ -35,6 +35,69 @@ enum VisibleEventSource {
 }
 
 impl UsageStore {
+    pub fn current_replay_revision(&self) -> Result<Option<ReplayRevisionSnapshot>, StoreError> {
+        let raw = self
+            .connection
+            .query_row(
+                "SELECT revision_id, evidence_epoch, canonicalizer_version,
+                        fingerprint_version, replay_signature_version,
+                        expected_source_count, scan_set_id, sealed, promoted
+                 FROM usage_replay_revision WHERE status = 'current'",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, i64>(3)?,
+                        row.get::<_, i64>(4)?,
+                        row.get::<_, i64>(5)?,
+                        row.get::<_, Option<i64>>(6)?,
+                        row.get::<_, i64>(7)?,
+                        row.get::<_, i64>(8)?,
+                    ))
+                },
+            )
+            .optional()?;
+        raw.map(|raw| {
+            Ok(ReplayRevisionSnapshot {
+                id: ReplayRevisionId::from_stored(raw.0)?,
+                epoch: ReplayEpoch::new(nonnegative(raw.1)?)
+                    .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?,
+                status: ReplayRevisionStatus::Current,
+                versions: AccountingVersions::from_stored(raw.2, raw.3, raw.4)?,
+                expected_source_count: nonnegative(raw.5)?,
+                scan_set_id: raw.6.map(ScanSetId::from_stored).transpose()?,
+                sealed: boolean(raw.7)?,
+                promoted: boolean(raw.8)?,
+            })
+        })
+        .transpose()
+    }
+
+    pub fn archive_publication(&self) -> Result<ArchivePublication, StoreError> {
+        let (generation, current_revision, complete_scan_set, quality): (
+            i64,
+            Option<i64>,
+            Option<i64>,
+            String,
+        ) = self.connection.query_row(
+            "SELECT archive_generation, current_revision_id,
+                    latest_complete_scan_set_id, incremental_state
+             FROM usage_archive_state WHERE singleton_id = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )?;
+        Ok(ArchivePublication {
+            generation: ArchiveGeneration::from_stored(generation)?,
+            current_revision: current_revision
+                .map(ReplayRevisionId::from_stored)
+                .transpose()?,
+            latest_complete_scan_set: complete_scan_set.map(ScanSetId::from_stored).transpose()?,
+            quality: ArchivePublicationQuality::from_sql(&quality)?,
+        })
+    }
+
     pub fn archive_state(&self) -> Result<ArchiveState, StoreError> {
         let current = self
             .connection

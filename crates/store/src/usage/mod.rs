@@ -5,6 +5,7 @@ use rusqlite::Connection;
 
 use crate::{EXPECTED_SQLITE_VERSION, StoreError, StoreErrorCode};
 
+mod incremental;
 mod migration;
 mod read;
 mod replay;
@@ -16,16 +17,19 @@ mod write;
 
 pub use schema::USAGE_SCHEMA_VERSION;
 pub use types::{
-    AccountingVersions, AppendBatch, AppendBatchParts, ArchiveMode, ArchiveState, EventCursor,
-    GenerationSnapshot, GenerationStatus, MAX_APPEND_CHUNK_UPDATES, MAX_APPEND_EVENTS,
-    MAX_APPEND_RELATIONS, MAX_REPLAY_SOURCES, MAX_RESUME_BYTES, MAX_SCAN_SCOPES,
-    MAX_USAGE_EVENT_PAGE_SIZE, ReplayAppendBatch, ReplayAppendBatchParts, ReplayContinuationResult,
-    ReplayEpoch, ReplayManifest, ReplayQualityCounts, ReplayRelation, ReplayRevisionId,
-    ReplayRevisionSnapshot, ReplayRevisionStatus, SCAN_HISTORY_PER_SCOPE, SCAN_PRUNE_BATCH_SIZE,
-    SOURCE_CHUNK_BYTES, ScanCounters, ScanId, ScanOutcome, ScanScope, ScanSetId, ScanSetManifest,
-    ScanSetSnapshot, ScanSnapshot, SourceKey, SourceKind, SourceRegistration,
-    SourceRegistrationParts, StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk,
-    StoredUsageEvent, StoredVerification, UsageStoreCounts,
+    AccountingVersions, AppendBatch, AppendBatchParts, ArchiveGeneration, ArchiveMode,
+    ArchivePublication, ArchivePublicationQuality, ArchiveState, CurrentReplayAppendBatch,
+    CurrentReplayAppendBatchParts, CurrentReplayCommit, CurrentScanPublication,
+    CurrentScanPublicationParts, EventCursor, GenerationSnapshot, GenerationStatus,
+    MAX_APPEND_CHUNK_UPDATES, MAX_APPEND_EVENTS, MAX_APPEND_RELATIONS, MAX_REPLAY_SOURCES,
+    MAX_RESUME_BYTES, MAX_SCAN_SCOPES, MAX_USAGE_EVENT_PAGE_SIZE, ReplayAppendBatch,
+    ReplayAppendBatchParts, ReplayContinuationResult, ReplayEpoch, ReplayManifest,
+    ReplayQualityCounts, ReplayRelation, ReplayRevisionId, ReplayRevisionSnapshot,
+    ReplayRevisionStatus, SCAN_HISTORY_PER_SCOPE, SCAN_PRUNE_BATCH_SIZE, SOURCE_CHUNK_BYTES,
+    ScanCounters, ScanId, ScanOutcome, ScanScope, ScanSetId, ScanSetManifest, ScanSetSnapshot,
+    ScanSnapshot, SourceKey, SourceKind, SourceRegistration, SourceRegistrationParts,
+    StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk, StoredUsageEvent,
+    StoredVerification, UsageStoreCounts,
 };
 
 use migration::migrate_schema;

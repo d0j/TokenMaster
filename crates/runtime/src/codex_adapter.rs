@@ -1,8 +1,9 @@
 use tokenmaster_codex::{
     CodexCheckpointV1, CodexProvider, EnumerationCompletion, ParserDiagnosticCode,
-    ReaderDiagnosticCode, ReaderErrorCode, ReaderOutcome, SinkDecision, SourceChunkDigest,
-    SourceFileDescriptor, enumerate_profile_sources, initialize_source_checkpoint,
-    logical_file_identity, read_source_batch,
+    ReaderDiagnosticCode, ReaderErrorCode, ReaderOutcome, SinkDecision, SourceCheckpointStatus,
+    SourceChunkDigest, SourceFileDescriptor, enumerate_profile_sources,
+    initialize_source_checkpoint, logical_file_identity, read_source_batch,
+    validate_source_checkpoint,
 };
 use tokenmaster_engine::{
     Adapter, AdapterBatch, AdapterBatchParts, AdapterCheckpoint, AdapterCompletion,
@@ -222,6 +223,26 @@ struct CodexSourceBatchReader {
 }
 
 impl SourceBatchReader for CodexSourceBatchReader {
+    fn validate_checkpoint(
+        &mut self,
+        checkpoint: &AdapterCheckpoint,
+        control: &OperationControl<'_>,
+    ) -> Result<(), PortError> {
+        control.check()?;
+        let logical = logical_file_identity(&self.descriptor);
+        let reader_checkpoint = CodexCheckpointV1::decode(checkpoint.as_bytes(), logical)
+            .map_err(|_| PortError::new(PortErrorCode::InvalidData))?
+            .into_reader();
+        match validate_source_checkpoint(&self.descriptor, &reader_checkpoint)
+            .map_err(|error| reader_port_error(error.code()))?
+        {
+            SourceCheckpointStatus::Unchanged | SourceCheckpointStatus::Appended => Ok(()),
+            SourceCheckpointStatus::RebuildRequired(_) => {
+                Err(PortError::new(PortErrorCode::RebuildRequired))
+            }
+        }
+    }
+
     fn read_batch(
         &mut self,
         checkpoint: &AdapterCheckpoint,
@@ -247,7 +268,9 @@ impl SourceBatchReader for CodexSourceBatchReader {
         })?;
 
         match outcome {
-            ReaderOutcome::RebuildRequired(_) => Err(PortError::new(PortErrorCode::StaleState)),
+            ReaderOutcome::RebuildRequired(_) => {
+                Err(PortError::new(PortErrorCode::RebuildRequired))
+            }
             ReaderOutcome::Unchanged(_) => AdapterBatch::new(
                 &self.source,
                 AdapterBatchParts {
@@ -317,7 +340,7 @@ fn discovered_source(descriptor: &SourceFileDescriptor) -> Result<DiscoveredSour
     Ok(DiscoveredSource::new(identity, kind))
 }
 
-fn encode_checkpoint(
+pub(crate) fn encode_checkpoint(
     checkpoint: tokenmaster_codex::ReaderCheckpointV1,
 ) -> Result<AdapterCheckpoint, PortError> {
     let encoded = CodexCheckpointV1::new(checkpoint)

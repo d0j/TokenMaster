@@ -525,7 +525,7 @@ impl ReplaySourceSink for ArchiveReplaySourceSink<'_> {
     }
 }
 
-fn canonicalize_batch(
+pub fn canonicalize_batch(
     source: &crate::SourceIdentity,
     batch: crate::AdapterBatch,
 ) -> Result<CanonicalBatch, PortError> {
@@ -599,6 +599,7 @@ fn failure_result(
         | PortErrorCode::InvalidData
         | PortErrorCode::CapacityExceeded
         | PortErrorCode::StaleState
+        | PortErrorCode::RebuildRequired
         | PortErrorCode::Unavailable
         | PortErrorCode::Failed => RefreshOutcome::Failed,
     };
@@ -645,6 +646,7 @@ fn quality_for_error(code: PortErrorCode) -> CompletionQuality {
         | PortErrorCode::InvalidData
         | PortErrorCode::CapacityExceeded
         | PortErrorCode::StaleState
+        | PortErrorCode::RebuildRequired
         | PortErrorCode::Unavailable
         | PortErrorCode::Failed => CompletionQuality::Failed,
     }

@@ -494,7 +494,6 @@ impl SourceRegistration {
             || parts.initial_checkpoint.physical_identity() != parts.physical_identity.as_ref()
             || parts.initial_checkpoint.committed_offset() != 0
             || parts.initial_checkpoint.scan_offset() != 0
-            || parts.initial_checkpoint.observed_file_length() != 0
             || parts.initial_checkpoint.anchor_start() != 0
             || parts.initial_checkpoint.anchor_len() != 0
         {
@@ -1049,6 +1048,151 @@ impl fmt::Debug for ReplayAppendBatch {
     }
 }
 
+#[derive(Clone)]
+pub struct CurrentReplayAppendBatchParts {
+    pub revision_id: ReplayRevisionId,
+    pub expected_epoch: ReplayEpoch,
+    pub expected_archive_generation: ArchiveGeneration,
+    pub append_batch: AppendBatch,
+    pub relations: Box<[SessionRelationDraft]>,
+}
+
+#[derive(Clone)]
+pub struct CurrentReplayAppendBatch {
+    parts: CurrentReplayAppendBatchParts,
+}
+
+impl CurrentReplayAppendBatch {
+    pub fn new(parts: CurrentReplayAppendBatchParts) -> Result<Self, StoreError> {
+        if parts.relations.len() > MAX_APPEND_RELATIONS {
+            return Err(StoreError::with_limit(
+                StoreErrorCode::CapacityExceeded,
+                MAX_APPEND_RELATIONS as u64,
+            ));
+        }
+        if parts
+            .relations
+            .iter()
+            .any(|relation| relation.source_offset() > i64::MAX as u64)
+        {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self { parts })
+    }
+
+    pub(super) const fn parts(&self) -> &CurrentReplayAppendBatchParts {
+        &self.parts
+    }
+}
+
+impl fmt::Debug for CurrentReplayAppendBatch {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CurrentReplayAppendBatch")
+            .field("revision_id", &self.parts.revision_id)
+            .field("expected_epoch", &self.parts.expected_epoch)
+            .field(
+                "expected_archive_generation",
+                &self.parts.expected_archive_generation,
+            )
+            .field("append_batch", &self.parts.append_batch)
+            .field("relation_count", &self.parts.relations.len())
+            .finish()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CurrentReplayCommit {
+    pub(super) processed_count: u16,
+    pub(super) remaining_work: bool,
+    pub(super) epoch: ReplayEpoch,
+    pub(super) archive_generation: ArchiveGeneration,
+    pub(super) quality: ArchivePublicationQuality,
+}
+
+#[derive(Clone)]
+pub struct CurrentScanPublicationParts {
+    pub revision_id: ReplayRevisionId,
+    pub expected_epoch: ReplayEpoch,
+    pub expected_archive_generation: ArchiveGeneration,
+    pub scan_set_id: ScanSetId,
+    pub discovered_sources: Box<[SourceKey]>,
+}
+
+#[derive(Clone)]
+pub struct CurrentScanPublication {
+    parts: CurrentScanPublicationParts,
+}
+
+impl CurrentScanPublication {
+    pub fn new(parts: CurrentScanPublicationParts) -> Result<Self, StoreError> {
+        if parts.discovered_sources.len() > MAX_REPLAY_SOURCES {
+            return Err(StoreError::with_limit(
+                StoreErrorCode::CapacityExceeded,
+                MAX_REPLAY_SOURCES as u64,
+            ));
+        }
+        let mut discovered_sources = parts.discovered_sources.into_vec();
+        discovered_sources.sort_unstable_by(|left, right| left.as_bytes().cmp(right.as_bytes()));
+        if discovered_sources.windows(2).any(|pair| pair[0] == pair[1]) {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self {
+            parts: CurrentScanPublicationParts {
+                discovered_sources: discovered_sources.into_boxed_slice(),
+                ..parts
+            },
+        })
+    }
+
+    pub(super) const fn parts(&self) -> &CurrentScanPublicationParts {
+        &self.parts
+    }
+}
+
+impl fmt::Debug for CurrentScanPublication {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CurrentScanPublication")
+            .field("revision_id", &self.parts.revision_id)
+            .field("expected_epoch", &self.parts.expected_epoch)
+            .field(
+                "expected_archive_generation",
+                &self.parts.expected_archive_generation,
+            )
+            .field("scan_set_id", &self.parts.scan_set_id)
+            .field("discovered_count", &self.parts.discovered_sources.len())
+            .finish()
+    }
+}
+
+impl CurrentReplayCommit {
+    #[must_use]
+    pub const fn processed_count(self) -> u16 {
+        self.processed_count
+    }
+
+    #[must_use]
+    pub const fn remaining_work(self) -> bool {
+        self.remaining_work
+    }
+
+    #[must_use]
+    pub const fn epoch(self) -> ReplayEpoch {
+        self.epoch
+    }
+
+    #[must_use]
+    pub const fn archive_generation(self) -> ArchiveGeneration {
+        self.archive_generation
+    }
+
+    #[must_use]
+    pub const fn quality(self) -> ArchivePublicationQuality {
+        self.quality
+    }
+}
+
 fn replay_append_debug(
     name: &str,
     parts: &ReplayAppendBatchParts,
@@ -1162,6 +1306,92 @@ impl ReplayEpoch {
     #[must_use]
     pub const fn get(self) -> u64 {
         self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct ArchiveGeneration(u64);
+
+impl ArchiveGeneration {
+    pub fn new(value: u64) -> Result<Self, StoreError> {
+        if value > i64::MAX as u64 {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self(value))
+    }
+
+    pub(super) fn from_stored(value: i64) -> Result<Self, StoreError> {
+        let value = u64::try_from(value)
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+        Ok(Self(value))
+    }
+
+    pub(super) fn as_sql(self) -> Result<i64, StoreError> {
+        i64::try_from(self.0).map_err(|_| StoreError::new(StoreErrorCode::InvalidValue))
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ArchivePublicationQuality {
+    Empty,
+    Complete,
+    Partial,
+    RecoveryPending,
+}
+
+impl ArchivePublicationQuality {
+    pub(super) const fn as_sql(self) -> &'static str {
+        match self {
+            Self::Empty => "empty",
+            Self::Complete => "complete",
+            Self::Partial => "partial",
+            Self::RecoveryPending => "recovery_pending",
+        }
+    }
+
+    pub(super) fn from_sql(value: &str) -> Result<Self, StoreError> {
+        match value {
+            "empty" => Ok(Self::Empty),
+            "complete" => Ok(Self::Complete),
+            "partial" => Ok(Self::Partial),
+            "recovery_pending" => Ok(Self::RecoveryPending),
+            _ => Err(StoreError::new(StoreErrorCode::InvalidStoredValue)),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ArchivePublication {
+    pub(super) generation: ArchiveGeneration,
+    pub(super) current_revision: Option<ReplayRevisionId>,
+    pub(super) latest_complete_scan_set: Option<ScanSetId>,
+    pub(super) quality: ArchivePublicationQuality,
+}
+
+impl ArchivePublication {
+    #[must_use]
+    pub const fn generation(self) -> ArchiveGeneration {
+        self.generation
+    }
+
+    #[must_use]
+    pub const fn current_revision(self) -> Option<ReplayRevisionId> {
+        self.current_revision
+    }
+
+    #[must_use]
+    pub const fn latest_complete_scan_set(self) -> Option<ScanSetId> {
+        self.latest_complete_scan_set
+    }
+
+    #[must_use]
+    pub const fn quality(self) -> ArchivePublicationQuality {
+        self.quality
     }
 }
 

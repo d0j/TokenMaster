@@ -1,7 +1,7 @@
 # TokenMaster Critical Audit and Approved Master Plan
 
-Status: architecture approved; P0-A through P1-A implemented; P1-B is the active gate.
-Date: 2026-07-14.
+Status: architecture approved; P0 through P1-D.3 implemented; P1-D.4 is active.
+Date: 2026-07-15.
 
 ## 1. Executive decision
 
@@ -180,7 +180,7 @@ implemented. P1-B.3 completes reference-safe scan-history retention with a 32-se
 per-scope window, 64-set transaction batch, reference/running preservation, recovery,
 ID-exhaustion, and rollback proofs under
 `docs/superpowers/plans/2026-07-15-tokenmaster-p1-b-scan-authority.md`. The immediate
-implementation rail is P1-C provider-neutral engine core under
+completed P1-C provider-neutral engine core is recorded under
 `docs/superpowers/plans/2026-07-15-tokenmaster-p1-c-engine-core.md`. P1-C.1 constant-
 state admission/coalescing/deadline/cancellation and P1-C.2 bounded
 adapter/archive/clock/writer-lease ports are implemented. P1-C.3 now adds lease-first,
@@ -189,8 +189,10 @@ revision/epoch continuity, all-phase cancellation/deadline handling, and last-co
 unpublished cleanup. P1-C.4 now completes the engine core with one owned worker,
 capacity-one wake/latest-result channels, constant-state coalescing, checked
 supersession, cancel/wake/join ownership, stale/deadline safety, and redacted
-panic/fault containment. The immediate next gate is a fresh P1-D executable plan for
-built-in Codex composition, the real portable writer lease, watcher/periodic hints,
-and lifecycle cancellation. The older replay plan remains historical evidence for
+panic/fault containment. P1-D.0 through P1-D.3 now provide exact per-file streaming,
+atomic replay facts, production Codex bootstrap, and replay-aware tail-only refresh
+with schema-v6 publication/recovery truth. The immediate next gate is P1-D.4, the real
+portable writer lease, then watcher/periodic hints and lifecycle cancellation under
+the existing P1-D executable plan. The older replay plan remains historical evidence for
 completed Tasks 1-2, but its Codex-owned Tasks 3+ are superseded and must not be
 executed.

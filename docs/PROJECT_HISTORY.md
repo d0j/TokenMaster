@@ -907,3 +907,35 @@ explicitly ignored one-million-row M0 scale test.
 P1-D.2 is bootstrap/full rebuild only. Replay-aware incremental tail refresh, the real
 OS writer lease, watcher/scheduler, lifecycle/sleep recovery, P1-E, M0 acceptance,
 packaging, signing, and release remain unclaimed.
+
+## 2026-07-15 — P1-D.3 replay-aware incremental archive added
+
+The steady-state Codex path no longer requires a full history rebuild. Strict schema
+v6 adds one singleton publication record with current revision, latest exact complete
+scan set, checked archive generation, and explicit complete/partial/recovery state.
+The exact v5 migration starts at generation zero and either preserves scan-backed
+complete authority or fails into recovery-pending; injected create/seed failures
+restore the exact v5 schema and rows.
+
+An exact complete scan now advances freshness for the current revision, provisionally
+registers new path-private sources, admits empty sources directly, and keeps non-empty
+sources partial until their content is read. Missing sources remain historical rather
+than destructive authority. Runtime preflights every present source before writing,
+then pulls only from persisted checkpoints. Unchanged refresh reads zero JSONL payload
+bytes; one-line and 300-event tails commit exact bounded batches; a deadline after the
+first batch resumes without duplicate events. Physical replacement, rewrite,
+truncation, or anchor mismatch advances only the publication into durable
+`recovery_pending` and preserves prior canonical truth for full rebuild. A changed
+profile scope is classified the same way, and full rebuild can safely replace an
+unadmitted provisional generation left by that interrupted admission path. More than
+256 new sources in one incremental pass also requests rebuild before retained admission
+state can exceed its fixed bound.
+
+Current append compares revision epoch, archive generation, source generation,
+identity, offsets, and chunk proof, atomically updates replay facts plus only affected
+fingerprints, and disables the older canonical-only bypass. Four injected boundaries
+prove rollback of projection, relations, work, chunks, checkpoint, source state, both
+CAS tokens, and publication quality. Focused evidence is 20 store unit tests, seven
+incremental store contracts, and eleven real runtime incremental contracts. P1-D.4 OS
+writer lease, watcher/scheduler, lifecycle assembly, P1-E, M0 acceptance, packaging,
+signing, and release remain unclaimed.

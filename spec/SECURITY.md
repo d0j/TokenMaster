@@ -176,6 +176,21 @@ synchronous adapter callbacks, and `StoreArchive` receives only sealed identity,
 canonical facts, checkpoint state, and checked handles. Bootstrap/full rebuild is not
 exposed as a live watcher path.
 
+Incremental refresh uses the same path-private callback boundary and a separate
+archive-generation CAS. Exact complete scans are the only source-admission authority;
+new sources are provisional until atomic publication, and non-empty admissions remain
+`partial` until read. A preflight pass validates every present file's logical/physical
+identity, length, modification observation, and bounded anchor before any tail write.
+Tail transactions materialize only affected fingerprints and roll back projection,
+relations, work, chunks, checkpoint, revision epoch, and archive generation at every
+injected boundary. Replacement, rewrite, truncation, or anchor mismatch writes only a
+CAS-checked `recovery_pending` marker and preserves prior canonical usage. Profile-scope
+drift uses the same marker. Full rebuild can recover only a generation-zero provisional
+source with no replay/observation/chunk facts, and rewrites its physical identity from
+the newly opened descriptor. Provisional-admission overflow fails into the same
+non-destructive recovery path before retaining an over-bound key. No path, raw line,
+incomplete tail, descriptor, or checkpoint bytes enter SQLite or reports.
+
 The deterministic worker uses only capacity-one standard-library wake/result
 channels and the constant-state coordinator. External clock and execution callbacks
 run outside the worker mutex. Stale cancellation cannot affect a newer request;

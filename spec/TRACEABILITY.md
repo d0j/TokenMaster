@@ -6,18 +6,18 @@ A design or plan is not implementation evidence.
 | Requirement | Status | Implementation or planned owner | Evidence or next gate |
 | --- | --- | --- | --- |
 | TM-FUNC-001 | implemented | `crates/provider`, Codex roots/files | provider, discovery, enumeration contracts |
-| TM-FUNC-002 | implemented | `crates/codex/src/reader` | framing, checkpoint, append/truncate/rewrite/revalidation contracts |
+| TM-FUNC-002 | implemented | Codex reader plus store/runtime incremental path | zero-payload unchanged, exact tail bytes, multi-batch restart, new/missing source, replacement/truncation/profile-scope recovery contracts |
 | TM-FUNC-003 | partial | domain/accounting/Codex parser; pricing/analytics planned | usage, canonicalizer, parser-state, parser-adversarial contracts |
 | TM-FUNC-004 | planned | query snapshots and complete Slint product routes | P4 UI plan after P2/P3 contracts |
 | TM-FUNC-005 | partial | `crates/probe-app`; product shell later | lifecycle, presentation, skin-runtime, metrics, stress contracts |
 | TM-FUNC-006 | planned | separate CLI and MCP adapters over query facade | P3 strict JSON/stdin MCP conformance tests |
 | TM-FUNC-007 | implemented | accounting lineage/classifier, scalable replay archive, P0-E composition, and P1-A retention | real JSONL baseline/append/restart/replay/quality/atomic-replacement/truncation-retention/failure contracts pass; live scheduling remains TM-FUNC-008/P1 |
-| TM-FUNC-008 | partial | built-in provider-neutral drafts, constant-state coordinator, corrected per-file/two-pass ports, one-shot executor, deterministic worker, and production Codex bootstrap composition; incremental live scheduling and plugin host pending | provider/Codex/accounting contracts plus P1-C engine and P1-D.0/P1-D.2 logical-file, checkpoint-codec, real-store bootstrap contracts |
+| TM-FUNC-008 | partial | provider-neutral drafts/engine, Codex bootstrap and replay-aware incremental runtime; lease/scheduler/lifecycle/plugin host pending | P1-C plus P1-D.0-P1-D.3 logical-file, codec, bootstrap, exact-scan, paired-CAS, tail/recovery contracts |
 | TM-FUNC-009 | planned | immutable provider quota epochs and weekly full-reset transitions | P2 quota reset plan; scheduled/early/repeated/reset+allowance/restart/UI/API fixtures pending |
 | TM-FUNC-010 | planned | banked reset lots, selectable default/custom expiry reminders, activation intents/receipts | P2 banked reset plan; inventory/profile/reminder/reconciliation/UI/security fixtures pending |
 | TM-UI-001 | planned | complete Slint board and supporting views | granular parity matrix and P4 accessibility/UI tests |
 | TM-UI-002 | partial | `crates/probe-app` presentation generations | presentation/skin contracts; archive-independent product snapshots pending |
-| TM-PERF-001 | partial | parser, reader, domain, store bounds, P0-E composition, P1-C engine core, P1-D.0 two-pass repair, and P1-D.2 runtime bootstrap | real runtime 300-file shared-source rebuild uses no descriptor collection; two linear passes, one temporary reader, 256 observation/relation batches, 32-KiB total checkpoint, 18 chunk updates, 4,096 continuation cap, reopen, capacity-one channels, and 10,000-hint one-follow-up contracts pass; incremental/query/plugin evidence pending |
+| TM-PERF-001 | partial | bounded parser/reader/store/engine plus P1-D.2 bootstrap and P1-D.3 tail runtime | unchanged payload bytes=0; exact one-line bytes; 300-event multi-batch; bounded scopes/new-source list/checkpoint/chunks/continuation; query/UI/plugin evidence pending |
 | TM-PERF-002 | open evidence | software renderer and M0 resource gates | uninterrupted soak and interactive receipts remain absent |
 | TM-PERF-003 | partial | keyset store reads implemented; immutable snapshots planned | SQLite/read contracts; P2 query snapshot gates pending |
 | TM-REL-001 | partial | M0 scripts and receipt schemas | identity checks exist; final product packaging evidence pending |
@@ -25,8 +25,8 @@ A design or plan is not implementation evidence.
 | TM-DATA-001 | partial | domain/provider/Codex/store privacy boundaries | adversarial/debug/path privacy tests; future surfaces must repeat gates |
 | TM-DATA-002 | implemented | domain drafts plus exclusive `tokenmaster-accounting` canonicalizer | canonicalizer vectors, compile-fail authority tests, Codex/store contracts |
 | TM-DATA-003 | implemented | file identity and reader checkpoint | physical identity live/persisted round-trip, checkpoint conversion, resume bound, and restart contracts |
-| TM-DATA-004 | implemented | atomic current append, scoped complete-only scan finalization, scan-bound and compatibility staging, bounded reference-safe scan pruning, exact preparation, atomic replay event/relation facts, paged seal, retained projection promotion, and staging discard | lifecycle/begin-fault/append-fault/membership/reopen/zero-source/300-source/repeated-scan/backlog/Codex pipeline contracts pass |
-| TM-DATA-005 | implemented | `crates/store/src/usage` | strict schema v5, exact v1/v2/v3/v4 migration, provider-qualified scan sets, pragmas, keyset paging, ingest contracts |
+| TM-DATA-004 | implemented | scoped scan/rebuild plus replay-aware current publication, paired-CAS tail facts, exact admission, durable partial/recovery, retained promotion/discard | atomic faults, stale CAS, unchanged/append/multi-batch/new/missing/restart/deadline/rebuild contracts pass |
+| TM-DATA-005 | implemented | `crates/store/src/usage` | strict schema v6, exact v1-v5 migration, singleton publication state, provider-qualified scans, pragmas, keyset paging |
 | TM-DATA-006 | partial | reader/parser/store plus engine value/batch/temporary-reader/execution/worker limits | line/resume, 32-KiB opaque checkpoint, independent 256 event/relation batches, one temporary replay reader, 18 chunk-update, 4,096 continuation, fixed-result, one active/aggregate follow-up, capacity-one channels, and SQLite-i64 counter bounds; full UI/query/plugin limits pending |
 | TM-DATA-007 | implemented | replay facts/classifier in a private overlay plus schema-v4 self-contained canonical projection with deterministic selection/retention | v1/v2/v3-to-v4 migration plus replay/append/restart/300-file/atomic-replacement/truncation truth-table/failure contracts pass |
 | TM-DATA-008 | planned | immutable quota samples, epochs, reset and allowance transitions | P2 quota reset history schema/detection/retention contracts pending |
@@ -34,7 +34,7 @@ A design or plan is not implementation evidence.
 | TM-SEC-001 | partial | local-only product and no listener today | future quota HTTPS opt-in and MCP stdio security tests pending |
 | TM-SEC-002 | partial | current JSONL/store boundaries validate types and sizes | future config/CLI/MCP/plugin boundary suites pending |
 | TM-SEC-003 | implemented | provider/Codex/store/engine errors, value types, and redacted worker panic boundary | serialized/debug privacy, path-redaction, sealed identity, path-substitution, raw-archive-write compile-fail, fixed panic/fault completion, and panic-strategy compile guard contracts |
-| TM-SEC-004 | partial | transactional scoped scan/replay authority, bounded pruning, CAS/preparation, atomic fact batches, immutable legacy, exact seal/carry-forward/discard, one-shot execution, and production bootstrap bridge | P1-D.2 proves path-free strict checkpoint decode, missing/zero-source truth, Windows replacement, truncation retention, reopen, cancellation, and exact post-begin discard; incremental live runtime remains |
+| TM-SEC-004 | partial | transactional scan/replay/current authority, paired CAS, preflight, atomic targeted projection, durable recovery, immutable legacy, exact rebuild | P1-D.3 proves path-free admission, four-boundary rollback, cancellation/deadline resume, Windows replacement/truncation recovery; OS lease/lifecycle remain |
 | TM-SEC-005 | partial | M0 skins are declarative application data | external skin package schema/validation not implemented |
 | TM-SEC-006 | planned | built-in Codex exists; isolated plugin host deferred | provider plugin design and future 1.1 conformance/security gates |
 | TM-SEC-007 | planned | host-owned banked reset activation capability and policy boundary | no-scrape/no-authority-escalation/idempotency/ambiguous-outcome security gates pending |
@@ -63,8 +63,12 @@ reader; the 300-file contract proves no engine replay-page/descriptor collection
 P1-D.1 applies replay events and late relations as one bounded atomic fact batch with
 two rollback boundaries and one epoch increment. P1-D.2 now supplies the real
 path-private Codex adapter, strict checkpoint codec, and store archive bootstrap
-composition. P1-D.3 replay-aware incremental archive is next, followed by the real OS
-writer lease and bounded watcher/scheduler.
+composition. P1-D.3 now adds schema v6 publication truth, exact scan freshness/source
+admission, paired-CAS replay-aware tail append, bounded continuation, durable partial/
+recovery state, and real Codex zero-payload/append/multi-batch/restart/replacement
+plus profile-scope/full-rebuild recovery contracts. P1-D.4 portable writer lease is
+next, followed by the bounded watcher/
+scheduler and lifecycle assembly.
 Tasks 3+ in the older replay plan are historical and superseded.
 
 The clean-root invariant is implemented by `scripts/audit-clean-root.ps1` and its

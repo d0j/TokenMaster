@@ -154,6 +154,19 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   Windows atomic replacement, truncation carry-forward, pre-start cancellation, and
   exact staging discard after replay begin. This is bootstrap/full rebuild only; no
   incremental tail path, watcher, scheduler, or real OS writer lease is claimed.
+- P1-D.3 replay-aware incremental archive: strict schema v6 adds one checked current
+  publication generation with exact complete/partial/recovery truth and exact v5
+  rollback-tested migration. Current append compares revision epoch plus archive
+  generation, applies replay facts and only affected fingerprints atomically, and
+  disables the replay-bypassing canonical append path. Runtime performs exact scan
+  freshness/admission, all-source identity/anchor preflight, then reads only persisted
+  tails. Real contracts prove zero payload bytes when unchanged, exact one-line bytes,
+  300-event multi-batch, several new plus empty sources, missing-source retention,
+  cancellation, deadline-after-first-batch restart without duplicates, Windows
+  replacement, truncation, changed-profile recovery, safe full-rebuild takeover of
+  provisional sources, durable `recovery_pending`, reopen semantics, and rollback at
+  four current-append boundaries. The OS writer lease, watcher/scheduler, and live
+  lifecycle assembly remain unimplemented.
 
 ## Next implementation slice
 
@@ -194,9 +207,9 @@ writer-lease ports, P1-C.3 supplies the one-shot executor, and P1-C.4 supplies t
 bounded deterministic worker. P1-D.0 corrects the real per-file/two-pass seam under
 `docs/superpowers/plans/2026-07-15-tokenmaster-p1-d-live-runtime.md`. P1-D.1 makes
 replay events and late relations one atomic store batch, and P1-D.2 composes the real
-Codex bootstrap reader with the store archive. The next gate is P1-D.3: add the
-replay-aware incremental tail archive before the portable writer lease,
-watcher/periodic hints, and lifecycle cancellation. P1-E
+Codex bootstrap reader with the store archive. P1-D.3 adds the replay-aware current
+archive and real tail-only refresh. The next gate is P1-D.4: implement the portable
+process-owned writer lease before watcher/periodic hints and lifecycle cancellation. P1-E
 then adds sleep/resume, immutable publication, race generations, and continuous
 runtime recovery.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred

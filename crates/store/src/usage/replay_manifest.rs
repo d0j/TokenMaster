@@ -313,6 +313,7 @@ impl UsageStore {
                 revision_id,
                 scan_set_id,
                 expected_source_count,
+                "staging",
             )?
         {
             return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
@@ -423,6 +424,7 @@ fn scan_bound_manifest_matches(
     revision_id: ReplayRevisionId,
     scan_set_id: ScanSetId,
     expected_source_count: u64,
+    generation_status: &str,
 ) -> Result<bool, StoreError> {
     if complete_scan_set_source_count(transaction, scan_set_id)? != Some(expected_source_count) {
         return Ok(false);
@@ -434,7 +436,7 @@ fn scan_bound_manifest_matches(
             JOIN usage_generation AS generation
               ON generation.file_key = replay.file_key
              AND generation.generation = replay.generation
-            WHERE replay.revision_id = ?1 AND generation.status = 'staging'),
+            WHERE replay.revision_id = ?1 AND generation.status = ?3),
            (SELECT count(*)
             FROM usage_source AS source
             JOIN usage_scan AS scan
@@ -454,7 +456,11 @@ fn scan_bound_manifest_matches(
                AND scan.profile_id = source.profile_id
                AND scan.scan_id = source.last_seen_scan_id
               WHERE source.file_key = replay.file_key AND source.missing = 0))",
-        params![revision_id.as_sql()?, scan_set_id.as_sql()?],
+        params![
+            revision_id.as_sql()?,
+            scan_set_id.as_sql()?,
+            generation_status
+        ],
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
     )?;
     Ok(stored_count(counts.0)? == expected_source_count
@@ -484,7 +490,13 @@ pub(super) fn replay_manifest_sources_closed(
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
     )?;
     let source_membership_matches = if let Some(scan_set_id) = scan_set_id {
-        scan_bound_manifest_matches(transaction, revision_id, scan_set_id, expected_source_count)?
+        scan_bound_manifest_matches(
+            transaction,
+            revision_id,
+            scan_set_id,
+            expected_source_count,
+            "staging",
+        )?
     } else {
         stored_count(counts.0)? == expected_source_count
     };
@@ -492,6 +504,55 @@ pub(super) fn replay_manifest_sources_closed(
         && stored_count(counts.1)? == expected_source_count
         && stored_count(counts.2)? == expected_source_count
         && stored_count(counts.3)? == expected_source_count)
+}
+
+pub(super) fn current_replay_manifest_sources_closed(
+    transaction: &Transaction<'_>,
+    revision_id: ReplayRevisionId,
+    expected_source_count: u64,
+    scan_set_id: ScanSetId,
+) -> Result<bool, StoreError> {
+    if complete_scan_set_source_count(transaction, scan_set_id)?.is_none() {
+        return Ok(false);
+    }
+    let counts: (i64, i64, i64, i64) = transaction.query_row(
+        "SELECT
+           (SELECT count(*) FROM usage_replay_source WHERE revision_id = ?1),
+           (SELECT count(*) FROM usage_replay_source AS replay
+            JOIN usage_generation AS generation
+              ON generation.file_key = replay.file_key
+             AND generation.generation = replay.generation
+            JOIN usage_source AS source
+              ON source.file_key = replay.file_key
+             AND source.current_generation = replay.generation
+            WHERE replay.revision_id = ?1 AND generation.status = 'current'),
+           (SELECT count(*) FROM usage_replay_source AS replay
+            JOIN usage_source AS source ON source.file_key = replay.file_key
+            WHERE replay.revision_id = ?1 AND NOT EXISTS(
+              SELECT 1 FROM usage_scan AS scope
+              WHERE scope.scan_set_id = ?2
+                AND scope.provider_id = source.provider_id
+                AND scope.profile_id = source.profile_id
+            )),
+           (SELECT count(*) FROM usage_source AS source
+            JOIN usage_scan AS scope
+              ON scope.scan_set_id = ?2
+             AND scope.provider_id = source.provider_id
+             AND scope.profile_id = source.profile_id
+            WHERE source.missing = 0 AND (
+              source.last_seen_scan_id <> scope.scan_id
+              OR NOT EXISTS(
+                SELECT 1 FROM usage_replay_source AS replay
+                WHERE replay.revision_id = ?1 AND replay.file_key = source.file_key
+              )
+            ))",
+        params![revision_id.as_sql()?, scan_set_id.as_sql()?],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+    )?;
+    Ok(stored_count(counts.0)? == expected_source_count
+        && stored_count(counts.1)? == expected_source_count
+        && counts.2 == 0
+        && counts.3 == 0)
 }
 
 pub(super) fn validate_complete_manifest(
@@ -538,7 +599,13 @@ fn replay_manifest_is_complete(
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
     )?;
     let source_membership_matches = if let Some(scan_set_id) = scan_set_id {
-        scan_bound_manifest_matches(transaction, revision_id, scan_set_id, expected_source_count)?
+        scan_bound_manifest_matches(
+            transaction,
+            revision_id,
+            scan_set_id,
+            expected_source_count,
+            "staging",
+        )?
     } else {
         stored_count(counts.0)? == expected_source_count
     };

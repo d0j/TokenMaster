@@ -36,9 +36,15 @@ replay fact batch atomically applies canonical events, late relations, derived r
 state, checkpoint, and one epoch increment. P1-D.2 is complete: `tokenmaster-runtime`
 now supplies the real built-in Codex bootstrap adapter, strict 32-KiB path-free
 checkpoint codec, checked store bridge, real Windows replacement/reopen/300-file
-contracts, and exact staging cleanup. The immediate next task is P1-D.3 replay-aware
-incremental tail refresh, before the portable writer lease, watcher/periodic hints,
-and lifecycle cancellation.
+contracts, and exact staging cleanup. P1-D.3 is complete: schema v6 adds the checked
+current publication generation; runtime exact-scan/preflight/tail passes read zero
+payload bytes when unchanged, append from persisted checkpoints, admit multiple new
+or empty sources, retain missing history, resume deadline-partial work, and durably
+mark replacement/truncation or profile-scope changes `recovery_pending`. Full rebuild
+recovers any unadmitted provisional source without trusting its abandoned checkpoint.
+The immediate next task is P1-D.4,
+the portable process-owned writer lease, before watcher/periodic hints and lifecycle
+cancellation.
 P2 now also has an approved separate banked-reset inventory/expiry/reminder/activation
 design in `docs/superpowers/plans/2026-07-15-tokenmaster-banked-reset-inventory.md`.
 It does not change the immediate P1-D gate and no current provider discovery,
@@ -159,8 +165,14 @@ cap, one epoch advance regardless of relation count, and the seven green real-JS
 pipeline contracts without the prior per-relation commit loop. P1-D.2 adds three
 checkpoint-codec and seven production-bootstrap contracts, including 300 files,
 zero/missing profiles, reopen, Windows replacement, truncation retention, cancellation,
-and exact post-begin discard. This does not claim incremental tail refresh, watcher
-scheduling, or a real OS lease.
+and exact post-begin discard. P1-D.3 adds seven store and eleven real runtime contracts:
+schema-v6 migration, paired revision/archive CAS, exact scan freshness/admission,
+zero-byte unchanged, exact tail bytes, 300-event multi-batch, multiple new/empty and
+missing sources, full-rebuild source admission, profile-scope and bounded-admission
+recovery, changed provisional identity, cancellation, deadline resume, durable rebuild
+state, and four
+transaction rollback boundaries. This does not claim watcher scheduling, live
+lifecycle assembly, or a real OS lease.
 Clean-root, formatting, strict workspace Clippy, and the full locked workspace passed;
 see the P1-A history entry for exact commands and focused counts. The
 one-million-row M0 scale test remains explicitly ignored in the normal workspace run.

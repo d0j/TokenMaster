@@ -292,3 +292,27 @@ filesystem, or SQLite dependencies into the engine and without mislabeling a ful
 history replay as the future live path. Distinguishing reader probe state from store
 staging state preserves replacement detection and exact CAS. The fixed envelope makes
 restart state portable and inspectable without serializing path-bearing descriptors.
+
+## ADR-020 — Replay-aware current publication and tail-only refresh
+
+Decision: schema v6 owns one strict singleton publication record containing a checked
+archive generation, current replay revision, latest complete scan set, and explicit
+`empty`, `complete`, `partial`, or `recovery_pending` quality. Steady-state refresh
+first publishes exact complete-scan freshness, then preflights all present sources,
+then reads only from persisted checkpoints. New sources are provisioned path-free by
+that exact scan; non-empty sources remain pending until their bounded reads finish,
+while missing historical sources are retained. Every current append compares both
+revision epoch and archive generation and updates only affected fingerprints in the
+same transaction as replay facts, chunks, checkpoint, source state, and both CAS
+tokens. The replay-verified archive rejects the older canonical-only append path.
+
+Replacement, rewrite, truncation, physical/logical identity mismatch, or anchor
+mismatch changes only the CAS-checked publication to `recovery_pending`; prior visible
+truth stays intact until `OneShotExecutor` completes a new exact rebuild. Watcher hints
+are not source authority and are not part of this decision.
+
+Rationale: re-running full history after every hint violates latency and memory goals,
+while appending directly to the old canonical projection bypasses replay accounting.
+The paired CAS prevents stale writers, exact scan authority admits new files without
+path persistence, durable partial/recovery states make restart honest, and targeted
+materialization avoids archive-sized work on the fast path.

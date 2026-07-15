@@ -59,15 +59,21 @@ immediate transaction. One accepted batch advances the epoch exactly once regard
 of relation count; any validation, database, or injected boundary failure rolls every
 component back together.
 
-The production bootstrap implementation is `tokenmaster-runtime`, not an engine or UI
-API. `CodexAdapter` refreshes one bounded discovery snapshot, emits configured scopes,
+The production composition is `tokenmaster-runtime`, not an engine or UI API.
+`CodexAdapter` refreshes one bounded discovery snapshot, emits configured scopes,
 and enumerates files twice without retaining JSONL descriptors. It supplies an opaque
 manual `CodexCheckpointV1` envelope whose entire encoded size is at most 32 KiB and
 whose decode is bound to the expected logical-file identity. `StoreArchive` bridges
 only normalized identities, canonical batches, exact scan/replay handles, and stable
-codes. Its checked ID translation is internal. This composition invokes
-`OneShotExecutor` only for bootstrap/full rebuild; it is not the watcher, scheduler,
-or steady-state incremental API.
+codes. Its checked ID translation is internal. `OneShotExecutor` remains the
+bootstrap/full-rebuild path. `refresh_incremental` is the separate tail path and
+returns `complete`, `partial`, or `rebuild_required` plus checked file/byte/event/
+batch/diagnostic counters and archive generation. It performs an exact complete scan,
+preflights every present source before tail writes, reads only after persisted
+checkpoints, reports profile-scope drift as `rebuild_required`, and never exposes paths
+or checkpoint bytes. Full rebuild may replace only an exact unadmitted provisional
+generation left by interrupted admission. Watcher, scheduler, process lease, and
+lifecycle assembly remain separate later layers.
 
 `RefreshWorker` owns exactly one dedicated thread, one capacity-one wake channel, and
 one capacity-one latest-only completion channel. Admission mutates the shared

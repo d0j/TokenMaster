@@ -3,12 +3,13 @@ use std::path::Path;
 use rusqlite::{Connection, params};
 use tempfile::TempDir;
 use tokenmaster_store::{
-    EXPECTED_SQLITE_VERSION, JournalMode, MAX_RESUME_BYTES, MAX_USAGE_EVENT_PAGE_SIZE, SourceKey,
-    StoreErrorCode, StoredCheckpoint, StoredCheckpointParts, StoredVerification,
-    USAGE_SCHEMA_VERSION, UsageStore,
+    ArchiveGeneration, ArchivePublicationQuality, EXPECTED_SQLITE_VERSION, JournalMode,
+    MAX_RESUME_BYTES, MAX_USAGE_EVENT_PAGE_SIZE, SourceKey, StoreErrorCode, StoredCheckpoint,
+    StoredCheckpointParts, StoredVerification, USAGE_SCHEMA_VERSION, UsageStore,
 };
 
-const USAGE_TABLES: [&str; 15] = [
+const USAGE_TABLES: [&str; 16] = [
+    "usage_archive_state",
     "usage_scan_set",
     "usage_source",
     "usage_generation",
@@ -262,9 +263,26 @@ fn schema_is_strict_path_free_and_has_exact_usage_tables() {
     let version: i64 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user version");
-    assert_eq!(USAGE_SCHEMA_VERSION, 5);
-    assert_eq!(version, 5);
+    assert_eq!(USAGE_SCHEMA_VERSION, 6);
+    assert_eq!(version, 6);
     assert_eq!(version, USAGE_SCHEMA_VERSION);
+
+    let publication_sql = table_sql(&path, "usage_archive_state")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    for required in [
+        "singleton_id INTEGER PRIMARY KEY CHECK(singleton_id = 1)",
+        "archive_generation INTEGER NOT NULL CHECK(archive_generation >= 0)",
+        "incremental_state TEXT NOT NULL CHECK(incremental_state IN ('empty','complete','partial','recovery_pending'))",
+        "FOREIGN KEY(current_revision_id) REFERENCES usage_replay_revision(revision_id)",
+        "FOREIGN KEY(latest_complete_scan_set_id) REFERENCES usage_scan_set(scan_set_id)",
+    ] {
+        assert!(
+            publication_sql.contains(required),
+            "missing archive-publication contract: {required}"
+        );
+    }
 
     let scan_set_sql = table_sql(&path, "usage_scan_set")
         .split_whitespace()
@@ -411,6 +429,18 @@ fn schema_is_strict_path_free_and_has_exact_usage_tables() {
             .contains("ON DELETE SET NULL"),
         "generation deletion must not rewrite source identity columns"
     );
+}
+
+#[test]
+fn fresh_archive_has_one_empty_generation_zero_publication() {
+    let store = UsageStore::in_memory().expect("in-memory usage store");
+    let publication = store
+        .archive_publication()
+        .expect("read archive publication");
+    assert_eq!(publication.generation(), ArchiveGeneration::new(0).unwrap());
+    assert_eq!(publication.current_revision(), None);
+    assert_eq!(publication.latest_complete_scan_set(), None);
+    assert_eq!(publication.quality(), ArchivePublicationQuality::Empty);
 }
 
 #[test]

@@ -4,16 +4,19 @@
 > this plan task-by-task. Use `superpowers:test-driven-development` for every behavior
 > change and `superpowers:verification-before-completion` before each completion claim.
 
-**Status:** Active. P1-D.3 is the immediate execution slice. Work remains root-only
+**Status:** Active. P1-D.4 is the immediate execution slice. Work remains root-only
 because the available task-name-only child surface cannot prove configured role/model
 routing; `MODEL_ROUTING_DRIFT` remains explicit.
 
-**Progress:** Tasks 1-6 (P1-D.0/P1-D.1/P1-D.2) are implemented. Task 5 applies events
+**Progress:** Tasks 1-7 (P1-D.0/P1-D.1/P1-D.2/P1-D.3) are implemented. Task 5 applies events
 and late relations in one bounded store transaction with one epoch advance. Task 6
 adds the real Codex bootstrap adapter, strict checkpoint codec, and checked store
-archive bridge. Focused codec/runtime tests, strict crate Clippy, and the full root
-gate pass. No incremental runtime,
-watcher, OS lease, lifecycle assembly, P1-E, M0 acceptance, or release is claimed.
+archive bridge. Task 7 adds schema-v6 publication generations, exact scan admission,
+paired-CAS replay-aware tail append, bounded partial recovery, and durable rebuild
+selection. Focused store/runtime tests cover zero-byte unchanged, exact append,
+multi-batch, new/missing sources, cancellation/deadline resume, replacement/truncation,
+and transaction faults. No watcher, OS lease, lifecycle assembly, P1-E, M0 acceptance,
+or release is claimed.
 
 **Goal:** Compose a live built-in Codex runtime whose normal refresh is tail-only,
 whose memory and watcher state are fixed/bounded, and whose writer/recovery behavior
@@ -377,6 +380,11 @@ cargo +1.97.0 tree -p tokenmaster-runtime --edges normal
 Commit: `feat(runtime): compose Codex bootstrap rebuild`.
 
 ## Task 7: P1-D.3 replay-aware incremental archive
+
+**Completed:** implemented with seven focused store contracts, eleven real runtime
+contracts, 20 store unit tests including four current-append fault boundaries, exact
+v5-to-v6 rollback, explicit full-rebuild source admission, profile-scope recovery,
+bounded-admission fallback, and the root quality gate.
 
 **Files:**
 

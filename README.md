@@ -15,12 +15,14 @@ three layouts, hot-switchable skins, English/Russian localization, tray lifecycl
 virtualized presentation models, and resource gates. It is not a product release or
 an accepted interactive Windows validation.
 
-M1 has bounded Codex source discovery, streaming JSONL parsing, revalidation,
-checkpoints, strict SQLite schema, and atomic current-generation ingest. Provider
-output now crosses a bounded neutral draft boundary; only `tokenmaster-accounting`
-can create fingerprint/replay identities and canonical events, and Codex preserves
-late ancestry separately. The pure bounded replay classifier is implemented; the next
-slice is its non-destructive versioned SQLite archive and staging integration.
+M1 has bounded Codex discovery/parsing, replay-safe accounting, strict SQLite schema
+v6, exact full rebuild, and a production incremental tail refresh. Unchanged refreshes
+read zero JSONL payload bytes; append resumes from the persisted checkpoint; new and
+missing sources follow exact complete-scan authority; replacement, rewrite, and
+truncation or a changed profile scope durably request a non-destructive full rebuild.
+That rebuild safely recovers an unadmitted provisional source. The next runtime slice is
+the portable process-owned writer lease, followed by bounded scheduling and lifecycle
+assembly.
 
 ## Build and verify
 

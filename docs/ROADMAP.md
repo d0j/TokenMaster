@@ -56,7 +56,10 @@ real multi-file boundary with fixed logical-file identity and two linear streami
 passes with one temporary descriptor-bound reader. P1-D.1 atomically binds events,
 late relations, checkpoint, replay work, and one epoch advance. P1-D.2 adds the real
 built-in Codex bootstrap/store composition and strict path-free checkpoint codec.
-P1-D.3+ and P1-E next add incremental live composition, the real writer lease,
+P1-D.3 adds strict schema-v6 publication generations, exact scan freshness and new
+source admission, paired-CAS replay-aware tail append, targeted materialization,
+bounded partial restart, and durable rebuild-required state. P1-D.4+ and P1-E next add
+the real writer lease,
 sleep/resume, continuous recovery, and
 immutable publication before indexed
 analytics, pricing, quota, Git output, automation, and complete UI work.
@@ -79,9 +82,12 @@ batch applies events and relations in one immediate transaction, rolls every fac
 checkpoint/epoch back at both injected boundaries, and advances epoch once. Completed
 P1-D.2: the production runtime composes the Codex adapter and store for bounded
 bootstrap/full rebuild with a strict 32-KiB checkpoint, checked ID bridge, real
-300-file/reopen/replacement/cleanup evidence. The current gate is P1-D.3 replay-aware
-incremental archive, then the real portable writer lease,
-incremental tail path, watcher/periodic hints, and lifecycle cancellation without
+300-file/reopen/replacement/cleanup evidence. Completed P1-D.3: schema v6 and the
+runtime now publish exact freshness, admit new sources, preflight identity, append only
+tail bytes with paired CAS, resume bounded partial work, and preserve old truth behind
+durable `recovery_pending` on replacement, truncation, or profile-scope changes; a
+full rebuild safely recovers provisional admission state. The current gate is P1-D.4, the
+portable writer lease, then watcher/periodic hints and lifecycle cancellation without
 adding provider/platform/UI dependencies to the engine core.
 
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset

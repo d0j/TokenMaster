@@ -1,8 +1,9 @@
-pub const USAGE_SCHEMA_VERSION: i64 = 5;
+pub const USAGE_SCHEMA_VERSION: i64 = 6;
 pub(super) const V1_SCHEMA_VERSION: i64 = 1;
 pub(super) const V2_SCHEMA_VERSION: i64 = 2;
 pub(super) const V3_SCHEMA_VERSION: i64 = 3;
 pub(super) const V4_SCHEMA_VERSION: i64 = 4;
+pub(super) const V5_SCHEMA_VERSION: i64 = 5;
 
 pub(super) struct TableContract {
     pub(super) name: &'static str,
@@ -445,6 +446,17 @@ pub(super) const V5_REPLAY_REVISION_CONTRACT: TableContract = TableContract {
     ],
 };
 
+pub(super) const V6_ARCHIVE_STATE_CONTRACT: TableContract = TableContract {
+    name: "usage_archive_state",
+    columns: &[
+        "singleton_id",
+        "archive_generation",
+        "current_revision_id",
+        "latest_complete_scan_set_id",
+        "incremental_state",
+    ],
+};
+
 pub(super) const PRE_V4_USAGE_EVENT_CONTRACT: TableContract = TableContract {
     name: "usage_event",
     columns: &[
@@ -770,6 +782,24 @@ CREATE TABLE usage_replay_revision (
   CHECK((status = 'staging' AND promoted = 0) OR
         (status = 'current' AND sealed = 1 AND promoted = 1)),
   FOREIGN KEY(scan_set_id) REFERENCES usage_scan_set(scan_set_id)
+) STRICT;
+"#;
+
+pub(super) const V6_ARCHIVE_STATE_SCHEMA: &str = r#"
+CREATE TABLE usage_archive_state (
+  singleton_id INTEGER PRIMARY KEY CHECK(singleton_id = 1),
+  archive_generation INTEGER NOT NULL CHECK(archive_generation >= 0),
+  current_revision_id INTEGER CHECK(current_revision_id IS NULL OR current_revision_id >= 0),
+  latest_complete_scan_set_id INTEGER CHECK(latest_complete_scan_set_id IS NULL OR latest_complete_scan_set_id >= 0),
+  incremental_state TEXT NOT NULL CHECK(incremental_state IN ('empty','complete','partial','recovery_pending')),
+  CHECK(incremental_state <> 'empty' OR
+        (current_revision_id IS NULL AND latest_complete_scan_set_id IS NULL)),
+  CHECK(incremental_state <> 'complete' OR
+        (current_revision_id IS NOT NULL AND latest_complete_scan_set_id IS NOT NULL)),
+  CHECK(incremental_state NOT IN ('partial','recovery_pending') OR
+        current_revision_id IS NOT NULL),
+  FOREIGN KEY(current_revision_id) REFERENCES usage_replay_revision(revision_id),
+  FOREIGN KEY(latest_complete_scan_set_id) REFERENCES usage_scan_set(scan_set_id)
 ) STRICT;
 "#;
 

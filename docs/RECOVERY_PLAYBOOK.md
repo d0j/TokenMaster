@@ -105,6 +105,30 @@
    or canonical usage. An available, completely enumerated empty profile is the only
    zero-source authoritative case.
 
+## Incremental runtime recovery
+
+1. Read `archive_publication()` together with `current_replay_revision()`. Resume only
+   an exact `partial` revision epoch/archive-generation pair. Never call the legacy
+   canonical-only append path after replay promotion and never edit a checkpoint.
+2. If partial state has replay work, run bounded current continuation. If it has no
+   work, enumerate the current exact scopes again and resume each present source from
+   its stored path-free checkpoint. A no-work pending probe does not advance either
+   CAS token. New non-empty sources remain pending; an empty admitted source may
+   already be complete.
+3. Before tail writes, revalidate every present source's logical/physical identity,
+   observed length/time, and bounded anchor. `RebuildRequired` must CAS the
+   publication to `recovery_pending`; it is not permission to overwrite identity,
+   truncate observations, remove missing history, or retry incremental append.
+4. `recovery_pending` is durable full-rebuild selection. Run the exact bootstrap path
+   against a new staging revision; only seal/promotion may restore `complete`. Prior
+   canonical pages remain readable until that promotion. A repeated incremental call
+   reports rebuild required without advancing the archive generation.
+5. A cancellation/deadline after one committed tail batch may leave truthful
+   `partial`. Retry from the stored checkpoint and latest paired CAS values. Current
+   append is transaction-atomic across replay facts, affected projection, relations,
+   work, chunks, checkpoint, source state, revision epoch, archive generation, and
+   publication quality; never compensate with ad hoc SQL.
+
 ## Worker recovery
 
 1. `running` accepts work; `shutting_down` and `stopped` return `closed`; `faulted`
@@ -128,13 +152,14 @@
 
 ## Schema recovery
 
-- Opening an exact schema-v1, v2, v3, or v4 archive performs the non-destructive
-  schema-v5 migration automatically. Preserve the original archive and reproduce any failure
+- Opening an exact schema-v1, v2, v3, v4, or v5 archive performs the non-destructive
+  schema-v6 migration automatically. Preserve the original archive and reproduce any failure
   against a synthetic copy; do not edit `sqlite_schema`, rename tables manually, or
   disable foreign keys in an operator workflow.
 - Migration validates the exact source schema before mutation. V2 revision migration
   restores `foreign_keys=ON` after every outcome; v3 canonical projection and v4
-  scan-set migrations run in immediate transactions. Create/copy/drop faults roll
+  scan-set and v5 publication-state migrations run in immediate transactions.
+  Create/copy/drop faults roll
   back to the exact prior schema and logical rows. Ambiguous migrated scan ownership
   or incoherent terminal state fails closed. Never delete the database to bypass a
   migration error.

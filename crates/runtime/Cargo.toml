@@ -10,6 +10,7 @@ serde_json.workspace = true
 tokenmaster-codex = { path = "../codex" }
 tokenmaster-engine = { path = "../engine" }
 tokenmaster-provider = { path = "../provider" }
+tokenmaster-platform = { path = "../platform" }
 tokenmaster-store = { path = "../store" }
 
 [dev-dependencies]

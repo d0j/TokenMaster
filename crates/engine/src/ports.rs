@@ -12,6 +12,7 @@ pub enum PortErrorCode {
     InvalidData,
     CapacityExceeded,
     StaleState,
+    RebuildRequired,
     Unavailable,
     Failed,
 }
@@ -25,6 +26,7 @@ impl core::fmt::Display for PortErrorCode {
             Self::InvalidData => "invalid_data",
             Self::CapacityExceeded => "capacity_exceeded",
             Self::StaleState => "stale_state",
+            Self::RebuildRequired => "rebuild_required",
             Self::Unavailable => "unavailable",
             Self::Failed => "failed",
         })
@@ -179,6 +181,14 @@ pub trait SourceSink {
 }
 
 pub trait SourceBatchReader {
+    fn validate_checkpoint(
+        &mut self,
+        _checkpoint: &AdapterCheckpoint,
+        control: &OperationControl<'_>,
+    ) -> Result<(), PortError> {
+        control.check()
+    }
+
     fn read_batch(
         &mut self,
         checkpoint: &AdapterCheckpoint,

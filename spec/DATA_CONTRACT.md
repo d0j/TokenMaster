@@ -110,6 +110,26 @@ source completion state, and evidence epoch are committed atomically. The epoch
 advances exactly once for the entire batch, never once per relation. A failure after
 event work or after relation work leaves the exact pre-batch state.
 
+Steady-state refresh is revision- and archive-generation-aware. An exact complete
+scan may advance freshness for the same current revision and provision new path-
+private sources. Non-empty new sources keep publication `partial` until their bounded
+checkpoint reads finish; empty sources may be complete immediately. Existing sources
+omitted by a complete scan remain historical evidence and are not deleted. Current
+tail append compares revision epoch, archive generation, source generation, identity,
+offsets, and proof state. Observations, replay state, affected-fingerprint projection,
+relations, work, chunks, checkpoint, source state, both CAS tokens, and publication
+quality commit atomically. Four injected boundaries prove exact rollback. Multiple
+batches and multiple newly admitted sources remain resumable.
+
+An unchanged refresh may probe metadata and one bounded anchor but reads zero
+historical JSONL payload bytes and commits no tail batch. Replacement, rewrite,
+truncation, identity mismatch, or a changed provider/profile scope never erases current
+truth: it advances the archive generation into durable `recovery_pending`, after which
+only a non-destructive full rebuild may return the publication to `complete`. That
+rebuild may replace only an exact unadmitted generation-zero provisional source with
+no replay source, observation, or chunk state. If one scan discovers more than the
+fixed provisional-admission bound, it requests rebuild before retaining another key.
+
 The worker retains one coordinator, one optional not-yet-started permit, one wake
 token, one completion, one owned thread handle, and fixed phase/supersession counters.
 Ten thousand active-time hints still retain only one merged follow-up. Completion
@@ -132,13 +152,15 @@ self-contained and adds publishing revision, origin revision, and retained state
 obsolete generations can be removed without fabricating provenance. Schema v5 adds
 provider-qualified scan sets, coherent child terminal state, exact last-seen
 references, running-scope exclusivity, and optional scan-set provenance for migrated
-replay revisions. Exact v1-v4 archives migrate non-destructively through validated
+replay revisions. Schema v6 adds a singleton archive generation, current revision,
+latest complete scan set, and explicit `empty|complete|partial|recovery_pending`
+publication state. Exact v1-v5 archives migrate non-destructively through validated
 create/copy/drop/rename steps; populated v4 scan ownership is derived only from its
 exact referenced sources, otherwise marked `legacy-unverified`. Ambiguous or
 incoherent state fails closed. V2 foreign keys are disabled only outside the
 revision-table migration transaction, checked before commit, and restored on every
-tested exit. V3-to-v4 and v4-to-v5 migrations use immediate transactions with exact
-logical-copy and injected rollback checks.
+tested exit. V3-to-v4, v4-to-v5, and v5-to-v6 migrations use immediate transactions
+with exact logical-copy and injected rollback checks.
 File-backed connections MUST use WAL,
 FULL synchronous writes, foreign keys, a bounded busy timeout, bounded journal/cache
 policy, and disabled mmap. Collections and complete-manifest validation are
