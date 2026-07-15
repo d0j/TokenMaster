@@ -48,8 +48,11 @@ normal exit, forced termination, and guard drop release the lock; paths and OS e
 remain private. P1-D.5 is complete: a fixed pathless atomic hint aggregate,
 capacity-one wake, one scheduler thread, 250 ms quiet window, 15 minute healthy/60
 second degraded reconciliation, checked clock rollback, and bounded `notify = 8.2.0`
-root generations now feed only refresh urgency into the existing worker. The immediate
-next task is P1-D.6 live recovery/lifecycle assembly.
+root generations now feed only refresh urgency into the existing worker. P1-D.6 is
+complete: `LiveRuntime` performs lease-first startup recovery, owns the Codex adapter,
+archive, worker, scheduler and watcher lifecycle, selects incremental versus rebuild,
+and implements admission-safe pause/resume plus ordered joined shutdown. The immediate
+next task is P1-E immutable query/publication snapshots and sleep/race integration.
 P2 now also has an approved separate banked-reset inventory/expiry/reminder/activation
 design in `docs/superpowers/plans/2026-07-15-tokenmaster-banked-reset-inventory.md`.
 It does not change the immediate P1-D gate and no current provider discovery,
@@ -185,8 +188,13 @@ bridge mapping; the eighth integration contract proves no handle-count growth ac
 10,000 hints collapse into one aggregate and one real worker follow-up, healthy/
 degraded timing and clock rollback are deterministic, create/append/rename is reduced
 to a pathless hint, missing/invalid/oversized generations fail closed, and 32 Windows
-root replacements return process handles and threads to baseline. This does not claim
-live archive/worker/watcher lifecycle assembly.
+root replacements return process handles and threads to baseline. P1-D.6 adds four
+startup-recovery and three combined live contracts: lease contention blocks before
+SQLite creation, orphan scans close, exact staging resumes/discards, append plus
+new-source publication works, 10,000 hints remain bounded, current partial state
+resumes without duplicates, replacement/truncation rebuilds preserve prior truth,
+pause/resume/reopen succeeds, and combined Windows handles/threads return to baseline
+after shutdown.
 Clean-root, formatting, strict workspace Clippy, and the full locked workspace passed;
 see the P1-A history entry for exact commands and focused counts. The
 one-million-row M0 scale test remains explicitly ignored in the normal workspace run.

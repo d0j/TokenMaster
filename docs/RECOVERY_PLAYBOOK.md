@@ -161,6 +161,26 @@
    inspect the worker/archive through fixed codes, and construct a fresh runtime. Do
    not replay queued event paths: none exist.
 
+## Live runtime startup and lifecycle recovery
+
+1. Startup acquires the archive sidecar writer lease before opening or migrating
+   SQLite. `busy` therefore means no startup scan, staging repair, or asynchronous
+   admission occurred; retry only after the other owner releases its OS handle.
+2. Under that same guard, close at most the one bounded running scan set as failed.
+   Resume staging only when status, accounting versions, scan binding, revision, and
+   epoch are exact. Promote a sealed exact revision directly; discard only the exact
+   invalid unpublished revision. Preserve state and fail startup when store access or
+   returned identity is unavailable or cannot safely authorize deletion.
+3. A replay-verified complete or partial current publication resumes incrementally.
+   Empty, legacy, stale, or recovery-pending truth uses the full rebuild. A typed
+   incremental `rebuild_required` switches to full rebuild under the same refresh
+   permit and writer guard; it never exposes the recovery marker as fresh truth.
+4. Pause closes scheduler-to-worker admission before pausing and cancelling the exact
+   active permit. Resume resets watcher assumptions and forces one recovery refresh.
+   Shutdown closes admission, drops the watcher, joins the scheduler, then cancels and
+   joins the worker. A fault does not waive cleanup; call shutdown or drop the runtime
+   and construct a new instance only after owned resources have joined.
+
 ## Worker recovery
 
 1. `running` accepts work; `shutting_down` and `stopped` return `closed`; `faulted`

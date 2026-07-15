@@ -213,8 +213,19 @@ The scheduler submission callback receives only `RefreshUrgency`. Its owned thre
 a thread-local panic-output filter, checked counters/time arithmetic, fixed phase, and
 joined shutdown. A failed submit faults without retry. Tests prove one aggregate and
 one engine follow-up for 10,000 hints and eventual return of process handles/threads to
-baseline after 32 Windows watcher replacements. Live lifecycle ordering and archive
-composition remain P1-D.6 and are not claimed by this slice.
+baseline after 32 Windows watcher replacements.
+
+`LiveRuntime` acquires the writer lease before SQLite open, migration, orphan-scan
+closure, or staging recovery. It resumes only the exact staging revision whose status,
+accounting versions, scan binding, revision, and epoch validate; ambiguous identity or
+unavailable storage is preserved and fails closed rather than authorizing deletion.
+The scheduler starts paused and cannot submit until worker and watcher ownership are
+installed. One admission mutex orders scheduler submission against pause/shutdown.
+Every refresh write obtains the OS guard, and full rebuild consumes that same
+pre-acquired guard instead of racing through a second acquisition. Shutdown drops
+watcher ownership, joins the scheduler closure and its worker reference, then cancels
+and joins the worker. Combined Windows evidence requires handles and threads to return
+to baseline; fixed snapshots and Debug expose no source/archive paths or inner errors.
 
 The deterministic worker uses only capacity-one standard-library wake/result
 channels and the constant-state coordinator. External clock and execution callbacks

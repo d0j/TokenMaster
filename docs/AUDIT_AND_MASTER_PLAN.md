@@ -1,6 +1,6 @@
 # TokenMaster Critical Audit and Approved Master Plan
 
-Status: architecture approved; P0 through P1-D.5 implemented; P1-D.6 is active.
+Status: architecture approved; P0 through P1-D implemented; P1-E is active.
 Date: 2026-07-15.
 
 ## 1. Executive decision
@@ -192,8 +192,10 @@ supersession, cancel/wake/join ownership, stale/deadline safety, and redacted
 panic/fault containment. P1-D.0 through P1-D.5 now provide exact per-file streaming,
 atomic replay facts, production Codex bootstrap, and replay-aware tail-only refresh
 with schema-v6 publication/recovery truth, a real portable writer lease, and bounded
-pathless watcher/periodic scheduling. The immediate next gate is P1-D.6 live assembly,
-restart recovery, and lifecycle cancellation under the existing P1-D executable plan.
+pathless watcher/periodic scheduling. P1-D.6 now composes lease-first restart recovery,
+incremental/rebuild selection, worker/scheduler/watcher ownership, admission-safe
+pause/resume, and ordered joined shutdown. The immediate next gate is P1-E immutable
+query/publication snapshots plus sleep/resume and race-generation integration.
 The older replay plan remains historical evidence for
 completed Tasks 1-2, but its Codex-owned Tasks 3+ are superseded and must not be
 executed.

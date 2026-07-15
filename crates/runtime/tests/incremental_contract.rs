@@ -454,6 +454,34 @@ fn exact_scan_admits_new_sources_but_retains_missing_historical_sources() {
 }
 
 #[test]
+fn exact_scan_applies_existing_tail_and_new_source_in_one_publication() {
+    let root = TempDir::new().expect("source root");
+    let first = root.path().join("first.jsonl");
+    std::fs::write(&first, usage_line(1)).expect("write first source");
+    let mut archive = StoreArchive::new(UsageStore::in_memory().expect("store"));
+    assert_bootstrapped(bootstrap(root.path(), &mut archive));
+
+    append(&first, &usage_line(2));
+    std::fs::write(root.path().join("second.jsonl"), usage_line(3)).expect("write new source");
+    let (_coordinator, permit) = permit();
+    let control = OperationControl::new(&permit, &FixedClock);
+    let result = refresh_incremental(&mut adapter(root.path()), &mut archive, &control);
+    assert!(
+        result.is_ok(),
+        "combined refresh: {result:?}, publication: {:?}, counts: {:?}, revision: {:?}",
+        archive.store().archive_publication(),
+        archive.store().counts(),
+        archive.store().current_replay_revision()
+    );
+    let report = result.expect("combined incremental refresh");
+
+    assert_eq!(report.outcome(), IncrementalRefreshOutcome::Complete);
+    let counts = archive.store().counts().expect("combined counts");
+    assert_eq!(counts.sources(), 2);
+    assert_eq!(counts.canonical_events(), 3);
+}
+
+#[test]
 fn full_rebuild_admits_a_source_added_after_the_current_revision() {
     let root = TempDir::new().expect("source root");
     std::fs::write(root.path().join("first.jsonl"), usage_line(1)).expect("write first source");

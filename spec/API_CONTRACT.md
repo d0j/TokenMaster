@@ -78,8 +78,18 @@ batch/diagnostic counters and archive generation. It performs an exact complete 
 preflights every present source before tail writes, reads only after persisted
 checkpoints, reports profile-scope drift as `rebuild_required`, and never exposes paths
 or checkpoint bytes. Full rebuild may replace only an exact unadmitted provisional
-generation left by interrupted admission. Live lifecycle assembly remains a separate
-later layer.
+generation left by interrupted admission.
+
+`LiveRuntime::start` acquires the process-owned writer lease before SQLite open and
+startup recovery, then creates the worker, a paused scheduler, and watcher before
+opening admission and forcing the first reconciliation. Its fixed snapshot exposes
+only lifecycle, scheduler, worker, watcher, and latest stable refresh kind/outcome/
+error code. Incremental work is selected only for replay-verified complete or partial
+publication; typed rebuild-required falls through to full rebuild under the same
+permit and pre-acquired guard. `pause` closes admission and cancels the exact active
+request, `resume` invalidates watcher assumptions and forces recovery, and `shutdown`
+drops the watcher, joins the scheduler, then cancels/joins the worker. Debug contains
+no archive or source path.
 
 `RefreshScheduler` owns one thread and one capacity-one wake. Its clonable
 `RefreshHintSink` accepts only pathless filesystem/force/health signals and exposes no

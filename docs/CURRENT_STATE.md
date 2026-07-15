@@ -187,7 +187,21 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   Five scheduler contracts prove 10,000-hint collapse and at most one real engine
   follow-up; five watcher contracts prove real create/append/rename hints, bounded
   generations, missing-root recovery, and return of Windows handles/threads to baseline
-  after 32 replacements. Live archive/worker/watcher assembly remains P1-D.6.
+  after 32 replacements.
+- P1-D.6 live runtime and restart recovery: `LiveRuntime` acquires the exact OS writer
+  lease before SQLite open/migration/recovery, closes one bounded orphan running scan
+  set as failed, and resumes or exact-discards only the validated staging revision.
+  The adapter, archive, and lease live inside one worker execution object. A refresh
+  selects incremental only for replay-verified complete/partial truth, falls back to
+  full rebuild on durable rebuild-required state, and replaces watcher roots only
+  after successful authoritative discovery. Pause closes admission before scheduler
+  pause and exact active-request cancellation; resume resets watcher assumptions and
+  forces recovery; shutdown drops the watcher, joins the scheduler, then cancels and
+  joins the worker. Three live contracts cover startup, append plus new source in one
+  publication, 10,000-hint burst, pause/resume, replacement, truncation, current
+  partial resume to 301 exact events, reopen, path-private Debug, and combined Windows
+  handle/thread return. Four recovery contracts cover lease contention before SQLite
+  creation, orphan closure, zero/nonempty staging resume, and incomplete discard.
 
 ## Next implementation slice
 
@@ -230,11 +244,11 @@ bounded deterministic worker. P1-D.0 corrects the real per-file/two-pass seam un
 replay events and late relations one atomic store batch, and P1-D.2 composes the real
 Codex bootstrap reader with the store archive. P1-D.3 adds the replay-aware current
 archive and real tail-only refresh, P1-D.4 adds the portable process-owned writer
-lease, and P1-D.5 adds bounded pathless watcher/periodic scheduling. The next gate is
-P1-D.6: assemble startup recovery, lease, incremental/rebuild selection, worker,
-scheduler, watcher, pause/resume, and exact shutdown. P1-E
-then adds sleep/resume, immutable publication, race generations, and continuous
-runtime recovery.
+lease, and P1-D.5 adds bounded pathless watcher/periodic scheduling. P1-D.6 completes
+lease-first startup recovery and live lifecycle assembly. The next gate is P1-E:
+expose immutable bounded query/publication snapshots, add sleep/resume and race
+generation integration, and prove continuous runtime recovery without sharing the
+writer connection with UI, CLI, or MCP readers.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 

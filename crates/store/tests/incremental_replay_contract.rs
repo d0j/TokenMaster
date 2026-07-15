@@ -447,6 +447,27 @@ fn discovered_source_is_admitted_only_by_its_exact_complete_scan() {
     assert_eq!(no_op.epoch(), published.epoch());
     assert_eq!(no_op.archive_generation(), published.archive_generation());
     assert_eq!(no_op.quality(), ArchivePublicationQuality::Partial);
+
+    let existing_tail = CurrentReplayAppendBatch::new(CurrentReplayAppendBatchParts {
+        revision_id: revision.id(),
+        expected_epoch: no_op.epoch(),
+        expected_archive_generation: no_op.archive_generation(),
+        append_batch: append(
+            100,
+            200,
+            vec![event("existing-tail", 110)],
+            Some(StoredSourceChunk::new(0, 100, [SEED + 3; 32]).unwrap()),
+            [SEED + 4; 32],
+            StoredVerification::Incremental,
+        ),
+        relations: Box::default(),
+    })
+    .unwrap();
+    let appended = store
+        .apply_current_replay_append_batch(&existing_tail)
+        .expect("a pending discovered source must not block an existing source tail");
+    assert_eq!(appended.quality(), ArchivePublicationQuality::Partial);
+    assert_eq!(store.event_page_before(None, 256).unwrap().len(), 2);
 }
 
 #[test]

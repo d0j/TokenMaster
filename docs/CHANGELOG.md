@@ -73,6 +73,10 @@ All notable changes are recorded here.
   hint aggregate, capacity-one wake, one scheduler thread, 250 ms quiet coalescing,
   15 minute healthy/60 second degraded reconciliation, checked clock rollback,
   64-root generation bounds, and Windows handle/thread return-to-baseline evidence.
+- Lease-first live runtime composition with exact startup scan/staging recovery,
+  incremental/rebuild selection, one worker-owned Codex/archive/lease state,
+  admission-safe pause/resume, ordered joined shutdown, stable path-free snapshots,
+  partial/reopen recovery, and combined Windows handle/thread return evidence.
 - Approved a provider-neutral weekly quota reset history: immutable pre/post epochs,
   scheduled/early/repeated reset transitions, allowance-change separation, bounded
   retention, and shared UI/CLI/MCP semantics for P2.
@@ -104,6 +108,9 @@ All notable changes are recorded here.
 - Disabled canonical-only append after replay promotion and removed false `complete`
   windows during new-source admission; current append, checkpoint, replay projection,
   publication quality, epoch, and archive generation now roll back together.
+- Allowed a valid existing-source tail to commit while an exact scan has also admitted
+  a new pending source; current replay membership remains required and all paired CAS
+  checks remain unchanged.
 - Classified profile-scope changes as durable rebuild requirements and made full
   rebuild safely recover an unadmitted provisional source instead of leaving the
   archive blocked after interrupted incremental admission.

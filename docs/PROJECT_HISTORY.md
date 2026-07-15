@@ -990,3 +990,43 @@ root bounds, missing-root degradation, latest-generation replacement, and return
 Windows process handles/threads to baseline after 32 replacements. P1-D.6 live
 archive/lease/worker/scheduler/watcher recovery and lifecycle assembly, P1-E, M0
 acceptance, packaging, signing, and release remain unclaimed.
+
+## 2026-07-15 — P1-D.6 live runtime and restart recovery assembled
+
+Added `LiveRuntime` as the production composition root. Startup derives and acquires
+the persistent archive sidecar guard before opening or migrating SQLite. Under that
+guard it closes the one bounded orphan running scan set as failed, validates the exact
+staging status/accounting versions/scan binding/revision/epoch, resumes complete
+staging through bounded continuation and promotion, or exact-discards only an invalid
+unpublished revision. Lease contention fails before SQLite creation; ambiguous or
+unavailable state is preserved rather than deleted.
+
+The worker execution object owns the path-private Codex adapter, SQLite archive bridge,
+and reusable lease. Replay-verified complete/partial publications use the paired-CAS
+incremental path; other truth uses full rebuild, and typed `rebuild_required` hands the
+already-held guard to the one-shot executor without a second lease race. Successful
+refresh updates only a bounded root vector and current watcher generation. Public
+snapshots expose fixed phase, counters, refresh kind/outcome, and stable error code;
+Debug contains no source or archive path.
+
+One admission mutex orders scheduler submission against pause and shutdown. Pause
+closes admission, pauses the scheduler, and cancels the exact active permit. Resume
+invalidates watcher assumptions and forces one recovery reconciliation. Shutdown
+drops watcher ownership, joins the scheduler and its worker reference, then cancels
+and joins the worker; faulted state still attempts cleanup. Combined Windows evidence
+returns handles and threads to baseline after two complete live generations.
+
+TDD also exposed a store seam: after an exact scan admitted a new pending source, a
+valid tail for an existing complete source was rejected as pending continuation. The
+guard now requires exact current-replay membership rather than pending state while
+preserving revision, archive generation, source generation, offset, identity, and
+chunk-proof CAS. Direct store and real runtime regressions cover the combined append
+plus new-source publication.
+
+Focused evidence is 20 store unit tests, seven incremental store contracts, twelve
+runtime incremental contracts, four startup recovery contracts, and three combined
+live contracts. Clean-root audit, formatting, strict workspace Clippy, all store and
+runtime targets, and the full locked workspace pass. The normal workspace run retains
+the one explicitly ignored one-million-row M0 scale gate. P1-E immutable query
+snapshots, sleep/race integration, M0 acceptance, packaging, signing, and release
+remain unclaimed.

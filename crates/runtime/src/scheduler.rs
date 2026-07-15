@@ -124,8 +124,29 @@ impl RefreshScheduler {
     where
         F: FnMut(RefreshUrgency) -> Result<(), E> + Send + 'static,
     {
+        Self::spawn_with_phase(clock, SchedulerPhase::Running, submit)
+    }
+
+    pub(crate) fn spawn_paused<F, E>(
+        clock: Arc<dyn Clock>,
+        submit: F,
+    ) -> Result<Self, SchedulerError>
+    where
+        F: FnMut(RefreshUrgency) -> Result<(), E> + Send + 'static,
+    {
+        Self::spawn_with_phase(clock, SchedulerPhase::Paused, submit)
+    }
+
+    fn spawn_with_phase<F, E>(
+        clock: Arc<dyn Clock>,
+        initial_phase: SchedulerPhase,
+        submit: F,
+    ) -> Result<Self, SchedulerError>
+    where
+        F: FnMut(RefreshUrgency) -> Result<(), E> + Send + 'static,
+    {
         install_scheduler_panic_redaction();
-        let state = Arc::new(HintState::new());
+        let state = Arc::new(HintState::new(initial_phase));
         let (wake_sender, wake_receiver) = sync_channel(1);
         let hints = RefreshHintSink::new(state.clone(), clock.clone(), wake_sender);
         let thread_state = state.clone();

@@ -1215,7 +1215,8 @@ pub struct AccountingVersions {
 }
 
 impl AccountingVersions {
-    pub(super) const fn compiled() -> Self {
+    #[must_use]
+    pub const fn compiled() -> Self {
         Self {
             canonicalizer: CANONICALIZER_VERSION,
             fingerprint: EVENT_FINGERPRINT_VERSION,

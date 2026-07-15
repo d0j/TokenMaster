@@ -20,8 +20,10 @@ v6, exact full rebuild, and a production incremental tail refresh. Unchanged ref
 read zero JSONL payload bytes; append resumes from the persisted checkpoint; new and
 missing sources follow exact complete-scan authority; replacement, rewrite, and
 truncation or a changed profile scope durably request a non-destructive full rebuild.
-That rebuild safely recovers an unadmitted provisional source. The next runtime slice is
-bounded scheduling and filesystem hints, followed by lifecycle assembly.
+That rebuild safely recovers an unadmitted provisional source. The live runtime now
+assembles startup recovery, the process-owned writer lease, the bounded worker,
+scheduler and pathless watcher, incremental/rebuild selection, pause/resume, and
+joined shutdown. P1-E immutable query snapshots and sleep/race integration are next.
 
 ## Build and verify
 
@@ -51,6 +53,8 @@ for diagnostic comparison and cannot be the default renderer.
 - Instant modular skin/layout/locale switching without rebuilding the archive.
 - Pathless filesystem hints collapse into one fixed atomic aggregate and one bounded
   scheduler wake; periodic reconciliation remains the source of liveness.
+- Startup recovery and every write run under the OS writer lease; shutdown stops
+  admission and watcher ownership before joining scheduler and worker threads.
 - Measured memory, CPU, handle, thread, USER, GDI, and latency gates.
 
 See [the approved audit and master plan](docs/AUDIT_AND_MASTER_PLAN.md),

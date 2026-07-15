@@ -153,6 +153,13 @@ Missing roots retain no backend watch, and old generation callbacks are non-auth
 No scheduler/watcher state is persisted or treated as scan, replay, checkpoint, or
 publication evidence.
 
+The live composition retains one adapter discovery snapshot, one SQLite writer
+connection, one reusable lease object, one worker, one scheduler, one current watcher
+generation, one bounded prior-root vector, one admission flag, and fixed lifecycle/
+latest-result snapshots. It retains no refresh history, event path, raw line, provider
+payload, staging page, or unbounded retry queue. Startup recovery reads at most the
+fixed scan-scope page and performs at most the fixed replay-continuation limit.
+
 Truncation, physical replacement, or source absence is not destructive authority. A
 complete sealed overlay may promote while carrying omitted prior replay-verified
 events. Incomplete, partial, cancelled, pending, mismatched, or invalid evidence still

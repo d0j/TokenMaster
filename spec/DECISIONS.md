@@ -354,3 +354,23 @@ periodic exact discovery repairs missed events. The pinned backend-owned interna
 thread receives its stop signal when the watcher is dropped; resource contracts require
 backend threads and handles to return to baseline after replacement/shutdown. Failure
 of that gate blocks P1-D rather than weakening the bound.
+
+## ADR-023 — Lease-first live composition with ordered joined shutdown
+
+Decision: `LiveRuntime` owns the production Codex composition. Startup acquires the
+persistent OS writer guard before SQLite open, migration, orphan-scan closure, or
+staging recovery. Only exact current accounting versions and scan/revision/epoch
+identity may resume or discard unpublished staging. The scheduler starts paused;
+worker, watcher, and admission state are installed before its forced recovery submit.
+The worker execution object owns the adapter, archive connection, and reusable lease.
+Each refresh takes one guard, selects incremental only for replay-verified complete or
+partial truth, and hands the already-held guard to full rebuild when required. Pause
+closes admission before exact cancellation. Resume resets watcher assumptions and
+forces recovery. Shutdown closes admission, drops the watcher, joins the scheduler,
+then cancels and joins the worker; faulted state still attempts cleanup.
+
+Rationale: independently started scheduler, watcher, recovery, and writer objects
+leave startup races, double lease acquisition, and detached cleanup windows. One
+composition root gives every mutable archive action one OS-owned guard, makes recovery
+precede asynchronous work, and gives pause/shutdown a testable ownership order while
+retaining fixed state and path-private public diagnostics.

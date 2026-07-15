@@ -4,11 +4,11 @@
 > this plan task-by-task. Use `superpowers:test-driven-development` for every behavior
 > change and `superpowers:verification-before-completion` before each completion claim.
 
-**Status:** Active. P1-D.6 is the immediate execution slice. Work remains root-only
-because the available task-name-only child surface cannot prove configured role/model
-routing; `MODEL_ROUTING_DRIFT` remains explicit.
+**Status:** Complete through P1-D.6. P1-E is the next execution slice. Work remains
+root-only because the available task-name-only child surface cannot prove configured
+role/model routing; `MODEL_ROUTING_DRIFT` remains explicit.
 
-**Progress:** Tasks 1-9 (P1-D.0/P1-D.1/P1-D.2/P1-D.3/P1-D.4/P1-D.5) are implemented.
+**Progress:** Tasks 1-10 (P1-D.0/P1-D.1/P1-D.2/P1-D.3/P1-D.4/P1-D.5/P1-D.6) are implemented.
 Task 5 applies events and late relations in one bounded store transaction with one epoch
 advance. Task 6 adds the real Codex bootstrap adapter, strict checkpoint codec, and
 checked store
@@ -19,8 +19,10 @@ multi-batch, new/missing sources, cancellation/deadline resume, replacement/trun
 and transaction faults. Task 8 adds the real persistent empty-sidecar OS writer lease
 and process-death recovery proof. Task 9 adds the fixed pathless hint aggregate,
 capacity-one scheduler, pinned bounded watcher, timing/fault/lifecycle contracts, and
-Windows resource-return evidence. No live lifecycle assembly, P1-E, M0 acceptance, or
-release is claimed.
+Windows resource-return evidence. Task 10 adds lease-first startup recovery, live
+incremental/rebuild selection, worker/scheduler/watcher ownership, pause/resume,
+ordered joined shutdown, partial restart, and combined Windows resource-return proof.
+No P1-E, M0 acceptance, or release is claimed.
 
 **Goal:** Compose a live built-in Codex runtime whose normal refresh is tail-only,
 whose memory and watcher state are fixed/bounded, and whose writer/recovery behavior
@@ -502,6 +504,16 @@ cargo +1.97.0 tree -p tokenmaster-runtime --edges normal
 Commit: `feat(runtime): add bounded refresh scheduling`.
 
 ## Task 10: P1-D.6 live assembly, recovery, lifecycle, and acceptance
+
+**Completed:** four recovery contracts and three live contracts prove writer-lease
+contention before SQLite creation, orphan scan closure, exact zero/nonempty staging
+resume, incomplete staging discard, startup/append/new-source/10,000-hint operation,
+replacement/truncation rebuild, current-partial resume without duplicates, pause/
+resume/reopen, path-private Debug, and combined Windows handle/thread return. A direct
+store plus real runtime regression also fixes existing-tail append while a newly
+admitted source is pending. Clean-root, formatting, strict workspace Clippy, and the
+full locked workspace pass with only the explicit one-million-row M0 scale test
+ignored by the normal suite.
 
 **Files:**
 

@@ -9,6 +9,9 @@ mod error;
 mod hints;
 mod incremental;
 mod lease;
+mod lifecycle;
+mod live;
+mod recovery;
 mod scheduler;
 mod store_archive;
 mod watcher;
@@ -19,6 +22,9 @@ pub use error::{RuntimeError, RuntimeErrorCode};
 pub use hints::{RefreshHintSink, SchedulerPhase, WatcherHealth};
 pub use incremental::{IncrementalRefreshOutcome, IncrementalRefreshReport, refresh_incremental};
 pub use lease::RuntimeWriterLease;
+pub use lifecycle::{LivePhase, LiveRefreshKind, LiveRefreshSnapshot, LiveRuntimeSnapshot};
+pub use live::LiveRuntime;
+pub use recovery::{StagingRecoveryOutcome, StartupRecoveryReport};
 pub use scheduler::{
     DEGRADED_POLL_MILLIS, HEALTHY_POLL_MILLIS, QUIET_WINDOW_MILLIS, RefreshScheduler,
     SchedulerError, SchedulerErrorCode, SchedulerSnapshot,

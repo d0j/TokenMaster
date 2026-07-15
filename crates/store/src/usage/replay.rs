@@ -575,12 +575,14 @@ impl UsageStore {
         match prior_quality {
             ArchivePublicationQuality::Complete => {}
             ArchivePublicationQuality::Partial => {
+                // A partial publication can contain newly admitted pending sources while a
+                // previously complete source receives a valid tail. Membership in the current
+                // replay, not the target source's pending state, is the required invariant.
                 let resumable: (i64, i64) = transaction.query_row(
                     "SELECT
                        (SELECT count(*) FROM usage_replay_work WHERE revision_id = ?1),
                        (SELECT count(*) FROM usage_replay_source
-                        WHERE revision_id = ?1 AND state = 'pending'
-                          AND file_key = ?2)",
+                        WHERE revision_id = ?1 AND file_key = ?2)",
                     params![
                         current_parts.revision_id.as_sql()?,
                         append.source_key.as_bytes().as_slice()

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use tokenmaster_codex::{
     CodexCheckpointV1, CodexProvider, EnumerationCompletion, ParserDiagnosticCode,
     ReaderDiagnosticCode, ReaderErrorCode, ReaderOutcome, SinkDecision, SourceCheckpointStatus,
@@ -34,6 +36,19 @@ impl CodexAdapter {
             request,
             snapshot: None,
         })
+    }
+
+    pub(crate) fn watch_roots(&self) -> Option<Vec<PathBuf>> {
+        let snapshot = self.snapshot.as_ref()?;
+        let mut roots = snapshot
+            .profiles()
+            .iter()
+            .filter(|profile| profile.availability() != ProfileAvailability::Rejected)
+            .map(|profile| profile.path().to_path_buf())
+            .collect::<Vec<_>>();
+        roots.sort_unstable();
+        roots.dedup();
+        Some(roots)
     }
 
     fn profile_sources<'a>(

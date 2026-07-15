@@ -7,6 +7,10 @@ pub enum RuntimeErrorCode {
     InvalidConfiguration,
     ProviderUnavailable,
     StoreUnavailable,
+    Busy,
+    Closed,
+    Faulted,
+    Internal,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -31,6 +35,10 @@ impl core::fmt::Display for RuntimeError {
             RuntimeErrorCode::InvalidConfiguration => "invalid runtime configuration",
             RuntimeErrorCode::ProviderUnavailable => "runtime provider is unavailable",
             RuntimeErrorCode::StoreUnavailable => "runtime store is unavailable",
+            RuntimeErrorCode::Busy => "runtime is busy",
+            RuntimeErrorCode::Closed => "runtime is closed",
+            RuntimeErrorCode::Faulted => "runtime is faulted",
+            RuntimeErrorCode::Internal => "runtime internal failure",
         })
     }
 }

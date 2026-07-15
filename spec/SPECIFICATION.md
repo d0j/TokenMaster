@@ -98,6 +98,13 @@ periodically even while the watcher is healthy, degrade to a shorter poll after 
 failure, and cap configured watch roots. Event paths and backend errors MUST NOT enter
 engine, archive, diagnostics, query, UI, CLI, or MCP state.
 
+Startup recovery MUST acquire the process-owned writer lease before SQLite open,
+migration, scan closure, or staging repair. The live runtime MUST keep the adapter,
+archive writer, worker, scheduler, and watcher under one explicit lifecycle. Pause
+MUST close new admissions before cancelling the exact active request; resume MUST
+force authoritative reconciliation; shutdown and `Drop` MUST stop watcher admission
+and join every owned thread. A fault MUST NOT bypass cleanup.
+
 The future external-provider surface MUST accept versioned WebAssembly Component
 packages through an isolated on-demand host implementing the same source contract.
 Adding a valid provider package MUST NOT require rebuilding TokenMaster or changing

@@ -61,7 +61,8 @@ source admission, paired-CAS replay-aware tail append, targeted materialization,
 bounded partial restart, and durable rebuild-required state. P1-D.4 adds the persistent
 empty-sidecar `File::try_lock` writer lease with process-death release. P1-D.5 adds the
 fixed pathless hint aggregate, capacity-one scheduler, exact quiet/periodic policy, and
-bounded watcher generations. P1-D.6 and P1-E next add live assembly, sleep/resume,
+bounded watcher generations. P1-D.6 completes lease-first startup recovery and live
+worker/scheduler/watcher lifecycle assembly. P1-E next adds sleep/resume, race-safe
 continuous recovery, and immutable publication before indexed analytics, pricing,
 quota, Git output, automation, and complete UI work.
 
@@ -91,8 +92,11 @@ full rebuild safely recovers provisional admission state. P1-D.4 adds the persis
 empty-sidecar writer lease with same-process/cross-process contention and death-release
 proof. P1-D.5 adds exact `notify = 8.2.0`, a fixed atomic pathless aggregate, one
 scheduler thread, deterministic quiet/healthy/degraded policy, bounded root
-generations, and shutdown resource evidence. The current gate is P1-D.6 lifecycle and
-recovery assembly without adding provider/platform/UI dependencies to the engine core.
+generations, and shutdown resource evidence. P1-D.6 adds exact startup recovery,
+incremental/rebuild selection, admission-safe pause/resume, ordered joined shutdown,
+partial/reopen evidence, and combined Windows resource return without adding provider/
+platform/UI dependencies to the engine core. The current gate is P1-E immutable
+query/publication snapshots plus sleep/resume and race-generation integration.
 
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset
 epochs. The weekly view preserves last-before/first-after state, maximum use before

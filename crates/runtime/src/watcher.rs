@@ -62,6 +62,13 @@ pub struct WatcherSnapshot {
 }
 
 impl WatcherSnapshot {
+    pub(crate) const fn stopped(generation: u64) -> Self {
+        Self {
+            generation,
+            root_count: 0,
+        }
+    }
+
     #[must_use]
     pub const fn generation(self) -> u64 {
         self.generation

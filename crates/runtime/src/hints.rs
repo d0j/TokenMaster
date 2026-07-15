@@ -56,12 +56,12 @@ pub(crate) struct HintState {
 }
 
 impl HintState {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(phase: SchedulerPhase) -> Self {
         Self {
             flags: AtomicU64::new(INITIAL_FLAGS),
             latest_hint_tick: AtomicU64::new(0),
             watcher_health: AtomicU8::new(WATCHER_HEALTHY),
-            phase: AtomicU8::new(PHASE_RUNNING),
+            phase: AtomicU8::new(encode_phase(phase)),
             accepted_hint_count: AtomicU64::new(0),
             submitted_count: AtomicU64::new(0),
         }

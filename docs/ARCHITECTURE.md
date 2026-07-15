@@ -46,6 +46,16 @@ latest monotonic tick, health, lifecycle, and fixed counters. A 250 ms quiet win
 15 minute healthy or 60 second degraded poll trigger authoritative discovery. Missing
 roots are not replaced by broad ancestor watches.
 
+`LiveRuntime` is the production composition boundary. Startup acquires the persistent
+OS writer lease before opening, migrating, or recovering SQLite; it closes a bounded
+orphan scan and resumes or exact-discards only validated staging. The worker owns the
+Codex adapter, store connection, archive bridge, and reusable lease object. Each write
+acquires one guard, selects incremental only from replay-verified complete/partial
+truth, and otherwise runs the exact full rebuild. Pause closes admissions before
+cancelling the active permit. Resume invalidates watcher assumptions and forces one
+authoritative reconciliation. Shutdown drops watcher ownership, joins the scheduler,
+then cancels and joins the worker, so no task-owned thread or lease survives.
+
 Provider-benefit inventory read does not imply activation authority. A future banked
 reset mutation is a separate host-owned official capability with explicit local
 policy, compare-and-swap admission, durable intent, provider idempotency/status, and

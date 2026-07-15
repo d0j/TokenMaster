@@ -66,6 +66,12 @@ impl StoreArchive {
         Ok(self.last_timestamp_ms)
     }
 
+    pub(crate) fn recovery_timestamp_ms(&mut self, floor: i64) -> Result<i64, PortError> {
+        let observed = self.timestamp_ms()?;
+        self.last_timestamp_ms = observed.max(floor);
+        Ok(self.last_timestamp_ms)
+    }
+
     fn scan_for_scope(
         &self,
         scan_set: ArchiveScanSetId,
@@ -743,7 +749,7 @@ fn store_epoch(engine: ArchiveEpoch) -> Result<ReplayEpoch, PortError> {
     ReplayEpoch::new(engine.get().saturating_sub(1)).map_err(|error| store_port_error(&error))
 }
 
-fn archive_replay(
+pub(crate) fn archive_replay(
     revision: ReplayRevisionId,
     epoch: ReplayEpoch,
 ) -> Result<ArchiveReplay, PortError> {
