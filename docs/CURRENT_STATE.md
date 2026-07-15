@@ -202,6 +202,15 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   partial resume to 301 exact events, reopen, path-private Debug, and combined Windows
   handle/thread return. Four recovery contracts cover lease contention before SQLite
   creation, orphan closure, zero/nonempty staging resume, and incomplete discard.
+- P1-E.1 immutable engine publication: startup copies current archive truth before the
+  worker is admitted, then retains one fixed publication state (at most 256 bytes in
+  the supported 64-bit build). A strictly newer persisted archive generation advances
+  the checked in-process generation and copies optional revision, latest complete scan
+  set, its exact completion time, quality, and fixed checked diagnostics. Equal/older
+  candidates and writer-busy work cannot replace the snapshot; 10,000 candidates
+  retain no history; overflow fails closed without wrap. Store/runtime contracts cover
+  exact scan lookup, stale ID, append generation, consumer ordering, busy recovery,
+  archive identity match, and path-private Debug.
 
 ## Next implementation slice
 
@@ -252,10 +261,10 @@ replay events and late relations one atomic store batch, and P1-D.2 composes the
 Codex bootstrap reader with the store archive. P1-D.3 adds the replay-aware current
 archive and real tail-only refresh, P1-D.4 adds the portable process-owned writer
 lease, and P1-D.5 adds bounded pathless watcher/periodic scheduling. P1-D.6 completes
-lease-first startup recovery and live lifecycle assembly. The next gate is P1-E:
-expose immutable bounded query/publication snapshots, add sleep/resume and race
-generation integration, and prove continuous runtime recovery without sharing the
-writer connection with UI, CLI, or MCP readers.
+lease-first startup recovery and live lifecycle assembly. P1-E.1 now exposes the
+immutable bounded engine publication without sharing the writer connection with UI,
+CLI, or MCP readers. The next gate is the remaining P1-E race/recovery matrix, Windows
+power-event suspend/resume binding, and final resource/CPU evidence.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 

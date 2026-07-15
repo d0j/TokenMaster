@@ -1051,3 +1051,30 @@ and advisory/source/license/secret/SBOM/action/attestation/package/clean-room ev
 The closure review found no remaining known planning contradiction or unfrozen 1.0
 release decision. This is architecture evidence only; P1-E, P2-P6 implementation,
 M0 receipts, packaging, signing, parity, and release remain unclaimed.
+
+## 2026-07-16 — P1-E.1 immutable engine publication added
+
+Added one startup-seeded, fixed `EnginePublicationState` to the production live
+composition. The public `EngineSnapshot` is a small copied value containing a checked
+in-process generation, persisted archive generation, optional replay revision and
+latest complete scan set, that set's exact completion timestamp, explicit archive
+quality, and fixed checked diagnostics. It owns no SQLite connection/transaction,
+query page, history, path, source, checkpoint, watcher, or UI handle. Consumers have a
+strict newer-generation predicate.
+
+Publication reads current SQLite truth after refresh work and writer-guard release.
+Only a strictly newer archive generation replaces the retained snapshot. Equal and
+older candidates increment fixed counters; busy/cancelled/deadline/failed work cannot
+manufacture a newer archive snapshot. Ten thousand equal candidates retain one state,
+and generation/counter overflow sets a fail-closed flag without wrapping. Startup
+seeds current archive truth before worker admission, so an existing archive does not
+depend on a new scan to become visible.
+
+The store now exposes one indexed `scan_set_snapshot` lookup used to derive truthful
+`data_through_ms`; a referenced set must be complete and have an exact completion time
+or publication fails unavailable. RED proved the missing store method and missing live
+engine field. Focused GREEN evidence is 12 scan contracts, three publication unit
+contracts, two live publication contracts, the complete runtime target suite, and
+strict store/runtime Clippy. The next P1-E gate remains the expanded race/recovery
+matrix, Windows power-event suspend/resume binding, and final resource/CPU evidence.
+M0 acceptance, P2 query snapshots, packaging, signing, and release remain unclaimed.

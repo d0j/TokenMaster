@@ -81,6 +81,10 @@ All notable changes are recorded here.
   incremental/rebuild selection, one worker-owned Codex/archive/lease state,
   admission-safe pause/resume, ordered joined shutdown, stable path-free snapshots,
   partial/reopen recovery, and combined Windows handle/thread return evidence.
+- Startup-seeded immutable engine publication with checked in-process generation,
+  exact archive generation/revision/scan/data-through/quality, fixed diagnostics,
+  strict newer-only consumer ordering, one-state retention across 10,000 candidates,
+  fail-closed overflow, and writer-busy/older-result rejection.
 - Approved a provider-neutral weekly quota reset history: immutable pre/post epochs,
   scheduled/early/repeated reset transitions, allowance-change separation, bounded
   retention, and shared UI/CLI/MCP semantics for P2.

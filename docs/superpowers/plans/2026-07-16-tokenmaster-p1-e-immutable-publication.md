@@ -1,6 +1,6 @@
 # P1-E Immutable Publication and Suspend/Resume Plan
 
-Status: approved executable plan.
+Status: in progress; Tasks 1-3 implemented, Tasks 4-6 remain.
 
 ## Goal
 
@@ -52,7 +52,7 @@ timestamp. Missing scan provenance remains `None`.
   and forces authoritative reconciliation; power callbacks never touch SQLite;
 - no M0, packaging, signing, interactive, or release claim follows from P1-E.
 
-## Task 1 — Add the archive data-through lookup
+## Task 1 — Add the archive data-through lookup (complete)
 
 Files:
 
@@ -68,7 +68,7 @@ TDD:
    existing indexed singleton lookup.
 4. Run the focused scan/store targets and strict Clippy.
 
-## Task 2 — Define immutable provider-neutral snapshot values
+## Task 2 — Define immutable provider-neutral snapshot values (complete)
 
 Files:
 
@@ -94,7 +94,7 @@ TDD:
 2. Implement the smallest fixed-state publisher.
 3. Run `cargo +1.97.0 test -p tokenmaster-runtime --test publication_contract --locked`.
 
-## Task 3 — Integrate startup seeding and post-refresh publication
+## Task 3 — Integrate startup seeding and post-refresh publication (complete)
 
 Files:
 

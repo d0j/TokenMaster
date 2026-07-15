@@ -101,6 +101,27 @@ fn complete_named_scope_scan(
 }
 
 #[test]
+fn completed_scan_set_snapshot_exposes_exact_data_through_time() {
+    let mut store = UsageStore::in_memory().expect("in-memory store");
+    let source = register_source(&mut store, 41, "codex", "default");
+    let (scan_set_id, _) = complete_single_scope_scan(&mut store, source, 12_000);
+
+    let snapshot = store
+        .scan_set_snapshot(scan_set_id)
+        .expect("completed scan-set snapshot");
+    assert_eq!(snapshot.id(), scan_set_id);
+    assert_eq!(snapshot.started_at_ms(), 12_000);
+    assert_eq!(snapshot.completed_at_ms(), Some(12_002));
+    assert_eq!(snapshot.outcome(), Some(ScanOutcome::Complete));
+    assert_eq!(snapshot.expected_scope_count(), 1);
+
+    let stale = store
+        .scan_set_snapshot(ScanSetId::new(9_999).expect("bounded stale id"))
+        .expect_err("unknown scan set must fail closed");
+    assert_eq!(stale.code(), StoreErrorCode::StaleScan);
+}
+
+#[test]
 fn scan_scope_and_manifest_are_bounded_provider_qualified_values() {
     let codex = ScanScope::new("codex", "default").expect("codex scope");
     let hermes = ScanScope::new("hermes", "default").expect("same profile, other provider");

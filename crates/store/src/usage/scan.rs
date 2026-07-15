@@ -107,6 +107,10 @@ impl UsageStore {
             .map_err(Into::into)
     }
 
+    pub fn scan_set_snapshot(&self, scan_set_id: ScanSetId) -> Result<ScanSetSnapshot, StoreError> {
+        load_scan_set(&self.connection, scan_set_id)
+    }
+
     pub fn scan_page(
         &self,
         scan_set_id: ScanSetId,

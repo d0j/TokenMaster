@@ -160,6 +160,18 @@ latest-result snapshots. It retains no refresh history, event path, raw line, pr
 payload, staging page, or unbounded retry queue. Startup recovery reads at most the
 fixed scan-scope page and performs at most the fixed replay-continuation limit.
 
+P1-E adds exactly one fixed engine-publication state. Its immutable public value copies
+only an in-process generation, persisted archive generation, optional replay revision,
+optional latest complete scan set, that exact set's completion time, publication
+quality, and fixed diagnostic counters. The publication state is at most 256 bytes in
+the supported 64-bit build and retains no prior snapshot. Ten thousand equal candidates
+change only checked scalar counters. Archive generation must be strictly newer before
+replacement; equal or older candidates cannot change the snapshot generation. Counter
+or generation overflow sets a fail-closed flag and never wraps. Failed, busy,
+cancelled, or deadline work cannot manufacture a newer archive snapshot. In-process
+generation may restart with the process; persisted archive generation is the durable
+ordering authority.
+
 Truncation, physical replacement, or source absence is not destructive authority. A
 complete sealed overlay may promote while carrying omitted prior replay-verified
 events. Incomplete, partial, cancelled, pending, mismatched, or invalid evidence still

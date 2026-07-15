@@ -11,6 +11,7 @@ mod incremental;
 mod lease;
 mod lifecycle;
 mod live;
+mod publication;
 mod recovery;
 mod scheduler;
 mod store_archive;
@@ -24,6 +25,9 @@ pub use incremental::{IncrementalRefreshOutcome, IncrementalRefreshReport, refre
 pub use lease::RuntimeWriterLease;
 pub use lifecycle::{LivePhase, LiveRefreshKind, LiveRefreshSnapshot, LiveRuntimeSnapshot};
 pub use live::LiveRuntime;
+pub use publication::{
+    EngineDiagnostics, EnginePublicationQuality, EngineSnapshot, EngineSnapshotGeneration,
+};
 pub use recovery::{StagingRecoveryOutcome, StartupRecoveryReport};
 pub use scheduler::{
     DEGRADED_POLL_MILLIS, HEALTHY_POLL_MILLIS, QUIET_WINDOW_MILLIS, RefreshScheduler,

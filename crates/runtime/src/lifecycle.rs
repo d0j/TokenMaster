@@ -1,6 +1,6 @@
 use tokenmaster_engine::{PortErrorCode, RefreshOutcome, WorkerSnapshot};
 
-use crate::{SchedulerSnapshot, WatcherSnapshot};
+use crate::{EngineSnapshot, SchedulerSnapshot, WatcherSnapshot};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LivePhase {
@@ -69,6 +69,7 @@ pub struct LiveRuntimeSnapshot {
     pub(crate) worker: WorkerSnapshot,
     pub(crate) watcher: WatcherSnapshot,
     pub(crate) refresh: LiveRefreshSnapshot,
+    pub(crate) engine: EngineSnapshot,
 }
 
 impl LiveRuntimeSnapshot {
@@ -95,5 +96,10 @@ impl LiveRuntimeSnapshot {
     #[must_use]
     pub const fn refresh(self) -> LiveRefreshSnapshot {
         self.refresh
+    }
+
+    #[must_use]
+    pub const fn engine(self) -> EngineSnapshot {
+        self.engine
     }
 }

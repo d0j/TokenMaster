@@ -11,9 +11,12 @@ use tokenmaster_engine::{
     WorkerPhase, WriterLease, WriterLeaseGuard,
 };
 use tokenmaster_provider::DiscoveryRequest;
-use tokenmaster_store::{ArchiveMode, ArchivePublicationQuality, UsageStore};
+use tokenmaster_store::{ArchiveMode, ArchivePublicationQuality, ScanOutcome, UsageStore};
 
 use crate::lifecycle::{LivePhase, LiveRefreshKind, LiveRefreshSnapshot, LiveRuntimeSnapshot};
+use crate::publication::{
+    ArchiveSnapshotCandidate, EnginePublicationQuality, EnginePublicationState,
+};
 use crate::recovery::{StartupRecoveryReport, recover_startup};
 use crate::{
     BoundedFilesystemWatcher, CodexAdapter, IncrementalRefreshOutcome, RefreshHintSink,
@@ -31,6 +34,7 @@ pub struct LiveRuntime {
     admission_open: Arc<Mutex<bool>>,
     reset_watcher: Arc<AtomicBool>,
     latest_refresh: Arc<Mutex<LiveRefreshSnapshot>>,
+    engine_publication: Arc<Mutex<EnginePublicationState>>,
 }
 
 impl LiveRuntime {
@@ -44,6 +48,12 @@ impl LiveRuntime {
         let startup_recovery = recover_startup(&mut archive).map_err(startup_port_error)?;
         drop(startup_guard);
 
+        let initial_publication = archive_snapshot_candidate(archive.store())
+            .map_err(|()| RuntimeError::new(RuntimeErrorCode::StoreUnavailable))?;
+        let engine_publication = Arc::new(Mutex::new(EnginePublicationState::seed(
+            initial_publication,
+        )));
+
         let watcher_slot = Arc::new(Mutex::new(None));
         let reset_watcher = Arc::new(AtomicBool::new(true));
         let execution_watcher = Arc::clone(&watcher_slot);
@@ -51,6 +61,7 @@ impl LiveRuntime {
         let execution_clock = Arc::clone(&clock);
         let latest_refresh = Arc::new(Mutex::new(LiveRefreshSnapshot::not_run()));
         let execution_refresh = Arc::clone(&latest_refresh);
+        let execution_publication = Arc::clone(&engine_publication);
         let mut execution = LiveExecution {
             clock: Arc::clone(&clock),
             lease,
@@ -61,6 +72,7 @@ impl LiveRuntime {
             last_watch_roots: Vec::new(),
             watch_set_complete: false,
             latest_refresh: execution_refresh,
+            engine_publication: execution_publication,
         };
         let worker = Arc::new(
             RefreshWorker::spawn(execution_clock, move |permit| execution.run(permit))
@@ -102,6 +114,7 @@ impl LiveRuntime {
             admission_open,
             reset_watcher,
             latest_refresh,
+            engine_publication,
         })
     }
 
@@ -159,12 +172,18 @@ impl LiveRuntime {
             .latest_refresh
             .lock()
             .map_err(|_| RuntimeError::new(RuntimeErrorCode::Internal))?;
+        let engine = self
+            .engine_publication
+            .lock()
+            .map_err(|_| RuntimeError::new(RuntimeErrorCode::Internal))?
+            .snapshot();
         Ok(LiveRuntimeSnapshot {
             phase,
             scheduler,
             worker,
             watcher,
             refresh,
+            engine,
         })
     }
 
@@ -318,14 +337,40 @@ struct LiveExecution {
     last_watch_roots: Vec<PathBuf>,
     watch_set_complete: bool,
     latest_refresh: Arc<Mutex<LiveRefreshSnapshot>>,
+    engine_publication: Arc<Mutex<EnginePublicationState>>,
 }
 
 impl LiveExecution {
     fn run(&mut self, permit: &RefreshPermit) -> RefreshOutcome {
-        let refresh = self.refresh(permit);
-        let outcome = refresh.outcome().unwrap_or(RefreshOutcome::Failed);
+        let mut refresh = self.refresh(permit);
+        let mut outcome = refresh.outcome().unwrap_or(RefreshOutcome::Failed);
         if outcome == RefreshOutcome::Completed {
             self.sync_watcher(permit.urgency());
+        }
+        let candidate = archive_snapshot_candidate(self.archive.store());
+        match self.engine_publication.lock() {
+            Ok(mut publication) => {
+                if candidate.is_err() {
+                    outcome = RefreshOutcome::Failed;
+                    refresh = LiveRefreshSnapshot::result(
+                        refresh.kind(),
+                        outcome,
+                        Some(PortErrorCode::Unavailable),
+                    );
+                }
+                publication.record_outcome(outcome);
+                if let Ok(candidate) = candidate {
+                    publication.publish(candidate);
+                }
+            }
+            Err(_) => {
+                outcome = RefreshOutcome::Failed;
+                refresh = LiveRefreshSnapshot::result(
+                    refresh.kind(),
+                    outcome,
+                    Some(PortErrorCode::Failed),
+                );
+            }
         }
         if let Ok(mut latest) = self.latest_refresh.lock() {
             *latest = refresh;
@@ -433,6 +478,37 @@ impl LiveExecution {
         self.watch_set_complete = root_count == roots.len();
         self.last_watch_roots = roots;
     }
+}
+
+fn archive_snapshot_candidate(store: &UsageStore) -> Result<ArchiveSnapshotCandidate, ()> {
+    let publication = store.archive_publication().map_err(|_| ())?;
+    let data_through_ms = match publication.latest_complete_scan_set() {
+        Some(scan_set_id) => {
+            let scan_set = store.scan_set_snapshot(scan_set_id).map_err(|_| ())?;
+            match (scan_set.outcome(), scan_set.completed_at_ms()) {
+                (Some(ScanOutcome::Complete), Some(completed_at_ms)) => Some(completed_at_ms),
+                _ => return Err(()),
+            }
+        }
+        None => None,
+    };
+    let quality = match publication.quality() {
+        ArchivePublicationQuality::Empty => EnginePublicationQuality::Empty,
+        ArchivePublicationQuality::Complete => EnginePublicationQuality::Complete,
+        ArchivePublicationQuality::Partial => EnginePublicationQuality::Partial,
+        ArchivePublicationQuality::RecoveryPending => EnginePublicationQuality::RecoveryPending,
+    };
+    Ok(ArchiveSnapshotCandidate {
+        archive_generation: publication.generation().get(),
+        archive_revision: publication
+            .current_revision()
+            .map(|revision| revision.get()),
+        scan_set_id: publication
+            .latest_complete_scan_set()
+            .map(|scan| scan.get()),
+        data_through_ms,
+        quality,
+    })
 }
 
 struct PreAcquiredLease {

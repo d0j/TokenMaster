@@ -51,8 +51,13 @@ second degraded reconciliation, checked clock rollback, and bounded `notify = 8.
 root generations now feed only refresh urgency into the existing worker. P1-D.6 is
 complete: `LiveRuntime` performs lease-first startup recovery, owns the Codex adapter,
 archive, worker, scheduler and watcher lifecycle, selects incremental versus rebuild,
-and implements admission-safe pause/resume plus ordered joined shutdown. The immediate
-next task is P1-E immutable query/publication snapshots and sleep/race integration.
+and implements admission-safe pause/resume plus ordered joined shutdown. P1-E.1 is now
+complete: one startup-seeded immutable `EngineSnapshot` advances only for a strictly
+newer archive generation and exposes exact revision/scan/data-through/quality plus
+fixed checked diagnostics. Equal/older and writer-busy candidates cannot replace it;
+focused store/runtime tests are green. The immediate next task is the remaining P1-E
+race/recovery matrix, Windows power-event suspend/resume binding, and final resource/
+CPU evidence.
 The 2026-07-16 closure review also freezes the remaining plan ambiguities: P3 is the
 complete UI, P4 presentation/localization, P5 read-only automation, and P6 the
 canonical MSVC signed portable release. It selects the Slint attribution route,

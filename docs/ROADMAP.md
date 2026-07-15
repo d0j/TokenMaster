@@ -62,9 +62,11 @@ bounded partial restart, and durable rebuild-required state. P1-D.4 adds the per
 empty-sidecar `File::try_lock` writer lease with process-death release. P1-D.5 adds the
 fixed pathless hint aggregate, capacity-one scheduler, exact quiet/periodic policy, and
 bounded watcher generations. P1-D.6 completes lease-first startup recovery and live
-worker/scheduler/watcher lifecycle assembly. P1-E next adds sleep/resume, race-safe
-continuous recovery, and immutable publication before indexed analytics, pricing,
-quota, Git output, automation, and complete UI work.
+worker/scheduler/watcher lifecycle assembly. P1-E.1 now adds startup-seeded immutable
+publication with strict in-process/archive generation ordering, exact revision/scan/
+data-through truth, fixed diagnostics, and busy/older-result rejection. Remaining P1-E
+work binds Windows power events and closes race/recovery/resource/CPU evidence before
+indexed analytics, pricing, quota, Git output, complete UI, and automation work.
 
 Completed P1-C.1: a no-async, constant-state coordinator with checked monotonic IDs,
 deadline/cancellation semantics, one active refresh, and one aggregate follow-up.
@@ -95,8 +97,9 @@ scheduler thread, deterministic quiet/healthy/degraded policy, bounded root
 generations, and shutdown resource evidence. P1-D.6 adds exact startup recovery,
 incremental/rebuild selection, admission-safe pause/resume, ordered joined shutdown,
 partial/reopen evidence, and combined Windows resource return without adding provider/
-platform/UI dependencies to the engine core. The current gate is P1-E immutable
-query/publication snapshots plus sleep/resume and race-generation integration.
+platform/UI dependencies to the engine core. P1-E.1 immutable engine publication is
+complete. The current gate is P1-E suspend/resume power binding, the remaining race/
+recovery matrix, and final resource/CPU evidence before P2 query snapshots.
 
 ## Approved implementation rail
 

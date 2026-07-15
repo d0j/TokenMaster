@@ -219,8 +219,11 @@ atomic replay facts, production Codex bootstrap, and replay-aware tail-only refr
 with schema-v6 publication/recovery truth, a real portable writer lease, and bounded
 pathless watcher/periodic scheduling. P1-D.6 now composes lease-first restart recovery,
 incremental/rebuild selection, worker/scheduler/watcher ownership, admission-safe
-pause/resume, and ordered joined shutdown. The immediate next gate is P1-E immutable
-query/publication snapshots plus sleep/resume and race-generation integration.
+pause/resume, and ordered joined shutdown. P1-E.1 now publishes one startup-seeded,
+strictly generation-ordered immutable engine snapshot with exact archive revision,
+scan-set/data-through truth, fixed checked diagnostics, and busy/older-result rejection.
+The immediate next gate is the remaining P1-E race/recovery matrix, Windows power-event
+binding, and final resource/CPU evidence before P2 indexed query snapshots.
 The older replay plan remains historical evidence for
 completed Tasks 1-2, but its Codex-owned Tasks 3+ are superseded and must not be
 executed.

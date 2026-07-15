@@ -83,10 +83,20 @@ generation left by interrupted admission.
 `LiveRuntime::start` acquires the process-owned writer lease before SQLite open and
 startup recovery, then creates the worker, a paused scheduler, and watcher before
 opening admission and forcing the first reconciliation. Its fixed snapshot exposes
-only lifecycle, scheduler, worker, watcher, and latest stable refresh kind/outcome/
-error code. Incremental work is selected only for replay-verified complete or partial
-publication; typed rebuild-required falls through to full rebuild under the same
-permit and pre-acquired guard. `pause` closes admission and cancels the exact active
+only lifecycle, scheduler, worker, watcher, latest stable refresh kind/outcome/error
+code, and one immutable `EngineSnapshot`. The engine snapshot is seeded from current
+archive truth before worker start and contains one checked in-process generation,
+persisted archive generation, optional revision and exact scan-set IDs, exact scan-set
+completion time as `data_through_ms`, publication quality, and fixed checked diagnostic
+counters. It contains no query rows, history, path, source, connection, transaction,
+watcher, or UI handle. Consumers replace a local snapshot only when
+`candidate.is_newer_than(current)`.
+
+Incremental work is selected only for replay-verified complete or partial publication;
+typed rebuild-required falls through to full rebuild under the same permit and
+pre-acquired guard. A newer archive generation is copied only after the archive write
+and guard release. Equal/older candidates and busy/cancelled/deadline results cannot
+advance the engine generation. `pause` closes admission and cancels the exact active
 request, `resume` invalidates watcher assumptions and forces recovery, and `shutdown`
 drops the watcher, joins the scheduler, then cancels/joins the worker. Debug contains
 no archive or source path.
