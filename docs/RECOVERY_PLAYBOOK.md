@@ -29,23 +29,27 @@
    staging generations in one immediate transaction, validates foreign keys, and
    leaves current events, current source pointers, and the immutable legacy snapshot
    unchanged. A stale epoch or integrity fault writes nothing.
-5. Never treat `Truncated`, `IdentityChanged`, or rewrite detection as permission to
-   erase prior visible usage. If replacement coverage is incomplete, discard staging
-   and keep the old current page. P1 must provide explicit bounded carry-forward and
-   retention authority.
+5. Never treat `Truncated`, `IdentityChanged`, missing, or rewrite detection as
+   permission to erase prior visible usage. A complete sealed revision may promote
+   through P1-A: eligible replaces, replay-only suppresses, and absent/conflict-only
+   replay-verified events carry with older origin provenance. Partial, cancelled,
+   pending, stale, or invalid staging must still be discarded or resumed by exact
+   epoch; it cannot invoke carry-forward.
 6. Never delete SQLite rows, generations, the legacy snapshot, or the archive file to
    recover a rebuild. P0-E proves exact discard through a test-only driver; no
    user-facing recovery command exists yet.
 
 ## Schema recovery
 
-- Opening an exact schema-v2 archive performs the non-destructive v3 revision-table
+- Opening an exact schema-v1, v2, or v3 archive performs the non-destructive schema-v4
   migration automatically. Preserve the original archive and reproduce any failure
   against a synthetic copy; do not edit `sqlite_schema`, rename tables manually, or
   disable foreign keys in an operator workflow.
-- Migration validates exact v2 before mutation, restores `foreign_keys=ON` after each
-  tested success/failure boundary, and rolls back create/copy/drop faults. A migration
-  error is fail-closed; never delete the database to bypass it.
+- Migration validates the exact source schema before mutation. V2 revision migration
+  restores `foreign_keys=ON` after every outcome; v3 canonical projection migration
+  runs in one immediate transaction. Create/copy/drop faults roll back to the exact
+  prior schema and logical rows. A migration error is fail-closed; never delete the
+  database to bypass it.
 
 Generated `target/`, `reports/`, and `dist/` content is disposable developer output.
 Do not use it as a release claim. M0 acceptance requires the exact external receipts

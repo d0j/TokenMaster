@@ -110,3 +110,30 @@ after restart. Constrained preparation solves both without coupling SQLite to Co
 Fail-closed prior coverage prevents a truncated, cancelled, incomplete, or parser-bug
 rebuild from erasing real accounted usage; P1 must define explicit carry-forward and
 retention authority before continuous reconciliation.
+
+Implementation update: P1-A now supplies that authority through ADR-013. Truncation
+and replacement still authorize no deletion; complete promotion uses explicit retained
+projection state, while incomplete or cancelled rebuilds remain blocked.
+
+## ADR-013 — Self-contained canonical projection and explicit retention
+
+Decision: schema v4 removes the canonical projection's foreign key to deletable source
+observations and records `projection_revision_id`, `origin_revision_id`, and
+`retained`. Promotion atomically applies one fixed policy: eligible selection replaces,
+replay-only suppresses, conflict-only retains, and absence retains. A retained row
+keeps its original source key, generation, offset, event values, and older origin
+revision without keeping the obsolete source generation alive or copying it into a
+synthetic observation. The publishing revision remains a deferred foreign key and all
+projection mutations share the generation/revision transaction.
+
+Unrebuilt legacy rows are not carried into replay-verified totals because v1 identity
+and quality cannot safely deduplicate against the new overlay; their immutable legacy
+snapshot remains readable separately. Partial, cancelled, pending, stale, or invalid
+rebuilds never reach the retention transaction.
+
+Rationale: keeping old generations can retain entire obsolete histories and grow
+without bound; attaching old events to a new generation fabricates provenance; copying
+the full canonical page into every staging revision doubles large archives. A
+self-contained indexed projection with explicit origin/retained state preserves
+history in set-based bounded-memory SQL and supports atomic rollback without those
+costs or false claims.

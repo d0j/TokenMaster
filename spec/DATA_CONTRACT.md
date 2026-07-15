@@ -55,24 +55,35 @@ The explicit 256-key manifest remains only a bounded test/repair input and canno
 a subset. Seal MUST prove the entire fixed all-registered-source manifest, exact
 checkpoint/chunk coverage, replay-overlay coverage, accounting versions, exhausted
 durable work, and foreign-key integrity.
-Promotion MUST require zero pending observations, account for every previously visible
-event in the replacement overlay or immutable legacy snapshot, replace canonical
-selections and source generations atomically, and leave the previous current state
-intact on failure. An explicit epoch-checked discard may remove only unpublished
-staging state; it MUST NOT mutate the current revision, legacy snapshot, or canonical
-event page.
+Promotion MUST require zero pending observations and atomically publish the
+deterministic union of new eligible selections and explicitly retained prior
+replay-verified events. A replay-only fingerprint with no eligible or conflict
+observation removes the prior contribution. An absent or conflict-only fingerprint
+is carried with its original selection provenance and marked retained; conflict
+quality remains visible. Unrebuilt legacy rows are not carried into replay-verified
+truth because their old identity may double count; the immutable legacy snapshot
+preserves them separately. Source generations and revision state swap in the same
+transaction, and any failure leaves the previous current state intact. An explicit
+epoch-checked discard may remove only unpublished staging state; it MUST NOT mutate
+the current revision, legacy snapshot, or canonical event page.
 
-Truncation or physical replacement is not destructive authority. If a complete new
-overlay omits a previously visible event, promotion fails closed and the prior page
-remains current. A future retention/carry-forward policy must account for that prior
-evidence explicitly; it may not infer deletion from a reader rebuild classification.
+Truncation, physical replacement, or source absence is not destructive authority. A
+complete sealed overlay may promote while carrying omitted prior replay-verified
+events. Incomplete, partial, cancelled, pending, mismatched, or invalid evidence still
+cannot promote. Carry-forward records accounting history; it does not claim that the
+original source still exists.
 
 ## TM-DATA-005 — SQLite policy
 
-The usage archive has a strict versioned schema. Schema v3 removes the historical
-256-source revision constraint. Exact v2 archives migrate with the safe
-create-new/copy/drop/rename sequence while foreign keys are disabled only outside the
-migration transaction, checked before commit, and restored on every tested exit.
+The usage archive has a strict versioned schema. Schema v3 removed the historical
+256-source revision constraint. Schema v4 makes the canonical projection
+self-contained and adds publishing revision, origin revision, and retained state, so
+obsolete generations can be removed without fabricating provenance. Exact v1, v2,
+and v3 archives migrate non-destructively through validated create/copy/drop/rename
+steps; v2 foreign keys are disabled only outside the revision-table migration
+transaction, checked before commit, and restored on every tested exit. V3-to-v4
+event migration is one immediate transaction with exact logical-copy and rollback
+checks.
 File-backed connections MUST use WAL,
 FULL synchronous writes, foreign keys, a bounded busy timeout, bounded journal/cache
 policy, and disabled mmap. Collections and complete-manifest validation are

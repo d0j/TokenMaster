@@ -34,7 +34,8 @@ Replay rebuilds use a SQLite-owned fixed all-registered-source manifest, store-o
 accounting versions, and an evidence-epoch compare-and-swap. The product path stages
 all sources with set-based SQL and retains at most one 256-row validation page; stored
 source counts never size application collections. Legacy v1 rows are copied into an
-immutable snapshot, and exact v2 archives are migrated non-destructively to strict v3.
+immutable snapshot, exact v2 archives are migrated non-destructively through strict
+v3, and exact v3 canonical rows migrate transactionally to strict v4 provenance.
 Replay observations, classifications, selections, and checkpoints remain private
 staging state until an explicit sealed promotion.
 Stored parent facts from another accounting version MUST fail closed; staging MUST NOT
@@ -59,18 +60,23 @@ authorize promotion. Seal and promotion repeat keyset-paged exact
 all-registered-source manifest completion, full-prefix checkpoint
 and chunk coverage, one replay row per staged observation, eligible-only selections,
 compiled accounting versions, exhausted work, and foreign-key integrity in one
-immediate transaction. Promotion additionally requires zero pending rows and complete
-evidence coverage of the prior visible projection, then materializes the newly
-eligible events and swaps revision,
-generation, and source-pointer state atomically. Injected failure at every mutation
-phase MUST roll back to the prior canonical page. Recovery may discard only an exact
-epoch-matched staging revision and staging generations; current and immutable legacy
-state remain untouched, and any integrity failure rolls the discard back.
+immediate transaction. Promotion additionally requires zero pending rows and a valid
+prior projection owner. It removes replay-only prior contributions, retains absent or
+conflict-only replay-verified events with their older origin revision, installs new
+eligible selections as direct rows, and swaps revision, generation, and source-pointer
+state atomically. The canonical projection has no foreign key to a deletable source
+generation; strict revision provenance plus promotion validation replaces that unsafe
+lifetime coupling. Injected failure at every mutation phase MUST roll back values,
+provenance, generations, and revision to the prior canonical page. Recovery may
+discard only an exact epoch-matched staging revision and staging generations; current
+and immutable legacy state remain untouched, and any integrity failure rolls the
+discard back.
 
-Reader `Truncated`, `IdentityChanged`, or rewrite classifications never authorize
-erasure. A replacement that omits prior visible evidence is rejected and discarded;
-the future runtime must use an explicit retention/carry-forward contract rather than
-weakening prior-projection coverage.
+Reader `Truncated`, `IdentityChanged`, missing, or rewrite classifications never
+authorize erasure. A complete sealed replacement may carry omitted replay-verified
+events; partial/cancelled input cannot. Only replay classification may automatically
+suppress a prior contribution. Unverified legacy rows remain in the separate immutable
+snapshot rather than being mixed into replay-verified totals.
 
 ## TM-SEC-005 — Extensibility
 

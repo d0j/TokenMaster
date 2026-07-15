@@ -1,7 +1,7 @@
 # TokenMaster P1 Runtime Engine and Retention Design
 
-**Status:** Approved for autonomous execution. P0-E is complete; P1-A retained
-projection is the first implementation slice.
+**Status:** Approved for autonomous execution. P0-E and P1-A are complete; P1-B scan
+epochs and source-set finalization are the next implementation slice.
 
 ## 1. Goal and boundary
 
@@ -70,8 +70,8 @@ revision rows are removed after atomic promotion. Strict checks require:
 
 - a legacy row to have no projection/origin revision and not be marked retained;
 - a direct replay selection to have equal non-null origin and projection revisions;
-- a carried replay row to have a non-null projection revision and either a legacy
-  origin or a strictly older replay origin.
+- a carried replay row to have a non-null projection revision and a strictly older
+  replay origin.
 
 Migration v3-to-v4 uses SQLite's create/copy/drop/rename procedure in one immediate
 transaction. Existing schema and foreign keys are validated before copying. If a
@@ -79,6 +79,11 @@ current replay revision exists, migrated rows are direct selections owned by it;
 otherwise they remain legacy rows. Row count and every copied logical column are
 verified before commit. v1 and v2 archives continue through their exact validation
 and non-destructive legacy-snapshot paths before reaching v4.
+
+Legacy-unverified rows are never carried into a replay-verified projection. The first
+successful replay promotion replaces them only when the old prior-coverage rule is
+satisfied; their immutable snapshot remains available. This prevents fingerprint-v1
+or otherwise unverified history from being mixed into fingerprint-v2 totals.
 
 ### 2.4 Promotion policy
 

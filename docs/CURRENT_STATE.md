@@ -22,7 +22,7 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 - P0-C pure replay classifier: root/matching/diverged/pending/conflict transitions,
   strong/weak proof rules, provider/profile/parent/ordinal validation, irreversible
   divergence, and pending (not conflict) depth/fanout exhaustion.
-- P0-D/P0-D.1 replay archive: strict SQLite schema v3, transactional exact-v1
+- P0-D/P0-D.1 replay archive: strict SQLite replay overlay, transactional exact-v1
   migration, non-destructive exact-v2 migration with fault-tested foreign-key policy
   restoration,
   immutable legacy snapshot, explicit archive modes, fixed/version-owned replay
@@ -52,8 +52,21 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   complete-line truncation. A constrained exact-epoch `prepare_replay_source` supplies
   a valid adapter-owned empty resume and live physical identity only to untouched
   staging; two bounded reads recover its checkpoint and one chunk after restart.
-  Truncation/omitted prior evidence fails promotion and exact discard leaves the old
-  canonical page current.
+  P0-E originally proved omitted prior evidence failed closed before retention
+  authority existed.
+- P1-A retained canonical projection: strict schema v4 migrates exact v1/v2/v3
+  archives through validated create/copy/drop/rename steps and three injected
+  rollback boundaries. The indexed canonical page is self-contained and records its
+  publishing revision, last direct origin revision, and retained state, so obsolete
+  source generations can be removed without false provenance or unbounded history
+  retention. Atomic promotion installs eligible selections directly, suppresses
+  replay-only prior contributions, and carries absent/conflict-only replay-verified
+  events. Legacy-unverified rows remain only in their immutable snapshot. Store
+  contracts prove the complete truth table, exact provenance after reopen, invalid
+  owner rejection, and rollback of values/provenance/generations/revision. The real
+  Codex JSONL truncation fixture now promotes while preserving the 2-event/26-token
+  canonical result; cancellation, malformed data, incomplete tails, and pending work
+  remain non-promotable.
 
 ## Next implementation slice
 
@@ -75,10 +88,11 @@ P0-D.1 is complete under
 300-source contract crosses two manifest pages, promotes, reopens, and preserves
 late-source fail-closed behavior. P0-E is complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-e-pipeline-proof.md`; it is a
-transactional cross-crate proof, not the production scheduler. P1 is now the next
-slice and owns scan epochs, source-set finalization, prior-evidence carry-forward,
-coalescing, cancellation policy, writer lease, sleep/resume, and continuous runtime
-recovery.
+transactional cross-crate proof, not the production scheduler. P1-A is complete under
+`docs/superpowers/plans/2026-07-14-tokenmaster-p1-retained-projection.md`. P1-B is now
+the next slice and owns scan epochs plus complete-source-set finalization. P1-C and
+later then add the provider-neutral engine, coalescing, cancellation policy, writer
+lease, sleep/resume, immutable publication, and continuous runtime recovery.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 

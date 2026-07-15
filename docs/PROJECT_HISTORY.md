@@ -379,3 +379,60 @@ workspace retained exactly one pre-existing explicitly ignored one-million-row M
 scale test. Normal dependency-tree inspection found no store/accounting dependency in
 the Codex production graph. No M0 acceptance, interactive Windows product result,
 package, signing, or release is claimed.
+
+## 2026-07-15 — P1-A retained canonical projection implemented
+
+Completed the first runtime prerequisite without adding a scheduler. Strict schema v4
+makes `usage_event` a self-contained indexed projection with publishing revision,
+last-direct origin revision, and retained state. Exact v1/v2/v3 archives migrate
+non-destructively through validated create/copy/drop/rename steps. Populated current
+and legacy fixtures preserve every logical event field; injected faults after event
+table create, copy, and drop restore the exact prior schema/version/rows. The existing
+v2 foreign-key restoration boundaries remain intact.
+
+Promotion no longer needs to keep an obsolete source generation or invent a new
+observation when a complete replacement omits old accounted usage. In one immediate
+transaction it removes replay-only prior contributions, carries absent/conflict-only
+replay-verified rows with their older origin provenance, installs eligible selections
+as direct rows, swaps generations/revision, and validates the result. Unrebuilt legacy
+rows remain only in the immutable legacy snapshot because their older identity cannot
+safely enter replay-verified totals. Invalid publishing ownership fails closed.
+Existing promotion fault points now prove rollback of values and provenance as well as
+row counts, generations, and revision status.
+
+The store truth-table contract covers eligible, replay-only, conflict-only, absent,
+pending, reopen, obsolete-generation removal, owner tamper, and every promotion fault.
+The real synthetic Codex JSONL complete-line truncation now promotes while preserving
+the prior 2-event/26-token result. Cancellation, malformed relevant JSON, incomplete
+tail, partial enumeration, and pending replay work remain non-promotable. No
+history-sized Rust collection or new dependency was added; projection work is
+set-based SQL inside the existing promotion transaction.
+
+Verification:
+
+```powershell
+cargo +1.97.0 test -p tokenmaster-store --lib migration --locked
+cargo +1.97.0 test -p tokenmaster-store --test usage_schema_contract --locked
+cargo +1.97.0 test -p tokenmaster-store --test replay_archive_contract --locked
+cargo +1.97.0 test -p tokenmaster-store --locked
+cargo +1.97.0 test -p tokenmaster-codex --test pipeline_contract --locked
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy -p tokenmaster-store -p tokenmaster-codex --all-targets --locked
+pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
+cargo +1.97.0 fmt --all -- --check
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy --workspace --all-targets --locked
+Remove-Item Env:RUSTFLAGS -ErrorAction SilentlyContinue
+cargo +1.97.0 test --workspace --locked
+git diff --check
+```
+
+Focused schema, replay archive, and pipeline suites pass 14, 40, and 7 tests. The
+workspace gate passes with exactly the pre-existing explicitly ignored one-million-row
+M0 scale test. Clean-root returns `TM-CLEAN-PASS`; formatting and strict workspace
+Clippy pass. The Codex normal dependency graph contains neither store nor accounting;
+tracked Go/JavaScript/TypeScript/Python source, new forbidden storage identifiers, and
+secret-value patterns are absent. An environment-root scan found no actual private
+path; synthetic `Example`/`private` path fixtures remain intentionally tracked and
+were not misreported as leaks. This completes P1-A only. P1-B scan epochs/source-set
+finalization and the P1-C+ live engine remain. No M0 acceptance, interactive Windows
+product result,
+package, signing, or release is claimed.

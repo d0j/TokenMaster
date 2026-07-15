@@ -34,10 +34,15 @@ atomic replacement beyond 256 files/events without introducing a live engine. It
 adds only bounded path-private restart reads and exact-epoch preparation of untouched
 staging.
 
-Current gate: P1 adds the provider-neutral runtime engine, scan epochs, source-set
-finalization, explicit prior-evidence carry-forward/retention, coalescing, writer lease,
-sleep/resume, and continuous recovery before indexed analytics, pricing, quota, Git
-output, automation, and complete UI work.
+Completed: P1-A upgrades the canonical projection to strict schema v4 with exact
+v1/v2/v3 migration and explicit prior-evidence carry-forward. Complete promotion
+selects eligible events, suppresses replay-only contributions, retains absent/conflict
+history, removes obsolete generations, and rolls back provenance atomically.
+
+Current gate: P1-B adds scan epochs and complete-source-set finalization. P1-C through
+P1-E then add the provider-neutral runtime engine, coalescing, cancellation, writer
+lease, sleep/resume, continuous recovery, and immutable publication before indexed
+analytics, pricing, quota, Git output, automation, and complete UI work.
 
 ## 0.9 — complete desktop product
 

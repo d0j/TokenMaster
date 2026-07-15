@@ -1,6 +1,7 @@
 # TokenMaster P1-A Retained Canonical Projection Implementation Plan
 
-**Status:** Approved; implementation pending.
+**Status:** Implemented and fully verified on 2026-07-15. P1-B scan epochs and
+source-set finalization are next.
 
 > **Execution mode:** root-only, test-first, one writer, current feature branch. The
 > available task-name-only child surface cannot prove requested model routing, so no

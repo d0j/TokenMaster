@@ -25,8 +25,12 @@ complete under `docs/superpowers/plans/2026-07-14-tokenmaster-p0-e-pipeline-proo
 the test-only driver proves the real synthetic Codex-to-archive path with more than
 256 files/events, restart, append, atomic replacement, exact totals/quality, and
 failure discard without changing production dependency direction. The immediate next
-task is P1, not expansion of the test driver. The complete approved order is in
-`docs/AUDIT_AND_MASTER_PLAN.md`.
+task is P1-B scan epochs/source-set finalization, not expansion of the test driver.
+P1-A is complete under
+`docs/superpowers/plans/2026-07-14-tokenmaster-p1-retained-projection.md`: strict
+schema v4, exact v1/v2/v3 migration, and atomic retained projection now handle
+complete truncation/replacement without retaining obsolete generations. The complete
+approved order is in `docs/AUDIT_AND_MASTER_PLAN.md`.
 
 Tasks 3+ in `2026-07-14-tokenmaster-p0-replay-correctness.md` are superseded. Do not
 execute its Codex-owned fingerprint/signature or destructive migration steps. Do not
@@ -41,14 +45,17 @@ store-owned evidence epoch and must reject stale CAS, altered duplicate observat
 mixed accounting versions, or stale durable work atomically. Late explicit relations
 use deterministic first-source identity; conflicting parents and confirmed cycles are
 permanent conflict. Seal requires exact complete manifest evidence. Promotion requires
-zero pending rows and complete prior-projection coverage and swaps all visible state in
-one transaction. A blocked/obsolete staging revision is recovered only through the
+zero pending rows and a valid prior projection owner. It installs eligible selections,
+suppresses replay-only prior contributions, carries absent/conflict-only
+replay-verified events, and swaps all visible state in one transaction. Unrebuilt
+legacy rows stay in the immutable legacy snapshot instead of entering replay-verified
+totals. A blocked/obsolete staging revision is recovered only through the
 exact revision/epoch discard API; never delete archive rows or the database manually.
 An untouched staging source must first be prepared with its exact revision/epoch and
 a validated zero-offset adapter checkpoint. Do not copy or invent opaque resume state.
-Reader truncation/replacement classification is not deletion authority; omitted prior
-visible evidence must leave promotion blocked until P1 provides an explicit bounded
-carry-forward policy.
+Reader truncation/replacement classification is not deletion authority. Only a
+complete sealed overlay may invoke the P1-A carry-forward policy; partial, cancelled,
+pending, stale, or invalid rebuilds remain blocked.
 
 ## Commands
 
@@ -72,16 +79,19 @@ For M0 developer evidence, Pester 5.7.1 and a validated GNU linker are required:
 pwsh -NoProfile -File scripts\verify-m0.ps1 -RepositoryRoot (Get-Location).Path
 ```
 
-The P0 authority/lineage/classifier, P0-D archive, P0-D.1 scalable manifest, and P0-E
-transactional composition slices passed focused contracts on 2026-07-14. P0-D.1 evidence includes exact populated-v2
+The P0 authority/lineage/classifier, P0-D archive, P0-D.1 scalable manifest, P0-E
+transactional composition, and P1-A retained projection slices passed focused
+contracts. P0-D.1 evidence includes exact populated-v2
 migration and three injected rollback boundaries, 300-source set-based begin, a
 two-page seal/promotion/reopen lifecycle, late-source seal rejection, and exact discard.
 P0-E adds persisted physical-identity reconstruction, bounded staging/chunk reads,
 exact source preparation, seven real-JSONL pipeline contracts, 300-file and 300-event
-bounds, reopen after batch one, Windows atomic replacement, and fail-closed
-cancellation/malformed/incomplete/truncation behavior.
+bounds, reopen after batch one, and Windows atomic replacement. P1-A adds exact
+v1/v2/v3-to-v4 migration, truth-table retention, provenance/fault rollback, and
+successful complete-line truncation carry-forward; cancellation, malformed data,
+incomplete tails, and pending evidence remain fail-closed.
 Clean-root, formatting, strict workspace Clippy, and the full locked workspace passed;
-see the final P0-D.1 history entry for exact commands and focused counts. The
+see the P1-A history entry for exact commands and focused counts. The
 one-million-row M0 scale test remains explicitly ignored in the normal workspace run.
 This does not accept M0, prove interactive Windows behavior, or package a product
 release. See `M0_ACCEPTANCE.md`.

@@ -19,6 +19,10 @@ All notable changes are recorded here.
   proofs.
 - Allocation-free provider-neutral replay classifier with explicit typed states,
   scope/ordinal validation, conservative weak evidence, and bounded-work semantics.
+- Strict SQLite schema v4 with exact v1/v2/v3 migration and canonical projection
+  publishing/origin/retained provenance.
+- Atomic carry-forward for absent or conflicting replay-verified evidence, with
+  truth-table, truncation, reopen, tamper, and fault-rollback contracts.
 
 ### Fixed
 
@@ -30,3 +34,6 @@ All notable changes are recorded here.
   collide with prior events.
 - Made store append fail closed when a canonical event provider does not match the
   registered source provider, in addition to existing profile/source checks.
+- Removed the canonical page's lifetime dependency on obsolete source generations;
+  complete truncation/replacement now preserves accounted usage without synthetic
+  observations or unbounded generation retention.
