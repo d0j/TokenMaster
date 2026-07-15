@@ -1,7 +1,7 @@
 use crate::{
     AdapterBatch, AdapterCheckpoint, AdapterCounters, AdapterDiagnostics, CancellationToken,
     CompletionQuality, DiscoveredSource, EngineError, EngineErrorCode, MonotonicTime,
-    RefreshDeadline, RefreshPermit, ScopeIdentity, SourceIdentity,
+    RefreshDeadline, RefreshPermit, ScopeIdentity,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -178,6 +178,23 @@ pub trait SourceSink {
     ) -> Result<SinkControl, PortError>;
 }
 
+pub trait SourceBatchReader {
+    fn read_batch(
+        &mut self,
+        checkpoint: &AdapterCheckpoint,
+        control: &OperationControl<'_>,
+    ) -> Result<AdapterBatch, PortError>;
+}
+
+pub trait ReplaySourceSink {
+    fn on_source(
+        &mut self,
+        source: DiscoveredSource,
+        initial_checkpoint: AdapterCheckpoint,
+        reader: &mut dyn SourceBatchReader,
+    ) -> Result<SinkControl, PortError>;
+}
+
 pub trait Adapter: Send {
     fn visit_scopes(
         &mut self,
@@ -192,12 +209,12 @@ pub trait Adapter: Send {
         sink: &mut dyn SourceSink,
     ) -> Result<AdapterCompletion, PortError>;
 
-    fn read_batch(
+    fn visit_replay_sources(
         &mut self,
-        source: &SourceIdentity,
-        checkpoint: &AdapterCheckpoint,
+        scope: &ScopeIdentity,
         control: &OperationControl<'_>,
-    ) -> Result<AdapterBatch, PortError>;
+        sink: &mut dyn ReplaySourceSink,
+    ) -> Result<AdapterCompletion, PortError>;
 }
 
 pub trait WriterLeaseGuard: Send {}

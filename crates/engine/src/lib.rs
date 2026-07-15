@@ -15,15 +15,14 @@
 //!
 //! ```compile_fail
 //! use std::path::Path;
-//! use tokenmaster_engine::{Adapter, AdapterCheckpoint, OperationControl};
+//! use tokenmaster_engine::{OperationControl, SourceBatchReader};
 //!
 //! fn provider_coupled(
-//!     adapter: &mut dyn Adapter,
+//!     reader: &mut dyn SourceBatchReader,
 //!     path: &Path,
-//!     checkpoint: &AdapterCheckpoint,
 //!     control: &OperationControl<'_>,
 //! ) {
-//!     let _ = adapter.read_batch(path, checkpoint, control);
+//!     let _ = reader.read_batch(path, control);
 //! }
 //! ```
 //!
@@ -59,9 +58,8 @@ mod values;
 mod worker;
 
 pub use archive::{
-    Archive, ArchiveEpoch, ArchiveReplay, ArchiveRevisionId, ArchiveScanSetId, ArchiveSourceCursor,
-    MAX_REPLAY_SOURCES_PER_PAGE, ReplayContinuation, ReplayContinuationState, ReplaySource,
-    ReplaySourcePage,
+    Archive, ArchiveEpoch, ArchiveReplay, ArchiveRevisionId, ArchiveScanSetId, ReplayContinuation,
+    ReplayContinuationState,
 };
 pub use batch::{
     AdapterBatch, AdapterBatchParts, BatchState, CanonicalBatch, CanonicalBatchParts,
@@ -78,7 +76,8 @@ pub use executor::{
 };
 pub use ports::{
     Adapter, AdapterCompletion, Clock, OperationControl, OperationStop, PortError, PortErrorCode,
-    ScopeSink, SinkControl, SourceSink, WriterLease, WriterLeaseGuard,
+    ReplaySourceSink, ScopeSink, SinkControl, SourceBatchReader, SourceSink, WriterLease,
+    WriterLeaseGuard,
 };
 pub use time::{MonotonicTime, RefreshDeadline, RefreshRequestId};
 pub use values::{

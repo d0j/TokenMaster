@@ -11,12 +11,12 @@ use tokenmaster_domain::{
 use tokenmaster_engine::{
     Adapter, AdapterBatch, AdapterBatchParts, AdapterCheckpoint, AdapterCompletion,
     AdapterCounters, AdapterDiagnostics, Archive, ArchiveEpoch, ArchiveReplay, ArchiveRevisionId,
-    ArchiveScanSetId, ArchiveSourceCursor, BatchState, CanonicalBatch, Clock, CompletionQuality,
-    DiscoveredSource, ExecutionCounts, MAX_REPLAY_CONTINUATIONS_PER_RUN, MonotonicTime,
-    OneShotExecutor, OperationControl, PortError, PortErrorCode, RefreshAdmission,
-    RefreshCoordinator, RefreshDeadline, RefreshOutcome, RefreshRequestId, RefreshUrgency,
-    ReplayCleanup, ReplayContinuation, ReplayContinuationState, ReplaySource, ReplaySourcePage,
-    ScopeIdentity, ScopeManifest, ScopeSink, SourceIdentity, SourceKind, SourceSink, WriterLease,
+    ArchiveScanSetId, BatchState, CanonicalBatch, Clock, CompletionQuality, DiscoveredSource,
+    ExecutionCounts, MAX_REPLAY_CONTINUATIONS_PER_RUN, MonotonicTime, OneShotExecutor,
+    OperationControl, PortError, PortErrorCode, RefreshAdmission, RefreshCoordinator,
+    RefreshDeadline, RefreshOutcome, RefreshRequestId, RefreshUrgency, ReplayCleanup,
+    ReplayContinuation, ReplayContinuationState, ReplaySourceSink, ScopeIdentity, ScopeManifest,
+    ScopeSink, SourceBatchReader, SourceIdentity, SourceKind, SourceSink, WriterLease,
     WriterLeaseGuard,
 };
 
@@ -160,6 +160,50 @@ fn observation(source: &SourceIdentity) -> ObservationDraft {
     .expect("observation")
 }
 
+struct FakeSourceReader {
+    log: Log,
+    source: SourceIdentity,
+    batch_source: Option<SourceIdentity>,
+    repeat_first_checkpoint: bool,
+    reads: u64,
+}
+
+impl SourceBatchReader for FakeSourceReader {
+    fn read_batch(
+        &mut self,
+        current_checkpoint: &AdapterCheckpoint,
+        control: &OperationControl<'_>,
+    ) -> Result<AdapterBatch, PortError> {
+        record(&self.log, "read");
+        control.check()?;
+        let repeats = self.repeat_first_checkpoint && self.reads == 0;
+        self.reads += 1;
+        let batch_source = self.batch_source.as_ref().unwrap_or(&self.source);
+        AdapterBatch::new(
+            batch_source,
+            AdapterBatchParts {
+                observations: vec![observation(batch_source)].into_boxed_slice(),
+                relations: Box::default(),
+                chunk_proofs: tokenmaster_engine::ChunkProofBatch::new(None, Box::default())
+                    .map_err(PortError::from)?,
+                next_checkpoint: if repeats {
+                    current_checkpoint.clone()
+                } else {
+                    checkpoint(2)
+                },
+                state: if repeats {
+                    BatchState::More
+                } else {
+                    BatchState::SnapshotEnd
+                },
+                counters: AdapterCounters::new(1, 80, 1, 0).map_err(PortError::from)?,
+                diagnostics: AdapterDiagnostics::default(),
+            },
+        )
+        .map_err(PortError::from)
+    }
+}
+
 struct FakeAdapter {
     log: Log,
     source: Option<SourceIdentity>,
@@ -223,26 +267,37 @@ impl Adapter for FakeAdapter {
         .map_err(PortError::from)
     }
 
-    fn read_batch(
+    fn visit_replay_sources(
         &mut self,
-        source: &SourceIdentity,
-        _checkpoint: &AdapterCheckpoint,
+        scope: &ScopeIdentity,
         control: &OperationControl<'_>,
-    ) -> Result<AdapterBatch, PortError> {
-        record(&self.log, "read");
+        sink: &mut dyn ReplaySourceSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        record(&self.log, "replay_sources");
         control.check()?;
-        AdapterBatch::new(
-            source,
-            AdapterBatchParts {
-                observations: vec![observation(source)].into_boxed_slice(),
-                relations: Box::default(),
-                chunk_proofs: tokenmaster_engine::ChunkProofBatch::new(None, Box::default())
-                    .map_err(PortError::from)?,
-                next_checkpoint: checkpoint(2),
-                state: BatchState::SnapshotEnd,
-                counters: AdapterCounters::new(1, 80, 1, 0).map_err(PortError::from)?,
-                diagnostics: AdapterDiagnostics::default(),
-            },
+        let files_read = if self
+            .source
+            .as_ref()
+            .is_some_and(|source| source.scope() == scope)
+        {
+            let source = self.source.as_ref().expect("checked source");
+            let mut reader = FakeSourceReader {
+                log: self.log.clone(),
+                source: source.clone(),
+                batch_source: None,
+                repeat_first_checkpoint: false,
+                reads: 0,
+            };
+            let discovered = DiscoveredSource::new(source.clone(), SourceKind::Active);
+            let _ = sink.on_source(discovered, checkpoint(1), &mut reader)?;
+            1
+        } else {
+            0
+        };
+        AdapterCompletion::new(
+            CompletionQuality::Complete,
+            AdapterCounters::new(files_read, 0, 0, 0).map_err(PortError::from)?,
+            AdapterDiagnostics::default(),
         )
         .map_err(PortError::from)
     }
@@ -250,7 +305,6 @@ impl Adapter for FakeAdapter {
 
 struct RepeatingCheckpointAdapter {
     inner: FakeAdapter,
-    reads: u64,
 }
 
 impl Adapter for RepeatingCheckpointAdapter {
@@ -271,30 +325,29 @@ impl Adapter for RepeatingCheckpointAdapter {
         self.inner.visit_sources(scope, control, sink)
     }
 
-    fn read_batch(
+    fn visit_replay_sources(
         &mut self,
-        source: &SourceIdentity,
-        current_checkpoint: &AdapterCheckpoint,
+        scope: &ScopeIdentity,
         control: &OperationControl<'_>,
-    ) -> Result<AdapterBatch, PortError> {
-        if self.reads != 0 {
-            return self.inner.read_batch(source, current_checkpoint, control);
-        }
-        self.reads += 1;
-        record(&self.inner.log, "read");
+        sink: &mut dyn ReplaySourceSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        record(&self.inner.log, "replay_sources");
         control.check()?;
-        AdapterBatch::new(
-            source,
-            AdapterBatchParts {
-                observations: vec![observation(source)].into_boxed_slice(),
-                relations: Box::default(),
-                chunk_proofs: tokenmaster_engine::ChunkProofBatch::new(None, Box::default())
-                    .map_err(PortError::from)?,
-                next_checkpoint: current_checkpoint.clone(),
-                state: BatchState::More,
-                counters: AdapterCounters::new(1, 80, 1, 0).map_err(PortError::from)?,
-                diagnostics: AdapterDiagnostics::default(),
-            },
+        let source = self.inner.source.as_ref().expect("replay source");
+        assert_eq!(source.scope(), scope);
+        let mut reader = FakeSourceReader {
+            log: self.inner.log.clone(),
+            source: source.clone(),
+            batch_source: None,
+            repeat_first_checkpoint: true,
+            reads: 0,
+        };
+        let discovered = DiscoveredSource::new(source.clone(), SourceKind::Active);
+        let _ = sink.on_source(discovered, checkpoint(1), &mut reader)?;
+        AdapterCompletion::new(
+            CompletionQuality::Complete,
+            AdapterCounters::new(1, 0, 0, 0).map_err(PortError::from)?,
+            AdapterDiagnostics::default(),
         )
         .map_err(PortError::from)
     }
@@ -332,19 +385,161 @@ impl Adapter for CrossScopeDiscoveryAdapter {
         .map_err(PortError::from)
     }
 
-    fn read_batch(
+    fn visit_replay_sources(
         &mut self,
-        source: &SourceIdentity,
-        checkpoint: &AdapterCheckpoint,
+        scope: &ScopeIdentity,
         control: &OperationControl<'_>,
-    ) -> Result<AdapterBatch, PortError> {
-        self.inner.read_batch(source, checkpoint, control)
+        sink: &mut dyn ReplaySourceSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        self.inner.visit_replay_sources(scope, control, sink)
+    }
+}
+
+struct MismatchedBatchAdapter {
+    inner: FakeAdapter,
+    batch_source: SourceIdentity,
+}
+
+impl Adapter for MismatchedBatchAdapter {
+    fn visit_scopes(
+        &mut self,
+        control: &OperationControl<'_>,
+        sink: &mut dyn ScopeSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        self.inner.visit_scopes(control, sink)
+    }
+
+    fn visit_sources(
+        &mut self,
+        scope: &ScopeIdentity,
+        control: &OperationControl<'_>,
+        sink: &mut dyn SourceSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        self.inner.visit_sources(scope, control, sink)
+    }
+
+    fn visit_replay_sources(
+        &mut self,
+        scope: &ScopeIdentity,
+        control: &OperationControl<'_>,
+        sink: &mut dyn ReplaySourceSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        record(&self.inner.log, "replay_sources");
+        control.check()?;
+        let source = self.inner.source.as_ref().expect("replay source");
+        assert_eq!(source.scope(), scope);
+        let mut reader = FakeSourceReader {
+            log: self.inner.log.clone(),
+            source: source.clone(),
+            batch_source: Some(self.batch_source.clone()),
+            repeat_first_checkpoint: false,
+            reads: 0,
+        };
+        let discovered = DiscoveredSource::new(source.clone(), SourceKind::Active);
+        let _ = sink.on_source(discovered, checkpoint(1), &mut reader)?;
+        AdapterCompletion::new(
+            CompletionQuality::Complete,
+            AdapterCounters::new(1, 0, 0, 0).map_err(PortError::from)?,
+            AdapterDiagnostics::default(),
+        )
+        .map_err(PortError::from)
+    }
+}
+
+struct SequenceAdapter {
+    log: Log,
+    discovery_sources: Vec<SourceIdentity>,
+    replay_sources: Vec<SourceIdentity>,
+    replay_quality: CompletionQuality,
+}
+
+impl Adapter for SequenceAdapter {
+    fn visit_scopes(
+        &mut self,
+        control: &OperationControl<'_>,
+        sink: &mut dyn ScopeSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        record(&self.log, "scopes");
+        control.check()?;
+        let scope = self
+            .discovery_sources
+            .first()
+            .ok_or_else(|| PortError::new(PortErrorCode::InvalidData))?
+            .scope()
+            .clone();
+        let _ = sink.on_scope(scope)?;
+        AdapterCompletion::new(
+            CompletionQuality::Complete,
+            AdapterCounters::default(),
+            AdapterDiagnostics::default(),
+        )
+        .map_err(PortError::from)
+    }
+
+    fn visit_sources(
+        &mut self,
+        scope: &ScopeIdentity,
+        control: &OperationControl<'_>,
+        sink: &mut dyn SourceSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        record(&self.log, "sources");
+        control.check()?;
+        let mut files_read = 0_u64;
+        for source in self
+            .discovery_sources
+            .iter()
+            .filter(|source| source.scope() == scope)
+        {
+            let discovered = DiscoveredSource::new(source.clone(), SourceKind::Active);
+            let _ = sink.on_source(discovered, checkpoint(1))?;
+            files_read += 1;
+        }
+        AdapterCompletion::new(
+            CompletionQuality::Complete,
+            AdapterCounters::new(files_read, 0, 0, 0).map_err(PortError::from)?,
+            AdapterDiagnostics::default(),
+        )
+        .map_err(PortError::from)
+    }
+
+    fn visit_replay_sources(
+        &mut self,
+        scope: &ScopeIdentity,
+        control: &OperationControl<'_>,
+        sink: &mut dyn ReplaySourceSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        record(&self.log, "replay_sources");
+        control.check()?;
+        let mut files_read = 0_u64;
+        for source in self
+            .replay_sources
+            .iter()
+            .filter(|source| source.scope() == scope)
+        {
+            let mut reader = FakeSourceReader {
+                log: self.log.clone(),
+                source: source.clone(),
+                batch_source: None,
+                repeat_first_checkpoint: false,
+                reads: 0,
+            };
+            let discovered = DiscoveredSource::new(source.clone(), SourceKind::Active);
+            let _ = sink.on_source(discovered, checkpoint(1), &mut reader)?;
+            files_read += 1;
+        }
+        AdapterCompletion::new(
+            self.replay_quality,
+            AdapterCounters::new(files_read, 0, 0, 0).map_err(PortError::from)?,
+            AdapterDiagnostics::default(),
+        )
+        .map_err(PortError::from)
     }
 }
 
 struct FakeArchive {
     log: Log,
-    source: Option<ReplaySource>,
+    sources: Vec<SourceIdentity>,
+    prepared_sources: Vec<SourceIdentity>,
     observed_sources: u64,
     appended_events: u64,
     finished_scopes: Vec<CompletionQuality>,
@@ -432,36 +627,20 @@ impl Archive for FakeArchive {
         ))
     }
 
-    fn replay_source_page(
-        &mut self,
-        _replay: ArchiveReplay,
-        _after: Option<&ArchiveSourceCursor>,
-    ) -> Result<ReplaySourcePage, PortError> {
-        record(&self.log, "page");
-        self.fail_if_configured("page")?;
-        let sources = self.source.clone().into_iter().collect::<Vec<_>>();
-        let next_cursor = if self.fail_at == Some("repeat_cursor") {
-            let page_calls = self
-                .log
-                .lock()
-                .expect("log lock")
-                .iter()
-                .filter(|event| **event == "page")
-                .count();
-            (page_calls <= 2).then(|| ArchiveSourceCursor::new([9; 32]))
-        } else {
-            None
-        };
-        ReplaySourcePage::new(sources.into_boxed_slice(), next_cursor).map_err(PortError::from)
-    }
-
     fn prepare_replay_source(
         &mut self,
         replay: ArchiveReplay,
-        _source: &ReplaySource,
+        source: &DiscoveredSource,
+        _initial_checkpoint: &AdapterCheckpoint,
     ) -> Result<ArchiveReplay, PortError> {
         record(&self.log, "prepare");
         self.fail_if_configured("prepare")?;
+        if !self.sources.contains(source.identity())
+            || self.prepared_sources.contains(source.identity())
+        {
+            return Err(PortError::new(PortErrorCode::InvalidData));
+        }
+        self.prepared_sources.push(source.identity().clone());
         if self.fail_at == Some("switch_revision") {
             return Ok(ArchiveReplay::new(
                 ArchiveRevisionId::new(replay.revision_id().get() + 1).map_err(PortError::from)?,
@@ -506,6 +685,9 @@ impl Archive for FakeArchive {
     fn seal_replay(&mut self, replay: ArchiveReplay) -> Result<ArchiveReplay, PortError> {
         record(&self.log, "seal");
         self.fail_if_configured("seal")?;
+        if self.prepared_sources.len() != self.sources.len() {
+            return Err(PortError::new(PortErrorCode::InvalidData));
+        }
         Ok(Self::advance(replay))
     }
 
@@ -557,7 +739,8 @@ fn run_complete_fixture(
     };
     let mut archive = FakeArchive {
         log: log.clone(),
-        source: Some(ReplaySource::new(source, checkpoint(1))),
+        sources: vec![source],
+        prepared_sources: Vec::new(),
         observed_sources: 0,
         appended_events: 0,
         finished_scopes: Vec::new(),
@@ -570,9 +753,45 @@ fn run_complete_fixture(
     (result, archive, log)
 }
 
+fn run_sequence_fixture(
+    discovery_sources: Vec<SourceIdentity>,
+    replay_sources: Vec<SourceIdentity>,
+    replay_quality: CompletionQuality,
+) -> (tokenmaster_engine::OneShotResult, FakeArchive, Log) {
+    let log = Log::default();
+    let clock = FakeClock::new(0);
+    let mut coordinator = RefreshCoordinator::new();
+    let permit = started_permit(&mut coordinator, &clock);
+    let mut lease = FakeLease {
+        log: log.clone(),
+        error: None,
+    };
+    let mut adapter = SequenceAdapter {
+        log: log.clone(),
+        discovery_sources: discovery_sources.clone(),
+        replay_sources,
+        replay_quality,
+    };
+    let mut archive = FakeArchive {
+        log: log.clone(),
+        sources: discovery_sources,
+        prepared_sources: Vec::new(),
+        observed_sources: 0,
+        appended_events: 0,
+        finished_scopes: Vec::new(),
+        fail_at: None,
+        discard_error: None,
+        discarded: None,
+    };
+
+    let result =
+        OneShotExecutor::new().run(&permit, &clock, &mut lease, &mut adapter, &mut archive);
+    (result, archive, log)
+}
+
 #[test]
 fn deadline_is_enforced_at_every_execution_control_boundary() {
-    const COMPLETE_PATH_CONTROL_CHECKS: u64 = 14;
+    const COMPLETE_PATH_CONTROL_CHECKS: u64 = 15;
 
     for expire_on in 1..=COMPLETE_PATH_CONTROL_CHECKS + 1 {
         let submit_clock = FakeClock::new(0);
@@ -622,7 +841,7 @@ fn deadline_is_enforced_at_every_execution_control_boundary() {
 
 #[test]
 fn cancellation_is_observed_between_every_execution_phase() {
-    const LAST_CANCELLABLE_INTERVAL: u64 = 13;
+    const LAST_CANCELLABLE_INTERVAL: u64 = 14;
 
     for cancel_on in 1..=LAST_CANCELLABLE_INTERVAL {
         let coordinator = Arc::new(Mutex::new(RefreshCoordinator::new()));
@@ -709,7 +928,8 @@ fn complete_execution_acquires_lease_then_publishes_one_canonical_result() {
     };
     let mut archive = FakeArchive {
         log: log.clone(),
-        source: Some(ReplaySource::new(source, checkpoint(1))),
+        sources: vec![source],
+        prepared_sources: Vec::new(),
         observed_sources: 0,
         appended_events: 0,
         finished_scopes: Vec::new(),
@@ -749,7 +969,7 @@ fn complete_execution_acquires_lease_then_publishes_one_canonical_result() {
             "finish_scope",
             "finish_scan",
             "begin_replay",
-            "page",
+            "replay_sources",
             "prepare",
             "read",
             "append",
@@ -764,6 +984,110 @@ fn complete_execution_acquires_lease_then_publishes_one_canonical_result() {
         .finish(permit.id(), result.outcome(), clock.now())
         .expect("finish");
     assert_eq!(transition.completed().outcome(), RefreshOutcome::Completed);
+}
+
+#[test]
+fn two_logical_files_with_one_provider_source_id_are_both_replayed() {
+    let first = source_identity();
+    let second = SourceIdentity::new(first.scope().clone(), first.source_id(), [8; 32])
+        .expect("second logical file");
+
+    let (result, archive, log) = run_sequence_fixture(
+        vec![first.clone(), second.clone()],
+        vec![first, second],
+        CompletionQuality::Complete,
+    );
+
+    assert_eq!(result.outcome(), RefreshOutcome::Completed);
+    assert_eq!(result.quality(), CompletionQuality::Complete);
+    assert_eq!(
+        result.counts(),
+        ExecutionCounts::new(2, 2, 2, 1).expect("counts")
+    );
+    assert_eq!(archive.observed_sources, 2);
+    assert_eq!(archive.prepared_sources.len(), 2);
+    assert_eq!(archive.appended_events, 2);
+    assert_eq!(
+        log.lock()
+            .expect("log lock")
+            .iter()
+            .filter(|event| **event == "read")
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn extra_second_pass_source_is_rejected_and_latest_epoch_is_discarded() {
+    let expected = source_identity();
+    let extra = SourceIdentity::new(expected.scope().clone(), expected.source_id(), [8; 32])
+        .expect("extra logical file");
+
+    let (result, archive, log) = run_sequence_fixture(
+        vec![expected.clone()],
+        vec![expected, extra],
+        CompletionQuality::Complete,
+    );
+
+    assert_eq!(result.outcome(), RefreshOutcome::Failed);
+    assert_eq!(result.error(), Some(PortErrorCode::InvalidData));
+    assert_eq!(result.cleanup(), ReplayCleanup::Discarded);
+    assert_eq!(archive.appended_events, 1);
+    assert!(!log.lock().expect("log lock").contains(&"seal"));
+}
+
+#[test]
+fn omitted_second_pass_source_reaches_exact_seal_and_cannot_publish() {
+    let first = source_identity();
+    let omitted = SourceIdentity::new(first.scope().clone(), first.source_id(), [8; 32])
+        .expect("omitted logical file");
+
+    let (result, archive, log) = run_sequence_fixture(
+        vec![first.clone(), omitted],
+        vec![first],
+        CompletionQuality::Complete,
+    );
+
+    assert_eq!(result.outcome(), RefreshOutcome::Failed);
+    assert_eq!(result.error(), Some(PortErrorCode::InvalidData));
+    assert_eq!(result.cleanup(), ReplayCleanup::Discarded);
+    assert_eq!(archive.appended_events, 1);
+    let events = log.lock().expect("log lock");
+    assert!(events.contains(&"seal"));
+    assert!(!events.contains(&"promote"));
+}
+
+#[test]
+fn incomplete_second_pass_quality_never_seals_or_promotes() {
+    for (quality, outcome, error) in [
+        (
+            CompletionQuality::Partial,
+            RefreshOutcome::Failed,
+            PortErrorCode::Unavailable,
+        ),
+        (
+            CompletionQuality::Cancelled,
+            RefreshOutcome::Cancelled,
+            PortErrorCode::Cancelled,
+        ),
+        (
+            CompletionQuality::Failed,
+            RefreshOutcome::Failed,
+            PortErrorCode::Failed,
+        ),
+    ] {
+        let source = source_identity();
+        let (result, _archive, log) =
+            run_sequence_fixture(vec![source.clone()], vec![source], quality);
+
+        assert_eq!(result.outcome(), outcome);
+        assert_eq!(result.quality(), quality);
+        assert_eq!(result.error(), Some(error));
+        assert_eq!(result.cleanup(), ReplayCleanup::Discarded);
+        let events = log.lock().expect("log lock");
+        assert!(!events.contains(&"seal"));
+        assert!(!events.contains(&"promote"));
+    }
 }
 
 #[test]
@@ -785,7 +1109,8 @@ fn complete_zero_source_scan_publishes_retention_without_adapter_reads() {
     };
     let mut archive = FakeArchive {
         log: log.clone(),
-        source: None,
+        sources: Vec::new(),
+        prepared_sources: Vec::new(),
         observed_sources: 0,
         appended_events: 0,
         finished_scopes: Vec::new(),
@@ -833,7 +1158,8 @@ fn busy_lease_returns_before_provider_io_or_archive_mutation() {
     };
     let mut archive = FakeArchive {
         log: log.clone(),
-        source: Some(ReplaySource::new(source, checkpoint(1))),
+        sources: vec![source],
+        prepared_sources: Vec::new(),
         observed_sources: 0,
         appended_events: 0,
         finished_scopes: Vec::new(),
@@ -873,7 +1199,8 @@ fn partial_discovery_closes_remaining_scopes_without_starting_replay() {
     };
     let mut archive = FakeArchive {
         log: log.clone(),
-        source: Some(ReplaySource::new(source, checkpoint(1))),
+        sources: vec![source],
+        prepared_sources: Vec::new(),
         observed_sources: 0,
         appended_events: 0,
         finished_scopes: Vec::new(),
@@ -930,7 +1257,8 @@ fn adapter_failure_closes_the_scan_failed_without_starting_replay() {
     };
     let mut archive = FakeArchive {
         log: log.clone(),
-        source: Some(ReplaySource::new(source, checkpoint(1))),
+        sources: vec![source],
+        prepared_sources: Vec::new(),
         observed_sources: 0,
         appended_events: 0,
         finished_scopes: Vec::new(),
@@ -971,7 +1299,8 @@ fn archive_observation_failure_still_closes_failed_scan_state() {
     };
     let mut archive = FakeArchive {
         log: log.clone(),
-        source: Some(ReplaySource::new(source, checkpoint(1))),
+        sources: vec![source],
+        prepared_sources: Vec::new(),
         observed_sources: 0,
         appended_events: 0,
         finished_scopes: Vec::new(),
@@ -1018,7 +1347,8 @@ fn cross_scope_discovery_is_rejected_before_archive_observation() {
     };
     let mut archive = FakeArchive {
         log: log.clone(),
-        source: None,
+        sources: Vec::new(),
+        prepared_sources: Vec::new(),
         observed_sources: 0,
         appended_events: 0,
         finished_scopes: Vec::new(),
@@ -1057,7 +1387,8 @@ fn replay_fault_discards_only_the_latest_unpublished_epoch() {
     };
     let mut archive = FakeArchive {
         log: log.clone(),
-        source: Some(ReplaySource::new(source, checkpoint(1))),
+        sources: vec![source],
+        prepared_sources: Vec::new(),
         observed_sources: 0,
         appended_events: 0,
         finished_scopes: Vec::new(),
@@ -1105,11 +1436,11 @@ fn non_progressing_adapter_checkpoint_fails_before_archive_append() {
             source_quality: CompletionQuality::Complete,
             source_error: None,
         },
-        reads: 0,
     };
     let mut archive = FakeArchive {
         log: log.clone(),
-        source: Some(ReplaySource::new(source, checkpoint(1))),
+        sources: vec![source],
+        prepared_sources: Vec::new(),
         observed_sources: 0,
         appended_events: 0,
         finished_scopes: Vec::new(),
@@ -1129,30 +1460,36 @@ fn non_progressing_adapter_checkpoint_fails_before_archive_append() {
 }
 
 #[test]
-fn repeated_archive_cursor_fails_without_reprocessing_the_page() {
+fn replay_batch_from_a_different_logical_file_fails_before_archive_append() {
     let log = Log::default();
     let clock = FakeClock::new(0);
     let mut coordinator = RefreshCoordinator::new();
     let permit = started_permit(&mut coordinator, &clock);
     let source = source_identity();
+    let batch_source = SourceIdentity::new(source.scope().clone(), source.source_id(), [8; 32])
+        .expect("different logical file");
     let mut lease = FakeLease {
         log: log.clone(),
         error: None,
     };
-    let mut adapter = FakeAdapter {
-        log: log.clone(),
-        source: Some(source.clone()),
-        extra_scope: None,
-        source_quality: CompletionQuality::Complete,
-        source_error: None,
+    let mut adapter = MismatchedBatchAdapter {
+        inner: FakeAdapter {
+            log: log.clone(),
+            source: Some(source.clone()),
+            extra_scope: None,
+            source_quality: CompletionQuality::Complete,
+            source_error: None,
+        },
+        batch_source,
     };
     let mut archive = FakeArchive {
         log: log.clone(),
-        source: Some(ReplaySource::new(source, checkpoint(1))),
+        sources: vec![source],
+        prepared_sources: Vec::new(),
         observed_sources: 0,
         appended_events: 0,
         finished_scopes: Vec::new(),
-        fail_at: Some("repeat_cursor"),
+        fail_at: None,
         discard_error: None,
         discarded: None,
     };
@@ -1163,9 +1500,8 @@ fn repeated_archive_cursor_fails_without_reprocessing_the_page() {
     assert_eq!(result.outcome(), RefreshOutcome::Failed);
     assert_eq!(result.error(), Some(PortErrorCode::InvalidData));
     assert_eq!(result.cleanup(), ReplayCleanup::Discarded);
-    let events = log.lock().expect("log lock").clone();
-    assert_eq!(events.iter().filter(|event| **event == "page").count(), 2);
-    assert_eq!(events.iter().filter(|event| **event == "append").count(), 1);
+    assert_eq!(archive.appended_events, 0);
+    assert!(!log.lock().expect("log lock").contains(&"append"));
 }
 
 #[test]
@@ -1187,7 +1523,8 @@ fn replay_continuation_work_is_hard_bounded_per_execution() {
     };
     let mut archive = FakeArchive {
         log: log.clone(),
-        source: None,
+        sources: Vec::new(),
+        prepared_sources: Vec::new(),
         observed_sources: 0,
         appended_events: 0,
         finished_scopes: Vec::new(),
@@ -1236,7 +1573,8 @@ fn stale_epoch_error_discards_the_last_confirmed_epoch_only() {
     };
     let mut archive = FakeArchive {
         log: log.clone(),
-        source: Some(ReplaySource::new(source, checkpoint(1))),
+        sources: vec![source],
+        prepared_sources: Vec::new(),
         observed_sources: 0,
         appended_events: 0,
         finished_scopes: Vec::new(),
@@ -1276,7 +1614,8 @@ fn archive_cannot_switch_the_replay_revision_mid_execution() {
     };
     let mut archive = FakeArchive {
         log,
-        source: Some(ReplaySource::new(source, checkpoint(1))),
+        sources: vec![source],
+        prepared_sources: Vec::new(),
         observed_sources: 0,
         appended_events: 0,
         finished_scopes: Vec::new(),
@@ -1321,7 +1660,8 @@ fn failed_replay_discard_is_reported_without_masking_the_execution_error() {
     };
     let mut archive = FakeArchive {
         log,
-        source: Some(ReplaySource::new(source, checkpoint(1))),
+        sources: vec![source],
+        prepared_sources: Vec::new(),
         observed_sources: 0,
         appended_events: 0,
         finished_scopes: Vec::new(),
@@ -1358,7 +1698,8 @@ fn busy_from_a_non_lease_port_is_a_failure_not_false_admission_backpressure() {
     };
     let mut archive = FakeArchive {
         log,
-        source: Some(ReplaySource::new(source, checkpoint(1))),
+        sources: vec![source],
+        prepared_sources: Vec::new(),
         observed_sources: 0,
         appended_events: 0,
         finished_scopes: Vec::new(),

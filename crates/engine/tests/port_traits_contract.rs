@@ -3,12 +3,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use tokenmaster_engine::{
     Adapter, AdapterBatch, AdapterBatchParts, AdapterCheckpoint, AdapterCompletion,
     AdapterCounters, AdapterDiagnostics, Archive, ArchiveEpoch, ArchiveReplay, ArchiveRevisionId,
-    ArchiveScanSetId, ArchiveSourceCursor, BatchState, Clock, CompletionQuality, DiscoveredSource,
-    EngineErrorCode, MAX_REPLAY_SOURCES_PER_PAGE, MonotonicTime, OperationControl, OperationStop,
-    PortError, PortErrorCode, RefreshAdmission, RefreshCoordinator, RefreshDeadline,
-    RefreshUrgency, ReplayContinuation, ReplayContinuationState, ReplaySource, ReplaySourcePage,
-    ScopeIdentity, ScopeManifest, ScopeSink, SinkControl, SourceIdentity, SourceKind, SourceSink,
-    WriterLease, WriterLeaseGuard,
+    ArchiveScanSetId, BatchState, Clock, CompletionQuality, DiscoveredSource, MonotonicTime,
+    OperationControl, OperationStop, PortError, PortErrorCode, RefreshAdmission,
+    RefreshCoordinator, RefreshDeadline, RefreshUrgency, ReplayContinuation,
+    ReplayContinuationState, ReplaySourceSink, ScopeIdentity, ScopeManifest, ScopeSink,
+    SinkControl, SourceBatchReader, SourceIdentity, SourceKind, SourceSink, WriterLease,
+    WriterLeaseGuard,
 };
 
 fn source_identity() -> SourceIdentity {
@@ -95,6 +95,34 @@ struct FakeAdapter {
     source: SourceIdentity,
 }
 
+struct FakeSourceReader {
+    source: SourceIdentity,
+}
+
+impl SourceBatchReader for FakeSourceReader {
+    fn read_batch(
+        &mut self,
+        checkpoint: &AdapterCheckpoint,
+        control: &OperationControl<'_>,
+    ) -> Result<AdapterBatch, PortError> {
+        control.check()?;
+        AdapterBatch::new(
+            &self.source,
+            AdapterBatchParts {
+                observations: Box::default(),
+                relations: Box::default(),
+                chunk_proofs: tokenmaster_engine::ChunkProofBatch::new(None, Box::default())
+                    .map_err(PortError::from)?,
+                next_checkpoint: checkpoint.clone(),
+                state: BatchState::SnapshotEnd,
+                counters: AdapterCounters::default(),
+                diagnostics: AdapterDiagnostics::default(),
+            },
+        )
+        .map_err(PortError::from)
+    }
+}
+
 impl Adapter for FakeAdapter {
     fn visit_scopes(
         &mut self,
@@ -133,30 +161,50 @@ impl Adapter for FakeAdapter {
         .map_err(PortError::from)
     }
 
-    fn read_batch(
+    fn visit_replay_sources(
         &mut self,
-        source: &SourceIdentity,
-        checkpoint: &AdapterCheckpoint,
+        scope: &ScopeIdentity,
         control: &OperationControl<'_>,
-    ) -> Result<AdapterBatch, PortError> {
+        sink: &mut dyn ReplaySourceSink,
+    ) -> Result<AdapterCompletion, PortError> {
         control.check()?;
-        if source != &self.source {
+        if scope != self.source.scope() {
             return Err(PortError::new(PortErrorCode::InvalidData));
         }
-        AdapterBatch::new(
-            source,
-            AdapterBatchParts {
-                observations: Box::default(),
-                relations: Box::default(),
-                chunk_proofs: tokenmaster_engine::ChunkProofBatch::new(None, Box::default())
-                    .map_err(PortError::from)?,
-                next_checkpoint: checkpoint.clone(),
-                state: BatchState::SnapshotEnd,
-                counters: AdapterCounters::default(),
-                diagnostics: AdapterDiagnostics::default(),
-            },
+        let source = DiscoveredSource::new(self.source.clone(), SourceKind::Active);
+        let checkpoint =
+            AdapterCheckpoint::new(vec![1, 2, 3].into_boxed_slice()).map_err(PortError::from)?;
+        let mut reader = FakeSourceReader {
+            source: self.source.clone(),
+        };
+        let _ = sink.on_source(source, checkpoint, &mut reader)?;
+        AdapterCompletion::new(
+            CompletionQuality::Complete,
+            AdapterCounters::new(1, 0, 0, 0).map_err(PortError::from)?,
+            AdapterDiagnostics::default(),
         )
         .map_err(PortError::from)
+    }
+}
+
+struct CollectedReplaySources<'a> {
+    control: &'a OperationControl<'a>,
+    sources: Vec<SourceIdentity>,
+    batch_count: usize,
+}
+
+impl ReplaySourceSink for CollectedReplaySources<'_> {
+    fn on_source(
+        &mut self,
+        source: DiscoveredSource,
+        initial_checkpoint: AdapterCheckpoint,
+        reader: &mut dyn SourceBatchReader,
+    ) -> Result<SinkControl, PortError> {
+        let batch = reader.read_batch(&initial_checkpoint, self.control)?;
+        assert_eq!(batch.source_identity(), source.identity());
+        self.sources.push(source.identity().clone());
+        self.batch_count += 1;
+        Ok(SinkControl::Continue)
     }
 }
 
@@ -189,30 +237,16 @@ fn adapter_streams_owned_normalized_values_through_object_safe_callbacks() {
     assert_eq!(sources.0.len(), 1);
     assert_eq!(sources.0[0].0.identity(), &source_identity());
     assert_eq!(sources.0[0].1.as_bytes(), &[1, 2, 3]);
-}
-
-#[test]
-fn replay_pages_are_exactly_bounded_and_debug_private() {
-    let replay_source = ReplaySource::new(
-        source_identity(),
-        AdapterCheckpoint::new(vec![0x5a; 32].into_boxed_slice()).expect("checkpoint"),
-    );
-    let cursor = ArchiveSourceCursor::new([9; 32]);
-    let page = ReplaySourcePage::new(vec![replay_source.clone()].into_boxed_slice(), Some(cursor))
-        .expect("page");
-    assert_eq!(page.sources().len(), 1);
-    assert_eq!(page.next_cursor(), Some(&cursor));
-    let debug = format!("{page:?}");
-    assert!(debug.contains("source_count: 1"));
-    assert!(!debug.contains("profile-a"));
-    assert!(!debug.contains("source-a"));
-    assert!(!debug.contains("90, 90"));
-
-    let too_many = vec![replay_source; MAX_REPLAY_SOURCES_PER_PAGE + 1].into_boxed_slice();
-    let error = ReplaySourcePage::new(too_many, None).expect_err("oversized page");
-    assert_eq!(error.code(), EngineErrorCode::CapacityExceeded);
-    let error = ReplaySourcePage::new(Box::default(), Some(cursor)).expect_err("empty progress");
-    assert_eq!(error.code(), EngineErrorCode::InvalidValue);
+    let mut replay = CollectedReplaySources {
+        control: &control,
+        sources: Vec::new(),
+        batch_count: 0,
+    };
+    adapter
+        .visit_replay_sources(&scopes.0[0], &control, &mut replay)
+        .expect("replay discovery");
+    assert_eq!(replay.sources, vec![source_identity()]);
+    assert_eq!(replay.batch_count, 1);
 }
 
 struct Guard;
@@ -266,18 +300,11 @@ impl Archive for FakeArchive {
         ))
     }
 
-    fn replay_source_page(
-        &mut self,
-        _replay: ArchiveReplay,
-        _after: Option<&ArchiveSourceCursor>,
-    ) -> Result<ReplaySourcePage, PortError> {
-        ReplaySourcePage::new(Box::default(), None).map_err(PortError::from)
-    }
-
     fn prepare_replay_source(
         &mut self,
         replay: ArchiveReplay,
-        _source: &ReplaySource,
+        _source: &DiscoveredSource,
+        _initial_checkpoint: &AdapterCheckpoint,
     ) -> Result<ArchiveReplay, PortError> {
         Ok(replay)
     }

@@ -2,11 +2,11 @@ use tokenmaster_accounting::Canonicalizer;
 
 use crate::{
     Adapter, AdapterCheckpoint, AdapterCompletion, AdapterCounters, AdapterDiagnostics, Archive,
-    ArchiveReplay, ArchiveRevisionId, ArchiveScanSetId, ArchiveSourceCursor, BatchState,
-    CanonicalBatch, CanonicalBatchParts, Clock, CompletionQuality, EngineError, EngineErrorCode,
+    ArchiveReplay, ArchiveRevisionId, ArchiveScanSetId, BatchState, CanonicalBatch,
+    CanonicalBatchParts, Clock, CompletionQuality, DiscoveredSource, EngineError, EngineErrorCode,
     MAX_SCOPE_MANIFEST_ENTRIES, OperationControl, PortError, PortErrorCode, RefreshOutcome,
-    RefreshPermit, RefreshRequestId, ReplayContinuationState, ReplaySource, ScopeIdentity,
-    ScopeManifest, ScopeSink, SinkControl, SourceSink, WriterLease,
+    RefreshPermit, RefreshRequestId, ReplayContinuationState, ReplaySourceSink, ScopeIdentity,
+    ScopeManifest, ScopeSink, SinkControl, SourceBatchReader, SourceSink, WriterLease,
 };
 
 pub const MAX_REPLAY_CONTINUATIONS_PER_RUN: usize = 4_096;
@@ -357,47 +357,53 @@ impl OneShotExecutor {
         archive: &mut dyn Archive,
         manifest: &ScopeManifest,
         state: &mut ExecutionState,
-    ) -> Result<(), PortError> {
-        let mut cursor: Option<ArchiveSourceCursor> = None;
-        loop {
+    ) -> Result<(), ExecutionFailure> {
+        for scope in manifest.scopes() {
             control.check()?;
-            let replay = state.replay.ok_or_else(stale_error)?;
-            let page = archive.replay_source_page(replay, cursor.as_ref())?;
-            let next_cursor = page.next_cursor().copied();
-            if next_cursor.is_some() && next_cursor == cursor {
-                return Err(PortError::new(PortErrorCode::InvalidData));
-            }
-            for source in page.sources() {
-                if !manifest.scopes().contains(source.identity().scope()) {
-                    return Err(PortError::new(PortErrorCode::InvalidData));
-                }
-                self.replay_source(control, adapter, archive, source, state)?;
-            }
-            let Some(next_cursor) = next_cursor else {
-                return Ok(());
+            let completion = {
+                let mut sink = ArchiveReplaySourceSink {
+                    executor: self,
+                    control,
+                    archive,
+                    expected_scope: scope,
+                    state,
+                };
+                adapter.visit_replay_sources(scope, control, &mut sink)?
             };
-            cursor = Some(next_cursor);
+            if completion.quality() != CompletionQuality::Complete {
+                return Err(ExecutionFailure {
+                    error: error_for_quality(completion.quality()),
+                    quality: completion.quality(),
+                });
+            }
         }
+        Ok(())
     }
 
     fn replay_source(
         &self,
         control: &OperationControl<'_>,
-        adapter: &mut dyn Adapter,
         archive: &mut dyn Archive,
-        source: &ReplaySource,
+        source: &DiscoveredSource,
+        initial_checkpoint: AdapterCheckpoint,
+        reader: &mut dyn SourceBatchReader,
         state: &mut ExecutionState,
     ) -> Result<(), PortError> {
         control.check()?;
         let current = state.replay.ok_or_else(stale_error)?;
-        let replay =
-            validate_replay_transition(current, archive.prepare_replay_source(current, source)?)?;
+        let replay = validate_replay_transition(
+            current,
+            archive.prepare_replay_source(current, source, &initial_checkpoint)?,
+        )?;
         state.replay = Some(replay);
-        let mut checkpoint = source.checkpoint().clone();
+        let mut checkpoint = initial_checkpoint;
 
         loop {
             control.check()?;
-            let batch = adapter.read_batch(source.identity(), &checkpoint, control)?;
+            let batch = reader.read_batch(&checkpoint, control)?;
+            if batch.source_identity() != source.identity() {
+                return Err(PortError::new(PortErrorCode::InvalidData));
+            }
             let batch_state = batch.state();
             let next_checkpoint = batch.next_checkpoint().clone();
             if batch_state == BatchState::More && next_checkpoint == checkpoint {
@@ -485,6 +491,36 @@ impl SourceSink for ArchiveSourceSink<'_> {
         self.archive
             .observe_source(self.scan_set_id, &source, &initial_checkpoint)?;
         self.counts.add_observed_source()?;
+        Ok(SinkControl::Continue)
+    }
+}
+
+struct ArchiveReplaySourceSink<'a> {
+    executor: &'a OneShotExecutor,
+    control: &'a OperationControl<'a>,
+    archive: &'a mut dyn Archive,
+    expected_scope: &'a ScopeIdentity,
+    state: &'a mut ExecutionState,
+}
+
+impl ReplaySourceSink for ArchiveReplaySourceSink<'_> {
+    fn on_source(
+        &mut self,
+        source: DiscoveredSource,
+        initial_checkpoint: AdapterCheckpoint,
+        reader: &mut dyn SourceBatchReader,
+    ) -> Result<SinkControl, PortError> {
+        if source.identity().scope() != self.expected_scope {
+            return Err(PortError::new(PortErrorCode::InvalidData));
+        }
+        self.executor.replay_source(
+            self.control,
+            self.archive,
+            &source,
+            initial_checkpoint,
+            reader,
+            self.state,
+        )?;
         Ok(SinkControl::Continue)
     }
 }
@@ -612,6 +648,16 @@ fn quality_for_error(code: PortErrorCode) -> CompletionQuality {
         | PortErrorCode::Unavailable
         | PortErrorCode::Failed => CompletionQuality::Failed,
     }
+}
+
+fn error_for_quality(quality: CompletionQuality) -> PortError {
+    PortError::new(match quality {
+        CompletionQuality::Complete => PortErrorCode::InvalidData,
+        CompletionQuality::Partial => PortErrorCode::Unavailable,
+        CompletionQuality::Cancelled => PortErrorCode::Cancelled,
+        CompletionQuality::Failed => PortErrorCode::Failed,
+        CompletionQuality::TimedOut => PortErrorCode::DeadlineExceeded,
+    })
 }
 
 fn stale_error() -> PortError {
