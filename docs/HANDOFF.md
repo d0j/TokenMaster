@@ -57,8 +57,10 @@ newer archive generation and exposes exact revision/scan/data-through/quality pl
   fixed checked diagnostics. Equal/older and writer-busy candidates cannot replace it;
   focused store/runtime tests are green. P1-E.2 now closes no-change, pause/resume,
   restart, malformed-truncation recovery, canonical-retention, and successful-repair
-  publication behavior. The immediate next task is Windows power-event suspend/resume
-  binding and final resource/CPU evidence.
+  publication behavior. P1-E.3 completes the Windows 8+ static capacity-one power
+  callback, narrow runtime command, forced resume reconciliation, and 4,096-cycle
+  resource proof without helper thread/window or callback heap state. P1 is implemented;
+  the immediate next task is P2 immutable indexed query snapshots.
 The 2026-07-16 closure review also freezes the remaining plan ambiguities: P3 is the
 complete UI, P4 presentation/localization, P5 read-only automation, and P6 the
 canonical MSVC signed portable release. It selects the Slint attribution route,
@@ -212,6 +214,13 @@ P1-E.2 adds no-change/resume/restart and failed-truncation recovery contracts. B
 malformed/incomplete/oversized adapter diagnostics now fail before checkpoint or batch
 commit; the archive remains `recovery_pending`, prior canonical truth stays readable,
 and a later valid rebuild returns the immutable publication to `complete`.
+P1-E.3 adds actual OS callback register/unregister, deterministic last-event-wins power
+semantics, resume-without-suspend recovery, duplicate/shutdown behavior, and a
+4,096-cycle plateau for private bytes, handles, threads, USER, and GDI objects. It does
+not replace the later frozen-candidate interactive hibernation or soak receipts.
+An explicit `x86_64-pc-windows-msvc` check currently stops before TokenMaster code:
+the installed Rust target has no `cl.exe`, Visual Studio installation, or `vswhere` in
+this environment. GNU remains the developer gate; MSVC setup/comparison remains P6.
 Clean-root, formatting, strict workspace Clippy, and the full locked workspace passed;
 see the P1-A history entry for exact commands and focused counts. The
 one-million-row M0 scale test remains explicitly ignored in the normal workspace run.

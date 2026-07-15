@@ -1,6 +1,7 @@
 # P1-E Immutable Publication and Suspend/Resume Plan
 
-Status: in progress; Tasks 1-4 implemented, Tasks 5-6 remain.
+Status: complete; Tasks 1-6 implemented. M0 and product-release acceptance remain
+separate exact-receipt gates.
 
 ## Goal
 
@@ -138,7 +139,7 @@ TDD matrix:
   generation/revision/scan/data-through exactly;
 - consumer races always keep the highest snapshot generation.
 
-## Task 5 — Bind Windows power events without UI/archive coupling
+## Task 5 — Bind Windows power events without UI/archive coupling (complete)
 
 Files:
 
@@ -154,7 +155,14 @@ resume-before-suspend, shutdown races, hibernation, and clock rollback are idemp
 If a reliable power notification cannot be installed, the periodic scheduler remains
 the recovery backstop and the UI reports the integration unavailable.
 
-## Task 6 — P1-E evidence and project truth
+Implementation selected the Windows 8+ callback form of
+`RegisterSuspendResumeNotification`. One process-wide static capacity-one atomic signal
+requires no heap callback context, helper thread, hidden window, USER object, or GDI
+object. The shell/controller takes the last event and passes it to
+`LiveRuntime::apply_power_event`; every resume forces recovery even when suspend was
+missed and runtime is still logically running.
+
+## Task 6 — P1-E evidence and project truth (complete)
 
 Files:
 
@@ -168,7 +176,8 @@ Focused evidence:
 - generation race and old-result rejection;
 - busy/cancel/deadline/partial/recovery behavior;
 - burst and restart;
-- Windows suspend/resume/hibernate sequence;
+- deterministic Windows suspend/resume/hibernate notification sequence and real OS
+  register/unregister lifecycle;
 - repeated runtime generation resource return;
 - bounded private-memory slope, CPU idle/refresh budget, handles, threads, USER and GDI
   objects using the existing evidence methodology.

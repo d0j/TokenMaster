@@ -406,3 +406,20 @@ or unverifiable shortcuts. Freezing them now preserves the proven native core, m
 the user-visible product the next priority after its data contracts, and gives one
 auditable definition of release readiness without pretending GNU developer evidence,
 private web behavior, or a broad feature label proves the final product.
+
+## ADR-025 — Static capacity-one Windows power callback boundary
+
+Decision: use the Windows 8+ callback form of `RegisterSuspendResumeNotification` in
+`tokenmaster-platform`. One process-wide static signal keeps only the latest suspend or
+resume event plus checked counters. It has no heap callback context, helper thread,
+hidden window, USER/GDI object, archive handle, or runtime reference. The product
+controller removes the pending event and invokes `LiveRuntime::apply_power_event`;
+suspend is idempotent pause, while every resume invalidates watcher assumptions and
+forces authoritative reconciliation even when a suspend notification was missed.
+
+Rationale: a message-only window adds a thread, window lifetime, USER handle, pump, and
+UI coupling solely to receive two event classes. Calling runtime from the OS callback
+would introduce lock order and SQLite lifetime hazards. A static last-event-wins signal
+is callback-lifetime safe, constant-state, non-blocking, and preserves resume recovery
+when suspend/resume notifications coalesce. Periodic exact reconciliation remains the
+backstop when registration is unavailable.

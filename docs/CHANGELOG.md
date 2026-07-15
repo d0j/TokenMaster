@@ -88,6 +88,10 @@ All notable changes are recorded here.
 - Immutable publication race/recovery coverage for no-change freshness, pause/resume,
   persisted versus in-process restart ordering, malformed-truncation
   `recovery_pending`, canonical retention, and successful repair.
+- Windows 8+ suspend/resume registration with one process-wide static capacity-one
+  signal, no helper thread/window/callback allocation, last-event-wins reduction,
+  forced reconciliation on every resume, private diagnostics, and 4,096-cycle private-
+  memory/handle/thread/USER/GDI resource bounds.
 - Approved a provider-neutral weekly quota reset history: immutable pre/post epochs,
   scheduled/early/repeated reset transitions, allowance-change separation, bounded
   retention, and shared UI/CLI/MCP semantics for P2.

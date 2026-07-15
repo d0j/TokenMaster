@@ -6,8 +6,11 @@ use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use tokenmaster_codex::{CodexRootInput, ConfiguredCodexRoot, build_discovery_request};
 use tokenmaster_engine::{RefreshOutcome, RefreshUrgency, WriterLease};
+use tokenmaster_platform::PowerLifecycleEvent;
 use tokenmaster_provider::DiscoveryRequest;
-use tokenmaster_runtime::{EnginePublicationQuality, LiveRuntime, RuntimeWriterLease};
+use tokenmaster_runtime::{
+    EnginePublicationQuality, LiveRuntime, RuntimeErrorCode, RuntimeWriterLease,
+};
 use tokenmaster_store::{ArchivePublicationQuality, UsageStore};
 
 fn request(root: &Path) -> DiscoveryRequest {
@@ -328,4 +331,73 @@ fn failed_truncation_rebuild_publishes_recovery_pending_then_recovers() {
     assert_ne!(repaired.archive_revision(), recovery.archive_revision());
     assert!(repaired.diagnostics().failed_refreshes() >= 1);
     runtime.shutdown().expect("shutdown");
+}
+
+#[test]
+fn power_events_are_idempotent_and_resume_always_reconciles() {
+    let source_root = TempDir::new().expect("source root");
+    let archive_root = TempDir::new().expect("archive root");
+    let archive_path = archive_root.path().join("usage.sqlite3");
+    let source = source_root.path().join("session.jsonl");
+    std::fs::write(&source, usage_line(1, 3)).expect("initial source");
+
+    let mut runtime =
+        LiveRuntime::start(&archive_path, request(source_root.path())).expect("live runtime");
+    assert_eq!(
+        wait_completion(&runtime).outcome(),
+        RefreshOutcome::Completed
+    );
+    wait_quiescent(&runtime);
+    let initial = runtime.snapshot().expect("initial snapshot").engine();
+
+    assert_eq!(
+        runtime
+            .apply_power_event(PowerLifecycleEvent::Resume)
+            .expect("running resume"),
+        tokenmaster_runtime::LivePhase::Running
+    );
+    assert_eq!(
+        wait_completion(&runtime).outcome(),
+        RefreshOutcome::Completed
+    );
+    wait_quiescent(&runtime);
+    let running_resume = runtime
+        .snapshot()
+        .expect("running resume snapshot")
+        .engine();
+    assert!(running_resume.is_newer_than(Some(initial)));
+
+    assert_eq!(
+        runtime
+            .apply_power_event(PowerLifecycleEvent::Suspend)
+            .expect("suspend"),
+        tokenmaster_runtime::LivePhase::Paused
+    );
+    assert_eq!(
+        runtime
+            .apply_power_event(PowerLifecycleEvent::Suspend)
+            .expect("duplicate suspend"),
+        tokenmaster_runtime::LivePhase::Paused
+    );
+    assert_eq!(
+        runtime
+            .apply_power_event(PowerLifecycleEvent::Resume)
+            .expect("resume"),
+        tokenmaster_runtime::LivePhase::Running
+    );
+    assert_eq!(
+        wait_completion(&runtime).outcome(),
+        RefreshOutcome::Completed
+    );
+    wait_quiescent(&runtime);
+    let resumed = runtime.snapshot().expect("resumed snapshot").engine();
+    assert!(resumed.is_newer_than(Some(running_resume)));
+    runtime.shutdown().expect("shutdown");
+    assert_eq!(
+        runtime
+            .apply_power_event(PowerLifecycleEvent::Resume)
+            .expect_err("resume after shutdown")
+            .code(),
+        RuntimeErrorCode::Closed
+    );
 }

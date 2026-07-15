@@ -233,6 +233,14 @@ joined shutdown. A failed submit faults without retry. Tests prove one aggregate
 one engine follow-up for 10,000 hints and eventual return of process handles/threads to
 baseline after 32 Windows watcher replacements.
 
+Windows suspend/resume registration uses one static callback and capacity-one atomic
+signal. The callback ignores context/setting pointers, maps only documented power-event
+codes, returns a stable success code, and cannot call runtime, SQLite, logging, UI, or
+allocation. The OS registration handle remains private to the platform guard. Explicit
+shutdown reports stable unregistration failure and keeps the guard retryable; a failed drop leaves the singleton
+closed to further registrations rather than allowing repeated handle growth or unsafe
+callback-context reuse.
+
 `LiveRuntime` acquires the writer lease before SQLite open, migration, orphan-scan
 closure, or staging recovery. It resumes only the exact staging revision whose status,
 accounting versions, scan binding, revision, and epoch validate; ambiguous identity or

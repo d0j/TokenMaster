@@ -218,6 +218,13 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   without erasing the prior two canonical events, then returns to `complete` only after
   valid input rebuilds successfully. Existing burst, cancellation, and stale-request
   contracts complete the race matrix.
+- P1-E.3 Windows power binding: `tokenmaster-platform` registers the Windows 8+
+  suspend/resume callback into one static capacity-one atomic signal with no helper
+  thread, hidden window, callback allocation, or runtime/archive reference. Runtime
+  applies the last event through an idempotent command; every resume forces exact
+  reconciliation even if suspend was missed. Unit/integration contracts cover every
+  resume code, duplicate/last-wins behavior, shutdown privacy, and 4,096 registration
+  cycles with bounded private bytes and no handle/thread/USER/GDI growth.
 
 ## Next implementation slice
 
@@ -271,8 +278,10 @@ lease, and P1-D.5 adds bounded pathless watcher/periodic scheduling. P1-D.6 comp
 lease-first startup recovery and live lifecycle assembly. P1-E.1 now exposes the
 immutable bounded engine publication without sharing the writer connection with UI,
 CLI, or MCP readers. P1-E.2 closes the race/recovery/restart matrix and makes degraded
-live input fail closed. The next gate is Windows power-event suspend/resume binding and
-final resource/CPU evidence.
+live input fail closed. P1-E.3 completes the isolated Windows power binding and
+deterministic resource evidence. The next implementation gate is P2 immutable indexed
+query snapshots; M0 interactive hibernation and uninterrupted-soak receipts remain
+separate frozen-candidate acceptance work.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 

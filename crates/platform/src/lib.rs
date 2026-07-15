@@ -5,6 +5,7 @@ use std::fmt;
 use std::fs::File;
 
 mod lease;
+mod power;
 
 #[cfg(unix)]
 mod unix;
@@ -15,6 +16,9 @@ mod windows;
 
 pub use lease::{
     ExclusiveFileLease, ExclusiveFileLeaseError, ExclusiveFileLeaseGuard, WRITER_LEASE_SUFFIX,
+};
+pub use power::{
+    PowerLifecycleEvent, PowerMonitorError, PowerMonitorSnapshot, SuspendResumeMonitor,
 };
 
 /// Stable, path-private identity for the physical file referenced by an open handle.

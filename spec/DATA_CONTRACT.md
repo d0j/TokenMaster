@@ -175,6 +175,12 @@ cancelled, or deadline work cannot manufacture a newer archive snapshot. In-proc
 generation may restart with the process; persisted archive generation is the durable
 ordering authority.
 
+The Windows power adapter adds one process-wide static signal containing one pending
+event byte, three checked counters, and one overflow flag. It retains no event queue,
+callback context allocation, thread, window, OS handle in engine state, timestamp, or
+history. Repeated equal notifications change only a checked coalesced counter; a later
+different notification atomically replaces the pending event.
+
 Truncation, physical replacement, or source absence is not destructive authority. A
 complete sealed overlay may promote while carrying omitted prior replay-verified
 events. Incomplete, partial, cancelled, pending, mismatched, or invalid evidence still

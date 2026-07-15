@@ -1,7 +1,7 @@
 # TokenMaster Critical Audit and Approved Master Plan
 
-Status: architecture and release plan approved after closure review; P0 through P1-D
-implemented; P1-E is active.
+Status: architecture and release plan approved after closure review; P0 through P1 are
+implemented; P2 is next.
 Date: 2026-07-16.
 
 ## 1. Executive decision
@@ -224,8 +224,10 @@ strictly generation-ordered immutable engine snapshot with exact archive revisio
 scan-set/data-through truth, fixed checked diagnostics, and busy/older-result rejection.
 P1-E.2 now closes no-change, pause/resume, restart, malformed-truncation recovery,
 canonical-retention, and successful-repair publication semantics. The immediate next
-gate is Windows power-event binding and final resource/CPU evidence before P2 indexed
-query snapshots.
+P1-E.3 adds a static capacity-one Windows power callback, idempotent runtime lifecycle
+command, forced resume reconciliation, and 4,096-cycle private-memory/handle/thread/
+USER/GDI bounds. P1 is implemented; the immediate next gate is P2 immutable indexed
+query snapshots. M0 interactive/soak evidence remains separate.
 The older replay plan remains historical evidence for
 completed Tasks 1-2, but its Codex-owned Tasks 3+ are superseded and must not be
 executed.

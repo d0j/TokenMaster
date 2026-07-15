@@ -101,6 +101,16 @@ request, `resume` invalidates watcher assumptions and forces recovery, and `shut
 drops the watcher, joins the scheduler, then cancels/joins the worker. Debug contains
 no archive or source path.
 
+On Windows 8+, `SuspendResumeMonitor` owns the single process registration for
+`RegisterSuspendResumeNotification`. The OS callback maps suspend and every supported
+resume form into one capacity-one last-event-wins atomic signal; it never calls runtime,
+opens SQLite, acquires a mutex, allocates, or creates a helper window/thread. A shell or
+controller removes the pending event and passes it to `LiveRuntime::apply_power_event`.
+Suspend is idempotent pause. Resume invalidates watcher assumptions and forces recovery
+even if runtime is already logically running, covering a missed or coalesced suspend.
+Registration and unregistration errors are stable and contain no OS handle or message.
+Failed explicit shutdown keeps the registration guard active so cleanup can be retried.
+
 Malformed, incomplete, or oversized relevant provider input is a blocking adapter
 diagnostic. The live reader returns fixed `invalid_data` before checkpoint or batch
 commit; a rebuild therefore remains failed/`recovery_pending` and preserves the prior

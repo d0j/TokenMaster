@@ -10,6 +10,7 @@ use tokenmaster_engine::{
     RefreshPermit, RefreshUrgency, RefreshWorker, WorkerCompletion, WorkerError, WorkerErrorCode,
     WorkerPhase, WriterLease, WriterLeaseGuard,
 };
+use tokenmaster_platform::PowerLifecycleEvent;
 use tokenmaster_provider::DiscoveryRequest;
 use tokenmaster_store::{ArchiveMode, ArchivePublicationQuality, ScanOutcome, UsageStore};
 
@@ -251,6 +252,21 @@ impl LiveRuntime {
         }
         self.phase = LivePhase::Running;
         Ok(self.phase)
+    }
+
+    pub fn apply_power_event(
+        &mut self,
+        event: PowerLifecycleEvent,
+    ) -> Result<LivePhase, RuntimeError> {
+        match event {
+            PowerLifecycleEvent::Suspend => self.pause(),
+            PowerLifecycleEvent::Resume if self.phase == LivePhase::Running => {
+                self.reset_watcher.store(true, Ordering::Release);
+                self.refresh_now(RefreshUrgency::Recovery)?;
+                Ok(self.phase)
+            }
+            PowerLifecycleEvent::Resume => self.resume(),
+        }
     }
 
     pub fn shutdown(&mut self) -> Result<LivePhase, RuntimeError> {

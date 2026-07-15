@@ -1095,3 +1095,30 @@ two canonical events readable, and a later valid rebuild publishes `complete` wi
 new revision. Focused strict runtime Clippy and the complete runtime test suite pass.
 Windows power-event binding and final resource/CPU evidence remain; P1, M0, packaging,
 signing, and release are not yet accepted.
+
+## 2026-07-16 — P1-E.3 Windows power binding completed
+
+Added the Windows 8+ callback form of `RegisterSuspendResumeNotification` behind
+`tokenmaster-platform`. A process-wide static capacity-one atomic signal stores only
+the latest suspend/resume event and checked counters. It owns no callback heap context,
+helper thread, hidden window, USER/GDI object, runtime reference, SQLite handle, path,
+timestamp, or event history. Unknown codes are counted and ignored; every documented
+resume form maps to one fixed event.
+
+`LiveRuntime::apply_power_event` keeps suspend idempotent and makes every resume reset
+watcher assumptions and force authoritative reconciliation, including resume-before-
+suspend and coalesced/missed suspend. Registration is a singleton with explicit stable
+shutdown errors and private Debug. RED contracts first proved the missing platform and
+runtime APIs. Focused GREEN covers last-wins/duplicates/counter overflow, all resume
+codes, actual OS register/unregister/reuse, runtime pause/resume/shutdown behavior, and
+4,096 register/unregister cycles under a 1-MiB private-memory ceiling with no sustained
+handle, thread, USER, or GDI growth. The first resource run exposed a two-handle observer
+warm-up in ToolHelp measurement; after warming the measurement itself, the unchanged
+strict plateau gate passed three consecutive runs.
+
+P1 is now implemented and P2 immutable indexed query snapshots are next. This does not
+accept M0, replace a frozen-candidate real hibernation/interactive receipt, run the final
+soak, package, sign, or release the product. An explicit MSVC check stopped before
+TokenMaster code because this machine has the Rust MSVC target but no `cl.exe`, Visual
+Studio installation, or `vswhere`; canonical MSVC setup/comparison remains P6 rather
+than a claimed validation result.
