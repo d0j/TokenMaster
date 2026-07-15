@@ -7,10 +7,12 @@ mod clock;
 mod codex_adapter;
 mod error;
 mod incremental;
+mod lease;
 mod store_archive;
 
 pub use clock::SystemClock;
 pub use codex_adapter::CodexAdapter;
 pub use error::{RuntimeError, RuntimeErrorCode};
 pub use incremental::{IncrementalRefreshOutcome, IncrementalRefreshReport, refresh_incremental};
+pub use lease::RuntimeWriterLease;
 pub use store_archive::StoreArchive;

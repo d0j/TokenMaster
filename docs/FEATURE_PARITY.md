@@ -11,5 +11,5 @@ claim. Each TokenMaster behavior must be specified, tested, bounded, and privacy
 | ccusage: source handling | Codex history discovery, active/archive precedence, incremental update | M1 discovery, bounded reader, exact-scan tail refresh, and rebuild fallback implemented; scheduling pending |
 | ccusage: usage semantics | Token fields, cumulative deltas, model normalization, session identity | M1 parser/domain implemented |
 | ccusage: analytics | Cost, reports, model/session/project breakdowns, periods | Planned after staging and index completion |
-| TokenMaster improvement | Bounded memory, path-private storage, transactional SQLite, immutable UI snapshots | Core contracts and current-generation ingest implemented |
+| TokenMaster improvement | Bounded memory, path-private storage, transactional SQLite, cross-process writer safety, immutable UI snapshots | Core contracts, current-generation ingest, and portable OS writer lease implemented |
 | TokenMaster improvement | Banked reset inventory, expiry reminders, assisted and capability-gated auto activation | P2 architecture approved; no current discovery or mutation implementation claimed |

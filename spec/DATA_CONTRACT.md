@@ -102,6 +102,11 @@ progress, port fault, or stale state after replay begin invokes exact discard of
 last confirmed unpublished handle; a failed discard remains an explicit recovery
 state and never authorizes publication.
 
+The cross-process writer sidecar is durable but contains exactly zero bytes. It stores
+no PID, timestamp, owner, path, diagnostic, credential, or lease history. Lock ownership
+exists only in one OS file handle and is released by guard drop or process death. The
+sidecar is never deleted on normal unlock.
+
 Canonical replay events and late session relations from one reader batch are one
 `ReplayAppendBatch` authority unit. Both collections are independently capped at 256.
 They share the same expected revision/epoch and source/checkpoint boundary; event

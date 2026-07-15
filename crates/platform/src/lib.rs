@@ -4,12 +4,18 @@
 use std::fmt;
 use std::fs::File;
 
+mod lease;
+
 #[cfg(unix)]
 mod unix;
 #[cfg(not(any(unix, windows)))]
 mod unsupported;
 #[cfg(windows)]
 mod windows;
+
+pub use lease::{
+    ExclusiveFileLease, ExclusiveFileLeaseError, ExclusiveFileLeaseGuard, WRITER_LEASE_SUFFIX,
+};
 
 /// Stable, path-private identity for the physical file referenced by an open handle.
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]

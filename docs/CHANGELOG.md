@@ -65,6 +65,10 @@ All notable changes are recorded here.
   archive CAS, targeted fingerprint materialization, zero-payload unchanged refresh,
   persisted-offset multi-batch tails, bounded partial restart, multiple new/empty
   sources, missing-history retention, and durable non-destructive rebuild state.
+- Portable process-owned writer lease using one persistent empty sidecar and Rust 1.97
+  `File::try_lock`, with same-process/cross-process contention, normal/forced process
+  release, canonical parent alias, unsupported namespace/mapped remote drive, privacy,
+  and runtime bridge contracts.
 - Approved a provider-neutral weekly quota reset history: immutable pre/post epochs,
   scheduled/early/repeated reset transitions, allowance-change separation, bounded
   retention, and shared UI/CLI/MCP semantics for P2.

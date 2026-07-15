@@ -152,8 +152,8 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   real runtime contracts prove baseline/reopen, 300 logical files sharing one source
   ID, authoritative zero-source, missing-profile partial retention, append rebuild,
   Windows atomic replacement, truncation carry-forward, pre-start cancellation, and
-  exact staging discard after replay begin. This is bootstrap/full rebuild only; no
-  incremental tail path, watcher, scheduler, or real OS writer lease is claimed.
+  exact staging discard after replay begin. This P1-D.2 slice is bootstrap/full
+  rebuild only; later slices below add the incremental tail and real OS writer lease.
 - P1-D.3 replay-aware incremental archive: strict schema v6 adds one checked current
   publication generation with exact complete/partial/recovery truth and exact v5
   rollback-tested migration. Current append compares revision epoch plus archive
@@ -165,8 +165,17 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   cancellation, deadline-after-first-batch restart without duplicates, Windows
   replacement, truncation, changed-profile recovery, safe full-rebuild takeover of
   provisional sources, durable `recovery_pending`, reopen semantics, and rollback at
-  four current-append boundaries. The OS writer lease, watcher/scheduler, and live
-  lifecycle assembly remain unimplemented.
+  four current-append boundaries.
+- P1-D.4 portable process-owned writer lease: `tokenmaster-platform` canonicalizes one
+  controlled local parent and uses a persistent empty sidecar plus Rust 1.97
+  `File::try_lock`. One guard owns one handle; drop, normal process exit, and forced
+  termination release the OS lock. Separate same-process and child-process handles,
+  canonical `.` aliasing, UNC/device/mapped-remote rejection, payload rejection, empty
+  persistence, redacted Debug, reacquisition, and runtime `busy` mapping are proven. A
+  4,096-cycle Windows acquire/drop contract also proves that the process handle count
+  does not grow. No PID, timestamp, path, owner payload, polling thread, or retained
+  lock history exists. Watcher/scheduler and live lifecycle assembly remain
+  unimplemented.
 
 ## Next implementation slice
 
@@ -208,8 +217,9 @@ bounded deterministic worker. P1-D.0 corrects the real per-file/two-pass seam un
 `docs/superpowers/plans/2026-07-15-tokenmaster-p1-d-live-runtime.md`. P1-D.1 makes
 replay events and late relations one atomic store batch, and P1-D.2 composes the real
 Codex bootstrap reader with the store archive. P1-D.3 adds the replay-aware current
-archive and real tail-only refresh. The next gate is P1-D.4: implement the portable
-process-owned writer lease before watcher/periodic hints and lifecycle cancellation. P1-E
+archive and real tail-only refresh, and P1-D.4 adds the portable process-owned writer
+lease. The next gate is P1-D.5: implement bounded watcher/periodic hints before
+lifecycle cancellation. P1-E
 then adds sleep/resume, immutable publication, race generations, and continuous
 runtime recovery.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred

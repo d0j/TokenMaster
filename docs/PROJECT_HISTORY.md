@@ -939,3 +939,27 @@ CAS tokens, and publication quality. Focused evidence is 20 store unit tests, se
 incremental store contracts, and eleven real runtime incremental contracts. P1-D.4 OS
 writer lease, watcher/scheduler, lifecycle assembly, P1-E, M0 acceptance, packaging,
 signing, and release remain unclaimed.
+
+## 2026-07-15 — P1-D.4 portable process-owned writer lease added
+
+Added `ExclusiveFileLease` in the platform boundary and `RuntimeWriterLease` as the
+provider-neutral engine bridge. One canonical controlled local archive parent derives
+one persistent sidecar. It is opened read/write without truncation, must remain a
+regular zero-byte file, and is never removed on unlock. Rust 1.97 `File::try_lock`
+provides non-blocking exclusive ownership; only typed contention maps to engine
+`busy`. One erased guard retains one file handle, so guard drop, normal process exit,
+and forced process termination release ownership without PID/timestamp state, a
+heartbeat, cleanup thread, or stale-owner heuristic.
+
+Eight platform integration contracts prove independent same-process handles, an
+independent child process, normal and forced child exit, reacquisition, canonical `.`
+parent aliasing, UNC/device rejection before I/O, payload rejection, persistent
+emptiness, and redacted Debug/error surfaces. One Windows unit contract rejects mapped
+remote, unknown, missing, and read-only optical drive types while accepting local
+fixed/removable/RAM-disk media. The eighth integration contract runs 4,096 acquire/drop
+cycles and proves that the Windows process handle count does not grow. Two runtime
+contracts prove stable `busy`/invalid-data mapping and guard-drop reacquisition through
+the engine port.
+Focused strict Clippy and all platform/runtime targets pass. P1-D.5 watcher/scheduler,
+P1-D.6 lifecycle assembly, P1-E, M0 acceptance, packaging, signing, and release remain
+unclaimed.

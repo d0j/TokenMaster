@@ -4,18 +4,20 @@
 > this plan task-by-task. Use `superpowers:test-driven-development` for every behavior
 > change and `superpowers:verification-before-completion` before each completion claim.
 
-**Status:** Active. P1-D.4 is the immediate execution slice. Work remains root-only
+**Status:** Active. P1-D.5 is the immediate execution slice. Work remains root-only
 because the available task-name-only child surface cannot prove configured role/model
 routing; `MODEL_ROUTING_DRIFT` remains explicit.
 
-**Progress:** Tasks 1-7 (P1-D.0/P1-D.1/P1-D.2/P1-D.3) are implemented. Task 5 applies events
-and late relations in one bounded store transaction with one epoch advance. Task 6
-adds the real Codex bootstrap adapter, strict checkpoint codec, and checked store
+**Progress:** Tasks 1-8 (P1-D.0/P1-D.1/P1-D.2/P1-D.3/P1-D.4) are implemented.
+Task 5 applies events and late relations in one bounded store transaction with one epoch
+advance. Task 6 adds the real Codex bootstrap adapter, strict checkpoint codec, and
+checked store
 archive bridge. Task 7 adds schema-v6 publication generations, exact scan admission,
 paired-CAS replay-aware tail append, bounded partial recovery, and durable rebuild
 selection. Focused store/runtime tests cover zero-byte unchanged, exact append,
 multi-batch, new/missing sources, cancellation/deadline resume, replacement/truncation,
-and transaction faults. No watcher, OS lease, lifecycle assembly, P1-E, M0 acceptance,
+and transaction faults. Task 8 adds the real persistent empty-sidecar OS writer lease
+and process-death recovery proof. No watcher, lifecycle assembly, P1-E, M0 acceptance,
 or release is claimed.
 
 **Goal:** Compose a live built-in Codex runtime whose normal refresh is tail-only,
@@ -425,6 +427,13 @@ cargo +1.97.0 test -p tokenmaster-runtime --test incremental_contract --locked
 Commit: `feat(store): add replay-aware incremental archive`.
 
 ## Task 8: P1-D.4 portable process-owned writer lease
+
+**Completed:** eight platform integration contracts, one Windows drive-classification
+unit contract, and two runtime bridge contracts prove same-process and independent-
+child contention, normal and forced process release, reacquisition, canonical parent
+aliasing, unsupported namespace/mapped-remote rejection, persistent zero-byte state,
+redacted Debug, stable `busy`/error mapping, and no process-handle growth across 4,096
+acquire/drop cycles.
 
 **Files:**
 

@@ -65,6 +65,20 @@
    32 newer closed sets. Running sets and source/replay references are preserved. A
    failure writes nothing; never replace this operation with ad hoc SQL.
 
+## Writer lease recovery
+
+1. `busy` means another live handle owns the empty archive sidecar. Do not delete the
+   sidecar, write a PID/timestamp into it, or bypass the lease with a SQLite-only
+   writer. Wait for the current operation to finish and retry through normal admission.
+2. Process death releases the OS lock. The zero-byte sidecar intentionally persists;
+   its existence is not evidence of a live owner and it must not be removed on startup
+   or unlock. Reacquire the same canonical archive identity through
+   `RuntimeWriterLease`.
+3. A non-empty, symlink/reparse, relative, remote, or device sidecar/location fails
+   closed. Preserve only the stable error category; never log the resolved path or OS
+   message. Repair the controlled data-directory configuration or remove unexpected
+   payload only through explicit operator-owned inspection, not automatically.
+
 ## One-shot engine recovery
 
 1. Treat a `busy` result as writer-lease admission backpressure only. The executor has
@@ -91,9 +105,9 @@
 
 ## Bootstrap runtime recovery
 
-1. Treat `tokenmaster-runtime` as the bootstrap/full-rebuild composition only. A
-   successful bootstrap must end in exact seal and promotion; do not reuse it as the
-   future watcher or incremental-tail loop.
+1. Treat `OneShotExecutor` through `tokenmaster-runtime` as the bootstrap/full-rebuild
+   path only. A successful bootstrap must end in exact seal and promotion; use the
+   separate incremental entry point for tails and do not reuse either as a watcher.
 2. A Codex checkpoint decode failure is `invalid_data`. Re-enumerate the current
    configured root and create a fresh zero-offset checkpoint by open/metadata probe.
    Never edit envelope bytes, restore a path from SQLite, or log checkpoint content.

@@ -160,6 +160,14 @@ misuse of that code fails the operation. Replay failure attempts exact
 last-confirmed-handle discard, and cleanup failure is reported separately without
 exposing data or masking the initiating stable code.
 
+The real writer lease resolves one controlled local parent, rejects relative,
+UNC/device/mapped-remote locations, symlink and reparse ambiguity, and opens one
+persistent empty sidecar without truncation. `File::try_lock` contention is the only
+`busy` source. The guard owns one handle; drop or process death releases the OS lock.
+The sidecar and Debug/error
+surfaces contain no owner, PID, timestamp, path, OS message, payload, or history and
+the sidecar is never deleted on unlock.
+
 Store replay append binds at most 256 late relation drafts to the same source,
 checkpoint, revision, and epoch as its at-most-256 canonical events. Provider/profile/
 source mismatches and out-of-range relation offsets fail before commit. Events,

@@ -52,6 +52,12 @@ Only lease acquisition may produce terminal `busy`; a `busy` code from any later
 is an execution failure. Failure after replay begin attempts exact discard and reports
 whether cleanup succeeded without masking the original stable error code.
 
+`RuntimeWriterLease` bridges the engine port to `tokenmaster-platform` without exposing
+a path or handle. Construction resolves one controlled local archive parent and one
+persistent sidecar identity. Acquisition is non-blocking; only OS lock contention maps
+to `busy`, while invalid sidecar/location and I/O failures remain stable path-free
+codes. The returned erased guard owns exactly one locked file handle.
+
 A replay append accepts at most 256 canonical events and at most 256 late session
 relations. Observation/overlay work, relation reconciliation, selection invalidation,
 continuation work, chunks, checkpoint, source state, and evidence epoch commit in one
@@ -72,8 +78,8 @@ batch/diagnostic counters and archive generation. It performs an exact complete 
 preflights every present source before tail writes, reads only after persisted
 checkpoints, reports profile-scope drift as `rebuild_required`, and never exposes paths
 or checkpoint bytes. Full rebuild may replace only an exact unadmitted provisional
-generation left by interrupted admission. Watcher, scheduler, process lease, and
-lifecycle assembly remain separate later layers.
+generation left by interrupted admission. Watcher, scheduler, and lifecycle assembly
+remain separate later layers.
 
 `RefreshWorker` owns exactly one dedicated thread, one capacity-one wake channel, and
 one capacity-one latest-only completion channel. Admission mutates the shared

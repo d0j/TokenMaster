@@ -21,8 +21,7 @@ read zero JSONL payload bytes; append resumes from the persisted checkpoint; new
 missing sources follow exact complete-scan authority; replacement, rewrite, and
 truncation or a changed profile scope durably request a non-destructive full rebuild.
 That rebuild safely recovers an unadmitted provisional source. The next runtime slice is
-the portable process-owned writer lease, followed by bounded scheduling and lifecycle
-assembly.
+bounded scheduling and filesystem hints, followed by lifecycle assembly.
 
 ## Build and verify
 

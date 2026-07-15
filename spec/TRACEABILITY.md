@@ -12,7 +12,7 @@ A design or plan is not implementation evidence.
 | TM-FUNC-005 | partial | `crates/probe-app`; product shell later | lifecycle, presentation, skin-runtime, metrics, stress contracts |
 | TM-FUNC-006 | planned | separate CLI and MCP adapters over query facade | P3 strict JSON/stdin MCP conformance tests |
 | TM-FUNC-007 | implemented | accounting lineage/classifier, scalable replay archive, P0-E composition, and P1-A retention | real JSONL baseline/append/restart/replay/quality/atomic-replacement/truncation-retention/failure contracts pass; live scheduling remains TM-FUNC-008/P1 |
-| TM-FUNC-008 | partial | provider-neutral drafts/engine, Codex bootstrap and replay-aware incremental runtime; lease/scheduler/lifecycle/plugin host pending | P1-C plus P1-D.0-P1-D.3 logical-file, codec, bootstrap, exact-scan, paired-CAS, tail/recovery contracts |
+| TM-FUNC-008 | partial | provider-neutral drafts/engine, Codex bootstrap, replay-aware incremental runtime, portable writer lease; scheduler/lifecycle/plugin host pending | P1-C plus P1-D.0-P1-D.4 logical-file, codec, bootstrap, exact-scan, paired-CAS, tail/recovery/lease contracts |
 | TM-FUNC-009 | planned | immutable provider quota epochs and weekly full-reset transitions | P2 quota reset plan; scheduled/early/repeated/reset+allowance/restart/UI/API fixtures pending |
 | TM-FUNC-010 | planned | banked reset lots, selectable default/custom expiry reminders, activation intents/receipts | P2 banked reset plan; inventory/profile/reminder/reconciliation/UI/security fixtures pending |
 | TM-UI-001 | planned | complete Slint board and supporting views | granular parity matrix and P4 accessibility/UI tests |
@@ -34,7 +34,7 @@ A design or plan is not implementation evidence.
 | TM-SEC-001 | partial | local-only product and no listener today | future quota HTTPS opt-in and MCP stdio security tests pending |
 | TM-SEC-002 | partial | current JSONL/store boundaries validate types and sizes | future config/CLI/MCP/plugin boundary suites pending |
 | TM-SEC-003 | implemented | provider/Codex/store/engine errors, value types, and redacted worker panic boundary | serialized/debug privacy, path-redaction, sealed identity, path-substitution, raw-archive-write compile-fail, fixed panic/fault completion, and panic-strategy compile guard contracts |
-| TM-SEC-004 | partial | transactional scan/replay/current authority, paired CAS, preflight, atomic targeted projection, durable recovery, immutable legacy, exact rebuild | P1-D.3 proves path-free admission, four-boundary rollback, cancellation/deadline resume, Windows replacement/truncation recovery; OS lease/lifecycle remain |
+| TM-SEC-004 | partial | transactional scan/replay/current authority, paired CAS, preflight, atomic targeted projection, durable recovery, immutable legacy, exact rebuild, OS writer lease | P1-D.3 path-free rollback/recovery plus P1-D.4 same/cross-process, death-release, empty-sidecar, namespace/privacy contracts; lifecycle remains |
 | TM-SEC-005 | partial | M0 skins are declarative application data | external skin package schema/validation not implemented |
 | TM-SEC-006 | planned | built-in Codex exists; isolated plugin host deferred | provider plugin design and future 1.1 conformance/security gates |
 | TM-SEC-007 | planned | host-owned banked reset activation capability and policy boundary | no-scrape/no-authority-escalation/idempotency/ambiguous-outcome security gates pending |
@@ -66,9 +66,10 @@ path-private Codex adapter, strict checkpoint codec, and store archive bootstrap
 composition. P1-D.3 now adds schema v6 publication truth, exact scan freshness/source
 admission, paired-CAS replay-aware tail append, bounded continuation, durable partial/
 recovery state, and real Codex zero-payload/append/multi-batch/restart/replacement
-plus profile-scope/full-rebuild recovery contracts. P1-D.4 portable writer lease is
-next, followed by the bounded watcher/
-scheduler and lifecycle assembly.
+plus profile-scope/full-rebuild recovery contracts. P1-D.4 adds the portable empty-
+sidecar process-owned writer lease, mapped-remote fail-closed classification, and a
+4,096-cycle Windows handle-plateau contract. P1-D.5 bounded watcher/scheduler is next,
+followed by lifecycle assembly.
 Tasks 3+ in the older replay plan are historical and superseded.
 
 The clean-root invariant is implemented by `scripts/audit-clean-root.ps1` and its

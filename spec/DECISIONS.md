@@ -316,3 +316,22 @@ while appending directly to the old canonical projection bypasses replay account
 The paired CAS prevents stale writers, exact scan authority admits new files without
 path persistence, durable partial/recovery states make restart honest, and targeted
 materialization avoids archive-sized work on the fast path.
+
+## ADR-021 — Persistent empty sidecar with OS-owned writer lock
+
+Decision: `tokenmaster-platform` derives one sidecar beside the archive after resolving
+and validating a controlled local parent; Windows drive-type validation rejects mapped
+remote and non-writable optical roots. The sidecar is opened read/write without
+truncation, must remain a regular zero-byte file, and is never deleted during unlock.
+Rust 1.97 `File::try_lock` supplies the non-blocking exclusive lock. Its typed
+`WouldBlock` is the only engine `busy`; every other failure becomes a stable path-free
+category. One guard owns one file handle, so drop, normal exit, and process death
+release ownership without a PID, timestamp, heartbeat, polling thread, or stale-owner
+repair protocol. Runtime implements the provider-neutral `WriterLease` port over this
+platform type; the engine retains no path or OS handle.
+
+Rationale: a SQLite row or owner timestamp can outlive a crash and create false
+permanent ownership, while deleting a lock file can split Unix inode identity between
+writers. A persistent empty sidecar plus an OS-owned handle preserves one lock identity,
+recovers automatically after process death, consumes constant memory, and exposes no
+private owner data.
