@@ -1140,3 +1140,17 @@ pages. P2-A starts with indexed latest activity and proves `pageSize + 1` lookah
 privacy, deadlines, and resources. P2-B will add schema-v7 transactional materialized
 aggregates; UI code is never allowed to full-scan/group the event table. This is an
 approved executable plan, not P2 implementation evidence.
+
+## 2026-07-16 — P2-A bounded query values implemented
+
+Added the root-workspace `tokenmaster-query` crate using RED/GREEN contracts. Its first
+slice owns schema-v1 immutable headers and envelopes, checked process-local and
+persisted generations, separate empty/legacy/replay dataset identity, one injected
+wall/monotonic clock sample, stable path-free errors, bounded scope/warning collections,
+and latest-activity pages capped at 256 owned items. Cursor and activity Debug redact
+the canonical fingerprint, and invalid nanoseconds, generations, revisions, page sizes,
+capacities, or continuation shape fail closed.
+
+All six focused value contracts and strict package clippy pass. This is Task 1 only:
+there is still no query SQLite connection, exact transaction capture, deadline handler,
+service mapping, frontend worker, CLI/MCP surface, aggregate, pricing, or quota claim.

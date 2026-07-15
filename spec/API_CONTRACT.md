@@ -159,6 +159,15 @@ zero scanned sources without implying zero historical usage.
 The UI consumes immutable bounded snapshots. It receives stable data-quality and
 freshness states and never directly receives source paths or raw source content.
 
+`tokenmaster-query` owns the shared schema-v1 read values for UI, CLI, and MCP. Every
+envelope carries a checked process-local snapshot generation, persisted publication
+generation, separate dataset identity, exact generated/data-through time, freshness,
+quality, at most 32 scopes and 16 stable warnings, and one owned payload. Activity
+pages contain at most 256 items and expose only a fingerprint-redacted opaque cursor.
+Invalid bounds, capacity, stale identity, deadline, archive, version, overflow, and
+internal failures use stable path-free codes. The facade clock supplies one exact wall/
+monotonic sample; frontends do not supply publication time.
+
 Quota snapshots expose current window epochs and a bounded transition page. Full
 weekly resets include before/after values, maximum pre-reset use, old/new reset times,
 transition kind, evidence source, confidence, and an exact or bounded detection time.

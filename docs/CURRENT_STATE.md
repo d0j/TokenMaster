@@ -286,8 +286,11 @@ P2-A is now executable under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-query-foundation.md`. Its approved
 design separates publication generation from dataset identity, uses a dedicated
 query-only SQLite store and short exact read transactions, keeps the facade synchronous,
-and starts with the existing composite-index latest-activity page. No P2 query code is
-claimed yet.
+and starts with the existing composite-index latest-activity page. P2-A Task 1 is now
+implemented in `tokenmaster-query`: schema-v1 headers/envelopes, checked generations,
+publication/dataset identity, an injected exact clock sample, stable path-free errors,
+bounded scopes/warnings/pages, and fingerprint-redacted activity cursors. Task 2, the
+separate query-only SQLite store and exact transaction capture, is next.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 

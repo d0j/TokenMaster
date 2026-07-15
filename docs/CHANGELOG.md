@@ -103,6 +103,10 @@ All notable changes are recorded here.
   identity, dedicated SQLite read-only/query-only store, short exact transactions,
   injected clock/deadline, bounded immutable envelopes, and composite keyset activity
   paging before materialized aggregates.
+- Added the first `tokenmaster-query` slice with schema-v1 immutable headers and
+  envelopes, checked publication/dataset identities, injected exact clock samples,
+  bounded pages/scopes/warnings, stable path-free errors, and fingerprint-redacted
+  activity cursors.
 
 ### Fixed
 

@@ -5232,6 +5232,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokenmaster-query"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.18",
+ "tokenmaster-domain",
+]
+
+[[package]]
 name = "tokenmaster-runtime"
 version = "0.1.0"
 dependencies = [

@@ -1,6 +1,6 @@
 # P2-A Immutable Query Foundation Plan
 
-Status: approved; implementation not started.
+Status: in progress; Task 1 complete.
 
 ## Goal
 
@@ -9,6 +9,8 @@ Implement the approved query foundation in
 contracts and no UI, analytics, pricing, quota, CLI, MCP, or arbitrary SQL scope.
 
 ## Task 1 — Add the bounded public query values
+
+Status: complete on 2026-07-16. Focused value contracts and strict package clippy pass.
 
 Files:
 
