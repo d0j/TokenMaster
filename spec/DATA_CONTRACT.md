@@ -42,18 +42,23 @@ Current-generation append writes observations, canonical selections, chunk cover
 checkpoint, and source metadata in one transaction. A stale generation, identity,
 offset, scan position, or partial proof MUST write nothing.
 
-Staging generations MUST remain invisible to canonical reads. The product replay
-begin currently supports a compatibility all-registered-source snapshot in one
-immediate transaction; the production P1-B path MUST instead bind to one exact
-complete scan set. A scan set contains a bounded duplicate-free manifest of
+Staging generations MUST remain invisible to canonical reads. Compatibility and
+test/repair replay begin may still snapshot all registered sources, but the production
+path binds to one exact complete scan set in an immediate transaction. A scan set
+contains a bounded duplicate-free manifest of
 provider/profile scopes and exactly one child scan per scope. Only a complete child
 may set unseen sources missing or restore observed sources present. Registration and
 ordinary append never manufacture presence: after a scope has complete-scan
 authority, a newly registered source starts missing until a later complete child
 observes it. Partial, cancelled, failed, timed-out, pending, stale, or foreign-scope
 scans preserve prior missing state. Scan-set creation and source finalization are
-single immediate transactions with fault-tested rollback. The compatibility replay
-path still snapshots every registered source into SQLite;
+single immediate transactions with fault-tested rollback. Scan-bound replay stages
+exactly the present sources whose last-seen child belongs to that set and stores
+`scan_set_id` on the revision. Begin, continuation, seal, and promotion revalidate
+completion, exact membership, staging counts, and foreign keys. A complete set with
+zero present sources creates no staging generations and may publish a retention-only
+revision while missing sources keep their prior current generations. The compatibility
+replay path still snapshots every registered source into SQLite;
 the stored checked 64-bit source count is never an application allocation authority.
 Before the first staging append, an adapter may prepare only its exact untouched
 pending source with a validated zero-offset incremental checkpoint. Preparation is

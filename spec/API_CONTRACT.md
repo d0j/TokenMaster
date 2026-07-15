@@ -22,6 +22,10 @@ cancelled, failed, and timed-out results remain visible quality states and never
 silently become success. Public surfaces expose bounded IDs, counts, timestamps, and
 stable codes, not source keys or paths.
 
+Published freshness identifies the exact complete scan set that authorized its replay
+revision. A zero-present-source publication is explicitly retention-only and reports
+zero scanned sources without implying zero historical usage.
+
 ## UI data boundary
 
 The UI consumes immutable bounded snapshots. It receives stable data-quality and

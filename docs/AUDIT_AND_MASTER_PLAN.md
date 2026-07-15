@@ -168,8 +168,9 @@ P1-A is complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p1-retained-projection.md`; it adds
 strict schema-v4 provenance and explicit bounded carry-forward. The immediate
 P1-B.1 gate is implemented as strict schema v5 plus scoped complete-only scan
-authority. The immediate implementation gate is P1-B.2 scan-bound replay, followed
-by P1-B.3 bounded history/recovery, under
+authority. P1-B.2 exact scan-bound replay and zero-source retention are also
+implemented. The immediate implementation gate is P1-B.3 reference-safe bounded
+history/recovery under
 `docs/superpowers/plans/2026-07-15-tokenmaster-p1-b-scan-authority.md`. The older replay
 plan remains historical evidence for completed Tasks 1-2, but its Codex-owned Tasks
 3+ are superseded and must not be executed.

@@ -116,6 +116,7 @@ fn baseline_real_jsonl_is_atomic_replay_safe_and_private() {
     assert!(result.max_reader_batch <= 256);
     assert!(result.max_event_page <= 256);
     assert_eq!(result.restarts, 1);
+    assert!(result.scan_bound);
 
     let debug = format!("{result:?}");
     assert!(!debug.contains(root.to_string_lossy().as_ref()));
@@ -362,6 +363,13 @@ fn enumeration_and_reader_cancellation_leave_no_staging_projection() {
     .expect_err("cancelled enumeration cannot begin replay");
     assert_eq!(enumeration_error, PipelineError::EnumerationIncomplete);
     assert_eq!(visible_totals(&enumeration_database), (0, 0, false));
+    assert!(
+        UsageStore::open(&enumeration_database)
+            .expect("reopen cancelled scan archive")
+            .running_scan_set()
+            .expect("cancelled scan state")
+            .is_none()
+    );
 
     let reader_directory = TempDir::new().expect("reader directory");
     let reader_root = reader_directory.path().join("reader-root");

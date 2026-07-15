@@ -14,7 +14,8 @@ use tokenmaster_platform::PhysicalFileIdentity;
 use tokenmaster_provider::{DiscoveryProvider, SourceKind as ProviderSourceKind};
 use tokenmaster_store::{
     AppendBatch, AppendBatchParts, EventCursor, ReplayAppendBatch, ReplayAppendBatchParts,
-    ReplayEpoch, ReplayQualityCounts, ReplayRelation, ReplayRevisionId, SourceKey,
+    ReplayEpoch, ReplayQualityCounts, ReplayRelation, ReplayRevisionId, ScanCounters, ScanId,
+    ScanOutcome, ScanScope, ScanSetId, ScanSetManifest, ScanSnapshot, SourceKey,
     SourceKind as StoreSourceKind, SourceRegistration, SourceRegistrationParts, StoreError,
     StoreErrorCode, StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk, StoredUsageEvent,
     StoredVerification, UsageStore,
@@ -52,6 +53,12 @@ pub struct PipelineResult {
     pub max_reader_batch: usize,
     pub max_event_page: usize,
     pub restarts: u64,
+    pub scan_bound: bool,
+}
+
+struct ActiveScanSet {
+    id: ScanSetId,
+    children: Box<[ScanSnapshot]>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -170,12 +177,25 @@ pub fn run_pipeline(
     }
 
     let mut archive = ReopenableStore::open(database, options.restart_after_batches)?;
-    let registered_files = register_complete_source_set(
+    let scan_set = begin_discovery_scan(&discovery, &mut archive.store)?;
+    let registered_files = match register_complete_source_set(
         &discovery,
         &mut archive.store,
+        &scan_set,
         options.cancel_enumeration_after_files,
-    )?;
-    let revision = archive.store.begin_replay_revision_all_sources()?;
+    ) {
+        Ok(registered_files) => {
+            finish_discovery_scan(&mut archive.store, &scan_set, ScanOutcome::Complete)?;
+            registered_files
+        }
+        Err(error) => {
+            finish_discovery_scan(&mut archive.store, &scan_set, ScanOutcome::Partial)?;
+            return Err(error);
+        }
+    };
+    let revision = archive
+        .store
+        .begin_replay_revision_for_scan_set(scan_set.id)?;
     let mut state = PipelineState {
         revision_id: revision.id(),
         epoch: revision.epoch(),
@@ -218,16 +238,19 @@ pub fn run_pipeline(
         }
     };
     state.epoch = sealed.epoch();
-    if let Err(error) = archive
+    let promoted = match archive
         .store
         .promote_replay_revision(state.revision_id, state.epoch)
     {
-        archive
-            .store
-            .discard_replay_revision(state.revision_id, state.epoch)
-            .map_err(PipelineError::from)?;
-        return Err(error.into());
-    }
+        Ok(promoted) => promoted,
+        Err(error) => {
+            archive
+                .store
+                .discard_replay_revision(state.revision_id, state.epoch)
+                .map_err(PipelineError::from)?;
+            return Err(error.into());
+        }
+    };
     archive.reopen()?;
 
     let visible = visible_summary(&archive.store, options.collect_event_ids)?;
@@ -242,6 +265,7 @@ pub fn run_pipeline(
         max_reader_batch: state.max_reader_batch,
         max_event_page: before.max_page.max(visible.max_page),
         restarts: archive.restarts,
+        scan_bound: promoted.scan_set_id() == Some(scan_set.id),
     })
 }
 
@@ -304,9 +328,57 @@ pub fn probe_current_rebuild_reason(
     Ok(result)
 }
 
+fn begin_discovery_scan(
+    discovery: &tokenmaster_provider::DiscoverySnapshot,
+    store: &mut UsageStore,
+) -> Result<ActiveScanSet, PipelineError> {
+    let mut scopes = discovery
+        .sources()
+        .iter()
+        .map(|source| ScanScope::new("codex", source.profile_id().as_str()))
+        .collect::<Result<Vec<_>, _>>()?;
+    scopes.sort_unstable();
+    scopes.dedup();
+    let manifest = ScanSetManifest::new(scopes.into_boxed_slice())?;
+    let scan_set = store.begin_scan_set(&manifest, 1_000)?;
+    let children = store.scan_page(scan_set.id(), None, usize::MAX)?;
+    Ok(ActiveScanSet {
+        id: scan_set.id(),
+        children,
+    })
+}
+
+fn finish_discovery_scan(
+    store: &mut UsageStore,
+    scan_set: &ActiveScanSet,
+    outcome: ScanOutcome,
+) -> Result<(), PipelineError> {
+    for child in &scan_set.children {
+        store.finish_scan(child.id(), outcome, 1_010, ScanCounters::default())?;
+    }
+    store.finish_scan_set(scan_set.id, 1_020)?;
+    Ok(())
+}
+
+fn scan_for_descriptor(
+    scan_set: &ActiveScanSet,
+    descriptor: &SourceFileDescriptor,
+) -> Result<ScanId, PipelineError> {
+    scan_set
+        .children
+        .iter()
+        .find(|scan| {
+            scan.scope().provider_id() == descriptor.provider_id()
+                && scan.scope().profile_id() == descriptor.profile_id().as_str()
+        })
+        .map(ScanSnapshot::id)
+        .ok_or(PipelineError::EnumerationIncomplete)
+}
+
 fn register_complete_source_set(
     discovery: &tokenmaster_provider::DiscoverySnapshot,
     store: &mut UsageStore,
+    scan_set: &ActiveScanSet,
     cancel_after_files: Option<u64>,
 ) -> Result<u64, PipelineError> {
     let mut emitted = 0_u64;
@@ -318,7 +390,11 @@ fn register_complete_source_set(
             if cancel_after_files.is_some_and(|limit| emitted >= limit) {
                 return SinkDecision::Cancel;
             }
-            match register_descriptor(store, &descriptor) {
+            match register_descriptor(store, &descriptor).and_then(|source_key| {
+                store
+                    .observe_scan_source(scan_for_descriptor(scan_set, &descriptor)?, source_key)?;
+                Ok(())
+            }) {
                 Ok(()) => match emitted.checked_add(1) {
                     Some(next) => {
                         emitted = next;
@@ -349,11 +425,11 @@ fn register_complete_source_set(
 fn register_descriptor(
     store: &mut UsageStore,
     descriptor: &SourceFileDescriptor,
-) -> Result<(), PipelineError> {
+) -> Result<SourceKey, PipelineError> {
     let logical = logical_file_identity(descriptor);
     let source_key = SourceKey::from_bytes(*logical.as_bytes());
     if store.generation_snapshot(source_key)?.is_some() {
-        return Ok(());
+        return Ok(source_key);
     }
     let batch = expect_batch(read_source_batch(descriptor, None, || false)?)?;
     let initial_checkpoint = empty_stored_checkpoint(batch.checkpoint())?;
@@ -372,7 +448,7 @@ fn register_descriptor(
         initial_checkpoint,
     })?;
     store.register_source(&registration)?;
-    Ok(())
+    Ok(source_key)
 }
 
 fn rebuild_complete_source_set(

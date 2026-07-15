@@ -75,6 +75,17 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   idempotent observation, complete-only missing finalization, later restoration,
   reopen, late registration, and atomic rollback after parent creation or presence
   mutation. Ordinary append no longer creates or clears scan authority.
+- P1-B.2 scan-bound replay: production begin stores one exact complete `scan_set_id`
+  and stages only its present members with set-based SQL. Continuation, seal, and
+  promotion revalidate parent/child completion plus bidirectional membership, so a
+  later scan invalidates stale staging. Same-profile Codex/Hermes scopes compose
+  without collision. A zero-present-source set survives reopen, creates no staging
+  generation, preserves missing sources/current generations, and atomically publishes
+  retained canonical truth. Faults after revision or generation creation roll back
+  all staging state. The real synthetic Codex pipeline now creates/observes/finalizes
+  a scan set before replay; partial enumeration closes partial and cannot authorize
+  replay. All seven pipeline contracts remain green without a production dependency
+  from the Codex adapter to the store.
 
 ## Next implementation slice
 
@@ -100,10 +111,10 @@ P0-D.1 is complete under
 late-source fail-closed behavior. P0-E is complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-e-pipeline-proof.md`; it is a
 transactional cross-crate proof, not the production scheduler. P1-A is complete under
-`docs/superpowers/plans/2026-07-14-tokenmaster-p1-retained-projection.md`. P1-B.1 now
-owns strict scoped scan-set lifecycle and complete-only presence. P1-B.2 is next and
-must bind replay to one complete set, including a zero-present-source retention-only
-revision; P1-B.3 then bounds history and recovery. P1-C and later add the
+`docs/superpowers/plans/2026-07-14-tokenmaster-p1-retained-projection.md`. P1-B.1 and
+P1-B.2 now own strict scan-set presence and exact replay binding, including a
+zero-present-source retention-only revision. P1-B.3 is next and bounds history,
+reference-safe pruning, ID exhaustion, and recovery. P1-C and later add the
 provider-neutral engine, coalescing, cancellation policy, writer
 lease, sleep/resume, immutable publication, and continuous runtime recovery.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred

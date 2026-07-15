@@ -1,4 +1,4 @@
-use rusqlite::{Transaction, TransactionBehavior, params};
+use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
 
 use crate::{StoreError, StoreErrorCode};
 
@@ -158,16 +158,316 @@ impl UsageStore {
             status,
             versions,
             expected_source_count,
+            scan_set_id: None,
             sealed: false,
             promoted: false,
         })
     }
+
+    pub fn begin_replay_revision_for_scan_set(
+        &mut self,
+        scan_set_id: ScanSetId,
+    ) -> Result<ReplayRevisionSnapshot, StoreError> {
+        self.begin_replay_revision_for_scan_set_inner(scan_set_id, ScanBoundBeginFault::None)
+    }
+
+    fn begin_replay_revision_for_scan_set_inner(
+        &mut self,
+        scan_set_id: ScanSetId,
+        _fault: ScanBoundBeginFault,
+    ) -> Result<ReplayRevisionSnapshot, StoreError> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let staging: (i64, i64) = transaction.query_row(
+            "SELECT
+               (SELECT count(*) FROM usage_replay_revision WHERE status = 'staging'),
+               (SELECT count(*) FROM usage_generation WHERE status = 'staging')",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        if staging != (0, 0) {
+            return Err(StoreError::new(StoreErrorCode::ArchiveModeMismatch));
+        }
+
+        let expected_source_count = complete_scan_set_source_count(&transaction, scan_set_id)?
+            .ok_or_else(|| StoreError::new(StoreErrorCode::IncompleteManifest))?;
+        let source_state: (i64, i64) = transaction.query_row(
+            "SELECT
+               (SELECT count(*)
+                FROM usage_source AS source
+                JOIN usage_scan AS scan
+                  ON scan.scan_set_id = ?1
+                 AND scan.provider_id = source.provider_id
+                 AND scan.profile_id = source.profile_id
+                 AND scan.scan_id = source.last_seen_scan_id
+                JOIN usage_generation AS current
+                  ON current.file_key = source.file_key
+                 AND current.generation = source.current_generation
+                WHERE scan.completion_state = 'complete' AND source.missing = 0
+                  AND current.status = 'current'),
+               (SELECT count(*)
+                FROM usage_source AS source
+                JOIN usage_scan AS scan
+                  ON scan.scan_set_id = ?1
+                 AND scan.provider_id = source.provider_id
+                 AND scan.profile_id = source.profile_id
+                 AND scan.scan_id = source.last_seen_scan_id
+                WHERE scan.completion_state = 'complete' AND source.missing = 0
+                  AND (SELECT max(previous.generation)
+                       FROM usage_generation AS previous
+                       WHERE previous.file_key = source.file_key) = ?2)",
+            params![scan_set_id.as_sql()?, i64::MAX],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        if stored_count(source_state.0)? != expected_source_count || source_state.1 != 0 {
+            return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+        }
+
+        let max_revision: Option<i64> = transaction.query_row(
+            "SELECT max(revision_id) FROM usage_replay_revision",
+            [],
+            |row| row.get(0),
+        )?;
+        let revision_value = max_revision
+            .map_or(Some(0), |value| value.checked_add(1))
+            .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?;
+        let revision_id = ReplayRevisionId::from_stored(revision_value)?;
+        let epoch = ReplayEpoch::new(0)?;
+        let versions = AccountingVersions::compiled();
+        let status = ReplayRevisionStatus::Staging;
+        let inserted_revision = transaction.execute(
+            "INSERT INTO usage_replay_revision(
+               revision_id, status, canonicalizer_version, fingerprint_version,
+               replay_signature_version, expected_source_count, evidence_epoch,
+               sealed, promoted, scan_set_id
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, 0, ?8)",
+            params![
+                revision_id.as_sql()?,
+                status.as_sql(),
+                i64::from(versions.canonicalizer()),
+                i64::from(versions.fingerprint()),
+                i64::from(versions.replay_signature()),
+                sql_count(expected_source_count)?,
+                epoch.as_sql()?,
+                scan_set_id.as_sql()?,
+            ],
+        )?;
+        if inserted_revision != 1 {
+            return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+        }
+        #[cfg(test)]
+        if _fault == ScanBoundBeginFault::AfterRevision {
+            return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+        }
+
+        let inserted_generations = transaction.execute(
+            "INSERT INTO usage_generation(
+               file_key, generation, status, parser_schema_version,
+               physical_identity, logical_identity, committed_offset, scan_offset,
+               observed_file_length, modified_time_ns, anchor_start, anchor_len,
+               anchor_sha256, resume_payload, discarding_oversized_line,
+               incomplete_tail, verification_level
+             )
+             SELECT
+               source.file_key,
+               (SELECT max(previous.generation) + 1
+                FROM usage_generation AS previous
+                WHERE previous.file_key = source.file_key),
+               'staging', current.parser_schema_version, current.physical_identity,
+               current.logical_identity, 0, 0, 0, NULL, 0, 0, ?2, zeroblob(0),
+               0, 0, 'incremental'
+             FROM usage_source AS source
+             JOIN usage_scan AS scan
+               ON scan.scan_set_id = ?1
+              AND scan.provider_id = source.provider_id
+              AND scan.profile_id = source.profile_id
+              AND scan.scan_id = source.last_seen_scan_id
+             JOIN usage_generation AS current
+               ON current.file_key = source.file_key
+              AND current.generation = source.current_generation
+             WHERE scan.completion_state = 'complete' AND source.missing = 0
+               AND current.status = 'current'
+             ORDER BY source.file_key",
+            params![scan_set_id.as_sql()?, EMPTY_SHA256.as_slice()],
+        )?;
+        if mutation_count(inserted_generations)? != expected_source_count {
+            return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+        }
+        #[cfg(test)]
+        if _fault == ScanBoundBeginFault::AfterGenerations {
+            return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+        }
+
+        let inserted_sources = transaction.execute(
+            "INSERT INTO usage_replay_source(revision_id, file_key, generation, state)
+             SELECT ?1, generation.file_key, generation.generation, 'pending'
+             FROM usage_generation AS generation
+             WHERE generation.status = 'staging'
+             ORDER BY generation.file_key",
+            [revision_id.as_sql()?],
+        )?;
+        if mutation_count(inserted_sources)? != expected_source_count
+            || !scan_bound_manifest_matches(
+                &transaction,
+                revision_id,
+                scan_set_id,
+                expected_source_count,
+            )?
+        {
+            return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+        }
+        let foreign_key_failures: i64 =
+            transaction.query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |row| {
+                row.get(0)
+            })?;
+        if foreign_key_failures != 0 {
+            return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+        }
+
+        transaction.commit()?;
+        Ok(ReplayRevisionSnapshot {
+            id: revision_id,
+            epoch,
+            status,
+            versions,
+            expected_source_count,
+            scan_set_id: Some(scan_set_id),
+            sealed: false,
+            promoted: false,
+        })
+    }
+
+    #[cfg(test)]
+    fn begin_replay_revision_for_scan_set_with_fault(
+        &mut self,
+        scan_set_id: ScanSetId,
+        fault: ScanBoundBeginFault,
+    ) -> Result<ReplayRevisionSnapshot, StoreError> {
+        self.begin_replay_revision_for_scan_set_inner(scan_set_id, fault)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ScanBoundBeginFault {
+    None,
+    #[cfg(test)]
+    AfterRevision,
+    #[cfg(test)]
+    AfterGenerations,
+}
+
+fn complete_scan_set_source_count(
+    transaction: &Transaction<'_>,
+    scan_set_id: ScanSetId,
+) -> Result<Option<u64>, StoreError> {
+    let state: Option<(String, i64, i64, i64, i64, i64, i64)> = transaction
+        .query_row(
+            "SELECT
+               completion_state, expected_scope_count,
+               (SELECT count(*) FROM usage_scan WHERE scan_set_id = ?1),
+               (SELECT count(*) FROM usage_scan
+                WHERE scan_set_id = ?1 AND completion_state = 'complete'),
+               (SELECT count(*)
+                FROM usage_source AS source
+                JOIN usage_scan AS scan
+                  ON scan.scan_set_id = ?1
+                 AND scan.provider_id = source.provider_id
+                 AND scan.profile_id = source.profile_id
+                WHERE source.last_seen_scan_id = scan.scan_id
+                  AND source.missing = 0),
+               (SELECT count(*)
+                FROM usage_source AS source
+                JOIN usage_scan AS scan
+                  ON scan.scan_set_id = ?1
+                 AND scan.provider_id = source.provider_id
+                 AND scan.profile_id = source.profile_id
+                WHERE source.missing <> CASE
+                  WHEN source.last_seen_scan_id = scan.scan_id THEN 0 ELSE 1 END),
+               (SELECT count(*) FROM usage_scan AS scan
+                WHERE scan.scan_set_id = ?1
+                  AND (scan.completed_at_ms IS NULL
+                       OR scan.completed_at_ms > usage_scan_set.completed_at_ms))
+             FROM usage_scan_set WHERE scan_set_id = ?1",
+            [scan_set_id.as_sql()?],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                ))
+            },
+        )
+        .optional()?;
+    let Some(state) = state else {
+        return Ok(None);
+    };
+    let expected_scope_count = stored_count(state.1)?;
+    if state.0 != "complete"
+        || stored_count(state.2)? != expected_scope_count
+        || stored_count(state.3)? != expected_scope_count
+        || state.5 != 0
+        || state.6 != 0
+    {
+        return Ok(None);
+    }
+    stored_count(state.4).map(Some)
+}
+
+fn scan_bound_manifest_matches(
+    transaction: &Transaction<'_>,
+    revision_id: ReplayRevisionId,
+    scan_set_id: ScanSetId,
+    expected_source_count: u64,
+) -> Result<bool, StoreError> {
+    if complete_scan_set_source_count(transaction, scan_set_id)? != Some(expected_source_count) {
+        return Ok(false);
+    }
+    let counts: (i64, i64, i64, i64) = transaction.query_row(
+        "SELECT
+           (SELECT count(*) FROM usage_replay_source WHERE revision_id = ?1),
+           (SELECT count(*) FROM usage_replay_source AS replay
+            JOIN usage_generation AS generation
+              ON generation.file_key = replay.file_key
+             AND generation.generation = replay.generation
+            WHERE replay.revision_id = ?1 AND generation.status = 'staging'),
+           (SELECT count(*)
+            FROM usage_source AS source
+            JOIN usage_scan AS scan
+              ON scan.scan_set_id = ?2
+             AND scan.provider_id = source.provider_id
+             AND scan.profile_id = source.profile_id
+             AND scan.scan_id = source.last_seen_scan_id
+            WHERE source.missing = 0 AND NOT EXISTS(
+              SELECT 1 FROM usage_replay_source AS replay
+              WHERE replay.revision_id = ?1 AND replay.file_key = source.file_key)),
+           (SELECT count(*) FROM usage_replay_source AS replay
+            WHERE replay.revision_id = ?1 AND NOT EXISTS(
+              SELECT 1 FROM usage_source AS source
+              JOIN usage_scan AS scan
+                ON scan.scan_set_id = ?2
+               AND scan.provider_id = source.provider_id
+               AND scan.profile_id = source.profile_id
+               AND scan.scan_id = source.last_seen_scan_id
+              WHERE source.file_key = replay.file_key AND source.missing = 0))",
+        params![revision_id.as_sql()?, scan_set_id.as_sql()?],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+    )?;
+    Ok(stored_count(counts.0)? == expected_source_count
+        && stored_count(counts.1)? == expected_source_count
+        && counts.2 == 0
+        && counts.3 == 0)
 }
 
 pub(super) fn replay_manifest_sources_closed(
     transaction: &Transaction<'_>,
     revision_id: ReplayRevisionId,
     expected_source_count: u64,
+    scan_set_id: Option<ScanSetId>,
 ) -> Result<bool, StoreError> {
     let counts: (i64, i64, i64, i64) = transaction.query_row(
         "SELECT
@@ -183,7 +483,12 @@ pub(super) fn replay_manifest_sources_closed(
         [revision_id.as_sql()?],
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
     )?;
-    Ok(stored_count(counts.0)? == expected_source_count
+    let source_membership_matches = if let Some(scan_set_id) = scan_set_id {
+        scan_bound_manifest_matches(transaction, revision_id, scan_set_id, expected_source_count)?
+    } else {
+        stored_count(counts.0)? == expected_source_count
+    };
+    Ok(source_membership_matches
         && stored_count(counts.1)? == expected_source_count
         && stored_count(counts.2)? == expected_source_count
         && stored_count(counts.3)? == expected_source_count)
@@ -193,8 +498,9 @@ pub(super) fn validate_complete_manifest(
     transaction: &Transaction<'_>,
     revision_id: ReplayRevisionId,
     expected_source_count: u64,
+    scan_set_id: Option<ScanSetId>,
 ) -> Result<(), StoreError> {
-    if !replay_manifest_is_complete(transaction, revision_id, expected_source_count)? {
+    if !replay_manifest_is_complete(transaction, revision_id, expected_source_count, scan_set_id)? {
         return Err(StoreError::new(StoreErrorCode::IncompleteManifest));
     }
     Ok(())
@@ -217,6 +523,7 @@ fn replay_manifest_is_complete(
     transaction: &Transaction<'_>,
     revision_id: ReplayRevisionId,
     expected_source_count: u64,
+    scan_set_id: Option<ScanSetId>,
 ) -> Result<bool, StoreError> {
     let counts: (i64, i64, i64) = transaction.query_row(
         "SELECT
@@ -230,7 +537,12 @@ fn replay_manifest_is_complete(
         [revision_id.as_sql()?],
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
     )?;
-    if stored_count(counts.0)? != expected_source_count
+    let source_membership_matches = if let Some(scan_set_id) = scan_set_id {
+        scan_bound_manifest_matches(transaction, revision_id, scan_set_id, expected_source_count)?
+    } else {
+        stored_count(counts.0)? == expected_source_count
+    };
+    if !source_membership_matches
         || stored_count(counts.1)? != expected_source_count
         || stored_count(counts.2)? != expected_source_count
     {
@@ -409,4 +721,98 @@ fn mutation_count(value: usize) -> Result<u64, StoreError> {
 
 fn sql_count(value: u64) -> Result<i64, StoreError> {
     i64::try_from(value).map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
+
+    fn registration() -> Result<SourceRegistration, StoreError> {
+        let checkpoint = StoredCheckpoint::new(StoredCheckpointParts {
+            parser_schema_version: 1,
+            physical_identity: Some([1; 32]),
+            logical_identity: [2; 32],
+            committed_offset: 0,
+            scan_offset: 0,
+            observed_file_length: 0,
+            modified_time_ns: None,
+            anchor_start: 0,
+            anchor_len: 0,
+            anchor_sha256: [3; 32],
+            resume: Box::default(),
+            discarding_oversized_line: false,
+            incomplete_tail: false,
+            verification: StoredVerification::Incremental,
+        })?;
+        SourceRegistration::new(SourceRegistrationParts {
+            source_key: SourceKey::from_bytes([1; 32]),
+            provider_id: "codex".into(),
+            profile_id: "default".into(),
+            source_id: "fixture".into(),
+            source_kind: SourceKind::Active,
+            logical_identity: [2; 32],
+            physical_identity: Some([1; 32]),
+            initial_checkpoint: checkpoint,
+        })
+    }
+
+    fn complete_scan(store: &mut UsageStore) -> Result<ScanSetId, StoreError> {
+        let manifest =
+            ScanSetManifest::new(vec![ScanScope::new("codex", "default")?].into_boxed_slice())?;
+        let scan_set = store.begin_scan_set(&manifest, 1_000)?;
+        let scans = store.scan_page(scan_set.id(), None, 1)?;
+        let scan = scans
+            .first()
+            .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+        store.observe_scan_source(scan.id(), SourceKey::from_bytes([1; 32]))?;
+        store.finish_scan(
+            scan.id(),
+            ScanOutcome::Complete,
+            1_010,
+            ScanCounters::default(),
+        )?;
+        store.finish_scan_set(scan_set.id(), 1_020)?;
+        Ok(scan_set.id())
+    }
+
+    #[test]
+    fn every_scan_bound_begin_fault_rolls_back_all_staging_state() -> TestResult {
+        for fault in [
+            ScanBoundBeginFault::AfterRevision,
+            ScanBoundBeginFault::AfterGenerations,
+        ] {
+            let mut store = UsageStore::in_memory()?;
+            store.register_source(&registration()?)?;
+            let scan_set_id = complete_scan(&mut store)?;
+            let error =
+                match store.begin_replay_revision_for_scan_set_with_fault(scan_set_id, fault) {
+                    Ok(_) => return Err("faulted scan-bound begin unexpectedly committed".into()),
+                    Err(error) => error,
+                };
+            assert_eq!(error.code(), StoreErrorCode::InvalidStoredValue);
+            let staging: (i64, i64, i64) = store.connection.query_row(
+                "SELECT
+                   (SELECT count(*) FROM usage_replay_revision WHERE status = 'staging'),
+                   (SELECT count(*) FROM usage_generation WHERE status = 'staging'),
+                   (SELECT count(*) FROM usage_replay_source)",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )?;
+            assert_eq!(staging, (0, 0, 0));
+            let current = store
+                .generation_snapshot(SourceKey::from_bytes([1; 32]))?
+                .ok_or("missing current generation after rollback")?;
+            assert_eq!(current.generation(), 0);
+            assert_eq!(current.status(), GenerationStatus::Current);
+            assert_eq!(
+                store
+                    .begin_replay_revision_for_scan_set(scan_set_id)?
+                    .expected_source_count(),
+                1
+            );
+        }
+        Ok(())
+    }
 }

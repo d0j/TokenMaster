@@ -41,8 +41,13 @@ history, removes obsolete generations, and rolls back provenance atomically.
 
 Completed: P1-B.1 adds strict schema v5, provider-qualified scan sets, exact
 complete-only presence finalization, late-registration safety, and transactional
-rollback proofs. Current gate P1-B.2 binds replay to a complete set and supports
-zero-present-source retention; P1-B.3 bounds scan history and recovery. P1-C through
+rollback proofs.
+
+Completed: P1-B.2 persists exact scan-set provenance, stages only present members,
+revalidates membership at continuation/seal/promotion, preserves missing generations,
+supports zero-source retention-only publication after reopen, and moves the real
+synthetic Codex pipeline onto this path. Current gate P1-B.3 bounds scan history and
+recovery. P1-C through
 P1-E then add the provider-neutral runtime engine, coalescing, cancellation, writer
 lease, sleep/resume, continuous recovery, and immutable publication before indexed
 analytics, pricing, quota, Git output, automation, and complete UI work.

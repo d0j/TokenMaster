@@ -38,6 +38,15 @@ and caller-supplied counters cannot clear `missing`. Parent/child creation and
 complete-only presence finalization are atomic; injected failures after their first
 mutation prove rollback. This presence signal still cannot delete canonical usage.
 
+Production replay begin accepts only one complete scan set and persists its exact ID.
+It creates staging generations only for sources whose scope, last-seen child, and
+present state match that set. The same set completion and bidirectional source
+membership are revalidated during continuation, seal, and promotion; a later scan or
+tampered missing/member row invalidates the old staging revision. Zero-present-source
+promotion is retention-only: it creates no generation, preserves missing sources and
+their current generations, and advances projection provenance atomically. Injected
+failures after revision creation and generation creation leave no staging state.
+
 Replay rebuilds use a SQLite-owned fixed all-registered-source manifest, store-owned
 accounting versions, and an evidence-epoch compare-and-swap. The product path stages
 all sources with set-based SQL and retains at most one 256-row validation page; stored

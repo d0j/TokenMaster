@@ -18,10 +18,14 @@
    its validated zero-offset adapter checkpoint; this binds the live path-private
    physical identity and a valid bounded resume payload without touching current.
    After any append/reopen, recover only through `replay_generation_snapshot` and
-   fetch full-prefix proofs one chunk at a time through `source_chunk`. Run bounded continuation until no actionable work remains, then
-   seal only after the complete SQLite-owned all-registered-source manifest has been
-   proven. Product rebuilds use `begin_replay_revision_all_sources`; the explicit
-   256-key manifest is test/repair-only and cannot authorize a subset.
+   fetch full-prefix proofs one chunk at a time through `source_chunk`. Run bounded
+   continuation until no actionable work remains, then seal only after the persisted
+   complete scan-set ID and exact present membership are revalidated. Product rebuilds
+   use `begin_replay_revision_for_scan_set`; `begin_replay_revision_all_sources` and
+   the explicit 256-key manifest remain bounded composition/test/repair compatibility.
+   If a later scan changes membership, discard the stale revision and restart from
+   the newer complete set. A zero-source bound revision has no source checkpoint work
+   and may seal/promote retention-only without changing missing-source generations.
 3. A sealed revision with pending quality evidence is intentionally not promotable.
    Preserve it for bounded `replay_quality()` inspection or explicitly call
    `discard_replay_revision` with its exact revision ID and latest epoch.
@@ -49,12 +53,12 @@
    finalizes presence; every other outcome preserves the prior `missing` values.
 3. Close the parent only after every child is terminal. A mixed parent truthfully
    aggregates to failed, timed out, cancelled, or partial and cannot authorize the
-   future production replay path. Do not edit scan or source rows manually.
+   production replay path. Do not edit scan or source rows manually.
 
 ## Schema recovery
 
-- Opening an exact schema-v1, v2, v3, or v4 archive performs the non-destructive schema-v5
-  migration automatically. Preserve the original archive and reproduce any failure
+- Opening an exact schema-v1, v2, v3, or v4 archive performs the non-destructive
+  schema-v5 migration automatically. Preserve the original archive and reproduce any failure
   against a synthetic copy; do not edit `sqlite_schema`, rename tables manually, or
   disable foreign keys in an operator workflow.
 - Migration validates the exact source schema before mutation. V2 revision migration

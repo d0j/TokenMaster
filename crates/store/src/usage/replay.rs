@@ -220,6 +220,7 @@ impl UsageStore {
             status,
             versions,
             expected_source_count,
+            scan_set_id: None,
             sealed: false,
             promoted: false,
         })
@@ -579,6 +580,7 @@ impl UsageStore {
             &transaction,
             revision_id,
             revision.expected_source_count,
+            revision.scan_set_id,
         )?;
         let Some(work) = load_next_actionable_work(&transaction, revision_id, manifest_complete)?
         else {
@@ -632,7 +634,12 @@ impl UsageStore {
         if revision.sealed {
             return Err(StoreError::new(StoreErrorCode::ArchiveModeMismatch));
         }
-        validate_complete_manifest(&transaction, revision_id, revision.expected_source_count)?;
+        validate_complete_manifest(
+            &transaction,
+            revision_id,
+            revision.expected_source_count,
+            revision.scan_set_id,
+        )?;
         if replay_work_exists(&transaction, revision_id)? {
             return Err(StoreError::new(StoreErrorCode::PendingContinuation));
         }
@@ -733,7 +740,12 @@ impl UsageStore {
         if !revision.sealed {
             return Err(StoreError::new(StoreErrorCode::UnsealedRevision));
         }
-        validate_complete_manifest(&transaction, revision_id, revision.expected_source_count)?;
+        validate_complete_manifest(
+            &transaction,
+            revision_id,
+            revision.expected_source_count,
+            revision.scan_set_id,
+        )?;
         if replay_work_exists(&transaction, revision_id)? {
             return Err(StoreError::new(StoreErrorCode::PendingContinuation));
         }
@@ -844,6 +856,7 @@ struct StoredRevision {
     epoch: ReplayEpoch,
     versions: AccountingVersions,
     expected_source_count: u64,
+    scan_set_id: Option<ScanSetId>,
     sealed: bool,
 }
 
@@ -861,6 +874,7 @@ fn replay_revision_snapshot(
         status,
         versions: revision.versions,
         expected_source_count: revision.expected_source_count,
+        scan_set_id: revision.scan_set_id,
         sealed,
         promoted,
     }
@@ -1233,7 +1247,8 @@ fn load_staging_revision(
         .query_row(
             "SELECT
                status, canonicalizer_version, fingerprint_version,
-               replay_signature_version, expected_source_count, evidence_epoch, sealed
+               replay_signature_version, expected_source_count, evidence_epoch,
+               sealed, scan_set_id
              FROM usage_replay_revision WHERE revision_id = ?1",
             [revision_id.as_sql()?],
             |row| {
@@ -1245,6 +1260,7 @@ fn load_staging_revision(
                     row.get::<_, i64>(4)?,
                     row.get::<_, i64>(5)?,
                     row.get::<_, i64>(6)?,
+                    row.get::<_, Option<i64>>(7)?,
                 ))
             },
         )
@@ -1253,12 +1269,16 @@ fn load_staging_revision(
     if raw.0 != "staging" {
         return Err(StoreError::new(StoreErrorCode::ArchiveModeMismatch));
     }
+    let expected_source_count =
+        u64::try_from(raw.4).map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+    let scan_set_id = raw.7.map(ScanSetId::from_stored).transpose()?;
+    if expected_source_count == 0 && scan_set_id.is_none() {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
     Ok(StoredRevision {
         versions: AccountingVersions::from_stored(raw.1, raw.2, raw.3)?,
-        expected_source_count: u64::try_from(raw.4)
-            .ok()
-            .filter(|value| *value != 0)
-            .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?,
+        expected_source_count,
+        scan_set_id,
         epoch: ReplayEpoch::new(
             u64::try_from(raw.5)
                 .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?,

@@ -1215,6 +1215,7 @@ pub struct ReplayRevisionSnapshot {
     pub(super) status: ReplayRevisionStatus,
     pub(super) versions: AccountingVersions,
     pub(super) expected_source_count: u64,
+    pub(super) scan_set_id: Option<ScanSetId>,
     pub(super) sealed: bool,
     pub(super) promoted: bool,
 }
@@ -1243,6 +1244,11 @@ impl ReplayRevisionSnapshot {
     #[must_use]
     pub const fn expected_source_count(self) -> u64 {
         self.expected_source_count
+    }
+
+    #[must_use]
+    pub const fn scan_set_id(self) -> Option<ScanSetId> {
+        self.scan_set_id
     }
 
     #[must_use]

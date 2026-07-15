@@ -26,6 +26,11 @@ All notable changes are recorded here.
 - Strict SQLite schema v5 with exact v1-v4 migration, bounded provider-qualified
   scan sets, complete-only source presence, coherent terminal state, and lifecycle
   rollback contracts.
+- Exact scan-bound replay with persisted provenance, bidirectional membership
+  revalidation, multi-provider scopes, atomic begin faults, missing-generation
+  preservation, and zero-source retention-only promotion after reopen.
+- Real synthetic Codex pipeline composition over complete/partial scan authority
+  without adding a store dependency to the production Codex adapter.
 - Approved a provider-neutral weekly quota reset history: immutable pre/post epochs,
   scheduled/early/repeated reset transitions, allowance-change separation, bounded
   retention, and shared UI/CLI/MCP semantics for P2.

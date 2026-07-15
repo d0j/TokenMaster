@@ -11,16 +11,21 @@ use tokenmaster_domain::{
 };
 use tokenmaster_store::{
     AppendBatch, AppendBatchParts, ArchiveMode, GenerationStatus, ReplayAppendBatch,
-    ReplayAppendBatchParts, ReplayManifest, ReplayRelation, ReplayRevisionStatus, SourceKey,
-    SourceKind, SourceRegistration, SourceRegistrationParts, StoreErrorCode, StoredCheckpoint,
-    StoredCheckpointParts, StoredSourceChunk, StoredVerification, UsageStore,
+    ReplayAppendBatchParts, ReplayManifest, ReplayRelation, ReplayRevisionStatus, ScanCounters,
+    ScanOutcome, ScanScope, ScanSetId, ScanSetManifest, SourceKey, SourceKind, SourceRegistration,
+    SourceRegistrationParts, StoreErrorCode, StoredCheckpoint, StoredCheckpointParts,
+    StoredSourceChunk, StoredVerification, UsageStore,
 };
 
 fn registration(seed: u8) -> SourceRegistration {
+    registration_in_scope(seed, "codex", "default")
+}
+
+fn registration_in_scope(seed: u8, provider_id: &str, profile_id: &str) -> SourceRegistration {
     SourceRegistration::new(SourceRegistrationParts {
         source_key: SourceKey::from_bytes([seed; 32]),
-        provider_id: "codex".into(),
-        profile_id: "default".into(),
+        provider_id: provider_id.into(),
+        profile_id: profile_id.into(),
         source_id: format!("fixture-{seed}").into_boxed_str(),
         source_kind: SourceKind::Active,
         logical_identity: [seed.wrapping_add(1); 32],
@@ -44,6 +49,35 @@ fn registration(seed: u8) -> SourceRegistration {
         .expect("initial checkpoint"),
     })
     .expect("source registration")
+}
+
+fn finish_codex_scan(
+    store: &mut UsageStore,
+    observed: &[SourceKey],
+    outcome: ScanOutcome,
+    started_at_ms: i64,
+) -> ScanSetId {
+    let manifest = ScanSetManifest::new(
+        vec![ScanScope::new("codex", "default").expect("scan scope")].into_boxed_slice(),
+    )
+    .expect("scan manifest");
+    let scan_set = store
+        .begin_scan_set(&manifest, started_at_ms)
+        .expect("begin scan set");
+    let scan = store.scan_page(scan_set.id(), None, 1).expect("scan page")[0].id();
+    for source_key in observed {
+        store
+            .observe_scan_source(scan, *source_key)
+            .expect("observe scan source");
+    }
+    store
+        .finish_scan(scan, outcome, started_at_ms + 10, ScanCounters::default())
+        .expect("finish child scan");
+    let finished = store
+        .finish_scan_set(scan_set.id(), started_at_ms + 20)
+        .expect("finish scan set");
+    assert_eq!(finished.outcome(), Some(outcome));
+    scan_set.id()
 }
 
 fn source_key_for_index(index: u32) -> SourceKey {
@@ -660,6 +694,7 @@ fn replay_manifest_bounds_and_begin_are_atomic_invisible_and_version_owned() {
     assert_eq!(revision.epoch().get(), 0);
     assert_eq!(revision.status(), ReplayRevisionStatus::Staging);
     assert_eq!(revision.expected_source_count(), 2);
+    assert_eq!(revision.scan_set_id(), None);
     assert!(!revision.sealed());
     assert!(!revision.promoted());
     assert_eq!(revision.versions().canonicalizer(), CANONICALIZER_VERSION);
@@ -709,6 +744,235 @@ fn replay_manifest_bounds_and_begin_are_atomic_invisible_and_version_owned() {
         })
         .expect("count replay manifest rows");
     assert_eq!(manifest_rows, 2);
+}
+
+#[test]
+fn scan_bound_begin_rejects_partial_and_stages_exact_present_membership() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("scan-bound-begin-private.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    for seed in [1_u8, 2_u8] {
+        store
+            .register_source(&registration(seed))
+            .expect("register source");
+    }
+
+    let partial = finish_codex_scan(&mut store, &[], ScanOutcome::Partial, 10_000);
+    let partial_error = store
+        .begin_replay_revision_for_scan_set(partial)
+        .expect_err("partial scan set cannot authorize replay");
+    assert_eq!(partial_error.code(), StoreErrorCode::IncompleteManifest);
+
+    let present = SourceKey::from_bytes([1_u8; 32]);
+    let complete = finish_codex_scan(&mut store, &[present], ScanOutcome::Complete, 11_000);
+    store
+        .register_source(&registration(3))
+        .expect("register source after complete scan");
+    let revision = store
+        .begin_replay_revision_for_scan_set(complete)
+        .expect("begin scan-bound replay");
+    assert_eq!(revision.scan_set_id(), Some(complete));
+    assert_eq!(revision.expected_source_count(), 1);
+    drop(store);
+
+    let connection = Connection::open(&path).expect("inspect exact membership");
+    let keys = connection
+        .prepare("SELECT file_key FROM usage_replay_source ORDER BY file_key")
+        .expect("prepare replay membership")
+        .query_map([], |row| row.get::<_, Vec<u8>>(0))
+        .expect("query replay membership")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect replay membership");
+    assert_eq!(keys, vec![present.as_bytes().to_vec()]);
+}
+
+#[test]
+fn scan_bound_begin_composes_same_profile_across_multiple_providers() {
+    let mut store = UsageStore::in_memory().expect("usage store");
+    let codex = SourceKey::from_bytes([6_u8; 32]);
+    let hermes = SourceKey::from_bytes([7_u8; 32]);
+    store
+        .register_source(&registration_in_scope(6, "codex", "default"))
+        .expect("register Codex source");
+    store
+        .register_source(&registration_in_scope(7, "hermes", "default"))
+        .expect("register Hermes source");
+    let manifest = ScanSetManifest::new(
+        vec![
+            ScanScope::new("hermes", "default").expect("Hermes scope"),
+            ScanScope::new("codex", "default").expect("Codex scope"),
+        ]
+        .into_boxed_slice(),
+    )
+    .expect("multi-provider scan manifest");
+    let scan_set = store.begin_scan_set(&manifest, 15_000).expect("begin scan");
+    for scan in store
+        .scan_page(scan_set.id(), None, usize::MAX)
+        .expect("scan scopes")
+    {
+        let source = match scan.scope().provider_id() {
+            "codex" => codex,
+            "hermes" => hermes,
+            _ => panic!("unexpected provider in bounded fixture"),
+        };
+        store
+            .observe_scan_source(scan.id(), source)
+            .expect("observe exact provider source");
+        store
+            .finish_scan(
+                scan.id(),
+                ScanOutcome::Complete,
+                15_010,
+                ScanCounters::default(),
+            )
+            .expect("finish provider scan");
+    }
+    store
+        .finish_scan_set(scan_set.id(), 15_020)
+        .expect("finish multi-provider set");
+
+    let revision = store
+        .begin_replay_revision_for_scan_set(scan_set.id())
+        .expect("begin multi-provider replay");
+    assert_eq!(revision.scan_set_id(), Some(scan_set.id()));
+    assert_eq!(revision.expected_source_count(), 2);
+}
+
+#[test]
+fn scan_bound_begin_rejects_parent_completed_before_its_child() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("scan-bound-time-tamper-private.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    store
+        .register_source(&registration(8))
+        .expect("register source");
+    let source = SourceKey::from_bytes([8_u8; 32]);
+    let scan_set = finish_codex_scan(&mut store, &[source], ScanOutcome::Complete, 16_000);
+    drop(store);
+    Connection::open(&path)
+        .expect("open time tamper")
+        .execute(
+            "UPDATE usage_scan_set SET completed_at_ms = 16005 WHERE scan_set_id = ?1",
+            [scan_set.get() as i64],
+        )
+        .expect("tamper parent completion time");
+
+    let error = UsageStore::open(&path)
+        .expect("reopen time-tampered archive")
+        .begin_replay_revision_for_scan_set(scan_set)
+        .expect_err("parent cannot complete before its child");
+    assert_eq!(error.code(), StoreErrorCode::IncompleteManifest);
+}
+
+#[test]
+fn scan_bound_seal_rejects_membership_changed_by_a_later_complete_scan() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("scan-bound-stale-private.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    store
+        .register_source(&registration(4))
+        .expect("register source");
+    let source = SourceKey::from_bytes([4_u8; 32]);
+    let authority = finish_codex_scan(&mut store, &[source], ScanOutcome::Complete, 20_000);
+    let revision = store
+        .begin_replay_revision_for_scan_set(authority)
+        .expect("begin scan-bound replay");
+    let epoch = store
+        .apply_replay_append_batch(&replay_append(4, revision.id(), revision.epoch(), vec![]))
+        .expect("complete staged source");
+
+    finish_codex_scan(&mut store, &[], ScanOutcome::Complete, 21_000);
+    let error = store
+        .seal_replay_revision(revision.id(), epoch)
+        .expect_err("changed membership must invalidate old scan authority");
+    assert_eq!(error.code(), StoreErrorCode::IncompleteManifest);
+}
+
+#[test]
+fn zero_source_scan_bound_revision_promotes_retained_truth_without_generation_loss() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("scan-bound-zero-private.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    store
+        .register_source(&registration(5))
+        .expect("register source");
+    let first = store
+        .begin_replay_revision_all_sources()
+        .expect("begin initial replay");
+    let first_epoch = store
+        .apply_replay_append_batch(&replay_append(
+            5,
+            first.id(),
+            first.epoch(),
+            vec![replay_event(
+                5,
+                "retained-root",
+                None,
+                0,
+                10,
+                Some(100),
+                false,
+            )],
+        ))
+        .expect("append initial replay");
+    let first_sealed = store
+        .seal_replay_revision(first.id(), first_epoch)
+        .expect("seal initial replay");
+    let first_current = store
+        .promote_replay_revision(first.id(), first_sealed.epoch())
+        .expect("promote initial replay");
+
+    let empty_authority = finish_codex_scan(&mut store, &[], ScanOutcome::Complete, 30_000);
+    let empty = store
+        .begin_replay_revision_for_scan_set(empty_authority)
+        .expect("begin zero-source replay");
+    assert_eq!(empty.scan_set_id(), Some(empty_authority));
+    assert_eq!(empty.expected_source_count(), 0);
+    drop(store);
+    let mut store = UsageStore::open(&path).expect("reopen zero-source staging");
+    let sealed = store
+        .seal_replay_revision(empty.id(), empty.epoch())
+        .expect("seal zero-source replay");
+    let promoted = store
+        .promote_replay_revision(empty.id(), sealed.epoch())
+        .expect("promote retention-only replay");
+    assert_eq!(promoted.scan_set_id(), Some(empty_authority));
+    drop(store);
+
+    let state: (i64, i64, i64, i64, i64, i64) = Connection::open(&path)
+        .expect("inspect retained state")
+        .query_row(
+            "SELECT
+               (SELECT current_generation FROM usage_source WHERE file_key = ?1),
+               (SELECT missing FROM usage_source WHERE file_key = ?1),
+               (SELECT count(*) FROM usage_generation WHERE file_key = ?1),
+               (SELECT projection_revision_id FROM usage_event),
+               (SELECT origin_revision_id FROM usage_event),
+               (SELECT retained FROM usage_event)",
+            [SourceKey::from_bytes([5_u8; 32]).as_bytes().as_slice()],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            },
+        )
+        .expect("retained state");
+    assert_eq!(state.0, 1, "missing source keeps its current generation");
+    assert_eq!(state.1, 1);
+    assert_eq!(
+        state.2, 1,
+        "zero-source replay creates no staging generation"
+    );
+    assert_eq!(state.3, promoted.id().get() as i64);
+    assert_eq!(state.4, first_current.id().get() as i64);
+    assert_eq!(state.5, 1);
 }
 
 #[test]

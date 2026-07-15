@@ -479,3 +479,48 @@ returns `TM-CLEAN-PASS`; formatting and strict Clippy pass. This completes P1-B.
 only. Scan-bound replay, zero-source retention promotion, bounded scan-history
 pruning, and live scheduling remain P1-B.2/P1-B.3/P1-C. No M0 acceptance,
 interactive product result, package, signing, or release is claimed.
+
+## 2026-07-15 — P1-B.2 scan-bound replay implemented
+
+Added the production `begin_replay_revision_for_scan_set` path. It accepts only one
+coherent complete scan set, stores its typed ID, and creates staging generations with
+set-based SQL only for exact present members. Same-profile scopes from different
+providers remain distinct. The compatibility all-source and explicit-manifest paths
+remain unbound for bounded composition/test/repair use and still reject empty input.
+
+Continuation, seal, and promotion load the persisted binding and revalidate parent and
+child completion times, exact scope membership in both directions, staging counts,
+and foreign keys. A later complete scan invalidates stale replay authority. Injected
+failures after revision creation and after generation creation roll back revision,
+generation, and manifest rows. A complete set with zero present sources survives
+reopen, creates no staging generation, seals, and publishes a retention-only revision:
+the missing source keeps its current generation and canonical events keep their
+original origin revision while receiving the new publishing provenance.
+
+The real synthetic Codex pipeline now builds a bounded scope manifest, records each
+registered file against the exact child scan, closes complete enumeration before
+replay, and uses the scan-bound path. Cancelled enumeration closes the set partial and
+leaves neither running scan authority nor staging projection. The production Codex
+crate dependency direction remains unchanged because this composition stays in its
+test-only driver.
+
+Verification:
+
+```powershell
+cargo +1.97.0 test -p tokenmaster-store --locked
+cargo +1.97.0 test -p tokenmaster-codex --locked
+pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
+cargo +1.97.0 fmt --all -- --check
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy --workspace --all-targets --locked
+cargo +1.97.0 test --workspace --locked
+git diff --check
+```
+
+All commands passed. Store evidence includes 15 unit tests, 45 replay contracts, 5
+scan contracts, 5 ingest contracts, 14 schema contracts, and its compile-fail API
+contract. All seven real synthetic Codex pipeline contracts pass on the scan-bound
+path. The full workspace retains exactly one pre-existing explicitly ignored
+one-million-row M0 scale test. Clean-root returns `TM-CLEAN-PASS`; formatting and
+strict Clippy pass. This completes P1-B.2 only. Reference-safe scan-history pruning,
+repeated-scan/ID-exhaustion recovery, and the live scheduler remain P1-B.3/P1-C. No
+M0 acceptance, interactive product result, package, signing, or release is claimed.

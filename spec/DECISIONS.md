@@ -151,8 +151,10 @@ immediate transactions with explicit fault rollback.
 
 Historical v4 scans are migrated only when their provider can be derived from exact
 referenced sources; otherwise they are isolated as `legacy-unverified`. Replay
-revisions gain nullable scan-set provenance for migration compatibility, while the
-future production replay begin requires one exact complete scan set. Closed scan
+revisions have nullable scan-set provenance for migration and bounded test/repair
+compatibility, while production begin, continuation, seal, and promotion require and
+revalidate one exact complete scan set. Zero-source sets publish retention-only truth
+without replacing missing-source generations. Closed scan
 history will be pruned only when unreferenced and beyond a fixed bounded window.
 
 Rationale: a profile ID is not globally unique across providers, one archive replay
