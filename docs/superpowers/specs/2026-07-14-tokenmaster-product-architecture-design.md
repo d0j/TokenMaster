@@ -548,12 +548,14 @@ prior/current epoch identity when available, and the two observation IDs. The st
 retains a fixed recent transition/epoch window per provider quota window and bounded
 older aggregates, never an unbounded poll history.
 
-This is deliberately data-driven. OpenAI documents Codex usage as dependent on plan,
-task complexity, model, and execution surface, with reset options exposed through the
-[usage page or limit banner](https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan/);
-[banked rate-limit resets](https://help.openai.com/en/articles/20001271) are also
-distinct from credits. Therefore TokenMaster never hard-codes a five-hour or weekly
-capacity and never treats local token totals as the provider allowance.
+This is deliberately data-driven. Provider limits can depend on plan, task, model,
+and execution surface, while banked rate-limit resets remain distinct from ordinary
+quota resets and credits. A user-facing usage page, limit banner, slash command,
+browser page, cached cookie, or observed private endpoint is not a stable machine
+contract. Therefore TokenMaster never hard-codes a five-hour or weekly capacity,
+never treats local token totals as the provider allowance, and reports live quota or
+reset discovery as unavailable unless a credential-free versioned local format or a
+documented stable official machine interface exists.
 
 ### 8.2 Banked reset inventory and expiry safety
 
@@ -811,29 +813,35 @@ Deliver immutable query facade, indexed aggregates, cost catalog with source/ver
 and provider-defined quota windows. Gate: UI/CLI fixture queries use no full scan and
 meet latency/page bounds.
 
-### E. Automation connector
-
-Deliver pure policy evaluator, CLI JSON, separate MCP binary, schemas, configuration
-printers, conformance, and process stress. Gate: target clients receive equivalent
-bounded structured data; GUI binary/resource budgets do not regress.
-
-### F. Product UI
+### E. Product UI
 
 Deliver shell, six board sections, all supporting routes, data states, keyboard,
 accessibility, virtualization, command palette, and compact widget. Gate: no mock data
 in production startup and all views consume immutable query snapshots.
 
-### G. Presentation and localization
+### F. Presentation and localization
 
 Deliver three built-in families, independent axes, validated external skins, bounded
 hot reload, en/ru/pseudo coverage, dynamic bars, reduced motion, and accessibility.
 Gate: switch latency and 10K-cycle retention gates pass.
 
+### G. Automation connector
+
+Deliver pure policy evaluator, CLI JSON, separate MCP binary, schemas, configuration
+printers, conformance, and process stress after the complete desktop product. Gate:
+target clients receive equivalent bounded structured data; GUI binary/resource budgets
+do not regress; no read-only or advisory client gains provider-mutation authority.
+
 ### H. Windows integration and release
 
 Deliver single instance, tray, startup, hotkey, notifications, Explorer/sleep/resume
-recovery, fast/heavy CI split, dependency/license audit, Slint attribution, SBOM,
-package rehearsal, interactive matrix, and 24/72-hour evidence.
+recovery, fast/heavy CI split, explicit GNU/MSVC comparison, canonical
+`x86_64-pc-windows-msvc` build, signed portable ZIP, dependency/advisory/source/license
+policy, Slint Royalty-free License 2.0 attribution, notices, SBOM, secret scan,
+immutable-action audit, artifact attestation, deterministic package rehearsal,
+clean-room launch, interactive matrix, and 24/72-hour evidence. Automatic update and
+installer behavior are deferred until their signed-manifest and rollback contracts
+exist.
 
 ### I. Provider plugin system (1.1)
 

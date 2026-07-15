@@ -1030,3 +1030,24 @@ runtime targets, and the full locked workspace pass. The normal workspace run re
 the one explicitly ignored one-million-row M0 scale gate. P1-E immutable query
 snapshots, sleep/race integration, M0 acceptance, packaging, signing, and release
 remain unclaimed.
+
+## 2026-07-16 — Architecture and release plan closed
+
+Repeated the critical audit across the normative contracts, current dependency and
+target configuration, implemented P0-P1-D.6 boundaries, and the exact external
+reference pins. The previous broad feature matrix was replaced with a row-level
+behavioral ledger covering quota/reset, dashboard, session/model/activity/code-output,
+settings/widget/notifications, daily/weekly/monthly/session analytics, filters,
+pricing, projects, live/statusline, JSON/offline/compact behavior, and explicit
+security rejections. A parity claim now blocks on every row becoming implemented or
+normatively rejected with a surviving regression gate.
+
+ADR-024 freezes the remaining product decisions: P3 complete UI, P4 presentation and
+localization, P5 read-only automation, canonical P6
+`x86_64-pc-windows-msvc` signed portable ZIP, explicit GNU/MSVC comparison, Slint
+Royalty-free License 2.0 attribution, no updater/installer in 1.0, release-pinned
+pricing, permitted credential-free local or documented official quota sources only,
+and advisory/source/license/secret/SBOM/action/attestation/package/clean-room evidence.
+The closure review found no remaining known planning contradiction or unfrozen 1.0
+release decision. This is architecture evidence only; P1-E, P2-P6 implementation,
+M0 receipts, packaging, signing, parity, and release remain unclaimed.

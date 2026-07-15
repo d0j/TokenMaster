@@ -11,6 +11,10 @@ All notable changes are recorded here.
 - Clean-root audit for product-tree invariants.
 - TokenMaster-only contracts, handoff, roadmap, feature matrix, and provenance.
 - Critical architecture audit with a single approved delivery rail.
+- Architecture/release closure review with a blocking row-level reference parity
+  ledger, UI-before-automation phase order, permitted Codex quota-source policy,
+  release-pinned pricing, canonical MSVC signed portable package, Slint attribution,
+  no-updater 1.0 boundary, and explicit supply-chain evidence gates.
 - Provider-neutral observation/canonicalization TDD plan and complete requirement status matrix.
 - Provider-neutral observation and late session-relation drafts with Codex ancestry,
   ordinal, cumulative, and resume-v2 contracts.

@@ -6,11 +6,25 @@ No telemetry, cloud sync, remote listener, automatic upload, analytics SDK, or
 developer-controlled service is permitted. Any future local API binds loopback only;
 MCP uses stdio only.
 
+The built-in Codex quota adapter may consume only a credential-free versioned local
+format or a documented stable official machine interface. A user-facing dashboard,
+slash command, browser page, cached cookie, captured request, or observed private
+endpoint is not an integration contract. Browser scraping, session reuse, private
+endpoint replay, credential extraction, and raw response persistence are forbidden.
+If no permitted source exists, live quota and banked-reset discovery remain explicitly
+unavailable or stale; local usage totals cannot substitute for provider allowance.
+
 ## TM-SEC-002 — Untrusted boundaries
 
 JSONL, configuration, archive files, CLI/MCP requests, generated reports, and future
 provider output are untrusted. Each boundary MUST validate type, size, count, encoding,
 path safety, timeout, and allowed values before allocation or interpretation.
+
+Any permitted quota response is additionally bounded by an exact schema/version,
+allowlisted origin when networked, maximum body size, deadline, redirect policy,
+backoff, freshness, and redacted error mapping. Custom origins never receive provider
+credentials. A schema change fails to unavailable/stale rather than best-effort field
+guessing.
 
 Providers emit bounded observation/session-relation drafts only. They cannot create
 event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or

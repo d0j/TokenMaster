@@ -1,7 +1,8 @@
 # TokenMaster Critical Audit and Approved Master Plan
 
-Status: architecture approved; P0 through P1-D implemented; P1-E is active.
-Date: 2026-07-15.
+Status: architecture and release plan approved after closure review; P0 through P1-D
+implemented; P1-E is active.
+Date: 2026-07-16.
 
 ## 1. Executive decision
 
@@ -84,11 +85,12 @@ contracts are stable.
 ### D. Product completeness
 
 11. Live Codex Plan Usage needs a separate quota adapter. The approved 1.0 design uses
-    credential-free local rate-limit events when available plus opt-in direct HTTPS for
-    fresher usage/reset-credit data. Secrets are never returned or stored; official
-    origins are allowlisted; custom origins never receive credentials; requests have
-    strict time/body bounds, backoff, jitter, auth-change invalidation, and stale
-    fallback. Quota windows are provider data, never hard-coded `5h`/`1w` UI fields.
+    only a credential-free versioned local format or a documented stable official
+    machine interface. A dashboard, slash command, browser page, cookie, or observed
+    private endpoint is not an API contract. When neither permitted source exists,
+    quota/reset discovery is explicitly unavailable or stale; local token totals never
+    become provider capacity. Quota windows are provider data, never hard-coded
+    `5h`/`1w` UI fields.
     Every full weekly reset, including an early or repeated reset, closes an immutable
     quota epoch and preserves exact available before/after ratios or units, maximum
     pre-reset use, old/new reset time, evidence/confidence, and allowance changes.
@@ -108,10 +110,11 @@ contracts are stable.
 13. Pricing uses an embedded pinned catalog with source/version provenance, explicit
     unknown-model state, and validated local overrides. No automatic network request
     runs in the hot path.
-14. `docs/FEATURE_PARITY.md` is too broad to prove the requested parity. It must become
-    a row-level matrix for WhereMyTokens and ccusage: pinned source, exact capability,
-    implement/adapt/reject decision, TokenMaster improvement, requirement ID, plan,
-    test, and status.
+14. `docs/FEATURE_PARITY.md` is now the row-level behavioral ledger for the pinned
+    references: exact capability, implement/adapt/reject decision, TokenMaster
+    improvement, requirement owner, delivery gate, validator, and status. A 1.0 parity
+    claim is blocked until every row is implemented or deliberately rejected under a
+    surviving normative rationale and regression gate.
 
 ### E. UI, quality, and documentation
 
@@ -123,6 +126,24 @@ contracts are stable.
     gets a row even when planned; every ADR reference must exist; current-state,
     roadmap, README, changelog, and plan status must agree. A machine validator becomes
     a release gate.
+
+### F. Release and supply-chain closure
+
+17. The workspace-global GNU target is a development constraint, not a signed-release
+    decision. The canonical 1.0 artifact is `x86_64-pc-windows-msvc`; P6 removes the
+    forced global target and uses an explicit GNU/MSVC comparison before release.
+18. The 1.0 package is a signed portable ZIP. Automatic update and installer behavior
+    are deferred until signed-manifest, interrupted-update, rollback, and downgrade
+    contracts exist.
+19. The Slint Royalty-free License 2.0 route is selected with attribution in Help/About
+    and on the public download page. Dependency notices, license policy, and SBOM are
+    package gates.
+20. Pricing is a release-pinned embedded catalog plus bounded validated overrides; no
+    hot-path network update is allowed and unknown model cost stays unknown.
+21. P6 requires advisory, dependency/source/license, secret, SBOM, immutable-action,
+    artifact-attestation, deterministic-content, and clean-room-launch evidence.
+22. The complete closure rationale and self-review are recorded in
+    `docs/superpowers/specs/2026-07-16-tokenmaster-plan-closure-design.md`.
 
 ## 4. Approved delivery order
 
@@ -143,15 +164,17 @@ contracts are stable.
 7. **P2 — product data:** Codex quota transport, immutable weekly reset epochs and
    before/after history, pricing catalog/overrides, bounded Git output metrics,
    indexed analytics, and data-quality semantics.
-8. **P3 — automation:** strict JSON CLI, separate stdio MCP process, capabilities,
-   bounded queries, idempotent refresh, and declarative advisory policy for Hermes and
-   other clients.
-9. **P4 — complete desktop UI:** six-section board and all history/session/model/
+8. **P3 — complete desktop UI:** six-section board and all history/session/model/
    project/activity/health/settings/help/widget routes from immutable snapshots.
-10. **P5 — presentation:** independent skin/layout/density/scheme/locale axes, dynamic
+9. **P4 — presentation:** independent skin/layout/density/scheme/locale axes, dynamic
     quota bars, en/ru/pseudo, keyboard/accessibility, DPI, and visible-paint gates.
+10. **P5 — automation:** strict JSON CLI, separate stdio MCP process, capabilities,
+    bounded queries, idempotent refresh, and declarative advisory policy for Hermes and
+    other clients. This remains read-only/advisory and follows the complete UI.
 11. **P6 — release:** Windows integration, portability, dependency/security audit,
-    SBOM, secret scan, package identity, interactive receipt, and soak receipt.
+    canonical MSVC signed portable ZIP, Slint attribution, SBOM, secret scan,
+    immutable CI actions, attestation, package identity, interactive receipt, and soak
+    receipt.
 12. **1.1 — provider ecosystem:** isolated Wasm Component host, WIT SDK, package trust,
     permissions, hot install/replace, and conformance suite. No Wasmtime dependency in
     GUI or Codex-only operation.
@@ -167,6 +190,8 @@ contracts are stable.
 - Skin/layout/locale changes do not scan sources or mutate the archive.
 - No M0 acceptance, package, or release claim without the exact interactive and soak
   receipts bound to one clean commit and executable SHA-256.
+- No 1.0 parity claim while `docs/FEATURE_PARITY.md` contains `planned` or `partial`;
+  rejected rows require a surviving normative rationale and regression gate.
 
 ## 6. Current execution rail
 

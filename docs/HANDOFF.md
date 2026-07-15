@@ -53,6 +53,13 @@ complete: `LiveRuntime` performs lease-first startup recovery, owns the Codex ad
 archive, worker, scheduler and watcher lifecycle, selects incremental versus rebuild,
 and implements admission-safe pause/resume plus ordered joined shutdown. The immediate
 next task is P1-E immutable query/publication snapshots and sleep/race integration.
+The 2026-07-16 closure review also freezes the remaining plan ambiguities: P3 is the
+complete UI, P4 presentation/localization, P5 read-only automation, and P6 the
+canonical MSVC signed portable release. It selects the Slint attribution route,
+forbids private/browser quota integration, keeps pricing release-pinned, expands
+`docs/FEATURE_PARITY.md` into a blocking row-level ledger, and defines the full
+supply-chain gate. See
+`docs/superpowers/specs/2026-07-16-tokenmaster-plan-closure-design.md` and ADR-024.
 P2 now also has an approved separate banked-reset inventory/expiry/reminder/activation
 design in `docs/superpowers/plans/2026-07-15-tokenmaster-banked-reset-inventory.md`.
 It does not change the immediate P1-D gate and no current provider discovery,

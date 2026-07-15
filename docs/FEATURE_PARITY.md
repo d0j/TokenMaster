@@ -1,15 +1,63 @@
-# TokenMaster feature matrix
+# TokenMaster feature-parity ledger
 
-The matrix is a requirements guide, not a copied implementation or compatibility
-claim. Each TokenMaster behavior must be specified, tested, bounded, and privacy-safe.
+This ledger defines behavioral lineage, not copied implementation, pixel compatibility,
+or protocol compatibility. `WMT` means the WhereMyTokens commit and `CC` means the
+ccusage commit pinned in `third_party/UPSTREAM.toml`. A 1.0 parity claim requires every
+row to be `implemented` or explicitly `rejected` with the recorded rationale.
 
-| Reference area | Target capability | TokenMaster status |
-| --- | --- | --- |
-| WhereMyTokens: quota-first board | Plan usage, code output, trend, sessions, activity, model usage | Planned product board; M0 presentation primitives exist; weekly reset epochs preserve exact history; separate banked-reset lots add expiry/reminder safety |
-| WhereMyTokens: exploration views | History, sessions, models, projects, activity, health, settings, help, compact access | Planned |
-| WhereMyTokens: interaction | Dense dark information design, responsive layouts, keyboard/accessibility, tray access | M0 layouts, skins, localization, tray contracts implemented |
-| ccusage: source handling | Codex history discovery, active/archive precedence, incremental update | M1 discovery, bounded reader, exact-scan tail refresh, rebuild fallback, pathless scheduling, startup recovery, and live lifecycle implemented |
-| ccusage: usage semantics | Token fields, cumulative deltas, model normalization, session identity | M1 parser/domain implemented |
-| ccusage: analytics | Cost, reports, model/session/project breakdowns, periods | Planned after staging and index completion |
-| TokenMaster improvement | Bounded memory, path-private storage, transactional SQLite, cross-process writer safety, immutable UI snapshots | Core ingest, portable OS writer lease, fixed watcher/scheduler state, and joined live lifecycle implemented; immutable UI/query snapshots remain P1-E |
-| TokenMaster improvement | Banked reset inventory, expiry reminders, assisted and capability-gated auto activation | P2 architecture approved; no current discovery or mutation implementation claimed |
+Status is one of `implemented`, `partial`, `planned`, or `rejected`.
+
+| Ref | Exact reference capability | Decision and TokenMaster improvement | Owner | Delivery gate and validator | Status |
+| --- | --- | --- | --- | --- | --- |
+| WMT / quota board | Quota-first plan-usage cards, percentage bars, reset time, source and freshness | Adapt as provider-defined keyed windows; never hard-code 5h/weekly capacity or turn missing data into zero | TM-FUNC-004, TM-UI-001 | P2 snapshot fixtures; P3 board tests | planned |
+| WMT / reset credits | Reset count and expiry detail | Replace count-only display with separate FEFO lots, exact/approximate expiry, change history, reminder coverage, and activation receipts | TM-FUNC-010, TM-DATA-009 | P2 inventory/reminder/reconciliation fixtures; P3 drawer | planned |
+| WMT / refresh states | Refresh, syncing, stale, partial-history, and rebuild-required feedback | Adapt with one immutable publication generation and explicit complete/partial/stale/recovery/unavailable quality | TM-UI-001, TM-UI-002 | P1-E race tests; P3 state snapshots | partial |
+| WMT / header metrics | Today/all-time cost, cache savings, plan/account labels | Adapt to indexed bounded aggregates with provenance and explicit unknown cost/plan state | TM-FUNC-003, TM-PERF-003 | P2 aggregate and unknown-model fixtures | planned |
+| WMT / token statistics | Input, output, cache-read, cache-creation, totals | Implement provider-neutral optional components; unavailable values remain unavailable | TM-FUNC-003 | P2 query fixtures against canonical archive | partial |
+| WMT / trend | Recent usage/cost trend card and breakdown | Implement indexed daily/weekly/monthly series with bounded point budgets and local timezone | TM-FUNC-003, TM-PERF-003 | P2 golden aggregates; P3 chart snapshots | planned |
+| WMT / sessions | Session rows, grouping/stacking, expansion, active state, context and cost | Adapt with stable session identity, keyset virtualization, truthful active/stale state, and no transcript content | TM-FUNC-003, TM-FUNC-004 | P2 session query; P3 keyboard/virtualization tests | planned |
+| WMT / model usage | Model breakdown, token mix, cost and color distinction | Implement normalized model IDs plus display aliases, accessible patterns, and unknown pricing | TM-FUNC-003, TM-UI-001 | P2 model fixtures; P3 color-independent snapshots | planned |
+| WMT / activity | Activity/rhythm chart and time distribution | Implement bounded hourly/day-of-week aggregates with timezone/DST tests and no raw event export | TM-FUNC-003, TM-DATA-001 | P2 DST aggregate fixtures; P3 chart tests | planned |
+| WMT / code output | Git code-output card | Adapt into a bounded read-only Git metrics subsystem with explicit author/repo/worktree/rename/merge/submodule semantics and no shell or file-content retention | TM-FUNC-004, TM-SEC-002 | P2 synthetic-repository fixtures; P3 card | planned |
+| WMT / section layout | Reorder, hide, show, and collapse main sections | Implement via validated layout manifests and atomic presentation revisions; always retain one visible section and a reset path | TM-FUNC-004, TM-UI-002 | P3 persistence; P4 10K switch-cycle gate | planned |
+| WMT / quota layout | Rich/simple/hidden quota rows and target order | Adapt to dynamic windows and bounded overflow; no provider-specific fixed UI schema | TM-FUNC-004, TM-UI-002 | P3 dynamic-window fixtures | planned |
+| WMT / compact widget | Always-on-top compact quota view with waiting/freshness state | Implement native compiled Slint widget reading the same snapshot; no second scanner or per-card timer | TM-FUNC-005, TM-PERF-001 | P3 lifecycle; P4 paint/resource tests | partial |
+| WMT / tray and taskbar | Tray label, dashboard access, startup, shortcut, always-on-top, taskbar mini quota | Implement tray/startup/hotkey/compact access; adapt mini display only where Windows APIs are stable and accessible | TM-FUNC-005 | P3/P6 Explorer, startup, hotkey, DPI tests | partial |
+| WMT / usage alerts | Selectable percentage thresholds and cooldown | Implement bounded per-window thresholds, deduplication, quiet hours, delivery receipts, and truthful notification availability | TM-FUNC-004, TM-DATA-009 | P2 due-queue fixtures; P3/P6 Windows delivery | planned |
+| WMT / expiry alerts | Expiring reset visibility | Improve with selectable 7d/24h/12h/6h/1h defaults, up to eight custom leads, snooze, sleep/clock-change recovery, and no false delivered state | TM-FUNC-010 | P2 time/restart/dedup fixtures; P3 settings | planned |
+| WMT / settings | Provider, currency, tray, appearance, layout, rebuild and integration settings | Adapt as typed bounded settings with atomic revision, validation, reset, import/export redaction, and safe migration | TM-FUNC-004, TM-SEC-002 | P3 settings schema/migration tests | planned |
+| WMT / appearance | System/light/dark theme | Extend to independent skin, layout, density, scheme, and locale axes with instant validated hot switch | TM-FUNC-005, TM-UI-002 | P4 combination/switch/retention matrix | partial |
+| WMT / help | In-product help and integration guidance | Implement localized Help/About, data-source truth, privacy, diagnostics, license attribution, and automation examples | TM-FUNC-004, TM-REL-003 | P3 content coverage; P6 license audit | planned |
+| WMT / live quota transport | Local/live/cached quota and reset data from several source qualities | Adapt only through a credential-free versioned local format or documented stable official machine interface; show unavailable otherwise | TM-FUNC-009, TM-SEC-001, TM-SEC-007 | P2 permitted-source contract tests | planned |
+| WMT / private web behavior | Browser session reuse, private endpoint replay, or endpoint-shape inference | Reject: unstable, credential-bearing, non-portable, and outside the security boundary | TM-SEC-001, TM-SEC-007 | Static/security tests forbid transport path | rejected |
+| WMT / fixed quota assumptions | Fixed 5h/weekly rows or capacity inferred from local tokens | Reject: windows and limits are provider data; local usage is not provider allowance | TM-FUNC-009 | P2 unknown/dynamic-window fixtures | rejected |
+| CC / source discovery | Local agent-history discovery and adapter separation | Implement Codex as the compiled-in bounded fast path; keep provider-neutral contracts for 1.1 isolated components | TM-FUNC-001, TM-FUNC-008 | P1 contracts; 1.1 conformance later | implemented |
+| CC / incremental local parsing | JSONL scan, append handling, normalization and cumulative deltas | Improve with path privacy, incomplete-tail recovery, replacement/truncation detection, replay-safe accounting, exact scans, and transactional SQLite | TM-FUNC-002, TM-FUNC-007 | P0/P1 contracts | implemented |
+| CC / all-agent aggregation | One command spanning many agent formats | Defer ingestion breadth to 1.1 plugins; 1.0 remains Codex-only so the native fast path stays small and stable | TM-FUNC-008, TM-SEC-006 | 1.1 WIT/package conformance | planned |
+| CC / daily reports | Daily token and cost aggregation | Implement indexed immutable daily snapshots with filters, model/project breakdowns, timezone and JSON parity | TM-FUNC-003, TM-PERF-003 | P2 query golden fixtures | planned |
+| CC / weekly reports | Weekly aggregation and configurable week start | Implement locale-independent stored facts plus user-selectable week boundary in bounded queries | TM-FUNC-003 | P2 week-boundary/DST fixtures | planned |
+| CC / monthly reports | Monthly aggregation, ordering and date bounds | Implement indexed calendar-period snapshots with explicit timezone and partial-period state | TM-FUNC-003 | P2 month/leap/DST fixtures | planned |
+| CC / session reports | Session list and exact session lookup | Implement keyset-paged summaries and opaque stable IDs; never expose transcript/source paths | TM-FUNC-003, TM-DATA-001 | P2 privacy and pagination fixtures | planned |
+| CC / model breakdown | Optional per-model report breakdown | Implement across period/session/project queries with normalization provenance and unknown aliases | TM-FUNC-003 | P2 aggregate fixtures | planned |
+| CC / project/instance grouping | Project grouping, aliases, instance split, project filter | Adapt with privacy-safe local repository identity, user aliases, and explicit unassociated state | TM-FUNC-003, TM-DATA-001 | P2 association/rename/privacy fixtures | planned |
+| CC / date/order/timezone | Since/until, ascending/descending order, timezone | Implement typed validated bounds, stable keyset ordering, DST behavior, and bounded pages | TM-FUNC-006, TM-PERF-003 | P2 facade; P5 CLI/MCP conformance | planned |
+| CC / cost modes | Auto, calculated, displayed cost modes and price overrides | Adapt as source-reported versus pinned-catalog estimates with provenance; bounded overrides; unknown never silently zero | TM-FUNC-003 | P2 pricing/version/override fixtures | planned |
+| CC / live blocks | Active billing blocks, remaining time, burn rate and token target | Adapt into current sessions, pace, quota windows, and alerts; never conflate local token target with provider limit | TM-FUNC-004, TM-FUNC-009 | P2 pace/quality fixtures; P3 live card | planned |
+| CC / statusline | Compact context/cost/burn-rate projection with refresh/cache controls | Adapt to tray/widget plus bounded read-only automation snapshots; one runtime owns refresh | TM-FUNC-005, TM-FUNC-006 | P3 compact view; P5 schema/process tests | planned |
+| CC / JSON | Machine-readable report output | Implement strict versioned bounded JSON in a separate CLI and equivalent MCP schemas | TM-FUNC-006 | P5 golden/schema/limit/error tests | planned |
+| CC / offline | Deterministic local-only calculation | Make local-only the default product mode; no telemetry or required service | TM-SEC-001 | P2/P5 network-denial tests | partial |
+| CC / compact tables | Responsive compact terminal output | Adapt into density-aware virtualized Slint tables and compact bounded CLI text/JSON projections | TM-UI-001, TM-UI-002 | P3/P4 width/DPI; P5 terminal snapshots | planned |
+| CC / configuration | Configuration, aliases and pricing overrides | Implement versioned typed config with schema, validation, migration, redacted diagnostics, and safe defaults | TM-SEC-002 | P2/P3/P5 migration/adversarial tests | planned |
+| CC / debug sampling | Debug output derived from parsed usage entries | Reject raw source samples, prompts, responses, commands, paths, and transcripts; expose fixed diagnostic counters/codes only | TM-DATA-001, TM-SEC-003 | Privacy scan and serialization tests | rejected |
+| CC / jq projection | Arbitrary expression over JSON output | Reject in-process expression execution; clients may process exported bounded JSON outside TokenMaster | TM-FUNC-006, TM-SEC-002 | CLI/MCP allowlist tests | rejected |
+| TM / immutable publication | One race-safe revision consumed identically by UI, CLI and MCP | Improve both references with monotonic immutable snapshots, older-result rejection, bounded diagnostics, and no writer/UI handle sharing | TM-UI-002, TM-PERF-003 | P1-E generation/race/resource contracts | planned |
+| TM / reset history | Preserve every detected full reset and allowance transition | New capability: immutable before/after epochs, early/repeated markers, confidence, evidence interval, and bounded retention | TM-FUNC-009, TM-DATA-008 | P2 reset-history plan fixtures | planned |
+| TM / modular skins | Instant data-only skins with inheritance and safe fallback | New capability: three built-ins, strict tokens, maximum depth two, bounded hot reload, no code/network/path authority | TM-FUNC-005, TM-SEC-005 | P4 validator/10K-cycle/resource gates | partial |
+| TM / automation for Hermes | Universal read-only statistics and advisory surface | New capability: same query truth through strict CLI/MCP, capabilities, schema versioning, idempotent refresh, and no agent-control authority | TM-FUNC-006 | P5 Hermes and generic-client conformance | planned |
+
+## Parity acceptance rule
+
+Before a release candidate, a validator must prove that every row has a valid owner,
+delivery gate, and allowed terminal status. `planned` or `partial` rows block the 1.0
+parity claim. `rejected` rows pass only when the normative security/product rationale
+and a regression gate remain present.

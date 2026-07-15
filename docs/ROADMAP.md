@@ -98,6 +98,26 @@ partial/reopen evidence, and combined Windows resource return without adding pro
 platform/UI dependencies to the engine core. The current gate is P1-E immutable
 query/publication snapshots plus sleep/resume and race-generation integration.
 
+## Approved implementation rail
+
+- **P1 — runtime publication:** finish immutable generation-ordered snapshots,
+  suspend/resume integration, race/failure recovery, and bounded-resource evidence.
+- **P2 — product data:** indexed query snapshots, analytics, pinned pricing and
+  overrides, dynamic quotas, full-reset epochs, banked-reset inventory/reminders, and
+  bounded Git output metrics.
+- **P3 — complete desktop UI:** quota-first board, history, sessions, models, projects,
+  activity, health, settings, help, command palette, tray, and compact widget.
+- **P4 — presentation:** modular skins/layouts/density/scheme/locale, en/ru/pseudo,
+  accessibility, DPI, reduced motion, and visible-paint/resource gates.
+- **P5 — automation:** strict bounded JSON CLI and a separate stdio MCP process for
+  Hermes and other clients after the complete UI; read-only/advisory by default with
+  no provider-mutation authority.
+- **P6 — release:** Windows integration, explicit GNU/MSVC comparison, canonical
+  signed MSVC portable package, license/supply-chain evidence, interactive matrix, and
+  final soak receipts.
+- **1.1 — providers:** isolated signed WebAssembly Component packages after 1.0
+  observation/query/quota contracts freeze.
+
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset
 epochs. The weekly view preserves last-before/first-after state, maximum use before
 reset, old/new reset time, early/repeated reset markers, confidence, and simultaneous
@@ -117,12 +137,19 @@ ship first and never authorizes mutation. See
 
 Complete the six-section board and supporting exploration views, tray/hotkey/startup,
 compact widget, notifications, settings, modular skins, en/ru, and migration tools.
+Every row in `docs/FEATURE_PARITY.md` must be implemented or explicitly rejected under
+its normative rationale before a parity claim.
 
 ## 1.0 — release candidate and stable
 
 Require privacy/dependency review, deterministic package rehearsal, complete evidence,
-performance reference runs, 72-hour soak, signed-build rehearsal, and the full
-interactive Windows matrix before a stable claim.
+performance reference runs, 72-hour soak, and the full interactive Windows matrix
+before a stable claim. The canonical artifact is a signed
+`x86_64-pc-windows-msvc` portable ZIP with Slint Royalty-free License 2.0 attribution,
+third-party notices, SBOM, advisory/source/license/secret scans, immutable CI action
+references, artifact attestation, SHA-256 manifest, deterministic content audit, and
+clean-room launch. The current GNU lane remains development/M0 evidence until the P6
+dual-lane comparison passes. No updater or installer ships in 1.0.
 
 ## 1.1 — provider plugin ecosystem
 

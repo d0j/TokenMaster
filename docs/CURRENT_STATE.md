@@ -205,6 +205,13 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 
 ## Next implementation slice
 
+The architecture/release closure review is approved in
+`docs/superpowers/specs/2026-07-16-tokenmaster-plan-closure-design.md`. It freezes the
+native stack, UI-before-automation rail, row-level parity ledger, permitted Codex
+quota sources, embedded pricing update policy, canonical MSVC signed portable ZIP,
+Slint attribution route, no-updater 1.0 boundary, and supply-chain evidence. These are
+design/acceptance decisions; they do not claim that P2-P6 functionality is implemented.
+
 The product architecture, universal automation connector, complete UI, dynamic quota
 bars, skins, layouts, density, and localization are approved in
 `docs/superpowers/specs/2026-07-14-tokenmaster-product-architecture-design.md`. Its
@@ -257,6 +264,12 @@ safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 M0 is not accepted. The required interactive Windows/DPI/accessibility receipt and an
 uninterrupted 24-hour software-soak receipt are absent. No package, signing, or
 product-release claim is authorized by the current developer evidence.
+
+The future canonical Windows 1.0 artifact is an MSVC signed portable ZIP, but none has
+been built or accepted. The current GNU lane remains developer/M0 evidence. P6
+GNU/MSVC comparison, attribution/notices, SBOM, advisory/source/license/secret/action
+audits, attestation, deterministic package, clean-room launch, signing, interactive
+matrix, and release-candidate soak all remain unverified.
 
 The clean-root audit, all three Pester contract files, root format check, strict
 Clippy with `RUSTFLAGS=-Dwarnings`, full locked Rust workspace tests, release build,

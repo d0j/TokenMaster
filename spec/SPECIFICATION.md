@@ -161,3 +161,16 @@ Missing or mismatched identity fields fail closed.
 Developer tests do not prove interactive Windows behavior. M0 acceptance requires the
 independent Windows/DPI/accessibility and uninterrupted 24-hour-soak receipts listed
 in `M0_ACCEPTANCE.md`.
+
+### TM-REL-003 — Reproducible native release
+
+The canonical Windows 1.0 artifact MUST target `x86_64-pc-windows-msvc` and ship as a
+signed portable ZIP bound to one clean commit, executable SHA-256, and package-content
+manifest. The package MUST include applicable license/attribution notices and an SBOM.
+Release evidence MUST include dependency advisory/source/license policy, secret scan,
+immutable CI action references, artifact provenance, deterministic package audit, and
+clean-room launch. The Slint desktop distribution MUST follow the selected
+Royalty-free License 2.0 attribution route unless a separately reviewed license route
+replaces it. GNU developer/M0 evidence MUST NOT be represented as MSVC release
+evidence. Automatic update and installer behavior MUST remain unavailable until a
+separate signed-manifest, rollback, downgrade, and interrupted-update contract passes.

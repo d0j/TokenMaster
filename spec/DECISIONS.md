@@ -374,3 +374,35 @@ leave startup races, double lease acquisition, and detached cleanup windows. One
 composition root gives every mutable archive action one OS-owned guard, makes recovery
 precede asynchronous work, and gives pause/shutdown a testable ownership order while
 retaining fixed state and path-private public diagnostics.
+
+## ADR-024 — Freeze the 1.0 delivery and native release boundary
+
+Decision: keep Rust 1.97, Slint 1.17, bundled SQLite, the built-in Codex adapter, and
+the provider-neutral architecture. After P2 query/data work, deliver the complete
+desktop UI in P3, presentation/localization in P4, and the read-only CLI/MCP automation
+surface in P5. P6 produces the canonical signed `x86_64-pc-windows-msvc` portable ZIP.
+The current GNU lane remains development/M0 evidence until an explicit dual-lane P6
+comparison passes; the workspace-global forced target is then replaced by explicit
+build-script target selection. No automatic updater or installer ships in 1.0.
+
+The Slint desktop distribution follows the Royalty-free License 2.0 attribution route
+with Help/About and public-download attribution, dependency notices, license policy,
+and SBOM. Pricing is a release-pinned embedded catalog plus bounded validated local
+overrides. Release gates include advisory, dependency/source/license, secret,
+immutable-CI-action, attestation, deterministic-content, clean-room-launch, signing,
+interactive, and soak evidence.
+
+The built-in Codex quota source is limited to a credential-free versioned local format
+or a documented stable official machine interface. A dashboard, slash command,
+browser/session state, or private endpoint is not a contract. Absence produces an
+explicit unavailable/stale state and cannot authorize automatic reset activation.
+`docs/FEATURE_PARITY.md` is the row-level behavioral ledger; a parity claim requires
+every row to be implemented or explicitly rejected under a surviving normative
+rationale and regression gate.
+
+Rationale: leaving target, package, license, data-source, feature-parity, and phase
+order implicit transfers product decisions into late implementation and allows unsafe
+or unverifiable shortcuts. Freezing them now preserves the proven native core, makes
+the user-visible product the next priority after its data contracts, and gives one
+auditable definition of release readiness without pretending GNU developer evidence,
+private web behavior, or a broad feature label proves the final product.
