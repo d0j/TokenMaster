@@ -54,10 +54,11 @@ archive, worker, scheduler and watcher lifecycle, selects incremental versus reb
 and implements admission-safe pause/resume plus ordered joined shutdown. P1-E.1 is now
 complete: one startup-seeded immutable `EngineSnapshot` advances only for a strictly
 newer archive generation and exposes exact revision/scan/data-through/quality plus
-fixed checked diagnostics. Equal/older and writer-busy candidates cannot replace it;
-focused store/runtime tests are green. The immediate next task is the remaining P1-E
-race/recovery matrix, Windows power-event suspend/resume binding, and final resource/
-CPU evidence.
+  fixed checked diagnostics. Equal/older and writer-busy candidates cannot replace it;
+  focused store/runtime tests are green. P1-E.2 now closes no-change, pause/resume,
+  restart, malformed-truncation recovery, canonical-retention, and successful-repair
+  publication behavior. The immediate next task is Windows power-event suspend/resume
+  binding and final resource/CPU evidence.
 The 2026-07-16 closure review also freezes the remaining plan ambiguities: P3 is the
 complete UI, P4 presentation/localization, P5 read-only automation, and P6 the
 canonical MSVC signed portable release. It selects the Slint attribution route,
@@ -207,6 +208,10 @@ new-source publication works, 10,000 hints remain bounded, current partial state
 resumes without duplicates, replacement/truncation rebuilds preserve prior truth,
 pause/resume/reopen succeeds, and combined Windows handles/threads return to baseline
 after shutdown.
+P1-E.2 adds no-change/resume/restart and failed-truncation recovery contracts. Blocking
+malformed/incomplete/oversized adapter diagnostics now fail before checkpoint or batch
+commit; the archive remains `recovery_pending`, prior canonical truth stays readable,
+and a later valid rebuild returns the immutable publication to `complete`.
 Clean-root, formatting, strict workspace Clippy, and the full locked workspace passed;
 see the P1-A history entry for exact commands and focused counts. The
 one-million-row M0 scale test remains explicitly ignored in the normal workspace run.

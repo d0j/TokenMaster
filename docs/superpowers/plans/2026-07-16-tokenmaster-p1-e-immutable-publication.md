@@ -1,6 +1,6 @@
 # P1-E Immutable Publication and Suspend/Resume Plan
 
-Status: in progress; Tasks 1-3 implemented, Tasks 4-6 remain.
+Status: in progress; Tasks 1-4 implemented, Tasks 5-6 remain.
 
 ## Goal
 
@@ -118,7 +118,7 @@ TDD:
    without paths or wrapped errors.
 5. Run focused runtime tests and privacy Debug assertions.
 
-## Task 4 — Close race, burst, pause/resume, and restart semantics
+## Task 4 — Close race, burst, pause/resume, and restart semantics (complete)
 
 Files:
 

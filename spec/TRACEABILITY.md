@@ -6,20 +6,20 @@ A design or plan is not implementation evidence.
 | Requirement | Status | Implementation or planned owner | Evidence or next gate |
 | --- | --- | --- | --- |
 | TM-FUNC-001 | implemented | `crates/provider`, Codex roots/files | provider, discovery, enumeration contracts |
-| TM-FUNC-002 | implemented | Codex reader plus store/runtime incremental path | zero-payload unchanged, exact tail bytes, multi-batch restart, new/missing source, replacement/truncation/profile-scope recovery contracts |
+| TM-FUNC-002 | implemented | Codex reader plus store/runtime incremental path | zero-payload unchanged, exact tail bytes, multi-batch restart, new/missing source, replacement/truncation/profile-scope and malformed-input recovery contracts |
 | TM-FUNC-003 | partial | domain/accounting/Codex parser; pricing/analytics planned | usage, canonicalizer, parser-state, parser-adversarial contracts |
 | TM-FUNC-004 | planned | query snapshots and complete Slint product routes | row-level parity ledger plus P3 UI plan after P2 query contracts |
 | TM-FUNC-005 | partial | `crates/probe-app`; product shell later | lifecycle, presentation, skin-runtime, metrics, stress contracts |
 | TM-FUNC-006 | planned | separate CLI and MCP adapters over query facade | P5 strict JSON/stdin MCP conformance tests after the complete UI |
 | TM-FUNC-007 | implemented | accounting lineage/classifier, scalable replay archive, P0-E composition, and P1-A retention | real JSONL baseline/append/restart/replay/quality/atomic-replacement/truncation-retention/failure contracts pass; live scheduling remains TM-FUNC-008/P1 |
-| TM-FUNC-008 | partial | provider-neutral drafts/engine plus built-in Codex live runtime and immutable publication; external plugin host pending | P1-C, P1-D.0-P1-D.6, and P1-E.1 logical-file/codec/bootstrap/exact-scan/CAS/recovery/lease/scheduling/lifecycle/publication contracts; Windows power binding remains |
+| TM-FUNC-008 | partial | provider-neutral drafts/engine plus built-in Codex live runtime and immutable publication; external plugin host pending | P1-C, P1-D.0-P1-D.6, and P1-E.1-P1-E.2 logical-file/codec/bootstrap/exact-scan/CAS/recovery/lease/scheduling/lifecycle/publication contracts; Windows power binding remains |
 | TM-FUNC-009 | planned | immutable provider quota epochs and weekly full-reset transitions | P2 quota reset plan; scheduled/early/repeated/reset+allowance/restart/UI/API fixtures pending |
 | TM-FUNC-010 | planned | banked reset lots, selectable default/custom expiry reminders, activation intents/receipts | P2 banked reset plan; inventory/profile/reminder/reconciliation/UI/security fixtures pending |
 | TM-UI-001 | planned | complete Slint board and supporting views | granular parity ledger and P3 accessibility/UI tests |
 | TM-UI-002 | partial | `crates/probe-app` presentation generations plus immutable runtime engine snapshot | strictly newer consumer predicate, exact archive identity/data-through, equal/older rejection; product query/presentation snapshots pending |
 | TM-PERF-001 | partial | bounded parser/reader/store/engine plus live runtime | unchanged payload bytes=0; exact tail; 300-event batches; 10,000-hint aggregate/one follow-up; one <=256-byte publication state across 10,000 candidates; watcher/live resource baselines; query/UI/plugin evidence pending |
 | TM-PERF-002 | open evidence | software renderer and M0 resource gates | uninterrupted soak and interactive receipts remain absent |
-| TM-PERF-003 | partial | keyset store reads plus immutable generation-ordered engine publication | P1-E archive identity/data-through/busy/older-result contracts; P2 indexed query snapshot gates pending |
+| TM-PERF-003 | partial | keyset store reads plus immutable generation-ordered engine publication | P1-E archive identity/data-through/busy/older/no-change/restart/recovery contracts; P2 indexed query snapshot gates pending |
 | TM-REL-001 | partial | M0 scripts and receipt schemas | identity checks exist; final product packaging evidence pending |
 | TM-REL-002 | open evidence | `M0_ACCEPTANCE.md` | interactive Windows/DPI/accessibility and uninterrupted soak receipts absent |
 | TM-REL-003 | planned | P6 explicit MSVC signed portable package and supply-chain gates | GNU/MSVC comparison, notices/SBOM, advisory/source/license/secret/action/attestation audits, deterministic package and clean-room launch pending |
@@ -76,8 +76,10 @@ incremental/rebuild selection, admission-safe pause/resume, current-partial rest
 ordered joined shutdown, and combined Windows resource return. P1-E.1 now adds
 startup-seeded immutable engine publication, strict archive-generation ordering,
 exact revision/scan/data-through, fixed checked diagnostics, 10,000 equal-candidate
-retention, and busy/older-result rejection. P1-E race/recovery expansion, Windows
-power-event binding, and final resource/CPU evidence remain.
+retention, and busy/older-result rejection. P1-E.2 closes no-change, pause/resume,
+process-restart, malformed-truncation `recovery_pending`, canonical-retention, and
+successful-repair publication contracts. Windows power-event binding and final
+resource/CPU evidence remain.
 Tasks 3+ in the older replay plan are historical and superseded.
 
 The clean-root invariant is implemented by `scripts/audit-clean-root.ps1` and its

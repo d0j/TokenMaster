@@ -134,6 +134,9 @@ only a non-destructive full rebuild may return the publication to `complete`. Th
 rebuild may replace only an exact unadmitted generation-zero provisional source with
 no replay source, observation, or chunk state. If one scan discovers more than the
 fixed provisional-admission bound, it requests rebuild before retaining another key.
+Malformed, incomplete, or oversized relevant input cannot advance an adapter checkpoint
+or authorize a complete rebuild; the failed attempt retains prior canonical truth and
+the durable recovery marker until valid authoritative input succeeds.
 
 The worker retains one coordinator, one optional not-yet-started permit, one wake
 token, one completion, one owned thread handle, and fixed phase/supersession counters.

@@ -222,8 +222,10 @@ incremental/rebuild selection, worker/scheduler/watcher ownership, admission-saf
 pause/resume, and ordered joined shutdown. P1-E.1 now publishes one startup-seeded,
 strictly generation-ordered immutable engine snapshot with exact archive revision,
 scan-set/data-through truth, fixed checked diagnostics, and busy/older-result rejection.
-The immediate next gate is the remaining P1-E race/recovery matrix, Windows power-event
-binding, and final resource/CPU evidence before P2 indexed query snapshots.
+P1-E.2 now closes no-change, pause/resume, restart, malformed-truncation recovery,
+canonical-retention, and successful-repair publication semantics. The immediate next
+gate is Windows power-event binding and final resource/CPU evidence before P2 indexed
+query snapshots.
 The older replay plan remains historical evidence for
 completed Tasks 1-2, but its Codex-owned Tasks 3+ are superseded and must not be
 executed.

@@ -211,6 +211,13 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   retain no history; overflow fails closed without wrap. Store/runtime contracts cover
   exact scan lookup, stale ID, append generation, consumer ordering, busy recovery,
   archive identity match, and path-private Debug.
+- P1-E.2 race/recovery closure: unchanged scans advance only freshness, pause/resume
+  forces authoritative reconciliation, process restart resets only in-process order,
+  and persisted archive generation/revision remain exact. A malformed truncation now
+  fails before checkpoint/batch commit, publishes a newer `recovery_pending` snapshot
+  without erasing the prior two canonical events, then returns to `complete` only after
+  valid input rebuilds successfully. Existing burst, cancellation, and stale-request
+  contracts complete the race matrix.
 
 ## Next implementation slice
 
@@ -263,8 +270,9 @@ archive and real tail-only refresh, P1-D.4 adds the portable process-owned write
 lease, and P1-D.5 adds bounded pathless watcher/periodic scheduling. P1-D.6 completes
 lease-first startup recovery and live lifecycle assembly. P1-E.1 now exposes the
 immutable bounded engine publication without sharing the writer connection with UI,
-CLI, or MCP readers. The next gate is the remaining P1-E race/recovery matrix, Windows
-power-event suspend/resume binding, and final resource/CPU evidence.
+CLI, or MCP readers. P1-E.2 closes the race/recovery/restart matrix and makes degraded
+live input fail closed. The next gate is Windows power-event suspend/resume binding and
+final resource/CPU evidence.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 

@@ -101,6 +101,12 @@ request, `resume` invalidates watcher assumptions and forces recovery, and `shut
 drops the watcher, joins the scheduler, then cancels/joins the worker. Debug contains
 no archive or source path.
 
+Malformed, incomplete, or oversized relevant provider input is a blocking adapter
+diagnostic. The live reader returns fixed `invalid_data` before checkpoint or batch
+commit; a rebuild therefore remains failed/`recovery_pending` and preserves the prior
+canonical publication until a later authoritative read completes. Non-blocking quality
+diagnostics may still accompany an otherwise valid bounded batch.
+
 `RefreshScheduler` owns one thread and one capacity-one wake. Its clonable
 `RefreshHintSink` accepts only pathless filesystem/force/health signals and exposes no
 event, root, source, request, or backend error. The fixed 250 ms quiet window, 15 minute

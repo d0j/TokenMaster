@@ -85,6 +85,9 @@ All notable changes are recorded here.
   exact archive generation/revision/scan/data-through/quality, fixed diagnostics,
   strict newer-only consumer ordering, one-state retention across 10,000 candidates,
   fail-closed overflow, and writer-busy/older-result rejection.
+- Immutable publication race/recovery coverage for no-change freshness, pause/resume,
+  persisted versus in-process restart ordering, malformed-truncation
+  `recovery_pending`, canonical retention, and successful repair.
 - Approved a provider-neutral weekly quota reset history: immutable pre/post epochs,
   scheduled/early/repeated reset transitions, allowance-change separation, bounded
   retention, and shared UI/CLI/MCP semantics for P2.
@@ -135,3 +138,5 @@ All notable changes are recorded here.
   abandon the one follow-up, suppress worker-only panic payload output, clear runtime
   state on other worker-port panics, preserve faulted join ownership, and reject
   incompatible `panic=abort` engine builds.
+- Made malformed, incomplete, or oversized relevant live input fail before checkpoint
+  or batch commit, preventing a degraded full rebuild from being mislabeled complete.

@@ -1078,3 +1078,20 @@ contracts, two live publication contracts, the complete runtime target suite, an
 strict store/runtime Clippy. The next P1-E gate remains the expanded race/recovery
 matrix, Windows power-event suspend/resume binding, and final resource/CPU evidence.
 M0 acceptance, P2 query snapshots, packaging, signing, and release remain unclaimed.
+
+## 2026-07-16 — P1-E.2 publication race and recovery matrix closed
+
+Added integration contracts for repeated no-change refresh, pause/resume reconciliation,
+and restart ordering. They prove that in-process generation is process-local while
+persisted archive generation/revision/scan freshness remains the durable authority.
+Existing 10,000-hint, stale-cancellation, busy, older-candidate, and consumer-ordering
+contracts complete the bounded race matrix without adding retained history.
+
+The malformed-truncation RED contract exposed that the Codex adapter counted a blocking
+diagnostic but still returned a complete batch. The reader now maps malformed,
+incomplete, or oversized relevant input to fixed `invalid_data` before checkpoint or
+batch commit. The failed rebuild publishes newer `recovery_pending`, leaves the prior
+two canonical events readable, and a later valid rebuild publishes `complete` with a
+new revision. Focused strict runtime Clippy and the complete runtime test suite pass.
+Windows power-event binding and final resource/CPU evidence remain; P1, M0, packaging,
+signing, and release are not yet accepted.

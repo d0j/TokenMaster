@@ -212,6 +212,10 @@ source with no replay/observation/chunk facts, and rewrites its physical identit
 the newly opened descriptor. Provisional-admission overflow fails into the same
 non-destructive recovery path before retaining an over-bound key. No path, raw line,
 incomplete tail, descriptor, or checkpoint bytes enter SQLite or reports.
+Malformed, incomplete, and oversized relevant input are blocking adapter diagnostics:
+they become only fixed `invalid_data`, cannot advance a checkpoint, and cannot turn a
+failed rebuild into a complete publication. The previous canonical publication remains
+readable behind `recovery_pending` until authoritative input is valid again.
 
 The pinned `notify = 8.2.0` backend is isolated inside `tokenmaster-runtime`. Callback
 code inspects only the rescan bit, discards every event/error object immediately, and

@@ -303,6 +303,9 @@ impl SourceBatchReader for CodexSourceBatchReader {
             ReaderOutcome::Batch(batch) => {
                 let mut diagnostics = AdapterDiagnostics::default();
                 map_batch_diagnostics(&batch, &mut diagnostics)?;
+                if has_blocking_input_diagnostic(&diagnostics) {
+                    return Err(PortError::new(PortErrorCode::InvalidData));
+                }
                 let diagnostic_count = diagnostics.total().map_err(PortError::from)?;
                 let chunk_proofs =
                     chunk_proofs(batch.previous_partial_chunk(), batch.source_chunks())?;
@@ -472,6 +475,16 @@ fn map_batch_diagnostics(
     .into_iter()
     .any(|code| batch.parser_diagnostics().count(code) > 0);
     record_if(target, other, AdapterDiagnosticCode::Other)
+}
+
+fn has_blocking_input_diagnostic(diagnostics: &AdapterDiagnostics) -> bool {
+    [
+        AdapterDiagnosticCode::IncompleteInput,
+        AdapterDiagnosticCode::MalformedInput,
+        AdapterDiagnosticCode::OversizedInput,
+    ]
+    .into_iter()
+    .any(|code| diagnostics.count(code) > 0)
 }
 
 fn record_if(
