@@ -54,6 +54,11 @@
 3. Close the parent only after every child is terminal. A mixed parent truthfully
    aggregates to failed, timed out, cancelled, or partial and cannot authorize the
    production replay path. Do not edit scan or source rows manually.
+4. Parent close automatically performs one reference-safe pruning batch. For an older
+   backlog, call the internal `prune_scan_history_batch()` repeatedly until it returns
+   zero. Each call removes at most 64 whole closed sets only when every child scope has
+   32 newer closed sets. Running sets and source/replay references are preserved. A
+   failure writes nothing; never replace this operation with ad hoc SQL.
 
 ## Schema recovery
 

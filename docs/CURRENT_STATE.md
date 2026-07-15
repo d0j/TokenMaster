@@ -86,6 +86,14 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   a scan set before replay; partial enumeration closes partial and cannot authorize
   replay. All seven pipeline contracts remain green without a production dependency
   from the Codex adapter to the store.
+- P1-B.3 bounded scan history: parent close prunes only whole closed scan sets when
+  every child scope has 32 newer closed sets. A source `last_seen_scan_id`, replay
+  `scan_set_id`, or running state protects the entire set. Each transaction removes at
+  most 64 candidates through a SQLite temporary table and scan-related foreign-key
+  checks, without scanning canonical usage events or collecting history in Rust.
+  Contracts prove steady-state plateau, repeated bounded backlog recovery, preservation
+  of running/replay-referenced sets, checked parent/child ID exhaustion, reopen, and
+  rollback of both close and pruning after an injected fault.
 
 ## Next implementation slice
 
@@ -113,9 +121,10 @@ late-source fail-closed behavior. P0-E is complete under
 transactional cross-crate proof, not the production scheduler. P1-A is complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p1-retained-projection.md`. P1-B.1 and
 P1-B.2 now own strict scan-set presence and exact replay binding, including a
-zero-present-source retention-only revision. P1-B.3 is next and bounds history,
-reference-safe pruning, ID exhaustion, and recovery. P1-C and later add the
-provider-neutral engine, coalescing, cancellation policy, writer
+zero-present-source retention-only revision. P1-B.3 completes reference-safe 32/64
+scan-history retention, ID exhaustion, and recovery. P1-C is next and adds the
+provider-neutral engine core, coalescing, cancellation policy, deadlines, and
+one-shot refresh. P1-D/P1-E later add the writer
 lease, sleep/resume, immutable publication, and continuous runtime recovery.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.

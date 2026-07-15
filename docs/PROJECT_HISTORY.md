@@ -524,3 +524,43 @@ one-million-row M0 scale test. Clean-root returns `TM-CLEAN-PASS`; formatting an
 strict Clippy pass. This completes P1-B.2 only. Reference-safe scan-history pruning,
 repeated-scan/ID-exhaustion recovery, and the live scheduler remain P1-B.3/P1-C. No
 M0 acceptance, interactive product result, package, signing, or release is claimed.
+
+## 2026-07-15 — P1-B.3 bounded scan history implemented
+
+Completed P1-B with reference-safe scan-history retention. Closing a parent now
+selects only whole closed sets for which every child scope has 32 newer closed sets.
+Any running state, source `last_seen_scan_id`, or replay `scan_set_id` reference keeps
+the complete set. One immediate transaction prunes at most 64 sets through a SQLite
+temporary candidate table and checks only the three scan-related foreign-key tables;
+it does not collect history in Rust or scan the canonical usage-event archive. The
+same bounded operation is public to store-owned recovery and can be repeated until an
+older backlog returns zero candidates.
+
+Contracts prove a repeated single-scope plateau, whole-set safety across shared
+Codex/Hermes scopes, survival of replay-referenced and running sets, 64+remainder
+backlog recovery, checked parent and child ID exhaustion, stale lookup after removal,
+reopen, and rollback of parent close, deleted rows, and temporary schema after an
+injected post-prune fault. The seven real synthetic Codex contracts remain unchanged.
+
+Verification:
+
+```powershell
+cargo +1.97.0 test -p tokenmaster-store --locked
+cargo +1.97.0 test -p tokenmaster-codex --test pipeline_contract --locked
+pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
+cargo +1.97.0 fmt --all -- --check
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy --workspace --all-targets --locked
+cargo +1.97.0 test --workspace --locked
+git diff --check
+```
+
+All commands passed. Store evidence includes 16 unit tests, 45 replay contracts, 11
+scan contracts, 5 ingest contracts, 14 schema contracts, and the compile-fail API
+contract. All seven scan-bound synthetic Codex pipeline contracts pass. The full
+workspace retains exactly one pre-existing explicitly ignored one-million-row M0
+scale test. Clean-root returns `TM-CLEAN-PASS`; formatting and strict Clippy pass.
+The normal Codex dependency graph contains neither store nor accounting; tracked
+Go/JavaScript/TypeScript/Python source, secret-value patterns, actual user-profile
+paths, and new forbidden storage identifiers are absent. This completes P1-B only;
+P1-C provider-neutral engine core is next. No M0 acceptance, interactive product
+result, package, signing, or release is claimed.

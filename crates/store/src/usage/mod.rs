@@ -21,10 +21,11 @@ pub use types::{
     MAX_REPLAY_SOURCES, MAX_RESUME_BYTES, MAX_SCAN_SCOPES, MAX_USAGE_EVENT_PAGE_SIZE,
     ReplayAppendBatch, ReplayAppendBatchParts, ReplayContinuationResult, ReplayEpoch,
     ReplayManifest, ReplayQualityCounts, ReplayRelation, ReplayRevisionId, ReplayRevisionSnapshot,
-    ReplayRevisionStatus, SOURCE_CHUNK_BYTES, ScanCounters, ScanId, ScanOutcome, ScanScope,
-    ScanSetId, ScanSetManifest, ScanSetSnapshot, ScanSnapshot, SourceKey, SourceKind,
-    SourceRegistration, SourceRegistrationParts, StoredCheckpoint, StoredCheckpointParts,
-    StoredSourceChunk, StoredUsageEvent, StoredVerification, UsageStoreCounts,
+    ReplayRevisionStatus, SCAN_HISTORY_PER_SCOPE, SCAN_PRUNE_BATCH_SIZE, SOURCE_CHUNK_BYTES,
+    ScanCounters, ScanId, ScanOutcome, ScanScope, ScanSetId, ScanSetManifest, ScanSetSnapshot,
+    ScanSnapshot, SourceKey, SourceKind, SourceRegistration, SourceRegistrationParts,
+    StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk, StoredUsageEvent,
+    StoredVerification, UsageStoreCounts,
 };
 
 use migration::migrate_schema;

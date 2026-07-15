@@ -46,8 +46,12 @@ rollback proofs.
 Completed: P1-B.2 persists exact scan-set provenance, stages only present members,
 revalidates membership at continuation/seal/promotion, preserves missing generations,
 supports zero-source retention-only publication after reopen, and moves the real
-synthetic Codex pipeline onto this path. Current gate P1-B.3 bounds scan history and
-recovery. P1-C through
+synthetic Codex pipeline onto this path.
+
+Completed: P1-B.3 keeps the newest 32 closed sets per scope, prunes at most 64 whole
+unreferenced sets per transaction, preserves running/source/replay references, recovers
+older backlogs in bounded passes, and fails atomically on pruning or ID exhaustion.
+Current gate P1-C is the provider-neutral runtime engine core. P1-C through
 P1-E then add the provider-neutral runtime engine, coalescing, cancellation, writer
 lease, sleep/resume, continuous recovery, and immutable publication before indexed
 analytics, pricing, quota, Git output, automation, and complete UI work.

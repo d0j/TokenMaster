@@ -25,14 +25,15 @@ complete under `docs/superpowers/plans/2026-07-14-tokenmaster-p0-e-pipeline-proo
 the test-only driver proves the real synthetic Codex-to-archive path with more than
 256 files/events, restart, append, atomic replacement, exact totals/quality, and
 failure discard without changing production dependency direction. The immediate next
-task is P1-B.3 reference-safe bounded scan-history pruning and recovery.
+task is P1-C provider-neutral engine core: bounded one-shot refresh, coalescing,
+cancellation, and deadlines over the completed store authority.
 P1-A is complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p1-retained-projection.md`: strict
 schema v4, exact v1/v2/v3 migration, and atomic retained projection now handle
 complete truncation/replacement without retaining obsolete generations. The complete
 approved order is in `docs/AUDIT_AND_MASTER_PLAN.md`.
 
-P1-B.1 and P1-B.2 are implemented under
+P1-B.1 through P1-B.3 are implemented under
 `docs/superpowers/plans/2026-07-15-tokenmaster-p1-b-scan-authority.md`: strict schema
 v5 migrates exact v1-v4 archives and adds a bounded provider/profile-qualified scan
 set. Only a complete child derives presence from exact last-seen membership. Partial
@@ -41,8 +42,10 @@ creation and missing-state finalization have injected rollback proofs. Productio
 replay now stores one complete set ID, stages only its exact present membership, and
 revalidates it through continuation, seal, and promotion. Zero-source retention-only
 promotion preserves missing-source generations. The real synthetic Codex driver
-exercises this path and closes cancelled enumeration partial. P1-B.3 remains and owns
-reference-safe bounded pruning, recovery, and ID-exhaustion proofs.
+exercises this path and closes cancelled enumeration partial. P1-B.3 keeps 32 closed
+sets per scope, removes at most 64 whole unreferenced sets per transaction, preserves
+running/source/replay references, and proves bounded backlog recovery, parent/child
+ID exhaustion, reopen, and rollback after an injected pruning fault.
 
 Tasks 3+ in `2026-07-14-tokenmaster-p0-replay-correctness.md` are superseded. Do not
 execute its Codex-owned fingerprint/signature or destructive migration steps. Do not
@@ -93,7 +96,7 @@ pwsh -NoProfile -File scripts\verify-m0.ps1 -RepositoryRoot (Get-Location).Path
 ```
 
 The P0 authority/lineage/classifier, P0-D archive, P0-D.1 scalable manifest, P0-E
-transactional composition, P1-A retained projection, and P1-B.1/P1-B.2 scoped scan
+transactional composition, P1-A retained projection, and complete P1-B scoped scan
 and replay authority slices passed focused contracts. P0-D.1 evidence includes exact populated-v2
 migration and three injected rollback boundaries, 300-source set-based begin, a
 two-page seal/promotion/reopen lifecycle, late-source seal rejection, and exact discard.
@@ -108,7 +111,9 @@ provider-qualified lifecycle, complete-only presence, late-registration safety, 
 two lifecycle fault rollback contracts. P1-B.2 adds exact multi-provider binding,
 bidirectional membership revalidation, stale-scan rejection, two begin fault
 boundaries, zero-source reopen/promotion, and the seven scan-bound Codex pipeline
-contracts. It does not yet claim bounded scan-history pruning or a live scheduler.
+contracts. P1-B.3 adds the repeated-scan 32-row plateau, 64+remainder backlog passes,
+running/replay-reference preservation, checked ID exhaustion, and close+prune rollback.
+It does not yet claim a live scheduler.
 Clean-root, formatting, strict workspace Clippy, and the full locked workspace passed;
 see the P1-A history entry for exact commands and focused counts. The
 one-million-row M0 scale test remains explicitly ignored in the normal workspace run.

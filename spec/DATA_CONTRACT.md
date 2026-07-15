@@ -60,6 +60,12 @@ zero present sources creates no staging generations and may publish a retention-
 revision while missing sources keep their prior current generations. The compatibility
 replay path still snapshots every registered source into SQLite;
 the stored checked 64-bit source count is never an application allocation authority.
+Closing a scan set atomically prunes only whole, closed, unreferenced sets beyond the
+newest 32 closed sets for every scope they contain. A set referenced by a source's
+`last_seen_scan_id`, a replay revision's `scan_set_id`, or running state is never
+eligible. One transaction removes at most 64 sets with set-based SQL and no
+history-sized Rust collection. The same bounded operation may be repeated explicitly
+to recover an older backlog; a failed prune rolls back the set close and all removals.
 Before the first staging append, an adapter may prepare only its exact untouched
 pending source with a validated zero-offset incremental checkpoint. Preparation is
 revision/epoch compare-and-swap, may replace only path-private physical identity,
@@ -106,7 +112,8 @@ logical-copy and injected rollback checks.
 File-backed connections MUST use WAL,
 FULL synchronous writes, foreign keys, a bounded busy timeout, bounded journal/cache
 policy, and disabled mmap. Collections and complete-manifest validation are
-keyset-paged at no more than 256 rows.
+keyset-paged at no more than 256 rows. Scan-history cleanup uses only scan-related
+foreign-key checks rather than rescanning the complete usage-event archive.
 
 ## TM-DATA-006 — Bounds
 

@@ -1,7 +1,7 @@
 # TokenMaster P1 Runtime Engine and Retention Design
 
-**Status:** Approved for autonomous execution. P0-E, P1-A, and P1-B.1/P1-B.2 are
-complete; P1-B.3 bounded scan history and recovery are the next implementation slice.
+**Status:** Approved for autonomous execution. P0-E, P1-A, and P1-B are complete;
+P1-C provider-neutral engine core is the next implementation slice.
 
 ## 1. Goal and boundary
 

@@ -14,6 +14,8 @@ pub const MAX_APPEND_EVENTS: usize = 256;
 pub const MAX_APPEND_CHUNK_UPDATES: usize = 18;
 pub const MAX_REPLAY_SOURCES: usize = 256;
 pub const MAX_SCAN_SCOPES: usize = 256;
+pub const SCAN_HISTORY_PER_SCOPE: usize = 32;
+pub const SCAN_PRUNE_BATCH_SIZE: usize = 64;
 pub const SOURCE_CHUNK_BYTES: u64 = 1 << 20;
 const MAX_ANCHOR_BYTES: u16 = 4096;
 

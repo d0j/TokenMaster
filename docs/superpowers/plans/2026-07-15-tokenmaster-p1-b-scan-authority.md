@@ -1,8 +1,7 @@
 # TokenMaster P1-B Scan Authority Implementation Plan
 
-**Status:** In progress. Tasks 1-4 and the Codex composition part of Task 5 are
-implemented and verified on 2026-07-15; bounded pruning/recovery is next. Do not
-claim complete until Tasks 5-6 pass.
+**Status:** Implemented and fully verified on 2026-07-15. Tasks 1-6 pass. This plan
+does not claim a live scheduler, M0 acceptance, packaging, or a product release.
 
 > **Execution mode:** root-only, test-first, one writer, current feature branch. The
 > available task-name-only child surface cannot prove requested model routing, so
@@ -28,8 +27,13 @@ P1-A archive truth, privacy, rollback, and memory bounds.
   reopen/retention promotion, and all prior promotion faults pass.
 - Task 5 composition: all seven real synthetic Codex contracts use complete scan-bound
   replay; cancelled enumeration closes partial and leaves no running authority.
-- Remaining: reference-safe bounded pruning, repeated-scan/ID/recovery stress,
-  final documentation, and full workspace acceptance.
+- Task 5 retention: closing a set keeps 32 closed sets per child scope and prunes at
+  most 64 whole unreferenced sets per transaction. Repeated scans plateau; bounded
+  backlog passes preserve running/source/replay references; parent/child ID exhaustion
+  and a post-prune fault roll back without partial state.
+- Task 6: contracts, decisions, traceability, state, roadmap, recovery, handoff,
+  changelog, and history are synchronized; the clean-root, format, strict Clippy, and
+  full locked workspace gates pass.
 
 ## Corrected architecture
 

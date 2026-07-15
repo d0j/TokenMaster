@@ -1,9 +1,10 @@
 use rusqlite::Connection;
 use tempfile::TempDir;
 use tokenmaster_store::{
-    MAX_SCAN_SCOPES, ScanCounters, ScanId, ScanOutcome, ScanScope, ScanSetId, ScanSetManifest,
-    SourceKey, SourceKind, SourceRegistration, SourceRegistrationParts, StoreErrorCode,
-    StoredCheckpoint, StoredCheckpointParts, StoredVerification, UsageStore,
+    MAX_SCAN_SCOPES, SCAN_HISTORY_PER_SCOPE, SCAN_PRUNE_BATCH_SIZE, ScanCounters, ScanId,
+    ScanOutcome, ScanScope, ScanSetId, ScanSetManifest, SourceKey, SourceKind, SourceRegistration,
+    SourceRegistrationParts, StoreErrorCode, StoredCheckpoint, StoredCheckpointParts,
+    StoredVerification, UsageStore,
 };
 
 fn checkpoint(seed: u8) -> StoredCheckpoint {
@@ -61,6 +62,42 @@ fn source_presence(path: &std::path::Path, source_key: SourceKey) -> (Option<i64
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .expect("source presence")
+}
+
+fn complete_single_scope_scan(
+    store: &mut UsageStore,
+    source: SourceKey,
+    started_at_ms: i64,
+) -> (ScanSetId, ScanId) {
+    complete_named_scope_scan(store, source, "codex", "default", started_at_ms)
+}
+
+fn complete_named_scope_scan(
+    store: &mut UsageStore,
+    source: SourceKey,
+    provider_id: &str,
+    profile_id: &str,
+    started_at_ms: i64,
+) -> (ScanSetId, ScanId) {
+    let manifest = ScanSetManifest::new(
+        vec![ScanScope::new(provider_id, profile_id).unwrap()].into_boxed_slice(),
+    )
+    .unwrap();
+    let scan_set = store.begin_scan_set(&manifest, started_at_ms).unwrap();
+    let scan = store.scan_page(scan_set.id(), None, 1).unwrap()[0].id();
+    store.observe_scan_source(scan, source).unwrap();
+    store
+        .finish_scan(
+            scan,
+            ScanOutcome::Complete,
+            started_at_ms + 1,
+            ScanCounters::default(),
+        )
+        .unwrap();
+    store
+        .finish_scan_set(scan_set.id(), started_at_ms + 2)
+        .unwrap();
+    (scan_set.id(), scan)
 }
 
 #[test]
@@ -370,4 +407,339 @@ fn source_registered_after_complete_scan_starts_missing_until_observed() {
         (None, 1),
         "a registration cannot invent presence after complete scan authority"
     );
+}
+
+#[test]
+fn repeated_scans_plateau_at_the_fixed_per_scope_history_window() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("bounded-scan-history-private.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    let source = register_source(&mut store, 10, "codex", "default");
+    let mut first_set = None;
+    for index in 0..(SCAN_HISTORY_PER_SCOPE + 8) {
+        let (scan_set, _) = complete_single_scope_scan(
+            &mut store,
+            source,
+            10_000 + i64::try_from(index).expect("fixture time") * 10,
+        );
+        first_set.get_or_insert(scan_set);
+    }
+    drop(store);
+
+    let counts: (i64, i64) = Connection::open(&path)
+        .expect("inspect bounded history")
+        .query_row(
+            "SELECT
+               (SELECT count(*) FROM usage_scan_set),
+               (SELECT count(*) FROM usage_scan)",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("history counts");
+    assert_eq!(counts.0, SCAN_HISTORY_PER_SCOPE as i64);
+    assert_eq!(counts.1, SCAN_HISTORY_PER_SCOPE as i64);
+
+    let store = UsageStore::open(&path).expect("reopen bounded history");
+    let error = store
+        .scan_page(first_set.expect("first scan set"), None, 1)
+        .expect_err("old unreferenced scan set must be pruned");
+    assert_eq!(error.code(), StoreErrorCode::StaleScan);
+}
+
+#[test]
+fn replay_referenced_scan_set_survives_beyond_the_history_window() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("referenced-scan-history-private.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    let source = register_source(&mut store, 11, "codex", "default");
+    let (referenced_set, _) = complete_single_scope_scan(&mut store, source, 20_000);
+    let revision = store
+        .begin_replay_revision_for_scan_set(referenced_set)
+        .expect("bind staging replay");
+    assert_eq!(revision.scan_set_id(), Some(referenced_set));
+    for index in 0..(SCAN_HISTORY_PER_SCOPE + 8) {
+        complete_single_scope_scan(
+            &mut store,
+            source,
+            21_000 + i64::try_from(index).expect("fixture time") * 10,
+        );
+    }
+    assert_eq!(
+        store
+            .scan_page(referenced_set, None, 1)
+            .expect("replay-referenced scan set")
+            .len(),
+        1
+    );
+    drop(store);
+
+    let counts: (i64, i64) = Connection::open(&path)
+        .expect("inspect referenced history")
+        .query_row(
+            "SELECT
+               (SELECT count(*) FROM usage_scan_set),
+               (SELECT count(*) FROM usage_scan)",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("referenced history counts");
+    assert_eq!(counts.0, SCAN_HISTORY_PER_SCOPE as i64 + 1);
+    assert_eq!(counts.1, SCAN_HISTORY_PER_SCOPE as i64 + 1);
+}
+
+#[test]
+fn multi_scope_set_is_pruned_only_after_every_scope_exits_its_window() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("multi-scope-history-private.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    let codex = register_source(&mut store, 12, "codex", "default");
+    let hermes = register_source(&mut store, 13, "hermes", "default");
+    let manifest = ScanSetManifest::new(
+        vec![
+            ScanScope::new("codex", "default").unwrap(),
+            ScanScope::new("hermes", "default").unwrap(),
+        ]
+        .into_boxed_slice(),
+    )
+    .unwrap();
+    let shared = store.begin_scan_set(&manifest, 30_000).unwrap();
+    for child in store.scan_page(shared.id(), None, 2).unwrap() {
+        let source = match child.scope().provider_id() {
+            "codex" => codex,
+            "hermes" => hermes,
+            _ => panic!("unexpected fixture scope"),
+        };
+        store.observe_scan_source(child.id(), source).unwrap();
+        store
+            .finish_scan(
+                child.id(),
+                ScanOutcome::Complete,
+                30_001,
+                ScanCounters::default(),
+            )
+            .unwrap();
+    }
+    store.finish_scan_set(shared.id(), 30_002).unwrap();
+
+    for index in 0..SCAN_HISTORY_PER_SCOPE {
+        complete_named_scope_scan(
+            &mut store,
+            codex,
+            "codex",
+            "default",
+            31_000 + i64::try_from(index).unwrap() * 10,
+        );
+    }
+    assert_eq!(
+        store.scan_page(shared.id(), None, 2).unwrap().len(),
+        2,
+        "the Hermes scope still protects the whole shared set"
+    );
+
+    for index in 0..SCAN_HISTORY_PER_SCOPE {
+        complete_named_scope_scan(
+            &mut store,
+            hermes,
+            "hermes",
+            "default",
+            32_000 + i64::try_from(index).unwrap() * 10,
+        );
+    }
+    let error = store
+        .scan_page(shared.id(), None, 2)
+        .expect_err("every shared scope has now exited its retained window");
+    assert_eq!(error.code(), StoreErrorCode::StaleScan);
+    drop(store);
+
+    let counts: (i64, i64) = Connection::open(&path)
+        .expect("inspect multi-scope history")
+        .query_row(
+            "SELECT
+               (SELECT count(*) FROM usage_scan_set),
+               (SELECT count(*) FROM usage_scan)",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("multi-scope history counts");
+    assert_eq!(
+        counts,
+        (
+            i64::try_from(SCAN_HISTORY_PER_SCOPE * 2).unwrap(),
+            i64::try_from(SCAN_HISTORY_PER_SCOPE * 2).unwrap()
+        )
+    );
+}
+
+#[test]
+fn manual_pruning_is_batched_and_can_recover_legacy_backlog() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("scan-prune-backlog-private.sqlite3");
+    drop(UsageStore::open(&path).expect("create usage store"));
+    let mut connection = Connection::open(&path).expect("open backlog fixture");
+    let transaction = connection.transaction().expect("backlog transaction");
+    const BACKLOG: usize = 100;
+    for id in 0_i64..i64::try_from(BACKLOG).expect("backlog bound") {
+        transaction
+            .execute(
+                "INSERT INTO usage_scan_set(
+                   scan_set_id, started_at_ms, completed_at_ms, completion_state,
+                   expected_scope_count
+                 ) VALUES (?1, ?2, ?3, 'complete', 1)",
+                rusqlite::params![id, id * 10, id * 10 + 1],
+            )
+            .expect("insert backlog scan set");
+        transaction
+            .execute(
+                "INSERT INTO usage_scan(
+                   scan_id, scan_set_id, provider_id, profile_id, started_at_ms,
+                   completed_at_ms, completion_state
+                 ) VALUES (?1, ?1, 'codex', 'default', ?2, ?3, 'complete')",
+                rusqlite::params![id, id * 10, id * 10 + 1],
+            )
+            .expect("insert backlog child scan");
+    }
+    let running_id = i64::try_from(BACKLOG).expect("running scan ID");
+    transaction
+        .execute(
+            "INSERT INTO usage_scan_set(
+               scan_set_id, started_at_ms, completed_at_ms, completion_state,
+               expected_scope_count
+             ) VALUES (?1, ?2, NULL, 'running', 1)",
+            rusqlite::params![running_id, running_id * 10],
+        )
+        .expect("insert running scan set");
+    transaction
+        .execute(
+            "INSERT INTO usage_scan(
+               scan_id, scan_set_id, provider_id, profile_id, started_at_ms,
+               completed_at_ms, completion_state
+             ) VALUES (?1, ?1, 'codex', 'default', ?2, NULL, 'running')",
+            rusqlite::params![running_id, running_id * 10],
+        )
+        .expect("insert running child scan");
+    transaction.commit().expect("commit backlog");
+    drop(connection);
+
+    let mut store = UsageStore::open(&path).expect("reopen backlog");
+    assert_eq!(
+        store
+            .running_scan_set()
+            .expect("load running scan set")
+            .expect("running scan set")
+            .id()
+            .get(),
+        u64::try_from(running_id).expect("running scan ID")
+    );
+    assert_eq!(
+        store.prune_scan_history_batch().unwrap(),
+        SCAN_PRUNE_BATCH_SIZE as u64
+    );
+    assert_eq!(
+        store.prune_scan_history_batch().unwrap(),
+        (BACKLOG - SCAN_HISTORY_PER_SCOPE - SCAN_PRUNE_BATCH_SIZE) as u64
+    );
+    assert_eq!(store.prune_scan_history_batch().unwrap(), 0);
+    assert_eq!(
+        store
+            .running_scan_set()
+            .expect("reload running scan set")
+            .expect("running scan set after pruning")
+            .id()
+            .get(),
+        u64::try_from(running_id).expect("running scan ID")
+    );
+    drop(store);
+
+    let counts: (i64, i64) = Connection::open(&path)
+        .expect("inspect pruned backlog")
+        .query_row(
+            "SELECT
+               (SELECT count(*) FROM usage_scan_set),
+               (SELECT count(*) FROM usage_scan)",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("pruned backlog counts");
+    assert_eq!(
+        counts,
+        (
+            SCAN_HISTORY_PER_SCOPE as i64 + 1,
+            SCAN_HISTORY_PER_SCOPE as i64 + 1
+        )
+    );
+}
+
+#[test]
+fn scan_set_id_exhaustion_fails_without_creating_running_state() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("scan-id-exhaustion-private.sqlite3");
+    drop(UsageStore::open(&path).expect("create usage store"));
+    Connection::open(&path)
+        .expect("open exhaustion fixture")
+        .execute_batch(&format!(
+            "INSERT INTO usage_scan_set(
+               scan_set_id, started_at_ms, completed_at_ms, completion_state,
+               expected_scope_count
+             ) VALUES ({0}, 1, 2, 'complete', 1);
+             INSERT INTO usage_scan(
+               scan_id, scan_set_id, provider_id, profile_id, started_at_ms,
+               completed_at_ms, completion_state
+             ) VALUES ({0}, {0}, 'codex', 'default', 1, 2, 'complete');",
+            i64::MAX
+        ))
+        .expect("insert exhausted IDs");
+
+    let mut store = UsageStore::open(&path).expect("reopen exhausted store");
+    let manifest =
+        ScanSetManifest::new(vec![ScanScope::new("codex", "default").unwrap()].into_boxed_slice())
+            .unwrap();
+    let error = store
+        .begin_scan_set(&manifest, 3)
+        .expect_err("scan-set ID exhaustion");
+    assert_eq!(error.code(), StoreErrorCode::CapacityExceeded);
+    assert!(store.running_scan_set().unwrap().is_none());
+}
+
+#[test]
+fn child_scan_id_exhaustion_rolls_back_the_new_parent() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("child-scan-id-exhaustion-private.sqlite3");
+    drop(UsageStore::open(&path).expect("create usage store"));
+    Connection::open(&path)
+        .expect("open child exhaustion fixture")
+        .execute_batch(&format!(
+            "INSERT INTO usage_scan_set(
+               scan_set_id, started_at_ms, completed_at_ms, completion_state,
+               expected_scope_count
+             ) VALUES (0, 1, 2, 'complete', 1);
+             INSERT INTO usage_scan(
+               scan_id, scan_set_id, provider_id, profile_id, started_at_ms,
+               completed_at_ms, completion_state
+             ) VALUES ({0}, 0, 'codex', 'default', 1, 2, 'complete');",
+            i64::MAX
+        ))
+        .expect("insert exhausted child ID");
+
+    let mut store = UsageStore::open(&path).expect("reopen child-exhausted store");
+    let manifest =
+        ScanSetManifest::new(vec![ScanScope::new("codex", "default").unwrap()].into_boxed_slice())
+            .unwrap();
+    let error = store
+        .begin_scan_set(&manifest, 3)
+        .expect_err("child scan ID exhaustion");
+    assert_eq!(error.code(), StoreErrorCode::CapacityExceeded);
+    assert!(store.running_scan_set().unwrap().is_none());
+    drop(store);
+
+    let set_count: i64 = Connection::open(&path)
+        .expect("inspect child exhaustion rollback")
+        .query_row("SELECT count(*) FROM usage_scan_set", [], |row| row.get(0))
+        .expect("scan-set count");
+    assert_eq!(set_count, 1, "new parent insert must roll back");
 }

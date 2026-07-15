@@ -285,6 +285,15 @@ impl UsageStore {
         scan_set_id: ScanSetId,
         completed_at_ms: i64,
     ) -> Result<ScanSetSnapshot, StoreError> {
+        self.finish_scan_set_inner(scan_set_id, completed_at_ms, ScanFault::None)
+    }
+
+    fn finish_scan_set_inner(
+        &mut self,
+        scan_set_id: ScanSetId,
+        completed_at_ms: i64,
+        _fault: ScanFault,
+    ) -> Result<ScanSetSnapshot, StoreError> {
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -351,8 +360,31 @@ impl UsageStore {
             return Err(StoreError::new(StoreErrorCode::StaleScan));
         }
         let snapshot = load_scan_set(&transaction, scan_set_id)?;
+        prune_scan_history(&transaction)?;
+        #[cfg(test)]
+        if _fault == ScanFault::AfterHistoryPrune {
+            return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+        }
         transaction.commit()?;
         Ok(snapshot)
+    }
+
+    pub fn prune_scan_history_batch(&mut self) -> Result<u64, StoreError> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let pruned = prune_scan_history(&transaction)?;
+        transaction.commit()?;
+        Ok(pruned)
+    }
+
+    #[cfg(test)]
+    fn finish_scan_set_with_prune_fault(
+        &mut self,
+        scan_set_id: ScanSetId,
+        completed_at_ms: i64,
+    ) -> Result<ScanSetSnapshot, StoreError> {
+        self.finish_scan_set_inner(scan_set_id, completed_at_ms, ScanFault::AfterHistoryPrune)
     }
 }
 
@@ -363,6 +395,91 @@ enum ScanFault {
     AfterSetInsert,
     #[cfg(test)]
     AfterPresenceFinalization,
+    #[cfg(test)]
+    AfterHistoryPrune,
+}
+
+fn prune_scan_history(transaction: &rusqlite::Transaction<'_>) -> Result<u64, StoreError> {
+    transaction.execute_batch(
+        "DROP TABLE IF EXISTS temp.tm_prunable_scan_set;
+         CREATE TEMP TABLE tm_prunable_scan_set(
+           scan_set_id INTEGER PRIMARY KEY
+         ) WITHOUT ROWID;",
+    )?;
+    let candidates = transaction.execute(
+        "INSERT INTO temp.tm_prunable_scan_set(scan_set_id)
+         SELECT candidate.scan_set_id
+         FROM usage_scan_set AS candidate
+         WHERE candidate.completion_state <> 'running'
+           AND EXISTS(
+             SELECT 1 FROM usage_scan AS child
+             WHERE child.scan_set_id = candidate.scan_set_id)
+           AND NOT EXISTS(
+             SELECT 1 FROM usage_replay_revision AS revision
+             WHERE revision.scan_set_id = candidate.scan_set_id)
+           AND NOT EXISTS(
+             SELECT 1
+             FROM usage_scan AS child
+             JOIN usage_source AS source
+               ON source.last_seen_scan_id = child.scan_id
+             WHERE child.scan_set_id = candidate.scan_set_id)
+           AND NOT EXISTS(
+             SELECT 1 FROM usage_scan AS child
+             WHERE child.scan_set_id = candidate.scan_set_id
+               AND NOT EXISTS(
+                 SELECT 1
+                 FROM usage_scan AS newer
+                 JOIN usage_scan_set AS newer_set
+                   ON newer_set.scan_set_id = newer.scan_set_id
+                 WHERE newer.provider_id = child.provider_id
+                   AND newer.profile_id = child.profile_id
+                   AND newer.scan_set_id > candidate.scan_set_id
+                   AND newer_set.completion_state <> 'running'
+                 ORDER BY newer.scan_set_id
+                 LIMIT 1 OFFSET ?1))
+         ORDER BY candidate.scan_set_id
+         LIMIT ?2",
+        params![
+            i64::try_from(
+                SCAN_HISTORY_PER_SCOPE
+                    .checked_sub(1)
+                    .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?,
+            )
+            .map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))?,
+            i64::try_from(SCAN_PRUNE_BATCH_SIZE)
+                .map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))?,
+        ],
+    )?;
+    let deleted_children = transaction.execute(
+        "DELETE FROM usage_scan
+         WHERE scan_set_id IN (SELECT scan_set_id FROM temp.tm_prunable_scan_set)",
+        [],
+    )?;
+    let deleted_sets = transaction.execute(
+        "DELETE FROM usage_scan_set
+         WHERE scan_set_id IN (SELECT scan_set_id FROM temp.tm_prunable_scan_set)",
+        [],
+    )?;
+    transaction.execute_batch("DROP TABLE temp.tm_prunable_scan_set;")?;
+    if deleted_sets != candidates || deleted_children < deleted_sets {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    let foreign_key_failures: i64 = transaction.query_row(
+        "SELECT count(*)
+         FROM (
+           SELECT 1 FROM pragma_foreign_key_check('usage_scan')
+           UNION ALL
+           SELECT 1 FROM pragma_foreign_key_check('usage_source')
+           UNION ALL
+           SELECT 1 FROM pragma_foreign_key_check('usage_replay_revision')
+         )",
+        [],
+        |row| row.get(0),
+    )?;
+    if foreign_key_failures != 0 {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    u64::try_from(deleted_sets).map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))
 }
 
 struct ObservedScanScope {
@@ -524,6 +641,75 @@ mod tests {
             |row| row.get(0),
         )?;
         assert_eq!(missing, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn prune_fault_restores_closed_state_history_and_temp_schema() -> TestResult {
+        let mut store = UsageStore::in_memory()?;
+        for index in 0..SCAN_HISTORY_PER_SCOPE {
+            let started_at_ms = 3_000 + i64::try_from(index)? * 10;
+            let set = store.begin_scan_set(&manifest()?, started_at_ms)?;
+            let scan = store.scan_page(set.id(), None, 1)?[0].id();
+            store.finish_scan(
+                scan,
+                ScanOutcome::Complete,
+                started_at_ms + 1,
+                ScanCounters::default(),
+            )?;
+            store.finish_scan_set(set.id(), started_at_ms + 2)?;
+        }
+
+        let started_at_ms = 4_000;
+        let set = store.begin_scan_set(&manifest()?, started_at_ms)?;
+        let scan = store.scan_page(set.id(), None, 1)?[0].id();
+        store.finish_scan(
+            scan,
+            ScanOutcome::Complete,
+            started_at_ms + 1,
+            ScanCounters::default(),
+        )?;
+        let error = match store.finish_scan_set_with_prune_fault(set.id(), started_at_ms + 2) {
+            Ok(_) => return Err("faulted pruning unexpectedly committed".into()),
+            Err(error) => error,
+        };
+        assert_eq!(error.code(), StoreErrorCode::InvalidStoredValue);
+        let rolled_back: (i64, i64, i64, String) = store.connection.query_row(
+            "SELECT
+               (SELECT count(*) FROM usage_scan_set),
+               (SELECT count(*) FROM usage_scan),
+               (SELECT count(*) FROM temp.sqlite_schema
+                WHERE name = 'tm_prunable_scan_set'),
+               (SELECT completion_state FROM usage_scan_set WHERE scan_set_id = ?1)",
+            [set.id().as_sql()?],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )?;
+        assert_eq!(
+            rolled_back,
+            (
+                i64::try_from(SCAN_HISTORY_PER_SCOPE + 1)?,
+                i64::try_from(SCAN_HISTORY_PER_SCOPE + 1)?,
+                0,
+                "running".to_owned()
+            ),
+            "the close and pruning transaction must roll back together"
+        );
+
+        store.finish_scan_set(set.id(), started_at_ms + 2)?;
+        let committed: (i64, i64) = store.connection.query_row(
+            "SELECT
+               (SELECT count(*) FROM usage_scan_set),
+               (SELECT count(*) FROM usage_scan)",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        assert_eq!(
+            committed,
+            (
+                i64::try_from(SCAN_HISTORY_PER_SCOPE)?,
+                i64::try_from(SCAN_HISTORY_PER_SCOPE)?
+            )
+        );
         Ok(())
     }
 }

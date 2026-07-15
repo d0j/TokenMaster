@@ -47,6 +47,14 @@ promotion is retention-only: it creates no generation, preserves missing sources
 their current generations, and advances projection provenance atomically. Injected
 failures after revision creation and generation creation leave no staging state.
 
+Scan-history pruning is store-owned and executes in the same immediate transaction as
+parent close. It deletes at most 64 whole closed sets per call only after every child
+scope has 32 newer closed sets, and only when neither source presence nor replay
+provenance references the candidate. Running sets are excluded. Candidate IDs live in
+a bounded SQLite temporary table, not an application collection; scan-related foreign
+keys are checked before commit. An injected post-prune failure restores the parent,
+children, references, and temporary schema to their prior state.
+
 Replay rebuilds use a SQLite-owned fixed all-registered-source manifest, store-owned
 accounting versions, and an evidence-epoch compare-and-swap. The product path stages
 all sources with set-based SQL and retains at most one 256-row validation page; stored

@@ -31,6 +31,9 @@ All notable changes are recorded here.
   preservation, and zero-source retention-only promotion after reopen.
 - Real synthetic Codex pipeline composition over complete/partial scan authority
   without adding a store dependency to the production Codex adapter.
+- Reference-safe scan-history retention: 32 closed sets per scope, at most 64 whole
+  unreferenced sets pruned per transaction, running/source/replay protection, bounded
+  backlog recovery, checked ID exhaustion, and injected rollback proof.
 - Approved a provider-neutral weekly quota reset history: immutable pre/post epochs,
   scheduled/early/repeated reset transitions, allowance-change separation, bounded
   retention, and shared UI/CLI/MCP semantics for P2.

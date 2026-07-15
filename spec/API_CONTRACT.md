@@ -22,6 +22,10 @@ cancelled, failed, and timed-out results remain visible quality states and never
 silently become success. Public surfaces expose bounded IDs, counts, timestamps, and
 stable codes, not source keys or paths.
 
+Automatic scan-history retention is an internal maintenance detail. Public refresh
+results remain bound to their returned scan-set identity even if an older unreferenced
+set is later pruned; no CLI or MCP surface exposes arbitrary pruning or row deletion.
+
 Published freshness identifies the exact complete scan set that authorized its replay
 revision. A zero-present-source publication is explicitly retention-only and reports
 zero scanned sources without implying zero historical usage.

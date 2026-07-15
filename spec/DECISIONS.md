@@ -154,10 +154,14 @@ referenced sources; otherwise they are isolated as `legacy-unverified`. Replay
 revisions have nullable scan-set provenance for migration and bounded test/repair
 compatibility, while production begin, continuation, seal, and promotion require and
 revalidate one exact complete scan set. Zero-source sets publish retention-only truth
-without replacing missing-source generations. Closed scan
-history will be pruned only when unreferenced and beyond a fixed bounded window.
+without replacing missing-source generations. Closed scan history is pruned as whole
+sets only when unreferenced and older than the newest 32 closed sets for every child
+scope. One transaction removes at most 64 sets; running sets and source/replay
+references are retained, and backlog recovery repeats the same bounded operation.
 
 Rationale: a profile ID is not globally unique across providers, one archive replay
 can cover several scopes, and append activity is not proof of complete enumeration.
 A scan set provides one archive-wide authority boundary without retaining a
 scan-by-source history table or allowing partial enumeration to erase evidence.
+The fixed 32/64 policy keeps steady-state refresh cost and database growth bounded
+without a full usage-event foreign-key scan or a history-sized Rust allocation.
