@@ -147,6 +147,16 @@ fits SQLite `i64`. Debug and error surfaces redact identities, checkpoint/proof 
 and keyset cursors. Compile-fail contracts reject private-field construction, path
 substitution for source identity, and raw byte archive writes.
 
+The one-shot executor validates scope ownership before an adapter discovery reaches
+the archive and validates revision identity/epoch monotonicity before trusting every
+returned replay handle. It rejects non-progressing adapter checkpoints and replay
+cursors, caps continuation calls per execution, and never retains a source list or
+history-sized batch. Cancellation and deadline are checked across the full execution
+phase matrix. Only writer-lease contention is exposed as `busy`; later port misuse of
+that code fails the operation. Replay failure attempts exact last-confirmed-handle
+discard, and cleanup failure is reported separately without exposing data or masking
+the initiating stable code.
+
 ## TM-SEC-007 — Benefit activation authority
 
 Banked-reset inventory read, official activation link, idempotent activation,

@@ -88,6 +88,15 @@ transaction, and any failure leaves the previous current state intact. An explic
 epoch-checked discard may remove only unpublished staging state; it MUST NOT mutate
 the current revision, legacy snapshot, or canonical event page.
 
+The one-shot engine begins replay only after the archive closes the exact scan set as
+complete. It streams discoveries directly to that set and verifies every discovered
+source belongs to the currently enumerated scope. During replay it retains only the
+latest exact revision/epoch handle and accepts a returned handle only for the same
+revision with a non-regressing epoch. Cancellation, deadline, invalid progress, port
+fault, or stale state after replay begin invokes exact discard of the last confirmed
+unpublished handle; a failed discard remains an explicit recovery state and never
+authorizes publication.
+
 Truncation, physical replacement, or source absence is not destructive authority. A
 complete sealed overlay may promote while carrying omitted prior replay-verified
 events. Incomplete, partial, cancelled, pending, mismatched, or invalid evidence still

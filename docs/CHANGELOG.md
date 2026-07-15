@@ -41,6 +41,10 @@ All notable changes are recorded here.
   32-KiB opaque checkpoints, 18 chunk-proof updates, scope-exact 256-item adapter and
   canonical batches, 256-record replay pages, stable coded errors, and object-safe
   synchronous adapter/archive/clock/writer-lease ports with compile-fail privacy gates.
+- Provider-neutral one-shot refresh execution with lease-first admission, streamed
+  scope-exact discovery, all-complete replay, core canonicalization, exact replay-handle
+  continuity, bounded continuation, phase-complete cancellation/deadline handling, and
+  explicit last-confirmed staging cleanup.
 - Approved a provider-neutral weekly quota reset history: immutable pre/post epochs,
   scheduled/early/repeated reset transitions, allowance-change separation, bounded
   retention, and shared UI/CLI/MCP semantics for P2.
@@ -64,3 +68,7 @@ All notable changes are recorded here.
   observations or unbounded generation retention.
 - Removed scan authority from ordinary append and made post-scan source registration
   remain missing until a later complete matching-scope scan observes it.
+- Rejected cross-scope adapter discovery and non-progressing checkpoints/cursors before
+  they can loop or mutate the wrong archive scope.
+- Reserved terminal `busy` for writer-lease admission so later port faults cannot be
+  mislabeled as harmless backpressure.

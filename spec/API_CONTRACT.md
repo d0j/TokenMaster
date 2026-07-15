@@ -39,6 +39,16 @@ archive work before provider I/O. Stable port errors contain only enumerated cod
 Cancellation/deadline checks use the operation's caller-supplied monotonic clock and
 occur between callbacks, pulls, and archive calls, never by interrupting a transaction.
 
+`OneShotExecutor` acquires `WriterLease` before adapter or archive work. It retains
+only the bounded scope manifest, one replay page, one adapter/canonical batch, opaque
+checkpoints, fixed counters, and the latest exact replay handle. Discovery sources are
+written through to the archive and never collected in an engine list. Cross-scope
+discovery, unchanged non-terminal checkpoints, repeated cursors, changed replay
+revision identity, regressed epochs, and exhausted continuation work fail closed.
+Only lease acquisition may produce terminal `busy`; a `busy` code from any later port
+is an execution failure. Failure after replay begin attempts exact discard and reports
+whether cleanup succeeded without masking the original stable error code.
+
 Automatic scan-history retention is an internal maintenance detail. Public refresh
 results remain bound to their returned scan-set identity even if an older unreferenced
 set is later pruned; no CLI or MCP surface exposes arbitrary pruning or row deletion.

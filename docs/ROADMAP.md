@@ -60,8 +60,11 @@ Completed P1-C.1: a no-async, constant-state coordinator with checked monotonic 
 deadline/cancellation semantics, one active refresh, and one aggregate follow-up.
 Completed P1-C.2: sealed bounded provider-neutral values, scope-exact adapter/canonical
 batches, and object-safe adapter/archive/clock/lease ports with compile-fail privacy
-boundaries. The current P1-C.3 gate composes one truthful one-shot execution; the
-bounded worker shell follows as P1-C.4 under the same plan.
+boundaries. Completed P1-C.3: one truthful lease-first execution streams discovery,
+closes scan outcomes, replays/canonicalizes bounded batches, validates exact handle
+progress, and seals/promotes or discards the unpublished revision under full phase
+cancellation/deadline coverage. The current gate is the bounded deterministic worker
+shell in P1-C.4 under the same plan.
 
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset
 epochs. The weekly view preserves last-before/first-after state, maximum use before

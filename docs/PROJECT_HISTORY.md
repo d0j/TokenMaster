@@ -686,3 +686,47 @@ provider dependencies are absent. This completes P1-C Task 2 only. One-shot
 execution, the bounded worker, live Codex composition, the OS writer lease, and
 sleep/resume remain. No M0 acceptance, interactive product result, package, signing,
 or release is claimed.
+
+## 2026-07-15 — P1-C.3 provider-neutral one-shot executor implemented
+
+Added the synchronous `OneShotExecutor` without adding Codex, platform, filesystem,
+Slint, async-runtime, or UI dependencies to `tokenmaster-engine`. It acquires the
+writer lease before provider/archive work, collects only the bounded scope manifest,
+streams discovered sources directly into one exact scan set, and begins replay only
+after every scope and the parent set close complete. Adapter observations are
+canonicalized under `tokenmaster-accounting` authority one bounded batch at a time;
+the executor retains only opaque checkpoints, one replay page/batch, fixed counters,
+and the latest exact replay handle.
+
+The TDD failure matrix found and fixed four boundary problems: a cancellation/deadline
+between discovery and parent close could leave a scan running; unchanged checkpoints,
+repeated cursors, and unbounded continuation could make no progress; an archive could
+return a different revision identity; and non-lease `busy` could be mislabeled as safe
+admission backpressure. The final implementation closes the scan at every cooperative
+boundary, rejects cross-scope discovery before archive mutation, validates same-revision
+non-regressing epochs, caps continuation calls at 4,096, and discards only the last
+confirmed unpublished handle. Cleanup failure is explicit and never masks the original
+stable error code.
+
+Verification:
+
+```powershell
+cargo +1.97.0 test -p tokenmaster-engine --test one_shot_executor_contract --locked
+cargo +1.97.0 test -p tokenmaster-engine --locked
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy -p tokenmaster-engine --all-targets --locked
+pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
+cargo +1.97.0 fmt --all -- --check
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy --workspace --all-targets --locked
+cargo +1.97.0 test --workspace --locked
+git diff --check
+```
+
+Engine evidence is 2 unit tests, 40 public coordinator/value/batch/port/executor
+contracts, and 3 compile-fail doctests. The eighteen executor contracts cover complete
+and zero-source publication, partial/fault closure, cross-scope rejection, lease-only
+busy, every deadline boundary, every cancellable phase interval, stale/foreign handles,
+non-progress, continuation capacity, and successful/failed exact cleanup. Existing
+store contracts remain the evidence that staging and fault paths preserve prior
+canonical readability. This completes P1-C Task 3 only. The bounded deterministic
+worker, live Codex composition, OS writer lease, sleep/resume, immutable product
+snapshot, M0 acceptance, packaging, signing, and release remain unclaimed.

@@ -184,6 +184,17 @@ ownership, shutdown, and memory behavior while still coalescing bursts and allow
 single follow-up. Keeping the OS lease and Codex reader behind later ports preserves
 portability and prevents platform/UI concerns from entering the engine core.
 
+P1-C.3 composes these ports in one synchronous `OneShotExecutor`. It streams discovery
+without a source collection, stores only fixed counters and the latest replay handle,
+canonicalizes each bounded adapter batch under core authority, and promotes only after
+complete continuation and seal. Cross-scope discovery, non-progress, replay identity
+change, epoch regression, stale state, cancellation, deadline, or port failure fail
+closed. Cleanup targets only the last confirmed unpublished handle. `busy` is reserved
+for writer-lease admission; the same code from an already-running port is a failure.
+Rationale: this keeps memory independent of source/history size, prevents adapter or
+archive boundary confusion from becoming canonical truth, and preserves exact recovery
+evidence without adding async, Codex, OS, or UI dependencies.
+
 ## ADR-016 — Separate banked reset inventory with capability-gated activation
 
 Decision: provider-granted banked rate-limit resets are typed independently from quota

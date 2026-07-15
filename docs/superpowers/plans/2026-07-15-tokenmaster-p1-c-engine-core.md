@@ -1,6 +1,6 @@
 # TokenMaster P1-C Provider-Neutral Engine Core Plan
 
-**Status:** In progress. Tasks 1 and 2 are implemented and verified; Task 3 is next. Execute
+**Status:** In progress. Tasks 1 through 3 are implemented and verified; Task 4 is next. Execute
 root-only, test-first, one writer, on the current feature branch. The available
 task-name-only child surface cannot prove requested model routing, so
 `MODEL_ROUTING_DRIFT` remains explicit.
@@ -86,6 +86,14 @@ only the exact unpublished revision/epoch.
 Contracts cover complete, zero-source retention, partial discovery, adapter failure,
 busy lease, cancellation at every phase, deadline at every phase, store fault, stale
 epoch, continuation bound, and prior-canonical readability.
+
+Completed: the synchronous executor acquires the writer lease before provider work,
+streams scope-exact discovery directly into one scan set, starts replay only from an
+all-complete set, canonicalizes bounded batches, validates replay revision/epoch
+continuity, and promotes one small result. Eighteen public contracts cover the listed
+success/failure cases plus cross-scope rejection, non-progressing cursors/checkpoints,
+cleanup failure, and lease-only `busy` semantics. Existing store contracts remain the
+evidence that staging and failed exact discard leave prior canonical truth readable.
 
 ## Task 4 — deterministic worker shell
 

@@ -109,6 +109,14 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   raw bytes, paths, Slint, OS handles, and async runtimes structurally separate.
   Compile-fail contracts prove sealed identity, path rejection, and canonical-only
   archive writes; debug/errors expose stable codes/counts only.
+- P1-C.3 one-shot execution: `OneShotExecutor` acquires the writer lease before any
+  provider/archive work, streams scope-exact discovery without retaining a source
+  list, closes incomplete scans truthfully, and replays only an all-complete exact set.
+  It canonicalizes one bounded batch at a time, validates revision/epoch continuity,
+  rejects non-progress and cross-scope data, caps continuation work at 4,096, then
+  seals/promotes one small result. Cancellation and deadlines are proven across every
+  execution boundary; replay faults discard only the last confirmed unpublished
+  handle and report cleanup failure separately. Eighteen focused contracts pass.
 
 ## Next implementation slice
 
@@ -144,9 +152,9 @@ transactional cross-crate proof, not the production scheduler. P1-A is complete 
 P1-B.2 now own strict scan-set presence and exact replay binding, including a
 zero-present-source retention-only revision. P1-B.3 completes reference-safe 32/64
 scan-history retention, ID exhaustion, and recovery. P1-C.1 supplies the
-constant-state coordinator and P1-C.2 supplies bounded adapter/archive/clock/
-writer-lease ports. P1-C.3 one-shot orchestration is next; P1-C.4 adds the bounded
-worker shell. P1-D/P1-E later add Codex live
+constant-state coordinator, P1-C.2 supplies bounded adapter/archive/clock/
+writer-lease ports, and P1-C.3 supplies the one-shot executor. P1-C.4 bounded worker
+shell is next. P1-D/P1-E later add Codex live
 integration, the real writer
 lease, sleep/resume, immutable publication, and continuous runtime recovery.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred

@@ -49,6 +49,7 @@ mod archive;
 mod batch;
 mod coordinator;
 mod error;
+mod executor;
 mod ports;
 mod time;
 mod values;
@@ -67,6 +68,10 @@ pub use coordinator::{
     RefreshPermit, RefreshResult, RefreshUrgency,
 };
 pub use error::{EngineError, EngineErrorCode};
+pub use executor::{
+    ExecutionCounts, MAX_REPLAY_CONTINUATIONS_PER_RUN, OneShotExecutor, OneShotResult,
+    ReplayCleanup,
+};
 pub use ports::{
     Adapter, AdapterCompletion, Clock, OperationControl, OperationStop, PortError, PortErrorCode,
     ScopeSink, SinkControl, SourceSink, WriterLease, WriterLeaseGuard,

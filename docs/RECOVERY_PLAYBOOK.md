@@ -60,6 +60,26 @@
    32 newer closed sets. Running sets and source/replay references are preserved. A
    failure writes nothing; never replace this operation with ad hoc SQL.
 
+## One-shot engine recovery
+
+1. Treat a `busy` result as writer-lease admission backpressure only. The executor has
+   not started adapter I/O or archive mutation in that case. A `busy` port code after
+   lease acquisition is reported as `failed`, not as safe backpressure.
+2. For `cancelled`, `deadline_exceeded`, or `failed`, inspect the bounded result's
+   scan-set ID, original stable error code, and `ReplayCleanup` state. `Discarded`
+   means the exact last confirmed unpublished revision/epoch was removed. `Failed`
+   means cleanup itself failed and startup recovery must inspect the one staging
+   revision by exact ID/epoch before retrying. Never guess a newer handle or delete
+   rows manually.
+3. A failure before replay may leave a closed partial/failed scan, or a running scan
+   only when the archive itself rejected closure. Follow scan-set recovery above. A
+   failure after replay begin never authorizes publication; prior canonical state
+   remains the read surface under the archive transaction contract.
+4. `InvalidData` for cross-scope discovery, repeated cursor, unchanged non-terminal
+   checkpoint, changed revision, or regressed epoch is a boundary/integrity fault.
+   Do not retry the same adapter/archive state indefinitely. Preserve bounded codes
+   and synthetic reproduction evidence; never log the source, checkpoint, or path.
+
 ## Schema recovery
 
 - Opening an exact schema-v1, v2, v3, or v4 archive performs the non-destructive

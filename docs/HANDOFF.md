@@ -27,11 +27,12 @@ the test-only driver proves the real synthetic Codex-to-archive path with more t
 failure discard without changing production dependency direction. P1-C.1 adds the
 constant-state provider-neutral refresh coordinator and P1-C.2 adds sealed bounded
 values, scope-exact batches, and object-safe adapter/archive/clock/writer-lease ports.
-The immediate next task is P1-C.3 one-shot orchestration under
+P1-C.3 adds the synchronous one-shot executor over those contracts. The immediate
+next task is the P1-C.4 bounded deterministic worker shell under
 `docs/superpowers/plans/2026-07-15-tokenmaster-p1-c-engine-core.md`.
 P2 now also has an approved separate banked-reset inventory/expiry/reminder/activation
 design in `docs/superpowers/plans/2026-07-15-tokenmaster-banked-reset-inventory.md`.
-It does not change the immediate P1-C.3 gate and no current provider discovery,
+It does not change the immediate P1-C.4 gate and no current provider discovery,
 notification delivery, or activation capability is claimed.
 P1-A is complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p1-retained-projection.md`: strict
@@ -56,10 +57,14 @@ ID exhaustion, reopen, and rollback after an injected pruning fault.
 The `tokenmaster-engine` crate owns checked monotonic IDs/deadlines, one active permit,
 one highest-urgency merged follow-up, cooperative atomic cancellation, sealed bounded
 runtime values, scope-exact adapter/canonical batches, and object-safe synchronous
-adapter/archive/clock/writer-lease contracts. Ten thousand hints remain one pending
-aggregate; checkpoints cap at 32 KiB, event/relation batches and replay pages at 256,
-and chunk updates at 18. Do not yet claim the P1-C.3 executor actually composes these
-ports, a worker exists, Codex is live-integrated, or the OS lease is implemented.
+adapter/archive/clock/writer-lease contracts. `OneShotExecutor` now acquires the lease
+first, streams discoveries directly into one exact scan set, enforces current-scope
+ownership, starts replay only after complete close, canonicalizes bounded batches,
+validates exact handle progress, and promotes or discards the last confirmed staging
+handle. Ten thousand hints remain one pending aggregate; checkpoints cap at 32 KiB,
+event/relation batches and replay pages at 256, chunk updates at 18, and continuation
+calls at 4,096 per execution. Do not yet claim a worker exists, Codex is live-integrated,
+or the OS lease is implemented.
 
 Tasks 3+ in `2026-07-14-tokenmaster-p0-replay-correctness.md` are superseded. Do not
 execute its Codex-owned fingerprint/signature or destructive migration steps. Do not
@@ -128,8 +133,9 @@ bidirectional membership revalidation, stale-scan rejection, two begin fault
 boundaries, zero-source reopen/promotion, and the seven scan-bound Codex pipeline
 contracts. P1-B.3 adds the repeated-scan 32-row plateau, 64+remainder backlog passes,
 running/replay-reference preservation, checked ID exhaustion, and close+prune rollback.
-P1-C.1/P1-C.2 add coordinator and port contracts only; they do not yet claim a live
-scheduler or one-shot execution.
+P1-C.1/P1-C.2 add coordinator and port contracts; P1-C.3 adds the provider-neutral
+one-shot executor and eighteen complete/failure/bounds contracts. They do not yet
+claim a live worker/scheduler, Codex composition, or a real OS lease.
 Clean-root, formatting, strict workspace Clippy, and the full locked workspace passed;
 see the P1-A history entry for exact commands and focused counts. The
 one-million-row M0 scale test remains explicitly ignored in the normal workspace run.
