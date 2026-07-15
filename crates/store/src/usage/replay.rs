@@ -20,7 +20,8 @@ use super::{
 const MATERIALIZE_REPLAY_SELECTION_SQL: &str = r#"
 INSERT INTO usage_event(
   fingerprint, event_id, selected_file_key, selected_generation,
-  selected_source_offset, profile_id, session_id, source_id,
+  selected_source_offset, projection_revision_id, origin_revision_id, retained,
+  profile_id, session_id, source_id,
   timestamp_seconds, timestamp_nanos, model, raw_model, input_tokens,
   cached_tokens, output_tokens, reasoning_tokens, total_tokens,
   fallback_model, long_context, service_tier, project_alias, originator,
@@ -29,7 +30,8 @@ INSERT INTO usage_event(
 )
 SELECT
   observation.fingerprint, observation.event_id, observation.file_key,
-  observation.generation, observation.source_offset, observation.profile_id,
+  observation.generation, observation.source_offset, ?1, ?1, 0,
+  observation.profile_id,
   observation.session_id, observation.source_id, observation.timestamp_seconds,
   observation.timestamp_nanos, observation.model, observation.raw_model,
   observation.input_tokens, observation.cached_tokens, observation.output_tokens,
@@ -49,6 +51,39 @@ JOIN usage_observation AS observation
 WHERE selection.revision_id = ?1
 ORDER BY observation.profile_id, observation.file_key,
          observation.generation, observation.source_offset
+ON CONFLICT(fingerprint) DO UPDATE SET
+  event_id = excluded.event_id,
+  selected_file_key = excluded.selected_file_key,
+  selected_generation = excluded.selected_generation,
+  selected_source_offset = excluded.selected_source_offset,
+  projection_revision_id = excluded.projection_revision_id,
+  origin_revision_id = excluded.origin_revision_id,
+  retained = excluded.retained,
+  profile_id = excluded.profile_id,
+  session_id = excluded.session_id,
+  source_id = excluded.source_id,
+  timestamp_seconds = excluded.timestamp_seconds,
+  timestamp_nanos = excluded.timestamp_nanos,
+  model = excluded.model,
+  raw_model = excluded.raw_model,
+  input_tokens = excluded.input_tokens,
+  cached_tokens = excluded.cached_tokens,
+  output_tokens = excluded.output_tokens,
+  reasoning_tokens = excluded.reasoning_tokens,
+  total_tokens = excluded.total_tokens,
+  fallback_model = excluded.fallback_model,
+  long_context = excluded.long_context,
+  service_tier = excluded.service_tier,
+  project_alias = excluded.project_alias,
+  originator = excluded.originator,
+  activity_read = excluded.activity_read,
+  activity_edit_write = excluded.activity_edit_write,
+  activity_search = excluded.activity_search,
+  activity_git = excluded.activity_git,
+  activity_build_test = excluded.activity_build_test,
+  activity_web = excluded.activity_web,
+  activity_subagents = excluded.activity_subagents,
+  activity_terminal = excluded.activity_terminal
 "#;
 
 impl UsageStore {
@@ -712,7 +747,7 @@ impl UsageStore {
         if pending != 0 {
             return Err(StoreError::new(StoreErrorCode::PendingContinuation));
         }
-        validate_prior_projection_coverage(&transaction, revision_id)?;
+        validate_prior_projection_state(&transaction, revision_id)?;
         materialize_replay_selection(&transaction, revision_id)?;
         promotion_fault(fault, PromotionFault::AfterMaterialization)?;
 
@@ -937,44 +972,162 @@ fn validate_replay_overlay(
     Ok(())
 }
 
-fn validate_prior_projection_coverage(
-    transaction: &Transaction<'_>,
-    revision_id: ReplayRevisionId,
-) -> Result<(), StoreError> {
-    let missing: i64 = transaction.query_row(
-        "SELECT count(*) FROM usage_event AS event
-         WHERE NOT EXISTS(
-           SELECT 1 FROM usage_replay_observation AS replay
-           WHERE replay.revision_id = ?1 AND replay.fingerprint = event.fingerprint
-         ) AND NOT EXISTS(
-           SELECT 1 FROM usage_legacy_event AS legacy
-           WHERE legacy.snapshot_id = 1 AND legacy.fingerprint = event.fingerprint
-         )",
-        [revision_id.as_sql()?],
-        |row| row.get(0),
-    )?;
-    if missing != 0 {
-        return Err(StoreError::new(StoreErrorCode::IncompleteManifest));
-    }
-    Ok(())
-}
-
 fn materialize_replay_selection(
     transaction: &Transaction<'_>,
     revision_id: ReplayRevisionId,
 ) -> Result<(), StoreError> {
-    transaction.execute("DELETE FROM usage_event", [])?;
-    let inserted =
-        transaction.execute(MATERIALIZE_REPLAY_SELECTION_SQL, [revision_id.as_sql()?])?;
+    let revision_sql = revision_id.as_sql()?;
     let expected: i64 = transaction.query_row(
+        "SELECT count(*) FROM (
+           SELECT event.fingerprint
+           FROM usage_event AS event
+           WHERE event.projection_revision_id IS NOT NULL
+             AND (
+               NOT EXISTS(
+                 SELECT 1 FROM usage_replay_observation AS replay
+                 WHERE replay.revision_id = ?1
+                   AND replay.fingerprint = event.fingerprint
+                   AND replay.disposition = 'replay'
+               )
+               OR EXISTS(
+                 SELECT 1 FROM usage_replay_observation AS replay
+                 WHERE replay.revision_id = ?1
+                   AND replay.fingerprint = event.fingerprint
+                   AND replay.disposition = 'conflict'
+               )
+             )
+           UNION
+           SELECT selection.fingerprint
+           FROM usage_replay_selection AS selection
+           WHERE selection.revision_id = ?1
+         )",
+        [revision_sql],
+        |row| row.get(0),
+    )?;
+    transaction.execute(
+        "DELETE FROM usage_event
+         WHERE projection_revision_id IS NULL
+            OR EXISTS(
+              SELECT 1 FROM usage_replay_observation AS replay
+              WHERE replay.revision_id = ?1
+                AND replay.fingerprint = usage_event.fingerprint
+                AND replay.disposition = 'replay'
+            )
+            AND NOT EXISTS(
+              SELECT 1 FROM usage_replay_observation AS replay
+              WHERE replay.revision_id = ?1
+                AND replay.fingerprint = usage_event.fingerprint
+                AND replay.disposition = 'conflict'
+            )",
+        [revision_sql],
+    )?;
+    transaction.execute(
+        "UPDATE usage_event
+         SET projection_revision_id = ?1, retained = 1",
+        [revision_sql],
+    )?;
+    let inserted = transaction.execute(MATERIALIZE_REPLAY_SELECTION_SQL, [revision_sql])?;
+    let selections: i64 = transaction.query_row(
         "SELECT count(*) FROM usage_replay_selection WHERE revision_id = ?1",
-        [revision_id.as_sql()?],
+        [revision_sql],
         |row| row.get(0),
     )?;
     if inserted
-        != usize::try_from(expected)
+        != usize::try_from(selections)
             .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?
     {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    let (actual, direct, invalid): (i64, i64, i64) = transaction.query_row(
+        "SELECT
+           (SELECT count(*) FROM usage_event),
+           (SELECT count(*) FROM usage_event
+            WHERE projection_revision_id = ?1
+              AND origin_revision_id = ?1 AND retained = 0),
+           (SELECT count(*) FROM usage_event AS event
+            WHERE event.projection_revision_id <> ?1
+               OR (event.retained = 0 AND NOT EXISTS(
+                 SELECT 1 FROM usage_replay_selection AS selection
+                 WHERE selection.revision_id = ?1
+                   AND selection.fingerprint = event.fingerprint
+                   AND selection.file_key = event.selected_file_key
+                   AND selection.generation = event.selected_generation
+                   AND selection.source_offset = event.selected_source_offset
+               ))
+               OR (event.retained = 1 AND (
+                 EXISTS(
+                   SELECT 1 FROM usage_replay_selection AS selection
+                   WHERE selection.revision_id = ?1
+                     AND selection.fingerprint = event.fingerprint
+                 )
+                 OR EXISTS(
+                   SELECT 1 FROM usage_replay_observation AS replay
+                   WHERE replay.revision_id = ?1
+                     AND replay.fingerprint = event.fingerprint
+                     AND replay.disposition = 'replay'
+                     AND NOT EXISTS(
+                       SELECT 1 FROM usage_replay_observation AS conflict
+                       WHERE conflict.revision_id = ?1
+                         AND conflict.fingerprint = event.fingerprint
+                         AND conflict.disposition = 'conflict'
+                     )
+                 )
+               )))",
+        [revision_sql],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    if actual != expected || direct != selections || invalid != 0 {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    Ok(())
+}
+
+fn validate_prior_projection_state(
+    transaction: &Transaction<'_>,
+    revision_id: ReplayRevisionId,
+) -> Result<(), StoreError> {
+    let current_revision: Option<i64> = transaction
+        .query_row(
+            "SELECT revision_id FROM usage_replay_revision WHERE status = 'current'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let invalid: i64 = match current_revision {
+        Some(current) => {
+            if current >= revision_id.as_sql()? {
+                return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+            }
+            transaction.query_row(
+                "SELECT count(*) FROM usage_event
+                 WHERE projection_revision_id IS NULL
+                    OR projection_revision_id <> ?1
+                    OR origin_revision_id IS NULL
+                    OR origin_revision_id > ?1
+                    OR (retained = 0 AND origin_revision_id <> ?1)",
+                [current],
+                |row| row.get(0),
+            )?
+        }
+        None => transaction.query_row(
+            "SELECT count(*) FROM usage_event AS event
+             WHERE event.projection_revision_id IS NOT NULL
+                OR event.origin_revision_id IS NOT NULL
+                OR event.retained <> 0
+                OR NOT EXISTS(
+                  SELECT 1 FROM usage_legacy_event AS legacy
+                  WHERE legacy.snapshot_id = 1
+                    AND legacy.fingerprint = event.fingerprint
+                ) AND NOT EXISTS(
+                  SELECT 1 FROM usage_replay_observation AS replay
+                  WHERE replay.revision_id = ?1
+                    AND replay.fingerprint = event.fingerprint
+                )",
+            [revision_id.as_sql()?],
+            |row| row.get(0),
+        )?,
+    };
+    if invalid != 0 {
         return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
     }
     Ok(())
@@ -2758,6 +2911,7 @@ mod tests {
     };
 
     type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
+    type ProjectionProvenance = (Vec<u8>, i64, Option<i64>, Option<i64>, i64);
 
     fn checkpoint(seed: u8, offset: u64) -> Result<StoredCheckpoint, StoreError> {
         StoredCheckpoint::new(StoredCheckpointParts {
@@ -2942,6 +3096,26 @@ mod tests {
         )?)
     }
 
+    fn projection_provenance_state(store: &UsageStore) -> TestResult<Vec<ProjectionProvenance>> {
+        Ok(store
+            .connection
+            .prepare(
+                "SELECT fingerprint, selected_generation, projection_revision_id,
+                        origin_revision_id, retained
+                 FROM usage_event ORDER BY fingerprint",
+            )?
+            .query_map([], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?)
+    }
+
     #[test]
     fn every_promotion_fault_boundary_rolls_back_all_visible_state() -> TestResult {
         for fault in [
@@ -2951,6 +3125,7 @@ mod tests {
         ] {
             let (mut store, revision_id, epoch) = promotion_ready_store()?;
             let before = promotion_state(&store)?;
+            let provenance_before = projection_provenance_state(&store)?;
             let page_before = store
                 .event_page_before(None, 256)?
                 .into_iter()
@@ -2962,6 +3137,7 @@ mod tests {
             };
             assert_eq!(error.code(), StoreErrorCode::Database);
             assert_eq!(promotion_state(&store)?, before);
+            assert_eq!(projection_provenance_state(&store)?, provenance_before);
             let page_after = store
                 .event_page_before(None, 256)?
                 .into_iter()
@@ -2981,6 +3157,7 @@ mod tests {
             PromotionFault::AfterRevisionStatus,
         ] {
             let (mut store, revision_id, epoch) = replacement_promotion_ready_store()?;
+            let provenance_before = projection_provenance_state(&store)?;
             let before: (i64, i64, i64, i64, i64, i64) = store.connection.query_row(
                 "SELECT
                    (SELECT revision_id FROM usage_replay_revision WHERE status = 'current'),
@@ -3028,6 +3205,7 @@ mod tests {
                 },
             )?;
             assert_eq!(after, before);
+            assert_eq!(projection_provenance_state(&store)?, provenance_before);
         }
         Ok(())
     }

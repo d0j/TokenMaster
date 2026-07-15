@@ -2999,8 +2999,10 @@ fn second_promotion_replaces_prior_revision_without_losing_covered_projection() 
 }
 
 #[test]
-fn replacement_promotion_rejects_missing_prior_projection_without_mutation() {
-    let mut store = UsageStore::in_memory().expect("usage store");
+fn replacement_promotion_carries_missing_prior_projection_with_exact_provenance() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("carry-forward-private.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
     store
         .register_source(&registration(6))
         .expect("registered source");
@@ -3009,20 +3011,14 @@ fn replacement_promotion_rejects_missing_prior_projection_without_mutation() {
     let first = store
         .begin_replay_revision(&manifest)
         .expect("begin first replay");
+    let retained_event = replay_event(6, "retained-root", None, 0, 10, Some(100), false);
+    let retained_event_id = retained_event.id().as_str().to_owned();
     let first_epoch = store
         .apply_replay_append_batch(&replay_append(
             6,
             first.id(),
             first.epoch(),
-            vec![replay_event(
-                6,
-                "retained-root",
-                None,
-                0,
-                10,
-                Some(100),
-                false,
-            )],
+            vec![retained_event],
         ))
         .expect("append first replay");
     let first_sealed = store
@@ -3038,43 +3034,261 @@ fn replacement_promotion_rejects_missing_prior_projection_without_mutation() {
     let second = store
         .begin_replay_revision(&manifest)
         .expect("begin incomplete replacement replay");
+    let replacement_event = replay_event(6, "replacement-root", None, 0, 20, Some(200), false);
+    let replacement_event_id = replacement_event.id().as_str().to_owned();
     let second_epoch = store
         .apply_replay_append_batch(&replay_append_generation(
             6,
             second.id(),
             second.epoch(),
             2,
-            vec![replay_event(
-                6,
-                "replacement-root",
-                None,
-                0,
-                20,
-                Some(200),
-                false,
-            )],
+            vec![replacement_event],
             100,
         ))
         .expect("append incomplete replacement replay");
     let second_sealed = store
         .seal_replay_revision(second.id(), second_epoch)
         .expect("seal incomplete replacement replay");
-    let error = store
+    store
         .promote_replay_revision(second.id(), second_sealed.epoch())
-        .expect_err("missing prior projection must block promotion");
-    assert_eq!(error.code(), StoreErrorCode::IncompleteManifest);
+        .expect("complete replacement carries prior projection");
     let state = store
         .archive_state()
-        .expect("archive state after rejection");
+        .expect("archive state after carry-forward");
     assert_eq!(state.mode(), ArchiveMode::ReplayVerified);
-    assert_eq!(state.active_revision(), Some(first.id()));
-    assert!(state.rebuild_staging());
+    assert_eq!(state.active_revision(), Some(second.id()));
+    assert!(!state.rebuild_staging());
+    let promoted_page = store
+        .event_page_before(None, 256)
+        .expect("canonical page after carry-forward");
+    assert_eq!(promoted_page.len(), 2);
+    assert!(
+        promoted_page
+            .iter()
+            .any(|event| event.event_id() == retained_event_id)
+    );
+    assert!(
+        promoted_page
+            .iter()
+            .any(|event| event.event_id() == replacement_event_id)
+    );
+    assert_eq!(current_page.len(), 1);
+    drop(store);
+
+    let connection = Connection::open(&path).expect("inspect carry-forward provenance");
+    let mut statement = connection
+        .prepare(
+            "SELECT event_id, selected_generation, projection_revision_id,
+                    origin_revision_id, retained
+             FROM usage_event ORDER BY event_id",
+        )
+        .expect("prepare provenance read");
+    let provenance = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, Option<i64>>(3)?,
+                row.get::<_, i64>(4)?,
+            ))
+        })
+        .expect("query provenance")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect provenance");
+    assert!(provenance.contains(&(retained_event_id, 1, 1, Some(0), 1)));
+    assert!(provenance.contains(&(replacement_event_id, 2, 1, Some(1), 0)));
+    let generations: Vec<i64> = connection
+        .prepare("SELECT generation FROM usage_generation ORDER BY generation")
+        .expect("prepare generation read")
+        .query_map([], |row| row.get(0))
+        .expect("query generations")
+        .collect::<Result<_, _>>()
+        .expect("collect generations");
+    assert_eq!(generations, vec![2]);
+    drop(statement);
+    drop(connection);
+
+    let reopened = UsageStore::open(&path).expect("reopen retained projection");
+    assert_eq!(
+        reopened
+            .event_page_before(None, 256)
+            .expect("reopened retained page"),
+        promoted_page
+    );
+}
+
+#[test]
+fn promotion_applies_direct_replay_conflict_and_absent_retention_truth_table() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("retention-truth-table-private.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    store
+        .register_source(&registration(16))
+        .expect("registered source");
+    let manifest = ReplayManifest::new(vec![SourceKey::from_bytes([16; 32])].into_boxed_slice())
+        .expect("manifest");
+
+    let parent = replay_event(16, "parent", None, 0, 10, Some(100), false);
+    let replay_later = replay_event(16, "child", None, 0, 20, Some(100), false);
+    let eligible = replay_event(16, "eligible", None, 0, 30, Some(300), false);
+    let conflict_later = replay_event(16, "conflict", None, 0, 40, Some(400), false);
+    let absent_later = replay_event(16, "absent", None, 0, 50, Some(500), false);
+    let ids = [
+        parent.id().as_str().to_owned(),
+        replay_later.id().as_str().to_owned(),
+        eligible.id().as_str().to_owned(),
+        conflict_later.id().as_str().to_owned(),
+        absent_later.id().as_str().to_owned(),
+    ];
+    let first = store
+        .begin_replay_revision(&manifest)
+        .expect("begin first revision");
+    let first_epoch = store
+        .apply_replay_append_batch(&replay_append(
+            16,
+            first.id(),
+            first.epoch(),
+            vec![parent, replay_later, eligible, conflict_later, absent_later],
+        ))
+        .expect("append first revision");
+    let first_sealed = store
+        .seal_replay_revision(first.id(), first_epoch)
+        .expect("seal first revision");
+    store
+        .promote_replay_revision(first.id(), first_sealed.epoch())
+        .expect("promote first revision");
     assert_eq!(
         store
             .event_page_before(None, 256)
-            .expect("canonical page after rejection"),
-        current_page
+            .expect("first canonical page")
+            .len(),
+        5
     );
+
+    let second = store
+        .begin_replay_revision(&manifest)
+        .expect("begin second revision");
+    let second_epoch = store
+        .apply_replay_append_batch(&replay_append_generation(
+            16,
+            second.id(),
+            second.epoch(),
+            2,
+            vec![
+                replay_event(16, "parent", None, 0, 10, Some(100), false),
+                replay_event(16, "child", Some("parent"), 0, 20, Some(100), false),
+                replay_event(16, "eligible", None, 0, 30, Some(300), false),
+                replay_event(16, "conflict", Some("other"), 0, 40, Some(400), true),
+            ],
+            100,
+        ))
+        .expect("append second revision");
+    let quality = store.replay_quality(second.id()).expect("second quality");
+    assert_eq!(quality.eligible(), 2);
+    assert_eq!(quality.replay(), 1);
+    assert_eq!(quality.pending(), 0);
+    assert_eq!(quality.conflict(), 1);
+    let second_sealed = store
+        .seal_replay_revision(second.id(), second_epoch)
+        .expect("seal second revision");
+    store
+        .promote_replay_revision(second.id(), second_sealed.epoch())
+        .expect("promote retention truth table");
+    drop(store);
+
+    let connection = Connection::open(&path).expect("inspect retention truth table");
+    let rows: Vec<(String, i64, i64, i64)> = connection
+        .prepare(
+            "SELECT event_id, selected_generation, origin_revision_id, retained
+             FROM usage_event ORDER BY event_id",
+        )
+        .expect("prepare retained rows")
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
+        .expect("query retained rows")
+        .collect::<Result<_, _>>()
+        .expect("collect retained rows");
+    assert_eq!(rows.len(), 4);
+    assert!(rows.contains(&(ids[0].clone(), 2, 1, 0)));
+    assert!(!rows.iter().any(|row| row.0 == ids[1]));
+    assert!(rows.contains(&(ids[2].clone(), 2, 1, 0)));
+    assert!(rows.contains(&(ids[3].clone(), 1, 0, 1)));
+    assert!(rows.contains(&(ids[4].clone(), 1, 0, 1)));
+}
+
+#[test]
+fn promotion_rejects_prior_projection_owned_by_the_staging_revision() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("projection-owner-tamper-private.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    store
+        .register_source(&registration(17))
+        .expect("registered source");
+    let manifest = ReplayManifest::new(vec![SourceKey::from_bytes([17; 32])].into_boxed_slice())
+        .expect("manifest");
+    let first = store
+        .begin_replay_revision(&manifest)
+        .expect("begin first revision");
+    let first_epoch = store
+        .apply_replay_append_batch(&replay_append(
+            17,
+            first.id(),
+            first.epoch(),
+            vec![replay_event(17, "prior", None, 0, 10, Some(100), false)],
+        ))
+        .expect("append first revision");
+    let first_sealed = store
+        .seal_replay_revision(first.id(), first_epoch)
+        .expect("seal first revision");
+    store
+        .promote_replay_revision(first.id(), first_sealed.epoch())
+        .expect("promote first revision");
+    let second = store
+        .begin_replay_revision(&manifest)
+        .expect("begin second revision");
+    let second_epoch = store
+        .apply_replay_append_batch(&replay_append_generation(
+            17,
+            second.id(),
+            second.epoch(),
+            2,
+            vec![replay_event(17, "next", None, 0, 20, Some(200), false)],
+            100,
+        ))
+        .expect("append second revision");
+    let second_sealed = store
+        .seal_replay_revision(second.id(), second_epoch)
+        .expect("seal second revision");
+    drop(store);
+
+    let connection = Connection::open(&path).expect("tamper projection owner");
+    connection
+        .execute(
+            "UPDATE usage_event
+             SET projection_revision_id = 1, origin_revision_id = 1, retained = 0",
+            [],
+        )
+        .expect("bind prior projection to staging revision");
+    drop(connection);
+
+    let mut reopened = UsageStore::open(&path).expect("reopen tampered projection");
+    let error = reopened
+        .promote_replay_revision(second.id(), second_sealed.epoch())
+        .expect_err("staging-owned prior projection must fail closed");
+    assert_eq!(error.code(), StoreErrorCode::InvalidStoredValue);
+    let text = format!("{error:?} {error}");
+    assert!(!text.contains(path.to_string_lossy().as_ref()));
+    let state = reopened
+        .archive_state()
+        .expect("archive state after rejection");
+    assert_eq!(state.active_revision(), Some(first.id()));
+    assert!(state.rebuild_staging());
 }
 
 #[test]

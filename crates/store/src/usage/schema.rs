@@ -700,7 +700,7 @@ CREATE TABLE usage_event (
     (projection_revision_id IS NOT NULL AND (
       (retained = 0 AND origin_revision_id = projection_revision_id)
       OR
-      (retained = 1 AND (origin_revision_id IS NULL OR origin_revision_id < projection_revision_id))
+      (retained = 1 AND origin_revision_id < projection_revision_id)
     ))
   ),
   FOREIGN KEY(projection_revision_id) REFERENCES usage_replay_revision(revision_id)
