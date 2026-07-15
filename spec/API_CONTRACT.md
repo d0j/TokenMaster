@@ -28,6 +28,17 @@ Request IDs are checked and monotonic within one engine lifetime. Coalesced admi
 does not imply a second queued operation; it contributes only to one bounded follow-up
 aggregate.
 
+The synchronous engine boundary is provider-neutral and object-safe. `Adapter`
+streams owned validated scopes and discovered sources through callbacks and returns
+at most 256 observations, 256 relations, 18 chunk-proof updates, and a 32-KiB opaque
+checkpoint per pull batch. `Archive` receives only discovered normalized identity,
+opaque checkpoint state, completion summaries, and canonical accounting batches; it
+never receives a provider descriptor, path, store handle, or raw source bytes.
+Replay-source reads return at most 256 normalized records per keyset page and release
+archive work before provider I/O. Stable port errors contain only enumerated codes.
+Cancellation/deadline checks use the operation's caller-supplied monotonic clock and
+occur between callbacks, pulls, and archive calls, never by interrupting a transaction.
+
 Automatic scan-history retention is an internal maintenance detail. Public refresh
 results remain bound to their returned scan-set identity even if an older unreferenced
 set is later pruned; no CLI or MCP surface exposes arbitrary pruning or row deletion.

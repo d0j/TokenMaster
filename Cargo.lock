@@ -5095,6 +5095,8 @@ name = "tokenmaster-engine"
 version = "0.1.0"
 dependencies = [
  "thiserror 2.0.18",
+ "tokenmaster-accounting",
+ "tokenmaster-domain",
 ]
 
 [[package]]

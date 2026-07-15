@@ -1,6 +1,6 @@
 # TokenMaster P1-C Provider-Neutral Engine Core Plan
 
-**Status:** In progress. Task 1 is implemented and verified; Task 2 is next. Execute
+**Status:** In progress. Tasks 1 and 2 are implemented and verified; Task 3 is next. Execute
 root-only, test-first, one writer, on the current feature branch. The available
 task-name-only child surface cannot prove requested model routing, so
 `MODEL_ROUTING_DRIFT` remains explicit.
@@ -67,6 +67,12 @@ chunk proofs, counters, stable diagnostics, and completion quality. Define synch
 callback/pull ports; the adapter never receives a store handle and the archive never
 receives a provider descriptor or raw source bytes. Add compile-fail dependency and
 privacy checks plus exact count/byte bounds.
+
+Completed: sealed scope/source/checkpoint/proof/counter/diagnostic values, scope-exact
+draft and canonical batches, object-safe callback/pull adapter plus archive/clock/lease
+ports, bounded replay pages, stable coded errors, and compile-fail privacy/dependency
+contracts. The normal engine graph contains domain/accounting only and excludes
+Codex, platform, Slint, Tokio, Wasmtime, filesystem, and UI dependencies.
 
 ## Task 3 — one-shot executor TDD
 

@@ -37,6 +37,10 @@ All notable changes are recorded here.
 - Provider-neutral constant-state refresh coordinator with monotonic checked IDs and
   deadlines, cooperative cancellation, explicit admission/terminal outcomes, one
   active permit, and one aggregate follow-up across 10,000-hint bursts.
+- Bounded provider-neutral engine runtime contracts: sealed scope/source identities,
+  32-KiB opaque checkpoints, 18 chunk-proof updates, scope-exact 256-item adapter and
+  canonical batches, 256-record replay pages, stable coded errors, and object-safe
+  synchronous adapter/archive/clock/writer-lease ports with compile-fail privacy gates.
 - Approved a provider-neutral weekly quota reset history: immutable pre/post epochs,
   scheduled/early/repeated reset transitions, allowance-change separation, bounded
   retention, and shared UI/CLI/MCP semantics for P2.

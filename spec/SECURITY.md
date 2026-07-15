@@ -136,6 +136,17 @@ request history. One active cancellation token uses an atomic flag; active and p
 deadlines use caller-supplied monotonic ticks, never wall clock. Stale request IDs fail
 without cancelling or completing newer work, and ID exhaustion cannot wrap.
 
+Engine runtime ports preserve the same separation structurally. `Adapter` has no
+archive/store argument and can emit only sealed provider-neutral identity, bounded
+drafts, opaque checkpoints, chunk proofs, counters, diagnostics, and completion
+quality. `Archive` has no provider descriptor/raw-input operation and accepts only
+normalized discovery state or scope-exact canonical batches. Adapter checkpoints are
+opaque and capped at 32 KiB; observation and relation batches cap independently at
+256; chunk updates cap at 18; replay source pages cap at 256; every persisted counter
+fits SQLite `i64`. Debug and error surfaces redact identities, checkpoint/proof bytes,
+and keyset cursors. Compile-fail contracts reject private-field construction, path
+substitution for source identity, and raw byte archive writes.
+
 ## TM-SEC-007 — Benefit activation authority
 
 Banked-reset inventory read, official activation link, idempotent activation,

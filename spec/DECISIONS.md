@@ -173,8 +173,11 @@ aggregate containing only highest urgency and merged live deadline. Admission an
 terminal outcomes are separate, IDs are checked and monotonic, cancellation is an
 `Arc<AtomicBool>`, and deadlines use caller-supplied monotonic milliseconds. No async
 runtime, path, provider descriptor, request history, or per-hint allocation is retained.
-P1-C defines fake-tested adapter/archive/clock/writer-lease ports; P1-D supplies Codex
-and OS implementations.
+P1-C.2 provides object-safe adapter/archive/clock/writer-lease ports with sealed
+provider-neutral identities, scope-exact canonical batches, 32-KiB checkpoints,
+256-item batch/page limits, and stable path-free errors. Adapter callbacks never
+receive archive/store authority; archive calls never receive provider descriptors or
+raw source bytes. P1-D supplies Codex and OS implementations.
 
 Rationale: one synchronous coordinator plus cooperative boundaries gives deterministic
 ownership, shutdown, and memory behavior while still coalescing bursts and allowing a

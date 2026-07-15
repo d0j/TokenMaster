@@ -182,7 +182,8 @@ ID-exhaustion, and rollback proofs under
 `docs/superpowers/plans/2026-07-15-tokenmaster-p1-b-scan-authority.md`. The immediate
 implementation rail is P1-C provider-neutral engine core under
 `docs/superpowers/plans/2026-07-15-tokenmaster-p1-c-engine-core.md`. P1-C.1 constant-
-state admission/coalescing/deadline/cancellation is implemented; P1-C.2 bounded
-adapter/archive/clock/writer-lease ports are next. The older replay
+state admission/coalescing/deadline/cancellation and P1-C.2 bounded
+adapter/archive/clock/writer-lease ports are implemented; P1-C.3 one-shot execution is
+next. The older replay
 plan remains historical evidence for completed Tasks 1-2, but its Codex-owned Tasks
 3+ are superseded and must not be executed.

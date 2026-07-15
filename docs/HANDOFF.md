@@ -24,13 +24,14 @@ schema v3, exact non-destructive v2 migration, SQLite-owned all-source begin, ch
 complete under `docs/superpowers/plans/2026-07-14-tokenmaster-p0-e-pipeline-proof.md`:
 the test-only driver proves the real synthetic Codex-to-archive path with more than
 256 files/events, restart, append, atomic replacement, exact totals/quality, and
-failure discard without changing production dependency direction. P1-C.1 now adds the
-constant-state provider-neutral refresh coordinator. The immediate next task is P1-C.2
-bounded adapter/archive/clock/writer-lease ports under
+failure discard without changing production dependency direction. P1-C.1 adds the
+constant-state provider-neutral refresh coordinator and P1-C.2 adds sealed bounded
+values, scope-exact batches, and object-safe adapter/archive/clock/writer-lease ports.
+The immediate next task is P1-C.3 one-shot orchestration under
 `docs/superpowers/plans/2026-07-15-tokenmaster-p1-c-engine-core.md`.
 P2 now also has an approved separate banked-reset inventory/expiry/reminder/activation
 design in `docs/superpowers/plans/2026-07-15-tokenmaster-banked-reset-inventory.md`.
-It does not change the immediate P1-C.2 gate and no current provider discovery,
+It does not change the immediate P1-C.3 gate and no current provider discovery,
 notification delivery, or activation capability is claimed.
 P1-A is complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p1-retained-projection.md`: strict
@@ -52,11 +53,13 @@ sets per scope, removes at most 64 whole unreferenced sets per transaction, pres
 running/source/replay references, and proves bounded backlog recovery, parent/child
 ID exhaustion, reopen, and rollback after an injected pruning fault.
 
-The new `tokenmaster-engine` crate currently owns coordination only: checked monotonic
-IDs/deadlines, one active permit, one highest-urgency merged follow-up, cooperative
-atomic cancellation, explicit admission/terminal outcomes, and stale/overflow
-rejection. Ten thousand hints remain one pending aggregate. Do not yet claim adapter
-execution, archive orchestration, a worker, Codex live integration, or an OS lease.
+The `tokenmaster-engine` crate owns checked monotonic IDs/deadlines, one active permit,
+one highest-urgency merged follow-up, cooperative atomic cancellation, sealed bounded
+runtime values, scope-exact adapter/canonical batches, and object-safe synchronous
+adapter/archive/clock/writer-lease contracts. Ten thousand hints remain one pending
+aggregate; checkpoints cap at 32 KiB, event/relation batches and replay pages at 256,
+and chunk updates at 18. Do not yet claim the P1-C.3 executor actually composes these
+ports, a worker exists, Codex is live-integrated, or the OS lease is implemented.
 
 Tasks 3+ in `2026-07-14-tokenmaster-p0-replay-correctness.md` are superseded. Do not
 execute its Codex-owned fingerprint/signature or destructive migration steps. Do not
@@ -125,7 +128,8 @@ bidirectional membership revalidation, stale-scan rejection, two begin fault
 boundaries, zero-source reopen/promotion, and the seven scan-bound Codex pipeline
 contracts. P1-B.3 adds the repeated-scan 32-row plateau, 64+remainder backlog passes,
 running/replay-reference preservation, checked ID exhaustion, and close+prune rollback.
-It does not yet claim a live scheduler.
+P1-C.1/P1-C.2 add coordinator and port contracts only; they do not yet claim a live
+scheduler or one-shot execution.
 Clean-root, formatting, strict workspace Clippy, and the full locked workspace passed;
 see the P1-A history entry for exact commands and focused counts. The
 one-million-row M0 scale test remains explicitly ignored in the normal workspace run.

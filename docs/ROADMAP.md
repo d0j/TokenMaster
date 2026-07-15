@@ -57,9 +57,11 @@ lease, sleep/resume, continuous recovery, and immutable publication before index
 analytics, pricing, quota, Git output, automation, and complete UI work.
 
 Completed P1-C.1: a no-async, constant-state coordinator with checked monotonic IDs,
-deadline/cancellation semantics, one active refresh, and one aggregate follow-up. The
-current P1-C.2 gate defines bounded provider-neutral adapter/archive/clock/lease ports;
-one-shot execution and the worker shell follow under the same P1-C plan.
+deadline/cancellation semantics, one active refresh, and one aggregate follow-up.
+Completed P1-C.2: sealed bounded provider-neutral values, scope-exact adapter/canonical
+batches, and object-safe adapter/archive/clock/lease ports with compile-fail privacy
+boundaries. The current P1-C.3 gate composes one truthful one-shot execution; the
+bounded worker shell follows as P1-C.4 under the same plan.
 
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset
 epochs. The weekly view preserves last-before/first-after state, maximum use before

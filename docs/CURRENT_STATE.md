@@ -101,6 +101,14 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   one highest-urgency follow-up without path/source/request history. Contracts cover
   immediate and active deadline expiry, cancellation precedence, busy, stale IDs,
   exactly-one follow-up, and both direct and follow-up ID exhaustion without wrap.
+- P1-C.2 bounded runtime ports: sealed provider/profile/source identities, opaque
+  checkpoints capped at 32 KiB, fixed diagnostic counters, 18-update chunk-proof
+  batches, scope-exact 256-observation/256-relation adapter and canonical batches,
+  and 256-record replay-source pages. Object-safe synchronous `Adapter`, `Archive`,
+  monotonic `Clock`, and `WriterLease` contracts keep provider I/O, archive authority,
+  raw bytes, paths, Slint, OS handles, and async runtimes structurally separate.
+  Compile-fail contracts prove sealed identity, path rejection, and canonical-only
+  archive writes; debug/errors expose stable codes/counts only.
 
 ## Next implementation slice
 
@@ -135,9 +143,10 @@ transactional cross-crate proof, not the production scheduler. P1-A is complete 
 `docs/superpowers/plans/2026-07-14-tokenmaster-p1-retained-projection.md`. P1-B.1 and
 P1-B.2 now own strict scan-set presence and exact replay binding, including a
 zero-present-source retention-only revision. P1-B.3 completes reference-safe 32/64
-scan-history retention, ID exhaustion, and recovery. P1-C.1 now supplies the
-constant-state coordinator. P1-C.2 is next and adds bounded adapter/archive/clock/
-writer-lease ports before one-shot orchestration. P1-D/P1-E later add Codex live
+scan-history retention, ID exhaustion, and recovery. P1-C.1 supplies the
+constant-state coordinator and P1-C.2 supplies bounded adapter/archive/clock/
+writer-lease ports. P1-C.3 one-shot orchestration is next; P1-C.4 adds the bounded
+worker shell. P1-D/P1-E later add Codex live
 integration, the real writer
 lease, sleep/resume, immutable publication, and continuous runtime recovery.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred

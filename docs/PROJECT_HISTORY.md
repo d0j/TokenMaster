@@ -629,7 +629,7 @@ forbidden.
 The contracts, product architecture, provider-plugin ABI, feature matrix, roadmap,
 current state, handoff, audit, changelog, and traceability now point to the approved
 plan. This is design-only P2 scope; no current account discovery, reminder delivery,
-or activation implementation is claimed. P1-C.2 remains the immediate code gate.
+or activation implementation is claimed. P1-C.3 remains the immediate code gate.
 
 Verification:
 
@@ -646,3 +646,43 @@ and the full locked workspace passed. The workspace retained exactly one explici
 ignored one-million-row M0 scale gate. Requirement/traceability and ADR consistency
 checks found 33 traced specification/security/data IDs and 16 unique ADR headings.
 No M0 acceptance, interactive product result, package, signing, or release is claimed.
+
+## 2026-07-15 — P1-C.2 bounded provider-neutral ports implemented
+
+Extended `tokenmaster-engine` without adding Codex, platform, Slint, Tokio, Wasmtime,
+filesystem, or UI dependencies. Sealed scope/source identities and provider-owned
+opaque checkpoints prevent paths and descriptors from becoming engine or archive
+state. Checkpoints cap at 32 KiB, chunk-proof updates at 18, adapter observations and
+relations independently at 256, and archive replay-source pages at 256. Counters are
+checked against SQLite `i64`; diagnostic categories are fixed and count-only.
+
+Synchronous object-safe `Adapter`, `Archive`, monotonic `Clock`, and `WriterLease`
+ports now separate provider I/O from storage authority. Adapter discovery streams
+owned normalized values through callbacks and batch pulls. The archive receives only
+normalized discovery state, completion summaries, opaque checkpoints, and scope-exact
+canonical accounting batches; it has no provider descriptor, path, or raw-source API.
+Replay handles carry exact revision/epoch identity and pages are bounded before any
+provider I/O. Stable port errors contain enumerated codes only. Compile-fail doctests
+reject private identity construction, filesystem-path substitution, and raw byte
+archive writes.
+
+Verification:
+
+```powershell
+cargo +1.97.0 test -p tokenmaster-engine --locked
+cargo +1.97.0 test -p tokenmaster-engine --doc --locked
+cargo +1.97.0 tree -p tokenmaster-engine --edges normal
+pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
+cargo +1.97.0 fmt --all -- --check
+$env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy --workspace --all-targets --locked
+cargo +1.97.0 test --workspace --locked
+git diff --check
+```
+
+Engine evidence is 2 unit tests, 22 public value/batch/port/coordinator contracts, and
+3 compile-fail doctests. The normal dependency graph contains only the approved
+domain/accounting contracts and their transitive libraries; forbidden runtime/UI/
+provider dependencies are absent. This completes P1-C Task 2 only. One-shot
+execution, the bounded worker, live Codex composition, the OS writer lease, and
+sleep/resume remain. No M0 acceptance, interactive product result, package, signing,
+or release is claimed.
