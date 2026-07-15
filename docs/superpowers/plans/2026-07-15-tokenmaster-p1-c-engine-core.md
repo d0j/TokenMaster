@@ -102,6 +102,81 @@ one active operation, one coalesced follow-up, no worker per source, explicit sh
 and no detached thread. Prove burst, stale-result, shutdown, panic/error, and channel
 backpressure behavior. Do not add an async runtime.
 
+### Resolved worker design
+
+Use one `RefreshWorker` thread with a shared mutex-protected `RefreshCoordinator`, a
+capacity-one `sync_channel` carrying only a wake token, and a capacity-one result
+channel. `submit` updates coordinator state directly; only `Started` stores one permit
+and wakes the thread, while every `Coalesced` request changes the existing fixed
+aggregate without allocating a command node. The worker executes a supplied
+`FnMut(&RefreshPermit) -> RefreshOutcome`, calls coordinator `finish`, and immediately
+runs at most the returned single follow-up. The callback returns status only; P1-E
+later owns immutable publication of the full `OneShotResult` snapshot.
+
+The result channel is latest-only. Publishing never blocks: if its one slot is full,
+the worker removes the older completion, increments a checked fixed supersession
+counter, and publishes the newer request ID. Public completion state contains only
+request ID, outcome, execution kind, follow-up/deadline/capacity flags, and the
+supersession count. It contains no generic payload, provider/source identity, path, or
+history. A caught callback panic publishes a stable `Panicked` failure, marks the
+worker `Faulted`, abandons any newly allocated follow-up, and exits; callers recreate
+the worker after archive recovery. An ordinary `Failed` outcome remains recoverable
+and may run the one coalesced follow-up.
+
+`shutdown` stops admission, cancels the exact active permit, wakes an idle worker, and
+joins the owned `JoinHandle`. `Drop` performs the same cancel/wake/join fallback, so a
+thread is never detached. Shutdown relies on the existing cooperative cancellation
+contract and never force-terminates a task or transaction.
+
+### Task 4.1 — burst, backpressure, and latest-only RED/GREEN
+
+**Files:**
+
+- Create: `crates/engine/tests/worker_contract.rs`
+- Create: `crates/engine/src/worker.rs`
+- Modify: `crates/engine/src/lib.rs`
+
+**Interfaces:**
+
+- `RefreshWorker::spawn(Arc<dyn Clock>, F) -> Result<RefreshWorker, WorkerError>` where
+  `F: FnMut(&RefreshPermit) -> RefreshOutcome + Send + 'static`.
+- `submit(RefreshUrgency, Option<RefreshDeadline>) -> Result<RefreshAdmission, WorkerError>`.
+- `cancel(RefreshRequestId)`, `try_completion()`, and `snapshot()` expose only fixed
+  state and stable errors.
+
+- [ ] Write contracts showing a blocked first task plus 10,000 hints retain one
+  follow-up and execute exactly twice; a normal failed first task still permits that
+  follow-up; and an unread result slot is replaced by the newest completion.
+- [ ] Run
+  `cargo +1.97.0 test -p tokenmaster-engine --test worker_contract --locked` and verify
+  RED because the worker API is absent.
+- [ ] Implement the capacity-one wake/result topology, fixed public values, stable
+  error mapping, coordinator submission/finish loop, and non-blocking latest-only
+  publication.
+- [ ] Re-run the focused contract and verify the burst/backpressure cases are GREEN.
+
+### Task 4.2 — shutdown, stale IDs, panic, and ownership RED/GREEN
+
+- [ ] Add contracts proving cancellation before execution, stale cancellation cannot
+  affect a newer active request, explicit shutdown cancels cooperatively and joins,
+  `Drop` also joins, callback panic becomes bounded `Panicked`/`Faulted` state, and
+  submissions after shutdown/fault fail with stable codes.
+- [ ] Run the focused contract and verify the new cases fail for missing behavior.
+- [ ] Implement pre-execution cancellation/deadline checks, phase transitions,
+  panic containment without panic-payload exposure, idempotent shutdown, and the
+  no-detach `Drop` fallback.
+- [ ] Re-run the focused contract, then
+  `cargo +1.97.0 test -p tokenmaster-engine --locked` and strict engine Clippy.
+
+### Task 4.3 — review and project truth
+
+- [ ] Review fixed memory/channel/thread ownership, race boundaries, stable Debug/error
+  output, follow-up behavior, and worker recreation after panic against the approved
+  P1 design.
+- [ ] Update API/data/security/decisions/traceability plus current state, roadmap,
+  handoff, recovery, changelog, history, and this plan without adding a commit hash.
+- [ ] Run dependency/privacy audits and the full root quality gate before committing.
+
 ## Task 5 — documentation and acceptance
 
 Update data/API/security contracts, decisions, traceability, current state, roadmap,
