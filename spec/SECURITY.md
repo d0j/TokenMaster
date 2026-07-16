@@ -62,7 +62,7 @@ canonical event mutations also roll back dataset generation; the generation
 reveals only a monotonic mutation count and no event, path, or source content. Replay
 evidence remains separate and cannot silently invalidate a cursor on a no-change scan.
 
-Schema-v8 aggregate rows are store-owned derived data. SQLite triggers are the final
+Schema-v9 aggregate and price-basis rows are store-owned derived data. SQLite triggers are the final
 mutation boundary: published current rollups, event counts, and dataset generation
 must change in the same transaction, and missing expected published rows fail the
 source mutation closed. Rebuilds retain no history-sized Rust map or long-lived read
@@ -72,6 +72,23 @@ expands to at most 18,432 cleanup/derived rows per call and remains subject to t
 rebuild-page latency and process-resource gates. UI, CLI, MCP, plugins, and LLM
 connectors receive neither aggregate write authority nor arbitrary SQL. They cannot
 force a raw-history fallback while aggregates are unavailable.
+
+The pricing engine is synchronous and has no filesystem, environment, SQLite, HTTP,
+async runtime, or mutable global cache. Release-pinned catalog changes are reviewed
+source changes; runtime LiteLLM/models.dev refresh is forbidden. Overrides are
+immutable, bounded to 512 validated entries, use strict decimal parsing and exact
+aliases, and reject the whole candidate on duplicates, alias chains/cycles, incomplete
+new models, unsupported combinations, or invalid rates. Public Debug/errors reveal
+counts and stable codes, never raw model lists, SQL, paths, prompts, responses,
+commands, or reasoning text.
+
+Price queries accept only typed ranges, scopes, breakdown identities, and opaque
+session keys already returned by the exact token capture. All collections, SQL text,
+parameters, transactions, deadlines, and returned details are bounded. The release
+gate traverses the pricing/query dependency closure, rejects network/async client
+crates, scans production source and release libraries for runtime pricing-network
+locators, and repeats catalog/override/mode/query switches under private-memory,
+handle, thread, USER, and GDI plateau checks.
 
 Aggregate overview reads accept only validated enum widths, signed UTC boundaries,
 at most three adjacent aligned segments, and at most 32 typed scopes. They bind only to

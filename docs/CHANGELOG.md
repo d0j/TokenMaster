@@ -6,6 +6,22 @@ All notable changes are recorded here.
 
 ### Added
 
+- Deterministic release-pinned fixed-point pricing with exact reviewed aliases,
+  standard/cached/output/long-context/priority rates, explicit zero, checked arithmetic,
+  one-time rounding, and no runtime price fetch.
+- Validated immutable price overrides capped at 512 entries, stable revision identity,
+  atomic rejection, source-reported/calculated/auto selection, explicit availability,
+  provenance, conflict, and bounded missing-key evidence.
+- Strict SQLite schema v9 price-basis facts for time and session aggregates, exact v8
+  migration, transactional live maintenance, resumable legacy rebuild, bounded indexed
+  batch reads, and exact dataset identity.
+- Dataset-exact costs on overview, calendar series, model/project/provider/profile
+  breakdowns, and opaque session page/detail values without raw-history or per-item
+  query fallback.
+- Current/legacy million-event pricing gates, catalog/override/query-switch Windows
+  resource plateaus with repeated high-water envelopes, scoped price query-plan
+  assertions, and a production dependency/binary-string audit that forbids runtime
+  pricing network paths.
 - Single-root TokenMaster workspace and clean-history product boundary.
 - Root-only Rust M0 scripts and CI.
 - Clean-root audit for product-tree invariants.

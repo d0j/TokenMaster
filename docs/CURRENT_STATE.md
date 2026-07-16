@@ -283,8 +283,37 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   The post-synchronization baseline gate passed clean-root audit, formatting, strict
   locked workspace Clippy, every locked workspace test/doctest, and diff-check in
   79.326 seconds.
+- P2-C deterministic pricing: `tokenmaster-pricing` contains the reviewed embedded
+  catalog, checked integer USD-micro arithmetic with one final rounding, exact aliases,
+  standard/priority/long-context rules, and immutable override snapshots capped at
+  512 entries. `auto`, `calculated`, and `reported` selection distinguishes complete,
+  partial, unavailable, and legitimate zero; it exposes provenance, catalog/override
+  identity, assumed/unpriced/omitted/conflict counters, and bounded missing reasons.
+- P2-C schema and recovery: strict schema v9 migrates exact v8 archives, adds optional
+  source-reported cost plus time/session price-basis rollups, and retains bounded
+  project partition in the same constant event row. Current insert/update/delete and
+  recovery/current/legacy rebuild contracts preserve price facts transactionally in
+  the active aggregate generation without storing calculated cost or private content.
+- P2-C cost facade: overview plus up to 400 series points uses one fair 401-target,
+  512-key batch; breakdown and session page/detail costs use bounded 256-target batches.
+  Every public overview, point, breakdown item, and session summary now carries a
+  dataset-exact `CostResult`. A 32-scope tuple-plan regression found during the red
+  million gate was replaced by bounded scope CTE plus composite-index seeks.
+- P2-C release evidence: current/legacy one-million gates pass at 1.862x/2.010x
+  database amplification, 148.168/156.080 ms full-analytics p95, 158.588/162.504 ms
+  all-32-scope analytics, session-page p95 below 14 ms, and session-detail p95 below
+  1 ms. Repeated catalog/override/mode/query cycles retain private-memory, handle,
+  thread, USER, and GDI plateaus. The production dependency/source/release-library
+  audit finds no runtime pricing network path.
 
 ## Next implementation slice
+
+The immediate product-data slice is P2-D: provider-defined quota windows, immutable
+full-reset epochs, banked reset lots, expiry/reminder coverage, and read-only policy
+evaluation under the already approved plans. It must not infer provider capacity from
+local token/cost facts and must not add browser/private-endpoint authority. P2-E Git
+output and P2-F joined product status remain after that; P3 complete UI follows the
+product-data contracts.
 
 The architecture/release closure review is approved in
 `docs/superpowers/specs/2026-07-16-tokenmaster-plan-closure-design.md`. It freezes the
@@ -350,7 +379,7 @@ implemented in `tokenmaster-query`: schema-v1 headers/envelopes, checked generat
 publication/dataset identity, an injected exact clock sample, stable path-free errors,
 bounded scopes/warnings/pages, and fingerprint-redacted activity cursors. Task 2, the
 separate query-only SQLite store and exact transaction capture, is also complete.
-`UsageReadStore` opens schema v8 read-only without migration, enforces defensive
+`UsageReadStore` opens schema v9 read-only without migration, enforces defensive
 query-only policy with a 4 MiB cache, captures publication/scan truth and current or
 legacy keyset pages in one deferred transaction, rejects stale continuation identity,
 uses indexed `pageSize + 1`, and clears its deadline handler on every result.
@@ -367,8 +396,10 @@ and current append proofs. P2-B Tasks 2-4 now add schema-v8 provider identity,
 transactional materialization, and bounded resumable publication. Tasks 6-8 are complete:
 fixed overview/series, independently capped breakdowns, opaque keyset session
 page/detail reads, private calendar/timezone composition, and immutable public facade
-values and million-row/storage/privacy/resource evidence are green. P2-C pinned
-pricing is next. No view-time grouping of the full event table is allowed.
+values and million-row/storage/privacy/resource evidence are green. P2-C schema-v9
+price facts, fixed-point selection, bounded overrides, public costs, and scale/
+resource/offline evidence are complete. P2-D quota reset epochs and banked-reset
+inventory are next. No view-time grouping of the full event table is allowed.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 

@@ -1,6 +1,7 @@
 # TokenMaster P2-C Pricing Design
 
-**Status:** approved after upstream, data-path, performance, privacy, and failure-mode audit
+**Status:** implemented and accepted by focused, workspace, current/legacy million-event,
+resource, storage-amplification, privacy, query-plan, and no-network gates
 
 **Scope:** release-pinned API-equivalent USD estimates, bounded validated overrides,
 source-reported cost selection, explicit provenance/conflict/availability, and indexed

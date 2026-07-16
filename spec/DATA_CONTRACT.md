@@ -211,7 +211,7 @@ keyset-paged at no more than 256 rows. Scan-history cleanup uses only scan-relat
 foreign-key checks rather than rescanning the complete usage-event archive.
 
 The query path uses a distinct `READ_ONLY|NO_MUTEX` connection and never calls the
-writable open/migration path. It requires exact schema v8 and bundled SQLite identity,
+writable open/migration path. It requires exact schema v9 and bundled SQLite identity,
 WAL, foreign keys, query-only and defensive modes, trusted-schema/DQS disabled,
 query-planner stability, no checkpoint on close, 250 ms busy timeout, 4 MiB cache,
 file-backed temporary storage, and zero mmap. Each result captures archive generation,
@@ -240,6 +240,18 @@ events maintain those rows transactionally when state is `ready`; insert, delete
 update, dataset generation, event count, and all aggregate contributions commit or
 roll back together. Missing token components retain known-count/known-sum algebra and
 never become zero. Current and immutable legacy datasets remain distinct.
+
+Schema v9 adds optional source-reported USD microdollars and generation-qualified
+`usage_price_time_rollup` / `usage_price_session_rollup` facts. Each canonical event
+contributes at most one minute, one hour, and one session price row keyed by exact
+provider/profile, model, bounded project partition, normalized service tier,
+long-context state, and reported-cost state. Rows retain event/calculable/reported
+counts plus checked uncached-input, cached-input, billable-output, and reported-cost
+sums; they never retain source IDs, paths, prompts, responses, commands, reasoning
+text, or a calculated monetary estimate. Current mutations update price facts in the
+same transaction as dataset generation and token rollups. Recovery and immutable-
+legacy rebuilds populate the same inactive aggregate generation and publish it only
+after the existing exact generation/count checks.
 
 Non-empty migration publishes no partial aggregate. A rebuild is bound to one expected
 dataset generation, uses a persisted fingerprint keyset cursor, and processes at most
@@ -279,6 +291,17 @@ identity, configurable week start, exact UTC boundaries, and owned metrics. Jiff
 timezone-rule objects remain private. A public token aggregate is exactly
 `unavailable`, `known(sum)`, or `partial(known_sum, known_count, event_count)`; no
 missing component is converted to zero. Daily series are optional and capped at 400.
+
+Public cost is selected from immutable price-basis captures and an immutable pricing
+engine. Money is unsigned integer USD microdollars; rates are integer microdollars per
+million tokens; all accumulation is checked and rounded once. `auto`, `calculated`,
+and `reported` modes return `complete`, `partial`, `unavailable`, or legitimate
+`zero`, source composition, catalog/override identity, counters, conflicts, and a
+bounded missing-reason set. Unknown models, tiers, contexts, token relationships, and
+key truncation never become zero. One overview plus up to 400 series targets uses one
+batch capped at 401 targets and 512 returned price keys. Breakdown and session batches
+retain at most 256 targets and the same global 512-key detail cap with exact per-target
+omitted counts. No result issues one SQL query per visible point or session.
 
 ## TM-DATA-006 — Bounds
 

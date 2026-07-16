@@ -428,7 +428,7 @@ backstop when registration is unavailable.
 
 Decision: `tokenmaster-query` owns synchronous bounded frontend values, while
 `tokenmaster-store::UsageReadStore` owns one separate SQLite `READ_ONLY|NO_MUTEX`
-connection. It requires exact schema v8 and bundled SQLite, applies WAL/query-only/
+connection. It requires exact schema v9 and bundled SQLite, applies WAL/query-only/
 defensive/QPSG/no-checkpoint policy with trusted schema and DQS disabled, a 250 ms busy
 timeout, 4 MiB cache and zero mmap, and never migrates. One short deferred transaction
 captures publication generation, independent dataset identity, exact scan truth and a
@@ -548,3 +548,29 @@ events/s with 246.558 ms page p95; legacy completed in 81.142 seconds / 12,324 e
 with 268.305 ms page p95. It preserves bounded crash/resume semantics while removing
 an avoidable transaction/set-up bottleneck. A larger unmeasured cap is rejected because
 it would increase writer hold time without a demonstrated product benefit.
+
+## ADR-031 — Fact-only price rollups and release-pinned fixed-point pricing
+
+Decision: schema v9 stores source pricing facts, never calculated historical cost.
+`usage_price_time_rollup` and `usage_price_session_rollup` retain model, bounded project,
+tier, context, reported-state, checked token basis, and optional reported USD micros in
+the same aggregate generation as token facts. A pure immutable `tokenmaster-pricing`
+engine selects `auto`, `calculated`, or `reported` cost from an embedded reviewed
+catalog plus an optional validated override snapshot. Arithmetic uses checked integer
+microdollars and one final half-up rounding. Unknown and truncated inputs produce
+partial/unavailable evidence, never a plausible zero.
+
+Overview plus 400 series points is one 401-target/512-key batch. Breakdown and session
+surfaces use bounded target batches over indexed price rollups; no raw-history fallback
+or per-visible-row query is permitted. Scoped range batches materialize at most 32
+parameterized scope keys and force composite-index seeks. Current and immutable-legacy
+million-event gates require at most 3.0x database amplification, full/scoped analytics
+below one second, cached overview below 250 ms, and session page/detail below 100 ms.
+The production pricing/query dependency closure and release libraries must contain no
+runtime pricing network path.
+
+Rationale: persisting calculated money couples immutable history to mutable rates;
+floating point and fuzzy aliases can silently drift; runtime catalogs expand privacy
+and supply-chain authority; one query per chart/session grows latency with UI size.
+Fact/rate separation, exact aliases, immutable overrides, batched indexed reads, and
+explicit provenance preserve reproducibility, responsiveness, and honest unknowns.

@@ -33,6 +33,12 @@ zeroes. Session timeline and detail MUST use all-time materialized session facts
 period analytics MUST NOT relabel whole-session totals as period-clipped values.
 Session lookup keys MUST bind to one exact dataset and MUST NOT expose raw source
 session identity.
+Estimated cost MUST use release-pinned fixed-point rates or explicit source-reported
+values with mode, availability, provenance, catalog/override identity, conflicts, and
+bounded missing reasons. Unknown pricing, tier, context, token basis, or truncated
+detail MUST NOT become zero. Overview, series, breakdown, session page, and session
+detail cost MUST use indexed bounded facts from the same exact dataset as their token
+metrics and MUST NOT issue one raw-history or per-visible-item query.
 
 ### TM-FUNC-004 — Complete desktop product
 

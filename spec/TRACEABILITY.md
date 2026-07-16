@@ -7,7 +7,7 @@ A design or plan is not implementation evidence.
 | --- | --- | --- | --- |
 | TM-FUNC-001 | implemented | `crates/provider`, Codex roots/files | provider, discovery, enumeration contracts |
 | TM-FUNC-002 | implemented | Codex reader plus store/runtime incremental path | zero-payload unchanged, exact tail bytes, multi-batch restart, new/missing source, replacement/truncation/profile-scope and malformed-input recovery contracts |
-| TM-FUNC-003 | partial | domain/accounting/Codex parser plus indexed aggregate query facade; pricing planned | usage/parser contracts plus exact calendar overview/daily-series/breakdown/session facade mapping; pricing/cost remains |
+| TM-FUNC-003 | partial | domain/accounting/Codex parser, schema-v9 price facts, pure pricing engine, and indexed aggregate query facade | exact token/cost overview, daily-series, breakdown, session page/detail mapping with availability, provenance, override, conflict, and unknown-price fixtures; UI/CLI/MCP presentation remains |
 | TM-FUNC-004 | planned | query snapshots and complete Slint product routes | row-level parity ledger plus P3 UI plan after P2 query contracts |
 | TM-FUNC-005 | partial | `crates/probe-app`; product shell later | lifecycle, presentation, skin-runtime, metrics, stress contracts |
 | TM-FUNC-006 | planned | separate CLI and MCP adapters over query facade | P5 strict JSON/stdin MCP conformance tests after the complete UI |
@@ -19,7 +19,7 @@ A design or plan is not implementation evidence.
 | TM-UI-002 | partial | `crates/probe-app`, immutable runtime publication, and P2-A query snapshots | strictly newer consumer predicate, exact archive identity/data-through, equal/older rejection, no-change cursor continuity, and one-retained-envelope contract pass; product presentation snapshots pending |
 | TM-PERF-001 | partial | bounded parser/reader/store/engine plus live runtime and query facade | unchanged payload bytes=0; exact tail; 300-event batches; 10,000-hint aggregate/one follow-up; one retained result across 10,000 candidates; watcher/live/power baselines and 256-cycle query resource plateau pass; UI/plugin evidence pending |
 | TM-PERF-002 | open evidence | software renderer and M0 resource gates | uninterrupted soak and interactive receipts remain absent |
-| TM-PERF-003 | partial | immutable engine publication, P2-A activity query, and P2-B transactional aggregates plus immutable facade | prior evidence plus measured 1/32/256 append p95 of 1.814/19.888/230.620 ms; current/legacy million-event rebuilds sustain 13,240/12,324 events/s with 246.558/268.305 ms page p95, cached overview p95 stays below 0.6 ms, full 400-point/four-breakdown/32-scope reads stay below 166 ms, session pages below 0.75 ms, amplification below 1.57x, and repeated resource plateaus pass; P3 UI remains |
+| TM-PERF-003 | partial | immutable engine publication, P2-A activity query, schema-v9 transactional token/price aggregates, and immutable cost facade | current/legacy P2-C million gates: rebuild 8,737/8,129 events/s, page p95 376.824/406.604 ms, amplification 1.862x/2.010x, cached overview p95 2.040/2.065 ms, 400-point/four-breakdown p95 148.168/156.080 ms, all-32-scope 158.588/162.504 ms, session page p95 below 14 ms and detail below 1 ms; override/mode resource plateaus pass; P3 UI remains |
 | TM-REL-001 | partial | M0 scripts and receipt schemas | identity checks exist; final product packaging evidence pending |
 | TM-REL-002 | open evidence | `M0_ACCEPTANCE.md` | interactive Windows/DPI/accessibility and uninterrupted soak receipts absent |
 | TM-REL-003 | planned | P6 explicit MSVC signed portable package and supply-chain gates | GNU/MSVC comparison, notices/SBOM, advisory/source/license/secret/action/attestation audits, deterministic package and clean-room launch pending |
@@ -27,12 +27,12 @@ A design or plan is not implementation evidence.
 | TM-DATA-002 | implemented | domain drafts plus exclusive `tokenmaster-accounting` canonicalizer | canonicalizer vectors, compile-fail authority tests, Codex/store contracts |
 | TM-DATA-003 | implemented | file identity and reader checkpoint | physical identity live/persisted round-trip, checkpoint conversion, resume bound, and restart contracts |
 | TM-DATA-004 | implemented | scoped scan/rebuild plus replay-aware current publication, paired-CAS tail facts, exact admission, durable partial/recovery, retained promotion/discard | atomic faults, stale CAS, unchanged/append/multi-batch/new/missing/restart/deadline/rebuild contracts pass |
-| TM-DATA-005 | implemented | writable usage store plus separate `UsageReadStore` | strict schema v8 with dataset/aggregate triggers, exact v7 rollback migration, provider-self-contained events, and read-only query-only defensive 4-MiB/no-migration/no-checkpoint policy pass |
-| TM-DATA-006 | partial | reader/parser/store, engine/runtime, and immutable P2 query facade | prior limits plus three-segment calendar composition, optional 400-point daily series, four unique breakdowns, 256+1 session lookahead, scope-bound cursor, 32 scopes, 16 warnings, exact two-second reads, and owned public values pass; UI/plugin limits pending |
+| TM-DATA-005 | implemented | writable usage store plus separate `UsageReadStore` | strict schema v9 with dataset/token/price triggers, exact v8 rollback migration, provider-self-contained price facts, and read-only query-only defensive 4-MiB/no-migration/no-checkpoint policy pass |
+| TM-DATA-006 | partial | reader/parser/store, engine/runtime, pure pricing engine, and immutable P2 query facade | prior limits plus 401-target/512-key range cost batches, 256-target breakdown/session batches, exact omitted counters, calendar composition, optional 400-point daily series, four breakdowns, scope-bound cursors, 32 scopes, 16 warnings, two-second reads, and owned public values pass; UI/plugin limits pending |
 | TM-DATA-007 | implemented | replay facts/classifier in a private overlay plus schema-v4 self-contained canonical projection with deterministic selection/retention | v1/v2/v3-to-v4 migration plus replay/append/restart/300-file/atomic-replacement/truncation truth-table/failure contracts pass |
 | TM-DATA-008 | planned | immutable quota samples, epochs, reset and allowance transitions | P2 quota reset history schema/detection/retention contracts pending |
 | TM-DATA-009 | planned | typed provider benefit inventory, versioned reminder profiles/delivery, activation intent/receipt projection | P2 banked reset schema/expiry/profile/dedup/CAS/retention contracts pending |
-| TM-SEC-001 | partial | local-only product and no listener today | permitted credential-free local/official quota source and future MCP stdio network-denial tests pending |
+| TM-SEC-001 | partial | local-only product, no listener, and deterministic offline pricing | pricing/query dependency/source/release-library audit proves no runtime pricing network path; permitted credential-free local/official quota source and future MCP stdio network-denial tests pending |
 | TM-SEC-002 | partial | current JSONL/store boundaries validate types and sizes | future config/CLI/MCP/plugin boundary suites pending |
 | TM-SEC-003 | implemented | provider/Codex/store/engine errors, value types, and redacted worker panic boundary | serialized/debug privacy, path-redaction, sealed identity, path-substitution, raw-archive-write compile-fail, fixed panic/fault completion, and panic-strategy compile guard contracts |
 | TM-SEC-004 | implemented | transactional archive authority, exact rebuild/recovery, OS lease, pathless watcher, ordered live lifecycle, static power callback | P1-D.3 rollback/recovery, P1-D.4 process lease, P1-D.5 callback privacy, P1-D.6 lease-first recovery/admission/shutdown, and P1-E.3 power isolation contracts |
@@ -85,7 +85,9 @@ resource bounds. P1 and P2-A are implemented. P2-B provider identity, aggregate
 schema/triggers, bounded rebuild, overview/series/breakdown reads, and opaque keyset
 session page/detail reads, exact private calendar composition, immutable aggregate
 values, facade mapping, and million-row/storage/privacy/resource evidence are
-implemented. P2-C pinned pricing is next; P3 UI evidence remains separate.
+implemented. P2-C schema-v9 price facts, fixed-point pricing, bounded overrides,
+batched cost facade, scale, offline, privacy, and resource gates are implemented.
+P2-D quota/reset inventory is next; P3 UI evidence remains separate.
 M0 interactive/
 soak evidence remains.
 Tasks 3+ in the older replay plan are historical and superseded.

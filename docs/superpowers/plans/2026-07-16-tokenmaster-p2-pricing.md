@@ -2,10 +2,14 @@
 
 **Design:** `docs/superpowers/specs/2026-07-16-tokenmaster-p2-pricing-design.md`
 
+**Status:** complete; focused, workspace, current/legacy million-event, Windows
+resource high-water, storage-amplification, query-plan, privacy, and no-network gates
+pass.
+
 Use focused red/green tests for every task. Keep each commit independently reviewable.
 Do not push or package without explicit user direction.
 
-## Task 1: Pure fixed-point pricing engine
+## Task 1: Pure fixed-point pricing engine — complete
 
 **Add:** `crates/pricing`
 
@@ -21,7 +25,7 @@ Do not push or package without explicit user direction.
 
 **Commit:** `feat(pricing): add deterministic pinned cost engine`
 
-## Task 2: Validated immutable overrides and cost selection
+## Task 2: Validated immutable overrides and cost selection — complete
 
 1. Write failing adversarial tests for maximum count/length/rate/threshold, strict
    decimal syntax, duplicates, incomplete new models, alias cycles/chains, atomic
@@ -35,7 +39,7 @@ Do not push or package without explicit user direction.
 
 **Commit:** `feat(pricing): add bounded overrides and cost provenance`
 
-## Task 3: Domain and schema-v9 source cost/price basis
+## Task 3: Domain and schema-v9 source cost/price basis — complete
 
 1. Add failing domain tests for optional bounded source-reported USD microdollars.
 2. Add failing v8-to-v9/current-schema/malformed-schema tests for the new event column,
@@ -47,7 +51,7 @@ Do not push or package without explicit user direction.
 
 **Commit:** `feat(store): add transactional price basis rollups`
 
-## Task 4: Recovery rebuild and bounded store queries
+## Task 4: Recovery rebuild and bounded store queries — complete
 
 1. Add failing current/legacy rebuild, cancel/resume, reopen, failure, cleanup, and
    generation-publication tests for both price tables.
@@ -59,7 +63,7 @@ Do not push or package without explicit user direction.
 
 **Commit:** `feat(store): add bounded price basis reads`
 
-## Task 5: Query facade cost integration
+## Task 5: Query facade cost integration — complete
 
 1. Add failing public contracts that attach cost to overview, series points, breakdown
    items, session pages/details, and exact current/legacy dataset identity.
@@ -71,7 +75,7 @@ Do not push or package without explicit user direction.
 
 **Commit:** `feat(query): expose truthful usage cost estimates`
 
-## Task 6: Release-scale and resource evidence
+## Task 6: Release-scale and resource evidence — complete
 
 1. Extend the ignored million-event current/legacy gate with price rows and cold/cached
    overview, 400-point series, four breakdowns, 32 scopes, and session costs.
@@ -84,7 +88,7 @@ Do not push or package without explicit user direction.
 
 **Commit:** `test(pricing): close cost scale and resource gates`
 
-## Task 7: Project truth and full acceptance
+## Task 7: Project truth and full acceptance — complete
 
 Update affected specification, data/API/security contracts, traceability, decisions,
 feature parity, current state, handoff, roadmap, changelog, and project history. Record
@@ -102,6 +106,13 @@ cargo +1.97.0 test --workspace --locked
 Then run the explicit ignored P2-C release gate, inspect the exact task-owned process
 tree and temporary directories, perform a root-owned read-only critical review, and
 commit only intentional files.
+
+The accepted current/legacy million-event receipts are respectively: 8,737/8,129
+rebuild events/s, 376.824/406.604 ms rebuild-page p95, 1.862x/2.010x SQLite
+amplification, 2.040/2.065 ms cached-overview p95, 148.168/156.080 ms full
+400-point/four-breakdown p95, 158.588/162.504 ms all-32-scope analytics, below 14 ms
+session-page p95, and below 1 ms detail p95. The production pricing network audit
+reports zero forbidden dependencies and binary strings.
 
 **Commit:** `docs(pricing): close P2-C project truth`
 

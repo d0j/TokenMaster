@@ -93,8 +93,18 @@ page p95 246.558/268.305 ms, amplification 1.483x/1.568x, cold overview below 17
 cached overview p95 below 0.55 ms, full 400-point/four-breakdown/32-scope analytics
 below 166 ms, session page p95 below 0.75 ms, and repeated Windows resource plateaus.
 The measured rebuild cap is 2,048 events; the former 256-event cap failed throughput.
-The immediate next product-data slice is P2-C release-pinned pricing and validated
-overrides. Do not replace aggregates with view-time full scans or relabel whole-session
+P2-C is complete. Schema v9 adds transactional time/session price-basis facts and exact
+v8 migration/recovery without persisting calculated cost. `tokenmaster-pricing` owns
+release-pinned integer USD-micro calculation, immutable 512-entry overrides, exact
+aliases, three selection modes, provenance/conflict/missing evidence, and no runtime
+network. The query facade attaches dataset-exact cost to overview, 400-point series,
+four breakdowns, session pages, and detail through 401/256-target batches with a
+global 512-key detail cap, never one query per visible row. The final current/legacy
+million gate passed: amplification 1.862x/2.010x, full p95 148.168/156.080 ms,
+32-scope 158.588/162.504 ms, session page below 14 ms, detail below 1 ms. Resource and
+production pricing-network audits pass. The immediate next slice is P2-D quota reset
+epochs plus banked-reset expiry/reminder inventory. Do not replace aggregates with
+view-time full scans, infer quota from local token/cost totals, or relabel whole-session
 totals as period totals.
 The 2026-07-16 closure review also freezes the remaining plan ambiguities: P3 is the
 complete UI, P4 presentation/localization, P5 read-only automation, and P6 the

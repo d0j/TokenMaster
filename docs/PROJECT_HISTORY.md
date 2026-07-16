@@ -1353,3 +1353,43 @@ pricing and validated overrides are the next product-data slice. After project-t
 synchronization, the complete baseline gate passed clean-root audit, formatting,
 strict locked workspace Clippy, every locked workspace test/doctest, and diff-check in
 79.326 seconds; P2-B Tasks 1-9 are complete.
+
+## 2026-07-16 — P2-C deterministic pricing and cost facade closed
+
+Added the pure `tokenmaster-pricing` engine with an embedded reviewed catalog, checked
+integer microdollar calculation, exact aliases, bounded immutable overrides, and
+`auto`/`calculated`/`reported` selection. Unknown models or tiers, incomplete basis,
+overflow, capped missing keys, and source/catalog conflicts remain explicit rather
+than becoming plausible zeroes. Runtime pricing remains local: the production closure,
+source, and release-artifact string audit reports zero forbidden HTTP dependencies or
+fetch signatures.
+
+Schema v9 now retains only derived price-basis facts beside existing time/session
+rollups. Live insert/replay/delete/replace and legacy rebuild update them in the same
+transaction and generation; public reads bind exact dataset identity and batch the
+overview, up to 400 series points, four capped breakdowns, 32 scopes, and session
+page/detail targets without raw-event or one-query-per-item fallback. The immutable
+query facade exposes cost availability, amount, mode, provenance, catalog and override
+identity, conflict, counters, and bounded missing evidence.
+
+The first release-scale run found scoped range pricing above the one-second contract.
+Query-phase evidence isolated the regression to SQLite's tuple membership plan. A
+bounded scopes CTE plus the composite price-time index restored indexed seeks; a real
+32-scope `EXPLAIN QUERY PLAN` assertion prevents recurrence. The final current/legacy
+million-event receipts passed at 8,737/8,129 rebuild events/s, 376.824/406.604 ms
+rebuild-page p95, 1.862x/2.010x SQLite amplification, 2.040/2.065 ms cached-overview
+p95, 148.168/156.080 ms full 400-point/four-breakdown p95, 158.588/162.504 ms
+all-32-scope analytics, below 14 ms session-page p95, and below 1 ms detail p95.
+Catalog/override/mode query switching retained private-memory, handle, thread, USER,
+and GDI plateaus. Final-gate review found that the prior two-point Windows
+`PrivateUsage` assertion could alternately fail open/drop or rebuild after a normal
+heap/SQLite high-water step despite later samples returning lower. It was replaced by
+a fixed-size eight-round warmup envelope followed by eight measured rounds, while
+preserving the 1/2 MiB memory budgets and handle/thread/USER/GDI bounds. The exact
+workspace resource binary passes repeatedly. Focused tests, clean-root audit,
+formatting, strict locked workspace Clippy, every locked workspace test/doctest,
+privacy checks, and diff review pass.
+
+This completes P2-C only. P2-D quota/reset history and expiring reset inventory is the
+next approved slice; Git output, joined snapshots, UI, automation, M0 acceptance,
+packaging, signing, and release remain open.

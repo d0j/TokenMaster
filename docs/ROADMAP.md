@@ -142,8 +142,13 @@ are now implemented. Fixed overview/series/breakdown and opaque keyset session
 page/detail reads are implemented. Calendar/timezone composition, immutable public
 values, scope-bound opaque session mapping, and exact facade capture are implemented.
 Deterministic current/legacy million-event cached-dashboard, rebuild, storage,
-privacy, and repeated-resource evidence passes; P2-B is complete. P2-C release-pinned
-pricing and validated overrides are next.
+privacy, and repeated-resource evidence passes; P2-B is complete. P2-C is also
+complete: schema-v9 fact-only price rollups, release-pinned fixed-point calculation,
+validated immutable overrides, dataset-exact cost on overview/series/breakdown/session
+surfaces, batched indexed reads, current/legacy million-event scale, resource plateaus,
+and production no-pricing-network audit pass. P2-D provider quota reset epochs and
+banked-reset expiry/reminder inventory are next, followed by P2-E Git output and P2-F
+joined product status.
 No frontend/database coupling or view-time full event grouping is accepted.
 
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset

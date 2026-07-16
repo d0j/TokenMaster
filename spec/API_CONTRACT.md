@@ -173,7 +173,7 @@ internal failures use stable path-free codes. The facade clock supplies one exac
 monotonic sample; frontends do not supply publication time.
 
 `UsageReadStore` is the only archive-read implementation behind that facade. It opens
-an existing exact schema-v8 archive read-only, applies query-only/defensive/no-checkpoint
+an existing exact schema-v9 archive read-only, applies query-only/defensive/no-checkpoint
 policy, performs no migration, and returns owned data after one short deferred read
 transaction. Continuation requires its dataset identity. Current and immutable legacy
 pages use composite keyset seek and at most one lookahead row; progress interruption is
@@ -207,6 +207,16 @@ date. Model, project, provider, and provider-qualified profile breakdowns are fi
 independent queries, each retains at most 256 items plus one internal lookahead and
 reports truncation. Project absence is typed, not an empty user-facing string.
 
+Price-basis store calls use only the active generation of schema-v9 price rollups.
+Overview plus series is one batch of at most 401 targets; a breakdown kind or session
+page/detail batch has at most 256 targets. Every batch returns at most 512 ordered
+price keys globally plus exact included/omitted metrics per target. Scoped range
+queries use bounded scope values and the composite scope/range index. Dynamic SQL is
+host-built only from fixed fragments and numbered parameters, is not statement-cached,
+and never contains caller identifiers or expressions. Exact dataset mismatch is
+`stale_snapshot`; no cost call may fall back to raw events or issue one query per
+visible point/session.
+
 The session store API is deliberately all-time. First and continuation requests accept
 at most 32 unique provider/profile scopes, retain at most 256 summaries plus one
 lookahead, and use a two-second maximum deadline. Ordering is last UTC instant
@@ -235,6 +245,16 @@ is `invalid_value` and a dataset change is `stale_snapshot` rather than a mixed 
 returns typed absence or one owned summary with model/project breakdowns. Failed
 calendar, rebuild, stale, or store captures do not consume process-local snapshot
 generation.
+
+Every analytics overview, series point, breakdown item, session summary, and session
+detail summary carries one immutable `CostResult`. It exposes requested mode, truthful
+availability, optional USD-micro amount, source composition, pinned catalog ID,
+override revision/use, total/priced/reported/assumed/unpriced/omitted/conflict event
+counters, and bounded missing reasons. `QueryService::open` uses the embedded catalog
+and `auto`; `open_with_pricing` and `replace_pricing` accept only an already validated
+immutable engine and explicit mode. A switch retains no engine history and affects
+only later snapshots. Cost and token captures must have identical dataset identity and
+event counts or the whole facade call fails closed.
 
 `QueryService` is the only public archive facade in this contour. It allocates a
 strictly increasing process-local snapshot generation only after a successful capture,
