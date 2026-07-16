@@ -1,12 +1,23 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
+mod benefit;
 mod identity;
 mod quota;
 mod session;
 mod state;
 mod usage;
 
+pub use benefit::{
+    BenefitConfidence, BenefitDetailKind, BenefitError, BenefitEvidenceSource, BenefitExpiry,
+    BenefitInventoryCompleteness, BenefitInventoryObservation, BenefitInventoryObservationParts,
+    BenefitKind, BenefitLabelKey, BenefitLocalDate, BenefitLocalDateTime, BenefitLocalTime,
+    BenefitLotId, BenefitLotObservation, BenefitLotObservationParts, BenefitObservationId,
+    BenefitScope, BenefitState, BenefitTarget, BenefitTimeZoneId, MAX_BENEFIT_LOTS_PER_OBSERVATION,
+    MAX_REMINDER_LEAD_SECONDS, MAX_REMINDER_THRESHOLDS, MIN_REMINDER_LEAD_SECONDS,
+    NotificationChannel, RECOMMENDED_REMINDER_LEAD_SECONDS, ReminderLeadTime, ReminderProfile,
+    ReminderProfileParts, ReminderProfileRevision,
+};
 pub use identity::{LayoutId, LocaleId, RouteId, ThemeId};
 pub use quota::{
     QuotaAccountId, QuotaConfidence, QuotaError, QuotaEvidenceSource, QuotaObservationId,

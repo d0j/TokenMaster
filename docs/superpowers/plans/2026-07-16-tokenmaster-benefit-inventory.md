@@ -48,14 +48,14 @@ browser, shell, async runtime, credential store, or provider activation API.
 
 **RED/GREEN:**
 
-- [ ] Add opaque redacted lot and observation IDs.
-- [ ] Add strict scope, kind, state, source, confidence, detail, target, expiry, lot,
+- [x] Add opaque redacted lot and observation IDs.
+- [x] Add strict scope, kind, state, source, confidence, detail, target, expiry, lot,
   inventory observation, notification channel, and reminder profile values.
-- [ ] Enforce 64 lots, positive ordered times, unique lot IDs, positive quantities,
+- [x] Enforce 64 lots, positive ordered times, unique lot IDs, positive quantities,
   strict IDs/label keys/time-zone IDs, exact/bounded expiry coherence, 8 unique
   thresholds, and 1-minute..365-day limits.
-- [ ] Repeat validation during deserialization and reject unknown nested fields.
-- [ ] Prove distinct kinds/expiry precisions cannot coerce and `Debug` is private.
+- [x] Repeat validation during deserialization and reject unknown nested fields.
+- [x] Prove distinct kinds/expiry precisions cannot coerce and `Debug` is private.
 
 **Focused validator:**
 
