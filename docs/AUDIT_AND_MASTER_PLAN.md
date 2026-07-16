@@ -2,7 +2,8 @@
 
 Status: architecture and release plan approved after closure review; P0 through P1,
 P2-A, P2-B, P2-C pinned pricing, and the P2-D quota history core are implemented;
-permitted Codex quota transport is next.
+the permitted built-in Codex quota normalizer/transport is also implemented.
+Executable discovery and dedicated quota refresh/store publication are next.
 Date: 2026-07-16.
 
 ## 1. Executive decision
@@ -162,9 +163,9 @@ contracts are stable.
 6. **P1 — runtime engine:** scan epochs, source finalization, staging promotion,
    coalescing, cancellation, sleep/resume, writer lease, recovery, and immutable
    snapshot revisions.
-7. **P2 — product data:** Codex quota transport, immutable weekly reset epochs and
-   before/after history, pricing catalog/overrides, bounded Git output metrics,
-   indexed analytics, and data-quality semantics.
+7. **P2 — product data:** built-in Codex quota source and runtime publication,
+   immutable weekly reset epochs and before/after history, pricing catalog/overrides,
+   bounded Git output metrics, indexed analytics, and data-quality semantics.
 8. **P3 — complete desktop UI:** six-section board and all history/session/model/
    project/activity/health/settings/help/widget routes from immutable snapshots.
 9. **P4 — presentation:** independent skin/layout/density/scheme/locale axes, dynamic
@@ -246,7 +247,9 @@ schema-v9 price facts, fixed-point engine, immutable overrides, batched cost fac
 million-event, resource, and offline-network gates pass. P2-D quota history Tasks 1-8
 also pass: exact domain/evaluator/schema/write/retention/read/query contracts,
 adversarial inference, 32-window/1,000-transition/10,000-poll scale, Windows resource
-return, and offline authority audit. Permitted Codex quota transport is the active
+return, and offline authority audit. The strict official Codex app-server normalizer/
+transport, live smoke, adversarial/resource gates, and release authority audit also
+pass. Executable discovery plus dedicated refresh/store publication is the active
 critical path; banked-reset inventory/reminders remain a separate following contour.
 View-time full scans and period-labeled
 whole-session totals remain forbidden.
@@ -259,8 +262,10 @@ contracts pass. No frontend owns SQLite. P2-B transactional storage, rebuild,
 overview, series, breakdown, session store reads, calendar composition, immutable
 aggregate/session facade values, and Task 8 scale/resource evidence are implemented.
 P2-C pinned pricing and its release gates are implemented; the P2-D quota history
-core and its acceptance gates are implemented. Permitted Codex quota transport is the
-next gate, followed separately by banked-reset inventory/reminders.
+core and its acceptance gates are implemented. The permitted built-in Codex quota
+normalizer/transport is implemented for the pinned version. Executable discovery and
+dedicated refresh/store publication are next, followed separately by banked-reset
+inventory/reminders.
 The older replay plan remains historical evidence for
 completed Tasks 1-2, but its Codex-owned Tasks 3+ are superseded and must not be
 executed.

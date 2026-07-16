@@ -410,6 +410,38 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   The offline authority audit covers 76 production dependency packages,
   43 production files, and three current release libraries with zero forbidden
   network/browser/shell matches.
+- Codex quota wire normalization: `tokenmaster-codex` now strictly decodes the
+  official account/rate-limit response into owned provider-neutral definitions and
+  samples. A ChatGPT email is transiently normalized into a domain-separated
+  pseudonymous account ID and cannot escape through values, errors, or `Debug`.
+  Non-empty `rateLimitsByLimitId` is authoritative over the legacy duplicate;
+  primary/secondary windows expand to at most 32 definitions. Ratios, seconds,
+  durations, freshness, IDs, provider evidence, and reset thresholds use checked
+  integer/domain contracts. Up to 64 reset-credit rows are validated transiently but
+  no benefit inventory is exposed or persisted.
+- Codex quota process transport: `CodexQuotaTransport` accepts only one already
+  resolved absolute regular native executable and fixed `app-server --stdio`
+  arguments. It performs the stable non-experimental initialize/account/rate-limit
+  protocol pinned to app-server `0.144.1`, opts out of the observed quota and
+  remote-control status notifications, caps a frame at 256 KiB, total stdout at
+  1 MiB, frames at 64, and the complete deadline at 30 seconds. One poll owns one
+  hidden Windows child and one helper thread; success, error, EOF, and timeout always
+  terminate/reap/join before return. Unknown fields, IDs, methods, versions, or
+  provider values fail closed under stable redacted error codes.
+- Codex quota connector acceptance: a credential-free live smoke against the
+  installed supported Codex returned two normalized observations and completed in
+  0.70-0.94 seconds across repeated runs. The deterministic fixture matrix covers
+  success, stderr, RPC failure, unsupported version, malformed/unknown/blank/
+  oversized envelopes, notification, wrong/duplicate/out-of-order/negative IDs,
+  early EOF, and timeout.
+  The isolated Windows resource gate completed 16 warm-up and 64 measured rounds;
+  every round included success, RPC failure, and forced timeout. The retained parent
+  plateau was about 1.4 MiB private memory; focused/full-workspace runs observed
+  topology-stable 131-135 handles, four threads, USER=1, GDI=0, and no task-owned
+  child remaining. The release authority audit covers 72 production dependency
+  packages, 22 production library source files, and one release library with zero
+  forbidden network/browser/cookie/private-endpoint/credential-file/shell/socket
+  matches.
 - Verification correction: the first post-Task-1 workspace run reproduced an existing
   query resource-test defect. A default Rust test harness changed its own worker
   threads during process-wide `PrivateUsage` sampling, while allocator spikes later
@@ -433,9 +465,12 @@ exact domain values, deterministic identities, pure reset/allowance evaluation,
 strict schema v10, exact v9 migration, transactional writes, bounded retention,
 defensive store reads, immutable public query values/service, adversarial and
 release-scale evidence, Windows resource return, and offline authority audit.
-The immediate next data contour is a permitted credential-free Codex quota transport;
-banked-reset inventory/reminders remain a separate following contour. No quota value
-may be inferred
+The permitted credential-free Codex quota normalizer and short-lived official
+app-server transport are now implemented and live-verified for the pinned version.
+The immediate next contour is executable discovery plus a dedicated quota refresh
+worker that performs provider I/O without a writer lease, then acquires the existing
+lease only for bounded normalized store publication. Banked-reset inventory/reminders
+remain a separate following contour. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.
 P2-E Git output and P2-F joined product status remain after P2-D; P3 complete UI
 follows the product-data contracts.
@@ -526,7 +561,9 @@ price facts, fixed-point selection, bounded overrides, public costs, and scale/
 resource/offline evidence are complete. P2-D quota values, evaluator, schema-v10
 storage, transactional history writes, bounded retention, defensive reads, immutable
 public quota query, adversarial/scale/resource gates, and offline authority audit are
-complete. Permitted Codex quota transport is next; banked-reset inventory/reminders
+complete. The built-in Codex quota normalizer and bounded official app-server
+transport are also complete for the pinned version. Executable discovery and the
+dedicated refresh/store-publication worker are next; banked-reset inventory/reminders
 follow as a separate contour.
 No view-time grouping of the full event table is allowed.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred

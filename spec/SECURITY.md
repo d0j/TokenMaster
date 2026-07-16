@@ -96,8 +96,35 @@ network/browser/async client crates, scans production source for endpoint, cooki
 browser automation, shell, and socket authority, builds release libraries, and scans
 their strings. The current gate covers 76 production dependency packages,
 43 production files, and three current release libraries with zero forbidden
-matches. This proves only the quota
-core is offline; it does not authorize or implement a Codex quota transport.
+matches. This proves the quota core remains offline and separate from provider I/O.
+
+The implemented Codex quota transport uses only an exact caller-resolved native
+executable plus fixed `app-server --stdio` arguments. It performs no PATH search,
+shell construction, endpoint selection, browser/session reuse, credential-file read,
+environment injection, response persistence, logging, socket/listener creation, or
+direct HTTP. The trusted official Codex child runs in the normal user context and owns
+its own authentication/network behavior; TokenMaster reads only bounded JSONL stdout,
+discards stderr, and never receives credentials. The command path, Codex home, account
+email, raw frames, provider error text, reset-credit IDs, and inner OS errors are
+absent from public results, errors, and `Debug`.
+
+The stable non-experimental protocol is pinned to Codex app-server `0.144.1`.
+Initialization suppresses the two observed unsolicited notifications, and strict
+unknown-field/ID/message validation rejects any unrequested surface. The CLI command
+remains an experimental product surface, so every version/schema change fails closed
+to unavailable/stale and requires regenerated official schema review plus live
+contract evidence before the version gate moves. No compatibility guess or private
+fallback is permitted.
+
+`scripts/audit-codex-quota-transport.ps1` traverses the production dependency closure,
+rejects network/browser/async client crates, scans the non-test Codex library source
+for browser, cookie, private endpoint, credential-file, shell, socket, and logging
+authority, proves exactly one fixed command/argument construction, builds the release
+library, and scans its strings. The current gate covers 72 production dependency
+packages, 22 production library source files, and one release library with zero
+forbidden matches. A separate isolated Windows gate repeatedly exercises success,
+JSON-RPC failure, and forced timeout; private memory and handle/thread/USER/GDI
+topology return to a stable plateau and no task-owned child remains.
 
 Providers emit bounded observation/session-relation drafts only. They cannot create
 event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or

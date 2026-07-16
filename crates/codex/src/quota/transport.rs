@@ -94,9 +94,9 @@ impl CodexQuotaTransport {
         Ok(Self { command, timeout })
     }
 
-    pub fn poll(&self, observed_at_ms: i64) -> Result<CodexQuotaSnapshot, CodexQuotaError> {
-        if observed_at_ms <= 0
-            || observed_at_ms
+    pub fn poll(&self, poll_started_at_ms: i64) -> Result<CodexQuotaSnapshot, CodexQuotaError> {
+        if poll_started_at_ms <= 0
+            || poll_started_at_ms
                 .checked_add(super::CODEX_QUOTA_STALE_MILLIS)
                 .is_none()
         {
@@ -145,7 +145,7 @@ impl CodexQuotaTransport {
         };
         stop_reap_and_join(&mut child, worker)?;
         let (account, quota) = wire_result?;
-        normalize_wire(account, quota, observed_at_ms)
+        normalize_wire(account, quota, poll_started_at_ms)
     }
 }
 

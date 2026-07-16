@@ -13,8 +13,15 @@ Codex JSONL sources
   -> immutable query snapshots
   -> Slint desktop UI, future CLI, future MCP
 
-Built-in Codex quota/benefit adapter or future sandboxed read-only provider component
-  -> immutable quota epochs and typed banked-reset/credit/temporary-use lots
+Exact installed Codex native executable
+  -> short-lived version-gated `app-server --stdio` child
+  -> strict account/rate-limit wire validation and pseudonymous account identity
+  -> provider-neutral primary/secondary quota definitions and samples
+  -> future dedicated refresh worker and bounded transactional quota publication
+  -> immutable quota epochs
+
+Validated Codex reset-credit rows or future sandboxed read-only provider component
+  -> typed banked-reset/credit/temporary-use lots
   -> bounded query snapshots, expiry queue, reminders, and pure policy evaluation
   -> the same Slint UI and read-only CLI/MCP projections
 ```
@@ -63,6 +70,23 @@ pagination instead of skipping rows.
 The UI receives bounded view models rather than owning archive state. Skin, layout,
 and locale selection alter presentation state only, so switching remains immediate and
 does not reparse sources or rebuild the archive.
+
+The built-in live quota source is separate from the JSONL usage reader. Composition
+supplies one already resolved absolute native Codex executable to
+`CodexQuotaTransport`. One poll creates exactly `app-server --stdio`, performs the
+stable non-experimental protocol supported by app-server `0.144.1`, reads account and
+multi-bucket rate limits, and then terminates/reaps the child and joins its one helper
+thread. The connector owns no endpoint, credential, browser, socket, SQLite
+transaction, writer lease, scheduler, or UI callback. Frame/output/count/time bounds
+and strict unknown-field/version checks make an incompatible response unavailable
+rather than guessed.
+
+Account email is transient input to a domain-separated pseudonym and never enters a
+snapshot, store, log, error, or `Debug`. Multi-bucket results supersede the legacy
+duplicate; primary/secondary provider windows map to exact fixed-point quota samples.
+The official response's reset-credit rows are only bounded and validated in this
+contour. A later benefit adapter will map them to typed lots without inheriting quota
+read authority as activation authority.
 
 The watcher is never source authority. Its callback discards `notify` event/error paths
 before touching shared state; one atomic aggregate retains only dirty/force/urgency,

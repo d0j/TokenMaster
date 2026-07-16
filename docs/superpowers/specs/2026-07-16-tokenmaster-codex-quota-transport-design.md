@@ -1,6 +1,6 @@
 # TokenMaster Codex Quota Transport Design
 
-**Status:** approved for implementation on 2026-07-16
+**Status:** implemented and verified on 2026-07-16
 
 **Scope:** one read-only, credential-blind, bounded Codex connector that converts the
 official local app-server rate-limit snapshot into the implemented provider-neutral
@@ -178,9 +178,12 @@ evidence metadata. Retry with the same normalized response/time is idempotent.
 
 ## 7. Freshness
 
-The app-server response has no freshness timestamps. The caller supplies the
-successful observation time after the response is complete. Codex transport policy
-v1 marks the sample:
+The app-server response has no freshness timestamps. The caller supplies a positive
+wall-clock lower bound captured immediately before poll admission. The transport
+validates it before spawning and uses it as the conservative observation time.
+Process duration can therefore age the sample by at most the configured bounded
+deadline but can never overstate freshness. Codex transport policy v1 marks the
+sample:
 
 - fresh through 20 minutes;
 - aging after 20 minutes;
@@ -233,4 +236,3 @@ The connector contour is accepted only when tests prove:
 - repeated polling returns host process resources to baseline;
 - no browser, cookie, private endpoint, raw credential, or raw response persistence;
 - focused tests, workspace formatting, strict clippy, and full workspace tests pass.
-

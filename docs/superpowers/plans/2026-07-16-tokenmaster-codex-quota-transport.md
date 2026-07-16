@@ -4,7 +4,7 @@
 > superpowers:executing-plans and superpowers:test-driven-development. Track every task
 > with checkbox syntax and verify before marking complete.
 
-**Status:** approved and in progress on 2026-07-16
+**Status:** completed on 2026-07-16
 
 **Goal:** read official live Codex quota windows through one bounded short-lived local
 app-server session and emit validated provider-neutral quota observations without
@@ -158,13 +158,13 @@ pwsh -NoProfile -File scripts\audit-codex-quota-transport.ps1 -RepositoryRoot (G
 
 **Actions:**
 
-- [ ] Record official app-server stable-surface boundary, exact version gate, process
+- [x] Record official app-server stable-surface boundary, exact version gate, process
   bounds, pseudonymous account limitation, and no-workspace-ID limitation.
-- [ ] Mark the Codex quota source connector implemented only after Tasks 1-3 pass.
-- [ ] Keep TM-FUNC-009 partial until runtime ingestion and UI exist.
-- [ ] Record the next blocker as dedicated quota refresh scheduling/writer coordination;
+- [x] Mark the Codex quota source connector implemented only after Tasks 1-3 pass.
+- [x] Keep TM-FUNC-009 partial until runtime ingestion and UI exist.
+- [x] Record the next blocker as dedicated quota refresh scheduling/writer coordination;
   keep TM-DATA-009 benefit inventory/reminders separate.
-- [ ] Run full baseline and inspect the final diff for private paths/data.
+- [x] Run full baseline and inspect the final diff for private paths/data.
 
 **Baseline:**
 

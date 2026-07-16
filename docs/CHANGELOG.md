@@ -6,6 +6,19 @@ All notable changes are recorded here.
 
 ### Added
 
+- Built-in credential-blind Codex quota connector using one exact short-lived
+  `app-server --stdio` child, stable non-experimental protocol pinned to `0.144.1`,
+  strict account/multi-bucket rate-limit schemas, pseudonymous account identity,
+  primary/secondary fixed-point window normalization, deterministic observations,
+  provider-defined reset thresholds, 20-minute/2-hour freshness, and transient
+  bounded reset-credit validation without benefit persistence.
+- Bounded Codex transport/process acceptance: exact fixed argv and notification
+  opt-outs, 256-KiB frame/1-MiB stdout/64-frame/32-window/64-credit caps, redacted
+  stable errors, hidden Windows child, complete timeout/reap/join cleanup, authenticated
+  live two-window smoke, adversarial envelope/ID/version/EOF/error matrix, 64-round
+  success/error/timeout Windows resource plateau, orphan-process check, and a release
+  dependency/source/library authority audit with zero forbidden network/browser/
+  cookie/private-endpoint/credential-file/shell/socket matches.
 - Immutable public quota query envelopes with independent quota revision, exact
   provider freshness, worst truthful quality, request-ordered explicit unavailable
   windows, query-owned reset/allowance values, opaque filter/revision-bound history

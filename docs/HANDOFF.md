@@ -143,10 +143,38 @@ legacy usage coexistence. Maximum calls measured 3.429 ms write, 0.228 ms duplic
 the Windows private-memory/handle/thread/USER/GDI plateau. The quota release closure
 contains 76 production dependency packages, 43 production files, and the three
 current release libraries with zero forbidden network/browser/shell matches.
-The immediate next slice is a permitted credential-free Codex quota transport.
-Banked-reset inventory/reminders and UI remain separate later contours. Do not
-replace aggregates with view-time full scans, infer quota from local token/cost totals,
-or relabel whole-session totals as period totals.
+The built-in Codex quota source contour is now implemented. Strict private wire
+decoding maps the official account and multi-bucket rate-limit response into at most
+32 provider-neutral primary/secondary observations. ChatGPT email exists only long
+enough to derive a domain-separated account pseudonym; raw email, Codex home,
+executable path, frames, provider errors, and reset-credit IDs never escape public
+values, errors, or `Debug`. Reset-credit rows are bounded and validated only; benefit
+inventory is still absent.
+
+`CodexQuotaTransport` accepts one caller-resolved absolute regular native executable
+and executes only `app-server --stdio`. The stable non-experimental handshake is
+pinned to app-server `0.144.1`, with fixed request IDs/methods, exact notification
+opt-outs, 256-KiB frame, 1-MiB stdout, 64-frame, 32-window, 64-credit-detail, and
+30-second hard bounds. One hidden Windows child and one helper thread are always
+terminated/reaped/joined before return. A live authenticated smoke returned two
+normalized observations in 0.70-0.94 seconds across repeated runs. The adversarial
+fixture matrix, strict Codex Clippy/tests, and release authority audit pass.
+
+The isolated resource gate performs success, RPC failure, and forced timeout in every
+round. It established a stable parent plateau after 16 warm-up rounds and passed 64
+measured rounds at about 1.4 MiB private memory. Focused/full-workspace runs observed
+topology-stable 131-135 handles, four threads, USER=1, GDI=0, with no task-owned child
+left. The transport audit covers 72 production dependency packages, 22 production
+library source files, and one release library with zero forbidden network/browser/
+cookie/private-endpoint/credential-file/shell/socket matches.
+
+The immediate next slice is executable discovery plus a dedicated quota refresh
+worker. Provider I/O must finish before acquiring the existing process writer lease;
+only the bounded owned normalized snapshot may enter transactional quota publication.
+Do not attach app-server I/O to the usage scan worker or hold SQLite/query/UI state
+across it. Banked-reset inventory/reminders and UI remain separate later contours. Do
+not replace aggregates with view-time full scans, infer quota from local token/cost
+totals, or relabel whole-session totals as period totals.
 The current post-Task-8 clean-root, formatting, strict locked workspace Clippy, and
 complete locked workspace test/doctest baseline passes. The query resource binary uses
 an isolated `harness = false` process plus a bounded maximum-64-round warm-up that
@@ -250,6 +278,15 @@ cargo +1.97.0 test -p tokenmaster-query --test quota_service_contract --locked
 $arguments = @('+1.97.0', 'test', '-p', 'tokenmaster-query', '--test', 'quota_scale_contract', '--release', '--locked', '--', '--ignored', '--nocapture')
 & cargo @arguments
 pwsh -NoProfile -File scripts\audit-quota-network.ps1 -RepositoryRoot (Get-Location).Path
+cargo +1.97.0 test -p tokenmaster-codex --test quota_normalization_contract --locked
+cargo +1.97.0 test -p tokenmaster-codex --test quota_transport_contract --locked
+cargo +1.97.0 test -p tokenmaster-codex --test quota_transport_adversarial_contract --locked
+cargo +1.97.0 test -p tokenmaster-codex --test quota_transport_resource_contract --locked
+pwsh -NoProfile -File scripts\audit-codex-quota-transport.ps1 -RepositoryRoot (Get-Location).Path
+# Optional authenticated live smoke:
+$env:TOKENMASTER_CODEX_EXECUTABLE = '<absolute native codex.exe>'
+$arguments = @('+1.97.0', 'test', '-p', 'tokenmaster-codex', '--test', 'quota_live_contract', '--locked', '--', '--ignored', '--nocapture')
+& cargo @arguments
 cargo +1.97.0 test --workspace --locked
 $env:RUSTFLAGS = '-Dwarnings'; cargo +1.97.0 clippy --workspace --all-targets --locked
 ```

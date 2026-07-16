@@ -1668,3 +1668,64 @@ This closes P2-D Tasks 1-8 and the provider-neutral quota history core only. The
 honest blocker is a permitted credential-free Codex quota transport. Banked-reset
 inventory/reminders, notification delivery, UI, CLI/MCP, M0 acceptance, packaging,
 signing, and release remain separate and unclaimed.
+
+## 2026-07-16 — official Codex quota connector implemented
+
+The source decision was revalidated against the installed Codex `0.144.1` generated
+non-experimental JSON Schemas and the official app-server manual. The accepted
+boundary is one caller-resolved native executable and one short-lived
+`app-server --stdio` session. Session JSONL inference, dashboard/slash-command
+scraping, browser cookies, private endpoint replay, local-token allowance estimates,
+persistent children, and shared sockets remain rejected.
+
+Added strict private account and rate-limit wire values plus
+`CodexQuotaNormalizer`. ChatGPT email is bounded, normalized, hashed through a
+domain-separated SHA-256 identity, and dropped; no raw email, Codex home, reset-credit
+ID, response frame, or provider error can enter public values/errors/Debug. A non-empty
+multi-bucket map supersedes its legacy duplicate. Primary and secondary windows expand
+to at most 32 provider-neutral fixed-point observations. Integer percentage/time/
+duration conversion, deterministic observation IDs, provider-official evidence,
+provider-supplied reset thresholds, 20-minute fresh and two-hour stale boundaries,
+legacy fallback, account switching, invalid/unknown/oversized input, clock overflow,
+and privacy surfaces have focused contracts. Reset-credit detail is validated up to 64
+rows only and is not yet stored or exposed.
+
+Added `CodexAppServerCommand` and `CodexQuotaTransport`. The descriptor accepts only an
+absolute regular non-reparse native file; Windows requires `.exe`. One poll executes
+only fixed `app-server --stdio` arguments, discards stderr, hides the Windows child,
+uses one helper thread and one complete monotonic deadline, and performs stable
+initialize/initialized, account read, and rate-limit read without enabling
+`experimentalApi`. Initialization opts out of `account/rateLimits/updated` and the
+observed unsolicited `remoteControl/status/changed` notification. The parser enforces
+fixed request IDs, strict unknown-field rejection, a 256-KiB frame, 1-MiB complete
+stdout, 64 frames, exact supported version, and stable redacted failure codes.
+Success, malformed input, RPC error, EOF, and timeout all terminate/reap the child and
+join the helper before return. The caller-provided poll-start wall clock is a
+conservative observation lower bound, so process duration may age evidence slightly
+but cannot overstate freshness.
+
+Repeated real authenticated live smokes returned two normalized observations in
+0.70-0.94 seconds. The deterministic fixture covers success, stderr, unsupported
+version, RPC failure, malformed/unknown/blank/oversized envelopes, unsolicited
+notification, both-result-and-error, missing result, wrong/duplicate/out-of-order/
+negative IDs, early EOF, and hang. A separate `harness = false` Windows process ran
+16 warm-up plus 64 measured rounds, each containing success, RPC failure, and forced
+timeout. Parent resources retained a stable approximately 1.4-MiB private-memory,
+four-thread, USER=1, GDI=0 plateau. Focused/full-workspace runs observed 131-135 stable
+handles within their respective process topology, and no task-owned fixture process
+remained.
+
+Added `scripts/audit-codex-quota-transport.ps1`. It traverses 72 production dependency
+packages, scans 22 non-test Codex library source files, proves one fixed command and
+argument construction, builds the release library, and rejects network/browser/async,
+cookie, private-endpoint, credential-file, shell, socket, experimental, logging, and
+raw persistence authority. The current release audit reports zero forbidden matches.
+Focused normalization/transport/adversarial/resource tests, strict Codex Clippy, the
+complete Codex suite, and the authenticated live smoke pass.
+
+This implements and verifies the built-in Codex quota source boundary only.
+Executable discovery, dedicated quota refresh scheduling, writer coordination,
+transactional store publication, health projection, benefit inventory/reminders,
+UI, CLI/MCP, M0 acceptance, packaging, signing, and release remain unclaimed. The next
+implementation slice must finish app-server I/O before acquiring the existing writer
+lease and may pass only the owned normalized snapshot into quota publication.

@@ -271,6 +271,45 @@ during a no-change scan without invalidating the cursor.
 P3 wraps the synchronous facade with one bounded worker rather than calling SQLite from
 a Slint callback.
 
+`CodexAppServerCommand` accepts one already resolved absolute native executable path.
+The path must name a regular non-reparse file; Windows additionally requires an
+`.exe`. It is canonicalized but has no public getter and its `Debug` output is
+redacted. `CodexQuotaTransport` accepts that descriptor plus a positive timeout no
+greater than 30 seconds and exposes one synchronous `poll(poll_started_at_ms)`
+operation. The caller captures this wall-clock lower bound immediately before
+admission. It is validated before process creation and becomes the conservative
+observation time, so transport duration can age evidence slightly but can never
+overstate freshness. The transport never accepts caller arguments, shell text,
+environment overrides, endpoints, headers, credentials, or arbitrary protocol
+methods.
+
+One poll starts exactly `<executable> app-server --stdio`, with hidden/no-console
+creation on Windows, and owns one child plus one helper I/O thread. It performs the
+stable non-experimental `initialize`/`initialized`, `account/read` with
+`refreshToken=false`, and `account/rateLimits/read` sequence. Initialization opts out
+of `account/rateLimits/updated` and `remoteControl/status/changed`; any remaining
+notification, wrong/duplicate/out-of-order ID, unknown field, malformed frame, RPC
+error, unsupported user-agent version, early EOF, or deadline fails the complete
+poll. The current supported app-server version is exactly `0.144.1`. One frame is
+capped at 256 KiB, complete stdout at 1 MiB, and frame count at 64. Success and every
+failure path terminate/reap the child and join the helper before return.
+
+The response must identify one ChatGPT account with a bounded non-empty email. The
+email is normalized only long enough to derive a domain-separated SHA-256
+`QuotaAccountId`; it is never returned, persisted, logged, or included in `Debug`.
+The current official response supplies no workspace identity, so workspace remains
+explicitly unavailable. A non-empty multi-bucket map is authoritative over its legacy
+duplicate. Primary/secondary windows expand to at most 32 normalized definitions and
+samples with checked integer percentages, times, durations, deterministic observation
+identity, provider-official evidence, and 20-minute/2-hour freshness boundaries.
+Reset-credit rows are schema/count validated transiently and are not exposed until the
+separate benefit-inventory contract is implemented.
+
+The transport performs no executable discovery, scheduling, SQLite access, writer
+lease acquisition, query publication, UI callback, benefit persistence, reminder, or
+activation. Composition must complete app-server I/O first, then pass only the owned
+normalized snapshot to a later bounded quota refresh worker.
+
 `UsageStore::apply_quota_observation` accepts one validated window definition and one
 same-window normalized sample. It returns only `Started`, `Duplicate`, `Stale`,
 `Advanced`, `AllowanceChanged`, or `Reset`, the independent quota revision, the

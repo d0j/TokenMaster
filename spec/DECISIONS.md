@@ -694,3 +694,31 @@ ambiguous, while allocating generations before a failed stale cursor would creat
 false consumer progress. An owned redacted facade plus measured offline acceptance
 gives UI, CLI, and MCP one bounded truth without authorizing the still-separate Codex
 transport or benefit mutation.
+
+## ADR-037 — Short-lived version-gated official Codex quota transport
+
+Decision: the built-in Codex quota source uses one already resolved native Codex
+executable and one short-lived `app-server --stdio` child per bounded poll. The
+connector performs only the stable non-experimental initialize, account-read, and
+rate-limit-read sequence supported by app-server `0.144.1`; it opts out of the two
+observed unsolicited notification methods and rejects every unknown field, method,
+ID, schema, version, size, time, or process outcome. The child has one helper thread,
+one monotonic deadline, fixed frame/output/count caps, discarded stderr, hidden
+Windows creation, and mandatory terminate/reap/join cleanup.
+
+Account email exists only as transient official response input to a domain-separated
+pseudonym. Multi-bucket data is authoritative over the legacy duplicate; provider
+primary/secondary windows map to exact fixed-point quota observations. The same
+response's reset-credit rows are validated but discarded until the independently
+authorized benefit-inventory contour. Executable discovery, polling, writer
+coordination, SQLite publication, UI, reminders, and activation remain separate.
+
+Persistent app-server ownership, shared sockets, session JSONL quota inference,
+dashboard/slash-command scraping, browser cookies, private endpoint replay, and local
+token-derived allowance are rejected. A persistent child saves less than one second
+on an infrequent refresh but permanently adds process/memory/lifecycle authority.
+Private or presentation-derived sources are brittle and violate the security
+contract. A replaceable short-lived official boundary keeps TokenMaster
+credential-blind, bounds retained resources, preserves truthful stale data on failure,
+and allows a future connector implementation without changing the quota domain,
+store, query, or UI contracts.
