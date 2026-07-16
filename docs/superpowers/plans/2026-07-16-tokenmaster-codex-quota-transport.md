@@ -44,25 +44,25 @@ crate.
 
 **RED:**
 
-- [ ] Add current multi-bucket fixture with one legacy duplicate, primary/secondary
+- [x] Add current multi-bucket fixture with one legacy duplicate, primary/secondary
   windows, and reset credits.
-- [ ] Add legacy-only fallback.
-- [ ] Add account pseudonym/account-switch isolation.
-- [ ] Add ratio/time/duration/freshness/observation-ID exact vectors.
-- [ ] Add unknown field, invalid percent/time/count/string, bucket mismatch, window
+- [x] Add legacy-only fallback.
+- [x] Add account pseudonym/account-switch isolation.
+- [x] Add ratio/time/duration/freshness/observation-ID exact vectors.
+- [x] Add unknown field, invalid percent/time/count/string, bucket mismatch, window
   overflow, missing email, and clock overflow cases.
-- [ ] Prove public/debug/error surfaces contain no fixture email, Codex home, raw credit
+- [x] Prove public/debug/error surfaces contain no fixture email, Codex home, raw credit
   ID, or raw response.
 
 **GREEN:**
 
-- [ ] Implement strict private wire structs.
-- [ ] Implement bounded provider string/count validation.
-- [ ] Implement domain-separated account/window/observation identities.
-- [ ] Normalize authoritative multi-bucket data without the legacy duplicate.
-- [ ] Emit immutable definition/sample pairs with explicit freshness and medium
+- [x] Implement strict private wire structs.
+- [x] Implement bounded provider string/count validation.
+- [x] Implement domain-separated account/window/observation identities.
+- [x] Normalize authoritative multi-bucket data without the legacy duplicate.
+- [x] Emit immutable definition/sample pairs with explicit freshness and medium
   inference confidence.
-- [ ] Decode reset credits only transiently and return no benefit inventory yet.
+- [x] Decode reset credits only transiently and return no benefit inventory yet.
 
 **Verify:**
 
@@ -175,4 +175,3 @@ $env:RUSTFLAGS = '-Dwarnings'
 cargo +1.97.0 clippy --workspace --all-targets --locked
 cargo +1.97.0 test --workspace --locked
 ```
-

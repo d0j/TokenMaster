@@ -32,6 +32,7 @@ mod identity;
 mod parser;
 mod path_policy;
 mod provider;
+mod quota;
 mod reader;
 mod roots;
 
@@ -51,6 +52,11 @@ pub use parser::{
     parse_line,
 };
 pub use provider::CodexProvider;
+pub use quota::{
+    CODEX_QUOTA_FRESH_MILLIS, CODEX_QUOTA_STALE_MILLIS, CodexQuotaError, CodexQuotaErrorCode,
+    CodexQuotaNormalizer, CodexQuotaObservation, CodexQuotaSnapshot, MAX_CODEX_QUOTA_JSON_BYTES,
+    MAX_CODEX_QUOTA_WINDOWS, MAX_CODEX_RESET_CREDIT_DETAILS,
+};
 pub use reader::{
     BoundaryAnchor, IntegrityReport, LogicalFileIdentity, MAX_ANCHOR_BYTES,
     MAX_BATCH_COMPLETE_BYTES, MAX_BATCH_EVENTS, MAX_RESUME_BYTES, READ_BUFFER_BYTES,
