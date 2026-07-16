@@ -21,3 +21,8 @@ tokenmaster-store = { path = "../store" }
 
 [target.'cfg(windows)'.dev-dependencies]
 windows.workspace = true
+
+[[test]]
+name = "quota_transport_resource_contract"
+path = "tests/quota_transport_resource_contract.rs"
+harness = false

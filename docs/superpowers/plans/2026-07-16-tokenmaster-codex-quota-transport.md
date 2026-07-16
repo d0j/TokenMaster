@@ -123,13 +123,13 @@ cargo +1.97.0 clippy -p tokenmaster-codex --all-targets --locked
 
 **RED/GREEN:**
 
-- [ ] Fuzz-like bounded fixture matrix cannot escape strict schema/count/time limits.
-- [ ] Repeated success/error/timeout polls return process private memory, handles,
+- [x] Fuzz-like bounded fixture matrix cannot escape strict schema/count/time limits.
+- [x] Repeated success/error/timeout polls return process private memory, handles,
   threads, USER, and GDI counts to the documented Windows tolerance.
-- [ ] Source/dependency/release-library audit rejects browser, cookie, private endpoint,
+- [x] Source/dependency/release-library audit rejects browser, cookie, private endpoint,
   credential-file parsing, shell construction, listener/socket server, and raw payload
   persistence.
-- [ ] Confirm no task-owned fixture/app-server process remains after the tests.
+- [x] Confirm no task-owned fixture/app-server process remains after the tests.
 
 **Verify:**
 

@@ -50,6 +50,41 @@ fn run() -> Result<(), ()> {
     if mode == "early_exit" {
         return Ok(());
     }
+    if mode == "empty_initialize" {
+        writeln!(
+            output,
+            "{{\"id\":0,\"result\":{{\"codexHome\":\"\",\
+             \"platformFamily\":\"windows\",\"platformOs\":\"windows\",\
+             \"userAgent\":\"Codex Fixture/0.144.1 (windows)\"}}}}"
+        )
+        .map_err(|_| ())?;
+        output.flush().map_err(|_| ())?;
+        return Ok(());
+    }
+    if mode == "unknown_initialize" {
+        writeln!(
+            output,
+            "{{\"id\":0,\"result\":{{\"codexHome\":\"C:\\\\private\\\\codex-home\",\
+             \"platformFamily\":\"windows\",\"platformOs\":\"windows\",\
+             \"userAgent\":\"Codex Fixture/0.144.1 (windows)\",\
+             \"privateUnexpected\":\"secret\"}}}}"
+        )
+        .map_err(|_| ())?;
+        output.flush().map_err(|_| ())?;
+        return Ok(());
+    }
+    if mode == "jsonrpc_initialize" {
+        writeln!(
+            output,
+            "{{\"jsonrpc\":\"2.0\",\"id\":0,\"result\":{{\
+             \"codexHome\":\"C:\\\\private\\\\codex-home\",\
+             \"platformFamily\":\"windows\",\"platformOs\":\"windows\",\
+             \"userAgent\":\"Codex Fixture/0.144.1 (windows)\"}}}}"
+        )
+        .map_err(|_| ())?;
+        output.flush().map_err(|_| ())?;
+        return Ok(());
+    }
     let user_agent = if mode == "unsupported_version" {
         "Codex Fixture/0.145.0 (windows)"
     } else {
@@ -118,6 +153,68 @@ fn run() -> Result<(), ()> {
                 output,
                 "{{\"id\":1,\"error\":{{\"code\":-32000,\
                  \"message\":\"private backend failure\"}}}}"
+            )
+            .map_err(|_| ())?;
+            output.flush().map_err(|_| ())?;
+            return Ok(());
+        }
+        "blank" => {
+            writeln!(output).map_err(|_| ())?;
+            output.flush().map_err(|_| ())?;
+            return Ok(());
+        }
+        "notification" => {
+            writeln!(
+                output,
+                "{{\"method\":\"remoteControl/status/changed\",\"params\":{{}}}}"
+            )
+            .map_err(|_| ())?;
+            output.flush().map_err(|_| ())?;
+            return Ok(());
+        }
+        "both_result_error" => {
+            writeln!(
+                output,
+                "{{\"id\":1,\"result\":{{\"requiresOpenaiAuth\":true,\
+                 \"account\":null}},\"error\":{{\"code\":-32000,\
+                 \"message\":\"private backend failure\"}}}}"
+            )
+            .map_err(|_| ())?;
+            output.flush().map_err(|_| ())?;
+            return Ok(());
+        }
+        "missing_result" => {
+            writeln!(output, "{{\"id\":1}}").map_err(|_| ())?;
+            output.flush().map_err(|_| ())?;
+            return Ok(());
+        }
+        "negative_id" => {
+            writeln!(
+                output,
+                "{{\"id\":-1,\"result\":{{\"requiresOpenaiAuth\":true,\
+                 \"account\":null}}}}"
+            )
+            .map_err(|_| ())?;
+            output.flush().map_err(|_| ())?;
+            return Ok(());
+        }
+        "rpc_error_unknown" => {
+            writeln!(
+                output,
+                "{{\"id\":1,\"error\":{{\"code\":-32000,\
+                 \"message\":\"private backend failure\",\
+                 \"privateUnexpected\":\"secret\"}}}}"
+            )
+            .map_err(|_| ())?;
+            output.flush().map_err(|_| ())?;
+            return Ok(());
+        }
+        "oversized_rpc_error" => {
+            let message = "x".repeat(2 * 1024);
+            writeln!(
+                output,
+                "{{\"id\":1,\"error\":{{\"code\":-32000,\
+                 \"message\":\"{message}\"}}}}"
             )
             .map_err(|_| ())?;
             output.flush().map_err(|_| ())?;
