@@ -111,7 +111,7 @@ pub struct CostCounters {
     pub conflict_events: u64,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct CostResult {
     mode: CostMode,
     availability: CostAvailability,

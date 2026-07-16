@@ -1,11 +1,14 @@
 use std::{fmt, sync::Arc, time::Duration};
 
 use tokenmaster_domain::{UsageProfileId, UsageProviderId};
+use tokenmaster_pricing::{CostMode, CostResult, PricingEngine};
 use tokenmaster_store::{
-    ScanScope, UsageSessionCursor as StoreCursor, UsageSessionDetailCapture as StoreDetailCapture,
+    ScanScope, UsageSessionBreakdownPriceBasisQuery as StoreBreakdownPriceQuery,
+    UsageSessionCursor as StoreCursor, UsageSessionDetailCapture as StoreDetailCapture,
     UsageSessionDetailQuery as StoreDetailQuery, UsageSessionKey as StoreKey,
     UsageSessionPageCapture as StorePageCapture, UsageSessionPageQuery as StorePageQuery,
-    UsageSessionSummary as StoreSummary,
+    UsageSessionPriceBasisBatchQuery as StorePriceBatchQuery,
+    UsageSessionPriceBasisQuery as StorePriceQuery, UsageSessionSummary as StoreSummary,
 };
 
 use crate::{
@@ -148,6 +151,7 @@ pub struct UsageSessionSummary {
     last_timestamp_seconds: i64,
     last_timestamp_nanos: u32,
     metrics: UsageMetrics,
+    cost: CostResult,
 }
 
 impl UsageSessionSummary {
@@ -184,6 +188,11 @@ impl UsageSessionSummary {
     #[must_use]
     pub const fn metrics(&self) -> &UsageMetrics {
         &self.metrics
+    }
+
+    #[must_use]
+    pub const fn cost(&self) -> &CostResult {
+        &self.cost
     }
 }
 
@@ -271,16 +280,39 @@ pub(crate) fn build_page_query(
 
 pub(crate) fn map_page_capture(
     capture: &StorePageCapture,
+    prices: Option<&tokenmaster_store::UsagePriceBasisBatchCapture>,
     request: &UsageSessionPageRequest,
+    pricing: &PricingEngine,
+    cost_mode: CostMode,
 ) -> Result<UsageSessionPage, QueryError> {
     let dataset_identity = service::from_store_identity(capture.publication().dataset_identity())?;
     if dataset_identity == DatasetIdentity::Empty && !capture.sessions().is_empty() {
         return Err(QueryError::new(QueryErrorCode::CorruptArchive));
     }
+    if capture.sessions().is_empty() {
+        if prices.is_some() {
+            return Err(QueryError::new(QueryErrorCode::CorruptArchive));
+        }
+    } else {
+        let prices = prices.ok_or_else(|| QueryError::new(QueryErrorCode::CorruptArchive))?;
+        if prices.publication().dataset_identity() != capture.publication().dataset_identity()
+            || prices.targets().len() != capture.sessions().len()
+        {
+            return Err(QueryError::new(QueryErrorCode::CorruptArchive));
+        }
+    }
     let sessions = capture
         .sessions()
         .iter()
-        .map(|summary| map_summary(summary, dataset_identity))
+        .enumerate()
+        .map(|(index, summary)| {
+            let price = prices
+                .ok_or_else(|| QueryError::new(QueryErrorCode::CorruptArchive))?
+                .targets()
+                .get(index)
+                .ok_or_else(|| QueryError::new(QueryErrorCode::CorruptArchive))?;
+            map_summary(summary, dataset_identity, price, pricing, cost_mode)
+        })
         .collect::<Result<Vec<_>, _>>()?;
     let next_cursor = capture.next_cursor().map(|inner| UsageSessionCursor {
         dataset_identity,
@@ -297,6 +329,24 @@ pub(crate) fn map_page_capture(
     })
 }
 
+pub(crate) fn build_page_price_query(
+    capture: &StorePageCapture,
+    deadline: Duration,
+) -> Result<Option<StorePriceBatchQuery>, QueryError> {
+    if capture.sessions().is_empty() {
+        return Ok(None);
+    }
+    let sessions = capture
+        .sessions()
+        .iter()
+        .map(|summary| summary.key().clone())
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    StorePriceBatchQuery::new(capture.publication().dataset_identity(), sessions, deadline)
+        .map(Some)
+        .map_err(service::map_store_error)
+}
+
 pub(crate) fn build_detail_query(
     key: &UsageSessionKey,
     deadline: Duration,
@@ -309,18 +359,103 @@ pub(crate) fn build_detail_query(
     .map_err(service::map_store_error)
 }
 
+pub(crate) fn build_detail_price_query(
+    key: &UsageSessionKey,
+    deadline: Duration,
+) -> Result<StorePriceQuery, QueryError> {
+    StorePriceQuery::new(
+        service::to_store_identity(key.dataset_identity),
+        key.inner.clone(),
+        deadline,
+    )
+    .map_err(service::map_store_error)
+}
+
+pub(crate) fn build_detail_breakdown_price_queries(
+    capture: &StoreDetailCapture,
+    key: &UsageSessionKey,
+    deadline: Duration,
+) -> Result<Vec<Option<StoreBreakdownPriceQuery>>, QueryError> {
+    let Some(detail) = capture.detail() else {
+        return Ok(Vec::new());
+    };
+    detail
+        .breakdowns()
+        .iter()
+        .map(|breakdown| {
+            if breakdown.items().is_empty() {
+                return Ok(None);
+            }
+            let targets = breakdown
+                .items()
+                .iter()
+                .map(|item| item.identity().clone())
+                .collect::<Vec<_>>()
+                .into_boxed_slice();
+            StoreBreakdownPriceQuery::new(
+                capture.publication().dataset_identity(),
+                key.inner.clone(),
+                breakdown.kind(),
+                targets,
+                deadline,
+            )
+            .map(Some)
+            .map_err(service::map_store_error)
+        })
+        .collect()
+}
+
 pub(crate) fn map_detail_capture(
     capture: &StoreDetailCapture,
+    summary_price: Option<&tokenmaster_store::UsagePriceBasisCapture>,
+    breakdown_prices: &[Option<tokenmaster_store::UsagePriceBasisBatchCapture>],
+    pricing: &PricingEngine,
+    cost_mode: CostMode,
 ) -> Result<UsageSessionDetailResult, QueryError> {
     let dataset_identity = service::from_store_identity(capture.publication().dataset_identity())?;
+    if capture.detail().is_none() {
+        if summary_price.is_some() || !breakdown_prices.is_empty() {
+            return Err(QueryError::new(QueryErrorCode::CorruptArchive));
+        }
+        return Ok(UsageSessionDetailResult { detail: None });
+    }
+    let summary_price =
+        summary_price.ok_or_else(|| QueryError::new(QueryErrorCode::CorruptArchive))?;
+    if summary_price.publication().dataset_identity() != capture.publication().dataset_identity() {
+        return Err(QueryError::new(QueryErrorCode::CorruptArchive));
+    }
     let detail = capture
         .detail()
         .map(|detail| {
-            let summary = map_summary(detail.summary(), dataset_identity)?;
+            if breakdown_prices.len() != detail.breakdowns().len() {
+                return Err(QueryError::new(QueryErrorCode::CorruptArchive));
+            }
+            let summary_metrics = UsageMetrics::from_store(detail.summary().metrics())?;
+            let summary_cost = analytics::map_single_cost(
+                summary_price,
+                summary_metrics.event_count(),
+                pricing,
+                cost_mode,
+            )?;
+            let summary = map_summary_with_metrics(
+                detail.summary(),
+                dataset_identity,
+                summary_metrics,
+                summary_cost,
+            )?;
             let breakdowns = detail
                 .breakdowns()
                 .iter()
-                .map(analytics::map_breakdown)
+                .zip(breakdown_prices)
+                .map(|(breakdown, prices)| {
+                    if prices.as_ref().is_some_and(|prices| {
+                        prices.publication().dataset_identity()
+                            != capture.publication().dataset_identity()
+                    }) {
+                        return Err(QueryError::new(QueryErrorCode::CorruptArchive));
+                    }
+                    analytics::map_breakdown(breakdown, prices.as_ref(), pricing, cost_mode)
+                })
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(UsageSessionDetail {
                 summary,
@@ -334,6 +469,20 @@ pub(crate) fn map_detail_capture(
 fn map_summary(
     value: &StoreSummary,
     dataset_identity: DatasetIdentity,
+    price: &tokenmaster_store::UsagePriceBasisTargetCapture,
+    pricing: &PricingEngine,
+    cost_mode: CostMode,
+) -> Result<UsageSessionSummary, QueryError> {
+    let metrics = UsageMetrics::from_store(value.metrics())?;
+    let cost = analytics::map_cost(price, metrics.event_count(), pricing, cost_mode)?;
+    map_summary_with_metrics(value, dataset_identity, metrics, cost)
+}
+
+fn map_summary_with_metrics(
+    value: &StoreSummary,
+    dataset_identity: DatasetIdentity,
+    metrics: UsageMetrics,
+    cost: CostResult,
 ) -> Result<UsageSessionSummary, QueryError> {
     let scope = QueryScope::new(
         UsageProviderId::new(value.provider_id().to_owned())
@@ -351,6 +500,7 @@ fn map_summary(
         first_timestamp_nanos: value.first_timestamp_nanos(),
         last_timestamp_seconds: value.last_timestamp_seconds(),
         last_timestamp_nanos: value.last_timestamp_nanos(),
-        metrics: UsageMetrics::from_store(value.metrics())?,
+        metrics,
+        cost,
     })
 }

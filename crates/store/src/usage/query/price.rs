@@ -3,10 +3,11 @@ use std::{sync::OnceLock, time::Duration, time::Instant};
 use rusqlite::{Connection, TransactionBehavior, params_from_iter, types::Value};
 
 use super::{
-    MAX_QUERY_DURATION, MAX_USAGE_OVERVIEW_SEGMENTS, MAX_USAGE_QUERY_SCOPES, PROGRESS_OP_INTERVAL,
-    UsageAggregateRange, UsageQueryDatasetIdentity, UsageQueryPublication, UsageReadStore,
-    UsageSessionKey, load_query_publication, load_raw_publication, load_ready_aggregate_generation,
-    map_sql, valid_model,
+    MAX_QUERY_DURATION, MAX_USAGE_BREAKDOWN_ITEMS, MAX_USAGE_OVERVIEW_SEGMENTS,
+    MAX_USAGE_QUERY_SCOPES, MAX_USAGE_SESSION_PAGE_SIZE, PROGRESS_OP_INTERVAL, UsageAggregateRange,
+    UsageBreakdownIdentity, UsageBreakdownKind, UsageQueryDatasetIdentity, UsageQueryPublication,
+    UsageReadStore, UsageSessionKey, load_query_publication, load_raw_publication,
+    load_ready_aggregate_generation, map_sql, valid_model,
 };
 use crate::usage::types::ScanScope;
 use crate::{StoreError, StoreErrorCode};
@@ -345,6 +346,114 @@ pub struct UsagePriceBasisBatchQuery {
     deadline: Duration,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UsageBreakdownPriceBasisQuery {
+    expected_dataset: UsageQueryDatasetIdentity,
+    range: UsageAggregateRange,
+    scopes: Box<[ScanScope]>,
+    kind: UsageBreakdownKind,
+    targets: Box<[UsageBreakdownIdentity]>,
+    deadline: Duration,
+}
+
+impl UsageBreakdownPriceBasisQuery {
+    pub fn new(
+        expected_dataset: UsageQueryDatasetIdentity,
+        range: UsageAggregateRange,
+        scopes: Box<[ScanScope]>,
+        kind: UsageBreakdownKind,
+        targets: Box<[UsageBreakdownIdentity]>,
+        deadline: Duration,
+    ) -> Result<Self, StoreError> {
+        validate_dataset_and_deadline(Some(expected_dataset), deadline)?;
+        if expected_dataset == UsageQueryDatasetIdentity::Empty {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        let scopes = validate_scopes(scopes)?;
+        validate_breakdown_targets(kind, &targets)?;
+        Ok(Self {
+            expected_dataset,
+            range,
+            scopes,
+            kind,
+            targets,
+            deadline,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UsageSessionPriceBasisBatchQuery {
+    expected_dataset: UsageQueryDatasetIdentity,
+    sessions: Box<[UsageSessionKey]>,
+    deadline: Duration,
+}
+
+impl UsageSessionPriceBasisBatchQuery {
+    pub fn new(
+        expected_dataset: UsageQueryDatasetIdentity,
+        sessions: Box<[UsageSessionKey]>,
+        deadline: Duration,
+    ) -> Result<Self, StoreError> {
+        validate_dataset_and_deadline(Some(expected_dataset), deadline)?;
+        if expected_dataset == UsageQueryDatasetIdentity::Empty || sessions.is_empty() {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        if sessions.len() > MAX_USAGE_SESSION_PAGE_SIZE {
+            return Err(StoreError::with_limit(
+                StoreErrorCode::CapacityExceeded,
+                MAX_USAGE_SESSION_PAGE_SIZE as u64,
+            ));
+        }
+        if sessions
+            .iter()
+            .any(|session| session.dataset_identity_internal() != expected_dataset)
+            || has_duplicates(&sessions)
+        {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self {
+            expected_dataset,
+            sessions,
+            deadline,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UsageSessionBreakdownPriceBasisQuery {
+    expected_dataset: UsageQueryDatasetIdentity,
+    session: UsageSessionKey,
+    kind: UsageBreakdownKind,
+    targets: Box<[UsageBreakdownIdentity]>,
+    deadline: Duration,
+}
+
+impl UsageSessionBreakdownPriceBasisQuery {
+    pub fn new(
+        expected_dataset: UsageQueryDatasetIdentity,
+        session: UsageSessionKey,
+        kind: UsageBreakdownKind,
+        targets: Box<[UsageBreakdownIdentity]>,
+        deadline: Duration,
+    ) -> Result<Self, StoreError> {
+        validate_dataset_and_deadline(Some(expected_dataset), deadline)?;
+        if expected_dataset == UsageQueryDatasetIdentity::Empty
+            || session.dataset_identity_internal() != expected_dataset
+        {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        validate_breakdown_targets(kind, &targets)?;
+        Ok(Self {
+            expected_dataset,
+            session,
+            kind,
+            targets,
+            deadline,
+        })
+    }
+}
+
 impl UsagePriceBasisBatchQuery {
     pub fn new(
         expected_dataset: Option<UsageQueryDatasetIdentity>,
@@ -467,6 +576,53 @@ impl UsageReadStore {
         }
     }
 
+    pub fn capture_usage_breakdown_price_basis(
+        &mut self,
+        query: UsageBreakdownPriceBasisQuery,
+    ) -> Result<UsagePriceBasisBatchCapture, StoreError> {
+        let deadline = query.deadline;
+        self.run_price_query(deadline, move |connection| {
+            capture_breakdown_batch(connection, query)
+        })
+    }
+
+    pub fn capture_usage_session_price_basis_batch(
+        &mut self,
+        query: UsageSessionPriceBasisBatchQuery,
+    ) -> Result<UsagePriceBasisBatchCapture, StoreError> {
+        let deadline = query.deadline;
+        self.run_price_query(deadline, move |connection| {
+            capture_session_batch(connection, query)
+        })
+    }
+
+    pub fn capture_usage_session_breakdown_price_basis(
+        &mut self,
+        query: UsageSessionBreakdownPriceBasisQuery,
+    ) -> Result<UsagePriceBasisBatchCapture, StoreError> {
+        let deadline = query.deadline;
+        self.run_price_query(deadline, move |connection| {
+            capture_session_breakdown_batch(connection, query)
+        })
+    }
+
+    fn run_price_query<T, F>(&mut self, deadline: Duration, capture: F) -> Result<T, StoreError>
+    where
+        F: FnOnce(&mut Connection) -> Result<T, StoreError>,
+    {
+        let started = Instant::now();
+        map_sql(self.connection.progress_handler(
+            PROGRESS_OP_INTERVAL,
+            Some(move || started.elapsed() >= deadline),
+        ))?;
+        let result = capture(&mut self.connection);
+        let clear_result = map_sql(self.connection.progress_handler(0, None::<fn() -> bool>));
+        match (result, clear_result) {
+            (Ok(capture), Ok(())) => Ok(capture),
+            (Err(error), _) | (Ok(_), Err(error)) => Err(error),
+        }
+    }
+
     pub fn capture_usage_session_price_basis(
         &mut self,
         query: UsageSessionPriceBasisQuery,
@@ -535,6 +691,97 @@ where
             targets = load_batch_rows(&transaction, &sql, &parameters, query.ranges.len())?;
         }
     }
+    map_sql(transaction.commit())?;
+    let targets = targets
+        .into_iter()
+        .map(RawPriceRows::target_capture)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(UsagePriceBasisBatchCapture {
+        publication,
+        targets: targets.into_boxed_slice(),
+    })
+}
+
+fn capture_breakdown_batch(
+    connection: &mut Connection,
+    query: UsageBreakdownPriceBasisQuery,
+) -> Result<UsagePriceBasisBatchCapture, StoreError> {
+    let target_count = query.targets.len();
+    capture_generated_batch(
+        connection,
+        query.expected_dataset,
+        target_count,
+        move |generation, dataset_kind| {
+            breakdown_batch_sql_and_parameters(
+                generation,
+                dataset_kind,
+                &query.range,
+                &query.scopes,
+                query.kind,
+                &query.targets,
+            )
+        },
+    )
+}
+
+fn capture_session_batch(
+    connection: &mut Connection,
+    query: UsageSessionPriceBasisBatchQuery,
+) -> Result<UsagePriceBasisBatchCapture, StoreError> {
+    let target_count = query.sessions.len();
+    capture_generated_batch(
+        connection,
+        query.expected_dataset,
+        target_count,
+        move |generation, dataset_kind| {
+            session_batch_sql_and_parameters(generation, dataset_kind, &query.sessions)
+        },
+    )
+}
+
+fn capture_session_breakdown_batch(
+    connection: &mut Connection,
+    query: UsageSessionBreakdownPriceBasisQuery,
+) -> Result<UsagePriceBasisBatchCapture, StoreError> {
+    let target_count = query.targets.len();
+    capture_generated_batch(
+        connection,
+        query.expected_dataset,
+        target_count,
+        move |generation, dataset_kind| {
+            session_breakdown_batch_sql_and_parameters(
+                generation,
+                dataset_kind,
+                &query.session,
+                query.kind,
+                &query.targets,
+            )
+        },
+    )
+}
+
+fn capture_generated_batch<F>(
+    connection: &mut Connection,
+    expected_dataset: UsageQueryDatasetIdentity,
+    target_count: usize,
+    build_sql: F,
+) -> Result<UsagePriceBasisBatchCapture, StoreError>
+where
+    F: FnOnce(i64, &'static str) -> Result<(String, Vec<Value>), StoreError>,
+{
+    let transaction = map_sql(connection.transaction_with_behavior(TransactionBehavior::Deferred))?;
+    let raw_publication = load_raw_publication(&transaction)?;
+    let dataset_identity = raw_publication.dataset_identity()?;
+    if dataset_identity != expected_dataset {
+        return Err(StoreError::new(StoreErrorCode::StaleRevision));
+    }
+    let publication = load_query_publication(&transaction, &raw_publication, dataset_identity)?;
+    let active_generation =
+        load_ready_aggregate_generation(&transaction, raw_publication.dataset_generation)?;
+    let dataset_kind = dataset_kind(dataset_identity)
+        .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+    let (sql, parameters) = build_sql(active_generation, dataset_kind)?;
+    let targets = load_batch_rows(&transaction, &sql, &parameters, target_count)?;
     map_sql(transaction.commit())?;
     let targets = targets
         .into_iter()
@@ -646,6 +893,63 @@ fn validate_scopes(scopes: Box<[ScanScope]>) -> Result<Box<[ScanScope]>, StoreEr
         return Err(StoreError::new(StoreErrorCode::InvalidValue));
     }
     Ok(scopes.into_boxed_slice())
+}
+
+fn validate_breakdown_targets(
+    kind: UsageBreakdownKind,
+    targets: &[UsageBreakdownIdentity],
+) -> Result<(), StoreError> {
+    if targets.is_empty() {
+        return Err(StoreError::new(StoreErrorCode::InvalidValue));
+    }
+    if targets.len() > MAX_USAGE_BREAKDOWN_ITEMS {
+        return Err(StoreError::with_limit(
+            StoreErrorCode::CapacityExceeded,
+            MAX_USAGE_BREAKDOWN_ITEMS as u64,
+        ));
+    }
+    for target in targets {
+        let (key1, key2) = breakdown_identity_values(kind, target)?;
+        let validated = super::analytics::validate_identity(kind, key1, key2)?;
+        if &validated != target {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+    }
+    if has_duplicates(targets) {
+        return Err(StoreError::new(StoreErrorCode::InvalidValue));
+    }
+    Ok(())
+}
+
+fn breakdown_identity_values(
+    kind: UsageBreakdownKind,
+    target: &UsageBreakdownIdentity,
+) -> Result<(String, String), StoreError> {
+    match (kind, target) {
+        (UsageBreakdownKind::Model, UsageBreakdownIdentity::Model(value))
+        | (UsageBreakdownKind::Project, UsageBreakdownIdentity::Project(value))
+        | (UsageBreakdownKind::Provider, UsageBreakdownIdentity::Provider(value)) => {
+            Ok((value.to_string(), String::new()))
+        }
+        (UsageBreakdownKind::Project, UsageBreakdownIdentity::UnassociatedProject) => {
+            Ok((String::new(), String::new()))
+        }
+        (
+            UsageBreakdownKind::Profile,
+            UsageBreakdownIdentity::Profile {
+                provider_id,
+                profile_id,
+            },
+        ) => Ok((provider_id.to_string(), profile_id.to_string())),
+        _ => Err(StoreError::new(StoreErrorCode::InvalidValue)),
+    }
+}
+
+fn has_duplicates<T: PartialEq>(values: &[T]) -> bool {
+    values
+        .iter()
+        .enumerate()
+        .any(|(index, value)| values[index + 1..].contains(value))
 }
 
 const fn dataset_kind(identity: UsageQueryDatasetIdentity) -> Option<&'static str> {
@@ -1071,6 +1375,294 @@ fn range_batch_sql_and_parameters(
          FROM selected ORDER BY target_id ASC, key_rank ASC"
     );
     Ok((Some(sql), parameters))
+}
+
+fn breakdown_batch_sql_and_parameters(
+    active_generation: i64,
+    dataset_kind: &'static str,
+    range: &UsageAggregateRange,
+    scopes: &[ScanScope],
+    kind: UsageBreakdownKind,
+    targets: &[UsageBreakdownIdentity],
+) -> Result<(String, Vec<Value>), StoreError> {
+    let mut parameters = vec![
+        Value::Integer(active_generation),
+        Value::Text(dataset_kind.to_owned()),
+    ];
+    let segment_values = append_segment_values(&mut parameters, std::slice::from_ref(range))?;
+    if segment_values.is_empty() {
+        return Ok((empty_batch_sql(targets.len()), parameters));
+    }
+    let scope_predicate = append_scope_predicate(&mut parameters, scopes);
+    let target_values = append_breakdown_target_values(&mut parameters, kind, targets)?;
+    let target_predicate = breakdown_target_predicate(kind);
+    let grouped = format!(
+        "SELECT targets.target_id, price.model, price.service_tier,
+                price.long_context, price.reported_state,
+                sum(price.event_count) AS event_count,
+                sum(price.calculable_event_count) AS calculable_event_count,
+                sum(price.uncached_input_sum) AS uncached_input_sum,
+                sum(price.cached_input_sum) AS cached_input_sum,
+                sum(price.billable_output_sum) AS billable_output_sum,
+                sum(price.reported_cost_count) AS reported_cost_count,
+                sum(price.reported_cost_sum) AS reported_cost_sum
+         FROM targets
+         JOIN usage_price_time_rollup AS price ON {target_predicate}
+         JOIN segments
+           ON price.bucket_width = segments.bucket_width
+          AND price.bucket_start_seconds >= segments.start_seconds
+          AND price.bucket_start_seconds < segments.end_seconds
+         WHERE price.aggregate_generation = ?1 AND price.dataset_kind = ?2
+           {scope_predicate}
+         GROUP BY targets.target_id, price.model, price.service_tier,
+                  price.long_context, price.reported_state"
+    );
+    Ok((
+        ranked_batch_sql(
+            &format!(
+                "segments(_unused_target, bucket_width, start_seconds, end_seconds) AS (
+                   VALUES {segment_values}
+                 ), targets(target_id, key1, key2) AS (
+                   VALUES {target_values}
+                 )"
+            ),
+            &grouped,
+        ),
+        parameters,
+    ))
+}
+
+fn session_batch_sql_and_parameters(
+    active_generation: i64,
+    dataset_kind: &'static str,
+    sessions: &[UsageSessionKey],
+) -> Result<(String, Vec<Value>), StoreError> {
+    let mut parameters = vec![
+        Value::Integer(active_generation),
+        Value::Text(dataset_kind.to_owned()),
+    ];
+    let mut target_values = String::new();
+    for (target, session) in sessions.iter().enumerate() {
+        append_value_separator(&mut target_values);
+        let first = parameters.len() + 1;
+        target_values.push_str(&format!(
+            "(?{first}, ?{}, ?{}, ?{})",
+            first + 1,
+            first + 2,
+            first + 3
+        ));
+        parameters.push(Value::Integer(
+            i64::try_from(target).map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))?,
+        ));
+        parameters.push(Value::Text(session.provider_id_internal().to_owned()));
+        parameters.push(Value::Text(session.profile_id_internal().to_owned()));
+        parameters.push(Value::Text(session.session_id_internal().to_owned()));
+    }
+    let grouped = "SELECT targets.target_id, price.model, price.service_tier,
+                          price.long_context, price.reported_state,
+                          sum(price.event_count) AS event_count,
+                          sum(price.calculable_event_count) AS calculable_event_count,
+                          sum(price.uncached_input_sum) AS uncached_input_sum,
+                          sum(price.cached_input_sum) AS cached_input_sum,
+                          sum(price.billable_output_sum) AS billable_output_sum,
+                          sum(price.reported_cost_count) AS reported_cost_count,
+                          sum(price.reported_cost_sum) AS reported_cost_sum
+                   FROM targets
+                   JOIN usage_price_session_rollup AS price
+                     ON price.provider_id = targets.provider_id
+                    AND price.profile_id = targets.profile_id
+                    AND price.session_id = targets.session_id
+                   WHERE price.aggregate_generation = ?1 AND price.dataset_kind = ?2
+                   GROUP BY targets.target_id, price.model, price.service_tier,
+                            price.long_context, price.reported_state";
+    Ok((
+        ranked_batch_sql(
+            &format!(
+                "targets(target_id, provider_id, profile_id, session_id) AS (
+                   VALUES {target_values}
+                 )"
+            ),
+            grouped,
+        ),
+        parameters,
+    ))
+}
+
+fn session_breakdown_batch_sql_and_parameters(
+    active_generation: i64,
+    dataset_kind: &'static str,
+    session: &UsageSessionKey,
+    kind: UsageBreakdownKind,
+    targets: &[UsageBreakdownIdentity],
+) -> Result<(String, Vec<Value>), StoreError> {
+    let mut parameters = vec![
+        Value::Integer(active_generation),
+        Value::Text(dataset_kind.to_owned()),
+        Value::Text(session.provider_id_internal().to_owned()),
+        Value::Text(session.profile_id_internal().to_owned()),
+        Value::Text(session.session_id_internal().to_owned()),
+    ];
+    let target_values = append_breakdown_target_values(&mut parameters, kind, targets)?;
+    let target_predicate = breakdown_target_predicate(kind);
+    let grouped = format!(
+        "SELECT targets.target_id, price.model, price.service_tier,
+                price.long_context, price.reported_state,
+                sum(price.event_count) AS event_count,
+                sum(price.calculable_event_count) AS calculable_event_count,
+                sum(price.uncached_input_sum) AS uncached_input_sum,
+                sum(price.cached_input_sum) AS cached_input_sum,
+                sum(price.billable_output_sum) AS billable_output_sum,
+                sum(price.reported_cost_count) AS reported_cost_count,
+                sum(price.reported_cost_sum) AS reported_cost_sum
+         FROM targets
+         JOIN usage_price_session_rollup AS price ON {target_predicate}
+         WHERE price.aggregate_generation = ?1 AND price.dataset_kind = ?2
+           AND price.provider_id = ?3 AND price.profile_id = ?4 AND price.session_id = ?5
+         GROUP BY targets.target_id, price.model, price.service_tier,
+                  price.long_context, price.reported_state"
+    );
+    Ok((
+        ranked_batch_sql(
+            &format!(
+                "targets(target_id, key1, key2) AS (
+                   VALUES {target_values}
+                 )"
+            ),
+            &grouped,
+        ),
+        parameters,
+    ))
+}
+
+fn append_segment_values(
+    parameters: &mut Vec<Value>,
+    ranges: &[UsageAggregateRange],
+) -> Result<String, StoreError> {
+    let mut values = String::new();
+    for (target, range) in ranges.iter().enumerate() {
+        for segment in range.segments() {
+            append_value_separator(&mut values);
+            let first = parameters.len() + 1;
+            values.push_str(&format!(
+                "(?{first}, ?{}, ?{}, ?{})",
+                first + 1,
+                first + 2,
+                first + 3
+            ));
+            parameters
+                .push(Value::Integer(i64::try_from(target).map_err(|_| {
+                    StoreError::new(StoreErrorCode::CapacityExceeded)
+                })?));
+            parameters.push(Value::Text(segment.bucket_width.as_sql().to_owned()));
+            parameters.push(Value::Integer(segment.start_seconds));
+            parameters.push(Value::Integer(segment.end_seconds));
+        }
+    }
+    Ok(values)
+}
+
+fn append_scope_predicate(parameters: &mut Vec<Value>, scopes: &[ScanScope]) -> String {
+    if scopes.is_empty() {
+        return String::new();
+    }
+    let mut values = String::new();
+    for scope in scopes {
+        append_value_separator(&mut values);
+        let first = parameters.len() + 1;
+        values.push_str(&format!("(?{first}, ?{})", first + 1));
+        parameters.push(Value::Text(scope.provider_id().to_owned()));
+        parameters.push(Value::Text(scope.profile_id().to_owned()));
+    }
+    format!("AND (price.provider_id, price.profile_id) IN (VALUES {values})")
+}
+
+fn append_breakdown_target_values(
+    parameters: &mut Vec<Value>,
+    kind: UsageBreakdownKind,
+    targets: &[UsageBreakdownIdentity],
+) -> Result<String, StoreError> {
+    let mut values = String::new();
+    for (target_id, target) in targets.iter().enumerate() {
+        let (key1, key2) = breakdown_identity_values(kind, target)?;
+        append_value_separator(&mut values);
+        let first = parameters.len() + 1;
+        values.push_str(&format!("(?{first}, ?{}, ?{})", first + 1, first + 2));
+        parameters
+            .push(Value::Integer(i64::try_from(target_id).map_err(|_| {
+                StoreError::new(StoreErrorCode::CapacityExceeded)
+            })?));
+        parameters.push(Value::Text(key1));
+        parameters.push(Value::Text(key2));
+    }
+    Ok(values)
+}
+
+const fn breakdown_target_predicate(kind: UsageBreakdownKind) -> &'static str {
+    match kind {
+        UsageBreakdownKind::Model => "price.model = targets.key1",
+        UsageBreakdownKind::Project => "price.project_key = targets.key1",
+        UsageBreakdownKind::Provider => "price.provider_id = targets.key1",
+        UsageBreakdownKind::Profile => {
+            "price.provider_id = targets.key1 AND price.profile_id = targets.key2"
+        }
+    }
+}
+
+fn append_value_separator(values: &mut String) {
+    if !values.is_empty() {
+        values.push_str(", ");
+    }
+}
+
+fn ranked_batch_sql(ctes: &str, grouped: &str) -> String {
+    format!(
+        "WITH {ctes}, grouped AS (
+           {grouped}
+         ), ranked AS (
+           SELECT grouped.*,
+                  row_number() OVER (
+                    PARTITION BY target_id
+                    ORDER BY event_count DESC, calculable_event_count DESC,
+                             reported_cost_count DESC, uncached_input_sum DESC,
+                             cached_input_sum DESC, billable_output_sum DESC,
+                             reported_cost_sum DESC, model ASC, service_tier ASC,
+                             long_context ASC, reported_state ASC
+                  ) AS key_rank,
+                  sum(event_count) OVER (PARTITION BY target_id) AS total_event_count,
+                  sum(calculable_event_count) OVER (PARTITION BY target_id)
+                    AS total_calculable_event_count,
+                  sum(uncached_input_sum) OVER (PARTITION BY target_id)
+                    AS total_uncached_input_sum,
+                  sum(cached_input_sum) OVER (PARTITION BY target_id)
+                    AS total_cached_input_sum,
+                  sum(billable_output_sum) OVER (PARTITION BY target_id)
+                    AS total_billable_output_sum,
+                  sum(reported_cost_count) OVER (PARTITION BY target_id)
+                    AS total_reported_cost_count,
+                  sum(reported_cost_sum) OVER (PARTITION BY target_id)
+                    AS total_reported_cost_sum
+           FROM grouped
+         ), selected AS (
+           SELECT * FROM ranked ORDER BY key_rank ASC, target_id ASC
+           LIMIT {MAX_USAGE_PRICE_BASIS_KEYS}
+         )
+         SELECT target_id, model, service_tier, long_context, reported_state,
+                event_count, calculable_event_count, uncached_input_sum,
+                cached_input_sum, billable_output_sum, reported_cost_count,
+                reported_cost_sum, total_event_count, total_calculable_event_count,
+                total_uncached_input_sum, total_cached_input_sum,
+                total_billable_output_sum, total_reported_cost_count,
+                total_reported_cost_sum
+         FROM selected ORDER BY target_id ASC, key_rank ASC"
+    )
+}
+
+fn empty_batch_sql(target_count: usize) -> String {
+    debug_assert!(target_count > 0);
+    "SELECT 0, '', 'unknown', 'unavailable', 'missing',
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+     WHERE 0 AND ?1 IS NOT NULL AND ?2 IS NOT NULL"
+        .to_owned()
 }
 
 #[cfg(test)]

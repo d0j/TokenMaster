@@ -1,6 +1,7 @@
 use std::{fmt, path::Path, time::Duration};
 
 use tokenmaster_domain::{ModelKey, TokenCount, TokenUsage, UsageProfileId, UsageProviderId};
+use tokenmaster_pricing::{CostMode, PricingEngine};
 use tokenmaster_store::{
     ArchivePublicationQuality, StoreError, StoreErrorCode, UsageActivityQuery, UsageQueryCapture,
     UsageQueryDatasetIdentity, UsageQueryEvent, UsageQueryPublication, UsageReadStore,
@@ -49,16 +50,39 @@ impl LatestActivityRequest {
 pub struct QueryService<C> {
     store: UsageReadStore,
     clock: C,
+    pricing: PricingEngine,
+    cost_mode: CostMode,
     last_generation: Option<SnapshotGeneration>,
 }
 
 impl<C: QueryClock> QueryService<C> {
     pub fn open(path: impl AsRef<Path>, clock: C) -> Result<Self, QueryError> {
+        Self::open_with_pricing(path, clock, PricingEngine::embedded(), CostMode::Auto)
+    }
+
+    pub fn open_with_pricing(
+        path: impl AsRef<Path>,
+        clock: C,
+        pricing: PricingEngine,
+        cost_mode: CostMode,
+    ) -> Result<Self, QueryError> {
         Ok(Self {
             store: UsageReadStore::open(path).map_err(map_store_error)?,
             clock,
+            pricing,
+            cost_mode,
             last_generation: None,
         })
+    }
+
+    pub fn replace_pricing(&mut self, pricing: PricingEngine, cost_mode: CostMode) {
+        self.pricing = pricing;
+        self.cost_mode = cost_mode;
+    }
+
+    #[must_use]
+    pub const fn cost_mode(&self) -> CostMode {
+        self.cost_mode
     }
 
     pub fn latest_activity(
@@ -118,7 +142,42 @@ impl<C: QueryClock> QueryService<C> {
             .store
             .capture_usage_analytics(store_query)
             .map_err(map_store_error)?;
-        let payload = analytics::map_capture(plan, &capture)?;
+        let price_query = analytics::build_store_price_query(
+            &plan,
+            capture.publication().dataset_identity(),
+            request.scopes(),
+            Duration::from_millis(QUERY_DEADLINE_MS),
+        )?;
+        let price_capture = self
+            .store
+            .capture_usage_price_basis_batch(price_query)
+            .map_err(map_store_error)?;
+        let breakdown_price_queries = analytics::build_store_breakdown_price_queries(
+            &plan,
+            &capture,
+            request.scopes(),
+            Duration::from_millis(QUERY_DEADLINE_MS),
+        )?;
+        let breakdown_price_captures = breakdown_price_queries
+            .into_iter()
+            .map(|query| {
+                query
+                    .map(|query| {
+                        self.store
+                            .capture_usage_breakdown_price_basis(query)
+                            .map_err(map_store_error)
+                    })
+                    .transpose()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let payload = analytics::map_capture(
+            plan,
+            &capture,
+            &price_capture,
+            &breakdown_price_captures,
+            &self.pricing,
+            self.cost_mode,
+        )?;
         let header = map_header(
             capture.publication(),
             generation,
@@ -144,7 +203,22 @@ impl<C: QueryClock> QueryService<C> {
             .store
             .capture_usage_session_page(store_query)
             .map_err(map_store_error)?;
-        let payload = session::map_page_capture(&capture, &request)?;
+        let price_query =
+            session::build_page_price_query(&capture, Duration::from_millis(QUERY_DEADLINE_MS))?;
+        let price_capture = price_query
+            .map(|query| {
+                self.store
+                    .capture_usage_session_price_basis_batch(query)
+                    .map_err(map_store_error)
+            })
+            .transpose()?;
+        let payload = session::map_page_capture(
+            &capture,
+            price_capture.as_ref(),
+            &request,
+            &self.pricing,
+            self.cost_mode,
+        )?;
         let header = map_header(
             capture.publication(),
             generation,
@@ -171,7 +245,41 @@ impl<C: QueryClock> QueryService<C> {
             .store
             .capture_usage_session_detail(store_query)
             .map_err(map_store_error)?;
-        let payload = session::map_detail_capture(&capture)?;
+        let summary_price = if capture.detail().is_some() {
+            let query =
+                session::build_detail_price_query(&key, Duration::from_millis(QUERY_DEADLINE_MS))?;
+            Some(
+                self.store
+                    .capture_usage_session_price_basis(query)
+                    .map_err(map_store_error)?,
+            )
+        } else {
+            None
+        };
+        let breakdown_price_queries = session::build_detail_breakdown_price_queries(
+            &capture,
+            &key,
+            Duration::from_millis(QUERY_DEADLINE_MS),
+        )?;
+        let breakdown_price_captures = breakdown_price_queries
+            .into_iter()
+            .map(|query| {
+                query
+                    .map(|query| {
+                        self.store
+                            .capture_usage_session_breakdown_price_basis(query)
+                            .map_err(map_store_error)
+                    })
+                    .transpose()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let payload = session::map_detail_capture(
+            &capture,
+            summary_price.as_ref(),
+            &breakdown_price_captures,
+            &self.pricing,
+            self.cost_mode,
+        )?;
         let header = map_header(
             capture.publication(),
             generation,

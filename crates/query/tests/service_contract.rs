@@ -4,11 +4,11 @@ use rusqlite::{Connection, params};
 use tempfile::TempDir;
 use tokenmaster_domain::{TokenCount, UsageProfileId, UsageProviderId};
 use tokenmaster_query::{
-    AggregateTokenValue, CalendarDate, DatasetGeneration, DatasetIdentity, LatestActivityRequest,
-    PageSize, QUERY_FRESH_MAX_AGE_MS, QUERY_STALE_MIN_AGE_MS, QueryClock, QueryError,
-    QueryErrorCode, QueryFreshness, QueryQuality, QueryService, QueryTimeSample, QueryWarningCode,
-    UsageAnalyticsRequest, UsageBreakdownIdentity, UsageBreakdownKind, UsageRange,
-    UsageSeriesSelection, UsageSessionPageRequest, UsageTimeZone, WeekStart,
+    AggregateTokenValue, CalendarDate, CostAvailability, DatasetGeneration, DatasetIdentity,
+    LatestActivityRequest, PageSize, QUERY_FRESH_MAX_AGE_MS, QUERY_STALE_MIN_AGE_MS, QueryClock,
+    QueryError, QueryErrorCode, QueryFreshness, QueryQuality, QueryService, QueryTimeSample,
+    QueryWarningCode, UsageAnalyticsRequest, UsageBreakdownIdentity, UsageBreakdownKind,
+    UsageRange, UsageSeriesSelection, UsageSessionPageRequest, UsageTimeZone, WeekStart,
 };
 use tokenmaster_store::UsageStore;
 
@@ -407,6 +407,14 @@ fn analytics_mapping_is_calendar_exact_owned_and_never_fabricates_missing_tokens
     assert_eq!(snapshot.payload().range().end_seconds(), 86_400);
     assert_eq!(snapshot.payload().overview().event_count(), 3);
     assert_eq!(
+        snapshot.payload().overview_cost().availability(),
+        CostAvailability::Unavailable
+    );
+    assert_eq!(
+        snapshot.payload().overview_cost().counters().total_events,
+        3
+    );
+    assert_eq!(
         snapshot.payload().overview().input(),
         AggregateTokenValue::Partial {
             known_sum: 23,
@@ -428,12 +436,22 @@ fn analytics_mapping_is_calendar_exact_owned_and_never_fabricates_missing_tokens
     );
     assert_eq!(snapshot.payload().series().len(), 1);
     assert_eq!(snapshot.payload().series()[0].metrics().event_count(), 3);
+    assert_eq!(
+        snapshot.payload().series()[0].cost().availability(),
+        CostAvailability::Unavailable
+    );
     assert_eq!(snapshot.payload().breakdowns().len(), 4);
     assert_eq!(
         snapshot.payload().breakdowns()[0].kind(),
         UsageBreakdownKind::Model
     );
     assert_eq!(snapshot.payload().breakdowns()[0].items().len(), 1);
+    assert_eq!(
+        snapshot.payload().breakdowns()[0].items()[0]
+            .cost()
+            .availability(),
+        CostAvailability::Unavailable
+    );
     assert!(matches!(
         snapshot.payload().breakdowns()[1].items()[0].identity(),
         UsageBreakdownIdentity::UnassociatedProject
@@ -496,6 +514,103 @@ fn unavailable_aggregate_rebuild_does_not_consume_snapshot_generation() {
 }
 
 #[test]
+fn calculated_cost_is_exact_across_overview_breakdowns_and_sessions() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("priced.sqlite3");
+    seed_current_archive(&path, 2_000, "complete", 3);
+    let connection = Connection::open(&path).expect("priced fixture connection");
+    connection
+        .execute(
+            "UPDATE usage_event SET cached_tokens = 0, reasoning_tokens = 0",
+            [],
+        )
+        .expect("make token basis calculable");
+    drop(connection);
+
+    let mut service = service(&path, 2_001);
+    let analytics = service
+        .usage_analytics(
+            UsageAnalyticsRequest::new(
+                UsageRange::today(),
+                UsageTimeZone::iana("UTC").expect("UTC"),
+                WeekStart::Monday,
+                UsageSeriesSelection::Daily,
+                Vec::new(),
+                vec![
+                    UsageBreakdownKind::Model,
+                    UsageBreakdownKind::Project,
+                    UsageBreakdownKind::Provider,
+                    UsageBreakdownKind::Profile,
+                ],
+            )
+            .expect("analytics request"),
+        )
+        .expect("priced analytics");
+    assert_eq!(
+        analytics.payload().overview_cost().availability(),
+        CostAvailability::Complete
+    );
+    assert_eq!(
+        analytics
+            .payload()
+            .overview_cost()
+            .amount()
+            .map(|amount| amount.get()),
+        Some(255)
+    );
+    assert_eq!(
+        analytics.payload().series()[0]
+            .cost()
+            .amount()
+            .map(|amount| amount.get()),
+        Some(255)
+    );
+    for breakdown in analytics.payload().breakdowns().iter() {
+        assert_eq!(breakdown.items().len(), 1);
+        assert_eq!(
+            breakdown.items()[0].cost().availability(),
+            CostAvailability::Complete
+        );
+        assert_eq!(
+            breakdown.items()[0]
+                .cost()
+                .amount()
+                .map(|amount| amount.get()),
+            Some(255)
+        );
+    }
+
+    let page = service
+        .usage_sessions(
+            UsageSessionPageRequest::first(PageSize::new(1).expect("page"), Vec::new())
+                .expect("session request"),
+        )
+        .expect("priced sessions");
+    assert_eq!(
+        page.payload().sessions()[0]
+            .cost()
+            .amount()
+            .map(|amount| amount.get()),
+        Some(255)
+    );
+    let detail = service
+        .usage_session_detail(page.payload().sessions()[0].key().clone())
+        .expect("priced detail");
+    let detail = detail.payload().detail().expect("detail");
+    assert_eq!(
+        detail.summary().cost().amount().map(|amount| amount.get()),
+        Some(255)
+    );
+    assert!(detail.breakdowns().iter().all(|breakdown| {
+        breakdown.items().len() == 1
+            && breakdown.items()[0]
+                .cost()
+                .amount()
+                .is_some_and(|amount| amount.get() == 255)
+    }));
+}
+
+#[test]
 fn session_page_detail_cursor_and_stale_dataset_are_opaque_and_exact() {
     let directory = TempDir::new().expect("temporary directory");
     let path = directory.path().join("sessions.sqlite3");
@@ -526,6 +641,10 @@ fn session_page_detail_cursor_and_stale_dataset_are_opaque_and_exact() {
         1_002
     );
     assert_eq!(first.payload().sessions()[0].metrics().event_count(), 1);
+    assert_eq!(
+        first.payload().sessions()[0].cost().availability(),
+        CostAvailability::Unavailable
+    );
     assert_eq!(
         first.payload().sessions()[0].metrics().input(),
         AggregateTokenValue::Known(12)
@@ -568,8 +687,16 @@ fn session_page_detail_cursor_and_stale_dataset_are_opaque_and_exact() {
     let detail = service.usage_session_detail(key).expect("session detail");
     let detail = detail.payload().detail().expect("existing detail");
     assert_eq!(detail.summary().metrics().event_count(), 1);
+    assert_eq!(
+        detail.summary().cost().availability(),
+        CostAvailability::Unavailable
+    );
     assert_eq!(detail.breakdowns().len(), 2);
     assert_eq!(detail.breakdowns()[0].kind(), UsageBreakdownKind::Model);
+    assert_eq!(
+        detail.breakdowns()[0].items()[0].cost().availability(),
+        CostAvailability::Unavailable
+    );
     assert_eq!(detail.breakdowns()[1].kind(), UsageBreakdownKind::Project);
     assert!(matches!(
         detail.breakdowns()[1].items()[0].identity(),

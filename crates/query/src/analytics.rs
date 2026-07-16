@@ -1,11 +1,21 @@
 use std::{sync::Arc, time::Duration};
 
 use tokenmaster_domain::{ModelKey, ProjectAlias, UsageProfileId, UsageProviderId};
+use tokenmaster_pricing::{
+    ContextClass, CostMode, CostResult, PriceBasisRow, PriceError, PriceErrorCode, PricingEngine,
+    ServiceTier, TokenPriceBasis, UsdMicros, select_cost,
+};
 use tokenmaster_store::{
     ScanScope, UsageAggregateActivity as StoreActivity, UsageAggregateMetrics as StoreMetrics,
     UsageAnalyticsCapture as StoreCapture, UsageAnalyticsQuery as StoreQuery,
     UsageBreakdown as StoreBreakdown, UsageBreakdownIdentity as StoreBreakdownIdentity,
-    UsageBreakdownKind as StoreBreakdownKind, UsageTokenAggregate as StoreTokenAggregate,
+    UsageBreakdownKind as StoreBreakdownKind,
+    UsageBreakdownPriceBasisQuery as StoreBreakdownPriceQuery,
+    UsagePriceBasisBatchCapture as StorePriceBatchCapture,
+    UsagePriceBasisBatchQuery as StorePriceBatchQuery,
+    UsagePriceBasisTargetCapture as StorePriceTarget, UsagePriceLongContext as StorePriceContext,
+    UsagePriceTier as StorePriceTier, UsageQueryDatasetIdentity as StoreDatasetIdentity,
+    UsageReportedCostState as StoreReportedState, UsageTokenAggregate as StoreTokenAggregate,
 };
 
 use crate::{
@@ -432,6 +442,7 @@ pub struct UsageSeriesPoint {
     start_seconds: i64,
     end_seconds: i64,
     metrics: UsageMetrics,
+    cost: CostResult,
 }
 
 impl UsageSeriesPoint {
@@ -455,6 +466,11 @@ impl UsageSeriesPoint {
     pub const fn metrics(&self) -> &UsageMetrics {
         &self.metrics
     }
+
+    #[must_use]
+    pub const fn cost(&self) -> &CostResult {
+        &self.cost
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -470,6 +486,7 @@ pub enum UsageBreakdownIdentity {
 pub struct UsageBreakdownItem {
     identity: UsageBreakdownIdentity,
     metrics: UsageMetrics,
+    cost: CostResult,
 }
 
 impl UsageBreakdownItem {
@@ -480,6 +497,11 @@ impl UsageBreakdownItem {
     #[must_use]
     pub const fn metrics(&self) -> &UsageMetrics {
         &self.metrics
+    }
+
+    #[must_use]
+    pub const fn cost(&self) -> &CostResult {
+        &self.cost
     }
 }
 
@@ -509,6 +531,7 @@ impl UsageBreakdown {
 pub struct UsageAnalytics {
     range: ResolvedUsageRange,
     overview: UsageMetrics,
+    overview_cost: CostResult,
     series: Arc<[UsageSeriesPoint]>,
     breakdowns: Arc<[UsageBreakdown]>,
 }
@@ -521,6 +544,11 @@ impl UsageAnalytics {
     #[must_use]
     pub const fn overview(&self) -> &UsageMetrics {
         &self.overview
+    }
+
+    #[must_use]
+    pub const fn overview_cost(&self) -> &CostResult {
+        &self.overview_cost
     }
     #[must_use]
     pub const fn series(&self) -> &Arc<[UsageSeriesPoint]> {
@@ -602,32 +630,126 @@ pub(crate) fn build_store_query(
     ))
 }
 
+pub(crate) fn build_store_price_query(
+    plan: &UsageAnalyticsPlan,
+    expected_dataset: StoreDatasetIdentity,
+    scopes: &[QueryScope],
+    deadline: Duration,
+) -> Result<StorePriceBatchQuery, QueryError> {
+    let mut ranges = Vec::with_capacity(plan.series.len() + 1);
+    ranges.push(plan.overview.clone().into_store_range()?);
+    for bucket in &plan.series {
+        ranges.push(bucket.clone().into_store_range()?);
+    }
+    let scopes = scopes
+        .iter()
+        .map(|scope| ScanScope::new(scope.provider_id().as_str(), scope.profile_id().as_str()))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_error| QueryError::new(QueryErrorCode::InvalidValue))?;
+    StorePriceBatchQuery::new(
+        Some(expected_dataset),
+        ranges.into_boxed_slice(),
+        scopes.into_boxed_slice(),
+        deadline,
+    )
+    .map_err(crate::service::map_store_error)
+}
+
+pub(crate) fn build_store_breakdown_price_queries(
+    plan: &UsageAnalyticsPlan,
+    capture: &StoreCapture,
+    scopes: &[QueryScope],
+    deadline: Duration,
+) -> Result<Vec<Option<StoreBreakdownPriceQuery>>, QueryError> {
+    let expected_dataset = capture.publication().dataset_identity();
+    let range = plan.overview.clone().into_store_range()?;
+    let scopes = scopes
+        .iter()
+        .map(|scope| ScanScope::new(scope.provider_id().as_str(), scope.profile_id().as_str()))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_error| QueryError::new(QueryErrorCode::InvalidValue))?
+        .into_boxed_slice();
+    capture
+        .breakdowns()
+        .iter()
+        .map(|breakdown| {
+            if breakdown.items().is_empty() {
+                return Ok(None);
+            }
+            let targets = breakdown
+                .items()
+                .iter()
+                .map(|item| item.identity().clone())
+                .collect::<Vec<_>>()
+                .into_boxed_slice();
+            StoreBreakdownPriceQuery::new(
+                expected_dataset,
+                range.clone(),
+                scopes.clone(),
+                breakdown.kind(),
+                targets,
+                deadline,
+            )
+            .map(Some)
+            .map_err(crate::service::map_store_error)
+        })
+        .collect()
+}
+
 pub(crate) fn map_capture(
     plan: UsageAnalyticsPlan,
     capture: &StoreCapture,
+    price_capture: &StorePriceBatchCapture,
+    breakdown_price_captures: &[Option<StorePriceBatchCapture>],
+    pricing: &PricingEngine,
+    cost_mode: CostMode,
 ) -> Result<UsageAnalytics, QueryError> {
-    if plan.series.len() != capture.series().len() {
+    if plan.series.len() != capture.series().len()
+        || price_capture.publication().dataset_identity()
+            != capture.publication().dataset_identity()
+        || price_capture.targets().len() != plan.series.len() + 1
+        || breakdown_price_captures.len() != capture.breakdowns().len()
+        || breakdown_price_captures.iter().flatten().any(|prices| {
+            prices.publication().dataset_identity() != capture.publication().dataset_identity()
+        })
+    {
         return Err(QueryError::new(QueryErrorCode::CorruptArchive));
     }
+    let overview = UsageMetrics::from_store(capture.overview())?;
+    let overview_cost = map_cost(
+        &price_capture.targets()[0],
+        overview.event_count(),
+        pricing,
+        cost_mode,
+    )?;
     let mut series = Vec::with_capacity(plan.series.len());
-    for (bucket, captured) in plan.series.iter().zip(capture.series()) {
+    for ((bucket, captured), price) in plan
+        .series
+        .iter()
+        .zip(capture.series())
+        .zip(&price_capture.targets()[1..])
+    {
         if bucket.start_seconds() != captured.start_seconds()
             || bucket.end_seconds() != captured.end_seconds()
         {
             return Err(QueryError::new(QueryErrorCode::CorruptArchive));
         }
+        let metrics = UsageMetrics::from_store(captured.metrics())?;
+        let cost = map_cost(price, metrics.event_count(), pricing, cost_mode)?;
         series.push(UsageSeriesPoint {
             start_date: bucket.start_date(),
             end_date: bucket.end_date(),
             start_seconds: bucket.start_seconds(),
             end_seconds: bucket.end_seconds(),
-            metrics: UsageMetrics::from_store(captured.metrics())?,
+            metrics,
+            cost,
         });
     }
     let breakdowns = capture
         .breakdowns()
         .iter()
-        .map(map_breakdown)
+        .zip(breakdown_price_captures)
+        .map(|(breakdown, prices)| map_breakdown(breakdown, prices.as_ref(), pricing, cost_mode))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(UsageAnalytics {
         range: ResolvedUsageRange {
@@ -637,18 +759,136 @@ pub(crate) fn map_capture(
             start_seconds: plan.overview.start_seconds(),
             end_seconds: plan.overview.end_seconds(),
         },
-        overview: UsageMetrics::from_store(capture.overview())?,
+        overview,
+        overview_cost,
         series: Arc::from(series),
         breakdowns: Arc::from(breakdowns),
     })
 }
 
-pub(crate) fn map_breakdown(value: &StoreBreakdown) -> Result<UsageBreakdown, QueryError> {
+pub(crate) fn map_cost(
+    capture: &StorePriceTarget,
+    expected_event_count: u64,
+    pricing: &PricingEngine,
+    cost_mode: CostMode,
+) -> Result<CostResult, QueryError> {
+    map_cost_parts(
+        capture.rows(),
+        capture.included(),
+        capture.omitted(),
+        expected_event_count,
+        pricing,
+        cost_mode,
+    )
+}
+
+pub(crate) fn map_single_cost(
+    capture: &tokenmaster_store::UsagePriceBasisCapture,
+    expected_event_count: u64,
+    pricing: &PricingEngine,
+    cost_mode: CostMode,
+) -> Result<CostResult, QueryError> {
+    map_cost_parts(
+        capture.rows(),
+        capture.included(),
+        capture.omitted(),
+        expected_event_count,
+        pricing,
+        cost_mode,
+    )
+}
+
+fn map_cost_parts(
+    rows: &[tokenmaster_store::UsagePriceBasisRow],
+    included: tokenmaster_store::UsagePriceBasisMetrics,
+    omitted: tokenmaster_store::UsagePriceBasisMetrics,
+    expected_event_count: u64,
+    pricing: &PricingEngine,
+    cost_mode: CostMode,
+) -> Result<CostResult, QueryError> {
+    let observed_event_count = included
+        .event_count()
+        .checked_add(omitted.event_count())
+        .ok_or_else(|| QueryError::new(QueryErrorCode::CorruptArchive))?;
+    if observed_event_count != expected_event_count {
+        return Err(QueryError::new(QueryErrorCode::CorruptArchive));
+    }
+    let rows = rows.iter().map(map_price_row).collect::<Vec<_>>();
+    select_cost(pricing, cost_mode, &rows, omitted.event_count()).map_err(map_price_error)
+}
+
+fn map_price_row(row: &tokenmaster_store::UsagePriceBasisRow) -> PriceBasisRow<'_> {
+    let metrics = row.metrics();
+    let tier = match row.key().tier() {
+        StorePriceTier::StandardReported => ServiceTier::StandardReported,
+        StorePriceTier::StandardAssumed => ServiceTier::StandardAssumed,
+        StorePriceTier::Priority => ServiceTier::Priority,
+        StorePriceTier::Unknown => ServiceTier::Unknown,
+    };
+    let context = match row.key().long_context() {
+        StorePriceContext::Yes => ContextClass::Long,
+        StorePriceContext::No => ContextClass::Short,
+        StorePriceContext::Unavailable => ContextClass::Unavailable,
+    };
+    let reported_cost = match row.key().reported_cost_state() {
+        StoreReportedState::Present => Some(UsdMicros::new(metrics.reported_cost_usd_micros())),
+        StoreReportedState::Missing => None,
+    };
+    PriceBasisRow {
+        model: row.key().model(),
+        tier,
+        context,
+        event_count: metrics.event_count(),
+        calculable_event_count: metrics.calculable_event_count(),
+        basis: TokenPriceBasis::new(
+            metrics.uncached_input_tokens(),
+            metrics.cached_input_tokens(),
+            metrics.billable_output_tokens(),
+        ),
+        reported_event_count: metrics.reported_cost_count(),
+        reported_cost,
+    }
+}
+
+fn map_price_error(error: PriceError) -> QueryError {
+    let code = match error.code() {
+        PriceErrorCode::ArithmeticOverflow => QueryErrorCode::Overflow,
+        PriceErrorCode::InvalidPriceRow | PriceErrorCode::TooManyPriceRows => {
+            QueryErrorCode::CorruptArchive
+        }
+        PriceErrorCode::ModelUnpriced
+        | PriceErrorCode::TierUnknown
+        | PriceErrorCode::ContextUnavailable
+        | PriceErrorCode::TierContextUnsupported
+        | PriceErrorCode::TokenBasisUnavailable
+        | PriceErrorCode::InconsistentTokenBasis
+        | PriceErrorCode::InvalidRate => QueryErrorCode::Internal,
+    };
+    QueryError::new(code)
+}
+
+pub(crate) fn map_breakdown(
+    value: &StoreBreakdown,
+    prices: Option<&StorePriceBatchCapture>,
+    pricing: &PricingEngine,
+    cost_mode: CostMode,
+) -> Result<UsageBreakdown, QueryError> {
     let kind = UsageBreakdownKind::from_store(value.kind());
+    if value.items().is_empty() {
+        if prices.is_some() {
+            return Err(QueryError::new(QueryErrorCode::CorruptArchive));
+        }
+    } else {
+        let prices = prices.ok_or_else(|| QueryError::new(QueryErrorCode::CorruptArchive))?;
+        if prices.targets().len() != value.items().len() {
+            return Err(QueryError::new(QueryErrorCode::CorruptArchive));
+        }
+    }
     let items = value
         .items()
         .iter()
-        .map(|item| {
+        .enumerate()
+        .map(|(index, item)| {
             let identity = match item.identity() {
                 StoreBreakdownIdentity::Model(value) => UsageBreakdownIdentity::Model(
                     ModelKey::new(value.to_string())
@@ -675,9 +915,19 @@ pub(crate) fn map_breakdown(value: &StoreBreakdown) -> Result<UsageBreakdown, Qu
                         .map_err(|_error| QueryError::new(QueryErrorCode::CorruptArchive))?,
                 )),
             };
+            let metrics = UsageMetrics::from_store(item.metrics())?;
+            let cost = map_cost(
+                &prices
+                    .ok_or_else(|| QueryError::new(QueryErrorCode::CorruptArchive))?
+                    .targets()[index],
+                metrics.event_count(),
+                pricing,
+                cost_mode,
+            )?;
             Ok(UsageBreakdownItem {
                 identity,
-                metrics: UsageMetrics::from_store(item.metrics())?,
+                metrics,
+                cost,
             })
         })
         .collect::<Result<Vec<_>, QueryError>>()?;

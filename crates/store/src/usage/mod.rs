@@ -25,14 +25,16 @@ pub use query::{
     UsageActivityQuery, UsageAggregateActivity, UsageAggregateBucketWidth, UsageAggregateMetrics,
     UsageAggregateRange, UsageAggregateSegment, UsageAnalyticsCapture, UsageAnalyticsQuery,
     UsageBreakdown, UsageBreakdownIdentity, UsageBreakdownItem, UsageBreakdownKind,
-    UsageOverviewCapture, UsageOverviewQuery, UsagePriceBasisBatchCapture,
-    UsagePriceBasisBatchQuery, UsagePriceBasisCapture, UsagePriceBasisKey, UsagePriceBasisMetrics,
-    UsagePriceBasisQuery, UsagePriceBasisRow, UsagePriceBasisTargetCapture, UsagePriceLongContext,
-    UsagePriceTier, UsageQueryCapture, UsageQueryDatasetIdentity, UsageQueryEvent,
-    UsageQueryPublication, UsageReadRuntimePolicy, UsageReadStore, UsageReportedCostState,
-    UsageSeriesPoint, UsageSeriesPointCapture, UsageSessionCursor, UsageSessionDetail,
+    UsageBreakdownPriceBasisQuery, UsageOverviewCapture, UsageOverviewQuery,
+    UsagePriceBasisBatchCapture, UsagePriceBasisBatchQuery, UsagePriceBasisCapture,
+    UsagePriceBasisKey, UsagePriceBasisMetrics, UsagePriceBasisQuery, UsagePriceBasisRow,
+    UsagePriceBasisTargetCapture, UsagePriceLongContext, UsagePriceTier, UsageQueryCapture,
+    UsageQueryDatasetIdentity, UsageQueryEvent, UsageQueryPublication, UsageReadRuntimePolicy,
+    UsageReadStore, UsageReportedCostState, UsageSeriesPoint, UsageSeriesPointCapture,
+    UsageSessionBreakdownPriceBasisQuery, UsageSessionCursor, UsageSessionDetail,
     UsageSessionDetailCapture, UsageSessionDetailQuery, UsageSessionKey, UsageSessionPageCapture,
-    UsageSessionPageQuery, UsageSessionPriceBasisQuery, UsageSessionSummary, UsageTokenAggregate,
+    UsageSessionPageQuery, UsageSessionPriceBasisBatchQuery, UsageSessionPriceBasisQuery,
+    UsageSessionSummary, UsageTokenAggregate,
 };
 pub use schema::USAGE_SCHEMA_VERSION;
 pub use types::{

@@ -4,9 +4,11 @@ use rusqlite::{Connection, params};
 use tempfile::TempDir;
 use tokenmaster_store::{
     MAX_USAGE_PRICE_BASIS_KEYS, MAX_USAGE_PRICE_BASIS_TARGETS, ScanScope, StoreErrorCode,
-    UsageAggregateBucketWidth, UsageAggregateRange, UsageAggregateSegment,
-    UsagePriceBasisBatchQuery, UsagePriceBasisQuery, UsageQueryDatasetIdentity, UsageReadStore,
-    UsageReportedCostState, UsageSessionPageQuery, UsageSessionPriceBasisQuery, UsageStore,
+    UsageAggregateBucketWidth, UsageAggregateRange, UsageAggregateSegment, UsageAnalyticsQuery,
+    UsageBreakdownKind, UsageBreakdownPriceBasisQuery, UsagePriceBasisBatchQuery,
+    UsagePriceBasisQuery, UsageQueryDatasetIdentity, UsageReadStore, UsageReportedCostState,
+    UsageSessionBreakdownPriceBasisQuery, UsageSessionDetailQuery, UsageSessionPageQuery,
+    UsageSessionPriceBasisBatchQuery, UsageSessionPriceBasisQuery, UsageStore,
 };
 
 fn seed_current_price_archive() -> (TempDir, std::path::PathBuf) {
@@ -124,6 +126,53 @@ fn session_price_basis_reuses_exact_session_and_dataset_identity() {
         .expect("session page");
     let session = page.sessions()[0].key().clone();
     let dataset = page.publication().dataset_identity();
+    let batch = store
+        .capture_usage_session_price_basis_batch(
+            UsageSessionPriceBasisBatchQuery::new(
+                dataset,
+                vec![session.clone()].into_boxed_slice(),
+                Duration::from_secs(2),
+            )
+            .expect("session batch price query"),
+        )
+        .expect("session batch price basis");
+    assert_eq!(batch.publication().dataset_identity(), dataset);
+    assert_eq!(batch.targets().len(), 1);
+    assert_eq!(batch.targets()[0].rows().len(), MAX_USAGE_PRICE_BASIS_KEYS);
+    assert_eq!(batch.targets()[0].omitted().event_count(), 8);
+
+    let detail = store
+        .capture_usage_session_detail(
+            UsageSessionDetailQuery::new(dataset, session.clone(), Duration::from_secs(2))
+                .expect("session detail query"),
+        )
+        .expect("session detail");
+    let model_breakdown = &detail.detail().expect("detail row").breakdowns()[0];
+    let targets = model_breakdown
+        .items()
+        .iter()
+        .map(|item| item.identity().clone())
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let breakdown = store
+        .capture_usage_session_breakdown_price_basis(
+            UsageSessionBreakdownPriceBasisQuery::new(
+                dataset,
+                session.clone(),
+                model_breakdown.kind(),
+                targets,
+                Duration::from_secs(2),
+            )
+            .expect("session breakdown price query"),
+        )
+        .expect("session breakdown price basis");
+    assert_eq!(breakdown.targets().len(), 256);
+    assert!(breakdown.targets().iter().all(|target| {
+        target.rows().len() == 1
+            && target.included().event_count() == 1
+            && target.omitted().event_count() == 0
+    }));
+
     let capture = store
         .capture_usage_session_price_basis(
             UsageSessionPriceBasisQuery::new(dataset, session, Duration::from_secs(2))
@@ -294,4 +343,52 @@ fn range_batch_uses_one_global_key_budget_with_exact_per_target_omissions() {
             dataset_generation: 780,
         }
     );
+}
+
+#[test]
+fn range_breakdown_price_batch_matches_only_the_bounded_visible_targets() {
+    let (_directory, path) = seed_current_price_archive();
+    let mut store = UsageReadStore::open(&path).expect("breakdown price store");
+    let analytics = store
+        .capture_usage_analytics(
+            UsageAnalyticsQuery::new(
+                None,
+                minute_range(),
+                Box::default(),
+                vec![UsageBreakdownKind::Model].into_boxed_slice(),
+                Box::default(),
+                Duration::from_secs(2),
+            )
+            .expect("analytics query"),
+        )
+        .expect("analytics capture");
+    let visible = &analytics.breakdowns()[0];
+    assert!(visible.truncated());
+    assert_eq!(visible.items().len(), 256);
+    let targets = visible
+        .items()
+        .iter()
+        .map(|item| item.identity().clone())
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let prices = store
+        .capture_usage_breakdown_price_basis(
+            UsageBreakdownPriceBasisQuery::new(
+                analytics.publication().dataset_identity(),
+                minute_range(),
+                Box::default(),
+                visible.kind(),
+                targets,
+                Duration::from_secs(2),
+            )
+            .expect("breakdown price query"),
+        )
+        .expect("breakdown price capture");
+
+    assert_eq!(prices.targets().len(), visible.items().len());
+    assert!(prices.targets().iter().all(|target| {
+        target.rows().len() == 1
+            && target.included().event_count() == 1
+            && target.omitted().event_count() == 0
+    }));
 }

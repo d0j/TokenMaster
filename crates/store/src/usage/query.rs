@@ -23,10 +23,12 @@ pub use analytics::{
     UsageBreakdownItem, UsageBreakdownKind, UsageSeriesPoint, UsageSeriesPointCapture,
 };
 pub use price::{
-    MAX_USAGE_PRICE_BASIS_KEYS, MAX_USAGE_PRICE_BASIS_TARGETS, UsagePriceBasisBatchCapture,
-    UsagePriceBasisBatchQuery, UsagePriceBasisCapture, UsagePriceBasisKey, UsagePriceBasisMetrics,
-    UsagePriceBasisQuery, UsagePriceBasisRow, UsagePriceBasisTargetCapture, UsagePriceLongContext,
-    UsagePriceTier, UsageReportedCostState, UsageSessionPriceBasisQuery,
+    MAX_USAGE_PRICE_BASIS_KEYS, MAX_USAGE_PRICE_BASIS_TARGETS, UsageBreakdownPriceBasisQuery,
+    UsagePriceBasisBatchCapture, UsagePriceBasisBatchQuery, UsagePriceBasisCapture,
+    UsagePriceBasisKey, UsagePriceBasisMetrics, UsagePriceBasisQuery, UsagePriceBasisRow,
+    UsagePriceBasisTargetCapture, UsagePriceLongContext, UsagePriceTier, UsageReportedCostState,
+    UsageSessionBreakdownPriceBasisQuery, UsageSessionPriceBasisBatchQuery,
+    UsageSessionPriceBasisQuery,
 };
 pub use session::{
     MAX_USAGE_SESSION_DETAIL_ITEMS, MAX_USAGE_SESSION_PAGE_SIZE, UsageSessionCursor,

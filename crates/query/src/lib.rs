@@ -40,3 +40,7 @@ pub use session::{
     UsageSessionCursor, UsageSessionDetail, UsageSessionDetailResult, UsageSessionKey,
     UsageSessionPage, UsageSessionPageRequest, UsageSessionSummary,
 };
+pub use tokenmaster_pricing::{
+    CostAvailability, CostComposition, CostCounters, CostMode, CostResult, MissingCost,
+    MissingReasonCode, OverrideRevision, OverrideSnapshot, PricingEngine,
+};
