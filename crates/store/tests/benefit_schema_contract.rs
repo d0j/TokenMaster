@@ -2,12 +2,22 @@ use std::path::Path;
 
 use rusqlite::Connection;
 use tempfile::TempDir;
-use tokenmaster_store::{StoreErrorCode, USAGE_SCHEMA_VERSION, UsageStore};
+use tokenmaster_domain::{
+    BenefitConfidence, BenefitDetailKind, BenefitEvidenceSource, BenefitExpiry,
+    BenefitInventoryCompleteness, BenefitInventoryObservation, BenefitInventoryObservationParts,
+    BenefitKind, BenefitLabelKey, BenefitLotId, BenefitLotObservation, BenefitLotObservationParts,
+    BenefitObservationId, BenefitScope, BenefitState, BenefitTarget, QuotaAccountId,
+    UsageProviderId,
+};
+use tokenmaster_store::{
+    MAX_BENEFIT_REMINDER_DUE_PAGE_SIZE, StoreErrorCode, USAGE_SCHEMA_VERSION, UsageStore,
+};
 
-const BENEFIT_TABLES: [&str; 9] = [
+const BENEFIT_TABLES: [&str; 10] = [
     "benefit_change",
     "benefit_lot_current",
     "benefit_lot_revision",
+    "benefit_reminder_ack",
     "benefit_reminder_delivery",
     "benefit_reminder_due",
     "benefit_reminder_profile",
@@ -25,7 +35,8 @@ const BENEFIT_INDEXES: [&str; 6] = [
     "benefit_profile_scope",
 ];
 
-const BENEFIT_TRIGGERS: [&str; 4] = [
+const BENEFIT_TRIGGERS: [&str; 5] = [
+    "benefit_ack_no_update",
     "benefit_change_no_update",
     "benefit_delivery_no_update",
     "benefit_lot_revision_no_update",
@@ -40,10 +51,51 @@ fn raw_connection(path: &Path) -> Connection {
     connection
 }
 
+fn seed_one_delivery(store: &mut UsageStore) {
+    let observed_at_ms = 1_800_000_000_000_i64;
+    let scope = BenefitScope::new(
+        UsageProviderId::new("codex").expect("provider"),
+        QuotaAccountId::new("migration_private").expect("account"),
+        None,
+    );
+    let lot = BenefitLotObservation::new(BenefitLotObservationParts {
+        lot_id: BenefitLotId::from_bytes([7; 32]),
+        kind: BenefitKind::BankedRateLimitReset,
+        quantity: 1,
+        state: BenefitState::Available,
+        target: BenefitTarget::Provider,
+        granted_at_ms: Some(observed_at_ms - 1),
+        expiry: BenefitExpiry::exact_utc(observed_at_ms + 30 * 60 * 1_000).expect("expiry"),
+        source: BenefitEvidenceSource::ProviderOfficial,
+        confidence: BenefitConfidence::High,
+        detail_kind: BenefitDetailKind::ProviderDetail,
+        label_key: BenefitLabelKey::new("benefit.codex.banked_reset").expect("label"),
+    })
+    .expect("lot");
+    let observation = BenefitInventoryObservation::new(BenefitInventoryObservationParts {
+        scope,
+        observation_id: BenefitObservationId::from_bytes([8; 32]),
+        observed_at_ms: observed_at_ms - 1,
+        fresh_until_ms: observed_at_ms,
+        stale_after_ms: observed_at_ms + 1,
+        completeness: BenefitInventoryCompleteness::Complete,
+        lots: vec![lot],
+    })
+    .expect("observation");
+    store
+        .apply_benefit_observation(&observation)
+        .expect("benefit observation");
+    let processed = store
+        .process_due_in_app_benefit_reminders(observed_at_ms, MAX_BENEFIT_REMINDER_DUE_PAGE_SIZE)
+        .expect("durable delivery");
+    assert_eq!(processed.delivery_count(), 1);
+}
+
 fn strip_benefit_schema_to_exact_v10(connection: &Connection) {
     connection
         .execute_batch(
-            "DROP TRIGGER IF EXISTS benefit_change_no_update;
+            "DROP TRIGGER IF EXISTS benefit_ack_no_update;
+             DROP TRIGGER IF EXISTS benefit_change_no_update;
              DROP TRIGGER IF EXISTS benefit_delivery_no_update;
              DROP TRIGGER IF EXISTS benefit_lot_revision_no_update;
              DROP TRIGGER IF EXISTS benefit_state_no_delete;
@@ -53,6 +105,7 @@ fn strip_benefit_schema_to_exact_v10(connection: &Connection) {
              DROP INDEX IF EXISTS benefit_lot_current_expiry;
              DROP INDEX IF EXISTS benefit_lot_revision_retention;
              DROP INDEX IF EXISTS benefit_profile_scope;
+             DROP TABLE IF EXISTS benefit_reminder_ack;
              DROP TABLE IF EXISTS benefit_reminder_delivery;
              DROP TABLE IF EXISTS benefit_reminder_due;
              DROP TABLE IF EXISTS benefit_reminder_threshold;
@@ -76,12 +129,12 @@ fn fresh_schema_has_strict_bounded_benefit_objects_and_recommended_profile() {
     drop(UsageStore::open(&path).expect("create current schema"));
     let connection = raw_connection(&path);
 
-    assert_eq!(USAGE_SCHEMA_VERSION, 11);
+    assert_eq!(USAGE_SCHEMA_VERSION, 12);
     assert_eq!(
         connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
             .expect("user version"),
-        11
+        12
     );
     assert_eq!(
         connection
@@ -282,7 +335,54 @@ fn exact_v10_migration_adds_empty_benefits_without_touching_existing_facts() {
         connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
             .expect("current version"),
-        11
+        12
+    );
+}
+
+#[test]
+fn exact_v11_migration_marks_legacy_delivery_receipts_acknowledged() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("benefit-v11-ack-migration.sqlite3");
+    {
+        let mut store = UsageStore::open(&path).expect("create current archive");
+        seed_one_delivery(&mut store);
+    }
+    {
+        let connection = raw_connection(&path);
+        connection
+            .execute_batch(
+                "DROP TRIGGER benefit_ack_no_update;
+                 DROP TABLE benefit_reminder_ack;",
+            )
+            .expect("strip v12 acknowledgement");
+        connection
+            .pragma_update(None, "user_version", 11_i64)
+            .expect("set exact v11");
+    }
+
+    let mut migrated = UsageStore::open(&path).expect("migrate exact v11");
+    let replay = migrated
+        .process_due_in_app_benefit_reminders(1_800_000_000_001, MAX_BENEFIT_REMINDER_DUE_PAGE_SIZE)
+        .expect("legacy delivery remains acknowledged");
+    assert_eq!(replay.delivery_count(), 0);
+    let connection = raw_connection(&path);
+    assert_eq!(
+        connection
+            .query_row("SELECT count(*) FROM benefit_reminder_ack", [], |row| row
+                .get::<_, i64>(
+                0
+            ),)
+            .expect("ack count"),
+        1
+    );
+    assert!(
+        connection
+            .execute(
+                "UPDATE benefit_reminder_ack
+                 SET acknowledged_at_ms = acknowledged_at_ms",
+                [],
+            )
+            .is_err()
     );
 }
 

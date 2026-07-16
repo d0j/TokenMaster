@@ -5360,6 +5360,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokenmaster-codex",
+ "tokenmaster-domain",
  "tokenmaster-engine",
  "tokenmaster-platform",
  "tokenmaster-provider",

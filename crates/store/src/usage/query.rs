@@ -7,7 +7,7 @@ use rusqlite::{
 
 use super::{
     JournalMode, MAX_SCAN_SCOPES, MAX_USAGE_EVENT_PAGE_SIZE,
-    migration::validate_v11,
+    migration::validate_v12,
     schema::USAGE_SCHEMA_VERSION,
     types::{AccountingVersions, ArchivePublicationQuality, EventCursor, ScanScope},
 };
@@ -752,7 +752,7 @@ impl UsageReadStore {
         if version != USAGE_SCHEMA_VERSION {
             return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
         }
-        validate_v11(&connection)?;
+        validate_v12(&connection)?;
         let store = Self { connection };
         store.runtime_policy()?;
         Ok(store)

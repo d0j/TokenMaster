@@ -121,6 +121,7 @@ impl BenefitProfileApplyResult {
 
 #[derive(Clone, Eq, PartialEq)]
 pub struct BenefitReminderDelivery {
+    delivery_id: [u8; 32],
     kind: BenefitKind,
     quantity: u64,
     label_key: Box<str>,
@@ -134,6 +135,7 @@ pub struct BenefitReminderDelivery {
 impl BenefitReminderDelivery {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
+        delivery_id: [u8; 32],
         kind: BenefitKind,
         quantity: u64,
         label_key: Box<str>,
@@ -144,6 +146,7 @@ impl BenefitReminderDelivery {
         delivered_at_ms: i64,
     ) -> Self {
         Self {
+            delivery_id,
             kind,
             quantity,
             label_key,
@@ -194,6 +197,10 @@ impl BenefitReminderDelivery {
     pub const fn delivered_at_ms(&self) -> i64 {
         self.delivered_at_ms
     }
+
+    pub(super) const fn delivery_id(&self) -> &[u8; 32] {
+        &self.delivery_id
+    }
 }
 
 impl core::fmt::Debug for BenefitReminderDelivery {
@@ -209,6 +216,31 @@ impl core::fmt::Debug for BenefitReminderDelivery {
             .field("expiry_at_ms", &self.expiry_at_ms)
             .field("delivered_at_ms", &self.delivered_at_ms)
             .finish()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BenefitReminderAcknowledgeResult {
+    acknowledged_count: u16,
+    already_acknowledged_count: u16,
+}
+
+impl BenefitReminderAcknowledgeResult {
+    pub(super) const fn new(acknowledged_count: u16, already_acknowledged_count: u16) -> Self {
+        Self {
+            acknowledged_count,
+            already_acknowledged_count,
+        }
+    }
+
+    #[must_use]
+    pub const fn acknowledged_count(self) -> u16 {
+        self.acknowledged_count
+    }
+
+    #[must_use]
+    pub const fn already_acknowledged_count(self) -> u16 {
+        self.already_acknowledged_count
     }
 }
 

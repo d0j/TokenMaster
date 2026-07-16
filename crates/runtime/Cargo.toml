@@ -16,6 +16,7 @@ tokenmaster-store = { path = "../store" }
 
 [dev-dependencies]
 tempfile.workspace = true
+tokenmaster-domain = { path = "../domain" }
 
 [target.'cfg(windows)'.dev-dependencies]
 windows.workspace = true
@@ -23,4 +24,9 @@ windows.workspace = true
 [[test]]
 name = "quota_runtime_resource_contract"
 path = "tests/quota_runtime_resource_contract.rs"
+harness = false
+
+[[test]]
+name = "reminder_runtime_resource_contract"
+path = "tests/reminder_runtime_resource_contract.rs"
 harness = false

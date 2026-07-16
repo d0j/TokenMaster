@@ -216,6 +216,18 @@ fn delivery_retention_prunes_only_noncurrent_revision_receipts() {
                 ],
             )
             .expect("old delivery");
+        if receipt != 1 {
+            connection
+                .execute(
+                    "INSERT INTO benefit_reminder_ack(delivery_id, acknowledged_at_ms)
+                     VALUES (?1, ?2)",
+                    params![
+                        opaque_id(receipt).as_slice(),
+                        i64::try_from(receipt).expect("acknowledgement time"),
+                    ],
+                )
+                .expect("old acknowledgement");
+        }
     }
     for receipt in 301_u64..=305 {
         connection
@@ -232,6 +244,16 @@ fn delivery_retention_prunes_only_noncurrent_revision_receipts() {
                 ],
             )
             .expect("current delivery");
+        connection
+            .execute(
+                "INSERT INTO benefit_reminder_ack(delivery_id, acknowledged_at_ms)
+                 VALUES (?1, ?2)",
+                params![
+                    opaque_id(receipt).as_slice(),
+                    i64::try_from(receipt).expect("acknowledgement time"),
+                ],
+            )
+            .expect("current acknowledgement");
     }
     connection
         .execute(
@@ -257,5 +279,16 @@ fn delivery_retention_prunes_only_noncurrent_revision_receipts() {
             "SELECT count(*) FROM benefit_reminder_delivery WHERE lot_revision = 2"
         ),
         5
+    );
+    assert_eq!(
+        scalar(
+            &path,
+            "SELECT count(*)
+             FROM benefit_reminder_delivery AS delivery
+             LEFT JOIN benefit_reminder_ack AS acknowledgement
+               ON acknowledgement.delivery_id = delivery.delivery_id
+             WHERE acknowledgement.delivery_id IS NULL"
+        ),
+        1
     );
 }

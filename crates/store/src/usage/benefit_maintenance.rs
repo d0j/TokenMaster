@@ -249,6 +249,10 @@ fn removable_delivery_candidates(
         "SELECT delivery.delivery_id
          FROM benefit_reminder_delivery AS delivery
          WHERE delivery.scope_id = ?1
+           AND EXISTS (
+             SELECT 1 FROM benefit_reminder_ack AS acknowledgement
+             WHERE acknowledgement.delivery_id = delivery.delivery_id
+           )
            AND NOT EXISTS (
              SELECT 1 FROM benefit_lot_current AS current
              WHERE current.scope_id = delivery.scope_id
@@ -386,6 +390,11 @@ mod tests {
                     opaque_id(1).as_slice(),
                     i64::try_from(delivery)?,
                 ],
+            )?;
+            store.connection.execute(
+                "INSERT INTO benefit_reminder_ack(delivery_id, acknowledged_at_ms)
+                 VALUES (?1, ?2)",
+                params![opaque_id(delivery).as_slice(), i64::try_from(delivery)?,],
             )?;
         }
         store.connection.execute(

@@ -1,12 +1,12 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
 use tokenmaster_domain::{BenefitKind, BenefitLabelKey, NotificationChannel, ReminderLeadTime};
 
 use super::UsageStore;
 use super::benefit_types::{
-    BenefitReminderDelivery, BenefitReminderProcessResult, MAX_BENEFIT_DELIVERIES_PER_SCOPE,
-    MAX_BENEFIT_REMINDER_DUE_PAGE_SIZE,
+    BenefitReminderAcknowledgeResult, BenefitReminderDelivery, BenefitReminderProcessResult,
+    MAX_BENEFIT_DELIVERIES_PER_SCOPE, MAX_BENEFIT_REMINDER_DUE_PAGE_SIZE,
 };
 use super::benefit_write::{channel_text, fixed_32, input_u64, invalid_stored, parse_kind};
 use crate::{StoreError, StoreErrorCode};
@@ -27,6 +27,14 @@ struct StoredDue {
 }
 
 impl UsageStore {
+    pub fn process_due_in_app_benefit_reminders(
+        &mut self,
+        delivered_at_ms: i64,
+        max_rows: usize,
+    ) -> Result<BenefitReminderProcessResult, StoreError> {
+        self.process_due_benefit_reminders(delivered_at_ms, NotificationChannel::InApp, max_rows)
+    }
+
     pub fn process_due_benefit_reminders(
         &mut self,
         delivered_at_ms: i64,
@@ -46,6 +54,22 @@ impl UsageStore {
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let pending_deliveries = load_unacknowledged_deliveries(&transaction, channel, max_rows)?;
+        if !pending_deliveries.is_empty() {
+            let (pending_due_count, retained_delivery_count) = load_global_counts(&transaction)?;
+            let nearest_due_at_ms = nearest_due_at_ms(&transaction, channel)?;
+            let result = BenefitReminderProcessResult::new(
+                0,
+                0,
+                0,
+                pending_deliveries.into_boxed_slice(),
+                pending_due_count,
+                retained_delivery_count,
+                nearest_due_at_ms,
+            );
+            transaction.commit()?;
+            return Ok(result);
+        }
         let selected = load_due_page(&transaction, delivered_at_ms, channel, max_rows)?;
         let examined_count = output_u16(selected.len())?;
         let expired_count = output_u16(
@@ -99,6 +123,7 @@ impl UsageStore {
             insert_receipt(&transaction, &candidate, delivered_at_ms)?;
             scope_delivery_counts.insert(candidate.scope_id, next_count);
             deliveries.push(BenefitReminderDelivery::new(
+                candidate.delivery_id,
                 candidate.kind,
                 candidate.quantity,
                 candidate.label_key,
@@ -122,11 +147,7 @@ impl UsageStore {
 
         let (pending_due_count, retained_delivery_count) =
             update_global_counts(&transaction, selected.len(), deliveries.len())?;
-        let nearest_due_at_ms = transaction.query_row(
-            "SELECT min(due_at_ms) FROM benefit_reminder_due WHERE channel = ?1",
-            [channel_text(channel)],
-            |row| row.get::<_, Option<i64>>(0),
-        )?;
+        let nearest_due_at_ms = nearest_due_at_ms(&transaction, channel)?;
         let suppressed_count = examined_count
             .checked_sub(expired_count)
             .and_then(|count| count.checked_sub(output_u16(deliveries.len()).ok()?))
@@ -143,6 +164,156 @@ impl UsageStore {
         transaction.commit()?;
         Ok(result)
     }
+
+    pub fn acknowledge_benefit_reminders(
+        &mut self,
+        deliveries: &[BenefitReminderDelivery],
+        acknowledged_at_ms: i64,
+    ) -> Result<BenefitReminderAcknowledgeResult, StoreError> {
+        if acknowledged_at_ms <= 0 {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        if deliveries.len() > MAX_BENEFIT_REMINDER_DUE_PAGE_SIZE {
+            return Err(StoreError::with_limit(
+                StoreErrorCode::CapacityExceeded,
+                MAX_BENEFIT_REMINDER_DUE_PAGE_SIZE as u64,
+            ));
+        }
+        let mut unique = BTreeSet::new();
+        for delivery in deliveries {
+            if delivery.channel() != NotificationChannel::InApp
+                || acknowledged_at_ms < delivery.delivered_at_ms()
+                || !unique.insert(*delivery.delivery_id())
+            {
+                return Err(StoreError::new(StoreErrorCode::InvalidValue));
+            }
+        }
+        if deliveries.is_empty() {
+            return Ok(BenefitReminderAcknowledgeResult::new(0, 0));
+        }
+
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let mut acknowledged = 0_usize;
+        let mut already_acknowledged = 0_usize;
+        for delivery in deliveries {
+            let stored = transaction
+                .query_row(
+                    "SELECT threshold_seconds, channel, due_at_ms, expiry_at_ms,
+                            delivered_at_ms,
+                            EXISTS(
+                              SELECT 1 FROM benefit_reminder_ack AS acknowledgement
+                              WHERE acknowledgement.delivery_id = delivery.delivery_id
+                            )
+                     FROM benefit_reminder_delivery AS delivery
+                     WHERE delivery.delivery_id = ?1",
+                    [delivery.delivery_id().as_slice()],
+                    |row| {
+                        Ok((
+                            row.get::<_, i64>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, i64>(2)?,
+                            row.get::<_, i64>(3)?,
+                            row.get::<_, i64>(4)?,
+                            row.get::<_, bool>(5)?,
+                        ))
+                    },
+                )
+                .optional()?
+                .ok_or_else(invalid_stored)?;
+            if stored.0 != i64::from(delivery.lead_time().seconds())
+                || parse_channel(&stored.1)? != delivery.channel()
+                || stored.2 != delivery.due_at_ms()
+                || stored.3 != delivery.expiry_at_ms()
+                || stored.4 != delivery.delivered_at_ms()
+            {
+                return Err(invalid_stored());
+            }
+            if stored.5 {
+                already_acknowledged = already_acknowledged
+                    .checked_add(1)
+                    .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?;
+                continue;
+            }
+            let changed = transaction.execute(
+                "INSERT INTO benefit_reminder_ack(delivery_id, acknowledged_at_ms)
+                 VALUES (?1, ?2)",
+                params![delivery.delivery_id().as_slice(), acknowledged_at_ms],
+            )?;
+            if changed != 1 {
+                return Err(invalid_stored());
+            }
+            acknowledged = acknowledged
+                .checked_add(1)
+                .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?;
+        }
+        let result = BenefitReminderAcknowledgeResult::new(
+            output_u16(acknowledged)?,
+            output_u16(already_acknowledged)?,
+        );
+        transaction.commit()?;
+        Ok(result)
+    }
+}
+
+fn load_unacknowledged_deliveries(
+    transaction: &Transaction<'_>,
+    channel: NotificationChannel,
+    max_rows: usize,
+) -> Result<Vec<BenefitReminderDelivery>, StoreError> {
+    let limit =
+        i64::try_from(max_rows).map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))?;
+    let mut statement = transaction.prepare(
+        "SELECT delivery.delivery_id, revision.kind, revision.quantity,
+                revision.label_key, delivery.threshold_seconds, delivery.channel,
+                delivery.due_at_ms, delivery.expiry_at_ms, delivery.delivered_at_ms
+         FROM benefit_reminder_delivery AS delivery
+         JOIN benefit_lot_revision AS revision
+           ON revision.scope_id = delivery.scope_id
+          AND revision.lot_id = delivery.lot_id
+          AND revision.lot_revision = delivery.lot_revision
+         LEFT JOIN benefit_reminder_ack AS acknowledgement
+           ON acknowledgement.delivery_id = delivery.delivery_id
+         WHERE delivery.channel = ?1
+           AND acknowledgement.delivery_id IS NULL
+         ORDER BY delivery.expiry_at_ms, delivery.delivered_at_ms, delivery.delivery_id
+         LIMIT ?2",
+    )?;
+    let rows = statement.query_map(params![channel_text(channel), limit], |row| {
+        let lead_time = ReminderLeadTime::new(
+            u32::try_from(row.get::<_, i64>(4)?).map_err(|_| rusqlite::Error::InvalidQuery)?,
+        )
+        .map_err(|_| rusqlite::Error::InvalidQuery)?;
+        let stored_channel =
+            parse_channel(&row.get::<_, String>(5)?).map_err(|_| rusqlite::Error::InvalidQuery)?;
+        let due_at_ms = row.get::<_, i64>(6)?;
+        let expiry_at_ms = row.get::<_, i64>(7)?;
+        let delivered_at_ms = row.get::<_, i64>(8)?;
+        if due_at_ms >= expiry_at_ms || expiry_at_ms <= 0 || delivered_at_ms <= 0 {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        let quantity =
+            input_u64(row.get::<_, i64>(2)?).map_err(|_| rusqlite::Error::InvalidQuery)?;
+        if quantity == 0 {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        let label = BenefitLabelKey::new(row.get::<_, String>(3)?)
+            .map_err(|_| rusqlite::Error::InvalidQuery)?;
+        Ok(BenefitReminderDelivery::new(
+            fixed_32(row.get::<_, Vec<u8>>(0)?).map_err(|_| rusqlite::Error::InvalidQuery)?,
+            parse_kind(&row.get::<_, String>(1)?).map_err(|_| rusqlite::Error::InvalidQuery)?,
+            quantity,
+            Box::from(label.as_str()),
+            lead_time,
+            stored_channel,
+            due_at_ms,
+            expiry_at_ms,
+            delivered_at_ms,
+        ))
+    })?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|_| invalid_stored())
 }
 
 fn load_due_page(
@@ -319,6 +490,30 @@ fn update_global_counts(
         return Err(invalid_stored());
     }
     Ok((pending, retained))
+}
+
+fn load_global_counts(transaction: &Transaction<'_>) -> Result<(u64, u64), StoreError> {
+    let stored = transaction
+        .query_row(
+            "SELECT pending_due_count, retained_delivery_count
+             FROM benefit_state WHERE singleton_id = 1",
+            [],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)),
+        )
+        .optional()?
+        .ok_or_else(invalid_stored)?;
+    Ok((input_u64(stored.0)?, input_u64(stored.1)?))
+}
+
+fn nearest_due_at_ms(
+    transaction: &Transaction<'_>,
+    channel: NotificationChannel,
+) -> Result<Option<i64>, StoreError> {
+    Ok(transaction.query_row(
+        "SELECT min(due_at_ms) FROM benefit_reminder_due WHERE channel = ?1",
+        [channel_text(channel)],
+        |row| row.get::<_, Option<i64>>(0),
+    )?)
 }
 
 fn parse_channel(value: &str) -> Result<NotificationChannel, StoreError> {

@@ -498,25 +498,15 @@ mod tests {
         }
         let deadline = std::time::Instant::now() + Duration::from_secs(2);
         while std::time::Instant::now() < deadline {
-            if runtime
-                .snapshot()
-                .test_value("snapshot")
-                .worker()
-                .pending_count()
-                == 1
-            {
+            let snapshot = runtime.snapshot().test_value("snapshot");
+            if snapshot.worker().pending_count() == 1 && !snapshot.schedule().refresh_pending() {
                 break;
             }
             std::thread::yield_now();
         }
-        assert_eq!(
-            runtime
-                .snapshot()
-                .test_value("snapshot")
-                .worker()
-                .pending_count(),
-            1
-        );
+        let drained = runtime.snapshot().test_value("drained snapshot");
+        assert_eq!(drained.worker().pending_count(), 1);
+        assert!(!drained.schedule().refresh_pending());
 
         release_sender
             .send(())

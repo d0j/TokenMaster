@@ -14,6 +14,7 @@ mod live;
 mod publication;
 mod quota;
 mod recovery;
+mod reminder;
 mod scheduler;
 mod store_archive;
 mod watcher;
@@ -38,6 +39,12 @@ pub use quota::{
     MAX_CODEX_EXECUTABLE_SEARCH_PATH_BYTES,
 };
 pub use recovery::{StagingRecoveryOutcome, StartupRecoveryReport};
+pub use reminder::{
+    BenefitReminderDelivery, BenefitReminderFailure, BenefitReminderRefreshSnapshot,
+    BenefitReminderRetryMode, BenefitReminderRuntime, BenefitReminderRuntimeConfig,
+    BenefitReminderRuntimePhase, BenefitReminderRuntimeSnapshot, BenefitReminderSchedulePhase,
+    BenefitReminderScheduleSnapshot,
+};
 pub use scheduler::{
     DEGRADED_POLL_MILLIS, HEALTHY_POLL_MILLIS, QUIET_WINDOW_MILLIS, RefreshScheduler,
     SchedulerError, SchedulerErrorCode, SchedulerSnapshot,

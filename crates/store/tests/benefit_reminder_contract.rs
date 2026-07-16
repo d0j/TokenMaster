@@ -60,7 +60,7 @@ fn recommended(revision: u64) -> ReminderProfile {
 }
 
 #[test]
-fn overdue_thresholds_collapse_to_one_durable_in_app_delivery() {
+fn unacknowledged_delivery_replays_after_restart_and_acknowledgement_stops_replay() {
     let directory = TempDir::new().expect("temporary directory");
     let path = directory.path().join("benefit-reminder.sqlite3");
     let expiry_at_ms = NOW_MS + 30 * 60 * 1_000;
@@ -99,25 +99,47 @@ fn overdue_thresholds_collapse_to_one_durable_in_app_delivery() {
         assert_eq!(delivery.channel(), NotificationChannel::InApp);
         assert_eq!(delivery.expiry_at_ms(), expiry_at_ms);
         assert_eq!(delivery.delivered_at_ms(), NOW_MS);
+        assert!(!format!("{delivery:?}").contains("delivery_id"));
     }
 
     let mut reopened = UsageStore::open(&path).expect("reopen");
-    let duplicate = reopened
+    let replayed = reopened
         .process_due_benefit_reminders(
             NOW_MS + 1,
             NotificationChannel::InApp,
             MAX_BENEFIT_REMINDER_DUE_PAGE_SIZE,
         )
         .expect("restart pass");
-    assert_eq!(duplicate.examined_count(), 0);
-    assert_eq!(duplicate.delivery_count(), 0);
+    assert_eq!(replayed.examined_count(), 0);
+    assert_eq!(replayed.delivery_count(), 1);
+    assert_eq!(replayed.deliveries()[0].delivered_at_ms(), NOW_MS);
 
     reopened
         .set_benefit_reminder_override(&scope("acct_private"), Some(&recommended(2)))
         .expect("rebuild profile");
-    let rebuilt = reopened
+    let after_rebuild = reopened
         .process_due_benefit_reminders(
             NOW_MS + 2,
+            NotificationChannel::InApp,
+            MAX_BENEFIT_REMINDER_DUE_PAGE_SIZE,
+        )
+        .expect("pending outbox after rebuild");
+    assert_eq!(after_rebuild.examined_count(), 0);
+    assert_eq!(after_rebuild.delivery_count(), 1);
+    assert_eq!(replayed.deliveries(), after_rebuild.deliveries());
+    let acknowledged = reopened
+        .acknowledge_benefit_reminders(after_rebuild.deliveries(), NOW_MS + 3)
+        .expect("acknowledge displayed reminder");
+    assert_eq!(acknowledged.acknowledged_count(), 1);
+    assert_eq!(acknowledged.already_acknowledged_count(), 0);
+    let repeated_ack = reopened
+        .acknowledge_benefit_reminders(after_rebuild.deliveries(), NOW_MS + 4)
+        .expect("idempotent acknowledgement");
+    assert_eq!(repeated_ack.acknowledged_count(), 0);
+    assert_eq!(repeated_ack.already_acknowledged_count(), 1);
+    let rebuilt = reopened
+        .process_due_benefit_reminders(
+            NOW_MS + 5,
             NotificationChannel::InApp,
             MAX_BENEFIT_REMINDER_DUE_PAGE_SIZE,
         )
@@ -160,6 +182,9 @@ fn collapsed_receipt_preserves_future_more_urgent_threshold() {
         Some(expiry_at_ms - 60 * 60 * 1_000)
     );
     assert_eq!(first.pending_due_count(), 1);
+    store
+        .acknowledge_benefit_reminders(first.deliveries(), NOW_MS + 1)
+        .expect("acknowledge first reminder");
 
     store
         .set_benefit_reminder_override(&scope("acct_private"), Some(&recommended(2)))
@@ -261,4 +286,46 @@ fn custom_profile_can_leave_reminders_disabled_after_receipt() {
         .set_benefit_reminder_override(&scope("acct_private"), Some(&disabled))
         .expect("disable reminders");
     assert_eq!(applied.pending_due_count(), 0);
+}
+
+#[test]
+fn due_page_is_exactly_bounded_and_split_lot_rows_cannot_replay() {
+    let mut store = UsageStore::in_memory().expect("store");
+    let expiry_at_ms = NOW_MS + 30 * 60 * 1_000;
+    let lots = (1_u8..=64)
+        .map(|id| lot(id, expiry_at_ms))
+        .collect::<Vec<_>>();
+    store
+        .apply_benefit_observation(&observation("acct_private", 1, NOW_MS - 1, lots))
+        .expect("observation");
+
+    let first = store
+        .process_due_benefit_reminders(
+            NOW_MS,
+            NotificationChannel::InApp,
+            MAX_BENEFIT_REMINDER_DUE_PAGE_SIZE,
+        )
+        .expect("first bounded page");
+    assert_eq!(
+        first.examined_count(),
+        u16::try_from(MAX_BENEFIT_REMINDER_DUE_PAGE_SIZE).expect("page size")
+    );
+    assert_eq!(first.delivery_count(), 52);
+    assert_eq!(first.pending_due_count(), 64);
+    store
+        .acknowledge_benefit_reminders(first.deliveries(), NOW_MS + 1)
+        .expect("acknowledge first page");
+
+    let second = store
+        .process_due_benefit_reminders(
+            NOW_MS + 2,
+            NotificationChannel::InApp,
+            MAX_BENEFIT_REMINDER_DUE_PAGE_SIZE,
+        )
+        .expect("remaining page");
+    assert_eq!(second.examined_count(), 64);
+    assert_eq!(second.delivery_count(), 12);
+    assert_eq!(second.suppressed_count(), 52);
+    assert_eq!(second.pending_due_count(), 0);
+    assert_eq!(second.retained_delivery_count(), 64);
 }

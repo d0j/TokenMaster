@@ -29,10 +29,11 @@ mod write;
 
 pub use benefit_types::{
     BenefitApplyResult, BenefitApplyStatus, BenefitInventoryRevision, BenefitMaintenanceResult,
-    BenefitProfileApplyResult, BenefitReminderDelivery, BenefitReminderProcessResult,
-    DEFAULT_BENEFIT_CHANGES_PER_SCOPE, DEFAULT_BENEFIT_DELIVERIES_PER_SCOPE,
-    MAX_BENEFIT_CHANGES_PER_SCOPE, MAX_BENEFIT_DELIVERIES_PER_SCOPE,
-    MAX_BENEFIT_MAINTENANCE_PAGE_SIZE, MAX_BENEFIT_REMINDER_DUE_PAGE_SIZE,
+    BenefitProfileApplyResult, BenefitReminderAcknowledgeResult, BenefitReminderDelivery,
+    BenefitReminderProcessResult, DEFAULT_BENEFIT_CHANGES_PER_SCOPE,
+    DEFAULT_BENEFIT_DELIVERIES_PER_SCOPE, MAX_BENEFIT_CHANGES_PER_SCOPE,
+    MAX_BENEFIT_DELIVERIES_PER_SCOPE, MAX_BENEFIT_MAINTENANCE_PAGE_SIZE,
+    MAX_BENEFIT_REMINDER_DUE_PAGE_SIZE,
 };
 pub use query::{
     BenefitChangeCursor, BenefitChangePageCapture, BenefitChangePageQuery, BenefitChangeRecord,

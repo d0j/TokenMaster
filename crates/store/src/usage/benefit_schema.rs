@@ -283,6 +283,26 @@ BEGIN
 END;
 "#;
 
+pub(super) const V12_BENEFIT_ACK_SCHEMA: &str = r#"
+CREATE TABLE benefit_reminder_ack (
+  delivery_id BLOB PRIMARY KEY NOT NULL CHECK(length(delivery_id) = 32),
+  acknowledged_at_ms INTEGER NOT NULL CHECK(acknowledged_at_ms > 0),
+  FOREIGN KEY(delivery_id)
+    REFERENCES benefit_reminder_delivery(delivery_id)
+    ON DELETE CASCADE
+) STRICT;
+
+INSERT INTO benefit_reminder_ack(delivery_id, acknowledged_at_ms)
+SELECT delivery_id, delivered_at_ms
+FROM benefit_reminder_delivery;
+
+CREATE TRIGGER benefit_ack_no_update
+BEFORE UPDATE ON benefit_reminder_ack
+BEGIN
+  SELECT RAISE(ABORT, 'immutable benefit acknowledgement');
+END;
+"#;
+
 pub(super) const V11_BENEFIT_TABLE_CONTRACTS: &[TableContract] = &[
     TableContract {
         name: "benefit_state",
@@ -459,3 +479,13 @@ pub(super) const V11_BENEFIT_TRIGGER_CONTRACTS: &[TriggerContract<'static>] = &[
         sql: "CREATE TRIGGER benefit_state_no_delete BEFORE DELETE ON benefit_state BEGIN SELECT RAISE(ABORT, 'benefit state is required'); END",
     },
 ];
+
+pub(super) const V12_BENEFIT_ACK_TABLE_CONTRACT: TableContract = TableContract {
+    name: "benefit_reminder_ack",
+    columns: &["delivery_id", "acknowledged_at_ms"],
+};
+
+pub(super) const V12_BENEFIT_ACK_TRIGGER_CONTRACT: TriggerContract<'static> = TriggerContract {
+    name: "benefit_ack_no_update",
+    sql: "CREATE TRIGGER benefit_ack_no_update BEFORE UPDATE ON benefit_reminder_ack BEGIN SELECT RAISE(ABORT, 'immutable benefit acknowledgement'); END",
+};
