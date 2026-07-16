@@ -249,6 +249,12 @@ mutation invalidates only staging and requires restart. Publication is one activ
 generation update after exact processed/total and dataset-generation checks. Aggregate
 reads require `ready`; no other state may fall back to a whole-history query.
 
+An exact overview bucket is described to the store by at most three ordered adjacent
+UTC segments over minute/hour rollups. Starts and ends are aligned to the selected
+width and ranges are half-open. This is sufficient for the private calendar layer to
+compose a boundary-minute prefix, full-hour middle, and boundary-minute suffix while
+keeping timezone rules and Jiff types outside the archive contract.
+
 ## TM-DATA-006 — Bounds
 
 Reader lines are limited to 16 MiB. Resume metadata is capped at 32 KiB. General

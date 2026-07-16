@@ -2,6 +2,7 @@ use std::{fmt, path::Path, time::Duration, time::Instant};
 
 use rusqlite::{
     Connection, ErrorCode, OpenFlags, Params, Row, TransactionBehavior, config::DbConfig, params,
+    params_from_iter, types::Value,
 };
 
 use super::{
@@ -16,6 +17,37 @@ const READ_CACHE_SIZE_KIB: u64 = 4 * 1024;
 const READ_BUSY_TIMEOUT_MS: u64 = 250;
 const MAX_QUERY_DURATION: Duration = Duration::from_secs(2);
 const PROGRESS_OP_INTERVAL: i32 = 1_000;
+pub const MAX_USAGE_QUERY_SCOPES: usize = 32;
+pub const MAX_USAGE_OVERVIEW_SEGMENTS: usize = 3;
+
+const OVERVIEW_SQL: &str = "SELECT coalesce(sum(event_count), 0),
+            coalesce(sum(input_known_count), 0), coalesce(sum(input_known_sum), 0),
+            coalesce(sum(cached_known_count), 0), coalesce(sum(cached_known_sum), 0),
+            coalesce(sum(output_known_count), 0), coalesce(sum(output_known_sum), 0),
+            coalesce(sum(reasoning_known_count), 0), coalesce(sum(reasoning_known_sum), 0),
+            coalesce(sum(total_known_count), 0), coalesce(sum(total_known_sum), 0),
+            coalesce(sum(fallback_model_count), 0),
+            coalesce(sum(long_context_yes_count), 0),
+            coalesce(sum(long_context_no_count), 0),
+            coalesce(sum(long_context_unavailable_count), 0),
+            coalesce(sum(activity_read), 0), coalesce(sum(activity_edit_write), 0),
+            coalesce(sum(activity_search), 0), coalesce(sum(activity_git), 0),
+            coalesce(sum(activity_build_test), 0), coalesce(sum(activity_web), 0),
+            coalesce(sum(activity_subagents), 0), coalesce(sum(activity_terminal), 0)
+     FROM usage_time_rollup
+     WHERE aggregate_generation = ?1 AND dataset_kind = ?2 AND bucket_width = ?3
+       AND bucket_start_seconds >= ?4 AND bucket_start_seconds < ?5
+       AND dimension_kind = 'all' AND dimension_value = ''
+       AND (?6 = 0 OR (provider_id, profile_id) IN (VALUES
+         (?7, ?8), (?9, ?10), (?11, ?12), (?13, ?14),
+         (?15, ?16), (?17, ?18), (?19, ?20), (?21, ?22),
+         (?23, ?24), (?25, ?26), (?27, ?28), (?29, ?30),
+         (?31, ?32), (?33, ?34), (?35, ?36), (?37, ?38),
+         (?39, ?40), (?41, ?42), (?43, ?44), (?45, ?46),
+         (?47, ?48), (?49, ?50), (?51, ?52), (?53, ?54),
+         (?55, ?56), (?57, ?58), (?59, ?60), (?61, ?62),
+         (?63, ?64), (?65, ?66), (?67, ?68), (?69, ?70)
+       ))";
 
 const FIRST_CURRENT_ACTIVITY_SQL: &str =
     "SELECT event.provider_id, event.profile_id, event.profile_id,
@@ -68,6 +100,317 @@ pub enum UsageQueryDatasetIdentity {
         revision_id: u64,
         dataset_generation: u64,
     },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UsageAggregateBucketWidth {
+    Minute,
+    Hour,
+}
+
+impl UsageAggregateBucketWidth {
+    const fn seconds(self) -> i64 {
+        match self {
+            Self::Minute => 60,
+            Self::Hour => 3_600,
+        }
+    }
+
+    const fn as_sql(self) -> &'static str {
+        match self {
+            Self::Minute => "minute",
+            Self::Hour => "hour",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UsageOverviewQuery {
+    expected_dataset: Option<UsageQueryDatasetIdentity>,
+    segments: Box<[UsageAggregateSegment]>,
+    scopes: Box<[ScanScope]>,
+    deadline: Duration,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UsageAggregateSegment {
+    bucket_width: UsageAggregateBucketWidth,
+    start_seconds: i64,
+    end_seconds: i64,
+}
+
+impl UsageAggregateSegment {
+    pub fn new(
+        bucket_width: UsageAggregateBucketWidth,
+        start_seconds: i64,
+        end_seconds: i64,
+    ) -> Result<Self, StoreError> {
+        if start_seconds >= end_seconds
+            || start_seconds.rem_euclid(bucket_width.seconds()) != 0
+            || end_seconds.rem_euclid(bucket_width.seconds()) != 0
+        {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self {
+            bucket_width,
+            start_seconds,
+            end_seconds,
+        })
+    }
+}
+
+impl UsageOverviewQuery {
+    pub fn new(
+        expected_dataset: Option<UsageQueryDatasetIdentity>,
+        segments: Box<[UsageAggregateSegment]>,
+        scopes: Box<[ScanScope]>,
+        deadline: Duration,
+    ) -> Result<Self, StoreError> {
+        if segments.is_empty()
+            || segments
+                .windows(2)
+                .any(|pair| pair[0].end_seconds != pair[1].start_seconds)
+            || deadline.is_zero()
+            || deadline > MAX_QUERY_DURATION
+            || matches!(
+                expected_dataset,
+                Some(UsageQueryDatasetIdentity::ReplayRevision {
+                    revision_id,
+                    dataset_generation,
+                }) if revision_id > i64::MAX as u64 || dataset_generation > i64::MAX as u64
+            )
+        {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        if segments.len() > MAX_USAGE_OVERVIEW_SEGMENTS {
+            return Err(StoreError::with_limit(
+                StoreErrorCode::CapacityExceeded,
+                MAX_USAGE_OVERVIEW_SEGMENTS as u64,
+            ));
+        }
+        if scopes.len() > MAX_USAGE_QUERY_SCOPES {
+            return Err(StoreError::with_limit(
+                StoreErrorCode::CapacityExceeded,
+                MAX_USAGE_QUERY_SCOPES as u64,
+            ));
+        }
+        let mut scopes = scopes.into_vec();
+        scopes.sort_unstable();
+        if scopes.windows(2).any(|pair| pair[0] == pair[1]) {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self {
+            expected_dataset,
+            segments,
+            scopes: scopes.into_boxed_slice(),
+            deadline,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct UsageTokenAggregate {
+    known_count: u64,
+    known_sum: u64,
+}
+
+impl UsageTokenAggregate {
+    #[must_use]
+    pub const fn known_count(self) -> u64 {
+        self.known_count
+    }
+
+    #[must_use]
+    pub const fn known_sum(self) -> u64 {
+        self.known_sum
+    }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct UsageAggregateMetrics {
+    event_count: u64,
+    input: UsageTokenAggregate,
+    cached: UsageTokenAggregate,
+    output: UsageTokenAggregate,
+    reasoning: UsageTokenAggregate,
+    total: UsageTokenAggregate,
+    fallback_model_count: u64,
+    long_context_yes_count: u64,
+    long_context_no_count: u64,
+    long_context_unavailable_count: u64,
+    activity: UsageAggregateActivity,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct UsageAggregateActivity {
+    read: u64,
+    edit_write: u64,
+    search: u64,
+    git: u64,
+    build_test: u64,
+    web: u64,
+    subagents: u64,
+    terminal: u64,
+}
+
+impl UsageAggregateActivity {
+    #[must_use]
+    pub const fn read(self) -> u64 {
+        self.read
+    }
+
+    #[must_use]
+    pub const fn edit_write(self) -> u64 {
+        self.edit_write
+    }
+
+    #[must_use]
+    pub const fn search(self) -> u64 {
+        self.search
+    }
+
+    #[must_use]
+    pub const fn git(self) -> u64 {
+        self.git
+    }
+
+    #[must_use]
+    pub const fn build_test(self) -> u64 {
+        self.build_test
+    }
+
+    #[must_use]
+    pub const fn web(self) -> u64 {
+        self.web
+    }
+
+    #[must_use]
+    pub const fn subagents(self) -> u64 {
+        self.subagents
+    }
+
+    #[must_use]
+    pub const fn terminal(self) -> u64 {
+        self.terminal
+    }
+}
+
+impl UsageAggregateMetrics {
+    fn checked_add(&mut self, other: &Self) -> Result<(), StoreError> {
+        fn add(left: &mut u64, right: u64) -> Result<(), StoreError> {
+            *left = left
+                .checked_add(right)
+                .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+            Ok(())
+        }
+        add(&mut self.event_count, other.event_count)?;
+        for (left, right) in [
+            (&mut self.input, other.input),
+            (&mut self.cached, other.cached),
+            (&mut self.output, other.output),
+            (&mut self.reasoning, other.reasoning),
+            (&mut self.total, other.total),
+        ] {
+            add(&mut left.known_count, right.known_count)?;
+            add(&mut left.known_sum, right.known_sum)?;
+        }
+        add(&mut self.fallback_model_count, other.fallback_model_count)?;
+        add(
+            &mut self.long_context_yes_count,
+            other.long_context_yes_count,
+        )?;
+        add(&mut self.long_context_no_count, other.long_context_no_count)?;
+        add(
+            &mut self.long_context_unavailable_count,
+            other.long_context_unavailable_count,
+        )?;
+        for (left, right) in [
+            (&mut self.activity.read, other.activity.read),
+            (&mut self.activity.edit_write, other.activity.edit_write),
+            (&mut self.activity.search, other.activity.search),
+            (&mut self.activity.git, other.activity.git),
+            (&mut self.activity.build_test, other.activity.build_test),
+            (&mut self.activity.web, other.activity.web),
+            (&mut self.activity.subagents, other.activity.subagents),
+            (&mut self.activity.terminal, other.activity.terminal),
+        ] {
+            add(left, right)?;
+        }
+        Ok(())
+    }
+
+    #[must_use]
+    pub const fn event_count(&self) -> u64 {
+        self.event_count
+    }
+
+    #[must_use]
+    pub const fn input(&self) -> UsageTokenAggregate {
+        self.input
+    }
+
+    #[must_use]
+    pub const fn cached(&self) -> UsageTokenAggregate {
+        self.cached
+    }
+
+    #[must_use]
+    pub const fn output(&self) -> UsageTokenAggregate {
+        self.output
+    }
+
+    #[must_use]
+    pub const fn reasoning(&self) -> UsageTokenAggregate {
+        self.reasoning
+    }
+
+    #[must_use]
+    pub const fn total(&self) -> UsageTokenAggregate {
+        self.total
+    }
+
+    #[must_use]
+    pub const fn fallback_model_count(&self) -> u64 {
+        self.fallback_model_count
+    }
+
+    #[must_use]
+    pub const fn long_context_yes_count(&self) -> u64 {
+        self.long_context_yes_count
+    }
+
+    #[must_use]
+    pub const fn long_context_no_count(&self) -> u64 {
+        self.long_context_no_count
+    }
+
+    #[must_use]
+    pub const fn long_context_unavailable_count(&self) -> u64 {
+        self.long_context_unavailable_count
+    }
+
+    #[must_use]
+    pub const fn activity(&self) -> UsageAggregateActivity {
+        self.activity
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UsageOverviewCapture {
+    publication: UsageQueryPublication,
+    metrics: UsageAggregateMetrics,
+}
+
+impl UsageOverviewCapture {
+    #[must_use]
+    pub const fn publication(&self) -> &UsageQueryPublication {
+        &self.publication
+    }
+
+    #[must_use]
+    pub const fn metrics(&self) -> &UsageAggregateMetrics {
+        &self.metrics
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -452,6 +795,37 @@ impl UsageReadStore {
         self.capture_activity_page_with_options(query, PROGRESS_OP_INTERVAL, false, || Ok(()))
     }
 
+    pub fn capture_usage_overview(
+        &mut self,
+        query: UsageOverviewQuery,
+    ) -> Result<UsageOverviewCapture, StoreError> {
+        self.capture_usage_overview_with_options(query, PROGRESS_OP_INTERVAL, false, || Ok(()))
+    }
+
+    fn capture_usage_overview_with_options<F>(
+        &mut self,
+        query: UsageOverviewQuery,
+        progress_interval: i32,
+        cancel_immediately: bool,
+        after_publication: F,
+    ) -> Result<UsageOverviewCapture, StoreError>
+    where
+        F: FnOnce() -> Result<(), StoreError>,
+    {
+        let started = Instant::now();
+        let deadline = query.deadline;
+        map_sql(self.connection.progress_handler(
+            progress_interval,
+            Some(move || cancel_immediately || started.elapsed() >= deadline),
+        ))?;
+        let result = capture_usage_overview(&mut self.connection, query, after_publication);
+        let clear_result = map_sql(self.connection.progress_handler(0, None::<fn() -> bool>));
+        match (result, clear_result) {
+            (Ok(capture), Ok(())) => Ok(capture),
+            (Err(error), _) | (Ok(_), Err(error)) => Err(error),
+        }
+    }
+
     fn capture_activity_page_with_options<F>(
         &mut self,
         query: UsageActivityQuery,
@@ -518,8 +892,7 @@ where
     {
         return Err(StoreError::new(StoreErrorCode::StaleRevision));
     }
-    let (data_through_ms, scopes) =
-        load_scan_truth(&transaction, raw_publication.latest_complete_scan_set_id)?;
+    let publication = load_query_publication(&transaction, &raw_publication, dataset_identity)?;
     let lookahead = query
         .page_size
         .checked_add(1)
@@ -536,20 +909,216 @@ where
         return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
     }
     let capture = UsageQueryCapture {
-        publication: UsageQueryPublication {
-            generation: nonnegative(raw_publication.archive_generation)?,
-            dataset_identity,
-            accounting_versions_current: raw_publication.accounting_versions_current()?,
-            data_through_ms,
-            quality: ArchivePublicationQuality::from_sql(&raw_publication.quality)?,
-            scopes: scopes.into_boxed_slice(),
-        },
+        publication,
         events: events.into_boxed_slice(),
         next_cursor,
         has_more,
     };
     map_sql(transaction.commit())?;
     Ok(capture)
+}
+
+fn capture_usage_overview<F>(
+    connection: &mut Connection,
+    query: UsageOverviewQuery,
+    after_publication: F,
+) -> Result<UsageOverviewCapture, StoreError>
+where
+    F: FnOnce() -> Result<(), StoreError>,
+{
+    let transaction = map_sql(connection.transaction_with_behavior(TransactionBehavior::Deferred))?;
+    let raw_publication = load_raw_publication(&transaction)?;
+    after_publication()?;
+    let dataset_identity = raw_publication.dataset_identity()?;
+    if query
+        .expected_dataset
+        .is_some_and(|expected| expected != dataset_identity)
+    {
+        return Err(StoreError::new(StoreErrorCode::StaleRevision));
+    }
+    let publication = load_query_publication(&transaction, &raw_publication, dataset_identity)?;
+    let active_generation =
+        load_ready_aggregate_generation(&transaction, raw_publication.dataset_generation)?;
+    let metrics = match dataset_identity {
+        UsageQueryDatasetIdentity::Empty => UsageAggregateMetrics::default(),
+        UsageQueryDatasetIdentity::ReplayRevision { .. } => {
+            load_overview_metrics(&transaction, active_generation, "current", &query)?
+        }
+        UsageQueryDatasetIdentity::LegacySnapshotV1 => {
+            load_overview_metrics(&transaction, active_generation, "legacy", &query)?
+        }
+    };
+    map_sql(transaction.commit())?;
+    Ok(UsageOverviewCapture {
+        publication,
+        metrics,
+    })
+}
+
+fn load_query_publication(
+    connection: &Connection,
+    raw: &RawPublication,
+    dataset_identity: UsageQueryDatasetIdentity,
+) -> Result<UsageQueryPublication, StoreError> {
+    let (data_through_ms, scopes) = load_scan_truth(connection, raw.latest_complete_scan_set_id)?;
+    Ok(UsageQueryPublication {
+        generation: nonnegative(raw.archive_generation)?,
+        dataset_identity,
+        accounting_versions_current: raw.accounting_versions_current()?,
+        data_through_ms,
+        quality: ArchivePublicationQuality::from_sql(&raw.quality)?,
+        scopes: scopes.into_boxed_slice(),
+    })
+}
+
+fn load_ready_aggregate_generation(
+    connection: &Connection,
+    dataset_generation: i64,
+) -> Result<i64, StoreError> {
+    let (state, expected_generation, active_generation): (String, i64, i64) =
+        map_sql(connection.query_row(
+            "SELECT state, expected_dataset_generation, active_aggregate_generation
+             FROM usage_aggregate_state WHERE singleton_id = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        ))?;
+    if state != "ready" {
+        return Err(StoreError::new(StoreErrorCode::RebuildRequired));
+    }
+    if expected_generation != dataset_generation || active_generation < 0 {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    Ok(active_generation)
+}
+
+fn load_overview_metrics(
+    connection: &Connection,
+    active_generation: i64,
+    dataset_kind: &'static str,
+    query: &UsageOverviewQuery,
+) -> Result<UsageAggregateMetrics, StoreError> {
+    let mut metrics = UsageAggregateMetrics::default();
+    for segment in &query.segments {
+        let parameters =
+            overview_parameters(active_generation, dataset_kind, segment, &query.scopes)?;
+        let mut statement = map_sql(connection.prepare_cached(OVERVIEW_SQL))?;
+        let raw = map_sql(statement.query_row(params_from_iter(parameters.iter()), raw_metrics))?;
+        metrics.checked_add(&raw.validate()?)?;
+    }
+    Ok(metrics)
+}
+
+fn overview_parameters(
+    active_generation: i64,
+    dataset_kind: &'static str,
+    segment: &UsageAggregateSegment,
+    scopes: &[ScanScope],
+) -> Result<Vec<Value>, StoreError> {
+    let mut parameters = Vec::with_capacity(6 + MAX_USAGE_QUERY_SCOPES * 2);
+    parameters.push(Value::Integer(active_generation));
+    parameters.push(Value::Text(dataset_kind.to_owned()));
+    parameters.push(Value::Text(segment.bucket_width.as_sql().to_owned()));
+    parameters.push(Value::Integer(segment.start_seconds));
+    parameters.push(Value::Integer(segment.end_seconds));
+    parameters
+        .push(Value::Integer(i64::try_from(scopes.len()).map_err(
+            |_| StoreError::new(StoreErrorCode::CapacityExceeded),
+        )?));
+    for index in 0..MAX_USAGE_QUERY_SCOPES {
+        if let Some(scope) = scopes.get(index) {
+            parameters.push(Value::Text(scope.provider_id().to_owned()));
+            parameters.push(Value::Text(scope.profile_id().to_owned()));
+        } else {
+            parameters.push(Value::Null);
+            parameters.push(Value::Null);
+        }
+    }
+    Ok(parameters)
+}
+
+fn raw_metrics(row: &Row<'_>) -> rusqlite::Result<RawAggregateMetrics> {
+    Ok(RawAggregateMetrics {
+        values: [
+            row.get(0)?,
+            row.get(1)?,
+            row.get(2)?,
+            row.get(3)?,
+            row.get(4)?,
+            row.get(5)?,
+            row.get(6)?,
+            row.get(7)?,
+            row.get(8)?,
+            row.get(9)?,
+            row.get(10)?,
+            row.get(11)?,
+            row.get(12)?,
+            row.get(13)?,
+            row.get(14)?,
+            row.get(15)?,
+            row.get(16)?,
+            row.get(17)?,
+            row.get(18)?,
+            row.get(19)?,
+            row.get(20)?,
+            row.get(21)?,
+            row.get(22)?,
+        ],
+    })
+}
+
+struct RawAggregateMetrics {
+    values: [i64; 23],
+}
+
+impl RawAggregateMetrics {
+    fn validate(self) -> Result<UsageAggregateMetrics, StoreError> {
+        let values = self
+            .values
+            .map(nonnegative)
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()?;
+        let event_count = values[0];
+        let token =
+            |count_index: usize, sum_index: usize| -> Result<UsageTokenAggregate, StoreError> {
+                let known_count = values[count_index];
+                if known_count > event_count || (known_count == 0 && values[sum_index] != 0) {
+                    return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+                }
+                Ok(UsageTokenAggregate {
+                    known_count,
+                    known_sum: values[sum_index],
+                })
+            };
+        let long_context_total = values[12]
+            .checked_add(values[13])
+            .and_then(|value| value.checked_add(values[14]))
+            .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+        if values[11] > event_count || long_context_total != event_count {
+            return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+        }
+        Ok(UsageAggregateMetrics {
+            event_count,
+            input: token(1, 2)?,
+            cached: token(3, 4)?,
+            output: token(5, 6)?,
+            reasoning: token(7, 8)?,
+            total: token(9, 10)?,
+            fallback_model_count: values[11],
+            long_context_yes_count: values[12],
+            long_context_no_count: values[13],
+            long_context_unavailable_count: values[14],
+            activity: UsageAggregateActivity {
+                read: values[15],
+                edit_write: values[16],
+                search: values[17],
+                git: values[18],
+                build_test: values[19],
+                web: values[20],
+                subagents: values[21],
+                terminal: values[22],
+            },
+        })
+    }
 }
 
 struct RawPublication {
@@ -913,6 +1482,20 @@ mod tests {
         UsageActivityQuery::new(None, None, 16, deadline)
     }
 
+    fn overview_query(deadline: Duration) -> Result<UsageOverviewQuery, StoreError> {
+        UsageOverviewQuery::new(
+            None,
+            vec![UsageAggregateSegment::new(
+                UsageAggregateBucketWidth::Hour,
+                0,
+                3_600,
+            )?]
+            .into_boxed_slice(),
+            Box::default(),
+            deadline,
+        )
+    }
+
     #[test]
     fn read_transaction_keeps_publication_exact_during_concurrent_commit() -> TestResult {
         let (_directory, path) = empty_archive()?;
@@ -959,6 +1542,77 @@ mod tests {
         assert_eq!(interrupted.code(), StoreErrorCode::DeadlineExceeded);
         let next = store.capture_activity_page(activity_query(Duration::from_secs(2))?)?;
         assert_eq!(next.publication().generation(), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn aggregate_read_transaction_keeps_ready_state_exact_during_concurrent_commit() -> TestResult {
+        let (_directory, path) = empty_archive()?;
+        let mut store = UsageReadStore::open(&path)?;
+        let writer_path = path.clone();
+        let capture = store.capture_usage_overview_with_options(
+            overview_query(Duration::from_secs(2))?,
+            PROGRESS_OP_INTERVAL,
+            false,
+            move || {
+                let writer = map_sql(Connection::open(&writer_path))?;
+                map_sql(writer.execute(
+                    "UPDATE usage_aggregate_state SET state = 'rebuild_required'
+                     WHERE singleton_id = 1",
+                    [],
+                ))?;
+                Ok(())
+            },
+        )?;
+        assert_eq!(capture.metrics().event_count(), 0);
+        let error = match store.capture_usage_overview(overview_query(Duration::from_secs(2))?) {
+            Err(error) => error,
+            Ok(_) => return Err("new transaction ignored unavailable aggregates".into()),
+        };
+        assert_eq!(error.code(), StoreErrorCode::RebuildRequired);
+        Ok(())
+    }
+
+    #[test]
+    fn aggregate_progress_cancellation_is_cleared_for_next_query() -> TestResult {
+        let (_directory, path) = empty_archive()?;
+        let mut store = UsageReadStore::open(&path)?;
+        let interrupted = match store.capture_usage_overview_with_options(
+            overview_query(Duration::from_secs(2))?,
+            1,
+            true,
+            || Ok(()),
+        ) {
+            Err(error) => error,
+            Ok(_) => return Err("forced aggregate cancellation unexpectedly completed".into()),
+        };
+        assert_eq!(interrupted.code(), StoreErrorCode::DeadlineExceeded);
+        let next = store.capture_usage_overview(overview_query(Duration::from_secs(2))?)?;
+        assert_eq!(next.metrics().event_count(), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn overview_plan_reads_only_materialized_range_without_offset() -> TestResult {
+        let (_directory, path) = empty_archive()?;
+        let store = UsageReadStore::open(&path)?;
+        let query = overview_query(Duration::from_secs(2))?;
+        let parameters = overview_parameters(0, "current", &query.segments[0], &query.scopes)?;
+        let explain = format!("EXPLAIN QUERY PLAN {OVERVIEW_SQL}");
+        let mut statement = store.connection.prepare(&explain)?;
+        let rows = statement.query_map(params_from_iter(parameters.iter()), |row| {
+            row.get::<_, String>(3)
+        })?;
+        let mut details = Vec::new();
+        for row in rows {
+            details.push(row?);
+        }
+        let joined = details.join("\n");
+        assert!(joined.contains("usage_time_rollup"));
+        let normalized = OVERVIEW_SQL.to_ascii_lowercase();
+        assert!(!normalized.contains("usage_event"));
+        assert!(!normalized.contains("usage_legacy_event"));
+        assert!(!normalized.contains(" offset "));
         Ok(())
     }
 

@@ -71,6 +71,11 @@ the expected generation and exact total still match. UI, CLI, MCP, plugins, and 
 connectors receive neither aggregate write authority nor arbitrary SQL. They cannot
 force a raw-history fallback while aggregates are unavailable.
 
+Aggregate overview reads accept only validated enum widths, signed UTC boundaries,
+at most three adjacent aligned segments, and at most 32 typed scopes. They bind only to
+fixed SQL over the active rollup generation, use no caller expression or identifier,
+never touch raw event tables, and clear progress cancellation before connection reuse.
+
 Scan authority is provider/profile qualified and store-owned. One bounded scan set
 contains one child per exact scope; an observation may update only the matching
 running child. Only successful completion of that child may derive presence from its

@@ -1239,3 +1239,21 @@ aggregate-disabled baseline itself is 159.787 ms. Database amplification measure
 now includes the main SQLite file, WAL, and SHM. Aggregate/session reads, private
 calendar composition, immutable public values, and million-row/resource acceptance
 remain open; no complete P2-B or release claim is made.
+
+## 2026-07-16 — P2-B exact overview read implemented
+
+Added the first fixed aggregate consumer to the separate query-only store. One short
+deferred transaction captures publication/dataset identity, requires a matching
+`ready` aggregate generation, and returns checked owned metrics from only
+`usage_time_rollup`. A request carries at most 32 unique typed scopes and one to three
+ordered adjacent UTC segments aligned to minute or hour rollups. This lets the future
+private calendar layer compose a boundary-minute prefix, full-hour middle, and
+boundary-minute suffix without embedding timezone types in the store.
+
+Contracts cover exact token known-count/sum values, current and empty scopes, stale
+dataset and rebuild-required state, deterministic cancellation cleanup, concurrent
+state mutation after snapshot acquisition, gaps, overlaps, misalignment, capacity,
+and events exactly on width-transition boundaries. The query plan contains neither
+raw event table nor `OFFSET`. Series, independent breakdowns, session keyset reads,
+calendar/Jiff mapping, public facade values, and million-row/resource evidence remain
+open; no P2-B completion or release claim is made.

@@ -73,8 +73,11 @@ resource contracts pass. P2-A plus the audited schema-v7 dataset-generation corr
 are implemented; exact migration rollback, insert/update/delete/overflow, real
 no-change scan, and append contracts pass. P2-B schema-v8 provider materialization,
 transactional UTC/session rollups, and bounded resumable generation publication are
-also implemented and focused-store verified. The immediate next task is fixed bounded
-aggregate/session reads over the active generation, then private calendar composition
+also implemented and focused-store verified. The first fixed overview read now
+captures publication, ready generation, and exact metrics in one transaction over at
+most three adjacent aligned UTC segments and 32 scopes; boundary, stale/rebuild,
+deadline, and raw-plan contracts pass. The immediate next task is series/breakdown and
+keyset session reads over the same active generation, then private calendar composition
 and immutable query values. Do not replace them with view-time full scans.
 The 2026-07-16 closure review also freezes the remaining plan ambiguities: P3 is the
 complete UI, P4 presentation/localization, P5 read-only automation, and P6 the

@@ -186,6 +186,13 @@ failure returns a stable unavailable/error code; it never triggers a raw-event
 selection remains a private query-facade responsibility and cannot inject SQL or a
 timezone file.
 
+One store overview range is one to three non-empty adjacent aligned UTC segments. Each
+segment selects a fixed minute or hour rollup and segments compose as one half-open
+range in request order. The store rejects gaps, overlaps, misalignment, more than three
+segments, more than 32 unique provider/profile scopes, or a deadline above two seconds
+before reading. Header, aggregate state, and every segment are captured in one deferred
+transaction; checked result addition cannot wrap.
+
 `QueryService` is the only public archive facade in this contour. It allocates a
 strictly increasing process-local snapshot generation only after a successful capture,
 maps complete/partial/recovery/legacy truth explicitly, applies the 20-minute/2-hour

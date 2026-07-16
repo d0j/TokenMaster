@@ -3,8 +3,10 @@ use std::{fs, path::Path, time::Duration};
 use rusqlite::{Connection, params};
 use tempfile::TempDir;
 use tokenmaster_store::{
-    EXPECTED_SQLITE_VERSION, EventCursor, JournalMode, StoreErrorCode, USAGE_SCHEMA_VERSION,
-    UsageActivityQuery, UsageQueryDatasetIdentity, UsageReadStore, UsageStore,
+    EXPECTED_SQLITE_VERSION, EventCursor, JournalMode, MAX_USAGE_OVERVIEW_SEGMENTS, ScanScope,
+    StoreErrorCode, USAGE_SCHEMA_VERSION, UsageActivityQuery, UsageAggregateBucketWidth,
+    UsageAggregateSegment, UsageOverviewQuery, UsageQueryDatasetIdentity, UsageReadStore,
+    UsageStore,
 };
 
 const SOURCE_KEY: [u8; 32] = [7; 32];
@@ -112,6 +114,37 @@ fn seed_current_archive(path: &Path) {
     checkpoint(path);
 }
 
+fn insert_current_event(path: &Path, index: u8, timestamp_seconds: i64) {
+    let connection = Connection::open(path).expect("open current event fixture");
+    connection
+        .pragma_update(None, "foreign_keys", "ON")
+        .expect("foreign keys");
+    connection
+        .execute(
+            "INSERT INTO usage_event(
+               fingerprint, event_id, selected_file_key, selected_generation,
+               selected_source_offset, projection_revision_id, origin_revision_id,
+               retained, provider_id, profile_id, session_id, source_id, timestamp_seconds,
+               timestamp_nanos, model, input_tokens, cached_tokens, output_tokens,
+               reasoning_tokens, total_tokens, fallback_model, long_context,
+               activity_read, activity_edit_write, activity_search, activity_git,
+               activity_build_test, activity_web, activity_subagents, activity_terminal
+             ) VALUES (
+               ?1, ?2, ?3, 0, ?4, 0, 0, 0, 'codex', 'default', 'session', 'fixture',
+               ?5, 0, 'gpt-5.6', 5, NULL, 2, NULL, 7, 0, 'no',
+               0, 0, 0, 0, 0, 0, 0, 0
+             )",
+            params![
+                [index; 32].as_slice(),
+                format!("boundary-event-{index}"),
+                SOURCE_KEY.as_slice(),
+                i64::from(index),
+                timestamp_seconds,
+            ],
+        )
+        .expect("insert current event");
+}
+
 fn seed_legacy_archive(path: &Path) {
     let mut connection = Connection::open(path).expect("create v1 fixture");
     connection
@@ -199,6 +232,210 @@ fn query(
 ) -> UsageActivityQuery {
     UsageActivityQuery::new(expected, before, page_size, Duration::from_secs(2))
         .expect("valid query")
+}
+
+fn overview_query(
+    expected: Option<UsageQueryDatasetIdentity>,
+    scopes: Box<[ScanScope]>,
+) -> UsageOverviewQuery {
+    UsageOverviewQuery::new(
+        expected,
+        vec![
+            UsageAggregateSegment::new(UsageAggregateBucketWidth::Hour, 0, 3_600)
+                .expect("valid overview segment"),
+        ]
+        .into_boxed_slice(),
+        scopes,
+        Duration::from_secs(2),
+    )
+    .expect("valid overview query")
+}
+
+#[test]
+fn aggregate_overview_is_exact_scope_bounded_and_generation_bound() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("aggregate-overview.sqlite3");
+    seed_current_archive(&path);
+    let mut store = UsageReadStore::open(&path).expect("aggregate read store");
+
+    let capture = store
+        .capture_usage_overview(overview_query(None, Box::default()))
+        .expect("aggregate overview");
+    assert_eq!(
+        capture.publication().dataset_identity(),
+        UsageQueryDatasetIdentity::ReplayRevision {
+            revision_id: 0,
+            dataset_generation: 3,
+        }
+    );
+    let metrics = capture.metrics();
+    assert_eq!(metrics.event_count(), 3);
+    assert_eq!(metrics.input().known_count(), 3);
+    assert_eq!(metrics.input().known_sum(), 33);
+    assert_eq!(metrics.cached().known_count(), 0);
+    assert_eq!(metrics.cached().known_sum(), 0);
+    assert_eq!(metrics.output().known_count(), 3);
+    assert_eq!(metrics.output().known_sum(), 3);
+    assert_eq!(metrics.reasoning().known_count(), 0);
+    assert_eq!(metrics.total().known_count(), 3);
+    assert_eq!(metrics.total().known_sum(), 36);
+    assert_eq!(metrics.long_context_no_count(), 3);
+
+    let included = ScanScope::new("codex", "default").expect("included scope");
+    assert_eq!(
+        store
+            .capture_usage_overview(overview_query(None, vec![included].into_boxed_slice()))
+            .expect("scoped overview")
+            .metrics(),
+        metrics
+    );
+    let excluded = ScanScope::new("codex", "other").expect("excluded scope");
+    assert_eq!(
+        store
+            .capture_usage_overview(overview_query(None, vec![excluded].into_boxed_slice()))
+            .expect("empty scoped overview")
+            .metrics()
+            .event_count(),
+        0
+    );
+
+    let stale = overview_query(
+        Some(UsageQueryDatasetIdentity::ReplayRevision {
+            revision_id: 0,
+            dataset_generation: 2,
+        }),
+        Box::default(),
+    );
+    assert_eq!(
+        store
+            .capture_usage_overview(stale)
+            .expect_err("stale aggregate dataset")
+            .code(),
+        StoreErrorCode::StaleRevision
+    );
+}
+
+#[test]
+fn aggregate_overview_composes_adjacent_widths_without_gaps_or_double_counting() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("aggregate-segments.sqlite3");
+    seed_current_archive(&path);
+    insert_current_event(&path, 20, 3_600);
+    insert_current_event(&path, 21, 7_200);
+
+    let segments = vec![
+        UsageAggregateSegment::new(UsageAggregateBucketWidth::Minute, 0, 3_600)
+            .expect("minute prefix"),
+        UsageAggregateSegment::new(UsageAggregateBucketWidth::Hour, 3_600, 7_200)
+            .expect("hour middle"),
+        UsageAggregateSegment::new(UsageAggregateBucketWidth::Minute, 7_200, 7_260)
+            .expect("minute suffix"),
+    ]
+    .into_boxed_slice();
+    let query = UsageOverviewQuery::new(None, segments, Box::default(), Duration::from_secs(2))
+        .expect("valid composed overview");
+    let mut store = UsageReadStore::open(&path).expect("aggregate read store");
+    let capture = store
+        .capture_usage_overview(query)
+        .expect("composed overview");
+
+    assert_eq!(
+        capture.publication().dataset_identity(),
+        UsageQueryDatasetIdentity::ReplayRevision {
+            revision_id: 0,
+            dataset_generation: 5,
+        }
+    );
+    let metrics = capture.metrics();
+    assert_eq!(metrics.event_count(), 5);
+    assert_eq!(metrics.input().known_count(), 5);
+    assert_eq!(metrics.input().known_sum(), 43);
+    assert_eq!(metrics.output().known_sum(), 7);
+    assert_eq!(metrics.total().known_sum(), 50);
+    assert_eq!(metrics.long_context_no_count(), 5);
+}
+
+#[test]
+fn aggregate_overview_rejects_unavailable_state_and_invalid_bounds() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("aggregate-unavailable.sqlite3");
+    seed_current_archive(&path);
+    let connection = Connection::open(&path).expect("aggregate state writer");
+    connection
+        .execute(
+            "UPDATE usage_aggregate_state
+             SET state = 'rebuild_required', rebuild_total_events = current_event_count
+             WHERE singleton_id = 1",
+            [],
+        )
+        .expect("require rebuild");
+    drop(connection);
+    let mut store = UsageReadStore::open(&path).expect("aggregate read store");
+    assert_eq!(
+        store
+            .capture_usage_overview(overview_query(None, Box::default()))
+            .expect_err("unavailable aggregates")
+            .code(),
+        StoreErrorCode::RebuildRequired
+    );
+
+    assert_eq!(
+        UsageAggregateSegment::new(UsageAggregateBucketWidth::Hour, 1, 3_600,)
+            .expect_err("misaligned range")
+            .code(),
+        StoreErrorCode::InvalidValue
+    );
+    let scopes = (0..33)
+        .map(|index| ScanScope::new("codex", format!("scope-{index}")))
+        .collect::<Result<Vec<_>, _>>()
+        .expect("valid scopes")
+        .into_boxed_slice();
+    let error = UsageOverviewQuery::new(
+        None,
+        vec![
+            UsageAggregateSegment::new(UsageAggregateBucketWidth::Hour, 0, 3_600)
+                .expect("valid overview segment"),
+        ]
+        .into_boxed_slice(),
+        scopes,
+        Duration::from_secs(2),
+    )
+    .expect_err("scope overflow");
+    assert_eq!(error.code(), StoreErrorCode::CapacityExceeded);
+    assert_eq!(error.limit(), Some(32));
+
+    let minute = |start, end| {
+        UsageAggregateSegment::new(UsageAggregateBucketWidth::Minute, start, end)
+            .expect("aligned minute segment")
+    };
+    for invalid_segments in [
+        Vec::new(),
+        vec![minute(0, 60), minute(120, 180)],
+        vec![minute(0, 120), minute(60, 180)],
+    ] {
+        assert_eq!(
+            UsageOverviewQuery::new(
+                None,
+                invalid_segments.into_boxed_slice(),
+                Box::default(),
+                Duration::from_secs(2),
+            )
+            .expect_err("invalid segment topology")
+            .code(),
+            StoreErrorCode::InvalidValue
+        );
+    }
+    let too_many = (0..=MAX_USAGE_OVERVIEW_SEGMENTS)
+        .map(|index| {
+            let start = i64::try_from(index).expect("small index") * 60;
+            minute(start, start + 60)
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let error = UsageOverviewQuery::new(None, too_many, Box::default(), Duration::from_secs(2))
+        .expect_err("segment overflow");
+    assert_eq!(error.code(), StoreErrorCode::CapacityExceeded);
+    assert_eq!(error.limit(), Some(MAX_USAGE_OVERVIEW_SEGMENTS as u64));
 }
 
 #[test]

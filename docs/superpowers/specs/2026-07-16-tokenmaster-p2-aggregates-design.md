@@ -1,7 +1,8 @@
 # TokenMaster P2-B Transactional Aggregates Design
 
-Status: approved and re-audited for implementation on 2026-07-16; Tasks 1-4 are
-implemented, while public aggregate reads and calendar composition remain open.
+Status: approved and re-audited for implementation on 2026-07-16; Tasks 1-4 and the
+first fixed overview-read slice of Task 6 are implemented. Series, breakdown/session
+reads, calendar composition, public values, and final evidence remain open.
 
 ## Goal
 
@@ -176,6 +177,13 @@ local calendar boundary. This keeps a year view bounded to full-hour rows plus a
 minute-aligned, the request fails with stable `unsupported_time_boundary` rather than
 rounding or scanning raw events. Contemporary IANA/DST fixtures, half-hour and
 quarter-hour zones, leap days, 23/25-hour days, and week-start changes are mandatory.
+
+The store boundary represents one exact calendar bucket as one to three ordered,
+non-empty, adjacent UTC segments: an optional minute-aligned prefix, an optional
+hour-aligned middle, and an optional minute-aligned suffix. Segment count, alignment,
+continuity, scope count, and deadline are validated before SQLite access. The three
+segments are summed inside the same deferred read transaction with checked arithmetic;
+events on a segment boundary belong to exactly one half-open segment.
 
 The first public limits are:
 

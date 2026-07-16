@@ -129,6 +129,11 @@ All notable changes are recorded here.
   rollback, and one checked active-generation publication.
 - Added measured release append gates for 1/32/256-event paths and corrected storage
   accounting to include SQLite main, WAL, and SHM files.
+- Added the first P2-B fixed aggregate read: one exact deferred snapshot binds
+  publication/dataset identity to a ready aggregate generation and sums at most three
+  adjacent aligned UTC minute/hour segments across at most 32 typed scopes. Boundary,
+  stale/rebuild, deadline cleanup, missing-token algebra, and raw-table-free query-plan
+  contracts pass.
 
 ### Fixed
 

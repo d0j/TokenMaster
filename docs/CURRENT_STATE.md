@@ -236,6 +236,13 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   restart, and one checked active-generation publication. Focused store tests pass.
   Reference-machine release p95 is 1.814 ms for one event, 19.888 ms for 32, and
   230.620 ms for 256, each within its corrected absolute and relative baseline gate.
+- P2-B fixed overview read: `UsageReadStore` captures publication identity, ready
+  aggregate generation, and exact overview metrics in one deferred transaction. One
+  request is limited to 32 unique scopes and three adjacent aligned minute/hour UTC
+  segments, allowing exact DST boundary composition without raw-event reads. Missing
+  token components retain known-count/sum truth, result addition is checked, stale or
+  rebuilding generations fail closed, deadline cleanup is reusable, and query-plan plus
+  boundary fixtures prove no raw table, `OFFSET`, gap, overlap, or double counting.
 
 ## Next implementation slice
 
@@ -317,9 +324,10 @@ The audited cursor correction is complete: replay evidence can advance on a no-c
 scan, so it is no longer dataset identity. Schema v7 adds a dedicated transactional
 dataset generation with exact v6 migration/rollback, overflow, real no-change scan,
 and current append proofs. P2-B Tasks 2-4 now add schema-v8 provider identity,
-transactional materialization, and bounded resumable publication. The next gate is the
-fixed aggregate/session read facade, followed by private calendar/timezone composition
-and immutable public values; no view-time grouping of the full event table is allowed.
+transactional materialization, and bounded resumable publication. Task 6 is in
+progress: the fixed overview read is green; series, independently capped breakdowns,
+and keyset session reads are next, followed by private calendar/timezone composition
+and immutable public values. No view-time grouping of the full event table is allowed.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 
