@@ -10,6 +10,8 @@ mod clock;
 mod error;
 mod identity;
 mod publication;
+mod quota;
+mod quota_identity;
 mod service;
 mod session;
 
@@ -33,6 +35,18 @@ pub use identity::{
     SnapshotGeneration,
 };
 pub use publication::{PublishOutcome, QuerySnapshotSlot};
+pub use quota::{
+    QuotaAllowanceChangeKind, QuotaAllowanceChangeValue, QuotaConfidence, QuotaCurrentRequest,
+    QuotaCurrentSnapshot, QuotaDefinitionValue, QuotaDetectionTime, QuotaEpochValue,
+    QuotaEvidenceSource, QuotaPresentation, QuotaRatioValue, QuotaResetEvidence,
+    QuotaResetThresholdsValue, QuotaSampleQuality, QuotaSampleValue, QuotaTransitionCursor,
+    QuotaTransitionKind, QuotaTransitionPage, QuotaTransitionPageRequest, QuotaTransitionValue,
+    QuotaUnitsValue, QuotaWindowResult, QuotaWindowSemantics, QuotaWindowValue,
+};
+pub use quota_identity::{
+    QUOTA_QUERY_SCHEMA_VERSION, QuotaEnvelope, QuotaQueryHeader, QuotaQueryHeaderParts,
+    QuotaRevision, QuotaWarningCode, QuotaWindowFilter,
+};
 pub use service::{
     LatestActivityRequest, QUERY_FRESH_MAX_AGE_MS, QUERY_STALE_MIN_AGE_MS, QueryService,
 };

@@ -10,6 +10,7 @@ jiff.workspace = true
 thiserror.workspace = true
 tokenmaster-domain = { path = "../domain" }
 tokenmaster-pricing = { path = "../pricing" }
+tokenmaster-quota = { path = "../quota" }
 tokenmaster-store = { path = "../store" }
 
 [dev-dependencies]
