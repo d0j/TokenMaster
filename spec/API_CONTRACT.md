@@ -271,6 +271,14 @@ during a no-change scan without invalidating the cursor.
 P3 wraps the synchronous facade with one bounded worker rather than calling SQLite from
 a Slint callback.
 
+`UsageStore::apply_quota_observation` accepts one validated window definition and one
+same-window normalized sample. It returns only `Started`, `Duplicate`, `Stale`,
+`Advanced`, `AllowanceChanged`, or `Reset`, the independent quota revision, the
+per-window transition sequence, and an optional opaque transition ID. Duplicate and
+stale results are exact no-ops. Visible results publish definition/sample/epoch/
+transition/current state and advance the quota revision once inside one immediate
+transaction; any failure rolls back the complete publication.
+
 Quota snapshots expose current window epochs and a bounded transition page. Full
 weekly resets include before/after values, maximum pre-reset use, old/new reset times,
 transition kind, evidence source, confidence, and an exact or bounded detection time.

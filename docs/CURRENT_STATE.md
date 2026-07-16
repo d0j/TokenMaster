@@ -343,6 +343,21 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   Clippy, formatting, and clean-root pass. Transactional quota writes, retention,
   reads, query, transport, inventory/reminders, UI, and automation remain
   unimplemented.
+- P2-D Task 4 transactional quota writes: `UsageStore::apply_quota_observation` now
+  evaluates and publishes one normalized definition/sample pair inside one immediate
+  transaction. Duplicate/stale inputs are exact no-ops; start/advance/allowance/reset
+  results insert immutable facts, update exact current epoch/window state, optionally
+  close one epoch and insert one transition, and advance the independent quota
+  revision once. Global observation content reuse, definition mutation/regression,
+  transition/SQLite overflow, and missing or mismatched current projection fail
+  closed. Five injected publication faults roll back definition, sample, epoch,
+  transition, projection, and revision to the exact prior state; retry is deterministic.
+  Eight focused write contracts, 51 store unit tests, the complete locked workspace
+  tests/doctests, strict workspace Clippy, formatting, and clean-root pass. Two fresh
+  isolated query resource processes also pass after the warm-up floor was hardened
+  against one transient low allocator sample without weakening sustained-growth or
+  structural gates. Bounded retention, reads/query, transport, inventory/reminders,
+  UI, and automation remain unimplemented.
 - Verification correction: the first post-Task-1 workspace run reproduced an existing
   query resource-test defect. A default Rust test harness changed its own worker
   threads during process-wide `PrivateUsage` sampling, while allocator spikes later
@@ -361,11 +376,12 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 ## Next implementation slice
 
 P2-D quota history core execution is active under
-`docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`. Tasks 1-3 exact
+`docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`. Tasks 1-4 exact
 domain values, deterministic identities, pure reset/allowance evaluation, strict
-schema v10, and exact v9 migration are complete. Task 4 transactional quota
-observation application is the immediate next slice. Retention, reads, query, and
-acceptance evidence remain Tasks 5-8. Permitted Codex quota transport and banked reset
+schema v10, exact v9 migration, and transactional quota observation application are
+complete. Task 5 bounded retention, restart, and maintenance fault evidence is the
+immediate next slice. Reads, query, and acceptance evidence remain Tasks 6-8.
+Permitted Codex quota transport and banked reset
 inventory/reminders remain separate later contours. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.
 P2-E Git output and P2-F joined product status remain after P2-D; P3 complete UI
@@ -455,8 +471,9 @@ page/detail reads, private calendar/timezone composition, and immutable public f
 values and million-row/storage/privacy/resource evidence are green. P2-C schema-v9
 price facts, fixed-point selection, bounded overrides, public costs, and scale/
 resource/offline evidence are complete. P2-D quota values, evaluator, and schema-v10
-foundation are complete; transactional quota history and banked-reset inventory are
-next. No view-time grouping of the full event table is allowed.
+  foundation plus transactional history writes are complete; bounded retention/query
+  and banked-reset inventory are next. No view-time grouping of the full event table
+  is allowed.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 

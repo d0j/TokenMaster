@@ -1490,3 +1490,42 @@ the two explicitly ignored reference/scale gates skipped. This closes P2-D Task 
 only. Task 4 transactional quota observation application is next; retention,
 reads/query, transport, banked-reset inventory/reminders, UI, automation, M0
 acceptance, packaging, signing, and release remain open.
+
+## 2026-07-16 — P2-D transactional quota publication implemented
+
+Added the public `UsageStore::apply_quota_observation` boundary and exact result values
+for started, duplicate, stale, advanced, allowance-changed, and reset outcomes. One
+immediate transaction loads only the target window, calls the pure quota evaluator,
+and publishes immutable definition/sample/history/transition facts plus exact current
+epoch/window state. Duplicate and stale observations are complete no-ops. Every visible
+result advances the independent quota revision exactly once; reset plus allowance
+change remains one complete transition.
+
+Observation identity is global and content-stable, definition content is immutable per
+revision, revision regression fails stale, and all revision/count/transition values are
+checked against SQLite capacity. Critical review found that a missing current-window
+projection could otherwise be silently recreated from the epoch. Writable use and
+reopen now require the current epoch, current projection, and exact last sample to
+agree on definition, identities, times, evidence metadata, and sequence; corruption
+fails closed without repair.
+
+Eight focused integration contracts cover start/advance/duplicate/stale, unpublished
+future definitions, allowance and reset-plus-allowance, repeated resets, account
+isolation, reopen continuity, observation/definition conflicts, and missing projection
+tamper. Internal tests inject failure after sample, epoch, transition, projection, and
+revision and prove exact rollback plus successful deterministic retry. The complete
+store suite now has 51 unit tests and passes with strict Clippy.
+
+The complete workspace gate initially exposed a repeatable false failure in the
+isolated Windows resource harness: one transient low allocator sample became the
+warm-up baseline and made the later stable plateau look like retained growth despite
+unchanged handles, threads, USER, and GDI counts. A deterministic RED vector now
+separates one low trough from a sustained phase change. Warm-up selection uses a
+second-lowest retained floor, while measured windows retain their original minimum
+return and sustained-growth rules. Two fresh isolated processes and the final
+clean-root, formatting, strict locked workspace Clippy, and complete locked workspace
+test/doctest gate pass; the explicitly ignored reference/scale tests remain skipped.
+
+This closes P2-D Task 4 only. Task 5 bounded retention, restart, and maintenance fault
+evidence is next; quota reads/query, permitted Codex transport, banked-reset inventory/
+reminders, UI, automation, M0 acceptance, packaging, signing, and release remain open.

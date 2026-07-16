@@ -6,6 +6,12 @@ All notable changes are recorded here.
 
 ### Added
 
+- Transactional quota observation persistence with exact duplicate/stale no-op,
+  immutable definition/sample/closed-epoch/transition facts, independent one-step
+  quota revision publication, repeated-reset and reopen continuity, account isolation,
+  global observation identity, definition immutability, current-projection validation,
+  checked sequence/capacity errors, deterministic retry, and rollback at five injected
+  publication boundaries.
 - Strict SQLite schema v10 quota storage with an independent revision, seven bounded
   tables, exact table/index/trigger validation, same-window/revision evidence foreign
   keys, semantic allowance-change checks, exact non-mutating v9 migration, malformed
@@ -196,6 +202,9 @@ All notable changes are recorded here.
 
 ### Fixed
 
+- Hardened the isolated Windows query resource warm-up floor against one transient low
+  allocator sample while retaining measured-window return minima, sustained-growth
+  rejection, and exact handle/thread/USER/GDI gates.
 - Replaced the overly conservative 256-event aggregate rebuild cap after its
   deterministic current-million red run retained only about 2,850 events/s. The
   2,048-event cap keeps the persisted cursor/generation/crash boundary, caps derived

@@ -6,7 +6,7 @@
 > (`- [ ]`) syntax for tracking.
 
 **Status:** inline execution in progress after spec-coverage, placeholder, type-flow,
-scope, authority-boundary, and restart-state self-review; Tasks 1-3 complete, Task 4
+scope, authority-boundary, and restart-state self-review; Tasks 1-4 complete, Task 5
 next
 
 **Goal:** Build the provider-neutral quota history data core that preserves scheduled,
@@ -418,6 +418,7 @@ git commit -m "feat(store): add quota schema v10"
 - Create: `crates/store/src/usage/quota_types.rs`
 - Modify: `crates/store/src/usage/mod.rs`
 - Modify: `crates/store/src/lib.rs`
+- Modify: `crates/store/src/usage/migration.rs`
 - Modify: `crates/store/Cargo.toml`
 - Create: `crates/store/tests/quota_write_contract.rs`
 
@@ -438,28 +439,30 @@ impl UsageStore {
 window transition sequence, and optional transition ID without exposing SQL or private
 scope IDs.
 
-- [ ] **Step 1: Write failing transactional contracts**
+- [x] **Step 1: Write failing transactional contracts**
 
 Cover first sample, no-op duplicate, stale sample, normal advance, standalone
 allowance change, reset, reset plus allowance change, two repeated resets, account
 switch isolation, reopen continuity, deterministic retry, and injected rollback after
 sample/epoch/transition/current/revision boundaries.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-store --test quota_write_contract --locked
 ```
 
-- [ ] **Step 3: Implement one immediate transaction**
+- [x] **Step 3: Implement one immediate transaction**
 
 Load only one window's definition/current epoch/last sample/next sequence. Call
 `tokenmaster_quota::evaluate_sample`, insert normalized immutable values, update the
 current projection, and advance `quota_state.revision` exactly once for every visible
 non-duplicate/non-stale result. All writes and the revision advance commit or roll back
-together.
+together. Observation identity is global and content-stable, definition identity is
+immutable per revision, transition/SQLite capacity is checked, and an epoch/current/
+last-sample mismatch fails closed rather than being silently repaired.
 
-- [ ] **Step 4: Verify focused and store suites**
+- [x] **Step 4: Verify focused and store suites**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-store --test quota_write_contract --locked
@@ -468,10 +471,10 @@ $env:RUSTFLAGS = '-Dwarnings'
 cargo +1.97.0 clippy -p tokenmaster-store --all-targets --locked
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
-git add -- crates/store/Cargo.toml crates/store/src/usage/quota_write.rs crates/store/src/usage/quota_types.rs crates/store/src/usage/mod.rs crates/store/src/lib.rs crates/store/tests/quota_write_contract.rs Cargo.lock
+git add -- crates/store/Cargo.toml crates/store/src/usage/quota_write.rs crates/store/src/usage/quota_types.rs crates/store/src/usage/migration.rs crates/store/src/usage/mod.rs crates/store/src/lib.rs crates/store/tests/quota_write_contract.rs Cargo.lock
 git commit -m "feat(store): persist immutable quota transitions"
 ```
 

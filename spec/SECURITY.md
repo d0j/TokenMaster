@@ -50,6 +50,14 @@ inside one exact scope/window. The exact v9 migration is one immediate transacti
 touches only quota objects after v9 validation, and rolls back without residue at the
 injected post-create fault boundary.
 
+The implemented quota writer accepts only already validated domain values and adds no
+filesystem, network, clock, shell, HTTP, credential, or raw-payload authority. It uses
+one immediate transaction, performs no write for duplicate/stale input, rejects global
+observation-ID content reuse and definition mutation, and checks the exact current
+epoch/window/last-sample projection before classification. Missing or mismatched
+projection state is rejected on live use and reopen rather than silently reconstructed.
+Injected failures at every publication boundary prove complete rollback.
+
 Providers emit bounded observation/session-relation drafts only. They cannot create
 event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or
 canonical events. Those values are created only by TokenMaster accounting code. Store

@@ -382,6 +382,23 @@ Maximum used ratio and maximum comparable absolute units each retain the observa
 identity that established that maximum; the identities may differ and are copied into
 reset transitions for exact retention/provenance.
 
+The implemented quota write path loads only one scope/window's latest definition,
+current epoch, exact last sample, and transition sequence inside one immediate
+transaction, then delegates classification to the pure evaluator. Identical duplicate
+and stale observations commit no row or revision change. Every visible start, advance,
+allowance change, or reset inserts one immutable normalized sample, updates the exact
+current epoch/window projection, optionally closes one epoch and inserts one immutable
+transition, and advances the independent quota revision exactly once. Reset plus
+allowance change remains one reset transition with complete allowance facts.
+
+Observation identity is global and content-stable; reusing it with different normalized
+content fails before publication. A stored definition revision cannot change content
+and a lower definition revision fails stale. Current epoch, current window, and last
+sample must agree exactly on revision, identities, times, evidence metadata, and
+transition sequence on writable use and reopen. Missing or mismatched projection state,
+sequence/revision/count overflow, or an injected fault after sample, epoch, transition,
+current projection, or revision fails closed and rolls back to the exact prior state.
+
 ## TM-DATA-009 — Banked reset inventory and activation receipts
 
 A provider benefit lot is immutable evidence scoped by provider, account/workspace,

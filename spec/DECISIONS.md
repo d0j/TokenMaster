@@ -595,3 +595,25 @@ semantics can weaken relationship checks, and mixing quota revision with usage
 generation would invalidate independent consumers. Exact composite ownership,
 semantic checks, and an isolated rollback-safe migration preserve restart truth,
 privacy, and future bounded retention without coupling quota history to local usage.
+
+## ADR-033 — One-transaction quota publication and fail-closed current projection
+
+Decision: `UsageStore::apply_quota_observation` owns one `BEGIN IMMEDIATE` transaction
+per normalized definition/sample pair. It loads one window, calls the pure evaluator,
+and treats duplicate/stale results as exact no-ops. A visible result inserts one
+immutable sample, updates the current epoch/window, optionally closes one epoch and
+inserts one transition, and advances the independent quota revision exactly once.
+Global observation identity is content-stable, definition revisions are immutable,
+and every generated revision/count/sequence is checked against SQLite capacity.
+
+The current epoch, current window projection, and exact last sample must agree on
+revision, observation/epoch identity, timestamps, quality/source/confidence, and
+transition sequence. Live use and reopen reject missing or mismatched projection state;
+the writer never silently repairs it. Injected failures after sample, epoch,
+transition, current projection, and revision must restore the exact prior state.
+
+Rationale: separate transactions can expose partial resets or consume revision without
+history, while silent projection reconstruction can turn corruption into plausible UI
+truth. One bounded transaction, pure classification, strict identity reuse, exact
+projection validation, and deterministic retry preserve idempotency, restart truth,
+and responsive constant-state writes without retaining history in memory.
