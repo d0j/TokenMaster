@@ -1,8 +1,8 @@
 # TokenMaster P2-B Transactional Aggregates Design
 
-Status: approved and re-audited for implementation on 2026-07-16; Tasks 1-4 and the
-overview/series/breakdown slices of Task 6 are implemented. Session reads, calendar
-composition, public values, and final evidence remain open.
+Status: approved and re-audited for implementation on 2026-07-16; Tasks 1-7 are
+implemented and focused-query verified. Performance/resource evidence and final
+project-wide closure remain open.
 
 ## Goal
 
@@ -299,6 +299,7 @@ RED/GREEN tests and the full workspace gate.
 
 ## Primary time-library references
 
-- Jiff crate/platform features: <https://docs.rs/jiff/latest/jiff/>;
-- timezone database and Windows behavior: <https://docs.rs/jiff/latest/jiff/tz/>;
-- explicit gap/fold policy: <https://docs.rs/jiff/latest/jiff/tz/enum.Disambiguation.html>.
+- Jiff 0.2.32 crate/platform features: <https://docs.rs/jiff/0.2.32/jiff/>;
+- timezone database and Windows behavior: <https://docs.rs/jiff/0.2.32/jiff/tz/>;
+- explicit gap/fold policy:
+  <https://docs.rs/jiff/0.2.32/jiff/tz/enum.Disambiguation.html>.

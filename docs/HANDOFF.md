@@ -82,8 +82,15 @@ breakdowns in that same transaction, including explicit skipped-date zero points
 truncation. All-time current/legacy session pages now use mixed-order 256+1 keyset
 continuation and exact dataset-bound opaque keys; detail uses only capped model/project
 session rollups. Raw session identity has no getter or Debug projection.
-The immediate next task is private calendar composition, then immutable query values.
-Do not replace them with view-time full scans or period-labeled whole-session totals.
+Private calendar composition and immutable public query values are now complete:
+explicit/resolved IANA zones, configurable week starts, exact DST/skipped-date
+boundaries, known/partial/unavailable metrics, optional 400-point daily series, four
+breakdowns, and owned session page/detail mappings pass. Public session cursors bind
+dataset plus canonical scopes so a filter change cannot skip keyset rows. Jiff 0.2.32
+is private; the locked Windows chain bundles tzdb 2026c. The immediate next task is
+Task 8 million-row latency, database amplification, privacy, and repeated resource
+evidence. Do not replace it with view-time full scans or period-labeled whole-session
+totals.
 The 2026-07-16 closure review also freezes the remaining plan ambiguities: P3 is the
 complete UI, P4 presentation/localization, P5 read-only automation, and P6 the
 canonical MSVC signed portable release. It selects the Slint attribution route,

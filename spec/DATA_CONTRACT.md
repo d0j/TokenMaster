@@ -266,11 +266,18 @@ Session summaries are all-time facts over one provider/profile/session key; peri
 filters apply to time-rollup analytics, not to whole-session metrics. The canonical
 order is last UTC instant descending, then provider, profile, and private session
 identity ascending. A continuation retains that exact key plus dataset identity and
-returns at most 256 rows with one internal lookahead. Raw session identity has no
-public getter and is redacted from Debug. Exact detail returns the same summary plus
+the public facade binds it to the canonical applied scope-filter set; it returns at
+most 256 rows with one internal lookahead. Raw session identity has no public getter
+and is redacted from Debug. Exact detail returns the same summary plus
 independently capped model and project dimension rows from `usage_session_rollup`;
 project absence is typed. A valid key missing from the exact unchanged dataset returns
 no detail rather than fabricated metrics.
+
+Public calendar values contain only validated Gregorian dates, a canonical IANA zone
+identity, configurable week start, exact UTC boundaries, and owned metrics. Jiff and
+timezone-rule objects remain private. A public token aggregate is exactly
+`unavailable`, `known(sum)`, or `partial(known_sum, known_count, event_count)`; no
+missing component is converted to zero. Daily series are optional and capped at 400.
 
 ## TM-DATA-006 — Bounds
 

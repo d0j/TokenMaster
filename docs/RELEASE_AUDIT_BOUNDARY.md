@@ -22,6 +22,9 @@ The 1.0 package audit requires:
   page, plus product license and generated third-party notices;
 - SBOM, advisory audit, dependency/source/license policy, secret scan, immutable CI
   action references, and artifact provenance/attestation;
+- exact calendar dependency and data provenance: Jiff version, platform adapter,
+  bundled IANA tzdb crate/version and IANA release (currently locked to Jiff 0.2.32,
+  `jiff-tzdb-platform` 0.1.3, `jiff-tzdb` 0.1.8, and tzdb 2026c);
 - clean-room launch, Windows interactive matrix, performance reference run, and
   uninterrupted release-candidate soak.
 

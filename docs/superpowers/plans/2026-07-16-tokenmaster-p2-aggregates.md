@@ -75,8 +75,8 @@ blocks startup on a full group-by, or can publish across a generation change.
 
 ## Task 5 — Add internal calendar/timezone boundary module
 
-Status: next. Task 6 is complete; the store read contract already consumes exact UTC
-half-open boundaries and does not depend on Jiff.
+Status: complete and focused-query verified on 2026-07-16. The store remains UTC-only;
+Jiff 0.2.32 and bundled tzdb 2026c stay private to `tokenmaster-query`.
 
 - Pin `jiff = 0.2.32` behind private query types.
 - Resolve explicit IANA/system zone identity without silent UTC fallback.
@@ -113,11 +113,18 @@ and opaque keyset session page/detail reads are implemented.
 
 ## Task 7 — Add immutable public query values and facade mapping
 
+Status: complete and focused-query verified on 2026-07-16. Exact calendar analytics,
+availability values, optional daily series, fixed breakdowns, opaque scope-bound
+session pages, and exact detail now share the P2-A envelope/facade.
+
 - Add range/timezone/week-start/breakdown requests and validated immutable values.
 - Map known/partial/unavailable token facts without zero fabrication.
 - Preserve P2-A identity, freshness, quality, warnings, ordering, privacy, and owned
   result behavior.
-- Add replacement/stale-dataset and archive-rebuild warning contracts.
+- Prove replacement ordering and stale-dataset rejection. A rebuild cannot return a
+  truthful analytics payload, so this call returns stable `unavailable` without
+  consuming snapshot generation while activity remains readable; the future joined
+  P2-F status snapshot owns the visible `aggregate_rebuilding` warning.
 
 ## Task 8 — Performance, storage, privacy, and resource evidence
 

@@ -3,14 +3,15 @@ use std::{fmt, path::Path, time::Duration};
 use tokenmaster_domain::{ModelKey, TokenCount, TokenUsage, UsageProfileId, UsageProviderId};
 use tokenmaster_store::{
     ArchivePublicationQuality, StoreError, StoreErrorCode, UsageActivityQuery, UsageQueryCapture,
-    UsageQueryDatasetIdentity, UsageQueryEvent, UsageReadStore,
+    UsageQueryDatasetIdentity, UsageQueryEvent, UsageQueryPublication, UsageReadStore,
 };
 
 use crate::{
     ActivityCursor, ActivityItem, DatasetGeneration, DatasetIdentity, LatestActivityPage, PageSize,
     PublicationGeneration, QueryClock, QueryEnvelope, QueryError, QueryErrorCode, QueryFreshness,
     QueryHeader, QueryHeaderParts, QueryQuality, QueryScope, QueryWarningCode, ReplayRevision,
-    SnapshotGeneration,
+    SnapshotGeneration, UsageAnalytics, UsageAnalyticsRequest, UsageSessionDetailResult,
+    UsageSessionKey, UsageSessionPage, UsageSessionPageRequest, analytics, session,
 };
 
 pub const QUERY_FRESH_MAX_AGE_MS: i64 = 20 * 60 * 1_000;
@@ -94,9 +95,98 @@ impl<C: QueryClock> QueryService<C> {
             .store
             .capture_activity_page(store_query)
             .map_err(map_store_error)?;
-        let envelope = map_capture(capture, generation, time.wall_time_ms())?;
+        let envelope = map_activity_capture(capture, generation, time.wall_time_ms())?;
         self.last_generation = Some(generation);
         Ok(envelope)
+    }
+
+    pub fn usage_analytics(
+        &mut self,
+        request: UsageAnalyticsRequest,
+    ) -> Result<QueryEnvelope<UsageAnalytics>, QueryError> {
+        let generation = self.next_generation()?;
+        let time = self.clock.sample()?;
+        time.monotonic_ms()
+            .checked_add(QUERY_DEADLINE_MS)
+            .ok_or_else(|| QueryError::new(QueryErrorCode::Overflow))?;
+        let (plan, store_query) = analytics::build_store_query(
+            &request,
+            time.wall_time_ms(),
+            Duration::from_millis(QUERY_DEADLINE_MS),
+        )?;
+        let capture = self
+            .store
+            .capture_usage_analytics(store_query)
+            .map_err(map_store_error)?;
+        let payload = analytics::map_capture(plan, &capture)?;
+        let header = map_header(
+            capture.publication(),
+            generation,
+            time.wall_time_ms(),
+            request.scopes().to_vec(),
+        )?;
+        self.last_generation = Some(generation);
+        Ok(QueryEnvelope::new(header, payload))
+    }
+
+    pub fn usage_sessions(
+        &mut self,
+        request: UsageSessionPageRequest,
+    ) -> Result<QueryEnvelope<UsageSessionPage>, QueryError> {
+        let generation = self.next_generation()?;
+        let time = self.clock.sample()?;
+        time.monotonic_ms()
+            .checked_add(QUERY_DEADLINE_MS)
+            .ok_or_else(|| QueryError::new(QueryErrorCode::Overflow))?;
+        let store_query =
+            session::build_page_query(&request, Duration::from_millis(QUERY_DEADLINE_MS))?;
+        let capture = self
+            .store
+            .capture_usage_session_page(store_query)
+            .map_err(map_store_error)?;
+        let payload = session::map_page_capture(&capture, &request)?;
+        let header = map_header(
+            capture.publication(),
+            generation,
+            time.wall_time_ms(),
+            request.scopes().to_vec(),
+        )?;
+        self.last_generation = Some(generation);
+        Ok(QueryEnvelope::new(header, payload))
+    }
+
+    pub fn usage_session_detail(
+        &mut self,
+        key: UsageSessionKey,
+    ) -> Result<QueryEnvelope<UsageSessionDetailResult>, QueryError> {
+        let generation = self.next_generation()?;
+        let time = self.clock.sample()?;
+        time.monotonic_ms()
+            .checked_add(QUERY_DEADLINE_MS)
+            .ok_or_else(|| QueryError::new(QueryErrorCode::Overflow))?;
+        let store_query =
+            session::build_detail_query(&key, Duration::from_millis(QUERY_DEADLINE_MS))?;
+        let scopes = vec![key.scope().clone()];
+        let capture = self
+            .store
+            .capture_usage_session_detail(store_query)
+            .map_err(map_store_error)?;
+        let payload = session::map_detail_capture(&capture)?;
+        let header = map_header(
+            capture.publication(),
+            generation,
+            time.wall_time_ms(),
+            scopes,
+        )?;
+        self.last_generation = Some(generation);
+        Ok(QueryEnvelope::new(header, payload))
+    }
+
+    fn next_generation(&self) -> Result<SnapshotGeneration, QueryError> {
+        match self.last_generation {
+            Some(current) => current.checked_next(),
+            None => SnapshotGeneration::new(1),
+        }
     }
 }
 
@@ -106,12 +196,28 @@ impl<C> fmt::Debug for QueryService<C> {
     }
 }
 
-fn map_capture(
+fn map_activity_capture(
     capture: UsageQueryCapture,
     generation: SnapshotGeneration,
     generated_at_ms: i64,
 ) -> Result<QueryEnvelope<LatestActivityPage>, QueryError> {
     let publication = capture.publication();
+    let mut items = Vec::with_capacity(capture.events().len());
+    for event in capture.events() {
+        items.push(map_event(event)?);
+    }
+    let next_cursor = capture.next_cursor().map(ActivityCursor::from_store);
+    let page = LatestActivityPage::new(items, next_cursor, capture.has_more())?;
+    let header = map_header(publication, generation, generated_at_ms, Vec::new())?;
+    Ok(QueryEnvelope::new(header, page))
+}
+
+fn map_header(
+    publication: &UsageQueryPublication,
+    generation: SnapshotGeneration,
+    generated_at_ms: i64,
+    scopes: Vec<QueryScope>,
+) -> Result<QueryHeader, QueryError> {
     let dataset_identity = from_store_identity(publication.dataset_identity())?;
     let mut warnings = Vec::with_capacity(2);
     let quality = map_quality(
@@ -125,13 +231,7 @@ fn map_capture(
         publication.data_through_ms(),
         &mut warnings,
     );
-    let mut items = Vec::with_capacity(capture.events().len());
-    for event in capture.events() {
-        items.push(map_event(event)?);
-    }
-    let next_cursor = capture.next_cursor().map(ActivityCursor::from_store);
-    let page = LatestActivityPage::new(items, next_cursor, capture.has_more())?;
-    let header = QueryHeader::new(QueryHeaderParts {
+    QueryHeader::new(QueryHeaderParts {
         snapshot_generation: generation,
         publication_generation: PublicationGeneration::new(publication.generation())?,
         dataset_identity,
@@ -139,10 +239,9 @@ fn map_capture(
         data_through_ms: publication.data_through_ms(),
         freshness,
         quality,
-        scopes: Vec::new(),
+        scopes,
         warnings,
-    })?;
-    Ok(QueryEnvelope::new(header, page))
+    })
 }
 
 fn map_event(event: &UsageQueryEvent) -> Result<ActivityItem, QueryError> {
@@ -233,7 +332,7 @@ fn map_freshness(
     }
 }
 
-const fn to_store_identity(identity: DatasetIdentity) -> UsageQueryDatasetIdentity {
+pub(crate) const fn to_store_identity(identity: DatasetIdentity) -> UsageQueryDatasetIdentity {
     match identity {
         DatasetIdentity::Empty => UsageQueryDatasetIdentity::Empty,
         DatasetIdentity::LegacySnapshotV1 => UsageQueryDatasetIdentity::LegacySnapshotV1,
@@ -247,7 +346,9 @@ const fn to_store_identity(identity: DatasetIdentity) -> UsageQueryDatasetIdenti
     }
 }
 
-fn from_store_identity(identity: UsageQueryDatasetIdentity) -> Result<DatasetIdentity, QueryError> {
+pub(crate) fn from_store_identity(
+    identity: UsageQueryDatasetIdentity,
+) -> Result<DatasetIdentity, QueryError> {
     match identity {
         UsageQueryDatasetIdentity::Empty => Ok(DatasetIdentity::Empty),
         UsageQueryDatasetIdentity::LegacySnapshotV1 => Ok(DatasetIdentity::LegacySnapshotV1),
@@ -263,7 +364,7 @@ fn from_store_identity(identity: UsageQueryDatasetIdentity) -> Result<DatasetIde
     }
 }
 
-fn map_store_error(error: StoreError) -> QueryError {
+pub(crate) fn map_store_error(error: StoreError) -> QueryError {
     let code = match error.code() {
         StoreErrorCode::InvalidValue => QueryErrorCode::InvalidValue,
         StoreErrorCode::CapacityExceeded => QueryErrorCode::CapacityExceeded,
@@ -277,8 +378,8 @@ fn map_store_error(error: StoreError) -> QueryError {
         | StoreErrorCode::InvalidStoredValue
         | StoreErrorCode::AccountingVersionMismatch
         | StoreErrorCode::ArchiveModeMismatch => QueryErrorCode::CorruptArchive,
+        StoreErrorCode::RebuildRequired => QueryErrorCode::Unavailable,
         StoreErrorCode::StaleCheckpoint
-        | StoreErrorCode::RebuildRequired
         | StoreErrorCode::IncompleteManifest
         | StoreErrorCode::UnsealedRevision
         | StoreErrorCode::PendingContinuation

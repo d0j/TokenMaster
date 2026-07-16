@@ -144,6 +144,16 @@ All notable changes are recorded here.
   exposure. Exact detail returns capped model/project rollups or typed absence without
   raw-event fallback. Current, rebuilt legacy, stale, equal-time, missing, scope,
   limit, cancellation, concurrent-state, and real query-plan contracts pass.
+- Added exact private calendar composition with pinned Jiff 0.2.32, explicit IANA or
+  resolved-system zones, all seven week starts, DST gap/fold, skipped-date, leap/year,
+  half/quarter-hour, and historical sub-minute fail-closed contracts. The locked
+  bundled Windows chain records `jiff-tzdb` 0.1.8 / IANA tzdb 2026c.
+- Added immutable public analytics and session facade values: today/day/week/month/
+  bounded custom ranges, optional 400-point daily series, known/partial/unavailable
+  token facts, activity counters, four independently capped breakdowns, and owned
+  opaque session page/detail results. Session continuation now binds both dataset and
+  canonical scopes, and failed/rebuild/stale captures do not consume snapshot
+  generation.
 
 ### Fixed
 

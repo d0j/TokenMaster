@@ -1297,3 +1297,29 @@ immutable aggregate facade values, million-row/resource evidence, UI, automation
 release remain open. The post-documentation root gate then passed clean-root audit,
 format check, strict locked workspace Clippy, all locked workspace tests/doctests, and
 diff-check in 79.8 seconds.
+
+## 2026-07-16 — P2-B exact calendar and immutable facade implemented
+
+Pinned Jiff 0.2.32 inside `tokenmaster-query` and kept its timezone objects outside
+public values and the archive contract. Explicit IANA or positively resolved system
+zones now convert day, configurable week, month, and bounded custom half-open ranges
+into at most three exact UTC minute/hour segments. Compatible gap/fold handling,
+zero-duration Pacific/Apia skipped date, UTC, Asia/Jerusalem, America/New_York,
+Australia/Lord_Howe, Asia/Kathmandu, leap/year edges, all seven week starts, and the
+Africa/Monrovia historical sub-minute rejection pass. The locked platform chain is
+`jiff-tzdb-platform` 0.1.3 and `jiff-tzdb` 0.1.8 / IANA tzdb 2026c.
+
+`QueryService` now maps one short aggregate capture into owned immutable public
+analytics with canonical zone/date/UTC boundaries, optional daily series capped at
+400, exact unavailable/known/partial token algebra, activity facts, and independently
+capped model/project/provider/profile breakdowns. All-time session first/continuation
+and exact detail are mapped into opaque public keys/cursors with raw session identity
+redacted. A closure audit found and fixed filter drift: continuation now retains the
+canonical scope set and rejects a changed filter before SQLite so keyset rows cannot
+be skipped. Missing detail remains typed `None`; changed datasets are stale; aggregate
+rebuild is unavailable without raw fallback; failed calls consume no snapshot
+generation. Focused strict query Clippy and the complete locked query suite pass.
+
+Task 8 million-row latency, database amplification, Debug/privacy, rebuild-cycle, and
+Windows resource evidence remains open; no P2-B completion, UI, automation, package,
+or release claim is made.

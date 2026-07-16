@@ -499,3 +499,34 @@ session that merely overlaps a period would falsely present all-time tokens as
 period-clipped tokens, while exact clipping would require raw-event access or another
 materialization. The explicit all-time boundary is therefore both truthful and fast;
 a future period-clipped session product requires a separately specified indexed fact.
+
+## ADR-029 — Exact private calendar and immutable aggregate facade
+
+Decision: `tokenmaster-query` pins Jiff 0.2.32 and keeps every Jiff/timezone-rule type
+private. Public requests select today/day/week/month or a custom range, an explicit
+IANA or positively resolved system zone, one of seven week starts, optional daily
+series, canonical scopes, and fixed breakdown kinds. Local half-open boundaries use
+Jiff compatible gap/fold resolution and compose at most three UTC minute/hour
+segments. Skipped civil dates remain zero-duration points; sub-minute historical
+boundaries fail with `unsupported_time_boundary` rather than rounding.
+
+Public token facts are `unavailable`, `known`, or `partial`; results are owned and
+bounded to 400 points, four independently capped breakdowns, and 256 session rows.
+Session keys/cursors keep raw identity opaque, and continuation additionally binds the
+canonical scope filters so a filter change cannot silently skip keyset rows. Aggregate
+rebuild is `unavailable` without a raw-history fallback and does not consume a snapshot
+generation. The locked Windows dependency chain is Jiff 0.2.32,
+`jiff-tzdb-platform` 0.1.3, and bundled `jiff-tzdb` 0.1.8 / IANA tzdb 2026c; changes
+require an explicit dependency/provenance review.
+
+An unavailable aggregate generation cannot produce a truthful analytics envelope, so
+the analytics call returns stable `unavailable` and does not allocate a snapshot
+generation. The future joined P2-F status snapshot, which can represent engine and
+aggregate health without fabricating metrics, owns the visible
+`aggregate_rebuilding` warning.
+
+Rationale: storing local buckets or exposing timezone engines couples data to mutable
+user settings; silent UTC/rounding gives plausible wrong totals; implicit series work
+wastes CLI/MCP latency; and dataset-only session cursors can skip rows after a filter
+change. Private exact composition plus validated immutable values preserves portable,
+responsive UI/CLI/MCP parity without expanding SQL, memory, or privacy authority.

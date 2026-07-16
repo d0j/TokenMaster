@@ -50,6 +50,15 @@ private-session identity. The raw session key remains inside a dataset-bound opa
 value with redacted Debug; exact detail reads only capped model/project session rows.
 Period analytics use UTC time rollups and never relabel whole-session totals.
 
+`tokenmaster-query` privately resolves validated calendar requests through pinned
+Jiff rules. An explicit IANA or positively resolved system zone becomes exact UTC
+minute/hour segments; gaps/folds use compatible civil-time semantics, skipped dates
+remain zero-duration points, and historical sub-minute boundaries fail closed. The
+public immutable facade exposes only dates, canonical zone identity, exact token
+availability, bounded daily points/breakdowns, and opaque session keys. Session
+continuations are bound to dataset plus scope filters, so changing a filter restarts
+pagination instead of skipping rows.
+
 The UI receives bounded view models rather than owning archive state. Skin, layout,
 and locale selection alter presentation state only, so switching remains immediate and
 does not reparse sources or rebuild the archive.

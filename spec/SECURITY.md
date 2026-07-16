@@ -85,6 +85,14 @@ projection may reveal it. Page scopes are typed and capped, continuation is keys
 detail returns fixed model/project dimensions, and a missing exact key cannot trigger a
 raw-history fallback.
 
+Calendar requests accept only a bounded validated IANA name or the system zone when it
+resolves to an IANA identity. They accept no timezone file, POSIX rule, URL, path, or
+silent UTC fallback. Historical boundaries not aligned to a UTC minute fail with
+`unsupported_time_boundary`; they are never rounded or answered from raw history.
+Public session cursors retain only an opaque store cursor plus the bounded canonical
+scope set and reject filter changes before SQLite access. Public Debug keeps the raw
+session identity redacted.
+
 Scan authority is provider/profile qualified and store-owned. One bounded scan set
 contains one child per exact scope; an observation may update only the matching
 running child. Only successful completion of that child may derive presence from its

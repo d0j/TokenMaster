@@ -236,18 +236,19 @@ owned, frontends receive no SQLite access, and latest activity uses the existing
 composite keyset index. P2-B schema-v8 provider identity, transactional materialized
 rollups, and bounded resumable publication are now implemented. Fixed overview,
 partitioned series, independently capped breakdown reads, and opaque mixed-order
-keyset session page/detail reads also pass in exact snapshots. The active critical
-path is private calendar composition, then immutable public values and million-row/
-resource evidence. View-time full scans and period-labeled whole-session totals remain
-forbidden.
+keyset session page/detail reads also pass in exact snapshots. Private exact IANA/DST
+calendar composition and immutable analytics/session facade values now pass as well,
+including optional daily series, explicit token availability, and scope-bound opaque
+session continuation. The active critical path is million-row/storage/privacy/resource
+evidence. View-time full scans and period-labeled whole-session totals remain forbidden.
 P2-A now implements the bounded public values, separate defensive read-only/query-only
 schema-v8 store, synchronous `QueryService`, and one-result consumer ordering. Current/
 legacy activity, exact publication and scan truth, stale accounting downgrade, stale
 identity, indexed lookahead, deadline cleanup, concurrent-commit isolation, 100K
 latency, Debug/privacy, 10,000-candidate retention, and 256-cycle Windows resource
 contracts pass. No frontend owns SQLite. P2-B transactional storage, rebuild,
-overview, series, breakdown, and session store reads are now implemented; calendar
-composition and immutable aggregate facade values are the next gate.
+overview, series, breakdown, session store reads, calendar composition, and immutable
+aggregate/session facade values are now implemented; Task 8 evidence is the next gate.
 The older replay plan remains historical evidence for
 completed Tasks 1-2, but its Codex-owned Tasks 3+ are superseded and must not be
 executed.

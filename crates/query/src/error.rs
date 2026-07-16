@@ -3,6 +3,9 @@ use core::fmt;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum QueryErrorCode {
     InvalidValue,
+    InvalidTimeZone,
+    SystemTimeZoneUnavailable,
+    UnsupportedTimeBoundary,
     CapacityExceeded,
     Unavailable,
     VersionMismatch,
@@ -18,6 +21,9 @@ impl QueryErrorCode {
     pub const fn stable_code(self) -> &'static str {
         match self {
             Self::InvalidValue => "invalid_value",
+            Self::InvalidTimeZone => "invalid_time_zone",
+            Self::SystemTimeZoneUnavailable => "system_time_zone_unavailable",
+            Self::UnsupportedTimeBoundary => "unsupported_time_boundary",
             Self::CapacityExceeded => "capacity_exceeded",
             Self::Unavailable => "unavailable",
             Self::VersionMismatch => "version_mismatch",

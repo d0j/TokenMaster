@@ -7,7 +7,7 @@ A design or plan is not implementation evidence.
 | --- | --- | --- | --- |
 | TM-FUNC-001 | implemented | `crates/provider`, Codex roots/files | provider, discovery, enumeration contracts |
 | TM-FUNC-002 | implemented | Codex reader plus store/runtime incremental path | zero-payload unchanged, exact tail bytes, multi-batch restart, new/missing source, replacement/truncation/profile-scope and malformed-input recovery contracts |
-| TM-FUNC-003 | partial | domain/accounting/Codex parser; pricing/analytics planned | usage, canonicalizer, parser-state, parser-adversarial contracts |
+| TM-FUNC-003 | partial | domain/accounting/Codex parser plus indexed aggregate query facade; pricing planned | usage/parser contracts plus exact calendar overview/daily-series/breakdown/session facade mapping; pricing/cost remains |
 | TM-FUNC-004 | planned | query snapshots and complete Slint product routes | row-level parity ledger plus P3 UI plan after P2 query contracts |
 | TM-FUNC-005 | partial | `crates/probe-app`; product shell later | lifecycle, presentation, skin-runtime, metrics, stress contracts |
 | TM-FUNC-006 | planned | separate CLI and MCP adapters over query facade | P5 strict JSON/stdin MCP conformance tests after the complete UI |
@@ -19,7 +19,7 @@ A design or plan is not implementation evidence.
 | TM-UI-002 | partial | `crates/probe-app`, immutable runtime publication, and P2-A query snapshots | strictly newer consumer predicate, exact archive identity/data-through, equal/older rejection, no-change cursor continuity, and one-retained-envelope contract pass; product presentation snapshots pending |
 | TM-PERF-001 | partial | bounded parser/reader/store/engine plus live runtime and query facade | unchanged payload bytes=0; exact tail; 300-event batches; 10,000-hint aggregate/one follow-up; one retained result across 10,000 candidates; watcher/live/power baselines and 256-cycle query resource plateau pass; UI/plugin evidence pending |
 | TM-PERF-002 | open evidence | software renderer and M0 resource gates | uninterrupted soak and interactive receipts remain absent |
-| TM-PERF-003 | partial | immutable engine publication, complete P2-A activity query, and P2-B transactional aggregate storage/rebuild/read | prior evidence plus measured 1/32/256 append p95 of 1.814/19.888/230.620 ms; exact overview/400-point-series/four-breakdown snapshot and 256+1 mixed-order session page/detail plans pass; million-row dashboard/resource evidence and P3 UI remain |
+| TM-PERF-003 | partial | immutable engine publication, P2-A activity query, and P2-B transactional aggregates plus immutable facade | prior evidence plus measured 1/32/256 append p95 of 1.814/19.888/230.620 ms; exact IANA/DST calendar overview/400-point-series/four-breakdown and scope-bound opaque session page/detail facade contracts pass; million-row dashboard/resource evidence and P3 UI remain |
 | TM-REL-001 | partial | M0 scripts and receipt schemas | identity checks exist; final product packaging evidence pending |
 | TM-REL-002 | open evidence | `M0_ACCEPTANCE.md` | interactive Windows/DPI/accessibility and uninterrupted soak receipts absent |
 | TM-REL-003 | planned | P6 explicit MSVC signed portable package and supply-chain gates | GNU/MSVC comparison, notices/SBOM, advisory/source/license/secret/action/attestation audits, deterministic package and clean-room launch pending |
@@ -28,7 +28,7 @@ A design or plan is not implementation evidence.
 | TM-DATA-003 | implemented | file identity and reader checkpoint | physical identity live/persisted round-trip, checkpoint conversion, resume bound, and restart contracts |
 | TM-DATA-004 | implemented | scoped scan/rebuild plus replay-aware current publication, paired-CAS tail facts, exact admission, durable partial/recovery, retained promotion/discard | atomic faults, stale CAS, unchanged/append/multi-batch/new/missing/restart/deadline/rebuild contracts pass |
 | TM-DATA-005 | implemented | writable usage store plus separate `UsageReadStore` | strict schema v8 with dataset/aggregate triggers, exact v7 rollback migration, provider-self-contained events, and read-only query-only defensive 4-MiB/no-migration/no-checkpoint policy pass |
-| TM-DATA-006 | partial | reader/parser/store, engine/runtime, P2-A query, and P2-B rebuild/read bounds | prior limits plus fixed three-segment overview, 400 exact series points, four unique breakdowns and session page/detail collections with 256+1 lookahead, 32 scopes, 16 warnings, exact read transactions and two-second maximum; public values and UI/plugin limits pending |
+| TM-DATA-006 | partial | reader/parser/store, engine/runtime, and immutable P2 query facade | prior limits plus three-segment calendar composition, optional 400-point daily series, four unique breakdowns, 256+1 session lookahead, scope-bound cursor, 32 scopes, 16 warnings, exact two-second reads, and owned public values pass; UI/plugin limits pending |
 | TM-DATA-007 | implemented | replay facts/classifier in a private overlay plus schema-v4 self-contained canonical projection with deterministic selection/retention | v1/v2/v3-to-v4 migration plus replay/append/restart/300-file/atomic-replacement/truncation truth-table/failure contracts pass |
 | TM-DATA-008 | planned | immutable quota samples, epochs, reset and allowance transitions | P2 quota reset history schema/detection/retention contracts pending |
 | TM-DATA-009 | planned | typed provider benefit inventory, versioned reminder profiles/delivery, activation intent/receipt projection | P2 banked reset schema/expiry/profile/dedup/CAS/retention contracts pending |
@@ -83,8 +83,9 @@ registration, capacity-one event reduction, resume-without-suspend reconciliatio
 duplicate/shutdown behavior, and 4,096-cycle private-memory/handle/thread/USER/GDI
 resource bounds. P1 and P2-A are implemented. P2-B provider identity, aggregate
 schema/triggers, bounded rebuild, overview/series/breakdown reads, and opaque keyset
-session page/detail reads are implemented; calendar composition, million-row resource
-evidence, and public values remain. M0 interactive/
+session page/detail reads, exact private calendar composition, immutable aggregate
+values, and facade mapping are implemented; million-row/resource evidence remains.
+M0 interactive/
 soak evidence remains.
 Tasks 3+ in the older replay plan are historical and superseded.
 

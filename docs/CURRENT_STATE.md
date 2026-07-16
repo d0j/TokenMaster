@@ -256,6 +256,21 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   dataset without a getter or Debug leak. Current/scoped/rebuilt-legacy, equal-time
   ordering, missing detail, 257-row truncation, stale identity, real plan, concurrent
   state, and forced-cancellation cleanup contracts pass.
+- P2-B calendar/facade: `tokenmaster-query` now pins Jiff 0.2.32 behind private
+  boundary types and resolves explicit IANA or positively identified system zones
+  without UTC fallback. UTC, Asia/Jerusalem, America/New_York, Australia/Lord_Howe,
+  Asia/Kathmandu, Pacific/Apia, leap/year edges, every week start, 23/25-hour days,
+  skipped dates, and a historical sub-minute failure pass. The locked bundled chain is
+  `jiff-tzdb-platform` 0.1.3 plus `jiff-tzdb` 0.1.8 / IANA tzdb 2026c.
+- P2-B immutable public values: `QueryService` now returns exact today/day/week/month/
+  bounded-custom analytics with optional 400-point daily series, known/partial/
+  unavailable tokens, activity counters, four fixed breakdowns, and owned opaque
+  session page/detail values. Session continuation binds dataset plus canonical scope
+  filters; rebuild/stale/failed reads consume no snapshot generation. Focused strict
+  Clippy and all `tokenmaster-query` tests pass.
+  A visible `aggregate_rebuilding` warning belongs to the future joined P2-F status
+  snapshot; analytics itself returns stable `unavailable` because no truthful payload
+  exists during rebuild.
 
 ## Next implementation slice
 
@@ -338,9 +353,10 @@ scan, so it is no longer dataset identity. Schema v7 adds a dedicated transactio
 dataset generation with exact v6 migration/rollback, overflow, real no-change scan,
 and current append proofs. P2-B Tasks 2-4 now add schema-v8 provider identity,
 transactional materialization, and bounded resumable publication. Task 6 is complete:
-fixed overview/series, independently capped breakdowns, and opaque keyset session
-page/detail reads are green. Private calendar/timezone composition and immutable
-public values are next. No view-time grouping of the full event table is allowed.
+fixed overview/series, independently capped breakdowns, opaque keyset session
+page/detail reads, private calendar/timezone composition, and immutable public facade
+values are green. Million-row/storage/privacy/resource evidence is next. No view-time
+grouping of the full event table is allowed.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 

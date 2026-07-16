@@ -226,6 +226,9 @@ fn stable_codes_do_not_include_inner_or_path_text() {
 
     for code in [
         QueryErrorCode::InvalidValue,
+        QueryErrorCode::InvalidTimeZone,
+        QueryErrorCode::SystemTimeZoneUnavailable,
+        QueryErrorCode::UnsupportedTimeBoundary,
         QueryErrorCode::CapacityExceeded,
         QueryErrorCode::Unavailable,
         QueryErrorCode::VersionMismatch,

@@ -214,6 +214,22 @@ capped independently at 256 plus one lookahead. Page and detail capture publicat
 ready aggregate generation, and payload in one deferred transaction, clear progress
 cancellation before connection reuse, and never query `usage_event` or use `OFFSET`.
 
+`QueryService::usage_analytics` accepts a validated today/day/week/month/custom range,
+explicit IANA or resolved-system timezone, one of seven week starts, optional daily
+series, at most 32 canonical unique scopes, and any unique subset of the four fixed
+breakdowns. Custom and returned daily series are capped at 400 dates. It returns a
+canonical zone identity, exact local-date/UTC boundaries, known/partial/unavailable
+token facts, owned activity counters, series, and independently bounded breakdowns.
+Jiff values never cross this facade.
+
+`QueryService::usage_sessions` returns an owned 256-item maximum all-time page. Its
+public cursor binds the exact dataset and canonical scope-filter set; a filter change
+is `invalid_value` and a dataset change is `stale_snapshot` rather than a mixed page.
+`QueryService::usage_session_detail` accepts only a previously returned opaque key and
+returns typed absence or one owned summary with model/project breakdowns. Failed
+calendar, rebuild, stale, or store captures do not consume process-local snapshot
+generation.
+
 `QueryService` is the only public archive facade in this contour. It allocates a
 strictly increasing process-local snapshot generation only after a successful capture,
 maps complete/partial/recovery/legacy truth explicitly, applies the 20-minute/2-hour

@@ -140,7 +140,8 @@ latency and repeated resource-return contracts pass. P2-B schema-v8 provider ide
 transactional materialized rollups, availability counts, and bounded resumable rebuild
 are now implemented. Fixed overview/series/breakdown and opaque keyset session
 page/detail reads are implemented. Calendar/timezone composition, immutable public
-values, and million-row cached-dashboard/resource evidence remain.
+values, scope-bound opaque session mapping, and exact facade capture are implemented.
+Million-row cached-dashboard/storage/privacy/resource evidence remains.
 No frontend/database coupling or view-time full event grouping is accepted.
 
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset

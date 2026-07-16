@@ -156,6 +156,12 @@ materialized rollups rather than grouping the complete event archive at view tim
 Session pages MUST use indexed mixed-order keyset continuation with one lookahead row,
 and exact detail MUST read only bounded model/project session rollups. Raw session IDs
 MUST remain private to the store query key and MUST NOT enter Debug or wire values.
+Calendar ranges MUST resolve an explicit IANA or positively identified system zone,
+use exact half-open local boundaries, and never silently fall back to UTC or round a
+historical sub-minute offset. Public analytics MUST preserve known, partial, and
+unavailable token facts and cap a requested daily series at 400 owned points. A
+session continuation MUST remain bound to both its exact dataset and canonical scope
+filter set; changing either starts a new first page.
 On the reference machine, aggregate-ready append p95 MUST remain below 25 ms for the
 normal one-event path, 50 ms for 32-event catch-up, and 250 ms for the maximum
 256-event catch-up, and MUST NOT exceed 1.5 times the matching aggregate-unavailable

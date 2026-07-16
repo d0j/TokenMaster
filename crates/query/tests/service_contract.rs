@@ -2,11 +2,13 @@ use std::path::Path;
 
 use rusqlite::{Connection, params};
 use tempfile::TempDir;
-use tokenmaster_domain::TokenCount;
+use tokenmaster_domain::{TokenCount, UsageProfileId, UsageProviderId};
 use tokenmaster_query::{
-    DatasetGeneration, DatasetIdentity, LatestActivityRequest, PageSize, QUERY_FRESH_MAX_AGE_MS,
-    QUERY_STALE_MIN_AGE_MS, QueryClock, QueryError, QueryErrorCode, QueryFreshness, QueryQuality,
-    QueryService, QueryTimeSample, QueryWarningCode,
+    AggregateTokenValue, CalendarDate, DatasetGeneration, DatasetIdentity, LatestActivityRequest,
+    PageSize, QUERY_FRESH_MAX_AGE_MS, QUERY_STALE_MIN_AGE_MS, QueryClock, QueryError,
+    QueryErrorCode, QueryFreshness, QueryQuality, QueryService, QueryTimeSample, QueryWarningCode,
+    UsageAnalyticsRequest, UsageBreakdownIdentity, UsageBreakdownKind, UsageRange,
+    UsageSeriesSelection, UsageSessionPageRequest, UsageTimeZone, WeekStart,
 };
 use tokenmaster_store::UsageStore;
 
@@ -358,4 +360,293 @@ fn activity_mapping_paging_and_failed_generation_are_exact() {
         changed.header().dataset_identity(),
         first.header().dataset_identity()
     );
+}
+
+#[test]
+fn analytics_mapping_is_calendar_exact_owned_and_never_fabricates_missing_tokens() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("analytics.sqlite3");
+    seed_current_archive(&path, 2_000, "complete", 3);
+    let connection = Connection::open(&path).expect("partial-token connection");
+    connection
+        .execute(
+            "UPDATE usage_event SET input_tokens = NULL WHERE event_id = 'event-0'",
+            [],
+        )
+        .expect("make one input value unavailable");
+    drop(connection);
+    let mut service = service(&path, 2_001);
+    let request = UsageAnalyticsRequest::new(
+        UsageRange::custom(
+            CalendarDate::new(1970, 1, 1).expect("start"),
+            CalendarDate::new(1970, 1, 2).expect("end"),
+        )
+        .expect("range"),
+        UsageTimeZone::iana("utc").expect("UTC"),
+        WeekStart::Monday,
+        UsageSeriesSelection::Daily,
+        Vec::new(),
+        vec![
+            UsageBreakdownKind::Profile,
+            UsageBreakdownKind::Provider,
+            UsageBreakdownKind::Project,
+            UsageBreakdownKind::Model,
+        ],
+    )
+    .expect("analytics request");
+    let snapshot = service.usage_analytics(request).expect("analytics");
+
+    assert_eq!(snapshot.header().snapshot_generation().get(), 1);
+    assert!(snapshot.header().scopes().is_empty());
+    assert_eq!(snapshot.payload().range().time_zone_id(), "UTC");
+    assert_eq!(snapshot.payload().range().start_seconds(), 0);
+    assert_eq!(snapshot.payload().range().end_seconds(), 86_400);
+    assert_eq!(snapshot.payload().overview().event_count(), 3);
+    assert_eq!(
+        snapshot.payload().overview().input(),
+        AggregateTokenValue::Partial {
+            known_sum: 23,
+            known_count: 2,
+            event_count: 3,
+        }
+    );
+    assert_eq!(
+        snapshot.payload().overview().cached(),
+        AggregateTokenValue::Unavailable
+    );
+    assert_eq!(
+        snapshot.payload().overview().reasoning(),
+        AggregateTokenValue::Unavailable
+    );
+    assert_eq!(
+        snapshot.payload().overview().total(),
+        AggregateTokenValue::Known(36)
+    );
+    assert_eq!(snapshot.payload().series().len(), 1);
+    assert_eq!(snapshot.payload().series()[0].metrics().event_count(), 3);
+    assert_eq!(snapshot.payload().breakdowns().len(), 4);
+    assert_eq!(
+        snapshot.payload().breakdowns()[0].kind(),
+        UsageBreakdownKind::Model
+    );
+    assert_eq!(snapshot.payload().breakdowns()[0].items().len(), 1);
+    assert!(matches!(
+        snapshot.payload().breakdowns()[1].items()[0].identity(),
+        UsageBreakdownIdentity::UnassociatedProject
+    ));
+
+    drop(service);
+    assert_eq!(snapshot.payload().overview().event_count(), 3);
+    let debug = format!("{snapshot:?}");
+    for private in [
+        path.to_string_lossy().as_ref(),
+        "fixture-source-private",
+        "private-prompt",
+        "private-response",
+        "private-command",
+        "private-reasoning",
+    ] {
+        assert!(
+            !debug.contains(private),
+            "analytics Debug exposed {private}"
+        );
+    }
+}
+
+#[test]
+fn unavailable_aggregate_rebuild_does_not_consume_snapshot_generation() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("rebuild.sqlite3");
+    seed_current_archive(&path, 2_000, "complete", 1);
+    let connection = Connection::open(&path).expect("rebuild connection");
+    connection
+        .execute(
+            "UPDATE usage_aggregate_state SET state = 'rebuild_required' WHERE singleton_id = 1",
+            [],
+        )
+        .expect("require aggregate rebuild");
+    drop(connection);
+
+    let mut service = service(&path, 2_001);
+    let error = service
+        .usage_analytics(
+            UsageAnalyticsRequest::new(
+                UsageRange::today(),
+                UsageTimeZone::iana("UTC").expect("UTC"),
+                WeekStart::Monday,
+                UsageSeriesSelection::None,
+                Vec::new(),
+                Vec::new(),
+            )
+            .expect("request"),
+        )
+        .expect_err("rebuild is unavailable");
+    assert_eq!(error.code(), QueryErrorCode::Unavailable);
+
+    let activity = service
+        .latest_activity(LatestActivityRequest::first(
+            PageSize::new(1).expect("page"),
+        ))
+        .expect("activity remains available");
+    assert_eq!(activity.header().snapshot_generation().get(), 1);
+}
+
+#[test]
+fn session_page_detail_cursor_and_stale_dataset_are_opaque_and_exact() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("sessions.sqlite3");
+    seed_current_archive(&path, 2_000, "complete", 3);
+    let connection = Connection::open(&path).expect("session fixture connection");
+    connection
+        .execute_batch(
+            "BEGIN IMMEDIATE;
+             UPDATE usage_event SET session_id = 'private-session-a' WHERE event_id = 'event-0';
+             UPDATE usage_event SET session_id = 'private-session-b' WHERE event_id = 'event-1';
+             UPDATE usage_event SET session_id = 'private-session-c' WHERE event_id = 'event-2';
+             COMMIT;",
+        )
+        .expect("split sessions");
+    drop(connection);
+
+    let mut service = service(&path, 2_001);
+    let first = service
+        .usage_sessions(
+            UsageSessionPageRequest::first(PageSize::new(2).expect("page"), Vec::new())
+                .expect("request"),
+        )
+        .expect("first session page");
+    assert_eq!(first.payload().sessions().len(), 2);
+    assert!(first.payload().has_more());
+    assert_eq!(
+        first.payload().sessions()[0].last_timestamp_seconds(),
+        1_002
+    );
+    assert_eq!(first.payload().sessions()[0].metrics().event_count(), 1);
+    assert_eq!(
+        first.payload().sessions()[0].metrics().input(),
+        AggregateTokenValue::Known(12)
+    );
+    let key = first.payload().sessions()[0].key().clone();
+    let cursor = first
+        .payload()
+        .next_cursor()
+        .expect("continuation cursor")
+        .clone();
+    assert_eq!(key.dataset_identity(), first.header().dataset_identity());
+    assert_eq!(cursor.dataset_identity(), first.header().dataset_identity());
+    let debug = format!("{first:?} {key:?} {cursor:?}");
+    for private in [
+        "private-session-a",
+        "private-session-b",
+        "private-session-c",
+        "fixture-source-private",
+    ] {
+        assert!(!debug.contains(private), "session Debug exposed {private}");
+    }
+    assert!(debug.contains("identity: \"[redacted]\""));
+
+    let changed_filter = UsageSessionPageRequest::continuation(
+        PageSize::new(2).expect("page"),
+        cursor.clone(),
+        vec![tokenmaster_query::QueryScope::new(
+            UsageProviderId::new("codex").expect("provider"),
+            UsageProfileId::new("default").expect("profile"),
+        )],
+    )
+    .expect_err("cursor cannot cross a filter change");
+    assert_eq!(changed_filter.code(), QueryErrorCode::InvalidValue);
+
+    let detail = service.usage_session_detail(key).expect("session detail");
+    let detail = detail.payload().detail().expect("existing detail");
+    assert_eq!(detail.summary().metrics().event_count(), 1);
+    assert_eq!(detail.breakdowns().len(), 2);
+    assert_eq!(detail.breakdowns()[0].kind(), UsageBreakdownKind::Model);
+    assert_eq!(detail.breakdowns()[1].kind(), UsageBreakdownKind::Project);
+    assert!(matches!(
+        detail.breakdowns()[1].items()[0].identity(),
+        UsageBreakdownIdentity::UnassociatedProject
+    ));
+
+    let connection = Connection::open(&path).expect("publication connection");
+    connection
+        .execute("UPDATE usage_archive_state SET archive_generation = 5", [])
+        .expect("no-change publication");
+    drop(connection);
+    let second = service
+        .usage_sessions(
+            UsageSessionPageRequest::continuation(
+                PageSize::new(2).expect("page"),
+                cursor.clone(),
+                Vec::new(),
+            )
+            .expect("continuation request"),
+        )
+        .expect("continuation page");
+    assert_eq!(second.header().snapshot_generation().get(), 3);
+    assert_eq!(second.header().publication_generation().get(), 5);
+    assert_eq!(second.payload().sessions().len(), 1);
+    assert!(!second.payload().has_more());
+
+    let connection = Connection::open(&path).expect("dataset mutation connection");
+    connection
+        .execute(
+            "UPDATE usage_event SET model = 'gpt-5.7' WHERE event_id = 'event-0'",
+            [],
+        )
+        .expect("mutate session dataset");
+    drop(connection);
+    let stale = service
+        .usage_sessions(
+            UsageSessionPageRequest::continuation(
+                PageSize::new(2).expect("page"),
+                cursor,
+                Vec::new(),
+            )
+            .expect("stale request"),
+        )
+        .expect_err("stale dataset");
+    assert_eq!(stale.code(), QueryErrorCode::StaleSnapshot);
+
+    let changed = service
+        .usage_sessions(
+            UsageSessionPageRequest::first(PageSize::new(2).expect("page"), Vec::new())
+                .expect("request"),
+        )
+        .expect("changed first page");
+    assert_eq!(changed.header().snapshot_generation().get(), 4);
+    assert_ne!(
+        changed.header().dataset_identity(),
+        first.header().dataset_identity()
+    );
+}
+
+#[test]
+fn missing_session_detail_is_typed_none_for_the_same_dataset() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("missing-session.sqlite3");
+    seed_current_archive(&path, 2_000, "complete", 1);
+    let mut service = service(&path, 2_001);
+    let page = service
+        .usage_sessions(
+            UsageSessionPageRequest::first(PageSize::new(1).expect("page"), Vec::new())
+                .expect("request"),
+        )
+        .expect("session page");
+    let key = page.payload().sessions()[0].key().clone();
+
+    let connection = Connection::open(&path).expect("fixture connection");
+    connection
+        .execute(
+            "DELETE FROM usage_session_rollup
+             WHERE provider_id = 'codex' AND profile_id = 'default' AND session_id = 'session'",
+            [],
+        )
+        .expect("remove exact rollup fixture");
+    drop(connection);
+
+    let detail = service
+        .usage_session_detail(key)
+        .expect("typed missing detail");
+    assert!(detail.payload().detail().is_none());
+    assert_eq!(detail.header().snapshot_generation().get(), 2);
 }
