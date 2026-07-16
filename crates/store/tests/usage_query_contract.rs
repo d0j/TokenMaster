@@ -3,10 +3,12 @@ use std::{fs, path::Path, time::Duration};
 use rusqlite::{Connection, params};
 use tempfile::TempDir;
 use tokenmaster_store::{
-    EXPECTED_SQLITE_VERSION, EventCursor, JournalMode, MAX_USAGE_OVERVIEW_SEGMENTS, ScanScope,
+    AggregateRebuildStatus, EXPECTED_SQLITE_VERSION, EventCursor, JournalMode,
+    MAX_USAGE_BREAKDOWNS, MAX_USAGE_OVERVIEW_SEGMENTS, MAX_USAGE_SERIES_POINTS, ScanScope,
     StoreErrorCode, USAGE_SCHEMA_VERSION, UsageActivityQuery, UsageAggregateBucketWidth,
-    UsageAggregateSegment, UsageOverviewQuery, UsageQueryDatasetIdentity, UsageReadStore,
-    UsageStore,
+    UsageAggregateRange, UsageAggregateSegment, UsageAnalyticsQuery, UsageBreakdownIdentity,
+    UsageBreakdownKind, UsageOverviewQuery, UsageQueryDatasetIdentity, UsageReadStore,
+    UsageSeriesPoint, UsageStore,
 };
 
 const SOURCE_KEY: [u8; 32] = [7; 32];
@@ -143,6 +145,88 @@ fn insert_current_event(path: &Path, index: u8, timestamp_seconds: i64) {
             ],
         )
         .expect("insert current event");
+}
+
+fn add_second_scope(path: &Path) -> [u8; 32] {
+    let second_key = [8_u8; 32];
+    let connection = Connection::open(path).expect("open second scope fixture");
+    connection
+        .pragma_update(None, "foreign_keys", "ON")
+        .expect("foreign keys");
+    connection
+        .execute(
+            "INSERT INTO usage_source(
+               file_key, provider_id, profile_id, source_id, source_kind,
+               logical_identity, physical_identity, missing
+             ) VALUES (?1, 'hermes', 'work', 'fixture-2', 'active', ?2, ?3, 0)",
+            params![
+                second_key.as_slice(),
+                [12_u8; 32].as_slice(),
+                [13_u8; 32].as_slice(),
+            ],
+        )
+        .expect("second source");
+    connection
+        .execute(
+            "INSERT INTO usage_scan(
+               scan_id, scan_set_id, provider_id, profile_id, started_at_ms,
+               completed_at_ms, completion_state
+             ) VALUES (2, 1, 'hermes', 'work', 1000, 1900, 'complete')",
+            [],
+        )
+        .expect("second scan scope");
+    connection
+        .execute_batch(
+            "UPDATE usage_scan_set SET expected_scope_count = 2 WHERE scan_set_id = 1;
+             UPDATE usage_replay_revision SET expected_source_count = 2
+             WHERE revision_id = 0",
+        )
+        .expect("second scope counts");
+    second_key
+}
+
+#[allow(clippy::too_many_arguments)]
+fn insert_analytics_event(
+    path: &Path,
+    source_key: &[u8; 32],
+    index: u8,
+    provider_id: &str,
+    profile_id: &str,
+    timestamp_seconds: i64,
+    model: &str,
+    project_alias: Option<&str>,
+) {
+    let connection = Connection::open(path).expect("open analytics event fixture");
+    connection
+        .pragma_update(None, "foreign_keys", "ON")
+        .expect("foreign keys");
+    connection
+        .execute(
+            "INSERT INTO usage_event(
+               fingerprint, event_id, selected_file_key, selected_generation,
+               selected_source_offset, projection_revision_id, origin_revision_id,
+               retained, provider_id, profile_id, session_id, source_id, timestamp_seconds,
+               timestamp_nanos, model, project_alias, input_tokens, cached_tokens,
+               output_tokens, reasoning_tokens, total_tokens, fallback_model, long_context,
+               activity_read, activity_edit_write, activity_search, activity_git,
+               activity_build_test, activity_web, activity_subagents, activity_terminal
+             ) VALUES (
+               ?1, ?2, ?3, 0, ?4, 0, 0, 0, ?5, ?6, 'session', 'fixture', ?7, 0,
+               ?8, ?9, 5, NULL, 2, NULL, 7, 0, 'no', 0, 0, 0, 0, 0, 0, 0, 0
+             )",
+            params![
+                [index; 32].as_slice(),
+                format!("analytics-event-{index}"),
+                source_key.as_slice(),
+                i64::from(index),
+                provider_id,
+                profile_id,
+                timestamp_seconds,
+                model,
+                project_alias,
+            ],
+        )
+        .expect("insert analytics event");
 }
 
 fn seed_legacy_archive(path: &Path) {
@@ -353,6 +437,384 @@ fn aggregate_overview_composes_adjacent_widths_without_gaps_or_double_counting()
     assert_eq!(metrics.output().known_sum(), 7);
     assert_eq!(metrics.total().known_sum(), 50);
     assert_eq!(metrics.long_context_no_count(), 5);
+}
+
+#[test]
+fn analytics_capture_is_one_exact_overview_series_and_breakdown_snapshot() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("analytics.sqlite3");
+    seed_current_archive(&path);
+    let second_key = add_second_scope(&path);
+    insert_analytics_event(
+        &path,
+        &SOURCE_KEY,
+        20,
+        "codex",
+        "default",
+        3_600,
+        "o3",
+        Some("alpha"),
+    );
+    insert_analytics_event(
+        &path,
+        &second_key,
+        21,
+        "hermes",
+        "work",
+        7_200,
+        "o3",
+        Some("alpha"),
+    );
+
+    let minute_prefix = UsageAggregateSegment::new(UsageAggregateBucketWidth::Minute, 0, 3_600)
+        .expect("minute prefix");
+    let hour_middle = UsageAggregateSegment::new(UsageAggregateBucketWidth::Hour, 3_600, 7_200)
+        .expect("hour middle");
+    let minute_suffix = UsageAggregateSegment::new(UsageAggregateBucketWidth::Minute, 7_200, 7_260)
+        .expect("minute suffix");
+    let overview = UsageAggregateRange::new(
+        vec![minute_prefix, hour_middle, minute_suffix].into_boxed_slice(),
+    )
+    .expect("overview range");
+    let series = vec![
+        UsageSeriesPoint::new(vec![minute_prefix].into_boxed_slice()).expect("first point"),
+        UsageSeriesPoint::empty(3_600).expect("skipped civil point"),
+        UsageSeriesPoint::new(vec![hour_middle, minute_suffix].into_boxed_slice())
+            .expect("final point"),
+    ]
+    .into_boxed_slice();
+    let query = UsageAnalyticsQuery::new(
+        None,
+        overview,
+        series,
+        vec![
+            UsageBreakdownKind::Profile,
+            UsageBreakdownKind::Model,
+            UsageBreakdownKind::Provider,
+            UsageBreakdownKind::Project,
+        ]
+        .into_boxed_slice(),
+        Box::default(),
+        Duration::from_secs(2),
+    )
+    .expect("valid analytics query");
+    let mut store = UsageReadStore::open(&path).expect("analytics read store");
+    let capture = store
+        .capture_usage_analytics(query)
+        .expect("analytics snapshot");
+
+    assert_eq!(
+        capture.publication().dataset_identity(),
+        UsageQueryDatasetIdentity::ReplayRevision {
+            revision_id: 0,
+            dataset_generation: 5,
+        }
+    );
+    assert_eq!(capture.overview().event_count(), 5);
+    assert_eq!(capture.overview().input().known_sum(), 43);
+    assert_eq!(capture.overview().total().known_sum(), 50);
+    assert_eq!(capture.series().len(), 3);
+    assert_eq!(capture.series()[0].metrics().event_count(), 3);
+    assert_eq!(capture.series()[1].start_seconds(), 3_600);
+    assert_eq!(capture.series()[1].end_seconds(), 3_600);
+    assert_eq!(capture.series()[1].metrics().event_count(), 0);
+    assert_eq!(capture.series()[2].metrics().event_count(), 2);
+
+    let breakdowns = capture.breakdowns();
+    assert_eq!(breakdowns.len(), MAX_USAGE_BREAKDOWNS);
+    assert_eq!(breakdowns[0].kind(), UsageBreakdownKind::Model);
+    assert_eq!(
+        breakdowns[0].items()[0].identity(),
+        &UsageBreakdownIdentity::Model("gpt-5.6".into())
+    );
+    assert_eq!(breakdowns[0].items()[0].metrics().total().known_sum(), 36);
+    assert_eq!(
+        breakdowns[0].items()[1].identity(),
+        &UsageBreakdownIdentity::Model("o3".into())
+    );
+    assert_eq!(breakdowns[0].items()[1].metrics().event_count(), 2);
+    assert_eq!(breakdowns[1].kind(), UsageBreakdownKind::Project);
+    assert_eq!(
+        breakdowns[1].items()[0].identity(),
+        &UsageBreakdownIdentity::UnassociatedProject
+    );
+    assert_eq!(
+        breakdowns[1].items()[1].identity(),
+        &UsageBreakdownIdentity::Project("alpha".into())
+    );
+    assert_eq!(breakdowns[2].kind(), UsageBreakdownKind::Provider);
+    assert_eq!(
+        breakdowns[2].items()[0].identity(),
+        &UsageBreakdownIdentity::Provider("codex".into())
+    );
+    assert_eq!(breakdowns[2].items()[0].metrics().event_count(), 4);
+    assert_eq!(breakdowns[3].kind(), UsageBreakdownKind::Profile);
+    assert_eq!(
+        breakdowns[3].items()[1].identity(),
+        &UsageBreakdownIdentity::Profile {
+            provider_id: "hermes".into(),
+            profile_id: "work".into(),
+        }
+    );
+    assert!(breakdowns.iter().all(|breakdown| !breakdown.truncated()));
+
+    let scoped_query = UsageAnalyticsQuery::new(
+        None,
+        UsageAggregateRange::new(
+            vec![minute_prefix, hour_middle, minute_suffix].into_boxed_slice(),
+        )
+        .expect("scoped overview range"),
+        Box::default(),
+        vec![UsageBreakdownKind::Model, UsageBreakdownKind::Provider].into_boxed_slice(),
+        vec![ScanScope::new("codex", "default").expect("codex scope")].into_boxed_slice(),
+        Duration::from_secs(2),
+    )
+    .expect("scoped analytics query");
+    let scoped = store
+        .capture_usage_analytics(scoped_query)
+        .expect("scoped analytics snapshot");
+    assert_eq!(scoped.overview().event_count(), 4);
+    assert_eq!(scoped.breakdowns()[0].items().len(), 2);
+    assert_eq!(scoped.breakdowns()[0].items()[1].metrics().event_count(), 1);
+    assert_eq!(scoped.breakdowns()[1].items().len(), 1);
+    assert_eq!(
+        scoped.breakdowns()[1].items()[0].identity(),
+        &UsageBreakdownIdentity::Provider("codex".into())
+    );
+}
+
+#[test]
+fn analytics_query_rejects_unbounded_or_incoherent_series_and_breakdowns() {
+    let empty_overview = UsageAggregateRange::empty(0).expect("empty overview");
+    let too_many_points = (0..=MAX_USAGE_SERIES_POINTS)
+        .map(|_| UsageSeriesPoint::empty(0).expect("empty point"))
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let error = UsageAnalyticsQuery::new(
+        None,
+        empty_overview.clone(),
+        too_many_points,
+        Box::default(),
+        Box::default(),
+        Duration::from_secs(2),
+    )
+    .expect_err("series capacity");
+    assert_eq!(error.code(), StoreErrorCode::CapacityExceeded);
+    assert_eq!(error.limit(), Some(MAX_USAGE_SERIES_POINTS as u64));
+
+    let error = UsageAnalyticsQuery::new(
+        None,
+        empty_overview.clone(),
+        Box::default(),
+        vec![
+            UsageBreakdownKind::Model,
+            UsageBreakdownKind::Project,
+            UsageBreakdownKind::Provider,
+            UsageBreakdownKind::Profile,
+            UsageBreakdownKind::Model,
+        ]
+        .into_boxed_slice(),
+        Box::default(),
+        Duration::from_secs(2),
+    )
+    .expect_err("breakdown capacity");
+    assert_eq!(error.code(), StoreErrorCode::CapacityExceeded);
+    assert_eq!(error.limit(), Some(MAX_USAGE_BREAKDOWNS as u64));
+
+    assert_eq!(
+        UsageAnalyticsQuery::new(
+            None,
+            empty_overview,
+            Box::default(),
+            vec![UsageBreakdownKind::Model, UsageBreakdownKind::Model].into_boxed_slice(),
+            Box::default(),
+            Duration::from_secs(2),
+        )
+        .expect_err("duplicate breakdown")
+        .code(),
+        StoreErrorCode::InvalidValue
+    );
+
+    let overview = UsageAggregateRange::new(
+        vec![
+            UsageAggregateSegment::new(UsageAggregateBucketWidth::Minute, 0, 180)
+                .expect("overview segment"),
+        ]
+        .into_boxed_slice(),
+    )
+    .expect("overview range");
+    let incoherent = vec![
+        UsageSeriesPoint::new(
+            vec![
+                UsageAggregateSegment::new(UsageAggregateBucketWidth::Minute, 0, 60)
+                    .expect("first segment"),
+            ]
+            .into_boxed_slice(),
+        )
+        .expect("first point"),
+        UsageSeriesPoint::new(
+            vec![
+                UsageAggregateSegment::new(UsageAggregateBucketWidth::Minute, 120, 180)
+                    .expect("second segment"),
+            ]
+            .into_boxed_slice(),
+        )
+        .expect("second point"),
+    ]
+    .into_boxed_slice();
+    assert_eq!(
+        UsageAnalyticsQuery::new(
+            None,
+            overview,
+            incoherent,
+            Box::default(),
+            Box::default(),
+            Duration::from_secs(2),
+        )
+        .expect_err("series gap")
+        .code(),
+        StoreErrorCode::InvalidValue
+    );
+    assert_eq!(
+        UsageAggregateRange::empty(1)
+            .expect_err("misaligned empty boundary")
+            .code(),
+        StoreErrorCode::InvalidValue
+    );
+}
+
+#[test]
+fn analytics_breakdown_uses_fixed_lookahead_and_reports_truncation() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("analytics-breakdown-limit.sqlite3");
+    seed_current_archive(&path);
+    let mut connection = Connection::open(&path).expect("open breakdown fixture");
+    connection
+        .pragma_update(None, "foreign_keys", "ON")
+        .expect("foreign keys");
+    let transaction = connection.transaction().expect("breakdown transaction");
+    for index in 0_u16..=256 {
+        let mut fingerprint = [42_u8; 32];
+        fingerprint[..2].copy_from_slice(&index.to_le_bytes());
+        transaction
+            .execute(
+                "INSERT INTO usage_event(
+                   fingerprint, event_id, selected_file_key, selected_generation,
+                   selected_source_offset, projection_revision_id, origin_revision_id,
+                   retained, provider_id, profile_id, session_id, source_id,
+                   timestamp_seconds, timestamp_nanos, model, input_tokens, cached_tokens,
+                   output_tokens, reasoning_tokens, total_tokens, fallback_model, long_context,
+                   activity_read, activity_edit_write, activity_search, activity_git,
+                   activity_build_test, activity_web, activity_subagents, activity_terminal
+                 ) VALUES (
+                   ?1, ?2, ?3, 0, ?4, 0, 0, 0, 'codex', 'default', 'session', 'fixture',
+                   1000, 0, ?5, 1, NULL, 0, NULL, 1, 0, 'no', 0, 0, 0, 0, 0, 0, 0, 0
+                 )",
+                params![
+                    fingerprint.as_slice(),
+                    format!("breakdown-{index}"),
+                    SOURCE_KEY.as_slice(),
+                    i64::from(index) + 100,
+                    format!("m{index:03}"),
+                ],
+            )
+            .expect("breakdown event");
+    }
+    transaction.commit().expect("commit breakdown fixture");
+    drop(connection);
+
+    let range = UsageAggregateRange::new(
+        vec![
+            UsageAggregateSegment::new(UsageAggregateBucketWidth::Hour, 0, 3_600)
+                .expect("overview segment"),
+        ]
+        .into_boxed_slice(),
+    )
+    .expect("overview range");
+    let query = UsageAnalyticsQuery::new(
+        None,
+        range,
+        Box::default(),
+        vec![UsageBreakdownKind::Model].into_boxed_slice(),
+        Box::default(),
+        Duration::from_secs(2),
+    )
+    .expect("breakdown query");
+    let mut store = UsageReadStore::open(&path).expect("breakdown read store");
+    let capture = store
+        .capture_usage_analytics(query)
+        .expect("bounded breakdown");
+    let breakdown = &capture.breakdowns()[0];
+    assert_eq!(breakdown.items().len(), 256);
+    assert!(breakdown.truncated());
+    assert_eq!(
+        breakdown.items()[0].identity(),
+        &UsageBreakdownIdentity::Model("gpt-5.6".into())
+    );
+}
+
+#[test]
+fn analytics_capture_reads_rebuilt_legacy_rollups_without_upgrading_identity() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("legacy-analytics.sqlite3");
+    seed_legacy_archive(&path);
+    let mut writer = UsageStore::open(&path).expect("legacy aggregate writer");
+    let mut ready = false;
+    for _ in 0..8 {
+        let progress = writer
+            .rebuild_aggregates_page(256)
+            .expect("legacy rebuild page");
+        if progress.status() == AggregateRebuildStatus::Ready {
+            ready = true;
+            break;
+        }
+    }
+    assert!(
+        ready,
+        "legacy aggregate rebuild did not finish within bound"
+    );
+    drop(writer);
+    checkpoint(&path);
+
+    let range = UsageAggregateRange::new(
+        vec![
+            UsageAggregateSegment::new(UsageAggregateBucketWidth::Hour, 0, 3_600)
+                .expect("legacy range segment"),
+        ]
+        .into_boxed_slice(),
+    )
+    .expect("legacy range");
+    let query = UsageAnalyticsQuery::new(
+        Some(UsageQueryDatasetIdentity::LegacySnapshotV1),
+        range,
+        Box::default(),
+        vec![UsageBreakdownKind::Model, UsageBreakdownKind::Profile].into_boxed_slice(),
+        Box::default(),
+        Duration::from_secs(2),
+    )
+    .expect("legacy analytics query");
+    let mut store = UsageReadStore::open(&path).expect("legacy analytics reader");
+    let capture = store
+        .capture_usage_analytics(query)
+        .expect("legacy analytics");
+    assert_eq!(
+        capture.publication().dataset_identity(),
+        UsageQueryDatasetIdentity::LegacySnapshotV1
+    );
+    assert_eq!(capture.overview().event_count(), 1);
+    assert_eq!(capture.overview().input().known_sum(), 4);
+    assert_eq!(capture.overview().total().known_sum(), 5);
+    assert_eq!(
+        capture.breakdowns()[0].items()[0].identity(),
+        &UsageBreakdownIdentity::Model("gpt-5.6".into())
+    );
+    assert_eq!(
+        capture.breakdowns()[1].items()[0].identity(),
+        &UsageBreakdownIdentity::Profile {
+            provider_id: "codex".into(),
+            profile_id: "legacy".into(),
+        }
+    );
 }
 
 #[test]

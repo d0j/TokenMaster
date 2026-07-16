@@ -1257,3 +1257,21 @@ and events exactly on width-transition boundaries. The query plan contains neith
 raw event table nor `OFFSET`. Series, independent breakdowns, session keyset reads,
 calendar/Jiff mapping, public facade values, and million-row/resource evidence remain
 open; no P2-B completion or release claim is made.
+
+## 2026-07-16 — P2-B exact series and breakdown snapshot implemented
+
+Extended the fixed aggregate reader with a combined analytics capture. Overview, up
+to 400 ordered series points, and any unique subset of model, project, provider, and
+provider-qualified profile breakdowns now bind to one publication, dataset identity,
+ready aggregate generation, and deferred transaction. Non-empty series points must
+partition the overview exactly; a minute-aligned zero-duration point preserves a civil
+date skipped by timezone history without inventing usage.
+
+Each breakdown is a separate fixed rollup query rather than a caller-defined cube. It
+orders by known total, event count, and stable identity, reads only 257 groups, retains
+256, and reports truncation. Unassociated project is typed explicitly. Exact fixtures
+cover mixed widths, boundary events, two scopes, all four breakdowns, scope filtering,
+zero points, incoherent partitions, duplicate/capacity rejection, 257-model truncation,
+real `EXPLAIN`, concurrent aggregate-state mutation, and cancellation cleanup. Focused
+store tests and strict Clippy pass. Session reads, private calendar mapping, immutable
+facade values, and million-row/resource evidence remain open.

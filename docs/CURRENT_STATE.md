@@ -243,6 +243,13 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   token components retain known-count/sum truth, result addition is checked, stale or
   rebuilding generations fail closed, deadline cleanup is reusable, and query-plan plus
   boundary fixtures prove no raw table, `OFFSET`, gap, overlap, or double counting.
+- P2-B combined analytics read: one call now captures that overview together with up
+  to 400 exact adjacent series points and any unique subset of model, project, provider,
+  and profile breakdowns. All payloads share one publication/generation snapshot.
+  Zero-duration minute-aligned points preserve skipped civil dates; each breakdown
+  retains 256 of 257 ordered groups and reports truncation. Scope filtering, exact
+  known/partial algebra, real `EXPLAIN`, concurrent state change, forced cancellation
+  cleanup, and the full focused store suite pass without raw-event or `OFFSET` access.
 
 ## Next implementation slice
 
@@ -325,8 +332,8 @@ scan, so it is no longer dataset identity. Schema v7 adds a dedicated transactio
 dataset generation with exact v6 migration/rollback, overflow, real no-change scan,
 and current append proofs. P2-B Tasks 2-4 now add schema-v8 provider identity,
 transactional materialization, and bounded resumable publication. Task 6 is in
-progress: the fixed overview read is green; series, independently capped breakdowns,
-and keyset session reads are next, followed by private calendar/timezone composition
+progress: fixed overview/series and independently capped breakdown reads are green;
+keyset session reads are next, followed by private calendar/timezone composition
 and immutable public values. No view-time grouping of the full event table is allowed.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.

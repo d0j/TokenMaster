@@ -13,6 +13,14 @@ use super::{
 };
 use crate::{EXPECTED_SQLITE_VERSION, StoreError, StoreErrorCode};
 
+mod analytics;
+
+pub use analytics::{
+    MAX_USAGE_BREAKDOWN_ITEMS, MAX_USAGE_BREAKDOWNS, MAX_USAGE_SERIES_POINTS, UsageAggregateRange,
+    UsageAnalyticsCapture, UsageAnalyticsQuery, UsageBreakdown, UsageBreakdownIdentity,
+    UsageBreakdownItem, UsageBreakdownKind, UsageSeriesPoint, UsageSeriesPointCapture,
+};
+
 const READ_CACHE_SIZE_KIB: u64 = 4 * 1024;
 const READ_BUSY_TIMEOUT_MS: u64 = 250;
 const MAX_QUERY_DURATION: Duration = Duration::from_secs(2);
@@ -941,12 +949,20 @@ where
         load_ready_aggregate_generation(&transaction, raw_publication.dataset_generation)?;
     let metrics = match dataset_identity {
         UsageQueryDatasetIdentity::Empty => UsageAggregateMetrics::default(),
-        UsageQueryDatasetIdentity::ReplayRevision { .. } => {
-            load_overview_metrics(&transaction, active_generation, "current", &query)?
-        }
-        UsageQueryDatasetIdentity::LegacySnapshotV1 => {
-            load_overview_metrics(&transaction, active_generation, "legacy", &query)?
-        }
+        UsageQueryDatasetIdentity::ReplayRevision { .. } => load_aggregate_metrics(
+            &transaction,
+            active_generation,
+            "current",
+            &query.segments,
+            &query.scopes,
+        )?,
+        UsageQueryDatasetIdentity::LegacySnapshotV1 => load_aggregate_metrics(
+            &transaction,
+            active_generation,
+            "legacy",
+            &query.segments,
+            &query.scopes,
+        )?,
     };
     map_sql(transaction.commit())?;
     Ok(UsageOverviewCapture {
@@ -991,16 +1007,16 @@ fn load_ready_aggregate_generation(
     Ok(active_generation)
 }
 
-fn load_overview_metrics(
+fn load_aggregate_metrics(
     connection: &Connection,
     active_generation: i64,
     dataset_kind: &'static str,
-    query: &UsageOverviewQuery,
+    segments: &[UsageAggregateSegment],
+    scopes: &[ScanScope],
 ) -> Result<UsageAggregateMetrics, StoreError> {
     let mut metrics = UsageAggregateMetrics::default();
-    for segment in &query.segments {
-        let parameters =
-            overview_parameters(active_generation, dataset_kind, segment, &query.scopes)?;
+    for segment in segments {
+        let parameters = overview_parameters(active_generation, dataset_kind, segment, scopes)?;
         let mut statement = map_sql(connection.prepare_cached(OVERVIEW_SQL))?;
         let raw = map_sql(statement.query_row(params_from_iter(parameters.iter()), raw_metrics))?;
         metrics.checked_add(&raw.validate()?)?;
@@ -1037,31 +1053,35 @@ fn overview_parameters(
 }
 
 fn raw_metrics(row: &Row<'_>) -> rusqlite::Result<RawAggregateMetrics> {
+    raw_metrics_at(row, 0)
+}
+
+fn raw_metrics_at(row: &Row<'_>, start: usize) -> rusqlite::Result<RawAggregateMetrics> {
     Ok(RawAggregateMetrics {
         values: [
-            row.get(0)?,
-            row.get(1)?,
-            row.get(2)?,
-            row.get(3)?,
-            row.get(4)?,
-            row.get(5)?,
-            row.get(6)?,
-            row.get(7)?,
-            row.get(8)?,
-            row.get(9)?,
-            row.get(10)?,
-            row.get(11)?,
-            row.get(12)?,
-            row.get(13)?,
-            row.get(14)?,
-            row.get(15)?,
-            row.get(16)?,
-            row.get(17)?,
-            row.get(18)?,
-            row.get(19)?,
-            row.get(20)?,
-            row.get(21)?,
-            row.get(22)?,
+            row.get(start)?,
+            row.get(start + 1)?,
+            row.get(start + 2)?,
+            row.get(start + 3)?,
+            row.get(start + 4)?,
+            row.get(start + 5)?,
+            row.get(start + 6)?,
+            row.get(start + 7)?,
+            row.get(start + 8)?,
+            row.get(start + 9)?,
+            row.get(start + 10)?,
+            row.get(start + 11)?,
+            row.get(start + 12)?,
+            row.get(start + 13)?,
+            row.get(start + 14)?,
+            row.get(start + 15)?,
+            row.get(start + 16)?,
+            row.get(start + 17)?,
+            row.get(start + 18)?,
+            row.get(start + 19)?,
+            row.get(start + 20)?,
+            row.get(start + 21)?,
+            row.get(start + 22)?,
         ],
     })
 }

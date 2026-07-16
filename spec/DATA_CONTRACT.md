@@ -255,6 +255,13 @@ width and ranges are half-open. This is sufficient for the private calendar laye
 compose a boundary-minute prefix, full-hour middle, and boundary-minute suffix while
 keeping timezone rules and Jiff types outside the archive contract.
 
+An analytics series is an ordered exact partition of its overview range and contains
+at most 400 owned points. A zero-duration minute-aligned point carries zero metrics and
+represents a civil bucket skipped by timezone history. Breakdowns group only stored
+rollup rows: model/project use their dimension rows; provider/profile use `all` rows.
+Each requested kind is unique, capped independently at 256 retained items with explicit
+truncation, and cannot multiply into a caller-defined cube.
+
 ## TM-DATA-006 — Bounds
 
 Reader lines are limited to 16 MiB. Resume metadata is capped at 32 KiB. General

@@ -18,11 +18,14 @@ mod types;
 mod write;
 
 pub use query::{
-    MAX_USAGE_OVERVIEW_SEGMENTS, MAX_USAGE_QUERY_SCOPES, UsageActivityQuery,
-    UsageAggregateActivity, UsageAggregateBucketWidth, UsageAggregateMetrics,
-    UsageAggregateSegment, UsageOverviewCapture, UsageOverviewQuery, UsageQueryCapture,
-    UsageQueryDatasetIdentity, UsageQueryEvent, UsageQueryPublication, UsageReadRuntimePolicy,
-    UsageReadStore, UsageTokenAggregate,
+    MAX_USAGE_BREAKDOWN_ITEMS, MAX_USAGE_BREAKDOWNS, MAX_USAGE_OVERVIEW_SEGMENTS,
+    MAX_USAGE_QUERY_SCOPES, MAX_USAGE_SERIES_POINTS, UsageActivityQuery, UsageAggregateActivity,
+    UsageAggregateBucketWidth, UsageAggregateMetrics, UsageAggregateRange, UsageAggregateSegment,
+    UsageAnalyticsCapture, UsageAnalyticsQuery, UsageBreakdown, UsageBreakdownIdentity,
+    UsageBreakdownItem, UsageBreakdownKind, UsageOverviewCapture, UsageOverviewQuery,
+    UsageQueryCapture, UsageQueryDatasetIdentity, UsageQueryEvent, UsageQueryPublication,
+    UsageReadRuntimePolicy, UsageReadStore, UsageSeriesPoint, UsageSeriesPointCapture,
+    UsageTokenAggregate,
 };
 pub use schema::USAGE_SCHEMA_VERSION;
 pub use types::{

@@ -91,14 +91,17 @@ Australia/Lord_Howe, Asia/Kathmandu, leap day, month/year edge, spring gap, fall
 
 ## Task 6 — Add bounded aggregate and session store reads
 
-Status: in progress. The exact overview sub-slice is implemented and focused-store
-verified; series, breakdown, and session reads remain.
+Status: in progress. Exact overview, partitioned series, and independently capped
+model/project/provider/profile breakdowns are implemented and focused-store verified;
+session reads remain.
 
 - Read header/state/payload in one deferred transaction. Overview now does this and
   requires a `ready` generation matching the captured dataset identity.
 - Accept at most three adjacent aligned UTC minute/hour segments per calendar bucket,
   so DST boundaries compose exactly without raw-event reads or double counting.
-- Add overview/series plus model/project/provider/profile breakdown queries.
+- Add overview/series plus model/project/provider/profile breakdown queries. Complete:
+  one capture binds all requested payloads to one transaction/generation, including a
+  typed zero-duration series point for skipped civil dates.
 - Add session first/cursor pages and exact bounded session detail.
 - Enforce 400 points, 32 scopes, four breakdowns, 256 rows, and two seconds.
 - Prove aggregate plans never touch raw event tables and never use offset pagination.

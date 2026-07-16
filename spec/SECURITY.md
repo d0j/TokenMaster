@@ -75,6 +75,9 @@ Aggregate overview reads accept only validated enum widths, signed UTC boundarie
 at most three adjacent aligned segments, and at most 32 typed scopes. They bind only to
 fixed SQL over the active rollup generation, use no caller expression or identifier,
 never touch raw event tables, and clear progress cancellation before connection reuse.
+Series and breakdown requests add no expressions: point topology and collection kinds
+are typed and bounded, all four breakdown statements are host-selected fixed SQL, and
+the combined capture releases its exact transaction before returning owned values.
 
 Scan authority is provider/profile qualified and store-owned. One bounded scan set
 contains one child per exact scope; an observation may update only the matching

@@ -134,6 +134,11 @@ All notable changes are recorded here.
   adjacent aligned UTC minute/hour segments across at most 32 typed scopes. Boundary,
   stale/rebuild, deadline cleanup, missing-token algebra, and raw-table-free query-plan
   contracts pass.
+- Added one combined analytics snapshot with an exact 400-point maximum series and
+  unique model/project/provider/profile breakdowns capped independently at 256+1.
+  Series partition, skipped-date zero points, canonical ordering, typed unassociated
+  project, scope filtering, truncation, concurrent-state, cancellation cleanup, and
+  real fixed-query-plan contracts pass.
 
 ### Fixed
 

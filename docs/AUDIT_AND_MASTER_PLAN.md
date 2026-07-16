@@ -234,10 +234,11 @@ generation is independent from dataset identity; current identity includes repla
 revision plus schema-v7 dataset generation; every result is transaction-exact and
 owned, frontends receive no SQLite access, and latest activity uses the existing
 composite keyset index. P2-B schema-v8 provider identity, transactional materialized
-rollups, and bounded resumable publication are now implemented. The active critical
-path is fixed aggregate/session reads, then private calendar composition, immutable
-public values, and million-row/resource evidence. View-time full scans remain
-forbidden.
+rollups, and bounded resumable publication are now implemented. Fixed overview,
+partitioned series, and independently capped breakdown reads also pass in one exact
+snapshot. The active critical path is keyset session reads, then private calendar
+composition, immutable public values, and million-row/resource evidence. View-time
+full scans remain forbidden.
 P2-A now implements the bounded public values, separate defensive read-only/query-only
 schema-v8 store, synchronous `QueryService`, and one-result consumer ordering. Current/
 legacy activity, exact publication and scan truth, stale accounting downgrade, stale

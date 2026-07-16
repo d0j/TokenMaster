@@ -193,6 +193,14 @@ segments, more than 32 unique provider/profile scopes, or a deadline above two s
 before reading. Header, aggregate state, and every segment are captured in one deferred
 transaction; checked result addition cannot wrap.
 
+The combined analytics store call returns overview, zero to 400 ordered series points,
+and zero to four unique breakdown kinds from the same deferred transaction and active
+aggregate generation. Non-empty series points must form an adjacent exact partition of
+the overview range; a minute-aligned zero-duration point represents a skipped civil
+date. Model, project, provider, and provider-qualified profile breakdowns are fixed
+independent queries, each retains at most 256 items plus one internal lookahead and
+reports truncation. Project absence is typed, not an empty user-facing string.
+
 `QueryService` is the only public archive facade in this contour. It allocates a
 strictly increasing process-local snapshot generation only after a successful capture,
 maps complete/partial/recovery/legacy truth explicitly, applies the 20-minute/2-hour

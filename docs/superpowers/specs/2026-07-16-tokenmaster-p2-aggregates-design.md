@@ -1,8 +1,8 @@
 # TokenMaster P2-B Transactional Aggregates Design
 
 Status: approved and re-audited for implementation on 2026-07-16; Tasks 1-4 and the
-first fixed overview-read slice of Task 6 are implemented. Series, breakdown/session
-reads, calendar composition, public values, and final evidence remain open.
+overview/series/breakdown slices of Task 6 are implemented. Session reads, calendar
+composition, public values, and final evidence remain open.
 
 ## Goal
 
@@ -197,6 +197,16 @@ The first public limits are:
 Breakdowns are independent capped collections, not an arbitrary four-dimensional
 cube. Supported P2-B breakdowns are model, project, provider, and profile. This avoids
 combinatorial row growth while covering the reference products' useful analysis.
+The store returns them in canonical kind order. Each collection is ordered by known
+total-token sum, then event count and identity, reads at most 257 groups, retains at
+most 256, and reports truncation explicitly. Project absence is a typed unassociated
+identity rather than an empty display label.
+
+One analytics capture binds overview, up to 400 ordered series points, and every
+requested breakdown to the same publication and active aggregate generation. Series
+points form an exact adjacent partition of the overview range. A zero-duration point
+is allowed only at a minute-aligned boundary so a skipped civil date remains visible
+without a fabricated bucket or database read.
 
 ## Immutable query values
 
