@@ -12,6 +12,7 @@ mod lease;
 mod lifecycle;
 mod live;
 mod publication;
+mod quota;
 mod recovery;
 mod scheduler;
 mod store_archive;
@@ -27,6 +28,11 @@ pub use lifecycle::{LivePhase, LiveRefreshKind, LiveRefreshSnapshot, LiveRuntime
 pub use live::LiveRuntime;
 pub use publication::{
     EngineDiagnostics, EnginePublicationQuality, EngineSnapshot, EngineSnapshotGeneration,
+};
+pub use quota::{
+    CodexExecutableDiscoveryError, CodexExecutableDiscoveryErrorCode, CodexExecutableSearchPath,
+    CodexQuotaRuntimeConfig, MAX_CODEX_EXECUTABLE_SEARCH_DIRS,
+    MAX_CODEX_EXECUTABLE_SEARCH_PATH_BYTES,
 };
 pub use recovery::{StagingRecoveryOutcome, StartupRecoveryReport};
 pub use scheduler::{
