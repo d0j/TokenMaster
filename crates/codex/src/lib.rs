@@ -53,9 +53,11 @@ pub use parser::{
 };
 pub use provider::CodexProvider;
 pub use quota::{
-    CODEX_QUOTA_FRESH_MILLIS, CODEX_QUOTA_STALE_MILLIS, CodexQuotaError, CodexQuotaErrorCode,
-    CodexQuotaNormalizer, CodexQuotaObservation, CodexQuotaSnapshot, MAX_CODEX_QUOTA_JSON_BYTES,
-    MAX_CODEX_QUOTA_WINDOWS, MAX_CODEX_RESET_CREDIT_DETAILS,
+    CODEX_QUOTA_FRESH_MILLIS, CODEX_QUOTA_STALE_MILLIS, CodexAppServerCommand, CodexQuotaError,
+    CodexQuotaErrorCode, CodexQuotaNormalizer, CodexQuotaObservation, CodexQuotaSnapshot,
+    CodexQuotaTransport, MAX_CODEX_APP_SERVER_FRAME_BYTES, MAX_CODEX_APP_SERVER_FRAMES,
+    MAX_CODEX_APP_SERVER_STDOUT_BYTES, MAX_CODEX_APP_SERVER_TIMEOUT, MAX_CODEX_QUOTA_JSON_BYTES,
+    MAX_CODEX_QUOTA_WINDOWS, MAX_CODEX_RESET_CREDIT_DETAILS, SUPPORTED_CODEX_APP_SERVER_VERSION,
 };
 pub use reader::{
     BoundaryAnchor, IntegrityReport, LogicalFileIdentity, MAX_ANCHOR_BYTES,

@@ -1,4 +1,5 @@
 mod normalize;
+mod transport;
 mod wire;
 
 use std::fmt;
@@ -18,6 +19,14 @@ pub enum CodexQuotaErrorCode {
     AccountIdentityUnavailable,
     InvalidTime,
     Unavailable,
+    InvalidCommand,
+    SpawnFailed,
+    DeadlineExceeded,
+    ProtocolError,
+    UnsupportedVersion,
+    RpcError,
+    ProcessExited,
+    ProcessCleanupFailed,
 }
 
 impl fmt::Display for CodexQuotaErrorCode {
@@ -28,6 +37,14 @@ impl fmt::Display for CodexQuotaErrorCode {
             Self::AccountIdentityUnavailable => "account_identity_unavailable",
             Self::InvalidTime => "invalid_time",
             Self::Unavailable => "unavailable",
+            Self::InvalidCommand => "invalid_command",
+            Self::SpawnFailed => "spawn_failed",
+            Self::DeadlineExceeded => "deadline_exceeded",
+            Self::ProtocolError => "protocol_error",
+            Self::UnsupportedVersion => "unsupported_version",
+            Self::RpcError => "rpc_error",
+            Self::ProcessExited => "process_exited",
+            Self::ProcessCleanupFailed => "process_cleanup_failed",
         })
     }
 }
@@ -166,3 +183,9 @@ impl CodexQuotaNormalizer {
         normalize::normalize_json(account_json, quota_json, observed_at_ms)
     }
 }
+
+pub use transport::{
+    CodexAppServerCommand, CodexQuotaTransport, MAX_CODEX_APP_SERVER_FRAME_BYTES,
+    MAX_CODEX_APP_SERVER_FRAMES, MAX_CODEX_APP_SERVER_STDOUT_BYTES, MAX_CODEX_APP_SERVER_TIMEOUT,
+    SUPPORTED_CODEX_APP_SERVER_VERSION,
+};

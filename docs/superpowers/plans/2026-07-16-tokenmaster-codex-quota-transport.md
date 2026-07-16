@@ -86,22 +86,22 @@ cargo +1.97.0 clippy -p tokenmaster-codex --all-targets --locked
 
 **RED:**
 
-- [ ] Add fixture modes for success, stable JSON-RPC error, unsupported user-agent
+- [x] Add fixture modes for success, stable JSON-RPC error, unsupported user-agent
   version, malformed/unknown/oversized frame, wrong/duplicate/out-of-order ID, early
   EOF, hang, and stderr noise.
-- [ ] Prove exact fixed argv and initialize/account/quota request shapes.
-- [ ] Prove success, every failure, and timeout terminate/reap the child and join the
+- [x] Prove exact fixed argv and initialize/account/quota request shapes.
+- [x] Prove success, every failure, and timeout terminate/reap the child and join the
   helper thread.
-- [ ] Prove command/path and fixture-private values are redacted.
+- [x] Prove command/path and fixture-private values are redacted.
 
 **GREEN:**
 
-- [ ] Implement path-private exact native executable descriptor.
-- [ ] Implement bounded line reader and complete-output/frame caps.
-- [ ] Implement one helper thread and one monotonic deadline.
-- [ ] Parse only the tested stable protocol version and never set `experimentalApi`.
-- [ ] Map all transport failures to stable redacted codes.
-- [ ] Use hidden/no-console child creation on Windows.
+- [x] Implement path-private exact native executable descriptor.
+- [x] Implement bounded line reader and complete-output/frame caps.
+- [x] Implement one helper thread and one monotonic deadline.
+- [x] Parse only the tested stable protocol version and never set `experimentalApi`.
+- [x] Map all transport failures to stable redacted codes.
+- [x] Use hidden/no-console child creation on Windows.
 
 **Verify:**
 
