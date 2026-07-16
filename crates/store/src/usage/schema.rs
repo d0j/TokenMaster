@@ -140,11 +140,11 @@ pub(super) const V8_INDEX_CONTRACTS: &[IndexContract] = &[
 pub(super) const V9_INDEX_CONTRACTS: &[IndexContract] = &[
     IndexContract {
         name: "usage_price_session_scope",
-        sql: "CREATE INDEX usage_price_session_scope ON usage_price_session_rollup(aggregate_generation, dataset_kind, provider_id, profile_id, session_id, model, service_tier, long_context, reported_state)",
+        sql: "CREATE INDEX usage_price_session_scope ON usage_price_session_rollup(aggregate_generation, dataset_kind, provider_id, profile_id, session_id, project_key, model, service_tier, long_context, reported_state)",
     },
     IndexContract {
         name: "usage_price_time_scope_range",
-        sql: "CREATE INDEX usage_price_time_scope_range ON usage_price_time_rollup(aggregate_generation, dataset_kind, provider_id, profile_id, bucket_width, bucket_start_seconds, model, service_tier, long_context, reported_state)",
+        sql: "CREATE INDEX usage_price_time_scope_range ON usage_price_time_rollup(aggregate_generation, dataset_kind, provider_id, profile_id, bucket_width, bucket_start_seconds, project_key, model, service_tier, long_context, reported_state)",
     },
 ];
 
@@ -796,6 +796,7 @@ pub(super) const V9_PRICE_TIME_ROLLUP_CONTRACT: TableContract = TableContract {
         "provider_id",
         "profile_id",
         "model",
+        "project_key",
         "service_tier",
         "long_context",
         "reported_state",
@@ -818,6 +819,7 @@ pub(super) const V9_PRICE_SESSION_ROLLUP_CONTRACT: TableContract = TableContract
         "profile_id",
         "session_id",
         "model",
+        "project_key",
         "service_tier",
         "long_context",
         "reported_state",

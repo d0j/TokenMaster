@@ -1,6 +1,6 @@
 #![cfg(windows)]
 
-use std::{mem::size_of, path::Path};
+use std::{mem::size_of, path::Path, sync::Mutex};
 
 use rusqlite::{Connection, params};
 use tempfile::TempDir;
@@ -12,6 +12,7 @@ use tokenmaster_query::{
 use tokenmaster_store::{AggregateRebuildStatus, UsageStore};
 
 const SOURCE_KEY: [u8; 32] = [7; 32];
+static RESOURCE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Clone, Copy, Debug)]
 struct ResourceCounts {
@@ -239,6 +240,9 @@ fn resource_counts() -> ResourceCounts {
 
 #[test]
 fn repeated_open_query_drop_returns_resources_to_a_stable_plateau() {
+    let _serial = RESOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let directory = TempDir::new().expect("temporary directory");
     let path = directory.path().join("resource.sqlite3");
     seed_empty_archive(&path);
@@ -273,6 +277,9 @@ fn repeated_open_query_drop_returns_resources_to_a_stable_plateau() {
 
 #[test]
 fn repeated_aggregate_session_and_resumable_rebuild_cycles_stay_on_a_resource_plateau() {
+    let _serial = RESOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let directory = TempDir::new().expect("temporary directory");
     let path = directory.path().join("aggregate-resource.sqlite3");
     seed_bounded_current_archive(&path, 512);

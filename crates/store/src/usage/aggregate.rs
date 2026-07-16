@@ -293,21 +293,24 @@ fn price_time_page_sql(dataset_kind: &str, page_sql: &str) -> String {
          )
          INSERT INTO usage_price_time_rollup(
            aggregate_generation, dataset_kind, bucket_width, bucket_start_seconds,
-           provider_id, profile_id, model, service_tier, long_context, reported_state,
+           provider_id, profile_id, model, project_key, service_tier, long_context,
+           reported_state,
            event_count, calculable_event_count, uncached_input_sum, cached_input_sum,
            billable_output_sum, reported_cost_count, reported_cost_sum
          )
          SELECT ?1, '{dataset_kind}', bucket_width, bucket_start_seconds,
-                provider_id, profile_id, model, price_tier, long_context, reported_state,
+                provider_id, profile_id, model, coalesce(project_alias, ''), price_tier,
+                long_context, reported_state,
                 count(*), sum(calculable), sum(uncached_input), sum(cached_input),
                 sum(billable_output), count(reported_cost_usd_micros),
                 coalesce(sum(reported_cost_usd_micros), 0)
          FROM expanded
          GROUP BY bucket_width, bucket_start_seconds, provider_id, profile_id,
-                  model, price_tier, long_context, reported_state
+                  model, project_alias, price_tier, long_context, reported_state
          ON CONFLICT(
            aggregate_generation, dataset_kind, bucket_width, bucket_start_seconds,
-           provider_id, profile_id, model, service_tier, long_context, reported_state
+           provider_id, profile_id, model, project_key, service_tier, long_context,
+           reported_state
          ) DO UPDATE SET
            event_count = event_count + excluded.event_count,
            calculable_event_count =
@@ -345,21 +348,21 @@ fn price_session_page_sql(dataset_kind: &str, page_sql: &str) -> String {
          )
          INSERT INTO usage_price_session_rollup(
            aggregate_generation, dataset_kind, provider_id, profile_id, session_id,
-           model, service_tier, long_context, reported_state,
+           model, project_key, service_tier, long_context, reported_state,
            event_count, calculable_event_count, uncached_input_sum, cached_input_sum,
            billable_output_sum, reported_cost_count, reported_cost_sum
          )
          SELECT ?1, '{dataset_kind}', provider_id, profile_id, session_id,
-                model, price_tier, long_context, reported_state,
+                model, coalesce(project_alias, ''), price_tier, long_context, reported_state,
                 count(*), sum(calculable), sum(uncached_input), sum(cached_input),
                 sum(billable_output), count(reported_cost_usd_micros),
                 coalesce(sum(reported_cost_usd_micros), 0)
          FROM normalized
-         GROUP BY provider_id, profile_id, session_id, model, price_tier,
+         GROUP BY provider_id, profile_id, session_id, model, project_alias, price_tier,
                   long_context, reported_state
          ON CONFLICT(
            aggregate_generation, dataset_kind, provider_id, profile_id, session_id,
-           model, service_tier, long_context, reported_state
+           model, project_key, service_tier, long_context, reported_state
          ) DO UPDATE SET
            event_count = event_count + excluded.event_count,
            calculable_event_count =

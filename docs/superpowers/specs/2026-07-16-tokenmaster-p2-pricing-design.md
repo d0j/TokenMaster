@@ -146,12 +146,15 @@ a multiplier.
 
 P2-C introduces schema v9 and two generation-owned tables:
 
-- `usage_time_price_rollup` for minute/hour range queries;
-- `usage_session_price_rollup` for session/detail queries.
+- `usage_price_time_rollup` for minute/hour range queries;
+- `usage_price_session_rollup` for session/detail queries.
 
-The primary keys include dataset/generation/scope plus model, normalized tier,
-long-context state, and reported/unreported state. Values include event count,
-calculable event count, checked token-basis sums, and reported-cost sum/count.
+The primary keys include dataset/generation/scope plus model, bounded project partition,
+normalized tier, long-context state, and reported/unreported state. Empty project is an
+explicit sentinel for an unassociated event. Values include event count, calculable event
+count, checked token-basis sums, and reported-cost sum/count. Keeping project in the same
+one-row event key is required for exact project breakdown cost without multiplying rows or
+reading raw history.
 
 Current inserts update the active generation transactionally. Delete/replace paths
 subtract or remove rows in the same transaction. Legacy and recovery rebuilds populate

@@ -9,6 +9,7 @@ CREATE TABLE usage_price_time_rollup (
   provider_id TEXT NOT NULL CHECK(length(CAST(provider_id AS BLOB)) BETWEEN 1 AND 64),
   profile_id TEXT NOT NULL CHECK(length(CAST(profile_id AS BLOB)) BETWEEN 1 AND 128),
   model TEXT NOT NULL CHECK(length(CAST(model AS BLOB)) BETWEEN 1 AND 64),
+  project_key TEXT NOT NULL CHECK(length(CAST(project_key AS BLOB)) <= 512),
   service_tier TEXT NOT NULL CHECK(service_tier IN ('standard_reported','standard_assumed','priority','unknown')),
   long_context TEXT NOT NULL CHECK(long_context IN ('yes','no','unavailable')),
   reported_state TEXT NOT NULL CHECK(reported_state IN ('present','missing')),
@@ -20,7 +21,8 @@ CREATE TABLE usage_price_time_rollup (
   reported_cost_count INTEGER NOT NULL CHECK(reported_cost_count BETWEEN 0 AND event_count),
   reported_cost_sum INTEGER NOT NULL CHECK(reported_cost_sum >= 0),
   PRIMARY KEY(aggregate_generation, dataset_kind, bucket_width, bucket_start_seconds,
-              provider_id, profile_id, model, service_tier, long_context, reported_state),
+              provider_id, profile_id, model, project_key, service_tier, long_context,
+              reported_state),
   CHECK((bucket_width = 'minute' AND bucket_start_seconds % 60 = 0)
      OR (bucket_width = 'hour' AND bucket_start_seconds % 3600 = 0)),
   CHECK(calculable_event_count > 0
@@ -36,6 +38,7 @@ CREATE TABLE usage_price_session_rollup (
   profile_id TEXT NOT NULL CHECK(length(CAST(profile_id AS BLOB)) BETWEEN 1 AND 128),
   session_id TEXT NOT NULL CHECK(length(CAST(session_id AS BLOB)) BETWEEN 1 AND 512),
   model TEXT NOT NULL CHECK(length(CAST(model AS BLOB)) BETWEEN 1 AND 64),
+  project_key TEXT NOT NULL CHECK(length(CAST(project_key AS BLOB)) <= 512),
   service_tier TEXT NOT NULL CHECK(service_tier IN ('standard_reported','standard_assumed','priority','unknown')),
   long_context TEXT NOT NULL CHECK(long_context IN ('yes','no','unavailable')),
   reported_state TEXT NOT NULL CHECK(reported_state IN ('present','missing')),
@@ -47,7 +50,7 @@ CREATE TABLE usage_price_session_rollup (
   reported_cost_count INTEGER NOT NULL CHECK(reported_cost_count BETWEEN 0 AND event_count),
   reported_cost_sum INTEGER NOT NULL CHECK(reported_cost_sum >= 0),
   PRIMARY KEY(aggregate_generation, dataset_kind, provider_id, profile_id, session_id,
-              model, service_tier, long_context, reported_state),
+              model, project_key, service_tier, long_context, reported_state),
   CHECK(calculable_event_count > 0
      OR (uncached_input_sum = 0 AND cached_input_sum = 0 AND billable_output_sum = 0)),
   CHECK((reported_state = 'present' AND reported_cost_count = event_count)
@@ -56,11 +59,12 @@ CREATE TABLE usage_price_session_rollup (
 
 CREATE INDEX usage_price_time_scope_range
   ON usage_price_time_rollup(aggregate_generation, dataset_kind, provider_id, profile_id,
-                             bucket_width, bucket_start_seconds, model, service_tier,
-                             long_context, reported_state);
+                             bucket_width, bucket_start_seconds, project_key, model,
+                             service_tier, long_context, reported_state);
 CREATE INDEX usage_price_session_scope
   ON usage_price_session_rollup(aggregate_generation, dataset_kind, provider_id, profile_id,
-                                session_id, model, service_tier, long_context, reported_state);
+                                session_id, project_key, model, service_tier, long_context,
+                                reported_state);
 "#;
 
 const NEW_TIER: &str = "CASE WHEN NEW.service_tier IS NULL THEN 'standard_assumed' WHEN lower(NEW.service_tier) IN ('standard','default') THEN 'standard_reported' WHEN lower(NEW.service_tier) IN ('priority','fast') THEN 'priority' ELSE 'unknown' END";
@@ -80,7 +84,7 @@ WHEN (SELECT state FROM usage_aggregate_state WHERE singleton_id = 1) = 'ready'
 BEGIN
   INSERT INTO usage_price_time_rollup(
     aggregate_generation, dataset_kind, bucket_width, bucket_start_seconds,
-    provider_id, profile_id, model, service_tier, long_context, reported_state,
+    provider_id, profile_id, model, project_key, service_tier, long_context, reported_state,
     event_count, calculable_event_count, uncached_input_sum, cached_input_sum,
     billable_output_sum, reported_cost_count, reported_cost_sum
   )
@@ -88,7 +92,8 @@ BEGIN
     (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1),
     'current', bucket.width,
     NEW.timestamp_seconds - (((NEW.timestamp_seconds % bucket.seconds) + bucket.seconds) % bucket.seconds),
-    NEW.provider_id, NEW.profile_id, NEW.model, {NEW_TIER}, NEW.long_context,
+    NEW.provider_id, NEW.profile_id, NEW.model, coalesce(NEW.project_alias, ''),
+    {NEW_TIER}, NEW.long_context,
     CASE WHEN NEW.reported_cost_usd_micros IS NULL THEN 'missing' ELSE 'present' END,
     1, CASE WHEN {NEW_CALCULABLE} THEN 1 ELSE 0 END,
     CASE WHEN {NEW_CALCULABLE} THEN NEW.input_tokens - NEW.cached_tokens ELSE 0 END,
@@ -102,7 +107,8 @@ BEGIN
   FROM (SELECT 'minute' AS width, 60 AS seconds UNION ALL SELECT 'hour', 3600) AS bucket
   WHERE true
   ON CONFLICT(aggregate_generation, dataset_kind, bucket_width, bucket_start_seconds,
-              provider_id, profile_id, model, service_tier, long_context, reported_state)
+              provider_id, profile_id, model, project_key, service_tier, long_context,
+              reported_state)
   DO UPDATE SET
     event_count = event_count + 1,
     calculable_event_count = calculable_event_count + excluded.calculable_event_count,
@@ -131,13 +137,13 @@ WHEN (SELECT state FROM usage_aggregate_state WHERE singleton_id = 1) = 'ready'
 BEGIN
   INSERT INTO usage_price_session_rollup(
     aggregate_generation, dataset_kind, provider_id, profile_id, session_id,
-    model, service_tier, long_context, reported_state,
+    model, project_key, service_tier, long_context, reported_state,
     event_count, calculable_event_count, uncached_input_sum, cached_input_sum,
     billable_output_sum, reported_cost_count, reported_cost_sum
   ) VALUES (
     (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1),
     'current', NEW.provider_id, NEW.profile_id, NEW.session_id,
-    NEW.model, {NEW_TIER}, NEW.long_context,
+    NEW.model, coalesce(NEW.project_alias, ''), {NEW_TIER}, NEW.long_context,
     CASE WHEN NEW.reported_cost_usd_micros IS NULL THEN 'missing' ELSE 'present' END,
     1, CASE WHEN {NEW_CALCULABLE} THEN 1 ELSE 0 END,
     CASE WHEN {NEW_CALCULABLE} THEN NEW.input_tokens - NEW.cached_tokens ELSE 0 END,
@@ -150,7 +156,7 @@ BEGIN
     coalesce(NEW.reported_cost_usd_micros, 0)
   )
   ON CONFLICT(aggregate_generation, dataset_kind, provider_id, profile_id, session_id,
-              model, service_tier, long_context, reported_state)
+              model, project_key, service_tier, long_context, reported_state)
   DO UPDATE SET
     event_count = event_count + 1,
     calculable_event_count = calculable_event_count + excluded.calculable_event_count,
@@ -183,6 +189,7 @@ BEGIN
           (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)
       AND dataset_kind = 'current' AND provider_id = OLD.provider_id
       AND profile_id = OLD.profile_id AND model = OLD.model
+      AND project_key = coalesce(OLD.project_alias, '')
       AND service_tier = {OLD_TIER} AND long_context = OLD.long_context
       AND reported_state = CASE WHEN OLD.reported_cost_usd_micros IS NULL THEN 'missing' ELSE 'present' END
       AND ((bucket_width = 'minute' AND bucket_start_seconds =
@@ -195,6 +202,7 @@ BEGIN
         (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)
     AND dataset_kind = 'current' AND provider_id = OLD.provider_id
     AND profile_id = OLD.profile_id AND model = OLD.model
+    AND project_key = coalesce(OLD.project_alias, '')
     AND service_tier = {OLD_TIER} AND long_context = OLD.long_context
     AND reported_state = CASE WHEN OLD.reported_cost_usd_micros IS NULL THEN 'missing' ELSE 'present' END
     AND event_count = 1
@@ -214,6 +222,7 @@ BEGIN
         (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)
     AND dataset_kind = 'current' AND provider_id = OLD.provider_id
     AND profile_id = OLD.profile_id AND model = OLD.model
+    AND project_key = coalesce(OLD.project_alias, '')
     AND service_tier = {OLD_TIER} AND long_context = OLD.long_context
     AND reported_state = CASE WHEN OLD.reported_cost_usd_micros IS NULL THEN 'missing' ELSE 'present' END
     AND event_count > 1
@@ -245,6 +254,7 @@ BEGIN
           (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)
       AND dataset_kind = 'current' AND provider_id = OLD.provider_id
       AND profile_id = OLD.profile_id AND session_id = OLD.session_id AND model = OLD.model
+      AND project_key = coalesce(OLD.project_alias, '')
       AND service_tier = {OLD_TIER} AND long_context = OLD.long_context
       AND reported_state = CASE WHEN OLD.reported_cost_usd_micros IS NULL THEN 'missing' ELSE 'present' END
   ) <> 1 THEN RAISE(ABORT, 'price session row unavailable') END;
@@ -253,6 +263,7 @@ BEGIN
         (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)
     AND dataset_kind = 'current' AND provider_id = OLD.provider_id
     AND profile_id = OLD.profile_id AND session_id = OLD.session_id AND model = OLD.model
+    AND project_key = coalesce(OLD.project_alias, '')
     AND service_tier = {OLD_TIER} AND long_context = OLD.long_context
     AND reported_state = CASE WHEN OLD.reported_cost_usd_micros IS NULL THEN 'missing' ELSE 'present' END
     AND event_count = 1;
@@ -268,6 +279,7 @@ BEGIN
         (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)
     AND dataset_kind = 'current' AND provider_id = OLD.provider_id
     AND profile_id = OLD.profile_id AND session_id = OLD.session_id AND model = OLD.model
+    AND project_key = coalesce(OLD.project_alias, '')
     AND service_tier = {OLD_TIER} AND long_context = OLD.long_context
     AND reported_state = CASE WHEN OLD.reported_cost_usd_micros IS NULL THEN 'missing' ELSE 'present' END
     AND event_count > 1;

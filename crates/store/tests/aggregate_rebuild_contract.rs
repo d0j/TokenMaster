@@ -205,6 +205,25 @@ fn current_rebuild_is_bounded_resumable_and_generation_published() {
     assert!(active_rows.3 > 0);
     assert!(active_rows.4 > 0);
     assert_eq!(active_rows.5, 5);
+    let project_rows = connection
+        .prepare(
+            "SELECT project_key, sum(event_count)
+             FROM usage_price_time_rollup
+             WHERE aggregate_generation = 1 AND dataset_kind = 'current'
+               AND bucket_width = 'hour'
+             GROUP BY project_key ORDER BY project_key",
+        )
+        .expect("prepare rebuilt project price rows")
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })
+        .expect("query rebuilt project price rows")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect rebuilt project price rows");
+    assert_eq!(
+        project_rows,
+        vec![(String::new(), 2), ("project-b".to_owned(), 3)]
+    );
     let stale_price_rows: i64 = connection
         .query_row(
             "SELECT (SELECT count(*) FROM usage_price_time_rollup

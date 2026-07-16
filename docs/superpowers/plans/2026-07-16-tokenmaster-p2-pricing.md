@@ -41,8 +41,8 @@ Do not push or package without explicit user direction.
 2. Add failing v8-to-v9/current-schema/malformed-schema tests for the new event column,
    aggregate state version, time/session price tables, indexes, checks, and triggers.
 3. Implement schema v9 migration without changing retained private-data policy.
-4. Add failing write/replay/delete/replace tests for per-event tier/context/reported-state
-   price facts and billable-output derivation.
+4. Add failing write/replay/delete/replace tests for per-event
+   model/project/tier/context/reported-state price facts and billable-output derivation.
 5. Implement transactional current rollup maintenance.
 
 **Commit:** `feat(store): add transactional price basis rollups`

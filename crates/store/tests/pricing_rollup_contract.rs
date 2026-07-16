@@ -167,3 +167,56 @@ fn ready_current_price_rollups_track_insert_update_and_delete_atomically() {
     assert_eq!(count(&connection, "usage_price_time_rollup"), 0);
     assert_eq!(count(&connection, "usage_price_session_rollup"), 0);
 }
+
+#[test]
+fn price_rollups_retain_bounded_project_partition_without_extra_event_rows() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("pricing-project.sqlite3");
+    drop(UsageStore::open(&path).expect("create archive"));
+    let connection = Connection::open(&path).expect("open archive");
+    for (index, project) in [(1_u8, None), (2_u8, Some("project-a"))] {
+        connection
+            .execute(
+                "INSERT INTO usage_event(
+                   fingerprint, event_id, selected_file_key, selected_generation,
+                   selected_source_offset, provider_id, profile_id, session_id, source_id,
+                   timestamp_seconds, timestamp_nanos, model, project_alias,
+                   input_tokens, cached_tokens, output_tokens, reasoning_tokens, total_tokens,
+                   fallback_model, long_context, activity_read, activity_edit_write,
+                   activity_search, activity_git, activity_build_test, activity_web,
+                   activity_subagents, activity_terminal
+                 ) VALUES (
+                   ?1, ?2, ?3, 0, ?4, 'codex', 'default', 'session', 'source',
+                   121, 0, 'gpt-5.6-sol', ?5, 10, 2, 3, 4, 17, 0, 'no',
+                   0, 0, 0, 0, 0, 0, 0, 0
+                 )",
+                params![
+                    [index; 32].as_slice(),
+                    format!("project-event-{index}"),
+                    [index + 10; 32].as_slice(),
+                    i64::from(index),
+                    project,
+                ],
+            )
+            .expect("project price event");
+    }
+
+    let projects = connection
+        .prepare(
+            "SELECT project_key, event_count FROM usage_price_time_rollup
+             WHERE bucket_width = 'minute' ORDER BY project_key",
+        )
+        .expect("project price query")
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })
+        .expect("project price rows")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect project price rows");
+    assert_eq!(
+        projects,
+        vec![(String::new(), 1), ("project-a".to_owned(), 1)]
+    );
+    assert_eq!(count(&connection, "usage_price_time_rollup"), 4);
+    assert_eq!(count(&connection, "usage_price_session_rollup"), 2);
+}
