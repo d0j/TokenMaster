@@ -6,6 +6,24 @@ All notable changes are recorded here.
 
 ### Added
 
+- Strict SQLite schema v11 benefit foundation with independent publication revision,
+  exact rollback-safe v10 migration, provider/account/workspace scopes, immutable
+  material lot revisions and change points, current projection, inherited/override
+  reminder profiles, durable due queue and delivery receipts, exact object validation,
+  and no changes to existing usage/price/quota facts.
+- Transactional benefit observation/profile persistence with deterministic pure-core
+  reconciliation, duplicate/stale no-op, freshness-only publication, missing/
+  ambiguous/reappearance/terminal handling, monotonic terminal cursor recovery after
+  restart, due rebuild, injected rollback at history/current/due/revision boundaries,
+  and path/identity-private errors.
+- Bounded benefit retention with 512-change/256-delivery soft defaults,
+  2,048-change/1,024-delivery hard limits, one total 256-row maintenance budget,
+  protected newest/current/terminal evidence, orphan material-revision cleanup,
+  noncurrent delivery compaction, exact state counts, and rollback-safe retry.
+- Provider-neutral benefit domain values and pure `tokenmaster-benefits`
+  reconciliation/reminder core, plus built-in Codex detailed reset-credit
+  normalization with account-separated opaque IDs, discarded untrusted text,
+  preserved independent expirations, and explicit aggregate unknown-expiry remainder.
 - Separate bounded Codex quota runtime with one independent scheduler/worker,
   immediate startup/recovery refresh, capacity-one coalescing, 15-minute normal and
   transient-only 60-second accelerated cadence, pause/resume/suspend/shutdown,
@@ -252,6 +270,10 @@ All notable changes are recorded here.
 
 ### Fixed
 
+- Removed a startup race in `RefreshScheduler::spawn_paused`: paused instances now
+  begin with no preloaded recovery flags, and `resume()` installs the single recovery
+  request. A fast scheduler thread can no longer submit both the constructor flag and
+  the resume flag before the first quota refresh completes.
 - Hardened the isolated Windows query resource warm-up floor against one transient low
   allocator sample while retaining measured-window return minima, sustained-growth
   rejection, and exact handle/thread/USER/GDI gates.

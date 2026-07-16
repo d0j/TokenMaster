@@ -9,6 +9,7 @@ rust-version.workspace = true
 libsqlite3-sys.workspace = true
 rusqlite.workspace = true
 tokenmaster-accounting = { path = "../accounting" }
+tokenmaster-benefits = { path = "../benefits" }
 tokenmaster-domain = { path = "../domain" }
 tokenmaster-quota = { path = "../quota" }
 

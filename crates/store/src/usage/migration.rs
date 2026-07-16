@@ -2,6 +2,10 @@ use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 use crate::{StoreError, StoreErrorCode};
 
+use super::benefit_schema::{
+    V11_BENEFIT_INDEX_CONTRACTS, V11_BENEFIT_SCHEMA, V11_BENEFIT_TABLE_CONTRACTS,
+    V11_BENEFIT_TRIGGER_CONTRACTS,
+};
 use super::price_schema::{
     V9_PRICE_ROLLUP_SCHEMA, price_session_delete_trigger, price_session_insert_trigger,
     price_session_update_trigger, price_time_delete_trigger, price_time_insert_trigger,
@@ -29,7 +33,8 @@ use super::schema::{
     V8_USAGE_EVENT_SCHEMA, V9_AGGREGATE_STATE_CONTRACT, V9_AGGREGATE_STATE_SCHEMA,
     V9_INDEX_CONTRACTS, V9_LEGACY_EVENT_CONTRACT, V9_OBSERVATION_CONTRACT,
     V9_PRICE_SESSION_ROLLUP_CONTRACT, V9_PRICE_TIME_ROLLUP_CONTRACT, V9_REPORTED_COST_TABLE_SCHEMA,
-    V9_SCHEMA_VERSION, V9_USAGE_EVENT_CONTRACT, v8_session_update_trigger, v8_time_update_trigger,
+    V9_SCHEMA_VERSION, V9_USAGE_EVENT_CONTRACT, V10_SCHEMA_VERSION, v8_session_update_trigger,
+    v8_time_update_trigger,
 };
 use super::{
     MAX_QUOTA_EPOCHS_PER_WINDOW, MAX_QUOTA_SAMPLES_PER_WINDOW, MAX_QUOTA_TRANSITIONS_PER_WINDOW,
@@ -49,7 +54,8 @@ pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreErr
             migrate_v6(connection)?;
             migrate_v7(connection)?;
             migrate_v8(connection)?;
-            migrate_v9(connection)
+            migrate_v9(connection)?;
+            migrate_v10(connection)
         }
         V3_SCHEMA_VERSION => {
             migrate_v3(connection)?;
@@ -58,7 +64,8 @@ pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreErr
             migrate_v6(connection)?;
             migrate_v7(connection)?;
             migrate_v8(connection)?;
-            migrate_v9(connection)
+            migrate_v9(connection)?;
+            migrate_v10(connection)
         }
         V4_SCHEMA_VERSION => {
             migrate_v4(connection)?;
@@ -66,7 +73,8 @@ pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreErr
             migrate_v6(connection)?;
             migrate_v7(connection)?;
             migrate_v8(connection)?;
-            migrate_v9(connection)
+            migrate_v9(connection)?;
+            migrate_v10(connection)
         }
         0 | V1_SCHEMA_VERSION => {
             let transaction =
@@ -82,35 +90,44 @@ pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreErr
             migrate_v6(connection)?;
             migrate_v7(connection)?;
             migrate_v8(connection)?;
-            migrate_v9(connection)
+            migrate_v9(connection)?;
+            migrate_v10(connection)
         }
         V5_SCHEMA_VERSION => {
             migrate_v5(connection)?;
             migrate_v6(connection)?;
             migrate_v7(connection)?;
             migrate_v8(connection)?;
-            migrate_v9(connection)
+            migrate_v9(connection)?;
+            migrate_v10(connection)
         }
         V6_SCHEMA_VERSION => {
             migrate_v6(connection)?;
             migrate_v7(connection)?;
             migrate_v8(connection)?;
-            migrate_v9(connection)
+            migrate_v9(connection)?;
+            migrate_v10(connection)
         }
         V7_SCHEMA_VERSION => {
             migrate_v7(connection)?;
             migrate_v8(connection)?;
-            migrate_v9(connection)
+            migrate_v9(connection)?;
+            migrate_v10(connection)
         }
         V8_SCHEMA_VERSION => {
             migrate_v8(connection)?;
-            migrate_v9(connection)
+            migrate_v9(connection)?;
+            migrate_v10(connection)
         }
-        V9_SCHEMA_VERSION => migrate_v9(connection),
+        V9_SCHEMA_VERSION => {
+            migrate_v9(connection)?;
+            migrate_v10(connection)
+        }
+        V10_SCHEMA_VERSION => migrate_v10(connection),
         USAGE_SCHEMA_VERSION => {
             let transaction =
                 connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-            validate_v10(&transaction)?;
+            validate_v11(&transaction)?;
             transaction.commit()?;
             Ok(())
         }
@@ -377,15 +394,25 @@ pub(super) fn validate_v8(connection: &Connection) -> Result<(), StoreError> {
 }
 
 pub(super) fn validate_v9(connection: &Connection) -> Result<(), StoreError> {
-    validate_v9_schema(connection, false)
+    validate_extended_schema(connection, false, false)
 }
 
 pub(super) fn validate_v10(connection: &Connection) -> Result<(), StoreError> {
-    validate_v9_schema(connection, true)?;
+    validate_extended_schema(connection, true, false)?;
     validate_quota_state(connection)
 }
 
-fn validate_v9_schema(connection: &Connection, include_quota: bool) -> Result<(), StoreError> {
+pub(super) fn validate_v11(connection: &Connection) -> Result<(), StoreError> {
+    validate_extended_schema(connection, true, true)?;
+    validate_quota_state(connection)?;
+    validate_benefit_state(connection)
+}
+
+fn validate_extended_schema(
+    connection: &Connection,
+    include_quota: bool,
+    include_benefit: bool,
+) -> Result<(), StoreError> {
     let session_update = v8_session_update_trigger()
         .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
     let time_update =
@@ -468,12 +495,18 @@ fn validate_v9_schema(connection: &Connection, include_quota: bool) -> Result<()
     if include_quota {
         trigger_contracts.extend(V10_QUOTA_TRIGGER_CONTRACTS.iter().copied());
     }
+    if include_benefit {
+        trigger_contracts.extend(V11_BENEFIT_TRIGGER_CONTRACTS.iter().copied());
+    }
     trigger_contracts.sort_unstable_by_key(|contract| contract.name);
     let mut indexes = V5_INDEX_CONTRACTS.to_vec();
     indexes.extend_from_slice(V8_INDEX_CONTRACTS);
     indexes.extend_from_slice(V9_INDEX_CONTRACTS);
     if include_quota {
         indexes.extend_from_slice(V10_QUOTA_INDEX_CONTRACTS);
+    }
+    if include_benefit {
+        indexes.extend_from_slice(V11_BENEFIT_INDEX_CONTRACTS);
     }
     let mut schema_sources = vec![
         V9_REPORTED_COST_TABLE_SCHEMA,
@@ -500,6 +533,10 @@ fn validate_v9_schema(connection: &Connection, include_quota: bool) -> Result<()
     if include_quota {
         schema_sources.push(V10_QUOTA_SCHEMA);
         extension_tables.extend_from_slice(V10_QUOTA_TABLE_CONTRACTS);
+    }
+    if include_benefit {
+        schema_sources.push(V11_BENEFIT_SCHEMA);
+        extension_tables.extend_from_slice(V11_BENEFIT_TABLE_CONTRACTS);
     }
     validate_schema(
         connection,
@@ -593,6 +630,44 @@ fn validate_quota_state(connection: &Connection) -> Result<(), StoreError> {
     Ok(())
 }
 
+fn validate_benefit_state(connection: &Connection) -> Result<(), StoreError> {
+    let valid = connection
+        .query_row(
+            "SELECT revision >= 0
+                    AND current_lot_count = (SELECT count(*) FROM benefit_lot_current)
+                    AND retained_change_count = (SELECT count(*) FROM benefit_change)
+                    AND pending_due_count = (SELECT count(*) FROM benefit_reminder_due)
+                    AND retained_delivery_count = (SELECT count(*) FROM benefit_reminder_delivery)
+                    AND ((revision = 0 AND last_published_at_ms IS NULL)
+                      OR (revision > 0 AND last_published_at_ms IS NOT NULL))
+             FROM benefit_state WHERE singleton_id = 1",
+            [],
+            |row| row.get::<_, bool>(0),
+        )
+        .optional()?
+        .unwrap_or(false);
+    if !valid {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    let profiles_valid = connection.query_row(
+        "SELECT
+           (SELECT count(*) FROM benefit_reminder_profile
+            WHERE profile_kind = 'global' AND length(profile_scope_id) = 0) = 1
+           AND NOT EXISTS(
+             SELECT 1 FROM benefit_reminder_profile AS profile
+             WHERE (SELECT count(*) FROM benefit_reminder_threshold AS threshold
+                    WHERE threshold.profile_kind = profile.profile_kind
+                      AND threshold.profile_scope_id = profile.profile_scope_id) > 8
+           )",
+        [],
+        |row| row.get::<_, bool>(0),
+    )?;
+    if !profiles_valid {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    Ok(())
+}
+
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum MigrationFault {
     None,
@@ -646,6 +721,8 @@ enum MigrationFault {
     AfterCreatePriceTriggers,
     #[cfg(test)]
     AfterCreateQuotaSchema,
+    #[cfg(test)]
+    AfterCreateBenefitSchema,
 }
 
 fn migrate_v2(connection: &mut Connection) -> Result<(), StoreError> {
@@ -785,6 +862,7 @@ enum MigrationBoundary {
     PriceSchemaCreated,
     PriceTriggersCreated,
     QuotaSchemaCreated,
+    BenefitSchemaCreated,
 }
 
 fn migration_fault(fault: MigrationFault, boundary: MigrationBoundary) -> Result<(), StoreError> {
@@ -887,6 +965,10 @@ fn migration_fault(fault: MigrationFault, boundary: MigrationBoundary) -> Result
                 MigrationFault::AfterCreateQuotaSchema,
                 MigrationBoundary::QuotaSchemaCreated
             )
+            | (
+                MigrationFault::AfterCreateBenefitSchema,
+                MigrationBoundary::BenefitSchemaCreated
+            )
     );
     #[cfg(not(test))]
     let triggered = {
@@ -941,6 +1023,24 @@ fn migrate_v9(connection: &mut Connection) -> Result<(), StoreError> {
     migrate_v9_with_fault(connection, MigrationFault::None)
 }
 
+fn migrate_v10(connection: &mut Connection) -> Result<(), StoreError> {
+    migrate_v10_with_fault(connection, MigrationFault::None)
+}
+
+fn migrate_v10_with_fault(
+    connection: &mut Connection,
+    fault: MigrationFault,
+) -> Result<(), StoreError> {
+    validate_v10(connection)?;
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    transaction.execute_batch(V11_BENEFIT_SCHEMA)?;
+    migration_fault(fault, MigrationBoundary::BenefitSchemaCreated)?;
+    transaction.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
+    validate_v11(&transaction)?;
+    transaction.commit()?;
+    Ok(())
+}
+
 fn migrate_v9_with_fault(
     connection: &mut Connection,
     fault: MigrationFault,
@@ -949,7 +1049,7 @@ fn migrate_v9_with_fault(
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     transaction.execute_batch(V10_QUOTA_SCHEMA)?;
     migration_fault(fault, MigrationBoundary::QuotaSchemaCreated)?;
-    transaction.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
+    transaction.pragma_update(None, "user_version", V10_SCHEMA_VERSION)?;
     validate_v10(&transaction)?;
     transaction.commit()?;
     Ok(())
@@ -1966,8 +2066,8 @@ mod tests {
         MigrationFault, migrate_schema, migrate_v2_revision_table, migrate_v2_with_fault,
         migrate_v3_with_fault, migrate_v4_with_fault, migrate_v5_with_fault, migrate_v6,
         migrate_v6_with_fault, migrate_v7_with_fault, migrate_v8_with_fault, migrate_v9_with_fault,
-        pragma_i64, validate_v2, validate_v3, validate_v4, validate_v5, validate_v6, validate_v7,
-        validate_v8, validate_v9, validate_v10,
+        migrate_v10_with_fault, pragma_i64, validate_v2, validate_v3, validate_v4, validate_v5,
+        validate_v6, validate_v7, validate_v8, validate_v9, validate_v10, validate_v11,
     };
     use crate::{StoreErrorCode, usage::schema};
 
@@ -2293,7 +2393,10 @@ mod tests {
         let mut connection = exact_v2_fixture(true)?;
         let before = fixture_snapshot(&connection)?;
         migrate_schema(&mut connection)?;
-        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 10);
+        assert_eq!(
+            pragma_i64(&connection, "PRAGMA user_version")?,
+            schema::USAGE_SCHEMA_VERSION
+        );
         assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
         assert_eq!(fixture_snapshot(&connection)?, before);
         assert_eq!(event_provenance(&connection)?, (Some(5), Some(5), 0));
@@ -2304,7 +2407,7 @@ mod tests {
             )?,
             1
         );
-        validate_v10(&connection)?;
+        validate_v11(&connection)?;
         let temporary_names: i64 = connection.query_row(
             "SELECT count(*) FROM sqlite_schema
              WHERE instr(sql, 'usage_replay_revision_v3') > 0
@@ -2333,7 +2436,10 @@ mod tests {
             let mut connection = exact_v3_fixture(current_revision)?;
             let before = fixture_snapshot(&connection)?;
             migrate_schema(&mut connection)?;
-            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 10);
+            assert_eq!(
+                pragma_i64(&connection, "PRAGMA user_version")?,
+                schema::USAGE_SCHEMA_VERSION
+            );
             assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
             assert_eq!(fixture_snapshot(&connection)?, before);
             assert_eq!(event_provenance(&connection)?, expected);
@@ -2344,7 +2450,7 @@ mod tests {
                 )?,
                 i64::from(current_revision)
             );
-            validate_v10(&connection)?;
+            validate_v11(&connection)?;
         }
         Ok(())
     }
@@ -2382,7 +2488,10 @@ mod tests {
     fn exact_v4_scan_and_revision_migrate_to_current_scoped_schema() -> TestResult {
         let mut connection = exact_v4_fixture_with_scan()?;
         migrate_schema(&mut connection)?;
-        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 10);
+        assert_eq!(
+            pragma_i64(&connection, "PRAGMA user_version")?,
+            schema::USAGE_SCHEMA_VERSION
+        );
         assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
         let scan: (
             i64,
@@ -2472,7 +2581,7 @@ mod tests {
             )?,
             1
         );
-        validate_v10(&connection)?;
+        validate_v11(&connection)?;
         Ok(())
     }
 
@@ -2614,6 +2723,38 @@ mod tests {
                 },
             )?,
             (0, 0, 0, 0, None)
+        );
+        validate_v10(&connection)?;
+        Ok(())
+    }
+
+    #[test]
+    fn benefit_schema_fault_rolls_back_exact_v10_without_residue() -> TestResult {
+        let mut connection = exact_v9_fixture()?;
+        migrate_v9_with_fault(&mut connection, MigrationFault::None)?;
+        let before = fixture_snapshot(&connection)?;
+
+        let error =
+            match migrate_v10_with_fault(&mut connection, MigrationFault::AfterCreateBenefitSchema)
+            {
+                Ok(()) => return Err("faulted benefit migration unexpectedly committed".into()),
+                Err(error) => error,
+            };
+
+        assert_eq!(error.code(), StoreErrorCode::Database);
+        assert_eq!(
+            pragma_i64(&connection, "PRAGMA user_version")?,
+            schema::V10_SCHEMA_VERSION
+        );
+        assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
+        assert_eq!(fixture_snapshot(&connection)?, before);
+        assert_eq!(
+            pragma_i64(
+                &connection,
+                "SELECT count(*) FROM sqlite_schema
+                 WHERE name LIKE 'benefit_%'"
+            )?,
+            0
         );
         validate_v10(&connection)?;
         Ok(())

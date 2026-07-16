@@ -185,14 +185,17 @@ gate retained a 3,149,824-byte private floor with a
 task-owned fixture child. Current project truth is recorded in ADR-038 and
 `docs/superpowers/specs/2026-07-16-tokenmaster-codex-quota-runtime-design.md`.
 
-The immediate next slice is the separately approved typed reset-credit benefit
-inventory and expiration/reminder contour. Preserve multiple lots and quantities,
-expiration precision, FEFO projection, default 7-day/24-hour/12-hour/6-hour/1-hour
-thresholds, user replacement/custom thresholds, deduplicated reminder delivery, and
-truthful notification coverage. Inventory read must not imply activation authority.
-UI, CLI/MCP, M0 acceptance, packaging, signing, and release remain later and
-unclaimed. Do not infer quota from local token/cost totals or replace aggregates with
-view-time full scans.
+The benefit foundation Tasks 1-4 are complete on
+`cx/tokenmaster-product-architecture`: provider-neutral values, pure deterministic
+reconciliation/reminder planning, privacy-safe Codex detailed-plus-aggregate
+normalization, and strict schema-v11 transactional inventory/history/profile/due
+storage with terminal-cursor recovery, 512/256 soft retention, 2,048/1,024 hard
+bounds, 256-row maintenance, restart, and injected rollback. The immediate next slice
+is Task 5: immutable bounded benefit current/history query snapshots with FEFO order,
+explicit freshness/completeness, active profile, nearest expiry/due, redacted
+revision-bound continuation, scale, corruption, and resource gates. Reminder delivery
+runtime, UI, CLI/MCP, activation, M0 acceptance, packaging, signing, and release remain
+unclaimed. Inventory read must not imply activation authority.
 The current post-Task-8 clean-root, formatting, strict locked workspace Clippy, and
 complete locked workspace test/doctest baseline passes. The query resource binary uses
 an isolated `harness = false` process plus a bounded maximum-64-round warm-up that

@@ -223,6 +223,13 @@ Default retention per scope is 512 change points with a hard cap of 2,048. Curre
 lots and unresolved ambiguity are protected. Maintenance is keyset-paged at no more
 than 256 rows and never scans usage events.
 
+The newest change for every known lot is also protected as its bounded identity
+cursor. A terminal lot that disappears from the current projection therefore retains
+one `retired_terminal` cursor plus its last material revision. If the provider later
+returns that same opaque lot ID, the store hydrates only that observed cursor for the
+pure reconciler, publishes `reappeared`, and continues the monotonic lot revision.
+It does not retain an unbounded in-memory tombstone map or scan unrelated history.
+
 ## 7. Reminder profiles and queue
 
 Recommended profile version 1 contains:

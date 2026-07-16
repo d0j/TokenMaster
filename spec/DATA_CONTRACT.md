@@ -211,7 +211,7 @@ keyset-paged at no more than 256 rows. Scan-history cleanup uses only scan-relat
 foreign-key checks rather than rescanning the complete usage-event archive.
 
 The query path uses a distinct `READ_ONLY|NO_MUTEX` connection and never calls the
-writable open/migration path. It requires exact schema v10 and bundled SQLite identity,
+writable open/migration path. It requires exact schema v11 and bundled SQLite identity,
 WAL, foreign keys, query-only and defensive modes, trusted-schema/DQS disabled,
 query-planner stability, no checkpoint on close, 250 ms busy timeout, 4 MiB cache,
 file-backed temporary storage, and zero mmap. Each result captures archive generation,
@@ -463,6 +463,14 @@ Unresolved or ambiguous intents survive retention. A confirmed receipt may refer
 one `manual_or_banked_reset` quota transition, but neither inventory nor local usage
 may invent provider capacity. Current lots, changes, reminders, intents, receipts,
 pages, and maintenance work have explicit per-scope bounds.
+
+Schema v11 implements the read-only inventory/reminder foundation with one independent
+benefit publication revision, strict scope/current/material-revision/change/profile/
+threshold/due/delivery objects, exact v10 migration, immutable change and delivery
+facts, 64 current lots, 8 thresholds, 512-change/256-delivery soft retention,
+2,048-change/1,024-delivery hard limits, and 256-row maintenance. The newest change
+per lot is protected as the terminal/reappearance revision cursor. Activation
+intents/receipts remain unimplemented and confer no current mutation authority.
 
 Only explicit provider ancestry identifies a parent. A strong signature covers the
 normalized model, emitted delta, and provider cumulative snapshot. A weak signature

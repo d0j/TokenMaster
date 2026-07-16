@@ -6,6 +6,10 @@ use rusqlite::Connection;
 use crate::{EXPECTED_SQLITE_VERSION, StoreError, StoreErrorCode};
 
 mod aggregate;
+mod benefit_maintenance;
+mod benefit_schema;
+mod benefit_types;
+mod benefit_write;
 mod incremental;
 mod migration;
 mod price_schema;
@@ -22,6 +26,12 @@ mod schema;
 mod types;
 mod write;
 
+pub use benefit_types::{
+    BenefitApplyResult, BenefitApplyStatus, BenefitInventoryRevision, BenefitMaintenanceResult,
+    BenefitProfileApplyResult, DEFAULT_BENEFIT_CHANGES_PER_SCOPE,
+    DEFAULT_BENEFIT_DELIVERIES_PER_SCOPE, MAX_BENEFIT_CHANGES_PER_SCOPE,
+    MAX_BENEFIT_DELIVERIES_PER_SCOPE, MAX_BENEFIT_MAINTENANCE_PAGE_SIZE,
+};
 pub use query::{
     MAX_QUOTA_CURRENT_WINDOWS, MAX_QUOTA_TRANSITION_PAGE_SIZE, MAX_USAGE_BREAKDOWN_ITEMS,
     MAX_USAGE_BREAKDOWNS, MAX_USAGE_OVERVIEW_SEGMENTS, MAX_USAGE_PRICE_BASIS_KEYS,

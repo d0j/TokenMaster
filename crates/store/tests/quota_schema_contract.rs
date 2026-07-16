@@ -54,7 +54,26 @@ fn raw_connection(path: &Path) -> Connection {
 fn strip_quota_schema_to_exact_v9(connection: &Connection) {
     connection
         .execute_batch(
-            "DROP TRIGGER IF EXISTS quota_epoch_history_no_update;
+            "DROP TRIGGER IF EXISTS benefit_change_no_update;
+             DROP TRIGGER IF EXISTS benefit_delivery_no_update;
+             DROP TRIGGER IF EXISTS benefit_lot_revision_no_update;
+             DROP TRIGGER IF EXISTS benefit_state_no_delete;
+             DROP INDEX IF EXISTS benefit_change_scope_sequence;
+             DROP INDEX IF EXISTS benefit_delivery_scope_time;
+             DROP INDEX IF EXISTS benefit_due_next;
+             DROP INDEX IF EXISTS benefit_lot_current_expiry;
+             DROP INDEX IF EXISTS benefit_lot_revision_retention;
+             DROP INDEX IF EXISTS benefit_profile_scope;
+             DROP TABLE IF EXISTS benefit_reminder_delivery;
+             DROP TABLE IF EXISTS benefit_reminder_due;
+             DROP TABLE IF EXISTS benefit_reminder_threshold;
+             DROP TABLE IF EXISTS benefit_reminder_profile;
+             DROP TABLE IF EXISTS benefit_change;
+             DROP TABLE IF EXISTS benefit_lot_current;
+             DROP TABLE IF EXISTS benefit_lot_revision;
+             DROP TABLE IF EXISTS benefit_scope;
+             DROP TABLE IF EXISTS benefit_state;
+             DROP TRIGGER IF EXISTS quota_epoch_history_no_update;
              DROP TRIGGER IF EXISTS quota_sample_no_update;
              DROP TRIGGER IF EXISTS quota_state_no_delete;
              DROP TRIGGER IF EXISTS quota_transition_no_update;
@@ -148,12 +167,12 @@ fn fresh_schema_has_exact_strict_bounded_quota_objects() {
     drop(UsageStore::open(&path).expect("create current schema"));
     let connection = raw_connection(&path);
 
-    assert_eq!(USAGE_SCHEMA_VERSION, 10);
+    assert_eq!(USAGE_SCHEMA_VERSION, 11);
     assert_eq!(
         connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
             .expect("user version"),
-        10
+        11
     );
     assert_eq!(
         connection
@@ -398,7 +417,7 @@ fn exact_v9_migration_adds_empty_quota_state_without_touching_usage_or_prices() 
         connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
             .expect("user version"),
-        10
+        11
     );
     let after = connection
         .query_row(

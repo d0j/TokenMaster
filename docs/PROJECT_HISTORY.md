@@ -1783,3 +1783,40 @@ notification delivery, activation, UI, CLI/MCP, M0 acceptance, packaging, signin
 and release remain unclaimed. The next implementation slice is the independently
 approved benefit inventory/reminder contour; inventory read must not authorize
 activation.
+
+## 2026-07-16 — benefit inventory foundation through strict schema v11
+
+Implemented the first four tasks of the approved benefit contour. The domain now owns
+bounded provider-neutral lots, typed expiry precision, opaque identities, inventory
+observations, notification channels, and versioned profiles. The new pure
+`tokenmaster-benefits` crate reconciles awarded/changed/missing/ambiguous/reappeared/
+terminal facts and computes deterministic reminder keys without I/O, clock, SQLite,
+thread, UI, or provider authority. The Codex normalizer hashes detailed reset-credit
+IDs by pseudonymous account, discards title/description, preserves separate lots, and
+emits one aggregate unknown-expiry remainder only when the official available count
+exceeds detailed available rows.
+
+Schema v11 adds strict benefit state/scope/material revision/current/change/profile/
+threshold/due/delivery objects and exact transactional v10 migration. One observation
+atomically publishes current facts, immutable history, freshness, and due rows.
+Duplicate polls append nothing; freshness-only input advances publication without lot
+history. Terminal disappearance preserves one bounded latest-change cursor, allowing
+the same opaque lot to reappear after restart with monotonic revision rather than
+identity reuse.
+
+Retention uses 512 changes and 256 deliveries as soft defaults, 2,048/1,024 hard
+limits, and one total 256-row page. It protects current/latest terminal evidence,
+removes only orphan material revisions and noncurrent receipts, advances the benefit
+publication when visible history changes, and never scans usage events. Fresh schema,
+exact v10 migration, weakened-schema rejection, write/restart/profile/terminal
+reappearance, 600-change plateau, delivery retention, and injected schema/write/
+maintenance rollback pass. Strict store Clippy, the complete store suite, dependency
+inspection, `git diff --check`, and `TM-CLEAN-PASS` are green. Immutable benefit query
+snapshots are next; reminder runtime, UI, automation, activation, packaging, and
+release remain unclaimed.
+
+The full workspace gate also exposed a scheduler startup race: a paused scheduler
+could inherit the constructor recovery flag and receive another from `resume()` if
+its thread started in the intervening window. Paused construction now starts with no
+pending flags, so resume is the sole startup-recovery authority; the focused quota
+runtime test and resource contract pass.

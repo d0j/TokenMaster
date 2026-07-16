@@ -428,7 +428,7 @@ backstop when registration is unavailable.
 
 Decision: `tokenmaster-query` owns synchronous bounded frontend values, while
 `tokenmaster-store::UsageReadStore` owns one separate SQLite `READ_ONLY|NO_MUTEX`
-connection. It requires exact schema v10 and bundled SQLite, applies WAL/query-only/
+connection. It requires exact schema v11 and bundled SQLite, applies WAL/query-only/
 defensive/QPSG/no-checkpoint policy with trusted schema and DQS disabled, a 250 ms busy
 timeout, 4 MiB cache and zero mmap, and never migrates. One short deferred transaction
 captures publication generation, independent dataset identity, exact scan truth and a
@@ -759,3 +759,30 @@ idle memory/process authority. Exact-native discovery, separate constant-state
 composition, I/O-before-lease ordering, non-waiting publication, and count-only health
 preserve responsiveness, bounded memory, cross-process safety, and truthful stale
 quota history without importing UI or benefit-mutation authority.
+
+## ADR-039 — Provider-neutral benefit inventory and strict schema v11
+
+Decision: banked resets, usage credits, temporary usage, and unknown benefits are
+separate bounded lots with typed expiry precision and opaque identities. The built-in
+Codex normalizer hashes raw reset-credit IDs with the pseudonymous account before the
+domain boundary, discards provider titles/descriptions, preserves detailed rows, and
+represents only an unexplained available-count remainder as one aggregate unknown-
+expiry lot. `tokenmaster-benefits` owns deterministic pure reconciliation and reminder
+keys without I/O authority.
+
+Schema v11 adds an independent benefit publication revision, strict current/material-
+revision/change/profile/threshold/due/delivery objects, and exact rollback-safe v10
+migration. One scope observation commits current/history/freshness/due state in one
+immediate transaction. Duplicate polls append no history; freshness-only observations
+advance publication without changing lot revisions. Retention uses 512 changes and
+256 deliveries as soft defaults, 2,048/1,024 hard limits, and a total 256-row
+maintenance page. The newest change per lot is protected as its revision cursor so a
+terminal lot can reappear after restart without revision reuse; only an actually
+observed retired ID is hydrated for reconciliation.
+
+Rationale: merging reset credits by count or expiry loses independently expiring
+value, while retaining raw provider IDs or every poll creates privacy and growth
+hazards. A pure core plus strict bounded storage preserves restart truth, deduplicated
+future reminders, constant memory, and provider-neutral extension points. Inventory
+read and in-app reminder planning do not grant activation, browser, credential,
+network, shell, arbitrary SQL, or plugin mutation authority.

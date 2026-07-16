@@ -17,12 +17,12 @@ fn current_schema_reserves_reported_cost_and_strict_price_rollups() {
     drop(UsageStore::open(&path).expect("create archive"));
     let connection = Connection::open(&path).expect("inspect archive");
 
-    assert_eq!(USAGE_SCHEMA_VERSION, 10);
+    assert_eq!(USAGE_SCHEMA_VERSION, 11);
     assert_eq!(
         connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
             .expect("schema version"),
-        10
+        11
     );
     for table in ["usage_observation", "usage_event", "usage_legacy_event"] {
         let present: i64 = connection

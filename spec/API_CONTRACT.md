@@ -302,8 +302,11 @@ explicitly unavailable. A non-empty multi-bucket map is authoritative over its l
 duplicate. Primary/secondary windows expand to at most 32 normalized definitions and
 samples with checked integer percentages, times, durations, deterministic observation
 identity, provider-official evidence, and 20-minute/2-hour freshness boundaries.
-Reset-credit rows are schema/count validated transiently and are not exposed until the
-separate benefit-inventory contract is implemented.
+Reset-credit rows are schema/count validated and normalized into one separate bounded
+provider-neutral benefit observation. Detailed raw credit IDs are account-separated
+SHA-256 inputs only; titles/descriptions are discarded. Detailed lots remain distinct,
+and any unexplained positive available-count remainder becomes one aggregate lot with
+unknown expiry. Quota observations and benefit observations remain separate values.
 
 The transport performs no executable discovery, scheduling, SQLite access, writer
 lease acquisition, query publication, UI callback, benefit persistence, reminder, or
@@ -359,6 +362,19 @@ returns observation IDs or rows, never changes quota revision, never scans anoth
 window, and may delete only old unreferenced samples for which a newer equivalent
 sample exists under the same definition revision. Zero or an oversized page fails
 before writes.
+
+`UsageStore::apply_benefit_observation` accepts one complete bounded provider-neutral
+inventory observation. Duplicate/stale input is a no-op; each newly accepted
+observation advances the independent benefit publication revision, while only
+meaningful lot changes append immutable change points and material revisions. The
+same transaction replaces one scope current projection, publishes exact freshness,
+and rebuilds its durable due rows from the active inherited or override profile.
+
+`UsageStore::set_benefit_reminder_override` atomically replaces or removes one scope
+profile and rebuilds only that scope's due rows. `UsageStore::maintain_benefit_history_page`
+accepts one exact scope and 1..=256 total deletions, protects current/latest terminal
+evidence, compacts old changes/material revisions and noncurrent delivery receipts,
+and returns counts only. None of these operations activates a benefit.
 
 `UsageReadStore::capture_quota_windows` accepts zero through 32 unique exact window
 keys and a deadline no greater than two seconds. It returns the independent quota

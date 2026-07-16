@@ -171,8 +171,10 @@ surfaces, batched indexed reads, current/legacy million-event scale, resource pl
   success/error/timeout resource return, and a zero-match release authority audit.
   Exact-native executable discovery and the separate quota scheduler/worker,
   I/O-before-lease store publication, count-only health, lifecycle, resource, and
-  release-authority gates are now complete. Separate banked-reset benefit inventory,
-  expiry reconciliation, reminders, notification coverage, and later independently
+  release-authority gates are now complete. Banked-reset benefit domain values, pure
+  expiry/reconciliation/reminder planning, built-in Codex normalization, and strict
+  schema-v11 inventory/history/profile/due storage are complete. Immutable benefit
+  queries, one-timer reminder delivery, notification coverage, and later independently
   authorized activation remain, followed by P2-E Git output and P2-F joined product
   status.
 No frontend/database coupling or view-time full event grouping is accepted.

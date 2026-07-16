@@ -161,15 +161,15 @@ cargo +1.97.0 clippy -p tokenmaster-codex --all-targets --locked
 
 **RED/GREEN:**
 
-- [ ] Add strict state/scope/current/change/profile/threshold/due/delivery tables,
+- [x] Add strict state/scope/current/change/profile/threshold/due/delivery tables,
   exact contracts, indexes, and immutability triggers.
-- [ ] Migrate exact v10 transactionally to v11 and validate fresh/v11 archives.
-- [ ] Reconcile one scope observation atomically through the pure core.
-- [ ] Keep duplicate polls history-neutral while refreshing bounded freshness.
-- [ ] Rebuild due rows transactionally for changed lot/profile revisions.
-- [ ] Enforce current/change/due/delivery bounds with protected current/ambiguous
+- [x] Migrate exact v10 transactionally to v11 and validate fresh/v11 archives.
+- [x] Reconcile one scope observation atomically through the pure core.
+- [x] Keep duplicate polls history-neutral while refreshing bounded freshness.
+- [x] Rebuild due rows transactionally for changed lot/profile revisions.
+- [x] Enforce current/change/due/delivery bounds with protected current/ambiguous
   evidence and keyset maintenance.
-- [ ] Inject faults at schema/current/history/due/revision boundaries and prove exact
+- [x] Inject faults at schema/current/history/due/revision boundaries and prove exact
   rollback plus unchanged usage/price/quota facts.
 
 **Focused validator:**

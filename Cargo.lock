@@ -5374,6 +5374,7 @@ dependencies = [
  "rusqlite",
  "tempfile",
  "tokenmaster-accounting",
+ "tokenmaster-benefits",
  "tokenmaster-domain",
  "tokenmaster-quota",
 ]
