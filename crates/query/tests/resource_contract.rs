@@ -4,10 +4,11 @@ use std::{mem::size_of, path::Path, sync::Mutex};
 
 use rusqlite::{Connection, params};
 use tempfile::TempDir;
+use tokenmaster_pricing::{AliasOverrideDraft, OverrideDraft, OverrideSnapshot};
 use tokenmaster_query::{
-    CalendarDate, LatestActivityRequest, PageSize, QueryClock, QueryError, QueryService,
-    QueryTimeSample, UsageAnalyticsRequest, UsageBreakdownKind, UsageRange, UsageSeriesSelection,
-    UsageSessionPageRequest, UsageTimeZone, WeekStart,
+    CalendarDate, CostMode, LatestActivityRequest, PageSize, PricingEngine, QueryClock, QueryError,
+    QueryService, QueryTimeSample, UsageAnalyticsRequest, UsageBreakdownKind, UsageRange,
+    UsageSeriesSelection, UsageSessionPageRequest, UsageTimeZone, WeekStart,
 };
 use tokenmaster_store::{AggregateRebuildStatus, UsageStore};
 
@@ -129,6 +130,15 @@ fn open_query_drop(path: &Path) {
 
 fn exercise_bounded_snapshots(path: &Path) {
     let mut service = QueryService::open(path, FixedClock).expect("open query service");
+    let override_snapshot = OverrideSnapshot::build(&[OverrideDraft::Alias(AliasOverrideDraft {
+        alias: "resource-alias",
+        target: "gpt-5.6-sol",
+    })])
+    .expect("bounded override snapshot");
+    service.replace_pricing(
+        PricingEngine::new(override_snapshot.clone()),
+        CostMode::Calculated,
+    );
     let analytics = UsageAnalyticsRequest::new(
         UsageRange::custom(
             CalendarDate::new(1970, 1, 1).expect("range start"),
@@ -153,6 +163,7 @@ fn exercise_bounded_snapshots(path: &Path) {
     assert_eq!(snapshot.payload().series().len(), 400);
     assert_eq!(snapshot.payload().breakdowns().len(), 4);
 
+    service.replace_pricing(PricingEngine::embedded(), CostMode::Reported);
     let page = service
         .usage_sessions(
             UsageSessionPageRequest::first(PageSize::new(16).expect("page"), Vec::new())
@@ -161,16 +172,22 @@ fn exercise_bounded_snapshots(path: &Path) {
         .expect("first session page");
     assert_eq!(page.payload().sessions().len(), 16);
     assert!(page.payload().has_more());
+    let detail_key = page.payload().sessions()[0].key().clone();
     let continuation = UsageSessionPageRequest::continuation(
         PageSize::new(16).expect("page"),
         page.payload().next_cursor().expect("continuation").clone(),
         Vec::new(),
     )
     .expect("continuation request");
+    service.replace_pricing(PricingEngine::new(override_snapshot), CostMode::Auto);
     let next = service
         .usage_sessions(continuation)
         .expect("continuation page");
     assert_eq!(next.payload().sessions().len(), 16);
+    let detail = service
+        .usage_session_detail(detail_key)
+        .expect("session detail");
+    assert!(detail.payload().detail().is_some());
 }
 
 fn resource_counts() -> ResourceCounts {

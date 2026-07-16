@@ -4,9 +4,10 @@ use rusqlite::{Connection, params};
 use tempfile::TempDir;
 use tokenmaster_domain::{UsageProfileId, UsageProviderId};
 use tokenmaster_query::{
-    CalendarDate, DatasetGeneration, DatasetIdentity, PageSize, QueryClock, QueryError, QueryScope,
-    QueryService, QueryTimeSample, ReplayRevision, UsageAnalyticsRequest, UsageBreakdownKind,
-    UsageRange, UsageSeriesSelection, UsageSessionPageRequest, UsageTimeZone, WeekStart,
+    CalendarDate, CostAvailability, DatasetGeneration, DatasetIdentity, PageSize, QueryClock,
+    QueryError, QueryScope, QueryService, QueryTimeSample, ReplayRevision, UsageAnalyticsRequest,
+    UsageBreakdownKind, UsageRange, UsageSeriesSelection, UsageSessionPageRequest, UsageTimeZone,
+    WeekStart,
 };
 use tokenmaster_store::{AggregateRebuildStatus, MAX_AGGREGATE_REBUILD_PAGE_SIZE, UsageStore};
 
@@ -19,6 +20,7 @@ const COLD_OVERVIEW_BUDGET: Duration = Duration::from_secs(1);
 const CACHED_OVERVIEW_P95_BUDGET: Duration = Duration::from_millis(250);
 const FULL_ANALYTICS_P95_BUDGET: Duration = Duration::from_secs(1);
 const SESSION_PAGE_P95_BUDGET: Duration = Duration::from_millis(100);
+const SESSION_DETAIL_P95_BUDGET: Duration = Duration::from_millis(100);
 const REBUILD_PAGE_P95_BUDGET: Duration = Duration::from_millis(500);
 const MIN_REBUILD_EVENTS_PER_SECOND: f64 = 5_000.0;
 const MAX_DATABASE_AMPLIFICATION: f64 = 3.0;
@@ -325,19 +327,31 @@ fn current_and_legacy_one_million_event_aggregates_meet_reference_budgets() {
 
         let connection = Connection::open(&path).expect("checkpoint connection");
         checkpoint(&connection);
-        let row_counts: (i64, i64, i64) = connection
+        let row_counts: (i64, i64, i64, i64, i64) = connection
             .query_row(
                 "SELECT
                    CASE ?1 WHEN 'current' THEN (SELECT count(*) FROM usage_event)
                            ELSE (SELECT count(*) FROM usage_legacy_event WHERE snapshot_id = 1)
                    END,
                    (SELECT count(*) FROM usage_time_rollup),
-                   (SELECT count(*) FROM usage_session_rollup)",
+                   (SELECT count(*) FROM usage_session_rollup),
+                   (SELECT count(*) FROM usage_price_time_rollup),
+                   (SELECT count(*) FROM usage_price_session_rollup)",
                 [kind.as_str()],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
             )
             .expect("fixture row counts");
         assert_eq!(row_counts.0, EVENT_COUNT);
+        assert!(row_counts.3 > 0);
+        assert!(row_counts.4 > 0);
         drop(connection);
         let final_bytes = sqlite_resident_bytes(&path);
         let database_amplification = final_bytes as f64 / raw_bytes as f64;
@@ -358,6 +372,14 @@ fn current_and_legacy_one_million_event_aggregates_meet_reference_budgets() {
             .expect("cold overview");
         let cold_elapsed = cold_started.elapsed();
         assert_eq!(cold.payload().overview().event_count(), EVENT_COUNT as u64);
+        assert_eq!(
+            cold.payload().overview_cost().availability(),
+            CostAvailability::Unavailable
+        );
+        assert_eq!(
+            cold.payload().overview_cost().counters().total_events,
+            EVENT_COUNT as u64
+        );
         assert_eq!(
             cold.header().dataset_identity(),
             match kind {
@@ -384,6 +406,10 @@ fn current_and_legacy_one_million_event_aggregates_meet_reference_budgets() {
             overview_samples.push(started.elapsed());
             assert_eq!(
                 snapshot.payload().overview().event_count(),
+                EVENT_COUNT as u64
+            );
+            assert_eq!(
+                snapshot.payload().overview_cost().counters().total_events,
                 EVENT_COUNT as u64
             );
         }
@@ -413,6 +439,18 @@ fn current_and_legacy_one_million_event_aggregates_meet_reference_budgets() {
             full_samples.push(started.elapsed());
             assert_eq!(snapshot.payload().series().len(), 400);
             assert_eq!(snapshot.payload().breakdowns().len(), 4);
+            assert_eq!(
+                snapshot.payload().overview_cost().counters().total_events,
+                EVENT_COUNT as u64
+            );
+            assert!(snapshot.payload().breakdowns().iter().all(|breakdown| {
+                breakdown
+                    .items()
+                    .iter()
+                    .map(|item| item.cost().counters().total_events)
+                    .sum::<u64>()
+                    == EVENT_COUNT as u64
+            }));
         }
         let full_p95 = percentile_95(&mut full_samples);
         assert!(
@@ -458,6 +496,10 @@ fn current_and_legacy_one_million_event_aggregates_meet_reference_budgets() {
             first_samples.push(started.elapsed());
             assert_eq!(page.payload().sessions().len(), 256);
             assert!(page.payload().has_more());
+            assert_eq!(
+                page.payload().sessions()[0].cost().counters().total_events,
+                16
+            );
             first_page = Some(page);
         }
         let first_p95 = percentile_95(&mut first_samples);
@@ -495,8 +537,40 @@ fn current_and_legacy_one_million_event_aggregates_meet_reference_budgets() {
             kind.as_str()
         );
 
+        let detail_key = first_page
+            .as_ref()
+            .expect("measured first page")
+            .payload()
+            .sessions()[0]
+            .key()
+            .clone();
+        let mut detail_samples = Vec::with_capacity(SAMPLE_COUNT);
+        for _ in 0..SAMPLE_COUNT {
+            let started = Instant::now();
+            let detail = service
+                .usage_session_detail(detail_key.clone())
+                .expect("session detail");
+            detail_samples.push(started.elapsed());
+            let detail = detail.payload().detail().expect("existing session");
+            assert_eq!(detail.summary().cost().counters().total_events, 16);
+            assert!(detail.breakdowns().iter().all(|breakdown| {
+                breakdown
+                    .items()
+                    .iter()
+                    .map(|item| item.cost().counters().total_events)
+                    .sum::<u64>()
+                    == 16
+            }));
+        }
+        let detail_p95 = percentile_95(&mut detail_samples);
+        assert!(
+            detail_p95 < SESSION_DETAIL_P95_BUDGET,
+            "{} session detail p95 {detail_p95:?} exceeded {SESSION_DETAIL_P95_BUDGET:?}",
+            kind.as_str()
+        );
+
         eprintln!(
-            "P2-B scale dataset={} events={} seed_s={:.3} rebuild_s={:.3} rebuild_events_per_s={:.0} rebuild_calls={} rebuild_page_p95_ms={:.3} raw_bytes={} final_bytes={} amplification={:.3} time_rows={} session_rows={} cold_overview_ms={:.3} cached_overview_p95_ms={:.3} full_analytics_p95_ms={:.3} scoped_full_ms={:.3} session_first_p95_ms={:.3} session_cursor_p95_ms={:.3}",
+            "P2-C scale dataset={} events={} seed_s={:.3} rebuild_s={:.3} rebuild_events_per_s={:.0} rebuild_calls={} rebuild_page_p95_ms={:.3} raw_bytes={} final_bytes={} amplification={:.3} time_rows={} session_rows={} price_time_rows={} price_session_rows={} cold_overview_ms={:.3} cached_overview_p95_ms={:.3} full_analytics_p95_ms={:.3} scoped_full_ms={:.3} session_first_p95_ms={:.3} session_cursor_p95_ms={:.3} session_detail_p95_ms={:.3}",
             kind.as_str(),
             EVENT_COUNT,
             seed_elapsed.as_secs_f64(),
@@ -509,12 +583,15 @@ fn current_and_legacy_one_million_event_aggregates_meet_reference_budgets() {
             database_amplification,
             row_counts.1,
             row_counts.2,
+            row_counts.3,
+            row_counts.4,
             cold_elapsed.as_secs_f64() * 1_000.0,
             overview_p95.as_secs_f64() * 1_000.0,
             full_p95.as_secs_f64() * 1_000.0,
             scoped_elapsed.as_secs_f64() * 1_000.0,
             first_p95.as_secs_f64() * 1_000.0,
             cursor_p95.as_secs_f64() * 1_000.0,
+            detail_p95.as_secs_f64() * 1_000.0,
         );
     }
 }

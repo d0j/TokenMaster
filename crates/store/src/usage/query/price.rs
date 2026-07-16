@@ -1299,8 +1299,8 @@ fn range_batch_sql_and_parameters(
             parameters.push(Value::Integer(segment.end_seconds));
         }
     }
-    let scope_predicate = if scopes.is_empty() {
-        String::new()
+    let (scope_cte, scope_join) = if scopes.is_empty() {
+        (String::new(), String::new())
     } else {
         let mut scope_values = String::new();
         for scope in scopes {
@@ -1312,12 +1312,31 @@ fn range_batch_sql_and_parameters(
             parameters.push(Value::Text(scope.provider_id().to_owned()));
             parameters.push(Value::Text(scope.profile_id().to_owned()));
         }
-        format!("AND (price.provider_id, price.profile_id) IN (VALUES {scope_values})")
+        (
+            format!(
+                ", scopes(provider_id, profile_id) AS (
+                   VALUES {scope_values}
+                 )"
+            ),
+            "CROSS JOIN scopes".to_owned(),
+        )
+    };
+    let scope_match = if scopes.is_empty() {
+        String::new()
+    } else {
+        "AND price.provider_id = scopes.provider_id
+         AND price.profile_id = scopes.profile_id"
+            .to_owned()
+    };
+    let price_source = if scopes.is_empty() {
+        "usage_price_time_rollup AS price"
+    } else {
+        "usage_price_time_rollup AS price INDEXED BY usage_price_time_scope_range"
     };
     let sql = format!(
         "WITH segments(target_id, bucket_width, start_seconds, end_seconds) AS (
            VALUES {segment_values}
-         ), grouped AS (
+         ){scope_cte}, grouped AS (
            SELECT segments.target_id, price.model, price.service_tier,
                   price.long_context, price.reported_state,
                   sum(price.event_count) AS event_count,
@@ -1328,12 +1347,13 @@ fn range_batch_sql_and_parameters(
                   sum(price.reported_cost_count) AS reported_cost_count,
                   sum(price.reported_cost_sum) AS reported_cost_sum
            FROM segments
-           JOIN usage_price_time_rollup AS price
-             ON price.bucket_width = segments.bucket_width
+           {scope_join}
+           JOIN {price_source}
+             ON price.aggregate_generation = ?1 AND price.dataset_kind = ?2
+            {scope_match}
+            AND price.bucket_width = segments.bucket_width
             AND price.bucket_start_seconds >= segments.start_seconds
             AND price.bucket_start_seconds < segments.end_seconds
-           WHERE price.aggregate_generation = ?1 AND price.dataset_kind = ?2
-             {scope_predicate}
            GROUP BY segments.target_id, price.model, price.service_tier,
                     price.long_context, price.reported_state
          ), ranked AS (
@@ -1737,6 +1757,27 @@ mod tests {
         let normalized_batch = batch_sql.to_ascii_lowercase();
         assert!(!normalized_batch.contains("usage_event"));
         assert!(normalized_batch.contains("limit 512"));
+
+        let scopes = (0..MAX_USAGE_QUERY_SCOPES)
+            .map(|index| ScanScope::new(format!("provider-{index:02}"), "default"))
+            .collect::<Result<Vec<_>, _>>()?;
+        let (scoped_sql, scoped_parameters) =
+            range_batch_sql_and_parameters(0, "current", &[range()?, range()?], &scopes)?;
+        let scoped_sql = scoped_sql.ok_or("scoped batch SQL")?;
+        let normalized_scoped = scoped_sql.to_ascii_lowercase();
+        assert!(normalized_scoped.contains("cross join scopes"));
+        assert!(normalized_scoped.contains("indexed by usage_price_time_scope_range"));
+        let mut scoped_statement = store
+            .connection
+            .prepare(&format!("EXPLAIN QUERY PLAN {scoped_sql}"))?;
+        let scoped_details = scoped_statement
+            .query_map(params_from_iter(scoped_parameters.iter()), |row| {
+                row.get::<_, String>(3)
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        assert!(scoped_details.iter().any(|detail| {
+            detail.contains("SEARCH price USING INDEX usage_price_time_scope_range")
+        }));
 
         for (sql, expected, forbidden) in [
             (range_price_sql(), "usage_price_time_rollup", "usage_event"),
