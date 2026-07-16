@@ -997,7 +997,13 @@ fn rebuild_due(
              )
              SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9
              WHERE NOT EXISTS(
-               SELECT 1 FROM benefit_reminder_delivery WHERE delivery_id = ?1
+               SELECT 1
+               FROM benefit_reminder_delivery
+               WHERE scope_id = ?2
+                 AND lot_id = ?3
+                 AND lot_revision = ?4
+                 AND channel = ?6
+                 AND threshold_seconds <= ?5
              )",
             params![
                 due.delivery_id().as_bytes().as_slice(),
@@ -1148,7 +1154,7 @@ const fn kind_text(value: BenefitKind) -> &'static str {
     }
 }
 
-fn parse_kind(value: &str) -> Result<BenefitKind, StoreError> {
+pub(super) fn parse_kind(value: &str) -> Result<BenefitKind, StoreError> {
     match value {
         "banked_rate_limit_reset" => Ok(BenefitKind::BankedRateLimitReset),
         "usage_credit" => Ok(BenefitKind::UsageCredit),
@@ -1259,7 +1265,7 @@ const fn change_kind_text(value: BenefitChangeKind) -> &'static str {
     }
 }
 
-const fn channel_text(value: NotificationChannel) -> &'static str {
+pub(super) const fn channel_text(value: NotificationChannel) -> &'static str {
     match value {
         NotificationChannel::InApp => "in_app",
         NotificationChannel::OsScheduled => "os_scheduled",

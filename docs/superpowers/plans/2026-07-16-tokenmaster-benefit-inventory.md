@@ -261,6 +261,12 @@ cargo +1.97.0 clippy -p tokenmaster-runtime --all-targets --locked
 
 **Files:**
 
+- Create: `crates/store/src/usage/benefit_reminder.rs`
+- Modify: `crates/store/src/usage/benefit_types.rs`
+- Modify: `crates/store/src/usage/benefit_write.rs`
+- Modify: `crates/store/src/usage/mod.rs`
+- Modify: `crates/store/src/lib.rs`
+- Create: `crates/store/tests/benefit_reminder_contract.rs`
 - Create: `crates/runtime/src/reminder/mod.rs`
 - Create: `crates/runtime/src/reminder/execution.rs`
 - Create: `crates/runtime/src/reminder/health.rs`
@@ -271,6 +277,11 @@ cargo +1.97.0 clippy -p tokenmaster-runtime --all-targets --locked
 
 **RED/GREEN:**
 
+- [ ] Store owns one bounded atomic due-page operation; runtime receives no SQL or
+  archive internals.
+- [ ] A delivered urgent threshold durably suppresses already-missed less-urgent
+  thresholds for the same lot revision/channel while preserving future
+  more-urgent thresholds.
 - [ ] Startup submits one recovery queue pass and waits only for nearest durable due.
 - [ ] Process at most 256 rows and emit at most one urgent in-app delivery per lot.
 - [ ] Record delivery before public notification publication and never duplicate a
@@ -285,6 +296,7 @@ cargo +1.97.0 clippy -p tokenmaster-runtime --all-targets --locked
 **Focused validator:**
 
 ```powershell
+cargo +1.97.0 test -p tokenmaster-store --test benefit_reminder_contract --locked
 cargo +1.97.0 test -p tokenmaster-runtime --test reminder_runtime_contract --locked
 cargo +1.97.0 test -p tokenmaster-runtime --test reminder_runtime_resource_contract --locked
 $env:RUSTFLAGS = '-Dwarnings'

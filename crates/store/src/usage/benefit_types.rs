@@ -1,3 +1,5 @@
+use tokenmaster_domain::{BenefitKind, NotificationChannel, ReminderLeadTime};
+
 use crate::{StoreError, StoreErrorCode};
 
 pub const DEFAULT_BENEFIT_CHANGES_PER_SCOPE: u64 = 512;
@@ -5,6 +7,8 @@ pub const MAX_BENEFIT_CHANGES_PER_SCOPE: u64 = 2_048;
 pub const DEFAULT_BENEFIT_DELIVERIES_PER_SCOPE: u64 = 256;
 pub const MAX_BENEFIT_DELIVERIES_PER_SCOPE: u64 = 1_024;
 pub const MAX_BENEFIT_MAINTENANCE_PAGE_SIZE: u16 = 256;
+pub const MAX_BENEFIT_REMINDER_DUE_PAGE_SIZE: usize =
+    tokenmaster_benefits::MAX_DUE_REMINDER_PAGE_SIZE;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct BenefitInventoryRevision(u64);
@@ -112,6 +116,173 @@ impl BenefitProfileApplyResult {
     #[must_use]
     pub const fn pending_due_count(self) -> u16 {
         self.pending_due_count
+    }
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct BenefitReminderDelivery {
+    kind: BenefitKind,
+    quantity: u64,
+    label_key: Box<str>,
+    lead_time: ReminderLeadTime,
+    channel: NotificationChannel,
+    due_at_ms: i64,
+    expiry_at_ms: i64,
+    delivered_at_ms: i64,
+}
+
+impl BenefitReminderDelivery {
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn new(
+        kind: BenefitKind,
+        quantity: u64,
+        label_key: Box<str>,
+        lead_time: ReminderLeadTime,
+        channel: NotificationChannel,
+        due_at_ms: i64,
+        expiry_at_ms: i64,
+        delivered_at_ms: i64,
+    ) -> Self {
+        Self {
+            kind,
+            quantity,
+            label_key,
+            lead_time,
+            channel,
+            due_at_ms,
+            expiry_at_ms,
+            delivered_at_ms,
+        }
+    }
+
+    #[must_use]
+    pub const fn kind(&self) -> BenefitKind {
+        self.kind
+    }
+
+    #[must_use]
+    pub const fn quantity(&self) -> u64 {
+        self.quantity
+    }
+
+    #[must_use]
+    pub fn label_key(&self) -> &str {
+        &self.label_key
+    }
+
+    #[must_use]
+    pub const fn lead_time(&self) -> ReminderLeadTime {
+        self.lead_time
+    }
+
+    #[must_use]
+    pub const fn channel(&self) -> NotificationChannel {
+        self.channel
+    }
+
+    #[must_use]
+    pub const fn due_at_ms(&self) -> i64 {
+        self.due_at_ms
+    }
+
+    #[must_use]
+    pub const fn expiry_at_ms(&self) -> i64 {
+        self.expiry_at_ms
+    }
+
+    #[must_use]
+    pub const fn delivered_at_ms(&self) -> i64 {
+        self.delivered_at_ms
+    }
+}
+
+impl core::fmt::Debug for BenefitReminderDelivery {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        formatter
+            .debug_struct("BenefitReminderDelivery")
+            .field("kind", &self.kind)
+            .field("quantity", &self.quantity)
+            .field("label_key", &self.label_key)
+            .field("lead_time", &self.lead_time)
+            .field("channel", &self.channel)
+            .field("due_at_ms", &self.due_at_ms)
+            .field("expiry_at_ms", &self.expiry_at_ms)
+            .field("delivered_at_ms", &self.delivered_at_ms)
+            .finish()
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BenefitReminderProcessResult {
+    examined_count: u16,
+    expired_count: u16,
+    suppressed_count: u16,
+    deliveries: Box<[BenefitReminderDelivery]>,
+    pending_due_count: u64,
+    retained_delivery_count: u64,
+    nearest_due_at_ms: Option<i64>,
+}
+
+impl BenefitReminderProcessResult {
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn new(
+        examined_count: u16,
+        expired_count: u16,
+        suppressed_count: u16,
+        deliveries: Box<[BenefitReminderDelivery]>,
+        pending_due_count: u64,
+        retained_delivery_count: u64,
+        nearest_due_at_ms: Option<i64>,
+    ) -> Self {
+        Self {
+            examined_count,
+            expired_count,
+            suppressed_count,
+            deliveries,
+            pending_due_count,
+            retained_delivery_count,
+            nearest_due_at_ms,
+        }
+    }
+
+    #[must_use]
+    pub const fn examined_count(&self) -> u16 {
+        self.examined_count
+    }
+
+    #[must_use]
+    pub const fn expired_count(&self) -> u16 {
+        self.expired_count
+    }
+
+    #[must_use]
+    pub const fn suppressed_count(&self) -> u16 {
+        self.suppressed_count
+    }
+
+    #[must_use]
+    pub fn delivery_count(&self) -> usize {
+        self.deliveries.len()
+    }
+
+    #[must_use]
+    pub const fn deliveries(&self) -> &[BenefitReminderDelivery] {
+        &self.deliveries
+    }
+
+    #[must_use]
+    pub const fn pending_due_count(&self) -> u64 {
+        self.pending_due_count
+    }
+
+    #[must_use]
+    pub const fn retained_delivery_count(&self) -> u64 {
+        self.retained_delivery_count
+    }
+
+    #[must_use]
+    pub const fn nearest_due_at_ms(&self) -> Option<i64> {
+        self.nearest_due_at_ms
     }
 }
 

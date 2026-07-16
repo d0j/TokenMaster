@@ -267,6 +267,13 @@ to the most urgent still-useful notice, records one receipt transactionally, and
 recomputes the nearest due time. It never replays every missed threshold after sleep
 or hibernation.
 
+The queue mutation is a store-owned bounded operation; reminder runtime code never
+receives SQL or archive internals. A receipt for the selected urgent threshold also
+suppresses already-due less-urgent thresholds for the same lot revision and channel
+when a profile or inventory refresh rebuilds the queue. More-urgent thresholds whose
+due time is still in the future remain scheduled. The store commits the receipt
+before returning the corresponding provider-neutral in-app event to runtime.
+
 ## 8. Failure and publication behavior
 
 - Malformed or over-capacity benefit input leaves the previous inventory untouched.
