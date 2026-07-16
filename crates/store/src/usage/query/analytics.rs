@@ -109,6 +109,10 @@ impl UsageAggregateRange {
     pub const fn is_empty(&self) -> bool {
         self.segments.is_empty()
     }
+
+    pub(super) const fn segments(&self) -> &[UsageAggregateSegment] {
+        &self.segments
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

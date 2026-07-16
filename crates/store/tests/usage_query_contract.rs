@@ -7,8 +7,8 @@ use tokenmaster_store::{
     MAX_USAGE_BREAKDOWNS, MAX_USAGE_OVERVIEW_SEGMENTS, MAX_USAGE_SERIES_POINTS, ScanScope,
     StoreErrorCode, USAGE_SCHEMA_VERSION, UsageActivityQuery, UsageAggregateBucketWidth,
     UsageAggregateRange, UsageAggregateSegment, UsageAnalyticsQuery, UsageBreakdownIdentity,
-    UsageBreakdownKind, UsageOverviewQuery, UsageQueryDatasetIdentity, UsageReadStore,
-    UsageSeriesPoint, UsageStore,
+    UsageBreakdownKind, UsageOverviewQuery, UsagePriceBasisQuery, UsageQueryDatasetIdentity,
+    UsageReadStore, UsageSeriesPoint, UsageStore,
 };
 
 const SOURCE_KEY: [u8; 32] = [7; 32];
@@ -815,6 +815,34 @@ fn analytics_capture_reads_rebuilt_legacy_rollups_without_upgrading_identity() {
             profile_id: "legacy".into(),
         }
     );
+
+    let price_range = UsageAggregateRange::new(
+        vec![
+            UsageAggregateSegment::new(UsageAggregateBucketWidth::Hour, 0, 3_600)
+                .expect("legacy price segment"),
+        ]
+        .into_boxed_slice(),
+    )
+    .expect("legacy price range");
+    let price = store
+        .capture_usage_price_basis(
+            UsagePriceBasisQuery::new(
+                Some(UsageQueryDatasetIdentity::LegacySnapshotV1),
+                price_range,
+                Box::default(),
+                Duration::from_secs(2),
+            )
+            .expect("legacy price query"),
+        )
+        .expect("legacy price capture");
+    assert_eq!(
+        price.publication().dataset_identity(),
+        UsageQueryDatasetIdentity::LegacySnapshotV1
+    );
+    assert_eq!(price.rows().len(), 1);
+    assert_eq!(price.included().event_count(), 1);
+    assert_eq!(price.included().calculable_event_count(), 0);
+    assert_eq!(price.omitted().event_count(), 0);
 }
 
 #[test]

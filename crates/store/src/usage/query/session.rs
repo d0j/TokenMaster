@@ -53,6 +53,24 @@ pub struct UsageSessionKey {
     session_id: Box<str>,
 }
 
+impl UsageSessionKey {
+    pub(super) const fn dataset_identity_internal(&self) -> UsageQueryDatasetIdentity {
+        self.dataset_identity
+    }
+
+    pub(super) fn provider_id_internal(&self) -> &str {
+        &self.provider_id
+    }
+
+    pub(super) fn profile_id_internal(&self) -> &str {
+        &self.profile_id
+    }
+
+    pub(super) fn session_id_internal(&self) -> &str {
+        &self.session_id
+    }
+}
+
 impl fmt::Debug for UsageSessionKey {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter

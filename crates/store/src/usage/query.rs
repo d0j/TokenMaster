@@ -14,12 +14,18 @@ use super::{
 use crate::{EXPECTED_SQLITE_VERSION, StoreError, StoreErrorCode};
 
 mod analytics;
+mod price;
 mod session;
 
 pub use analytics::{
     MAX_USAGE_BREAKDOWN_ITEMS, MAX_USAGE_BREAKDOWNS, MAX_USAGE_SERIES_POINTS, UsageAggregateRange,
     UsageAnalyticsCapture, UsageAnalyticsQuery, UsageBreakdown, UsageBreakdownIdentity,
     UsageBreakdownItem, UsageBreakdownKind, UsageSeriesPoint, UsageSeriesPointCapture,
+};
+pub use price::{
+    MAX_USAGE_PRICE_BASIS_KEYS, UsagePriceBasisCapture, UsagePriceBasisKey, UsagePriceBasisMetrics,
+    UsagePriceBasisQuery, UsagePriceBasisRow, UsagePriceLongContext, UsagePriceTier,
+    UsageReportedCostState, UsageSessionPriceBasisQuery,
 };
 pub use session::{
     MAX_USAGE_SESSION_DETAIL_ITEMS, MAX_USAGE_SESSION_PAGE_SIZE, UsageSessionCursor,
