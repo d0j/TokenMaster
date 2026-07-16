@@ -136,10 +136,11 @@ P2-A and its audited schema-v7 dataset-generation correction are complete:
 identity, truthful freshness/quality, strict consumer ordering and the synchronous
 facade, while `UsageReadStore` supplies isolated defensive read-only/query-only exact
 transaction capture with composite keyset/deadline evidence. The 100K activity-page
-latency and repeated resource-return contracts pass. P2-B is next: schema-v8
-transactional materialized aggregates with availability counts, bounded rebuild and
-million-row cached-dashboard evidence. No frontend/database coupling or view-time full
-event grouping is accepted.
+latency and repeated resource-return contracts pass. P2-B schema-v8 provider identity,
+transactional materialized rollups, availability counts, and bounded resumable rebuild
+are now implemented. Fixed aggregate/session reads, calendar/timezone composition,
+immutable public values, and million-row cached-dashboard/resource evidence remain.
+No frontend/database coupling or view-time full event grouping is accepted.
 
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset
 epochs. The weekly view preserves last-before/first-after state, maximum use before

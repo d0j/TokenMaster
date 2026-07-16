@@ -17,12 +17,13 @@ mod usage;
 pub use error::{StoreError, StoreErrorCode};
 pub use session_store::{EXPECTED_SQLITE_VERSION, MAX_PAGE_SIZE, MAX_SEED_SESSIONS, ProbeStore};
 pub use usage::{
-    AccountingVersions, AppendBatch, AppendBatchParts, ArchiveGeneration, ArchiveMode,
-    ArchivePublication, ArchivePublicationQuality, ArchiveState, CurrentReplayAppendBatch,
+    AccountingVersions, AggregateRebuildProgress, AggregateRebuildStatus, AppendBatch,
+    AppendBatchParts, ArchiveGeneration, ArchiveMode, ArchivePublication,
+    ArchivePublicationQuality, ArchiveState, CurrentReplayAppendBatch,
     CurrentReplayAppendBatchParts, CurrentReplayCommit, CurrentScanPublication,
     CurrentScanPublicationParts, DatasetGeneration, EventCursor, GenerationSnapshot,
-    GenerationStatus, JournalMode, MAX_APPEND_CHUNK_UPDATES, MAX_APPEND_EVENTS,
-    MAX_APPEND_RELATIONS, MAX_REPLAY_SOURCES, MAX_RESUME_BYTES, MAX_SCAN_SCOPES,
+    GenerationStatus, JournalMode, MAX_AGGREGATE_REBUILD_PAGE_SIZE, MAX_APPEND_CHUNK_UPDATES,
+    MAX_APPEND_EVENTS, MAX_APPEND_RELATIONS, MAX_REPLAY_SOURCES, MAX_RESUME_BYTES, MAX_SCAN_SCOPES,
     MAX_USAGE_EVENT_PAGE_SIZE, ReplayAppendBatch, ReplayAppendBatchParts, ReplayContinuationResult,
     ReplayEpoch, ReplayManifest, ReplayQualityCounts, ReplayRelation, ReplayRevisionId,
     ReplayRevisionSnapshot, ReplayRevisionStatus, RuntimePolicy, SCAN_HISTORY_PER_SCOPE,

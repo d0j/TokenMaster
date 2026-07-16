@@ -58,9 +58,18 @@ does not claim a serialized cursor schema.
 Archive writes use explicit transactions and compare expected generation, identity,
 checkpoint, and proof state. Failed writes roll back completely. Incomplete, cancelled,
 or failed scans MUST NOT authorize destructive source reconciliation. Overflowed
-canonical event mutations also roll back schema-v7 dataset generation; the generation
+canonical event mutations also roll back dataset generation; the generation
 reveals only a monotonic mutation count and no event, path, or source content. Replay
 evidence remains separate and cannot silently invalidate a cursor on a no-change scan.
+
+Schema-v8 aggregate rows are store-owned derived data. SQLite triggers are the final
+mutation boundary: published current rollups, event counts, and dataset generation
+must change in the same transaction, and missing expected published rows fail the
+source mutation closed. Rebuilds retain no history-sized Rust map or long-lived read
+transaction, process fixed keyset pages under writer authority, and publish only after
+the expected generation and exact total still match. UI, CLI, MCP, plugins, and LLM
+connectors receive neither aggregate write authority nor arbitrary SQL. They cannot
+force a raw-history fallback while aggregates are unavailable.
 
 Scan authority is provider/profile qualified and store-owned. One bounded scan set
 contains one child per exact scope; an observation may update only the matching

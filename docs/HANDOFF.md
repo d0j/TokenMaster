@@ -71,8 +71,11 @@ publication, rejects changed replay revision or dataset generation, and publishe
 successful strictly newer owned envelopes. The 100K latency and 256-cycle Windows
 resource contracts pass. P2-A plus the audited schema-v7 dataset-generation correction
 are implemented; exact migration rollback, insert/update/delete/overflow, real
-no-change scan, and append contracts pass. The immediate next task is P2-B schema-v8
-transactional materialized aggregates. Do not replace them with view-time full scans.
+no-change scan, and append contracts pass. P2-B schema-v8 provider materialization,
+transactional UTC/session rollups, and bounded resumable generation publication are
+also implemented and focused-store verified. The immediate next task is fixed bounded
+aggregate/session reads over the active generation, then private calendar composition
+and immutable query values. Do not replace them with view-time full scans.
 The 2026-07-16 closure review also freezes the remaining plan ambiguities: P3 is the
 complete UI, P4 presentation/localization, P5 read-only automation, and P6 the
 canonical MSVC signed portable release. It selects the Slint attribution route,

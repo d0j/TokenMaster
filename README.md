@@ -15,15 +15,19 @@ three layouts, hot-switchable skins, English/Russian localization, tray lifecycl
 virtualized presentation models, and resource gates. It is not a product release or
 an accepted interactive Windows validation.
 
-M1 has bounded Codex discovery/parsing, replay-safe accounting, strict SQLite schema
-v6, exact full rebuild, and a production incremental tail refresh. Unchanged refreshes
+The data/runtime foundation has bounded Codex discovery/parsing, replay-safe
+accounting, strict SQLite schema v8, exact full rebuild, and a production incremental
+tail refresh. Unchanged refreshes
 read zero JSONL payload bytes; append resumes from the persisted checkpoint; new and
 missing sources follow exact complete-scan authority; replacement, rewrite, and
 truncation or a changed profile scope durably request a non-destructive full rebuild.
 That rebuild safely recovers an unadmitted provisional source. The live runtime now
 assembles startup recovery, the process-owned writer lease, the bounded worker,
 scheduler and pathless watcher, incremental/rebuild selection, pause/resume, and
-joined shutdown. P1-E immutable query snapshots and sleep/race integration are next.
+joined shutdown. Immutable P2-A activity queries are complete. P2-B now has
+provider-self-contained canonical events, transactional UTC/session rollups, and a
+bounded resumable aggregate rebuild; aggregate readers, calendar composition, pricing,
+quota/reset data, complete UI, automation, and release evidence remain.
 
 ## Build and verify
 

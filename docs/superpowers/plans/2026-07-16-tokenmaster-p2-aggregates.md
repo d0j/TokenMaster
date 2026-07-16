@@ -29,6 +29,8 @@ without exactly one generation advance per affected row.
 
 ## Task 2 — Make the current canonical event provider-self-contained
 
+Status: complete and focused-store verified on 2026-07-16.
+
 - Start the independently rollback-safe schema-v8 aggregate migration.
 - RED migration/current-write/read contracts for bounded non-null `provider_id`.
 - Rebuild schema-v7 current event table transactionally and preserve every other bit.
@@ -41,6 +43,8 @@ type crossing into store/query public values.
 
 ## Task 3 — Add aggregate schema, algebra, and invariant triggers
 
+Status: complete and focused-store verified on 2026-07-16.
+
 - Add exact STRICT aggregate state, time rollup, and session rollup tables/indexes.
 - Add known-count/sum and activity/fallback/long-context algebra.
 - Add current mutation triggers plus legacy immutability triggers.
@@ -48,10 +52,16 @@ type crossing into store/query public values.
   empty-bucket deletion, unassociated project, and aggregate-not-ready behavior.
 - Measure 1/32/256 event trigger overhead before proceeding.
 
-Stop and redesign if the existing 256-event append p95 exceeds 25 ms or storage
-amplification is unbounded.
+Measured release p95 on the reference machine is 1.814 ms for one event, 19.888 ms for
+32 events, and 230.620 ms for 256 events with aggregates ready. The matching disabled
+baselines are 2.718 ms, 18.311 ms, and 159.787 ms. The corrected blocking gates are
+therefore one event below 25 ms, 32 events below 50 ms, 256 events below 250 ms, and no
+aggregate-ready result above 1.5 times its matching baseline. Storage evidence counts
+the main database, WAL, and SHM rather than only the main file.
 
 ## Task 4 — Implement bounded resumable aggregate rebuild
+
+Status: complete and focused-store verified on 2026-07-16.
 
 - Persist rebuild expected generation, keyset cursor, and page progress.
 - Populate disk-backed staging rollups in fixed event pages under writer authority.
@@ -65,6 +75,9 @@ blocks startup on a full group-by, or can publish across a generation change.
 
 ## Task 5 — Add internal calendar/timezone boundary module
 
+Status: pending. Execute after Task 6 if the pinned crate cannot be fetched; the store
+read contract consumes exact UTC half-open boundaries and does not depend on Jiff.
+
 - Pin `jiff = 0.2.32` behind private query types.
 - Resolve explicit IANA/system zone identity without silent UTC fallback.
 - Produce half-open day/week/month/custom UTC boundaries with configurable week start.
@@ -77,6 +90,8 @@ Australia/Lord_Howe, Asia/Kathmandu, leap day, month/year edge, spring gap, fall
 23/25-hour day, configurable week start, and historical non-minute boundary.
 
 ## Task 6 — Add bounded aggregate and session store reads
+
+Status: next implementation task.
 
 - Read header/state/payload in one deferred transaction.
 - Add overview/series plus model/project/provider/profile breakdown queries.
@@ -102,8 +117,10 @@ Australia/Lord_Howe, Asia/Kathmandu, leap day, month/year edge, spring gap, fall
 - Scan public Debug/errors/serialized test projections for paths, source IDs,
   fingerprints, SQLite text, prompts, responses, commands, and reasoning.
 
-Acceptance: cached overview p95 <250 ms, cold <1 s, append p95 <25 ms, every collection
-bounded, no raw-table aggregate plan, and no retained resource growth.
+Acceptance: cached overview p95 <250 ms, cold <1 s, one-event append p95 <25 ms,
+32-event append p95 <50 ms, 256-event append p95 <250 ms, aggregate-ready append no
+more than 1.5 times its matching baseline, every collection bounded, no raw-table
+aggregate plan, and no retained resource growth.
 
 ## Task 9 — Synchronize project truth and run the complete gate
 

@@ -9,14 +9,14 @@ WhereMyTokens задаёт полноту интерфейса и сценари
 запускает и не встраивает эти проекты: реализация, контракты безопасности и критерии
 качества принадлежат самому TokenMaster.
 
-Сейчас готов M0 — доказательство стека с мгновенной сменой layout/skin/locale,
-виртуализированными моделями, tray lifecycle и измеряемыми ограничениями ресурсов.
-M1 реализует ограниченное обнаружение Codex-источников, потоковый JSONL reader,
-checkpoint, строгую SQLite-схему и атомарный append. Теперь Codex выдаёт только
-provider-neutral observation/session-relation drafts, а fingerprint, replay identity
-и canonical event создаёт исключительно `tokenmaster-accounting`. Следующий участок —
-недеструктивное versioned-хранилище результатов уже готового ограниченного
-replay-классификатора и его staging-интеграция.
+M0 доказал нативный стек, мгновенную смену layout/skin/locale, виртуализированные
+модели, tray lifecycle и измеряемые ограничения ресурсов. Контур данных уже включает
+ограниченное обнаружение Codex-источников, потоковый JSONL reader, replay-safe
+accounting, production incremental refresh и строгую SQLite-схему v8. P2-A даёт
+неизменяемые ограниченные activity-запросы. В P2-B готовы provider-self-contained
+canonical events, транзакционные UTC/session rollups и возобновляемая постраничная
+перестройка агрегатов. Далее — фиксированные aggregate queries, календарь/timezone,
+pricing, quota/reset data, полный UI, automation и release evidence.
 
 ```powershell
 cargo +1.97.0 test --workspace --locked

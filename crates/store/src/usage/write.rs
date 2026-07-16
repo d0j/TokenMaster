@@ -9,7 +9,7 @@ const REFRESH_CANONICAL_SQL: &str = r#"
 INSERT INTO usage_event(
   fingerprint, event_id, selected_file_key, selected_generation,
   selected_source_offset, projection_revision_id, origin_revision_id, retained,
-  profile_id, session_id, source_id,
+  provider_id, profile_id, session_id, source_id,
   timestamp_seconds, timestamp_nanos, model, raw_model, input_tokens,
   cached_tokens, output_tokens, reasoning_tokens, total_tokens,
   fallback_model, long_context, service_tier, project_alias, originator,
@@ -19,13 +19,15 @@ INSERT INTO usage_event(
 SELECT
   o.fingerprint, o.event_id, o.file_key, o.generation, o.source_offset,
   current_revision.revision_id, current_revision.revision_id, 0,
-  o.profile_id, o.session_id, o.source_id, o.timestamp_seconds,
+  source.provider_id, o.profile_id, o.session_id, o.source_id, o.timestamp_seconds,
   o.timestamp_nanos, o.model, o.raw_model, o.input_tokens, o.cached_tokens,
   o.output_tokens, o.reasoning_tokens, o.total_tokens, o.fallback_model,
   o.long_context, o.service_tier, o.project_alias, o.originator,
   o.activity_read, o.activity_edit_write, o.activity_search, o.activity_git,
   o.activity_build_test, o.activity_web, o.activity_subagents, o.activity_terminal
 FROM usage_observation AS o
+JOIN usage_source AS source
+  ON source.file_key = o.file_key AND source.profile_id = o.profile_id
 JOIN usage_generation AS g
   ON g.file_key = o.file_key AND g.generation = o.generation
 LEFT JOIN usage_replay_revision AS current_revision

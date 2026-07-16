@@ -6,7 +6,7 @@ use rusqlite::{
 
 use super::{
     JournalMode, MAX_SCAN_SCOPES, MAX_USAGE_EVENT_PAGE_SIZE,
-    migration::validate_v7,
+    migration::validate_v8,
     schema::USAGE_SCHEMA_VERSION,
     types::{AccountingVersions, ArchivePublicationQuality, EventCursor, ScanScope},
 };
@@ -18,22 +18,20 @@ const MAX_QUERY_DURATION: Duration = Duration::from_secs(2);
 const PROGRESS_OP_INTERVAL: i32 = 1_000;
 
 const FIRST_CURRENT_ACTIVITY_SQL: &str =
-    "SELECT source.provider_id, source.profile_id, event.profile_id,
+    "SELECT event.provider_id, event.profile_id, event.profile_id,
             event.event_id, event.timestamp_seconds, event.timestamp_nanos, event.model,
             event.input_tokens, event.cached_tokens, event.output_tokens,
             event.reasoning_tokens, event.total_tokens, event.fingerprint
      FROM usage_event AS event
-     LEFT JOIN usage_source AS source ON source.file_key = event.selected_file_key
      ORDER BY event.timestamp_seconds DESC, event.timestamp_nanos DESC,
               event.fingerprint DESC
      LIMIT ?1";
 const CURSOR_CURRENT_ACTIVITY_SQL: &str =
-    "SELECT source.provider_id, source.profile_id, event.profile_id,
+    "SELECT event.provider_id, event.profile_id, event.profile_id,
             event.event_id, event.timestamp_seconds, event.timestamp_nanos, event.model,
             event.input_tokens, event.cached_tokens, event.output_tokens,
             event.reasoning_tokens, event.total_tokens, event.fingerprint
      FROM usage_event AS event
-     LEFT JOIN usage_source AS source ON source.file_key = event.selected_file_key
      WHERE (event.timestamp_seconds, event.timestamp_nanos, event.fingerprint) < (?1, ?2, ?3)
      ORDER BY event.timestamp_seconds DESC, event.timestamp_nanos DESC,
               event.fingerprint DESC
@@ -376,7 +374,7 @@ impl UsageReadStore {
         if version != USAGE_SCHEMA_VERSION {
             return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
         }
-        validate_v7(&connection)?;
+        validate_v8(&connection)?;
         let store = Self { connection };
         store.runtime_policy()?;
         Ok(store)
@@ -985,6 +983,7 @@ mod tests {
         let normalized = CURSOR_CURRENT_ACTIVITY_SQL.to_ascii_lowercase();
         assert!(!normalized.contains(" offset "));
         assert!(!normalized.contains("count("));
+        assert!(!normalized.contains("usage_source"));
         assert!(!fs::read(path)?.is_empty());
         Ok(())
     }

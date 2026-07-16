@@ -148,6 +148,12 @@ thread, USER-object, GDI-object, and sampling-gap gates during the acceptance so
 
 Archive reads MUST be keyset-paged and use indexes that seek from the cursor. UI
 snapshots MUST be immutable, bounded, and independent of writer lock duration.
+Dashboard totals, series, breakdowns, and session summaries MUST read transactional
+materialized rollups rather than grouping the complete event archive at view time.
+On the reference machine, aggregate-ready append p95 MUST remain below 25 ms for the
+normal one-event path, 50 ms for 32-event catch-up, and 250 ms for the maximum
+256-event catch-up, and MUST NOT exceed 1.5 times the matching aggregate-unavailable
+baseline.
 
 ## Release requirements
 

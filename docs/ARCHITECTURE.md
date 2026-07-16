@@ -9,6 +9,7 @@ Codex JSONL sources
   -> exclusive TokenMaster accounting canonicalizer
   -> replay classifier and revalidation/runtime engine
   -> transactional current/staging SQLite archive
+  -> transactional generation-qualified UTC/session rollups
   -> immutable query snapshots
   -> Slint desktop UI, future CLI, future MCP
 
@@ -35,6 +36,12 @@ bounded session-relation draft in addition to observation drafts; reconciliation
 apply it to earlier observations without retaining raw JSONL. Parser resume v2 stores
 the next ordinal and bounded lineage state. Resume v1 fails closed because assigning
 ordinal zero after prior emissions would create false identity collisions.
+
+Current canonical events carry provider identity directly. When aggregate publication
+is ready, SQLite triggers update dataset generation, event counts, UTC minute/hour
+facts, and session facts in the same event transaction. Non-empty migration and repair
+use persisted 256-event keyset pages and disk-backed unpublished generations; readers
+never group the whole event archive as fallback.
 
 The UI receives bounded view models rather than owning archive state. Skin, layout,
 and locale selection alter presentation state only, so switching remains immediate and

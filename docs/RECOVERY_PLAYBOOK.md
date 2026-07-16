@@ -204,15 +204,15 @@
 
 ## Schema recovery
 
-- Opening an exact schema-v1, v2, v3, v4, v5, or v6 archive performs the
-  non-destructive schema-v7 migration automatically. Preserve the original archive and
+- Opening an exact schema-v1, v2, v3, v4, v5, v6, or v7 archive performs the
+  non-destructive schema-v8 migration automatically. Preserve the original archive and
   reproduce any failure
   against a synthetic copy; do not edit `sqlite_schema`, rename tables manually, or
   disable foreign keys in an operator workflow.
 - Migration validates the exact source schema before mutation. V2 revision migration
   restores `foreign_keys=ON` after every outcome; v3 canonical projection and v4
-  scan-set, v5 publication-state, and v6 dataset-generation migrations run in immediate
-  transactions.
+  scan-set, v5 publication-state, v6 dataset-generation, and v7 provider/aggregate
+  migrations run in immediate transactions.
   Create/copy/drop faults roll
   back to the exact prior schema and logical rows. Ambiguous migrated scan ownership
   or incoherent terminal state fails closed. Never delete the database to bypass a

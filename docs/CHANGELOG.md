@@ -111,7 +111,7 @@ All notable changes are recorded here.
   envelopes, checked publication/dataset identities, injected exact clock samples,
   bounded pages/scopes/warnings, stable path-free errors, and fingerprint-redacted
   activity cursors.
-- Added the separate schema-v7 `UsageReadStore`: SQLite read-only/query-only and
+- Added the separate schema-v8 `UsageReadStore`: SQLite read-only/query-only and
   defensive policy, fixed 4 MiB cache, exact short read transactions, current/legacy
   composite-keyset pages, `pageSize + 1` lookahead, stale dataset rejection, and
   deadline interruption with guaranteed handler cleanup.
@@ -121,6 +121,14 @@ All notable changes are recorded here.
 - Added P2-A evidence for a 100,000-event activity archive (35.65 ms new connection plus
   first page; 1.10 ms warm cursor page), 10,000 candidate replacements with one retained
   payload, private Debug/error fixtures, and a 256-cycle Windows resource plateau.
+- Added exact schema-v8 migration with provider-self-contained current events,
+  generation-qualified UTC minute/hour and session rollups, transactional known/
+  partial/unavailable token algebra, and fail-closed invariant triggers.
+- Added bounded resumable aggregate rebuilding with 256-event keyset pages, disk-backed
+  unpublished generations, bounded cleanup, reopen resume, mutation restart, fault
+  rollback, and one checked active-generation publication.
+- Added measured release append gates for 1/32/256-event paths and corrected storage
+  accounting to include SQLite main, WAL, and SHM files.
 
 ### Fixed
 

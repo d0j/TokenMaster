@@ -8,7 +8,8 @@ use tokenmaster_store::{
     StoredCheckpointParts, StoredVerification, USAGE_SCHEMA_VERSION, UsageStore,
 };
 
-const USAGE_TABLES: [&str; 16] = [
+const USAGE_TABLES: [&str; 19] = [
+    "usage_aggregate_state",
     "usage_archive_state",
     "usage_scan_set",
     "usage_source",
@@ -17,6 +18,8 @@ const USAGE_TABLES: [&str; 16] = [
     "usage_observation",
     "usage_event",
     "usage_scan",
+    "usage_session_rollup",
+    "usage_time_rollup",
     "usage_legacy_snapshot",
     "usage_legacy_event",
     "usage_replay_revision",
@@ -26,7 +29,13 @@ const USAGE_TABLES: [&str; 16] = [
     "usage_replay_selection",
     "usage_replay_work",
 ];
-const USAGE_TRIGGERS: [&str; 6] = [
+const USAGE_TRIGGERS: [&str; 12] = [
+    "usage_event_aggregate_session_after_delete",
+    "usage_event_aggregate_session_after_insert",
+    "usage_event_aggregate_session_after_update",
+    "usage_event_aggregate_time_after_delete",
+    "usage_event_aggregate_time_after_insert",
+    "usage_event_aggregate_time_after_update",
     "usage_event_dataset_generation_after_delete",
     "usage_event_dataset_generation_after_insert",
     "usage_event_dataset_generation_after_update",
@@ -55,12 +64,64 @@ fn checkpoint_parts() -> StoredCheckpointParts {
     }
 }
 
-fn seed_usage_fixture(path: &Path, event_count: u32) {
-    drop(UsageStore::open(path).expect("create usage schema"));
-    seed_existing_usage_fixture(path, event_count);
+#[allow(clippy::too_many_arguments)]
+fn insert_aggregate_event(
+    connection: &Connection,
+    fingerprint_byte: u8,
+    event_id: &str,
+    timestamp_seconds: i64,
+    model: &str,
+    project_alias: Option<&str>,
+    input_tokens: Option<i64>,
+    cached_tokens: Option<i64>,
+    fallback_model: i64,
+    long_context: &str,
+) -> rusqlite::Result<usize> {
+    connection.execute(
+        "INSERT INTO usage_event(
+           fingerprint, event_id, selected_file_key, selected_generation,
+           selected_source_offset, provider_id, profile_id, session_id, source_id,
+           timestamp_seconds, timestamp_nanos, model, project_alias,
+           input_tokens, cached_tokens, output_tokens, reasoning_tokens, total_tokens,
+           fallback_model, long_context, activity_read, activity_edit_write,
+           activity_search, activity_git, activity_build_test, activity_web,
+           activity_subagents, activity_terminal
+         ) VALUES (
+           ?1, ?2, ?3, 0, ?4, 'codex', 'default', 'session', 'source',
+           ?5, 7, ?6, ?7, ?8, ?9, 2, 1,
+           CASE WHEN ?8 IS NULL THEN NULL ELSE ?8 + coalesce(?9, 0) + 3 END,
+           ?10, ?11, 1, 2, 3, 4, 5, 6, 7, 8
+         )",
+        params![
+            [fingerprint_byte; 32].as_slice(),
+            event_id,
+            [42_u8; 32].as_slice(),
+            i64::from(fingerprint_byte),
+            timestamp_seconds,
+            model,
+            project_alias,
+            input_tokens,
+            cached_tokens,
+            fallback_model,
+            long_context,
+        ],
+    )
 }
 
-fn seed_existing_usage_fixture(path: &Path, event_count: u32) {
+fn fresh_usage_connection(file_name: &str) -> (TempDir, Connection) {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join(file_name);
+    drop(UsageStore::open(&path).expect("create usage schema"));
+    let connection = Connection::open(path).expect("open usage schema");
+    (directory, connection)
+}
+
+fn seed_usage_fixture(path: &Path, event_count: u32) {
+    drop(UsageStore::open(path).expect("create usage schema"));
+    seed_existing_usage_fixture(path, event_count, true);
+}
+
+fn seed_existing_usage_fixture(path: &Path, event_count: u32, provider_self_contained: bool) {
     let mut connection = Connection::open(path).expect("open usage fixture");
     connection
         .pragma_update(None, "foreign_keys", "ON")
@@ -139,8 +200,30 @@ fn seed_existing_usage_fixture(path: &Path, event_count: u32) {
                 ],
             )
             .expect("fixture observation");
-        transaction
-            .execute(
+        let (event_sql, event_parameters) = if provider_self_contained {
+            (
+                "INSERT INTO usage_event(
+                   fingerprint, event_id, selected_file_key, selected_generation,
+                   selected_source_offset, provider_id, profile_id, session_id, source_id,
+                   timestamp_seconds, timestamp_nanos, model, raw_model, input_tokens,
+                   cached_tokens, output_tokens, reasoning_tokens, total_tokens,
+                   fallback_model, long_context, service_tier, project_alias, originator,
+                   activity_read, activity_edit_write, activity_search, activity_git,
+                   activity_build_test, activity_web, activity_subagents, activity_terminal
+                 ) VALUES (
+                   ?1, ?2, ?3, 0, ?4, 'codex', 'default', 'session', 'fixture', ?4,
+                   0, 'gpt-test', NULL, 1, 2, 3, 4, 10, 0, 'no', NULL, NULL,
+                   NULL, 0, 0, 0, 0, 0, 0, 0, 0
+                 )",
+                params![
+                    fingerprint.as_slice(),
+                    event_id.as_str(),
+                    FIXTURE_SOURCE_KEY.as_slice(),
+                    source_offset
+                ],
+            )
+        } else {
+            (
                 "INSERT INTO usage_event(
                    fingerprint, event_id, selected_file_key, selected_generation,
                    selected_source_offset, profile_id, session_id, source_id,
@@ -156,11 +239,14 @@ fn seed_existing_usage_fixture(path: &Path, event_count: u32) {
                  )",
                 params![
                     fingerprint.as_slice(),
-                    event_id,
+                    event_id.as_str(),
                     FIXTURE_SOURCE_KEY.as_slice(),
                     source_offset
                 ],
             )
+        };
+        transaction
+            .execute(event_sql, event_parameters)
             .expect("fixture canonical event");
     }
     transaction.commit().expect("commit usage fixture");
@@ -172,7 +258,7 @@ fn create_v1_fixture(path: &Path, event_count: u32) {
         .execute_batch(include_str!("fixtures/usage_v1.sql"))
         .expect("create exact v1 schema");
     drop(connection);
-    seed_existing_usage_fixture(path, event_count);
+    seed_existing_usage_fixture(path, event_count, false);
 }
 
 fn rewrite_table_schema(path: &Path, table: &str, from: &str, to: &str) {
@@ -266,8 +352,8 @@ fn schema_is_strict_path_free_and_has_exact_usage_tables() {
     let version: i64 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user version");
-    assert_eq!(USAGE_SCHEMA_VERSION, 7);
-    assert_eq!(version, 7);
+    assert_eq!(USAGE_SCHEMA_VERSION, 8);
+    assert_eq!(version, 8);
     assert_eq!(version, USAGE_SCHEMA_VERSION);
 
     let publication_sql = table_sql(&path, "usage_archive_state")
@@ -332,6 +418,7 @@ fn schema_is_strict_path_free_and_has_exact_usage_tables() {
         "projection_revision_id INTEGER",
         "origin_revision_id INTEGER",
         "retained INTEGER NOT NULL CHECK(retained IN (0,1))",
+        "provider_id TEXT NOT NULL CHECK(length(CAST(provider_id AS BLOB)) BETWEEN 1 AND 64)",
         "FOREIGN KEY(projection_revision_id) REFERENCES usage_replay_revision(revision_id) DEFERRABLE INITIALLY DEFERRED",
     ] {
         assert!(
@@ -343,6 +430,17 @@ fn schema_is_strict_path_free_and_has_exact_usage_tables() {
         !normalized_event_sql.contains("REFERENCES usage_observation"),
         "canonical projection must not retain a foreign key to a deletable generation"
     );
+
+    let aggregate_state: (String, i64, i64, i64) = connection
+        .query_row(
+            "SELECT state, expected_dataset_generation,
+                    current_event_count, legacy_event_count
+             FROM usage_aggregate_state WHERE singleton_id = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .expect("fresh aggregate state");
+    assert_eq!(aggregate_state, ("ready".to_owned(), 0, 0, 0));
 
     let mut table_list = connection
         .prepare("PRAGMA table_list")
@@ -457,11 +555,11 @@ fn dataset_generation_changes_only_with_canonical_event_mutations() {
         .execute(
             "INSERT INTO usage_event(
                fingerprint, event_id, selected_file_key, selected_generation,
-               selected_source_offset, profile_id, session_id, source_id,
+               selected_source_offset, provider_id, profile_id, session_id, source_id,
                timestamp_seconds, timestamp_nanos, model, fallback_model, long_context,
                activity_read, activity_edit_write, activity_search, activity_git,
                activity_build_test, activity_web, activity_subagents, activity_terminal
-             ) VALUES (?1, 'event', ?2, 0, 0, 'default', 'session', 'source',
+             ) VALUES (?1, 'event', ?2, 0, 0, 'unknown', 'default', 'session', 'source',
                        1, 0, 'model', 0, 'no', 0, 0, 0, 0, 0, 0, 0, 0)",
             params![[1_u8; 32].as_slice(), [2_u8; 32].as_slice()],
         )
@@ -499,6 +597,280 @@ fn dataset_generation_changes_only_with_canonical_event_mutations() {
 }
 
 #[test]
+fn ready_aggregates_track_insert_update_delete_and_availability_exactly() {
+    let (_directory, connection) = fresh_usage_connection("aggregate-mutations.sqlite3");
+    insert_aggregate_event(
+        &connection,
+        1,
+        "first",
+        61,
+        "model-a",
+        None,
+        Some(10),
+        None,
+        1,
+        "yes",
+    )
+    .expect("first aggregate event");
+    insert_aggregate_event(
+        &connection,
+        2,
+        "second",
+        121,
+        "model-b",
+        Some("project-b"),
+        None,
+        Some(3),
+        0,
+        "unavailable",
+    )
+    .expect("second aggregate event");
+
+    let hour_all: (i64, i64, i64, i64, i64, i64, i64, i64, i64) = connection
+        .query_row(
+            "SELECT event_count, input_known_count, input_known_sum,
+                    cached_known_count, cached_known_sum, fallback_model_count,
+                    long_context_yes_count, long_context_unavailable_count,
+                    activity_terminal
+             FROM usage_time_rollup
+             WHERE dataset_kind = 'current' AND bucket_width = 'hour'
+               AND bucket_start_seconds = 0 AND provider_id = 'codex'
+               AND profile_id = 'default' AND dimension_kind = 'all'",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                ))
+            },
+        )
+        .expect("hour all rollup");
+    assert_eq!(hour_all, (2, 1, 10, 1, 3, 1, 1, 1, 16));
+    assert_eq!(
+        connection
+            .query_row("SELECT count(*) FROM usage_time_rollup", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .expect("time rollup count"),
+        11
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT count(*) FROM usage_session_rollup", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .expect("session rollup count"),
+        5
+    );
+
+    connection
+        .execute(
+            "UPDATE usage_event
+             SET timestamp_seconds = 3661, model = 'model-b',
+                 project_alias = 'project-b', input_tokens = 20,
+                 cached_tokens = 4, total_tokens = 27, fallback_model = 0,
+                 long_context = 'no'
+             WHERE event_id = 'first'",
+            [],
+        )
+        .expect("move aggregate contribution");
+    let session_all: (i64, i64, i64, i64, i64, i64) = connection
+        .query_row(
+            "SELECT event_count, first_timestamp_seconds, last_timestamp_seconds,
+                    input_known_count, input_known_sum, cached_known_sum
+             FROM usage_session_rollup
+             WHERE dataset_kind = 'current' AND provider_id = 'codex'
+               AND profile_id = 'default' AND session_id = 'session'
+               AND dimension_kind = 'all'",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            },
+        )
+        .expect("updated session rollup");
+    assert_eq!(session_all, (2, 121, 3661, 1, 20, 7));
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT count(*) FROM usage_session_rollup
+                 WHERE dimension_kind = 'model' AND dimension_value = 'model-a'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("removed old model dimension"),
+        0
+    );
+
+    connection
+        .execute("DELETE FROM usage_event WHERE event_id = 'first'", [])
+        .expect("delete moved event");
+    let remaining_session: (i64, i64, i64) = connection
+        .query_row(
+            "SELECT event_count, first_timestamp_seconds, last_timestamp_seconds
+             FROM usage_session_rollup
+             WHERE dataset_kind = 'current' AND dimension_kind = 'all'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("remaining session");
+    assert_eq!(remaining_session, (1, 121, 121));
+
+    connection
+        .execute("DELETE FROM usage_event WHERE event_id = 'second'", [])
+        .expect("delete final event");
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT (SELECT count(*) FROM usage_time_rollup)
+                      + (SELECT count(*) FROM usage_session_rollup)",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("empty aggregate rows"),
+        0
+    );
+    let state: (String, i64, i64) = connection
+        .query_row(
+            "SELECT state, expected_dataset_generation, current_event_count
+             FROM usage_aggregate_state WHERE singleton_id = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("final aggregate state");
+    assert_eq!(state, ("ready".to_owned(), 5, 0));
+}
+
+#[test]
+fn unavailable_aggregates_never_publish_partial_rows() {
+    let (_directory, connection) = fresh_usage_connection("aggregate-unavailable.sqlite3");
+    connection
+        .execute(
+            "UPDATE usage_aggregate_state
+             SET state = 'rebuild_required', rebuild_total_events = 0
+             WHERE singleton_id = 1",
+            [],
+        )
+        .expect("require rebuild");
+
+    insert_aggregate_event(
+        &connection,
+        3,
+        "pending",
+        1,
+        "model",
+        None,
+        Some(1),
+        None,
+        0,
+        "no",
+    )
+    .expect("event while aggregate unavailable");
+
+    let state: (String, i64, i64, i64) = connection
+        .query_row(
+            "SELECT state, expected_dataset_generation,
+                    current_event_count, rebuild_total_events
+             FROM usage_aggregate_state WHERE singleton_id = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .expect("pending aggregate state");
+    assert_eq!(state, ("rebuild_required".to_owned(), 1, 1, 1));
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT (SELECT count(*) FROM usage_time_rollup)
+                      + (SELECT count(*) FROM usage_session_rollup)",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("no partial rollups"),
+        0
+    );
+}
+
+#[test]
+fn aggregate_overflow_rolls_back_event_generation_state_and_rollups() {
+    let (_directory, connection) = fresh_usage_connection("aggregate-overflow.sqlite3");
+    insert_aggregate_event(
+        &connection,
+        4,
+        "base",
+        1,
+        "model",
+        None,
+        Some(1),
+        None,
+        0,
+        "no",
+    )
+    .expect("base aggregate event");
+    connection
+        .execute(
+            "UPDATE usage_time_rollup SET input_known_sum = ?1
+             WHERE bucket_width = 'hour' AND dimension_kind = 'all'",
+            [i64::MAX],
+        )
+        .expect("seed aggregate overflow boundary");
+    let before: (i64, i64, i64) = connection
+        .query_row(
+            "SELECT archive.dataset_generation, aggregate.current_event_count,
+                    (SELECT count(*) FROM usage_time_rollup)
+             FROM usage_archive_state AS archive
+             JOIN usage_aggregate_state AS aggregate ON aggregate.singleton_id = 1
+             WHERE archive.singleton_id = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("overflow baseline");
+
+    let result = insert_aggregate_event(
+        &connection,
+        5,
+        "overflow",
+        2,
+        "model",
+        None,
+        Some(1),
+        None,
+        0,
+        "no",
+    );
+    assert!(
+        result.is_err(),
+        "aggregate integer overflow must fail closed"
+    );
+    let after: (i64, i64, i64, i64) = connection
+        .query_row(
+            "SELECT archive.dataset_generation, aggregate.current_event_count,
+                    (SELECT count(*) FROM usage_time_rollup),
+                    (SELECT count(*) FROM usage_event)
+             FROM usage_archive_state AS archive
+             JOIN usage_aggregate_state AS aggregate ON aggregate.singleton_id = 1
+             WHERE archive.singleton_id = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .expect("overflow rollback state");
+    assert_eq!((after.0, after.1, after.2), before);
+    assert_eq!(after.3, 1);
+}
+
+#[test]
 fn dataset_generation_overflow_aborts_the_event_mutation() {
     let directory = TempDir::new().expect("temporary directory");
     let path = directory
@@ -516,11 +888,11 @@ fn dataset_generation_overflow_aborts_the_event_mutation() {
     let result = connection.execute(
         "INSERT INTO usage_event(
            fingerprint, event_id, selected_file_key, selected_generation,
-           selected_source_offset, profile_id, session_id, source_id,
+           selected_source_offset, provider_id, profile_id, session_id, source_id,
            timestamp_seconds, timestamp_nanos, model, fallback_model, long_context,
            activity_read, activity_edit_write, activity_search, activity_git,
            activity_build_test, activity_web, activity_subagents, activity_terminal
-         ) VALUES (?1, 'overflow', ?2, 0, 0, 'default', 'session', 'source',
+         ) VALUES (?1, 'overflow', ?2, 0, 0, 'unknown', 'default', 'session', 'source',
                    1, 0, 'model', 0, 'no', 0, 0, 0, 0, 0, 0, 0, 0)",
         params![[3_u8; 32].as_slice(), [4_u8; 32].as_slice()],
     );
@@ -546,11 +918,11 @@ fn missing_dataset_state_aborts_the_event_mutation() {
     let result = connection.execute(
         "INSERT INTO usage_event(
            fingerprint, event_id, selected_file_key, selected_generation,
-           selected_source_offset, profile_id, session_id, source_id,
+           selected_source_offset, provider_id, profile_id, session_id, source_id,
            timestamp_seconds, timestamp_nanos, model, fallback_model, long_context,
            activity_read, activity_edit_write, activity_search, activity_git,
            activity_build_test, activity_web, activity_subagents, activity_terminal
-         ) VALUES (?1, 'missing-state', ?2, 0, 0, 'default', 'session', 'source',
+         ) VALUES (?1, 'missing-state', ?2, 0, 0, 'unknown', 'default', 'session', 'source',
                    1, 0, 'model', 0, 'no', 0, 0, 0, 0, 0, 0, 0, 0)",
         params![[5_u8; 32].as_slice(), [6_u8; 32].as_slice()],
     );
@@ -559,6 +931,112 @@ fn missing_dataset_state_aborts_the_event_mutation() {
         .query_row("SELECT count(*) FROM usage_event", [], |row| row.get(0))
         .expect("event count");
     assert_eq!(event_count, 0);
+}
+
+#[test]
+fn missing_aggregate_state_aborts_event_and_dataset_generation() {
+    let (_directory, connection) = fresh_usage_connection("missing-aggregate-state.sqlite3");
+    connection
+        .execute(
+            "DELETE FROM usage_aggregate_state WHERE singleton_id = 1",
+            [],
+        )
+        .expect("remove aggregate state to simulate corruption");
+
+    let result = insert_aggregate_event(
+        &connection,
+        6,
+        "missing-aggregate-state",
+        1,
+        "model",
+        None,
+        Some(1),
+        None,
+        0,
+        "no",
+    );
+    assert!(result.is_err(), "missing aggregate state must fail closed");
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT dataset_generation FROM usage_archive_state WHERE singleton_id = 1",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("unchanged dataset generation"),
+        0
+    );
+    assert_eq!(
+        connection
+            .query_row("SELECT count(*) FROM usage_event", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .expect("no event committed"),
+        0
+    );
+}
+
+#[test]
+fn missing_published_rollup_aborts_event_mutation_and_all_trigger_side_effects() {
+    let (_directory, connection) = fresh_usage_connection("missing-published-rollup.sqlite3");
+    insert_aggregate_event(
+        &connection,
+        7,
+        "published",
+        1,
+        "model",
+        None,
+        Some(1),
+        None,
+        0,
+        "no",
+    )
+    .expect("published aggregate event");
+    connection
+        .execute(
+            "DELETE FROM usage_time_rollup
+             WHERE bucket_width = 'minute' AND dimension_kind = 'model'",
+            [],
+        )
+        .expect("simulate missing published rollup");
+    let before: (i64, i64, i64, i64) = connection
+        .query_row(
+            "SELECT archive.dataset_generation, aggregate.current_event_count,
+                    (SELECT count(*) FROM usage_time_rollup),
+                    (SELECT count(*) FROM usage_session_rollup)
+             FROM usage_archive_state AS archive
+             JOIN usage_aggregate_state AS aggregate ON aggregate.singleton_id = 1
+             WHERE archive.singleton_id = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .expect("corrupt aggregate baseline");
+
+    let result = connection.execute("DELETE FROM usage_event WHERE event_id = 'published'", []);
+    assert!(result.is_err(), "missing published rollup must fail closed");
+    let after: (i64, i64, i64, i64, i64) = connection
+        .query_row(
+            "SELECT archive.dataset_generation, aggregate.current_event_count,
+                    (SELECT count(*) FROM usage_time_rollup),
+                    (SELECT count(*) FROM usage_session_rollup),
+                    (SELECT count(*) FROM usage_event)
+             FROM usage_archive_state AS archive
+             JOIN usage_aggregate_state AS aggregate ON aggregate.singleton_id = 1
+             WHERE archive.singleton_id = 1",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .expect("rolled-back aggregate state");
+    assert_eq!((after.0, after.1, after.2, after.3), before);
+    assert_eq!(after.4, 1);
 }
 
 #[test]

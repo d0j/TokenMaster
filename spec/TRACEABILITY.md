@@ -19,7 +19,7 @@ A design or plan is not implementation evidence.
 | TM-UI-002 | partial | `crates/probe-app`, immutable runtime publication, and P2-A query snapshots | strictly newer consumer predicate, exact archive identity/data-through, equal/older rejection, no-change cursor continuity, and one-retained-envelope contract pass; product presentation snapshots pending |
 | TM-PERF-001 | partial | bounded parser/reader/store/engine plus live runtime and query facade | unchanged payload bytes=0; exact tail; 300-event batches; 10,000-hint aggregate/one follow-up; one retained result across 10,000 candidates; watcher/live/power baselines and 256-cycle query resource plateau pass; UI/plugin evidence pending |
 | TM-PERF-002 | open evidence | software renderer and M0 resource gates | uninterrupted soak and interactive receipts remain absent |
-| TM-PERF-003 | partial | immutable engine publication plus complete P2-A activity query foundation | checked revision-plus-dataset-generation identity, real no-change scan continuity, append/update/delete invalidation, schema-v6-to-v7 rollback/overflow, concurrent-commit transaction, composite-index/no-offset, lookahead, deadline cleanup, truthful version quality, privacy, 100K latency (35.65 ms cold first page; 1.10 ms warm cursor), and 256-cycle resource contracts pass; P2-B million-row materialized aggregates and P3 UI evidence pending |
+| TM-PERF-003 | partial | immutable engine publication, complete P2-A activity query, and P2-B transactional aggregate storage/rebuild | prior cursor/query evidence plus schema-v8 exact triggers, provider-self-contained events, bounded resumable aggregate publication, and measured 1/32/256 append p95 of 1.814/19.888/230.620 ms pass; aggregate read facade, million-row dashboard/resource evidence, and P3 UI remain |
 | TM-REL-001 | partial | M0 scripts and receipt schemas | identity checks exist; final product packaging evidence pending |
 | TM-REL-002 | open evidence | `M0_ACCEPTANCE.md` | interactive Windows/DPI/accessibility and uninterrupted soak receipts absent |
 | TM-REL-003 | planned | P6 explicit MSVC signed portable package and supply-chain gates | GNU/MSVC comparison, notices/SBOM, advisory/source/license/secret/action/attestation audits, deterministic package and clean-room launch pending |
@@ -27,8 +27,8 @@ A design or plan is not implementation evidence.
 | TM-DATA-002 | implemented | domain drafts plus exclusive `tokenmaster-accounting` canonicalizer | canonicalizer vectors, compile-fail authority tests, Codex/store contracts |
 | TM-DATA-003 | implemented | file identity and reader checkpoint | physical identity live/persisted round-trip, checkpoint conversion, resume bound, and restart contracts |
 | TM-DATA-004 | implemented | scoped scan/rebuild plus replay-aware current publication, paired-CAS tail facts, exact admission, durable partial/recovery, retained promotion/discard | atomic faults, stale CAS, unchanged/append/multi-batch/new/missing/restart/deadline/rebuild contracts pass |
-| TM-DATA-005 | implemented | writable usage store plus separate `UsageReadStore` | strict schema v7 with dataset-generation triggers and exact v6 rollback migration; read-only query-only defensive 4-MiB/no-migration/no-checkpoint policy and unchanged-file contracts pass |
-| TM-DATA-006 | partial | reader/parser/store, engine/runtime, and P2-A query bounds | prior limits plus 256+1 read lookahead, 256 internal scan scopes, 32 public scope filters, 16 warnings, one exact read transaction and two-second maximum; UI/plugin limits pending |
+| TM-DATA-005 | implemented | writable usage store plus separate `UsageReadStore` | strict schema v8 with dataset/aggregate triggers, exact v7 rollback migration, provider-self-contained events, and read-only query-only defensive 4-MiB/no-migration/no-checkpoint policy pass |
+| TM-DATA-006 | partial | reader/parser/store, engine/runtime, P2-A query, and P2-B rebuild bounds | prior limits plus 256+1 read lookahead, 256-event/2304-rollup cleanup pages, 32 public scope filters, 16 warnings, one exact read transaction and two-second maximum; aggregate public reads/UI/plugin limits pending |
 | TM-DATA-007 | implemented | replay facts/classifier in a private overlay plus schema-v4 self-contained canonical projection with deterministic selection/retention | v1/v2/v3-to-v4 migration plus replay/append/restart/300-file/atomic-replacement/truncation truth-table/failure contracts pass |
 | TM-DATA-008 | planned | immutable quota samples, epochs, reset and allowance transitions | P2 quota reset history schema/detection/retention contracts pending |
 | TM-DATA-009 | planned | typed provider benefit inventory, versioned reminder profiles/delivery, activation intent/receipt projection | P2 banked reset schema/expiry/profile/dedup/CAS/retention contracts pending |
@@ -81,8 +81,10 @@ process-restart, malformed-truncation `recovery_pending`, canonical-retention, a
 successful-repair publication contracts. P1-E.3 adds real Windows callback
 registration, capacity-one event reduction, resume-without-suspend reconciliation,
 duplicate/shutdown behavior, and 4,096-cycle private-memory/handle/thread/USER/GDI
-resource bounds. P1 and P2-A are implemented; M0 interactive/soak and P2-B product-data
-evidence remain.
+resource bounds. P1 and P2-A are implemented. P2-B provider identity, aggregate
+schema/triggers, and bounded rebuild are implemented; its read facade, calendar
+composition, million-row resource evidence, and public values remain. M0 interactive/
+soak evidence remains.
 Tasks 3+ in the older replay plan are historical and superseded.
 
 The clean-root invariant is implemented by `scripts/audit-clean-root.ps1` and its

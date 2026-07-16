@@ -233,10 +233,13 @@ P2-A now has an executable approved design in
 generation is independent from dataset identity; current identity includes replay
 revision plus schema-v7 dataset generation; every result is transaction-exact and
 owned, frontends receive no SQLite access, and latest activity uses the existing
-composite keyset index. P2-B will add transactional materialized aggregates instead of
-view-time full scans.
+composite keyset index. P2-B schema-v8 provider identity, transactional materialized
+rollups, and bounded resumable publication are now implemented. The active critical
+path is fixed aggregate/session reads, then private calendar composition, immutable
+public values, and million-row/resource evidence. View-time full scans remain
+forbidden.
 P2-A now implements the bounded public values, separate defensive read-only/query-only
-schema-v7 store, synchronous `QueryService`, and one-result consumer ordering. Current/
+schema-v8 store, synchronous `QueryService`, and one-result consumer ordering. Current/
 legacy activity, exact publication and scan truth, stale accounting downgrade, stale
 identity, indexed lookahead, deadline cleanup, concurrent-commit isolation, 100K
 latency, Debug/privacy, 10,000-candidate retention, and 256-cycle Windows resource

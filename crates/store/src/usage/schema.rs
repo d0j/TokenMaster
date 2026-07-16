@@ -1,24 +1,29 @@
-pub const USAGE_SCHEMA_VERSION: i64 = 7;
+use std::sync::OnceLock;
+
+pub const USAGE_SCHEMA_VERSION: i64 = 8;
 pub(super) const V1_SCHEMA_VERSION: i64 = 1;
 pub(super) const V2_SCHEMA_VERSION: i64 = 2;
 pub(super) const V3_SCHEMA_VERSION: i64 = 3;
 pub(super) const V4_SCHEMA_VERSION: i64 = 4;
 pub(super) const V5_SCHEMA_VERSION: i64 = 5;
 pub(super) const V6_SCHEMA_VERSION: i64 = 6;
+pub(super) const V7_SCHEMA_VERSION: i64 = 7;
 
 pub(super) struct TableContract {
     pub(super) name: &'static str,
     pub(super) columns: &'static [&'static str],
 }
 
+#[derive(Clone, Copy)]
 pub(super) struct IndexContract {
     pub(super) name: &'static str,
     pub(super) sql: &'static str,
 }
 
-pub(super) struct TriggerContract {
-    pub(super) name: &'static str,
-    pub(super) sql: &'static str,
+#[derive(Clone, Copy)]
+pub(super) struct TriggerContract<'a> {
+    pub(super) name: &'a str,
+    pub(super) sql: &'a str,
 }
 
 pub(super) const V1_TABLE_COUNT: usize = 6;
@@ -116,7 +121,22 @@ pub(super) const V5_INDEX_CONTRACTS: &[IndexContract] = &[
     },
 ];
 
-pub(super) const LEGACY_TRIGGER_CONTRACTS: &[TriggerContract] = &[
+pub(super) const V8_INDEX_CONTRACTS: &[IndexContract] = &[
+    IndexContract {
+        name: "usage_event_session_time",
+        sql: "CREATE INDEX usage_event_session_time ON usage_event(provider_id, profile_id, session_id, timestamp_seconds, timestamp_nanos, fingerprint)",
+    },
+    IndexContract {
+        name: "usage_session_rollup_page",
+        sql: "CREATE INDEX usage_session_rollup_page ON usage_session_rollup(aggregate_generation, dataset_kind, last_timestamp_seconds DESC, last_timestamp_nanos DESC, provider_id, profile_id, session_id) WHERE dimension_kind = 'all'",
+    },
+    IndexContract {
+        name: "usage_time_rollup_scope_range",
+        sql: "CREATE INDEX usage_time_rollup_scope_range ON usage_time_rollup(aggregate_generation, dataset_kind, provider_id, profile_id, dimension_kind, dimension_value, bucket_width, bucket_start_seconds)",
+    },
+];
+
+pub(super) const LEGACY_TRIGGER_CONTRACTS: &[TriggerContract<'static>] = &[
     TriggerContract {
         name: "usage_legacy_event_no_delete",
         sql: "CREATE TRIGGER usage_legacy_event_no_delete BEFORE DELETE ON usage_legacy_event BEGIN SELECT RAISE(ABORT, 'immutable legacy snapshot'); END",
@@ -131,7 +151,7 @@ pub(super) const LEGACY_TRIGGER_CONTRACTS: &[TriggerContract] = &[
     },
 ];
 
-pub(super) const USAGE_TRIGGER_CONTRACTS: &[TriggerContract] = &[
+pub(super) const USAGE_TRIGGER_CONTRACTS: &[TriggerContract<'static>] = &[
     TriggerContract {
         name: "usage_event_dataset_generation_after_delete",
         sql: "CREATE TRIGGER usage_event_dataset_generation_after_delete AFTER DELETE ON usage_event BEGIN SELECT CASE WHEN (SELECT count(*) FROM usage_archive_state WHERE singleton_id = 1) <> 1 THEN RAISE(ABORT, 'dataset generation unavailable') WHEN (SELECT dataset_generation FROM usage_archive_state WHERE singleton_id = 1) = 9223372036854775807 THEN RAISE(ABORT, 'dataset generation exhausted') END; UPDATE usage_archive_state SET dataset_generation = dataset_generation + 1 WHERE singleton_id = 1; END",
@@ -494,6 +514,142 @@ pub(super) const V7_ARCHIVE_STATE_CONTRACT: TableContract = TableContract {
         "current_revision_id",
         "latest_complete_scan_set_id",
         "incremental_state",
+    ],
+};
+
+pub(super) const V8_USAGE_EVENT_CONTRACT: TableContract = TableContract {
+    name: "usage_event",
+    columns: &[
+        "fingerprint",
+        "event_id",
+        "selected_file_key",
+        "selected_generation",
+        "selected_source_offset",
+        "projection_revision_id",
+        "origin_revision_id",
+        "retained",
+        "provider_id",
+        "profile_id",
+        "session_id",
+        "source_id",
+        "timestamp_seconds",
+        "timestamp_nanos",
+        "model",
+        "raw_model",
+        "input_tokens",
+        "cached_tokens",
+        "output_tokens",
+        "reasoning_tokens",
+        "total_tokens",
+        "fallback_model",
+        "long_context",
+        "service_tier",
+        "project_alias",
+        "originator",
+        "activity_read",
+        "activity_edit_write",
+        "activity_search",
+        "activity_git",
+        "activity_build_test",
+        "activity_web",
+        "activity_subagents",
+        "activity_terminal",
+    ],
+};
+
+pub(super) const V8_AGGREGATE_STATE_CONTRACT: TableContract = TableContract {
+    name: "usage_aggregate_state",
+    columns: &[
+        "singleton_id",
+        "aggregate_schema_version",
+        "state",
+        "expected_dataset_generation",
+        "active_aggregate_generation",
+        "rebuild_aggregate_generation",
+        "current_event_count",
+        "legacy_event_count",
+        "failure_code",
+        "rebuild_dataset_kind",
+        "rebuild_cursor_fingerprint",
+        "rebuild_processed_events",
+        "rebuild_total_events",
+    ],
+};
+
+pub(super) const V8_TIME_ROLLUP_CONTRACT: TableContract = TableContract {
+    name: "usage_time_rollup",
+    columns: &[
+        "aggregate_generation",
+        "dataset_kind",
+        "bucket_width",
+        "bucket_start_seconds",
+        "provider_id",
+        "profile_id",
+        "dimension_kind",
+        "dimension_value",
+        "event_count",
+        "input_known_count",
+        "input_known_sum",
+        "cached_known_count",
+        "cached_known_sum",
+        "output_known_count",
+        "output_known_sum",
+        "reasoning_known_count",
+        "reasoning_known_sum",
+        "total_known_count",
+        "total_known_sum",
+        "fallback_model_count",
+        "long_context_yes_count",
+        "long_context_no_count",
+        "long_context_unavailable_count",
+        "activity_read",
+        "activity_edit_write",
+        "activity_search",
+        "activity_git",
+        "activity_build_test",
+        "activity_web",
+        "activity_subagents",
+        "activity_terminal",
+    ],
+};
+
+pub(super) const V8_SESSION_ROLLUP_CONTRACT: TableContract = TableContract {
+    name: "usage_session_rollup",
+    columns: &[
+        "aggregate_generation",
+        "dataset_kind",
+        "provider_id",
+        "profile_id",
+        "session_id",
+        "dimension_kind",
+        "dimension_value",
+        "event_count",
+        "first_timestamp_seconds",
+        "first_timestamp_nanos",
+        "last_timestamp_seconds",
+        "last_timestamp_nanos",
+        "input_known_count",
+        "input_known_sum",
+        "cached_known_count",
+        "cached_known_sum",
+        "output_known_count",
+        "output_known_sum",
+        "reasoning_known_count",
+        "reasoning_known_sum",
+        "total_known_count",
+        "total_known_sum",
+        "fallback_model_count",
+        "long_context_yes_count",
+        "long_context_no_count",
+        "long_context_unavailable_count",
+        "activity_read",
+        "activity_edit_write",
+        "activity_search",
+        "activity_git",
+        "activity_build_test",
+        "activity_web",
+        "activity_subagents",
+        "activity_terminal",
     ],
 };
 
@@ -909,6 +1065,538 @@ BEGIN
 END;
 "#;
 
+pub(super) const V8_DATASET_DELETE_TRIGGER: &str = r#"
+CREATE TRIGGER usage_event_dataset_generation_after_delete
+AFTER DELETE ON usage_event
+BEGIN
+  SELECT CASE
+    WHEN (SELECT count(*) FROM usage_archive_state WHERE singleton_id = 1) <> 1
+      THEN RAISE(ABORT, 'dataset generation unavailable')
+    WHEN (SELECT dataset_generation FROM usage_archive_state WHERE singleton_id = 1)
+         = 9223372036854775807
+      THEN RAISE(ABORT, 'dataset generation exhausted')
+    WHEN (SELECT count(*) FROM usage_aggregate_state WHERE singleton_id = 1) <> 1
+      THEN RAISE(ABORT, 'aggregate state unavailable')
+    WHEN (SELECT current_event_count FROM usage_aggregate_state WHERE singleton_id = 1) = 0
+      THEN RAISE(ABORT, 'aggregate event count underflow')
+  END;
+  UPDATE usage_archive_state
+  SET dataset_generation = dataset_generation + 1
+  WHERE singleton_id = 1;
+  UPDATE usage_aggregate_state
+  SET expected_dataset_generation =
+        (SELECT dataset_generation FROM usage_archive_state WHERE singleton_id = 1),
+      current_event_count = current_event_count - 1,
+      state = CASE WHEN state = 'ready' THEN 'ready' ELSE 'rebuild_required' END,
+      failure_code = NULL,
+      rebuild_aggregate_generation = NULL,
+      rebuild_dataset_kind = NULL,
+      rebuild_cursor_fingerprint = NULL,
+      rebuild_processed_events = 0,
+      rebuild_total_events = current_event_count - 1 + legacy_event_count
+  WHERE singleton_id = 1;
+END;
+"#;
+
+pub(super) const V8_DATASET_INSERT_TRIGGER: &str = r#"
+CREATE TRIGGER usage_event_dataset_generation_after_insert
+AFTER INSERT ON usage_event
+BEGIN
+  SELECT CASE
+    WHEN (SELECT count(*) FROM usage_archive_state WHERE singleton_id = 1) <> 1
+      THEN RAISE(ABORT, 'dataset generation unavailable')
+    WHEN (SELECT dataset_generation FROM usage_archive_state WHERE singleton_id = 1)
+         = 9223372036854775807
+      THEN RAISE(ABORT, 'dataset generation exhausted')
+    WHEN (SELECT count(*) FROM usage_aggregate_state WHERE singleton_id = 1) <> 1
+      THEN RAISE(ABORT, 'aggregate state unavailable')
+    WHEN (SELECT current_event_count FROM usage_aggregate_state WHERE singleton_id = 1)
+         = 9223372036854775807
+      THEN RAISE(ABORT, 'aggregate event count exhausted')
+  END;
+  UPDATE usage_archive_state
+  SET dataset_generation = dataset_generation + 1
+  WHERE singleton_id = 1;
+  UPDATE usage_aggregate_state
+  SET expected_dataset_generation =
+        (SELECT dataset_generation FROM usage_archive_state WHERE singleton_id = 1),
+      current_event_count = current_event_count + 1,
+      state = CASE WHEN state = 'ready' THEN 'ready' ELSE 'rebuild_required' END,
+      failure_code = NULL,
+      rebuild_aggregate_generation = NULL,
+      rebuild_dataset_kind = NULL,
+      rebuild_cursor_fingerprint = NULL,
+      rebuild_processed_events = 0,
+      rebuild_total_events = current_event_count + 1 + legacy_event_count
+  WHERE singleton_id = 1;
+END;
+"#;
+
+pub(super) const V8_DATASET_UPDATE_TRIGGER: &str = r#"
+CREATE TRIGGER usage_event_dataset_generation_after_update
+AFTER UPDATE ON usage_event
+BEGIN
+  SELECT CASE
+    WHEN (SELECT count(*) FROM usage_archive_state WHERE singleton_id = 1) <> 1
+      THEN RAISE(ABORT, 'dataset generation unavailable')
+    WHEN (SELECT dataset_generation FROM usage_archive_state WHERE singleton_id = 1)
+         = 9223372036854775807
+      THEN RAISE(ABORT, 'dataset generation exhausted')
+    WHEN (SELECT count(*) FROM usage_aggregate_state WHERE singleton_id = 1) <> 1
+      THEN RAISE(ABORT, 'aggregate state unavailable')
+  END;
+  UPDATE usage_archive_state
+  SET dataset_generation = dataset_generation + 1
+  WHERE singleton_id = 1;
+  UPDATE usage_aggregate_state
+  SET expected_dataset_generation =
+        (SELECT dataset_generation FROM usage_archive_state WHERE singleton_id = 1),
+      state = CASE WHEN state = 'ready' THEN 'ready' ELSE 'rebuild_required' END,
+      failure_code = NULL,
+      rebuild_aggregate_generation = NULL,
+      rebuild_dataset_kind = NULL,
+      rebuild_cursor_fingerprint = NULL,
+      rebuild_processed_events = 0,
+      rebuild_total_events = current_event_count + legacy_event_count
+  WHERE singleton_id = 1;
+END;
+"#;
+
+pub(super) const V8_TIME_INSERT_TRIGGER: &str = r#"
+CREATE TRIGGER usage_event_aggregate_time_after_insert
+AFTER INSERT ON usage_event
+WHEN (SELECT state FROM usage_aggregate_state WHERE singleton_id = 1) = 'ready'
+BEGIN
+  INSERT INTO usage_time_rollup(
+    aggregate_generation, dataset_kind, bucket_width, bucket_start_seconds,
+    provider_id, profile_id,
+    dimension_kind, dimension_value, event_count,
+    input_known_count, input_known_sum, cached_known_count, cached_known_sum,
+    output_known_count, output_known_sum, reasoning_known_count, reasoning_known_sum,
+    total_known_count, total_known_sum, fallback_model_count,
+    long_context_yes_count, long_context_no_count, long_context_unavailable_count,
+    activity_read, activity_edit_write, activity_search, activity_git,
+    activity_build_test, activity_web, activity_subagents, activity_terminal
+  )
+  SELECT
+    (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1),
+    'current', bucket.width,
+    NEW.timestamp_seconds -
+      (((NEW.timestamp_seconds % bucket.seconds) + bucket.seconds) % bucket.seconds),
+    NEW.provider_id, NEW.profile_id, dimension.kind, dimension.value, 1,
+    CASE WHEN NEW.input_tokens IS NULL THEN 0 ELSE 1 END,
+    coalesce(NEW.input_tokens, 0),
+    CASE WHEN NEW.cached_tokens IS NULL THEN 0 ELSE 1 END,
+    coalesce(NEW.cached_tokens, 0),
+    CASE WHEN NEW.output_tokens IS NULL THEN 0 ELSE 1 END,
+    coalesce(NEW.output_tokens, 0),
+    CASE WHEN NEW.reasoning_tokens IS NULL THEN 0 ELSE 1 END,
+    coalesce(NEW.reasoning_tokens, 0),
+    CASE WHEN NEW.total_tokens IS NULL THEN 0 ELSE 1 END,
+    coalesce(NEW.total_tokens, 0),
+    NEW.fallback_model,
+    CASE WHEN NEW.long_context = 'yes' THEN 1 ELSE 0 END,
+    CASE WHEN NEW.long_context = 'no' THEN 1 ELSE 0 END,
+    CASE WHEN NEW.long_context = 'unavailable' THEN 1 ELSE 0 END,
+    NEW.activity_read, NEW.activity_edit_write, NEW.activity_search, NEW.activity_git,
+    NEW.activity_build_test, NEW.activity_web, NEW.activity_subagents,
+    NEW.activity_terminal
+  FROM (
+    SELECT 'minute' AS width, 60 AS seconds
+    UNION ALL SELECT 'hour', 3600
+  ) AS bucket
+  CROSS JOIN (
+    SELECT 'all' AS kind, '' AS value
+    UNION ALL SELECT 'model', NEW.model
+    UNION ALL SELECT 'project', coalesce(NEW.project_alias, '')
+  ) AS dimension
+  WHERE true
+  ON CONFLICT(
+    aggregate_generation, dataset_kind, bucket_width, bucket_start_seconds,
+    provider_id, profile_id,
+    dimension_kind, dimension_value
+  ) DO UPDATE SET
+    event_count = event_count + 1,
+    input_known_count = input_known_count + excluded.input_known_count,
+    input_known_sum = input_known_sum + excluded.input_known_sum,
+    cached_known_count = cached_known_count + excluded.cached_known_count,
+    cached_known_sum = cached_known_sum + excluded.cached_known_sum,
+    output_known_count = output_known_count + excluded.output_known_count,
+    output_known_sum = output_known_sum + excluded.output_known_sum,
+    reasoning_known_count = reasoning_known_count + excluded.reasoning_known_count,
+    reasoning_known_sum = reasoning_known_sum + excluded.reasoning_known_sum,
+    total_known_count = total_known_count + excluded.total_known_count,
+    total_known_sum = total_known_sum + excluded.total_known_sum,
+    fallback_model_count = fallback_model_count + excluded.fallback_model_count,
+    long_context_yes_count = long_context_yes_count + excluded.long_context_yes_count,
+    long_context_no_count = long_context_no_count + excluded.long_context_no_count,
+    long_context_unavailable_count =
+      long_context_unavailable_count + excluded.long_context_unavailable_count,
+    activity_read = activity_read + excluded.activity_read,
+    activity_edit_write = activity_edit_write + excluded.activity_edit_write,
+    activity_search = activity_search + excluded.activity_search,
+    activity_git = activity_git + excluded.activity_git,
+    activity_build_test = activity_build_test + excluded.activity_build_test,
+    activity_web = activity_web + excluded.activity_web,
+    activity_subagents = activity_subagents + excluded.activity_subagents,
+    activity_terminal = activity_terminal + excluded.activity_terminal;
+END;
+"#;
+
+pub(super) const V8_TIME_DELETE_TRIGGER: &str = r#"
+CREATE TRIGGER usage_event_aggregate_time_after_delete
+AFTER DELETE ON usage_event
+WHEN (SELECT state FROM usage_aggregate_state WHERE singleton_id = 1) = 'ready'
+BEGIN
+  SELECT CASE WHEN (
+    SELECT count(*) FROM usage_time_rollup
+    WHERE aggregate_generation =
+          (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)
+      AND dataset_kind = 'current'
+      AND provider_id = OLD.provider_id AND profile_id = OLD.profile_id
+      AND (
+        (bucket_width = 'minute' AND bucket_start_seconds =
+          OLD.timestamp_seconds - (((OLD.timestamp_seconds % 60) + 60) % 60))
+        OR
+        (bucket_width = 'hour' AND bucket_start_seconds =
+          OLD.timestamp_seconds - (((OLD.timestamp_seconds % 3600) + 3600) % 3600))
+      )
+      AND (
+        (dimension_kind = 'all' AND dimension_value = '')
+        OR (dimension_kind = 'model' AND dimension_value = OLD.model)
+        OR (dimension_kind = 'project'
+            AND dimension_value = coalesce(OLD.project_alias, ''))
+      )
+  ) <> 6 THEN RAISE(ABORT, 'aggregate time rows unavailable') END;
+  DELETE FROM usage_time_rollup
+  WHERE aggregate_generation =
+        (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)
+    AND dataset_kind = 'current'
+    AND provider_id = OLD.provider_id AND profile_id = OLD.profile_id
+    AND event_count = 1
+    AND (
+      (bucket_width = 'minute' AND bucket_start_seconds =
+        OLD.timestamp_seconds - (((OLD.timestamp_seconds % 60) + 60) % 60))
+      OR
+      (bucket_width = 'hour' AND bucket_start_seconds =
+        OLD.timestamp_seconds - (((OLD.timestamp_seconds % 3600) + 3600) % 3600))
+    )
+    AND (
+      (dimension_kind = 'all' AND dimension_value = '')
+      OR (dimension_kind = 'model' AND dimension_value = OLD.model)
+      OR (dimension_kind = 'project'
+          AND dimension_value = coalesce(OLD.project_alias, ''))
+    );
+  UPDATE usage_time_rollup
+  SET event_count = event_count - 1,
+      input_known_count = input_known_count -
+        CASE WHEN OLD.input_tokens IS NULL THEN 0 ELSE 1 END,
+      input_known_sum = input_known_sum - coalesce(OLD.input_tokens, 0),
+      cached_known_count = cached_known_count -
+        CASE WHEN OLD.cached_tokens IS NULL THEN 0 ELSE 1 END,
+      cached_known_sum = cached_known_sum - coalesce(OLD.cached_tokens, 0),
+      output_known_count = output_known_count -
+        CASE WHEN OLD.output_tokens IS NULL THEN 0 ELSE 1 END,
+      output_known_sum = output_known_sum - coalesce(OLD.output_tokens, 0),
+      reasoning_known_count = reasoning_known_count -
+        CASE WHEN OLD.reasoning_tokens IS NULL THEN 0 ELSE 1 END,
+      reasoning_known_sum = reasoning_known_sum - coalesce(OLD.reasoning_tokens, 0),
+      total_known_count = total_known_count -
+        CASE WHEN OLD.total_tokens IS NULL THEN 0 ELSE 1 END,
+      total_known_sum = total_known_sum - coalesce(OLD.total_tokens, 0),
+      fallback_model_count = fallback_model_count - OLD.fallback_model,
+      long_context_yes_count = long_context_yes_count -
+        CASE WHEN OLD.long_context = 'yes' THEN 1 ELSE 0 END,
+      long_context_no_count = long_context_no_count -
+        CASE WHEN OLD.long_context = 'no' THEN 1 ELSE 0 END,
+      long_context_unavailable_count = long_context_unavailable_count -
+        CASE WHEN OLD.long_context = 'unavailable' THEN 1 ELSE 0 END,
+      activity_read = activity_read - OLD.activity_read,
+      activity_edit_write = activity_edit_write - OLD.activity_edit_write,
+      activity_search = activity_search - OLD.activity_search,
+      activity_git = activity_git - OLD.activity_git,
+      activity_build_test = activity_build_test - OLD.activity_build_test,
+      activity_web = activity_web - OLD.activity_web,
+      activity_subagents = activity_subagents - OLD.activity_subagents,
+      activity_terminal = activity_terminal - OLD.activity_terminal
+  WHERE dataset_kind = 'current'
+    AND aggregate_generation =
+        (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)
+    AND provider_id = OLD.provider_id AND profile_id = OLD.profile_id
+    AND event_count > 1
+    AND (
+      (bucket_width = 'minute' AND bucket_start_seconds =
+        OLD.timestamp_seconds - (((OLD.timestamp_seconds % 60) + 60) % 60))
+      OR
+      (bucket_width = 'hour' AND bucket_start_seconds =
+        OLD.timestamp_seconds - (((OLD.timestamp_seconds % 3600) + 3600) % 3600))
+    )
+    AND (
+      (dimension_kind = 'all' AND dimension_value = '')
+      OR (dimension_kind = 'model' AND dimension_value = OLD.model)
+      OR (dimension_kind = 'project'
+          AND dimension_value = coalesce(OLD.project_alias, ''))
+    );
+END;
+"#;
+
+pub(super) const V8_SESSION_INSERT_TRIGGER: &str = r#"
+CREATE TRIGGER usage_event_aggregate_session_after_insert
+AFTER INSERT ON usage_event
+WHEN (SELECT state FROM usage_aggregate_state WHERE singleton_id = 1) = 'ready'
+BEGIN
+  INSERT INTO usage_session_rollup(
+    aggregate_generation, dataset_kind, provider_id, profile_id, session_id, dimension_kind,
+    dimension_value, event_count, first_timestamp_seconds, first_timestamp_nanos,
+    last_timestamp_seconds, last_timestamp_nanos,
+    input_known_count, input_known_sum, cached_known_count, cached_known_sum,
+    output_known_count, output_known_sum, reasoning_known_count, reasoning_known_sum,
+    total_known_count, total_known_sum, fallback_model_count,
+    long_context_yes_count, long_context_no_count, long_context_unavailable_count,
+    activity_read, activity_edit_write, activity_search, activity_git,
+    activity_build_test, activity_web, activity_subagents, activity_terminal
+  )
+  SELECT
+    (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1),
+    'current', NEW.provider_id, NEW.profile_id, NEW.session_id,
+    dimension.kind, dimension.value, 1,
+    CASE WHEN dimension.kind = 'all' THEN NEW.timestamp_seconds END,
+    CASE WHEN dimension.kind = 'all' THEN NEW.timestamp_nanos END,
+    CASE WHEN dimension.kind = 'all' THEN NEW.timestamp_seconds END,
+    CASE WHEN dimension.kind = 'all' THEN NEW.timestamp_nanos END,
+    CASE WHEN NEW.input_tokens IS NULL THEN 0 ELSE 1 END,
+    coalesce(NEW.input_tokens, 0),
+    CASE WHEN NEW.cached_tokens IS NULL THEN 0 ELSE 1 END,
+    coalesce(NEW.cached_tokens, 0),
+    CASE WHEN NEW.output_tokens IS NULL THEN 0 ELSE 1 END,
+    coalesce(NEW.output_tokens, 0),
+    CASE WHEN NEW.reasoning_tokens IS NULL THEN 0 ELSE 1 END,
+    coalesce(NEW.reasoning_tokens, 0),
+    CASE WHEN NEW.total_tokens IS NULL THEN 0 ELSE 1 END,
+    coalesce(NEW.total_tokens, 0),
+    NEW.fallback_model,
+    CASE WHEN NEW.long_context = 'yes' THEN 1 ELSE 0 END,
+    CASE WHEN NEW.long_context = 'no' THEN 1 ELSE 0 END,
+    CASE WHEN NEW.long_context = 'unavailable' THEN 1 ELSE 0 END,
+    NEW.activity_read, NEW.activity_edit_write, NEW.activity_search, NEW.activity_git,
+    NEW.activity_build_test, NEW.activity_web, NEW.activity_subagents,
+    NEW.activity_terminal
+  FROM (
+    SELECT 'all' AS kind, '' AS value
+    UNION ALL SELECT 'model', NEW.model
+    UNION ALL SELECT 'project', coalesce(NEW.project_alias, '')
+  ) AS dimension
+  WHERE true
+  ON CONFLICT(
+    aggregate_generation, dataset_kind, provider_id, profile_id, session_id,
+    dimension_kind, dimension_value
+  ) DO UPDATE SET
+    event_count = event_count + 1,
+    first_timestamp_seconds = CASE
+      WHEN usage_session_rollup.dimension_kind = 'all'
+       AND (excluded.first_timestamp_seconds, excluded.first_timestamp_nanos)
+           < (usage_session_rollup.first_timestamp_seconds,
+              usage_session_rollup.first_timestamp_nanos)
+      THEN excluded.first_timestamp_seconds
+      ELSE usage_session_rollup.first_timestamp_seconds END,
+    first_timestamp_nanos = CASE
+      WHEN usage_session_rollup.dimension_kind = 'all'
+       AND (excluded.first_timestamp_seconds, excluded.first_timestamp_nanos)
+           < (usage_session_rollup.first_timestamp_seconds,
+              usage_session_rollup.first_timestamp_nanos)
+      THEN excluded.first_timestamp_nanos
+      ELSE usage_session_rollup.first_timestamp_nanos END,
+    last_timestamp_seconds = CASE
+      WHEN usage_session_rollup.dimension_kind = 'all'
+       AND (excluded.last_timestamp_seconds, excluded.last_timestamp_nanos)
+           > (usage_session_rollup.last_timestamp_seconds,
+              usage_session_rollup.last_timestamp_nanos)
+      THEN excluded.last_timestamp_seconds
+      ELSE usage_session_rollup.last_timestamp_seconds END,
+    last_timestamp_nanos = CASE
+      WHEN usage_session_rollup.dimension_kind = 'all'
+       AND (excluded.last_timestamp_seconds, excluded.last_timestamp_nanos)
+           > (usage_session_rollup.last_timestamp_seconds,
+              usage_session_rollup.last_timestamp_nanos)
+      THEN excluded.last_timestamp_nanos
+      ELSE usage_session_rollup.last_timestamp_nanos END,
+    input_known_count = input_known_count + excluded.input_known_count,
+    input_known_sum = input_known_sum + excluded.input_known_sum,
+    cached_known_count = cached_known_count + excluded.cached_known_count,
+    cached_known_sum = cached_known_sum + excluded.cached_known_sum,
+    output_known_count = output_known_count + excluded.output_known_count,
+    output_known_sum = output_known_sum + excluded.output_known_sum,
+    reasoning_known_count = reasoning_known_count + excluded.reasoning_known_count,
+    reasoning_known_sum = reasoning_known_sum + excluded.reasoning_known_sum,
+    total_known_count = total_known_count + excluded.total_known_count,
+    total_known_sum = total_known_sum + excluded.total_known_sum,
+    fallback_model_count = fallback_model_count + excluded.fallback_model_count,
+    long_context_yes_count = long_context_yes_count + excluded.long_context_yes_count,
+    long_context_no_count = long_context_no_count + excluded.long_context_no_count,
+    long_context_unavailable_count =
+      long_context_unavailable_count + excluded.long_context_unavailable_count,
+    activity_read = activity_read + excluded.activity_read,
+    activity_edit_write = activity_edit_write + excluded.activity_edit_write,
+    activity_search = activity_search + excluded.activity_search,
+    activity_git = activity_git + excluded.activity_git,
+    activity_build_test = activity_build_test + excluded.activity_build_test,
+    activity_web = activity_web + excluded.activity_web,
+    activity_subagents = activity_subagents + excluded.activity_subagents,
+    activity_terminal = activity_terminal + excluded.activity_terminal;
+END;
+"#;
+
+pub(super) const V8_SESSION_DELETE_TRIGGER: &str = r#"
+CREATE TRIGGER usage_event_aggregate_session_after_delete
+AFTER DELETE ON usage_event
+WHEN (SELECT state FROM usage_aggregate_state WHERE singleton_id = 1) = 'ready'
+BEGIN
+  SELECT CASE WHEN (
+    SELECT count(*) FROM usage_session_rollup
+    WHERE aggregate_generation =
+          (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)
+      AND dataset_kind = 'current'
+      AND provider_id = OLD.provider_id AND profile_id = OLD.profile_id
+      AND session_id = OLD.session_id
+      AND (
+        (dimension_kind = 'all' AND dimension_value = '')
+        OR (dimension_kind = 'model' AND dimension_value = OLD.model)
+        OR (dimension_kind = 'project'
+            AND dimension_value = coalesce(OLD.project_alias, ''))
+      )
+  ) <> 3 THEN RAISE(ABORT, 'aggregate session rows unavailable') END;
+  DELETE FROM usage_session_rollup
+  WHERE aggregate_generation =
+        (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)
+    AND dataset_kind = 'current'
+    AND provider_id = OLD.provider_id AND profile_id = OLD.profile_id
+    AND session_id = OLD.session_id AND event_count = 1
+    AND (
+      (dimension_kind = 'all' AND dimension_value = '')
+      OR (dimension_kind = 'model' AND dimension_value = OLD.model)
+      OR (dimension_kind = 'project'
+          AND dimension_value = coalesce(OLD.project_alias, ''))
+    );
+  UPDATE usage_session_rollup
+  SET event_count = event_count - 1,
+      input_known_count = input_known_count -
+        CASE WHEN OLD.input_tokens IS NULL THEN 0 ELSE 1 END,
+      input_known_sum = input_known_sum - coalesce(OLD.input_tokens, 0),
+      cached_known_count = cached_known_count -
+        CASE WHEN OLD.cached_tokens IS NULL THEN 0 ELSE 1 END,
+      cached_known_sum = cached_known_sum - coalesce(OLD.cached_tokens, 0),
+      output_known_count = output_known_count -
+        CASE WHEN OLD.output_tokens IS NULL THEN 0 ELSE 1 END,
+      output_known_sum = output_known_sum - coalesce(OLD.output_tokens, 0),
+      reasoning_known_count = reasoning_known_count -
+        CASE WHEN OLD.reasoning_tokens IS NULL THEN 0 ELSE 1 END,
+      reasoning_known_sum = reasoning_known_sum - coalesce(OLD.reasoning_tokens, 0),
+      total_known_count = total_known_count -
+        CASE WHEN OLD.total_tokens IS NULL THEN 0 ELSE 1 END,
+      total_known_sum = total_known_sum - coalesce(OLD.total_tokens, 0),
+      fallback_model_count = fallback_model_count - OLD.fallback_model,
+      long_context_yes_count = long_context_yes_count -
+        CASE WHEN OLD.long_context = 'yes' THEN 1 ELSE 0 END,
+      long_context_no_count = long_context_no_count -
+        CASE WHEN OLD.long_context = 'no' THEN 1 ELSE 0 END,
+      long_context_unavailable_count = long_context_unavailable_count -
+        CASE WHEN OLD.long_context = 'unavailable' THEN 1 ELSE 0 END,
+      activity_read = activity_read - OLD.activity_read,
+      activity_edit_write = activity_edit_write - OLD.activity_edit_write,
+      activity_search = activity_search - OLD.activity_search,
+      activity_git = activity_git - OLD.activity_git,
+      activity_build_test = activity_build_test - OLD.activity_build_test,
+      activity_web = activity_web - OLD.activity_web,
+      activity_subagents = activity_subagents - OLD.activity_subagents,
+      activity_terminal = activity_terminal - OLD.activity_terminal
+  WHERE dataset_kind = 'current'
+    AND aggregate_generation =
+        (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)
+    AND provider_id = OLD.provider_id AND profile_id = OLD.profile_id
+    AND session_id = OLD.session_id AND event_count > 1
+    AND (
+      (dimension_kind = 'all' AND dimension_value = '')
+      OR (dimension_kind = 'model' AND dimension_value = OLD.model)
+      OR (dimension_kind = 'project'
+          AND dimension_value = coalesce(OLD.project_alias, ''))
+    );
+  UPDATE usage_session_rollup
+  SET first_timestamp_seconds = (
+        SELECT timestamp_seconds FROM usage_event
+        WHERE provider_id = OLD.provider_id AND profile_id = OLD.profile_id
+          AND session_id = OLD.session_id
+        ORDER BY timestamp_seconds, timestamp_nanos, fingerprint LIMIT 1
+      ),
+      first_timestamp_nanos = (
+        SELECT timestamp_nanos FROM usage_event
+        WHERE provider_id = OLD.provider_id AND profile_id = OLD.profile_id
+          AND session_id = OLD.session_id
+        ORDER BY timestamp_seconds, timestamp_nanos, fingerprint LIMIT 1
+      ),
+      last_timestamp_seconds = (
+        SELECT timestamp_seconds FROM usage_event
+        WHERE provider_id = OLD.provider_id AND profile_id = OLD.profile_id
+          AND session_id = OLD.session_id
+        ORDER BY timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC LIMIT 1
+      ),
+      last_timestamp_nanos = (
+        SELECT timestamp_nanos FROM usage_event
+        WHERE provider_id = OLD.provider_id AND profile_id = OLD.profile_id
+          AND session_id = OLD.session_id
+        ORDER BY timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC LIMIT 1
+      )
+  WHERE aggregate_generation =
+        (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)
+    AND dataset_kind = 'current' AND dimension_kind = 'all'
+    AND provider_id = OLD.provider_id AND profile_id = OLD.profile_id
+    AND session_id = OLD.session_id;
+END;
+"#;
+
+fn combine_aggregate_update_trigger(
+    name: &str,
+    delete_trigger: &str,
+    insert_trigger: &str,
+) -> Option<String> {
+    let delete_body = delete_trigger
+        .split_once("\nBEGIN\n")?
+        .1
+        .strip_suffix("END;\n")?;
+    let insert_body = insert_trigger
+        .split_once("\nBEGIN\n")?
+        .1
+        .strip_suffix("END;\n")?;
+    Some(format!(
+        "CREATE TRIGGER {name}\nAFTER UPDATE ON usage_event\nWHEN (SELECT state FROM usage_aggregate_state WHERE singleton_id = 1) = 'ready'\nBEGIN\n{delete_body}{insert_body}END;\n"
+    ))
+}
+
+pub(super) fn v8_time_update_trigger() -> Option<&'static str> {
+    static TRIGGER: OnceLock<Option<String>> = OnceLock::new();
+    TRIGGER
+        .get_or_init(|| {
+            combine_aggregate_update_trigger(
+                "usage_event_aggregate_time_after_update",
+                V8_TIME_DELETE_TRIGGER,
+                V8_TIME_INSERT_TRIGGER,
+            )
+        })
+        .as_deref()
+}
+
+pub(super) fn v8_session_update_trigger() -> Option<&'static str> {
+    static TRIGGER: OnceLock<Option<String>> = OnceLock::new();
+    TRIGGER
+        .get_or_init(|| {
+            combine_aggregate_update_trigger(
+                "usage_event_aggregate_session_after_update",
+                V8_SESSION_DELETE_TRIGGER,
+                V8_SESSION_INSERT_TRIGGER,
+            )
+        })
+        .as_deref()
+}
+
 pub(super) const V4_USAGE_EVENT_SCHEMA: &str = r#"
 CREATE TABLE usage_event (
   fingerprint BLOB PRIMARY KEY CHECK(length(fingerprint) = 32),
@@ -956,6 +1644,193 @@ CREATE TABLE usage_event (
   FOREIGN KEY(projection_revision_id) REFERENCES usage_replay_revision(revision_id)
     DEFERRABLE INITIALLY DEFERRED
 ) STRICT;
+"#;
+
+pub(super) const V8_USAGE_EVENT_SCHEMA: &str = r#"
+CREATE TABLE usage_event (
+  fingerprint BLOB PRIMARY KEY CHECK(length(fingerprint) = 32),
+  event_id TEXT NOT NULL CHECK(length(CAST(event_id AS BLOB)) BETWEEN 1 AND 128),
+  selected_file_key BLOB NOT NULL CHECK(length(selected_file_key) = 32),
+  selected_generation INTEGER NOT NULL CHECK(selected_generation >= 0),
+  selected_source_offset INTEGER NOT NULL CHECK(selected_source_offset >= 0),
+  projection_revision_id INTEGER CHECK(projection_revision_id IS NULL OR projection_revision_id >= 0),
+  origin_revision_id INTEGER CHECK(origin_revision_id IS NULL OR origin_revision_id >= 0),
+  retained INTEGER NOT NULL CHECK(retained IN (0,1)) DEFAULT 0,
+  provider_id TEXT NOT NULL CHECK(length(CAST(provider_id AS BLOB)) BETWEEN 1 AND 64),
+  profile_id TEXT NOT NULL CHECK(length(CAST(profile_id AS BLOB)) BETWEEN 1 AND 128),
+  session_id TEXT NOT NULL CHECK(length(CAST(session_id AS BLOB)) BETWEEN 1 AND 512),
+  source_id TEXT NOT NULL CHECK(length(CAST(source_id AS BLOB)) BETWEEN 1 AND 128),
+  timestamp_seconds INTEGER NOT NULL,
+  timestamp_nanos INTEGER NOT NULL CHECK(timestamp_nanos BETWEEN 0 AND 999999999),
+  model TEXT NOT NULL CHECK(length(CAST(model AS BLOB)) BETWEEN 1 AND 64),
+  raw_model TEXT CHECK(raw_model IS NULL OR length(CAST(raw_model AS BLOB)) BETWEEN 1 AND 512),
+  input_tokens INTEGER CHECK(input_tokens IS NULL OR input_tokens >= 0),
+  cached_tokens INTEGER CHECK(cached_tokens IS NULL OR cached_tokens >= 0),
+  output_tokens INTEGER CHECK(output_tokens IS NULL OR output_tokens >= 0),
+  reasoning_tokens INTEGER CHECK(reasoning_tokens IS NULL OR reasoning_tokens >= 0),
+  total_tokens INTEGER CHECK(total_tokens IS NULL OR total_tokens >= 0),
+  fallback_model INTEGER NOT NULL CHECK(fallback_model IN (0,1)),
+  long_context TEXT NOT NULL CHECK(long_context IN ('yes','no','unavailable')),
+  service_tier TEXT CHECK(service_tier IS NULL OR length(CAST(service_tier AS BLOB)) BETWEEN 1 AND 512),
+  project_alias TEXT CHECK(project_alias IS NULL OR length(CAST(project_alias AS BLOB)) BETWEEN 1 AND 512),
+  originator TEXT CHECK(originator IS NULL OR length(CAST(originator AS BLOB)) BETWEEN 1 AND 512),
+  activity_read INTEGER NOT NULL CHECK(activity_read >= 0),
+  activity_edit_write INTEGER NOT NULL CHECK(activity_edit_write >= 0),
+  activity_search INTEGER NOT NULL CHECK(activity_search >= 0),
+  activity_git INTEGER NOT NULL CHECK(activity_git >= 0),
+  activity_build_test INTEGER NOT NULL CHECK(activity_build_test >= 0),
+  activity_web INTEGER NOT NULL CHECK(activity_web >= 0),
+  activity_subagents INTEGER NOT NULL CHECK(activity_subagents >= 0),
+  activity_terminal INTEGER NOT NULL CHECK(activity_terminal >= 0),
+  CHECK(
+    (projection_revision_id IS NULL AND origin_revision_id IS NULL AND retained = 0)
+    OR
+    (projection_revision_id IS NOT NULL AND (
+      (retained = 0 AND origin_revision_id = projection_revision_id)
+      OR
+      (retained = 1 AND origin_revision_id < projection_revision_id)
+    ))
+  ),
+  FOREIGN KEY(projection_revision_id) REFERENCES usage_replay_revision(revision_id)
+    DEFERRABLE INITIALLY DEFERRED
+) STRICT;
+"#;
+
+pub(super) const V8_AGGREGATE_SCHEMA: &str = r#"
+CREATE TABLE usage_aggregate_state (
+  singleton_id INTEGER PRIMARY KEY CHECK(singleton_id = 1),
+  aggregate_schema_version INTEGER NOT NULL CHECK(aggregate_schema_version = 1),
+  state TEXT NOT NULL CHECK(state IN ('ready','rebuild_required','rebuilding','failed')),
+  expected_dataset_generation INTEGER NOT NULL CHECK(expected_dataset_generation >= 0),
+  active_aggregate_generation INTEGER NOT NULL CHECK(active_aggregate_generation >= 0),
+  rebuild_aggregate_generation INTEGER CHECK(rebuild_aggregate_generation IS NULL OR rebuild_aggregate_generation >= 0),
+  current_event_count INTEGER NOT NULL CHECK(current_event_count >= 0),
+  legacy_event_count INTEGER NOT NULL CHECK(legacy_event_count >= 0),
+  failure_code TEXT CHECK(failure_code IS NULL OR length(CAST(failure_code AS BLOB)) BETWEEN 1 AND 64),
+  rebuild_dataset_kind TEXT CHECK(rebuild_dataset_kind IN ('cleanup','current','legacy')),
+  rebuild_cursor_fingerprint BLOB CHECK(rebuild_cursor_fingerprint IS NULL OR length(rebuild_cursor_fingerprint) = 32),
+  rebuild_processed_events INTEGER NOT NULL DEFAULT 0 CHECK(rebuild_processed_events >= 0),
+  rebuild_total_events INTEGER NOT NULL CHECK(rebuild_total_events >= 0),
+  CHECK(rebuild_processed_events <= rebuild_total_events),
+  CHECK(
+    (state = 'ready' AND failure_code IS NULL AND rebuild_aggregate_generation IS NULL
+      AND rebuild_dataset_kind IS NULL
+      AND rebuild_cursor_fingerprint IS NULL AND rebuild_processed_events = 0)
+    OR
+    (state = 'rebuild_required' AND failure_code IS NULL
+      AND rebuild_aggregate_generation IS NULL AND rebuild_dataset_kind IS NULL
+      AND rebuild_cursor_fingerprint IS NULL AND rebuild_processed_events = 0)
+    OR
+    (state = 'rebuilding' AND failure_code IS NULL
+      AND rebuild_aggregate_generation IS NOT NULL
+      AND rebuild_aggregate_generation <> active_aggregate_generation
+      AND rebuild_dataset_kind IS NOT NULL)
+    OR
+    (state = 'failed' AND failure_code IS NOT NULL)
+  )
+) STRICT;
+
+CREATE TABLE usage_time_rollup (
+  aggregate_generation INTEGER NOT NULL CHECK(aggregate_generation >= 0),
+  dataset_kind TEXT NOT NULL CHECK(dataset_kind IN ('current','legacy')),
+  bucket_width TEXT NOT NULL CHECK(bucket_width IN ('minute','hour')),
+  bucket_start_seconds INTEGER NOT NULL,
+  provider_id TEXT NOT NULL CHECK(length(CAST(provider_id AS BLOB)) BETWEEN 1 AND 64),
+  profile_id TEXT NOT NULL CHECK(length(CAST(profile_id AS BLOB)) BETWEEN 1 AND 128),
+  dimension_kind TEXT NOT NULL CHECK(dimension_kind IN ('all','model','project')),
+  dimension_value TEXT NOT NULL CHECK(length(CAST(dimension_value AS BLOB)) <= 512),
+  event_count INTEGER NOT NULL CHECK(event_count > 0),
+  input_known_count INTEGER NOT NULL CHECK(input_known_count BETWEEN 0 AND event_count),
+  input_known_sum INTEGER NOT NULL CHECK(input_known_sum >= 0),
+  cached_known_count INTEGER NOT NULL CHECK(cached_known_count BETWEEN 0 AND event_count),
+  cached_known_sum INTEGER NOT NULL CHECK(cached_known_sum >= 0),
+  output_known_count INTEGER NOT NULL CHECK(output_known_count BETWEEN 0 AND event_count),
+  output_known_sum INTEGER NOT NULL CHECK(output_known_sum >= 0),
+  reasoning_known_count INTEGER NOT NULL CHECK(reasoning_known_count BETWEEN 0 AND event_count),
+  reasoning_known_sum INTEGER NOT NULL CHECK(reasoning_known_sum >= 0),
+  total_known_count INTEGER NOT NULL CHECK(total_known_count BETWEEN 0 AND event_count),
+  total_known_sum INTEGER NOT NULL CHECK(total_known_sum >= 0),
+  fallback_model_count INTEGER NOT NULL CHECK(fallback_model_count BETWEEN 0 AND event_count),
+  long_context_yes_count INTEGER NOT NULL CHECK(long_context_yes_count BETWEEN 0 AND event_count),
+  long_context_no_count INTEGER NOT NULL CHECK(long_context_no_count BETWEEN 0 AND event_count),
+  long_context_unavailable_count INTEGER NOT NULL CHECK(long_context_unavailable_count BETWEEN 0 AND event_count),
+  activity_read INTEGER NOT NULL CHECK(activity_read >= 0),
+  activity_edit_write INTEGER NOT NULL CHECK(activity_edit_write >= 0),
+  activity_search INTEGER NOT NULL CHECK(activity_search >= 0),
+  activity_git INTEGER NOT NULL CHECK(activity_git >= 0),
+  activity_build_test INTEGER NOT NULL CHECK(activity_build_test >= 0),
+  activity_web INTEGER NOT NULL CHECK(activity_web >= 0),
+  activity_subagents INTEGER NOT NULL CHECK(activity_subagents >= 0),
+  activity_terminal INTEGER NOT NULL CHECK(activity_terminal >= 0),
+  PRIMARY KEY(aggregate_generation, dataset_kind, bucket_width, bucket_start_seconds, provider_id,
+              profile_id, dimension_kind, dimension_value),
+  CHECK((bucket_width = 'minute' AND bucket_start_seconds % 60 = 0)
+     OR (bucket_width = 'hour' AND bucket_start_seconds % 3600 = 0)),
+  CHECK((dimension_kind = 'all' AND dimension_value = '')
+     OR (dimension_kind = 'model' AND length(CAST(dimension_value AS BLOB)) BETWEEN 1 AND 64)
+     OR dimension_kind = 'project')
+) STRICT;
+
+CREATE TABLE usage_session_rollup (
+  aggregate_generation INTEGER NOT NULL CHECK(aggregate_generation >= 0),
+  dataset_kind TEXT NOT NULL CHECK(dataset_kind IN ('current','legacy')),
+  provider_id TEXT NOT NULL CHECK(length(CAST(provider_id AS BLOB)) BETWEEN 1 AND 64),
+  profile_id TEXT NOT NULL CHECK(length(CAST(profile_id AS BLOB)) BETWEEN 1 AND 128),
+  session_id TEXT NOT NULL CHECK(length(CAST(session_id AS BLOB)) BETWEEN 1 AND 512),
+  dimension_kind TEXT NOT NULL CHECK(dimension_kind IN ('all','model','project')),
+  dimension_value TEXT NOT NULL CHECK(length(CAST(dimension_value AS BLOB)) <= 512),
+  event_count INTEGER NOT NULL CHECK(event_count > 0),
+  first_timestamp_seconds INTEGER,
+  first_timestamp_nanos INTEGER CHECK(first_timestamp_nanos IS NULL OR first_timestamp_nanos BETWEEN 0 AND 999999999),
+  last_timestamp_seconds INTEGER,
+  last_timestamp_nanos INTEGER CHECK(last_timestamp_nanos IS NULL OR last_timestamp_nanos BETWEEN 0 AND 999999999),
+  input_known_count INTEGER NOT NULL CHECK(input_known_count BETWEEN 0 AND event_count),
+  input_known_sum INTEGER NOT NULL CHECK(input_known_sum >= 0),
+  cached_known_count INTEGER NOT NULL CHECK(cached_known_count BETWEEN 0 AND event_count),
+  cached_known_sum INTEGER NOT NULL CHECK(cached_known_sum >= 0),
+  output_known_count INTEGER NOT NULL CHECK(output_known_count BETWEEN 0 AND event_count),
+  output_known_sum INTEGER NOT NULL CHECK(output_known_sum >= 0),
+  reasoning_known_count INTEGER NOT NULL CHECK(reasoning_known_count BETWEEN 0 AND event_count),
+  reasoning_known_sum INTEGER NOT NULL CHECK(reasoning_known_sum >= 0),
+  total_known_count INTEGER NOT NULL CHECK(total_known_count BETWEEN 0 AND event_count),
+  total_known_sum INTEGER NOT NULL CHECK(total_known_sum >= 0),
+  fallback_model_count INTEGER NOT NULL CHECK(fallback_model_count BETWEEN 0 AND event_count),
+  long_context_yes_count INTEGER NOT NULL CHECK(long_context_yes_count BETWEEN 0 AND event_count),
+  long_context_no_count INTEGER NOT NULL CHECK(long_context_no_count BETWEEN 0 AND event_count),
+  long_context_unavailable_count INTEGER NOT NULL CHECK(long_context_unavailable_count BETWEEN 0 AND event_count),
+  activity_read INTEGER NOT NULL CHECK(activity_read >= 0),
+  activity_edit_write INTEGER NOT NULL CHECK(activity_edit_write >= 0),
+  activity_search INTEGER NOT NULL CHECK(activity_search >= 0),
+  activity_git INTEGER NOT NULL CHECK(activity_git >= 0),
+  activity_build_test INTEGER NOT NULL CHECK(activity_build_test >= 0),
+  activity_web INTEGER NOT NULL CHECK(activity_web >= 0),
+  activity_subagents INTEGER NOT NULL CHECK(activity_subagents >= 0),
+  activity_terminal INTEGER NOT NULL CHECK(activity_terminal >= 0),
+  PRIMARY KEY(aggregate_generation, dataset_kind, provider_id, profile_id, session_id,
+              dimension_kind, dimension_value),
+  CHECK((dimension_kind = 'all' AND dimension_value = ''
+         AND first_timestamp_seconds IS NOT NULL AND first_timestamp_nanos IS NOT NULL
+         AND last_timestamp_seconds IS NOT NULL AND last_timestamp_nanos IS NOT NULL
+         AND (first_timestamp_seconds, first_timestamp_nanos)
+             <= (last_timestamp_seconds, last_timestamp_nanos))
+     OR (dimension_kind <> 'all' AND dimension_value <> ''
+         AND first_timestamp_seconds IS NULL AND first_timestamp_nanos IS NULL
+         AND last_timestamp_seconds IS NULL AND last_timestamp_nanos IS NULL)
+     OR (dimension_kind = 'project' AND dimension_value = ''
+         AND first_timestamp_seconds IS NULL AND first_timestamp_nanos IS NULL
+         AND last_timestamp_seconds IS NULL AND last_timestamp_nanos IS NULL))
+) STRICT;
+
+CREATE INDEX usage_event_session_time
+  ON usage_event(provider_id, profile_id, session_id, timestamp_seconds,
+                 timestamp_nanos, fingerprint);
+CREATE INDEX usage_session_rollup_page
+  ON usage_session_rollup(aggregate_generation, dataset_kind, last_timestamp_seconds DESC,
+                          last_timestamp_nanos DESC, provider_id, profile_id, session_id)
+  WHERE dimension_kind = 'all';
+CREATE INDEX usage_time_rollup_scope_range
+  ON usage_time_rollup(aggregate_generation, dataset_kind, provider_id, profile_id, dimension_kind,
+                       dimension_value, bucket_width, bucket_start_seconds);
 "#;
 
 pub(super) const REPLAY_CHILD_SCHEMA: &str = r#"

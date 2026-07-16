@@ -115,7 +115,7 @@ fn repeated_open_query_drop_returns_resources_to_a_stable_plateau() {
     let path = directory.path().join("resource.sqlite3");
     seed_empty_archive(&path);
 
-    for _ in 0..32 {
+    for _ in 0..256 {
         open_query_drop(&path);
     }
     let _measurement_warmup = resource_counts();

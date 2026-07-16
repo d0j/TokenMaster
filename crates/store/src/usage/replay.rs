@@ -25,7 +25,7 @@ const MATERIALIZE_REPLAY_SELECTION_SQL: &str = r#"
 INSERT INTO usage_event(
   fingerprint, event_id, selected_file_key, selected_generation,
   selected_source_offset, projection_revision_id, origin_revision_id, retained,
-  profile_id, session_id, source_id,
+  provider_id, profile_id, session_id, source_id,
   timestamp_seconds, timestamp_nanos, model, raw_model, input_tokens,
   cached_tokens, output_tokens, reasoning_tokens, total_tokens,
   fallback_model, long_context, service_tier, project_alias, originator,
@@ -35,7 +35,7 @@ INSERT INTO usage_event(
 SELECT
   observation.fingerprint, observation.event_id, observation.file_key,
   observation.generation, observation.source_offset, ?1, ?1, 0,
-  observation.profile_id,
+  source.provider_id, observation.profile_id,
   observation.session_id, observation.source_id, observation.timestamp_seconds,
   observation.timestamp_nanos, observation.model, observation.raw_model,
   observation.input_tokens, observation.cached_tokens, observation.output_tokens,
@@ -52,6 +52,9 @@ JOIN usage_observation AS observation
  AND observation.generation = selection.generation
  AND observation.source_offset = selection.source_offset
  AND observation.fingerprint = selection.fingerprint
+JOIN usage_source AS source
+  ON source.file_key = observation.file_key
+ AND source.profile_id = observation.profile_id
 WHERE selection.revision_id = ?1
 ORDER BY observation.profile_id, observation.file_key,
          observation.generation, observation.source_offset
@@ -63,6 +66,7 @@ ON CONFLICT(fingerprint) DO UPDATE SET
   projection_revision_id = excluded.projection_revision_id,
   origin_revision_id = excluded.origin_revision_id,
   retained = excluded.retained,
+  provider_id = excluded.provider_id,
   profile_id = excluded.profile_id,
   session_id = excluded.session_id,
   source_id = excluded.source_id,
@@ -94,7 +98,7 @@ const MATERIALIZE_CURRENT_FINGERPRINT_SQL: &str = r#"
 INSERT INTO usage_event(
   fingerprint, event_id, selected_file_key, selected_generation,
   selected_source_offset, projection_revision_id, origin_revision_id, retained,
-  profile_id, session_id, source_id,
+  provider_id, profile_id, session_id, source_id,
   timestamp_seconds, timestamp_nanos, model, raw_model, input_tokens,
   cached_tokens, output_tokens, reasoning_tokens, total_tokens,
   fallback_model, long_context, service_tier, project_alias, originator,
@@ -104,7 +108,7 @@ INSERT INTO usage_event(
 SELECT
   observation.fingerprint, observation.event_id, observation.file_key,
   observation.generation, observation.source_offset, ?1, ?1, 0,
-  observation.profile_id,
+  source.provider_id, observation.profile_id,
   observation.session_id, observation.source_id, observation.timestamp_seconds,
   observation.timestamp_nanos, observation.model, observation.raw_model,
   observation.input_tokens, observation.cached_tokens, observation.output_tokens,
@@ -121,6 +125,9 @@ JOIN usage_observation AS observation
  AND observation.generation = selection.generation
  AND observation.source_offset = selection.source_offset
  AND observation.fingerprint = selection.fingerprint
+JOIN usage_source AS source
+  ON source.file_key = observation.file_key
+ AND source.profile_id = observation.profile_id
 WHERE selection.revision_id = ?1 AND selection.fingerprint = ?2
 ON CONFLICT(fingerprint) DO UPDATE SET
   event_id = excluded.event_id,
@@ -130,6 +137,7 @@ ON CONFLICT(fingerprint) DO UPDATE SET
   projection_revision_id = excluded.projection_revision_id,
   origin_revision_id = excluded.origin_revision_id,
   retained = excluded.retained,
+  provider_id = excluded.provider_id,
   profile_id = excluded.profile_id,
   session_id = excluded.session_id,
   source_id = excluded.source_id,

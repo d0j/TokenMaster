@@ -96,13 +96,13 @@ fn seed_current_archive(path: &Path, completed_at_ms: i64, quality: &str, event_
                 "INSERT INTO usage_event(
                    fingerprint, event_id, selected_file_key, selected_generation,
                    selected_source_offset, projection_revision_id, origin_revision_id,
-                   retained, profile_id, session_id, source_id, timestamp_seconds,
+                   retained, provider_id, profile_id, session_id, source_id, timestamp_seconds,
                    timestamp_nanos, model, input_tokens, cached_tokens, output_tokens,
                    reasoning_tokens, total_tokens, fallback_model, long_context,
                    activity_read, activity_edit_write, activity_search, activity_git,
                    activity_build_test, activity_web, activity_subagents, activity_terminal
                  ) VALUES (
-                   ?1, ?2, ?3, 0, ?4, 0, 0, 0, 'default', 'session', 'fixture-source-private',
+                   ?1, ?2, ?3, 0, ?4, 0, 0, 0, 'codex', 'default', 'session', 'fixture-source-private',
                    ?5, 0, 'gpt-5.6', ?6, NULL, 1, NULL, ?7, 0, 'no',
                    0, 0, 0, 0, 0, 0, 0, 0
                  )",

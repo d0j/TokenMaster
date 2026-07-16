@@ -1211,3 +1211,31 @@ includes replay revision ID plus schema-v7 `dataset_generation`, which advances 
 every canonical event insert/update/delete in the same transaction and stays fixed for
 scan/publication-only work. Exact v6 migration fault rollback, overflow, real no-change
 scan, append, store, and facade contracts prove the corrected boundary.
+
+## 2026-07-16 — P2-B aggregate storage and bounded publication implemented
+
+Schema v8 now makes the current canonical projection provider-self-contained and
+creates exact generation-qualified UTC minute/hour and session rollups. Exact v7
+migration preserves every canonical value and dataset generation, rejects source/
+profile ambiguity, uses explicit `unknown` only for an old orphan, and rolls back at
+every provider and aggregate boundary. Current insert/update/delete paths maintain
+known-count/sum availability algebra, activity and context counters, event counts,
+dataset generation, and rollups in one SQLite transaction. Missing singleton state,
+overflow, or a missing expected published row fails the complete source mutation
+closed.
+
+Non-empty archives enter `rebuild_required` instead of blocking startup. The store
+rebuilds current and immutable legacy facts through persisted fingerprint-keyset pages
+of at most 256 events into disk-backed unpublished rows. Cleanup is bounded, reopen
+resumes, event mutation restarts against the new dataset generation, faults roll back
+the exact page/state, and publication is one checked active-generation update. No
+history-sized Rust map or long-lived read transaction is retained.
+
+The first release-mode reference measurements are 1.814 ms p95 for one event,
+19.888 ms for 32, and 230.620 ms for 256 with aggregate maintenance ready; all remain
+inside corrected absolute gates and 1.5-times matching-baseline limits. The old single
+25 ms expectation for a maximum 256-event catch-up was rejected because the measured
+aggregate-disabled baseline itself is 159.787 ms. Database amplification measurement
+now includes the main SQLite file, WAL, and SHM. Aggregate/session reads, private
+calendar composition, immutable public values, and million-row/resource acceptance
+remain open; no complete P2-B or release claim is made.

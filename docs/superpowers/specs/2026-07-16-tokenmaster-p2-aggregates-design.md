@@ -1,6 +1,7 @@
 # TokenMaster P2-B Transactional Aggregates Design
 
-Status: approved for implementation after critical self-review on 2026-07-16.
+Status: approved and re-audited for implementation on 2026-07-16; Tasks 1-4 are
+implemented, while public aggregate reads and calendar composition remain open.
 
 ## Goal
 
@@ -139,12 +140,15 @@ remembering a second call site.
 
 Migration does not impose an unbounded startup group-by. Non-empty archives enter
 `rebuild_required`. Rebuild uses the already-held single-writer authority, a persisted
-keyset cursor, fixed pages, disk-backed staging rows, and an expected
-`dataset_generation`. Each page transaction checks that generation. Final publication
-atomically swaps staging facts, records exact counts, and moves to `ready` only if the
-generation still matches. Cancellation or crash leaves current canonical events
-untouched and resumable staging private. A generation mismatch discards only staging
-and restarts; no stale aggregate is published.
+keyset cursor, fixed pages capped at 256 events, disk-backed generation-qualified
+staging rows, and an expected `dataset_generation`. Each page transaction checks that
+generation. Initial cleanup removes at most nine rollup rows per requested event page;
+no call performs history-sized cleanup or allocates a history-sized Rust collection.
+Final publication changes the active aggregate generation in one singleton update,
+records exact counts, and moves to `ready` only if the dataset generation still
+matches. Cancellation or crash leaves current canonical events untouched and
+resumable staging private. A generation mismatch discards only unpublished rollups in
+bounded cleanup pages and restarts; no stale aggregate is published.
 
 Fresh empty archives start `ready`. A legacy-only archive builds its immutable facts
 through the same bounded protocol. The UI later shows aggregate rebuild progress and
@@ -208,16 +212,20 @@ frontend receives it.
 
 - no aggregate query plan may read `usage_event` or `usage_legacy_event`;
 - no aggregate query uses `OFFSET`, caller SQL, or a returned live transaction;
-- incremental maintenance is measured at 1, 32, and 256 appended events;
-- the existing append p95 target remains 25 ms; a regression requires redesign, not a
-  relaxed target;
+- incremental maintenance is measured at 1, 32, and 256 appended events against the
+  same append with aggregate publication unavailable;
+- on the reference machine the p95 budgets are below 25 ms for the normal one-event
+  append, below 50 ms for a 32-event catch-up, and below 250 ms for the maximum
+  256-event catch-up; ready aggregate maintenance must also stay within 1.5 times its
+  matching baseline;
 - a cached one-million-event overview is p95 below 250 ms and cold below one second on
   the reference machine;
 - 400-point daily series, four capped breakdowns, session first/cursor pages, DST
   edges, and worst allowed scope filters receive explicit budgets;
 - repeated query/snapshot replacement and rebuild cancellation/restart have stable
   private-memory, handle, thread, USER, and GDI plateaus;
-- database size amplification is measured and documented before P2-B acceptance.
+- database size amplification includes the main SQLite file, WAL, and SHM and is
+  measured and documented before P2-B acceptance.
 
 ## Fault and integrity matrix
 

@@ -13,12 +13,56 @@ pub const MAX_USAGE_EVENT_PAGE_SIZE: usize = 256;
 pub const MAX_APPEND_EVENTS: usize = 256;
 pub const MAX_APPEND_RELATIONS: usize = 256;
 pub const MAX_APPEND_CHUNK_UPDATES: usize = 18;
+pub const MAX_AGGREGATE_REBUILD_PAGE_SIZE: usize = 256;
 pub const MAX_REPLAY_SOURCES: usize = 256;
 pub const MAX_SCAN_SCOPES: usize = 256;
 pub const SCAN_HISTORY_PER_SCOPE: usize = 32;
 pub const SCAN_PRUNE_BATCH_SIZE: usize = 64;
 pub const SOURCE_CHUNK_BYTES: u64 = 1 << 20;
 const MAX_ANCHOR_BYTES: u16 = 4096;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AggregateRebuildStatus {
+    Ready,
+    Rebuilding,
+    Restarted,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AggregateRebuildProgress {
+    status: AggregateRebuildStatus,
+    processed_events: u64,
+    total_events: u64,
+}
+
+impl AggregateRebuildProgress {
+    pub(super) const fn new(
+        status: AggregateRebuildStatus,
+        processed_events: u64,
+        total_events: u64,
+    ) -> Self {
+        Self {
+            status,
+            processed_events,
+            total_events,
+        }
+    }
+
+    #[must_use]
+    pub const fn status(self) -> AggregateRebuildStatus {
+        self.status
+    }
+
+    #[must_use]
+    pub const fn processed_events(self) -> u64 {
+        self.processed_events
+    }
+
+    #[must_use]
+    pub const fn total_events(self) -> u64 {
+        self.total_events
+    }
+}
 
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub struct SourceKey([u8; 32]);

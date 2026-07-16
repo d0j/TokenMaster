@@ -12,7 +12,12 @@ use super::schema::{
     V5_REPLAY_REVISION_SCHEMA, V5_SCAN_SET_CONTRACT, V5_SCAN_SET_SCHEMA, V5_SCHEMA_VERSION,
     V5_USAGE_SCAN_CONTRACT, V5_USAGE_SCAN_SCHEMA, V6_ARCHIVE_STATE_CONTRACT,
     V6_ARCHIVE_STATE_SCHEMA, V6_SCHEMA_VERSION, V7_ARCHIVE_STATE_CONTRACT, V7_ARCHIVE_STATE_SCHEMA,
-    V7_DATASET_GENERATION_TRIGGERS,
+    V7_DATASET_GENERATION_TRIGGERS, V7_SCHEMA_VERSION, V8_AGGREGATE_SCHEMA,
+    V8_AGGREGATE_STATE_CONTRACT, V8_DATASET_DELETE_TRIGGER, V8_DATASET_INSERT_TRIGGER,
+    V8_DATASET_UPDATE_TRIGGER, V8_INDEX_CONTRACTS, V8_SESSION_DELETE_TRIGGER,
+    V8_SESSION_INSERT_TRIGGER, V8_SESSION_ROLLUP_CONTRACT, V8_TIME_DELETE_TRIGGER,
+    V8_TIME_INSERT_TRIGGER, V8_TIME_ROLLUP_CONTRACT, V8_USAGE_EVENT_CONTRACT,
+    V8_USAGE_EVENT_SCHEMA, v8_session_update_trigger, v8_time_update_trigger,
 };
 
 pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreError> {
@@ -26,18 +31,21 @@ pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreErr
             migrate_v2(connection)?;
             migrate_v4(connection)?;
             migrate_v5(connection)?;
-            migrate_v6(connection)
+            migrate_v6(connection)?;
+            migrate_v7(connection)
         }
         V3_SCHEMA_VERSION => {
             migrate_v3(connection)?;
             migrate_v4(connection)?;
             migrate_v5(connection)?;
-            migrate_v6(connection)
+            migrate_v6(connection)?;
+            migrate_v7(connection)
         }
         V4_SCHEMA_VERSION => {
             migrate_v4(connection)?;
             migrate_v5(connection)?;
-            migrate_v6(connection)
+            migrate_v6(connection)?;
+            migrate_v7(connection)
         }
         0 | V1_SCHEMA_VERSION => {
             let transaction =
@@ -50,17 +58,23 @@ pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreErr
             transaction.commit()?;
             migrate_v4(connection)?;
             migrate_v5(connection)?;
-            migrate_v6(connection)
+            migrate_v6(connection)?;
+            migrate_v7(connection)
         }
         V5_SCHEMA_VERSION => {
             migrate_v5(connection)?;
-            migrate_v6(connection)
+            migrate_v6(connection)?;
+            migrate_v7(connection)
         }
-        V6_SCHEMA_VERSION => migrate_v6(connection),
+        V6_SCHEMA_VERSION => {
+            migrate_v6(connection)?;
+            migrate_v7(connection)
+        }
+        V7_SCHEMA_VERSION => migrate_v7(connection),
         USAGE_SCHEMA_VERSION => {
             let transaction =
                 connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-            validate_v7(&transaction)?;
+            validate_v8(&transaction)?;
             transaction.commit()?;
             Ok(())
         }
@@ -243,6 +257,89 @@ pub(super) fn validate_v7(connection: &Connection) -> Result<(), StoreError> {
     validate_archive_publication(connection)
 }
 
+pub(super) fn validate_v8(connection: &Connection) -> Result<(), StoreError> {
+    let session_update = v8_session_update_trigger()
+        .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+    let time_update =
+        v8_time_update_trigger().ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+    let mut trigger_contracts = vec![
+        TriggerContract {
+            name: "usage_event_aggregate_session_after_delete",
+            sql: V8_SESSION_DELETE_TRIGGER,
+        },
+        TriggerContract {
+            name: "usage_event_aggregate_session_after_insert",
+            sql: V8_SESSION_INSERT_TRIGGER,
+        },
+        TriggerContract {
+            name: "usage_event_aggregate_session_after_update",
+            sql: session_update,
+        },
+        TriggerContract {
+            name: "usage_event_aggregate_time_after_delete",
+            sql: V8_TIME_DELETE_TRIGGER,
+        },
+        TriggerContract {
+            name: "usage_event_aggregate_time_after_insert",
+            sql: V8_TIME_INSERT_TRIGGER,
+        },
+        TriggerContract {
+            name: "usage_event_aggregate_time_after_update",
+            sql: time_update,
+        },
+        TriggerContract {
+            name: "usage_event_dataset_generation_after_delete",
+            sql: V8_DATASET_DELETE_TRIGGER,
+        },
+        TriggerContract {
+            name: "usage_event_dataset_generation_after_insert",
+            sql: V8_DATASET_INSERT_TRIGGER,
+        },
+        TriggerContract {
+            name: "usage_event_dataset_generation_after_update",
+            sql: V8_DATASET_UPDATE_TRIGGER,
+        },
+    ];
+    trigger_contracts.extend(LEGACY_TRIGGER_CONTRACTS.iter().copied());
+    let mut indexes = V5_INDEX_CONTRACTS.to_vec();
+    indexes.extend_from_slice(V8_INDEX_CONTRACTS);
+    validate_schema(
+        connection,
+        USAGE_TABLE_CONTRACTS,
+        USAGE_INDEX_CONTRACTS,
+        &trigger_contracts,
+        &[
+            V8_AGGREGATE_SCHEMA,
+            V8_USAGE_EVENT_SCHEMA,
+            V7_ARCHIVE_STATE_SCHEMA,
+            V5_SCAN_SET_SCHEMA,
+            V5_USAGE_SCAN_SCHEMA,
+            V5_REPLAY_REVISION_SCHEMA,
+            V1_SCHEMA,
+            REPLAY_AUX_SCHEMA,
+            REPLAY_CHILD_SCHEMA,
+        ],
+        &[
+            V5_USAGE_SCAN_CONTRACT,
+            V5_REPLAY_REVISION_CONTRACT,
+            V8_USAGE_EVENT_CONTRACT,
+        ],
+        SchemaExtensions {
+            tables: &[
+                V5_SCAN_SET_CONTRACT,
+                V7_ARCHIVE_STATE_CONTRACT,
+                V8_AGGREGATE_STATE_CONTRACT,
+                V8_TIME_ROLLUP_CONTRACT,
+                V8_SESSION_ROLLUP_CONTRACT,
+            ],
+            indexes: &indexes,
+        },
+    )?;
+    validate_legacy_snapshot(connection)?;
+    validate_archive_publication(connection)?;
+    validate_aggregate_state(connection)
+}
+
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum MigrationFault {
     None,
@@ -274,6 +371,18 @@ enum MigrationFault {
     AfterSeedDatasetState,
     #[cfg(test)]
     AfterCreateDatasetTriggers,
+    #[cfg(test)]
+    AfterCreateProviderEvent,
+    #[cfg(test)]
+    AfterCopyProviderEvent,
+    #[cfg(test)]
+    AfterDropProviderEvent,
+    #[cfg(test)]
+    AfterCreateAggregateSchema,
+    #[cfg(test)]
+    AfterSeedAggregateState,
+    #[cfg(test)]
+    AfterCreateAggregateTriggers,
 }
 
 fn migrate_v2(connection: &mut Connection) -> Result<(), StoreError> {
@@ -402,6 +511,12 @@ enum MigrationBoundary {
     DatasetStateCreated,
     DatasetStateSeeded,
     DatasetTriggersCreated,
+    ProviderEventCreated,
+    ProviderEventCopied,
+    ProviderEventDropped,
+    AggregateSchemaCreated,
+    AggregateStateSeeded,
+    AggregateTriggersCreated,
 }
 
 fn migration_fault(fault: MigrationFault, boundary: MigrationBoundary) -> Result<(), StoreError> {
@@ -460,6 +575,30 @@ fn migration_fault(fault: MigrationFault, boundary: MigrationBoundary) -> Result
                 MigrationFault::AfterCreateDatasetTriggers,
                 MigrationBoundary::DatasetTriggersCreated
             )
+            | (
+                MigrationFault::AfterCreateProviderEvent,
+                MigrationBoundary::ProviderEventCreated
+            )
+            | (
+                MigrationFault::AfterCopyProviderEvent,
+                MigrationBoundary::ProviderEventCopied
+            )
+            | (
+                MigrationFault::AfterDropProviderEvent,
+                MigrationBoundary::ProviderEventDropped
+            )
+            | (
+                MigrationFault::AfterCreateAggregateSchema,
+                MigrationBoundary::AggregateSchemaCreated
+            )
+            | (
+                MigrationFault::AfterSeedAggregateState,
+                MigrationBoundary::AggregateStateSeeded
+            )
+            | (
+                MigrationFault::AfterCreateAggregateTriggers,
+                MigrationBoundary::AggregateTriggersCreated
+            )
     );
     #[cfg(not(test))]
     let triggered = {
@@ -502,6 +641,62 @@ fn migrate_v6(connection: &mut Connection) -> Result<(), StoreError> {
     migrate_v6_with_fault(connection, MigrationFault::None)
 }
 
+fn migrate_v7(connection: &mut Connection) -> Result<(), StoreError> {
+    migrate_v7_with_fault(connection, MigrationFault::None)
+}
+
+fn migrate_v7_with_fault(
+    connection: &mut Connection,
+    fault: MigrationFault,
+) -> Result<(), StoreError> {
+    validate_v7(connection)?;
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    migrate_usage_event_v8(&transaction, fault)?;
+    transaction.execute_batch(V8_AGGREGATE_SCHEMA)?;
+    migration_fault(fault, MigrationBoundary::AggregateSchemaCreated)?;
+    transaction.execute(
+        "INSERT INTO usage_aggregate_state(
+           singleton_id, aggregate_schema_version, state,
+           expected_dataset_generation, active_aggregate_generation,
+           current_event_count, legacy_event_count,
+           rebuild_total_events
+         )
+         SELECT 1, 1,
+                CASE WHEN current_count = 0 AND legacy_count = 0
+                     THEN 'ready' ELSE 'rebuild_required' END,
+                dataset_generation, 0, current_count, legacy_count,
+                current_count + legacy_count
+         FROM (
+           SELECT archive.dataset_generation,
+                  (SELECT count(*) FROM usage_event) AS current_count,
+                  (SELECT count(*) FROM usage_legacy_event
+                   WHERE snapshot_id = 1) AS legacy_count
+           FROM usage_archive_state AS archive WHERE archive.singleton_id = 1
+         )",
+        [],
+    )?;
+    migration_fault(fault, MigrationBoundary::AggregateStateSeeded)?;
+    transaction.execute_batch(V8_SESSION_DELETE_TRIGGER)?;
+    transaction.execute_batch(V8_SESSION_INSERT_TRIGGER)?;
+    transaction.execute_batch(
+        v8_session_update_trigger()
+            .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?,
+    )?;
+    transaction.execute_batch(V8_TIME_DELETE_TRIGGER)?;
+    transaction.execute_batch(V8_TIME_INSERT_TRIGGER)?;
+    transaction.execute_batch(
+        v8_time_update_trigger().ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?,
+    )?;
+    transaction.execute_batch(V8_DATASET_DELETE_TRIGGER)?;
+    transaction.execute_batch(V8_DATASET_INSERT_TRIGGER)?;
+    transaction.execute_batch(V8_DATASET_UPDATE_TRIGGER)?;
+    migration_fault(fault, MigrationBoundary::AggregateTriggersCreated)?;
+    transaction.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
+    validate_v8(&transaction)?;
+    transaction.commit()?;
+    Ok(())
+}
+
 fn migrate_v6_with_fault(
     connection: &mut Connection,
     fault: MigrationFault,
@@ -528,7 +723,7 @@ fn migrate_v6_with_fault(
     migration_fault(fault, MigrationBoundary::DatasetStateSeeded)?;
     transaction.execute_batch(V7_DATASET_GENERATION_TRIGGERS)?;
     migration_fault(fault, MigrationBoundary::DatasetTriggersCreated)?;
-    transaction.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
+    transaction.pragma_update(None, "user_version", V7_SCHEMA_VERSION)?;
     validate_v7(&transaction)?;
     transaction.commit()?;
     Ok(())
@@ -883,6 +1078,132 @@ fn migrate_usage_event_v4(
     Ok(())
 }
 
+fn migrate_usage_event_v8(
+    connection: &Connection,
+    fault: MigrationFault,
+) -> Result<(), StoreError> {
+    let source_profile_mismatches = pragma_i64(
+        connection,
+        "SELECT count(*)
+         FROM usage_event AS event
+         JOIN usage_source AS source ON source.file_key = event.selected_file_key
+         WHERE source.profile_id <> event.profile_id",
+    )?;
+    if source_profile_mismatches != 0 {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+
+    let old_count = pragma_i64(connection, "SELECT count(*) FROM usage_event")?;
+    let temporary_schema = V8_USAGE_EVENT_SCHEMA.replacen(
+        "CREATE TABLE usage_event (",
+        "CREATE TABLE usage_event_v8 (",
+        1,
+    );
+    connection.execute_batch(&temporary_schema)?;
+    migration_fault(fault, MigrationBoundary::ProviderEventCreated)?;
+    connection.execute_batch(
+        "INSERT INTO usage_event_v8(
+           fingerprint, event_id, selected_file_key, selected_generation,
+           selected_source_offset, projection_revision_id, origin_revision_id,
+           retained, provider_id, profile_id, session_id, source_id,
+           timestamp_seconds, timestamp_nanos, model, raw_model, input_tokens,
+           cached_tokens, output_tokens, reasoning_tokens, total_tokens,
+           fallback_model, long_context, service_tier, project_alias, originator,
+           activity_read, activity_edit_write, activity_search, activity_git,
+           activity_build_test, activity_web, activity_subagents, activity_terminal
+         )
+         SELECT
+           event.fingerprint, event.event_id, event.selected_file_key,
+           event.selected_generation, event.selected_source_offset,
+           event.projection_revision_id, event.origin_revision_id, event.retained,
+           coalesce(source.provider_id, 'unknown'), event.profile_id,
+           event.session_id, event.source_id, event.timestamp_seconds,
+           event.timestamp_nanos, event.model, event.raw_model, event.input_tokens,
+           event.cached_tokens, event.output_tokens, event.reasoning_tokens,
+           event.total_tokens, event.fallback_model, event.long_context,
+           event.service_tier, event.project_alias, event.originator,
+           event.activity_read, event.activity_edit_write, event.activity_search,
+           event.activity_git, event.activity_build_test, event.activity_web,
+           event.activity_subagents, event.activity_terminal
+         FROM usage_event AS event
+         LEFT JOIN usage_source AS source ON source.file_key = event.selected_file_key;",
+    )?;
+    let new_count = pragma_i64(connection, "SELECT count(*) FROM usage_event_v8")?;
+    let logical_difference = pragma_i64(
+        connection,
+        "SELECT count(*) FROM (
+           SELECT fingerprint, event_id, selected_file_key, selected_generation,
+                  selected_source_offset, projection_revision_id,
+                  origin_revision_id, retained, profile_id, session_id, source_id,
+                  timestamp_seconds, timestamp_nanos, model, raw_model,
+                  input_tokens, cached_tokens, output_tokens, reasoning_tokens,
+                  total_tokens, fallback_model, long_context, service_tier,
+                  project_alias, originator, activity_read, activity_edit_write,
+                  activity_search, activity_git, activity_build_test, activity_web,
+                  activity_subagents, activity_terminal
+           FROM usage_event
+           EXCEPT
+           SELECT fingerprint, event_id, selected_file_key, selected_generation,
+                  selected_source_offset, projection_revision_id,
+                  origin_revision_id, retained, profile_id, session_id, source_id,
+                  timestamp_seconds, timestamp_nanos, model, raw_model,
+                  input_tokens, cached_tokens, output_tokens, reasoning_tokens,
+                  total_tokens, fallback_model, long_context, service_tier,
+                  project_alias, originator, activity_read, activity_edit_write,
+                  activity_search, activity_git, activity_build_test, activity_web,
+                  activity_subagents, activity_terminal
+           FROM usage_event_v8
+           UNION ALL
+           SELECT fingerprint, event_id, selected_file_key, selected_generation,
+                  selected_source_offset, projection_revision_id,
+                  origin_revision_id, retained, profile_id, session_id, source_id,
+                  timestamp_seconds, timestamp_nanos, model, raw_model,
+                  input_tokens, cached_tokens, output_tokens, reasoning_tokens,
+                  total_tokens, fallback_model, long_context, service_tier,
+                  project_alias, originator, activity_read, activity_edit_write,
+                  activity_search, activity_git, activity_build_test, activity_web,
+                  activity_subagents, activity_terminal
+           FROM usage_event_v8
+           EXCEPT
+           SELECT fingerprint, event_id, selected_file_key, selected_generation,
+                  selected_source_offset, projection_revision_id,
+                  origin_revision_id, retained, profile_id, session_id, source_id,
+                  timestamp_seconds, timestamp_nanos, model, raw_model,
+                  input_tokens, cached_tokens, output_tokens, reasoning_tokens,
+                  total_tokens, fallback_model, long_context, service_tier,
+                  project_alias, originator, activity_read, activity_edit_write,
+                  activity_search, activity_git, activity_build_test, activity_web,
+                  activity_subagents, activity_terminal
+           FROM usage_event
+         )",
+    )?;
+    let provider_difference = pragma_i64(
+        connection,
+        "SELECT count(*)
+         FROM usage_event_v8 AS event
+         LEFT JOIN usage_source AS source ON source.file_key = event.selected_file_key
+         WHERE event.provider_id <> coalesce(source.provider_id, 'unknown')",
+    )?;
+    if old_count < 0
+        || old_count != new_count
+        || logical_difference != 0
+        || provider_difference != 0
+    {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    migration_fault(fault, MigrationBoundary::ProviderEventCopied)?;
+    connection.execute_batch("DROP TABLE usage_event;")?;
+    migration_fault(fault, MigrationBoundary::ProviderEventDropped)?;
+    connection.execute_batch(
+        "ALTER TABLE usage_event_v8 RENAME TO usage_event;
+         CREATE INDEX usage_event_time_desc
+           ON usage_event(timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC);
+         CREATE INDEX usage_event_model_time
+           ON usage_event(model, timestamp_seconds DESC, timestamp_nanos DESC, fingerprint DESC);",
+    )?;
+    Ok(())
+}
+
 fn validate_legacy_snapshot(connection: &Connection) -> Result<(), StoreError> {
     let (snapshot_count, recorded_count, event_count): (i64, Option<i64>, i64) = connection
         .query_row(
@@ -953,6 +1274,62 @@ fn validate_archive_publication(connection: &Connection) -> Result<(), StoreErro
     Ok(())
 }
 
+fn validate_aggregate_state(connection: &Connection) -> Result<(), StoreError> {
+    let state: Option<(i64, String, i64, i64, i64, i64)> = connection
+        .query_row(
+            "SELECT aggregate.aggregate_schema_version, aggregate.state,
+                    aggregate.expected_dataset_generation,
+                    aggregate.current_event_count, aggregate.legacy_event_count,
+                    aggregate.rebuild_total_events
+             FROM usage_aggregate_state AS aggregate
+             JOIN usage_archive_state AS archive ON archive.singleton_id = 1
+             WHERE aggregate.singleton_id = 1
+               AND aggregate.expected_dataset_generation = archive.dataset_generation",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            },
+        )
+        .optional()?;
+    let Some((schema_version, state, generation, current_count, legacy_count, total_count)) = state
+    else {
+        return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
+    };
+    let expected_total = current_count
+        .checked_add(legacy_count)
+        .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+    if schema_version != 1
+        || generation < 0
+        || current_count < 0
+        || legacy_count < 0
+        || total_count != expected_total
+        || !matches!(
+            state.as_str(),
+            "ready" | "rebuild_required" | "rebuilding" | "failed"
+        )
+    {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    let legacy_snapshot_count: Option<i64> = connection
+        .query_row(
+            "SELECT event_count FROM usage_legacy_snapshot WHERE snapshot_id = 1",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if legacy_count != legacy_snapshot_count.unwrap_or(0) {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    Ok(())
+}
+
 #[derive(Clone, Copy)]
 struct SchemaExtensions<'a> {
     tables: &'a [TableContract],
@@ -970,7 +1347,7 @@ fn validate_schema(
     connection: &Connection,
     table_contracts: &[TableContract],
     index_contracts: &[IndexContract],
-    trigger_contracts: &[TriggerContract],
+    trigger_contracts: &[TriggerContract<'_>],
     table_schema_sources: &[&str],
     column_overrides: &[TableContract],
     extensions: SchemaExtensions<'_>,
@@ -1022,7 +1399,7 @@ fn validate_schema(
         )?;
         let expected_sql = expected_table_sql(table_schema_sources, contract.name)
             .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
-        if normalize_schema_sql(&actual_sql) != expected_sql {
+        if !normalized_schema_sql_equal(&actual_sql, expected_sql) {
             return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
         }
     }
@@ -1053,23 +1430,27 @@ fn validate_named_sql(
     let rows = statement.query_map([kind], |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
     })?;
-    let actual = rows.collect::<Result<Vec<_>, _>>()?;
-    if actual.len() != contracts.len() + extra_contracts.len() {
-        return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
-    }
-    for ((actual_name, actual_sql), expected) in
-        actual.iter().zip(contracts.iter().chain(extra_contracts))
-    {
-        if actual_name != expected.name || normalize_schema_sql(actual_sql) != expected.sql {
+    let mut expected = contracts.iter().chain(extra_contracts).collect::<Vec<_>>();
+    expected.sort_unstable_by_key(|contract| contract.name);
+    let mut actual = rows;
+    for expected in expected {
+        let Some(row) = actual.next() else {
+            return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
+        };
+        let (actual_name, actual_sql) = row?;
+        if actual_name != expected.name || !normalized_schema_sql_equal(&actual_sql, expected.sql) {
             return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
         }
+    }
+    if actual.next().transpose()?.is_some() {
+        return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
     }
     Ok(())
 }
 
 fn validate_triggers(
     connection: &Connection,
-    contracts: &[TriggerContract],
+    contracts: &[TriggerContract<'_>],
 ) -> Result<(), StoreError> {
     let mut statement = connection.prepare(
         "SELECT name, sql FROM sqlite_schema
@@ -1079,14 +1460,18 @@ fn validate_triggers(
     let rows = statement.query_map([], |row| {
         Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
     })?;
-    let actual = rows.collect::<Result<Vec<_>, _>>()?;
-    if actual.len() != contracts.len() {
-        return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
-    }
-    for ((actual_name, actual_sql), expected) in actual.iter().zip(contracts) {
-        if actual_name != expected.name || normalize_schema_sql(actual_sql) != expected.sql {
+    let mut actual = rows;
+    for expected in contracts {
+        let Some(row) = actual.next() else {
+            return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
+        };
+        let (actual_name, actual_sql) = row?;
+        if actual_name != expected.name || !normalized_schema_sql_equal(&actual_sql, expected.sql) {
             return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
         }
+    }
+    if actual.next().transpose()?.is_some() {
+        return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
     }
     Ok(())
 }
@@ -1100,25 +1485,73 @@ fn count_application_objects(connection: &Connection) -> Result<i64, StoreError>
     )?)
 }
 
-fn normalize_schema_sql(sql: &str) -> String {
-    let normalized = sql.split_whitespace().collect::<Vec<_>>().join(" ");
-    let Some(quoted) = normalized.strip_prefix("CREATE TABLE \"") else {
-        return normalized;
-    };
-    let Some((table_name, suffix)) = quoted.split_once("\" ") else {
-        return normalized;
-    };
-    format!("CREATE TABLE {table_name} {suffix}")
+struct NormalizedSchemaTokens<'a> {
+    tokens: std::iter::Peekable<std::str::SplitWhitespace<'a>>,
+    index: usize,
 }
 
-fn expected_table_sql(schema_sources: &[&str], table_name: &str) -> Option<String> {
-    let prefix = format!("CREATE TABLE {table_name} ");
+impl<'a> NormalizedSchemaTokens<'a> {
+    fn new(sql: &'a str) -> Self {
+        Self {
+            tokens: sql.split_whitespace().peekable(),
+            index: 0,
+        }
+    }
+
+    fn next(&mut self) -> Option<&'a str> {
+        let mut token = self.tokens.next()?;
+        if self.index == 2 && token == "IF" {
+            if self.tokens.next()? != "NOT" || self.tokens.next()? != "EXISTS" {
+                return None;
+            }
+            token = self.tokens.next()?;
+        }
+        if self.index == 2 {
+            token = token
+                .strip_prefix('"')
+                .and_then(|value| value.strip_suffix('"'))
+                .unwrap_or(token);
+        }
+        if self.tokens.peek().is_none() {
+            token = token.trim_end_matches(';');
+        }
+        self.index += 1;
+        Some(token)
+    }
+}
+
+fn normalized_schema_sql_equal(left: &str, right: &str) -> bool {
+    let mut left = NormalizedSchemaTokens::new(left);
+    let mut right = NormalizedSchemaTokens::new(right);
+    loop {
+        match (left.next(), right.next()) {
+            (Some(left), Some(right)) if left == right => {}
+            (None, None) => return true,
+            _ => return false,
+        }
+    }
+}
+
+fn table_statement_name(statement: &str) -> Option<&str> {
+    let mut tokens = statement.split_whitespace();
+    if tokens.next()? != "CREATE" || tokens.next()? != "TABLE" {
+        return None;
+    }
+    let mut name = tokens.next()?;
+    if name == "IF" {
+        if tokens.next()? != "NOT" || tokens.next()? != "EXISTS" {
+            return None;
+        }
+        name = tokens.next()?;
+    }
+    Some(name.trim_matches('"'))
+}
+
+fn expected_table_sql<'a>(schema_sources: &[&'a str], table_name: &str) -> Option<&'a str> {
     for source in schema_sources {
         for statement in source.split(';') {
-            let normalized = normalize_schema_sql(statement);
-            let canonical = normalized.replacen("CREATE TABLE IF NOT EXISTS ", "CREATE TABLE ", 1);
-            if canonical.starts_with(&prefix) {
-                return Some(canonical);
+            if table_statement_name(statement) == Some(table_name) {
+                return Some(statement);
             }
         }
     }
@@ -1136,8 +1569,8 @@ mod tests {
     use super::{
         MigrationFault, migrate_schema, migrate_v2_revision_table, migrate_v2_with_fault,
         migrate_v3_with_fault, migrate_v4_with_fault, migrate_v5_with_fault, migrate_v6,
-        migrate_v6_with_fault, pragma_i64, validate_v2, validate_v3, validate_v4, validate_v5,
-        validate_v6, validate_v7,
+        migrate_v6_with_fault, migrate_v7_with_fault, pragma_i64, validate_v2, validate_v3,
+        validate_v4, validate_v5, validate_v6, validate_v7, validate_v8,
     };
     use crate::{StoreErrorCode, usage::schema};
 
@@ -1459,11 +1892,11 @@ mod tests {
     }
 
     #[test]
-    fn exact_v2_migrates_to_v7_and_preserves_all_rows() -> TestResult {
+    fn exact_v2_migrates_to_v8_and_preserves_all_rows() -> TestResult {
         let mut connection = exact_v2_fixture(true)?;
         let before = fixture_snapshot(&connection)?;
         migrate_schema(&mut connection)?;
-        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 7);
+        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 8);
         assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
         assert_eq!(fixture_snapshot(&connection)?, before);
         assert_eq!(event_provenance(&connection)?, (Some(5), Some(5), 0));
@@ -1474,11 +1907,12 @@ mod tests {
             )?,
             1
         );
-        validate_v7(&connection)?;
+        validate_v8(&connection)?;
         let temporary_names: i64 = connection.query_row(
             "SELECT count(*) FROM sqlite_schema
              WHERE instr(sql, 'usage_replay_revision_v3') > 0
-                OR instr(sql, 'usage_event_v4') > 0",
+                OR instr(sql, 'usage_event_v4') > 0
+                OR instr(sql, 'usage_event_v8') > 0",
             [],
             |row| row.get(0),
         )?;
@@ -1494,7 +1928,7 @@ mod tests {
     }
 
     #[test]
-    fn exact_v3_migrates_to_v7_with_legacy_and_current_projection_provenance() -> TestResult {
+    fn exact_v3_migrates_to_v8_with_legacy_and_current_projection_provenance() -> TestResult {
         for (current_revision, expected) in [
             (false, (None, None, 0_i64)),
             (true, (Some(5_i64), Some(5_i64), 0_i64)),
@@ -1502,7 +1936,7 @@ mod tests {
             let mut connection = exact_v3_fixture(current_revision)?;
             let before = fixture_snapshot(&connection)?;
             migrate_schema(&mut connection)?;
-            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 7);
+            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 8);
             assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
             assert_eq!(fixture_snapshot(&connection)?, before);
             assert_eq!(event_provenance(&connection)?, expected);
@@ -1513,7 +1947,7 @@ mod tests {
                 )?,
                 i64::from(current_revision)
             );
-            validate_v7(&connection)?;
+            validate_v8(&connection)?;
         }
         Ok(())
     }
@@ -1548,10 +1982,10 @@ mod tests {
     }
 
     #[test]
-    fn exact_v4_scan_and_revision_migrate_to_scoped_v7() -> TestResult {
+    fn exact_v4_scan_and_revision_migrate_to_scoped_v8() -> TestResult {
         let mut connection = exact_v4_fixture_with_scan()?;
         migrate_schema(&mut connection)?;
-        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 7);
+        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 8);
         assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
         let scan: (
             i64,
@@ -1641,7 +2075,7 @@ mod tests {
             )?,
             1
         );
-        validate_v7(&connection)?;
+        validate_v8(&connection)?;
         Ok(())
     }
 
@@ -1656,6 +2090,14 @@ mod tests {
             )?;
         }
         validate_v5(&connection)?;
+        Ok(connection)
+    }
+
+    fn exact_v7_fixture() -> TestResult<Connection> {
+        let mut connection = exact_v5_fixture(true)?;
+        migrate_v5_with_fault(&mut connection, MigrationFault::None)?;
+        migrate_v6(&mut connection)?;
+        validate_v7(&connection)?;
         Ok(connection)
     }
 
@@ -1755,6 +2197,211 @@ mod tests {
                 )?,
                 0
             );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn exact_v7_migration_materializes_provider_without_advancing_dataset() -> TestResult {
+        let mut connection = exact_v7_fixture()?;
+        let generation = pragma_i64(
+            &connection,
+            "SELECT dataset_generation FROM usage_archive_state",
+        )?;
+
+        migrate_v7_with_fault(&mut connection, MigrationFault::None)?;
+
+        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 8);
+        assert_eq!(
+            connection.query_row("SELECT provider_id FROM usage_event", [], |row| {
+                row.get::<_, String>(0)
+            })?,
+            "codex"
+        );
+        assert_eq!(
+            pragma_i64(
+                &connection,
+                "SELECT dataset_generation FROM usage_archive_state"
+            )?,
+            generation
+        );
+        assert_eq!(
+            connection.query_row(
+                "SELECT state, expected_dataset_generation,
+                        current_event_count, legacy_event_count, rebuild_total_events
+                 FROM usage_aggregate_state WHERE singleton_id = 1",
+                [],
+                |row| Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, i64>(4)?,
+                )),
+            )?,
+            ("rebuild_required".to_owned(), generation, 1, 1, 2)
+        );
+        validate_v8(&connection)?;
+        Ok(())
+    }
+
+    #[test]
+    fn exact_v7_migration_uses_stable_unknown_for_orphan_event() -> TestResult {
+        let mut connection = exact_v7_fixture()?;
+        connection.execute(
+            "UPDATE usage_event SET selected_file_key = ?1",
+            [[42_u8; 32].as_slice()],
+        )?;
+        let generation = pragma_i64(
+            &connection,
+            "SELECT dataset_generation FROM usage_archive_state",
+        )?;
+
+        migrate_v7_with_fault(&mut connection, MigrationFault::None)?;
+
+        assert_eq!(
+            connection.query_row("SELECT provider_id FROM usage_event", [], |row| {
+                row.get::<_, String>(0)
+            })?,
+            "unknown"
+        );
+        assert_eq!(
+            pragma_i64(
+                &connection,
+                "SELECT dataset_generation FROM usage_archive_state"
+            )?,
+            generation
+        );
+        validate_v8(&connection)?;
+        Ok(())
+    }
+
+    #[test]
+    fn exact_v7_migration_rejects_source_profile_mismatch_without_changes() -> TestResult {
+        let mut connection = exact_v7_fixture()?;
+        connection.execute("UPDATE usage_event SET profile_id = 'different'", [])?;
+        let generation = pragma_i64(
+            &connection,
+            "SELECT dataset_generation FROM usage_archive_state",
+        )?;
+
+        let error = match migrate_v7_with_fault(&mut connection, MigrationFault::None) {
+            Ok(()) => return Err("mismatched provider migration unexpectedly committed".into()),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.code(), StoreErrorCode::InvalidStoredValue);
+        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 7);
+        assert_eq!(
+            connection.query_row("SELECT profile_id FROM usage_event", [], |row| {
+                row.get::<_, String>(0)
+            })?,
+            "different"
+        );
+        assert_eq!(
+            pragma_i64(
+                &connection,
+                "SELECT dataset_generation FROM usage_archive_state"
+            )?,
+            generation
+        );
+        validate_v7(&connection)?;
+        Ok(())
+    }
+
+    #[test]
+    fn every_v7_provider_event_fault_rolls_back_exactly() -> TestResult {
+        for fault in [
+            MigrationFault::AfterCreateProviderEvent,
+            MigrationFault::AfterCopyProviderEvent,
+            MigrationFault::AfterDropProviderEvent,
+        ] {
+            let mut connection = exact_v7_fixture()?;
+            let generation = pragma_i64(
+                &connection,
+                "SELECT dataset_generation FROM usage_archive_state",
+            )?;
+            let event: (Vec<u8>, String) = connection.query_row(
+                "SELECT fingerprint, profile_id FROM usage_event",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+
+            let error = match migrate_v7_with_fault(&mut connection, fault) {
+                Ok(()) => return Err("faulted provider migration unexpectedly committed".into()),
+                Err(error) => error,
+            };
+
+            assert_eq!(error.code(), StoreErrorCode::Database);
+            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 7);
+            assert_eq!(
+                pragma_i64(
+                    &connection,
+                    "SELECT dataset_generation FROM usage_archive_state"
+                )?,
+                generation
+            );
+            assert_eq!(
+                connection.query_row(
+                    "SELECT fingerprint, profile_id FROM usage_event",
+                    [],
+                    |row| Ok((row.get::<_, Vec<u8>>(0)?, row.get::<_, String>(1)?))
+                )?,
+                event
+            );
+            assert_eq!(
+                pragma_i64(
+                    &connection,
+                    "SELECT count(*) FROM sqlite_schema
+                     WHERE name = 'usage_event_v8' OR instr(sql, 'usage_event_v8') > 0"
+                )?,
+                0
+            );
+            validate_v7(&connection)?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn every_v7_aggregate_migration_fault_rolls_back_exactly() -> TestResult {
+        for fault in [
+            MigrationFault::AfterCreateAggregateSchema,
+            MigrationFault::AfterSeedAggregateState,
+            MigrationFault::AfterCreateAggregateTriggers,
+        ] {
+            let mut connection = exact_v7_fixture()?;
+            let generation = pragma_i64(
+                &connection,
+                "SELECT dataset_generation FROM usage_archive_state",
+            )?;
+
+            let error = match migrate_v7_with_fault(&mut connection, fault) {
+                Ok(()) => return Err("faulted aggregate migration unexpectedly committed".into()),
+                Err(error) => error,
+            };
+
+            assert_eq!(error.code(), StoreErrorCode::Database);
+            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 7);
+            assert_eq!(
+                pragma_i64(
+                    &connection,
+                    "SELECT dataset_generation FROM usage_archive_state"
+                )?,
+                generation
+            );
+            assert_eq!(
+                pragma_i64(
+                    &connection,
+                    "SELECT count(*) FROM sqlite_schema
+                     WHERE name IN (
+                       'usage_event_v8', 'usage_aggregate_state',
+                       'usage_time_rollup', 'usage_session_rollup'
+                     ) OR instr(sql, 'usage_event_v8') > 0
+                        OR name LIKE 'usage_event_aggregate_%'"
+                )?,
+                0
+            );
+            validate_v7(&connection)?;
         }
         Ok(())
     }

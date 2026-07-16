@@ -211,7 +211,7 @@ keyset-paged at no more than 256 rows. Scan-history cleanup uses only scan-relat
 foreign-key checks rather than rescanning the complete usage-event archive.
 
 The query path uses a distinct `READ_ONLY|NO_MUTEX` connection and never calls the
-writable open/migration path. It requires exact schema v7 and bundled SQLite identity,
+writable open/migration path. It requires exact schema v8 and bundled SQLite identity,
 WAL, foreign keys, query-only and defensive modes, trusted-schema/DQS disabled,
 query-planner stability, no checkpoint on close, 250 ms busy timeout, 4 MiB cache,
 file-backed temporary storage, and zero mmap. Each result captures archive generation,
@@ -232,7 +232,22 @@ versions remains readable for bounded diagnosis but the query facade MUST mark i
 `unknown` with `accounting_version_stale`; it MUST NOT describe that data as
 authoritative. Query consumers retain at most one immutable result. The P2-A
 100,000-event contract covers a 256-row first/cursor page; million-row dashboards are
-served only by the future transactional materialized aggregates in P2-B.
+served only by transactional materialized aggregates in P2-B.
+
+Schema v8 makes current canonical events provider-self-contained and adds one exact
+aggregate state plus generation-qualified UTC minute/hour and session rollups. Current
+events maintain those rows transactionally when state is `ready`; insert, delete,
+update, dataset generation, event count, and all aggregate contributions commit or
+roll back together. Missing token components retain known-count/known-sum algebra and
+never become zero. Current and immutable legacy datasets remain distinct.
+
+Non-empty migration publishes no partial aggregate. A rebuild is bound to one expected
+dataset generation, uses a persisted fingerprint keyset cursor, and processes at most
+256 events per call into disk-backed unpublished rows. Cleanup is also paged at no
+more than nine rollup rows per requested event. Reopen resumes exact state; a canonical
+mutation invalidates only staging and requires restart. Publication is one active-
+generation update after exact processed/total and dataset-generation checks. Aggregate
+reads require `ready`; no other state may fall back to a whole-history query.
 
 ## TM-DATA-006 — Bounds
 

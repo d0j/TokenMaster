@@ -428,7 +428,7 @@ backstop when registration is unavailable.
 
 Decision: `tokenmaster-query` owns synchronous bounded frontend values, while
 `tokenmaster-store::UsageReadStore` owns one separate SQLite `READ_ONLY|NO_MUTEX`
-connection. It requires exact schema v7 and bundled SQLite, applies WAL/query-only/
+connection. It requires exact schema v8 and bundled SQLite, applies WAL/query-only/
 defensive/QPSG/no-checkpoint policy with trusted schema and DQS disabled, a 250 ms busy
 timeout, 4 MiB cache and zero mmap, and never migrates. One short deferred transaction
 captures publication generation, independent dataset identity, exact scan truth and a
@@ -462,3 +462,24 @@ history; offset pages degrade and can mix revisions; copying a 256-scope authori
 into every header conflicts with the 32-filter API bound. Separate identity, ownership,
 and exact short snapshots preserve responsiveness, paging continuity, privacy and
 bounded memory without another daemon or async runtime.
+
+## ADR-027 — Transactional generation-qualified usage aggregates
+
+Decision: schema v8 materializes bounded UTC minute/hour and session rollups behind a
+singleton publication state. Current canonical events store provider identity directly.
+When aggregate state is `ready`, SQLite triggers maintain dataset generation, exact
+event counts, missing-value algebra, time rows, and session rows in the same canonical
+event transaction. Other states keep canonical ingestion authoritative, publish no
+partial rollup, and require a rebuild.
+
+Rebuild uses fixed fingerprint-keyset pages of at most 256 events, disk-backed rows in
+an inactive aggregate generation, persisted progress, bounded cleanup, and one expected
+dataset generation. Reopen resumes; mutation invalidates unpublished work; final
+publication is one checked active-generation update. Aggregate readers must require
+`ready` and the exact active generation and may never group raw history as fallback.
+
+Rationale: view-time grouping fails million-row responsiveness, Rust maps grow with
+history, long snapshots retain WAL, and call-site-only maintenance can miss replay or
+promotion paths. Transactional triggers plus bounded resumable publication preserve
+one accounting authority, bounded memory, crash safety, and a fast shared UI/CLI/MCP
+query surface.

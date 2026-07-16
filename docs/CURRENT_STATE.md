@@ -225,6 +225,17 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   reconciliation even if suspend was missed. Unit/integration contracts cover every
   resume code, duplicate/last-wins behavior, shutdown privacy, and 4,096 registration
   cycles with bounded private bytes and no handle/thread/USER/GDI growth.
+- P2-B aggregate storage foundation: strict schema v8 migrates exact v7 archives with
+  rollback at every provider/aggregate boundary, makes current canonical events
+  provider-self-contained, and adds generation-qualified UTC minute/hour and session
+  rollups with exact unavailable/partial token algebra. All current event mutation
+  paths converge on transactional invariant triggers; overflow, missing state, or a
+  missing expected published rollup aborts event, dataset generation, counts, and
+  rollups together. Non-empty archives rebuild through persisted keyset pages capped at
+  256 events, bounded disk-backed cleanup/staging, reopen resume, generation-mismatch
+  restart, and one checked active-generation publication. Focused store tests pass.
+  Reference-machine release p95 is 1.814 ms for one event, 19.888 ms for 32, and
+  230.620 ms for 256, each within its corrected absolute and relative baseline gate.
 
 ## Next implementation slice
 
@@ -292,7 +303,7 @@ implemented in `tokenmaster-query`: schema-v1 headers/envelopes, checked generat
 publication/dataset identity, an injected exact clock sample, stable path-free errors,
 bounded scopes/warnings/pages, and fingerprint-redacted activity cursors. Task 2, the
 separate query-only SQLite store and exact transaction capture, is also complete.
-`UsageReadStore` opens schema v7 read-only without migration, enforces defensive
+`UsageReadStore` opens schema v8 read-only without migration, enforces defensive
 query-only policy with a 4 MiB cache, captures publication/scan truth and current or
 legacy keyset pages in one deferred transaction, rejects stale continuation identity,
 uses indexed `pageSize + 1`, and clears its deadline handler on every result.
@@ -305,8 +316,10 @@ a warm cursor page in 1.10 ms, and a 256-cycle Windows open/query/drop resource 
 The audited cursor correction is complete: replay evidence can advance on a no-change
 scan, so it is no longer dataset identity. Schema v7 adds a dedicated transactional
 dataset generation with exact v6 migration/rollback, overflow, real no-change scan,
-and current append proofs. The next implementation gate is P2-B schema-v8
-transactional materialized aggregates, not view-time grouping of the full event table.
+and current append proofs. P2-B Tasks 2-4 now add schema-v8 provider identity,
+transactional materialization, and bounded resumable publication. The next gate is the
+fixed aggregate/session read facade, followed by private calendar/timezone composition
+and immutable public values; no view-time grouping of the full event table is allowed.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 

@@ -84,13 +84,13 @@ fn seed_current_archive(path: &Path) {
                 "INSERT INTO usage_event(
                    fingerprint, event_id, selected_file_key, selected_generation,
                    selected_source_offset, projection_revision_id, origin_revision_id,
-                   retained, profile_id, session_id, source_id, timestamp_seconds,
+                   retained, provider_id, profile_id, session_id, source_id, timestamp_seconds,
                    timestamp_nanos, model, input_tokens, cached_tokens, output_tokens,
                    reasoning_tokens, total_tokens, fallback_model, long_context,
                    activity_read, activity_edit_write, activity_search, activity_git,
                    activity_build_test, activity_web, activity_subagents, activity_terminal
                  ) VALUES (
-                   ?1, ?2, ?3, 0, ?4, 0, 0, 0, 'default', 'session', 'fixture',
+                   ?1, ?2, ?3, 0, ?4, 0, 0, 0, 'codex', 'default', 'session', 'fixture',
                    ?5, ?6, 'gpt-5.6', ?7, NULL, 1, NULL, ?8, 0, 'no',
                    0, 0, 0, 0, 0, 0, 0, 0
                  )",
@@ -336,6 +336,14 @@ fn capture_is_exact_keyset_bounded_and_rejects_stale_dataset() {
     let directory = TempDir::new().expect("temporary directory");
     let path = directory.path().join("usage.sqlite3");
     seed_current_archive(&path);
+    let source_writer = Connection::open(&path).expect("source metadata writer");
+    source_writer
+        .execute(
+            "UPDATE usage_source SET provider_id = 'changed-after-materialization'",
+            [],
+        )
+        .expect("mutate non-authoritative source metadata");
+    drop(source_writer);
     let mut store = UsageReadStore::open(&path).expect("read store");
     let identity = UsageQueryDatasetIdentity::ReplayRevision {
         revision_id: 0,

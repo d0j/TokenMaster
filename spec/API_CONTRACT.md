@@ -173,11 +173,18 @@ internal failures use stable path-free codes. The facade clock supplies one exac
 monotonic sample; frontends do not supply publication time.
 
 `UsageReadStore` is the only archive-read implementation behind that facade. It opens
-an existing exact schema-v7 archive read-only, applies query-only/defensive/no-checkpoint
+an existing exact schema-v8 archive read-only, applies query-only/defensive/no-checkpoint
 policy, performs no migration, and returns owned data after one short deferred read
 transaction. Continuation requires its dataset identity. Current and immutable legacy
 pages use composite keyset seek and at most one lookahead row; progress interruption is
 cleared before the connection can serve another query.
+
+Aggregate requests use only fixed generation-qualified rollup queries. A state other
+than `ready`, a generation mismatch, a stale dataset identity, or a bound/deadline
+failure returns a stable unavailable/error code; it never triggers a raw-event
+`GROUP BY`. Store requests use exact UTC half-open boundaries. Calendar/timezone
+selection remains a private query-facade responsibility and cannot inject SQL or a
+timezone file.
 
 `QueryService` is the only public archive facade in this contour. It allocates a
 strictly increasing process-local snapshot generation only after a successful capture,
