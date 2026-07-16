@@ -362,6 +362,9 @@ the documented precedence and preserve scheduled, early, manual/banked, or unkno
 classification plus exact-or-interval detection time. Open epoch identity retains its
 opening definition revision while the state separately tracks the latest applied
 definition revision, so definition updates survive restart without false resets.
+Maximum used ratio and maximum comparable absolute units each retain the observation
+identity that established that maximum; the identities may differ and are copied into
+reset transitions for exact retention/provenance.
 
 ## TM-DATA-009 — Banked reset inventory and activation receipts
 

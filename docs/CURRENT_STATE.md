@@ -326,9 +326,11 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   inference gates. A review-found restart defect is covered: the epoch-opening
   definition revision is retained separately from the latest applied revision, so an
   update neither invents a reset nor makes restored state invalid. Eleven focused
-  detector/identity contracts and strict crate Clippy pass. No schema, persistence,
-  retention, public query, transport, inventory/reminder, UI, or automation capability
-  is claimed.
+  detector/identity contracts and strict crate Clippy pass. Ratio and absolute-unit
+  maxima retain independent observation IDs in current state and transitions, so
+  later retention can protect exact evidence even when the maxima occur in different
+  samples. No schema, persistence, retention, public query, transport,
+  inventory/reminder, UI, or automation capability is claimed.
 - Verification correction: the first post-Task-1 workspace run reproduced an existing
   query resource-test defect. A default Rust test harness changed its own worker
   threads during process-wide `PrivateUsage` sampling, while allocator spikes later

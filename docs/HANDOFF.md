@@ -109,7 +109,8 @@ reset evidence, validated serde, and redacted observation IDs are implemented an
 focused-verified. `tokenmaster-quota` now owns pure constant-state evaluation,
 domain-separated deterministic identities, exact duplicate/stale/conflict and
 transition-sequence gates, scheduled/early/repeated/manual reset classification,
-allowance changes, comparable maximum use, and restart-safe definition revisions.
+allowance changes, comparable maximum use with independent ratio/unit observation
+provenance, and restart-safe definition revisions.
 The immediate next slice is Task 3 in
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: strict schema v10
 and exact v9 migration. Transactional persistence, retention, reads, public query

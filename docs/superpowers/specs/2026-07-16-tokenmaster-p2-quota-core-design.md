@@ -23,6 +23,10 @@ optional and never inferred from local tokens, messages, tasks, cost, or elapsed
 If no permitted Codex quota source exists, the later adapter reports unavailable; the
 data core does not weaken its evidence rules to manufacture a live quota.
 
+Maximum ratio and absolute-unit use retain independent observation identities because
+the two maxima can occur in different samples. Closed-epoch retention can therefore
+protect the exact evidence rows without retaining unrelated poll history.
+
 ## 2. Audited architecture choice
 
 Three approaches were considered:

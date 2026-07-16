@@ -1440,7 +1440,9 @@ manual/banked, and provider-threshold resets. Scheduled, early, manual/banked, a
 lower-confidence unknown kinds remain distinct. Allowance changes are orthogonal and
 may accompany a reset. Rolling recovery, ratio drops alone, and untrusted threshold
 inference cannot manufacture resets. Per-window sequences are exact, monotonic, and
-checked against overflow.
+checked against overflow. Maximum ratio and maximum comparable units retain separate
+observation identities in epoch state and reset transitions, allowing later retention
+to protect the exact evidence rows when those maxima occur in different samples.
 
 Critical self-review found that applying a newer window-definition revision would
 have preserved the old epoch ID but overwritten the revision used to validate it,
