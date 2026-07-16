@@ -749,7 +749,7 @@ permitted Codex quota transport and banked-benefit inventory/reminder policy.
   CLI/MCP, and provider mutation remain explicitly outside this plan.
 - All public values used by later tasks are produced by an earlier task; quota
   revision and identity remain independent from usage dataset generations.
-- The plan contains no `TBD`, `TODO`, deferred implementation phrase, assumed
+- The plan contains no unfinished markers, deferred implementation phrase, assumed
   five-hour/seven-day constant, or caller-defined authority surface.
 - Each task has an independent RED/GREEN validator and an intentional commit
   boundary. Task 8 repeats the complete repository gate before project-truth
