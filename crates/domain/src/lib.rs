@@ -2,6 +2,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
 mod benefit;
+mod git_output;
 mod identity;
 mod quota;
 mod session;
@@ -17,6 +18,13 @@ pub use benefit::{
     MAX_REMINDER_LEAD_SECONDS, MAX_REMINDER_THRESHOLDS, MIN_REMINDER_LEAD_SECONDS,
     NotificationChannel, RECOMMENDED_REMINDER_LEAD_SECONDS, ReminderLeadTime, ReminderProfile,
     ReminderProfileParts, ReminderProfileRevision,
+};
+pub use git_output::{
+    GitActivityAssociationId, GitLineMetrics, GitOutputCategory, GitOutputCategoryMetrics,
+    GitOutputDay, GitOutputError, GitOutputPortfolio, GitOutputProjection,
+    GitOutputProjectionParts, GitOutputQuality, GitOutputTotals, GitOutputUnavailableReason,
+    GitOutputWarning, GitRepositoryId, MAX_GIT_OUTPUT_CATEGORIES, MAX_GIT_OUTPUT_DAYS,
+    MAX_GIT_OUTPUT_REPOSITORIES, MAX_GIT_OUTPUT_WARNINGS,
 };
 pub use identity::{LayoutId, LocaleId, RouteId, ThemeId};
 pub use quota::{
