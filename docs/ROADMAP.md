@@ -138,8 +138,9 @@ facade, while `UsageReadStore` supplies isolated defensive read-only/query-only 
 transaction capture with composite keyset/deadline evidence. The 100K activity-page
 latency and repeated resource-return contracts pass. P2-B schema-v8 provider identity,
 transactional materialized rollups, availability counts, and bounded resumable rebuild
-are now implemented. Fixed aggregate/session reads, calendar/timezone composition,
-immutable public values, and million-row cached-dashboard/resource evidence remain.
+are now implemented. Fixed overview/series/breakdown and opaque keyset session
+page/detail reads are implemented. Calendar/timezone composition, immutable public
+values, and million-row cached-dashboard/resource evidence remain.
 No frontend/database coupling or view-time full event grouping is accepted.
 
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset

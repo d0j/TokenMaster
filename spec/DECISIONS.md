@@ -483,3 +483,19 @@ history, long snapshots retain WAL, and call-site-only maintenance can miss repl
 promotion paths. Transactional triggers plus bounded resumable publication preserve
 one accounting authority, bounded memory, crash safety, and a fast shared UI/CLI/MCP
 query surface.
+
+## ADR-028 — Opaque all-time session reads
+
+Decision: session timeline and detail read only the active generation of
+`usage_session_rollup`. Timeline pages are ordered by last UTC instant descending and
+provider/profile/private-session identity ascending, use matching mixed-order keyset
+continuation, retain 256 rows plus one lookahead, and bind cursor and opaque key to the
+exact dataset identity. Raw session identity has no public getter and is redacted from
+Debug. Detail returns `None` for a missing exact key or one all-time summary plus
+independently capped model/project rollup collections. It never scans raw events.
+
+Period selection remains a time-rollup concern. Returning a whole-session rollup for a
+session that merely overlaps a period would falsely present all-time tokens as
+period-clipped tokens, while exact clipping would require raw-event access or another
+materialization. The explicit all-time boundary is therefore both truthful and fast;
+a future period-clipped session product requires a separately specified indexed fact.

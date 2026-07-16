@@ -262,6 +262,16 @@ rollup rows: model/project use their dimension rows; provider/profile use `all` 
 Each requested kind is unique, capped independently at 256 retained items with explicit
 truncation, and cannot multiply into a caller-defined cube.
 
+Session summaries are all-time facts over one provider/profile/session key; period
+filters apply to time-rollup analytics, not to whole-session metrics. The canonical
+order is last UTC instant descending, then provider, profile, and private session
+identity ascending. A continuation retains that exact key plus dataset identity and
+returns at most 256 rows with one internal lookahead. Raw session identity has no
+public getter and is redacted from Debug. Exact detail returns the same summary plus
+independently capped model and project dimension rows from `usage_session_rollup`;
+project absence is typed. A valid key missing from the exact unchanged dataset returns
+no detail rather than fabricated metrics.
+
 ## TM-DATA-006 — Bounds
 
 Reader lines are limited to 16 MiB. Resume metadata is capped at 32 KiB. General

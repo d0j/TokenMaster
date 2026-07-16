@@ -14,11 +14,17 @@ use super::{
 use crate::{EXPECTED_SQLITE_VERSION, StoreError, StoreErrorCode};
 
 mod analytics;
+mod session;
 
 pub use analytics::{
     MAX_USAGE_BREAKDOWN_ITEMS, MAX_USAGE_BREAKDOWNS, MAX_USAGE_SERIES_POINTS, UsageAggregateRange,
     UsageAnalyticsCapture, UsageAnalyticsQuery, UsageBreakdown, UsageBreakdownIdentity,
     UsageBreakdownItem, UsageBreakdownKind, UsageSeriesPoint, UsageSeriesPointCapture,
+};
+pub use session::{
+    MAX_USAGE_SESSION_DETAIL_ITEMS, MAX_USAGE_SESSION_PAGE_SIZE, UsageSessionCursor,
+    UsageSessionDetail, UsageSessionDetailCapture, UsageSessionDetailQuery, UsageSessionKey,
+    UsageSessionPageCapture, UsageSessionPageQuery, UsageSessionSummary,
 };
 
 const READ_CACHE_SIZE_KIB: u64 = 4 * 1024;

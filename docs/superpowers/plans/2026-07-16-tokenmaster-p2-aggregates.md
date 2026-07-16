@@ -75,8 +75,8 @@ blocks startup on a full group-by, or can publish across a generation change.
 
 ## Task 5 — Add internal calendar/timezone boundary module
 
-Status: pending. Execute after Task 6 if the pinned crate cannot be fetched; the store
-read contract consumes exact UTC half-open boundaries and does not depend on Jiff.
+Status: next. Task 6 is complete; the store read contract already consumes exact UTC
+half-open boundaries and does not depend on Jiff.
 
 - Pin `jiff = 0.2.32` behind private query types.
 - Resolve explicit IANA/system zone identity without silent UTC fallback.
@@ -91,9 +91,9 @@ Australia/Lord_Howe, Asia/Kathmandu, leap day, month/year edge, spring gap, fall
 
 ## Task 6 — Add bounded aggregate and session store reads
 
-Status: in progress. Exact overview, partitioned series, and independently capped
-model/project/provider/profile breakdowns are implemented and focused-store verified;
-session reads remain.
+Status: complete and focused-store verified on 2026-07-16. Exact overview,
+partitioned series, independently capped model/project/provider/profile breakdowns,
+and opaque keyset session page/detail reads are implemented.
 
 - Read header/state/payload in one deferred transaction. Overview now does this and
   requires a `ready` generation matching the captured dataset identity.
@@ -102,9 +102,14 @@ session reads remain.
 - Add overview/series plus model/project/provider/profile breakdown queries. Complete:
   one capture binds all requested payloads to one transaction/generation, including a
   typed zero-duration series point for skipped civil dates.
-- Add session first/cursor pages and exact bounded session detail.
+- Add session first/cursor pages and exact bounded session detail. Complete: mixed
+  timestamp/identity ordering, exact dataset-bound opaque keys, all-time semantics,
+  typed missing detail, model/project dimensions, and 256+1 lookahead pass for current
+  and rebuilt legacy data.
 - Enforce 400 points, 32 scopes, four breakdowns, 256 rows, and two seconds.
 - Prove aggregate plans never touch raw event tables and never use offset pagination.
+  Complete for overview, analytics, session pages, and session detail with real
+  `EXPLAIN QUERY PLAN`, forced cancellation cleanup, and concurrent-state fixtures.
 
 ## Task 7 — Add immutable public query values and facade mapping
 

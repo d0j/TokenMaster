@@ -79,9 +79,11 @@ most three adjacent aligned UTC segments and 32 scopes; boundary, stale/rebuild,
 deadline, and raw-plan contracts pass. A combined capture now adds an exact partitioned
 400-point series and four independently capped 256-item model/project/provider/profile
 breakdowns in that same transaction, including explicit skipped-date zero points and
-truncation. The immediate next task is keyset session reads over the active generation,
-then private calendar composition and immutable query values. Do not replace them with
-view-time full scans.
+truncation. All-time current/legacy session pages now use mixed-order 256+1 keyset
+continuation and exact dataset-bound opaque keys; detail uses only capped model/project
+session rollups. Raw session identity has no getter or Debug projection.
+The immediate next task is private calendar composition, then immutable query values.
+Do not replace them with view-time full scans or period-labeled whole-session totals.
 The 2026-07-16 closure review also freezes the remaining plan ambiguities: P3 is the
 complete UI, P4 presentation/localization, P5 read-only automation, and P6 the
 canonical MSVC signed portable release. It selects the Slint attribution route,

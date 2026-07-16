@@ -201,6 +201,19 @@ date. Model, project, provider, and provider-qualified profile breakdowns are fi
 independent queries, each retains at most 256 items plus one internal lookahead and
 reports truncation. Project absence is typed, not an empty user-facing string.
 
+The session store API is deliberately all-time. First and continuation requests accept
+at most 32 unique provider/profile scopes, retain at most 256 summaries plus one
+lookahead, and use a two-second maximum deadline. Ordering is last UTC instant
+descending followed by provider/profile/private-session identity ascending; the
+continuation predicate mirrors that mixed direction and is bound to the exact dataset.
+Session keys and cursors are cloneable opaque in-process values with redacted Debug and
+no raw session getter. A continuation without the matching dataset is invalid, and a
+changed dataset is stale. Exact detail requires the key's dataset identity and returns
+either no matching detail or one summary plus model/project rollup collections, each
+capped independently at 256 plus one lookahead. Page and detail capture publication,
+ready aggregate generation, and payload in one deferred transaction, clear progress
+cancellation before connection reuse, and never query `usage_event` or use `OFFSET`.
+
 `QueryService` is the only public archive facade in this contour. It allocates a
 strictly increasing process-local snapshot generation only after a successful capture,
 maps complete/partial/recovery/legacy truth explicitly, applies the 20-minute/2-hour

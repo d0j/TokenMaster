@@ -43,6 +43,13 @@ facts, and session facts in the same event transaction. Non-empty migration and 
 use persisted 256-event keyset pages and disk-backed unpublished generations; readers
 never group the whole event archive as fallback.
 
+Read-only analytics bind publication, dataset identity, active aggregate generation,
+and owned payload in one short deferred transaction. Session timeline is explicitly
+all-time: mixed-order 256+1 keyset pages use last UTC instant then provider/profile/
+private-session identity. The raw session key remains inside a dataset-bound opaque
+value with redacted Debug; exact detail reads only capped model/project session rows.
+Period analytics use UTC time rollups and never relabel whole-session totals.
+
 The UI receives bounded view models rather than owning archive state. Skin, layout,
 and locale selection alter presentation state only, so switching remains immediate and
 does not reparse sources or rebuild the archive.

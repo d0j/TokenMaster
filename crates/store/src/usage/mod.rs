@@ -19,12 +19,15 @@ mod write;
 
 pub use query::{
     MAX_USAGE_BREAKDOWN_ITEMS, MAX_USAGE_BREAKDOWNS, MAX_USAGE_OVERVIEW_SEGMENTS,
-    MAX_USAGE_QUERY_SCOPES, MAX_USAGE_SERIES_POINTS, UsageActivityQuery, UsageAggregateActivity,
+    MAX_USAGE_QUERY_SCOPES, MAX_USAGE_SERIES_POINTS, MAX_USAGE_SESSION_DETAIL_ITEMS,
+    MAX_USAGE_SESSION_PAGE_SIZE, UsageActivityQuery, UsageAggregateActivity,
     UsageAggregateBucketWidth, UsageAggregateMetrics, UsageAggregateRange, UsageAggregateSegment,
     UsageAnalyticsCapture, UsageAnalyticsQuery, UsageBreakdown, UsageBreakdownIdentity,
     UsageBreakdownItem, UsageBreakdownKind, UsageOverviewCapture, UsageOverviewQuery,
     UsageQueryCapture, UsageQueryDatasetIdentity, UsageQueryEvent, UsageQueryPublication,
     UsageReadRuntimePolicy, UsageReadStore, UsageSeriesPoint, UsageSeriesPointCapture,
+    UsageSessionCursor, UsageSessionDetail, UsageSessionDetailCapture, UsageSessionDetailQuery,
+    UsageSessionKey, UsageSessionPageCapture, UsageSessionPageQuery, UsageSessionSummary,
     UsageTokenAggregate,
 };
 pub use schema::USAGE_SCHEMA_VERSION;

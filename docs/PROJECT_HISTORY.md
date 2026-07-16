@@ -1275,3 +1275,25 @@ zero points, incoherent partitions, duplicate/capacity rejection, 257-model trun
 real `EXPLAIN`, concurrent aggregate-state mutation, and cancellation cleanup. Focused
 store tests and strict Clippy pass. Session reads, private calendar mapping, immutable
 facade values, and million-row/resource evidence remain open.
+
+## 2026-07-16 — P2-B opaque keyset session reads implemented
+
+Added all-time session first/cursor pages and exact detail to the isolated read-only
+store. Pages order by last UTC instant descending and provider/profile/private-session
+identity ascending, mirror that mixed direction in the continuation predicate, bind
+opaque keys and cursors to the exact dataset, accept at most 32 scopes, retain 256 of
+257 rows, and expose no raw session getter or Debug value. Detail returns `None` for a
+missing exact key or one summary plus independently capped model/project rollups;
+unassociated project remains typed. Period analytics remain separate so whole-session
+totals cannot be mislabeled as period-clipped values.
+
+TDD fixtures cover equal timestamps across identities, two-page continuity without
+duplicates, stale and unbound cursors, exact scopes, current and rebuilt legacy data,
+missing detail, 257 sessions, 257 models, opaque Debug, concurrent aggregate-state
+change, forced cancellation cleanup, and real `EXPLAIN QUERY PLAN`. Fixed SQL uses
+`usage_session_rollup`, the composite page index, no `usage_event`, and no `OFFSET`.
+The complete store suite and strict store Clippy pass. Private Jiff calendar mapping,
+immutable aggregate facade values, million-row/resource evidence, UI, automation, and
+release remain open. The post-documentation root gate then passed clean-root audit,
+format check, strict locked workspace Clippy, all locked workspace tests/doctests, and
+diff-check in 79.8 seconds.

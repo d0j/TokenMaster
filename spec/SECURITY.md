@@ -78,6 +78,12 @@ never touch raw event tables, and clear progress cancellation before connection 
 Series and breakdown requests add no expressions: point topology and collection kinds
 are typed and bounded, all four breakdown statements are host-selected fixed SQL, and
 the combined capture releases its exact transaction before returning owned values.
+Session requests use only fixed `usage_session_rollup` statements. Their composite
+cursor and exact lookup key retain raw session identity only inside an opaque
+dataset-bound store value; no public getter, Debug output, error, or frontend wire
+projection may reveal it. Page scopes are typed and capped, continuation is keyset-only,
+detail returns fixed model/project dimensions, and a missing exact key cannot trigger a
+raw-history fallback.
 
 Scan authority is provider/profile qualified and store-owned. One bounded scan set
 contains one child per exact scope; an observation may update only the matching

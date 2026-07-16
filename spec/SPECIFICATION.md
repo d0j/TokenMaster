@@ -29,7 +29,10 @@ The fast append path MUST NOT rescan an entire history.
 The product MUST expose explicit available/unavailable token components, cumulative
 deltas, model normalization, sessions, projects, activity, service tier, and estimated
 API-equivalent cost. Missing values MUST remain explicit and never become fabricated
-zeroes.
+zeroes. Session timeline and detail MUST use all-time materialized session facts;
+period analytics MUST NOT relabel whole-session totals as period-clipped values.
+Session lookup keys MUST bind to one exact dataset and MUST NOT expose raw source
+session identity.
 
 ### TM-FUNC-004 — Complete desktop product
 
@@ -150,6 +153,9 @@ Archive reads MUST be keyset-paged and use indexes that seek from the cursor. UI
 snapshots MUST be immutable, bounded, and independent of writer lock duration.
 Dashboard totals, series, breakdowns, and session summaries MUST read transactional
 materialized rollups rather than grouping the complete event archive at view time.
+Session pages MUST use indexed mixed-order keyset continuation with one lookahead row,
+and exact detail MUST read only bounded model/project session rollups. Raw session IDs
+MUST remain private to the store query key and MUST NOT enter Debug or wire values.
 On the reference machine, aggregate-ready append p95 MUST remain below 25 ms for the
 normal one-event path, 50 ms for 32-event catch-up, and 250 ms for the maximum
 256-event catch-up, and MUST NOT exceed 1.5 times the matching aggregate-unavailable

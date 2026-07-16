@@ -510,7 +510,7 @@ fn empty_breakdown(kind: UsageBreakdownKind) -> UsageBreakdown {
     }
 }
 
-fn validate_identity(
+pub(super) fn validate_identity(
     kind: UsageBreakdownKind,
     key1: String,
     key2: String,
@@ -536,6 +536,29 @@ fn validate_identity(
             })
         }
         _ => Err(invalid()),
+    }
+}
+
+pub(super) fn usage_breakdown_item(
+    kind: UsageBreakdownKind,
+    key1: String,
+    metrics: UsageAggregateMetrics,
+) -> Result<UsageBreakdownItem, StoreError> {
+    Ok(UsageBreakdownItem {
+        identity: validate_identity(kind, key1, String::new())?,
+        metrics,
+    })
+}
+
+pub(super) fn usage_breakdown(
+    kind: UsageBreakdownKind,
+    items: Vec<UsageBreakdownItem>,
+    truncated: bool,
+) -> UsageBreakdown {
+    UsageBreakdown {
+        kind,
+        items: items.into_boxed_slice(),
+        truncated,
     }
 }
 

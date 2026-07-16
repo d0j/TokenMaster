@@ -139,6 +139,11 @@ All notable changes are recorded here.
   Series partition, skipped-date zero points, canonical ordering, typed unassociated
   project, scope filtering, truncation, concurrent-state, cancellation cleanup, and
   real fixed-query-plan contracts pass.
+- Added all-time session first/cursor pages with mixed timestamp/identity keyset order,
+  exact dataset-bound opaque keys, 32-scope and 256+1 bounds, and no raw session Debug
+  exposure. Exact detail returns capped model/project rollups or typed absence without
+  raw-event fallback. Current, rebuilt legacy, stale, equal-time, missing, scope,
+  limit, cancellation, concurrent-state, and real query-plan contracts pass.
 
 ### Fixed
 
