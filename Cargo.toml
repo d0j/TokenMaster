@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
   "crates/accounting",
+  "crates/benefits",
   "crates/domain",
   "crates/engine",
   "crates/platform",

@@ -5235,6 +5235,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokenmaster-benefits"
+version = "0.1.0"
+dependencies = [
+ "sha2",
+ "tokenmaster-domain",
+]
+
+[[package]]
 name = "tokenmaster-codex"
 version = "0.1.0"
 dependencies = [

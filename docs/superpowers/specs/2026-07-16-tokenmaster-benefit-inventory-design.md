@@ -207,7 +207,9 @@ For each observation it returns one bounded plan:
    updated;
 3. classify prior missing non-terminal lots as ambiguous disappearance rather than
    silently activated, expired, or revoked;
-4. advance the inventory revision only for a visible projection change;
+4. advance the inventory revision for every newly accepted observation because
+   freshness is visible, while leaving lot revisions and history unchanged when lot
+   facts are identical;
 5. append one immutable change point per meaningful lot change;
 6. rebuild due entries only for changed lot revisions or changed profiles.
 
@@ -307,4 +309,3 @@ The foundation is accepted only when tests prove:
 - quota/benefit/reminder failure isolation and resource plateaus pass;
 - clean-root, formatting, warnings-as-errors Clippy, complete workspace tests, and
   the benefit release-authority audit pass.
-

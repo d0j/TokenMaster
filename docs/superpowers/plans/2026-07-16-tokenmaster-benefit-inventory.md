@@ -85,14 +85,14 @@ cargo +1.97.0 clippy -p tokenmaster-domain --all-targets --locked
 
 **RED/GREEN:**
 
-- [ ] Add domain-separated architecture-independent scope/change/delivery identities.
-- [ ] Reconcile awarded/changed/unchanged/missing/reappeared/terminal lots without
+- [x] Add domain-separated architecture-independent scope/change/delivery identities.
+- [x] Reconcile awarded/changed/unchanged/missing/reappeared/terminal lots without
   merging different identities or inventing terminal outcomes.
-- [ ] Return a bounded deterministic plan with exact next revisions/sequences.
-- [ ] Normalize recommended, subset, custom-only, and empty profiles.
-- [ ] Compute conservative due times, dedupe keys, and one most-urgent overdue
+- [x] Return a bounded deterministic plan with exact next revisions/sequences.
+- [x] Normalize recommended, subset, custom-only, and empty profiles.
+- [x] Compute conservative due times, dedupe keys, and one most-urgent overdue
   delivery per lot.
-- [ ] Prove pure-core determinism, redaction, bounds, overflow handling, and no I/O
+- [x] Prove pure-core determinism, redaction, bounds, overflow handling, and no I/O
   dependency surface.
 
 **Focused validator:**
