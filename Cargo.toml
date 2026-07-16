@@ -8,6 +8,7 @@ members = [
   "crates/codex",
   "crates/provider",
   "crates/pricing",
+  "crates/quota",
   "crates/query",
   "crates/runtime",
   "crates/store",

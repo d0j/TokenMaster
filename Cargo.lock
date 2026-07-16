@@ -5335,6 +5335,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokenmaster-quota"
+version = "0.1.0"
+dependencies = [
+ "sha2",
+ "tokenmaster-domain",
+]
+
+[[package]]
 name = "tokenmaster-runtime"
 version = "0.1.0"
 dependencies = [
