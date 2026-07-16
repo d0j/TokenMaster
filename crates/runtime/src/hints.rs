@@ -58,7 +58,11 @@ pub(crate) struct HintState {
 impl HintState {
     pub(crate) fn new(phase: SchedulerPhase) -> Self {
         Self {
-            flags: AtomicU64::new(INITIAL_FLAGS),
+            flags: AtomicU64::new(if phase == SchedulerPhase::Running {
+                INITIAL_FLAGS
+            } else {
+                0
+            }),
             latest_hint_tick: AtomicU64::new(0),
             watcher_health: AtomicU8::new(WATCHER_HEALTHY),
             phase: AtomicU8::new(encode_phase(phase)),
