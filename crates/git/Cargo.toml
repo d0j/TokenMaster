@@ -9,3 +9,6 @@ rust-version.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 tokenmaster-domain = { path = "../domain" }
+
+[dev-dependencies]
+tempfile.workspace = true

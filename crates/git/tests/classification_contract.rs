@@ -41,6 +41,12 @@ fn identities_are_deterministic_framed_ordered_and_redacted() {
         derive_author_fingerprint(&first_salt, b"user@example.com")
             .expect("normalized author fingerprint")
     );
+    assert_eq!(
+        derive_author_fingerprint(&first_salt, "ПОЛЬЗОВАТЕЛЬ@ПРИМЕР.РФ".as_bytes())
+            .expect("international author"),
+        derive_author_fingerprint(&first_salt, "пользователь@пример.рф".as_bytes())
+            .expect("normalized international author")
+    );
     assert_eq!(format!("{author:?}"), "GitAuthorFingerprint([redacted])");
 
     let commit =
@@ -135,8 +141,8 @@ fn classifier_uses_destination_path_precedence_without_path_retention() {
 #[test]
 fn commit_aggregation_handles_merge_binary_submodule_and_checked_limits() {
     let mut accumulator =
-        GitCommitAccumulator::new(GitCommitFingerprint::from_bytes([3; 32]), 20_000, 2)
-            .expect("merge accumulator");
+        GitCommitAccumulator::new(GitCommitFingerprint::from_bytes([3; 32]), 20_000, 1)
+            .expect("ordinary accumulator");
     accumulator
         .record(GitPathStat::text(b"src/main.rs", 20, 3).expect("product stat"))
         .expect("record product");
@@ -151,8 +157,8 @@ fn commit_aggregation_handles_merge_binary_submodule_and_checked_limits() {
         .expect("record submodule");
     let aggregate = accumulator.finish().expect("finish aggregate");
 
-    assert!(aggregate.is_merge());
-    assert_eq!(aggregate.parent_count(), 2);
+    assert!(!aggregate.is_merge());
+    assert_eq!(aggregate.parent_count(), 1);
     assert_eq!(aggregate.lines(), GitLineMetrics::new(28, 7));
     assert_eq!(
         aggregate.category_lines(GitOutputCategory::ProductCode),
@@ -165,6 +171,16 @@ fn commit_aggregation_handles_merge_binary_submodule_and_checked_limits() {
     assert_eq!(aggregate.binary_files(), 1);
     assert_eq!(aggregate.submodule_changes(), 1);
     assert_eq!(aggregate.changed_paths(), 4);
+
+    let mut merge = GitCommitAccumulator::new(GitCommitFingerprint::from_bytes([8; 32]), 20_000, 2)
+        .expect("merge accumulator");
+    assert_eq!(
+        merge.record(GitPathStat::text(b"src/merged.rs", 10, 0).expect("merge path")),
+        Err(GitCoreError::IncoherentState)
+    );
+    let merge = merge.finish().expect("finish merge");
+    assert!(merge.is_merge());
+    assert_eq!(merge.lines(), GitLineMetrics::new(0, 0));
 
     let mut bounded =
         GitCommitAccumulator::new(GitCommitFingerprint::from_bytes([4; 32]), 20_000, 1)

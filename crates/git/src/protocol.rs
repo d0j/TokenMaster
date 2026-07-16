@@ -103,7 +103,8 @@ enum ParseState {
     ExpectRecordSeparator,
     HeaderObjectId,
     HeaderTimestamp,
-    HeaderAuthor,
+    HeaderRawAuthor,
+    HeaderCanonicalAuthor,
     HeaderParents,
     BodyStart,
     RawHeader,
@@ -147,6 +148,7 @@ struct CurrentCommit {
     accumulator: Option<GitCommitAccumulator>,
     raw_entries: Vec<RawEntry>,
     numstat_index: usize,
+    body_terminated: bool,
 }
 
 struct PendingHeader {
@@ -174,6 +176,7 @@ pub struct GitLogStreamParser {
     pending_added: Option<NumValue>,
     pending_removed: Option<NumValue>,
     current: Option<CurrentCommit>,
+    processed_commits: usize,
     emitted_commits: u64,
 }
 
@@ -189,6 +192,7 @@ impl GitLogStreamParser {
             pending_added: None,
             pending_removed: None,
             current: None,
+            processed_commits: 0,
             emitted_commits: 0,
         }
     }
@@ -259,15 +263,26 @@ impl GitLogStreamParser {
                         .map_err(|_| GitCoreError::InvalidTimestamp)?;
                     self.pending_header.day_index = Some(day_index);
                     self.token.clear();
-                    self.state = ParseState::HeaderAuthor;
+                    self.state = ParseState::HeaderRawAuthor;
                 } else {
                     self.push_token(byte, self.config.limits.header_bytes)?;
                 }
             }
-            ParseState::HeaderAuthor => {
+            ParseState::HeaderRawAuthor => {
                 if byte == 0 {
                     let fingerprint = derive_author_fingerprint(&self.config.salt, &self.token)?;
                     self.pending_header.selected_author =
+                        self.config.authors.binary_search(&fingerprint).is_ok();
+                    self.token.clear();
+                    self.state = ParseState::HeaderCanonicalAuthor;
+                } else {
+                    self.push_token(byte, self.config.limits.author_bytes)?;
+                }
+            }
+            ParseState::HeaderCanonicalAuthor => {
+                if byte == 0 {
+                    let fingerprint = derive_author_fingerprint(&self.config.salt, &self.token)?;
+                    self.pending_header.selected_author |=
                         self.config.authors.binary_search(&fingerprint).is_ok();
                     self.token.clear();
                     self.state = ParseState::HeaderParents;
@@ -297,6 +312,7 @@ impl GitLogStreamParser {
                             self.config.limits.paths_per_commit.min(256),
                         ),
                         numstat_index: 0,
+                        body_terminated: false,
                     });
                     self.token.clear();
                     self.state = ParseState::BodyStart;
@@ -309,12 +325,32 @@ impl GitLogStreamParser {
                     self.finish_current(sink)?;
                     self.start_header();
                 }
-                b'\n' | b'\r' => {}
+                0 => {
+                    let current = self.current.as_mut().ok_or(GitCoreError::InvalidProtocol)?;
+                    if current.body_terminated {
+                        return Err(GitCoreError::InvalidProtocol);
+                    }
+                    if current.numstat_index != current.raw_entries.len() {
+                        return Err(GitCoreError::ProtocolMismatch);
+                    }
+                    current.body_terminated = true;
+                }
+                b'\n' | b'\r' => {
+                    if self
+                        .current
+                        .as_ref()
+                        .is_some_and(|current| current.body_terminated)
+                    {
+                        return Err(GitCoreError::InvalidProtocol);
+                    }
+                }
                 b':' => {
+                    self.require_open_body()?;
                     self.token.push(byte);
                     self.state = ParseState::RawHeader;
                 }
                 b'-' | b'0'..=b'9' => {
+                    self.require_open_body()?;
                     self.token.push(byte);
                     self.state = ParseState::NumAdded;
                 }
@@ -443,6 +479,13 @@ impl GitLogStreamParser {
         Ok(())
     }
 
+    fn require_open_body(&self) -> Result<(), GitCoreError> {
+        match self.current.as_ref() {
+            Some(current) if !current.body_terminated => Ok(()),
+            _ => Err(GitCoreError::InvalidProtocol),
+        }
+    }
+
     fn finish_raw_path(&mut self, kind: RawKind, path: &[u8]) -> Result<(), GitCoreError> {
         let current = self.current.as_mut().ok_or(GitCoreError::InvalidProtocol)?;
         if current.raw_entries.len() == self.config.limits.paths_per_commit {
@@ -502,6 +545,15 @@ impl GitLogStreamParser {
         if current.numstat_index != current.raw_entries.len() {
             return Err(GitCoreError::ProtocolMismatch);
         }
+        if self.processed_commits == crate::MAX_GIT_SCANNED_COMMITS {
+            return Err(GitCoreError::CapacityExceeded {
+                limit: crate::MAX_GIT_SCANNED_COMMITS,
+            });
+        }
+        self.processed_commits = self
+            .processed_commits
+            .checked_add(1)
+            .ok_or(GitCoreError::Overflow)?;
         if let Some(accumulator) = current.accumulator {
             sink.push_commit(accumulator.finish()?)?;
             self.emitted_commits = self
@@ -529,6 +581,7 @@ impl fmt::Debug for GitLogStreamParser {
             .field("state", &self.state)
             .field("token_bytes", &self.token.len())
             .field("has_current", &self.current.is_some())
+            .field("processed_commits", &self.processed_commits)
             .field("emitted_commits", &self.emitted_commits)
             .finish()
     }

@@ -125,16 +125,16 @@ cargo +1.97.0 clippy -p tokenmaster-git --all-targets --locked
 
 **RED/GREEN:**
 
-- [ ] Validate explicit/automatic exact native Git discovery with bounded `PATH`.
-- [ ] Build only fixed version/discovery/config/ref/log commands with stdin null,
+- [x] Validate explicit/automatic exact native Git discovery with bounded `PATH`.
+- [x] Build only fixed version/discovery/config/ref/log commands with stdin null,
   hidden child, paging/locks/prompts/color/external diff/textconv disabled.
-- [ ] Read stdout/stderr concurrently under exact byte caps and kill/join on deadline,
+- [x] Read stdout/stderr concurrently under exact byte caps and kill/join on deadline,
   cancellation, parser fault, or drop.
-- [ ] Resolve common-dir identity, local heads, object format, shallow state, and
+- [x] Resolve common-dir identity, local heads, object format, shallow state, and
   author email without retaining raw values.
-- [ ] Cover root/ordinary/multiple branch/dedup/merge/octopus/rename/binary/submodule/
+- [x] Cover root/ordinary/multiple branch/dedup/merge/octopus/rename/binary/submodule/
   worktree/mailmap/empty/missing-author/shallow fixtures.
-- [ ] Prove no shell, hook, pager, external diff, textconv, network, credential, editor,
+- [x] Prove no shell, hook, pager, external diff, textconv, network, credential, editor,
   ref/index/worktree/config mutation, child leak, or unbounded retained output.
 
 **Focused validator:**

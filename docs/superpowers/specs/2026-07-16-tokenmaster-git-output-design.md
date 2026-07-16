@@ -202,9 +202,11 @@ If no valid email exists, the repository is `unavailable: author_identity_missin
 Emails are read transiently, normalized as bounded UTF-8, hashed with the installation
 salt, and discarded. They are not passed as visible process arguments.
 
-The log stream includes the bounded author email field. TokenMaster hashes it and
-compares fingerprints in-process. `--use-mailmap` is enabled so aliases follow the
-repository's declared mailmap, but neither names nor emails leave the parser.
+The log stream includes both bounded raw and mailmapped author email fields.
+TokenMaster hashes both and compares fingerprints in-process. A configured email
+therefore still owns commits written with that exact raw email, while aliases declared
+by the repository mailmap can also match a configured canonical email. Neither names
+nor emails leave the parser.
 
 ## 6. Commit graph and diff semantics
 
@@ -232,13 +234,16 @@ repository's declared mailmap, but neither names nor emails leave the parser.
 ### Merge commits
 
 - A merge commit is counted once when authored by the selected author.
-- Its line output is the merge result relative to its first parent.
+- Its line output is defined as zero.
 - Commits introduced by merged branches are still counted independently once through
   the all-local-branch reachability walk.
-- Octopus merges use the same first-parent result rule.
+- Octopus merges use the same zero-line rule.
 
-This avoids double-counting the merged side while still recording conflict-resolution
-or integration changes authored in the merge.
+This avoids counting the merged side once in its original commits and a second time
+in the merge result. Git cannot isolate only conflict-resolution lines from an
+arbitrary historical merge without expensive reconstruction and version-sensitive
+heuristics, so TokenMaster does not invent them. The separate merge count keeps that
+activity visible.
 
 ### Renames and copies
 
@@ -299,7 +304,9 @@ and schedules a bounded rebuild rather than mixing definitions.
 Discovery permits only a native executable named `git.exe` on Windows or `git` on
 supported Unix platforms. Explicit configuration is authoritative; automatic
 discovery examines a bounded process `PATH` snapshot and validates an absolute regular
-native file under platform policy.
+native file under platform policy. Windows reparse points are rejected; conventional
+Unix symlinks are canonicalized and the final same-named regular executable is
+revalidated.
 
 Every child uses:
 
@@ -312,8 +319,10 @@ Every child uses:
 - no pager;
 - no external diff;
 - no textconv;
+- merge diffs explicitly disabled;
 - no color;
 - no optional network or credential operation;
+- inherited Git location/config/trace/askpass/SSH redirection removed;
 - a monotonic deadline and kill/join cleanup.
 
 Allowed command families are fixed:
@@ -340,6 +349,7 @@ Initial hard limits:
 - 4,096 changed paths per commit;
 - 32 KiB per path field;
 - 4 KiB per author field;
+- 256 KiB for transient `.mailmap` hashing;
 - 64 MiB total stdout per repository scan;
 - 64 KiB stderr;
 - 30 seconds per repository scan;
@@ -351,7 +361,8 @@ The parser consumes NUL-framed fields incrementally. It retains one commit accum
 one path-stat accumulator, fixed counters, one bounded batch, and no whole-history
 vector. Any limit breach terminates the scan as partial or unavailable according to
 whether a coherent prefix is safely publishable. An authoritative replacement
-requires a complete stream and matching ref fingerprint before and after the scan.
+requires a complete stream and matching repository, author, local-ref, shallow/object
+format, and mailmap identities before and after one shared scan deadline.
 
 ## 10. Incremental cache
 
@@ -361,6 +372,7 @@ For each repository it retains:
 
 - hash algorithm;
 - bounded sorted local-head fingerprint;
+- bounded worktree-root `.mailmap` content fingerprint;
 - category semantics version;
 - author-set fingerprint;
 - immutable daily/category aggregates;

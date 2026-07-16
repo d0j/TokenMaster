@@ -3,8 +3,12 @@
 
 mod aggregate;
 mod classify;
+mod command;
+mod discovery;
 mod identity;
+mod process;
 mod protocol;
+mod scan;
 
 pub const MAX_GIT_AUTHOR_BYTES: usize = 4 * 1024;
 pub const MAX_GIT_PATH_BYTES: usize = 32 * 1024;
@@ -12,6 +16,95 @@ pub const MAX_GIT_REF_NAME_BYTES: usize = 4 * 1024;
 pub const MAX_GIT_REFS: usize = 512;
 pub const MAX_GIT_PATHS_PER_COMMIT: usize = 4_096;
 pub const MAX_GIT_COMMITS_PER_BATCH: usize = 256;
+pub const MAX_GIT_SCANNED_COMMITS: usize = 200_000;
+pub const MAX_GIT_MAILMAP_BYTES: usize = 256 * 1024;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GitBackendErrorCode {
+    AuthorIdentityMissing,
+    Cancelled,
+    CapacityExceeded,
+    DeadlineExceeded,
+    HistoryChangedDuringScan,
+    InvalidExecutable,
+    InvalidTime,
+    ProcessCleanupFailed,
+    ProcessFailed,
+    ProtocolError,
+    RepositoryNotFound,
+    RepositoryPathRejected,
+    SpawnFailed,
+    StderrLimitExceeded,
+    StdoutLimitExceeded,
+    TooManyRefs,
+    Unavailable,
+    UnsupportedObjectFormat,
+    UnsupportedVersion,
+}
+
+impl GitBackendErrorCode {
+    #[must_use]
+    pub const fn stable_code(self) -> &'static str {
+        match self {
+            Self::AuthorIdentityMissing => "author_identity_missing",
+            Self::Cancelled => "cancelled",
+            Self::CapacityExceeded => "capacity_exceeded",
+            Self::DeadlineExceeded => "deadline_exceeded",
+            Self::HistoryChangedDuringScan => "history_changed_during_scan",
+            Self::InvalidExecutable => "invalid_executable",
+            Self::InvalidTime => "invalid_time",
+            Self::ProcessCleanupFailed => "process_cleanup_failed",
+            Self::ProcessFailed => "process_failed",
+            Self::ProtocolError => "protocol_error",
+            Self::RepositoryNotFound => "repository_not_found",
+            Self::RepositoryPathRejected => "repository_path_rejected",
+            Self::SpawnFailed => "spawn_failed",
+            Self::StderrLimitExceeded => "stderr_limit_exceeded",
+            Self::StdoutLimitExceeded => "stdout_limit_exceeded",
+            Self::TooManyRefs => "too_many_refs",
+            Self::Unavailable => "unavailable",
+            Self::UnsupportedObjectFormat => "unsupported_object_format",
+            Self::UnsupportedVersion => "unsupported_version",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GitBackendError {
+    code: GitBackendErrorCode,
+    limit: Option<usize>,
+}
+
+impl GitBackendError {
+    pub(crate) const fn new(code: GitBackendErrorCode) -> Self {
+        Self { code, limit: None }
+    }
+
+    pub(crate) const fn with_limit(code: GitBackendErrorCode, limit: usize) -> Self {
+        Self {
+            code,
+            limit: Some(limit),
+        }
+    }
+
+    #[must_use]
+    pub const fn code(self) -> GitBackendErrorCode {
+        self.code
+    }
+
+    #[must_use]
+    pub const fn limit(self) -> Option<usize> {
+        self.limit
+    }
+}
+
+impl std::fmt::Display for GitBackendError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.code.stable_code())
+    }
+}
+
+impl std::error::Error for GitBackendError {}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum GitCoreError {
@@ -69,9 +162,18 @@ pub use aggregate::{
     GitScanAccumulator, GitScanSummary,
 };
 pub use classify::classify_destination_path;
+pub use command::{GitExecutable, GitRepositoryCandidate};
+pub use discovery::{
+    GitExecutableSearchPath, MAX_GIT_EXECUTABLE_SEARCH_DIRS, MAX_GIT_EXECUTABLE_SEARCH_PATH_BYTES,
+};
 pub use identity::{
-    GitAuthorFingerprint, GitCommitFingerprint, GitIdentitySalt, GitRefFingerprint, GitRefHead,
-    derive_author_fingerprint, derive_commit_fingerprint, derive_ref_fingerprint,
-    derive_repository_id,
+    GitAuthorFingerprint, GitCommitFingerprint, GitIdentitySalt, GitMailmapFingerprint,
+    GitRefFingerprint, GitRefHead, derive_author_fingerprint, derive_commit_fingerprint,
+    derive_mailmap_fingerprint, derive_ref_fingerprint, derive_repository_id,
+};
+pub use process::{
+    GitCancellation, GitProcess, GitRunControl, GitVersion, MAX_GIT_LOG_STDOUT_BYTES,
+    MAX_GIT_PROCESS_TIMEOUT, MAX_GIT_STDERR_BYTES,
 };
 pub use protocol::{GitLogParseConfig, GitLogStreamParser, GitStreamLimits};
+pub use scan::{GitAuthorSource, GitObjectFormat, GitRepositoryScan};

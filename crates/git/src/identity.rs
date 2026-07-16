@@ -36,6 +36,7 @@ macro_rules! opaque_identity {
 opaque_identity!(GitIdentitySalt);
 opaque_identity!(GitAuthorFingerprint);
 opaque_identity!(GitCommitFingerprint);
+opaque_identity!(GitMailmapFingerprint);
 opaque_identity!(GitRefFingerprint);
 
 #[derive(Clone, Eq, PartialEq)]
@@ -98,6 +99,17 @@ pub fn derive_commit_fingerprint(
     Ok(GitCommitFingerprint::from_bytes(framed_hash(
         b"tokenmaster.git.commit.v1",
         &[salt.as_bytes(), object_id],
+    )?))
+}
+
+pub fn derive_mailmap_fingerprint(
+    salt: &GitIdentitySalt,
+    contents: Option<&[u8]>,
+) -> Result<GitMailmapFingerprint, GitCoreError> {
+    let presence = [u8::from(contents.is_some())];
+    Ok(GitMailmapFingerprint::from_bytes(framed_hash(
+        b"tokenmaster.git.mailmap.v1",
+        &[salt.as_bytes(), &presence, contents.unwrap_or_default()],
     )?))
 }
 
@@ -168,14 +180,14 @@ fn validate_ref_name(value: &[u8]) -> Result<(), GitCoreError> {
 
 fn normalize_email(value: &[u8]) -> Result<Vec<u8>, GitCoreError> {
     let value = trim_ascii(value);
-    if value.is_empty()
-        || value.len() > MAX_GIT_AUTHOR_BYTES
-        || value.iter().any(|byte| {
-            !byte.is_ascii()
-                || byte.is_ascii_control()
-                || byte.is_ascii_whitespace()
-                || matches!(*byte, b'<' | b'>')
-        })
+    if value.is_empty() || value.len() > MAX_GIT_AUTHOR_BYTES {
+        return Err(GitCoreError::InvalidAuthor);
+    }
+    let text = std::str::from_utf8(value).map_err(|_| GitCoreError::InvalidAuthor)?;
+    if text
+        .chars()
+        .any(|character| character.is_control() || character.is_whitespace())
+        || value.iter().any(|byte| matches!(*byte, b'<' | b'>'))
     {
         return Err(GitCoreError::InvalidAuthor);
     }
@@ -185,7 +197,16 @@ fn normalize_email(value: &[u8]) -> Result<Vec<u8>, GitCoreError> {
     if separator == 0 || separator + 1 == value.len() || value[separator + 1..].contains(&b'@') {
         return Err(GitCoreError::InvalidAuthor);
     }
-    Ok(value.iter().map(u8::to_ascii_lowercase).collect())
+    let mut normalized = String::with_capacity(value.len());
+    for character in text.chars().flat_map(char::to_lowercase) {
+        normalized.push(character);
+        if normalized.len() > MAX_GIT_AUTHOR_BYTES {
+            return Err(GitCoreError::CapacityExceeded {
+                limit: MAX_GIT_AUTHOR_BYTES,
+            });
+        }
+    }
+    Ok(normalized.into_bytes())
 }
 
 fn trim_ascii(mut value: &[u8]) -> &[u8] {

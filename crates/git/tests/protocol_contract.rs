@@ -17,6 +17,8 @@ fn append_header(output: &mut Vec<u8>, oid: &str, timestamp: i64, author: &str, 
     output.push(0);
     output.extend_from_slice(author.as_bytes());
     output.push(0);
+    output.extend_from_slice(author.as_bytes());
+    output.push(0);
     output.extend_from_slice(parents.as_bytes());
     output.push(0);
 }
@@ -75,7 +77,7 @@ fn fixture() -> Vec<u8> {
         OID_A,
         20_000 * 86_400 + 1,
         "USER@example.com",
-        &format!("{PARENT_A} {PARENT_B}"),
+        PARENT_A,
     );
     output.push(b'\n');
     append_raw(&mut output, "100644", "100644", "M", b"src/main.rs", None);
@@ -107,24 +109,15 @@ fn fixture() -> Vec<u8> {
     append_numstat(&mut output, "8", "4", b"src/old.rs", Some(b"tests/new.rs"));
     append_numstat(&mut output, "-", "-", b"assets/logo.png", None);
     append_numstat(&mut output, "1", "1", b"vendor/submodule", None);
+    output.push(0);
 
     append_header(
         &mut output,
         OID_B,
         20_001 * 86_400 + 1,
-        "other@example.com",
-        PARENT_A,
+        "user@example.com",
+        &format!("{PARENT_A} {PARENT_B}"),
     );
-    output.push(b'\n');
-    append_raw(
-        &mut output,
-        "100644",
-        "100644",
-        "M",
-        b"src/ignored.rs",
-        None,
-    );
-    append_numstat(&mut output, "100", "0", b"src/ignored.rs", None);
     output
 }
 
@@ -140,7 +133,7 @@ fn real_git_nul_shape_parses_incrementally_and_filters_author() {
         parser.finish(&mut scan).expect("finish parser");
         let summary = scan.finish().expect("finish scan");
 
-        assert_eq!(summary.totals().commits(), 1);
+        assert_eq!(summary.totals().commits(), 2);
         assert_eq!(summary.totals().merge_commits(), 1);
         assert_eq!(summary.totals().lines(), GitLineMetrics::new(28, 7));
         assert_eq!(summary.totals().binary_files(), 1);
@@ -153,7 +146,7 @@ fn real_git_nul_shape_parses_incrementally_and_filters_author() {
             summary.category_lines(GitOutputCategory::Test),
             GitLineMetrics::new(8, 4)
         );
-        assert_eq!(summary.retained_days().len(), 1);
+        assert_eq!(summary.retained_days().len(), 2);
         assert_eq!(summary.retained_days()[0].day_index(), 20_000);
     }
 }
@@ -220,12 +213,26 @@ fn protocol_rejects_truncation_path_mismatch_and_field_limits() {
     let salt = GitIdentitySalt::from_bytes([9; 32]);
     let author = derive_author_fingerprint(&salt, b"user@example.com").expect("author fingerprint");
     let limits = GitStreamLimits::new(8, 8, 4, 4).expect("small valid limits");
-    let config = GitLogParseConfig::new(salt, vec![author], limits).expect("small parse config");
-    let mut parser = GitLogStreamParser::new(config);
+    let small_config =
+        GitLogParseConfig::new(salt, vec![author], limits).expect("small parse config");
+    let mut parser = GitLogStreamParser::new(small_config);
     let mut scan = GitScanAccumulator::new();
     assert_eq!(
         parser.push(&bytes, &mut scan),
         Err(GitCoreError::CapacityExceeded { limit: 8 })
+    );
+
+    let mut premature_separator = fixture();
+    let first_raw = premature_separator
+        .iter()
+        .position(|byte| *byte == b':')
+        .expect("first raw record");
+    premature_separator.insert(first_raw, 0);
+    let mut parser = GitLogStreamParser::new(config());
+    let mut scan = GitScanAccumulator::new();
+    assert_eq!(
+        parser.push(&premature_separator, &mut scan),
+        Err(GitCoreError::InvalidProtocol)
     );
 }
 

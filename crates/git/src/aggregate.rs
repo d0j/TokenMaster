@@ -85,6 +85,9 @@ impl GitCommitAccumulator {
     }
 
     pub fn record(&mut self, stat: GitPathStat) -> Result<(), GitCoreError> {
+        if self.parent_count > 1 {
+            return Err(GitCoreError::IncoherentState);
+        }
         if self.changed_paths == MAX_GIT_PATHS_PER_COMMIT {
             return Err(GitCoreError::CapacityExceeded {
                 limit: MAX_GIT_PATHS_PER_COMMIT,
