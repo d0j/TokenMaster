@@ -8,7 +8,13 @@ mod state;
 mod usage;
 
 pub use identity::{LayoutId, LocaleId, RouteId, ThemeId};
-pub use quota::{DomainError, QuotaTarget};
+pub use quota::{
+    QuotaAccountId, QuotaConfidence, QuotaError, QuotaEvidenceSource, QuotaObservationId,
+    QuotaPresentationDirection, QuotaProviderEpochId, QuotaRatio, QuotaResetEvidence,
+    QuotaResetThresholds, QuotaSample, QuotaSampleParts, QuotaSampleQuality, QuotaScope,
+    QuotaUnitId, QuotaUnits, QuotaWindowDefinition, QuotaWindowDefinitionParts, QuotaWindowId,
+    QuotaWindowKey, QuotaWindowSemantics, QuotaWorkspaceId,
+};
 pub use session::SessionSummary;
 pub use state::AppState;
 pub use usage::{

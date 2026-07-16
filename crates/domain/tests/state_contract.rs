@@ -1,15 +1,4 @@
-use tokenmaster_domain::{
-    AppState, LayoutId, LocaleId, QuotaTarget, RouteId, SessionSummary, ThemeId,
-};
-
-#[test]
-fn quota_target_accepts_provider_defined_windows() {
-    let target = QuotaTarget::new("codex", "burst-37m", "37 minute burst", 0.42, 1_800_000_000)
-        .expect("valid target");
-
-    assert_eq!(target.id(), "burst-37m");
-    assert_eq!(target.label(), "37 minute burst");
-}
+use tokenmaster_domain::{AppState, LayoutId, LocaleId, RouteId, SessionSummary, ThemeId};
 
 #[test]
 fn ten_thousand_switches_preserve_route_and_selection() {
@@ -26,34 +15,6 @@ fn ten_thousand_switches_preserve_route_and_selection() {
     assert_eq!(state.route(), RouteId::Sessions);
     assert_eq!(state.selected_session(), Some(731));
     assert_eq!(state.revision(), 29_999);
-}
-
-#[test]
-fn quota_target_rejects_invalid_text_fields() {
-    for (provider, id, label) in [
-        ("", "window", "Window"),
-        ("codex", " ", "Window"),
-        ("codex", "window", ""),
-        (&"p".repeat(65), "window", "Window"),
-        ("codex", &"i".repeat(65), "Window"),
-        ("codex", "window", &"l".repeat(129)),
-    ] {
-        assert!(QuotaTarget::new(provider, id, label, 0.5, 1).is_err());
-    }
-}
-
-#[test]
-fn quota_target_rejects_invalid_ratios() {
-    for ratio in [f64::NAN, f64::INFINITY, -0.01, 1.01] {
-        assert!(QuotaTarget::new("codex", "window", "Window", ratio, 1).is_err());
-    }
-}
-
-#[test]
-fn quota_target_rejects_non_positive_reset_time() {
-    for resets_at_ms in [i64::MIN, -1, 0] {
-        assert!(QuotaTarget::new("codex", "window", "Window", 0.5, resets_at_ms).is_err());
-    }
 }
 
 #[test]
