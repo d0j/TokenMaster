@@ -2,11 +2,14 @@ use std::collections::BTreeSet;
 
 use sha2::{Digest, Sha256};
 use tokenmaster_domain::{
-    QuotaAccountId, QuotaConfidence, QuotaEvidenceSource, QuotaObservationId,
-    QuotaPresentationDirection, QuotaRatio, QuotaResetEvidence, QuotaResetThresholds, QuotaSample,
-    QuotaSampleParts, QuotaSampleQuality, QuotaScope, QuotaWindowDefinition,
-    QuotaWindowDefinitionParts, QuotaWindowId, QuotaWindowKey, QuotaWindowSemantics,
-    UsageProviderId,
+    BenefitConfidence, BenefitDetailKind, BenefitEvidenceSource, BenefitExpiry,
+    BenefitInventoryCompleteness, BenefitInventoryObservation, BenefitInventoryObservationParts,
+    BenefitKind, BenefitLabelKey, BenefitLotId, BenefitLotObservation, BenefitLotObservationParts,
+    BenefitObservationId, BenefitScope, BenefitState, BenefitTarget, QuotaAccountId,
+    QuotaConfidence, QuotaEvidenceSource, QuotaObservationId, QuotaPresentationDirection,
+    QuotaRatio, QuotaResetEvidence, QuotaResetThresholds, QuotaSample, QuotaSampleParts,
+    QuotaSampleQuality, QuotaScope, QuotaWindowDefinition, QuotaWindowDefinitionParts,
+    QuotaWindowId, QuotaWindowKey, QuotaWindowSemantics, UsageProviderId,
 };
 
 use super::wire::{
@@ -22,6 +25,9 @@ use super::{
 const ACCOUNT_DOMAIN: &[u8] = b"tokenmaster.codex.quota-account.v1";
 const LIMIT_DOMAIN: &[u8] = b"tokenmaster.codex.quota-limit.v1";
 const OBSERVATION_DOMAIN: &[u8] = b"tokenmaster.codex.quota-observation.v1";
+const BENEFIT_LOT_DOMAIN: &[u8] = b"tokenmaster.codex.benefit-lot.v1";
+const BENEFIT_AGGREGATE_DOMAIN: &[u8] = b"tokenmaster.codex.benefit-aggregate.v1";
+const BENEFIT_OBSERVATION_DOMAIN: &[u8] = b"tokenmaster.codex.benefit-observation.v1";
 const MAX_EMAIL_BYTES: usize = 320;
 const MAX_PROVIDER_STRING_BYTES: usize = 512;
 const MAX_SAFE_LIMIT_ID_BYTES: usize = 80;
@@ -73,7 +79,13 @@ pub(super) fn normalize_wire(
     }
 
     let account_id = account_id(account)?;
-    validate_reset_credits(quota.rate_limit_reset_credits.as_ref())?;
+    let benefit_observation = normalize_reset_credits(
+        &account_id,
+        quota.rate_limit_reset_credits,
+        observed_at_ms,
+        fresh_until_ms,
+        stale_after_ms,
+    )?;
     validate_snapshot_auxiliary(&quota.rate_limits)?;
 
     let mut observations = Vec::new();
@@ -125,7 +137,11 @@ pub(super) fn normalize_wire(
     if observations.is_empty() {
         return Err(CodexQuotaError::new(CodexQuotaErrorCode::Unavailable));
     }
-    Ok(CodexQuotaSnapshot::new(account_id, observations))
+    Ok(CodexQuotaSnapshot::new(
+        account_id,
+        observations,
+        benefit_observation,
+    ))
 }
 
 fn validate_json_size(bytes: &[u8]) -> Result<(), CodexQuotaError> {
@@ -350,32 +366,227 @@ fn validate_snapshot_auxiliary(snapshot: &RateLimitSnapshotWire) -> Result<(), C
     Ok(())
 }
 
-fn validate_reset_credits(
-    summary: Option<&RateLimitResetCreditsSummaryWire>,
-) -> Result<(), CodexQuotaError> {
+fn normalize_reset_credits(
+    account_id: &QuotaAccountId,
+    summary: Option<RateLimitResetCreditsSummaryWire>,
+    observed_at_ms: i64,
+    fresh_until_ms: i64,
+    stale_after_ms: i64,
+) -> Result<Option<BenefitInventoryObservation>, CodexQuotaError> {
     let Some(summary) = summary else {
-        return Ok(());
+        return Ok(None);
     };
-    let available_count = usize::try_from(summary.available_count).map_err(|_| invalid_data())?;
-    if let Some(credits) = &summary.credits {
-        if credits.len() > MAX_CODEX_RESET_CREDIT_DETAILS {
+    let available_count = u64::try_from(summary.available_count).map_err(|_| invalid_data())?;
+    if available_count > i64::MAX as u64 {
+        return Err(invalid_data());
+    }
+    let credits = summary.credits.unwrap_or_default();
+    if credits.len() > MAX_CODEX_RESET_CREDIT_DETAILS {
+        return Err(CodexQuotaError::with_limit(
+            CodexQuotaErrorCode::CapacityExceeded,
+            MAX_CODEX_RESET_CREDIT_DETAILS,
+        ));
+    }
+    let mut raw_ids = BTreeSet::new();
+    let mut detailed_available_count = 0_u64;
+    let mut lots = Vec::with_capacity(credits.len().saturating_add(1));
+    for credit in credits {
+        validate_reset_credit(&credit)?;
+        if !raw_ids.insert(credit.id.clone()) {
+            return Err(invalid_data());
+        }
+        if matches!(
+            credit.status,
+            super::wire::RateLimitResetCreditStatusWire::Available
+        ) {
+            detailed_available_count = detailed_available_count
+                .checked_add(1)
+                .ok_or_else(invalid_data)?;
+        }
+        lots.push(normalize_reset_credit(account_id, credit)?);
+    }
+    if detailed_available_count > available_count {
+        return Err(invalid_data());
+    }
+    let aggregate_quantity = available_count - detailed_available_count;
+    let completeness = if aggregate_quantity == 0 {
+        BenefitInventoryCompleteness::Complete
+    } else {
+        if lots.len() == MAX_CODEX_RESET_CREDIT_DETAILS {
             return Err(CodexQuotaError::with_limit(
                 CodexQuotaErrorCode::CapacityExceeded,
                 MAX_CODEX_RESET_CREDIT_DETAILS,
             ));
         }
-        if credits.len() > available_count {
-            return Err(invalid_data());
-        }
-        for credit in credits {
-            validate_reset_credit(credit)?;
-        }
+        lots.push(aggregate_reset_lot(account_id, aggregate_quantity)?);
+        BenefitInventoryCompleteness::CompleteQuantityPartialDetails
+    };
+    lots.sort_unstable_by_key(|lot| *lot.lot_id().as_bytes());
+    let scope = BenefitScope::new(
+        UsageProviderId::new("codex").map_err(|_| invalid_data())?,
+        account_id.clone(),
+        None,
+    );
+    let observation_id = benefit_observation_id(
+        &scope,
+        observed_at_ms,
+        fresh_until_ms,
+        stale_after_ms,
+        completeness,
+        &lots,
+    );
+    BenefitInventoryObservation::new(BenefitInventoryObservationParts {
+        scope,
+        observation_id,
+        observed_at_ms,
+        fresh_until_ms,
+        stale_after_ms,
+        completeness,
+        lots,
+    })
+    .map(Some)
+    .map_err(|_| invalid_data())
+}
+
+fn normalize_reset_credit(
+    account_id: &QuotaAccountId,
+    credit: RateLimitResetCreditWire,
+) -> Result<BenefitLotObservation, CodexQuotaError> {
+    let lot_id = detailed_benefit_lot_id(account_id, &credit.id);
+    let kind = match credit.reset_type {
+        super::wire::RateLimitResetTypeWire::CodexRateLimits => BenefitKind::BankedRateLimitReset,
+        super::wire::RateLimitResetTypeWire::Unknown => BenefitKind::Unknown,
+    };
+    let state = match credit.status {
+        super::wire::RateLimitResetCreditStatusWire::Available => BenefitState::Available,
+        super::wire::RateLimitResetCreditStatusWire::Redeeming => BenefitState::ActivationPending,
+        super::wire::RateLimitResetCreditStatusWire::Redeemed => BenefitState::Activated,
+        super::wire::RateLimitResetCreditStatusWire::Unknown => BenefitState::Ambiguous,
+    };
+    let granted_at_ms = credit
+        .granted_at
+        .checked_mul(1_000)
+        .ok_or_else(invalid_data)?;
+    let expiry = credit
+        .expires_at
+        .map(|expires_at| {
+            expires_at
+                .checked_mul(1_000)
+                .ok_or_else(invalid_data)
+                .and_then(|expires_at_ms| {
+                    BenefitExpiry::exact_utc(expires_at_ms).map_err(|_| invalid_data())
+                })
+        })
+        .transpose()?
+        .unwrap_or_else(BenefitExpiry::unknown);
+    let known = kind == BenefitKind::BankedRateLimitReset
+        && !matches!(
+            credit.status,
+            super::wire::RateLimitResetCreditStatusWire::Unknown
+        );
+    BenefitLotObservation::new(BenefitLotObservationParts {
+        lot_id,
+        kind,
+        quantity: 1,
+        state,
+        target: BenefitTarget::Provider,
+        granted_at_ms: Some(granted_at_ms),
+        expiry,
+        source: BenefitEvidenceSource::ProviderOfficial,
+        confidence: if known {
+            BenefitConfidence::High
+        } else {
+            BenefitConfidence::Low
+        },
+        detail_kind: BenefitDetailKind::ProviderDetail,
+        label_key: BenefitLabelKey::new(if kind == BenefitKind::BankedRateLimitReset {
+            "benefit.codex.banked_reset"
+        } else {
+            "benefit.codex.unknown"
+        })
+        .map_err(|_| invalid_data())?,
+    })
+    .map_err(|_| invalid_data())
+}
+
+fn aggregate_reset_lot(
+    account_id: &QuotaAccountId,
+    quantity: u64,
+) -> Result<BenefitLotObservation, CodexQuotaError> {
+    BenefitLotObservation::new(BenefitLotObservationParts {
+        lot_id: aggregate_benefit_lot_id(account_id),
+        kind: BenefitKind::BankedRateLimitReset,
+        quantity,
+        state: BenefitState::Available,
+        target: BenefitTarget::Provider,
+        granted_at_ms: None,
+        expiry: BenefitExpiry::unknown(),
+        source: BenefitEvidenceSource::ProviderOfficial,
+        confidence: BenefitConfidence::Medium,
+        detail_kind: BenefitDetailKind::ProviderAggregate,
+        label_key: BenefitLabelKey::new("benefit.codex.banked_reset")
+            .map_err(|_| invalid_data())?,
+    })
+    .map_err(|_| invalid_data())
+}
+
+fn detailed_benefit_lot_id(account_id: &QuotaAccountId, raw_id: &str) -> BenefitLotId {
+    let mut hasher = Sha256::new();
+    update_field(&mut hasher, BENEFIT_LOT_DOMAIN);
+    update_field(&mut hasher, account_id.as_str().as_bytes());
+    update_field(&mut hasher, raw_id.as_bytes());
+    BenefitLotId::from_bytes(hasher.finalize().into())
+}
+
+fn aggregate_benefit_lot_id(account_id: &QuotaAccountId) -> BenefitLotId {
+    let mut hasher = Sha256::new();
+    update_field(&mut hasher, BENEFIT_AGGREGATE_DOMAIN);
+    update_field(&mut hasher, account_id.as_str().as_bytes());
+    update_field(&mut hasher, b"banked_rate_limit_reset");
+    update_field(&mut hasher, b"unexplained_available");
+    BenefitLotId::from_bytes(hasher.finalize().into())
+}
+
+fn benefit_observation_id(
+    scope: &BenefitScope,
+    observed_at_ms: i64,
+    fresh_until_ms: i64,
+    stale_after_ms: i64,
+    completeness: BenefitInventoryCompleteness,
+    lots: &[BenefitLotObservation],
+) -> BenefitObservationId {
+    let mut hasher = Sha256::new();
+    update_field(&mut hasher, BENEFIT_OBSERVATION_DOMAIN);
+    update_field(&mut hasher, scope.provider_id().as_str().as_bytes());
+    update_field(&mut hasher, scope.account_id().as_str().as_bytes());
+    update_field(&mut hasher, &observed_at_ms.to_be_bytes());
+    update_field(&mut hasher, &fresh_until_ms.to_be_bytes());
+    update_field(&mut hasher, &stale_after_ms.to_be_bytes());
+    update_field(&mut hasher, &[benefit_completeness_code(completeness)]);
+    update_field(&mut hasher, &(lots.len() as u64).to_be_bytes());
+    for lot in lots {
+        update_field(&mut hasher, lot.lot_id().as_bytes());
+        update_field(&mut hasher, &[benefit_kind_code(lot.kind())]);
+        update_field(&mut hasher, &lot.quantity().to_be_bytes());
+        update_field(&mut hasher, &[benefit_state_code(lot.state())]);
+        update_optional_i64(&mut hasher, lot.granted_at_ms());
+        update_benefit_expiry(&mut hasher, lot.expiry());
+        update_field(&mut hasher, &[benefit_confidence_code(lot.confidence())]);
+        update_field(&mut hasher, &[benefit_detail_code(lot.detail_kind())]);
+        update_field(&mut hasher, lot.label_key().as_bytes());
     }
-    Ok(())
+    BenefitObservationId::from_bytes(hasher.finalize().into())
 }
 
 fn validate_reset_credit(credit: &RateLimitResetCreditWire) -> Result<(), CodexQuotaError> {
     validate_provider_text(&credit.id, MAX_CREDIT_ID_BYTES, false)?;
+    if credit
+        .id
+        .chars()
+        .any(|character| character.is_control() || character.is_whitespace())
+    {
+        return Err(invalid_data());
+    }
     if credit.granted_at <= 0
         || credit
             .expires_at
@@ -391,6 +602,96 @@ fn validate_reset_credit(credit: &RateLimitResetCreditWire) -> Result<(), CodexQ
     }
     let _ = (credit.reset_type, credit.status);
     Ok(())
+}
+
+fn update_benefit_expiry(hasher: &mut Sha256, expiry: &BenefitExpiry) {
+    match expiry {
+        BenefitExpiry::ExactUtc { at_ms } => {
+            update_field(hasher, &[1]);
+            update_field(hasher, &at_ms.to_be_bytes());
+        }
+        BenefitExpiry::ProviderLocal { local, time_zone } => {
+            update_field(hasher, &[2]);
+            update_field(hasher, &local.date().year().to_be_bytes());
+            update_field(hasher, &[local.date().month(), local.date().day()]);
+            update_field(
+                hasher,
+                &[
+                    local.time().hour(),
+                    local.time().minute(),
+                    local.time().second(),
+                ],
+            );
+            update_field(hasher, &local.time().millisecond().to_be_bytes());
+            update_field(hasher, time_zone.as_str().as_bytes());
+        }
+        BenefitExpiry::ProviderDate { date, time_zone } => {
+            update_field(hasher, &[3]);
+            update_field(hasher, &date.year().to_be_bytes());
+            update_field(hasher, &[date.month(), date.day()]);
+            match time_zone {
+                Some(time_zone) => {
+                    update_field(hasher, &[1]);
+                    update_field(hasher, time_zone.as_str().as_bytes());
+                }
+                None => update_field(hasher, &[0]),
+            }
+        }
+        BenefitExpiry::BoundedUtc {
+            earliest_at_ms,
+            latest_at_ms,
+        } => {
+            update_field(hasher, &[4]);
+            update_field(hasher, &earliest_at_ms.to_be_bytes());
+            update_field(hasher, &latest_at_ms.to_be_bytes());
+        }
+        BenefitExpiry::Unknown => update_field(hasher, &[5]),
+    }
+}
+
+const fn benefit_completeness_code(value: BenefitInventoryCompleteness) -> u8 {
+    match value {
+        BenefitInventoryCompleteness::Complete => 1,
+        BenefitInventoryCompleteness::CompleteQuantityPartialDetails => 2,
+        BenefitInventoryCompleteness::Partial => 3,
+    }
+}
+
+const fn benefit_kind_code(value: BenefitKind) -> u8 {
+    match value {
+        BenefitKind::BankedRateLimitReset => 1,
+        BenefitKind::UsageCredit => 2,
+        BenefitKind::TemporaryUsage => 3,
+        BenefitKind::Unknown => 4,
+    }
+}
+
+const fn benefit_state_code(value: BenefitState) -> u8 {
+    match value {
+        BenefitState::Available => 1,
+        BenefitState::ActivationPending => 2,
+        BenefitState::Activated => 3,
+        BenefitState::Expired => 4,
+        BenefitState::Revoked => 5,
+        BenefitState::Ambiguous => 6,
+    }
+}
+
+const fn benefit_confidence_code(value: BenefitConfidence) -> u8 {
+    match value {
+        BenefitConfidence::High => 1,
+        BenefitConfidence::Medium => 2,
+        BenefitConfidence::Low => 3,
+        BenefitConfidence::Unknown => 4,
+    }
+}
+
+const fn benefit_detail_code(value: BenefitDetailKind) -> u8 {
+    match value {
+        BenefitDetailKind::ProviderDetail => 1,
+        BenefitDetailKind::ProviderAggregate => 2,
+        BenefitDetailKind::Manual => 3,
+    }
 }
 
 fn validate_display_label(label: String) -> Result<Box<str>, CodexQuotaError> {

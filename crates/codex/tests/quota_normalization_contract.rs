@@ -4,7 +4,9 @@ use tokenmaster_codex::{
     MAX_CODEX_QUOTA_JSON_BYTES,
 };
 use tokenmaster_domain::{
-    QuotaConfidence, QuotaEvidenceSource, QuotaSampleQuality, QuotaWindowSemantics,
+    BenefitConfidence, BenefitDetailKind, BenefitExpiry, BenefitInventoryCompleteness, BenefitKind,
+    BenefitState, BenefitTarget, QuotaConfidence, QuotaEvidenceSource, QuotaSampleQuality,
+    QuotaWindowSemantics,
 };
 
 const OBSERVED_AT_MS: i64 = 1_700_000_000_000;
@@ -106,6 +108,27 @@ fn current_multi_bucket_response_normalizes_without_legacy_duplication() {
         "acct_45771b654d2155290e57022a8faed51f9ae246e50e8a871a6b51c4ee07ec4501"
     );
     assert_eq!(snapshot.observations().len(), 2);
+    let benefits = snapshot
+        .benefit_observation()
+        .expect("reset-credit inventory");
+    assert_eq!(
+        benefits.completeness(),
+        BenefitInventoryCompleteness::Complete
+    );
+    assert_eq!(benefits.lots().len(), 1);
+    let reset = &benefits.lots()[0];
+    assert_eq!(reset.kind(), BenefitKind::BankedRateLimitReset);
+    assert_eq!(reset.quantity(), 1);
+    assert_eq!(reset.state(), BenefitState::Available);
+    assert_eq!(reset.target(), &BenefitTarget::Provider);
+    assert_eq!(reset.granted_at_ms(), Some(1_699_000_000_000));
+    assert_eq!(
+        reset.expiry(),
+        &BenefitExpiry::exact_utc(1_700_200_000_000).expect("expiry")
+    );
+    assert_eq!(reset.confidence(), BenefitConfidence::High);
+    assert_eq!(reset.detail_kind(), BenefitDetailKind::ProviderDetail);
+    assert_eq!(reset.label_key(), "benefit.codex.banked_reset");
 
     let default = &snapshot.observations()[0];
     assert_eq!(
@@ -185,6 +208,13 @@ fn current_multi_bucket_response_normalizes_without_legacy_duplication() {
         snapshot.observations()[0].sample().observation_id(),
         duplicate.observations()[0].sample().observation_id()
     );
+    assert_eq!(
+        benefits.observation_id(),
+        duplicate
+            .benefit_observation()
+            .expect("duplicate benefits")
+            .observation_id()
+    );
     let later = normalize(
         &account(Some(PRIVATE_EMAIL)),
         &current_response(),
@@ -193,6 +223,13 @@ fn current_multi_bucket_response_normalizes_without_legacy_duplication() {
     assert_ne!(
         snapshot.observations()[0].sample().observation_id(),
         later.observations()[0].sample().observation_id()
+    );
+    assert_ne!(
+        benefits.observation_id(),
+        later
+            .benefit_observation()
+            .expect("later benefits")
+            .observation_id()
     );
 }
 
@@ -222,6 +259,66 @@ fn legacy_only_snapshot_expands_primary_and_secondary_in_stable_order() {
             .observations()
             .iter()
             .all(|observation| observation.display_label() == Some("Codex"))
+    );
+    assert_eq!(normalized.benefit_observation(), None);
+}
+
+#[test]
+fn reset_credit_detail_and_aggregate_gap_remain_distinct_and_account_scoped() {
+    let mut response = current_response();
+    response["rateLimitResetCredits"]["availableCount"] = json!(3);
+    response["rateLimitResetCredits"]["credits"]
+        .as_array_mut()
+        .expect("credit rows")
+        .push(json!({
+            "description": null,
+            "expiresAt": 1_700_300_000,
+            "grantedAt": 1_699_100_000,
+            "id": "credit_redeemed_private",
+            "resetType": "codexRateLimits",
+            "status": "redeemed",
+            "title": null
+        }));
+
+    let first = normalize(&account(Some(PRIVATE_EMAIL)), &response, OBSERVED_AT_MS);
+    let inventory = first.benefit_observation().expect("benefit inventory");
+    assert_eq!(
+        inventory.completeness(),
+        BenefitInventoryCompleteness::CompleteQuantityPartialDetails
+    );
+    assert_eq!(inventory.lots().len(), 3);
+    assert_eq!(
+        inventory
+            .lots()
+            .iter()
+            .filter(|lot| lot.detail_kind() == BenefitDetailKind::ProviderDetail)
+            .count(),
+        2
+    );
+    let aggregate = inventory
+        .lots()
+        .iter()
+        .find(|lot| lot.detail_kind() == BenefitDetailKind::ProviderAggregate)
+        .expect("aggregate gap");
+    assert_eq!(aggregate.quantity(), 2);
+    assert_eq!(aggregate.state(), BenefitState::Available);
+    assert_eq!(aggregate.expiry(), &BenefitExpiry::Unknown);
+    assert_eq!(aggregate.confidence(), BenefitConfidence::Medium);
+
+    let second = normalize(
+        &account(Some("another@example.com")),
+        &response,
+        OBSERVED_AT_MS,
+    );
+    let second_inventory = second
+        .benefit_observation()
+        .expect("second account inventory");
+    assert!(
+        inventory
+            .lots()
+            .iter()
+            .zip(second_inventory.lots())
+            .all(|(left, right)| left.lot_id() != right.lot_id())
     );
 }
 
@@ -265,6 +362,23 @@ fn malformed_or_ambiguous_provider_data_fails_closed() {
     invalid_credit["rateLimitResetCredits"]["credits"][0]["unexpected"] =
         json!("private credit payload");
     assert_error(invalid_credit, CodexQuotaErrorCode::InvalidData);
+
+    let mut duplicate_credit = current_response();
+    let duplicate_row = duplicate_credit["rateLimitResetCredits"]["credits"][0].clone();
+    duplicate_credit["rateLimitResetCredits"]["credits"]
+        .as_array_mut()
+        .expect("credit rows")
+        .push(duplicate_row);
+    duplicate_credit["rateLimitResetCredits"]["availableCount"] = json!(2);
+    assert_error(duplicate_credit, CodexQuotaErrorCode::InvalidData);
+
+    let mut incoherent_available = current_response();
+    incoherent_available["rateLimitResetCredits"]["availableCount"] = json!(0);
+    assert_error(incoherent_available, CodexQuotaErrorCode::InvalidData);
+
+    let mut invalid_expiry = current_response();
+    invalid_expiry["rateLimitResetCredits"]["credits"][0]["expiresAt"] = json!(1_698_000_000);
+    assert_error(invalid_expiry, CodexQuotaErrorCode::InvalidData);
 
     let missing_email = serde_json::to_vec(&account(None)).expect("account fixture");
     let response = serde_json::to_vec(&current_response()).expect("quota fixture");

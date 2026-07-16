@@ -4,7 +4,9 @@ mod wire;
 
 use std::fmt;
 
-use tokenmaster_domain::{QuotaAccountId, QuotaSample, QuotaWindowDefinition};
+use tokenmaster_domain::{
+    BenefitInventoryObservation, QuotaAccountId, QuotaSample, QuotaWindowDefinition,
+};
 
 pub const CODEX_QUOTA_FRESH_MILLIS: i64 = 20 * 60 * 1_000;
 pub const CODEX_QUOTA_STALE_MILLIS: i64 = 2 * 60 * 60 * 1_000;
@@ -137,16 +139,19 @@ impl fmt::Debug for CodexQuotaObservation {
 pub struct CodexQuotaSnapshot {
     account_id: QuotaAccountId,
     observations: Box<[CodexQuotaObservation]>,
+    benefit_observation: Option<BenefitInventoryObservation>,
 }
 
 impl CodexQuotaSnapshot {
     pub(super) fn new(
         account_id: QuotaAccountId,
         observations: Vec<CodexQuotaObservation>,
+        benefit_observation: Option<BenefitInventoryObservation>,
     ) -> Self {
         Self {
             account_id,
             observations: observations.into_boxed_slice(),
+            benefit_observation,
         }
     }
 
@@ -159,6 +164,11 @@ impl CodexQuotaSnapshot {
     pub const fn observations(&self) -> &[CodexQuotaObservation] {
         &self.observations
     }
+
+    #[must_use]
+    pub const fn benefit_observation(&self) -> Option<&BenefitInventoryObservation> {
+        self.benefit_observation.as_ref()
+    }
 }
 
 impl fmt::Debug for CodexQuotaSnapshot {
@@ -167,6 +177,10 @@ impl fmt::Debug for CodexQuotaSnapshot {
             .debug_struct("CodexQuotaSnapshot")
             .field("account_id", &"[redacted]")
             .field("observation_count", &self.observations.len())
+            .field(
+                "has_benefit_observation",
+                &self.benefit_observation.is_some(),
+            )
             .finish()
     }
 }

@@ -56,6 +56,7 @@ fn success_uses_exact_protocol_and_returns_normalized_snapshot() {
         .expect("fixture poll");
 
     assert_eq!(snapshot.observations().len(), 1);
+    assert_eq!(snapshot.benefit_observation(), None);
     assert_eq!(
         snapshot.observations()[0]
             .definition()

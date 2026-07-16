@@ -120,13 +120,13 @@ cargo +1.97.0 clippy -p tokenmaster-benefits --all-targets --locked
 
 **RED/GREEN:**
 
-- [ ] Expose one separate benefit observation in `CodexQuotaSnapshot`.
-- [ ] Hash detailed raw IDs with account-separated framing before constructing lots.
-- [ ] Emit one stable aggregate unknown-expiry lot for unexplained available count.
-- [ ] Preserve different detailed IDs/expirations and map statuses conservatively.
-- [ ] Reject duplicate IDs, count incoherence, invalid/overflow times, and excessive
+- [x] Expose one separate benefit observation in `CodexQuotaSnapshot`.
+- [x] Hash detailed raw IDs with account-separated framing before constructing lots.
+- [x] Emit one stable aggregate unknown-expiry lot for unexplained available count.
+- [x] Preserve different detailed IDs/expirations and map statuses conservatively.
+- [x] Reject duplicate IDs, count incoherence, invalid/overflow times, and excessive
   detail without leaking values.
-- [ ] Prove raw ID/title/description/email cannot escape values, errors, `Debug`,
+- [x] Prove raw ID/title/description/email cannot escape values, errors, `Debug`,
   serialized fixtures, or retained process output.
 
 **Focused validator:**
