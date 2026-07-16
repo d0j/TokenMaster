@@ -48,11 +48,21 @@ must take it before the next pull. The value is never a field of `AdapterBatch`,
 `CanonicalBatch`, `AdapterCheckpoint`, `Archive`, or a public refresh result. Taking
 or dropping the hint cannot alter usage accounting or archive publication.
 
-The future Git output query returns one immutable bounded projection with explicit
-publication revision, freshness/quality, totals, categories, daily points, warnings,
-unavailable reasons, and omission counts. It exposes opaque repository/association
-identity only when required for bounded continuation or selection; no path, ref,
-email, commit, file, process, or command value is public.
+`UsageReadStore::capture_git_output` returns one owned immutable bounded store
+projection with an independent publication revision, monotonic publication time,
+freshness/quality, all-time and requested-range totals/categories, retained daily
+points, warnings, unavailable reasons, omission counts, exact project-association
+availability, daily-retention boundary, range-completeness flag, and repository
+one-row-lookahead flag. Requests accept 1-32 repositories, at most 400 inclusive days,
+and a nonzero hard deadline no longer than two seconds. SQLite interruption and a
+completed-late read both return `deadline_exceeded`, and the progress handler is
+cleared before reuse.
+
+The later public query facade maps this store capture into independent product
+envelopes. Store and public values expose opaque repository/association/project
+identity only when required for exact selection or joining; no path, ref, email,
+commit, file, process, SQL, or command value is public. Conflicting or absent project
+associations remain explicitly unavailable for the later efficiency join.
 
 `OneShotExecutor` acquires `WriterLease` before adapter or archive work. It retains
 only the bounded scope manifest, one temporary reader/batch, opaque checkpoints,

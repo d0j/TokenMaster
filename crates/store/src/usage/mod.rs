@@ -11,6 +11,10 @@ mod benefit_reminder;
 mod benefit_schema;
 mod benefit_types;
 mod benefit_write;
+mod git_query;
+mod git_schema;
+mod git_types;
+mod git_write;
 mod incremental;
 mod migration;
 mod price_schema;
@@ -34,6 +38,13 @@ pub use benefit_types::{
     DEFAULT_BENEFIT_DELIVERIES_PER_SCOPE, MAX_BENEFIT_CHANGES_PER_SCOPE,
     MAX_BENEFIT_DELIVERIES_PER_SCOPE, MAX_BENEFIT_MAINTENANCE_PAGE_SIZE,
     MAX_BENEFIT_REMINDER_DUE_PAGE_SIZE,
+};
+pub use git_query::{
+    GitOutputCapture, GitOutputQuery, GitOutputRepositoryCapture, GitRangeMetrics,
+};
+pub use git_types::{
+    GitCacheIdentity, GitIncrementalAuthority, GitProjectKey, GitProjectionInput,
+    GitProjectionInputParts, GitPublication, GitRefreshInput, GitRefreshInputParts,
 };
 pub use query::{
     BenefitChangeCursor, BenefitChangePageCapture, BenefitChangePageQuery, BenefitChangeRecord,

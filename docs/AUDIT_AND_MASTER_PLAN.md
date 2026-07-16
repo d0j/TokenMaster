@@ -257,7 +257,10 @@ pass. Exact-native discovery plus dedicated refresh/store publication now pass t
 focused, resource, and release-authority gates. Banked-reset inventory Tasks 1-8 now
 also pass through combined runtime publication, the isolated durable reminder event
 runtime, complete project-truth synchronization, and the full workspace plus
-specialized authority gates. P2-E Git output is the active critical path.
+specialized authority gates. P2-E Git output is the active critical path; its Tasks
+1-5 domain/parser/native-backend/hint/schema-v13 projection and bounded store capture
+now pass, with public efficiency query, runtime/resource evidence, and final audit
+remaining.
 View-time full scans and period-labeled
 whole-session totals remain forbidden.
 P2-A now implements the bounded public values, separate defensive read-only/query-only

@@ -6,7 +6,7 @@
 > `superpowers:verification-before-completion`. Mark a checkbox only after its
 > validator passes.
 
-**Status:** in progress
+**Status:** in progress; Tasks 1-5 complete
 
 **Goal:** derive bounded local Git output metrics for repositories associated with
 normalized activity, preserve private incremental projections, and expose immutable
@@ -230,16 +230,16 @@ cargo +1.97.0 clippy -p tokenmaster-platform -p tokenmaster-provider -p tokenmas
 
 **RED/GREEN:**
 
-- [ ] Add installation salt, independent Git publication state, repository,
+- [x] Add installation salt, independent Git publication state, repository,
   association, salted ref fingerprint, daily/category, and bounded health objects.
-- [ ] Migrate exact v12 transactionally to v13 and validate fresh/v13 archives.
-- [ ] Publish complete rebuild or a same-process proven append-only delta atomically
+- [x] Migrate exact v12 transactionally to v13 and validate fresh/v13 archives.
+- [x] Publish complete rebuild or a same-process proven append-only delta atomically
   after exact before/after ref fingerprints.
-- [ ] Refresh unchanged scans without history traversal or aggregate mutation.
-- [ ] Invalidate restart-with-changed-refs, force-push/deletion/author/mailmap/category/
+- [x] Refresh unchanged scans without history traversal or aggregate mutation.
+- [x] Invalidate restart-with-changed-refs, force-push/deletion/author/mailmap/category/
   object/shallow changes and preserve prior projection stale until rebuild.
-- [ ] Add bounded read captures for 32 repositories and 400 daily points.
-- [ ] Fault-test every schema/projection/frontier/publication boundary and prove no
+- [x] Add bounded read captures for 32 repositories and 400 daily points.
+- [x] Fault-test every schema/projection/frontier/publication boundary and prove no
   usage/price/quota/benefit/reminder regression.
 
 **Focused validator:**

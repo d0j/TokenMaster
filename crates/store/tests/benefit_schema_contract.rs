@@ -92,6 +92,7 @@ fn seed_one_delivery(store: &mut UsageStore) {
 }
 
 fn strip_benefit_schema_to_exact_v10(connection: &Connection) {
+    git_schema_v13::strip_git_schema(connection);
     connection
         .execute_batch(
             "DROP TRIGGER IF EXISTS benefit_ack_no_update;
@@ -129,12 +130,12 @@ fn fresh_schema_has_strict_bounded_benefit_objects_and_recommended_profile() {
     drop(UsageStore::open(&path).expect("create current schema"));
     let connection = raw_connection(&path);
 
-    assert_eq!(USAGE_SCHEMA_VERSION, 12);
+    assert_eq!(USAGE_SCHEMA_VERSION, 13);
     assert_eq!(
         connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
             .expect("user version"),
-        12
+        13
     );
     assert_eq!(
         connection
@@ -335,7 +336,7 @@ fn exact_v10_migration_adds_empty_benefits_without_touching_existing_facts() {
         connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
             .expect("current version"),
-        12
+        13
     );
 }
 
@@ -349,6 +350,7 @@ fn exact_v11_migration_marks_legacy_delivery_receipts_acknowledged() {
     }
     {
         let connection = raw_connection(&path);
+        git_schema_v13::strip_git_schema(&connection);
         connection
             .execute_batch(
                 "DROP TRIGGER benefit_ack_no_update;
@@ -419,4 +421,7 @@ fn weakened_benefit_schema_is_rejected_on_reopen() {
         Err(error) => error,
     };
     assert_eq!(error.code(), StoreErrorCode::SchemaMismatch);
+}
+mod git_schema_v13 {
+    include!("support/git_schema_v13.rs");
 }

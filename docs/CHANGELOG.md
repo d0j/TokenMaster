@@ -6,6 +6,15 @@ All notable changes are recorded here.
 
 ### Added
 
+- Strict SQLite schema v13 Git projection with a random installation salt,
+  independent monotonic publication state, 32 opaque repositories, 4,096 activity
+  associations, immutable rebuild/append aggregate generations, exact rollback-safe
+  v12 migration, unchanged refresh, rebuild-required invalidation, and no durable
+  path/ref/commit/file/command/raw-output values.
+- Bounded defensive Git store capture with owned all-time/range totals, eight
+  categories, latest-400-day retention, explicit `daily_history_truncated` boundary
+  and range completeness, exact project-association clearing/ambiguity, 32+1
+  repository lookahead, hard maximum two-second deadline, and progress cleanup.
 - Store-owned durable in-app reminder processing: one immediate transaction first
   replays at most 256 unacknowledged immutable outbox rows or examines at most 256
   indexed due rows, drains expired entries, selects one most-urgent useful threshold

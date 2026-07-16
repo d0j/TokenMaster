@@ -87,6 +87,17 @@ explicit. Missing or ambiguous evidence MUST NOT become zero or complete quality
 Persistent projections and queries MUST remain bounded to 32 repositories and 400
 daily points per snapshot.
 
+The durable projection MUST use immutable aggregate generations and one independent
+monotonic Git publication revision. Rebuild, proven same-process append, unchanged
+refresh, and rebuild-required invalidation MUST publish transactionally; any stale
+authority or failed write MUST preserve the prior generation. All-time totals remain
+exact when the latest 400 daily points omit older days, but the range MUST then be
+marked partial with an explicit retention boundary. Repository and project selection
+MUST use salted opaque identities; conflicting or missing project associations MUST
+disable the efficiency join instead of selecting one silently. Reads MUST use a hard
+caller deadline of at most two seconds and one-row lookahead when a repository limit
+can omit results.
+
 ### TM-FUNC-005 — Native interaction
 
 The product MUST provide single-instance tray behavior, dashboard/compact access,

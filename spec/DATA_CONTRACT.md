@@ -58,6 +58,23 @@ quality, warnings, unavailable reasons, freshness, and omission counters. It MUS
 NOT retain a repository path, executable path, author email, ref, commit identity or
 message, file path/content, raw command output, or provider transcript.
 
+Schema v13 owns one random 32-byte installation salt, one independent monotonic Git
+publication state, at most 32 repositories, at most 4,096 activity associations, and
+one immutable active aggregate generation per repository. A generation contains at
+most the latest 400 daily rows, exactly eight category rows per retained day, exactly
+eight all-time category rows, and at most 16 ordered warnings. All-time totals remain
+independent of the daily retention window. If any older daily fact is dropped,
+`daily_history_truncated` is mandatory, quality is partial, and queries expose the
+oldest retained day plus whether the requested range is complete.
+
+Only salted opaque repository, association, project, ref-set, mailmap, and author-set
+fingerprints are durable. A project key is present in a read capture only when every
+association for that repository has the same non-null key. Missing or conflicting
+keys produce `association_incomplete`; replacing an association with no safe project
+key clears the earlier key. Unavailable repositories have no cache identity,
+aggregate, category, daily, or warning rows and therefore represent absence rather
+than fabricated zero activity.
+
 ## TM-DATA-004 — Current and staging generations
 
 Current-generation append writes observations, canonical selections, chunk coverage,

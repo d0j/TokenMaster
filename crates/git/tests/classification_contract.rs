@@ -217,7 +217,17 @@ fn scan_and_batch_state_are_bounded_without_whole_history_retention() {
         summary.retained_days().len(),
         tokenmaster_domain::MAX_GIT_OUTPUT_DAYS
     );
+    assert_eq!(
+        summary.retained_day_categories().len(),
+        tokenmaster_domain::MAX_GIT_OUTPUT_DAYS * tokenmaster_domain::MAX_GIT_OUTPUT_CATEGORIES
+    );
     assert_eq!(summary.retained_days()[0].day_index(), 1);
+    assert_eq!(summary.retained_day_categories()[0].day_index(), 1);
+    assert_eq!(
+        summary.retained_day_categories()[0].category(),
+        GitOutputCategory::ProductCode
+    );
+    assert!(summary.daily_history_truncated());
 
     let records = (0..MAX_GIT_COMMITS_PER_BATCH)
         .map(|index| {

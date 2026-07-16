@@ -158,6 +158,21 @@ reads, and exposes fixed queries only. Every public error and Debug value is pat
 activity/cursor fingerprints are redacted. Deadline interruption is cleared on every
 success/error path before reuse.
 
+Schema v13 adds only installation-salted opaque Git identities, bounded aggregate
+facts, counters, stable quality codes, and immutable generations. It has no repository
+or executable path, author email/name, ref/branch, commit/object ID, file path/content,
+command, stdout, or stderr column. Exact v12 migration is one rollback-tested
+immediate transaction. Rebuild, proven append, unchanged refresh, association update,
+and rebuild-required invalidation advance a separate Git revision atomically; injected
+faults after aggregate or repository mutation restore the exact prior publication.
+Unavailable data stores no fabricated cache fingerprint or zero series.
+
+Git read capture uses the same defensive read-only/query-only connection, a maximum
+two-second progress handler plus final wall-clock check, fixed SQL, bounded rows, and
+one-row lookahead. A missing, cleared, or conflicting opaque project association
+cannot inherit an older key or authorize cost attribution. Daily retention is visible
+as `daily_history_truncated` and cannot be reported as complete.
+
 The facade exports fixed request methods only and never arbitrary SQL, filesystem,
 shell, HTTP, plugin, or provider-mutation authority. Public query results omit source
 IDs and private source content. Obsolete accounting versions fail truthful quality

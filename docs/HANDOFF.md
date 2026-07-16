@@ -220,7 +220,7 @@ clean-root, formatting, strict locked workspace Clippy, complete locked workspac
 test/doctest, specialized benefit audit, complete-diff, process-return, and
 dependency/language-surface gates.
 
-P2-E Git output Tasks 1-4 are complete under
+P2-E Git output Tasks 1-5 are complete under
 `docs/superpowers/plans/2026-07-16-tokenmaster-git-output.md`: strict opaque domain
 values; bounded NUL parsing/aggregation; an exact native read-only Git backend with
 owned process cleanup and synthetic repository coverage; and one latest transient
@@ -229,7 +229,11 @@ and safe project alias to a sealed canonical local directory, travels only besid
 descriptor-bound reader pull, and is absent from resume, checkpoints, canonical
 events, archive, SQLite, errors, and `Debug`. Shared platform validation rejects
 relative/traversal/network/device/mapped-remote and linked/reparse ancestry. The
-immediate next slice is Task 5, strict schema-v13 Git projection.
+strict schema-v13 store now adds salted opaque identities, 32 repositories, 4,096
+associations, immutable rebuild/append generations, unchanged refresh, stale
+invalidation, 400-day retention truth, exact association ambiguity, rollback-tested
+v12 migration, and deadline-bounded owned captures. The immediate next slice is Task
+6: immutable public Git envelopes plus the exact usage/cost efficiency join.
 Actual P3 visible notifications/UI, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.

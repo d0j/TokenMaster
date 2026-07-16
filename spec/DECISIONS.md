@@ -911,3 +911,30 @@ surfaces. Reconstructing repository identity from `ProjectAlias` would be ambigu
 The separate capacity-one side channel preserves exact association for Git discovery,
 keeps old providers source-compatible through a default `None`, and gives the runtime
 one narrow value it can consume or drop without changing usage truth.
+
+## ADR-045 — Git aggregates use private immutable schema-v13 generations
+
+Decision: schema v13 adds an independent Git installation salt/publication revision,
+at most 32 opaque repositories, at most 4,096 opaque activity associations, immutable
+daily/day-category/category/warning generations, and no path or raw Git identity.
+Authoritative rebuild replaces one generation; a same-process append is accepted only
+with exact scan-revision/ref-fingerprint CAS plus compatible object/mailmap/author/
+category/shallow identity. An unchanged refresh mutates no aggregate. Any restart with
+changed refs or incompatible identity marks the prior projection rebuild-required
+until a complete replacement publishes.
+
+Only the latest 400 daily rows are retained while all-time totals and categories stay
+exact. Loss of an older day forces `daily_history_truncated`, partial quality, an
+oldest-retained boundary, and a range-completeness result. Project attribution is
+available only when every durable association agrees on one non-null opaque project
+key; absence clears an earlier key and disagreement produces
+`association_incomplete`. Fixed read capture owns its values, uses 32+1 repository
+lookahead, accepts at most 400 inclusive days, and enforces a total deadline of at most
+two seconds.
+
+Rationale: mutable aggregate rows create torn snapshots and difficult rollback;
+persisted paths/commit IDs violate the privacy boundary; timestamp-only incremental
+authority is unsafe after rewritten history; and silently retained project keys or
+truncated daily series would manufacture exactness. Immutable generations plus
+bounded salted metadata keep restart cost acceptable while making failure, staleness,
+retention, association ambiguity, and omission truth explicit.

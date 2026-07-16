@@ -128,9 +128,10 @@ snapshots; interactive hibernation/soak stay in the frozen-candidate M0 gate.
 - **1.1 — providers:** isolated signed WebAssembly Component packages after 1.0
   observation/query/quota contracts freeze.
 
-P2-E Tasks 1-4 are complete: strict bounded Git values, streaming aggregation, exact
-native read-only inspection, and transient provider-neutral repository activity hints.
-Task 5 schema-v13 projection is next, followed by immutable query, bounded runtime,
+P2-E Tasks 1-5 are complete: strict bounded Git values, streaming aggregation, exact
+native read-only inspection, transient provider-neutral repository activity hints,
+and strict schema-v13 immutable incremental projection with bounded store captures.
+Task 6 public immutable query/efficiency mapping is next, followed by bounded runtime,
 joined product status, and the complete UI.
 
 P2-A query foundation is approved under

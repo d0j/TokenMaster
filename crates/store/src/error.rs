@@ -84,7 +84,14 @@ impl fmt::Display for StoreError {
 impl std::error::Error for StoreError {}
 
 impl From<rusqlite::Error> for StoreError {
-    fn from(_error: rusqlite::Error) -> Self {
-        Self::new(StoreErrorCode::Database)
+    fn from(error: rusqlite::Error) -> Self {
+        match error {
+            rusqlite::Error::SqliteFailure(details, _)
+                if details.code == rusqlite::ErrorCode::OperationInterrupted =>
+            {
+                Self::new(StoreErrorCode::DeadlineExceeded)
+            }
+            _ => Self::new(StoreErrorCode::Database),
+        }
     }
 }

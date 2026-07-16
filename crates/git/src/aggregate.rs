@@ -255,6 +255,7 @@ struct DayAggregate {
     commits: u64,
     merge_commits: u64,
     lines: GitLineMetrics,
+    categories: [GitLineMetrics; CATEGORY_COUNT],
 }
 
 impl Default for DayAggregate {
@@ -263,7 +264,32 @@ impl Default for DayAggregate {
             commits: 0,
             merge_commits: 0,
             lines: GitLineMetrics::new(0, 0),
+            categories: [GitLineMetrics::new(0, 0); CATEGORY_COUNT],
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GitDayCategoryAggregate {
+    day_index: i32,
+    category: GitOutputCategory,
+    lines: GitLineMetrics,
+}
+
+impl GitDayCategoryAggregate {
+    #[must_use]
+    pub const fn day_index(self) -> i32 {
+        self.day_index
+    }
+
+    #[must_use]
+    pub const fn category(self) -> GitOutputCategory {
+        self.category
+    }
+
+    #[must_use]
+    pub const fn lines(self) -> GitLineMetrics {
+        self.lines
     }
 }
 
@@ -276,6 +302,7 @@ pub struct GitScanAccumulator {
     binary_files: u64,
     submodule_changes: u64,
     retained_days: BTreeMap<i32, DayAggregate>,
+    daily_history_truncated: bool,
 }
 
 impl Default for GitScanAccumulator {
@@ -295,6 +322,7 @@ impl GitScanAccumulator {
             binary_files: 0,
             submodule_changes: 0,
             retained_days: BTreeMap::new(),
+            daily_history_truncated: false,
         }
     }
 
@@ -336,9 +364,11 @@ impl GitScanAccumulator {
                 return Err(GitCoreError::IncoherentState);
             };
             if commit.day_index <= oldest {
+                self.daily_history_truncated = true;
                 return Ok(());
             }
             self.retained_days.remove(&oldest);
+            self.daily_history_truncated = true;
         }
         let day = self.retained_days.entry(commit.day_index).or_default();
         day.commits = day.commits.checked_add(1).ok_or(GitCoreError::Overflow)?;
@@ -352,6 +382,12 @@ impl GitScanAccumulator {
             .lines
             .checked_add(commit.lines)
             .map_err(|_| GitCoreError::Overflow)?;
+        for category in all_categories() {
+            let index = category_index(category);
+            day.categories[index] = day.categories[index]
+                .checked_add(commit.categories[index])
+                .map_err(|_| GitCoreError::Overflow)?;
+        }
         Ok(())
     }
 
@@ -366,14 +402,22 @@ impl GitScanAccumulator {
             0,
         )
         .map_err(|_| GitCoreError::IncoherentState)?;
-        let retained_days = self
-            .retained_days
-            .into_iter()
-            .map(|(day_index, day)| {
+        let mut retained_days = Vec::with_capacity(self.retained_days.len());
+        let mut retained_day_categories =
+            Vec::with_capacity(self.retained_days.len().saturating_mul(CATEGORY_COUNT));
+        for (day_index, day) in self.retained_days {
+            retained_days.push(
                 GitOutputDay::new(day_index, day.commits, day.merge_commits, day.lines)
-                    .map_err(|_| GitCoreError::IncoherentState)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+                    .map_err(|_| GitCoreError::IncoherentState)?,
+            );
+            for category in all_categories() {
+                retained_day_categories.push(GitDayCategoryAggregate {
+                    day_index,
+                    category,
+                    lines: day.categories[category_index(category)],
+                });
+            }
+        }
         let categories = all_categories()
             .into_iter()
             .map(|category| {
@@ -383,7 +427,9 @@ impl GitScanAccumulator {
         Ok(GitScanSummary {
             totals,
             retained_days,
+            retained_day_categories,
             categories,
+            daily_history_truncated: self.daily_history_truncated,
         })
     }
 }
@@ -398,7 +444,9 @@ impl GitCommitSink for GitScanAccumulator {
 pub struct GitScanSummary {
     totals: GitOutputTotals,
     retained_days: Vec<GitOutputDay>,
+    retained_day_categories: Vec<GitDayCategoryAggregate>,
     categories: Vec<GitOutputCategoryMetrics>,
+    daily_history_truncated: bool,
 }
 
 impl GitScanSummary {
@@ -413,8 +461,18 @@ impl GitScanSummary {
     }
 
     #[must_use]
+    pub fn retained_day_categories(&self) -> &[GitDayCategoryAggregate] {
+        &self.retained_day_categories
+    }
+
+    #[must_use]
     pub fn categories(&self) -> &[GitOutputCategoryMetrics] {
         &self.categories
+    }
+
+    #[must_use]
+    pub const fn daily_history_truncated(&self) -> bool {
+        self.daily_history_truncated
     }
 
     #[must_use]

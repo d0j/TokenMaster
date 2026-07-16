@@ -1972,3 +1972,35 @@ remain path-free. The Git backend repeats the same local-directory validation fo
 executable parent, candidate, common directory, and worktree root before command use.
 Schema-v13 Git projection, query, runtime scheduling/resource gates, joined status,
 and UI remain unclaimed.
+
+## 2026-07-16 — Private incremental Git projection added
+
+Completed P2-E Task 5. Schema v13 adds a random installation salt, independent
+monotonic Git publication revision, at most 32 opaque repositories, 4,096 opaque
+activity associations, immutable daily/day-category/category/warning generations,
+eight fixed categories, 16 warnings, and no repository path, executable path, author
+email/name, ref, commit/object identity, file path/content, command, stdout, or stderr.
+Exact v12 migration is transactional and its injected post-schema failure restores the
+literal prior schema and all usage, pricing, quota, benefit, reminder, and
+acknowledgement facts.
+
+Authoritative rebuild and same-process CAS-proven append switch one generation
+atomically. Unchanged refresh changes no aggregate; changed or incompatible authority
+marks the prior projection rebuild-required; stale CAS and injected repository/state
+faults write nothing. Unavailable results have no fabricated cache identity or zero
+series. All-time totals remain exact while daily retention keeps only the latest 400
+days; any older-day loss forces partial `daily_history_truncated`, exposes the oldest
+retained day, and marks older requested ranges incomplete.
+
+The defensive read store now returns owned bounded all-time/range totals, eight
+all-time/range categories, daily points, warnings, quality, omission counters, and
+32+1 repository lookahead under a hard maximum two-second deadline. Completed-late
+reads fail, SQLite interruption is mapped explicitly, and the progress handler is
+cleared before reuse. A missing project key clears prior association state; multiple
+associations expose a key only when every row agrees, otherwise the capture becomes
+partial with `association_incomplete`. Focused Git schema/projection/incremental/query,
+domain retention, and strict store Clippy validators pass. The clean-root audit,
+formatting check, warnings-as-errors locked workspace Clippy, complete locked
+workspace tests/doctests, and diff check also pass. Public query envelopes, the
+cost-efficiency join, runtime publication/resource evidence, final authority audit,
+joined status, and UI remain unclaimed.

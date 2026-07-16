@@ -154,6 +154,7 @@ pub enum GitOutputWarning {
     SubmoduleLinesOmitted,
     OversizedFieldsOmitted,
     InvalidCommitOmitted,
+    DailyHistoryTruncated,
     IncrementalRebuildPending,
     AssociationIncomplete,
 }
@@ -167,6 +168,7 @@ impl GitOutputWarning {
             Self::SubmoduleLinesOmitted => "submodule_lines_omitted",
             Self::OversizedFieldsOmitted => "oversized_fields_omitted",
             Self::InvalidCommitOmitted => "invalid_commit_omitted",
+            Self::DailyHistoryTruncated => "daily_history_truncated",
             Self::IncrementalRebuildPending => "incremental_rebuild_pending",
             Self::AssociationIncomplete => "association_incomplete",
         }
@@ -707,9 +709,17 @@ fn validate_projection_parts(parts: &GitOutputProjectionParts) -> Result<(), Git
             .ok_or(GitOutputError::Overflow)?;
         day_lines = day_lines.checked_add(day.lines)?;
     }
-    if day_commits != parts.totals.commits
-        || day_merges != parts.totals.merge_commits
-        || day_lines != parts.totals.lines
+    let daily_history_truncated = parts
+        .warnings
+        .contains(&GitOutputWarning::DailyHistoryTruncated);
+    if day_commits > parts.totals.commits
+        || day_merges > parts.totals.merge_commits
+        || day_lines.added() > parts.totals.lines.added()
+        || day_lines.removed() > parts.totals.lines.removed()
+        || daily_history_truncated
+            != (day_commits != parts.totals.commits
+                || day_merges != parts.totals.merge_commits
+                || day_lines != parts.totals.lines)
     {
         return Err(GitOutputError::IncoherentState);
     }

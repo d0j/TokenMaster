@@ -1,6 +1,6 @@
 # TokenMaster Bounded Git Output Design
 
-**Status:** approved for implementation on 2026-07-16
+**Status:** approved; implementation Tasks 1-5 complete on 2026-07-16
 
 **Scope:** local read-only Git code-output metrics, transient repository association,
 bounded incremental projection, immutable query snapshots, and usage/cost efficiency
@@ -470,6 +470,7 @@ Partial warnings include:
 - `submodule_lines_omitted`;
 - `oversized_fields_omitted`;
 - `invalid_commit_omitted`;
+- `daily_history_truncated`;
 - `incremental_rebuild_pending`;
 - `association_incomplete`.
 

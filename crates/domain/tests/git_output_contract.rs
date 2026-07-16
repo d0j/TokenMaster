@@ -72,6 +72,10 @@ fn opaque_identities_and_stable_codes_are_path_private() {
         GitOutputWarning::SubmoduleLinesOmitted.stable_code(),
         "submodule_lines_omitted"
     );
+    assert_eq!(
+        GitOutputWarning::DailyHistoryTruncated.stable_code(),
+        "daily_history_truncated"
+    );
 
     let debug = format!("{:?}", complete_projection(3));
     for forbidden in [
@@ -161,6 +165,22 @@ fn quality_reason_warning_and_aggregate_coherence_fail_closed() {
     mismatched.categories[0] = category(GitOutputCategory::ProductCode, 21, 5);
     assert_eq!(
         GitOutputProjection::new(mismatched),
+        Err(GitOutputError::IncoherentState)
+    );
+}
+
+#[test]
+fn explicitly_truncated_daily_history_preserves_honest_all_time_totals() {
+    let mut parts = complete_projection(4).into_parts();
+    parts.quality = GitOutputQuality::Partial;
+    parts.warnings = vec![GitOutputWarning::DailyHistoryTruncated];
+    parts.totals = GitOutputTotals::new(3, 0, lines(30, 10), 0, 0, 0, 0).expect("all-time totals");
+    assert!(GitOutputProjection::new(parts.clone()).is_ok());
+
+    parts.warnings.clear();
+    parts.quality = GitOutputQuality::Complete;
+    assert_eq!(
+        GitOutputProjection::new(parts),
         Err(GitOutputError::IncoherentState)
     );
 }

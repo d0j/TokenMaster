@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-pub const USAGE_SCHEMA_VERSION: i64 = 12;
+pub const USAGE_SCHEMA_VERSION: i64 = 13;
 pub(super) const V1_SCHEMA_VERSION: i64 = 1;
 pub(super) const V2_SCHEMA_VERSION: i64 = 2;
 pub(super) const V3_SCHEMA_VERSION: i64 = 3;
@@ -12,6 +12,7 @@ pub(super) const V8_SCHEMA_VERSION: i64 = 8;
 pub(super) const V9_SCHEMA_VERSION: i64 = 9;
 pub(super) const V10_SCHEMA_VERSION: i64 = 10;
 pub(super) const V11_SCHEMA_VERSION: i64 = 11;
+pub(super) const V12_SCHEMA_VERSION: i64 = 12;
 
 #[derive(Clone, Copy)]
 pub(super) struct TableContract {

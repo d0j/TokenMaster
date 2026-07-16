@@ -158,8 +158,8 @@ impl GitCoreError {
 }
 
 pub use aggregate::{
-    GitAggregateBatch, GitCommitAccumulator, GitCommitAggregate, GitCommitSink, GitPathStat,
-    GitScanAccumulator, GitScanSummary,
+    GitAggregateBatch, GitCommitAccumulator, GitCommitAggregate, GitCommitSink,
+    GitDayCategoryAggregate, GitPathStat, GitScanAccumulator, GitScanSummary,
 };
 pub use classify::classify_destination_path;
 pub use command::{GitExecutable, GitRepositoryCandidate};

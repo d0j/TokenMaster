@@ -506,6 +506,24 @@ provider readers default to no hint. The Git backend applies the same validation
 to the executable parent, candidate, common directory, and worktree root immediately
 before command use.
 
+Task 5 is now implemented. Strict schema v13 adds a random installation salt,
+independent monotonic Git publication state, at most 32 opaque repositories, 4,096
+activity associations, immutable aggregate generations, exact all-time totals/eight
+categories, the latest 400 daily points with eight day-category rows each, and at most
+16 stable warnings. Exact v12 migration and injected schema failure roll back without
+touching usage, price, quota, benefit, reminder, or acknowledgement state.
+
+Authoritative rebuild, same-process CAS-proven append, unchanged refresh, and
+rebuild-required invalidation are atomic. Changed/incompatible authority preserves the
+prior generation stale. Unavailable publication stores no fabricated cache identity
+or zero series. Daily retention becomes explicit partial
+`daily_history_truncated` with an oldest-retained boundary and per-request completeness.
+An absent project key clears the earlier value; multiple associations expose a project
+key only when all agree, otherwise the capture adds `association_incomplete`.
+`UsageReadStore` returns owned all-time/range totals, categories, days, warnings and
+quality through a 32+1 repository lookahead, at most 400 inclusive days, and a hard
+maximum two-second deadline whose progress handler is cleared before reuse.
+
 ## Next implementation slice
 
 P2-D quota history core is complete under
@@ -522,13 +540,14 @@ credit inventory, expiration reconciliation, default/custom reminder profiles,
 immutable read snapshots, and publication through the existing Codex runtime with
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
-workspace quality gate. P2-E Tasks 1-4 are complete; the immediate next slice is the
-strict schema-v13 Git projection in Task 5. Activation
+workspace quality gate. P2-E Tasks 1-5 are complete; the immediate next slice is Task
+6, the immutable public Git query envelopes and exact usage/cost efficiency join.
+Activation
 remains a later independently authorized
 capability; visible notifications and the complete UI follow the completed data
 contracts. No quota value may be inferred from local token/cost facts and no browser/
 private-endpoint authority may be added.
-The remaining P2-E work is schema-v13 projection, immutable query mapping, runtime
+The remaining P2-E work is public query mapping/efficiency evidence, runtime
 scheduling/resource evidence, and final audit. P2-F joined product status and P3
 complete UI follow the product-data contracts.
 

@@ -148,6 +148,14 @@ fn real_git_nul_shape_parses_incrementally_and_filters_author() {
         );
         assert_eq!(summary.retained_days().len(), 2);
         assert_eq!(summary.retained_days()[0].day_index(), 20_000);
+        let first_product = summary
+            .retained_day_categories()
+            .iter()
+            .find(|item| {
+                item.day_index() == 20_000 && item.category() == GitOutputCategory::ProductCode
+            })
+            .expect("day product category");
+        assert_eq!(first_product.lines(), GitLineMetrics::new(20, 3));
     }
 }
 

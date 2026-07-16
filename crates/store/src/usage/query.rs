@@ -7,7 +7,7 @@ use rusqlite::{
 
 use super::{
     JournalMode, MAX_SCAN_SCOPES, MAX_USAGE_EVENT_PAGE_SIZE,
-    migration::validate_v12,
+    migration::validate_v13,
     schema::USAGE_SCHEMA_VERSION,
     types::{AccountingVersions, ArchivePublicationQuality, EventCursor, ScanScope},
 };
@@ -50,8 +50,8 @@ pub use session::{
 
 const READ_CACHE_SIZE_KIB: u64 = 4 * 1024;
 const READ_BUSY_TIMEOUT_MS: u64 = 250;
-const MAX_QUERY_DURATION: Duration = Duration::from_secs(2);
-const PROGRESS_OP_INTERVAL: i32 = 1_000;
+pub(super) const MAX_QUERY_DURATION: Duration = Duration::from_secs(2);
+pub(super) const PROGRESS_OP_INTERVAL: i32 = 1_000;
 pub const MAX_USAGE_QUERY_SCOPES: usize = 32;
 pub const MAX_USAGE_OVERVIEW_SEGMENTS: usize = 3;
 
@@ -730,7 +730,7 @@ impl UsageReadRuntimePolicy {
 }
 
 pub struct UsageReadStore {
-    connection: Connection,
+    pub(super) connection: Connection,
 }
 
 impl UsageReadStore {
@@ -752,7 +752,7 @@ impl UsageReadStore {
         if version != USAGE_SCHEMA_VERSION {
             return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
         }
-        validate_v12(&connection)?;
+        validate_v13(&connection)?;
         let store = Self { connection };
         store.runtime_policy()?;
         Ok(store)
@@ -1483,7 +1483,7 @@ fn negative_pragma_u64(connection: &Connection, sql: &str) -> Result<u64, StoreE
         .ok_or_else(|| StoreError::new(StoreErrorCode::PolicyMismatch))
 }
 
-fn map_sql<T>(result: rusqlite::Result<T>) -> Result<T, StoreError> {
+pub(super) fn map_sql<T>(result: rusqlite::Result<T>) -> Result<T, StoreError> {
     result.map_err(map_sql_error)
 }
 

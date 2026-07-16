@@ -11,6 +11,7 @@ rusqlite.workspace = true
 tokenmaster-accounting = { path = "../accounting" }
 tokenmaster-benefits = { path = "../benefits" }
 tokenmaster-domain = { path = "../domain" }
+tokenmaster-git = { path = "../git" }
 tokenmaster-quota = { path = "../quota" }
 
 [dev-dependencies]
