@@ -9,7 +9,7 @@ use tokenmaster_domain::{
 };
 use tokenmaster_quota::{
     QuotaAllowanceChangeKind, QuotaDetectionTime, QuotaEpochState, QuotaErrorCode, QuotaEvaluation,
-    QuotaTransitionKind, evaluate_sample,
+    QuotaTransition, QuotaTransitionId, QuotaTransitionKind, evaluate_sample,
 };
 
 #[derive(Clone)]
@@ -417,6 +417,18 @@ fn explicit_epoch_local_and_manual_resets_preserve_kind_time_and_identity() {
     assert_eq!(
         provider_transition.maximum_used_ratio_observation_id_before(),
         Some(first.observation_id())
+    );
+    assert_eq!(
+        QuotaTransition::restore(provider_transition.to_parts()).expect("restore transition"),
+        provider_transition
+    );
+    let mut tampered = provider_transition.to_parts();
+    tampered.id = QuotaTransitionId::from_bytes([9; 32]);
+    assert_eq!(
+        QuotaTransition::restore(tampered)
+            .expect_err("tampered identity")
+            .code(),
+        QuotaErrorCode::InvalidTransitionState
     );
 
     let mut local_spec = SampleSpec::new(3, 4_000);

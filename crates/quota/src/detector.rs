@@ -23,6 +23,7 @@ pub enum QuotaErrorCode {
     InvalidTransitionSequence,
     TransitionSequenceOverflow,
     InvalidEpochState,
+    InvalidTransitionState,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -69,6 +70,9 @@ impl fmt::Display for QuotaError {
                 "quota transition sequence cannot advance"
             }
             QuotaErrorCode::InvalidEpochState => "restored quota epoch state is incoherent",
+            QuotaErrorCode::InvalidTransitionState => {
+                "restored quota transition state is incoherent"
+            }
         };
         formatter.write_str(message)
     }
@@ -112,6 +116,36 @@ pub struct QuotaAllowanceChange {
 }
 
 impl QuotaAllowanceChange {
+    pub fn restore(
+        kind: QuotaAllowanceChangeKind,
+        old_units: QuotaUnits,
+        new_units: QuotaUnits,
+    ) -> Result<Self, QuotaError> {
+        let old_capacity = old_units
+            .capacity()
+            .ok_or_else(|| QuotaError::new(QuotaErrorCode::InvalidTransitionState))?;
+        let new_capacity = new_units
+            .capacity()
+            .ok_or_else(|| QuotaError::new(QuotaErrorCode::InvalidTransitionState))?;
+        let valid = match kind {
+            QuotaAllowanceChangeKind::Increased => {
+                old_units.unit_id() == new_units.unit_id() && new_capacity > old_capacity
+            }
+            QuotaAllowanceChangeKind::Decreased => {
+                old_units.unit_id() == new_units.unit_id() && new_capacity < old_capacity
+            }
+            QuotaAllowanceChangeKind::UnitChanged => old_units.unit_id() != new_units.unit_id(),
+        };
+        if !valid {
+            return Err(QuotaError::new(QuotaErrorCode::InvalidTransitionState));
+        }
+        Ok(Self {
+            kind,
+            old_units,
+            new_units,
+        })
+    }
+
     #[must_use]
     pub const fn kind(&self) -> QuotaAllowanceChangeKind {
         self.kind
@@ -317,6 +351,7 @@ impl QuotaEpochState {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct QuotaTransition {
     id: QuotaTransitionId,
+    definition_revision: u64,
     sequence: u64,
     key: QuotaWindowKey,
     kind: QuotaTransitionKind,
@@ -336,7 +371,127 @@ pub struct QuotaTransition {
     detection_time: QuotaDetectionTime,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct QuotaTransitionParts {
+    pub id: QuotaTransitionId,
+    pub definition_revision: u64,
+    pub sequence: u64,
+    pub key: QuotaWindowKey,
+    pub kind: QuotaTransitionKind,
+    pub previous_epoch_id: QuotaEpochId,
+    pub current_epoch_id: QuotaEpochId,
+    pub pre_observation_id: QuotaObservationId,
+    pub post_observation_id: QuotaObservationId,
+    pub maximum_used_ratio_before: Option<QuotaRatio>,
+    pub maximum_used_ratio_observation_id_before: Option<QuotaObservationId>,
+    pub maximum_used_units_before: Option<QuotaUnits>,
+    pub maximum_used_units_observation_id_before: Option<QuotaObservationId>,
+    pub old_resets_at_ms: Option<i64>,
+    pub new_resets_at_ms: Option<i64>,
+    pub allowance_change: Option<QuotaAllowanceChange>,
+    pub source: QuotaEvidenceSource,
+    pub confidence: QuotaConfidence,
+    pub detection_time: QuotaDetectionTime,
+}
+
 impl QuotaTransition {
+    pub fn restore(parts: QuotaTransitionParts) -> Result<Self, QuotaError> {
+        let reset_epoch_shape = parts.previous_epoch_id != parts.current_epoch_id;
+        let allowance_shape = parts.kind == QuotaTransitionKind::AllowanceChanged
+            && !reset_epoch_shape
+            && parts.allowance_change.is_some();
+        let reset_shape = parts.kind != QuotaTransitionKind::AllowanceChanged && reset_epoch_shape;
+        let valid_detection_time = match parts.detection_time {
+            QuotaDetectionTime::Exact(at_ms) => at_ms > 0,
+            QuotaDetectionTime::Interval {
+                after_ms,
+                at_or_before_ms,
+            } => after_ms > 0 && after_ms < at_or_before_ms,
+        };
+        let expected_id = quota_transition_id(TransitionIdentityInput {
+            key: &parts.key,
+            definition_revision: parts.definition_revision,
+            sequence: parts.sequence,
+            kind_code: parts.kind.identity_code(),
+            previous_epoch_id: parts.previous_epoch_id,
+            current_epoch_id: parts.current_epoch_id,
+            pre_observation_id: parts.pre_observation_id,
+            post_observation_id: parts.post_observation_id,
+        });
+        if parts.definition_revision == 0
+            || parts.sequence == 0
+            || (!allowance_shape && !reset_shape)
+            || parts.pre_observation_id == parts.post_observation_id
+            || parts.maximum_used_ratio_before.is_some()
+                != parts.maximum_used_ratio_observation_id_before.is_some()
+            || parts.maximum_used_units_before.is_some()
+                != parts.maximum_used_units_observation_id_before.is_some()
+            || parts
+                .maximum_used_units_before
+                .as_ref()
+                .is_some_and(|units| units.used().is_none())
+            || parts.old_resets_at_ms.is_some_and(|value| value <= 0)
+            || parts.new_resets_at_ms.is_some_and(|value| value <= 0)
+            || !valid_detection_time
+            || parts.id != expected_id
+        {
+            return Err(QuotaError::new(QuotaErrorCode::InvalidTransitionState));
+        }
+        Ok(Self {
+            id: parts.id,
+            definition_revision: parts.definition_revision,
+            sequence: parts.sequence,
+            key: parts.key,
+            kind: parts.kind,
+            previous_epoch_id: parts.previous_epoch_id,
+            current_epoch_id: parts.current_epoch_id,
+            pre_observation_id: parts.pre_observation_id,
+            post_observation_id: parts.post_observation_id,
+            maximum_used_ratio_before: parts.maximum_used_ratio_before,
+            maximum_used_ratio_observation_id_before: parts
+                .maximum_used_ratio_observation_id_before,
+            maximum_used_units_before: parts.maximum_used_units_before,
+            maximum_used_units_observation_id_before: parts
+                .maximum_used_units_observation_id_before,
+            old_resets_at_ms: parts.old_resets_at_ms,
+            new_resets_at_ms: parts.new_resets_at_ms,
+            allowance_change: parts.allowance_change,
+            source: parts.source,
+            confidence: parts.confidence,
+            detection_time: parts.detection_time,
+        })
+    }
+
+    #[must_use]
+    pub fn to_parts(&self) -> QuotaTransitionParts {
+        QuotaTransitionParts {
+            id: self.id,
+            definition_revision: self.definition_revision(),
+            sequence: self.sequence,
+            key: self.key.clone(),
+            kind: self.kind,
+            previous_epoch_id: self.previous_epoch_id,
+            current_epoch_id: self.current_epoch_id,
+            pre_observation_id: self.pre_observation_id,
+            post_observation_id: self.post_observation_id,
+            maximum_used_ratio_before: self.maximum_used_ratio_before,
+            maximum_used_ratio_observation_id_before: self.maximum_used_ratio_observation_id_before,
+            maximum_used_units_before: self.maximum_used_units_before.clone(),
+            maximum_used_units_observation_id_before: self.maximum_used_units_observation_id_before,
+            old_resets_at_ms: self.old_resets_at_ms,
+            new_resets_at_ms: self.new_resets_at_ms,
+            allowance_change: self.allowance_change.clone(),
+            source: self.source,
+            confidence: self.confidence,
+            detection_time: self.detection_time,
+        }
+    }
+
+    #[must_use]
+    pub const fn definition_revision(&self) -> u64 {
+        self.definition_revision
+    }
+
     #[must_use]
     pub const fn id(&self) -> QuotaTransitionId {
         self.id
@@ -872,6 +1027,7 @@ fn make_transition(
     });
     QuotaTransition {
         id,
+        definition_revision: definition.revision(),
         sequence,
         key: definition.key().clone(),
         kind,

@@ -15,6 +15,7 @@ use crate::{EXPECTED_SQLITE_VERSION, StoreError, StoreErrorCode};
 
 mod analytics;
 mod price;
+mod quota;
 mod session;
 
 pub use analytics::{
@@ -29,6 +30,11 @@ pub use price::{
     UsagePriceBasisTargetCapture, UsagePriceLongContext, UsagePriceTier, UsageReportedCostState,
     UsageSessionBreakdownPriceBasisQuery, UsageSessionPriceBasisBatchQuery,
     UsageSessionPriceBasisQuery,
+};
+pub use quota::{
+    MAX_QUOTA_CURRENT_WINDOWS, MAX_QUOTA_TRANSITION_PAGE_SIZE, QuotaCurrentCapture,
+    QuotaCurrentEpoch, QuotaCurrentQuery, QuotaCurrentWindow, QuotaTransitionCursor,
+    QuotaTransitionPageCapture, QuotaTransitionPageQuery, QuotaTransitionRecord,
 };
 pub use session::{
     MAX_USAGE_SESSION_DETAIL_ITEMS, MAX_USAGE_SESSION_PAGE_SIZE, UsageSessionCursor,

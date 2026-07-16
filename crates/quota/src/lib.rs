@@ -7,6 +7,6 @@ mod identity;
 pub use detector::{
     QuotaAllowanceChange, QuotaAllowanceChangeKind, QuotaDetectionTime, QuotaEpochState,
     QuotaEpochStateParts, QuotaError, QuotaErrorCode, QuotaEvaluation, QuotaTransition,
-    QuotaTransitionKind, evaluate_sample,
+    QuotaTransitionKind, QuotaTransitionParts, evaluate_sample,
 };
 pub use identity::{QuotaEpochId, QuotaScopeId, QuotaTransitionId, quota_epoch_id, quota_scope_id};

@@ -1157,7 +1157,8 @@ fn map_quota_error(error: tokenmaster_quota::QuotaError) -> StoreError {
         | QuotaErrorCode::PreviousWindowMismatch
         | QuotaErrorCode::StatePreviousMismatch
         | QuotaErrorCode::InvalidTransitionSequence
-        | QuotaErrorCode::InvalidEpochState => StoreErrorCode::InvalidStoredValue,
+        | QuotaErrorCode::InvalidEpochState
+        | QuotaErrorCode::InvalidTransitionState => StoreErrorCode::InvalidStoredValue,
     };
     StoreError::new(code)
 }

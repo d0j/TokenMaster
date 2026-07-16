@@ -23,9 +23,12 @@ mod types;
 mod write;
 
 pub use query::{
-    MAX_USAGE_BREAKDOWN_ITEMS, MAX_USAGE_BREAKDOWNS, MAX_USAGE_OVERVIEW_SEGMENTS,
-    MAX_USAGE_PRICE_BASIS_KEYS, MAX_USAGE_PRICE_BASIS_TARGETS, MAX_USAGE_QUERY_SCOPES,
-    MAX_USAGE_SERIES_POINTS, MAX_USAGE_SESSION_DETAIL_ITEMS, MAX_USAGE_SESSION_PAGE_SIZE,
+    MAX_QUOTA_CURRENT_WINDOWS, MAX_QUOTA_TRANSITION_PAGE_SIZE, MAX_USAGE_BREAKDOWN_ITEMS,
+    MAX_USAGE_BREAKDOWNS, MAX_USAGE_OVERVIEW_SEGMENTS, MAX_USAGE_PRICE_BASIS_KEYS,
+    MAX_USAGE_PRICE_BASIS_TARGETS, MAX_USAGE_QUERY_SCOPES, MAX_USAGE_SERIES_POINTS,
+    MAX_USAGE_SESSION_DETAIL_ITEMS, MAX_USAGE_SESSION_PAGE_SIZE, QuotaCurrentCapture,
+    QuotaCurrentEpoch, QuotaCurrentQuery, QuotaCurrentWindow, QuotaTransitionCursor,
+    QuotaTransitionPageCapture, QuotaTransitionPageQuery, QuotaTransitionRecord,
     UsageActivityQuery, UsageAggregateActivity, UsageAggregateBucketWidth, UsageAggregateMetrics,
     UsageAggregateRange, UsageAggregateSegment, UsageAnalyticsCapture, UsageAnalyticsQuery,
     UsageBreakdown, UsageBreakdownIdentity, UsageBreakdownItem, UsageBreakdownKind,
