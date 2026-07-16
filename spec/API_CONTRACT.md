@@ -382,6 +382,50 @@ accepts one exact scope and 1..=256 total deletions, protects current/latest ter
 evidence, compacts old changes/material revisions and noncurrent delivery receipts,
 and returns counts only. None of these operations activates a benefit.
 
+`UsageStore::process_due_in_app_benefit_reminders` is the only runtime-facing due
+queue mutation. It accepts a positive wall-clock delivery time and a page from 1
+through 256 and starts one immediate transaction. Existing unacknowledged outbox rows
+are returned first. Otherwise it reads at most that many indexed due rows, drops
+expired rows, collapses already-due thresholds to the smallest still-useful lead per
+lot revision and channel, and inserts an immutable delivery/outbox row before deleting
+the selected due rows and returning any provider-neutral value. One recorded threshold
+suppresses equal or less-urgent already-missed thresholds when later profile/inventory
+writes rebuild the queue; future more-urgent thresholds remain pending. The result
+contains at most 256 owned deliveries, exact counts, and the next indexed in-app due
+time. Runtime receives no SQL, scope/lot identity, archive connection, or activation
+authority; the opaque acknowledgement key inside a delivery has no public accessor
+and is omitted from `Debug`.
+
+`UsageStore::acknowledge_benefit_reminders` accepts at most 256 store-issued delivery
+values plus a positive acknowledgement time. One immediate transaction validates the
+sealed keys and immutable public facts, then inserts missing immutable acknowledgement
+rows idempotently. Acknowledgement never deletes the delivery receipt and never
+weakens reminder deduplication. Unacknowledged rows are protected from retention.
+
+`BenefitReminderRuntime` owns one dedicated scheduler thread, one existing bounded
+`RefreshWorker`, one nearest wall-clock deadline, capacity-one coalesced urgency, one
+latest count-only health snapshot, and one pending owned notification batch. Startup
+submits one recovery pass. Inventory/profile/clock hints, manual reconciliation, and
+resume coalesce; suspend pauses admission and resume forces recovery. Transient
+writer/store unavailability uses one 60-second retry deadline. While an unconsumed
+batch is pending, no later due page is committed, so public delivery values cannot be
+silently overwritten. `take_notifications` leases a copy for presentation but does
+not claim it was shown. `release_notifications` makes a failed presentation available
+again. Only `acknowledge_notifications`, called after successful presentation,
+commits the durable acknowledgement and reopens reconciliation. A crash before that
+commit replays the outbox row after restart; a crash after it does not duplicate the
+event. Shutdown and `Drop` join both owned threads.
+
+Reminder health exposes only phase, normal/accelerated retry, pending flags, nearest
+due/retry times, worker state, stable failure, bounded examined/expired/suppressed/
+delivery counts, aggregate pending/retained counts, elapsed time, and last-success
+time. It contains no archive path, provider/account/workspace/lot/delivery identity,
+provider payload, credential, email, or inner SQLite/OS error. The returned delivery
+batch contains only provider-neutral kind, quantity, localization key, lead time,
+channel, due/expiry time, and committed delivery time. P3 still owns actual visible
+in-app presentation; OS/tray scheduling, snooze, quiet hours, and activation remain
+unimplemented.
+
 `UsageReadStore::capture_quota_windows` accepts zero through 32 unique exact window
 keys and a deadline no greater than two seconds. It returns the independent quota
 revision plus owned available definitions, current samples, current epoch state and

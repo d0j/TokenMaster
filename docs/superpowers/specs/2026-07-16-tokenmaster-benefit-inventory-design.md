@@ -1,6 +1,7 @@
 # TokenMaster Benefit Inventory and Reminder Foundation Design
 
-**Status:** approved for implementation on 2026-07-16
+**Status:** implemented and fully verified on 2026-07-16 for the read-only
+inventory/reminder foundation; later mutation and presentation contours remain open
 
 **Scope:** provider-neutral read-only benefit inventory, immutable change history,
 bounded reminder profiles and durable scheduling, built-in Codex reset-credit
@@ -260,10 +261,12 @@ keys. At most 8 rows per lot and 64 current lots are retained.
 
 The first notification channel is `in_app`; coverage is therefore truthfully
 `in_app_only`. OS scheduling, tray ownership, permissions, quiet hours, snooze, and
-platform delivery are later extensions over the same queue and receipt schema.
+platform delivery are later extensions over the same queue, outbox, and acknowledgement
+schema.
 
-The due worker asks for at most 256 due rows, collapses overdue thresholds for one lot
-to the most urgent still-useful notice, records one receipt transactionally, and
+The due worker first returns at most 256 unacknowledged immutable outbox rows. When
+none exist, it asks for at most 256 due rows, collapses overdue thresholds for one lot
+to the most urgent still-useful notice, records one outbox row transactionally, and
 recomputes the nearest due time. It never replays every missed threshold after sleep
 or hibernation.
 
@@ -271,8 +274,11 @@ The queue mutation is a store-owned bounded operation; reminder runtime code nev
 receives SQL or archive internals. A receipt for the selected urgent threshold also
 suppresses already-due less-urgent thresholds for the same lot revision and channel
 when a profile or inventory refresh rebuilds the queue. More-urgent thresholds whose
-due time is still in the future remain scheduled. The store commits the receipt
-before returning the corresponding provider-neutral in-app event to runtime.
+due time is still in the future remain scheduled. The store commits the outbox row
+before returning the corresponding provider-neutral in-app event to runtime. Taking
+the batch leases it but does not claim display. A failed presenter releases it; only
+successful presentation inserts a separate immutable acknowledgement. A crash before
+acknowledgement replays the event, while a crash after acknowledgement does not.
 
 ## 8. Failure and publication behavior
 
@@ -312,8 +318,8 @@ The foundation is accepted only when tests prove:
 - credits, temporary usage, banked resets, and unknown kinds never coerce;
 - duplicate, changed, missing, reappearing, activated, and ambiguous lots reconcile
   deterministically;
-- schema v10 migrates transactionally to strict schema v11 without changing usage,
-  price, or quota facts;
+- schema v10 migrates transactionally through strict schema v11 to v12 without
+  changing usage, price, or quota facts; exact v11 receipts migrate as acknowledged;
 - current/history query ordering, continuation, freshness, and corruption rejection
   are bounded and immutable;
 - recommended, custom-only, subset, empty, inherited, and override profiles persist
@@ -324,12 +330,16 @@ The foundation is accepted only when tests prove:
 - clean-root, formatting, warnings-as-errors Clippy, complete workspace tests, and
   the benefit release-authority audit pass.
 
-Implementation status: Tasks 1-6 are complete. The immutable query facade proves
+Implementation status: Tasks 1-8 are complete. The immutable query facade proves
 64-lot FEFO current snapshots, 2,048-change history, 256-row continuation, restart,
 concurrent read-transaction exactness, deadline cleanup, corruption rejection,
 generation neutrality, no usage-dataset scan, and Windows resource return. One Codex
 poll now publishes quota plus the optional benefit observation under one non-waiting
 writer guard and one store open, with separate transactions, validated count-only
 health, domain-specific failure/last-success state, restart idempotency, and bounded
-Windows resource return. Durable reminder delivery, UI, automation, activation, and
-release gates remain separate.
+Windows resource return. Store-owned 256-row reminder processing, immutable
+outbox-before-event ordering, pre-acknowledgement restart replay, post-acknowledgement
+deduplication, profile-rebuild survival, release/retry, one-nearest-timer scheduling,
+capacity-one backpressure, hibernation/clock reconciliation, fault isolation, and
+Windows resource return now pass. Visible P3 delivery, OS scheduling, automation,
+activation, and release gates remain separate.

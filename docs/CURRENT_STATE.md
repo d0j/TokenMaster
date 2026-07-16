@@ -494,14 +494,17 @@ defensive store reads, immutable public query values/service, adversarial and
 release-scale evidence, Windows resource return, and offline authority audit.
 The permitted credential-free Codex quota normalizer, short-lived official app-server
 transport, exact-native executable discovery, and separate bounded quota runtime are
-now implemented and verified. Benefit Tasks 1-6 are also implemented: typed reset-
+now implemented and verified. Benefit Tasks 1-8 are also implemented and verified:
+typed reset-
 credit inventory, expiration reconciliation, default/custom reminder profiles,
 immutable read snapshots, and publication through the existing Codex runtime with
-separate domain health. The immediate next slice is the one-timer durable reminder
-runtime and truthful in-app delivery coverage. Activation remains a later independently
-authorized capability; UI follows the completed data contracts. No quota value may be
-inferred from local token/cost facts and no browser/private-endpoint authority may be
-added.
+separate domain health, plus the store-owned due transaction and one-timer durable
+in-app event runtime, authority audit, complete project-truth closure, and full
+workspace quality gate. The immediate next slice is P2-E Git output. Activation
+remains a later independently authorized
+capability; visible notifications and the complete UI follow the completed data
+contracts. No quota value may be inferred from local token/cost facts and no browser/
+private-endpoint authority may be added.
 P2-E Git output and P2-F joined product status remain after P2-D; P3 complete UI
 follows the product-data contracts.
 
@@ -569,7 +572,7 @@ implemented in `tokenmaster-query`: schema-v1 headers/envelopes, checked generat
 publication/dataset identity, an injected exact clock sample, stable path-free errors,
 bounded scopes/warnings/pages, and fingerprint-redacted activity cursors. Task 2, the
 separate query-only SQLite store and exact transaction capture, is also complete.
-`UsageReadStore` opens schema v11 read-only without migration, enforces defensive
+`UsageReadStore` opens schema v12 read-only without migration, enforces defensive
 query-only policy with a 4 MiB cache, captures publication/scan truth and current or
 legacy keyset pages in one deferred transaction, rejects stale continuation identity,
 uses indexed `pageSize + 1`, and clears its deadline handler on every result.
@@ -593,11 +596,12 @@ storage, transactional history writes, bounded retention, defensive reads, immut
 public quota query, adversarial/scale/resource gates, and offline authority audit are
 complete. The built-in Codex quota normalizer, bounded official app-server transport,
 exact-native executable discovery, and dedicated refresh/store-publication worker are
-complete for the pinned version. The benefit foundation Tasks 1-6 are also complete:
+complete for the pinned version. The benefit foundation Tasks 1-8 are also complete:
 strict provider-neutral values, pure reconciliation/reminder planning, privacy-safe
-Codex reset-credit normalization, and schema-v11 transactional inventory/history/
-profile/due storage with bounded maintenance and rollback, plus immutable current and
-history snapshots with FEFO order, explicit absence/freshness/completeness/unknown
+Codex reset-credit normalization, and schema-v12 transactional inventory/history/
+profile/due/outbox/ack storage with bounded maintenance, exact v11 migration, and
+rollback, plus immutable current and history snapshots with FEFO order, explicit
+absence/freshness/completeness/unknown
 facts, inherited/override profiles, nearest expiry/due, revision-bound 256-row
 continuation, corruption rejection, failed-call generation neutrality, and combined
 quota-runtime publication from one poll/lease/store open with independent transaction,
@@ -606,7 +610,25 @@ failure, and last-success truth. The
 256-row page; repeated open/query/drop returned with five threads, 116 handles,
 USER=2, GDI=0, and 4,517,888 private bytes. The combined runtime gate passed 16+48
 rounds at 131 handles, four threads, USER=1, GDI=0, a 3,432,448-byte private floor,
-and a 6,139,904-byte sampled high. Reminder delivery/runtime and UI remain later.
+and a 6,139,904-byte sampled high.
+
+The store-owned reminder operation first replays at most 256 unacknowledged immutable
+outbox rows or atomically examines at most 256 indexed due rows, records new outbox
+rows before returning typed events, suppresses already-missed less-urgent thresholds,
+preserves future more-urgent thresholds, drains expired rows, and returns the next
+in-app deadline. Presentation leases but does not acknowledge a batch; release retries
+failed presentation and explicit post-presentation acknowledgement is idempotent.
+The isolated `BenefitReminderRuntime` owns one scheduler, one worker, one nearest
+timer, one coalesced request, one latest count-only snapshot, and one ready/leased
+bounded batch. Startup/restart, pre-ack replay, post-ack deduplication, 10,000 hints,
+pause/resume/hibernation recovery, clock hints, acknowledgement contention, fault
+isolation, and notification backpressure pass. Its latest 16+48 Windows gate returned
+at 117 handles, four threads, USER=1, GDI=0, a 3,440,640-byte private floor, and a
+5,799,936-byte sampled high. The four-package
+benefit authority audit found 125 production dependencies, four reminder production
+source files, four release libraries, and zero forbidden dependency/source/binary
+matches. Actual P3 rendering, OS/tray delivery, snooze, quiet hours, and activation
+remain later.
 No view-time grouping of the full event table is allowed.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.

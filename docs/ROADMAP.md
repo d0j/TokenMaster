@@ -71,8 +71,8 @@ indexed analytics, pricing, and the provider-neutral quota history core are comp
 The permitted built-in Codex quota normalizer and short-lived official app-server
 transport, exact-native executable discovery, and dedicated quota refresh
 scheduling/writer coordination are complete for the pinned supported version.
-Banked-reset inventory/reminders and Git output are next, followed by complete UI and
-automation work.
+Banked-reset inventory/reminders are complete through their read-only authority and
+project-truth gates. Git output is next, followed by complete UI and automation work.
 
 Completed P1-C.1: a no-async, constant-state coordinator with checked monotonic IDs,
 deadline/cancellation semantics, one active refresh, and one aggregate follow-up.
@@ -171,14 +171,20 @@ surfaces, batched indexed reads, current/legacy million-event scale, resource pl
   success/error/timeout resource return, and a zero-match release authority audit.
   Exact-native executable discovery and the separate quota scheduler/worker,
   I/O-before-lease store publication, count-only health, lifecycle, resource, and
-  release-authority gates are now complete. Benefit Tasks 1-6 add provider-neutral
+  release-authority gates are now complete. Benefit Tasks 1-8 add provider-neutral
   lots, pure expiry/reconciliation/reminder planning, privacy-safe built-in Codex
-  normalization, strict schema-v11 write/retention, and immutable FEFO current plus
+  normalization, strict schema-v12 write/retention/outbox acknowledgement, and
+  immutable FEFO current plus
   revision-bound history snapshots, plus one-poll/one-lease/one-open publication
   through the existing Codex quota runtime with separate quota/benefit transactions
-  and health. Task 7 owns the one-timer durable reminder worker.
-  Notification delivery, later independently authorized activation, P2-E Git output,
-  and P2-F joined product status remain.
+  and health. Task 7 adds the store-owned 256-row due operation and one-timer durable
+  in-app event runtime with outbox-before-publication, pre-ack restart replay,
+  post-ack deduplication, release/retry, hibernation/clock reconciliation, bounded
+  backpressure, fault isolation, and resource/authority gates. Task 8 closes
+  dependency/language/privacy authority,
+  project truth, and the complete workspace quality gate. P3 visible notification
+  delivery, later independently
+  authorized activation, P2-E Git output, and P2-F joined product status remain.
 No frontend/database coupling or view-time full event grouping is accepted.
 
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset

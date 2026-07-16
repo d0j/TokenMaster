@@ -4,7 +4,7 @@ Status: architecture and release plan approved after closure review; P0 through 
 P2-A, P2-B, P2-C pinned pricing, and the P2-D quota history core are implemented;
 the permitted built-in Codex quota normalizer/transport, exact-native executable
 discovery, and dedicated quota refresh/store publication are also implemented.
-Typed banked-reset domain/core/Codex normalization, strict schema-v11 store
+Typed banked-reset domain/core/Codex normalization, strict schema-v12 store
 foundation, immutable FEFO current/revision-bound history queries, and combined Codex
 runtime publication with separate quota/benefit truth are implemented. Reminder
 runtime, UI, automation, and activation remain later.
@@ -254,9 +254,10 @@ adversarial inference, 32-window/1,000-transition/10,000-poll scale, Windows res
 return, and offline authority audit. The strict official Codex app-server normalizer/
 transport, live smoke, adversarial/resource gates, and release authority audit also
 pass. Exact-native discovery plus dedicated refresh/store publication now pass their
-focused, resource, and release-authority gates. Banked-reset inventory Tasks 1-6 now
-also pass through combined runtime publication; durable reminder delivery is the
-active critical path.
+focused, resource, and release-authority gates. Banked-reset inventory Tasks 1-8 now
+also pass through combined runtime publication, the isolated durable reminder event
+runtime, complete project-truth synchronization, and the full workspace plus
+specialized authority gates. P2-E Git output is the active critical path.
 View-time full scans and period-labeled
 whole-session totals remain forbidden.
 P2-A now implements the bounded public values, separate defensive read-only/query-only
@@ -271,9 +272,11 @@ P2-C pinned pricing and its release gates are implemented; the P2-D quota histor
 core and its acceptance gates are implemented. The permitted built-in Codex quota
 normalizer/transport, exact-native discovery, and dedicated refresh/store publication
 are implemented for the pinned version. Typed banked-reset values, pure
-reconciliation/reminder planning, Codex normalization, strict schema-v11 storage, and
-immutable FEFO current/revision-bound history queries plus Codex runtime benefit
-publication are implemented; reminder delivery is next.
+reconciliation/reminder planning, Codex normalization, strict schema-v12 storage,
+immutable FEFO current/revision-bound history queries, Codex runtime benefit
+publication, and one-timer crash-safe outbox/ack reminder delivery are implemented.
+Visible P3 notification rendering, OS/tray scheduling, snooze/quiet hours, and
+activation remain separate.
 The older replay plan remains historical evidence for
 completed Tasks 1-2, but its Codex-owned Tasks 3+ are superseded and must not be
 executed.

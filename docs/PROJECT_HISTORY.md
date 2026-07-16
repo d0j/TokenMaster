@@ -1878,3 +1878,68 @@ task-owned child remaining. The refreshed release-authority audit covers 115
 production dependency packages, six production quota-runtime source files, and one
 release library with zero forbidden matches. Reminder delivery, UI, automation,
 activation, M0 acceptance, packaging, signing, and release remain unclaimed.
+
+## 2026-07-16 — durable one-timer benefit reminder runtime implemented
+
+Completed Task 7 of the approved benefit contour and corrected one omission in the
+original file plan: runtime could not safely own reminder SQL. The new narrow
+`UsageStore` operation is therefore the sole due-queue mutation boundary. One
+immediate transaction reads at most 256 indexed in-app rows, drops expired entries,
+collapses overdue thresholds to the smallest useful lead per lot revision/channel,
+records the immutable receipt before deleting the examined rows, updates exact global
+counts, and returns only provider-neutral delivery values plus the nearest due time.
+A selected urgent receipt suppresses equal and less-urgent missed thresholds after
+restart or profile/inventory rebuild while preserving future more-urgent thresholds.
+
+The new `BenefitReminderRuntime` is isolated from usage and quota execution. It owns
+one dedicated scheduler, one existing bounded worker, one nearest wall-clock deadline,
+one coalesced urgency, one latest count-only health snapshot, and one pending owned
+batch capped at 256. Startup and resume force recovery; inventory/profile/clock hints
+coalesce; transient writer/store failure uses one 60-second retry. An unconsumed batch
+backpressures later store commits rather than overwriting or accumulating events.
+Pause/suspend close admission, resume/hibernation recovers, shutdown/`Drop` join both
+threads, and scheduler panic output is thread-locally redacted.
+
+The final implementation corrects a crash gap found during critical review. Schema
+v12 adds a separate immutable acknowledgement relation: the delivery row is a durable
+outbox item, not proof that P3 displayed it. Taking a batch leases it; release makes a
+failed presentation retryable; only explicit post-presentation acknowledgement ends
+restart replay. Exact v11 migration marks legacy receipts acknowledged, retention
+protects unacknowledged rows, and acknowledgement contention preserves the leased
+batch.
+
+Five store reminder contracts, four schema-migration contracts, and five public
+runtime contracts cover the exact 256-row split, overdue collapse, future one-hour
+preservation, expired drain, disabled profiles, outbox-before-event, pre-ack restart
+replay, post-ack deduplication, release/retry, acknowledgement contention, 10,000
+mixed hints, pause/resume/clock recovery, contention-before-SQLite, and reminder-fault
+isolation from a live usage runtime.
+Private scheduler tests cover the exact nearest-due wait, notification backpressure,
+burst coalescing, and one accelerated retry deadline. The Windows harness passed 16
+warm-up plus 48 measured delivery/acknowledgement/reconcile/lifecycle/contention rounds
+at a 3,440,640-byte private floor, 5,799,936-byte sampled high, 117 handles, four
+threads, USER=1, and GDI=0. The new four-package release audit covers 125 production
+dependencies, four reminder source files, and four release libraries with zero
+forbidden dependency/source/binary matches.
+
+This publishes durable typed in-app events only; it does not claim that unfinished P3
+rendered a notification. OS/tray scheduling, snooze, quiet hours, activation, CLI/MCP,
+M0 acceptance, packaging, signing, and release remain unclaimed.
+
+## 2026-07-16 — benefit inventory/reminder authority contour closed
+
+Completed Task 8 and closed the approved read-only benefit inventory/reminder
+foundation without expanding provider authority. The final audit covers four
+production packages, 125 dependency packages, four reminder production source files,
+and four release libraries. It confirms lease-before-store, outbox-before-publication,
+post-presentation acknowledgement, the fixed 256-row due-page boundary, durable
+less-urgent suppression, no direct runtime SQL, no foreign runtime, and zero
+forbidden dependency, source, or binary-string matches.
+
+The complete clean-root audit, formatting check, warnings-as-errors locked workspace
+Clippy, locked workspace tests and doctests, specialized benefit authority audit,
+complete-diff check, dependency/language review, and task-owned process-return check
+all pass. This closes only the read-only inventory, history, publication, and durable
+typed in-app event foundation. P2-E Git output is next. Visible P3 notifications/UI,
+OS/tray delivery, snooze, quiet hours, CLI/MCP, activation, M0 acceptance, packaging,
+signing, and release remain unclaimed.

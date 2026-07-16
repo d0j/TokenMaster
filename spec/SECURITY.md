@@ -477,6 +477,31 @@ The runtime owns zero child processes while idle, at most one during a poll, two
 constant-state host threads while running, capacity-one scheduling/worker wakes, and
 one latest snapshot. Shutdown joins owned threads and the transport reaps its child.
 
+The benefit reminder runtime has no provider, network, browser, credential, shell,
+plugin, usage-ingestion, quota-transport, or direct-SQL authority. It tries the shared
+writer lease before opening SQLite and calls one bounded store-owned operation only.
+The store commits an immutable delivery/outbox row before returning a notification
+value; runtime cannot fabricate, edit, or delete it. A separate immutable schema-v12
+acknowledgement is inserted only after the presenter confirms display. Before that
+point restart replays the outbox row; after it, deduplication remains permanent.
+Writer contention creates no archive and selects one bounded 60-second retry. A
+dedicated scheduler retains only one nearest due/retry deadline and one coalesced
+urgency; the worker and scheduler have fixed joined ownership and thread-local
+panic-output redaction.
+
+At most one owned provider-neutral batch of 256 in-app events is retained. While that
+batch is pending or leased for presentation, scheduling is backpressured rather than
+overwriting or accumulating events. A failed display releases the same bounded batch;
+acknowledgement contention keeps it retryable. Health excludes archive paths and all
+provider/account/workspace/lot/delivery identity or values. Delivery values expose
+only approved presentation facts: kind,
+quantity, localization key, lead/channel, due/expiry, and committed delivery time.
+Their sealed acknowledgement key has no public accessor and is omitted from `Debug`.
+They contain no raw provider ID/title/description, scope identity, target window,
+credential, prompt, response, command, source content, or absolute path. This event
+surface grants no visible-UI, OS-notification, snooze, quiet-hours, or activation
+authority.
+
 ## TM-SEC-007 — Benefit activation authority
 
 Banked-reset inventory read, official activation link, idempotent activation,

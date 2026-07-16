@@ -6,6 +6,35 @@ All notable changes are recorded here.
 
 ### Added
 
+- Store-owned durable in-app reminder processing: one immediate transaction first
+  replays at most 256 unacknowledged immutable outbox rows or examines at most 256
+  indexed due rows, drains expired entries, selects one most-urgent useful threshold
+  per lot/channel, commits outbox before returning the event, updates exact counts/
+  nearest due, and suppresses equal/less-urgent missed thresholds while preserving
+  future more-urgent thresholds.
+- Strict schema-v12 immutable reminder acknowledgement: presentation leases without
+  claiming display, release retries a failed presenter, pre-ack crash/restart replays
+  the outbox, post-ack restart deduplicates, exact v11 receipts migrate as already
+  acknowledged, and retention cannot remove unacknowledged events.
+- Isolated `BenefitReminderRuntime` with one scheduler, one bounded worker, one nearest
+  wall-clock timer, capacity-one coalesced hints, one latest count-only health
+  snapshot, one at-most-256 ready/leased notification batch with backpressure,
+  startup/resume/hibernation/clock recovery, 60-second transient retry, joined
+  shutdown, and thread-local scheduler panic redaction.
+- Durable reminder acceptance for pre-ack restart replay, post-ack deduplication,
+  release/retry, acknowledgement contention, 10,000 hints, profile rebuild, future
+  urgent threshold, expired drain, outbox-before-event ordering, contention-before-
+  SQLite, live-usage fault isolation, pause/resume, and deterministic nearest/retry
+  scheduling. The 16+48 Windows resource gate returned at a 3,440,640-byte private
+  floor, 5,799,936-byte sampled high, 117 handles, four threads, USER=1, and GDI=0.
+- Benefit release-authority audit across four production packages, 125 production
+  dependencies, four reminder source files, and four release libraries, with zero
+  forbidden dependency, foreign-language, network/browser/credential/shell/direct-SQL,
+  or private binary-string matches.
+- Benefit contour closure with clean-root, formatting, warnings-as-errors locked
+  workspace Clippy, complete locked workspace tests/doctests, specialized authority
+  audit, complete-diff/dependency/language review, and task-owned process return all
+  passing. This does not claim visible notification rendering or activation.
 - One-poll Codex quota/benefit runtime publication: provider I/O still completes before
   one non-waiting writer-lease attempt and one store open; at most 32 quota windows
   and one optional benefit observation publish through separate exact transactions
@@ -31,8 +60,9 @@ All notable changes are recorded here.
   corruption rejection, source-level no-usage-scan guard, 0.842 ms current read,
   4.904 ms maximum 256-row page, and 32 open/query/drop cycles returning at 116
   handles, five threads, USER=2, GDI=0, and 4,517,888 private bytes.
-- Strict SQLite schema v11 benefit foundation with independent publication revision,
-  exact rollback-safe v10 migration, provider/account/workspace scopes, immutable
+- Strict SQLite schema v12 benefit foundation with independent publication revision,
+  exact rollback-safe v10-to-v11 and v11-to-v12 migrations, provider/account/workspace
+  scopes, immutable
   material lot revisions and change points, current projection, inherited/override
   reminder profiles, durable due queue and delivery receipts, exact object validation,
   and no changes to existing usage/price/quota facts.

@@ -6,7 +6,7 @@
 > `superpowers:verification-before-completion`. Mark a checkbox only after its
 > validator passes.
 
-**Status:** in progress
+**Status:** complete and fully verified on 2026-07-16
 
 **Goal:** publish the built-in Codex reset-credit inventory as strict provider-neutral
 lots, preserve bounded immutable history, expose immutable read snapshots, and
@@ -16,7 +16,7 @@ schedule restart-safe in-app reminders without adding provider mutation authorit
 `docs/superpowers/specs/2026-07-16-tokenmaster-benefit-inventory-design.md`
 
 **Tech stack:** Rust 1.97, edition 2024, new pure `tokenmaster-benefits` crate,
-existing strict Codex app-server transport, bundled SQLite schema v11, existing
+existing strict Codex app-server transport, bundled SQLite schema v12, existing
 constant-state scheduler/worker, and current query facade patterns. No HTTP client,
 browser, shell, async runtime, credential store, or provider activation API.
 
@@ -277,20 +277,21 @@ cargo +1.97.0 clippy -p tokenmaster-runtime --all-targets --locked
 
 **RED/GREEN:**
 
-- [ ] Store owns one bounded atomic due-page operation; runtime receives no SQL or
+- [x] Store owns one bounded atomic due-page operation; runtime receives no SQL or
   archive internals.
-- [ ] A delivered urgent threshold durably suppresses already-missed less-urgent
+- [x] A delivered urgent threshold durably suppresses already-missed less-urgent
   thresholds for the same lot revision/channel while preserving future
   more-urgent thresholds.
-- [ ] Startup submits one recovery queue pass and waits only for nearest durable due.
-- [ ] Process at most 256 rows and emit at most one urgent in-app delivery per lot.
-- [ ] Record delivery before public notification publication and never duplicate a
-  key across restart or clock changes.
-- [ ] Profile/inventory changes, resume, hibernation, and wall-clock discontinuity
+- [x] Startup submits one recovery queue pass and waits only for nearest durable due.
+- [x] Process at most 256 rows and emit at most one urgent in-app delivery per lot.
+- [x] Record an immutable outbox row before public notification publication, replay it
+  after restart until explicit post-presentation acknowledgement, and never duplicate
+  it after acknowledgement or clock changes.
+- [x] Profile/inventory changes, resume, hibernation, and wall-clock discontinuity
   coalesce to one reconciliation.
-- [ ] Pause/shutdown join all task-owned state; reminder fault leaves usage/quota
-  runtimes unchanged.
-- [ ] Prove constant threads/timers, bounded memory/handles/USER/GDI, and no per-lot
+- [x] Pause closes admission and cancels active work; shutdown joins all task-owned
+  state; reminder fault leaves usage/quota runtimes unchanged.
+- [x] Prove constant threads/timers, bounded memory/handles/USER/GDI, and no per-lot
   retained callbacks.
 
 **Focused validator:**
@@ -329,14 +330,14 @@ cargo +1.97.0 clippy -p tokenmaster-runtime --all-targets --locked
 
 **Actions:**
 
-- [ ] Audit dependency trees, production sources, SQLite strings, fixtures, and
+- [x] Audit dependency trees, production sources, SQLite strings, fixtures, and
   release libraries for raw IDs, provider payloads, browser/network/shell/credential
   authority, activation claims, and foreign runtimes.
-- [ ] Record schema-v11 migration, identity/privacy, reconciliation, reminder
+- [x] Record schema-v10/v11/v12 migration, identity/privacy, reconciliation, reminder
   coverage, failure isolation, retention, and resource evidence.
-- [ ] Advance TM-DATA-009 only through inventory/reminder foundation; keep activation,
+- [x] Advance TM-DATA-009 only through inventory/reminder foundation; keep activation,
   OS notification scheduling, UI, CLI/MCP, and plugins incomplete.
-- [ ] Inspect the complete diff and repository language/dependency surface.
+- [x] Inspect the complete diff and repository language/dependency surface.
 
 **Baseline:**
 

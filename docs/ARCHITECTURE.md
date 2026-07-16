@@ -89,9 +89,11 @@ rather than guessed.
 Account email is transient input to a domain-separated pseudonym and never enters a
 snapshot, store, log, error, or `Debug`. Multi-bucket results supersede the legacy
 duplicate; primary/secondary provider windows map to exact fixed-point quota samples.
-The official response's reset-credit rows are only bounded and validated in this
-contour. A later benefit adapter will map them to typed lots without inheriting quota
-read authority as activation authority.
+The official response's reset-credit rows are normalized into separate typed benefit
+lots in the same owned Codex snapshot. Raw IDs are account-separated hash input only;
+titles/descriptions are discarded. Quota and benefit publication remain independent
+transactions and neither inventory read nor reminder delivery inherits activation
+authority.
 
 Quota runtime scheduling, worker state, and health are independent from `LiveRuntime`.
 The normal period is 15 minutes; only bounded transient process/lease failures select
@@ -105,6 +107,20 @@ Pause/suspend cancellation after source I/O prevents publication, resume coalesc
 recovery refresh, and shutdown joins both quota-owned host threads. No executable/
 archive path, account/window identity, label, quota value, provider payload, or inner
 OS/store error enters quota health.
+
+Benefit reminder delivery is a third isolated runtime composition. It owns no Codex
+transport and receives no SQL. After one non-waiting writer lease succeeds, the
+schema-v12 store first replays unacknowledged immutable outbox rows or atomically
+examines at most 256 indexed in-app due rows, records new outbox rows, collapses
+already-missed thresholds, and returns a bounded provider-neutral batch plus the next
+due time. One scheduler thread retains a single wall-clock deadline; one bounded
+worker performs the store call. Capacity-one hints and a single ready/leased batch
+prevent per-lot timers, callback retention, overwrite, and unbounded growth.
+`take_notifications` leases without claiming display; release retries a failed
+presentation, and an explicit post-presentation acknowledgement inserts a separate
+immutable row. Startup, resume/hibernation recovery, profile/inventory changes, and
+clock-change hints reconcile through the same path. P3 still owns actual rendering;
+OS/tray delivery and activation are separate future capabilities.
 
 The watcher is never source authority. Its callback discards `notify` event/error paths
 before touching shared state; one atomic aggregate retains only dirty/force/urgency,

@@ -428,7 +428,7 @@ backstop when registration is unavailable.
 
 Decision: `tokenmaster-query` owns synchronous bounded frontend values, while
 `tokenmaster-store::UsageReadStore` owns one separate SQLite `READ_ONLY|NO_MUTEX`
-connection. It requires exact schema v11 and bundled SQLite, applies WAL/query-only/
+connection. It requires exact schema v12 and bundled SQLite, applies WAL/query-only/
 defensive/QPSG/no-checkpoint policy with trusted schema and DQS disabled, a 250 ms busy
 timeout, 4 MiB cache and zero mmap, and never migrates. One short deferred transaction
 captures publication generation, independent dataset identity, exact scan truth and a
@@ -789,7 +789,7 @@ network, shell, arbitrary SQL, or plugin mutation authority.
 
 ## ADR-040 — Immutable benefit snapshots use one revision-bound read model
 
-Decision: `UsageReadStore` owns separate schema-v11 current and change-page captures
+Decision: `UsageReadStore` owns separate schema-v12 current and change-page captures
 for benefit inventory. Each capture starts by reading the independent global benefit
 revision in one deferred transaction. Current rows are restored from immutable
 material revisions, checked against every redundant projection column, and ordered by
@@ -836,3 +836,54 @@ would couple independent revisions and roll back useful quota facts when benefit
 storage fails. One poll/guard/open with separate exact transactions preserves
 responsiveness, restart idempotency, fault isolation, and truthful automation health
 without adding a thread, timer, network path, notification, or activation authority.
+
+## ADR-042 — Store-owned durable reminder delivery with one runtime timer
+
+Decision: due-queue mutation remains inside `tokenmaster-store`. One immediate
+transaction reads at most 256 indexed in-app due rows, collapses overdue thresholds
+per lot revision/channel, records the selected immutable receipt before removing the
+examined rows, updates exact global counts, and returns only bounded provider-neutral
+delivery values plus the next due time. A selected urgent receipt suppresses equal and
+less-urgent missed thresholds during future queue rebuilds while preserving
+not-yet-due more-urgent thresholds.
+
+`BenefitReminderRuntime` owns exactly one scheduler thread and one bounded worker,
+one nearest wall-clock deadline, one coalesced urgency, one latest count-only health
+snapshot, and one pending delivery batch. Startup/resume force recovery; inventory,
+profile, and clock hints coalesce; transient writer/store failure gets one 60-second
+retry. An unacknowledged batch backpressures later queue commits. Delivery/outbox
+commit therefore precedes event publication. Durable acknowledgement follows
+successful presentation, so restart replays a pre-acknowledgement crash without
+duplicating a post-acknowledgement event. Shutdown and `Drop` join all owned threads;
+scheduler panic output is thread-locally redacted.
+
+Rationale: direct runtime SQL would duplicate archive invariants and permit partial
+receipt/queue updates. Per-lot timers or callbacks would make memory and handle use
+grow with inventory. An unbounded notification channel could leak memory, while
+overwriting a capacity-one slot after receipt commit would lose user-visible value.
+One store transaction plus one-timer runtime preserves bounded crash-safe replay and
+post-acknowledgement deduplication, hibernation collapse, and provider neutrality
+without granting UI, OS-notification, network, browser, credential, plugin, or
+activation authority.
+
+## ADR-043 — Schema-v12 durable reminder outbox acknowledgement
+
+Decision: the schema-v11 delivery receipt alone is insufficient presentation truth
+because process failure after receipt commit but before in-memory handoff can lose an
+unseen reminder. Schema v12 therefore adds an immutable acknowledgement relation
+separate from the immutable delivery/outbox row. Existing unacknowledged outbox rows
+are replayed before new due work. `take_notifications` leases but does not acknowledge
+the bounded batch; explicit acknowledgement occurs only after successful presentation,
+while release makes a failed presentation retryable. Retention may remove only
+acknowledged noncurrent delivery rows.
+
+Exact v11 migration inserts acknowledgements for all legacy delivery rows because the
+old contract already considered those rows consumed. Migration is one immediate
+fault-tested transaction and changes no usage, price, quota, inventory, or history
+fact.
+
+Rationale: acknowledgement before presentation creates false delivered state;
+acknowledgement after an in-memory-only handoff creates a crash gap unless the outbox
+is replayable. A separate immutable acknowledgement preserves both no-loss and
+no-duplicate behavior with one bounded batch, one additional fixed store operation,
+no new thread, and no provider or activation authority.

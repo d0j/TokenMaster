@@ -189,12 +189,13 @@ packages, six production quota-runtime source files, and one release library wit
 forbidden authority matches. Current project truth is recorded in ADR-038, ADR-041, and
 `docs/superpowers/specs/2026-07-16-tokenmaster-codex-quota-runtime-design.md`.
 
-The benefit foundation Tasks 1-6 are complete on
+The benefit foundation Tasks 1-8 are complete on
 `cx/tokenmaster-product-architecture`: provider-neutral values, pure deterministic
 reconciliation/reminder planning, privacy-safe Codex detailed-plus-aggregate
-normalization, and strict schema-v11 transactional inventory/history/profile/due
-storage with terminal-cursor recovery, 512/256 soft retention, 2,048/1,024 hard
-bounds, 256-row maintenance, restart, and injected rollback. The new benefit read
+normalization, and strict schema-v12 transactional inventory/history/profile/due/
+outbox/ack storage with terminal-cursor recovery, 512/256 soft retention, 2,048/1,024
+hard bounds, 256-row maintenance, restart, exact v11 migration, and injected rollback.
+The new benefit read
 facade adds one-transaction current/history capture, 64-lot FEFO snapshots, explicit
 absent/stale/partial/unknown facts, inherited/override profile metadata, nearest
 expiry/due, redacted scope/revision-bound 256+1 history, concurrent-snapshot/deadline
@@ -204,10 +205,23 @@ maximum page; resource return ended at 116 handles, five threads, USER=2, GDI=0,
 4,517,888 private bytes. Task 6 now publishes quota and benefit facts from one Codex
 poll through one lease/store open, with independent exact transactions, validated
 per-domain counts, failure stages, last-success timestamps, restart idempotency,
-cancellation/contention/retry truth, and no cross-domain atomicity claim. The immediate
-next slice is Task 7: one-timer durable reminder delivery. UI, CLI/MCP, activation, M0
-acceptance, packaging, signing, and release remain unclaimed. Inventory read must not
-imply activation authority.
+cancellation/contention/retry truth, and no cross-domain atomicity claim. Task 7 adds
+the missing store-owned atomic due-page seam and the isolated one-timer runtime:
+at most 256 indexed rows, immutable outbox-before-event ordering, pre-ack restart/
+profile replay, post-ack deduplication, release/retry, future urgent preservation,
+one scheduler/worker, capacity-one hints and ready/leased notification batch,
+pause/resume/clock recovery, accelerated contention retry, fault isolation, and
+joined shutdown. The latest reminder resource gate passed 16+48 rounds at a
+3,440,640-byte private floor, 5,799,936-byte sampled high, 117 handles, four threads,
+USER=1, and GDI=0. The benefit authority audit passes
+with 125 production dependencies, four reminder source files, four release libraries,
+and zero forbidden matches. Task 8 project-truth and authority closure now passes the
+clean-root, formatting, strict locked workspace Clippy, complete locked workspace
+test/doctest, specialized benefit audit, complete-diff, process-return, and
+dependency/language-surface gates. The immediate next slice is P2-E Git output.
+Actual P3 visible notifications/UI, CLI/MCP, activation, M0
+acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
+must not imply activation authority.
 The current post-Task-8 clean-root, formatting, strict locked workspace Clippy, and
 complete locked workspace test/doctest baseline passes. The query resource binary uses
 an isolated `harness = false` process plus a bounded maximum-64-round warm-up that
@@ -316,6 +330,10 @@ cargo +1.97.0 test -p tokenmaster-codex --test quota_transport_contract --locked
 cargo +1.97.0 test -p tokenmaster-codex --test quota_transport_adversarial_contract --locked
 cargo +1.97.0 test -p tokenmaster-codex --test quota_transport_resource_contract --locked
 pwsh -NoProfile -File scripts\audit-codex-quota-transport.ps1 -RepositoryRoot (Get-Location).Path
+cargo +1.97.0 test -p tokenmaster-store --test benefit_reminder_contract --locked
+cargo +1.97.0 test -p tokenmaster-runtime --test reminder_runtime_contract --locked
+cargo +1.97.0 test -p tokenmaster-runtime --test reminder_runtime_resource_contract --locked
+pwsh -NoProfile -File scripts\audit-benefit-inventory.ps1 -RepositoryRoot (Get-Location).Path
 # Optional authenticated live smoke:
 $env:TOKENMASTER_CODEX_EXECUTABLE = '<absolute native codex.exe>'
 $arguments = @('+1.97.0', 'test', '-p', 'tokenmaster-codex', '--test', 'quota_live_contract', '--locked', '--', '--ignored', '--nocapture')

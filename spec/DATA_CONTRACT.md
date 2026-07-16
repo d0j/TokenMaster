@@ -211,7 +211,7 @@ keyset-paged at no more than 256 rows. Scan-history cleanup uses only scan-relat
 foreign-key checks rather than rescanning the complete usage-event archive.
 
 The query path uses a distinct `READ_ONLY|NO_MUTEX` connection and never calls the
-writable open/migration path. It requires exact schema v11 and bundled SQLite identity,
+writable open/migration path. It requires exact schema v12 and bundled SQLite identity,
 WAL, foreign keys, query-only and defensive modes, trusted-schema/DQS disabled,
 query-planner stability, no checkpoint on close, 250 ms busy timeout, 4 MiB cache,
 file-backed temporary storage, and zero mmap. Each result captures archive generation,
@@ -472,7 +472,7 @@ facts, 64 current lots, 8 thresholds, 512-change/256-delivery soft retention,
 per lot is protected as the terminal/reappearance revision cursor. Activation
 intents/receipts remain unimplemented and confer no current mutation authority.
 
-The defensive benefit read projection is also implemented over the same schema-v11
+The defensive benefit read projection is also implemented over the same schema-v12
 archive. Current and history captures read the global benefit revision and all
 scope-owned rows in one deferred transaction. Current rows are capped at 64 and
 ordered by conservative expiry, unknown expiry, explicit kind rank, and opaque lot
@@ -493,6 +493,33 @@ records separate bounded quota and benefit observation/processed/status/failure
 counts, benefit material-change and pending-due counts, and separate last-success
 times. A failed domain never rewrites the other domain's result or implies
 cross-domain atomicity.
+
+The durable in-app reminder queue is now executable under schema v12. One store-owned
+immediate transaction first replays at most 256 immutable delivery/outbox rows that
+lack an acknowledgement. When none exist, it examines at most 256 indexed due rows,
+removes expired entries, selects the most urgent useful overdue threshold for each lot
+revision/channel, records its immutable delivery/outbox row, removes only the examined
+due rows, updates aggregate queue/receipt counts, and returns the next due time.
+Runtime never receives SQL or public scope/lot/delivery identities. A recorded
+threshold suppresses equal and less-urgent missed thresholds across profile rebuild
+and restart while preserving a future more-urgent threshold.
+
+Schema v12 adds a separate immutable `benefit_reminder_ack` relation. Presentation
+leases an in-memory copy without changing durable truth. Only an explicit
+post-presentation acknowledgement inserts the corresponding row idempotently.
+Unacknowledged outbox rows survive restart and profile/inventory rebuild and are
+ineligible for retention. Exact v11 migration marks pre-v12 delivery receipts as
+acknowledged because the old runtime already treated them as consumed.
+
+The reminder runtime retains one scheduler, one worker, one nearest deadline, one
+capacity-one coalesced request, one latest count-only snapshot, and at most one owned
+delivery batch of 256 items. No per-scope or per-lot timer, thread, channel, callback,
+or retained source/provider payload exists. Notification backpressure stops later
+queue mutation until the batch is acknowledged. A failed presentation can release the
+lease; process failure before acknowledgement replays it. This foundation publishes
+typed in-app events but does not claim that the unfinished P3 UI rendered them; OS
+delivery, snooze, quiet hours, activation intents, and activation receipts remain
+absent.
 
 Only explicit provider ancestry identifies a parent. A strong signature covers the
 normalized model, emitted delta, and provider cumulative snapshot. A weak signature
