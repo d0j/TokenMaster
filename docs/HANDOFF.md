@@ -102,16 +102,20 @@ four breakdowns, session pages, and detail through 401/256-target batches with a
 global 512-key detail cap, never one query per visible row. The final current/legacy
 million gate passed: amplification 1.862x/2.010x, full p95 148.168/156.080 ms,
 32-scope 158.588/162.504 ms, session page below 14 ms, detail below 1 ms. Resource and
-production pricing-network audits pass. P2-D quota history core Task 1 is complete:
+production pricing-network audits pass. P2-D quota history core Tasks 1-2 are complete:
 the floating-point `QuotaTarget` placeholder is gone, and exact bounded quota IDs,
 parts-per-million ratios, optional units, provider thresholds, definitions, samples,
 reset evidence, validated serde, and redacted observation IDs are implemented and
-focused-verified. The immediate next slice is Task 2 in
-`docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: pure deterministic
-reset evaluation and identities. Schema v10, persistence, retention, reads, public
-query values, permitted Codex quota transport, banked-reset inventory/reminders, and
-UI are not implemented. Do not replace aggregates with view-time full scans, infer
-quota from local token/cost totals, or relabel whole-session totals as period totals.
+focused-verified. `tokenmaster-quota` now owns pure constant-state evaluation,
+domain-separated deterministic identities, exact duplicate/stale/conflict and
+transition-sequence gates, scheduled/early/repeated/manual reset classification,
+allowance changes, comparable maximum use, and restart-safe definition revisions.
+The immediate next slice is Task 3 in
+`docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: strict schema v10
+and exact v9 migration. Transactional persistence, retention, reads, public query
+values, permitted Codex quota transport, banked-reset inventory/reminders, and UI are
+not implemented. Do not replace aggregates with view-time full scans, infer quota
+from local token/cost totals, or relabel whole-session totals as period totals.
 The post-Task-1 complete baseline passes. During that gate, the existing query
 resource binary was corrected from a multi-thread test-harness/single-sample
 `PrivateUsage` measurement to an isolated `harness = false` process with two

@@ -33,6 +33,14 @@ sample times/evidence are ordered, unknown nested serde fields are rejected, and
 observation identity `Debug` is redacted. This validation does not authorize a
 provider transport or make raw provider payloads safe to retain.
 
+The implemented quota detector adds no filesystem, environment, network, async,
+SQLite, serializer, clock, timer, or mutable-global capability. Scope, epoch, and
+transition identities are domain-separated SHA-256 values over normalized
+length-prefixed fields and big-endian integers; their `Debug` output is redacted.
+Detector errors are stable path-free codes. Low/unknown-confidence or
+conflict/unknown-quality samples cannot independently trigger threshold inference,
+and rolling windows never infer resets from ratio recovery.
+
 Providers emit bounded observation/session-relation drafts only. They cannot create
 event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or
 canonical events. Those values are created only by TokenMaster accounting code. Store

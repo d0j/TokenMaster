@@ -353,6 +353,16 @@ transitions and may accompany a reset. Transition identity is deterministic so
 restart/retry cannot duplicate it. Poll samples, epochs, transitions, and aggregates
 have explicit per-window retention/page bounds.
 
+The pure quota evaluator is implemented without I/O or mutable global state. It
+rejects mismatched windows, conflicting duplicate identities, incoherent previous
+state, definition-revision regression, non-exact transition sequences, and sequence
+overflow. Ratio/amount drops alone and rolling-window recovery do not create resets.
+Provider epoch, explicit reset, manual/banked, and provider-threshold evidence follow
+the documented precedence and preserve scheduled, early, manual/banked, or unknown
+classification plus exact-or-interval detection time. Open epoch identity retains its
+opening definition revision while the state separately tracks the latest applied
+definition revision, so definition updates survive restart without false resets.
+
 ## TM-DATA-009 — Banked reset inventory and activation receipts
 
 A provider benefit lot is immutable evidence scoped by provider, account/workspace,

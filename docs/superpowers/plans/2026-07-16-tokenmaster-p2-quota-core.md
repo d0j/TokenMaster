@@ -6,7 +6,8 @@
 > (`- [ ]`) syntax for tracking.
 
 **Status:** inline execution in progress after spec-coverage, placeholder, type-flow,
-scope, and authority-boundary self-review; Task 1 complete, Task 2 next
+scope, authority-boundary, and restart-state self-review; Tasks 1-2 complete, Task 3
+next
 
 **Goal:** Build the provider-neutral quota history data core that preserves scheduled,
 early, repeated, and manual/banked full resets without inventing provider limits.
@@ -281,7 +282,7 @@ pub fn evaluate_sample(
 `QuotaEpochState`; transition variants additionally carry one immutable
 `QuotaTransition`.
 
-- [ ] **Step 1: Write failing detector fixtures**
+- [x] **Step 1: Write failing detector fixtures**
 
 Cover exact provider epoch reset, explicit provider/local/manual reset, provider
 threshold scheduled reset, early reset, inferred unknown reset, repeated reset,
@@ -293,7 +294,7 @@ Use provider-defined nonstandard fixtures such as a 603,900-second fixed window 
 post-reset thresholds of 5% used / 95% remaining. No fixture may assume five hours or
 seven days.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-quota --locked
@@ -301,7 +302,7 @@ cargo +1.97.0 test -p tokenmaster-quota --locked
 
 Expected: package is absent.
 
-- [ ] **Step 3: Implement the pure crate**
+- [x] **Step 3: Implement the pure crate**
 
 Add workspace member `crates/quota` with only:
 
@@ -319,7 +320,7 @@ integer bytes, or map iteration as identity input.
 Detection precedence and confidence follow the design exactly. Store maximum used
 ratio and matching absolute used units only when they are available and comparable.
 
-- [ ] **Step 4: Verify crate tests, privacy, and dependency closure**
+- [x] **Step 4: Verify crate tests, privacy, and dependency closure**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-quota --locked
@@ -331,7 +332,7 @@ cargo tree -p tokenmaster-quota --locked
 Expected: only standard library, `sha2`, and `tokenmaster-domain` in the production
 closure; all tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add -- Cargo.toml Cargo.lock crates/quota

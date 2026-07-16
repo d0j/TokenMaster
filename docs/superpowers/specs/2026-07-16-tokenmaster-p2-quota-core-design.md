@@ -184,6 +184,11 @@ pre/post observations, transition kind, and sequence inputs. Retry/restart canno
 duplicate a transition, while two repeated resets necessarily have different
 pre/post observations and identities.
 
+An open epoch retains the definition revision that created its epoch identity while
+also tracking the latest definition revision successfully applied to later samples.
+Increasing a definition revision therefore neither invents a reset nor makes the
+state unrestorable; a later revision regression fails closed.
+
 ## 6. Schema-v10 model
 
 The quota tables are:

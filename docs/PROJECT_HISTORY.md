@@ -1420,3 +1420,32 @@ This closes only P2-D Task 1. The pure detector and deterministic identities are
 schema v10, quota persistence/retention/reads/query, provider transport, banked-reset
 inventory/reminders, UI, automation, M0 acceptance, packaging, signing, and release
 remain open.
+
+## 2026-07-16 — P2-D pure quota detector implemented
+
+Added the I/O-free `tokenmaster-quota` crate with only `tokenmaster-domain` and
+release-pinned `sha2` as direct production dependencies. Versioned, domain-separated
+SHA-256 scope, epoch, and transition identities use normalized length-framed fields,
+big-endian integers, fixed 32-byte values, and redacted `Debug`; fixed independent
+vectors cover scope, epoch, and transition identity.
+
+The constant-state evaluator now starts and advances epochs, retains comparable
+maximum use, rejects conflicting duplicates and incoherent window/state continuity,
+ignores stale observations, and detects provider-epoch, explicit provider/local,
+manual/banked, and provider-threshold resets. Scheduled, early, manual/banked, and
+lower-confidence unknown kinds remain distinct. Allowance changes are orthogonal and
+may accompany a reset. Rolling recovery, ratio drops alone, and untrusted threshold
+inference cannot manufacture resets. Per-window sequences are exact, monotonic, and
+checked against overflow.
+
+Critical self-review found that applying a newer window-definition revision would
+have preserved the old epoch ID but overwritten the revision used to validate it,
+making a later restore reject valid state. The state now retains the opening
+definition revision separately from the latest applied revision; the regression test
+proves revision advance, restart restore, and fail-closed revision rollback.
+
+The package-absent RED, 11 focused identity/detector tests, strict warnings-as-errors
+Clippy, direct-dependency audit, forbidden-capability scan, formatting, and diff-check
+pass. This closes P2-D Task 2 only. Task 3 strict schema v10 and exact v9 migration is
+next; writes, retention, reads, query, transport, inventory/reminders, UI, automation,
+M0 acceptance, packaging, signing, and release remain open.

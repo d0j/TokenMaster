@@ -314,6 +314,21 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   contracts plus the complete domain suite and strict domain Clippy pass. No detector,
   SQLite quota tables, provider transport, inventory, reminder, query, or UI
   capability is claimed.
+- P2-D Task 2 pure quota evaluator: the new `tokenmaster-quota` crate has only
+  `tokenmaster-domain` and `sha2` as direct production dependencies and performs no
+  I/O. Domain-separated, length-framed SHA-256 scope/epoch/transition identities use
+  architecture-independent integer encoding and redacted `Debug`. Constant-state
+  evaluation covers start/advance, identical and conflicting duplicates, stale
+  samples, window/state continuity, provider-epoch and explicit resets,
+  manual/banked resets, provider-threshold scheduled/early/unknown resets, standalone
+  and reset-accompanying allowance changes, comparable maximum use, repeated resets,
+  exact checked sequences, overflow, rolling/drop-only rejection, and untrusted
+  inference gates. A review-found restart defect is covered: the epoch-opening
+  definition revision is retained separately from the latest applied revision, so an
+  update neither invents a reset nor makes restored state invalid. Eleven focused
+  detector/identity contracts and strict crate Clippy pass. No schema, persistence,
+  retention, public query, transport, inventory/reminder, UI, or automation capability
+  is claimed.
 - Verification correction: the first post-Task-1 workspace run reproduced an existing
   query resource-test defect. A default Rust test harness changed its own worker
   threads during process-wide `PrivateUsage` sampling, while allocator spikes later
@@ -328,14 +343,15 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 ## Next implementation slice
 
 P2-D quota history core execution is active under
-`docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`. Task 1 exact domain
-values is complete; Task 2 is the immediate next slice: the pure constant-state reset
-detector and deterministic identities. Schema v10, writes, retention, reads, query,
-and acceptance evidence remain Tasks 3-8. Permitted Codex quota transport and banked
-reset inventory/reminders remain separate later contours. No quota value may be
-inferred from local token/cost facts and no browser/private-endpoint authority may be
-added. P2-E Git output and P2-F joined product status remain after P2-D; P3 complete
-UI follows the product-data contracts.
+`docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`. Tasks 1-2 exact
+domain values, deterministic identities, and pure reset/allowance evaluation are
+complete. Task 3 is the immediate next slice: strict schema v10 plus exact v9
+migration. Transactional writes, retention, reads, query, and acceptance evidence
+remain Tasks 4-8. Permitted Codex quota transport and banked reset
+inventory/reminders remain separate later contours. No quota value may be inferred
+from local token/cost facts and no browser/private-endpoint authority may be added.
+P2-E Git output and P2-F joined product status remain after P2-D; P3 complete UI
+follows the product-data contracts.
 
 The architecture/release closure review is approved in
 `docs/superpowers/specs/2026-07-16-tokenmaster-plan-closure-design.md`. It freezes the

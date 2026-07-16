@@ -6,6 +6,11 @@ All notable changes are recorded here.
 
 ### Added
 
+- Pure constant-state quota epoch evaluator with domain-separated deterministic
+  scope/epoch/transition identities, exact duplicate/stale/conflict handling,
+  scheduled/early/manual/unknown full resets, orthogonal allowance changes,
+  maximum comparable use, restart-safe definition revisions, checked transition
+  sequences, and explicit rejection of drop-only or rolling-window reset inference.
 - Exact provider-neutral quota domain values replacing the floating-point M0
   placeholder: bounded scope/window/unit/epoch IDs, redacted 32-byte observation IDs,
   parts-per-million ratios, optional coherent units, fixed-window provider thresholds,
