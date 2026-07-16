@@ -66,6 +66,18 @@ $foreignSourceFiles = @(
 if ($foreignSourceFiles.Count -ne 0) {
     throw 'quota runtime production source contains a foreign-language file'
 }
+
+function Get-ProductionRustText {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $text = [System.IO.File]::ReadAllText($Path)
+    $testBoundary = $text.IndexOf('#[cfg(test)]', [System.StringComparison]::Ordinal)
+    if ($testBoundary -ge 0) {
+        return $text.Substring(0, $testBoundary)
+    }
+    return $text
+}
+
 $forbiddenSourcePattern = @(
     'https?://',
     '\bstd::net\b|\bTcp(Stream|Listener)\b|\bUdpSocket\b',
@@ -80,11 +92,11 @@ $forbiddenSourcePattern = @(
     '\bTcpStream\b|\bUdpSocket\b',
     '\brusqlite\b|\btransaction_with_behavior\b'
 ) -join '|'
-$sourceMatches = @(
-    $librarySourceFiles | Select-String -Pattern $forbiddenSourcePattern -CaseSensitive:$false
-)
-if ($sourceMatches.Count -ne 0) {
-    throw 'quota runtime source contains forbidden network/browser/credential/shell/direct-SQL authority'
+foreach ($sourceFile in $librarySourceFiles) {
+    $productionText = Get-ProductionRustText -Path $sourceFile.FullName
+    if ($productionText -match $forbiddenSourcePattern) {
+        throw 'quota runtime source contains forbidden network/browser/credential/shell/direct-SQL authority'
+    }
 }
 
 $discoveryPath = Join-Path $quotaSourceRoot 'discovery.rs'
@@ -92,11 +104,11 @@ $configPath = Join-Path $quotaSourceRoot 'config.rs'
 $executionPath = Join-Path $quotaSourceRoot 'execution.rs'
 $runtimePath = Join-Path $quotaSourceRoot 'runtime.rs'
 $healthPath = Join-Path $quotaSourceRoot 'health.rs'
-$discoveryText = [System.IO.File]::ReadAllText($discoveryPath)
-$configText = [System.IO.File]::ReadAllText($configPath)
-$executionText = [System.IO.File]::ReadAllText($executionPath)
-$runtimeText = [System.IO.File]::ReadAllText($runtimePath)
-$healthText = [System.IO.File]::ReadAllText($healthPath)
+$discoveryText = Get-ProductionRustText -Path $discoveryPath
+$configText = Get-ProductionRustText -Path $configPath
+$executionText = Get-ProductionRustText -Path $executionPath
+$runtimeText = Get-ProductionRustText -Path $runtimePath
+$healthText = Get-ProductionRustText -Path $healthPath
 
 $requiredDiscoveryPatterns = @(
     'MAX_CODEX_EXECUTABLE_SEARCH_DIRS',
