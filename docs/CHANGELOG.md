@@ -28,10 +28,11 @@ All notable changes are recorded here.
   breakdowns, and opaque session page/detail values without raw-history or per-item
   query fallback.
 - Current/legacy million-event pricing gates, catalog/override/query-switch Windows
-  resource plateaus with an isolated single-thread measurement process, repeated
-  retained-return windows, structural high-water checks, scoped price query-plan
-  assertions, and a production dependency/binary-string audit that forbids runtime
-  pricing network paths.
+  resource plateaus with an isolated single-thread measurement process, bounded
+  topology-stable warm-up, converged retained-return windows, unchanged 1/2 MiB
+  budgets, structural high-water checks, scoped price query-plan assertions, and a
+  production dependency/binary-string audit that forbids runtime pricing network
+  paths.
 - Single-root TokenMaster workspace and clean-history product boundary.
 - Root-only Rust M0 scripts and CI.
 - Clean-root audit for product-tree invariants.

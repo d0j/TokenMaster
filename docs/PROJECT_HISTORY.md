@@ -1387,11 +1387,15 @@ proved that the default Rust test harness itself could terminate worker threads 
 process-wide sampling and that a single allocator high-water sample could exceed the
 budget even when later samples returned below the earlier floor. The resource contract
 now runs as a Cargo `harness = false` single-thread process. It preserves per-sample
-handle/thread/USER/GDI checks and the original 1/2 MiB budgets, but measures retained
-memory by return within each of two consecutive eight-round windows. Deterministic
-fixtures prove transient spikes pass while sustained growth and incomplete windows
-fail. Focused tests, clean-root audit, formatting, strict locked workspace Clippy,
-every locked workspace test/doctest, privacy checks, and diff review pass.
+handle/thread/USER/GDI checks and the original 1/2 MiB budgets. A later full gate
+showed that a fixed warm-up could still finish before process topology and allocator
+phase converged. Warm-up is now bounded to 64 rounds and begins measurement only
+after two eight-round windows share one structural topology and converged retained
+floors; their higher return floor is the conservative reference. Deterministic
+fixtures prove topology/allocator phase shifts and transient spikes do not masquerade
+as leaks, while sustained growth and incomplete windows fail. Two fresh focused
+processes, clean-root audit, formatting, strict locked workspace Clippy, every locked
+workspace test/doctest, privacy checks, and diff review pass.
 
 This completes P2-C only. P2-D quota/reset history and expiring reset inventory is the
 next approved slice; Git output, joined snapshots, UI, automation, M0 acceptance,
@@ -1446,6 +1450,7 @@ proves revision advance, restart restore, and fail-closed revision rollback.
 
 The package-absent RED, 11 focused identity/detector tests, strict warnings-as-errors
 Clippy, direct-dependency audit, forbidden-capability scan, formatting, and diff-check
-pass. This closes P2-D Task 2 only. Task 3 strict schema v10 and exact v9 migration is
-next; writes, retention, reads, query, transport, inventory/reminders, UI, automation,
-M0 acceptance, packaging, signing, and release remain open.
+pass. The complete workspace gate also passes after the resource measurement
+correction above. This closes P2-D Task 2 only. Task 3 strict schema v10 and exact v9
+migration is next; writes, retention, reads, query, transport, inventory/reminders,
+UI, automation, M0 acceptance, packaging, signing, and release remain open.

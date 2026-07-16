@@ -116,11 +116,12 @@ and exact v9 migration. Transactional persistence, retention, reads, public quer
 values, permitted Codex quota transport, banked-reset inventory/reminders, and UI are
 not implemented. Do not replace aggregates with view-time full scans, infer quota
 from local token/cost totals, or relabel whole-session totals as period totals.
-The post-Task-1 complete baseline passes. During that gate, the existing query
-resource binary was corrected from a multi-thread test-harness/single-sample
-`PrivateUsage` measurement to an isolated `harness = false` process with two
-retained-return windows. The original 1 MiB open/drop and 2 MiB aggregate/rebuild
-budgets plus per-sample handle/thread/USER/GDI bounds remain unchanged.
+The current post-Task-2 complete baseline passes. The query resource binary now uses
+an isolated `harness = false` process plus a bounded maximum-64-round warm-up that
+waits for two topology-stable eight-round retained floors before measurement. The
+original 1 MiB open/drop and 2 MiB aggregate/rebuild budgets plus per-sample
+handle/thread/USER/GDI bounds remain unchanged. Two fresh focused runs and the
+warnings-as-errors workspace binary pass.
 The 2026-07-16 closure review also freezes the remaining plan ambiguities: P3 is the
 complete UI, P4 presentation/localization, P5 read-only automation, and P6 the
 canonical MSVC signed portable release. It selects the Slint attribution route,

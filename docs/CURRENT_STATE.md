@@ -332,13 +332,17 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 - Verification correction: the first post-Task-1 workspace run reproduced an existing
   query resource-test defect. A default Rust test harness changed its own worker
   threads during process-wide `PrivateUsage` sampling, while allocator spikes later
-  returned below the earlier floor. The resource gate now runs as a Cargo
-  `harness = false` single-thread process, preserves per-sample handle/thread/USER/GDI
-  bounds, and requires both measured eight-round windows to return within the original
-  1 MiB open/drop or 2 MiB aggregate/rebuild retained-memory budget. Deterministic
-  fixtures reject sustained growth and incomplete windows. The clean-root audit,
-  formatting, strict locked workspace Clippy, complete locked workspace tests/doctests,
-  and diff-check pass after the correction.
+  returned below the earlier floor. A later full gate proved that fixed warm-up could
+  still end before the process topology and allocator phase converged. The resource
+  gate now runs as a Cargo `harness = false` single-thread process and performs at
+  most 64 warm-up rounds until two eight-round windows have identical
+  handle/thread/USER/GDI topology and converged retained floors. Measurement retains
+  the original 1 MiB open/drop and 2 MiB aggregate/rebuild budgets plus per-sample
+  structural bounds. Deterministic fixtures reject topology-phase contamination,
+  sustained growth, and incomplete windows; two fresh focused processes and the full
+  workspace build pass. The clean-root audit, formatting, strict locked workspace
+  Clippy, complete locked workspace tests/doctests, and diff-check pass after the
+  correction.
 
 ## Next implementation slice
 
