@@ -168,6 +168,11 @@ historical sub-minute offset. Public analytics MUST preserve known, partial, and
 unavailable token facts and cap a requested daily series at 400 owned points. A
 session continuation MUST remain bound to both its exact dataset and canonical scope
 filter set; changing either starts a new first page.
+Quota current reads MUST accept at most 32 exact windows. Reset history MUST use a
+quota-revision-bound keyset cursor, return at most 256 transitions plus one internal
+lookahead, and apply each sample's provider-defined freshness boundaries rather than
+the usage TTL. On the reference machine, one quota write, duplicate poll, 32-window
+current snapshot, and 256-row history page MUST each complete below one second.
 On the reference machine, aggregate-ready append p95 MUST remain below 25 ms for the
 normal one-event path, 50 ms for 32-event catch-up, and 250 ms for the maximum
 256-event catch-up, and MUST NOT exceed 1.5 times the matching aggregate-unavailable

@@ -300,6 +300,15 @@ Changed revision/filter cursors fail closed. Both captures use fixed quota-only 
 SQL in one deferred snapshot, accept no caller SQL/sort/column expression, return no
 usage/price rows, and clear deadline interruption state before every return.
 
+`QueryService::quota_windows` maps zero through 32 exact requested windows into one
+owned `QuotaEnvelope<QuotaCurrentSnapshot>` while preserving request order and
+explicit missing-window results. `QueryService::quota_transitions` maps one newest-
+first page into `QuotaEnvelope<QuotaTransitionPage>`. Their `QuotaQueryHeader` uses
+the independent quota revision rather than usage `DatasetIdentity`, applies each
+sample's exact fresh/stale boundaries, reports the worst truthful selected quality,
+and allocates snapshot generation only after store capture and public mapping both
+succeed. Failed/stale calls therefore consume no public generation.
+
 Quota snapshots expose current window epochs and a bounded transition page. Full
 weekly resets include before/after values, maximum pre-reset use, old/new reset times,
 transition kind, evidence source, confidence, and an exact or bounded detection time.

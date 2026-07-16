@@ -4,11 +4,19 @@ use std::{mem::size_of, path::Path};
 
 use rusqlite::{Connection, params};
 use tempfile::TempDir;
+use tokenmaster_domain::{
+    QuotaAccountId, QuotaConfidence, QuotaEvidenceSource, QuotaObservationId,
+    QuotaPresentationDirection, QuotaProviderEpochId, QuotaRatio, QuotaResetEvidence, QuotaSample,
+    QuotaSampleParts, QuotaSampleQuality, QuotaScope, QuotaWindowDefinition,
+    QuotaWindowDefinitionParts, QuotaWindowId, QuotaWindowKey, QuotaWindowSemantics,
+    UsageProviderId,
+};
 use tokenmaster_pricing::{AliasOverrideDraft, OverrideDraft, OverrideSnapshot};
 use tokenmaster_query::{
     CalendarDate, CostMode, LatestActivityRequest, PageSize, PricingEngine, QueryClock, QueryError,
-    QueryService, QueryTimeSample, UsageAnalyticsRequest, UsageBreakdownKind, UsageRange,
-    UsageSeriesSelection, UsageSessionPageRequest, UsageTimeZone, WeekStart,
+    QueryService, QueryTimeSample, QuotaCurrentRequest, QuotaTransitionPageRequest,
+    UsageAnalyticsRequest, UsageBreakdownKind, UsageRange, UsageSeriesSelection,
+    UsageSessionPageRequest, UsageTimeZone, WeekStart,
 };
 use tokenmaster_store::{AggregateRebuildStatus, UsageStore};
 
@@ -30,7 +38,7 @@ struct FixedClock;
 
 impl QueryClock for FixedClock {
     fn sample(&self) -> Result<QueryTimeSample, QueryError> {
-        Ok(QueryTimeSample::new(1, 1))
+        Ok(QueryTimeSample::new(1_000_000, 1))
     }
 }
 
@@ -119,6 +127,79 @@ fn seed_bounded_current_archive(path: &Path, event_count: i64) {
         .expect("checkpoint");
 }
 
+fn quota_key(index: u64) -> QuotaWindowKey {
+    QuotaWindowKey::new(
+        QuotaScope::new(
+            UsageProviderId::new("codex").expect("provider"),
+            QuotaAccountId::new("resource-account").expect("account"),
+            None,
+        ),
+        QuotaWindowId::new(format!("resource-{index}")).expect("window"),
+    )
+}
+
+fn quota_definition(index: u64) -> QuotaWindowDefinition {
+    QuotaWindowDefinition::new(QuotaWindowDefinitionParts {
+        key: quota_key(index),
+        revision: 1,
+        label_key: format!("quota.resource-{index}"),
+        presentation: QuotaPresentationDirection::Used,
+        semantics: QuotaWindowSemantics::Fixed,
+        nominal_duration_seconds: None,
+        reset_thresholds: None,
+    })
+    .expect("quota definition")
+}
+
+fn quota_observation_id(window: u64, observation: u64) -> QuotaObservationId {
+    let mut bytes = [0_u8; 32];
+    bytes[16..24].copy_from_slice(&window.to_be_bytes());
+    bytes[24..].copy_from_slice(&observation.to_be_bytes());
+    QuotaObservationId::from_bytes(bytes)
+}
+
+fn quota_sample(index: u64, observation: u64) -> QuotaSample {
+    let observed_at_ms = i64::try_from(observation * 1_000).expect("observation time");
+    QuotaSample::new(QuotaSampleParts {
+        key: quota_key(index),
+        observation_id: quota_observation_id(index, observation),
+        observed_at_ms,
+        fresh_until_ms: observed_at_ms + 10_000,
+        stale_after_ms: observed_at_ms + 20_000,
+        provider_epoch_id: Some(
+            QuotaProviderEpochId::new(format!("resource-epoch-{index}-{observation}"))
+                .expect("provider epoch"),
+        ),
+        used_ratio: Some(QuotaRatio::new(100_000).expect("used ratio")),
+        remaining_ratio: Some(QuotaRatio::new(900_000).expect("remaining ratio")),
+        units: None,
+        advertised_resets_at_ms: Some(observed_at_ms + 100_000),
+        quality: QuotaSampleQuality::Authoritative,
+        source: QuotaEvidenceSource::ProviderOfficial,
+        confidence: QuotaConfidence::High,
+        reset_evidence: QuotaResetEvidence::None,
+        reset_occurred_at_ms: None,
+    })
+    .expect("quota sample")
+}
+
+fn seed_bounded_quota(path: &Path) {
+    let mut store = UsageStore::open(path).expect("quota writer");
+    for index in 0..4 {
+        let definition = quota_definition(index);
+        for observation in 1..=9 {
+            store
+                .apply_quota_observation(&definition, &quota_sample(index, observation))
+                .expect("quota observation");
+        }
+    }
+    drop(store);
+    let connection = Connection::open(path).expect("quota checkpoint connection");
+    connection
+        .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
+        .expect("quota checkpoint");
+}
+
 fn open_query_drop(path: &Path) {
     let mut service = QueryService::open(path, FixedClock).expect("open query service");
     let snapshot = service
@@ -189,6 +270,51 @@ fn exercise_bounded_snapshots(path: &Path) {
         .usage_session_detail(detail_key)
         .expect("session detail");
     assert!(detail.payload().detail().is_some());
+}
+
+fn exercise_bounded_quota_snapshots(path: &Path) {
+    let keys = (0..4).map(quota_key).collect::<Vec<_>>();
+    let mut service = QueryService::open(path, FixedClock).expect("quota query service");
+    let current = service
+        .quota_windows(QuotaCurrentRequest::new(keys.clone()).expect("quota current request"))
+        .expect("quota current snapshot");
+    assert_eq!(current.payload().windows().len(), 4);
+    assert!(
+        current
+            .payload()
+            .windows()
+            .iter()
+            .all(|window| window.snapshot().is_some())
+    );
+    for key in keys {
+        let first = service
+            .quota_transitions(
+                QuotaTransitionPageRequest::first(
+                    key.clone(),
+                    PageSize::new(4).expect("quota page"),
+                )
+                .expect("quota first request"),
+            )
+            .expect("quota first page");
+        assert_eq!(first.payload().transitions().len(), 4);
+        assert!(first.payload().has_more());
+        let second = service
+            .quota_transitions(
+                QuotaTransitionPageRequest::continuation(
+                    key,
+                    PageSize::new(4).expect("quota page"),
+                    first
+                        .payload()
+                        .next_cursor()
+                        .cloned()
+                        .expect("quota cursor"),
+                )
+                .expect("quota continuation request"),
+            )
+            .expect("quota continuation page");
+        assert_eq!(second.payload().transitions().len(), 4);
+        assert!(!second.payload().has_more());
+    }
 }
 
 fn resource_counts() -> ResourceCounts {
@@ -593,6 +719,13 @@ fn repeated_aggregate_session_and_resumable_rebuild_cycles_stay_on_a_resource_pl
     verify_resource_plateau(
         "resumable rebuild",
         || exercise_rebuild_cycle(&path),
+        8,
+        2_097_152,
+    );
+    seed_bounded_quota(&path);
+    verify_resource_plateau(
+        "quota current/history/reopen",
+        || exercise_bounded_quota_snapshots(&path),
         8,
         2_097_152,
     );

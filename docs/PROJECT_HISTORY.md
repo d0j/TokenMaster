@@ -1609,3 +1609,62 @@ workspace run keeps the explicitly ignored reference/scale tests skipped.
 This closes P2-D Task 6 only. Task 7 immutable public quota query values/service is
 next; permitted Codex transport, banked-reset inventory/reminders, UI, automation, M0
 acceptance, packaging, signing, and release remain open.
+
+## 2026-07-16 — P2-D immutable public quota facade implemented
+
+Added query-owned quota values and two fixed `QueryService` methods. Current requests
+accept zero through 32 unique exact windows, preserve request order, and return one
+explicit available or unavailable result per filter. Transition requests return
+newest-first immutable pages with an opaque continuation bound to the exact window and
+quota revision. `QuotaQueryHeader` is independent from usage `DatasetIdentity` and
+carries checked process-local generation, exact quota revision, generated/data-
+through time, provider-defined aggregate freshness, worst truthful selected quality,
+exact bounded filters, and stable warnings.
+
+Public values preserve definitions, ratios, optional units, samples, current epochs,
+last transitions, reset/allowance kind, evidence, confidence, and exact-or-interval
+detection time without leaking store DTOs. Filter, label, account/window,
+provider-epoch, and cursor identity are redacted from public Debug. A stale revision,
+changed filter, unavailable window, clock rollback, and partial/conflicting evidence
+remain explicit. Generation advances only after store capture, mapping, and header
+construction succeed; a stale continuation therefore does not consume consumer
+ordering.
+
+Four focused facade contracts cover scheduled, early, unknown, manual/banked,
+allowance, ratio-only, unit-bearing, repeated sequence, first/continuation paging,
+changed filters, stale revisions, freshness boundaries, quality aggregation, missing
+windows, clock discontinuity, bounds, stable warnings, and Debug privacy. The complete
+locked query suite, resource contract, formatting, diff check, and strict query
+Clippy pass.
+
+This closes P2-D Task 7 only. Task 8 scale, resource, privacy, offline authority, and
+project-truth closure is next; transport, banked inventory/reminders, UI, automation,
+M0 acceptance, packaging, signing, and release remain open.
+
+## 2026-07-16 — P2-D quota history core acceptance closed
+
+Added a pure adversarial detector matrix proving that rolling/unknown windows and
+low-quality or low-confidence fixed-window recoveries cannot infer automatic resets.
+Explicit manual/banked evidence remains typed even when automatic evidence is
+conflicting or unknown, while opaque scope/epoch/transition identities remain
+redacted.
+
+Added an ignored release-scale quota gate covering 32 windows, 1,000 immutable
+scheduled/early/manual repeated transitions, 10,000 duplicate polls, writer restart,
+reader reopen, request-ordered current snapshots, complete 256-row keyset paging,
+bounded maintenance, and coexistence with both current and migrated immutable-legacy
+usage. The reference run completed in 1.72 seconds. Maximum measured calls were
+3.429 ms for a visible write, 0.228 ms for a duplicate poll, 2.774 ms for the
+32-window snapshot, and 1.256 ms for a 256-row history page.
+
+Extended the isolated Windows resource binary with repeated quota current/history/
+switch/reopen cycles under the existing topology-stable private-memory,
+handle/thread/USER/GDI plateau rules. Added `scripts/audit-quota-network.ps1`; its
+release closure covered 76 production dependency packages, 43 production files, and
+the three current quota/store/query release libraries with zero forbidden network,
+browser, cookie, shell, socket, or async-client matches.
+
+This closes P2-D Tasks 1-8 and the provider-neutral quota history core only. The next
+honest blocker is a permitted credential-free Codex quota transport. Banked-reset
+inventory/reminders, notification delivery, UI, CLI/MCP, M0 acceptance, packaging,
+signing, and release remain separate and unclaimed.

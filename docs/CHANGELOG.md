@@ -6,6 +6,17 @@ All notable changes are recorded here.
 
 ### Added
 
+- Immutable public quota query envelopes with independent quota revision, exact
+  provider freshness, worst truthful quality, request-ordered explicit unavailable
+  windows, query-owned reset/allowance values, opaque filter/revision-bound history
+  continuation, failed-call snapshot-generation neutrality, and redacted public
+  `Debug`.
+- P2-D quota-core acceptance gates: adversarial no-inference matrix, 32-window/
+  1,000-transition/10,000-duplicate release fixture, writer/reader restart, 256-row
+  continuation, bounded maintenance, current/migrated-legacy usage coexistence,
+  repeated Windows private-memory/handle/thread/USER/GDI plateau, and a release
+  dependency/source/library audit forbidding network, browser, cookie, shell, socket,
+  and async-client authority.
 - Defensive quota store snapshots with zero-to-32 exact current windows, owned
   definition/sample/epoch/last-transition values, revision-bound newest-first
   transition history capped at 256+1, opaque filter-bound keyset cursors, fixed

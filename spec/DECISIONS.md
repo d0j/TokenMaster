@@ -667,3 +667,30 @@ history scans or accepting corrupted duplicated columns as plausible state. Sepa
 read authority, fixed bounds, revision-bound keyset continuation, owned values, and
 repeated relational validation keep latency/memory bounded while preserving restart,
 privacy, and automation semantics.
+
+## ADR-036 — Independent immutable quota facade and offline acceptance
+
+Decision: `tokenmaster-query` exposes quota through `QuotaQueryHeader` and
+`QuotaEnvelope<T>`, never through usage `DatasetIdentity`. The header owns one checked
+process-local snapshot generation, exact quota revision, generated/data-through time,
+provider-defined aggregate freshness, worst truthful quality, exact bounded window
+filters, and stable warnings. Current requests preserve caller order and return one
+explicit unavailable result for every missing requested window. Transition
+continuation retains an opaque store cursor plus the exact public filter and revision.
+Snapshot generation is committed only after store capture, mapping, and header
+validation all succeed.
+
+Public quota values are query-owned immutable projections. Their `Debug` surfaces
+redact filters, provider epochs, labels, and opaque cursor identities. The core
+acceptance gate covers an adversarial no-inference matrix, 32 windows, 1,000
+transitions, 10,000 duplicate polls, restart, 256-row paging, bounded maintenance,
+current and legacy usage coexistence, Windows resource return, and a release
+dependency/source/library audit that rejects network, browser, cookie, shell, socket,
+and async-client authority.
+
+Rationale: reusing usage identity or TTL would invalidate independent quota updates
+and misstate provider freshness. Omitting missing windows would make UI ordering
+ambiguous, while allocating generations before a failed stale cursor would create
+false consumer progress. An owned redacted facade plus measured offline acceptance
+gives UI, CLI, and MCP one bounded truth without authorizing the still-separate Codex
+transport or benefit mutation.

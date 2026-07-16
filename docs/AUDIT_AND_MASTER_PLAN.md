@@ -1,7 +1,8 @@
 # TokenMaster Critical Audit and Approved Master Plan
 
 Status: architecture and release plan approved after closure review; P0 through P1,
-P2-A, P2-B, and P2-C pinned pricing are implemented; P2-D quota/reset inventory is next.
+P2-A, P2-B, P2-C pinned pricing, and the P2-D quota history core are implemented;
+permitted Codex quota transport is next.
 Date: 2026-07-16.
 
 ## 1. Executive decision
@@ -242,8 +243,12 @@ including optional daily series, explicit token availability, and scope-bound op
 session continuation. Deterministic current/legacy million-event latency, rebuild,
 storage amplification, privacy, and repeated resource evidence now pass. P2-C
 schema-v9 price facts, fixed-point engine, immutable overrides, batched cost facade,
-million-event, resource, and offline-network gates pass. P2-D quota/reset inventory is
-the active critical path. View-time full scans and period-labeled
+million-event, resource, and offline-network gates pass. P2-D quota history Tasks 1-8
+also pass: exact domain/evaluator/schema/write/retention/read/query contracts,
+adversarial inference, 32-window/1,000-transition/10,000-poll scale, Windows resource
+return, and offline authority audit. Permitted Codex quota transport is the active
+critical path; banked-reset inventory/reminders remain a separate following contour.
+View-time full scans and period-labeled
 whole-session totals remain forbidden.
 P2-A now implements the bounded public values, separate defensive read-only/query-only
 schema-v8 store, synchronous `QueryService`, and one-result consumer ordering. Current/
@@ -253,8 +258,9 @@ latency, Debug/privacy, 10,000-candidate retention, and 256-cycle Windows resour
 contracts pass. No frontend owns SQLite. P2-B transactional storage, rebuild,
 overview, series, breakdown, session store reads, calendar composition, immutable
 aggregate/session facade values, and Task 8 scale/resource evidence are implemented.
-P2-C pinned pricing and its release gates are implemented; P2-D quota/reset history
-and banked-reset inventory are the next gate.
+P2-C pinned pricing and its release gates are implemented; the P2-D quota history
+core and its acceptance gates are implemented. Permitted Codex quota transport is the
+next gate, followed separately by banked-reset inventory/reminders.
 The older replay plan remains historical evidence for
 completed Tasks 1-2, but its Codex-owned Tasks 3+ are superseded and must not be
 executed.

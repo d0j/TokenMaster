@@ -83,6 +83,22 @@ plausible UI truth. A two-second maximum deadline is enforced across the complet
 capture as well as inside SQLite VM execution, and the progress handler is removed
 after success or failure so cancellation cannot contaminate the next query.
 
+The public quota facade adds no SQLite, filesystem, network, shell, HTTP, browser,
+cookie, credential, provider-mutation, or raw-payload authority. Its values are owned
+and bounded; request/header/result/cursor `Debug` redacts exact filters and private
+provider-epoch identity. The adversarial detector matrix proves that rolling/unknown
+windows and low-quality or low-confidence fixed-window recovery cannot infer an
+automatic reset, while explicit manual evidence remains typed.
+
+`scripts/audit-quota-network.ps1` traverses the release dependency closure of
+`tokenmaster-quota`, `tokenmaster-store`, and `tokenmaster-query`, rejects
+network/browser/async client crates, scans production source for endpoint, cookie,
+browser automation, shell, and socket authority, builds release libraries, and scans
+their strings. The current gate covers 76 production dependency packages,
+43 production files, and three current release libraries with zero forbidden
+matches. This proves only the quota
+core is offline; it does not authorize or implement a Codex quota transport.
+
 Providers emit bounded observation/session-relation drafts only. They cannot create
 event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or
 canonical events. Those values are created only by TokenMaster accounting code. Store

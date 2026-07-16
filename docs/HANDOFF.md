@@ -102,7 +102,7 @@ four breakdowns, session pages, and detail through 401/256-target batches with a
 global 512-key detail cap, never one query per visible row. The final current/legacy
 million gate passed: amplification 1.862x/2.010x, full p95 148.168/156.080 ms,
 32-scope 158.588/162.504 ms, session page below 14 ms, detail below 1 ms. Resource and
-production pricing-network audits pass. P2-D quota history core Tasks 1-6 are complete:
+production pricing-network audits pass. P2-D quota history core Tasks 1-8 are complete:
 the floating-point `QuotaTarget` placeholder is gone, and exact bounded quota IDs,
 parts-per-million ratios, optional units, provider thresholds, definitions, samples,
 reset evidence, validated serde, and redacted observation IDs are implemented and
@@ -131,13 +131,23 @@ two-second total deadlines, progress cleanup, redacted `Debug`, deterministic
 transition restoration, and current/boundary projection reconciliation are covered.
 Missing windows stay absent; stale revision, changed cursor filter, malformed rows,
 missing last transition, and post-open drift fail closed.
-The immediate next slice is Task 7 in
-`docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: immutable public
-quota values and `QueryService` facade mapping. Permitted Codex quota transport,
-banked-reset inventory/reminders, and UI are not implemented. Do not
+`tokenmaster-query` now exposes independent immutable quota envelopes, request-ordered
+current results, query-owned reset/allowance values, exact provider freshness,
+worst-truthful quality, explicit unavailable windows, opaque revision/filter-bound
+continuation, and failed-call generation neutrality. Public Debug redacts filter,
+label, provider-epoch, and cursor identity.
+The final release-scale gate passes with 32 windows, 1,000 transitions, 10,000
+duplicate polls, restart, 256-row paging, bounded maintenance, and current/migrated-
+legacy usage coexistence. Maximum calls measured 3.429 ms write, 0.228 ms duplicate,
+2.774 ms current-32, and 1.256 ms history-256. Repeated quota query/reopen cycles pass
+the Windows private-memory/handle/thread/USER/GDI plateau. The quota release closure
+contains 76 production dependency packages, 43 production files, and the three
+current release libraries with zero forbidden network/browser/shell matches.
+The immediate next slice is a permitted credential-free Codex quota transport.
+Banked-reset inventory/reminders and UI remain separate later contours. Do not
 replace aggregates with view-time full scans, infer quota from local token/cost totals,
 or relabel whole-session totals as period totals.
-The current post-Task-6 clean-root, formatting, strict locked workspace Clippy, and
+The current post-Task-8 clean-root, formatting, strict locked workspace Clippy, and
 complete locked workspace test/doctest baseline passes. The query resource binary uses
 an isolated `harness = false` process plus a bounded maximum-64-round warm-up that
 waits for two topology-stable eight-round retained floors before measurement and
@@ -234,6 +244,12 @@ cargo +1.97.0 test -p tokenmaster-codex --test pipeline_contract --locked
 cargo +1.97.0 test -p tokenmaster-codex --locked
 cargo +1.97.0 test -p tokenmaster-engine --locked
 cargo +1.97.0 test -p tokenmaster-platform --locked
+cargo +1.97.0 test -p tokenmaster-quota --test adversarial_contract --locked
+cargo +1.97.0 test -p tokenmaster-query --test quota_value_contract --locked
+cargo +1.97.0 test -p tokenmaster-query --test quota_service_contract --locked
+$arguments = @('+1.97.0', 'test', '-p', 'tokenmaster-query', '--test', 'quota_scale_contract', '--release', '--locked', '--', '--ignored', '--nocapture')
+& cargo @arguments
+pwsh -NoProfile -File scripts\audit-quota-network.ps1 -RepositoryRoot (Get-Location).Path
 cargo +1.97.0 test --workspace --locked
 $env:RUSTFLAGS = '-Dwarnings'; cargo +1.97.0 clippy --workspace --all-targets --locked
 ```

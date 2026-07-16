@@ -430,6 +430,22 @@ allowance boundary units, and reset-current epoch identity must agree with the j
 boundary samples. Any malformed or post-open altered projection fails with
 `InvalidStoredValue`; no plausible partial snapshot is returned.
 
+The public quota facade is implemented separately from usage dataset identity.
+`QuotaQueryHeader` carries a checked process-local snapshot generation, exact quota
+revision, generated/data-through time, aggregate freshness/quality, exact bounded
+window filters, and stable warnings. Current requests preserve caller order and
+return one explicit result per requested window; missing windows are unavailable,
+never zero. Transition pages expose query-owned immutable values and an opaque cursor
+bound to the exact filter and quota revision. Public `Debug` redacts account,
+workspace, window, provider-epoch, and cursor identity.
+
+The release-scale contract covers 32 windows, 1,000 immutable transitions, 10,000
+duplicate polls, scheduled/early/manual repeated resets, writer and reader restart,
+256-row continuation, bounded maintenance, and both current and migrated immutable
+legacy usage archives. Measured maximum calls are 3.429 ms for a visible write,
+0.228 ms for a duplicate poll, 2.774 ms for a 32-window current snapshot, and
+1.256 ms for a 256-row history page on the reference machine.
+
 ## TM-DATA-009 — Banked reset inventory and activation receipts
 
 A provider benefit lot is immutable evidence scoped by provider, account/workspace,

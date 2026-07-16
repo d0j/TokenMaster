@@ -66,9 +66,10 @@ worker/scheduler/watcher lifecycle assembly. P1-E.1 now adds startup-seeded immu
 publication with strict in-process/archive generation ordering, exact revision/scan/
 data-through truth, fixed diagnostics, and busy/older-result rejection. Remaining P1-E
 work now closes with a Windows 8+ static capacity-one power callback, forced resume
-reconciliation, and 4,096-cycle private-memory/handle/thread/USER/GDI bounds. P2 indexed
-analytics, pricing, quota, and Git output are next, followed by complete UI and
-automation work.
+reconciliation, and 4,096-cycle private-memory/handle/thread/USER/GDI bounds. P2
+indexed analytics, pricing, and the provider-neutral quota history core are complete.
+Permitted Codex quota transport, banked-reset inventory/reminders, and Git output are
+next, followed by complete UI and automation work.
 
 Completed P1-C.1: a no-async, constant-state coordinator with checked monotonic IDs,
 deadline/cancellation semantics, one active refresh, and one aggregate follow-up.
@@ -146,18 +147,24 @@ privacy, and repeated-resource evidence passes; P2-B is complete. P2-C is also
 complete: schema-v9 fact-only price rollups, release-pinned fixed-point calculation,
 validated immutable overrides, dataset-exact cost on overview/series/breakdown/session
 surfaces, batched indexed reads, current/legacy million-event scale, resource plateaus,
-  and production no-pricing-network audit pass. P2-D Tasks 1-6 exact fixed-point quota
+  and production no-pricing-network audit pass. P2-D Tasks 1-8 exact fixed-point quota
   domain values, deterministic identities, pure reset/allowance evaluation, strict
-  schema v10, exact rollback-safe v9 migration, and one-transaction immutable quota
-  publication plus evidence-preserving bounded retention are complete. Retention uses
+  schema v10, exact rollback-safe v9 migration, one-transaction immutable quota
+  publication, evidence-preserving bounded retention, defensive reads, and the
+  independent immutable public quota facade are complete. Retention uses
   512/256 soft defaults, 2,048/1,024 hard caps, a 256-row same-window maintenance
   page, and protected first/current/max/pre/post evidence with fail-closed over-cap
   write/reopen behavior. Defensive store reads now provide exact 32-window current
   snapshots and revision-bound descending 256+1 keyset transition pages with owned
   boundary values, fixed quota-only index seeks, total deadline cleanup, and
-  post-open projection-drift rejection. The immutable public query facade, permitted
-  Codex quota transport, and separate banked-reset expiry/reminder inventory remain,
-  followed by P2-E Git output and P2-F joined product status.
+  post-open projection-drift rejection. Current query results preserve request order,
+  explicit unavailability, provider-defined freshness, worst truthful quality, opaque
+  revision/filter continuation, and failed-call generation neutrality. The final gate
+  covers 32 windows, 1,000 transitions, 10,000 duplicate polls, restart, 256-row
+  paging, maintenance, current/legacy coexistence, Windows resource return, and a
+  zero-match offline authority audit. Permitted Codex quota transport and separate
+  banked-reset expiry/reminder inventory remain, followed by P2-E Git output and P2-F
+  joined product status.
 No frontend/database coupling or view-time full event grouping is accepted.
 
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset

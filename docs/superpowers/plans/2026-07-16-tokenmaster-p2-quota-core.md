@@ -5,9 +5,9 @@
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox
 > (`- [ ]`) syntax for tracking.
 
-**Status:** inline execution in progress after spec-coverage, placeholder, type-flow,
-scope, authority-boundary, and restart-state self-review; Tasks 1-6 complete, Task 7
-next
+**Status:** implemented and fully verified on 2026-07-16 after spec-coverage,
+placeholder, type-flow, scope, authority-boundary, restart-state, adversarial,
+release-scale, resource, privacy, and offline-authority review; Tasks 1-8 complete
 
 **Goal:** Build the provider-neutral quota history data core that preserves scheduled,
 early, repeated, and manual/banked full resets without inventing provider limits.
@@ -652,28 +652,28 @@ impl<C: QueryClock> QueryService<C> {
 through time, `QueryFreshness`, `QueryQuality`, exact window filters, and bounded
 warnings. It deliberately has no usage `DatasetIdentity`.
 
-- [ ] **Step 1: Write failing immutable facade tests**
+- [x] **Step 1: Write failing immutable facade tests**
 
 Cover authoritative/fresh, aging, stale, unavailable, partial, conflict, scheduled,
 early, manual/banked, unknown, exact time, bounded interval, ratio-only, unit-bearing,
 allowance change, repeated sequence, opaque continuation, stale revision, failed-call
 snapshot-generation neutrality, and public Debug/privacy.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-query --test quota_value_contract --locked
 cargo +1.97.0 test -p tokenmaster-query --test quota_service_contract --locked
 ```
 
-- [ ] **Step 3: Implement mapping and service methods**
+- [x] **Step 3: Implement mapping and service methods**
 
 Freshness uses each sample's exact `fresh_until_ms` / `stale_after_ms`; no 20-minute
 usage TTL is reused. Aggregate current-window quality is the strongest truthful
 downgrade across selected windows. Allocate `SnapshotGeneration` only after the store
 capture and public mapping both succeed.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-query --test quota_value_contract --locked
@@ -683,7 +683,7 @@ $env:RUSTFLAGS = '-Dwarnings'
 cargo +1.97.0 clippy -p tokenmaster-query --all-targets --locked
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add -- crates/query/src/quota.rs crates/query/src/quota_identity.rs crates/query/src/lib.rs crates/query/src/service.rs crates/query/tests/quota_value_contract.rs crates/query/tests/quota_service_contract.rs
@@ -715,7 +715,7 @@ git commit -m "feat(query): expose immutable quota history"
 - Modify: `docs/AUDIT_AND_MASTER_PLAN.md`
 - Modify: this plan and its design status
 
-- [ ] **Step 1: Add adversarial and release-scale gates**
+- [x] **Step 1: Add adversarial and release-scale gates**
 
 The ignored release gate must cover at least 32 windows, 1,000 transitions, 10,000
 redundant polls, scheduled/early/repeated/manual resets, restart, current reads,
@@ -724,14 +724,14 @@ Quota writes and reads must stay below one second on the reference machine; repe
 current/history/switch/reopen cycles must preserve Windows private-memory, handles,
 threads, USER, and GDI high-water bounds.
 
-- [ ] **Step 2: Add production authority audit**
+- [x] **Step 2: Add production authority audit**
 
 `scripts/audit-quota-network.ps1` builds the release `tokenmaster-quota`,
 `tokenmaster-store`, and `tokenmaster-query` closure; rejects HTTP/browser/async
 clients; scans production source and release libraries for private endpoint, cookie,
 browser automation, shell, and arbitrary network signatures.
 
-- [ ] **Step 3: Run the complete gate**
+- [x] **Step 3: Run the complete gate**
 
 ```powershell
 pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
@@ -748,14 +748,14 @@ pwsh -NoProfile -File scripts\audit-quota-network.ps1 -RepositoryRoot (Get-Locat
 git diff --check
 ```
 
-- [ ] **Step 4: Update project truth**
+- [x] **Step 4: Update project truth**
 
 Record exact schema, bounds, gates, measured receipts, and the next honest blocker.
 Never place the current commit hash in tracked documents. Do not claim Codex quota
 transport, banked inventory, reminders, UI, CLI/MCP, M0 acceptance, package, signing,
 or release.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add -- crates/quota/tests/adversarial_contract.rs crates/query/tests/quota_scale_contract.rs crates/query/tests/resource_contract.rs scripts/audit-quota-network.ps1 spec docs

@@ -1,8 +1,7 @@
 # TokenMaster P2-D Quota History Core Design
 
-**Status:** approved after critical self-review under the user's delegated product
-authority; implements the already approved quota-reset requirements without changing
-their product boundary
+**Status:** implemented and fully verified on 2026-07-16; Tasks 1-8 and the complete
+quota-core acceptance gate pass without changing the approved product boundary
 
 **Scope:** provider-neutral quota window definitions, exact normalized observations,
 pure full-reset and allowance-change detection, schema-v10 persistence, bounded
