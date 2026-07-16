@@ -59,6 +59,8 @@ mod windows {
             !archive.exists(),
             "source failure must precede SQLite publication"
         );
+        assert_eq!(snapshot.refresh().quota_failure_count(), 0);
+        assert_eq!(snapshot.refresh().benefit_failure_count(), 0);
         let debug = format!("{runtime:?}");
         assert!(!debug.contains(executable.to_string_lossy().as_ref()));
         assert!(!debug.contains(archive.to_string_lossy().as_ref()));

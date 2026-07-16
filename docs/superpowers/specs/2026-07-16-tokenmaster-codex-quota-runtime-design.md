@@ -247,9 +247,11 @@ The contour is accepted only when tests prove:
 - no task-owned child/thread remains after focused tests;
 - clean-root audit, formatting, strict clippy, and full workspace tests pass.
 
-Benefit inventory, reset-credit expiration reminders, opt-in activation, quota UI,
-skins, localization, CLI/MCP projections, and generic provider packages begin only
-after this runtime contour is verified.
+Benefit inventory began only after this runtime contour was verified. The current
+extension publishes the optional normalized benefit observation under the same writer
+guard and store open while preserving independent transactions and health; reminder
+delivery, opt-in activation, quota UI, skins, localization, CLI/MCP projections, and
+generic provider packages remain later.
 
 ## 11. Implementation evidence
 
@@ -258,10 +260,11 @@ after this runtime contour is verified.
 - Execution, lifecycle, cadence, cancellation, partial-publication, and usage-runtime
   isolation contracts pass under strict runtime Clippy.
 - The isolated Windows harness passed 16 warm-up plus 48 measured rounds covering
-  success, RPC failure, forced timeout, writer contention, and pause/resume. It
-  retained a 3,149,824-byte private floor with a 5,615,616-byte sampled high,
-  131 handles, four threads, USER=1, GDI=0, and no task-owned fixture child.
-- The release audit covered 114 production dependency packages, the production
+  quota-plus-benefit success, RPC failure, forced timeout, writer contention, and
+  pause/resume. It retained a 3,432,448-byte private floor with a 6,139,904-byte
+  sampled high, 131 handles, four threads, USER=1, GDI=0, and no task-owned fixture
+  child.
+- The release audit covered 115 production dependency packages, the production
   portions of six quota-runtime source files, and one release library with zero
   forbidden network/browser/cookie/private-endpoint/credential-file/shell/socket/
   direct-SQL or foreign-runtime matches.

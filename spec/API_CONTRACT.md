@@ -330,22 +330,28 @@ retry loops.
 One execution captures the wall-clock lower bound, completes discovery and app-server
 I/O, then rechecks cancellation/deadline before trying the shared process writer lease
 once. Only after acquiring the guard does it open `UsageStore` and apply the at-most-32
-owned observations in deterministic order. The guard spans the complete bounded loop;
-each window retains the existing independent transaction/idempotency contract. A
-failure after N observations may therefore retain an exact committed prefix and
-reports its counts; the runtime does not claim cross-window rollback. Store and guard
-are dropped before health publication.
+owned quota observations in deterministic order followed by the optional separate
+benefit observation. The guard spans the complete bounded publication, but every quota
+window and the benefit inventory retain their own exact transaction/idempotency
+contract. A quota failure may retain an exact committed quota prefix and does not
+prevent an independently valid benefit transaction; a benefit failure never rolls
+back committed quota. No cross-window or cross-domain atomicity is claimed. Store and
+guard are dropped before health publication.
 
 The public quota-runtime snapshot contains only phase, normal/accelerated schedule
 state, bounded worker state, latest attempt outcome/stage/stable code, count-only
-publication results, conservative observation/elapsed time, and last-success time. It
-contains no executable/archive path, account/window identity, label, quota value,
-provider payload, email, credential, or inner OS/SQLite error. Pause closes admission
-and cancels the active permit; a source result completing after cancellation is not
-published. Suspend maps to pause, resume forces one recovery refresh, and shutdown/
-`Drop` join the scheduler and worker. The current transport is not cancellation-aware
-mid-session, so pause/shutdown may wait up to its bounded timeout while holding no
-writer guard or SQLite state.
+quota and benefit processed/status/failure results, conservative observation/elapsed
+time, overall last-success time, and separate last successful quota/benefit publication
+times. Quota and benefit report arithmetic is validated before health publication;
+an inconsistent internal report fails closed as domain `invalid_data`. Common
+lease/open/control failure remains distinct from quota-transaction and benefit-
+transaction failure. The snapshot contains no executable/archive path, account/window/
+lot identity, label, quota or benefit value, provider payload, email, credential, or
+inner OS/SQLite error. Pause closes admission and cancels the active permit; a source
+result completing after cancellation is not published. Suspend maps to pause, resume
+forces one recovery refresh, and shutdown/`Drop` join the scheduler and worker. The
+current transport is not cancellation-aware mid-session, so pause/shutdown may wait up
+to its bounded timeout while holding no writer guard or SQLite state.
 
 `UsageStore::apply_quota_observation` accepts one validated window definition and one
 same-window normalized sample. It returns only `Started`, `Duplicate`, `Stale`,

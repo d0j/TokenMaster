@@ -235,13 +235,13 @@ cargo +1.97.0 clippy -p tokenmaster-query --all-targets --locked
 
 **RED/GREEN:**
 
-- [ ] One source poll precedes one writer-lease attempt and one store open.
-- [ ] Publish quota and benefit facts through separate exact transactions while the
+- [x] One source poll precedes one writer-lease attempt and one store open.
+- [x] Publish quota and benefit facts through separate exact transactions while the
   same non-interleaving guard is held.
-- [ ] Report separate quota/benefit processed/changed/failure health.
-- [ ] Prove quota success plus benefit failure, benefit success plus quota duplicate,
+- [x] Report separate quota/benefit processed/changed/failure health.
+- [x] Prove quota success plus benefit failure, benefit success plus quota duplicate,
   cancellation, contention, retry, and restart behavior truthfully.
-- [ ] Preserve usage-runtime isolation and bounded child/thread/handle/memory return.
+- [x] Preserve usage-runtime isolation and bounded child/thread/handle/memory return.
 
 **Focused validator:**
 

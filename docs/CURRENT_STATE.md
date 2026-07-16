@@ -417,8 +417,9 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   Non-empty `rateLimitsByLimitId` is authoritative over the legacy duplicate;
   primary/secondary windows expand to at most 32 definitions. Ratios, seconds,
   durations, freshness, IDs, provider evidence, and reset thresholds use checked
-  integer/domain contracts. Up to 64 reset-credit rows are validated transiently but
-  no benefit inventory is exposed or persisted.
+  integer/domain contracts. Up to 64 reset-credit rows are validated transiently,
+  raw IDs and untrusted text are discarded, and one separate provider-neutral benefit
+  observation may leave normalization.
 - Codex quota process transport: `CodexQuotaTransport` accepts only one already
   resolved absolute regular native executable and fixed `app-server --stdio`
   arguments. It performs the stable non-experimental initialize/account/rate-limit
@@ -446,18 +447,22 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   native selection or a fresh bounded `PATH` search over at most 64 KiB/128 entries
   for exact `codex.exe`/`codex` filenames only. A separate scheduler/worker performs
   app-server I/O before trying the shared writer lease, opens SQLite only under the
-  non-waiting guard, publishes at most 32 independent idempotent window transactions,
-  and exposes one count/time/code-only health snapshot separate from usage-engine
-  health. Cancellation after source I/O writes nothing; partial store failure reports
-  the exact committed prefix. Normal/accelerated cadence is 15 minutes/60 seconds,
-  with permanent incompatibility kept on the normal cadence.
+  non-waiting guard, publishes at most 32 independent idempotent quota transactions
+  plus one optional independent benefit transaction, and exposes one count/time/code-
+  only health snapshot separate from usage-engine health. Quota and benefit
+  processed/status/failure/last-success facts remain distinct; a benefit failure never
+  rolls back quota and a quota failure may still leave a truthful benefit success.
+  Cancellation after source I/O writes nothing; partial store failure reports exact
+  committed transactions. Normal/accelerated cadence is 15 minutes/60 seconds, with
+  permanent incompatibility kept on the normal cadence.
 - Codex quota runtime acceptance: focused discovery/execution/lifecycle/public
   contracts, concurrent usage-runtime/quota-worker fault isolation, and strict
   runtime Clippy pass. The isolated Windows gate completed
-  16 warm-up and 48 measured rounds; every round covered success, RPC failure, forced
-  timeout, writer contention, and pause/resume. The retained private floor was
-  3,149,824 bytes, sampled high 5,615,616 bytes, handles 131, threads four, USER=1,
-  GDI=0, with no task-owned fixture child remaining. The release audit covers 114
+  16 warm-up and 48 measured rounds; every success round published quota plus a real
+  reset-credit benefit, and every round also covered RPC failure, forced timeout,
+  writer contention, and pause/resume. The latest retained private floor was
+  3,432,448 bytes, sampled high 6,139,904 bytes, handles 131, threads four, USER=1,
+  GDI=0, with no task-owned fixture child remaining. The release audit covers 115
   production dependency packages, the production portions of six quota-runtime
   source files, and one release library with zero forbidden network/browser/cookie/
   private-endpoint/credential-file/shell/socket/direct-SQL or foreign-runtime matches.
@@ -489,11 +494,14 @@ defensive store reads, immutable public query values/service, adversarial and
 release-scale evidence, Windows resource return, and offline authority audit.
 The permitted credential-free Codex quota normalizer, short-lived official app-server
 transport, exact-native executable discovery, and separate bounded quota runtime are
-now implemented and verified. The immediate next contour is typed reset-credit
-benefit inventory, expiration reconciliation, default/custom reminder profiles, and
-truthful notification coverage. Activation remains a later independently authorized
-capability; UI follows the completed data contracts. No quota value may be inferred
-from local token/cost facts and no browser/private-endpoint authority may be added.
+now implemented and verified. Benefit Tasks 1-6 are also implemented: typed reset-
+credit inventory, expiration reconciliation, default/custom reminder profiles,
+immutable read snapshots, and publication through the existing Codex runtime with
+separate domain health. The immediate next slice is the one-timer durable reminder
+runtime and truthful in-app delivery coverage. Activation remains a later independently
+authorized capability; UI follows the completed data contracts. No quota value may be
+inferred from local token/cost facts and no browser/private-endpoint authority may be
+added.
 P2-E Git output and P2-F joined product status remain after P2-D; P3 complete UI
 follows the product-data contracts.
 
@@ -585,17 +593,20 @@ storage, transactional history writes, bounded retention, defensive reads, immut
 public quota query, adversarial/scale/resource gates, and offline authority audit are
 complete. The built-in Codex quota normalizer, bounded official app-server transport,
 exact-native executable discovery, and dedicated refresh/store-publication worker are
-complete for the pinned version. The benefit foundation Tasks 1-5 are also complete:
+complete for the pinned version. The benefit foundation Tasks 1-6 are also complete:
 strict provider-neutral values, pure reconciliation/reminder planning, privacy-safe
 Codex reset-credit normalization, and schema-v11 transactional inventory/history/
 profile/due storage with bounded maintenance and rollback, plus immutable current and
 history snapshots with FEFO order, explicit absence/freshness/completeness/unknown
 facts, inherited/override profiles, nearest expiry/due, revision-bound 256-row
-continuation, corruption rejection, and failed-call generation neutrality. The
+continuation, corruption rejection, failed-call generation neutrality, and combined
+quota-runtime publication from one poll/lease/store open with independent transaction,
+failure, and last-success truth. The
 64-lot/2,048-change gate measured 0.842 ms for current and 4.904 ms for the slowest
 256-row page; repeated open/query/drop returned with five threads, 116 handles,
-USER=2, GDI=0, and 4,517,888 private bytes. Reminder delivery/runtime and UI remain
-later.
+USER=2, GDI=0, and 4,517,888 private bytes. The combined runtime gate passed 16+48
+rounds at 131 handles, four threads, USER=1, GDI=0, a 3,432,448-byte private floor,
+and a 6,139,904-byte sampled high. Reminder delivery/runtime and UI remain later.
 No view-time grouping of the full event table is allowed.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.

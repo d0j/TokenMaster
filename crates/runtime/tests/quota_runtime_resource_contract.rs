@@ -89,6 +89,17 @@ impl FixtureSet {
         assert_eq!(success_snapshot.outcome(), Some(RefreshOutcome::Completed));
         assert_eq!(success_snapshot.observation_count(), 1);
         assert_eq!(success_snapshot.processed_count(), 1);
+        assert_eq!(success_snapshot.quota_failure_count(), 0);
+        assert_eq!(success_snapshot.benefit_observation_count(), 1);
+        assert_eq!(success_snapshot.benefit_processed_count(), 1);
+        assert_eq!(
+            success_snapshot
+                .benefit_changed_count()
+                .saturating_add(success_snapshot.benefit_freshness_only_count())
+                .saturating_add(success_snapshot.benefit_duplicate_count()),
+            1
+        );
+        assert_eq!(success_snapshot.benefit_failure_count(), 0);
         success.shutdown().expect("success shutdown");
 
         let mut rpc = start_runtime(&self.rpc_archive, &self.rpc_error, Duration::from_secs(2));
@@ -269,7 +280,11 @@ fn run_fixture() -> Result<(), ()> {
     }
     writeln!(
         output,
-        "{{\"id\":2,\"result\":{{\"rateLimitResetCredits\":null,\
+        "{{\"id\":2,\"result\":{{\"rateLimitResetCredits\":{{\
+         \"availableCount\":1,\"credits\":[{{\"description\":\"private benefit\",\
+         \"expiresAt\":2000000000,\"grantedAt\":1700000000,\
+         \"id\":\"private_runtime_credit_id\",\"resetType\":\"codexRateLimits\",\
+         \"status\":\"available\",\"title\":\"private benefit title\"}}]}},\
          \"rateLimits\":{{\"limitId\":\"codex\",\"limitName\":null,\
          \"planType\":\"pro\",\"primary\":{{\"usedPercent\":42,\
          \"resetsAt\":1700100000,\"windowDurationMins\":10080}},\

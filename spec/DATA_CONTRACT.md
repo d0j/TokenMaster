@@ -484,6 +484,16 @@ counts must match captured rows, and missing/invalid material fails as
 benefit-owned tables. No benefit query references usage events, usage rollups,
 provider payloads, source paths, or prompts.
 
+The built-in Codex refresh runtime now publishes the normalized benefit observation
+without merging it into quota state. One provider poll precedes one non-waiting writer
+lease attempt and one writable store open. The same process guard covers deterministic
+quota publication and the optional benefit publication, while every quota window and
+the benefit inventory keep independent transactions and revisions. Runtime health
+records separate bounded quota and benefit observation/processed/status/failure
+counts, benefit material-change and pending-due counts, and separate last-success
+times. A failed domain never rewrites the other domain's result or implies
+cross-domain atomicity.
+
 Only explicit provider ancestry identifies a parent. A strong signature covers the
 normalized model, emitted delta, and provider cumulative snapshot. A weak signature
 covers model and delta only and cannot suppress a pre-divergence event by itself.

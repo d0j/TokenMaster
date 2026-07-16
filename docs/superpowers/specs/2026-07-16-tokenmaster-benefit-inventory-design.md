@@ -317,9 +317,12 @@ The foundation is accepted only when tests prove:
 - clean-root, formatting, warnings-as-errors Clippy, complete workspace tests, and
   the benefit release-authority audit pass.
 
-Implementation status: Tasks 1-5 are complete. The immutable query facade proves
+Implementation status: Tasks 1-6 are complete. The immutable query facade proves
 64-lot FEFO current snapshots, 2,048-change history, 256-row continuation, restart,
 concurrent read-transaction exactness, deadline cleanup, corruption rejection,
-generation neutrality, no usage-dataset scan, and Windows resource return. Runtime
-publication, durable reminder delivery, UI, automation, activation, and release gates
-remain separate.
+generation neutrality, no usage-dataset scan, and Windows resource return. One Codex
+poll now publishes quota plus the optional benefit observation under one non-waiting
+writer guard and one store open, with separate transactions, validated count-only
+health, domain-specific failure/last-success state, restart idempotency, and bounded
+Windows resource return. Durable reminder delivery, UI, automation, activation, and
+release gates remain separate.

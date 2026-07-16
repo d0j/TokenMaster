@@ -810,3 +810,29 @@ unbound history cursors would make restart, partial inventory, and concurrent up
 ambiguous. A narrow benefit-owned read model keeps queries bounded and immutable,
 prevents usage-event scans, fails closed on SQLite drift, and remains reusable by the
 future UI/CLI/MCP without granting notification or activation authority.
+
+## ADR-041 — One Codex poll publishes quota and benefits with separate truth
+
+Decision: `CodexQuotaRuntime` consumes one owned normalized Codex snapshot, completes
+provider I/O before writer admission, tries the shared process lease once, and opens
+`UsageStore` once. While the same non-interleaving guard is held it publishes each
+quota window and the optional benefit observation through their existing independent
+transactions and revisions. A quota failure stops the remaining quota prefix but does
+not prevent an independently valid benefit attempt; a benefit failure never rolls
+back committed quota.
+
+The retained health snapshot keeps common discovery/clock/transport/lease/open/control
+failure distinct from quota-transaction and benefit-transaction failure. It reports
+bounded per-domain observed, processed, exact status, failure, lot-change, pending-due,
+and last-success facts. Overall success requires every represented domain to succeed,
+but a sibling domain success remains visible after partial failure. Internal report
+counts and status arithmetic are validated before publication and inconsistency fails
+closed as domain `invalid_data`.
+
+Rationale: a second provider poll would duplicate child-process latency and could
+observe a different account moment; separate store opens or writer acquisitions would
+allow unrelated writers to interleave. Conversely, one cross-domain SQLite transaction
+would couple independent revisions and roll back useful quota facts when benefit
+storage fails. One poll/guard/open with separate exact transactions preserves
+responsiveness, restart idempotency, fault isolation, and truthful automation health
+without adding a thread, timer, network path, notification, or activation authority.

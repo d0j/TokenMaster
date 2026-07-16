@@ -5,9 +5,9 @@ P2-A, P2-B, P2-C pinned pricing, and the P2-D quota history core are implemented
 the permitted built-in Codex quota normalizer/transport, exact-native executable
 discovery, and dedicated quota refresh/store publication are also implemented.
 Typed banked-reset domain/core/Codex normalization, strict schema-v11 store
-foundation, and immutable FEFO current/revision-bound history queries are implemented.
-Codex runtime benefit publication is next; reminder runtime, UI, automation, and
-activation remain later.
+foundation, immutable FEFO current/revision-bound history queries, and combined Codex
+runtime publication with separate quota/benefit truth are implemented. Reminder
+runtime, UI, automation, and activation remain later.
 Date: 2026-07-16.
 
 ## 1. Executive decision
@@ -254,8 +254,9 @@ adversarial inference, 32-window/1,000-transition/10,000-poll scale, Windows res
 return, and offline authority audit. The strict official Codex app-server normalizer/
 transport, live smoke, adversarial/resource gates, and release authority audit also
 pass. Exact-native discovery plus dedicated refresh/store publication now pass their
-focused, resource, and release-authority gates; banked-reset inventory/reminders are
-the active critical path.
+focused, resource, and release-authority gates. Banked-reset inventory Tasks 1-6 now
+also pass through combined runtime publication; durable reminder delivery is the
+active critical path.
 View-time full scans and period-labeled
 whole-session totals remain forbidden.
 P2-A now implements the bounded public values, separate defensive read-only/query-only
@@ -271,8 +272,8 @@ core and its acceptance gates are implemented. The permitted built-in Codex quot
 normalizer/transport, exact-native discovery, and dedicated refresh/store publication
 are implemented for the pinned version. Typed banked-reset values, pure
 reconciliation/reminder planning, Codex normalization, strict schema-v11 storage, and
-immutable FEFO current/revision-bound history queries are implemented; Codex runtime
-benefit publication and reminder delivery are next.
+immutable FEFO current/revision-bound history queries plus Codex runtime benefit
+publication are implemented; reminder delivery is next.
 The older replay plan remains historical evidence for
 completed Tasks 1-2, but its Codex-owned Tasks 3+ are superseded and must not be
 executed.

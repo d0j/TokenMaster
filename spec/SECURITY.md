@@ -456,17 +456,24 @@ path and an unopened lease factory, but it holds no file guard, SQLite connectio
 query snapshot, UI callback, or usage-engine state while the child runs. After a
 successful owned normalized snapshot, it tries the existing process writer lease once,
 opens the writable store only under that guard, applies at most 32 independent
-idempotent observations, and drops store/guard before publishing count-only health.
-Writer contention writes nothing and returns `busy`. Cancellation after source I/O
-writes nothing; cancellation during the bounded store loop may leave only the exact
-already committed prefix and reports partial counts without claiming rollback.
+idempotent quota observations plus at most one separate benefit observation, and drops
+store/guard before publishing count-only health. Quota windows and benefit inventory
+use separate exact transactions under the same non-interleaving guard. A benefit
+failure cannot roll back committed quota; a quota failure does not authorize a false
+cross-domain success and may still leave an independently successful benefit
+transaction. Writer contention writes nothing and returns `busy`. Cancellation after
+source I/O writes nothing; cancellation during bounded publication may leave only
+exact already committed transactions and reports their domain-specific counts without
+claiming rollback.
 
 Quota-runtime health is independent from usage-engine health and excludes executable/
 archive paths, pseudonymous account identity, window identity, labels, quota values,
-raw frames, provider messages, email, credentials, reset-credit IDs, and inner
-platform/store errors. Permanent incompatibility remains on the 15-minute cadence;
-only bounded transient process/lease failures may use the 60-second cadence. The
-runtime owns zero child processes while idle, at most one during a poll, two
+benefit/lot values, raw frames, provider messages, email, credentials, reset-credit
+IDs, and inner platform/store errors. It exposes only bounded per-domain observation,
+processed, status, failure, pending-due, lot-change, and last-success facts; inconsistent
+internal arithmetic fails closed. Permanent incompatibility remains on the 15-minute
+cadence; only bounded transient process/lease failures may use the 60-second cadence.
+The runtime owns zero child processes while idle, at most one during a poll, two
 constant-state host threads while running, capacity-one scheduling/worker wakes, and
 one latest snapshot. Shutdown joins owned threads and the transport reaps its child.
 

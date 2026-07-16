@@ -25,6 +25,8 @@ pub enum CodexQuotaRefreshStage {
     Clock,
     Transport,
     Publication,
+    QuotaPublication,
+    BenefitPublication,
     Control,
 }
 
@@ -34,6 +36,8 @@ pub enum CodexQuotaRefreshFailure {
     Clock(CodexQuotaClockErrorCode),
     Transport(CodexQuotaErrorCode),
     Publication(CodexQuotaPublicationErrorCode),
+    QuotaPublication(CodexQuotaPublicationErrorCode),
+    BenefitPublication(CodexQuotaPublicationErrorCode),
     Control(PortErrorCode),
 }
 
@@ -45,6 +49,8 @@ impl CodexQuotaRefreshFailure {
             Self::Clock(_) => CodexQuotaRefreshStage::Clock,
             Self::Transport(_) => CodexQuotaRefreshStage::Transport,
             Self::Publication(_) => CodexQuotaRefreshStage::Publication,
+            Self::QuotaPublication(_) => CodexQuotaRefreshStage::QuotaPublication,
+            Self::BenefitPublication(_) => CodexQuotaRefreshStage::BenefitPublication,
             Self::Control(_) => CodexQuotaRefreshStage::Control,
         }
     }
@@ -116,9 +122,21 @@ pub struct CodexQuotaRefreshSnapshot {
     pub(super) stale_count: u16,
     pub(super) allowance_change_count: u16,
     pub(super) reset_count: u16,
+    pub(super) quota_failure: Option<CodexQuotaPublicationErrorCode>,
+    pub(super) benefit_observation_count: u8,
+    pub(super) benefit_processed_count: u8,
+    pub(super) benefit_changed_count: u8,
+    pub(super) benefit_freshness_only_count: u8,
+    pub(super) benefit_duplicate_count: u8,
+    pub(super) benefit_stale_count: u8,
+    pub(super) benefit_lot_change_count: u16,
+    pub(super) benefit_pending_due_count: u16,
+    pub(super) benefit_failure: Option<CodexQuotaPublicationErrorCode>,
     pub(super) observed_at_ms: Option<i64>,
     pub(super) elapsed_millis: u64,
     pub(super) last_success_observed_at_ms: Option<i64>,
+    pub(super) last_quota_success_observed_at_ms: Option<i64>,
+    pub(super) last_benefit_success_observed_at_ms: Option<i64>,
 }
 
 impl CodexQuotaRefreshSnapshot {
@@ -137,9 +155,21 @@ impl CodexQuotaRefreshSnapshot {
             stale_count: 0,
             allowance_change_count: 0,
             reset_count: 0,
+            quota_failure: None,
+            benefit_observation_count: 0,
+            benefit_processed_count: 0,
+            benefit_changed_count: 0,
+            benefit_freshness_only_count: 0,
+            benefit_duplicate_count: 0,
+            benefit_stale_count: 0,
+            benefit_lot_change_count: 0,
+            benefit_pending_due_count: 0,
+            benefit_failure: None,
             observed_at_ms: None,
             elapsed_millis: 0,
             last_success_observed_at_ms: None,
+            last_quota_success_observed_at_ms: None,
+            last_benefit_success_observed_at_ms: None,
         }
     }
 
@@ -169,12 +199,27 @@ impl CodexQuotaRefreshSnapshot {
     }
 
     #[must_use]
+    pub const fn quota_observation_count(self) -> u16 {
+        self.observation_count
+    }
+
+    #[must_use]
     pub const fn processed_count(self) -> u16 {
         self.processed_count
     }
 
     #[must_use]
+    pub const fn quota_processed_count(self) -> u16 {
+        self.processed_count
+    }
+
+    #[must_use]
     pub const fn changed_count(self) -> u16 {
+        self.changed_count
+    }
+
+    #[must_use]
+    pub const fn quota_changed_count(self) -> u16 {
         self.changed_count
     }
 
@@ -209,6 +254,66 @@ impl CodexQuotaRefreshSnapshot {
     }
 
     #[must_use]
+    pub const fn quota_failure_count(self) -> u8 {
+        if self.quota_failure.is_some() { 1 } else { 0 }
+    }
+
+    #[must_use]
+    pub const fn quota_failure(self) -> Option<CodexQuotaPublicationErrorCode> {
+        self.quota_failure
+    }
+
+    #[must_use]
+    pub const fn benefit_observation_count(self) -> u8 {
+        self.benefit_observation_count
+    }
+
+    #[must_use]
+    pub const fn benefit_processed_count(self) -> u8 {
+        self.benefit_processed_count
+    }
+
+    #[must_use]
+    pub const fn benefit_changed_count(self) -> u8 {
+        self.benefit_changed_count
+    }
+
+    #[must_use]
+    pub const fn benefit_freshness_only_count(self) -> u8 {
+        self.benefit_freshness_only_count
+    }
+
+    #[must_use]
+    pub const fn benefit_duplicate_count(self) -> u8 {
+        self.benefit_duplicate_count
+    }
+
+    #[must_use]
+    pub const fn benefit_stale_count(self) -> u8 {
+        self.benefit_stale_count
+    }
+
+    #[must_use]
+    pub const fn benefit_lot_change_count(self) -> u16 {
+        self.benefit_lot_change_count
+    }
+
+    #[must_use]
+    pub const fn benefit_pending_due_count(self) -> u16 {
+        self.benefit_pending_due_count
+    }
+
+    #[must_use]
+    pub const fn benefit_failure_count(self) -> u8 {
+        if self.benefit_failure.is_some() { 1 } else { 0 }
+    }
+
+    #[must_use]
+    pub const fn benefit_failure(self) -> Option<CodexQuotaPublicationErrorCode> {
+        self.benefit_failure
+    }
+
+    #[must_use]
     pub const fn observed_at_ms(self) -> Option<i64> {
         self.observed_at_ms
     }
@@ -221,6 +326,16 @@ impl CodexQuotaRefreshSnapshot {
     #[must_use]
     pub const fn last_success_observed_at_ms(self) -> Option<i64> {
         self.last_success_observed_at_ms
+    }
+
+    #[must_use]
+    pub const fn last_quota_success_observed_at_ms(self) -> Option<i64> {
+        self.last_quota_success_observed_at_ms
+    }
+
+    #[must_use]
+    pub const fn last_benefit_success_observed_at_ms(self) -> Option<i64> {
+        self.last_benefit_success_observed_at_ms
     }
 }
 

@@ -6,6 +6,20 @@ All notable changes are recorded here.
 
 ### Added
 
+- One-poll Codex quota/benefit runtime publication: provider I/O still completes before
+  one non-waiting writer-lease attempt and one store open; at most 32 quota windows
+  and one optional benefit observation publish through separate exact transactions
+  under the same guard, preserving committed sibling facts without claiming cross-
+  domain atomicity.
+- Separate validated runtime health for quota and benefits, including observed/
+  processed/exact status/failure counts, benefit lot-change and pending-due counts,
+  common versus domain failure stages, overall and per-domain last-success times,
+  accelerated benefit-contention retry, inconsistent-report fail-closed behavior, and
+  restart-idempotent duplicate publication.
+- Combined quota-benefit Windows runtime acceptance with real reset-credit fixture:
+  16 warm-up plus 48 measured success/RPC/timeout/contention/pause-resume rounds,
+  3,432,448-byte private floor, 6,139,904-byte sampled high, 131 handles, four threads,
+  USER=1, GDI=0, and no task-owned child process remaining.
 - Immutable benefit query envelopes with independent benefit revision, one-transaction
   current/history capture, 64-lot conservative FEFO order, explicit absent/fresh/
   aging/stale and complete/quantity-partial/partial/unknown facts, inherited/override

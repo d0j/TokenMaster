@@ -1848,3 +1848,33 @@ GDI=0. Strict query Clippy, complete store/query suites, and diff checks pass. T
 separate benefit publication through the existing Codex quota runtime, is next;
 reminder delivery, UI, automation, activation, M0 acceptance, packaging, signing, and
 release remain unclaimed.
+
+## 2026-07-16 — Codex runtime publishes quota and benefit inventory separately
+
+Completed Task 6 of the benefit contour. One short-lived Codex app-server poll now
+produces one owned snapshot that reaches writer admission only after provider I/O.
+The runtime tries the shared process lease once, opens `UsageStore` once, and holds the
+same non-interleaving guard while applying at most 32 quota windows and one optional
+benefit observation. Each quota window and the benefit inventory retain independent
+transactions and revisions: quota success survives benefit failure, benefit success
+remains visible after quota failure or duplicate input, and no cross-domain atomic
+success or rollback is claimed.
+
+The public runtime snapshot now reports separate quota and benefit observed, processed,
+exact status, failure, and last-success facts, plus benefit material-change and
+pending-due counts. Common lease/open/control failure remains distinct from quota or
+benefit transaction failure. Count/status arithmetic and expected domain cardinality
+are validated before publication; inconsistent internal reports fail closed as
+`invalid_data` and cannot advance any success timestamp.
+
+Focused execution tests cover source-before-publication, cancellation, writer
+contention without store creation, quota success plus benefit failure, benefit success
+plus quota failure, benefit contention retry, quota/benefit duplicate publication
+across publisher restart, and report corruption. The Windows harness uses a real
+reset-credit response in every success round and passed 16 warm-up plus 48 measured
+success/RPC/timeout/busy/pause-resume rounds at a 3,432,448-byte private floor,
+6,139,904-byte sampled high, 131 handles, four threads, USER=1, GDI=0, with no
+task-owned child remaining. The refreshed release-authority audit covers 115
+production dependency packages, six production quota-runtime source files, and one
+release library with zero forbidden matches. Reminder delivery, UI, automation,
+activation, M0 acceptance, packaging, signing, and release remain unclaimed.

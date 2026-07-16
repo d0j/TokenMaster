@@ -8,7 +8,7 @@ use tokenmaster_codex::{
 use tokenmaster_engine::{
     Clock, OperationControl, PortErrorCode, RefreshOutcome, RefreshPermit, WriterLease,
 };
-use tokenmaster_store::{QuotaApplyStatus, StoreErrorCode, UsageStore};
+use tokenmaster_store::{BenefitApplyStatus, QuotaApplyStatus, StoreErrorCode, UsageStore};
 
 use super::{
     CodexExecutableDiscoveryErrorCode, CodexQuotaClockErrorCode, CodexQuotaPublicationErrorCode,
@@ -85,17 +85,6 @@ pub(super) struct QuotaPublicationSummary {
 }
 
 impl QuotaPublicationSummary {
-    const EMPTY: Self = Self {
-        processed_count: 0,
-        changed_count: 0,
-        started_count: 0,
-        advanced_count: 0,
-        duplicate_count: 0,
-        stale_count: 0,
-        allowance_change_count: 0,
-        reset_count: 0,
-    };
-
     fn record(&mut self, status: QuotaApplyStatus) -> Result<(), CodexQuotaPublicationErrorCode> {
         increment(&mut self.processed_count)?;
         match status {
@@ -121,26 +110,84 @@ impl QuotaPublicationSummary {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) struct BenefitPublicationSummary {
+    observation_count: u8,
+    processed_count: u8,
+    changed_count: u8,
+    freshness_only_count: u8,
+    duplicate_count: u8,
+    stale_count: u8,
+    lot_change_count: u16,
+    pending_due_count: u16,
+}
+
+impl BenefitPublicationSummary {
+    fn record(
+        &mut self,
+        status: BenefitApplyStatus,
+        lot_change_count: u16,
+        pending_due_count: u16,
+    ) -> Result<(), CodexQuotaPublicationErrorCode> {
+        increment_u8(&mut self.processed_count)?;
+        match status {
+            BenefitApplyStatus::Duplicate => increment_u8(&mut self.duplicate_count)?,
+            BenefitApplyStatus::Stale => increment_u8(&mut self.stale_count)?,
+            BenefitApplyStatus::FreshnessOnly => {
+                increment_u8(&mut self.freshness_only_count)?;
+            }
+            BenefitApplyStatus::Changed => increment_u8(&mut self.changed_count)?,
+        }
+        self.lot_change_count = lot_change_count;
+        self.pending_due_count = pending_due_count;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) struct QuotaPublicationReport {
+    quota: QuotaPublicationSummary,
+    benefit: BenefitPublicationSummary,
+    quota_failure: Option<CodexQuotaPublicationErrorCode>,
+    benefit_failure: Option<CodexQuotaPublicationErrorCode>,
+}
+
+impl QuotaPublicationReport {
+    fn for_snapshot(snapshot: &CodexQuotaSnapshot) -> Self {
+        Self {
+            benefit: BenefitPublicationSummary {
+                observation_count: u8::from(snapshot.benefit_observation().is_some()),
+                ..BenefitPublicationSummary::default()
+            },
+            ..Self::default()
+        }
+    }
+
+    const fn has_domain_failure(self) -> bool {
+        self.quota_failure.is_some() || self.benefit_failure.is_some()
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct QuotaPublicationError {
     code: CodexQuotaPublicationErrorCode,
-    summary: QuotaPublicationSummary,
+    report: QuotaPublicationReport,
 }
 
 impl QuotaPublicationError {
-    pub(super) const fn new(
+    const fn with_report(
         code: CodexQuotaPublicationErrorCode,
-        summary: QuotaPublicationSummary,
+        report: QuotaPublicationReport,
     ) -> Self {
-        Self { code, summary }
+        Self { code, report }
     }
 
     pub(super) const fn code(self) -> CodexQuotaPublicationErrorCode {
         self.code
     }
 
-    pub(super) const fn summary(self) -> QuotaPublicationSummary {
-        self.summary
+    pub(super) const fn report(self) -> QuotaPublicationReport {
+        self.report
     }
 }
 
@@ -149,7 +196,7 @@ pub(super) trait QuotaPublisher: Send + 'static {
         &mut self,
         snapshot: &CodexQuotaSnapshot,
         control: &OperationControl<'_>,
-    ) -> Result<QuotaPublicationSummary, QuotaPublicationError>;
+    ) -> Result<QuotaPublicationReport, QuotaPublicationError>;
 }
 
 pub(super) struct StoreQuotaPublisher {
@@ -171,34 +218,76 @@ impl QuotaPublisher for StoreQuotaPublisher {
         &mut self,
         snapshot: &CodexQuotaSnapshot,
         control: &OperationControl<'_>,
-    ) -> Result<QuotaPublicationSummary, QuotaPublicationError> {
-        let mut summary = QuotaPublicationSummary::default();
+    ) -> Result<QuotaPublicationReport, QuotaPublicationError> {
+        let mut report = QuotaPublicationReport::for_snapshot(snapshot);
         control
             .check()
-            .map_err(|error| control_publication_error(error.code(), summary))?;
+            .map_err(|error| control_publication_error(error.code(), report))?;
         let guard = self
             .lease
             .try_acquire()
-            .map_err(|error| lease_publication_error(error.code(), summary))?;
+            .map_err(|error| lease_publication_error(error.code(), report))?;
         let mut store = UsageStore::open(&self.archive_path)
-            .map_err(|error| store_publication_error(error.code(), summary))?;
+            .map_err(|error| store_publication_error(error.code(), report))?;
         for observation in snapshot.observations() {
             control
                 .check()
-                .map_err(|error| control_publication_error(error.code(), summary))?;
-            let result = store
-                .apply_quota_observation(observation.definition(), observation.sample())
-                .map_err(|error| store_publication_error(error.code(), summary))?;
-            summary
-                .record(result.status())
-                .map_err(|code| QuotaPublicationError::new(code, summary))?;
+                .map_err(|error| control_publication_error(error.code(), report))?;
+            match store.apply_quota_observation(observation.definition(), observation.sample()) {
+                Ok(result) => {
+                    report
+                        .quota
+                        .record(result.status())
+                        .map_err(|code| QuotaPublicationError::with_report(code, report))?;
+                }
+                Err(error) => {
+                    let code = store_publication_code(error.code());
+                    if matches!(
+                        code,
+                        CodexQuotaPublicationErrorCode::Cancelled
+                            | CodexQuotaPublicationErrorCode::DeadlineExceeded
+                    ) {
+                        return Err(QuotaPublicationError::with_report(code, report));
+                    }
+                    report.quota_failure = Some(code);
+                    break;
+                }
+            }
         }
         control
             .check()
-            .map_err(|error| control_publication_error(error.code(), summary))?;
+            .map_err(|error| control_publication_error(error.code(), report))?;
+        if let Some(observation) = snapshot.benefit_observation() {
+            match store.apply_benefit_observation(observation) {
+                Ok(result) => {
+                    report
+                        .benefit
+                        .record(
+                            result.status(),
+                            result.change_count(),
+                            result.pending_due_count(),
+                        )
+                        .map_err(|code| QuotaPublicationError::with_report(code, report))?;
+                }
+                Err(error) => {
+                    let code = store_publication_code(error.code());
+                    if matches!(
+                        code,
+                        CodexQuotaPublicationErrorCode::Cancelled
+                            | CodexQuotaPublicationErrorCode::DeadlineExceeded
+                    ) {
+                        return Err(QuotaPublicationError::with_report(code, report));
+                    }
+                    report.benefit_failure = Some(code);
+                }
+            }
+        }
+        control
+            .check()
+            .map_err(|error| control_publication_error(error.code(), report))?;
         drop(store);
         drop(guard);
-        Ok(summary)
+        Ok(report)
     }
 }
 
@@ -243,7 +332,13 @@ where
         if let Err(error) = control.check() {
             return self.finish(
                 started_at,
-                AttemptResult::control(error.code(), QuotaPublicationSummary::default(), 0, None),
+                AttemptResult::control(
+                    error.code(),
+                    QuotaPublicationReport::default(),
+                    0,
+                    None,
+                    false,
+                ),
             );
         }
         let observed_at_ms = match self.wall_clock.now_millis() {
@@ -263,10 +358,15 @@ where
             }
         };
         let observation_count = u16::try_from(snapshot.observations().len()).unwrap_or(u16::MAX);
+        let publication_report = QuotaPublicationReport::for_snapshot(&snapshot);
         if snapshot.observations().len() > MAX_CODEX_QUOTA_WINDOWS {
             return self.finish(
                 started_at,
-                AttemptResult::transport_capacity(observed_at_ms, observation_count),
+                AttemptResult::transport_capacity(
+                    observed_at_ms,
+                    observation_count,
+                    publication_report,
+                ),
             );
         }
         if let Err(error) = control.check() {
@@ -274,15 +374,38 @@ where
                 started_at,
                 AttemptResult::control(
                     error.code(),
-                    QuotaPublicationSummary::default(),
+                    publication_report,
                     observation_count,
                     Some(observed_at_ms),
+                    false,
                 ),
             );
         }
         let publication = match self.publisher.publish(&snapshot, &control) {
-            Ok(summary) => AttemptResult::completed(observed_at_ms, observation_count, summary),
-            Err(error) => AttemptResult::publication(observed_at_ms, observation_count, error),
+            Ok(mut report)
+                if !publication_report_is_consistent(
+                    report,
+                    observation_count,
+                    publication_report.benefit.observation_count,
+                ) =>
+            {
+                mark_inconsistent_domains_failed(
+                    &mut report,
+                    observation_count,
+                    publication_report.benefit.observation_count,
+                );
+                AttemptResult::domain_publication(observed_at_ms, observation_count, report)
+            }
+            Ok(report) if report.has_domain_failure() => {
+                AttemptResult::domain_publication(observed_at_ms, observation_count, report)
+            }
+            Ok(report) => AttemptResult::completed(observed_at_ms, observation_count, report),
+            Err(error) => AttemptResult::publication(
+                observed_at_ms,
+                observation_count,
+                publication_report.benefit.observation_count,
+                error,
+            ),
         };
         self.finish(started_at, publication)
     }
@@ -305,23 +428,45 @@ where
         } else {
             latest.last_success_observed_at_ms
         };
+        let last_quota_success_observed_at_ms = if result.quota_succeeded {
+            result.observed_at_ms
+        } else {
+            latest.last_quota_success_observed_at_ms
+        };
+        let last_benefit_success_observed_at_ms = if result.benefit_succeeded {
+            result.observed_at_ms
+        } else {
+            latest.last_benefit_success_observed_at_ms
+        };
         *latest = CodexQuotaRefreshSnapshot {
             attempt_sequence,
             outcome: Some(result.outcome),
             failure: result.failure,
             retry_mode: result.retry_mode,
             observation_count: result.observation_count,
-            processed_count: result.summary.processed_count,
-            changed_count: result.summary.changed_count,
-            started_count: result.summary.started_count,
-            advanced_count: result.summary.advanced_count,
-            duplicate_count: result.summary.duplicate_count,
-            stale_count: result.summary.stale_count,
-            allowance_change_count: result.summary.allowance_change_count,
-            reset_count: result.summary.reset_count,
+            processed_count: result.report.quota.processed_count,
+            changed_count: result.report.quota.changed_count,
+            started_count: result.report.quota.started_count,
+            advanced_count: result.report.quota.advanced_count,
+            duplicate_count: result.report.quota.duplicate_count,
+            stale_count: result.report.quota.stale_count,
+            allowance_change_count: result.report.quota.allowance_change_count,
+            reset_count: result.report.quota.reset_count,
+            quota_failure: result.report.quota_failure,
+            benefit_observation_count: result.report.benefit.observation_count,
+            benefit_processed_count: result.report.benefit.processed_count,
+            benefit_changed_count: result.report.benefit.changed_count,
+            benefit_freshness_only_count: result.report.benefit.freshness_only_count,
+            benefit_duplicate_count: result.report.benefit.duplicate_count,
+            benefit_stale_count: result.report.benefit.stale_count,
+            benefit_lot_change_count: result.report.benefit.lot_change_count,
+            benefit_pending_due_count: result.report.benefit.pending_due_count,
+            benefit_failure: result.report.benefit_failure,
             observed_at_ms: result.observed_at_ms,
             elapsed_millis,
             last_success_observed_at_ms,
+            last_quota_success_observed_at_ms,
+            last_benefit_success_observed_at_ms,
         };
         result.outcome
     }
@@ -332,59 +477,74 @@ struct AttemptResult {
     failure: Option<CodexQuotaRefreshFailure>,
     retry_mode: CodexQuotaRetryMode,
     observation_count: u16,
-    summary: QuotaPublicationSummary,
+    report: QuotaPublicationReport,
     observed_at_ms: Option<i64>,
+    quota_succeeded: bool,
+    benefit_succeeded: bool,
 }
 
 impl AttemptResult {
-    const fn completed(
+    fn completed(
         observed_at_ms: i64,
         observation_count: u16,
-        summary: QuotaPublicationSummary,
+        report: QuotaPublicationReport,
     ) -> Self {
         Self {
             outcome: RefreshOutcome::Completed,
             failure: None,
             retry_mode: CodexQuotaRetryMode::Normal,
             observation_count,
-            summary,
+            report,
             observed_at_ms: Some(observed_at_ms),
+            quota_succeeded: report.quota.processed_count == observation_count,
+            benefit_succeeded: report.benefit.observation_count > 0
+                && report.benefit.processed_count == report.benefit.observation_count,
         }
     }
 
-    const fn clock(error: CodexQuotaClockErrorCode) -> Self {
+    fn clock(error: CodexQuotaClockErrorCode) -> Self {
         Self {
             outcome: RefreshOutcome::Failed,
             failure: Some(CodexQuotaRefreshFailure::Clock(error)),
             retry_mode: CodexQuotaRetryMode::Normal,
             observation_count: 0,
-            summary: QuotaPublicationSummary::EMPTY,
+            report: QuotaPublicationReport::default(),
             observed_at_ms: None,
+            quota_succeeded: false,
+            benefit_succeeded: false,
         }
     }
 
-    const fn source(error: CodexQuotaSourceFailure, observed_at_ms: i64) -> Self {
+    fn source(error: CodexQuotaSourceFailure, observed_at_ms: i64) -> Self {
         match error {
             CodexQuotaSourceFailure::Discovery(error) => Self {
                 outcome: RefreshOutcome::Failed,
                 failure: Some(CodexQuotaRefreshFailure::Discovery(error)),
                 retry_mode: CodexQuotaRetryMode::Normal,
                 observation_count: 0,
-                summary: QuotaPublicationSummary::EMPTY,
+                report: QuotaPublicationReport::default(),
                 observed_at_ms: Some(observed_at_ms),
+                quota_succeeded: false,
+                benefit_succeeded: false,
             },
             CodexQuotaSourceFailure::Transport(error) => Self {
                 outcome: transport_outcome(error),
                 failure: Some(CodexQuotaRefreshFailure::Transport(error)),
                 retry_mode: transport_retry_mode(error),
                 observation_count: 0,
-                summary: QuotaPublicationSummary::EMPTY,
+                report: QuotaPublicationReport::default(),
                 observed_at_ms: Some(observed_at_ms),
+                quota_succeeded: false,
+                benefit_succeeded: false,
             },
         }
     }
 
-    const fn transport_capacity(observed_at_ms: i64, observation_count: u16) -> Self {
+    fn transport_capacity(
+        observed_at_ms: i64,
+        observation_count: u16,
+        report: QuotaPublicationReport,
+    ) -> Self {
         Self {
             outcome: RefreshOutcome::Failed,
             failure: Some(CodexQuotaRefreshFailure::Transport(
@@ -392,54 +552,103 @@ impl AttemptResult {
             )),
             retry_mode: CodexQuotaRetryMode::Normal,
             observation_count,
-            summary: QuotaPublicationSummary::EMPTY,
+            report,
             observed_at_ms: Some(observed_at_ms),
+            quota_succeeded: false,
+            benefit_succeeded: false,
         }
     }
 
-    const fn control(
+    fn control(
         error: PortErrorCode,
-        summary: QuotaPublicationSummary,
+        report: QuotaPublicationReport,
         observation_count: u16,
         observed_at_ms: Option<i64>,
+        publication_attempted: bool,
     ) -> Self {
+        let (quota_succeeded, benefit_succeeded) =
+            publication_successes(report, observation_count, publication_attempted);
         Self {
             outcome: control_outcome(error),
             failure: Some(CodexQuotaRefreshFailure::Control(error)),
             retry_mode: CodexQuotaRetryMode::Normal,
             observation_count,
-            summary,
+            report,
             observed_at_ms,
+            quota_succeeded,
+            benefit_succeeded,
         }
     }
 
-    const fn publication(
+    fn publication(
         observed_at_ms: i64,
         observation_count: u16,
+        benefit_observation_count: u8,
         error: QuotaPublicationError,
     ) -> Self {
         let code = error.code();
+        let mut report = error.report();
+        if report.benefit.processed_count == 0 {
+            report.benefit.observation_count = benefit_observation_count;
+        }
+        mark_unpublished_domains_failed(&mut report, observation_count, code);
         match code {
             CodexQuotaPublicationErrorCode::Cancelled => Self::control(
                 PortErrorCode::Cancelled,
-                error.summary(),
+                report,
                 observation_count,
                 Some(observed_at_ms),
+                true,
             ),
             CodexQuotaPublicationErrorCode::DeadlineExceeded => Self::control(
                 PortErrorCode::DeadlineExceeded,
-                error.summary(),
+                report,
                 observation_count,
                 Some(observed_at_ms),
+                true,
             ),
-            _ => Self {
-                outcome: publication_outcome(code),
-                failure: Some(CodexQuotaRefreshFailure::Publication(code)),
-                retry_mode: publication_retry_mode(code),
-                observation_count,
-                summary: error.summary(),
-                observed_at_ms: Some(observed_at_ms),
-            },
+            _ => {
+                let (quota_succeeded, benefit_succeeded) =
+                    publication_successes(report, observation_count, true);
+                Self {
+                    outcome: publication_outcome(code),
+                    failure: Some(CodexQuotaRefreshFailure::Publication(code)),
+                    retry_mode: publication_retry_mode(code),
+                    observation_count,
+                    report,
+                    observed_at_ms: Some(observed_at_ms),
+                    quota_succeeded,
+                    benefit_succeeded,
+                }
+            }
+        }
+    }
+
+    fn domain_publication(
+        observed_at_ms: i64,
+        observation_count: u16,
+        report: QuotaPublicationReport,
+    ) -> Self {
+        let (outcome, retry_mode) = domain_publication_classification(report);
+        let failure = report
+            .quota_failure
+            .map(CodexQuotaRefreshFailure::QuotaPublication)
+            .or_else(|| {
+                report
+                    .benefit_failure
+                    .map(CodexQuotaRefreshFailure::BenefitPublication)
+            });
+        let (quota_succeeded, benefit_succeeded) =
+            publication_successes(report, observation_count, true);
+        Self {
+            outcome,
+            failure,
+            retry_mode,
+            observation_count,
+            report,
+            observed_at_ms: Some(observed_at_ms),
+            quota_succeeded,
+            benefit_succeeded,
         }
     }
 }
@@ -452,6 +661,135 @@ const fn increment(value: &mut u16) -> Result<(), CodexQuotaPublicationErrorCode
         }
         None => Err(CodexQuotaPublicationErrorCode::CapacityExceeded),
     }
+}
+
+const fn increment_u8(value: &mut u8) -> Result<(), CodexQuotaPublicationErrorCode> {
+    match value.checked_add(1) {
+        Some(next) => {
+            *value = next;
+            Ok(())
+        }
+        None => Err(CodexQuotaPublicationErrorCode::CapacityExceeded),
+    }
+}
+
+fn publication_successes(
+    report: QuotaPublicationReport,
+    observation_count: u16,
+    publication_attempted: bool,
+) -> (bool, bool) {
+    if !publication_attempted {
+        return (false, false);
+    }
+    let quota_succeeded =
+        report.quota_failure.is_none() && report.quota.processed_count == observation_count;
+    let benefit_succeeded = report.benefit.observation_count > 0
+        && report.benefit_failure.is_none()
+        && report.benefit.processed_count == report.benefit.observation_count;
+    (quota_succeeded, benefit_succeeded)
+}
+
+fn mark_unpublished_domains_failed(
+    report: &mut QuotaPublicationReport,
+    observation_count: u16,
+    code: CodexQuotaPublicationErrorCode,
+) {
+    if report.quota_failure.is_none() && report.quota.processed_count < observation_count {
+        report.quota_failure = Some(code);
+    }
+    if report.benefit.observation_count > report.benefit.processed_count
+        && report.benefit_failure.is_none()
+    {
+        report.benefit_failure = Some(code);
+    }
+}
+
+fn publication_report_is_consistent(
+    report: QuotaPublicationReport,
+    quota_observation_count: u16,
+    benefit_observation_count: u8,
+) -> bool {
+    quota_report_is_consistent(report, quota_observation_count)
+        && benefit_report_is_consistent(report, benefit_observation_count)
+}
+
+fn quota_report_is_consistent(report: QuotaPublicationReport, observation_count: u16) -> bool {
+    let classified_changes = u32::from(report.quota.started_count)
+        + u32::from(report.quota.advanced_count)
+        + u32::from(report.quota.allowance_change_count)
+        + u32::from(report.quota.reset_count);
+    let classified_processed = u32::from(report.quota.changed_count)
+        + u32::from(report.quota.duplicate_count)
+        + u32::from(report.quota.stale_count);
+    let completion_matches_failure = match report.quota_failure {
+        None => report.quota.processed_count == observation_count,
+        Some(_) => report.quota.processed_count < observation_count,
+    };
+    classified_changes == u32::from(report.quota.changed_count)
+        && classified_processed == u32::from(report.quota.processed_count)
+        && report.quota.processed_count <= observation_count
+        && completion_matches_failure
+}
+
+fn benefit_report_is_consistent(report: QuotaPublicationReport, observation_count: u8) -> bool {
+    let classified_processed = u16::from(report.benefit.changed_count)
+        + u16::from(report.benefit.freshness_only_count)
+        + u16::from(report.benefit.duplicate_count)
+        + u16::from(report.benefit.stale_count);
+    let completion_matches_failure = match report.benefit_failure {
+        None => report.benefit.processed_count == observation_count,
+        Some(_) => report.benefit.processed_count < observation_count,
+    };
+    report.benefit.observation_count == observation_count
+        && classified_processed == u16::from(report.benefit.processed_count)
+        && report.benefit.processed_count <= observation_count
+        && completion_matches_failure
+}
+
+fn mark_inconsistent_domains_failed(
+    report: &mut QuotaPublicationReport,
+    quota_observation_count: u16,
+    benefit_observation_count: u8,
+) {
+    if !quota_report_is_consistent(*report, quota_observation_count) {
+        report.quota_failure = Some(CodexQuotaPublicationErrorCode::InvalidData);
+    }
+    if !benefit_report_is_consistent(*report, benefit_observation_count) {
+        report.benefit.observation_count = benefit_observation_count;
+        report.benefit_failure = Some(CodexQuotaPublicationErrorCode::InvalidData);
+    }
+}
+
+fn domain_publication_classification(
+    report: QuotaPublicationReport,
+) -> (RefreshOutcome, CodexQuotaRetryMode) {
+    let quota = report.quota_failure;
+    let benefit = report.benefit_failure;
+    let outcome = if quota == Some(CodexQuotaPublicationErrorCode::Cancelled)
+        || benefit == Some(CodexQuotaPublicationErrorCode::Cancelled)
+    {
+        RefreshOutcome::Cancelled
+    } else if quota == Some(CodexQuotaPublicationErrorCode::DeadlineExceeded)
+        || benefit == Some(CodexQuotaPublicationErrorCode::DeadlineExceeded)
+    {
+        RefreshOutcome::DeadlineExceeded
+    } else if quota == Some(CodexQuotaPublicationErrorCode::Busy)
+        || benefit == Some(CodexQuotaPublicationErrorCode::Busy)
+    {
+        RefreshOutcome::Busy
+    } else {
+        RefreshOutcome::Failed
+    };
+    let retry_mode = if quota
+        .is_some_and(|code| publication_retry_mode(code) == CodexQuotaRetryMode::Accelerated)
+        || benefit
+            .is_some_and(|code| publication_retry_mode(code) == CodexQuotaRetryMode::Accelerated)
+    {
+        CodexQuotaRetryMode::Accelerated
+    } else {
+        CodexQuotaRetryMode::Normal
+    };
+    (outcome, retry_mode)
 }
 
 const fn control_outcome(error: PortErrorCode) -> RefreshOutcome {
@@ -528,7 +866,7 @@ const fn publication_retry_mode(error: CodexQuotaPublicationErrorCode) -> CodexQ
 
 const fn control_publication_error(
     error: PortErrorCode,
-    summary: QuotaPublicationSummary,
+    report: QuotaPublicationReport,
 ) -> QuotaPublicationError {
     let code = match error {
         PortErrorCode::Cancelled => CodexQuotaPublicationErrorCode::Cancelled,
@@ -542,21 +880,25 @@ const fn control_publication_error(
             CodexQuotaPublicationErrorCode::StoreUnavailable
         }
     };
-    QuotaPublicationError::new(code, summary)
+    QuotaPublicationError::with_report(code, report)
 }
 
 const fn lease_publication_error(
     error: PortErrorCode,
-    summary: QuotaPublicationSummary,
+    report: QuotaPublicationReport,
 ) -> QuotaPublicationError {
-    control_publication_error(error, summary)
+    control_publication_error(error, report)
 }
 
 const fn store_publication_error(
     error: StoreErrorCode,
-    summary: QuotaPublicationSummary,
+    report: QuotaPublicationReport,
 ) -> QuotaPublicationError {
-    let code = match error {
+    QuotaPublicationError::with_report(store_publication_code(error), report)
+}
+
+const fn store_publication_code(error: StoreErrorCode) -> CodexQuotaPublicationErrorCode {
+    match error {
         StoreErrorCode::CapacityExceeded => CodexQuotaPublicationErrorCode::CapacityExceeded,
         StoreErrorCode::DeadlineExceeded => CodexQuotaPublicationErrorCode::DeadlineExceeded,
         StoreErrorCode::InvalidValue
@@ -577,8 +919,7 @@ const fn store_publication_error(
         | StoreErrorCode::SchemaMismatch
         | StoreErrorCode::PolicyMismatch
         | StoreErrorCode::RebuildRequired => CodexQuotaPublicationErrorCode::StoreUnavailable,
-    };
-    QuotaPublicationError::new(code, summary)
+    }
 }
 
 #[cfg(test)]
@@ -597,8 +938,9 @@ mod tests {
     };
 
     use super::{
-        CodexQuotaExecution, CodexQuotaSource, CodexQuotaSourceFailure, CodexQuotaWallClock,
-        QuotaPublicationError, QuotaPublicationSummary, QuotaPublisher, StoreQuotaPublisher,
+        BenefitPublicationSummary, CodexQuotaExecution, CodexQuotaSource, CodexQuotaSourceFailure,
+        CodexQuotaWallClock, QuotaPublicationError, QuotaPublicationReport,
+        QuotaPublicationSummary, QuotaPublisher, StoreQuotaPublisher,
     };
     use crate::RuntimeWriterLease;
     use crate::quota::{
@@ -678,7 +1020,7 @@ mod tests {
     struct FakePublisher {
         events: Arc<Mutex<Vec<&'static str>>>,
         calls: Arc<AtomicUsize>,
-        result: Result<QuotaPublicationSummary, QuotaPublicationError>,
+        result: Result<QuotaPublicationReport, QuotaPublicationError>,
     }
 
     impl QuotaPublisher for FakePublisher {
@@ -686,7 +1028,7 @@ mod tests {
             &mut self,
             _snapshot: &CodexQuotaSnapshot,
             _control: &OperationControl<'_>,
-        ) -> Result<QuotaPublicationSummary, QuotaPublicationError> {
+        ) -> Result<QuotaPublicationReport, QuotaPublicationError> {
             self.events.lock().test_value("event lock").push("publish");
             self.calls.fetch_add(1, Ordering::AcqRel);
             self.result
@@ -704,7 +1046,18 @@ mod tests {
         }))
         .test_value("account fixture");
         let quota = serde_json::to_vec(&json!({
-            "rateLimitResetCredits": null,
+            "rateLimitResetCredits": {
+                "availableCount": 1,
+                "credits": [{
+                    "description": "private runtime benefit description",
+                    "expiresAt": 1_700_300_000,
+                    "grantedAt": 1_699_000_000,
+                    "id": "private_runtime_credit_id",
+                    "resetType": "codexRateLimits",
+                    "status": "available",
+                    "title": "private runtime benefit title"
+                }]
+            },
             "rateLimits": {
                 "credits": null,
                 "individualLimit": null,
@@ -760,6 +1113,20 @@ mod tests {
         }
     }
 
+    fn completed_report() -> QuotaPublicationReport {
+        QuotaPublicationReport {
+            quota: completed_summary(),
+            benefit: BenefitPublicationSummary {
+                observation_count: 1,
+                processed_count: 1,
+                changed_count: 1,
+                ..BenefitPublicationSummary::default()
+            },
+            quota_failure: None,
+            benefit_failure: None,
+        }
+    }
+
     #[test]
     fn source_completes_before_publication_and_success_health_is_bounded() {
         let events = Arc::new(Mutex::new(Vec::new()));
@@ -775,7 +1142,7 @@ mod tests {
         let publisher = FakePublisher {
             events: Arc::clone(&events),
             calls: Arc::clone(&calls),
-            result: Ok(completed_summary()),
+            result: Ok(completed_report()),
         };
         let mut execution = CodexQuotaExecution::new(
             monotonic,
@@ -800,10 +1167,25 @@ mod tests {
         assert_eq!(snapshot.observation_count(), 2);
         assert_eq!(snapshot.processed_count(), 2);
         assert_eq!(snapshot.changed_count(), 2);
+        assert_eq!(snapshot.quota_failure_count(), 0);
+        assert_eq!(snapshot.quota_failure(), None);
         assert_eq!(snapshot.allowance_change_count(), 1);
         assert_eq!(snapshot.reset_count(), 1);
+        assert_eq!(snapshot.benefit_observation_count(), 1);
+        assert_eq!(snapshot.benefit_processed_count(), 1);
+        assert_eq!(snapshot.benefit_changed_count(), 1);
+        assert_eq!(snapshot.benefit_failure_count(), 0);
+        assert_eq!(snapshot.benefit_failure(), None);
         assert_eq!(snapshot.observed_at_ms(), Some(OBSERVED_AT_MS));
         assert_eq!(snapshot.last_success_observed_at_ms(), Some(OBSERVED_AT_MS));
+        assert_eq!(
+            snapshot.last_quota_success_observed_at_ms(),
+            Some(OBSERVED_AT_MS)
+        );
+        assert_eq!(
+            snapshot.last_benefit_success_observed_at_ms(),
+            Some(OBSERVED_AT_MS)
+        );
         let debug = format!("{snapshot:?}");
         assert!(!debug.contains(PRIVATE_EMAIL));
         assert!(!debug.contains("private runtime label"));
@@ -833,7 +1215,7 @@ mod tests {
         let publisher = FakePublisher {
             events: Arc::clone(&events),
             calls: Arc::clone(&calls),
-            result: Ok(completed_summary()),
+            result: Ok(completed_report()),
         };
         let mut execution = CodexQuotaExecution::new(
             monotonic,
@@ -853,7 +1235,11 @@ mod tests {
         );
         assert_eq!(snapshot.observation_count(), 2);
         assert_eq!(snapshot.processed_count(), 0);
+        assert_eq!(snapshot.benefit_observation_count(), 1);
+        assert_eq!(snapshot.benefit_processed_count(), 0);
         assert_eq!(snapshot.last_success_observed_at_ms(), None);
+        assert_eq!(snapshot.last_quota_success_observed_at_ms(), None);
+        assert_eq!(snapshot.last_benefit_success_observed_at_ms(), None);
     }
 
     #[test]
@@ -871,7 +1257,8 @@ mod tests {
             .publish(&normalized(OBSERVED_AT_MS), &control)
             .test_error("writer contention");
         assert_eq!(error.code(), CodexQuotaPublicationErrorCode::Busy);
-        assert_eq!(error.summary(), QuotaPublicationSummary::default());
+        assert_eq!(error.report().quota, QuotaPublicationSummary::default());
+        assert_eq!(error.report().benefit.observation_count, 1);
         assert!(!archive.exists(), "busy publication must not open SQLite");
     }
 
@@ -888,18 +1275,249 @@ mod tests {
         let first = publisher
             .publish(&snapshot, &control)
             .test_value("first publish");
-        assert_eq!(first.processed_count, 2);
-        assert_eq!(first.changed_count, 2);
-        assert_eq!(first.started_count, 2);
-        assert_eq!(first.duplicate_count, 0);
+        assert_eq!(first.quota.processed_count, 2);
+        assert_eq!(first.quota.changed_count, 2);
+        assert_eq!(first.quota.started_count, 2);
+        assert_eq!(first.quota.duplicate_count, 0);
+        assert_eq!(first.benefit.observation_count, 1);
+        assert_eq!(first.benefit.processed_count, 1);
+        assert_eq!(first.benefit.changed_count, 1);
+        assert_eq!(first.benefit.duplicate_count, 0);
+        assert_eq!(first.benefit_failure, None);
 
-        let duplicate = publisher
+        drop(publisher);
+        let mut restarted = StoreQuotaPublisher::new(&archive).test_value("restarted publisher");
+        let duplicate = restarted
             .publish(&snapshot, &control)
-            .test_value("idempotent publish");
-        assert_eq!(duplicate.processed_count, 2);
-        assert_eq!(duplicate.changed_count, 0);
-        assert_eq!(duplicate.duplicate_count, 2);
-        assert_eq!(duplicate.stale_count, 0);
+            .test_value("idempotent restart publish");
+        assert_eq!(duplicate.quota.processed_count, 2);
+        assert_eq!(duplicate.quota.changed_count, 0);
+        assert_eq!(duplicate.quota.duplicate_count, 2);
+        assert_eq!(duplicate.quota.stale_count, 0);
+        assert_eq!(duplicate.benefit.processed_count, 1);
+        assert_eq!(duplicate.benefit.changed_count, 0);
+        assert_eq!(duplicate.benefit.duplicate_count, 1);
+        assert_eq!(duplicate.benefit.stale_count, 0);
+        assert_eq!(duplicate.quota_failure, None);
+        assert_eq!(duplicate.benefit_failure, None);
+    }
+
+    #[test]
+    fn quota_success_and_benefit_failure_publish_separate_health_without_false_atomic_success() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
+        let report = QuotaPublicationReport {
+            quota: completed_summary(),
+            benefit: BenefitPublicationSummary {
+                observation_count: 1,
+                ..BenefitPublicationSummary::default()
+            },
+            quota_failure: None,
+            benefit_failure: Some(CodexQuotaPublicationErrorCode::InvalidData),
+        };
+        let source = FakeSource {
+            events: Arc::clone(&events),
+            result: Ok(normalized(OBSERVED_AT_MS)),
+            on_poll: None,
+        };
+        let publisher = FakePublisher {
+            events,
+            calls: Arc::new(AtomicUsize::new(0)),
+            result: Ok(report),
+        };
+        let mut execution = CodexQuotaExecution::new(
+            Arc::new(FakeMonotonicClock::default()),
+            FixedWallClock(Ok(OBSERVED_AT_MS)),
+            source,
+            publisher,
+            Arc::clone(&latest),
+        );
+        let (_coordinator, permit) = permit(None);
+
+        assert_eq!(execution.run(&permit), RefreshOutcome::Failed);
+        let snapshot = *latest.lock().test_value("latest");
+        assert_eq!(
+            snapshot.failure(),
+            Some(CodexQuotaRefreshFailure::BenefitPublication(
+                CodexQuotaPublicationErrorCode::InvalidData
+            ))
+        );
+        assert_eq!(snapshot.quota_failure_count(), 0);
+        assert_eq!(snapshot.quota_failure(), None);
+        assert_eq!(snapshot.processed_count(), 2);
+        assert_eq!(snapshot.changed_count(), 2);
+        assert_eq!(snapshot.benefit_failure_count(), 1);
+        assert_eq!(
+            snapshot.benefit_failure(),
+            Some(CodexQuotaPublicationErrorCode::InvalidData)
+        );
+        assert_eq!(snapshot.benefit_processed_count(), 0);
+        assert_eq!(snapshot.last_success_observed_at_ms(), None);
+        assert_eq!(
+            snapshot.last_quota_success_observed_at_ms(),
+            Some(OBSERVED_AT_MS)
+        );
+        assert_eq!(snapshot.last_benefit_success_observed_at_ms(), None);
+    }
+
+    #[test]
+    fn benefit_contention_keeps_quota_success_and_selects_accelerated_retry() {
+        let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
+        let report = QuotaPublicationReport {
+            quota: completed_summary(),
+            benefit: BenefitPublicationSummary {
+                observation_count: 1,
+                ..BenefitPublicationSummary::default()
+            },
+            quota_failure: None,
+            benefit_failure: Some(CodexQuotaPublicationErrorCode::Busy),
+        };
+        let source = FakeSource {
+            events: Arc::new(Mutex::new(Vec::new())),
+            result: Ok(normalized(OBSERVED_AT_MS)),
+            on_poll: None,
+        };
+        let publisher = FakePublisher {
+            events: Arc::new(Mutex::new(Vec::new())),
+            calls: Arc::new(AtomicUsize::new(0)),
+            result: Ok(report),
+        };
+        let mut execution = CodexQuotaExecution::new(
+            Arc::new(FakeMonotonicClock::default()),
+            FixedWallClock(Ok(OBSERVED_AT_MS)),
+            source,
+            publisher,
+            Arc::clone(&latest),
+        );
+        let (_coordinator, permit) = permit(None);
+
+        assert_eq!(execution.run(&permit), RefreshOutcome::Busy);
+        let snapshot = *latest.lock().test_value("latest");
+        assert_eq!(snapshot.retry_mode(), CodexQuotaRetryMode::Accelerated);
+        assert_eq!(
+            snapshot.failure(),
+            Some(CodexQuotaRefreshFailure::BenefitPublication(
+                CodexQuotaPublicationErrorCode::Busy
+            ))
+        );
+        assert_eq!(
+            snapshot.last_quota_success_observed_at_ms(),
+            Some(OBSERVED_AT_MS)
+        );
+        assert_eq!(snapshot.last_benefit_success_observed_at_ms(), None);
+    }
+
+    #[test]
+    fn benefit_success_remains_visible_when_quota_publication_fails() {
+        let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
+        let report = QuotaPublicationReport {
+            quota: QuotaPublicationSummary::default(),
+            benefit: BenefitPublicationSummary {
+                observation_count: 1,
+                processed_count: 1,
+                changed_count: 1,
+                lot_change_count: 1,
+                pending_due_count: 5,
+                ..BenefitPublicationSummary::default()
+            },
+            quota_failure: Some(CodexQuotaPublicationErrorCode::InvalidData),
+            benefit_failure: None,
+        };
+        let source = FakeSource {
+            events: Arc::new(Mutex::new(Vec::new())),
+            result: Ok(normalized(OBSERVED_AT_MS)),
+            on_poll: None,
+        };
+        let publisher = FakePublisher {
+            events: Arc::new(Mutex::new(Vec::new())),
+            calls: Arc::new(AtomicUsize::new(0)),
+            result: Ok(report),
+        };
+        let mut execution = CodexQuotaExecution::new(
+            Arc::new(FakeMonotonicClock::default()),
+            FixedWallClock(Ok(OBSERVED_AT_MS)),
+            source,
+            publisher,
+            Arc::clone(&latest),
+        );
+        let (_coordinator, permit) = permit(None);
+
+        assert_eq!(execution.run(&permit), RefreshOutcome::Failed);
+        let snapshot = *latest.lock().test_value("latest");
+        assert_eq!(
+            snapshot.failure(),
+            Some(CodexQuotaRefreshFailure::QuotaPublication(
+                CodexQuotaPublicationErrorCode::InvalidData
+            ))
+        );
+        assert_eq!(snapshot.quota_failure_count(), 1);
+        assert_eq!(snapshot.benefit_failure_count(), 0);
+        assert_eq!(snapshot.benefit_processed_count(), 1);
+        assert_eq!(snapshot.benefit_lot_change_count(), 1);
+        assert_eq!(snapshot.benefit_pending_due_count(), 5);
+        assert_eq!(snapshot.last_quota_success_observed_at_ms(), None);
+        assert_eq!(
+            snapshot.last_benefit_success_observed_at_ms(),
+            Some(OBSERVED_AT_MS)
+        );
+    }
+
+    #[test]
+    fn inconsistent_publisher_report_fails_closed_without_advancing_success() {
+        let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
+        let report = QuotaPublicationReport {
+            quota: QuotaPublicationSummary {
+                processed_count: 2,
+                changed_count: 2,
+                started_count: 1,
+                ..QuotaPublicationSummary::default()
+            },
+            benefit: BenefitPublicationSummary {
+                observation_count: 0,
+                processed_count: 0,
+                ..BenefitPublicationSummary::default()
+            },
+            quota_failure: None,
+            benefit_failure: None,
+        };
+        let source = FakeSource {
+            events: Arc::new(Mutex::new(Vec::new())),
+            result: Ok(normalized(OBSERVED_AT_MS)),
+            on_poll: None,
+        };
+        let publisher = FakePublisher {
+            events: Arc::new(Mutex::new(Vec::new())),
+            calls: Arc::new(AtomicUsize::new(0)),
+            result: Ok(report),
+        };
+        let mut execution = CodexQuotaExecution::new(
+            Arc::new(FakeMonotonicClock::default()),
+            FixedWallClock(Ok(OBSERVED_AT_MS)),
+            source,
+            publisher,
+            Arc::clone(&latest),
+        );
+        let (_coordinator, permit) = permit(None);
+
+        assert_eq!(execution.run(&permit), RefreshOutcome::Failed);
+        let snapshot = *latest.lock().test_value("latest");
+        assert_eq!(
+            snapshot.failure(),
+            Some(CodexQuotaRefreshFailure::QuotaPublication(
+                CodexQuotaPublicationErrorCode::InvalidData
+            ))
+        );
+        assert_eq!(
+            snapshot.quota_failure(),
+            Some(CodexQuotaPublicationErrorCode::InvalidData)
+        );
+        assert_eq!(
+            snapshot.benefit_failure(),
+            Some(CodexQuotaPublicationErrorCode::InvalidData)
+        );
+        assert_eq!(snapshot.last_success_observed_at_ms(), None);
+        assert_eq!(snapshot.last_quota_success_observed_at_ms(), None);
+        assert_eq!(snapshot.last_benefit_success_observed_at_ms(), None);
     }
 
     #[test]
@@ -929,13 +1547,20 @@ mod tests {
             ),
             (
                 Ok(normalized(OBSERVED_AT_MS)),
-                Some(QuotaPublicationError::new(
+                Some(QuotaPublicationError::with_report(
                     CodexQuotaPublicationErrorCode::InvalidData,
-                    QuotaPublicationSummary {
-                        processed_count: 1,
-                        changed_count: 1,
-                        started_count: 1,
-                        ..QuotaPublicationSummary::default()
+                    QuotaPublicationReport {
+                        quota: QuotaPublicationSummary {
+                            processed_count: 1,
+                            changed_count: 1,
+                            started_count: 1,
+                            ..QuotaPublicationSummary::default()
+                        },
+                        benefit: BenefitPublicationSummary {
+                            observation_count: 1,
+                            ..BenefitPublicationSummary::default()
+                        },
+                        ..QuotaPublicationReport::default()
                     },
                 )),
                 RefreshOutcome::Failed,
@@ -951,7 +1576,7 @@ mod tests {
             let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
             let monotonic = Arc::new(FakeMonotonicClock::default());
             let publisher_result =
-                publication_error.map_or_else(|| Ok(QuotaPublicationSummary::default()), Err);
+                publication_error.map_or_else(|| Ok(QuotaPublicationReport::default()), Err);
             let source = FakeSource {
                 events: Arc::clone(&events),
                 result: source_result,
@@ -1001,7 +1626,7 @@ mod tests {
         let publisher = FakePublisher {
             events,
             calls: Arc::clone(&calls),
-            result: Ok(completed_summary()),
+            result: Ok(completed_report()),
         };
         let monotonic_clock: Arc<dyn Clock> = monotonic.clone();
         let mut execution = CodexQuotaExecution::new(
@@ -1032,7 +1657,7 @@ mod tests {
         let publisher = FakePublisher {
             events: Arc::new(Mutex::new(Vec::new())),
             calls: Arc::clone(&calls),
-            result: Ok(completed_summary()),
+            result: Ok(completed_report()),
         };
         let monotonic_clock: Arc<dyn Clock> = monotonic.clone();
         let mut execution = CodexQuotaExecution::new(

@@ -148,8 +148,8 @@ decoding maps the official account and multi-bucket rate-limit response into at 
 32 provider-neutral primary/secondary observations. ChatGPT email exists only long
 enough to derive a domain-separated account pseudonym; raw email, Codex home,
 executable path, frames, provider errors, and reset-credit IDs never escape public
-values, errors, or `Debug`. Reset-credit rows are bounded and validated only; benefit
-inventory is still absent.
+values, errors, or `Debug`. Reset-credit rows are bounded, raw provider identity/text
+is discarded, and one separate provider-neutral benefit observation may be published.
 
 `CodexQuotaTransport` accepts one caller-resolved absolute regular native executable
 and executes only `app-server --stdio`. The stable non-experimental handshake is
@@ -173,19 +173,23 @@ selection scans a fresh bounded `PATH` for the exact native filename; explicit
 selection is authoritative and cannot fall back. `CodexQuotaRuntime` has its own
 scheduler, worker, retry cadence, lifecycle, completion, and count-only health. It
 finishes app-server I/O before trying the shared process writer lease, opens SQLite
-only under that guard, and publishes the at-most-32 normalized observations with the
-existing independent per-window transaction/idempotency semantics. It never attaches
-provider I/O or health to the usage scan worker.
+only under that guard, and publishes the at-most-32 normalized quota observations plus
+one optional benefit observation using independent transactions under the same guard.
+Quota/benefit processed/status/failure/last-success health is separate; neither domain
+can claim rollback or atomic success for the other. It never attaches provider I/O or
+health to the usage scan worker.
 
 The focused runtime suite, concurrent usage-runtime/quota-worker fault isolation,
-public fail-closed smoke, strict Clippy, 16+48-round success/RPC/timeout/busy/
-pause-resume Windows resource gate, and release authority audit pass. The runtime
-gate retained a 3,149,824-byte private floor with a
-5,615,616-byte sampled high, 131 handles, four threads, USER=1, GDI=0, and no
-task-owned fixture child. Current project truth is recorded in ADR-038 and
+public fail-closed smoke, strict Clippy, 16+48-round quota-benefit success/RPC/timeout/
+busy/pause-resume Windows resource gate, and release authority audit pass. The latest
+runtime gate retained a 3,432,448-byte private floor with a
+6,139,904-byte sampled high, 131 handles, four threads, USER=1, GDI=0, and no
+task-owned fixture child. The refreshed release audit covers 115 production dependency
+packages, six production quota-runtime source files, and one release library with zero
+forbidden authority matches. Current project truth is recorded in ADR-038, ADR-041, and
 `docs/superpowers/specs/2026-07-16-tokenmaster-codex-quota-runtime-design.md`.
 
-The benefit foundation Tasks 1-5 are complete on
+The benefit foundation Tasks 1-6 are complete on
 `cx/tokenmaster-product-architecture`: provider-neutral values, pure deterministic
 reconciliation/reminder planning, privacy-safe Codex detailed-plus-aggregate
 normalization, and strict schema-v11 transactional inventory/history/profile/due
@@ -197,9 +201,11 @@ expiry/due, redacted scope/revision-bound 256+1 history, concurrent-snapshot/dea
 cleanup, corruption rejection, failed-call generation neutrality, and no usage
 dataset scan. The 64-lot/2,048-change gate measured 0.842 ms current and 4.904 ms
 maximum page; resource return ended at 116 handles, five threads, USER=2, GDI=0, and
-4,517,888 private bytes. The immediate next slice is Task 6: publish benefit
-observations through the existing Codex quota runtime while preserving separate
-transactions and health. Reminder delivery runtime, UI, CLI/MCP, activation, M0
+4,517,888 private bytes. Task 6 now publishes quota and benefit facts from one Codex
+poll through one lease/store open, with independent exact transactions, validated
+per-domain counts, failure stages, last-success timestamps, restart idempotency,
+cancellation/contention/retry truth, and no cross-domain atomicity claim. The immediate
+next slice is Task 7: one-timer durable reminder delivery. UI, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory read must not
 imply activation authority.
 The current post-Task-8 clean-root, formatting, strict locked workspace Clippy, and
