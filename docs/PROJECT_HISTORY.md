@@ -1323,3 +1323,33 @@ generation. Focused strict query Clippy and the complete locked query suite pass
 Task 8 million-row latency, database amplification, Debug/privacy, rebuild-cycle, and
 Windows resource evidence remains open; no P2-B completion, UI, automation, package,
 or release claim is made.
+
+## 2026-07-16 — P2-B scale, storage, privacy, and resource gate closed
+
+Added deterministic release-mode current and immutable-legacy fixtures with one
+million canonical events each. The first current red run exposed a real design defect:
+the 256-event rebuild cap reached only 912,128 events after 346.44 seconds wall,
+approximately 2,850 events/s, even though process private memory remained near 14 MiB.
+The hard cap was raised to 2,048 events while preserving one persisted fingerprint
+cursor, one expected dataset generation, disk-backed inactive rows, crash/reopen
+resume, and at most 18,432 derived/cleanup rows per call. Existing fault, stale-
+generation, bounds, reopen, and resource contracts remained green.
+
+The repeated current/legacy million gate then passed in 174.35 seconds total. Current
+rebuild took 75.528 seconds at 13,240 events/s with 246.558 ms page p95; legacy took
+81.142 seconds at 12,324 events/s with 268.305 ms page p95. Both used 490 resumable
+calls. Main+WAL+SHM amplification was 1.483x/1.568x. Cold overview was
+174.318/178.241 ms; cached overview p95 0.543/0.365 ms; full 400-point/four-breakdown
+p95 151.043/141.192 ms; all-32-scope full analytics 165.120/139.040 ms; session first/
+cursor p95 stayed below 0.75 ms. Repeated bounded analytics/session snapshots and
+cooperative rebuild reopen cycles retained private-memory, handle, thread, USER, and
+GDI plateaus. Existing public Debug/error contracts exclude archive paths, source and
+session identities, fingerprints, SQLite text, prompts, responses, commands, and
+reasoning; future serialized CLI/MCP values still require their own wire privacy gate.
+
+This closes P2-B Task 8 but does not claim pricing, quota/reset inventory, Git output,
+complete UI, automation, M0 acceptance, packaging, signing, or release. P2-C pinned
+pricing and validated overrides are the next product-data slice. After project-truth
+synchronization, the complete baseline gate passed clean-root audit, formatting,
+strict locked workspace Clippy, every locked workspace test/doctest, and diff-check in
+79.326 seconds; P2-B Tasks 1-9 are complete.

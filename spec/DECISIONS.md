@@ -472,7 +472,7 @@ event counts, missing-value algebra, time rows, and session rows in the same can
 event transaction. Other states keep canonical ingestion authoritative, publish no
 partial rollup, and require a rebuild.
 
-Rebuild uses fixed fingerprint-keyset pages of at most 256 events, disk-backed rows in
+Rebuild uses fixed fingerprint-keyset pages of at most 2,048 events, disk-backed rows in
 an inactive aggregate generation, persisted progress, bounded cleanup, and one expected
 dataset generation. Reopen resumes; mutation invalidates unpublished work; final
 publication is one checked active-generation update. Aggregate readers must require
@@ -530,3 +530,21 @@ user settings; silent UTC/rounding gives plausible wrong totals; implicit series
 wastes CLI/MCP latency; and dataset-only session cursors can skip rows after a filter
 change. Private exact composition plus validated immutable values preserves portable,
 responsive UI/CLI/MCP parity without expanding SQL, memory, or privacy authority.
+
+## ADR-030 — Measured 2,048-event aggregate rebuild pages
+
+Decision: retain the persisted fingerprint cursor, one short immediate transaction per
+page, inactive disk-backed aggregate generation, and expected-dataset-generation CAS,
+but raise the aggregate rebuild hard cap from 256 to 2,048 events. A call can derive or
+clean at most nine rollup rows per event (18,432 at the cap), owns no history-sized
+Rust collection, and must meet a separate 500 ms page-p95 gate. Current and immutable-
+legacy million-event rebuilds must sustain at least 5,000 events/s; query and process-
+resource gates remain independent.
+
+Rationale: the deterministic current-million red run at 256 reached only 912,128
+events after 346.44 seconds, approximately 2,850 events/s, despite stable ~14 MiB
+private memory. The 2,048 cap reduced the same rebuild to 75.528 seconds / 13,240
+events/s with 246.558 ms page p95; legacy completed in 81.142 seconds / 12,324 events/s
+with 268.305 ms page p95. It preserves bounded crash/resume semantics while removing
+an avoidable transaction/set-up bottleneck. A larger unmeasured cap is rejected because
+it would increase writer hold time without a demonstrated product benefit.

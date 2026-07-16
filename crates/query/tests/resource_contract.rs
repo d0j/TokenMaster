@@ -2,11 +2,16 @@
 
 use std::{mem::size_of, path::Path};
 
+use rusqlite::{Connection, params};
 use tempfile::TempDir;
 use tokenmaster_query::{
-    LatestActivityRequest, PageSize, QueryClock, QueryError, QueryService, QueryTimeSample,
+    CalendarDate, LatestActivityRequest, PageSize, QueryClock, QueryError, QueryService,
+    QueryTimeSample, UsageAnalyticsRequest, UsageBreakdownKind, UsageRange, UsageSeriesSelection,
+    UsageSessionPageRequest, UsageTimeZone, WeekStart,
 };
-use tokenmaster_store::UsageStore;
+use tokenmaster_store::{AggregateRebuildStatus, UsageStore};
+
+const SOURCE_KEY: [u8; 32] = [7; 32];
 
 #[derive(Clone, Copy, Debug)]
 struct ResourceCounts {
@@ -34,6 +39,83 @@ fn seed_empty_archive(path: &Path) {
         .expect("checkpoint");
 }
 
+fn seed_bounded_current_archive(path: &Path, event_count: i64) {
+    seed_empty_archive(path);
+    let mut connection = Connection::open(path).expect("fixture connection");
+    connection
+        .pragma_update(None, "foreign_keys", "ON")
+        .expect("foreign keys");
+    let transaction = connection.transaction().expect("fixture transaction");
+    transaction
+        .execute(
+            "INSERT INTO usage_source(
+               file_key, provider_id, profile_id, source_id, source_kind,
+               logical_identity, physical_identity, missing
+             ) VALUES (?1, 'codex', 'default', 'resource-private-source', 'active', ?2, ?3, 0)",
+            params![
+                SOURCE_KEY.as_slice(),
+                [2_u8; 32].as_slice(),
+                [3_u8; 32].as_slice()
+            ],
+        )
+        .expect("source");
+    transaction
+        .execute_batch(
+            "INSERT INTO usage_scan_set(
+               scan_set_id, started_at_ms, completed_at_ms, completion_state,
+               expected_scope_count
+             ) VALUES (1, 1, 1000, 'complete', 1);
+             INSERT INTO usage_scan(
+               scan_id, scan_set_id, provider_id, profile_id, started_at_ms,
+               completed_at_ms, completion_state
+             ) VALUES (1, 1, 'codex', 'default', 1, 1000, 'complete');
+             INSERT INTO usage_replay_revision(
+               revision_id, status, canonicalizer_version, fingerprint_version,
+               replay_signature_version, expected_source_count, evidence_epoch,
+               sealed, promoted, scan_set_id
+             ) VALUES (0, 'current', 1, 2, 1, 1, 1, 1, 1, 1);
+             UPDATE usage_archive_state
+             SET archive_generation = 1, current_revision_id = 0,
+                 latest_complete_scan_set_id = 1, incremental_state = 'complete'
+             WHERE singleton_id = 1;",
+        )
+        .expect("publication metadata");
+    transaction
+        .execute(
+            "WITH RECURSIVE series(value) AS (
+               VALUES(1)
+               UNION ALL
+               SELECT value + 1 FROM series WHERE value < ?1
+             )
+             INSERT INTO usage_event(
+               fingerprint, event_id, selected_file_key, selected_generation,
+               selected_source_offset, projection_revision_id, origin_revision_id,
+               retained, provider_id, profile_id, session_id, source_id,
+               timestamp_seconds, timestamp_nanos, model, input_tokens,
+               cached_tokens, output_tokens, reasoning_tokens, total_tokens,
+               fallback_model, long_context, project_alias, activity_read,
+               activity_edit_write, activity_search, activity_git,
+               activity_build_test, activity_web, activity_subagents,
+               activity_terminal
+             )
+             SELECT unhex(printf('%064x', value)), 'event-' || value, ?2, 0, value,
+                    0, 0, 0, 'codex', 'default', 'private-session-' || value,
+                    'resource-private-source', value, 0,
+                    CASE value % 2 WHEN 0 THEN 'gpt-a' ELSE 'gpt-b' END,
+                    value, NULL, 1, NULL, value + 1, 0, 'no', 'tokenmaster',
+                    1, 0, 0, 0, 0, 0, 0, 0
+             FROM series",
+            params![event_count, SOURCE_KEY.as_slice()],
+        )
+        .expect("bulk events");
+    transaction.commit().expect("commit fixture");
+    drop(connection);
+    let connection = Connection::open(path).expect("checkpoint connection");
+    connection
+        .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
+        .expect("checkpoint");
+}
+
 fn open_query_drop(path: &Path) {
     let mut service = QueryService::open(path, FixedClock).expect("open query service");
     let snapshot = service
@@ -42,6 +124,52 @@ fn open_query_drop(path: &Path) {
         ))
         .expect("query empty archive");
     assert!(snapshot.payload().items().is_empty());
+}
+
+fn exercise_bounded_snapshots(path: &Path) {
+    let mut service = QueryService::open(path, FixedClock).expect("open query service");
+    let analytics = UsageAnalyticsRequest::new(
+        UsageRange::custom(
+            CalendarDate::new(1970, 1, 1).expect("range start"),
+            CalendarDate::new(1971, 2, 5).expect("range end"),
+        )
+        .expect("400-day range"),
+        UsageTimeZone::iana("UTC").expect("UTC"),
+        WeekStart::Monday,
+        UsageSeriesSelection::Daily,
+        Vec::new(),
+        vec![
+            UsageBreakdownKind::Model,
+            UsageBreakdownKind::Project,
+            UsageBreakdownKind::Provider,
+            UsageBreakdownKind::Profile,
+        ],
+    )
+    .expect("analytics request");
+    let snapshot = service
+        .usage_analytics(analytics)
+        .expect("bounded analytics snapshot");
+    assert_eq!(snapshot.payload().series().len(), 400);
+    assert_eq!(snapshot.payload().breakdowns().len(), 4);
+
+    let page = service
+        .usage_sessions(
+            UsageSessionPageRequest::first(PageSize::new(16).expect("page"), Vec::new())
+                .expect("session request"),
+        )
+        .expect("first session page");
+    assert_eq!(page.payload().sessions().len(), 16);
+    assert!(page.payload().has_more());
+    let continuation = UsageSessionPageRequest::continuation(
+        PageSize::new(16).expect("page"),
+        page.payload().next_cursor().expect("continuation").clone(),
+        Vec::new(),
+    )
+    .expect("continuation request");
+    let next = service
+        .usage_sessions(continuation)
+        .expect("continuation page");
+    assert_eq!(next.payload().sessions().len(), 16);
 }
 
 fn resource_counts() -> ResourceCounts {
@@ -140,5 +268,87 @@ fn repeated_open_query_drop_returns_resources_to_a_stable_plateau() {
     assert!(
         after.private_bytes <= before.private_bytes.saturating_add(1_048_576),
         "query private bytes grew over 1 MiB: before={before:?}, after={after:?}"
+    );
+}
+
+#[test]
+fn repeated_aggregate_session_and_resumable_rebuild_cycles_stay_on_a_resource_plateau() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("aggregate-resource.sqlite3");
+    seed_bounded_current_archive(&path, 512);
+
+    for _ in 0..4 {
+        exercise_bounded_snapshots(&path);
+    }
+    let _measurement_warmup = resource_counts();
+    let before_queries = resource_counts();
+    for _ in 0..16 {
+        exercise_bounded_snapshots(&path);
+    }
+    let after_queries = resource_counts();
+
+    assert!(
+        after_queries.handles <= before_queries.handles.saturating_add(1),
+        "aggregate query handles grew: before={before_queries:?}, after={after_queries:?}"
+    );
+    assert!(
+        after_queries.threads <= before_queries.threads,
+        "aggregate query threads grew: before={before_queries:?}, after={after_queries:?}"
+    );
+    assert!(
+        after_queries.user_objects <= before_queries.user_objects
+            && after_queries.gdi_objects <= before_queries.gdi_objects,
+        "aggregate query GUI objects grew: before={before_queries:?}, after={after_queries:?}"
+    );
+    assert!(
+        after_queries.private_bytes <= before_queries.private_bytes.saturating_add(2_097_152),
+        "aggregate query private bytes grew over 2 MiB: before={before_queries:?}, after={after_queries:?}"
+    );
+
+    let connection = Connection::open(&path).expect("rebuild fixture connection");
+    connection
+        .execute(
+            "UPDATE usage_aggregate_state
+             SET state = 'rebuild_required', rebuild_aggregate_generation = NULL,
+                 rebuild_dataset_kind = NULL, rebuild_cursor_fingerprint = NULL,
+                 rebuild_processed_events = 0,
+                 rebuild_total_events = current_event_count + legacy_event_count
+             WHERE singleton_id = 1",
+            [],
+        )
+        .expect("require rebuild");
+    drop(connection);
+
+    let before_rebuild = resource_counts();
+    let mut status = AggregateRebuildStatus::Rebuilding;
+    for _ in 0..64 {
+        let mut store = UsageStore::open(&path).expect("resume rebuild");
+        status = store
+            .rebuild_aggregates_page(256)
+            .expect("one cooperative rebuild page")
+            .status();
+        drop(store);
+        if status == AggregateRebuildStatus::Ready {
+            break;
+        }
+    }
+    assert_eq!(status, AggregateRebuildStatus::Ready);
+    let after_rebuild = resource_counts();
+    assert!(
+        after_rebuild.handles <= before_rebuild.handles.saturating_add(1),
+        "resumable rebuild handles grew: before={before_rebuild:?}, after={after_rebuild:?}"
+    );
+    assert!(
+        after_rebuild.threads <= before_rebuild.threads,
+        "resumable rebuild threads grew: before={before_rebuild:?}, after={after_rebuild:?}"
+    );
+    assert!(
+        after_rebuild.user_objects <= before_rebuild.user_objects
+            && after_rebuild.gdi_objects <= before_rebuild.gdi_objects,
+        "resumable rebuild GUI objects grew: before={before_rebuild:?}, after={after_rebuild:?}"
+    );
+    assert!(
+        after_rebuild.private_bytes <= before_rebuild.private_bytes.saturating_add(2_097_152),
+        "resumable rebuild private bytes grew over 2 MiB: before={before_rebuild:?}, after={after_rebuild:?}"
     );
 }

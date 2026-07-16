@@ -124,7 +124,7 @@ All notable changes are recorded here.
 - Added exact schema-v8 migration with provider-self-contained current events,
   generation-qualified UTC minute/hour and session rollups, transactional known/
   partial/unavailable token algebra, and fail-closed invariant triggers.
-- Added bounded resumable aggregate rebuilding with 256-event keyset pages, disk-backed
+- Added bounded resumable aggregate rebuilding with measured 2,048-event keyset pages, disk-backed
   unpublished generations, bounded cleanup, reopen resume, mutation restart, fault
   rollback, and one checked active-generation publication.
 - Added measured release append gates for 1/32/256-event paths and corrected storage
@@ -154,9 +154,20 @@ All notable changes are recorded here.
   opaque session page/detail results. Session continuation now binds both dataset and
   canonical scopes, and failed/rebuild/stale captures do not consume snapshot
   generation.
+- Added explicit P2-B current/legacy million-event release-mode gates for rebuild
+  throughput/page latency, cold/cached overview, full 400-point/four-breakdown/
+  32-scope analytics, session pages, main+WAL+SHM amplification, privacy, and repeated
+  snapshot/rebuild resource plateaus. The measured results are 12,324-13,240 events/s,
+  246.558-268.305 ms rebuild-page p95, 1.483x-1.568x storage amplification, below
+  179 ms cold overview, below 0.55 ms cached overview p95, below 166 ms full analytics,
+  and below 0.75 ms session-page p95.
 
 ### Fixed
 
+- Replaced the overly conservative 256-event aggregate rebuild cap after its
+  deterministic current-million red run retained only about 2,850 events/s. The
+  2,048-event cap keeps the persisted cursor/generation/crash boundary, caps derived
+  work at 18,432 rows, and passes the independent 500 ms page-p95/resource gates.
 - Bound current replay cursors to revision ID plus the dedicated schema-v7 dataset
   generation. Insert/update/delete advance it transactionally; real no-change scan
   publication may advance replay evidence but keeps dataset identity stable. Exact v6

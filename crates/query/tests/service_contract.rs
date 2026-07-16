@@ -289,6 +289,10 @@ fn activity_mapping_paging_and_failed_generation_are_exact() {
         "private-response",
         "private-command",
         "private-reasoning",
+        "usage_time_rollup",
+        "usage_session_rollup",
+        "SELECT ",
+        "select ",
     ] {
         assert!(
             !debug.contains(private),
@@ -536,10 +540,15 @@ fn session_page_detail_cursor_and_stale_dataset_are_opaque_and_exact() {
     assert_eq!(cursor.dataset_identity(), first.header().dataset_identity());
     let debug = format!("{first:?} {key:?} {cursor:?}");
     for private in [
+        path.to_string_lossy().as_ref(),
         "private-session-a",
         "private-session-b",
         "private-session-c",
         "fixture-source-private",
+        "usage_time_rollup",
+        "usage_session_rollup",
+        "SELECT ",
+        "select ",
     ] {
         assert!(!debug.contains(private), "session Debug exposed {private}");
     }

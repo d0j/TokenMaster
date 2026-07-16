@@ -66,8 +66,10 @@ Schema-v8 aggregate rows are store-owned derived data. SQLite triggers are the f
 mutation boundary: published current rollups, event counts, and dataset generation
 must change in the same transaction, and missing expected published rows fail the
 source mutation closed. Rebuilds retain no history-sized Rust map or long-lived read
-transaction, process fixed keyset pages under writer authority, and publish only after
-the expected generation and exact total still match. UI, CLI, MCP, plugins, and LLM
+transaction, process fixed keyset pages capped at 2,048 events under writer authority,
+and publish only after the expected generation and exact total still match. The cap
+expands to at most 18,432 cleanup/derived rows per call and remains subject to the
+rebuild-page latency and process-resource gates. UI, CLI, MCP, plugins, and LLM
 connectors receive neither aggregate write authority nor arbitrary SQL. They cannot
 force a raw-history fallback while aggregates are unavailable.
 
@@ -84,6 +86,13 @@ dataset-bound store value; no public getter, Debug output, error, or frontend wi
 projection may reveal it. Page scopes are typed and capped, continuation is keyset-only,
 detail returns fixed model/project dimensions, and a missing exact key cannot trigger a
 raw-history fallback.
+
+The P2-B scale/privacy gate uses deterministic current and immutable-legacy fixtures,
+scans public analytics/session Debug and stable errors for archive paths, source IDs,
+fingerprints, SQLite text, prompts, responses, commands, and reasoning, and repeats
+400-point/four-breakdown snapshot replacement plus cooperative rebuild resume. This
+evidence is required in addition to type opacity; absence of a current serialization
+surface is not treated as proof for future CLI/MCP wire values.
 
 Calendar requests accept only a bounded validated IANA name or the system zone when it
 resolves to an IANA identity. They accept no timezone file, POSIX rule, URL, path, or

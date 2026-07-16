@@ -179,6 +179,12 @@ transaction. Continuation requires its dataset identity. Current and immutable l
 pages use composite keyset seek and at most one lookahead row; progress interruption is
 cleared before the connection can serve another query.
 
+`UsageStore::rebuild_aggregates_page` accepts from 1 through 2,048 canonical events.
+The upper bound is a measured SQL work cap, not an allocation allowance: the method
+retains only persisted cursor/progress state, writes generation-qualified staging rows,
+and derives or cleans at most 18,432 rollup rows in one transaction. Zero or a value
+above the exported hard cap fails before writes.
+
 Aggregate requests use only fixed generation-qualified rollup queries. A state other
 than `ready`, a generation mismatch, a stale dataset identity, or a bound/deadline
 failure returns a stable unavailable/error code; it never triggers a raw-event

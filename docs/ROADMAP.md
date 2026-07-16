@@ -141,7 +141,9 @@ transactional materialized rollups, availability counts, and bounded resumable r
 are now implemented. Fixed overview/series/breakdown and opaque keyset session
 page/detail reads are implemented. Calendar/timezone composition, immutable public
 values, scope-bound opaque session mapping, and exact facade capture are implemented.
-Million-row cached-dashboard/storage/privacy/resource evidence remains.
+Deterministic current/legacy million-event cached-dashboard, rebuild, storage,
+privacy, and repeated-resource evidence passes; P2-B is complete. P2-C release-pinned
+pricing and validated overrides are next.
 No frontend/database coupling or view-time full event grouping is accepted.
 
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset

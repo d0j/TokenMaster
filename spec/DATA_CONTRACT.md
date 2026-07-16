@@ -243,8 +243,9 @@ never become zero. Current and immutable legacy datasets remain distinct.
 
 Non-empty migration publishes no partial aggregate. A rebuild is bound to one expected
 dataset generation, uses a persisted fingerprint keyset cursor, and processes at most
-256 events per call into disk-backed unpublished rows. Cleanup is also paged at no
-more than nine rollup rows per requested event. Reopen resumes exact state; a canonical
+2,048 events per call into disk-backed unpublished rows. Cleanup is also paged at no
+more than nine rollup rows per requested event, or 18,432 rows at the hard cap. Reopen
+resumes exact state; a canonical
 mutation invalidates only staging and requires restart. Publication is one active-
 generation update after exact processed/total and dataset-generation checks. Aggregate
 reads require `ready`; no other state may fall back to a whole-history query.

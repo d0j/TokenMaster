@@ -1,7 +1,7 @@
 # TokenMaster Critical Audit and Approved Master Plan
 
-Status: architecture and release plan approved after closure review; P0 through P1 are
-implemented; P2 is next.
+Status: architecture and release plan approved after closure review; P0 through P1,
+P2-A, and P2-B are implemented; P2-C pinned pricing is next.
 Date: 2026-07-16.
 
 ## 1. Executive decision
@@ -239,16 +239,19 @@ partitioned series, independently capped breakdown reads, and opaque mixed-order
 keyset session page/detail reads also pass in exact snapshots. Private exact IANA/DST
 calendar composition and immutable analytics/session facade values now pass as well,
 including optional daily series, explicit token availability, and scope-bound opaque
-session continuation. The active critical path is million-row/storage/privacy/resource
-evidence. View-time full scans and period-labeled whole-session totals remain forbidden.
+session continuation. Deterministic current/legacy million-event latency, rebuild,
+storage amplification, privacy, and repeated resource evidence now pass. P2-C pinned
+pricing is the active critical path. View-time full scans and period-labeled
+whole-session totals remain forbidden.
 P2-A now implements the bounded public values, separate defensive read-only/query-only
 schema-v8 store, synchronous `QueryService`, and one-result consumer ordering. Current/
 legacy activity, exact publication and scan truth, stale accounting downgrade, stale
 identity, indexed lookahead, deadline cleanup, concurrent-commit isolation, 100K
 latency, Debug/privacy, 10,000-candidate retention, and 256-cycle Windows resource
 contracts pass. No frontend owns SQLite. P2-B transactional storage, rebuild,
-overview, series, breakdown, session store reads, calendar composition, and immutable
-aggregate/session facade values are now implemented; Task 8 evidence is the next gate.
+overview, series, breakdown, session store reads, calendar composition, immutable
+aggregate/session facade values, and Task 8 scale/resource evidence are implemented;
+P2-C pinned pricing is the next gate.
 The older replay plan remains historical evidence for
 completed Tasks 1-2, but its Codex-owned Tasks 3+ are superseded and must not be
 executed.

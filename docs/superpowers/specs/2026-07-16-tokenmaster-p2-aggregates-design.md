@@ -141,9 +141,10 @@ remembering a second call site.
 
 Migration does not impose an unbounded startup group-by. Non-empty archives enter
 `rebuild_required`. Rebuild uses the already-held single-writer authority, a persisted
-keyset cursor, fixed pages capped at 256 events, disk-backed generation-qualified
+keyset cursor, fixed pages capped at 2,048 events, disk-backed generation-qualified
 staging rows, and an expected `dataset_generation`. Each page transaction checks that
-generation. Initial cleanup removes at most nine rollup rows per requested event page;
+generation. Initial cleanup removes at most nine rollup rows per requested event page,
+or 18,432 rows at the hard cap;
 no call performs history-sized cleanup or allocates a history-sized Rust collection.
 Final publication changes the active aggregate generation in one singleton update,
 records exact counts, and moves to `ready` only if the dataset generation still
@@ -238,12 +239,14 @@ frontend receives it.
   matching baseline;
 - a cached one-million-event overview is p95 below 250 ms and cold below one second on
   the reference machine;
-- 400-point daily series, four capped breakdowns, session first/cursor pages, DST
-  edges, and worst allowed scope filters receive explicit budgets;
+- 400-point daily series plus four capped breakdowns and all 32 scopes complete below
+  one second, while session first/cursor page p95 remains below 100 ms;
+- current and immutable-legacy rebuild throughput remains at least 5,000 events/s and
+  rebuild-page p95 below 500 ms;
 - repeated query/snapshot replacement and rebuild cancellation/restart have stable
   private-memory, handle, thread, USER, and GDI plateaus;
-- database size amplification includes the main SQLite file, WAL, and SHM and is
-  measured and documented before P2-B acceptance.
+- database size amplification includes the main SQLite file, WAL, and SHM, is measured
+  and documented, and remains at or below 3.0x before P2-B acceptance.
 
 ## Fault and integrity matrix
 

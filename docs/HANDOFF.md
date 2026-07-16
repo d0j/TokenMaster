@@ -87,10 +87,15 @@ explicit/resolved IANA zones, configurable week starts, exact DST/skipped-date
 boundaries, known/partial/unavailable metrics, optional 400-point daily series, four
 breakdowns, and owned session page/detail mappings pass. Public session cursors bind
 dataset plus canonical scopes so a filter change cannot skip keyset rows. Jiff 0.2.32
-is private; the locked Windows chain bundles tzdb 2026c. The immediate next task is
-Task 8 million-row latency, database amplification, privacy, and repeated resource
-evidence. Do not replace it with view-time full scans or period-labeled whole-session
-totals.
+is private; the locked Windows chain bundles tzdb 2026c. P2-B Task 8 now passes on
+deterministic current/legacy million-event fixtures: rebuild 13,240/12,324 events/s,
+page p95 246.558/268.305 ms, amplification 1.483x/1.568x, cold overview below 179 ms,
+cached overview p95 below 0.55 ms, full 400-point/four-breakdown/32-scope analytics
+below 166 ms, session page p95 below 0.75 ms, and repeated Windows resource plateaus.
+The measured rebuild cap is 2,048 events; the former 256-event cap failed throughput.
+The immediate next product-data slice is P2-C release-pinned pricing and validated
+overrides. Do not replace aggregates with view-time full scans or relabel whole-session
+totals as period totals.
 The 2026-07-16 closure review also freezes the remaining plan ambiguities: P3 is the
 complete UI, P4 presentation/localization, P5 read-only automation, and P6 the
 canonical MSVC signed portable release. It selects the Slint attribution route,

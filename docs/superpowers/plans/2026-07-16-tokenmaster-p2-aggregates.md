@@ -1,6 +1,6 @@
 # TokenMaster P2-B Transactional Aggregates Implementation Plan
 
-Status: approved; implementation in progress from 2026-07-16.
+Status: complete and fully verified on 2026-07-16.
 
 Design authority:
 `docs/superpowers/specs/2026-07-16-tokenmaster-p2-aggregates-design.md`.
@@ -70,6 +70,11 @@ Status: complete and focused-store verified on 2026-07-16.
 - Build legacy-only facts without upgrading legacy quality.
 - Inject faults at every state/page/swap boundary.
 
+The original 256-event cap retained only about 2,850 events/s in the deterministic
+current-million red run (912,128 events after 346.44 seconds wall). The audited hard
+cap is now 2,048: it retains the same cursor/generation/crash boundary and at most
+18,432 derived rows per call while the scale gate separately caps page p95 at 500 ms.
+
 Stop if rebuild needs a long-lived read transaction, retains a history-sized Rust map,
 blocks startup on a full group-by, or can publish across a generation change.
 
@@ -128,6 +133,8 @@ session pages, and exact detail now share the P2-A envelope/facade.
 
 ## Task 8 — Performance, storage, privacy, and resource evidence
 
+Status: complete and reference-machine verified on 2026-07-16.
+
 - Generate deterministic one-million-event current and legacy fixtures.
 - Measure cold/cached overview, 400-point series, four breakdowns, session pages,
   append overhead, rebuild throughput/resume, and database amplification.
@@ -141,7 +148,20 @@ Acceptance: cached overview p95 <250 ms, cold <1 s, one-event append p95 <25 ms,
 more than 1.5 times its matching baseline, every collection bounded, no raw-table
 aggregate plan, and no retained resource growth.
 
+Release-mode current/legacy million-event results: rebuild 75.528/81.142 s at
+13,240/12,324 events/s, 490 resumable calls, page p95 246.558/268.305 ms, database
+amplification 1.483x/1.568x including main/WAL/SHM, cold overview 174.318/178.241 ms,
+cached overview p95 0.543/0.365 ms, full 400-point/four-breakdown p95
+151.043/141.192 ms, maximum-32-scope full analytics 165.120/139.040 ms, and session
+first/cursor p95 below 0.75 ms. Repeated 400-point snapshot/session replacement and
+cooperative rebuild reopen cycles retain handle/thread/USER/GDI plateaus and stay
+within a 2 MiB private-memory delta after warm-up. Existing public Debug/error privacy
+fixtures cover paths, source/session identities, fingerprints, SQLite text, prompts,
+responses, commands, and reasoning; there is no serialized P2-B wire surface yet.
+
 ## Task 9 — Synchronize project truth and run the complete gate
+
+Status: complete and fully verified on 2026-07-16.
 
 Update specification, API/data/security contracts, decisions, traceability, feature
 parity, current state, roadmap, audit/master plan, handoff, changelog, and project

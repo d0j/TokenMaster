@@ -40,7 +40,8 @@ ordinal zero after prior emissions would create false identity collisions.
 Current canonical events carry provider identity directly. When aggregate publication
 is ready, SQLite triggers update dataset generation, event counts, UTC minute/hour
 facts, and session facts in the same event transaction. Non-empty migration and repair
-use persisted 256-event keyset pages and disk-backed unpublished generations; readers
+use persisted keyset pages capped at 2,048 events and disk-backed unpublished
+generations; readers
 never group the whole event archive as fallback.
 
 Read-only analytics bind publication, dataset identity, active aggregate generation,

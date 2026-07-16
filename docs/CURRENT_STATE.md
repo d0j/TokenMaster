@@ -232,7 +232,7 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   paths converge on transactional invariant triggers; overflow, missing state, or a
   missing expected published rollup aborts event, dataset generation, counts, and
   rollups together. Non-empty archives rebuild through persisted keyset pages capped at
-  256 events, bounded disk-backed cleanup/staging, reopen resume, generation-mismatch
+  2,048 events, bounded disk-backed cleanup/staging, reopen resume, generation-mismatch
   restart, and one checked active-generation publication. Focused store tests pass.
   Reference-machine release p95 is 1.814 ms for one event, 19.888 ms for 32, and
   230.620 ms for 256, each within its corrected absolute and relative baseline gate.
@@ -271,6 +271,18 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   A visible `aggregate_rebuilding` warning belongs to the future joined P2-F status
   snapshot; analytics itself returns stable `unavailable` because no truthful payload
   exists during rebuild.
+- P2-B scale/privacy/resource closure: deterministic release-mode current and
+  immutable-legacy one-million-event fixtures rebuild in 75.528/81.142 seconds at
+  13,240/12,324 events/s. Rebuild-page p95 is 246.558/268.305 ms; main+WAL+SHM
+  amplification is 1.483x/1.568x. Cold overview is 174.318/178.241 ms, cached p95 is
+  0.543/0.365 ms, full 400-point/four-breakdown p95 is 151.043/141.192 ms, all-32-scope
+  full analytics is 165.120/139.040 ms, and session first/cursor p95 remains below
+  0.75 ms. Repeated snapshot/session replacement and cooperative rebuild reopen cycles
+  retain private-memory/handle/thread/USER/GDI plateaus. The prior 256-event rebuild
+  cap failed throughput and was replaced by the measured 2,048-event bounded cap.
+  The post-synchronization baseline gate passed clean-root audit, formatting, strict
+  locked workspace Clippy, every locked workspace test/doctest, and diff-check in
+  79.326 seconds.
 
 ## Next implementation slice
 
@@ -352,11 +364,11 @@ The audited cursor correction is complete: replay evidence can advance on a no-c
 scan, so it is no longer dataset identity. Schema v7 adds a dedicated transactional
 dataset generation with exact v6 migration/rollback, overflow, real no-change scan,
 and current append proofs. P2-B Tasks 2-4 now add schema-v8 provider identity,
-transactional materialization, and bounded resumable publication. Task 6 is complete:
+transactional materialization, and bounded resumable publication. Tasks 6-8 are complete:
 fixed overview/series, independently capped breakdowns, opaque keyset session
 page/detail reads, private calendar/timezone composition, and immutable public facade
-values are green. Million-row/storage/privacy/resource evidence is next. No view-time
-grouping of the full event table is allowed.
+values and million-row/storage/privacy/resource evidence are green. P2-C pinned
+pricing is next. No view-time grouping of the full event table is allowed.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 

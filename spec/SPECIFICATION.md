@@ -166,6 +166,14 @@ On the reference machine, aggregate-ready append p95 MUST remain below 25 ms for
 normal one-event path, 50 ms for 32-event catch-up, and 250 ms for the maximum
 256-event catch-up, and MUST NOT exceed 1.5 times the matching aggregate-unavailable
 baseline.
+One-million-event current and immutable-legacy fixtures MUST also meet the following
+reference-machine gates: rebuild throughput at least 5,000 events/s, rebuild-page p95
+below 500 ms, cold open plus overview below one second, cached overview p95 below
+250 ms, a 400-point/four-breakdown analytics snapshot with all 32 scopes below one
+second, and first/cursor session-page p95 below 100 ms. SQLite footprint measurement
+MUST include the main file, WAL, and SHM and MUST remain at or below 3.0 times the
+matching pre-aggregate fixture. These developer gates do not replace package-bound
+release performance or soak receipts.
 
 ## Release requirements
 

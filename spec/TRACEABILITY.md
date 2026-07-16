@@ -19,7 +19,7 @@ A design or plan is not implementation evidence.
 | TM-UI-002 | partial | `crates/probe-app`, immutable runtime publication, and P2-A query snapshots | strictly newer consumer predicate, exact archive identity/data-through, equal/older rejection, no-change cursor continuity, and one-retained-envelope contract pass; product presentation snapshots pending |
 | TM-PERF-001 | partial | bounded parser/reader/store/engine plus live runtime and query facade | unchanged payload bytes=0; exact tail; 300-event batches; 10,000-hint aggregate/one follow-up; one retained result across 10,000 candidates; watcher/live/power baselines and 256-cycle query resource plateau pass; UI/plugin evidence pending |
 | TM-PERF-002 | open evidence | software renderer and M0 resource gates | uninterrupted soak and interactive receipts remain absent |
-| TM-PERF-003 | partial | immutable engine publication, P2-A activity query, and P2-B transactional aggregates plus immutable facade | prior evidence plus measured 1/32/256 append p95 of 1.814/19.888/230.620 ms; exact IANA/DST calendar overview/400-point-series/four-breakdown and scope-bound opaque session page/detail facade contracts pass; million-row dashboard/resource evidence and P3 UI remain |
+| TM-PERF-003 | partial | immutable engine publication, P2-A activity query, and P2-B transactional aggregates plus immutable facade | prior evidence plus measured 1/32/256 append p95 of 1.814/19.888/230.620 ms; current/legacy million-event rebuilds sustain 13,240/12,324 events/s with 246.558/268.305 ms page p95, cached overview p95 stays below 0.6 ms, full 400-point/four-breakdown/32-scope reads stay below 166 ms, session pages below 0.75 ms, amplification below 1.57x, and repeated resource plateaus pass; P3 UI remains |
 | TM-REL-001 | partial | M0 scripts and receipt schemas | identity checks exist; final product packaging evidence pending |
 | TM-REL-002 | open evidence | `M0_ACCEPTANCE.md` | interactive Windows/DPI/accessibility and uninterrupted soak receipts absent |
 | TM-REL-003 | planned | P6 explicit MSVC signed portable package and supply-chain gates | GNU/MSVC comparison, notices/SBOM, advisory/source/license/secret/action/attestation audits, deterministic package and clean-room launch pending |
@@ -84,7 +84,8 @@ duplicate/shutdown behavior, and 4,096-cycle private-memory/handle/thread/USER/G
 resource bounds. P1 and P2-A are implemented. P2-B provider identity, aggregate
 schema/triggers, bounded rebuild, overview/series/breakdown reads, and opaque keyset
 session page/detail reads, exact private calendar composition, immutable aggregate
-values, and facade mapping are implemented; million-row/resource evidence remains.
+values, facade mapping, and million-row/storage/privacy/resource evidence are
+implemented. P2-C pinned pricing is next; P3 UI evidence remains separate.
 M0 interactive/
 soak evidence remains.
 Tasks 3+ in the older replay plan are historical and superseded.

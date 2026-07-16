@@ -26,7 +26,14 @@ The 1.0 package audit requires:
   bundled IANA tzdb crate/version and IANA release (currently locked to Jiff 0.2.32,
   `jiff-tzdb-platform` 0.1.3, `jiff-tzdb` 0.1.8, and tzdb 2026c);
 - clean-room launch, Windows interactive matrix, performance reference run, and
-  uninterrupted release-candidate soak.
+uninterrupted release-candidate soak.
+
+The current P2-B developer reference gate covers deterministic current and immutable-
+legacy million-event fixtures, rebuild throughput and page p95, cold/cached/full
+analytics, 32-scope and session-page latency, main+WAL+SHM amplification, privacy, and
+resource plateaus. Its measurements are architecture evidence only. P6 must rerun the
+same budgets against the exact clean MSVC release candidate and record machine,
+commit, executable, and package identity; GNU developer numbers do not transfer.
 
 An automatic updater or installer is outside 1.0. Adding either requires a separately
 approved signed-manifest, staged replacement, rollback, downgrade, and interrupted-
