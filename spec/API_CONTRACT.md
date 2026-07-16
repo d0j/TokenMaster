@@ -405,13 +405,31 @@ CLI and MCP use the same fields and stable transition sequence so automation can
 idempotently. Unavailable provider capacity remains `null`/unavailable, not zero or an
 estimate derived from local token usage.
 
-Benefit inventory snapshots expose bounded typed lots separately from quota windows:
-benefit kind, quantity, target window, expiration value and precision, state, source,
-freshness, confidence, activation capability, active bounded reminder profile and its
-revision, reminder coverage, and nearest due time.
-Bounded transition and activation-receipt pages use stable sequences. An identical
-schema serves UI, CLI, and MCP reads; manual facts are explicitly marked and never
-become official evidence.
+`QueryService::benefit_inventory` returns one owned
+`BenefitEnvelope<BenefitCurrentSnapshot>` for an exact provider/account/workspace
+scope. It uses the independent benefit publication revision, allocates public
+snapshot generation only after capture and mapping succeed, and exposes explicit
+absent/fresh/aging/stale, complete/quantity-partial/partial, and unknown-expiry/
+unknown-evidence facts. Present inventory contains at most 64 typed lots in
+conservative FEFO order: known conservative expiry, unknown expiry, kind, then opaque
+lot ID. The payload also exposes the nearest conservative available-lot expiry, the
+nearest durable due time, and the active profile revision, normalized lead times,
+configured channels, inherited/override source, and truthful `in_app_only` or
+disabled delivery coverage.
+
+`QueryService::benefit_changes` returns newest-first immutable change points in an
+owned `BenefitEnvelope<BenefitChangePage>`. A page uses 256+1 lookahead and returns at
+most 256 rows. Its opaque continuation binds the exact scope and global benefit
+revision; a change in either fails closed without consuming snapshot generation.
+Before/after material values retain their actual material revisions, including
+terminal retirement and later reappearance. Current/history reads share one short
+deferred transaction, never scan usage-event or rollup tables, reject redundant
+projection drift after reader open, clear deadline handlers on every outcome, and
+redact scope/lot/change identities from `Debug`.
+
+Future activation-receipt pages use stable sequences. The same immutable schema will
+serve UI, CLI, and MCP reads; manual facts remain explicitly marked and never become
+official evidence.
 
 The 1.0 CLI/MCP boundary is read-only for benefit inventory and pure policy evaluation.
 Future activation is a separate host-owned mutation capability, not arbitrary HTTP or

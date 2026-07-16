@@ -33,6 +33,9 @@ pub use benefit_types::{
     MAX_BENEFIT_DELIVERIES_PER_SCOPE, MAX_BENEFIT_MAINTENANCE_PAGE_SIZE,
 };
 pub use query::{
+    BenefitChangeCursor, BenefitChangePageCapture, BenefitChangePageQuery, BenefitChangeRecord,
+    BenefitCurrentCapture, BenefitCurrentQuery, BenefitDueSnapshot, BenefitReminderProfileSnapshot,
+    BenefitScopeSnapshot, MAX_BENEFIT_CHANGE_PAGE_SIZE, MAX_BENEFIT_CURRENT_LOTS,
     MAX_QUOTA_CURRENT_WINDOWS, MAX_QUOTA_TRANSITION_PAGE_SIZE, MAX_USAGE_BREAKDOWN_ITEMS,
     MAX_USAGE_BREAKDOWNS, MAX_USAGE_OVERVIEW_SEGMENTS, MAX_USAGE_PRICE_BASIS_KEYS,
     MAX_USAGE_PRICE_BASIS_TARGETS, MAX_USAGE_QUERY_SCOPES, MAX_USAGE_SERIES_POINTS,

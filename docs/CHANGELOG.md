@@ -6,6 +6,17 @@ All notable changes are recorded here.
 
 ### Added
 
+- Immutable benefit query envelopes with independent benefit revision, one-transaction
+  current/history capture, 64-lot conservative FEFO order, explicit absent/fresh/
+  aging/stale and complete/quantity-partial/partial/unknown facts, inherited/override
+  profile metadata, nearest conservative expiry/durable due, truthful `in_app_only`
+  coverage, redacted scope/revision-bound 256+1 history continuation, and failed-call
+  snapshot-generation neutrality.
+- Benefit query acceptance at 64 current lots and 2,048 immutable changes: restart,
+  concurrent snapshot isolation, deadline-handler cleanup, live redundant-projection
+  corruption rejection, source-level no-usage-scan guard, 0.842 ms current read,
+  4.904 ms maximum 256-row page, and 32 open/query/drop cycles returning at 116
+  handles, five threads, USER=2, GDI=0, and 4,517,888 private bytes.
 - Strict SQLite schema v11 benefit foundation with independent publication revision,
   exact rollback-safe v10 migration, provider/account/workspace scopes, immutable
   material lot revisions and change points, current projection, inherited/override

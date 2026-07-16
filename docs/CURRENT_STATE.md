@@ -585,11 +585,17 @@ storage, transactional history writes, bounded retention, defensive reads, immut
 public quota query, adversarial/scale/resource gates, and offline authority audit are
 complete. The built-in Codex quota normalizer, bounded official app-server transport,
 exact-native executable discovery, and dedicated refresh/store-publication worker are
-complete for the pinned version. The benefit foundation Tasks 1-4 are also complete:
+complete for the pinned version. The benefit foundation Tasks 1-5 are also complete:
 strict provider-neutral values, pure reconciliation/reminder planning, privacy-safe
 Codex reset-credit normalization, and schema-v11 transactional inventory/history/
-profile/due storage with bounded maintenance and rollback. Immutable benefit query
-snapshots are the next separate contour; reminder delivery/runtime and UI remain later.
+profile/due storage with bounded maintenance and rollback, plus immutable current and
+history snapshots with FEFO order, explicit absence/freshness/completeness/unknown
+facts, inherited/override profiles, nearest expiry/due, revision-bound 256-row
+continuation, corruption rejection, and failed-call generation neutrality. The
+64-lot/2,048-change gate measured 0.842 ms for current and 4.904 ms for the slowest
+256-row page; repeated open/query/drop returned with five threads, 116 handles,
+USER=2, GDI=0, and 4,517,888 private bytes. Reminder delivery/runtime and UI remain
+later.
 No view-time grouping of the full event table is allowed.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.

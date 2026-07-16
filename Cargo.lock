@@ -5336,6 +5336,7 @@ dependencies = [
  "rusqlite",
  "tempfile",
  "thiserror 2.0.18",
+ "tokenmaster-benefits",
  "tokenmaster-domain",
  "tokenmaster-pricing",
  "tokenmaster-quota",

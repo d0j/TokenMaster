@@ -786,3 +786,27 @@ hazards. A pure core plus strict bounded storage preserves restart truth, dedupl
 future reminders, constant memory, and provider-neutral extension points. Inventory
 read and in-app reminder planning do not grant activation, browser, credential,
 network, shell, arbitrary SQL, or plugin mutation authority.
+
+## ADR-040 — Immutable benefit snapshots use one revision-bound read model
+
+Decision: `UsageReadStore` owns separate schema-v11 current and change-page captures
+for benefit inventory. Each capture starts by reading the independent global benefit
+revision in one deferred transaction. Current rows are restored from immutable
+material revisions, checked against every redundant projection column, and ordered by
+known conservative expiry, unknown expiry, explicit kind rank, and opaque lot ID.
+History is descending keyset pagination with 256+1 lookahead; its opaque cursor binds
+the exact scope hash and global benefit revision.
+
+`tokenmaster-query` maps those captures into owned benefit envelopes with a separate
+header schema, checked process-local snapshot generation, explicit absent/freshness/
+completeness/unknown warnings, nearest expiry/due facts, and inherited/override
+profile metadata. Delivery coverage is `in_app_only` only when the configured profile
+includes the currently implemented in-app channel; configured OS scheduling is
+reported unavailable rather than implied. Generation advances only after store
+capture and public mapping succeed.
+
+Rationale: grouping benefits in UI code, reusing usage dataset identity, or permitting
+unbound history cursors would make restart, partial inventory, and concurrent updates
+ambiguous. A narrow benefit-owned read model keeps queries bounded and immutable,
+prevents usage-event scans, fails closed on SQLite drift, and remains reusable by the
+future UI/CLI/MCP without granting notification or activation authority.

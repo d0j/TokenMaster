@@ -5,6 +5,7 @@
 
 mod activity;
 mod analytics;
+mod benefit;
 mod calendar;
 mod clock;
 mod error;
@@ -24,6 +25,13 @@ pub use analytics::{
     UsageAnalytics, UsageAnalyticsRequest, UsageBreakdown, UsageBreakdownIdentity,
     UsageBreakdownItem, UsageBreakdownKind, UsageMetrics, UsageRange, UsageSeriesPoint,
     UsageSeriesSelection,
+};
+pub use benefit::{
+    BENEFIT_QUERY_SCHEMA_VERSION, BenefitChangeCursor, BenefitChangeKind, BenefitChangePage,
+    BenefitChangePageRequest, BenefitChangeValue, BenefitCurrentRequest, BenefitCurrentSnapshot,
+    BenefitEnvelope, BenefitInventoryValue, BenefitLotValue, BenefitQueryHeader,
+    BenefitQueryHeaderParts, BenefitReminderCoverage, BenefitReminderProfileSource,
+    BenefitReminderProfileValue, BenefitRevision, BenefitScopeFilter, BenefitWarningCode,
 };
 pub use calendar::{CalendarDate, UsageTimeZone, WeekStart};
 pub use clock::{QueryClock, QueryTimeSample, SystemQueryClock};

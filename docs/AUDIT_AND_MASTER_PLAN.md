@@ -4,9 +4,10 @@ Status: architecture and release plan approved after closure review; P0 through 
 P2-A, P2-B, P2-C pinned pricing, and the P2-D quota history core are implemented;
 the permitted built-in Codex quota normalizer/transport, exact-native executable
 discovery, and dedicated quota refresh/store publication are also implemented.
-Typed banked-reset domain/core/Codex normalization and strict schema-v11 store
-foundation are implemented. Immutable benefit queries are next; reminder runtime,
-UI, automation, and activation remain later.
+Typed banked-reset domain/core/Codex normalization, strict schema-v11 store
+foundation, and immutable FEFO current/revision-bound history queries are implemented.
+Codex runtime benefit publication is next; reminder runtime, UI, automation, and
+activation remain later.
 Date: 2026-07-16.
 
 ## 1. Executive decision
@@ -269,8 +270,9 @@ P2-C pinned pricing and its release gates are implemented; the P2-D quota histor
 core and its acceptance gates are implemented. The permitted built-in Codex quota
 normalizer/transport, exact-native discovery, and dedicated refresh/store publication
 are implemented for the pinned version. Typed banked-reset values, pure
-reconciliation/reminder planning, Codex normalization, and strict schema-v11 storage
-are implemented; immutable benefit queries and reminder delivery are next.
+reconciliation/reminder planning, Codex normalization, strict schema-v11 storage, and
+immutable FEFO current/revision-bound history queries are implemented; Codex runtime
+benefit publication and reminder delivery are next.
 The older replay plan remains historical evidence for
 completed Tasks 1-2, but its Codex-owned Tasks 3+ are superseded and must not be
 executed.

@@ -8,13 +8,15 @@ use tokenmaster_store::{
 };
 
 use crate::{
-    ActivityCursor, ActivityItem, DatasetGeneration, DatasetIdentity, LatestActivityPage, PageSize,
+    ActivityCursor, ActivityItem, BenefitChangePage, BenefitChangePageRequest,
+    BenefitCurrentRequest, BenefitCurrentSnapshot, BenefitEnvelope, BenefitQueryHeader,
+    BenefitQueryHeaderParts, DatasetGeneration, DatasetIdentity, LatestActivityPage, PageSize,
     PublicationGeneration, QueryClock, QueryEnvelope, QueryError, QueryErrorCode, QueryFreshness,
     QueryHeader, QueryHeaderParts, QueryQuality, QueryScope, QueryWarningCode, QuotaCurrentRequest,
     QuotaCurrentSnapshot, QuotaEnvelope, QuotaQueryHeader, QuotaQueryHeaderParts,
     QuotaTransitionPage, QuotaTransitionPageRequest, ReplayRevision, SnapshotGeneration,
     UsageAnalytics, UsageAnalyticsRequest, UsageSessionDetailResult, UsageSessionKey,
-    UsageSessionPage, UsageSessionPageRequest, analytics, quota, session,
+    UsageSessionPage, UsageSessionPageRequest, analytics, benefit, quota, session,
 };
 
 pub const QUERY_FRESH_MAX_AGE_MS: i64 = 20 * 60 * 1_000;
@@ -115,6 +117,66 @@ impl<C: QueryClock> QueryService<C> {
         })?;
         self.last_generation = Some(generation);
         Ok(QuotaEnvelope::new(header, mapped.payload))
+    }
+
+    pub fn benefit_inventory(
+        &mut self,
+        request: BenefitCurrentRequest,
+    ) -> Result<BenefitEnvelope<BenefitCurrentSnapshot>, QueryError> {
+        let time = self.clock.sample()?;
+        time.monotonic_ms()
+            .checked_add(QUERY_DEADLINE_MS)
+            .ok_or_else(|| QueryError::new(QueryErrorCode::Overflow))?;
+        let store_query =
+            benefit::build_current_query(&request, Duration::from_millis(QUERY_DEADLINE_MS))?;
+        let capture = self
+            .store
+            .capture_benefit_current(store_query)
+            .map_err(map_store_error)?;
+        let mapped = benefit::map_current_capture(&capture, &request, time.wall_time_ms())?;
+        let generation = self.next_generation()?;
+        let header = BenefitQueryHeader::new(BenefitQueryHeaderParts {
+            snapshot_generation: generation,
+            benefit_revision: mapped.benefit_revision,
+            generated_at_ms: time.wall_time_ms(),
+            data_through_ms: mapped.data_through_ms,
+            freshness: mapped.freshness,
+            quality: mapped.quality,
+            filter: mapped.filter,
+            warnings: mapped.warnings,
+        })?;
+        self.last_generation = Some(generation);
+        Ok(BenefitEnvelope::new(header, mapped.payload))
+    }
+
+    pub fn benefit_changes(
+        &mut self,
+        request: BenefitChangePageRequest,
+    ) -> Result<BenefitEnvelope<BenefitChangePage>, QueryError> {
+        let time = self.clock.sample()?;
+        time.monotonic_ms()
+            .checked_add(QUERY_DEADLINE_MS)
+            .ok_or_else(|| QueryError::new(QueryErrorCode::Overflow))?;
+        let store_query =
+            benefit::build_change_query(&request, Duration::from_millis(QUERY_DEADLINE_MS))?;
+        let capture = self
+            .store
+            .capture_benefit_changes(store_query)
+            .map_err(map_store_error)?;
+        let mapped = benefit::map_change_capture(&capture, &request, time.wall_time_ms())?;
+        let generation = self.next_generation()?;
+        let header = BenefitQueryHeader::new(BenefitQueryHeaderParts {
+            snapshot_generation: generation,
+            benefit_revision: mapped.benefit_revision,
+            generated_at_ms: time.wall_time_ms(),
+            data_through_ms: mapped.data_through_ms,
+            freshness: mapped.freshness,
+            quality: mapped.quality,
+            filter: mapped.filter,
+            warnings: mapped.warnings,
+        })?;
+        self.last_generation = Some(generation);
+        Ok(BenefitEnvelope::new(header, mapped.payload))
     }
 
     pub fn quota_transitions(

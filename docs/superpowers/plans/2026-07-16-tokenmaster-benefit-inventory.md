@@ -202,13 +202,13 @@ cargo +1.97.0 clippy -p tokenmaster-store --all-targets --locked
 
 **RED/GREEN:**
 
-- [ ] Add bounded current and keyset history store captures under one transaction.
-- [ ] Sort current lots by conservative expiry, unknown expiry, kind, and opaque ID.
-- [ ] Expose explicit absent/stale/partial/unknown facts and active inherited/override
+- [x] Add bounded current and keyset history store captures under one transaction.
+- [x] Sort current lots by conservative expiry, unknown expiry, kind, and opaque ID.
+- [x] Expose explicit absent/stale/partial/unknown facts and active inherited/override
   profile metadata.
-- [ ] Expose nearest expiry/due and truthful `in_app_only` coverage.
-- [ ] Bind continuation to exact scope and benefit revision with redacted `Debug`.
-- [ ] Prove 64 lots, 2,048 changes, 256-row paging, restart, corruption rejection,
+- [x] Expose nearest expiry/due and truthful `in_app_only` coverage.
+- [x] Bind continuation to exact scope and benefit revision with redacted `Debug`.
+- [x] Prove 64 lots, 2,048 changes, 256-row paging, restart, corruption rejection,
   generation neutrality, no usage scan, and resource return.
 
 **Focused validator:**

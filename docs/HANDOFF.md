@@ -185,17 +185,23 @@ gate retained a 3,149,824-byte private floor with a
 task-owned fixture child. Current project truth is recorded in ADR-038 and
 `docs/superpowers/specs/2026-07-16-tokenmaster-codex-quota-runtime-design.md`.
 
-The benefit foundation Tasks 1-4 are complete on
+The benefit foundation Tasks 1-5 are complete on
 `cx/tokenmaster-product-architecture`: provider-neutral values, pure deterministic
 reconciliation/reminder planning, privacy-safe Codex detailed-plus-aggregate
 normalization, and strict schema-v11 transactional inventory/history/profile/due
 storage with terminal-cursor recovery, 512/256 soft retention, 2,048/1,024 hard
-bounds, 256-row maintenance, restart, and injected rollback. The immediate next slice
-is Task 5: immutable bounded benefit current/history query snapshots with FEFO order,
-explicit freshness/completeness, active profile, nearest expiry/due, redacted
-revision-bound continuation, scale, corruption, and resource gates. Reminder delivery
-runtime, UI, CLI/MCP, activation, M0 acceptance, packaging, signing, and release remain
-unclaimed. Inventory read must not imply activation authority.
+bounds, 256-row maintenance, restart, and injected rollback. The new benefit read
+facade adds one-transaction current/history capture, 64-lot FEFO snapshots, explicit
+absent/stale/partial/unknown facts, inherited/override profile metadata, nearest
+expiry/due, redacted scope/revision-bound 256+1 history, concurrent-snapshot/deadline
+cleanup, corruption rejection, failed-call generation neutrality, and no usage
+dataset scan. The 64-lot/2,048-change gate measured 0.842 ms current and 4.904 ms
+maximum page; resource return ended at 116 handles, five threads, USER=2, GDI=0, and
+4,517,888 private bytes. The immediate next slice is Task 6: publish benefit
+observations through the existing Codex quota runtime while preserving separate
+transactions and health. Reminder delivery runtime, UI, CLI/MCP, activation, M0
+acceptance, packaging, signing, and release remain unclaimed. Inventory read must not
+imply activation authority.
 The current post-Task-8 clean-root, formatting, strict locked workspace Clippy, and
 complete locked workspace test/doctest baseline passes. The query resource binary uses
 an isolated `harness = false` process plus a bounded maximum-64-round warm-up that

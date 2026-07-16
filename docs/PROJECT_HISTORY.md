@@ -1820,3 +1820,31 @@ could inherit the constructor recovery flag and receive another from `resume()` 
 its thread started in the intervening window. Paused construction now starts with no
 pending flags, so resume is the sole startup-recovery authority; the focused quota
 runtime test and resource contract pass.
+
+## 2026-07-16 — immutable benefit query snapshots
+
+Completed Task 5 of the approved benefit inventory contour. `UsageReadStore` now owns
+benefit-only current and history captures that read the independent benefit revision
+and scope facts in one deferred transaction. Current rows restore immutable material
+revisions, reject disagreement with redundant projection columns, and return at most
+64 lots in conservative FEFO order. History uses descending `(sequence, change_id)`
+keyset paging with 256+1 lookahead and a redacted cursor bound to the exact scope and
+global benefit revision.
+
+`tokenmaster-query` now exposes independent immutable benefit envelopes for current
+inventory and change history. They preserve absent, fresh/aging/stale,
+complete/quantity-partial/partial, unknown-expiry, unknown-evidence, nearest
+expiry/due, and inherited/override profile truth. Configured OS scheduling is not
+claimed; coverage is only `in_app_only` when the supported channel is configured.
+Failed/stale/corrupt requests consume no public snapshot generation, and inventory
+read grants no notification or activation authority.
+
+Focused acceptance covers restart, exact concurrent read snapshots, deadline-handler
+cleanup, live projection corruption, no usage-dataset scan, 64 current lots, 2,048
+changes, and eight 256-row history pages. On this machine the current read measured
+0.842 ms and the slowest history page 4.904 ms. After 32 open/query/drop cycles the
+process returned at 4,517,888 private bytes, 116 handles, five threads, USER=2, and
+GDI=0. Strict query Clippy, complete store/query suites, and diff checks pass. Task 6,
+separate benefit publication through the existing Codex quota runtime, is next;
+reminder delivery, UI, automation, activation, M0 acceptance, packaging, signing, and
+release remain unclaimed.

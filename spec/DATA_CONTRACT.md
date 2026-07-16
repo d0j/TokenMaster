@@ -472,6 +472,18 @@ facts, 64 current lots, 8 thresholds, 512-change/256-delivery soft retention,
 per lot is protected as the terminal/reappearance revision cursor. Activation
 intents/receipts remain unimplemented and confer no current mutation authority.
 
+The defensive benefit read projection is also implemented over the same schema-v11
+archive. Current and history captures read the global benefit revision and all
+scope-owned rows in one deferred transaction. Current rows are capped at 64 and
+ordered by conservative expiry, unknown expiry, explicit kind rank, and opaque lot
+ID. History uses descending `(sequence, change_id)` keyset paging with 256+1
+lookahead; continuations bind the exact scope hash and benefit revision. Current
+redundant columns must exactly match their immutable material revision, scope row
+counts must match captured rows, and missing/invalid material fails as
+`InvalidStoredValue`. Profile inheritance and nearest due facts come from indexed
+benefit-owned tables. No benefit query references usage events, usage rollups,
+provider payloads, source paths, or prompts.
+
 Only explicit provider ancestry identifies a parent. A strong signature covers the
 normalized model, emitted delta, and provider cumulative snapshot. A weak signature
 covers model and delta only and cannot suppress a pre-divergence event by itself.

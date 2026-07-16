@@ -316,3 +316,10 @@ The foundation is accepted only when tests prove:
 - quota/benefit/reminder failure isolation and resource plateaus pass;
 - clean-root, formatting, warnings-as-errors Clippy, complete workspace tests, and
   the benefit release-authority audit pass.
+
+Implementation status: Tasks 1-5 are complete. The immutable query facade proves
+64-lot FEFO current snapshots, 2,048-change history, 256-row continuation, restart,
+concurrent read-transaction exactness, deadline cleanup, corruption rejection,
+generation neutrality, no usage-dataset scan, and Windows resource return. Runtime
+publication, durable reminder delivery, UI, automation, activation, and release gates
+remain separate.

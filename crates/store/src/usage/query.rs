@@ -14,6 +14,7 @@ use super::{
 use crate::{EXPECTED_SQLITE_VERSION, StoreError, StoreErrorCode};
 
 mod analytics;
+mod benefit;
 mod price;
 mod quota;
 mod session;
@@ -22,6 +23,11 @@ pub use analytics::{
     MAX_USAGE_BREAKDOWN_ITEMS, MAX_USAGE_BREAKDOWNS, MAX_USAGE_SERIES_POINTS, UsageAggregateRange,
     UsageAnalyticsCapture, UsageAnalyticsQuery, UsageBreakdown, UsageBreakdownIdentity,
     UsageBreakdownItem, UsageBreakdownKind, UsageSeriesPoint, UsageSeriesPointCapture,
+};
+pub use benefit::{
+    BenefitChangeCursor, BenefitChangePageCapture, BenefitChangePageQuery, BenefitChangeRecord,
+    BenefitCurrentCapture, BenefitCurrentQuery, BenefitDueSnapshot, BenefitReminderProfileSnapshot,
+    BenefitScopeSnapshot, MAX_BENEFIT_CHANGE_PAGE_SIZE, MAX_BENEFIT_CURRENT_LOTS,
 };
 pub use price::{
     MAX_USAGE_PRICE_BASIS_KEYS, MAX_USAGE_PRICE_BASIS_TARGETS, UsageBreakdownPriceBasisQuery,

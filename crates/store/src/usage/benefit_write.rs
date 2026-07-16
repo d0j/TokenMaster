@@ -467,15 +467,23 @@ fn decode_current_lot(row: &Row<'_>) -> rusqlite::Result<BenefitCurrentLot> {
     })
 }
 
-fn decode_current_lot_inner(row: &Row<'_>) -> Result<BenefitCurrentLot, StoreError> {
-    let lot_id = BenefitLotId::from_bytes(fixed_32(row.get::<_, Vec<u8>>(0)?)?);
+pub(super) fn decode_current_lot_inner(row: &Row<'_>) -> Result<BenefitCurrentLot, StoreError> {
+    let (lot, revision) = decode_lot_revision_at(row, 0)?;
+    BenefitCurrentLot::new(lot, revision).map_err(map_core_error)
+}
+
+pub(super) fn decode_lot_revision_at(
+    row: &Row<'_>,
+    start: usize,
+) -> Result<(BenefitLotObservation, BenefitRevision), StoreError> {
+    let lot_id = BenefitLotId::from_bytes(fixed_32(row.get::<_, Vec<u8>>(start)?)?);
     let revision =
-        BenefitRevision::new(input_u64(row.get::<_, i64>(1)?)?).map_err(map_core_error)?;
-    let kind = parse_kind(&row.get::<_, String>(2)?)?;
-    let quantity = input_u64(row.get::<_, i64>(3)?)?;
-    let state = parse_state(&row.get::<_, String>(4)?)?;
-    let target_kind = row.get::<_, String>(5)?;
-    let target_window = row.get::<_, Option<String>>(6)?;
+        BenefitRevision::new(input_u64(row.get::<_, i64>(start + 1)?)?).map_err(map_core_error)?;
+    let kind = parse_kind(&row.get::<_, String>(start + 2)?)?;
+    let quantity = input_u64(row.get::<_, i64>(start + 3)?)?;
+    let state = parse_state(&row.get::<_, String>(start + 4)?)?;
+    let target_kind = row.get::<_, String>(start + 5)?;
+    let target_window = row.get::<_, Option<String>>(start + 6)?;
     let target = match (target_kind.as_str(), target_window) {
         ("provider", None) => BenefitTarget::Provider,
         ("quota_window", Some(window_id)) => {
@@ -484,18 +492,18 @@ fn decode_current_lot_inner(row: &Row<'_>) -> Result<BenefitCurrentLot, StoreErr
         _ => return Err(invalid_stored()),
     };
     let expiry = decode_expiry(
-        &row.get::<_, String>(8)?,
-        row.get(9)?,
-        row.get(10)?,
-        row.get(11)?,
-        row.get(12)?,
-        row.get(13)?,
-        row.get(14)?,
-        row.get(15)?,
-        row.get(16)?,
-        row.get(17)?,
-        row.get(18)?,
-        row.get(19)?,
+        &row.get::<_, String>(start + 8)?,
+        row.get(start + 9)?,
+        row.get(start + 10)?,
+        row.get(start + 11)?,
+        row.get(start + 12)?,
+        row.get(start + 13)?,
+        row.get(start + 14)?,
+        row.get(start + 15)?,
+        row.get(start + 16)?,
+        row.get(start + 17)?,
+        row.get(start + 18)?,
+        row.get(start + 19)?,
     )?;
     let lot = BenefitLotObservation::new(BenefitLotObservationParts {
         lot_id,
@@ -503,15 +511,16 @@ fn decode_current_lot_inner(row: &Row<'_>) -> Result<BenefitCurrentLot, StoreErr
         quantity,
         state,
         target,
-        granted_at_ms: row.get(7)?,
+        granted_at_ms: row.get(start + 7)?,
         expiry,
-        source: parse_source(&row.get::<_, String>(20)?)?,
-        confidence: parse_confidence(&row.get::<_, String>(21)?)?,
-        detail_kind: parse_detail(&row.get::<_, String>(22)?)?,
-        label_key: BenefitLabelKey::new(row.get::<_, String>(23)?).map_err(|_| invalid_stored())?,
+        source: parse_source(&row.get::<_, String>(start + 20)?)?,
+        confidence: parse_confidence(&row.get::<_, String>(start + 21)?)?,
+        detail_kind: parse_detail(&row.get::<_, String>(start + 22)?)?,
+        label_key: BenefitLabelKey::new(row.get::<_, String>(start + 23)?)
+            .map_err(|_| invalid_stored())?,
     })
     .map_err(|_| invalid_stored())?;
-    BenefitCurrentLot::new(lot, revision).map_err(map_core_error)
+    Ok((lot, revision))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -886,7 +895,7 @@ fn insert_profile_override(
     Ok(())
 }
 
-fn load_active_profile(
+pub(super) fn load_active_profile(
     transaction: &Transaction<'_>,
     scope_id: &[u8; 32],
 ) -> Result<ReminderProfile, StoreError> {
@@ -1069,7 +1078,7 @@ fn checked_replace_count(total: i64, old: i64, new: i64) -> Result<i64, StoreErr
         .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))
 }
 
-fn fixed_32(bytes: Vec<u8>) -> Result<[u8; 32], StoreError> {
+pub(super) fn fixed_32(bytes: Vec<u8>) -> Result<[u8; 32], StoreError> {
     bytes
         .try_into()
         .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))
@@ -1085,7 +1094,7 @@ fn input_i64(value: impl TryInto<i64>) -> Result<i64, StoreError> {
         .map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))
 }
 
-fn input_u64(value: i64) -> Result<u64, StoreError> {
+pub(super) fn input_u64(value: i64) -> Result<u64, StoreError> {
     u64::try_from(value).map_err(|_| invalid_stored())
 }
 
@@ -1105,7 +1114,7 @@ fn output_u16(value: i64) -> Result<u16, StoreError> {
     u16::try_from(value).map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))
 }
 
-fn map_core_error(error: BenefitCoreError) -> StoreError {
+pub(super) fn map_core_error(error: BenefitCoreError) -> StoreError {
     let code = match error {
         BenefitCoreError::CapacityExceeded
         | BenefitCoreError::InvalidRevision
@@ -1117,7 +1126,7 @@ fn map_core_error(error: BenefitCoreError) -> StoreError {
     StoreError::new(code)
 }
 
-const fn invalid_stored() -> StoreError {
+pub(super) const fn invalid_stored() -> StoreError {
     StoreError::new(StoreErrorCode::InvalidStoredValue)
 }
 

@@ -171,12 +171,13 @@ surfaces, batched indexed reads, current/legacy million-event scale, resource pl
   success/error/timeout resource return, and a zero-match release authority audit.
   Exact-native executable discovery and the separate quota scheduler/worker,
   I/O-before-lease store publication, count-only health, lifecycle, resource, and
-  release-authority gates are now complete. Banked-reset benefit domain values, pure
-  expiry/reconciliation/reminder planning, built-in Codex normalization, and strict
-  schema-v11 inventory/history/profile/due storage are complete. Immutable benefit
-  queries, one-timer reminder delivery, notification coverage, and later independently
-  authorized activation remain, followed by P2-E Git output and P2-F joined product
-  status.
+  release-authority gates are now complete. Benefit Tasks 1-5 add provider-neutral
+  lots, pure expiry/reconciliation/reminder planning, privacy-safe built-in Codex
+  normalization, strict schema-v11 write/retention, and immutable FEFO current plus
+  revision-bound history snapshots. Task 6 integrates benefit publication into the
+  existing Codex quota runtime; Task 7 owns the one-timer durable reminder worker.
+  Notification delivery, later independently authorized activation, P2-E Git output,
+  and P2-F joined product status remain.
 No frontend/database coupling or view-time full event grouping is accepted.
 
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset
