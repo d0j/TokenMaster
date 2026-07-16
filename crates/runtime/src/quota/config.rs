@@ -57,6 +57,25 @@ impl CodexQuotaRuntimeConfig {
             CodexExecutableSelection::Explicit(command) => Ok(command.clone()),
         }
     }
+
+    pub(super) fn resolve_current_command(
+        &self,
+    ) -> Result<CodexAppServerCommand, super::CodexExecutableDiscoveryError> {
+        match &self.executable {
+            CodexExecutableSelection::Automatic => {
+                CodexExecutableSearchPath::from_environment()?.resolve()
+            }
+            CodexExecutableSelection::Explicit(command) => Ok(command.clone()),
+        }
+    }
+
+    pub(super) fn archive_path(&self) -> &std::path::Path {
+        &self.archive_path
+    }
+
+    pub(super) const fn transport_timeout(&self) -> Duration {
+        self.transport_timeout
+    }
 }
 
 impl fmt::Debug for CodexQuotaRuntimeConfig {

@@ -164,6 +164,20 @@ impl RefreshHintSink {
         self.wake()
     }
 
+    pub(crate) fn set_poll_health(&self, health: WatcherHealth) -> bool {
+        if self.state.phase() != SchedulerPhase::Running {
+            return false;
+        }
+        self.state.watcher_health.store(
+            match health {
+                WatcherHealth::Healthy => WATCHER_HEALTHY,
+                WatcherHealth::Degraded => WATCHER_DEGRADED,
+            },
+            Ordering::Release,
+        );
+        self.wake()
+    }
+
     pub(crate) fn wake(&self) -> bool {
         match self.wake_sender.try_send(SchedulerWake::Signal) {
             Ok(()) | Err(TrySendError::Full(_)) => true,

@@ -31,7 +31,10 @@ pub use publication::{
 };
 pub use quota::{
     CodexExecutableDiscoveryError, CodexExecutableDiscoveryErrorCode, CodexExecutableSearchPath,
-    CodexQuotaRuntimeConfig, MAX_CODEX_EXECUTABLE_SEARCH_DIRS,
+    CodexQuotaClockErrorCode, CodexQuotaPublicationErrorCode, CodexQuotaRefreshFailure,
+    CodexQuotaRefreshSnapshot, CodexQuotaRefreshStage, CodexQuotaRetryMode, CodexQuotaRuntime,
+    CodexQuotaRuntimeConfig, CodexQuotaRuntimePhase, CodexQuotaRuntimeSnapshot,
+    CodexQuotaScheduleSnapshot, MAX_CODEX_EXECUTABLE_SEARCH_DIRS,
     MAX_CODEX_EXECUTABLE_SEARCH_PATH_BYTES,
 };
 pub use recovery::{StagingRecoveryOutcome, StartupRecoveryReport};
