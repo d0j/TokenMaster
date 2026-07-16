@@ -170,8 +170,16 @@ fn epoch_starts_advances_and_retains_only_comparable_maximum_use() {
         700_000
     );
     assert_eq!(
+        state.maximum_used_ratio_observation_id(),
+        Some(first.observation_id())
+    );
+    assert_eq!(
         state.maximum_used_units().and_then(QuotaUnits::used),
         Some(70)
+    );
+    assert_eq!(
+        state.maximum_used_units_observation_id(),
+        Some(first.observation_id())
     );
 
     let mut second_spec = SampleSpec::new(2, 2_000);
@@ -198,17 +206,62 @@ fn epoch_starts_advances_and_retains_only_comparable_maximum_use() {
         state.maximum_used_units().and_then(QuotaUnits::used),
         Some(90)
     );
+    assert_eq!(
+        state.maximum_used_ratio_observation_id(),
+        Some(second.observation_id())
+    );
+    assert_eq!(
+        state.maximum_used_units_observation_id(),
+        Some(second.observation_id())
+    );
 
-    let mut drop_spec = SampleSpec::new(3, 3_000);
+    let mut units_only_max_spec = SampleSpec::new(3, 3_000);
+    units_only_max_spec.used_ppm = Some(800_000);
+    units_only_max_spec.remaining_ppm = Some(200_000);
+    units_only_max_spec.used_units = Some(95);
+    units_only_max_spec.remaining_units = Some(5);
+    units_only_max_spec.capacity = Some(100);
+    let units_only_max = sample(&key, units_only_max_spec);
+    let state = match evaluate_sample(&definition, Some(&state), Some(&second), &units_only_max, 1)
+        .expect("independent maxima advance")
+    {
+        QuotaEvaluation::Advanced { state } => state,
+        other => panic!("expected advance, got {other:?}"),
+    };
+    assert_eq!(
+        state.maximum_used_ratio_observation_id(),
+        Some(second.observation_id())
+    );
+    assert_eq!(
+        state.maximum_used_units_observation_id(),
+        Some(units_only_max.observation_id())
+    );
+
+    let mut drop_spec = SampleSpec::new(4, 4_000);
     drop_spec.used_ppm = Some(100_000);
     drop_spec.remaining_ppm = Some(900_000);
     drop_spec.epoch = Some("epoch-1");
     let drop_only = sample(&key, drop_spec);
-    assert!(matches!(
-        evaluate_sample(&definition, Some(&state), Some(&second), &drop_only, 1)
-            .expect("drop-only advance"),
-        QuotaEvaluation::Advanced { .. }
-    ));
+    let state = match evaluate_sample(
+        &definition,
+        Some(&state),
+        Some(&units_only_max),
+        &drop_only,
+        1,
+    )
+    .expect("drop-only advance")
+    {
+        QuotaEvaluation::Advanced { state } => state,
+        other => panic!("expected advance, got {other:?}"),
+    };
+    assert_eq!(
+        state.maximum_used_ratio_observation_id(),
+        Some(second.observation_id())
+    );
+    assert_eq!(
+        state.maximum_used_units_observation_id(),
+        Some(units_only_max.observation_id())
+    );
 }
 
 #[test]
@@ -235,6 +288,14 @@ fn definition_revision_advances_without_rekeying_the_open_epoch_and_cannot_regre
     assert_eq!(state.definition_revision(), 2);
     let restored = QuotaEpochState::restore(state.to_parts()).expect("restored advanced state");
     assert_eq!(restored, state);
+    let mut invalid_parts = state.to_parts();
+    invalid_parts.maximum_used_ratio_observation_id = None;
+    assert_eq!(
+        QuotaEpochState::restore(invalid_parts)
+            .expect_err("maximum provenance mismatch")
+            .code(),
+        QuotaErrorCode::InvalidEpochState
+    );
 
     let third = sample(&key, SampleSpec::new(3, 3_000));
     assert_eq!(
@@ -352,6 +413,10 @@ fn explicit_epoch_local_and_manual_resets_preserve_kind_time_and_identity() {
     assert_ne!(
         provider_transition.previous_epoch_id(),
         provider_state.epoch_id()
+    );
+    assert_eq!(
+        provider_transition.maximum_used_ratio_observation_id_before(),
+        Some(first.observation_id())
     );
 
     let mut local_spec = SampleSpec::new(3, 4_000);

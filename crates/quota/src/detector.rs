@@ -145,7 +145,9 @@ pub struct QuotaEpochStateParts {
     pub first_observed_at_ms: i64,
     pub last_observed_at_ms: i64,
     pub maximum_used_ratio: Option<QuotaRatio>,
+    pub maximum_used_ratio_observation_id: Option<QuotaObservationId>,
     pub maximum_used_units: Option<QuotaUnits>,
+    pub maximum_used_units_observation_id: Option<QuotaObservationId>,
     pub provider_epoch_id: Option<QuotaProviderEpochId>,
     pub advertised_resets_at_ms: Option<i64>,
     pub last_transition_sequence: u64,
@@ -162,7 +164,9 @@ pub struct QuotaEpochState {
     first_observed_at_ms: i64,
     last_observed_at_ms: i64,
     maximum_used_ratio: Option<QuotaRatio>,
+    maximum_used_ratio_observation_id: Option<QuotaObservationId>,
     maximum_used_units: Option<QuotaUnits>,
+    maximum_used_units_observation_id: Option<QuotaObservationId>,
     provider_epoch_id: Option<QuotaProviderEpochId>,
     advertised_resets_at_ms: Option<i64>,
     last_transition_sequence: u64,
@@ -177,6 +181,10 @@ impl QuotaEpochState {
             || parts
                 .advertised_resets_at_ms
                 .is_some_and(|value| value <= 0)
+            || parts.maximum_used_ratio.is_some()
+                != parts.maximum_used_ratio_observation_id.is_some()
+            || parts.maximum_used_units.is_some()
+                != parts.maximum_used_units_observation_id.is_some()
             || parts
                 .maximum_used_units
                 .as_ref()
@@ -200,7 +208,9 @@ impl QuotaEpochState {
             first_observed_at_ms: parts.first_observed_at_ms,
             last_observed_at_ms: parts.last_observed_at_ms,
             maximum_used_ratio: parts.maximum_used_ratio,
+            maximum_used_ratio_observation_id: parts.maximum_used_ratio_observation_id,
             maximum_used_units: parts.maximum_used_units,
+            maximum_used_units_observation_id: parts.maximum_used_units_observation_id,
             provider_epoch_id: parts.provider_epoch_id,
             advertised_resets_at_ms: parts.advertised_resets_at_ms,
             last_transition_sequence: parts.last_transition_sequence,
@@ -219,7 +229,9 @@ impl QuotaEpochState {
             first_observed_at_ms: self.first_observed_at_ms,
             last_observed_at_ms: self.last_observed_at_ms,
             maximum_used_ratio: self.maximum_used_ratio,
+            maximum_used_ratio_observation_id: self.maximum_used_ratio_observation_id,
             maximum_used_units: self.maximum_used_units.clone(),
+            maximum_used_units_observation_id: self.maximum_used_units_observation_id,
             provider_epoch_id: self.provider_epoch_id.clone(),
             advertised_resets_at_ms: self.advertised_resets_at_ms,
             last_transition_sequence: self.last_transition_sequence,
@@ -272,8 +284,18 @@ impl QuotaEpochState {
     }
 
     #[must_use]
+    pub const fn maximum_used_ratio_observation_id(&self) -> Option<QuotaObservationId> {
+        self.maximum_used_ratio_observation_id
+    }
+
+    #[must_use]
     pub const fn maximum_used_units(&self) -> Option<&QuotaUnits> {
         self.maximum_used_units.as_ref()
+    }
+
+    #[must_use]
+    pub const fn maximum_used_units_observation_id(&self) -> Option<QuotaObservationId> {
+        self.maximum_used_units_observation_id
     }
 
     #[must_use]
@@ -303,7 +325,9 @@ pub struct QuotaTransition {
     pre_observation_id: QuotaObservationId,
     post_observation_id: QuotaObservationId,
     maximum_used_ratio_before: Option<QuotaRatio>,
+    maximum_used_ratio_observation_id_before: Option<QuotaObservationId>,
     maximum_used_units_before: Option<QuotaUnits>,
+    maximum_used_units_observation_id_before: Option<QuotaObservationId>,
     old_resets_at_ms: Option<i64>,
     new_resets_at_ms: Option<i64>,
     allowance_change: Option<QuotaAllowanceChange>,
@@ -359,8 +383,18 @@ impl QuotaTransition {
     }
 
     #[must_use]
+    pub const fn maximum_used_ratio_observation_id_before(&self) -> Option<QuotaObservationId> {
+        self.maximum_used_ratio_observation_id_before
+    }
+
+    #[must_use]
     pub const fn maximum_used_units_before(&self) -> Option<&QuotaUnits> {
         self.maximum_used_units_before.as_ref()
+    }
+
+    #[must_use]
+    pub const fn maximum_used_units_observation_id_before(&self) -> Option<QuotaObservationId> {
+        self.maximum_used_units_observation_id_before
     }
 
     #[must_use]
@@ -528,10 +562,14 @@ fn start_epoch_with_sequence(
     sample: &QuotaSample,
     last_transition_sequence: u64,
 ) -> QuotaEpochState {
+    let maximum_used_ratio = sample.used_ratio();
+    let maximum_used_ratio_observation_id = maximum_used_ratio.map(|_| sample.observation_id());
     let maximum_used_units = sample
         .units()
         .filter(|units| units.used().is_some())
         .cloned();
+    let maximum_used_units_observation_id =
+        maximum_used_units.as_ref().map(|_| sample.observation_id());
     QuotaEpochState {
         key: sample.key().clone(),
         epoch_definition_revision: definition.revision(),
@@ -541,8 +579,10 @@ fn start_epoch_with_sequence(
         last_observation_id: sample.observation_id(),
         first_observed_at_ms: sample.observed_at_ms(),
         last_observed_at_ms: sample.observed_at_ms(),
-        maximum_used_ratio: sample.used_ratio(),
+        maximum_used_ratio,
+        maximum_used_ratio_observation_id,
         maximum_used_units,
+        maximum_used_units_observation_id,
         provider_epoch_id: sample.provider_epoch_id().cloned(),
         advertised_resets_at_ms: sample.advertised_resets_at_ms(),
         last_transition_sequence,
@@ -554,6 +594,18 @@ fn advance_epoch(
     current: &QuotaEpochState,
     sample: &QuotaSample,
 ) -> QuotaEpochState {
+    let (maximum_used_ratio, maximum_used_ratio_observation_id) = maximum_ratio(
+        current.maximum_used_ratio,
+        current.maximum_used_ratio_observation_id,
+        sample.used_ratio(),
+        sample.observation_id(),
+    );
+    let (maximum_used_units, maximum_used_units_observation_id) = maximum_units(
+        current.maximum_used_units.as_ref(),
+        current.maximum_used_units_observation_id,
+        sample.units(),
+        sample.observation_id(),
+    );
     QuotaEpochState {
         key: current.key.clone(),
         epoch_definition_revision: current.epoch_definition_revision,
@@ -563,39 +615,52 @@ fn advance_epoch(
         last_observation_id: sample.observation_id(),
         first_observed_at_ms: current.first_observed_at_ms,
         last_observed_at_ms: sample.observed_at_ms(),
-        maximum_used_ratio: maximum_ratio(current.maximum_used_ratio, sample.used_ratio()),
-        maximum_used_units: maximum_units(current.maximum_used_units.as_ref(), sample.units()),
+        maximum_used_ratio,
+        maximum_used_ratio_observation_id,
+        maximum_used_units,
+        maximum_used_units_observation_id,
         provider_epoch_id: sample.provider_epoch_id().cloned(),
         advertised_resets_at_ms: sample.advertised_resets_at_ms(),
         last_transition_sequence: current.last_transition_sequence,
     }
 }
 
-fn maximum_ratio(current: Option<QuotaRatio>, sample: Option<QuotaRatio>) -> Option<QuotaRatio> {
+fn maximum_ratio(
+    current: Option<QuotaRatio>,
+    current_observation_id: Option<QuotaObservationId>,
+    sample: Option<QuotaRatio>,
+    sample_observation_id: QuotaObservationId,
+) -> (Option<QuotaRatio>, Option<QuotaObservationId>) {
     match (current, sample) {
         (Some(current), Some(sample))
             if sample.parts_per_million() > current.parts_per_million() =>
         {
-            Some(sample)
+            (Some(sample), Some(sample_observation_id))
         }
-        (Some(current), _) => Some(current),
-        (None, sample) => sample,
+        (Some(current), _) => (Some(current), current_observation_id),
+        (None, Some(sample)) => (Some(sample), Some(sample_observation_id)),
+        (None, None) => (None, None),
     }
 }
 
-fn maximum_units(current: Option<&QuotaUnits>, sample: Option<&QuotaUnits>) -> Option<QuotaUnits> {
+fn maximum_units(
+    current: Option<&QuotaUnits>,
+    current_observation_id: Option<QuotaObservationId>,
+    sample: Option<&QuotaUnits>,
+    sample_observation_id: QuotaObservationId,
+) -> (Option<QuotaUnits>, Option<QuotaObservationId>) {
     let sample = sample.filter(|units| units.used().is_some());
     match (current, sample) {
         (Some(current), Some(sample)) if current.unit_id() == sample.unit_id() => {
             if sample.used() > current.used() {
-                Some(sample.clone())
+                (Some(sample.clone()), Some(sample_observation_id))
             } else {
-                Some(current.clone())
+                (Some(current.clone()), current_observation_id)
             }
         }
-        (Some(current), None) => Some(current.clone()),
-        (None, Some(sample)) => Some(sample.clone()),
-        (Some(_), Some(_)) | (None, None) => None,
+        (Some(current), None) => (Some(current.clone()), current_observation_id),
+        (None, Some(sample)) => (Some(sample.clone()), Some(sample_observation_id)),
+        (Some(_), Some(_)) | (None, None) => (None, None),
     }
 }
 
@@ -815,7 +880,9 @@ fn make_transition(
         pre_observation_id: previous.observation_id(),
         post_observation_id: sample.observation_id(),
         maximum_used_ratio_before: previous_state.maximum_used_ratio,
+        maximum_used_ratio_observation_id_before: previous_state.maximum_used_ratio_observation_id,
         maximum_used_units_before: previous_state.maximum_used_units.clone(),
+        maximum_used_units_observation_id_before: previous_state.maximum_used_units_observation_id,
         old_resets_at_ms: previous.advertised_resets_at_ms(),
         new_resets_at_ms: sample.advertised_resets_at_ms(),
         allowance_change,
