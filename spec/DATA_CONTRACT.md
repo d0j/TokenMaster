@@ -36,6 +36,28 @@ Resume v1 MUST fail closed and be rebuilt through a new non-destructive generati
 the ordinal MUST NOT be guessed. Late ancestry is a separate bounded session-relation
 draft so it can reconcile prior observations without retaining source content.
 
+## TM-DATA-010 — Repository activity and Git output projection
+
+A repository activity hint is a transient provider-neutral value containing exact
+provider, profile, source, session, event time, optional safe project alias, and one
+sealed canonical local-directory candidate. The candidate MUST reject relative,
+traversal, network, device, mapped-remote, symlink, and reparse-point ancestry before
+use. Only one latest hint may exist per source batch. The hint and candidate MUST NOT
+implement serialization and MUST use fully redacted `Debug`.
+
+Repository paths are excluded from parser resume, adapter checkpoints, observations,
+canonical batches, SQLite, query values, diagnostics, logs, and errors. A consumer
+MUST take the side-channel hint immediately after its source batch; a later read may
+replace it. Explicit invalid `cwd` clears prior transient association rather than
+reusing an older repository.
+
+The durable Git projection uses installation-salted opaque repository and activity
+association identities. It retains bounded scan/publication state and aggregate
+facts only: exact day/category line metrics, commit and merge counts, explicit
+quality, warnings, unavailable reasons, freshness, and omission counters. It MUST
+NOT retain a repository path, executable path, author email, ref, commit identity or
+message, file path/content, raw command output, or provider transcript.
+
 ## TM-DATA-004 — Current and staging generations
 
 Current-generation append writes observations, canonical selections, chunk coverage,

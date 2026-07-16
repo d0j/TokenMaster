@@ -201,6 +201,7 @@ impl ReplaySourceSink for CollectedReplaySources<'_> {
         reader: &mut dyn SourceBatchReader,
     ) -> Result<SinkControl, PortError> {
         let batch = reader.read_batch(&initial_checkpoint, self.control)?;
+        assert!(reader.take_repository_activity_hint().is_none());
         assert_eq!(batch.source_identity(), source.identity());
         self.sources.push(source.identity().clone());
         self.batch_count += 1;

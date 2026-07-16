@@ -216,6 +216,30 @@ fn executable_validation_rejects_relative_wrong_name_and_symlink() {
 }
 
 #[test]
+fn repository_candidate_rejects_linked_ancestors() {
+    let root = TempDir::new().expect("validation root");
+    let target = root.path().join("target");
+    let linked = root.path().join("linked");
+    fs::create_dir(&target).expect("target");
+
+    #[cfg(windows)]
+    {
+        if std::os::windows::fs::symlink_dir(&target, &linked).is_err() {
+            return;
+        }
+    }
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&target, &linked).expect("directory symlink");
+
+    assert_eq!(
+        tokenmaster_git::GitRepositoryCandidate::new(linked)
+            .expect_err("linked candidate")
+            .code(),
+        GitBackendErrorCode::RepositoryPathRejected
+    );
+}
+
+#[test]
 fn missing_author_is_explicit_and_repository_paths_never_enter_arguments_or_errors() {
     let fixture = Fixture::new("missing_author");
     fs::create_dir(fixture.directory.join(".git")).expect("fixture common directory");

@@ -41,6 +41,19 @@ handle, or raw source bytes. Stable port errors contain only enumerated codes.
 Cancellation/deadline checks use the operation's caller-supplied monotonic clock and
 occur between callbacks, pulls, and archive calls, never by interrupting a transaction.
 
+`SourceBatchReader::take_repository_activity_hint` is a separate transient side
+channel beside the preceding pull. It returns at most one latest sealed activity
+association and defaults to `None` for providers without that capability. The caller
+must take it before the next pull. The value is never a field of `AdapterBatch`,
+`CanonicalBatch`, `AdapterCheckpoint`, `Archive`, or a public refresh result. Taking
+or dropping the hint cannot alter usage accounting or archive publication.
+
+The future Git output query returns one immutable bounded projection with explicit
+publication revision, freshness/quality, totals, categories, daily points, warnings,
+unavailable reasons, and omission counts. It exposes opaque repository/association
+identity only when required for bounded continuation or selection; no path, ref,
+email, commit, file, process, or command value is public.
+
 `OneShotExecutor` acquires `WriterLease` before adapter or archive work. It retains
 only the bounded scope manifest, one temporary reader/batch, opaque checkpoints,
 fixed counters, and the latest exact replay handle. Discovery and rebuild sources are

@@ -217,6 +217,7 @@ impl Adapter for CodexAdapter {
             let mut reader = CodexSourceBatchReader {
                 descriptor,
                 source: source.identity().clone(),
+                latest_repository_activity_hint: None,
             };
             sink.on_source(source, checkpoint, &mut reader)
         })
@@ -235,6 +236,7 @@ impl core::fmt::Debug for CodexAdapter {
 struct CodexSourceBatchReader {
     descriptor: SourceFileDescriptor,
     source: SourceIdentity,
+    latest_repository_activity_hint: Option<tokenmaster_provider::RepositoryActivityHint>,
 }
 
 impl SourceBatchReader for CodexSourceBatchReader {
@@ -263,6 +265,7 @@ impl SourceBatchReader for CodexSourceBatchReader {
         checkpoint: &AdapterCheckpoint,
         control: &OperationControl<'_>,
     ) -> Result<AdapterBatch, PortError> {
+        self.latest_repository_activity_hint = None;
         control.check()?;
         let logical = logical_file_identity(&self.descriptor);
         let reader_checkpoint = CodexCheckpointV1::decode(checkpoint.as_bytes(), logical)
@@ -300,7 +303,7 @@ impl SourceBatchReader for CodexSourceBatchReader {
                 },
             )
             .map_err(PortError::from),
-            ReaderOutcome::Batch(batch) => {
+            ReaderOutcome::Batch(mut batch) => {
                 let mut diagnostics = AdapterDiagnostics::default();
                 map_batch_diagnostics(&batch, &mut diagnostics)?;
                 if has_blocking_input_diagnostic(&diagnostics) {
@@ -323,7 +326,7 @@ impl SourceBatchReader for CodexSourceBatchReader {
                     diagnostic_count,
                 )
                 .map_err(PortError::from)?;
-                AdapterBatch::new(
+                let result = AdapterBatch::new(
                     &self.source,
                     AdapterBatchParts {
                         observations: batch.events().to_vec().into_boxed_slice(),
@@ -335,9 +338,20 @@ impl SourceBatchReader for CodexSourceBatchReader {
                         diagnostics,
                     },
                 )
-                .map_err(PortError::from)
+                .map_err(PortError::from);
+                if result.is_ok() {
+                    self.latest_repository_activity_hint =
+                        batch.take_latest_repository_activity_hint();
+                }
+                result
             }
         }
+    }
+
+    fn take_repository_activity_hint(
+        &mut self,
+    ) -> Option<tokenmaster_provider::RepositoryActivityHint> {
+        self.latest_repository_activity_hint.take()
     }
 }
 

@@ -4,6 +4,8 @@ use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use tokenmaster_platform::{LocalDirectoryError, ValidatedLocalDirectory};
+
 use crate::{GitBackendError, GitBackendErrorCode};
 
 #[derive(Clone, Eq, PartialEq)]
@@ -14,11 +16,14 @@ pub struct GitExecutable {
 impl GitExecutable {
     pub fn new(path: PathBuf) -> Result<Self, GitBackendError> {
         validate_absolute_local_path(&path)?;
+        #[cfg(windows)]
+        validate_executable_parent(&path)?;
         let initial_metadata = fs::symlink_metadata(&path).map_err(|_| invalid_executable())?;
         validate_initial_executable_type(&initial_metadata)?;
         validate_native_name(&path)?;
         let path = fs::canonicalize(path).map_err(|_| invalid_executable())?;
         validate_absolute_local_path(&path)?;
+        validate_executable_parent(&path)?;
         validate_native_name(&path)?;
         let metadata = fs::symlink_metadata(&path).map_err(|_| invalid_executable())?;
         if !metadata.is_file() || is_reparse_point(&metadata) {
@@ -40,6 +45,16 @@ impl GitExecutable {
     }
 }
 
+fn validate_executable_parent(path: &Path) -> Result<(), GitBackendError> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .ok_or_else(invalid_executable)?;
+    ValidatedLocalDirectory::new(parent)
+        .map(|_| ())
+        .map_err(|_| invalid_executable())
+}
+
 impl fmt::Debug for GitExecutable {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("GitExecutable([redacted])")
@@ -53,18 +68,7 @@ pub struct GitRepositoryCandidate {
 
 impl GitRepositoryCandidate {
     pub fn new(path: PathBuf) -> Result<Self, GitBackendError> {
-        validate_absolute_local_path(&path)?;
-        let metadata = fs::symlink_metadata(&path)
-            .map_err(|_| GitBackendError::new(GitBackendErrorCode::RepositoryNotFound))?;
-        if !metadata.is_dir() || is_reparse_point(&metadata) {
-            return Err(GitBackendError::new(
-                GitBackendErrorCode::RepositoryPathRejected,
-            ));
-        }
-        let path = fs::canonicalize(path)
-            .map_err(|_| GitBackendError::new(GitBackendErrorCode::RepositoryNotFound))?;
-        validate_absolute_local_path(&path)
-            .map_err(|_| GitBackendError::new(GitBackendErrorCode::RepositoryPathRejected))?;
+        let path = validate_private_directory(&path)?;
         Ok(Self { path })
     }
 
@@ -145,17 +149,16 @@ fn configure_git_environment(command: &mut Command) {
 }
 
 pub(crate) fn validate_private_directory(path: &Path) -> Result<PathBuf, GitBackendError> {
-    validate_absolute_local_path(path)
-        .map_err(|_| GitBackendError::new(GitBackendErrorCode::RepositoryPathRejected))?;
-    let metadata = fs::symlink_metadata(path)
-        .map_err(|_| GitBackendError::new(GitBackendErrorCode::RepositoryNotFound))?;
-    if !metadata.is_dir() || is_reparse_point(&metadata) {
-        return Err(GitBackendError::new(
-            GitBackendErrorCode::RepositoryPathRejected,
-        ));
-    }
-    fs::canonicalize(path)
-        .map_err(|_| GitBackendError::new(GitBackendErrorCode::RepositoryNotFound))
+    ValidatedLocalDirectory::new(path)
+        .map(|directory| directory.as_path().to_path_buf())
+        .map_err(|error| {
+            GitBackendError::new(match error {
+                LocalDirectoryError::InvalidPath | LocalDirectoryError::UnsupportedLocation => {
+                    GitBackendErrorCode::RepositoryPathRejected
+                }
+                LocalDirectoryError::Unavailable => GitBackendErrorCode::RepositoryNotFound,
+            })
+        })
 }
 
 fn validate_native_name(path: &Path) -> Result<(), GitBackendError> {

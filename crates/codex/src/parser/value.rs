@@ -122,6 +122,10 @@ impl<const MAX_BYTES: usize> BoundedText<'_, MAX_BYTES> {
         matches!(self, Self::Invalid)
     }
 
+    pub(crate) const fn is_missing(&self) -> bool {
+        matches!(self, Self::Missing)
+    }
+
     pub(crate) fn from_owned(value: String) -> BoundedText<'static, MAX_BYTES> {
         classify_owned_text(value)
     }

@@ -218,7 +218,18 @@ with 125 production dependencies, four reminder source files, four release libra
 and zero forbidden matches. Task 8 project-truth and authority closure now passes the
 clean-root, formatting, strict locked workspace Clippy, complete locked workspace
 test/doctest, specialized benefit audit, complete-diff, process-return, and
-dependency/language-surface gates. The immediate next slice is P2-E Git output.
+dependency/language-surface gates.
+
+P2-E Git output Tasks 1-4 are complete under
+`docs/superpowers/plans/2026-07-16-tokenmaster-git-output.md`: strict opaque domain
+values; bounded NUL parsing/aggregation; an exact native read-only Git backend with
+owned process cleanup and synthetic repository coverage; and one latest transient
+Codex repository activity hint. The hint binds provider/profile/source/session/time
+and safe project alias to a sealed canonical local directory, travels only beside a
+descriptor-bound reader pull, and is absent from resume, checkpoints, canonical
+events, archive, SQLite, errors, and `Debug`. Shared platform validation rejects
+relative/traversal/network/device/mapped-remote and linked/reparse ancestry. The
+immediate next slice is Task 5, strict schema-v13 Git projection.
 Actual P3 visible notifications/UI, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.

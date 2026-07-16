@@ -258,6 +258,7 @@ pub struct ReadBatch {
     reached_snapshot_end: bool,
     source_chunks: Vec<SourceChunkDigest>,
     previous_partial_chunk: Option<SourceChunkDigest>,
+    latest_repository_activity_hint: Option<tokenmaster_provider::RepositoryActivityHint>,
 }
 
 impl ReadBatch {
@@ -305,6 +306,13 @@ impl ReadBatch {
     pub const fn previous_partial_chunk(&self) -> Option<SourceChunkDigest> {
         self.previous_partial_chunk
     }
+
+    #[must_use]
+    pub fn take_latest_repository_activity_hint(
+        &mut self,
+    ) -> Option<tokenmaster_provider::RepositoryActivityHint> {
+        self.latest_repository_activity_hint.take()
+    }
 }
 
 impl fmt::Debug for ReadBatch {
@@ -322,6 +330,10 @@ impl fmt::Debug for ReadBatch {
             .field(
                 "has_previous_partial_chunk",
                 &self.previous_partial_chunk.is_some(),
+            )
+            .field(
+                "has_repository_activity_hint",
+                &self.latest_repository_activity_hint.is_some(),
             )
             .finish()
     }
@@ -565,7 +577,7 @@ pub fn read_source_batch(
         .map_err(|_| ReaderError::new(ReaderErrorCode::SeekFailed))?;
     let remaining = source.file_length.saturating_sub(start_offset);
     let mut reader = BufReader::with_capacity(READ_BUFFER_BYTES, source.file.take(remaining));
-    let framed = framing::read_lines(
+    let mut framed = framing::read_lines(
         &mut reader,
         framing::FramingInput {
             descriptor,
@@ -640,6 +652,7 @@ pub fn read_source_batch(
         source::revalidate_path_identity(descriptor, expected)
             .map_err(|_| ReaderError::new(ReaderErrorCode::SourceChanged))?;
     }
+    let latest_repository_activity_hint = framed.state.take_latest_repository_activity_hint();
     let checkpoint = ReaderCheckpointV1::new(ReaderCheckpointParts {
         parser_schema_version: PARSER_SCHEMA_VERSION,
         physical_identity: source.physical_identity,
@@ -666,6 +679,7 @@ pub fn read_source_batch(
         reached_snapshot_end: framed.reached_snapshot_end,
         source_chunks,
         previous_partial_chunk,
+        latest_repository_activity_hint,
     }))
 }
 

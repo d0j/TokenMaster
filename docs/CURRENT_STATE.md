@@ -484,6 +484,28 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   Clippy, complete locked workspace tests/doctests, and diff-check pass after the
   correction.
 
+## P2-E Git output foundation
+
+Tasks 1-4 of
+`docs/superpowers/plans/2026-07-16-tokenmaster-git-output.md` are implemented. The
+domain now owns opaque repository/activity identities, exact bounded line/day/category
+metrics, quality, warning, and unavailable contracts. `tokenmaster-git` owns the
+bounded streaming NUL parser, deterministic aggregate core, and exact native read-only
+backend with fixed commands, explicit executable discovery, concurrent capped output,
+deadline/cancellation cleanup, and synthetic coverage for root/merge/octopus/rename/
+binary/gitlink/worktree/mailmap/shallow/history-change semantics.
+
+Codex metadata and turn context now emit at most one latest provider-neutral
+`RepositoryActivityHint` per source batch. Its canonical local path is sealed,
+non-serializable, fully redacted, excluded from resume/checkpoint/events/SQLite, and
+transported only through the descriptor-bound reader side channel. Relative,
+traversal, network/device/mapped-remote, symlink, and reparse ancestry fail closed;
+an explicit invalid `cwd` clears the prior transient association. Exact provider,
+profile, source, session, event time, and safe project alias are preserved. Existing
+provider readers default to no hint. The Git backend applies the same validation again
+to the executable parent, candidate, common directory, and worktree root immediately
+before command use.
+
 ## Next implementation slice
 
 P2-D quota history core is complete under
@@ -500,13 +522,15 @@ credit inventory, expiration reconciliation, default/custom reminder profiles,
 immutable read snapshots, and publication through the existing Codex runtime with
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
-workspace quality gate. The immediate next slice is P2-E Git output. Activation
+workspace quality gate. P2-E Tasks 1-4 are complete; the immediate next slice is the
+strict schema-v13 Git projection in Task 5. Activation
 remains a later independently authorized
 capability; visible notifications and the complete UI follow the completed data
 contracts. No quota value may be inferred from local token/cost facts and no browser/
 private-endpoint authority may be added.
-P2-E Git output and P2-F joined product status remain after P2-D; P3 complete UI
-follows the product-data contracts.
+The remaining P2-E work is schema-v13 projection, immutable query mapping, runtime
+scheduling/resource evidence, and final audit. P2-F joined product status and P3
+complete UI follow the product-data contracts.
 
 The architecture/release closure review is approved in
 `docs/superpowers/specs/2026-07-16-tokenmaster-plan-closure-design.md`. It freezes the

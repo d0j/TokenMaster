@@ -1943,3 +1943,32 @@ all pass. This closes only the read-only inventory, history, publication, and du
 typed in-app event foundation. P2-E Git output is next. Visible P3 notifications/UI,
 OS/tray delivery, snooze, quiet hours, CLI/MCP, activation, M0 acceptance, packaging,
 signing, and release remain unclaimed.
+
+## 2026-07-16 — Git output foundation and private repository hints
+
+Completed P2-E Tasks 1-4. New strict domain values cover opaque installation-scoped
+repository/activity identity, bounded day/category metrics, commits/merges, quality,
+warnings, unavailable reasons, freshness, and omission truth. The isolated
+`tokenmaster-git` core incrementally parses capped NUL-framed native Git output,
+classifies versioned product-code paths, and emits at most 256 aggregates without
+retaining commit or file history.
+
+The exact native backend discovers and validates one platform executable without a
+shell, runs fixed read-only version/repository/config/ref/log commands with paging,
+hooks, credentials, network helpers, external diff, textconv, and mutation paths
+disabled, reads stdout/stderr concurrently under caps, and owns kill/wait/join cleanup
+on every cancellation, deadline, parse, and drop path. Synthetic fixtures cover root,
+ordinary, branch deduplication, merge/octopus, rename, binary, gitlink, worktree,
+mailmap, empty, missing-author, shallow, and history-change behavior.
+
+Codex now advertises `RepositoryActivity` and emits one latest transient hint beside a
+source batch. The hint preserves exact provider/profile/source/session/time and safe
+project alias while its canonical local path remains sealed, non-serializable, and
+redacted. Shared platform policy rejects relative, traversal, network/device/mapped-
+remote, symlink, and reparse ancestry. Explicit invalid `cwd` clears old transient
+association; untimed context may use the next timed usage line. Parser resume,
+checkpoints, observations, canonical batches, SQLite, diagnostics, errors, and Debug
+remain path-free. The Git backend repeats the same local-directory validation for the
+executable parent, candidate, common directory, and worktree root before command use.
+Schema-v13 Git projection, query, runtime scheduling/resource gates, joined status,
+and UI remain unclaimed.

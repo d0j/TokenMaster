@@ -4,6 +4,7 @@ use tokenmaster_domain::{
     ObservationVerification, SessionRelationDraft, SessionRelationDraftParts, TokenCount,
     TokenUsage, UsageProfileId, UsageProviderId, UsageSessionId, UsageSourceId,
 };
+use tokenmaster_provider::{RepositoryActivityHint, RepositoryActivityHintParts};
 
 mod effects;
 mod state;
@@ -249,6 +250,13 @@ pub fn parse_line(
         let metadata_only = metadata.has_updates();
         let tool = tool_update(&raw, diagnostics);
         let tool_only = tool.is_some();
+        record_repository_activity_hint(
+            context,
+            state,
+            &metadata,
+            &session_id,
+            first_timestamp([&raw.timestamp, &raw.created_at, &raw.created_at_v2]),
+        );
         apply_metadata(state, metadata);
         if metadata_only {
             diagnostics.record_metadata_line();
@@ -366,6 +374,7 @@ pub fn parse_line(
             return ParseOutcome::Rejected(ParserDiagnosticCode::InvalidMetadata);
         }
     };
+    record_repository_activity_hint(context, state, &metadata, &session_id, Some(timestamp));
     apply_metadata(state, metadata);
     if metadata_line {
         diagnostics.record_metadata_line();
@@ -385,6 +394,41 @@ pub fn parse_line(
     state.pending_activity = ActivityCounts::default();
     diagnostics.record_emitted_event();
     ParseOutcome::Emitted(event)
+}
+
+fn record_repository_activity_hint(
+    context: &ParseContext,
+    state: &mut ParserState,
+    metadata: &effects::MetadataUpdate,
+    session_id: &UsageSessionId,
+    observed_at: Option<tokenmaster_domain::UtcTimestamp>,
+) {
+    let Some(observed_at) = observed_at else {
+        return;
+    };
+    let (candidate, project) = match &metadata.repository_candidate {
+        effects::RepositoryCandidateUpdate::Missing => {
+            let Some(candidate) = state.repository_candidate.clone() else {
+                return;
+            };
+            (candidate, state.repository_project.clone())
+        }
+        effects::RepositoryCandidateUpdate::Set(candidate) => {
+            (candidate.clone(), metadata.project.clone())
+        }
+        effects::RepositoryCandidateUpdate::Clear => return,
+    };
+    state.record_repository_activity_hint(RepositoryActivityHint::new(
+        RepositoryActivityHintParts {
+            provider_id: context.provider_id.clone(),
+            profile_id: context.profile_id.clone(),
+            source_id: context.source_id.clone(),
+            session_id: session_id.clone(),
+            observed_at,
+            project,
+            candidate,
+        },
+    ));
 }
 
 fn resolved_session_id(

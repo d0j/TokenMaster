@@ -138,6 +138,16 @@ Source descriptors are path-private. Public errors, debug surfaces, serialized v
 and diagnostics use stable codes and counters, never absolute paths or wrapped OS
 messages.
 
+Repository activity uses a separate sealed transient path type. Construction accepts
+only an existing canonical local directory, rejects traversal, network/device/mapped-
+remote namespaces and linked/reparse ancestry, and bounds the lossless platform path
+length. `RepositoryActivityHint` is capacity-one per source batch, non-serializable,
+fully redacted in `Debug`, and excluded from parser resume, adapter/canonical batches,
+checkpoints, SQLite, query, diagnostics, and errors. An explicit invalid candidate
+clears the previous transient association. The Git backend MUST revalidate the
+candidate before and after its bounded read-only scan; the hint grants neither generic
+filesystem access nor repository mutation authority.
+
 ## TM-SEC-004 — Archive integrity
 
 The frontend query path cannot receive `UsageStore`, a SQLite connection, transaction,
@@ -328,12 +338,15 @@ without cancelling or completing newer work, and ID exhaustion cannot wrap.
 Engine runtime ports preserve the same separation structurally. `Adapter` has no
 archive/store argument and can emit only sealed provider-neutral identity, bounded
 drafts, opaque checkpoints, chunk proofs, counters, diagnostics, and completion
-quality. `Archive` has no provider descriptor/raw-input operation and accepts only
-normalized discovery state or scope-exact canonical batches. Adapter checkpoints are
+quality, plus the separately sealed transient repository hint when that capability is
+declared. `Archive` has no provider descriptor/raw-input/hint operation and accepts
+only normalized discovery state or scope-exact canonical batches. Adapter checkpoints are
 opaque and capped at 32 KiB; observation and relation batches cap independently at
 256; chunk updates cap at 18; every persisted counter fits SQLite `i64`. Full rebuild
-lends exactly one temporary descriptor-bound source reader per callback and exposes no
-path, file handle, raw bytes, or replay-source collection to the engine. Debug and
+lends exactly one temporary descriptor-bound source reader per callback. It exposes
+no raw or serializable path, file handle, raw bytes, or replay-source collection; the
+optional sealed candidate can only be taken synchronously and never enters archive
+state. Debug and
 error surfaces redact identities and checkpoint/proof bytes. Compile-fail contracts
 reject private-field construction, path substitution for source identity, and raw
 byte archive writes.

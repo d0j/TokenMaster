@@ -158,10 +158,15 @@ from a path basename.
 A valid Codex metadata/turn-context `cwd` creates a transient
 `RepositoryActivityHint` containing:
 
-- provider/profile/session scope;
+- provider/profile/source/session scope;
 - event time;
 - safe project alias when available;
 - a sealed absolute local candidate path.
+
+The hint travels through a capacity-one transient method on the descriptor-bound
+`SourceBatchReader`, not through `AdapterBatch` or `CanonicalBatch`. Providers without
+repository activity use the default `None`. A consumer takes the value immediately
+after the corresponding pull; the next pull may replace it.
 
 The Git subsystem resolves the candidate with exact native Git read-only commands,
 obtains the absolute common Git directory, and computes:

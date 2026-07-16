@@ -155,28 +155,43 @@ cargo +1.97.0 clippy -p tokenmaster-git --all-targets --locked
 
 **Files:**
 
+- Create: `crates/platform/src/local_directory.rs`
+- Create: `crates/provider/src/repository.rs`
+- Create: `crates/provider/tests/repository_activity_contract.rs`
+- Create: `crates/runtime/tests/repository_hint_contract.rs`
+- Modify: `crates/platform/src/lib.rs`
+- Modify: `crates/platform/src/lease.rs`
+- Modify: `crates/git/Cargo.toml`
+- Modify: `crates/git/src/command.rs`
+- Modify: `crates/git/tests/process_contract.rs`
+- Modify: `crates/provider/Cargo.toml`
 - Modify: `crates/provider/src/capability.rs`
 - Modify: `crates/provider/src/lib.rs`
+- Modify: `crates/engine/Cargo.toml`
 - Modify: `crates/engine/src/ports.rs`
-- Modify: `crates/engine/src/values.rs`
 - Modify: `crates/codex/src/parser/effects.rs`
 - Modify: `crates/codex/src/parser/state.rs`
+- Modify: `crates/codex/src/parser/value.rs`
 - Modify: `crates/codex/src/parser/mod.rs`
 - Modify: `crates/codex/src/provider.rs`
+- Modify: `crates/codex/src/reader/mod.rs`
+- Modify: `crates/runtime/src/codex_adapter.rs`
 - Modify: `crates/codex/tests/parser_state_contract.rs`
 - Modify: `crates/codex/tests/pipeline_contract.rs`
-- Modify: `crates/engine/tests/port_values_contract.rs`
+- Modify: `crates/codex/tests/source_discovery_contract.rs`
+- Modify: `crates/engine/tests/port_traits_contract.rs`
 
 **RED/GREEN:**
 
-- [ ] Add one latest bounded provider-neutral transient repository hint per source
+- [x] Add one latest bounded provider-neutral transient repository hint per source
   batch.
-- [ ] Reject relative/network/device/traversal/reparse-unsafe candidate paths.
-- [ ] Keep the sealed path non-serializable and redacted and exclude it from parser
+- [x] Reject relative/network/device/traversal/reparse-unsafe candidate paths.
+- [x] Keep the sealed path non-serializable and redacted and exclude it from parser
   resume/checkpoint/canonical events.
-- [ ] Preserve safe project alias and exact provider/profile/session/time association.
-- [ ] Coalesce repeated metadata/turn-context hints without a path/event history.
-- [ ] Prove old checkpoints remain compatible and no path reaches store/query/errors/
+- [x] Preserve safe project alias and exact provider/profile/source/session/time
+  association.
+- [x] Coalesce repeated metadata/turn-context hints without a path/event history.
+- [x] Prove old checkpoints remain compatible and no path reaches store/query/errors/
   diagnostics/`Debug`.
 
 **Focused validator:**
@@ -184,9 +199,11 @@ cargo +1.97.0 clippy -p tokenmaster-git --all-targets --locked
 ```powershell
 cargo +1.97.0 test -p tokenmaster-codex --test parser_state_contract --locked
 cargo +1.97.0 test -p tokenmaster-codex --test pipeline_contract --locked
-cargo +1.97.0 test -p tokenmaster-engine --test port_values_contract --locked
+cargo +1.97.0 test -p tokenmaster-provider --test repository_activity_contract --locked
+cargo +1.97.0 test -p tokenmaster-engine --test port_traits_contract --locked
+cargo +1.97.0 test -p tokenmaster-runtime --test repository_hint_contract --locked
 $env:RUSTFLAGS = '-Dwarnings'
-cargo +1.97.0 clippy -p tokenmaster-codex -p tokenmaster-engine --all-targets --locked
+cargo +1.97.0 clippy -p tokenmaster-platform -p tokenmaster-provider -p tokenmaster-codex -p tokenmaster-engine -p tokenmaster-runtime --all-targets --locked
 ```
 
 **Checkpoint commit:** `feat(codex): emit private repository hints`

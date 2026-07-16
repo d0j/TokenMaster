@@ -194,6 +194,15 @@ pub trait SourceBatchReader {
         checkpoint: &AdapterCheckpoint,
         control: &OperationControl<'_>,
     ) -> Result<AdapterBatch, PortError>;
+
+    /// Takes the latest transient repository association produced by the preceding
+    /// `read_batch` call. A later read may replace it; implementations must never
+    /// encode the hint into an adapter batch or checkpoint.
+    fn take_repository_activity_hint(
+        &mut self,
+    ) -> Option<tokenmaster_provider::RepositoryActivityHint> {
+        None
+    }
 }
 
 pub trait ReplaySourceSink {

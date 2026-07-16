@@ -5,6 +5,7 @@ use std::fmt;
 use std::fs::File;
 
 mod lease;
+mod local_directory;
 mod power;
 
 #[cfg(unix)]
@@ -17,6 +18,7 @@ mod windows;
 pub use lease::{
     ExclusiveFileLease, ExclusiveFileLeaseError, ExclusiveFileLeaseGuard, WRITER_LEASE_SUFFIX,
 };
+pub use local_directory::{LocalDirectoryError, ValidatedLocalDirectory};
 pub use power::{
     PowerLifecycleEvent, PowerMonitorError, PowerMonitorSnapshot, SuspendResumeMonitor,
 };

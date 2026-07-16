@@ -28,6 +28,7 @@ impl CodexProvider {
                 ProviderCapability::Projects,
                 ProviderCapability::Models,
                 ProviderCapability::CodeOutput,
+                ProviderCapability::RepositoryActivity,
             ],
         )?;
         Ok(Self { descriptor })

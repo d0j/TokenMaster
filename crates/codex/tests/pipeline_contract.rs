@@ -123,6 +123,109 @@ fn baseline_real_jsonl_is_atomic_replay_safe_and_private() {
     assert!(!debug.contains(PRIVACY_SENTINEL));
 }
 
+#[test]
+fn source_batch_exposes_only_latest_transient_repository_hint() {
+    let directory = TempDir::new().expect("temporary directory");
+    let root = directory.path().join("codex-root");
+    let first = directory
+        .path()
+        .join("PRIVATE_PIPELINE_FIRST")
+        .join("project-first");
+    let second = directory
+        .path()
+        .join("PRIVATE_PIPELINE_SECOND")
+        .join("project-second");
+    fs::create_dir(&root).expect("Codex root");
+    fs::create_dir_all(&first).expect("first repository");
+    fs::create_dir_all(&second).expect("second repository");
+    let source = root.join("session.jsonl");
+    let content = [
+        serde_json::json!({
+            "timestamp": "2026-07-10T08:00:00Z",
+            "type": "session_meta",
+            "payload": {"id": "session-first", "cwd": first}
+        })
+        .to_string(),
+        serde_json::json!({
+            "timestamp": "2026-07-10T08:01:00Z",
+            "type": "turn_context",
+            "payload": {"session_id": "session-second", "cwd": second}
+        })
+        .to_string(),
+        serde_json::json!({
+            "timestamp": "2026-07-10T08:02:00Z",
+            "model": "gpt-test",
+            "usage": {"total_tokens": 1}
+        })
+        .to_string(),
+    ]
+    .join("\n");
+    fs::write(&source, format!("{content}\n")).expect("source");
+
+    let configured = [ConfiguredCodexRoot::new(&root, None, true)];
+    let request = build_discovery_request(CodexRootInput {
+        user_profile: None,
+        codex_home: None,
+        configured: &configured,
+    })
+    .expect("request");
+    let snapshot = CodexProvider::new()
+        .expect("provider")
+        .discover(&request)
+        .expect("discovery");
+    let mut observed = None;
+    enumerate_profile_sources(
+        snapshot.sources(),
+        || false,
+        |descriptor| {
+            let ReaderOutcome::Batch(mut batch) =
+                read_source_batch(&descriptor, None, || false).expect("read")
+            else {
+                panic!("batch expected");
+            };
+            let checkpoint =
+                serde_json::to_string(batch.checkpoint().resume()).expect("resume serializes");
+            let debug = format!("{batch:?}");
+            let hint = batch
+                .take_latest_repository_activity_hint()
+                .expect("latest transient hint");
+            assert_eq!(hint.session_id().as_str(), "session-second");
+            assert_eq!(hint.candidate().as_path(), second.canonicalize().unwrap());
+            assert!(batch.take_latest_repository_activity_hint().is_none());
+            for marker in ["PRIVATE_PIPELINE_FIRST", "PRIVATE_PIPELINE_SECOND"] {
+                assert!(!checkpoint.contains(marker));
+                assert!(!debug.contains(marker));
+            }
+            observed = Some(hint);
+            SinkDecision::Continue
+        },
+    )
+    .expect("enumeration");
+    assert!(observed.is_some());
+
+    let database = directory.path().join("repository-hint.sqlite3");
+    let result = run_pipeline(&root, &database, PipelineOptions::default())
+        .expect("repository metadata pipeline");
+    assert_eq!(result.visible_events, 1);
+    for archive_file in [
+        database.clone(),
+        database.with_extension("sqlite3-wal"),
+        database.with_extension("sqlite3-shm"),
+    ] {
+        let Ok(bytes) = fs::read(archive_file) else {
+            continue;
+        };
+        for marker in ["PRIVATE_PIPELINE_FIRST", "PRIVATE_PIPELINE_SECOND"] {
+            assert!(
+                !bytes
+                    .windows(marker.len())
+                    .any(|window| window == marker.as_bytes()),
+                "private path reached durable archive"
+            );
+        }
+    }
+}
+
 fn write_usage_lines(path: &Path, count: u64) {
     let mut content = String::new();
     for index in 0..count {

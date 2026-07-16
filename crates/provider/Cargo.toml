@@ -8,6 +8,9 @@ rust-version.workspace = true
 [dependencies]
 serde.workspace = true
 thiserror.workspace = true
+tokenmaster-domain = { path = "../domain" }
+tokenmaster-platform = { path = "../platform" }
 
 [dev-dependencies]
 serde_json.workspace = true
+tempfile.workspace = true

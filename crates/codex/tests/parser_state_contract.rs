@@ -25,6 +25,18 @@ fn parse(
     parse_line(context, state, diagnostics, offset, line)
 }
 
+fn metadata_line(path: &std::path::Path, session: &str, timestamp: &str) -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "timestamp": timestamp,
+        "type": "session_meta",
+        "payload": {
+            "id": session,
+            "cwd": path,
+        }
+    }))
+    .expect("metadata fixture")
+}
+
 fn emitted(
     context: &ParseContext,
     state: &mut ParserState,
@@ -122,6 +134,206 @@ fn metadata_activity_and_privacy_follow_the_bounded_contract() {
     assert!(resume_json.contains("real-session-id"));
     assert!(resume_json.contains("feature/usage"));
     assert!(state.retained_text_bytes() <= ParserState::MAX_RETAINED_TEXT_BYTES);
+}
+
+#[test]
+fn repository_activity_keeps_only_latest_hint_outside_resume_state() {
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let first = directory
+        .path()
+        .join("PRIVATE_FIRST_PARENT")
+        .join("project-first");
+    let second = directory
+        .path()
+        .join("PRIVATE_SECOND_PARENT")
+        .join("project-second");
+    std::fs::create_dir_all(&first).expect("first repository");
+    std::fs::create_dir_all(&second).expect("second repository");
+    let context = context();
+    let mut state = ParserState::new();
+    let mut diagnostics = ParserDiagnostics::new();
+
+    assert!(matches!(
+        parse(
+            &context,
+            &mut state,
+            &mut diagnostics,
+            0,
+            &metadata_line(&first, "session-first", "2026-07-10T08:00:00Z"),
+        ),
+        ParseOutcome::MetadataOnly
+    ));
+    assert!(matches!(
+        parse(
+            &context,
+            &mut state,
+            &mut diagnostics,
+            1,
+            &metadata_line(&second, "session-second", "2026-07-10T08:01:00Z"),
+        ),
+        ParseOutcome::MetadataOnly
+    ));
+
+    let resume = serde_json::to_string(&state.snapshot()).expect("resume serializes");
+    let hint = state
+        .take_latest_repository_activity_hint()
+        .expect("latest repository activity");
+    assert_eq!(hint.provider_id().as_str(), "codex");
+    assert_eq!(hint.profile_id().as_str(), "profile_fixture");
+    assert_eq!(hint.source_id().as_str(), "source_fixture");
+    assert_eq!(hint.session_id().as_str(), "session-second");
+    assert_eq!(hint.observed_at().unix_seconds(), 1_783_670_460);
+    assert_eq!(
+        hint.project().map(tokenmaster_domain::ProjectAlias::as_str),
+        Some("project-second")
+    );
+    assert_eq!(hint.candidate().as_path(), second.canonicalize().unwrap());
+    assert!(state.take_latest_repository_activity_hint().is_none());
+    for marker in ["PRIVATE_FIRST_PARENT", "PRIVATE_SECOND_PARENT"] {
+        assert!(!resume.contains(marker));
+    }
+    assert!(!format!("{state:?}").contains("PRIVATE_SECOND_PARENT"));
+    assert!(!format!("{hint:?}").contains("PRIVATE_SECOND_PARENT"));
+    assert!(state.retained_text_bytes() <= ParserState::MAX_RETAINED_TEXT_BYTES);
+}
+
+#[test]
+fn repository_activity_ignores_invalid_and_unavailable_candidates() {
+    let context = context();
+    let mut state = ParserState::new();
+    let mut diagnostics = ParserDiagnostics::new();
+    let missing = if cfg!(windows) {
+        std::path::PathBuf::from(r"C:\TOKENMASTER_MISSING_PRIVATE_REPOSITORY")
+    } else {
+        std::path::PathBuf::from("/TOKENMASTER_MISSING_PRIVATE_REPOSITORY")
+    };
+
+    for (offset, path) in [std::path::Path::new("relative/escape"), missing.as_path()]
+        .into_iter()
+        .enumerate()
+    {
+        assert!(matches!(
+            parse(
+                &context,
+                &mut state,
+                &mut diagnostics,
+                offset as u64,
+                &metadata_line(path, "session-invalid", "2026-07-10T08:00:00Z"),
+            ),
+            ParseOutcome::MetadataOnly
+        ));
+        assert!(state.take_latest_repository_activity_hint().is_none());
+    }
+}
+
+#[test]
+fn explicit_invalid_cwd_clears_prior_transient_candidate() {
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let repository = directory.path().join("project-valid");
+    std::fs::create_dir(&repository).expect("repository");
+    let context = context();
+    let mut state = ParserState::new();
+    let mut diagnostics = ParserDiagnostics::new();
+
+    assert!(matches!(
+        parse(
+            &context,
+            &mut state,
+            &mut diagnostics,
+            0,
+            &metadata_line(&repository, "session-valid", "2026-07-10T08:00:00Z"),
+        ),
+        ParseOutcome::MetadataOnly
+    ));
+    assert!(state.take_latest_repository_activity_hint().is_some());
+    assert!(matches!(
+        parse(
+            &context,
+            &mut state,
+            &mut diagnostics,
+            1,
+            br#"{"timestamp":"2026-07-10T08:01:00Z","type":"turn_context","payload":{"session_id":"session-next","cwd":"relative\\invalid"}}"#,
+        ),
+        ParseOutcome::MetadataOnly
+    ));
+    assert!(state.take_latest_repository_activity_hint().is_none());
+    let _ = emitted(
+        &context,
+        &mut state,
+        &mut diagnostics,
+        2,
+        br#"{"timestamp":"2026-07-10T08:02:00Z","model":"gpt-test","usage":{"total_tokens":1}}"#,
+    );
+    assert!(state.take_latest_repository_activity_hint().is_none());
+}
+
+#[test]
+fn untimed_turn_context_is_associated_with_next_timed_usage() {
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let repository = directory.path().join("project-timed");
+    std::fs::create_dir(&repository).expect("repository");
+    let context = context();
+    let mut state = ParserState::new();
+    let mut diagnostics = ParserDiagnostics::new();
+    let line = serde_json::to_vec(&serde_json::json!({
+        "type": "turn_context",
+        "payload": {
+            "session_id": "session-timed",
+            "cwd": repository,
+            "model": "gpt-test",
+        }
+    }))
+    .expect("turn context");
+
+    assert!(matches!(
+        parse(&context, &mut state, &mut diagnostics, 0, &line),
+        ParseOutcome::MetadataOnly
+    ));
+    assert!(state.take_latest_repository_activity_hint().is_none());
+    let _ = emitted(
+        &context,
+        &mut state,
+        &mut diagnostics,
+        1,
+        br#"{"timestamp":"2026-07-10T08:02:00Z","usage":{"total_tokens":1}}"#,
+    );
+    let hint = state
+        .take_latest_repository_activity_hint()
+        .expect("usage supplies activity time");
+    assert_eq!(hint.session_id().as_str(), "session-timed");
+    assert_eq!(hint.observed_at().unix_seconds(), 1_783_670_520);
+}
+
+#[test]
+fn ten_thousand_repository_updates_keep_one_bounded_latest_slot() {
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let repository = directory.path().join("project-burst");
+    std::fs::create_dir(&repository).expect("repository");
+    let context = context();
+    let mut state = ParserState::new();
+    let mut diagnostics = ParserDiagnostics::new();
+
+    for index in 0..10_000 {
+        let session = format!("session-{index}");
+        assert!(matches!(
+            parse(
+                &context,
+                &mut state,
+                &mut diagnostics,
+                index,
+                &metadata_line(&repository, &session, "2026-07-10T08:00:00Z"),
+            ),
+            ParseOutcome::MetadataOnly
+        ));
+        assert!(state.retained_text_bytes() <= ParserState::MAX_RETAINED_TEXT_BYTES);
+    }
+
+    let hint = state
+        .take_latest_repository_activity_hint()
+        .expect("latest hint");
+    assert_eq!(hint.session_id().as_str(), "session-9999");
+    assert!(state.take_latest_repository_activity_hint().is_none());
+    assert_eq!(diagnostics.metadata_lines(), 10_000);
 }
 
 #[test]

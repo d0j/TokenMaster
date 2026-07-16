@@ -70,6 +70,23 @@ official narrow idempotent provider capability, fresh high-confidence evidence,
 explicit local policy, compare-and-swap admission, durable intent, and post-action
 reconciliation. Manual inventory and read-only automation MUST NOT authorize it.
 
+### TM-FUNC-011 — Bounded Git output analytics
+
+The product MUST expose bounded local Git output facts for the active author:
+additions, deletions, net lines, commits, merge commits, and versioned product-code
+categories over exact daily ranges. Repository discovery MUST begin only from a
+validated transient provider activity hint or an explicit local user selection.
+Absolute paths, author email, refs, commit IDs/messages, file names/content, and raw
+Git output MUST NOT enter the archive or public snapshots.
+
+Git inspection MUST use an exact native executable and fixed read-only commands with
+shells, hooks, paging, editors, credentials, network access, external diff, textconv,
+and repository mutation disabled. Merge, rename, binary, gitlink, worktree, mailmap,
+shallow-history, history-change, partial, and unavailable semantics MUST remain
+explicit. Missing or ambiguous evidence MUST NOT become zero or complete quality.
+Persistent projections and queries MUST remain bounded to 32 repositories and 400
+daily points per snapshot.
+
 ### TM-FUNC-005 — Native interaction
 
 The product MUST provide single-instance tray behavior, dashboard/compact access,

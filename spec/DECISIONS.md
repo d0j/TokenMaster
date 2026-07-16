@@ -887,3 +887,27 @@ acknowledgement after an in-memory-only handoff creates a crash gap unless the o
 is replayable. A separate immutable acknowledgement preserves both no-loss and
 no-duplicate behavior with one bounded batch, one additional fixed store operation,
 no new thread, and no provider or activation authority.
+
+## ADR-044 — Repository paths use a transient reader side channel
+
+Decision: a built-in or future provider may declare `RepositoryActivity` and produce
+one latest `RepositoryActivityHint` beside a source read. The hint binds exact
+provider/profile/source/session/time and optional safe project alias to a sealed
+canonical local-directory candidate. It is taken synchronously through
+`SourceBatchReader` and is deliberately absent from adapter batches, canonical
+events, checkpoints, archive ports, SQLite, and public snapshots.
+
+Candidate construction shares the platform local-directory policy with the writer
+lease: absolute existing local directories only, bounded platform path bytes, no
+traversal, network/device/mapped-remote namespace, symlink, or reparse ancestry.
+Repeated metadata and turn-context lines replace one in-memory slot. Untimed context
+may be paired with the next valid timed usage line in the same bounded reader state;
+an explicit invalid `cwd` clears the prior transient candidate. Parser resume does
+not carry the candidate across a batch or restart.
+
+Rationale: adding a path to `ObservationDraft`, `AdapterBatch`, or checkpoint state
+would let private filesystem identity approach durable accounting and plugin-facing
+surfaces. Reconstructing repository identity from `ProjectAlias` would be ambiguous.
+The separate capacity-one side channel preserves exact association for Git discovery,
+keeps old providers source-compatible through a default `None`, and gives the runtime
+one narrow value it can consume or drop without changing usage truth.

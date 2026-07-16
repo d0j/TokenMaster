@@ -9,3 +9,4 @@ rust-version.workspace = true
 thiserror.workspace = true
 tokenmaster-accounting = { path = "../accounting" }
 tokenmaster-domain = { path = "../domain" }
+tokenmaster-provider = { path = "../provider" }

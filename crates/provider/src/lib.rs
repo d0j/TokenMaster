@@ -4,6 +4,13 @@
 //! fn assert_serialize<T: serde::Serialize>() {}
 //! assert_serialize::<tokenmaster_provider::ProfileDescriptor>();
 //! ```
+//!
+//! Transient repository hints are also deliberately non-serializable:
+//!
+//! ```compile_fail
+//! fn assert_serialize<T: serde::Serialize>() {}
+//! assert_serialize::<tokenmaster_provider::RepositoryActivityHint>();
+//! ```
 
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used, clippy::expect_used)]
@@ -12,6 +19,7 @@ mod capability;
 mod discovery;
 mod error;
 mod identity;
+mod repository;
 
 pub use capability::{ProviderCapability, ProviderDescriptor};
 pub use discovery::{
@@ -21,3 +29,6 @@ pub use discovery::{
 };
 pub use error::{ProviderError, ProviderErrorCode};
 pub use identity::{ProfileId, ProviderId, SourceId};
+pub use repository::{
+    RepositoryActivityHint, RepositoryActivityHintParts, RepositoryCandidatePath,
+};
