@@ -340,6 +340,8 @@ mod tests {
     };
     use std::time::Duration;
 
+    use tempfile::TempDir;
+    use tokenmaster_codex::{CodexRootInput, ConfiguredCodexRoot, build_discovery_request};
     use tokenmaster_engine::{
         Clock, MonotonicTime, RefreshOutcome, RefreshPermit, RefreshUrgency, WorkerPhase,
     };
@@ -652,7 +654,39 @@ mod tests {
     }
 
     #[test]
-    fn runner_panic_faults_only_the_quota_runtime() {
+    fn runner_panic_faults_only_quota_and_preserves_live_usage_snapshot() {
+        let source_root = TempDir::new().test_value("usage source root");
+        let archive_root = TempDir::new().test_value("usage archive root");
+        let configured = [ConfiguredCodexRoot::new(source_root.path(), None, true)];
+        let request = build_discovery_request(CodexRootInput {
+            user_profile: None,
+            codex_home: None,
+            configured: &configured,
+        })
+        .test_value("usage discovery request");
+        let mut usage_runtime =
+            crate::LiveRuntime::start(&archive_root.path().join("usage.sqlite3"), request)
+                .test_value("usage runtime");
+        let usage_deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            if usage_runtime
+                .try_completion()
+                .test_value("usage completion")
+                .is_some()
+            {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < usage_deadline,
+                "usage runtime refresh timed out"
+            );
+            std::thread::yield_now();
+        }
+        let usage_before = usage_runtime
+            .snapshot()
+            .test_value("usage snapshot before quota fault")
+            .engine();
+
         let clock = Arc::new(FakeClock::default());
         let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
         let runtime = CodexQuotaRuntime::start_with_runner(clock, latest, |_permit| {
@@ -671,6 +705,16 @@ mod tests {
         assert_eq!(snapshot.phase(), CodexQuotaRuntimePhase::Faulted);
         assert_eq!(snapshot.worker().phase(), WorkerPhase::Faulted);
         assert!(!format!("{runtime:?}").contains("private quota runner panic"));
+        assert_eq!(
+            usage_runtime
+                .snapshot()
+                .test_value("usage snapshot after quota fault")
+                .engine(),
+            usage_before
+        );
+        usage_runtime
+            .shutdown()
+            .test_value("usage runtime shutdown");
     }
 
     #[test]
