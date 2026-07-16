@@ -10,6 +10,7 @@ libsqlite3-sys.workspace = true
 rusqlite.workspace = true
 tokenmaster-accounting = { path = "../accounting" }
 tokenmaster-domain = { path = "../domain" }
+tokenmaster-quota = { path = "../quota" }
 
 [dev-dependencies]
 tempfile.workspace = true

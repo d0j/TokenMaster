@@ -5366,6 +5366,7 @@ dependencies = [
  "tempfile",
  "tokenmaster-accounting",
  "tokenmaster-domain",
+ "tokenmaster-quota",
 ]
 
 [[package]]

@@ -11,6 +11,8 @@ mod migration;
 mod price_schema;
 mod query;
 mod quota_schema;
+mod quota_types;
+mod quota_write;
 mod read;
 mod replay;
 mod replay_manifest;
@@ -37,6 +39,7 @@ pub use query::{
     UsageSessionPageQuery, UsageSessionPriceBasisBatchQuery, UsageSessionPriceBasisQuery,
     UsageSessionSummary, UsageTokenAggregate,
 };
+pub use quota_types::{QuotaApplyResult, QuotaApplyStatus, QuotaRevision};
 pub use schema::USAGE_SCHEMA_VERSION;
 pub use types::{
     AccountingVersions, AggregateRebuildProgress, AggregateRebuildStatus, AppendBatch,

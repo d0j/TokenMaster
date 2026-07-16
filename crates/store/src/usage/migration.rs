@@ -528,6 +528,30 @@ fn validate_quota_state(connection: &Connection) -> Result<(), StoreError> {
                     AND retained_sample_count = (SELECT count(*) FROM quota_sample)
                     AND retained_epoch_count = (SELECT count(*) FROM quota_epoch_history)
                     AND retained_transition_count = (SELECT count(*) FROM quota_transition)
+                    AND NOT EXISTS (
+                      SELECT 1
+                      FROM quota_epoch_current AS epoch
+                      LEFT JOIN quota_window_current AS current
+                        ON current.scope_id = epoch.scope_id
+                       AND current.window_id = epoch.window_id
+                      LEFT JOIN quota_sample AS sample
+                        ON sample.scope_id = epoch.scope_id
+                       AND sample.window_id = epoch.window_id
+                       AND sample.definition_revision = epoch.definition_revision
+                       AND sample.observation_id = epoch.last_observation_id
+                      WHERE current.scope_id IS NULL
+                         OR sample.observation_id IS NULL
+                         OR current.definition_revision <> epoch.definition_revision
+                         OR current.sample_observation_id <> epoch.last_observation_id
+                         OR current.epoch_id <> epoch.epoch_id
+                         OR current.observed_at_ms <> sample.observed_at_ms
+                         OR current.fresh_until_ms <> sample.fresh_until_ms
+                         OR current.stale_after_ms <> sample.stale_after_ms
+                         OR current.quality <> sample.quality
+                         OR current.source <> sample.source
+                         OR current.confidence <> sample.confidence
+                         OR current.last_transition_sequence <> epoch.last_transition_sequence
+                    )
                     AND ((revision = 0
                           AND last_published_at_ms IS NULL
                           AND NOT EXISTS (SELECT 1 FROM quota_window_current)
