@@ -13,9 +13,10 @@ use tokenmaster_query::{
 use tokenmaster_store::{AggregateRebuildStatus, UsageStore};
 
 const SOURCE_KEY: [u8; 32] = [7; 32];
+const PRIVATE_PLATEAU_WARMUP_ROUNDS: usize = 8;
 static RESOURCE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 struct ResourceCounts {
     private_bytes: usize,
     handles: u32,
@@ -255,81 +256,57 @@ fn resource_counts() -> ResourceCounts {
     }
 }
 
-#[test]
-fn repeated_open_query_drop_returns_resources_to_a_stable_plateau() {
-    let _serial = RESOURCE_TEST_LOCK
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let directory = TempDir::new().expect("temporary directory");
-    let path = directory.path().join("resource.sqlite3");
-    seed_empty_archive(&path);
-
-    for _ in 0..256 {
-        open_query_drop(&path);
-    }
-    let _measurement_warmup = resource_counts();
-    let before = resource_counts();
-    for _ in 0..256 {
-        open_query_drop(&path);
-    }
-    let after = resource_counts();
-
+fn assert_structural_plateau(label: &str, baseline: ResourceCounts, sample: ResourceCounts) {
     assert!(
-        after.handles <= before.handles.saturating_add(1),
-        "query handles grew: before={before:?}, after={after:?}"
+        sample.handles <= baseline.handles.saturating_add(1),
+        "{label} handles grew: baseline={baseline:?}, sample={sample:?}"
     );
     assert!(
-        after.threads <= before.threads,
-        "query threads grew: before={before:?}, after={after:?}"
+        sample.threads <= baseline.threads,
+        "{label} threads grew: baseline={baseline:?}, sample={sample:?}"
     );
     assert!(
-        after.user_objects <= before.user_objects && after.gdi_objects <= before.gdi_objects,
-        "query GUI objects grew: before={before:?}, after={after:?}"
-    );
-    assert!(
-        after.private_bytes <= before.private_bytes.saturating_add(1_048_576),
-        "query private bytes grew over 1 MiB: before={before:?}, after={after:?}"
+        sample.user_objects <= baseline.user_objects && sample.gdi_objects <= baseline.gdi_objects,
+        "{label} GUI objects grew: baseline={baseline:?}, sample={sample:?}"
     );
 }
 
-#[test]
-fn repeated_aggregate_session_and_resumable_rebuild_cycles_stay_on_a_resource_plateau() {
-    let _serial = RESOURCE_TEST_LOCK
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let directory = TempDir::new().expect("temporary directory");
-    let path = directory.path().join("aggregate-resource.sqlite3");
-    seed_bounded_current_archive(&path, 512);
-
-    for _ in 0..4 {
-        exercise_bounded_snapshots(&path);
+fn verify_resource_plateau(
+    label: &str,
+    mut exercise_round: impl FnMut(),
+    measured_rounds: usize,
+    private_budget: usize,
+) {
+    let mut warmup_samples = [ResourceCounts::default(); PRIVATE_PLATEAU_WARMUP_ROUNDS];
+    for sample_slot in &mut warmup_samples {
+        exercise_round();
+        let sample = resource_counts();
+        *sample_slot = sample;
     }
-    let _measurement_warmup = resource_counts();
-    let before_queries = resource_counts();
-    for _ in 0..16 {
-        exercise_bounded_snapshots(&path);
+
+    let mut plateau = warmup_samples[0];
+    for sample in &warmup_samples[1..] {
+        plateau.private_bytes = plateau.private_bytes.max(sample.private_bytes);
+        plateau.handles = plateau.handles.max(sample.handles);
+        plateau.threads = plateau.threads.max(sample.threads);
+        plateau.user_objects = plateau.user_objects.max(sample.user_objects);
+        plateau.gdi_objects = plateau.gdi_objects.max(sample.gdi_objects);
     }
-    let after_queries = resource_counts();
+    let private_limit = plateau.private_bytes.saturating_add(private_budget);
+    for _ in 0..measured_rounds {
+        exercise_round();
+        let sample = resource_counts();
+        assert_structural_plateau(label, plateau, sample);
+        assert!(
+            sample.private_bytes <= private_limit,
+            "{label} private bytes grew after plateau: \
+             plateau={plateau:?}, sample={sample:?}, budget={private_budget}"
+        );
+    }
+}
 
-    assert!(
-        after_queries.handles <= before_queries.handles.saturating_add(1),
-        "aggregate query handles grew: before={before_queries:?}, after={after_queries:?}"
-    );
-    assert!(
-        after_queries.threads <= before_queries.threads,
-        "aggregate query threads grew: before={before_queries:?}, after={after_queries:?}"
-    );
-    assert!(
-        after_queries.user_objects <= before_queries.user_objects
-            && after_queries.gdi_objects <= before_queries.gdi_objects,
-        "aggregate query GUI objects grew: before={before_queries:?}, after={after_queries:?}"
-    );
-    assert!(
-        after_queries.private_bytes <= before_queries.private_bytes.saturating_add(2_097_152),
-        "aggregate query private bytes grew over 2 MiB: before={before_queries:?}, after={after_queries:?}"
-    );
-
-    let connection = Connection::open(&path).expect("rebuild fixture connection");
+fn exercise_rebuild_cycle(path: &Path) {
+    let connection = Connection::open(path).expect("rebuild fixture connection");
     connection
         .execute(
             "UPDATE usage_aggregate_state
@@ -343,10 +320,9 @@ fn repeated_aggregate_session_and_resumable_rebuild_cycles_stay_on_a_resource_pl
         .expect("require rebuild");
     drop(connection);
 
-    let before_rebuild = resource_counts();
     let mut status = AggregateRebuildStatus::Rebuilding;
     for _ in 0..64 {
-        let mut store = UsageStore::open(&path).expect("resume rebuild");
+        let mut store = UsageStore::open(path).expect("resume rebuild");
         status = store
             .rebuild_aggregates_page(256)
             .expect("one cooperative rebuild page")
@@ -357,22 +333,52 @@ fn repeated_aggregate_session_and_resumable_rebuild_cycles_stay_on_a_resource_pl
         }
     }
     assert_eq!(status, AggregateRebuildStatus::Ready);
-    let after_rebuild = resource_counts();
-    assert!(
-        after_rebuild.handles <= before_rebuild.handles.saturating_add(1),
-        "resumable rebuild handles grew: before={before_rebuild:?}, after={after_rebuild:?}"
+}
+
+#[test]
+fn repeated_open_query_drop_returns_resources_to_a_stable_plateau() {
+    let _serial = RESOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("resource.sqlite3");
+    seed_empty_archive(&path);
+
+    verify_resource_plateau(
+        "query open/drop",
+        || {
+            for _ in 0..128 {
+                open_query_drop(&path);
+            }
+        },
+        8,
+        1_048_576,
     );
-    assert!(
-        after_rebuild.threads <= before_rebuild.threads,
-        "resumable rebuild threads grew: before={before_rebuild:?}, after={after_rebuild:?}"
+}
+
+#[test]
+fn repeated_aggregate_session_and_resumable_rebuild_cycles_stay_on_a_resource_plateau() {
+    let _serial = RESOURCE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("aggregate-resource.sqlite3");
+    seed_bounded_current_archive(&path, 512);
+
+    verify_resource_plateau(
+        "aggregate query",
+        || {
+            for _ in 0..4 {
+                exercise_bounded_snapshots(&path);
+            }
+        },
+        8,
+        2_097_152,
     );
-    assert!(
-        after_rebuild.user_objects <= before_rebuild.user_objects
-            && after_rebuild.gdi_objects <= before_rebuild.gdi_objects,
-        "resumable rebuild GUI objects grew: before={before_rebuild:?}, after={after_rebuild:?}"
-    );
-    assert!(
-        after_rebuild.private_bytes <= before_rebuild.private_bytes.saturating_add(2_097_152),
-        "resumable rebuild private bytes grew over 2 MiB: before={before_rebuild:?}, after={after_rebuild:?}"
+    verify_resource_plateau(
+        "resumable rebuild",
+        || exercise_rebuild_cycle(&path),
+        8,
+        2_097_152,
     );
 }
