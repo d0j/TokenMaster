@@ -3,10 +3,10 @@ use std::time::Duration;
 use rusqlite::{Connection, params};
 use tempfile::TempDir;
 use tokenmaster_store::{
-    MAX_USAGE_PRICE_BASIS_KEYS, ScanScope, StoreErrorCode, UsageAggregateBucketWidth,
-    UsageAggregateRange, UsageAggregateSegment, UsagePriceBasisQuery, UsageQueryDatasetIdentity,
-    UsageReadStore, UsageReportedCostState, UsageSessionPageQuery, UsageSessionPriceBasisQuery,
-    UsageStore,
+    MAX_USAGE_PRICE_BASIS_KEYS, MAX_USAGE_PRICE_BASIS_TARGETS, ScanScope, StoreErrorCode,
+    UsageAggregateBucketWidth, UsageAggregateRange, UsageAggregateSegment,
+    UsagePriceBasisBatchQuery, UsagePriceBasisQuery, UsageQueryDatasetIdentity, UsageReadStore,
+    UsageReportedCostState, UsageSessionPageQuery, UsageSessionPriceBasisQuery, UsageStore,
 };
 
 fn seed_current_price_archive() -> (TempDir, std::path::PathBuf) {
@@ -199,5 +199,99 @@ fn price_basis_enforces_scope_bounds_deadline_and_exact_dataset() {
     assert_eq!(duplicate.code(), StoreErrorCode::InvalidValue);
     assert!(
         UsagePriceBasisQuery::new(None, minute_range(), Box::default(), Duration::ZERO,).is_err()
+    );
+
+    assert!(
+        UsagePriceBasisBatchQuery::new(
+            None,
+            Box::default(),
+            Box::default(),
+            Duration::from_secs(1),
+        )
+        .is_err()
+    );
+    let too_many_ranges = (0..=MAX_USAGE_PRICE_BASIS_TARGETS)
+        .map(|_| minute_range())
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let error = UsagePriceBasisBatchQuery::new(
+        None,
+        too_many_ranges,
+        Box::default(),
+        Duration::from_secs(1),
+    )
+    .expect_err("too many batch targets");
+    assert_eq!(error.code(), StoreErrorCode::CapacityExceeded);
+    assert_eq!(error.limit(), Some(MAX_USAGE_PRICE_BASIS_TARGETS as u64));
+}
+
+#[test]
+fn range_batch_uses_one_global_key_budget_with_exact_per_target_omissions() {
+    let (_directory, path) = seed_current_price_archive();
+    let connection = Connection::open(&path).expect("rebucket fixture");
+    connection
+        .execute(
+            "UPDATE usage_event SET timestamp_seconds = 61
+             WHERE selected_source_offset % 2 = 1",
+            [],
+        )
+        .expect("rebucket odd events");
+    drop(connection);
+
+    let ranges = [
+        UsageAggregateRange::new(
+            vec![
+                UsageAggregateSegment::new(UsageAggregateBucketWidth::Minute, 0, 60)
+                    .expect("first segment"),
+            ]
+            .into_boxed_slice(),
+        )
+        .expect("first range"),
+        UsageAggregateRange::new(
+            vec![
+                UsageAggregateSegment::new(UsageAggregateBucketWidth::Minute, 60, 120)
+                    .expect("second segment"),
+            ]
+            .into_boxed_slice(),
+        )
+        .expect("second range"),
+    ];
+    let mut store = UsageReadStore::open(&path).expect("batch price store");
+    let capture = store
+        .capture_usage_price_basis_batch(
+            UsagePriceBasisBatchQuery::new(
+                None,
+                ranges.into(),
+                Box::default(),
+                Duration::from_secs(2),
+            )
+            .expect("batch price query"),
+        )
+        .expect("batch price capture");
+
+    assert_eq!(MAX_USAGE_PRICE_BASIS_TARGETS, 401);
+    assert_eq!(capture.targets().len(), 2);
+    assert_eq!(
+        capture
+            .targets()
+            .iter()
+            .map(|target| target.rows().len())
+            .sum::<usize>(),
+        MAX_USAGE_PRICE_BASIS_KEYS
+    );
+    for target in capture.targets() {
+        assert_eq!(target.rows().len(), 256);
+        assert_eq!(target.included().event_count(), 256);
+        assert_eq!(target.omitted().event_count(), 4);
+        assert_eq!(target.omitted().calculable_event_count(), 4);
+    }
+    assert_eq!(capture.targets()[0].omitted().reported_cost_count(), 4);
+    assert_eq!(capture.targets()[1].omitted().reported_cost_count(), 0);
+    assert_eq!(
+        capture.publication().dataset_identity(),
+        UsageQueryDatasetIdentity::ReplayRevision {
+            revision_id: 0,
+            dataset_generation: 780,
+        }
     );
 }
