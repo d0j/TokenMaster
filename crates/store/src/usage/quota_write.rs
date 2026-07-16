@@ -11,6 +11,9 @@ use tokenmaster_quota::{
     quota_epoch_id, quota_scope_id,
 };
 
+use super::quota_maintenance::{
+    delete_unprotected_sample, enforce_quota_window_hard_caps, samples_are_redundant,
+};
 use super::{QuotaApplyResult, QuotaApplyStatus, QuotaRevision, UsageStore};
 use crate::{StoreError, StoreErrorCode};
 
@@ -182,12 +185,35 @@ impl UsageStore {
         )?;
         quota_write_fault(fault, QuotaWriteFault::AfterCurrent)?;
 
+        let prune_previous = status == QuotaApplyStatus::Advanced
+            && current
+                .as_ref()
+                .is_some_and(|current| current.definition_revision() == definition.revision())
+            && previous
+                .as_ref()
+                .is_some_and(|previous| samples_are_redundant(previous, sample));
+        let deleted_previous = if prune_previous {
+            let previous = previous
+                .as_ref()
+                .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+            delete_unprotected_sample(
+                &transaction,
+                scope_bytes,
+                window_id,
+                previous.observation_id().as_bytes().as_slice(),
+            )?
+        } else {
+            false
+        };
+        enforce_quota_window_hard_caps(&transaction, scope_bytes, window_id)?;
+
         let next_revision = state.revision.next()?;
         publish_quota_state(
             &transaction,
             &state,
             next_revision,
             sample.observed_at_ms(),
+            1 - i64::from(deleted_previous),
             closes_epoch,
             transition.is_some(),
         )?;
@@ -1027,10 +1053,11 @@ fn publish_quota_state(
     state: &QuotaState,
     next_revision: QuotaRevision,
     observed_at_ms: i64,
+    sample_count_delta: i64,
     epoch_closed: bool,
     transition_inserted: bool,
 ) -> Result<(), StoreError> {
-    let retained_sample_count = checked_count(state.retained_sample_count, 1)?;
+    let retained_sample_count = checked_count(state.retained_sample_count, sample_count_delta)?;
     let retained_epoch_count = checked_count(state.retained_epoch_count, i64::from(epoch_closed))?;
     let retained_transition_count = checked_count(
         state.retained_transition_count,

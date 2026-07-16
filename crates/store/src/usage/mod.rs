@@ -10,6 +10,7 @@ mod incremental;
 mod migration;
 mod price_schema;
 mod query;
+mod quota_maintenance;
 mod quota_schema;
 mod quota_types;
 mod quota_write;
@@ -39,7 +40,13 @@ pub use query::{
     UsageSessionPageQuery, UsageSessionPriceBasisBatchQuery, UsageSessionPriceBasisQuery,
     UsageSessionSummary, UsageTokenAggregate,
 };
-pub use quota_types::{QuotaApplyResult, QuotaApplyStatus, QuotaRevision};
+pub use quota_types::{
+    DEFAULT_QUOTA_EPOCHS_PER_WINDOW, DEFAULT_QUOTA_SAMPLES_PER_WINDOW,
+    DEFAULT_QUOTA_TRANSITIONS_PER_WINDOW, MAX_QUOTA_EPOCHS_PER_WINDOW,
+    MAX_QUOTA_MAINTENANCE_PAGE_SIZE, MAX_QUOTA_SAMPLES_PER_WINDOW,
+    MAX_QUOTA_TRANSITIONS_PER_WINDOW, QuotaApplyResult, QuotaApplyStatus, QuotaMaintenanceResult,
+    QuotaRevision,
+};
 pub use schema::USAGE_SCHEMA_VERSION;
 pub use types::{
     AccountingVersions, AggregateRebuildProgress, AggregateRebuildStatus, AppendBatch,

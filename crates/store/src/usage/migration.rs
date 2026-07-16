@@ -1,4 +1,4 @@
-use rusqlite::{Connection, OptionalExtension, TransactionBehavior};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 use crate::{StoreError, StoreErrorCode};
 
@@ -30,6 +30,9 @@ use super::schema::{
     V9_INDEX_CONTRACTS, V9_LEGACY_EVENT_CONTRACT, V9_OBSERVATION_CONTRACT,
     V9_PRICE_SESSION_ROLLUP_CONTRACT, V9_PRICE_TIME_ROLLUP_CONTRACT, V9_REPORTED_COST_TABLE_SCHEMA,
     V9_SCHEMA_VERSION, V9_USAGE_EVENT_CONTRACT, v8_session_update_trigger, v8_time_update_trigger,
+};
+use super::{
+    MAX_QUOTA_EPOCHS_PER_WINDOW, MAX_QUOTA_SAMPLES_PER_WINDOW, MAX_QUOTA_TRANSITIONS_PER_WINDOW,
 };
 
 pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreError> {
@@ -529,6 +532,21 @@ fn validate_quota_state(connection: &Connection) -> Result<(), StoreError> {
                     AND retained_epoch_count = (SELECT count(*) FROM quota_epoch_history)
                     AND retained_transition_count = (SELECT count(*) FROM quota_transition)
                     AND NOT EXISTS (
+                      SELECT 1 FROM quota_sample
+                      GROUP BY scope_id, window_id
+                      HAVING count(*) > ?1
+                    )
+                    AND NOT EXISTS (
+                      SELECT 1 FROM quota_epoch_history
+                      GROUP BY scope_id, window_id
+                      HAVING count(*) > ?2
+                    )
+                    AND NOT EXISTS (
+                      SELECT 1 FROM quota_transition
+                      GROUP BY scope_id, window_id
+                      HAVING count(*) > ?3
+                    )
+                    AND NOT EXISTS (
                       SELECT 1
                       FROM quota_epoch_current AS epoch
                       LEFT JOIN quota_window_current AS current
@@ -560,7 +578,11 @@ fn validate_quota_state(connection: &Connection) -> Result<(), StoreError> {
              FROM quota_state
              WHERE singleton_id = 1
                AND (SELECT count(*) FROM quota_state) = 1",
-            [],
+            params![
+                MAX_QUOTA_SAMPLES_PER_WINDOW as i64,
+                MAX_QUOTA_EPOCHS_PER_WINDOW as i64,
+                MAX_QUOTA_TRANSITIONS_PER_WINDOW as i64,
+            ],
             |row| row.get::<_, bool>(0),
         )
         .optional()?
