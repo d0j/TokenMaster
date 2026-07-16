@@ -5,7 +5,7 @@
 > `superpowers:verification-before-completion`. Mark a checkbox only after its
 > validator passes.
 
-**Status:** approved for execution on 2026-07-16
+**Status:** completed and verified on 2026-07-16
 
 **Goal:** discover the installed native Codex executable and publish official
 app-server quota observations through a separate bounded runtime that never holds the
@@ -33,6 +33,11 @@ dependency, shell execution, or new crate.
 - Use focused red/green tests and commit independently reviewable checkpoints.
 - Run the repository baseline only after focused contours pass.
 
+**Execution note:** Tasks 2 and 3 were committed together because their internal
+execution types intentionally remain private and strict dead-code lint cannot pass
+until runtime composition consumes them. No lint suppression or temporary public
+surface was added.
+
 ---
 
 ### Task 1: Freeze executable selection and discovery
@@ -47,22 +52,22 @@ dependency, shell execution, or new crate.
 
 **RED:**
 
-- [ ] Explicit absolute native executable is accepted and remains path-private.
-- [ ] Invalid explicit path fails configuration and never falls back to a valid
+- [x] Explicit absolute native executable is accepted and remains path-private.
+- [x] Invalid explicit path fails configuration and never falls back to a valid
   `PATH` candidate.
-- [ ] Automatic search follows directory order and accepts only exact `codex.exe` on
+- [x] Automatic search follows directory order and accepts only exact `codex.exe` on
   Windows or `codex` elsewhere.
-- [ ] `.cmd`, `.ps1`, extensionless Windows shims, symlinks/reparse points, relative
+- [x] `.cmd`, `.ps1`, extensionless Windows shims, symlinks/reparse points, relative
   entries, absent entries, oversized `PATH`, and excessive entry counts are rejected
   or skipped exactly as designed.
-- [ ] Config/discovery `Debug` and errors contain no executable or archive path.
+- [x] Config/discovery `Debug` and errors contain no executable or archive path.
 
 **GREEN:**
 
-- [ ] Add redacted `CodexQuotaRuntimeConfig` with auto and explicit selection.
-- [ ] Validate explicit selection during runtime construction.
-- [ ] Add bounded environment `PATH` discovery used afresh for every automatic poll.
-- [ ] Return only stable discovery error codes.
+- [x] Add redacted `CodexQuotaRuntimeConfig` with auto and explicit selection.
+- [x] Validate explicit selection during runtime construction.
+- [x] Add bounded environment `PATH` discovery used afresh for every automatic poll.
+- [x] Return only stable discovery error codes.
 
 **Focused validator:**
 
@@ -88,29 +93,29 @@ cargo +1.97.0 clippy -p tokenmaster-runtime --all-targets --locked
 
 **RED:**
 
-- [ ] Fake source events prove poll completion precedes writer acquisition/store open.
-- [ ] Cancellation or deadline after source completion causes zero publication.
-- [ ] Writer contention maps to `Busy`, performs zero writes, and retains no snapshot.
-- [ ] Successful at-most-32 publication counts started/advanced/duplicate/stale,
+- [x] Fake source events prove poll completion precedes writer acquisition/store open.
+- [x] Cancellation or deadline after source completion causes zero publication.
+- [x] Writer contention maps to `Busy`, performs zero writes, and retains no snapshot.
+- [x] Successful at-most-32 publication counts started/advanced/duplicate/stale,
   allowance-change, and reset statuses exactly.
-- [ ] A store failure after N observations reports processed/changed counts for the
+- [x] A store failure after N observations reports processed/changed counts for the
   committed prefix and fails the refresh without exposing store details.
-- [ ] Repeating one normalized snapshot is idempotent and bounded.
-- [ ] Automatic discovery/transport/store failures map to the correct redacted stage
+- [x] Repeating one normalized snapshot is idempotent and bounded.
+- [x] Automatic discovery/transport/store failures map to the correct redacted stage
   and stable code.
 
 **GREEN:**
 
-- [ ] Add a private quota source interface and production discovery/transport source.
-- [ ] Add a private publisher owning the archive path and `RuntimeWriterLease`, but no
+- [x] Add a private quota source interface and production discovery/transport source.
+- [x] Add a private publisher owning the archive path and `RuntimeWriterLease`, but no
   idle SQLite connection.
-- [ ] Add one execution object that checks control before poll, after poll, before
+- [x] Add one execution object that checks control before poll, after poll, before
   each publication, and after the bounded loop.
-- [ ] Hold the shared writer guard across the complete publication loop and drop
+- [x] Hold the shared writer guard across the complete publication loop and drop
   store/guard before health publication.
-- [ ] Add a copyable latest-only refresh snapshot with bounded counts, elapsed time,
+- [x] Add a copyable latest-only refresh snapshot with bounded counts, elapsed time,
   observation time, last-success time, stage, and stable error code.
-- [ ] Classify only transient source/publication failures for accelerated retry.
+- [x] Classify only transient source/publication failures for accelerated retry.
 
 **Focused validator:**
 
@@ -138,30 +143,30 @@ cargo +1.97.0 clippy -p tokenmaster-runtime --all-targets --locked
 
 **RED:**
 
-- [ ] Start performs one immediate recovery refresh on the dedicated worker.
-- [ ] Ten thousand manual refresh requests retain at most one active plus one
+- [x] Start performs one immediate recovery refresh on the dedicated worker.
+- [x] Ten thousand manual refresh requests retain at most one active plus one
   coalesced follow-up.
-- [ ] Successful refresh selects the 15-minute normal cadence.
-- [ ] Writer contention, temporary spawn/unavailable, deadline, and early-exit
+- [x] Successful refresh selects the 15-minute normal cadence.
+- [x] Writer contention, temporary spawn/unavailable, deadline, and early-exit
   failures select the 60-second accelerated cadence; permanent failures do not.
-- [ ] Pause closes admission and cancelled in-flight source results cannot publish.
-- [ ] Resume and power-resume force exactly one coalesced recovery refresh.
-- [ ] Shutdown/Drop join scheduler and worker; repeated shutdown is idempotent.
-- [ ] Worker panic faults only quota health and leaves a separately running
+- [x] Pause closes admission and cancelled in-flight source results cannot publish.
+- [x] Resume and power-resume force exactly one coalesced recovery refresh.
+- [x] Shutdown/Drop join scheduler and worker; repeated shutdown is idempotent.
+- [x] Worker panic faults only quota health and leaves a separately running
   `LiveRuntime` usage snapshot unchanged.
-- [ ] Public snapshots contain no configured/archive path, account/window/value, or
+- [x] Public snapshots contain no configured/archive path, account/window/value, or
   fixture-private text.
 
 **GREEN:**
 
-- [ ] Compose a distinct `CodexQuotaRuntime` from the existing scheduler and worker.
-- [ ] Add crate-private scheduler retry-mode setters that change cadence without
+- [x] Compose a distinct `CodexQuotaRuntime` from the existing scheduler and worker.
+- [x] Add crate-private scheduler retry-mode setters that change cadence without
   manufacturing filesystem hints or immediate retry loops.
-- [ ] Expose `start`, `refresh_now`, `snapshot`, `try_completion`, `pause`, `resume`,
+- [x] Expose `start`, `refresh_now`, `snapshot`, `try_completion`, `pause`, `resume`,
   `apply_power_event`, and `shutdown`.
-- [ ] Translate the internal scheduler snapshot to quota-specific normal/accelerated
+- [x] Translate the internal scheduler snapshot to quota-specific normal/accelerated
   schedule health instead of exposing watcher terminology.
-- [ ] Preserve path-private `Debug` and stable runtime error mapping.
+- [x] Preserve path-private `Debug` and stable runtime error mapping.
 
 **Focused validator:**
 
@@ -186,15 +191,15 @@ cargo +1.97.0 clippy -p tokenmaster-runtime --all-targets --locked
 
 **RED/GREEN:**
 
-- [ ] Repeated source success, transport failure, writer contention, pause/resume, and
+- [x] Repeated source success, transport failure, writer contention, pause/resume, and
   shutdown return host private memory, handles, threads, USER, and GDI counts to the
   documented Windows tolerance.
-- [ ] No task-owned Codex/fixture process or quota worker thread remains after tests.
-- [ ] Source audit rejects browser/cookie/private endpoint/auth-file/shell/listener
+- [x] No task-owned Codex/fixture process or quota worker thread remains after tests.
+- [x] Source audit rejects browser/cookie/private endpoint/auth-file/shell/listener
   dependencies and raw response/path persistence.
-- [ ] Release dependency tree adds no browser, network, shell, async-runtime, or
+- [x] Release dependency tree adds no browser, network, shell, async-runtime, or
   foreign-language runtime dependency.
-- [ ] Automatic discovery never selects the installed npm `.cmd`/`.ps1` wrappers.
+- [x] Automatic discovery never selects the installed npm `.cmd`/`.ps1` wrappers.
 
 **Focused validator:**
 
@@ -221,6 +226,8 @@ pwsh -NoProfile -File scripts\audit-codex-quota-runtime.ps1 -RepositoryRoot (Get
 - Modify: `docs/ROADMAP.md`
 - Modify: `docs/CHANGELOG.md`
 - Modify: `docs/PROJECT_HISTORY.md`
+- Modify: `docs/AUDIT_AND_MASTER_PLAN.md`
+- Modify: `docs/FEATURE_PARITY.md`
 - Modify:
   `docs/superpowers/specs/2026-07-16-tokenmaster-codex-quota-runtime-design.md`
 - Modify:
@@ -228,15 +235,15 @@ pwsh -NoProfile -File scripts\audit-codex-quota-runtime.ps1 -RepositoryRoot (Get
 
 **Actions:**
 
-- [ ] Record exact discovery trust boundary, retry classification, I/O-before-lease
+- [x] Record exact discovery trust boundary, retry classification, I/O-before-lease
   invariant, per-window transactional publication, cancellation limitation, resource
   bounds, and separate health contract.
-- [ ] Advance TM-FUNC-009 only to runtime publication complete; keep quota UI and
+- [x] Advance TM-FUNC-009 only to runtime publication complete; keep quota UI and
   benefits/reminders/activation incomplete.
-- [ ] Set the next contour to typed reset-credit benefit inventory and expiration
+- [x] Set the next contour to typed reset-credit benefit inventory and expiration
   reminders before activation or UI.
-- [ ] Record verification evidence without current commit hashes or private paths.
-- [ ] Inspect the complete diff and repository language/dependency surface.
+- [x] Record verification evidence without current commit hashes or private paths.
+- [x] Inspect the complete diff and repository language/dependency surface.
 
 **Baseline:**
 
@@ -247,6 +254,11 @@ $env:RUSTFLAGS = '-Dwarnings'
 cargo +1.97.0 clippy --workspace --all-targets --locked
 cargo +1.97.0 test --workspace --locked
 ```
+
+**Verification result:** every command above exited zero after the final isolation
+regression was added. The focused quota resource harness also repeated its 16 warm-up
+plus 48 measured rounds with bounded memory/handle/thread/USER/GDI results and no
+remaining task-owned fixture child.
 
 **Final checkpoint commit:** `docs(runtime): close Codex quota refresh contour`
 

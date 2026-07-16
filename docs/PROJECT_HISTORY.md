@@ -1729,3 +1729,57 @@ transactional store publication, health projection, benefit inventory/reminders,
 UI, CLI/MCP, M0 acceptance, packaging, signing, and release remain unclaimed. The next
 implementation slice must finish app-server I/O before acquiring the existing writer
 lease and may pass only the owned normalized snapshot into quota publication.
+
+## 2026-07-16 — dedicated Codex quota runtime implemented
+
+Added path-private executable selection in `tokenmaster-runtime`. Explicit native
+configuration is authoritative and invalid configuration cannot fall back. Automatic
+selection captures the current process `PATH` on each poll, rejects more than 64 KiB
+or 128 entries, ignores relative entries, and validates only the exact platform
+native `codex.exe`/`codex` filename through `CodexAppServerCommand`. It never resolves
+shell aliases, `PATHEXT`, `.cmd`, `.ps1`, JavaScript/package-manager wrappers, browser
+state, or credentials. Deterministic contracts cover directory order, exact-name
+selection, invalid explicit configuration, bounds, missing candidates, and Debug/error
+redaction.
+
+Added `CodexQuotaRuntime` as a composition independent from the usage `LiveRuntime`.
+It reuses distinct instances of the constant-state scheduler and worker, performs one
+startup recovery refresh, coalesces manual/resume bursts, uses a 15-minute normal
+period and a 60-second period only for bounded transient process/lease failures, and
+owns pause/resume/power/shutdown/Drop lifecycle. Quota phase, schedule, worker, latest
+attempt, stable failure stage/code, counts, elapsed/observation time, and last-success
+time are exposed separately from usage-engine health without paths, identities,
+labels, quota values, raw provider payloads, or inner platform/store errors.
+
+The execution captures its wall-clock lower bound and completes discovery plus the
+short-lived app-server poll before trying the shared process writer lease. It rechecks
+cancellation/deadline, acquires without waiting, opens SQLite only under the guard,
+and applies at most 32 normalized observations in deterministic order. The guard spans
+the complete loop while each window retains the existing independent idempotent
+transaction. A later failure may keep an exact committed prefix and reports its
+counts; writer contention opens no SQLite store. Cancellation after source I/O
+publishes nothing. Store and guard are dropped before health publication.
+
+Focused discovery, execution, lifecycle, public fail-closed, concurrent
+usage-runtime/quota-worker fault-isolation, and full runtime tests pass with strict
+Clippy. The isolated Windows resource harness ran success, RPC failure, forced
+timeout, writer contention, and pause/resume in every round. It
+established a stable plateau after 16 warm-up rounds and passed 48 measured rounds
+with a 3,149,824-byte retained private floor, 5,615,616-byte sampled high, 131
+handles, four threads, USER=1, GDI=0, and no remaining task-owned fixture child.
+`scripts/audit-codex-quota-runtime.ps1` traverses 114 production dependency packages,
+checks the production portions of six quota-runtime source files and the release
+library, proves exact-native discovery plus source-before-publisher/lease-before-store
+ordering, and reports zero
+forbidden network/browser/cookie/private-endpoint/credential-file/shell/socket/
+direct-SQL/foreign-runtime matches. The current machine contains npm Codex
+`.ps1`/`.cmd` wrappers, while the exact-native search resolves the installed Windows
+app `codex.exe`.
+
+This closes executable discovery, quota refresh scheduling, writer coordination,
+transactional publication, separate health, and runtime resource/security evidence.
+Typed reset-credit benefit inventory, expiration reconciliation, reminders,
+notification delivery, activation, UI, CLI/MCP, M0 acceptance, packaging, signing,
+and release remain unclaimed. The next implementation slice is the independently
+approved benefit inventory/reminder contour; inventory read must not authorize
+activation.

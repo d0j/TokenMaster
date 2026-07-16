@@ -1,6 +1,6 @@
 # TokenMaster Codex Quota Runtime Design
 
-**Status:** approved for implementation on 2026-07-16
+**Status:** implemented and verified on 2026-07-16
 
 **Scope:** deterministic native-executable discovery plus one dedicated, bounded
 Codex quota refresh runtime. Benefit inventory/reminders/activation, UI, CLI, MCP,
@@ -250,3 +250,22 @@ The contour is accepted only when tests prove:
 Benefit inventory, reset-credit expiration reminders, opt-in activation, quota UI,
 skins, localization, CLI/MCP projections, and generic provider packages begin only
 after this runtime contour is verified.
+
+## 11. Implementation evidence
+
+- Exact-native discovery, configuration redaction, and fail-closed public contracts
+  pass.
+- Execution, lifecycle, cadence, cancellation, partial-publication, and usage-runtime
+  isolation contracts pass under strict runtime Clippy.
+- The isolated Windows harness passed 16 warm-up plus 48 measured rounds covering
+  success, RPC failure, forced timeout, writer contention, and pause/resume. It
+  retained a 3,149,824-byte private floor with a 5,615,616-byte sampled high,
+  131 handles, four threads, USER=1, GDI=0, and no task-owned fixture child.
+- The release audit covered 114 production dependency packages, the production
+  portions of six quota-runtime source files, and one release library with zero
+  forbidden network/browser/cookie/private-endpoint/credential-file/shell/socket/
+  direct-SQL or foreign-runtime matches.
+- Clean-root, formatting, strict locked workspace Clippy, the complete locked
+  workspace test/doctest baseline, and a concurrent usage-runtime/quota-worker fault
+  isolation regression pass. Existing opt-in authenticated-live and explicit
+  million-row tests remain intentionally ignored by the normal workspace command.

@@ -69,10 +69,10 @@ work now closes with a Windows 8+ static capacity-one power callback, forced res
 reconciliation, and 4,096-cycle private-memory/handle/thread/USER/GDI bounds. P2
 indexed analytics, pricing, and the provider-neutral quota history core are complete.
 The permitted built-in Codex quota normalizer and short-lived official app-server
-transport are complete for the pinned supported version. Executable discovery,
-dedicated quota refresh scheduling/writer coordination, banked-reset
-inventory/reminders, and Git output are next, followed by complete UI and automation
-work.
+transport, exact-native executable discovery, and dedicated quota refresh
+scheduling/writer coordination are complete for the pinned supported version.
+Banked-reset inventory/reminders and Git output are next, followed by complete UI and
+automation work.
 
 Completed P1-C.1: a no-async, constant-state coordinator with checked monotonic IDs,
 deadline/cancellation semantics, one active refresh, and one aggregate follow-up.
@@ -169,9 +169,12 @@ surfaces, batched indexed reads, current/legacy million-event scale, resource pl
   official app-server `0.144.1` normalization/transport, exact fixed argv/protocol,
   bounded process I/O, live two-window evidence, adversarial rejection, repeated
   success/error/timeout resource return, and a zero-match release authority audit.
-  Runtime executable discovery, quota refresh scheduling/writer coordination, and
-  separate banked-reset expiry/reminder inventory remain, followed by P2-E Git output
-  and P2-F joined product status.
+  Exact-native executable discovery and the separate quota scheduler/worker,
+  I/O-before-lease store publication, count-only health, lifecycle, resource, and
+  release-authority gates are now complete. Separate banked-reset benefit inventory,
+  expiry reconciliation, reminders, notification coverage, and later independently
+  authorized activation remain, followed by P2-E Git output and P2-F joined product
+  status.
 No frontend/database coupling or view-time full event grouping is accepted.
 
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset

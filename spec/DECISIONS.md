@@ -722,3 +722,40 @@ contract. A replaceable short-lived official boundary keeps TokenMaster
 credential-blind, bounds retained resources, preserves truthful stale data on failure,
 and allows a future connector implementation without changing the quota domain,
 store, query, or UI contracts.
+
+## ADR-038 — Separate bounded Codex quota runtime and I/O-before-lease publication
+
+Decision: executable selection and quota polling are composed in a dedicated
+`CodexQuotaRuntime`, not in the usage `LiveRuntime`. Explicit executable configuration
+is authoritative. Automatic selection captures at most 64 KiB/128 process-`PATH`
+entries on every poll, visits only absolute entries, and validates the exact native
+`codex.exe`/`codex` filename through `CodexAppServerCommand`; shell aliases,
+`PATHEXT`, script/package-manager shims, browser state, and credential files are never
+resolved or executed.
+
+The runtime reuses independent instances of the existing constant-state scheduler and
+worker. It starts with one recovery refresh, coalesces manual/resume requests into at
+most one follow-up, uses a 15-minute normal cadence, and selects the 60-second cadence
+only for transient writer/process unavailability. Version, schema, account, protocol,
+RPC, configuration, and invalid-data failures remain on the normal cadence. Quota
+phase/schedule/worker/latest-attempt health is separate from usage-engine publication
+and contains only stable codes, counts, times, and retry mode.
+
+One execution completes discovery and the short-lived app-server session before
+trying the shared writer lease. It rechecks cancellation/deadline, acquires without
+waiting, opens SQLite only under the guard, and applies at most 32 deterministic
+observations while holding that process guard. Existing per-window transactions remain
+the atomic unit: a later failure may leave an exact committed prefix and reports its
+counts, but no other TokenMaster writer can interleave and no cross-window rollback is
+claimed. Store/guard are dropped before health publication. Pause, suspend, resume,
+shutdown, and `Drop` close admission, cancel exact permits, and join owned threads;
+the bounded transport remains responsible for child cleanup.
+
+Rationale: extending the usage execution would acquire the writer lease before remote
+provider I/O and couple unrelated latency/health. A second custom orchestrator or
+async runtime would duplicate already verified coalescing/lifecycle state. A
+persistent child or aggressive retry on permanent incompatibility would increase
+idle memory/process authority. Exact-native discovery, separate constant-state
+composition, I/O-before-lease ordering, non-waiting publication, and count-only health
+preserve responsiveness, bounded memory, cross-process safety, and truthful stale
+quota history without importing UI or benefit-mutation authority.

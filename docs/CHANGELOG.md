@@ -6,6 +6,20 @@ All notable changes are recorded here.
 
 ### Added
 
+- Separate bounded Codex quota runtime with one independent scheduler/worker,
+  immediate startup/recovery refresh, capacity-one coalescing, 15-minute normal and
+  transient-only 60-second accelerated cadence, pause/resume/suspend/shutdown,
+  I/O-before-lease ordering, non-waiting shared writer admission, at-most-32
+  idempotent per-window publications, partial-prefix accounting, and count/time/code-
+  only health isolated from usage-engine state.
+- Exact-native Codex executable selection with authoritative explicit configuration,
+  fresh automatic process-`PATH` discovery bounded to 64 KiB/128 entries, exact
+  `codex.exe`/`codex` matching, relative/script/`PATHEXT`/package-wrapper rejection,
+  path-private config/discovery errors, public fail-closed smoke, 16+48-round
+  success/RPC/timeout/busy/pause-resume Windows resource plateau, and a release
+  dependency/production-source/library audit with explicit `#[cfg(test)]` exclusion
+  and zero forbidden network/browser/credential/shell/socket/direct-SQL/
+  foreign-runtime matches.
 - Built-in credential-blind Codex quota connector using one exact short-lived
   `app-server --stdio` child, stable non-experimental protocol pinned to `0.144.1`,
   strict account/multi-bucket rate-limit schemas, pseudonymous account identity,

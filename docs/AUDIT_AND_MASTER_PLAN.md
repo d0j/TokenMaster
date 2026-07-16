@@ -2,8 +2,9 @@
 
 Status: architecture and release plan approved after closure review; P0 through P1,
 P2-A, P2-B, P2-C pinned pricing, and the P2-D quota history core are implemented;
-the permitted built-in Codex quota normalizer/transport is also implemented.
-Executable discovery and dedicated quota refresh/store publication are next.
+the permitted built-in Codex quota normalizer/transport, exact-native executable
+discovery, and dedicated quota refresh/store publication are also implemented.
+Typed banked-reset benefit inventory and expiration reminders are next.
 Date: 2026-07-16.
 
 ## 1. Executive decision
@@ -249,8 +250,9 @@ also pass: exact domain/evaluator/schema/write/retention/read/query contracts,
 adversarial inference, 32-window/1,000-transition/10,000-poll scale, Windows resource
 return, and offline authority audit. The strict official Codex app-server normalizer/
 transport, live smoke, adversarial/resource gates, and release authority audit also
-pass. Executable discovery plus dedicated refresh/store publication is the active
-critical path; banked-reset inventory/reminders remain a separate following contour.
+pass. Exact-native discovery plus dedicated refresh/store publication now pass their
+focused, resource, and release-authority gates; banked-reset inventory/reminders are
+the active critical path.
 View-time full scans and period-labeled
 whole-session totals remain forbidden.
 P2-A now implements the bounded public values, separate defensive read-only/query-only
@@ -263,9 +265,9 @@ overview, series, breakdown, session store reads, calendar composition, immutabl
 aggregate/session facade values, and Task 8 scale/resource evidence are implemented.
 P2-C pinned pricing and its release gates are implemented; the P2-D quota history
 core and its acceptance gates are implemented. The permitted built-in Codex quota
-normalizer/transport is implemented for the pinned version. Executable discovery and
-dedicated refresh/store publication are next, followed separately by banked-reset
-inventory/reminders.
+normalizer/transport, exact-native discovery, and dedicated refresh/store publication
+are implemented for the pinned version. Typed banked-reset inventory, expiration
+reconciliation, and reminders are next.
 The older replay plan remains historical evidence for
 completed Tasks 1-2, but its Codex-owned Tasks 3+ are superseded and must not be
 executed.

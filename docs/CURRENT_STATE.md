@@ -442,6 +442,28 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   packages, 22 production library source files, and one release library with zero
   forbidden network/browser/cookie/private-endpoint/credential-file/shell/socket
   matches.
+- Codex quota runtime: `CodexQuotaRuntimeConfig` accepts authoritative explicit
+  native selection or a fresh bounded `PATH` search over at most 64 KiB/128 entries
+  for exact `codex.exe`/`codex` filenames only. A separate scheduler/worker performs
+  app-server I/O before trying the shared writer lease, opens SQLite only under the
+  non-waiting guard, publishes at most 32 independent idempotent window transactions,
+  and exposes one count/time/code-only health snapshot separate from usage-engine
+  health. Cancellation after source I/O writes nothing; partial store failure reports
+  the exact committed prefix. Normal/accelerated cadence is 15 minutes/60 seconds,
+  with permanent incompatibility kept on the normal cadence.
+- Codex quota runtime acceptance: focused discovery/execution/lifecycle/public
+  contracts, concurrent usage-runtime/quota-worker fault isolation, and strict
+  runtime Clippy pass. The isolated Windows gate completed
+  16 warm-up and 48 measured rounds; every round covered success, RPC failure, forced
+  timeout, writer contention, and pause/resume. The retained private floor was
+  3,149,824 bytes, sampled high 5,615,616 bytes, handles 131, threads four, USER=1,
+  GDI=0, with no task-owned fixture child remaining. The release audit covers 114
+  production dependency packages, the production portions of six quota-runtime
+  source files, and one release library with zero forbidden network/browser/cookie/
+  private-endpoint/credential-file/shell/socket/direct-SQL or foreign-runtime matches.
+  The local process `PATH`
+  contains npm `.ps1`/`.cmd` wrappers, but exact-native discovery selects the
+  installed Windows app `codex.exe`.
 - Verification correction: the first post-Task-1 workspace run reproduced an existing
   query resource-test defect. A default Rust test harness changed its own worker
   threads during process-wide `PrivateUsage` sampling, while allocator spikes later
@@ -465,12 +487,12 @@ exact domain values, deterministic identities, pure reset/allowance evaluation,
 strict schema v10, exact v9 migration, transactional writes, bounded retention,
 defensive store reads, immutable public query values/service, adversarial and
 release-scale evidence, Windows resource return, and offline authority audit.
-The permitted credential-free Codex quota normalizer and short-lived official
-app-server transport are now implemented and live-verified for the pinned version.
-The immediate next contour is executable discovery plus a dedicated quota refresh
-worker that performs provider I/O without a writer lease, then acquires the existing
-lease only for bounded normalized store publication. Banked-reset inventory/reminders
-remain a separate following contour. No quota value may be inferred
+The permitted credential-free Codex quota normalizer, short-lived official app-server
+transport, exact-native executable discovery, and separate bounded quota runtime are
+now implemented and verified. The immediate next contour is typed reset-credit
+benefit inventory, expiration reconciliation, default/custom reminder profiles, and
+truthful notification coverage. Activation remains a later independently authorized
+capability; UI follows the completed data contracts. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.
 P2-E Git output and P2-F joined product status remain after P2-D; P3 complete UI
 follows the product-data contracts.
@@ -561,10 +583,10 @@ price facts, fixed-point selection, bounded overrides, public costs, and scale/
 resource/offline evidence are complete. P2-D quota values, evaluator, schema-v10
 storage, transactional history writes, bounded retention, defensive reads, immutable
 public quota query, adversarial/scale/resource gates, and offline authority audit are
-complete. The built-in Codex quota normalizer and bounded official app-server
-transport are also complete for the pinned version. Executable discovery and the
-dedicated refresh/store-publication worker are next; banked-reset inventory/reminders
-follow as a separate contour.
+complete. The built-in Codex quota normalizer, bounded official app-server transport,
+exact-native executable discovery, and dedicated refresh/store-publication worker are
+complete for the pinned version. Typed banked-reset inventory, expiration
+reconciliation, and reminders are the next separate contour.
 No view-time grouping of the full event table is allowed.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.

@@ -17,7 +17,9 @@ Exact installed Codex native executable
   -> short-lived version-gated `app-server --stdio` child
   -> strict account/rate-limit wire validation and pseudonymous account identity
   -> provider-neutral primary/secondary quota definitions and samples
-  -> future dedicated refresh worker and bounded transactional quota publication
+  -> separate constant-state quota scheduler/worker
+  -> shared non-waiting writer lease after provider I/O only
+  -> bounded per-window transactional quota publication
   -> immutable quota epochs
 
 Validated Codex reset-credit rows or future sandboxed read-only provider component
@@ -73,7 +75,10 @@ does not reparse sources or rebuild the archive.
 
 The built-in live quota source is separate from the JSONL usage reader. Composition
 supplies one already resolved absolute native Codex executable to
-`CodexQuotaTransport`. One poll creates exactly `app-server --stdio`, performs the
+`CodexQuotaTransport`. `CodexQuotaRuntime` resolves it either from authoritative
+explicit configuration or by scanning a bounded current process `PATH` for the exact
+native filename only; shell aliases, `PATHEXT`, scripts, package-manager wrappers, and
+relative entries are ignored. One poll creates exactly `app-server --stdio`, performs the
 stable non-experimental protocol supported by app-server `0.144.1`, reads account and
 multi-bucket rate limits, and then terminates/reaps the child and joins its one helper
 thread. The connector owns no endpoint, credential, browser, socket, SQLite
@@ -87,6 +92,19 @@ duplicate; primary/secondary provider windows map to exact fixed-point quota sam
 The official response's reset-credit rows are only bounded and validated in this
 contour. A later benefit adapter will map them to typed lots without inheriting quota
 read authority as activation authority.
+
+Quota runtime scheduling, worker state, and health are independent from `LiveRuntime`.
+The normal period is 15 minutes; only bounded transient process/lease failures select
+the 60-second period. Discovery and the complete app-server poll finish before the
+shared writer lease is tried. The runtime then opens a writable store only under that
+guard and applies at most 32 observations. The guard covers the complete loop while
+each window keeps its existing independent idempotent transaction; a failure may
+report an exact committed prefix but no other TokenMaster writer can interleave. The
+store and guard are dropped before one latest count-only health snapshot is published.
+Pause/suspend cancellation after source I/O prevents publication, resume coalesces one
+recovery refresh, and shutdown joins both quota-owned host threads. No executable/
+archive path, account/window identity, label, quota value, provider payload, or inner
+OS/store error enters quota health.
 
 The watcher is never source authority. Its callback discards `notify` event/error paths
 before touching shared state; one atomic aggregate retains only dirty/force/urgency,

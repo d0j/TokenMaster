@@ -443,6 +443,33 @@ completion channel, snapshot, archive, or diagnostics. `tokenmaster-engine` fail
 compilation under `panic=abort`; only unwind builds can provide the required contained
 fault transition.
 
+The Codex quota runtime is a separate composition from usage ingestion. Automatic
+discovery captures only the bounded process `PATH`, visits absolute entries in order,
+and validates the exact platform-native Codex filename through the path-private
+command descriptor. It does not use shell resolution, `PATHEXT`, aliases, registry
+commands, `.cmd`, `.ps1`, JavaScript wrappers, package managers, browser state, or
+credential files. Explicit executable selection is authoritative and invalid explicit
+configuration fails closed rather than selecting another binary.
+
+Provider I/O completes before writer admission. The runtime may retain the archive
+path and an unopened lease factory, but it holds no file guard, SQLite connection,
+query snapshot, UI callback, or usage-engine state while the child runs. After a
+successful owned normalized snapshot, it tries the existing process writer lease once,
+opens the writable store only under that guard, applies at most 32 independent
+idempotent observations, and drops store/guard before publishing count-only health.
+Writer contention writes nothing and returns `busy`. Cancellation after source I/O
+writes nothing; cancellation during the bounded store loop may leave only the exact
+already committed prefix and reports partial counts without claiming rollback.
+
+Quota-runtime health is independent from usage-engine health and excludes executable/
+archive paths, pseudonymous account identity, window identity, labels, quota values,
+raw frames, provider messages, email, credentials, reset-credit IDs, and inner
+platform/store errors. Permanent incompatibility remains on the 15-minute cadence;
+only bounded transient process/lease failures may use the 60-second cadence. The
+runtime owns zero child processes while idle, at most one during a poll, two
+constant-state host threads while running, capacity-one scheduling/worker wakes, and
+one latest snapshot. Shutdown joins owned threads and the transport reaps its child.
+
 ## TM-SEC-007 — Benefit activation authority
 
 Banked-reset inventory read, official activation link, idempotent activation,

@@ -168,13 +168,31 @@ left. The transport audit covers 72 production dependency packages, 22 productio
 library source files, and one release library with zero forbidden network/browser/
 cookie/private-endpoint/credential-file/shell/socket matches.
 
-The immediate next slice is executable discovery plus a dedicated quota refresh
-worker. Provider I/O must finish before acquiring the existing process writer lease;
-only the bounded owned normalized snapshot may enter transactional quota publication.
-Do not attach app-server I/O to the usage scan worker or hold SQLite/query/UI state
-across it. Banked-reset inventory/reminders and UI remain separate later contours. Do
-not replace aggregates with view-time full scans, infer quota from local token/cost
-totals, or relabel whole-session totals as period totals.
+Executable discovery and the dedicated quota runtime are complete. Automatic
+selection scans a fresh bounded `PATH` for the exact native filename; explicit
+selection is authoritative and cannot fall back. `CodexQuotaRuntime` has its own
+scheduler, worker, retry cadence, lifecycle, completion, and count-only health. It
+finishes app-server I/O before trying the shared process writer lease, opens SQLite
+only under that guard, and publishes the at-most-32 normalized observations with the
+existing independent per-window transaction/idempotency semantics. It never attaches
+provider I/O or health to the usage scan worker.
+
+The focused runtime suite, concurrent usage-runtime/quota-worker fault isolation,
+public fail-closed smoke, strict Clippy, 16+48-round success/RPC/timeout/busy/
+pause-resume Windows resource gate, and release authority audit pass. The runtime
+gate retained a 3,149,824-byte private floor with a
+5,615,616-byte sampled high, 131 handles, four threads, USER=1, GDI=0, and no
+task-owned fixture child. Current project truth is recorded in ADR-038 and
+`docs/superpowers/specs/2026-07-16-tokenmaster-codex-quota-runtime-design.md`.
+
+The immediate next slice is the separately approved typed reset-credit benefit
+inventory and expiration/reminder contour. Preserve multiple lots and quantities,
+expiration precision, FEFO projection, default 7-day/24-hour/12-hour/6-hour/1-hour
+thresholds, user replacement/custom thresholds, deduplicated reminder delivery, and
+truthful notification coverage. Inventory read must not imply activation authority.
+UI, CLI/MCP, M0 acceptance, packaging, signing, and release remain later and
+unclaimed. Do not infer quota from local token/cost totals or replace aggregates with
+view-time full scans.
 The current post-Task-8 clean-root, formatting, strict locked workspace Clippy, and
 complete locked workspace test/doctest baseline passes. The query resource binary uses
 an isolated `harness = false` process plus a bounded maximum-64-round warm-up that
