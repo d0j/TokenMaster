@@ -371,8 +371,25 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   Two injected maintenance boundaries restore both rows and global retained count,
   then deterministic retry succeeds. Seven focused retention contracts, 52 store unit
   tests, clean-root, formatting, strict locked workspace Clippy, and the complete
-  locked workspace test/doctest suite pass. Quota reads/query, transport,
-  inventory/reminders, UI, and automation remain unimplemented.
+  locked workspace test/doctest suite pass. This retention task adds no public query,
+  transport, inventory/reminder, UI, or automation capability.
+- P2-D Task 6 defensive quota reads: `UsageReadStore` now captures zero through 32
+  unique exact current-window keys or one exact transition history page. Current
+  capture owns validated definitions, samples, current epoch plus first sample, and an
+  optional exact last transition under one quota revision. Transition history is
+  newest-first, revision/filter-bound, opaque-keyset paged at 256+1, and returns owned
+  pre/post samples without `OFFSET`, usage tables, price tables, caller SQL, or
+  caller-defined sorting. Missing windows remain absent.
+  Critical review added deterministic transition restoration to the quota authority
+  crate and relational read checks: current epoch/provider-reset projection and
+  transition source, reset times, allowance units, detection interval, ordering, and
+  reset epoch identity must match their boundary samples. Post-open drift and a
+  missing referenced last transition fail `InvalidStoredValue`. Total deadline is
+  enforced even across multiple short statements and the progress handler is cleared
+  after every return. Six focused query contracts, 56 store unit tests, exact index
+  plan checks, quota/store strict Clippy, and the complete locked workspace gate pass.
+  Public quota query values/service, transport, inventory/reminders, UI, and
+  automation remain unimplemented.
 - Verification correction: the first post-Task-1 workspace run reproduced an existing
   query resource-test defect. A default Rust test harness changed its own worker
   threads during process-wide `PrivateUsage` sampling, while allocator spikes later
@@ -391,12 +408,12 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 ## Next implementation slice
 
 P2-D quota history core execution is active under
-`docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`. Tasks 1-5 exact
+`docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`. Tasks 1-6 exact
 domain values, deterministic identities, pure reset/allowance evaluation, strict
 schema v10, exact v9 migration, and transactional quota observation application are
-complete together with bounded evidence-preserving retention. Task 6 defensive quota
-read snapshots and keyset transition history is the immediate next slice. Query
-facade and acceptance evidence remain Tasks 7-8.
+complete together with bounded evidence-preserving retention and defensive store
+snapshots/keyset history. Task 7 immutable public quota query values/service is the
+immediate next slice; acceptance evidence remains Task 8.
 Permitted Codex quota transport and banked reset
 inventory/reminders remain separate later contours. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.
@@ -487,9 +504,9 @@ page/detail reads, private calendar/timezone composition, and immutable public f
 values and million-row/storage/privacy/resource evidence are green. P2-C schema-v9
 price facts, fixed-point selection, bounded overrides, public costs, and scale/
 resource/offline evidence are complete. P2-D quota values, evaluator, and schema-v10
-  foundation plus transactional history writes are complete; bounded retention/query
-  and banked-reset inventory are next. No view-time grouping of the full event table
-  is allowed.
+foundation, transactional history writes, bounded retention, and defensive store
+reads are complete; immutable public quota query and banked-reset inventory are next.
+No view-time grouping of the full event table is allowed.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 

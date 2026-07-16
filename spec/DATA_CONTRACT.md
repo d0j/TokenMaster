@@ -413,6 +413,23 @@ per-window counts above a hard cap even when singleton counts were altered to ma
 Maintenance changes only retained detail/counts, not semantic quota revision, and its
 delete/state fault boundaries restore the exact prior archive.
 
+Defensive quota reads are implemented on the separate query-only `UsageReadStore`.
+One deferred transaction first captures the independent quota revision, then loads at
+most 32 exact current windows or one newest-first transition page with at most 256+1
+rows. Missing current windows remain absent. Transition continuation is keyset-based
+on sequence and opaque identity, bound to the exact window and captured revision, and
+never uses `OFFSET`.
+
+Every returned value is reconstructed through the domain/quota constructors rather
+than copied into an unchecked read DTO. Current definition/sample/epoch/current-row
+projections must agree on exact key, revision, identities, times, provider epoch,
+advertised reset, evidence metadata, and transition sequence. Transition IDs are
+recomputed from their normalized identity fields; kind/epoch shape, allowance
+direction, detection interval, pre/post ordering, old/new advertised resets, source,
+allowance boundary units, and reset-current epoch identity must agree with the joined
+boundary samples. Any malformed or post-open altered projection fails with
+`InvalidStoredValue`; no plausible partial snapshot is returned.
+
 ## TM-DATA-009 — Banked reset inventory and activation receipts
 
 A provider benefit lot is immutable evidence scoped by provider, account/workspace,

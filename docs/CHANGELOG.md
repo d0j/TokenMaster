@@ -6,6 +6,12 @@ All notable changes are recorded here.
 
 ### Added
 
+- Defensive quota store snapshots with zero-to-32 exact current windows, owned
+  definition/sample/epoch/last-transition values, revision-bound newest-first
+  transition history capped at 256+1, opaque filter-bound keyset cursors, fixed
+  quota-only indexed SQL, strict two-second total deadlines, guaranteed progress
+  cleanup, deterministic transition restoration, boundary-projection reconciliation,
+  redacted capture `Debug`, and post-open drift rejection.
 - Evidence-preserving bounded quota retention with exported 512-sample/256-epoch-
   transition soft defaults, 2,048/1,024 per-window hard caps, 256-candidate
   maintenance pages, automatic equivalent-poll pruning, same-definition/same-window

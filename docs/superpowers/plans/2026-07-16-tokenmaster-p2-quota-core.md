@@ -6,7 +6,7 @@
 > (`- [ ]`) syntax for tracking.
 
 **Status:** inline execution in progress after spec-coverage, placeholder, type-flow,
-scope, authority-boundary, and restart-state self-review; Tasks 1-5 complete, Task 6
+scope, authority-boundary, and restart-state self-review; Tasks 1-6 complete, Task 7
 next
 
 **Goal:** Build the provider-neutral quota history data core that preserves scheduled,
@@ -547,9 +547,14 @@ git commit -m "feat(store): bound quota history retention"
 **Files:**
 
 - Create: `crates/store/src/usage/query/quota.rs`
+- Modify: `crates/quota/src/detector.rs`
+- Modify: `crates/quota/src/identity.rs`
+- Modify: `crates/quota/src/lib.rs`
+- Modify: `crates/quota/tests/detector_contract.rs`
 - Modify: `crates/store/src/usage/query.rs`
 - Modify: `crates/store/src/usage/mod.rs`
 - Modify: `crates/store/src/lib.rs`
+- Modify: `crates/store/src/usage/quota_write.rs`
 - Create: `crates/store/tests/quota_query_contract.rs`
 
 **Interfaces:**
@@ -572,38 +577,45 @@ Current query accepts at most 32 exact window keys. Transition page accepts one 
 window, exact optional expected quota revision, optional opaque cursor, `1..=256`
 page size, and a maximum two-second deadline.
 
-- [ ] **Step 1: Write failing query/value/index tests**
+- [x] **Step 1: Write failing query/value/index tests**
 
 Cover empty/current/multiple scopes, exact revision binding, 256+1 lookahead,
 descending sequence cursor, changed filter/revision rejection, missing window, deadline
 cleanup, query-only behavior, owned values, redacted cursor/ID `Debug`, and real
 `EXPLAIN QUERY PLAN` index seeks. Assert quota SQL contains no usage/price table.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-store --test quota_query_contract --locked
 ```
 
-- [ ] **Step 3: Implement fixed read SQL**
+- [x] **Step 3: Implement fixed read SQL**
 
 Add no caller-defined SQL, sort, expression, or column selection. Capture quota
 revision and rows in one deferred transaction. Remove the progress handler before
 every success/error return.
 
-- [ ] **Step 4: Verify**
+Critical review additionally requires validated transition restoration, reconciliation
+of duplicated current/transition projections with boundary samples, post-open drift
+rejection, and rejection of a capture that completes after the total deadline even if
+no individual SQLite statement crossed the progress callback interval.
+
+- [x] **Step 4: Verify**
 
 ```powershell
+cargo +1.97.0 test -p tokenmaster-quota --locked
 cargo +1.97.0 test -p tokenmaster-store --test quota_query_contract --locked
 cargo +1.97.0 test -p tokenmaster-store --locked
 $env:RUSTFLAGS = '-Dwarnings'
+cargo +1.97.0 clippy -p tokenmaster-quota --all-targets --locked
 cargo +1.97.0 clippy -p tokenmaster-store --all-targets --locked
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
-git add -- crates/store/src/usage/query/quota.rs crates/store/src/usage/query.rs crates/store/src/usage/mod.rs crates/store/src/lib.rs crates/store/tests/quota_query_contract.rs
+git add -- crates/quota/src/detector.rs crates/quota/src/identity.rs crates/quota/src/lib.rs crates/quota/tests/detector_contract.rs crates/store/src/usage/query/quota.rs crates/store/src/usage/query.rs crates/store/src/usage/mod.rs crates/store/src/lib.rs crates/store/src/usage/quota_write.rs crates/store/tests/quota_query_contract.rs
 git commit -m "feat(store): add bounded quota snapshots"
 ```
 

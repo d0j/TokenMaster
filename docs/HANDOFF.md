@@ -102,7 +102,7 @@ four breakdowns, session pages, and detail through 401/256-target batches with a
 global 512-key detail cap, never one query per visible row. The final current/legacy
 million gate passed: amplification 1.862x/2.010x, full p95 148.168/156.080 ms,
 32-scope 158.588/162.504 ms, session page below 14 ms, detail below 1 ms. Resource and
-  production pricing-network audits pass. P2-D quota history core Tasks 1-5 are complete:
+production pricing-network audits pass. P2-D quota history core Tasks 1-6 are complete:
 the floating-point `QuotaTarget` placeholder is gone, and exact bounded quota IDs,
 parts-per-million ratios, optional units, provider thresholds, definitions, samples,
 reset evidence, validated serde, and redacted observation IDs are implemented and
@@ -111,30 +111,37 @@ domain-separated deterministic identities, exact duplicate/stale/conflict and
 transition-sequence gates, scheduled/early/repeated/manual reset classification,
 allowance changes, comparable maximum use with independent ratio/unit observation
 provenance, and restart-safe definition revisions. Schema v10 now adds exact strict
-  quota tables/indexes/triggers, independent quota revision, same-window composite
-  evidence ownership, semantic allowance checks, exact v9 preservation, malformed
-  reopen rejection, and residue-free injected rollback. The store now applies one
-  normalized quota observation in one immediate transaction with duplicate/stale
-  no-op, immutable definition/sample/history/transition publication, exact quota
-  revision advance, deterministic retry, global observation identity, five-boundary
-  rollback, and fail-closed current projection validation. Quota retention now exports
-  512/256 soft defaults, 2,048/1,024 hard caps, and a 256-row maintenance page.
-  Consecutive equivalent polls prune only the prior unprotected sample; explicit
-  maintenance is definition-bound and same-window, preserves first/current/max and
-  all reset pre/post/max evidence, and leaves meaningful or transition history above
-  soft defaults. Applying or reopening over-cap state fails closed. Maintenance
-  rollback and deterministic retry are covered at both delete/count boundaries.
-The immediate next slice is Task 6 in
-`docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: defensive quota read
-snapshots and bounded keyset transition history. Public query values, permitted Codex
-quota transport, banked-reset inventory/reminders, and UI are not implemented. Do not
+quota tables/indexes/triggers, independent quota revision, same-window composite
+evidence ownership, semantic allowance checks, exact v9 preservation, malformed
+reopen rejection, and residue-free injected rollback. The store now applies one
+normalized quota observation in one immediate transaction with duplicate/stale
+no-op, immutable definition/sample/history/transition publication, exact quota
+revision advance, deterministic retry, global observation identity, five-boundary
+rollback, and fail-closed current projection validation. Quota retention now exports
+512/256 soft defaults, 2,048/1,024 hard caps, and a 256-row maintenance page.
+Consecutive equivalent polls prune only the prior unprotected sample; explicit
+maintenance is definition-bound and same-window, preserves first/current/max and
+all reset pre/post/max evidence, and leaves meaningful or transition history above
+soft defaults. Applying or reopening over-cap state fails closed. Maintenance
+rollback and deterministic retry are covered at both delete/count boundaries.
+`UsageReadStore` now returns owned exact current snapshots for at most 32 unique
+window keys and revision-bound newest-first transition pages capped at 256+1. Fixed
+quota-only indexed SQL, one deferred transaction, opaque filter-bound keyset cursors,
+two-second total deadlines, progress cleanup, redacted `Debug`, deterministic
+transition restoration, and current/boundary projection reconciliation are covered.
+Missing windows stay absent; stale revision, changed cursor filter, malformed rows,
+missing last transition, and post-open drift fail closed.
+The immediate next slice is Task 7 in
+`docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: immutable public
+quota values and `QueryService` facade mapping. Permitted Codex quota transport,
+banked-reset inventory/reminders, and UI are not implemented. Do not
 replace aggregates with view-time full scans, infer quota from local token/cost totals,
 or relabel whole-session totals as period totals.
-The current post-Task-5 clean-root, formatting, strict locked workspace Clippy, and
+The current post-Task-6 clean-root, formatting, strict locked workspace Clippy, and
 complete locked workspace test/doctest baseline passes. The query resource binary uses
 an isolated `harness = false` process plus a bounded maximum-64-round warm-up that
-  waits for two topology-stable eight-round retained floors before measurement and
-  ignores one transient low allocator sample only while choosing the warm-up floor. The
+waits for two topology-stable eight-round retained floors before measurement and
+ignores one transient low allocator sample only while choosing the warm-up floor. The
 original 1 MiB open/drop and 2 MiB aggregate/rebuild budgets plus per-sample
 handle/thread/USER/GDI bounds remain unchanged. Two fresh focused runs and the
 warnings-as-errors workspace binary pass.

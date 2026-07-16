@@ -643,3 +643,27 @@ allowance changes. Definition-bound equivalence plus reference-aware deletion ke
 steady polling near constant size without changing visible truth. Fixed pages and
 hard caps bound work and storage; preserving semantic revision avoids invalidating
 current/transition consumers for deletion of interchangeable internal detail.
+
+## ADR-035 — Defensive quota snapshots with revision-bound keyset history
+
+Decision: quota reads stay on the existing separate `UsageReadStore` and expose two
+fixed operations only. Current capture accepts at most 32 unique exact window keys.
+Transition capture accepts one exact window, optional expected quota revision, an
+opaque revision/filter-bound cursor, and a page of at most 256 rows plus one lookahead.
+Both operations use one deferred transaction, fixed quota-only parameterized SQL,
+indexed exact/keyset predicates, no `OFFSET`, no caller-defined SQL/sort/projection,
+and a total deadline of at most two seconds with guaranteed progress-handler cleanup.
+Missing current windows are absent, not zero.
+
+Stored rows are not trusted merely because schema v10 accepted them earlier. Reads
+restore domain/quota authority objects, recompute deterministic transition identity,
+and validate current epoch/current-row and transition pre/post projections against
+their joined samples. A stale expected revision, changed cursor filter, malformed row,
+missing last transition, or post-open projection drift fails closed without returning
+partial values.
+
+Rationale: UI, CLI, and MCP need one immutable quota truth without blocking on full
+history scans or accepting corrupted duplicated columns as plausible state. Separate
+read authority, fixed bounds, revision-bound keyset continuation, owned values, and
+repeated relational validation keep latency/memory bounded while preserving restart,
+privacy, and automation semantics.

@@ -68,6 +68,21 @@ post-count faults prove rollback. Reopen independently rejects over-cap persiste
 state, including a tampered archive whose global retained count was made internally
 consistent.
 
+The implemented quota read boundary adds no write, migration, filesystem, network,
+clock, shell, HTTP, credential, provider, or raw-payload authority. It runs only on
+the existing read-only/query-only defensive connection with fixed parameterized
+quota-table SQL, exact key filters, no caller-defined expressions, no `OFFSET`, at
+most 32 current windows, and at most 256+1 transition rows. Opaque cursors bind the
+exact window and quota revision; public capture/cursor `Debug` output redacts filters
+and identities.
+
+Read reconstruction repeats domain and deterministic transition-identity validation
+and cross-checks current epoch/current-row and transition boundary facts against the
+joined samples. Post-open archive drift therefore fails closed instead of becoming
+plausible UI truth. A two-second maximum deadline is enforced across the complete
+capture as well as inside SQLite VM execution, and the progress handler is removed
+after success or failure so cancellation cannot contaminate the next query.
+
 Providers emit bounded observation/session-relation drafts only. They cannot create
 event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or
 canonical events. Those values are created only by TokenMaster accounting code. Store

@@ -287,6 +287,19 @@ window, and may delete only old unreferenced samples for which a newer equivalen
 sample exists under the same definition revision. Zero or an oversized page fails
 before writes.
 
+`UsageReadStore::capture_quota_windows` accepts zero through 32 unique exact window
+keys and a deadline no greater than two seconds. It returns the independent quota
+revision plus owned available definitions, current samples, current epoch state and
+first samples, and optional exact last transitions. Missing requested windows are
+omitted rather than converted to zero. `UsageReadStore::capture_quota_transitions`
+accepts one exact window, an optional expected quota revision, an optional opaque
+revision-and-filter-bound cursor, a page size from 1 through 256, and the same deadline
+bound. It returns newest-first immutable transitions using a 256+1 maximum lookahead,
+owned pre/post samples, `has_more`, and a continuation only when another row exists.
+Changed revision/filter cursors fail closed. Both captures use fixed quota-only indexed
+SQL in one deferred snapshot, accept no caller SQL/sort/column expression, return no
+usage/price rows, and clear deadline interruption state before every return.
+
 Quota snapshots expose current window epochs and a bounded transition page. Full
 weekly resets include before/after values, maximum pre-reset use, old/new reset times,
 transition kind, evidence source, confidence, and an exact or bounded detection time.

@@ -1570,3 +1570,42 @@ This closes P2-D Task 5 only. Task 6 defensive quota read snapshots and bounded 
 transition history is next; public query mapping, permitted Codex transport,
 banked-reset inventory/reminders, UI, automation, M0 acceptance, packaging, signing,
 and release remain open.
+
+## 2026-07-16 — P2-D defensive quota store snapshots implemented
+
+Added fixed `UsageReadStore` quota captures. Current capture accepts zero through 32
+unique exact window keys and returns one independent quota revision plus owned
+available definitions, current samples, current epoch state and first samples, and
+optional exact last transitions. Missing requested windows remain absent. Transition
+capture accepts one exact window, optional expected revision, optional opaque
+revision/filter-bound cursor, a page from 1 through 256, and a deadline no greater than
+two seconds. It returns newest-first immutable transitions, owned pre/post samples,
+and a continuation only after a fixed one-row lookahead.
+
+The SQL surface is fixed and quota-only: no caller SQL, sort, projection, `OFFSET`,
+usage table, or price table is accepted. Exact primary/composite index plans are
+asserted for current, first transition, and cursor pages without temporary sorting.
+Each capture owns one deferred snapshot. Stale revisions and changed cursor filters
+fail before returning values; deadline interruption is cleared before the next query.
+Critical review found that SQLite VM interruption alone was not a strict total
+deadline across multiple short statements, so a completed late capture is also
+rejected.
+
+Read-side values are restored through domain/quota authority rather than unchecked
+DTO construction. `QuotaTransition` now retains its definition revision and exposes a
+validated restore/parts round trip that recomputes deterministic identity and checks
+kind/epoch, allowance, maximum-use, reset-time, and detection shapes. The store also
+cross-checks current epoch provider/reset projection and transition source, old/new
+reset times, allowance boundary units, detection interval, observation ordering, and
+reset-current epoch identity against joined samples. Long-lived-reader tests prove
+that missing last transitions and post-open epoch/transition projection drift fail
+`InvalidStoredValue` rather than becoming plausible UI state.
+
+Six focused quota query contracts, 56 store unit tests, the complete store and quota
+suites, strict quota/store Clippy, formatting, diff checks, clean-root, and the
+complete locked workspace test/doctest and warnings-as-errors gate pass. The normal
+workspace run keeps the explicitly ignored reference/scale tests skipped.
+
+This closes P2-D Task 6 only. Task 7 immutable public quota query values/service is
+next; permitted Codex transport, banked-reset inventory/reminders, UI, automation, M0
+acceptance, packaging, signing, and release remain open.
