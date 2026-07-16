@@ -14,6 +14,7 @@ use tokenmaster_store::{AggregateRebuildStatus, UsageStore};
 
 const SOURCE_KEY: [u8; 32] = [7; 32];
 const PRIVATE_PLATEAU_WARMUP_ROUNDS: usize = 8;
+const PRIVATE_PLATEAU_MAX_WARMUP_ROUNDS: usize = 64;
 
 #[derive(Clone, Copy, Debug, Default)]
 struct ResourceCounts {
@@ -298,6 +299,100 @@ fn private_return_windows_reject_sustained_retained_growth() {
     ));
 }
 
+fn private_warmup_restarts_after_topology_and_allocator_phase_changes() {
+    let mut samples = Vec::new();
+    samples.extend((0..8).map(|offset| ResourceCounts {
+        private_bytes: 4_700_000 + offset * 10_000,
+        handles: 119,
+        threads: 4,
+        user_objects: 1,
+        gdi_objects: 0,
+    }));
+    samples.extend((0..8).map(|offset| ResourceCounts {
+        private_bytes: if offset == 0 {
+            3_100_000
+        } else {
+            4_700_000 + offset * 20_000
+        },
+        handles: 119,
+        threads: 1,
+        user_objects: 1,
+        gdi_objects: 0,
+    }));
+    assert!(stable_warmup_plateau(&samples, 8, 1_048_576).is_none());
+
+    samples.extend((0..8).map(|offset| ResourceCounts {
+        private_bytes: 5_600_000 + offset * 20_000,
+        handles: 119,
+        threads: 1,
+        user_objects: 1,
+        gdi_objects: 0,
+    }));
+    assert!(stable_warmup_plateau(&samples, 8, 1_048_576).is_none());
+
+    samples.extend((0..8).map(|offset| ResourceCounts {
+        private_bytes: 5_700_000 + offset * 20_000,
+        handles: 119,
+        threads: 1,
+        user_objects: 1,
+        gdi_objects: 0,
+    }));
+    let plateau = stable_warmup_plateau(&samples, 8, 1_048_576).expect("stable latest plateau");
+    assert_eq!(plateau.samples.len(), 8);
+    assert_eq!(plateau.private_floor, 5_700_000);
+    assert_eq!(
+        plateau
+            .samples
+            .iter()
+            .map(|sample| sample.private_bytes)
+            .min(),
+        Some(5_700_000)
+    );
+    assert!(plateau.samples.iter().all(|sample| sample.threads == 1));
+}
+
+struct StableWarmupPlateau<'a> {
+    samples: &'a [ResourceCounts],
+    private_floor: usize,
+}
+
+fn stable_warmup_plateau<'a>(
+    samples: &'a [ResourceCounts],
+    window_size: usize,
+    private_budget: usize,
+) -> Option<StableWarmupPlateau<'a>> {
+    let required_samples = window_size.checked_mul(2)?;
+    if window_size == 0 || samples.len() < required_samples {
+        return None;
+    }
+    let candidate = &samples[samples.len() - required_samples..];
+    let topology = candidate[0];
+    if candidate.iter().any(|sample| {
+        sample.handles != topology.handles
+            || sample.threads != topology.threads
+            || sample.user_objects != topology.user_objects
+            || sample.gdi_objects != topology.gdi_objects
+    }) {
+        return None;
+    }
+    let (previous_window, current_window) = candidate.split_at(window_size);
+    let previous_floor = previous_window
+        .iter()
+        .map(|sample| sample.private_bytes)
+        .min()?;
+    let current_floor = current_window
+        .iter()
+        .map(|sample| sample.private_bytes)
+        .min()?;
+    if current_floor > previous_floor.saturating_add(private_budget) {
+        return None;
+    }
+    Some(StableWarmupPlateau {
+        samples: current_window,
+        private_floor: previous_floor.max(current_floor),
+    })
+}
+
 fn private_return_windows_within_budget(
     baseline: &[usize],
     measured: &[usize],
@@ -330,15 +425,36 @@ fn verify_resource_plateau(
     measured_rounds: usize,
     private_budget: usize,
 ) {
-    let mut warmup_samples = [ResourceCounts::default(); PRIVATE_PLATEAU_WARMUP_ROUNDS];
-    for sample_slot in &mut warmup_samples {
+    let mut warmup_samples = Vec::with_capacity(PRIVATE_PLATEAU_MAX_WARMUP_ROUNDS);
+    for _ in 0..PRIVATE_PLATEAU_MAX_WARMUP_ROUNDS {
         exercise_round();
         let sample = resource_counts();
-        *sample_slot = sample;
+        warmup_samples.push(sample);
+        if stable_warmup_plateau(
+            &warmup_samples,
+            PRIVATE_PLATEAU_WARMUP_ROUNDS,
+            private_budget,
+        )
+        .is_some()
+        {
+            break;
+        }
     }
 
-    let mut plateau = warmup_samples[0];
-    for sample in &warmup_samples[1..] {
+    let stable_plateau = stable_warmup_plateau(
+        &warmup_samples,
+        PRIVATE_PLATEAU_WARMUP_ROUNDS,
+        private_budget,
+    )
+    .unwrap_or_else(|| {
+        panic!(
+            "{label} did not establish a topology-stable retained plateau within \
+             {PRIVATE_PLATEAU_MAX_WARMUP_ROUNDS} rounds: samples={warmup_samples:?}"
+        )
+    });
+    let plateau_samples = stable_plateau.samples;
+    let mut plateau = plateau_samples[0];
+    for sample in &plateau_samples[1..] {
         plateau.private_bytes = plateau.private_bytes.max(sample.private_bytes);
         plateau.handles = plateau.handles.max(sample.handles);
         plateau.threads = plateau.threads.max(sample.threads);
@@ -360,7 +476,7 @@ fn verify_resource_plateau(
         last_measured = sample;
         assert_structural_plateau(label, plateau, sample);
     }
-    let warmup_private = warmup_samples.map(|sample| sample.private_bytes);
+    let warmup_private = [stable_plateau.private_floor];
     let return_window_minima = private_samples
         .chunks_exact(PRIVATE_PLATEAU_WARMUP_ROUNDS)
         .filter_map(|window| window.iter().copied().min())
@@ -452,6 +568,7 @@ fn repeated_aggregate_session_and_resumable_rebuild_cycles_stay_on_a_resource_pl
 fn main() {
     private_return_windows_accept_transient_allocator_spikes();
     private_return_windows_reject_sustained_retained_growth();
+    private_warmup_restarts_after_topology_and_allocator_phase_changes();
     repeated_open_query_drop_returns_resources_to_a_stable_plateau();
     repeated_aggregate_session_and_resumable_rebuild_cycles_stay_on_a_resource_plateau();
     println!("resource_contract: pass");
