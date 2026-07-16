@@ -211,7 +211,7 @@ keyset-paged at no more than 256 rows. Scan-history cleanup uses only scan-relat
 foreign-key checks rather than rescanning the complete usage-event archive.
 
 The query path uses a distinct `READ_ONLY|NO_MUTEX` connection and never calls the
-writable open/migration path. It requires exact schema v9 and bundled SQLite identity,
+writable open/migration path. It requires exact schema v10 and bundled SQLite identity,
 WAL, foreign keys, query-only and defensive modes, trusted-schema/DQS disabled,
 query-planner stability, no checkpoint on close, 250 ms busy timeout, 4 MiB cache,
 file-backed temporary storage, and zero mmap. Each result captures archive generation,
@@ -252,6 +252,22 @@ text, or a calculated monetary estimate. Current mutations update price facts in
 same transaction as dataset generation and token rollups. Recovery and immutable-
 legacy rebuilds populate the same inactive aggregate generation and publish it only
 after the existing exact generation/count checks.
+
+Schema v10 adds a quota-owned singleton revision, immutable definition revisions and
+samples, current/closed epoch projections, reset/allowance transitions, and one exact
+current window projection without changing usage or price row shape. Every quota table
+is `STRICT`; opaque IDs are exact 32-byte blobs; text, enums, ratios, times, counts,
+units, and allowance-change direction are checked. Composite foreign keys prevent a
+current projection or retained evidence row from binding a sample, epoch, or
+definition from another scope/window or revision. Published definitions, samples,
+closed epochs, and transitions reject `UPDATE`; later store-owned bounded retention
+may delete only whole unreferenced retained rows.
+
+The exact v9-to-v10 path first validates the v9 archive, then creates and seeds only
+the empty quota schema inside one immediate transaction, sets `user_version=10`,
+validates the complete v10 contract, and commits. Any quota-schema fault rolls back to
+exact v9 with no quota objects. The migration does not rewrite or reclassify usage,
+aggregate, or price rows.
 
 Non-empty migration publishes no partial aggregate. A rebuild is bound to one expected
 dataset generation, uses a persisted fingerprint keyset cursor, and processes at most

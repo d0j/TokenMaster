@@ -6,6 +6,10 @@ All notable changes are recorded here.
 
 ### Added
 
+- Strict SQLite schema v10 quota storage with an independent revision, seven bounded
+  tables, exact table/index/trigger validation, same-window/revision evidence foreign
+  keys, semantic allowance-change checks, exact non-mutating v9 migration, malformed
+  reopen rejection, and residue-free injected rollback.
 - Pure constant-state quota epoch evaluator with domain-separated deterministic
   scope/epoch/transition identities, exact duplicate/stale/conflict handling,
   scheduled/early/manual/unknown full resets, orthogonal allowance changes,

@@ -173,7 +173,7 @@ internal failures use stable path-free codes. The facade clock supplies one exac
 monotonic sample; frontends do not supply publication time.
 
 `UsageReadStore` is the only archive-read implementation behind that facade. It opens
-an existing exact schema-v9 archive read-only, applies query-only/defensive/no-checkpoint
+an existing exact schema-v10 archive read-only, applies query-only/defensive/no-checkpoint
 policy, performs no migration, and returns owned data after one short deferred read
 transaction. Continuation requires its dataset identity. Current and immutable legacy
 pages use composite keyset seek and at most one lookahead row; progress interruption is
@@ -207,7 +207,8 @@ date. Model, project, provider, and provider-qualified profile breakdowns are fi
 independent queries, each retains at most 256 items plus one internal lookahead and
 reports truncation. Project absence is typed, not an empty user-facing string.
 
-Price-basis store calls use only the active generation of schema-v9 price rollups.
+Price-basis store calls use only the active generation of the price rollups introduced
+in schema v9 and retained unchanged by the current schema.
 Overview plus series is one batch of at most 401 targets; a breakdown kind or session
 page/detail batch has at most 256 targets. Every batch returns at most 512 ordered
 price keys globally plus exact included/omitted metrics per target. Scoped range

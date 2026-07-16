@@ -331,6 +331,18 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   later retention can protect exact evidence even when the maxima occur in different
   samples. No schema, persistence, retention, public query, transport,
   inventory/reminder, UI, or automation capability is claimed.
+- P2-D Task 3 strict quota schema: schema v10 adds seven quota-owned `STRICT` tables,
+  one independent quota revision, immutable definition/sample/history contracts,
+  current epoch/window projections, fixed indexes, and exact trigger SQL. Exact
+  same-window/revision composite foreign keys prevent cross-scope sample or epoch
+  binding. Allowance changes require complete old/new units and a kind consistent with
+  unit/capacity direction. Exact v9 migration creates only empty quota state inside one
+  immediate transaction, preserves usage/dataset/aggregate/price facts, and rolls back
+  to residue-free v9 at an injected post-create fault. Five focused schema contracts,
+  49 store unit tests, complete locked workspace tests/doctests, strict workspace
+  Clippy, formatting, and clean-root pass. Transactional quota writes, retention,
+  reads, query, transport, inventory/reminders, UI, and automation remain
+  unimplemented.
 - Verification correction: the first post-Task-1 workspace run reproduced an existing
   query resource-test defect. A default Rust test harness changed its own worker
   threads during process-wide `PrivateUsage` sampling, while allocator spikes later
@@ -349,11 +361,11 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 ## Next implementation slice
 
 P2-D quota history core execution is active under
-`docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`. Tasks 1-2 exact
-domain values, deterministic identities, and pure reset/allowance evaluation are
-complete. Task 3 is the immediate next slice: strict schema v10 plus exact v9
-migration. Transactional writes, retention, reads, query, and acceptance evidence
-remain Tasks 4-8. Permitted Codex quota transport and banked reset
+`docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`. Tasks 1-3 exact
+domain values, deterministic identities, pure reset/allowance evaluation, strict
+schema v10, and exact v9 migration are complete. Task 4 transactional quota
+observation application is the immediate next slice. Retention, reads, query, and
+acceptance evidence remain Tasks 5-8. Permitted Codex quota transport and banked reset
 inventory/reminders remain separate later contours. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.
 P2-E Git output and P2-F joined product status remain after P2-D; P3 complete UI
@@ -423,7 +435,7 @@ implemented in `tokenmaster-query`: schema-v1 headers/envelopes, checked generat
 publication/dataset identity, an injected exact clock sample, stable path-free errors,
 bounded scopes/warnings/pages, and fingerprint-redacted activity cursors. Task 2, the
 separate query-only SQLite store and exact transaction capture, is also complete.
-`UsageReadStore` opens schema v9 read-only without migration, enforces defensive
+`UsageReadStore` opens schema v10 read-only without migration, enforces defensive
 query-only policy with a 4 MiB cache, captures publication/scan truth and current or
 legacy keyset pages in one deferred transaction, rejects stale continuation identity,
 uses indexed `pageSize + 1`, and clears its deadline handler on every result.
@@ -442,8 +454,9 @@ fixed overview/series, independently capped breakdowns, opaque keyset session
 page/detail reads, private calendar/timezone composition, and immutable public facade
 values and million-row/storage/privacy/resource evidence are green. P2-C schema-v9
 price facts, fixed-point selection, bounded overrides, public costs, and scale/
-resource/offline evidence are complete. P2-D quota reset epochs and banked-reset
-inventory are next. No view-time grouping of the full event table is allowed.
+resource/offline evidence are complete. P2-D quota values, evaluator, and schema-v10
+foundation are complete; transactional quota history and banked-reset inventory are
+next. No view-time grouping of the full event table is allowed.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.
 

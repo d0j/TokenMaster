@@ -102,7 +102,7 @@ four breakdowns, session pages, and detail through 401/256-target batches with a
 global 512-key detail cap, never one query per visible row. The final current/legacy
 million gate passed: amplification 1.862x/2.010x, full p95 148.168/156.080 ms,
 32-scope 158.588/162.504 ms, session page below 14 ms, detail below 1 ms. Resource and
-production pricing-network audits pass. P2-D quota history core Tasks 1-2 are complete:
+production pricing-network audits pass. P2-D quota history core Tasks 1-3 are complete:
 the floating-point `QuotaTarget` placeholder is gone, and exact bounded quota IDs,
 parts-per-million ratios, optional units, provider thresholds, definitions, samples,
 reset evidence, validated serde, and redacted observation IDs are implemented and
@@ -110,14 +110,17 @@ focused-verified. `tokenmaster-quota` now owns pure constant-state evaluation,
 domain-separated deterministic identities, exact duplicate/stale/conflict and
 transition-sequence gates, scheduled/early/repeated/manual reset classification,
 allowance changes, comparable maximum use with independent ratio/unit observation
-provenance, and restart-safe definition revisions.
-The immediate next slice is Task 3 in
-`docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: strict schema v10
-and exact v9 migration. Transactional persistence, retention, reads, public query
+provenance, and restart-safe definition revisions. Schema v10 now adds exact strict
+quota tables/indexes/triggers, independent quota revision, same-window composite
+evidence ownership, semantic allowance checks, exact v9 preservation, malformed
+reopen rejection, and residue-free injected rollback.
+The immediate next slice is Task 4 in
+`docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: one transactional
+quota observation application path. Retention, reads, public query
 values, permitted Codex quota transport, banked-reset inventory/reminders, and UI are
 not implemented. Do not replace aggregates with view-time full scans, infer quota
 from local token/cost totals, or relabel whole-session totals as period totals.
-The current post-Task-2 complete baseline passes. The query resource binary now uses
+The current post-Task-3 complete baseline passes. The query resource binary now uses
 an isolated `harness = false` process plus a bounded maximum-64-round warm-up that
 waits for two topology-stable eight-round retained floors before measurement. The
 original 1 MiB open/drop and 2 MiB aggregate/rebuild budgets plus per-sample

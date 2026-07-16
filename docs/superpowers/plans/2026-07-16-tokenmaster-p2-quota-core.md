@@ -6,7 +6,7 @@
 > (`- [ ]`) syntax for tracking.
 
 **Status:** inline execution in progress after spec-coverage, placeholder, type-flow,
-scope, authority-boundary, and restart-state self-review; Tasks 1-2 complete, Task 3
+scope, authority-boundary, and restart-state self-review; Tasks 1-3 complete, Task 4
 next
 
 **Goal:** Build the provider-neutral quota history data core that preserves scheduled,
@@ -349,26 +349,28 @@ git commit -m "feat(quota): add deterministic reset detector"
 - Modify: `crates/store/src/usage/mod.rs`
 - Modify: `crates/store/src/usage/schema.rs`
 - Modify: `crates/store/src/usage/migration.rs`
-- Modify: `crates/store/src/lib.rs`
+- Modify: `crates/store/src/usage/query.rs`
 - Create: `crates/store/tests/quota_schema_contract.rs`
 - Modify: `crates/store/tests/usage_schema_contract.rs`
+- Modify: `crates/store/tests/pricing_rollup_contract.rs`
 
 **Interfaces:**
 
 - Produces `USAGE_SCHEMA_VERSION = 10` and exact quota table/index/trigger contracts.
 - Fresh and v9-migrated archives contain one `quota_state(singleton_id=1, revision=0)`.
 
-- [ ] **Step 1: Write failing fresh/migration/malformed schema tests**
+- [x] **Step 1: Write failing fresh/migration/malformed schema tests**
 
 Assert exact `STRICT` tables, 32-byte opaque ID checks, enum checks, foreign keys,
 indexes for current scope/window, transition sequence, sample retention, and
-insert-only history triggers. Assert an exact v9 database migrates without changing
+UPDATE-protected retained-history triggers. Store-owned DELETE remains reserved for
+the bounded retention task. Assert an exact v9 database migrates without changing
 usage counts, aggregate generations, price rows, or usage dataset generation.
 
 Inject a failure after quota table creation and prove the entire migration rolls back
 to exact v9 with no quota objects.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-store --test quota_schema_contract --locked
@@ -376,29 +378,33 @@ cargo +1.97.0 test -p tokenmaster-store --test quota_schema_contract --locked
 
 Expected: schema version remains 9 and quota tables are absent.
 
-- [ ] **Step 3: Implement schema and migration**
+- [x] **Step 3: Implement schema and migration**
 
-`quota_schema.rs` owns `V10_QUOTA_SCHEMA`, table/index contracts, and immutable-history
-triggers. `migrate_schema` must call `migrate_v9_to_v10` only after exact v9
-validation, set `user_version=10` inside the same immediate transaction, then run
-`validate_v10`.
+`quota_schema.rs` owns `V10_QUOTA_SCHEMA`, table/index contracts, and retained-history
+UPDATE guards. `migrate_schema` runs the v9-to-v10 step only after exact v9 validation,
+sets `user_version=10` inside the same immediate transaction, then runs `validate_v10`.
 
-No migration query may read `usage_event`, `usage_time_rollup`,
-`usage_session_rollup`, or price tables.
+After the exact-v9 precondition validation, the migration transaction may execute only
+quota DDL, the empty quota-state seed, the version update, and v10 validation. It may
+not rewrite or reclassify usage or price rows.
 
-- [ ] **Step 4: Verify all store schema/migration tests**
+- [x] **Step 4: Verify all store schema/migration tests**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-store --test quota_schema_contract --locked
 cargo +1.97.0 test -p tokenmaster-store --test usage_schema_contract --locked
+cargo +1.97.0 test -p tokenmaster-store --locked
 $env:RUSTFLAGS = '-Dwarnings'
 cargo +1.97.0 clippy -p tokenmaster-store --all-targets --locked
 ```
 
-- [ ] **Step 5: Commit**
+The complete global clean-root, formatting, warnings-as-errors workspace Clippy, and
+locked workspace test/doctest baseline also passes.
+
+- [x] **Step 5: Commit**
 
 ```powershell
-git add -- crates/store/src/usage/quota_schema.rs crates/store/src/usage/mod.rs crates/store/src/usage/schema.rs crates/store/src/usage/migration.rs crates/store/src/lib.rs crates/store/tests/quota_schema_contract.rs crates/store/tests/usage_schema_contract.rs
+git add -- crates/store/src/usage/quota_schema.rs crates/store/src/usage/mod.rs crates/store/src/usage/schema.rs crates/store/src/usage/migration.rs crates/store/src/usage/query.rs crates/store/tests/quota_schema_contract.rs crates/store/tests/usage_schema_contract.rs crates/store/tests/pricing_rollup_contract.rs
 git commit -m "feat(store): add quota schema v10"
 ```
 

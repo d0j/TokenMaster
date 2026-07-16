@@ -41,6 +41,15 @@ Detector errors are stable path-free codes. Low/unknown-confidence or
 conflict/unknown-quality samples cannot independently trigger threshold inference,
 and rolling windows never infer resets from ratio recovery.
 
+The implemented schema-v10 quota store boundary persists only normalized bounded
+facts. It has no payload, URL, header, cookie, credential, prompt, response,
+reasoning, command, source-content, or path columns. Exact table/index/trigger SQL is
+validated on writable and read-only reopen; weakened or extra authority fails closed.
+Composite foreign keys keep sample, epoch, definition, and current-projection evidence
+inside one exact scope/window. The exact v9 migration is one immediate transaction,
+touches only quota objects after v9 validation, and rolls back without residue at the
+injected post-create fault boundary.
+
 Providers emit bounded observation/session-relation drafts only. They cannot create
 event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or
 canonical events. Those values are created only by TokenMaster accounting code. Store

@@ -428,7 +428,7 @@ backstop when registration is unavailable.
 
 Decision: `tokenmaster-query` owns synchronous bounded frontend values, while
 `tokenmaster-store::UsageReadStore` owns one separate SQLite `READ_ONLY|NO_MUTEX`
-connection. It requires exact schema v9 and bundled SQLite, applies WAL/query-only/
+connection. It requires exact schema v10 and bundled SQLite, applies WAL/query-only/
 defensive/QPSG/no-checkpoint policy with trusted schema and DQS disabled, a 250 ms busy
 timeout, 4 MiB cache and zero mmap, and never migrates. One short deferred transaction
 captures publication generation, independent dataset identity, exact scan truth and a
@@ -574,3 +574,24 @@ floating point and fuzzy aliases can silently drift; runtime catalogs expand pri
 and supply-chain authority; one query per chart/session grows latency with UI size.
 Fact/rate separation, exact aliases, immutable overrides, batched indexed reads, and
 explicit provenance preserve reproducibility, responsiveness, and honest unknowns.
+
+## ADR-032 — Quota-owned strict schema and exact migration boundary
+
+Decision: schema v10 adds a quota-owned revision and seven `STRICT` tables for
+definition revisions, immutable samples, current and closed epochs, reset/allowance
+transitions, and the exact current window projection. Quota identity remains separate
+from usage dataset identity. Same-scope/window composite foreign keys bind every
+current sample/epoch and retained evidence reference; allowance-change kind must agree
+with complete old/new units and capacity direction. Published history rejects
+`UPDATE`, while later bounded maintenance may delete only unreferenced whole rows.
+
+An exact v9 archive is validated before one immediate migration transaction creates
+and seeds only quota objects, advances `user_version`, validates v10, and commits.
+Injected failure after quota creation leaves exact v9 and no quota residue. No usage
+or price row is rewritten or reclassified.
+
+Rationale: loose global-ID foreign keys permit cross-window projections, SQL `NULL`
+semantics can weaken relationship checks, and mixing quota revision with usage
+generation would invalidate independent consumers. Exact composite ownership,
+semantic checks, and an isolated rollback-safe migration preserve restart truth,
+privacy, and future bounded retention without coupling quota history to local usage.

@@ -146,10 +146,11 @@ privacy, and repeated-resource evidence passes; P2-B is complete. P2-C is also
 complete: schema-v9 fact-only price rollups, release-pinned fixed-point calculation,
 validated immutable overrides, dataset-exact cost on overview/series/breakdown/session
 surfaces, batched indexed reads, current/legacy million-event scale, resource plateaus,
-and production no-pricing-network audit pass. P2-D Tasks 1-2 exact fixed-point quota
-domain values, deterministic identities, and pure reset/allowance evaluation are
-complete. Strict schema v10/migration, transactional persistence, bounded retention
-and history/query core, permitted Codex quota transport, and separate banked-reset
+and production no-pricing-network audit pass. P2-D Tasks 1-3 exact fixed-point quota
+domain values, deterministic identities, pure reset/allowance evaluation, strict
+schema v10, and exact rollback-safe v9 migration are complete. Transactional
+persistence, bounded retention and history/query core, permitted Codex quota transport,
+and separate banked-reset
 expiry/reminder inventory remain, followed by P2-E Git output and P2-F joined product
 status.
 No frontend/database coupling or view-time full event grouping is accepted.

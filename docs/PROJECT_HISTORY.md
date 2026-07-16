@@ -1456,3 +1456,37 @@ pass. The complete workspace gate also passes after the resource measurement
 correction above. This closes P2-D Task 2 only. Task 3 strict schema v10 and exact v9
 migration is next; writes, retention, reads, query, transport, inventory/reminders,
 UI, automation, M0 acceptance, packaging, signing, and release remain open.
+
+## 2026-07-16 — P2-D strict quota schema v10 implemented
+
+Added a quota-owned schema-v10 plane inside the existing bundled SQLite archive:
+singleton revision/count state, immutable definition revisions and samples, current
+and closed epoch projections, immutable reset/allowance transitions, and one exact
+current window projection. All seven tables are `STRICT`; identifiers, enums, times,
+ratios, units, sequence values, and freshness relationships are checked. Fixed
+indexes support definition lookup, sample/epoch retention, transition sequence, and
+current-scope reads.
+
+Critical review found two integrity gaps before commit. Global evidence IDs alone
+could bind a current window to another window's sample or epoch, and SQLite `NULL`
+check semantics could accept incomplete allowance-change units. Composite
+scope/window/revision foreign keys now bind current and retained evidence exactly.
+Allowance facts require both unit IDs and capacities, and increased/decreased/unit-
+changed kinds must match their unit/capacity relationship. Published definitions,
+samples, closed epochs, and transitions reject `UPDATE`; future bounded maintenance
+retains authority to delete only whole unreferenced rows.
+
+The exact v9 migration validates the source archive, creates and seeds only quota
+objects inside one immediate transaction, advances the schema version, validates the
+complete v10 contract, and commits without rewriting or reclassifying usage,
+aggregate, dataset-generation, or price facts. An injected fault after quota creation
+rolls back to exact v9 with no quota residue. Malformed current quota SQL fails closed
+on reopen.
+
+Five focused schema contracts, 20 migration unit contracts, 49 complete store unit
+tests, every locked workspace test and doctest, strict warnings-as-errors workspace
+Clippy, formatting, clean-root, and diff checks pass. The normal workspace run keeps
+the two explicitly ignored reference/scale gates skipped. This closes P2-D Task 3
+only. Task 4 transactional quota observation application is next; retention,
+reads/query, transport, banked-reset inventory/reminders, UI, automation, M0
+acceptance, packaging, signing, and release remain open.
