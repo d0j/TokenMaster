@@ -26,6 +26,13 @@ backoff, freshness, and redacted error mapping. Custom origins never receive pro
 credentials. A schema change fails to unavailable/stale rather than best-effort field
 guessing.
 
+Normalized quota domain input already fails closed before detector or persistence:
+identifiers use a narrow bounded ASCII alphabet, ratios use checked integer
+parts-per-million, optional units and reset thresholds are relationship-validated,
+sample times/evidence are ordered, unknown nested serde fields are rejected, and
+observation identity `Debug` is redacted. This validation does not authorize a
+provider transport or make raw provider payloads safe to retain.
+
 Providers emit bounded observation/session-relation drafts only. They cannot create
 event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or
 canonical events. Those values are created only by TokenMaster accounting code. Store

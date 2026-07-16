@@ -305,15 +305,37 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   1 ms. Repeated catalog/override/mode/query cycles retain private-memory, handle,
   thread, USER, and GDI plateaus. The production dependency/source/release-library
   audit finds no runtime pricing network path.
+- P2-D Task 1 exact quota domain: the M0 `QuotaTarget`/`f64` placeholder is removed.
+  Provider/account/workspace/window/unit/provider-epoch IDs are bounded ASCII values;
+  observations use exact redacted 32-byte IDs; ratios are integer parts per million;
+  absolute units remain optional; fixed-window thresholds are provider-defined; and
+  normalized definitions/samples validate revision, time ordering, reset evidence,
+  optional absence, capacity coherence, and nested serde fields. Eleven quota
+  contracts plus the complete domain suite and strict domain Clippy pass. No detector,
+  SQLite quota tables, provider transport, inventory, reminder, query, or UI
+  capability is claimed.
+- Verification correction: the first post-Task-1 workspace run reproduced an existing
+  query resource-test defect. A default Rust test harness changed its own worker
+  threads during process-wide `PrivateUsage` sampling, while allocator spikes later
+  returned below the earlier floor. The resource gate now runs as a Cargo
+  `harness = false` single-thread process, preserves per-sample handle/thread/USER/GDI
+  bounds, and requires both measured eight-round windows to return within the original
+  1 MiB open/drop or 2 MiB aggregate/rebuild retained-memory budget. Deterministic
+  fixtures reject sustained growth and incomplete windows. The clean-root audit,
+  formatting, strict locked workspace Clippy, complete locked workspace tests/doctests,
+  and diff-check pass after the correction.
 
 ## Next implementation slice
 
-The immediate product-data slice is P2-D: provider-defined quota windows, immutable
-full-reset epochs, banked reset lots, expiry/reminder coverage, and read-only policy
-evaluation under the already approved plans. It must not infer provider capacity from
-local token/cost facts and must not add browser/private-endpoint authority. P2-E Git
-output and P2-F joined product status remain after that; P3 complete UI follows the
-product-data contracts.
+P2-D quota history core execution is active under
+`docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`. Task 1 exact domain
+values is complete; Task 2 is the immediate next slice: the pure constant-state reset
+detector and deterministic identities. Schema v10, writes, retention, reads, query,
+and acceptance evidence remain Tasks 3-8. Permitted Codex quota transport and banked
+reset inventory/reminders remain separate later contours. No quota value may be
+inferred from local token/cost facts and no browser/private-endpoint authority may be
+added. P2-E Git output and P2-F joined product status remain after P2-D; P3 complete
+UI follows the product-data contracts.
 
 The architecture/release closure review is approved in
 `docs/superpowers/specs/2026-07-16-tokenmaster-plan-closure-design.md`. It freezes the

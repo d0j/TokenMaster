@@ -5,8 +5,8 @@
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox
 > (`- [ ]`) syntax for tracking.
 
-**Status:** approved for inline execution after spec-coverage, placeholder, type-flow,
-scope, and authority-boundary self-review; implementation not yet started
+**Status:** inline execution in progress after spec-coverage, placeholder, type-flow,
+scope, and authority-boundary self-review; Task 1 complete, Task 2 next
 
 **Goal:** Build the provider-neutral quota history data core that preserves scheduled,
 early, repeated, and manual/banked full resets without inventing provider limits.
@@ -73,7 +73,7 @@ cargo +1.97.0 test --workspace --locked
   - `QuotaResetThresholds`, `QuotaError`, and constructor-parts structs
 - Removes: public `QuotaTarget` and its `f64 used_ratio`.
 
-- [ ] **Step 1: Write failing quota value contracts**
+- [x] **Step 1: Write failing quota value contracts**
 
 Create `crates/domain/tests/quota_contract.rs` with fixtures that call the desired API:
 
@@ -179,7 +179,7 @@ non-fixed thresholds, empty thresholds, invalid time order, invalid exact reset 
 empty samples, redacted observation `Debug`, and serde round-trips that preserve
 `None` rather than zero.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -189,7 +189,7 @@ cargo +1.97.0 test -p tokenmaster-domain --test quota_contract --locked
 
 Expected: compilation fails because the new quota types are not exported.
 
-- [ ] **Step 3: Implement the minimal bounded types**
+- [x] **Step 3: Implement the minimal bounded types**
 
 Replace `crates/domain/src/quota.rs` with private validated string wrappers and the
 exact constructors exercised above. Use this common ID validator:
@@ -227,7 +227,7 @@ only for `Fixed`.
 Export all new types from `crates/domain/src/lib.rs`. Remove the quota-specific tests
 and `QuotaTarget` import from `state_contract.rs`.
 
-- [ ] **Step 4: Run focused tests and strict crate Clippy**
+- [x] **Step 4: Run focused tests and strict crate Clippy**
 
 Run:
 
@@ -240,7 +240,7 @@ cargo +1.97.0 clippy -p tokenmaster-domain --all-targets --locked
 
 Expected: all pass with zero warnings.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add -- crates/domain/src/quota.rs crates/domain/src/lib.rs crates/domain/tests/quota_contract.rs crates/domain/tests/state_contract.rs

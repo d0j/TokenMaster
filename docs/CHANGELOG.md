@@ -6,6 +6,10 @@ All notable changes are recorded here.
 
 ### Added
 
+- Exact provider-neutral quota domain values replacing the floating-point M0
+  placeholder: bounded scope/window/unit/epoch IDs, redacted 32-byte observation IDs,
+  parts-per-million ratios, optional coherent units, fixed-window provider thresholds,
+  normalized definitions/samples, explicit reset evidence, and validated strict serde.
 - Deterministic release-pinned fixed-point pricing with exact reviewed aliases,
   standard/cached/output/long-context/priority rates, explicit zero, checked arithmetic,
   one-time rounding, and no runtime price fetch.
@@ -19,7 +23,8 @@ All notable changes are recorded here.
   breakdowns, and opaque session page/detail values without raw-history or per-item
   query fallback.
 - Current/legacy million-event pricing gates, catalog/override/query-switch Windows
-  resource plateaus with repeated high-water envelopes, scoped price query-plan
+  resource plateaus with an isolated single-thread measurement process, repeated
+  retained-return windows, structural high-water checks, scoped price query-plan
   assertions, and a production dependency/binary-string audit that forbids runtime
   pricing network paths.
 - Single-root TokenMaster workspace and clean-history product boundary.

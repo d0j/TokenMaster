@@ -333,6 +333,18 @@ window/reset semantics, optional used/remaining ratios, optional capacity/units,
 advertised reset time, freshness, quality, evidence source, and confidence. Missing
 values are never inferred from local usage.
 
+The implemented domain representation uses bounded ASCII identifiers of at most 128
+bytes for account, workspace, window, unit, and provider epoch; provider identity
+retains its existing 64-byte contract. Observation identity is exactly 32 bytes with
+redacted `Debug`. Ratios are exact integer parts per million in
+`0..=1_000_000`; no floating-point quota value remains. A sample enforces
+`0 < observed_at <= fresh_until <= stale_after`, contains at least one quota/reset
+fact, preserves absent values as `None`, and accepts an exact reset occurrence only
+with explicit evidence inside `1..=observed_at`. Absolute used/remaining values cannot
+exceed a present capacity. Reset thresholds require a post-reset boundary and are
+valid only for fixed windows. Deserialization repeats these validations and rejects
+unknown nested scope/window fields.
+
 A full-reset transition references the last trustworthy pre-reset sample and first
 trustworthy post-reset sample and records the closed epoch's maximum observed use,
 old/new advertised reset times, scheduled/early/manual-or-banked/unknown kind, and an

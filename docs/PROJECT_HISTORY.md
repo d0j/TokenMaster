@@ -1381,15 +1381,42 @@ rebuild-page p95, 1.862x/2.010x SQLite amplification, 2.040/2.065 ms cached-over
 p95, 148.168/156.080 ms full 400-point/four-breakdown p95, 158.588/162.504 ms
 all-32-scope analytics, below 14 ms session-page p95, and below 1 ms detail p95.
 Catalog/override/mode query switching retained private-memory, handle, thread, USER,
-and GDI plateaus. Final-gate review found that the prior two-point Windows
-`PrivateUsage` assertion could alternately fail open/drop or rebuild after a normal
-heap/SQLite high-water step despite later samples returning lower. It was replaced by
-a fixed-size eight-round warmup envelope followed by eight measured rounds, while
-preserving the 1/2 MiB memory budgets and handle/thread/USER/GDI bounds. The exact
-workspace resource binary passes repeatedly. Focused tests, clean-root audit,
-formatting, strict locked workspace Clippy, every locked workspace test/doctest,
-privacy checks, and diff review pass.
+and GDI plateaus. The original two-point Windows `PrivateUsage` assertion was first
+replaced by repeated warmup/measurement samples. A later complete workspace gate
+proved that the default Rust test harness itself could terminate worker threads during
+process-wide sampling and that a single allocator high-water sample could exceed the
+budget even when later samples returned below the earlier floor. The resource contract
+now runs as a Cargo `harness = false` single-thread process. It preserves per-sample
+handle/thread/USER/GDI checks and the original 1/2 MiB budgets, but measures retained
+memory by return within each of two consecutive eight-round windows. Deterministic
+fixtures prove transient spikes pass while sustained growth and incomplete windows
+fail. Focused tests, clean-root audit, formatting, strict locked workspace Clippy,
+every locked workspace test/doctest, privacy checks, and diff review pass.
 
 This completes P2-C only. P2-D quota/reset history and expiring reset inventory is the
 next approved slice; Git output, joined snapshots, UI, automation, M0 acceptance,
 packaging, signing, and release remain open.
+
+## 2026-07-16 — P2-D exact quota domain implemented
+
+Replaced the provisional `QuotaTarget` and floating-point used ratio with exact
+provider-neutral quota values. Account/workspace/window/unit/provider-epoch IDs use a
+bounded ASCII alphabet, observations use redacted exact 32-byte identities, ratios
+use integer parts per million, and absolute provider units remain optional. Fixed
+windows may carry provider-defined post-reset thresholds without any built-in
+five-hour, weekly, zero-used, or full-remaining rule.
+
+Definitions and samples now validate positive revisions/durations, ordered
+observation/freshness/staleness times, optional capacity coherence, nonempty quota
+facts, explicit reset evidence, exact reset occurrence bounds, and absence as typed
+`None`. Custom deserialization repeats constructor validation and rejects unknown
+nested scope/window fields. The new contract was observed RED before implementation;
+eleven focused quota tests, the complete domain suite, strict domain Clippy, and
+diff-check pass. The subsequent complete baseline also passes clean-root audit,
+formatting, strict locked workspace Clippy, every locked workspace test/doctest, and
+the corrected isolated query resource contract.
+
+This closes only P2-D Task 1. The pure detector and deterministic identities are next;
+schema v10, quota persistence/retention/reads/query, provider transport, banked-reset
+inventory/reminders, UI, automation, M0 acceptance, packaging, signing, and release
+remain open.
