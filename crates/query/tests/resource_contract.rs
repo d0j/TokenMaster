@@ -282,6 +282,28 @@ fn private_return_windows_accept_transient_allocator_spikes() {
     ));
 }
 
+fn private_warmup_accepts_one_transient_allocator_trough() {
+    let mut samples = Vec::new();
+    samples.extend((0..8).map(|offset| ResourceCounts {
+        private_bytes: if offset == 2 { 5_390_000 } else { 6_700_000 },
+        handles: 112,
+        threads: 1,
+        user_objects: 1,
+        gdi_objects: 0,
+    }));
+    samples.extend((0..8).map(|_| ResourceCounts {
+        private_bytes: 6_750_000,
+        handles: 112,
+        threads: 1,
+        user_objects: 1,
+        gdi_objects: 0,
+    }));
+
+    let plateau =
+        stable_warmup_plateau(&samples, 8, 1_048_576).expect("single trough is not a plateau");
+    assert_eq!(plateau.private_floor, 6_750_000);
+}
+
 fn private_return_windows_reject_sustained_retained_growth() {
     let baseline = [4_800_000, 4_700_000, 4_900_000, 4_750_000];
     let measured = [
@@ -309,7 +331,7 @@ fn private_warmup_restarts_after_topology_and_allocator_phase_changes() {
         gdi_objects: 0,
     }));
     samples.extend((0..8).map(|offset| ResourceCounts {
-        private_bytes: if offset == 0 {
+        private_bytes: if offset < 2 {
             3_100_000
         } else {
             4_700_000 + offset * 20_000
@@ -339,7 +361,7 @@ fn private_warmup_restarts_after_topology_and_allocator_phase_changes() {
     }));
     let plateau = stable_warmup_plateau(&samples, 8, 1_048_576).expect("stable latest plateau");
     assert_eq!(plateau.samples.len(), 8);
-    assert_eq!(plateau.private_floor, 5_700_000);
+    assert_eq!(plateau.private_floor, 5_720_000);
     assert_eq!(
         plateau
             .samples
@@ -354,6 +376,21 @@ fn private_warmup_restarts_after_topology_and_allocator_phase_changes() {
 struct StableWarmupPlateau<'a> {
     samples: &'a [ResourceCounts],
     private_floor: usize,
+}
+
+fn retained_private_floor(values: impl IntoIterator<Item = usize>) -> Option<usize> {
+    let mut values = values.into_iter();
+    let mut lowest = values.next()?;
+    let mut second_lowest = None;
+    for value in values {
+        if value < lowest {
+            second_lowest = Some(lowest);
+            lowest = value;
+        } else if second_lowest.is_none_or(|current| value < current) {
+            second_lowest = Some(value);
+        }
+    }
+    Some(second_lowest.unwrap_or(lowest))
 }
 
 fn stable_warmup_plateau<'a>(
@@ -376,14 +413,10 @@ fn stable_warmup_plateau<'a>(
         return None;
     }
     let (previous_window, current_window) = candidate.split_at(window_size);
-    let previous_floor = previous_window
-        .iter()
-        .map(|sample| sample.private_bytes)
-        .min()?;
-    let current_floor = current_window
-        .iter()
-        .map(|sample| sample.private_bytes)
-        .min()?;
+    let previous_floor =
+        retained_private_floor(previous_window.iter().map(|sample| sample.private_bytes))?;
+    let current_floor =
+        retained_private_floor(current_window.iter().map(|sample| sample.private_bytes))?;
     if current_floor > previous_floor.saturating_add(private_budget) {
         return None;
     }
@@ -567,6 +600,7 @@ fn repeated_aggregate_session_and_resumable_rebuild_cycles_stay_on_a_resource_pl
 
 fn main() {
     private_return_windows_accept_transient_allocator_spikes();
+    private_warmup_accepts_one_transient_allocator_trough();
     private_return_windows_reject_sustained_retained_growth();
     private_warmup_restarts_after_topology_and_allocator_phase_changes();
     repeated_open_query_drop_returns_resources_to_a_stable_plateau();
