@@ -16,3 +16,8 @@ tokenmaster-store = { path = "../store" }
 rusqlite.workspace = true
 tempfile.workspace = true
 windows.workspace = true
+
+[[test]]
+name = "resource_contract"
+path = "tests/resource_contract.rs"
+harness = false

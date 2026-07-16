@@ -1,6 +1,6 @@
 #![cfg(windows)]
 
-use std::{mem::size_of, path::Path, sync::Mutex};
+use std::{mem::size_of, path::Path};
 
 use rusqlite::{Connection, params};
 use tempfile::TempDir;
@@ -14,7 +14,6 @@ use tokenmaster_store::{AggregateRebuildStatus, UsageStore};
 
 const SOURCE_KEY: [u8; 32] = [7; 32];
 const PRIVATE_PLATEAU_WARMUP_ROUNDS: usize = 8;
-static RESOURCE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Clone, Copy, Debug, Default)]
 struct ResourceCounts {
@@ -271,6 +270,60 @@ fn assert_structural_plateau(label: &str, baseline: ResourceCounts, sample: Reso
     );
 }
 
+fn private_return_windows_accept_transient_allocator_spikes() {
+    let baseline = [4_800_000, 4_700_000, 4_900_000, 4_750_000];
+    let measured = [
+        6_300_000, 4_760_000, 6_100_000, 4_780_000, 6_200_000, 4_790_000, 6_000_000, 4_770_000,
+    ];
+
+    assert!(private_return_windows_within_budget(
+        &baseline, &measured, 4, 100_000
+    ));
+}
+
+fn private_return_windows_reject_sustained_retained_growth() {
+    let baseline = [4_800_000, 4_700_000, 4_900_000, 4_750_000];
+    let measured = [
+        4_760_000, 4_780_000, 4_790_000, 4_770_000, 4_900_001, 4_910_000, 4_920_000, 4_930_000,
+    ];
+
+    assert!(!private_return_windows_within_budget(
+        &baseline, &measured, 4, 200_000
+    ));
+    assert!(!private_return_windows_within_budget(
+        &baseline,
+        &measured[..7],
+        4,
+        200_000
+    ));
+}
+
+fn private_return_windows_within_budget(
+    baseline: &[usize],
+    measured: &[usize],
+    window_size: usize,
+    private_budget: usize,
+) -> bool {
+    if baseline.is_empty()
+        || measured.is_empty()
+        || window_size == 0
+        || !measured.len().is_multiple_of(window_size)
+    {
+        return false;
+    }
+    let Some(baseline_floor) = baseline.iter().copied().min() else {
+        return false;
+    };
+    let private_limit = baseline_floor.saturating_add(private_budget);
+    measured.chunks_exact(window_size).all(|window| {
+        window
+            .iter()
+            .copied()
+            .min()
+            .is_some_and(|floor| floor <= private_limit)
+    })
+}
+
 fn verify_resource_plateau(
     label: &str,
     mut exercise_round: impl FnMut(),
@@ -292,17 +345,38 @@ fn verify_resource_plateau(
         plateau.user_objects = plateau.user_objects.max(sample.user_objects);
         plateau.gdi_objects = plateau.gdi_objects.max(sample.gdi_objects);
     }
-    let private_limit = plateau.private_bytes.saturating_add(private_budget);
+    let mut first_measured = None;
+    let mut highest_measured = ResourceCounts::default();
+    let mut last_measured = ResourceCounts::default();
+    let mut private_samples = Vec::with_capacity(measured_rounds);
     for _ in 0..measured_rounds {
         exercise_round();
         let sample = resource_counts();
+        private_samples.push(sample.private_bytes);
+        first_measured.get_or_insert(sample);
+        if sample.private_bytes > highest_measured.private_bytes {
+            highest_measured = sample;
+        }
+        last_measured = sample;
         assert_structural_plateau(label, plateau, sample);
-        assert!(
-            sample.private_bytes <= private_limit,
-            "{label} private bytes grew after plateau: \
-             plateau={plateau:?}, sample={sample:?}, budget={private_budget}"
-        );
     }
+    let warmup_private = warmup_samples.map(|sample| sample.private_bytes);
+    let return_window_minima = private_samples
+        .chunks_exact(PRIVATE_PLATEAU_WARMUP_ROUNDS)
+        .filter_map(|window| window.iter().copied().min())
+        .collect::<Vec<_>>();
+    assert!(
+        private_return_windows_within_budget(
+            &warmup_private,
+            &private_samples,
+            PRIVATE_PLATEAU_WARMUP_ROUNDS,
+            private_budget,
+        ),
+        "{label} private bytes did not return to the retained plateau: plateau={plateau:?}, \
+         first={first_measured:?}, highest={highest_measured:?}, last={last_measured:?}, \
+         budget={private_budget}, return_window_minima={return_window_minima:?}, \
+         private_samples={private_samples:?}"
+    );
 }
 
 fn exercise_rebuild_cycle(path: &Path) {
@@ -335,11 +409,7 @@ fn exercise_rebuild_cycle(path: &Path) {
     assert_eq!(status, AggregateRebuildStatus::Ready);
 }
 
-#[test]
 fn repeated_open_query_drop_returns_resources_to_a_stable_plateau() {
-    let _serial = RESOURCE_TEST_LOCK
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let directory = TempDir::new().expect("temporary directory");
     let path = directory.path().join("resource.sqlite3");
     seed_empty_archive(&path);
@@ -351,16 +421,12 @@ fn repeated_open_query_drop_returns_resources_to_a_stable_plateau() {
                 open_query_drop(&path);
             }
         },
-        8,
+        16,
         1_048_576,
     );
 }
 
-#[test]
 fn repeated_aggregate_session_and_resumable_rebuild_cycles_stay_on_a_resource_plateau() {
-    let _serial = RESOURCE_TEST_LOCK
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let directory = TempDir::new().expect("temporary directory");
     let path = directory.path().join("aggregate-resource.sqlite3");
     seed_bounded_current_archive(&path, 512);
@@ -381,4 +447,12 @@ fn repeated_aggregate_session_and_resumable_rebuild_cycles_stay_on_a_resource_pl
         8,
         2_097_152,
     );
+}
+
+fn main() {
+    private_return_windows_accept_transient_allocator_spikes();
+    private_return_windows_reject_sustained_retained_growth();
+    repeated_open_query_drop_returns_resources_to_a_stable_plateau();
+    repeated_aggregate_session_and_resumable_rebuild_cycles_stay_on_a_resource_plateau();
+    println!("resource_contract: pass");
 }
