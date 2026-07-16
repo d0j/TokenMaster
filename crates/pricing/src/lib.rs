@@ -3,6 +3,19 @@
 
 use std::fmt;
 
+mod overrides;
+mod selection;
+
+pub use overrides::{
+    AliasOverrideDraft, EngineQuote, ModelOverrideDraft, OverrideDraft, OverrideError,
+    OverrideErrorCode, OverrideRevision, OverrideSnapshot, PriceRatesOverride, PricingEngine,
+    RuleSource,
+};
+pub use selection::{
+    CostAvailability, CostComposition, CostCounters, CostMode, CostResult, MissingCost,
+    MissingReasonCode, PriceBasisRow, cost_values_conflict, select_cost,
+};
+
 pub const CATALOG_ID: &str = "openai-api-2026-07-16-v1";
 pub const CATALOG_RETRIEVED_DATE: &str = "2026-07-16";
 pub const MAX_RATE_MICROS_PER_MILLION: u64 = 1_000_000_000_000;
@@ -35,6 +48,8 @@ pub enum PriceErrorCode {
     InconsistentTokenBasis,
     InvalidRate,
     ArithmeticOverflow,
+    InvalidPriceRow,
+    TooManyPriceRows,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -66,6 +81,8 @@ impl fmt::Display for PriceError {
             PriceErrorCode::InconsistentTokenBasis => "token price basis is inconsistent",
             PriceErrorCode::InvalidRate => "price rate is invalid",
             PriceErrorCode::ArithmeticOverflow => "price arithmetic exceeds supported range",
+            PriceErrorCode::InvalidPriceRow => "price basis row is invalid",
+            PriceErrorCode::TooManyPriceRows => "price basis row count exceeds supported range",
         })
     }
 }
@@ -76,6 +93,11 @@ impl std::error::Error for PriceError {}
 pub struct UsdMicros(u64);
 
 impl UsdMicros {
+    #[must_use]
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
     #[must_use]
     pub const fn get(self) -> u64 {
         self.0
@@ -219,6 +241,13 @@ pub struct PriceRates {
 }
 
 pub fn calculate_cost(rates: PriceRates, basis: TokenPriceBasis) -> Result<UsdMicros, PriceError> {
+    round_numerator(calculate_numerator(rates, basis)?)
+}
+
+pub(crate) fn calculate_numerator(
+    rates: PriceRates,
+    basis: TokenPriceBasis,
+) -> Result<u128, PriceError> {
     let mut numerator = 0_u128;
     for (tokens, rate) in [
         (basis.uncached_input_tokens, rates.uncached_input),
@@ -232,6 +261,10 @@ pub fn calculate_cost(rates: PriceRates, basis: TokenPriceBasis) -> Result<UsdMi
             .checked_add(component)
             .ok_or_else(|| PriceError::new(PriceErrorCode::ArithmeticOverflow))?;
     }
+    Ok(numerator)
+}
+
+pub(crate) fn round_numerator(numerator: u128) -> Result<UsdMicros, PriceError> {
     let rounded = numerator
         .checked_add(HALF_TOKEN_MILLION)
         .ok_or_else(|| PriceError::new(PriceErrorCode::ArithmeticOverflow))?
@@ -285,23 +318,7 @@ impl EmbeddedCatalog {
             .iter()
             .find(|rule| rule.canonical_model == model || rule.aliases.contains(&model))
             .ok_or_else(|| PriceError::new(PriceErrorCode::ModelUnpriced))?;
-        let rates = match (tier, context) {
-            (ServiceTier::Unknown, _) => {
-                return Err(PriceError::new(PriceErrorCode::TierUnknown));
-            }
-            (_, ContextClass::Unavailable) => {
-                return Err(PriceError::new(PriceErrorCode::ContextUnavailable));
-            }
-            (ServiceTier::StandardReported | ServiceTier::StandardAssumed, ContextClass::Short) => {
-                Some(rule.standard_short)
-            }
-            (ServiceTier::StandardReported | ServiceTier::StandardAssumed, ContextClass::Long) => {
-                rule.standard_long
-            }
-            (ServiceTier::Priority, ContextClass::Short) => rule.priority_short,
-            (ServiceTier::Priority, ContextClass::Long) => rule.priority_long,
-        }
-        .ok_or_else(|| PriceError::new(PriceErrorCode::TierContextUnsupported))?;
+        let rates = select_rule_rates(rule, tier, context)?;
         Ok(PriceQuote {
             amount: calculate_cost(rates, basis)?,
             canonical_model: rule.canonical_model,
@@ -316,13 +333,36 @@ pub const fn embedded_catalog() -> EmbeddedCatalog {
 }
 
 #[derive(Clone, Copy)]
-struct ModelRule {
-    canonical_model: &'static str,
-    aliases: &'static [&'static str],
-    standard_short: PriceRates,
-    standard_long: Option<PriceRates>,
-    priority_short: Option<PriceRates>,
-    priority_long: Option<PriceRates>,
+pub(crate) struct ModelRule {
+    pub(crate) canonical_model: &'static str,
+    pub(crate) aliases: &'static [&'static str],
+    pub(crate) standard_short: PriceRates,
+    pub(crate) standard_long: Option<PriceRates>,
+    pub(crate) priority_short: Option<PriceRates>,
+    pub(crate) priority_long: Option<PriceRates>,
+}
+
+pub(crate) fn select_rule_rates(
+    rule: &ModelRule,
+    tier: ServiceTier,
+    context: ContextClass,
+) -> Result<PriceRates, PriceError> {
+    match (tier, context) {
+        (ServiceTier::Unknown, _) => Err(PriceError::new(PriceErrorCode::TierUnknown)),
+        (_, ContextClass::Unavailable) => Err(PriceError::new(PriceErrorCode::ContextUnavailable)),
+        (ServiceTier::StandardReported | ServiceTier::StandardAssumed, ContextClass::Short) => {
+            Ok(rule.standard_short)
+        }
+        (ServiceTier::StandardReported | ServiceTier::StandardAssumed, ContextClass::Long) => rule
+            .standard_long
+            .ok_or_else(|| PriceError::new(PriceErrorCode::TierContextUnsupported)),
+        (ServiceTier::Priority, ContextClass::Short) => rule
+            .priority_short
+            .ok_or_else(|| PriceError::new(PriceErrorCode::TierContextUnsupported)),
+        (ServiceTier::Priority, ContextClass::Long) => rule
+            .priority_long
+            .ok_or_else(|| PriceError::new(PriceErrorCode::TierContextUnsupported)),
+    }
 }
 
 const fn rate_micros(value: u64) -> UsdPerMillion {
@@ -337,7 +377,7 @@ const fn rates(input: u64, cached: u64, output: u64) -> PriceRates {
     }
 }
 
-const CATALOG: &[ModelRule] = &[
+pub(crate) const CATALOG: &[ModelRule] = &[
     ModelRule {
         canonical_model: "gpt-5.6-sol",
         aliases: &["gpt-5.6"],
