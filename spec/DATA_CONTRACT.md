@@ -399,6 +399,20 @@ transition sequence on writable use and reopen. Missing or mismatched projection
 sequence/revision/count overflow, or an injected fault after sample, epoch, transition,
 current projection, or revision fails closed and rolls back to the exact prior state.
 
+Quota retention is implemented with exported per-window soft defaults of 512 samples
+and 256 closed epochs/transitions, hard caps of 2,048 samples and 1,024 closed
+epochs/transitions, and maintenance pages capped at 256 candidates. A consecutive
+equivalent poll may remove only its previous unprotected same-definition sample after
+the current pointer moves. Paged maintenance selects only older unprotected samples
+that have a newer normalized equivalent in the same window and definition revision.
+First, last/current, ratio maximum, unit maximum, closed-epoch, and transition
+pre/post/max evidence remain protected. Meaningful samples and all transitions may
+remain above their soft defaults; Task 5 never merges transitions or closed epochs.
+Crossing a hard cap rolls back the applying observation, and reopen rejects stored
+per-window counts above a hard cap even when singleton counts were altered to match.
+Maintenance changes only retained detail/counts, not semantic quota revision, and its
+delete/state fault boundaries restore the exact prior archive.
+
 ## TM-DATA-009 — Banked reset inventory and activation receipts
 
 A provider benefit lot is immutable evidence scoped by provider, account/workspace,

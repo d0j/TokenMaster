@@ -1529,3 +1529,44 @@ test/doctest gate pass; the explicitly ignored reference/scale tests remain skip
 This closes P2-D Task 4 only. Task 5 bounded retention, restart, and maintenance fault
 evidence is next; quota reads/query, permitted Codex transport, banked-reset inventory/
 reminders, UI, automation, M0 acceptance, packaging, signing, and release remain open.
+
+## 2026-07-16 — P2-D bounded quota retention implemented
+
+Added fixed public retention contracts: 512 samples and 256 closed epochs/transitions
+per window as soft defaults, 2,048 samples and 1,024 closed epochs/transitions as hard
+caps, and maintenance pages from 1 through 256 candidates. The write transaction now
+recognizes a consecutive same-definition sample whose normalized quota facts are
+equivalent, moves the exact current epoch/window projection first, and removes only
+the prior sample when no current, epoch, maximum-use, or transition reference protects
+it. Ten thousand identical polls therefore retain only the protected first and newest
+samples while quota revision still records every visible observation.
+
+Added `UsageStore::maintain_quota_history_page`. One immediate transaction selects
+only old unprotected samples in the requested scope/window that have a newer
+same-definition normalized equivalent, deletes at most the fixed page, and adjusts
+only the retained-sample count. It returns examined/deleted/remaining counts without
+exposing IDs or rows and does not advance semantic quota revision. Meaningful history
+may remain over the soft default; transitions and closed epochs are never merged or
+deleted in this task. First/current/last, independent ratio/unit maxima, and every
+transition pre/post/max sample remain protected.
+
+Critical review added persisted hard-cap validation on reopen rather than trusting
+only the global singleton counts. An applying observation that would create sample,
+closed-epoch, or transition count above a hard cap rolls the complete transaction
+back. A manually altered archive with one extra valid sample and a correspondingly
+altered global count now fails closed. Maintenance fault injection after deletion and
+after state-count update proves exact rollback and deterministic retry.
+
+Seven focused integration contracts cover the 10,000-poll plateau, 600-row paged
+backlog, window isolation, protected first/max/current evidence, 513 meaningful
+samples, 1,024 reset transitions with complete pre/post evidence, page bounds, hard
+caps, tampered reopen, boundary restarts, and revision/sequence overflow. The store
+suite has 52 unit tests including both maintenance rollback boundaries; focused store
+tests, clean-root, formatting, strict locked workspace Clippy, and the complete locked
+workspace test/doctest suite pass. The normal run keeps the explicitly ignored
+reference/scale gates skipped.
+
+This closes P2-D Task 5 only. Task 6 defensive quota read snapshots and bounded keyset
+transition history is next; public query mapping, permitted Codex transport,
+banked-reset inventory/reminders, UI, automation, M0 acceptance, packaging, signing,
+and release remain open.

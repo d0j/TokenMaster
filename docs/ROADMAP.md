@@ -146,13 +146,15 @@ privacy, and repeated-resource evidence passes; P2-B is complete. P2-C is also
 complete: schema-v9 fact-only price rollups, release-pinned fixed-point calculation,
 validated immutable overrides, dataset-exact cost on overview/series/breakdown/session
 surfaces, batched indexed reads, current/legacy million-event scale, resource plateaus,
-  and production no-pricing-network audit pass. P2-D Tasks 1-4 exact fixed-point quota
+  and production no-pricing-network audit pass. P2-D Tasks 1-5 exact fixed-point quota
   domain values, deterministic identities, pure reset/allowance evaluation, strict
   schema v10, exact rollback-safe v9 migration, and one-transaction immutable quota
-  publication are complete. Bounded retention and history/query core, permitted Codex quota transport,
-and separate banked-reset
-expiry/reminder inventory remain, followed by P2-E Git output and P2-F joined product
-status.
+  publication plus evidence-preserving bounded retention are complete. Retention uses
+  512/256 soft defaults, 2,048/1,024 hard caps, a 256-row same-window maintenance
+  page, and protected first/current/max/pre/post evidence with fail-closed over-cap
+  write/reopen behavior. Defensive quota reads and public query core, permitted Codex
+  quota transport, and separate banked-reset expiry/reminder inventory remain,
+  followed by P2-E Git output and P2-F joined product status.
 No frontend/database coupling or view-time full event grouping is accepted.
 
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset

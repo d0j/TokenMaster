@@ -58,6 +58,16 @@ epoch/window/last-sample projection before classification. Missing or mismatched
 projection state is rejected on live use and reopen rather than silently reconstructed.
 Injected failures at every publication boundary prove complete rollback.
 
+The implemented quota retention path is store-owned and exposes no SQL, identifiers,
+sample content, filesystem, network, clock, shell, or provider authority. Automatic
+and paged deletion use fixed parameterized statements scoped to one exact window and
+only remove redundant samples unreferenced by current, epoch, maximum-use, or
+transition evidence. Page size and per-window hard caps are fixed exported bounds.
+Maintenance does not advance semantic quota revision; injected post-delete and
+post-count faults prove rollback. Reopen independently rejects over-cap persisted
+state, including a tampered archive whose global retained count was made internally
+consistent.
+
 Providers emit bounded observation/session-relation drafts only. They cannot create
 event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or
 canonical events. Those values are created only by TokenMaster accounting code. Store

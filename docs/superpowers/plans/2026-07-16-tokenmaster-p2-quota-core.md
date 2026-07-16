@@ -6,7 +6,7 @@
 > (`- [ ]`) syntax for tracking.
 
 **Status:** inline execution in progress after spec-coverage, placeholder, type-flow,
-scope, authority-boundary, and restart-state self-review; Tasks 1-4 complete, Task 5
+scope, authority-boundary, and restart-state self-review; Tasks 1-5 complete, Task 6
 next
 
 **Goal:** Build the provider-neutral quota history data core that preserves scheduled,
@@ -486,7 +486,10 @@ git commit -m "feat(store): persist immutable quota transitions"
 
 - Modify: `crates/store/src/usage/quota_write.rs`
 - Create: `crates/store/src/usage/quota_maintenance.rs`
+- Modify: `crates/store/src/usage/quota_types.rs`
+- Modify: `crates/store/src/usage/migration.rs`
 - Modify: `crates/store/src/usage/mod.rs`
+- Modify: `crates/store/src/lib.rs`
 - Create: `crates/store/tests/quota_retention_contract.rs`
 
 **Interfaces:**
@@ -503,19 +506,19 @@ impl UsageStore {
 
 Page size is `1..=256`. The result exposes examined/deleted/remaining counts only.
 
-- [ ] **Step 1: Write failing retention tests**
+- [x] **Step 1: Write failing retention tests**
 
 Generate 10,000 redundant polls, 513 meaningful samples, 257 resets, protected
 first/last/max/pre/post samples, restart between every detector boundary, maintenance
 fault rollback, and sequence/revision overflow.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-store --test quota_retention_contract --locked
 ```
 
-- [ ] **Step 3: Implement bounded compaction**
+- [x] **Step 3: Implement bounded compaction**
 
 Use fixed keyset deletes of unprotected redundant samples only. Never scan another
 window and never delete current, unresolved, first, last, maximum-use, pre-reset, or
@@ -523,17 +526,17 @@ post-reset evidence. Preserve all transitions until a later aggregate contract e
 therefore Task 5 may report over-default transition backlog but must remain below the
 hard cap or fail the applying write closed.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-store --test quota_retention_contract --locked
 cargo +1.97.0 test -p tokenmaster-store --locked
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
-git add -- crates/store/src/usage/quota_write.rs crates/store/src/usage/quota_maintenance.rs crates/store/src/usage/mod.rs crates/store/tests/quota_retention_contract.rs
+git add -- crates/store/src/lib.rs crates/store/src/usage/migration.rs crates/store/src/usage/mod.rs crates/store/src/usage/quota_maintenance.rs crates/store/src/usage/quota_types.rs crates/store/src/usage/quota_write.rs crates/store/tests/quota_retention_contract.rs
 git commit -m "feat(store): bound quota history retention"
 ```
 

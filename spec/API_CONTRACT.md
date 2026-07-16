@@ -279,6 +279,14 @@ stale results are exact no-ops. Visible results publish definition/sample/epoch/
 transition/current state and advance the quota revision once inside one immediate
 transaction; any failure rolls back the complete publication.
 
+`UsageStore::maintain_quota_history_page` accepts one exact quota window and a page
+size from 1 through 256. It returns examined, deleted, remaining-sample,
+remaining-closed-epoch, and remaining-transition counts only. Maintenance never
+returns observation IDs or rows, never changes quota revision, never scans another
+window, and may delete only old unreferenced samples for which a newer equivalent
+sample exists under the same definition revision. Zero or an oversized page fails
+before writes.
+
 Quota snapshots expose current window epochs and a bounded transition page. Full
 weekly resets include before/after values, maximum pre-reset use, old/new reset times,
 transition kind, evidence source, confidence, and an exact or bounded detection time.

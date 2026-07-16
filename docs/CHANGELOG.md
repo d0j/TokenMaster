@@ -6,6 +6,12 @@ All notable changes are recorded here.
 
 ### Added
 
+- Evidence-preserving bounded quota retention with exported 512-sample/256-epoch-
+  transition soft defaults, 2,048/1,024 per-window hard caps, 256-candidate
+  maintenance pages, automatic equivalent-poll pruning, same-definition/same-window
+  compaction, protected first/current/last/ratio-max/unit-max/reset evidence,
+  over-cap write/reopen rejection, count-only results, and rollback-safe retry at both
+  maintenance fault boundaries.
 - Transactional quota observation persistence with exact duplicate/stale no-op,
   immutable definition/sample/closed-epoch/transition facts, independent one-step
   quota revision publication, repeated-reset and reopen continuity, account isolation,

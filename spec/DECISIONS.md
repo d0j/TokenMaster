@@ -617,3 +617,29 @@ history, while silent projection reconstruction can turn corruption into plausib
 truth. One bounded transaction, pure classification, strict identity reuse, exact
 projection validation, and deterministic retry preserve idempotency, restart truth,
 and responsive constant-state writes without retaining history in memory.
+
+## ADR-034 — Evidence-preserving quota retention and fixed hard caps
+
+Decision: quota history uses per-window soft defaults of 512 samples and 256 closed
+epochs/transitions, hard caps of 2,048 samples and 1,024 closed epochs/transitions,
+and maintenance pages of at most 256 candidates. The write path may replace only the
+immediately previous unprotected same-definition sample when every normalized quota
+fact is equivalent. Explicit maintenance may delete only an older unprotected sample
+that has a newer equivalent inside the same scope/window and definition revision.
+First, current/last, ratio/unit maximum, closed-epoch, and transition pre/post/max
+evidence are always protected. Task 5 never merges or deletes transitions or closed
+epochs.
+
+Maintenance owns one immediate transaction, updates only the retained sample count,
+does not advance semantic quota revision, and returns counts rather than identities or
+rows. Applying a sample that would cross a hard cap fails before publication and rolls
+back completely. Writable reopen validates every stored per-window hard cap in
+addition to global count/projection integrity, so an externally altered over-cap
+archive fails closed.
+
+Rationale: retaining every poll causes unbounded SQLite growth, while age-only
+deletion can erase the exact evidence needed to explain resets, maximum use, and
+allowance changes. Definition-bound equivalence plus reference-aware deletion keeps
+steady polling near constant size without changing visible truth. Fixed pages and
+hard caps bound work and storage; preserving semantic revision avoids invalidating
+current/transition consumers for deletion of interchangeable internal detail.

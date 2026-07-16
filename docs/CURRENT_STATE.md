@@ -356,8 +356,23 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   tests/doctests, strict workspace Clippy, formatting, and clean-root pass. Two fresh
   isolated query resource processes also pass after the warm-up floor was hardened
   against one transient low allocator sample without weakening sustained-growth or
-  structural gates. Bounded retention, reads/query, transport, inventory/reminders,
-  UI, and automation remain unimplemented.
+  structural gates. Reads/query, transport, inventory/reminders, UI, and automation
+  remain unimplemented.
+- P2-D Task 5 bounded quota retention: exported per-window defaults are 512 samples
+  and 256 closed epochs/transitions; hard caps are 2,048 samples and 1,024 closed
+  epochs/transitions; maintenance pages are capped at 256. Equivalent polling removes
+  only the previous unprotected same-definition sample after current publication, so
+  10,000 identical polls retain protected first/latest evidence. Explicit maintenance
+  deletes only old unreferenced same-window samples with a newer normalized
+  equivalent and never removes first/current/last, independent ratio/unit maxima, or
+  transition pre/post/max evidence. Meaningful 513-sample history and 1,024 reset
+  transitions remain intact above soft defaults. Applying an over-cap sample/reset
+  rolls back; reopen rejects a tampered internally-count-consistent over-cap archive.
+  Two injected maintenance boundaries restore both rows and global retained count,
+  then deterministic retry succeeds. Seven focused retention contracts, 52 store unit
+  tests, clean-root, formatting, strict locked workspace Clippy, and the complete
+  locked workspace test/doctest suite pass. Quota reads/query, transport,
+  inventory/reminders, UI, and automation remain unimplemented.
 - Verification correction: the first post-Task-1 workspace run reproduced an existing
   query resource-test defect. A default Rust test harness changed its own worker
   threads during process-wide `PrivateUsage` sampling, while allocator spikes later
@@ -376,11 +391,12 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 ## Next implementation slice
 
 P2-D quota history core execution is active under
-`docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`. Tasks 1-4 exact
+`docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`. Tasks 1-5 exact
 domain values, deterministic identities, pure reset/allowance evaluation, strict
 schema v10, exact v9 migration, and transactional quota observation application are
-complete. Task 5 bounded retention, restart, and maintenance fault evidence is the
-immediate next slice. Reads, query, and acceptance evidence remain Tasks 6-8.
+complete together with bounded evidence-preserving retention. Task 6 defensive quota
+read snapshots and keyset transition history is the immediate next slice. Query
+facade and acceptance evidence remain Tasks 7-8.
 Permitted Codex quota transport and banked reset
 inventory/reminders remain separate later contours. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.
