@@ -355,6 +355,7 @@ pub fn parse_line(
         fallback_model: model.fallback,
         long_context,
         service_tier,
+        reported_cost: None,
         project,
         originator,
         activity,

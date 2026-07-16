@@ -68,6 +68,7 @@ fn event_in_scope(
         fallback_model: false,
         long_context: LongContextState::No,
         service_tier: None,
+        reported_cost: None,
         project: None,
         originator: None,
         activity: ActivityCounts::default(),

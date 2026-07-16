@@ -30,7 +30,8 @@ INSERT INTO usage_event(
   cached_tokens, output_tokens, reasoning_tokens, total_tokens,
   fallback_model, long_context, service_tier, project_alias, originator,
   activity_read, activity_edit_write, activity_search, activity_git,
-  activity_build_test, activity_web, activity_subagents, activity_terminal
+  activity_build_test, activity_web, activity_subagents, activity_terminal,
+  reported_cost_usd_micros
 )
 SELECT
   observation.fingerprint, observation.event_id, observation.file_key,
@@ -45,7 +46,8 @@ SELECT
   observation.activity_read, observation.activity_edit_write,
   observation.activity_search, observation.activity_git,
   observation.activity_build_test, observation.activity_web,
-  observation.activity_subagents, observation.activity_terminal
+  observation.activity_subagents, observation.activity_terminal,
+  observation.reported_cost_usd_micros
 FROM usage_replay_selection AS selection
 JOIN usage_observation AS observation
   ON observation.file_key = selection.file_key
@@ -91,7 +93,8 @@ ON CONFLICT(fingerprint) DO UPDATE SET
   activity_build_test = excluded.activity_build_test,
   activity_web = excluded.activity_web,
   activity_subagents = excluded.activity_subagents,
-  activity_terminal = excluded.activity_terminal
+  activity_terminal = excluded.activity_terminal,
+  reported_cost_usd_micros = excluded.reported_cost_usd_micros
 "#;
 
 const MATERIALIZE_CURRENT_FINGERPRINT_SQL: &str = r#"
@@ -103,7 +106,8 @@ INSERT INTO usage_event(
   cached_tokens, output_tokens, reasoning_tokens, total_tokens,
   fallback_model, long_context, service_tier, project_alias, originator,
   activity_read, activity_edit_write, activity_search, activity_git,
-  activity_build_test, activity_web, activity_subagents, activity_terminal
+  activity_build_test, activity_web, activity_subagents, activity_terminal,
+  reported_cost_usd_micros
 )
 SELECT
   observation.fingerprint, observation.event_id, observation.file_key,
@@ -118,7 +122,8 @@ SELECT
   observation.activity_read, observation.activity_edit_write,
   observation.activity_search, observation.activity_git,
   observation.activity_build_test, observation.activity_web,
-  observation.activity_subagents, observation.activity_terminal
+  observation.activity_subagents, observation.activity_terminal,
+  observation.reported_cost_usd_micros
 FROM usage_replay_selection AS selection
 JOIN usage_observation AS observation
   ON observation.file_key = selection.file_key
@@ -162,7 +167,8 @@ ON CONFLICT(fingerprint) DO UPDATE SET
   activity_build_test = excluded.activity_build_test,
   activity_web = excluded.activity_web,
   activity_subagents = excluded.activity_subagents,
-  activity_terminal = excluded.activity_terminal
+  activity_terminal = excluded.activity_terminal,
+  reported_cost_usd_micros = excluded.reported_cost_usd_micros
 "#;
 
 impl UsageStore {
@@ -2240,6 +2246,7 @@ fn observation_matches(
              AND activity_search = ?25 AND activity_git = ?26
              AND activity_build_test = ?27 AND activity_web = ?28
              AND activity_subagents = ?29 AND activity_terminal = ?30
+             AND reported_cost_usd_micros IS ?31
          )",
         params![
             source_key.as_bytes().as_slice(),
@@ -2272,6 +2279,10 @@ fn observation_matches(
             sql_u64(activity[5])?,
             sql_u64(activity[6])?,
             sql_u64(activity[7])?,
+            event
+                .reported_cost()
+                .map(|cost| sql_u64(cost.get()))
+                .transpose()?,
         ],
         |row| row.get(0),
     )?;
@@ -3876,6 +3887,7 @@ mod tests {
             fallback_model: false,
             long_context: LongContextState::No,
             service_tier: None,
+            reported_cost: None,
             project: None,
             originator: None,
             activity: ActivityCounts::default(),

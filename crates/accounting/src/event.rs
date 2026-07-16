@@ -241,6 +241,11 @@ impl CanonicalUsageEvent {
     }
 
     #[must_use]
+    pub const fn reported_cost(&self) -> Option<tokenmaster_domain::ReportedCostUsdMicros> {
+        self.draft.reported_cost()
+    }
+
+    #[must_use]
     pub fn project(&self) -> Option<&ProjectAlias> {
         self.draft.project()
     }

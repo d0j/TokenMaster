@@ -1,8 +1,8 @@
 use tokenmaster_domain::{
     ActivityCounts, ActivityKind, LongContextState, MetadataValue, ModelKey, ObservationDraft,
-    ObservationDraftParts, ObservationVerification, ProjectAlias, SessionRelationDraft,
-    SessionRelationDraftParts, TokenCount, TokenUsage, UsageProfileId, UsageProviderId,
-    UsageSessionId, UsageSourceId, UtcTimestamp,
+    ObservationDraftParts, ObservationVerification, ProjectAlias, ReportedCostUsdMicros,
+    SessionRelationDraft, SessionRelationDraftParts, TokenCount, TokenUsage, UsageProfileId,
+    UsageProviderId, UsageSessionId, UsageSourceId, UtcTimestamp,
 };
 
 #[test]
@@ -42,6 +42,7 @@ fn observation_draft_is_bounded_provider_neutral_and_private() {
         fallback_model: false,
         long_context: LongContextState::No,
         service_tier: Some(MetadataValue::new("priority").expect("valid tier")),
+        reported_cost: Some(ReportedCostUsdMicros::new(42_500)),
         project: Some(ProjectAlias::new("tokenmaster").expect("valid project")),
         originator: Some(MetadataValue::new("codex_cli").expect("valid originator")),
         activity: ActivityCounts::default(),
@@ -63,6 +64,10 @@ fn observation_draft_is_bounded_provider_neutral_and_private() {
     );
     assert_eq!(draft.delta_usage(), &delta);
     assert_eq!(draft.cumulative_usage(), Some(&cumulative));
+    assert_eq!(
+        draft.reported_cost().map(ReportedCostUsdMicros::get),
+        Some(42_500)
+    );
 
     let debug = format!("{draft:?}");
     assert!(debug.contains("provider_id"));
@@ -96,6 +101,7 @@ fn observation_draft_is_bounded_provider_neutral_and_private() {
         fallback_model: false,
         long_context: LongContextState::No,
         service_tier: None,
+        reported_cost: None,
         project: None,
         originator: None,
         activity: ActivityCounts::default(),

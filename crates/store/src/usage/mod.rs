@@ -8,6 +8,7 @@ use crate::{EXPECTED_SQLITE_VERSION, StoreError, StoreErrorCode};
 mod aggregate;
 mod incremental;
 mod migration;
+mod price_schema;
 mod query;
 mod read;
 mod replay;

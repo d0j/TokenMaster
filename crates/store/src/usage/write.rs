@@ -14,7 +14,8 @@ INSERT INTO usage_event(
   cached_tokens, output_tokens, reasoning_tokens, total_tokens,
   fallback_model, long_context, service_tier, project_alias, originator,
   activity_read, activity_edit_write, activity_search, activity_git,
-  activity_build_test, activity_web, activity_subagents, activity_terminal
+  activity_build_test, activity_web, activity_subagents, activity_terminal,
+  reported_cost_usd_micros
 )
 SELECT
   o.fingerprint, o.event_id, o.file_key, o.generation, o.source_offset,
@@ -24,7 +25,8 @@ SELECT
   o.output_tokens, o.reasoning_tokens, o.total_tokens, o.fallback_model,
   o.long_context, o.service_tier, o.project_alias, o.originator,
   o.activity_read, o.activity_edit_write, o.activity_search, o.activity_git,
-  o.activity_build_test, o.activity_web, o.activity_subagents, o.activity_terminal
+  o.activity_build_test, o.activity_web, o.activity_subagents, o.activity_terminal,
+  o.reported_cost_usd_micros
 FROM usage_observation AS o
 JOIN usage_source AS source
   ON source.file_key = o.file_key AND source.profile_id = o.profile_id
@@ -372,11 +374,12 @@ pub(super) fn insert_observation(
            input_tokens, cached_tokens, output_tokens, reasoning_tokens, total_tokens,
            fallback_model, long_context, service_tier, project_alias, originator,
            activity_read, activity_edit_write, activity_search, activity_git,
-           activity_build_test, activity_web, activity_subagents, activity_terminal
+           activity_build_test, activity_web, activity_subagents, activity_terminal,
+           reported_cost_usd_micros
          ) VALUES (
            ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14,
            ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26,
-           ?27, ?28, ?29, ?30
+           ?27, ?28, ?29, ?30, ?31
          )",
         params![
             source_key.as_bytes().as_slice(),
@@ -409,6 +412,10 @@ pub(super) fn insert_observation(
             sql_u64(activity[5])?,
             sql_u64(activity[6])?,
             sql_u64(activity[7])?,
+            event
+                .reported_cost()
+                .map(|cost| sql_u64(cost.get()))
+                .transpose()?,
         ],
     )?;
     Ok(())
@@ -696,6 +703,7 @@ mod tests {
             fallback_model: false,
             long_context: LongContextState::No,
             service_tier: None,
+            reported_cost: None,
             project: Some(ProjectAlias::new("tokenmaster")?),
             originator: None,
             activity: ActivityCounts::default(),

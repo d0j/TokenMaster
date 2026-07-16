@@ -8,7 +8,7 @@ use tokenmaster_store::{
     StoredCheckpointParts, StoredVerification, USAGE_SCHEMA_VERSION, UsageStore,
 };
 
-const USAGE_TABLES: [&str; 19] = [
+const USAGE_TABLES: [&str; 21] = [
     "usage_aggregate_state",
     "usage_archive_state",
     "usage_scan_set",
@@ -20,6 +20,8 @@ const USAGE_TABLES: [&str; 19] = [
     "usage_scan",
     "usage_session_rollup",
     "usage_time_rollup",
+    "usage_price_session_rollup",
+    "usage_price_time_rollup",
     "usage_legacy_snapshot",
     "usage_legacy_event",
     "usage_replay_revision",
@@ -29,7 +31,7 @@ const USAGE_TABLES: [&str; 19] = [
     "usage_replay_selection",
     "usage_replay_work",
 ];
-const USAGE_TRIGGERS: [&str; 12] = [
+const USAGE_TRIGGERS: [&str; 18] = [
     "usage_event_aggregate_session_after_delete",
     "usage_event_aggregate_session_after_insert",
     "usage_event_aggregate_session_after_update",
@@ -39,6 +41,12 @@ const USAGE_TRIGGERS: [&str; 12] = [
     "usage_event_dataset_generation_after_delete",
     "usage_event_dataset_generation_after_insert",
     "usage_event_dataset_generation_after_update",
+    "usage_event_price_session_after_delete",
+    "usage_event_price_session_after_insert",
+    "usage_event_price_session_after_update",
+    "usage_event_price_time_after_delete",
+    "usage_event_price_time_after_insert",
+    "usage_event_price_time_after_update",
     "usage_legacy_event_no_delete",
     "usage_legacy_event_no_insert",
     "usage_legacy_event_no_update",
@@ -352,8 +360,8 @@ fn schema_is_strict_path_free_and_has_exact_usage_tables() {
     let version: i64 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user version");
-    assert_eq!(USAGE_SCHEMA_VERSION, 8);
-    assert_eq!(version, 8);
+    assert_eq!(USAGE_SCHEMA_VERSION, 9);
+    assert_eq!(version, 9);
     assert_eq!(version, USAGE_SCHEMA_VERSION);
 
     let publication_sql = table_sql(&path, "usage_archive_state")

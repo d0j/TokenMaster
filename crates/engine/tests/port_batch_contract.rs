@@ -57,6 +57,7 @@ fn observation(source: &SourceIdentity, ordinal: u64) -> ObservationDraft {
         fallback_model: false,
         long_context: LongContextState::No,
         service_tier: None,
+        reported_cost: None,
         project: None,
         originator: None,
         activity: ActivityCounts::default(),

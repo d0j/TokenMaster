@@ -77,7 +77,8 @@ const CURRENT_PAGE: &str = "
 SELECT fingerprint, provider_id, profile_id, session_id, timestamp_seconds,
        timestamp_nanos, model, project_alias, input_tokens, cached_tokens,
        output_tokens, reasoning_tokens, total_tokens, fallback_model,
-       long_context, activity_read, activity_edit_write, activity_search,
+       long_context, service_tier, reported_cost_usd_micros,
+       activity_read, activity_edit_write, activity_search,
        activity_git, activity_build_test, activity_web, activity_subagents,
        activity_terminal
 FROM usage_event
@@ -94,7 +95,8 @@ SELECT event.fingerprint,
        event.timestamp_nanos, event.model, event.project_alias,
        event.input_tokens, event.cached_tokens, event.output_tokens,
        event.reasoning_tokens, event.total_tokens, event.fallback_model,
-       event.long_context, event.activity_read, event.activity_edit_write,
+       event.long_context, event.service_tier, event.reported_cost_usd_micros,
+       event.activity_read, event.activity_edit_write,
        event.activity_search, event.activity_git, event.activity_build_test,
        event.activity_web, event.activity_subagents, event.activity_terminal
 FROM usage_legacy_event AS event
@@ -253,6 +255,123 @@ fn session_page_sql(dataset_kind: &str, page_sql: &str) -> String {
     )
 }
 
+const PAGE_CALCULABLE: &str = "input_tokens IS NOT NULL AND cached_tokens IS NOT NULL AND cached_tokens <= input_tokens AND ((total_tokens IS NOT NULL AND total_tokens >= input_tokens AND (output_tokens IS NULL OR reasoning_tokens IS NULL OR (output_tokens <= total_tokens - input_tokens AND reasoning_tokens = total_tokens - input_tokens - output_tokens))) OR (total_tokens IS NULL AND output_tokens IS NOT NULL AND reasoning_tokens IS NOT NULL AND output_tokens <= 9223372036854775807 - reasoning_tokens))";
+
+fn price_time_page_sql(dataset_kind: &str, page_sql: &str) -> String {
+    format!(
+        "WITH page AS ({page_sql}),
+         normalized AS (
+           SELECT page.*,
+                  CASE WHEN service_tier IS NULL THEN 'standard_assumed'
+                       WHEN lower(service_tier) IN ('standard','default')
+                         THEN 'standard_reported'
+                       WHEN lower(service_tier) IN ('priority','fast') THEN 'priority'
+                       ELSE 'unknown' END AS price_tier,
+                  CASE WHEN reported_cost_usd_micros IS NULL
+                       THEN 'missing' ELSE 'present' END AS reported_state,
+                  CASE WHEN {PAGE_CALCULABLE} THEN 1 ELSE 0 END AS calculable,
+                  CASE WHEN {PAGE_CALCULABLE}
+                       THEN input_tokens - cached_tokens ELSE 0 END AS uncached_input,
+                  CASE WHEN {PAGE_CALCULABLE} THEN cached_tokens ELSE 0 END AS cached_input,
+                  CASE WHEN {PAGE_CALCULABLE}
+                       THEN CASE WHEN total_tokens IS NOT NULL
+                                 THEN total_tokens - input_tokens
+                                 ELSE output_tokens + reasoning_tokens END
+                       ELSE 0 END AS billable_output
+           FROM page
+         ),
+         expanded AS (
+           SELECT normalized.*, bucket.width AS bucket_width,
+                  timestamp_seconds -
+                    (((timestamp_seconds % bucket.seconds) + bucket.seconds)
+                     % bucket.seconds) AS bucket_start_seconds
+           FROM normalized
+           CROSS JOIN (
+             SELECT 'minute' AS width, 60 AS seconds
+             UNION ALL SELECT 'hour', 3600
+           ) AS bucket
+         )
+         INSERT INTO usage_price_time_rollup(
+           aggregate_generation, dataset_kind, bucket_width, bucket_start_seconds,
+           provider_id, profile_id, model, service_tier, long_context, reported_state,
+           event_count, calculable_event_count, uncached_input_sum, cached_input_sum,
+           billable_output_sum, reported_cost_count, reported_cost_sum
+         )
+         SELECT ?1, '{dataset_kind}', bucket_width, bucket_start_seconds,
+                provider_id, profile_id, model, price_tier, long_context, reported_state,
+                count(*), sum(calculable), sum(uncached_input), sum(cached_input),
+                sum(billable_output), count(reported_cost_usd_micros),
+                coalesce(sum(reported_cost_usd_micros), 0)
+         FROM expanded
+         GROUP BY bucket_width, bucket_start_seconds, provider_id, profile_id,
+                  model, price_tier, long_context, reported_state
+         ON CONFLICT(
+           aggregate_generation, dataset_kind, bucket_width, bucket_start_seconds,
+           provider_id, profile_id, model, service_tier, long_context, reported_state
+         ) DO UPDATE SET
+           event_count = event_count + excluded.event_count,
+           calculable_event_count =
+             calculable_event_count + excluded.calculable_event_count,
+           uncached_input_sum = uncached_input_sum + excluded.uncached_input_sum,
+           cached_input_sum = cached_input_sum + excluded.cached_input_sum,
+           billable_output_sum = billable_output_sum + excluded.billable_output_sum,
+           reported_cost_count = reported_cost_count + excluded.reported_cost_count,
+           reported_cost_sum = reported_cost_sum + excluded.reported_cost_sum"
+    )
+}
+
+fn price_session_page_sql(dataset_kind: &str, page_sql: &str) -> String {
+    format!(
+        "WITH page AS ({page_sql}),
+         normalized AS (
+           SELECT page.*,
+                  CASE WHEN service_tier IS NULL THEN 'standard_assumed'
+                       WHEN lower(service_tier) IN ('standard','default')
+                         THEN 'standard_reported'
+                       WHEN lower(service_tier) IN ('priority','fast') THEN 'priority'
+                       ELSE 'unknown' END AS price_tier,
+                  CASE WHEN reported_cost_usd_micros IS NULL
+                       THEN 'missing' ELSE 'present' END AS reported_state,
+                  CASE WHEN {PAGE_CALCULABLE} THEN 1 ELSE 0 END AS calculable,
+                  CASE WHEN {PAGE_CALCULABLE}
+                       THEN input_tokens - cached_tokens ELSE 0 END AS uncached_input,
+                  CASE WHEN {PAGE_CALCULABLE} THEN cached_tokens ELSE 0 END AS cached_input,
+                  CASE WHEN {PAGE_CALCULABLE}
+                       THEN CASE WHEN total_tokens IS NOT NULL
+                                 THEN total_tokens - input_tokens
+                                 ELSE output_tokens + reasoning_tokens END
+                       ELSE 0 END AS billable_output
+           FROM page
+         )
+         INSERT INTO usage_price_session_rollup(
+           aggregate_generation, dataset_kind, provider_id, profile_id, session_id,
+           model, service_tier, long_context, reported_state,
+           event_count, calculable_event_count, uncached_input_sum, cached_input_sum,
+           billable_output_sum, reported_cost_count, reported_cost_sum
+         )
+         SELECT ?1, '{dataset_kind}', provider_id, profile_id, session_id,
+                model, price_tier, long_context, reported_state,
+                count(*), sum(calculable), sum(uncached_input), sum(cached_input),
+                sum(billable_output), count(reported_cost_usd_micros),
+                coalesce(sum(reported_cost_usd_micros), 0)
+         FROM normalized
+         GROUP BY provider_id, profile_id, session_id, model, price_tier,
+                  long_context, reported_state
+         ON CONFLICT(
+           aggregate_generation, dataset_kind, provider_id, profile_id, session_id,
+           model, service_tier, long_context, reported_state
+         ) DO UPDATE SET
+           event_count = event_count + excluded.event_count,
+           calculable_event_count =
+             calculable_event_count + excluded.calculable_event_count,
+           uncached_input_sum = uncached_input_sum + excluded.uncached_input_sum,
+           cached_input_sum = cached_input_sum + excluded.cached_input_sum,
+           billable_output_sum = billable_output_sum + excluded.billable_output_sum,
+           reported_cost_count = reported_cost_count + excluded.reported_cost_count,
+           reported_cost_sum = reported_cost_sum + excluded.reported_cost_sum"
+    )
+}
+
 struct RebuildState {
     state: String,
     archive_generation: i64,
@@ -289,7 +408,7 @@ impl UsageStore {
         let limit = i64::try_from(max_events)
             .map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))?;
         let cleanup_limit = limit
-            .checked_mul(9)
+            .checked_mul(12)
             .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?;
         let transaction = self
             .connection
@@ -357,7 +476,23 @@ impl UsageStore {
                      )",
                     [cleanup_limit],
                 )?;
-                if removed_time == 0 && removed_session == 0 {
+                let removed_price_time = transaction.execute(
+                    "DELETE FROM usage_price_time_rollup WHERE rowid IN (
+                       SELECT rowid FROM usage_price_time_rollup ORDER BY rowid LIMIT ?1
+                     )",
+                    [cleanup_limit],
+                )?;
+                let removed_price_session = transaction.execute(
+                    "DELETE FROM usage_price_session_rollup WHERE rowid IN (
+                       SELECT rowid FROM usage_price_session_rollup ORDER BY rowid LIMIT ?1
+                     )",
+                    [cleanup_limit],
+                )?;
+                if removed_time == 0
+                    && removed_session == 0
+                    && removed_price_time == 0
+                    && removed_price_session == 0
+                {
                     if state.total_events == 0 {
                         aggregate_fault(fault, AggregateBoundary::Publish)?;
                         finish_rebuild(&transaction, rebuild_generation, 0)?;
@@ -587,6 +722,14 @@ fn materialize_page(
         &session_page_sql(dataset_kind, page_sql),
         params![aggregate_generation, cursor, limit],
     )?;
+    transaction.execute(
+        &price_time_page_sql(dataset_kind, page_sql),
+        params![aggregate_generation, cursor, limit],
+    )?;
+    transaction.execute(
+        &price_session_page_sql(dataset_kind, page_sql),
+        params![aggregate_generation, cursor, limit],
+    )?;
     Ok(())
 }
 
@@ -660,19 +803,32 @@ mod tests {
                  rebuild_total_events = current_event_count + legacy_event_count
              WHERE singleton_id = 1;
              DELETE FROM usage_time_rollup;
-             DELETE FROM usage_session_rollup;",
+             DELETE FROM usage_session_rollup;
+             DELETE FROM usage_price_time_rollup;
+             DELETE FROM usage_price_session_rollup;",
         )?;
         Ok(store)
     }
 
-    fn rebuild_state(store: &UsageStore) -> TestResult<(String, i64, i64, i64)> {
+    fn rebuild_state(store: &UsageStore) -> TestResult<(String, i64, i64, i64, i64, i64)> {
         Ok(store.connection.query_row(
             "SELECT state, rebuild_processed_events,
                     (SELECT count(*) FROM usage_time_rollup),
-                    (SELECT count(*) FROM usage_session_rollup)
+                    (SELECT count(*) FROM usage_session_rollup),
+                    (SELECT count(*) FROM usage_price_time_rollup),
+                    (SELECT count(*) FROM usage_price_session_rollup)
              FROM usage_aggregate_state WHERE singleton_id = 1",
             [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            },
         )?)
     }
 

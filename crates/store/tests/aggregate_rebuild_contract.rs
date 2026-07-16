@@ -128,6 +128,14 @@ fn current_rebuild_is_bounded_resumable_and_generation_published() {
     assert_eq!(cleanup.status(), AggregateRebuildStatus::Rebuilding);
     assert_eq!(cleanup.processed_events(), 0);
     assert_eq!(cleanup.total_events(), 5);
+    let cleanup_complete = store
+        .rebuild_aggregates_page(2)
+        .expect("finish stale price-row cleanup");
+    assert_eq!(
+        cleanup_complete.status(),
+        AggregateRebuildStatus::Rebuilding
+    );
+    assert_eq!(cleanup_complete.processed_events(), 0);
     let first = store.rebuild_aggregates_page(2).expect("first data page");
     assert_eq!(first.processed_events(), 2);
     drop(store);
@@ -161,7 +169,7 @@ fn current_rebuild_is_bounded_resumable_and_generation_published() {
         )
         .expect("aggregate state");
     assert_eq!(state, ("ready".to_owned(), 1, None, 5, 5));
-    let active_rows: (i64, i64, i64) = connection
+    let active_rows: (i64, i64, i64, i64, i64, i64) = connection
         .query_row(
             "SELECT
                (SELECT count(*) FROM usage_time_rollup
@@ -170,14 +178,44 @@ fn current_rebuild_is_bounded_resumable_and_generation_published() {
                 WHERE aggregate_generation = 1),
                (SELECT sum(event_count) FROM usage_time_rollup
                 WHERE aggregate_generation = 1 AND dataset_kind = 'current'
-                  AND bucket_width = 'hour' AND dimension_kind = 'all')",
+                  AND bucket_width = 'hour' AND dimension_kind = 'all'),
+               (SELECT count(*) FROM usage_price_time_rollup
+                WHERE aggregate_generation = 1),
+               (SELECT count(*) FROM usage_price_session_rollup
+                WHERE aggregate_generation = 1),
+               (SELECT sum(event_count) FROM usage_price_time_rollup
+                WHERE aggregate_generation = 1 AND dataset_kind = 'current'
+                  AND bucket_width = 'hour')",
             [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            },
         )
         .expect("active rollups");
     assert!(active_rows.0 > 0);
     assert!(active_rows.1 > 0);
     assert_eq!(active_rows.2, 5);
+    assert!(active_rows.3 > 0);
+    assert!(active_rows.4 > 0);
+    assert_eq!(active_rows.5, 5);
+    let stale_price_rows: i64 = connection
+        .query_row(
+            "SELECT (SELECT count(*) FROM usage_price_time_rollup
+                     WHERE aggregate_generation <> 1)
+                  + (SELECT count(*) FROM usage_price_session_rollup
+                     WHERE aggregate_generation <> 1)",
+            [],
+            |row| row.get(0),
+        )
+        .expect("no stale price generations");
+    assert_eq!(stale_price_rows, 0);
 }
 
 #[test]
@@ -228,6 +266,37 @@ fn migrated_current_and_immutable_legacy_build_as_distinct_datasets() {
         vec![
             ("current".to_owned(), "codex".to_owned(), 1),
             ("legacy".to_owned(), "codex".to_owned(), 1),
+        ]
+    );
+    let price_datasets = connection
+        .prepare(
+            "SELECT dataset_kind, provider_id, sum(event_count),
+                    sum(calculable_event_count), sum(reported_cost_count)
+             FROM usage_price_time_rollup
+             WHERE aggregate_generation = (
+               SELECT active_aggregate_generation FROM usage_aggregate_state
+               WHERE singleton_id = 1
+             ) AND bucket_width = 'hour'
+             GROUP BY dataset_kind, provider_id ORDER BY dataset_kind",
+        )
+        .expect("prepare price datasets")
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, i64>(4)?,
+            ))
+        })
+        .expect("query price datasets")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect price datasets");
+    assert_eq!(
+        price_datasets,
+        vec![
+            ("current".to_owned(), "codex".to_owned(), 1, 0, 0),
+            ("legacy".to_owned(), "codex".to_owned(), 1, 0, 0),
         ]
     );
 }

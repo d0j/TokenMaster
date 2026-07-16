@@ -3,8 +3,9 @@ use tempfile::TempDir;
 use tokenmaster_accounting::{CanonicalUsageEvent, Canonicalizer};
 use tokenmaster_domain::{
     ActivityCounts, LongContextState, MetadataValue, ModelKey, ObservationDraft,
-    ObservationDraftParts, ObservationVerification, ProjectAlias, TokenCount, TokenUsage,
-    UsageProfileId, UsageProviderId, UsageSessionId, UsageSourceId, UtcTimestamp,
+    ObservationDraftParts, ObservationVerification, ProjectAlias, ReportedCostUsdMicros,
+    TokenCount, TokenUsage, UsageProfileId, UsageProviderId, UsageSessionId, UsageSourceId,
+    UtcTimestamp,
 };
 use tokenmaster_store::{
     AppendBatch, AppendBatchParts, SourceKey, SourceKind, SourceRegistration,
@@ -107,6 +108,7 @@ fn event_for_provider(
         fallback_model: false,
         long_context: LongContextState::No,
         service_tier: Some(MetadataValue::new("priority").expect("tier")),
+        reported_cost: Some(ReportedCostUsdMicros::new(12_345)),
         project: Some(ProjectAlias::new("tokenmaster").expect("project")),
         originator: Some(MetadataValue::new("codex_cli").expect("originator")),
         activity: ActivityCounts::default(),
@@ -315,14 +317,18 @@ fn duplicate_fingerprint_keeps_two_observations_and_one_deterministic_canonical_
     drop(store);
 
     let connection = Connection::open(path).expect("inspect deterministic selection");
-    let selected_file_key: Vec<u8> = connection
+    let selected: (Vec<u8>, Option<i64>, Option<i64>) = connection
         .query_row(
-            "SELECT selected_file_key FROM usage_event WHERE fingerprint = ?1",
+            "SELECT selected_file_key, reported_cost_usd_micros,
+                    (SELECT reported_cost_usd_micros FROM usage_observation
+                     WHERE fingerprint = usage_event.fingerprint
+                     ORDER BY file_key LIMIT 1)
+             FROM usage_event WHERE fingerprint = ?1",
             [fingerprint.as_slice()],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
         .expect("canonical source key");
-    assert_eq!(selected_file_key, [1_u8; 32]);
+    assert_eq!(selected, (vec![1_u8; 32], Some(12_345), Some(12_345)));
 }
 
 #[test]

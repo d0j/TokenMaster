@@ -30,6 +30,22 @@ pub enum TokenCount {
     Unavailable,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ReportedCostUsdMicros(u64);
+
+impl ReportedCostUsdMicros {
+    #[must_use]
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
 impl Serialize for TokenCount {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -448,6 +464,7 @@ pub struct ObservationDraftParts {
     pub fallback_model: bool,
     pub long_context: LongContextState,
     pub service_tier: Option<MetadataValue>,
+    pub reported_cost: Option<ReportedCostUsdMicros>,
     pub project: Option<ProjectAlias>,
     pub originator: Option<MetadataValue>,
     pub activity: ActivityCounts,
@@ -555,6 +572,11 @@ impl ObservationDraft {
     #[must_use]
     pub fn service_tier(&self) -> Option<&MetadataValue> {
         self.parts.service_tier.as_ref()
+    }
+
+    #[must_use]
+    pub const fn reported_cost(&self) -> Option<ReportedCostUsdMicros> {
+        self.parts.reported_cost
     }
 
     #[must_use]

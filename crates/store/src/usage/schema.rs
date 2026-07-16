@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-pub const USAGE_SCHEMA_VERSION: i64 = 8;
+pub const USAGE_SCHEMA_VERSION: i64 = 9;
 pub(super) const V1_SCHEMA_VERSION: i64 = 1;
 pub(super) const V2_SCHEMA_VERSION: i64 = 2;
 pub(super) const V3_SCHEMA_VERSION: i64 = 3;
@@ -8,6 +8,7 @@ pub(super) const V4_SCHEMA_VERSION: i64 = 4;
 pub(super) const V5_SCHEMA_VERSION: i64 = 5;
 pub(super) const V6_SCHEMA_VERSION: i64 = 6;
 pub(super) const V7_SCHEMA_VERSION: i64 = 7;
+pub(super) const V8_SCHEMA_VERSION: i64 = 8;
 
 pub(super) struct TableContract {
     pub(super) name: &'static str,
@@ -133,6 +134,17 @@ pub(super) const V8_INDEX_CONTRACTS: &[IndexContract] = &[
     IndexContract {
         name: "usage_time_rollup_scope_range",
         sql: "CREATE INDEX usage_time_rollup_scope_range ON usage_time_rollup(aggregate_generation, dataset_kind, provider_id, profile_id, dimension_kind, dimension_value, bucket_width, bucket_start_seconds)",
+    },
+];
+
+pub(super) const V9_INDEX_CONTRACTS: &[IndexContract] = &[
+    IndexContract {
+        name: "usage_price_session_scope",
+        sql: "CREATE INDEX usage_price_session_scope ON usage_price_session_rollup(aggregate_generation, dataset_kind, provider_id, profile_id, session_id, model, service_tier, long_context, reported_state)",
+    },
+    IndexContract {
+        name: "usage_price_time_scope_range",
+        sql: "CREATE INDEX usage_price_time_scope_range ON usage_price_time_rollup(aggregate_generation, dataset_kind, provider_id, profile_id, bucket_width, bucket_start_seconds, model, service_tier, long_context, reported_state)",
     },
 ];
 
@@ -650,6 +662,172 @@ pub(super) const V8_SESSION_ROLLUP_CONTRACT: TableContract = TableContract {
         "activity_web",
         "activity_subagents",
         "activity_terminal",
+    ],
+};
+
+pub(super) const V9_OBSERVATION_CONTRACT: TableContract = TableContract {
+    name: "usage_observation",
+    columns: &[
+        "file_key",
+        "generation",
+        "source_offset",
+        "fingerprint",
+        "event_id",
+        "profile_id",
+        "session_id",
+        "source_id",
+        "timestamp_seconds",
+        "timestamp_nanos",
+        "model",
+        "raw_model",
+        "input_tokens",
+        "cached_tokens",
+        "output_tokens",
+        "reasoning_tokens",
+        "total_tokens",
+        "fallback_model",
+        "long_context",
+        "service_tier",
+        "project_alias",
+        "originator",
+        "activity_read",
+        "activity_edit_write",
+        "activity_search",
+        "activity_git",
+        "activity_build_test",
+        "activity_web",
+        "activity_subagents",
+        "activity_terminal",
+        "reported_cost_usd_micros",
+    ],
+};
+
+pub(super) const V9_USAGE_EVENT_CONTRACT: TableContract = TableContract {
+    name: "usage_event",
+    columns: &[
+        "fingerprint",
+        "event_id",
+        "selected_file_key",
+        "selected_generation",
+        "selected_source_offset",
+        "projection_revision_id",
+        "origin_revision_id",
+        "retained",
+        "provider_id",
+        "profile_id",
+        "session_id",
+        "source_id",
+        "timestamp_seconds",
+        "timestamp_nanos",
+        "model",
+        "raw_model",
+        "input_tokens",
+        "cached_tokens",
+        "output_tokens",
+        "reasoning_tokens",
+        "total_tokens",
+        "fallback_model",
+        "long_context",
+        "service_tier",
+        "project_alias",
+        "originator",
+        "activity_read",
+        "activity_edit_write",
+        "activity_search",
+        "activity_git",
+        "activity_build_test",
+        "activity_web",
+        "activity_subagents",
+        "activity_terminal",
+        "reported_cost_usd_micros",
+    ],
+};
+
+pub(super) const V9_LEGACY_EVENT_CONTRACT: TableContract = TableContract {
+    name: "usage_legacy_event",
+    columns: &[
+        "snapshot_id",
+        "fingerprint",
+        "event_id",
+        "selected_file_key",
+        "selected_generation",
+        "selected_source_offset",
+        "profile_id",
+        "session_id",
+        "source_id",
+        "timestamp_seconds",
+        "timestamp_nanos",
+        "model",
+        "raw_model",
+        "input_tokens",
+        "cached_tokens",
+        "output_tokens",
+        "reasoning_tokens",
+        "total_tokens",
+        "fallback_model",
+        "long_context",
+        "service_tier",
+        "project_alias",
+        "originator",
+        "activity_read",
+        "activity_edit_write",
+        "activity_search",
+        "activity_git",
+        "activity_build_test",
+        "activity_web",
+        "activity_subagents",
+        "activity_terminal",
+        "reported_cost_usd_micros",
+    ],
+};
+
+pub(super) const V9_AGGREGATE_STATE_CONTRACT: TableContract = TableContract {
+    name: "usage_aggregate_state",
+    columns: V8_AGGREGATE_STATE_CONTRACT.columns,
+};
+
+pub(super) const V9_PRICE_TIME_ROLLUP_CONTRACT: TableContract = TableContract {
+    name: "usage_price_time_rollup",
+    columns: &[
+        "aggregate_generation",
+        "dataset_kind",
+        "bucket_width",
+        "bucket_start_seconds",
+        "provider_id",
+        "profile_id",
+        "model",
+        "service_tier",
+        "long_context",
+        "reported_state",
+        "event_count",
+        "calculable_event_count",
+        "uncached_input_sum",
+        "cached_input_sum",
+        "billable_output_sum",
+        "reported_cost_count",
+        "reported_cost_sum",
+    ],
+};
+
+pub(super) const V9_PRICE_SESSION_ROLLUP_CONTRACT: TableContract = TableContract {
+    name: "usage_price_session_rollup",
+    columns: &[
+        "aggregate_generation",
+        "dataset_kind",
+        "provider_id",
+        "profile_id",
+        "session_id",
+        "model",
+        "service_tier",
+        "long_context",
+        "reported_state",
+        "event_count",
+        "calculable_event_count",
+        "uncached_input_sum",
+        "cached_input_sum",
+        "billable_output_sum",
+        "reported_cost_count",
+        "reported_cost_sum",
     ],
 };
 
@@ -1693,6 +1871,166 @@ CREATE TABLE usage_event (
   ),
   FOREIGN KEY(projection_revision_id) REFERENCES usage_replay_revision(revision_id)
     DEFERRABLE INITIALLY DEFERRED
+) STRICT;
+"#;
+
+pub(super) const V9_REPORTED_COST_TABLE_SCHEMA: &str = r#"
+CREATE TABLE usage_observation (
+  file_key BLOB NOT NULL CHECK(length(file_key) = 32),
+  generation INTEGER NOT NULL CHECK(generation >= 0),
+  source_offset INTEGER NOT NULL CHECK(source_offset >= 0),
+  fingerprint BLOB NOT NULL CHECK(length(fingerprint) = 32),
+  event_id TEXT NOT NULL CHECK(length(CAST(event_id AS BLOB)) BETWEEN 1 AND 128),
+  profile_id TEXT NOT NULL CHECK(length(CAST(profile_id AS BLOB)) BETWEEN 1 AND 128),
+  session_id TEXT NOT NULL CHECK(length(CAST(session_id AS BLOB)) BETWEEN 1 AND 512),
+  source_id TEXT NOT NULL CHECK(length(CAST(source_id AS BLOB)) BETWEEN 1 AND 128),
+  timestamp_seconds INTEGER NOT NULL,
+  timestamp_nanos INTEGER NOT NULL CHECK(timestamp_nanos BETWEEN 0 AND 999999999),
+  model TEXT NOT NULL CHECK(length(CAST(model AS BLOB)) BETWEEN 1 AND 64),
+  raw_model TEXT CHECK(raw_model IS NULL OR length(CAST(raw_model AS BLOB)) BETWEEN 1 AND 512),
+  input_tokens INTEGER CHECK(input_tokens IS NULL OR input_tokens >= 0),
+  cached_tokens INTEGER CHECK(cached_tokens IS NULL OR cached_tokens >= 0),
+  output_tokens INTEGER CHECK(output_tokens IS NULL OR output_tokens >= 0),
+  reasoning_tokens INTEGER CHECK(reasoning_tokens IS NULL OR reasoning_tokens >= 0),
+  total_tokens INTEGER CHECK(total_tokens IS NULL OR total_tokens >= 0),
+  fallback_model INTEGER NOT NULL CHECK(fallback_model IN (0,1)),
+  long_context TEXT NOT NULL CHECK(long_context IN ('yes','no','unavailable')),
+  service_tier TEXT CHECK(service_tier IS NULL OR length(CAST(service_tier AS BLOB)) BETWEEN 1 AND 512),
+  project_alias TEXT CHECK(project_alias IS NULL OR length(CAST(project_alias AS BLOB)) BETWEEN 1 AND 512),
+  originator TEXT CHECK(originator IS NULL OR length(CAST(originator AS BLOB)) BETWEEN 1 AND 512),
+  activity_read INTEGER NOT NULL CHECK(activity_read >= 0),
+  activity_edit_write INTEGER NOT NULL CHECK(activity_edit_write >= 0),
+  activity_search INTEGER NOT NULL CHECK(activity_search >= 0),
+  activity_git INTEGER NOT NULL CHECK(activity_git >= 0),
+  activity_build_test INTEGER NOT NULL CHECK(activity_build_test >= 0),
+  activity_web INTEGER NOT NULL CHECK(activity_web >= 0),
+  activity_subagents INTEGER NOT NULL CHECK(activity_subagents >= 0),
+  activity_terminal INTEGER NOT NULL CHECK(activity_terminal >= 0),
+  reported_cost_usd_micros INTEGER CHECK(reported_cost_usd_micros IS NULL OR reported_cost_usd_micros >= 0),
+  PRIMARY KEY(file_key, generation, source_offset, fingerprint),
+  FOREIGN KEY(file_key, generation)
+    REFERENCES usage_generation(file_key, generation) ON DELETE CASCADE
+) STRICT;
+
+CREATE TABLE usage_event (
+  fingerprint BLOB PRIMARY KEY CHECK(length(fingerprint) = 32),
+  event_id TEXT NOT NULL CHECK(length(CAST(event_id AS BLOB)) BETWEEN 1 AND 128),
+  selected_file_key BLOB NOT NULL CHECK(length(selected_file_key) = 32),
+  selected_generation INTEGER NOT NULL CHECK(selected_generation >= 0),
+  selected_source_offset INTEGER NOT NULL CHECK(selected_source_offset >= 0),
+  projection_revision_id INTEGER CHECK(projection_revision_id IS NULL OR projection_revision_id >= 0),
+  origin_revision_id INTEGER CHECK(origin_revision_id IS NULL OR origin_revision_id >= 0),
+  retained INTEGER NOT NULL CHECK(retained IN (0,1)) DEFAULT 0,
+  provider_id TEXT NOT NULL CHECK(length(CAST(provider_id AS BLOB)) BETWEEN 1 AND 64),
+  profile_id TEXT NOT NULL CHECK(length(CAST(profile_id AS BLOB)) BETWEEN 1 AND 128),
+  session_id TEXT NOT NULL CHECK(length(CAST(session_id AS BLOB)) BETWEEN 1 AND 512),
+  source_id TEXT NOT NULL CHECK(length(CAST(source_id AS BLOB)) BETWEEN 1 AND 128),
+  timestamp_seconds INTEGER NOT NULL,
+  timestamp_nanos INTEGER NOT NULL CHECK(timestamp_nanos BETWEEN 0 AND 999999999),
+  model TEXT NOT NULL CHECK(length(CAST(model AS BLOB)) BETWEEN 1 AND 64),
+  raw_model TEXT CHECK(raw_model IS NULL OR length(CAST(raw_model AS BLOB)) BETWEEN 1 AND 512),
+  input_tokens INTEGER CHECK(input_tokens IS NULL OR input_tokens >= 0),
+  cached_tokens INTEGER CHECK(cached_tokens IS NULL OR cached_tokens >= 0),
+  output_tokens INTEGER CHECK(output_tokens IS NULL OR output_tokens >= 0),
+  reasoning_tokens INTEGER CHECK(reasoning_tokens IS NULL OR reasoning_tokens >= 0),
+  total_tokens INTEGER CHECK(total_tokens IS NULL OR total_tokens >= 0),
+  fallback_model INTEGER NOT NULL CHECK(fallback_model IN (0,1)),
+  long_context TEXT NOT NULL CHECK(long_context IN ('yes','no','unavailable')),
+  service_tier TEXT CHECK(service_tier IS NULL OR length(CAST(service_tier AS BLOB)) BETWEEN 1 AND 512),
+  project_alias TEXT CHECK(project_alias IS NULL OR length(CAST(project_alias AS BLOB)) BETWEEN 1 AND 512),
+  originator TEXT CHECK(originator IS NULL OR length(CAST(originator AS BLOB)) BETWEEN 1 AND 512),
+  activity_read INTEGER NOT NULL CHECK(activity_read >= 0),
+  activity_edit_write INTEGER NOT NULL CHECK(activity_edit_write >= 0),
+  activity_search INTEGER NOT NULL CHECK(activity_search >= 0),
+  activity_git INTEGER NOT NULL CHECK(activity_git >= 0),
+  activity_build_test INTEGER NOT NULL CHECK(activity_build_test >= 0),
+  activity_web INTEGER NOT NULL CHECK(activity_web >= 0),
+  activity_subagents INTEGER NOT NULL CHECK(activity_subagents >= 0),
+  activity_terminal INTEGER NOT NULL CHECK(activity_terminal >= 0),
+  reported_cost_usd_micros INTEGER CHECK(reported_cost_usd_micros IS NULL OR reported_cost_usd_micros >= 0),
+  CHECK(
+    (projection_revision_id IS NULL AND origin_revision_id IS NULL AND retained = 0)
+    OR
+    (projection_revision_id IS NOT NULL AND (
+      (retained = 0 AND origin_revision_id = projection_revision_id)
+      OR
+      (retained = 1 AND origin_revision_id < projection_revision_id)
+    ))
+  ),
+  FOREIGN KEY(projection_revision_id) REFERENCES usage_replay_revision(revision_id)
+    DEFERRABLE INITIALLY DEFERRED
+) STRICT;
+
+CREATE TABLE usage_legacy_event (
+  snapshot_id INTEGER NOT NULL CHECK(snapshot_id = 1),
+  fingerprint BLOB NOT NULL CHECK(length(fingerprint) = 32),
+  event_id TEXT NOT NULL CHECK(length(CAST(event_id AS BLOB)) BETWEEN 1 AND 128),
+  selected_file_key BLOB NOT NULL CHECK(length(selected_file_key) = 32),
+  selected_generation INTEGER NOT NULL CHECK(selected_generation >= 0),
+  selected_source_offset INTEGER NOT NULL CHECK(selected_source_offset >= 0),
+  profile_id TEXT NOT NULL CHECK(length(CAST(profile_id AS BLOB)) BETWEEN 1 AND 128),
+  session_id TEXT NOT NULL CHECK(length(CAST(session_id AS BLOB)) BETWEEN 1 AND 512),
+  source_id TEXT NOT NULL CHECK(length(CAST(source_id AS BLOB)) BETWEEN 1 AND 128),
+  timestamp_seconds INTEGER NOT NULL,
+  timestamp_nanos INTEGER NOT NULL CHECK(timestamp_nanos BETWEEN 0 AND 999999999),
+  model TEXT NOT NULL CHECK(length(CAST(model AS BLOB)) BETWEEN 1 AND 64),
+  raw_model TEXT CHECK(raw_model IS NULL OR length(CAST(raw_model AS BLOB)) BETWEEN 1 AND 512),
+  input_tokens INTEGER CHECK(input_tokens IS NULL OR input_tokens >= 0),
+  cached_tokens INTEGER CHECK(cached_tokens IS NULL OR cached_tokens >= 0),
+  output_tokens INTEGER CHECK(output_tokens IS NULL OR output_tokens >= 0),
+  reasoning_tokens INTEGER CHECK(reasoning_tokens IS NULL OR reasoning_tokens >= 0),
+  total_tokens INTEGER CHECK(total_tokens IS NULL OR total_tokens >= 0),
+  fallback_model INTEGER NOT NULL CHECK(fallback_model IN (0,1)),
+  long_context TEXT NOT NULL CHECK(long_context IN ('yes','no','unavailable')),
+  service_tier TEXT CHECK(service_tier IS NULL OR length(CAST(service_tier AS BLOB)) BETWEEN 1 AND 512),
+  project_alias TEXT CHECK(project_alias IS NULL OR length(CAST(project_alias AS BLOB)) BETWEEN 1 AND 512),
+  originator TEXT CHECK(originator IS NULL OR length(CAST(originator AS BLOB)) BETWEEN 1 AND 512),
+  activity_read INTEGER NOT NULL CHECK(activity_read >= 0),
+  activity_edit_write INTEGER NOT NULL CHECK(activity_edit_write >= 0),
+  activity_search INTEGER NOT NULL CHECK(activity_search >= 0),
+  activity_git INTEGER NOT NULL CHECK(activity_git >= 0),
+  activity_build_test INTEGER NOT NULL CHECK(activity_build_test >= 0),
+  activity_web INTEGER NOT NULL CHECK(activity_web >= 0),
+  activity_subagents INTEGER NOT NULL CHECK(activity_subagents >= 0),
+  activity_terminal INTEGER NOT NULL CHECK(activity_terminal >= 0),
+  reported_cost_usd_micros INTEGER CHECK(reported_cost_usd_micros IS NULL OR reported_cost_usd_micros >= 0),
+  PRIMARY KEY(snapshot_id, fingerprint),
+  FOREIGN KEY(snapshot_id) REFERENCES usage_legacy_snapshot(snapshot_id)
+) STRICT;
+"#;
+
+pub(super) const V9_AGGREGATE_STATE_SCHEMA: &str = r#"
+CREATE TABLE usage_aggregate_state (
+  singleton_id INTEGER PRIMARY KEY CHECK(singleton_id = 1),
+  aggregate_schema_version INTEGER NOT NULL CHECK(aggregate_schema_version = 2),
+  state TEXT NOT NULL CHECK(state IN ('ready','rebuild_required','rebuilding','failed')),
+  expected_dataset_generation INTEGER NOT NULL CHECK(expected_dataset_generation >= 0),
+  active_aggregate_generation INTEGER NOT NULL CHECK(active_aggregate_generation >= 0),
+  rebuild_aggregate_generation INTEGER CHECK(rebuild_aggregate_generation IS NULL OR rebuild_aggregate_generation >= 0),
+  current_event_count INTEGER NOT NULL CHECK(current_event_count >= 0),
+  legacy_event_count INTEGER NOT NULL CHECK(legacy_event_count >= 0),
+  failure_code TEXT CHECK(failure_code IS NULL OR length(CAST(failure_code AS BLOB)) BETWEEN 1 AND 64),
+  rebuild_dataset_kind TEXT CHECK(rebuild_dataset_kind IN ('cleanup','current','legacy')),
+  rebuild_cursor_fingerprint BLOB CHECK(rebuild_cursor_fingerprint IS NULL OR length(rebuild_cursor_fingerprint) = 32),
+  rebuild_processed_events INTEGER NOT NULL DEFAULT 0 CHECK(rebuild_processed_events >= 0),
+  rebuild_total_events INTEGER NOT NULL CHECK(rebuild_total_events >= 0),
+  CHECK(rebuild_processed_events <= rebuild_total_events),
+  CHECK(
+    (state = 'ready' AND failure_code IS NULL AND rebuild_aggregate_generation IS NULL
+      AND rebuild_dataset_kind IS NULL
+      AND rebuild_cursor_fingerprint IS NULL AND rebuild_processed_events = 0)
+    OR
+    (state = 'rebuild_required' AND failure_code IS NULL
+      AND rebuild_aggregate_generation IS NULL AND rebuild_dataset_kind IS NULL
+      AND rebuild_cursor_fingerprint IS NULL AND rebuild_processed_events = 0)
+    OR
+    (state = 'rebuilding' AND failure_code IS NULL
+      AND rebuild_aggregate_generation IS NOT NULL
+      AND rebuild_aggregate_generation <> active_aggregate_generation
+      AND rebuild_dataset_kind IS NOT NULL)
+    OR
+    (state = 'failed' AND failure_code IS NOT NULL)
+  )
 ) STRICT;
 "#;
 

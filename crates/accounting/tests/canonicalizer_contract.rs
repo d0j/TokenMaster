@@ -55,6 +55,7 @@ fn draft(
         fallback_model: false,
         long_context: LongContextState::No,
         service_tier: Some(MetadataValue::new("priority").expect("valid tier")),
+        reported_cost: None,
         project: Some(ProjectAlias::new("tokenmaster").expect("valid project")),
         originator: Some(MetadataValue::new("codex_cli").expect("valid originator")),
         activity: ActivityCounts::default(),

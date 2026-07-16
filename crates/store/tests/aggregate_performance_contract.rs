@@ -89,6 +89,7 @@ fn event(index: usize) -> CanonicalUsageEvent {
         fallback_model: false,
         long_context: LongContextState::No,
         service_tier: None,
+        reported_cost: None,
         project: Some(ProjectAlias::new("tokenmaster").expect("project")),
         originator: None,
         activity: ActivityCounts::default(),

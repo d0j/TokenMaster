@@ -2,6 +2,11 @@ use rusqlite::{Connection, OptionalExtension, TransactionBehavior};
 
 use crate::{StoreError, StoreErrorCode};
 
+use super::price_schema::{
+    V9_PRICE_ROLLUP_SCHEMA, price_session_delete_trigger, price_session_insert_trigger,
+    price_session_update_trigger, price_time_delete_trigger, price_time_insert_trigger,
+    price_time_update_trigger,
+};
 use super::schema::{
     IndexContract, LEGACY_COPY_SQL, LEGACY_IMMUTABILITY_TRIGGERS, LEGACY_TRIGGER_CONTRACTS,
     PRE_V4_USAGE_EVENT_CONTRACT, REPLAY_AUX_SCHEMA, REPLAY_CHILD_SCHEMA, TableContract,
@@ -14,10 +19,13 @@ use super::schema::{
     V6_ARCHIVE_STATE_SCHEMA, V6_SCHEMA_VERSION, V7_ARCHIVE_STATE_CONTRACT, V7_ARCHIVE_STATE_SCHEMA,
     V7_DATASET_GENERATION_TRIGGERS, V7_SCHEMA_VERSION, V8_AGGREGATE_SCHEMA,
     V8_AGGREGATE_STATE_CONTRACT, V8_DATASET_DELETE_TRIGGER, V8_DATASET_INSERT_TRIGGER,
-    V8_DATASET_UPDATE_TRIGGER, V8_INDEX_CONTRACTS, V8_SESSION_DELETE_TRIGGER,
+    V8_DATASET_UPDATE_TRIGGER, V8_INDEX_CONTRACTS, V8_SCHEMA_VERSION, V8_SESSION_DELETE_TRIGGER,
     V8_SESSION_INSERT_TRIGGER, V8_SESSION_ROLLUP_CONTRACT, V8_TIME_DELETE_TRIGGER,
     V8_TIME_INSERT_TRIGGER, V8_TIME_ROLLUP_CONTRACT, V8_USAGE_EVENT_CONTRACT,
-    V8_USAGE_EVENT_SCHEMA, v8_session_update_trigger, v8_time_update_trigger,
+    V8_USAGE_EVENT_SCHEMA, V9_AGGREGATE_STATE_CONTRACT, V9_AGGREGATE_STATE_SCHEMA,
+    V9_INDEX_CONTRACTS, V9_LEGACY_EVENT_CONTRACT, V9_OBSERVATION_CONTRACT,
+    V9_PRICE_SESSION_ROLLUP_CONTRACT, V9_PRICE_TIME_ROLLUP_CONTRACT, V9_REPORTED_COST_TABLE_SCHEMA,
+    V9_USAGE_EVENT_CONTRACT, v8_session_update_trigger, v8_time_update_trigger,
 };
 
 pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreError> {
@@ -32,20 +40,23 @@ pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreErr
             migrate_v4(connection)?;
             migrate_v5(connection)?;
             migrate_v6(connection)?;
-            migrate_v7(connection)
+            migrate_v7(connection)?;
+            migrate_v8(connection)
         }
         V3_SCHEMA_VERSION => {
             migrate_v3(connection)?;
             migrate_v4(connection)?;
             migrate_v5(connection)?;
             migrate_v6(connection)?;
-            migrate_v7(connection)
+            migrate_v7(connection)?;
+            migrate_v8(connection)
         }
         V4_SCHEMA_VERSION => {
             migrate_v4(connection)?;
             migrate_v5(connection)?;
             migrate_v6(connection)?;
-            migrate_v7(connection)
+            migrate_v7(connection)?;
+            migrate_v8(connection)
         }
         0 | V1_SCHEMA_VERSION => {
             let transaction =
@@ -59,22 +70,29 @@ pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreErr
             migrate_v4(connection)?;
             migrate_v5(connection)?;
             migrate_v6(connection)?;
-            migrate_v7(connection)
+            migrate_v7(connection)?;
+            migrate_v8(connection)
         }
         V5_SCHEMA_VERSION => {
             migrate_v5(connection)?;
             migrate_v6(connection)?;
-            migrate_v7(connection)
+            migrate_v7(connection)?;
+            migrate_v8(connection)
         }
         V6_SCHEMA_VERSION => {
             migrate_v6(connection)?;
-            migrate_v7(connection)
+            migrate_v7(connection)?;
+            migrate_v8(connection)
         }
-        V7_SCHEMA_VERSION => migrate_v7(connection),
+        V7_SCHEMA_VERSION => {
+            migrate_v7(connection)?;
+            migrate_v8(connection)
+        }
+        V8_SCHEMA_VERSION => migrate_v8(connection),
         USAGE_SCHEMA_VERSION => {
             let transaction =
                 connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-            validate_v8(&transaction)?;
+            validate_v9(&transaction)?;
             transaction.commit()?;
             Ok(())
         }
@@ -337,7 +355,133 @@ pub(super) fn validate_v8(connection: &Connection) -> Result<(), StoreError> {
     )?;
     validate_legacy_snapshot(connection)?;
     validate_archive_publication(connection)?;
-    validate_aggregate_state(connection)
+    validate_aggregate_state(connection, 1)
+}
+
+pub(super) fn validate_v9(connection: &Connection) -> Result<(), StoreError> {
+    let session_update = v8_session_update_trigger()
+        .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+    let time_update =
+        v8_time_update_trigger().ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+    let price_session_delete = price_session_delete_trigger()
+        .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+    let price_session_insert = price_session_insert_trigger()
+        .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+    let price_session_update = price_session_update_trigger()
+        .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+    let price_time_delete = price_time_delete_trigger()
+        .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+    let price_time_insert = price_time_insert_trigger()
+        .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+    let price_time_update = price_time_update_trigger()
+        .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+    let mut trigger_contracts = vec![
+        TriggerContract {
+            name: "usage_event_aggregate_session_after_delete",
+            sql: V8_SESSION_DELETE_TRIGGER,
+        },
+        TriggerContract {
+            name: "usage_event_aggregate_session_after_insert",
+            sql: V8_SESSION_INSERT_TRIGGER,
+        },
+        TriggerContract {
+            name: "usage_event_aggregate_session_after_update",
+            sql: session_update,
+        },
+        TriggerContract {
+            name: "usage_event_aggregate_time_after_delete",
+            sql: V8_TIME_DELETE_TRIGGER,
+        },
+        TriggerContract {
+            name: "usage_event_aggregate_time_after_insert",
+            sql: V8_TIME_INSERT_TRIGGER,
+        },
+        TriggerContract {
+            name: "usage_event_aggregate_time_after_update",
+            sql: time_update,
+        },
+        TriggerContract {
+            name: "usage_event_dataset_generation_after_delete",
+            sql: V8_DATASET_DELETE_TRIGGER,
+        },
+        TriggerContract {
+            name: "usage_event_dataset_generation_after_insert",
+            sql: V8_DATASET_INSERT_TRIGGER,
+        },
+        TriggerContract {
+            name: "usage_event_dataset_generation_after_update",
+            sql: V8_DATASET_UPDATE_TRIGGER,
+        },
+        TriggerContract {
+            name: "usage_event_price_session_after_delete",
+            sql: price_session_delete,
+        },
+        TriggerContract {
+            name: "usage_event_price_session_after_insert",
+            sql: price_session_insert,
+        },
+        TriggerContract {
+            name: "usage_event_price_session_after_update",
+            sql: price_session_update,
+        },
+        TriggerContract {
+            name: "usage_event_price_time_after_delete",
+            sql: price_time_delete,
+        },
+        TriggerContract {
+            name: "usage_event_price_time_after_insert",
+            sql: price_time_insert,
+        },
+        TriggerContract {
+            name: "usage_event_price_time_after_update",
+            sql: price_time_update,
+        },
+    ];
+    trigger_contracts.extend(LEGACY_TRIGGER_CONTRACTS.iter().copied());
+    let mut indexes = V5_INDEX_CONTRACTS.to_vec();
+    indexes.extend_from_slice(V8_INDEX_CONTRACTS);
+    indexes.extend_from_slice(V9_INDEX_CONTRACTS);
+    validate_schema(
+        connection,
+        USAGE_TABLE_CONTRACTS,
+        USAGE_INDEX_CONTRACTS,
+        &trigger_contracts,
+        &[
+            V9_REPORTED_COST_TABLE_SCHEMA,
+            V9_AGGREGATE_STATE_SCHEMA,
+            V9_PRICE_ROLLUP_SCHEMA,
+            V8_AGGREGATE_SCHEMA,
+            V7_ARCHIVE_STATE_SCHEMA,
+            V5_SCAN_SET_SCHEMA,
+            V5_USAGE_SCAN_SCHEMA,
+            V5_REPLAY_REVISION_SCHEMA,
+            V1_SCHEMA,
+            REPLAY_AUX_SCHEMA,
+            REPLAY_CHILD_SCHEMA,
+        ],
+        &[
+            V5_USAGE_SCAN_CONTRACT,
+            V5_REPLAY_REVISION_CONTRACT,
+            V9_OBSERVATION_CONTRACT,
+            V9_USAGE_EVENT_CONTRACT,
+            V9_LEGACY_EVENT_CONTRACT,
+        ],
+        SchemaExtensions {
+            tables: &[
+                V5_SCAN_SET_CONTRACT,
+                V7_ARCHIVE_STATE_CONTRACT,
+                V9_AGGREGATE_STATE_CONTRACT,
+                V8_TIME_ROLLUP_CONTRACT,
+                V8_SESSION_ROLLUP_CONTRACT,
+                V9_PRICE_TIME_ROLLUP_CONTRACT,
+                V9_PRICE_SESSION_ROLLUP_CONTRACT,
+            ],
+            indexes: &indexes,
+        },
+    )?;
+    validate_legacy_snapshot(connection)?;
+    validate_archive_publication(connection)?;
+    validate_aggregate_state(connection, 2)
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -383,6 +527,14 @@ enum MigrationFault {
     AfterSeedAggregateState,
     #[cfg(test)]
     AfterCreateAggregateTriggers,
+    #[cfg(test)]
+    AfterAddReportedCost,
+    #[cfg(test)]
+    AfterUpgradeAggregateState,
+    #[cfg(test)]
+    AfterCreatePriceSchema,
+    #[cfg(test)]
+    AfterCreatePriceTriggers,
 }
 
 fn migrate_v2(connection: &mut Connection) -> Result<(), StoreError> {
@@ -517,6 +669,10 @@ enum MigrationBoundary {
     AggregateSchemaCreated,
     AggregateStateSeeded,
     AggregateTriggersCreated,
+    ReportedCostAdded,
+    AggregateStateUpgraded,
+    PriceSchemaCreated,
+    PriceTriggersCreated,
 }
 
 fn migration_fault(fault: MigrationFault, boundary: MigrationBoundary) -> Result<(), StoreError> {
@@ -599,6 +755,22 @@ fn migration_fault(fault: MigrationFault, boundary: MigrationBoundary) -> Result
                 MigrationFault::AfterCreateAggregateTriggers,
                 MigrationBoundary::AggregateTriggersCreated
             )
+            | (
+                MigrationFault::AfterAddReportedCost,
+                MigrationBoundary::ReportedCostAdded
+            )
+            | (
+                MigrationFault::AfterUpgradeAggregateState,
+                MigrationBoundary::AggregateStateUpgraded
+            )
+            | (
+                MigrationFault::AfterCreatePriceSchema,
+                MigrationBoundary::PriceSchemaCreated
+            )
+            | (
+                MigrationFault::AfterCreatePriceTriggers,
+                MigrationBoundary::PriceTriggersCreated
+            )
     );
     #[cfg(not(test))]
     let triggered = {
@@ -643,6 +815,93 @@ fn migrate_v6(connection: &mut Connection) -> Result<(), StoreError> {
 
 fn migrate_v7(connection: &mut Connection) -> Result<(), StoreError> {
     migrate_v7_with_fault(connection, MigrationFault::None)
+}
+
+fn migrate_v8(connection: &mut Connection) -> Result<(), StoreError> {
+    migrate_v8_with_fault(connection, MigrationFault::None)
+}
+
+fn migrate_v8_with_fault(
+    connection: &mut Connection,
+    fault: MigrationFault,
+) -> Result<(), StoreError> {
+    validate_v8(connection)?;
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    transaction.execute_batch(
+        "DROP TRIGGER usage_event_aggregate_session_after_delete;
+         DROP TRIGGER usage_event_aggregate_session_after_insert;
+         DROP TRIGGER usage_event_aggregate_session_after_update;
+         DROP TRIGGER usage_event_aggregate_time_after_delete;
+         DROP TRIGGER usage_event_aggregate_time_after_insert;
+         DROP TRIGGER usage_event_aggregate_time_after_update;
+         DROP TRIGGER usage_event_dataset_generation_after_delete;
+         DROP TRIGGER usage_event_dataset_generation_after_insert;
+         DROP TRIGGER usage_event_dataset_generation_after_update;
+         ALTER TABLE usage_observation ADD COLUMN
+           reported_cost_usd_micros INTEGER
+           CHECK(reported_cost_usd_micros IS NULL OR reported_cost_usd_micros >= 0);
+         ALTER TABLE usage_event ADD COLUMN
+           reported_cost_usd_micros INTEGER
+           CHECK(reported_cost_usd_micros IS NULL OR reported_cost_usd_micros >= 0);
+         ALTER TABLE usage_legacy_event ADD COLUMN
+           reported_cost_usd_micros INTEGER
+           CHECK(reported_cost_usd_micros IS NULL OR reported_cost_usd_micros >= 0);
+         ALTER TABLE usage_aggregate_state RENAME TO usage_aggregate_state_v8;",
+    )?;
+    migration_fault(fault, MigrationBoundary::ReportedCostAdded)?;
+    transaction.execute_batch(V9_AGGREGATE_STATE_SCHEMA)?;
+    transaction.execute(
+        "INSERT INTO usage_aggregate_state(
+           singleton_id, aggregate_schema_version, state,
+           expected_dataset_generation, active_aggregate_generation,
+           current_event_count, legacy_event_count, rebuild_total_events
+         )
+         SELECT old.singleton_id, 2,
+                CASE WHEN old.current_event_count = 0 AND old.legacy_event_count = 0
+                     THEN 'ready' ELSE 'rebuild_required' END,
+                archive.dataset_generation, old.active_aggregate_generation,
+                old.current_event_count, old.legacy_event_count,
+                old.current_event_count + old.legacy_event_count
+         FROM usage_aggregate_state_v8 AS old
+         JOIN usage_archive_state AS archive ON archive.singleton_id = old.singleton_id",
+        [],
+    )?;
+    transaction.execute_batch("DROP TABLE usage_aggregate_state_v8;")?;
+    migration_fault(fault, MigrationBoundary::AggregateStateUpgraded)?;
+    transaction.execute_batch(V9_PRICE_ROLLUP_SCHEMA)?;
+    migration_fault(fault, MigrationBoundary::PriceSchemaCreated)?;
+
+    transaction.execute_batch(V8_SESSION_DELETE_TRIGGER)?;
+    transaction.execute_batch(V8_SESSION_INSERT_TRIGGER)?;
+    transaction.execute_batch(
+        v8_session_update_trigger()
+            .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?,
+    )?;
+    transaction.execute_batch(V8_TIME_DELETE_TRIGGER)?;
+    transaction.execute_batch(V8_TIME_INSERT_TRIGGER)?;
+    transaction.execute_batch(
+        v8_time_update_trigger().ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?,
+    )?;
+    transaction.execute_batch(V8_DATASET_DELETE_TRIGGER)?;
+    transaction.execute_batch(V8_DATASET_INSERT_TRIGGER)?;
+    transaction.execute_batch(V8_DATASET_UPDATE_TRIGGER)?;
+    for trigger in [
+        price_session_delete_trigger(),
+        price_session_insert_trigger(),
+        price_session_update_trigger(),
+        price_time_delete_trigger(),
+        price_time_insert_trigger(),
+        price_time_update_trigger(),
+    ] {
+        transaction.execute_batch(
+            trigger.ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?,
+        )?;
+    }
+    migration_fault(fault, MigrationBoundary::PriceTriggersCreated)?;
+    transaction.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
+    validate_v9(&transaction)?;
+    transaction.commit()?;
+    Ok(())
 }
 
 fn migrate_v7_with_fault(
@@ -691,7 +950,7 @@ fn migrate_v7_with_fault(
     transaction.execute_batch(V8_DATASET_INSERT_TRIGGER)?;
     transaction.execute_batch(V8_DATASET_UPDATE_TRIGGER)?;
     migration_fault(fault, MigrationBoundary::AggregateTriggersCreated)?;
-    transaction.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
+    transaction.pragma_update(None, "user_version", V8_SCHEMA_VERSION)?;
     validate_v8(&transaction)?;
     transaction.commit()?;
     Ok(())
@@ -1274,7 +1533,10 @@ fn validate_archive_publication(connection: &Connection) -> Result<(), StoreErro
     Ok(())
 }
 
-fn validate_aggregate_state(connection: &Connection) -> Result<(), StoreError> {
+fn validate_aggregate_state(
+    connection: &Connection,
+    expected_schema_version: i64,
+) -> Result<(), StoreError> {
     let state: Option<(i64, String, i64, i64, i64, i64)> = connection
         .query_row(
             "SELECT aggregate.aggregate_schema_version, aggregate.state,
@@ -1305,7 +1567,7 @@ fn validate_aggregate_state(connection: &Connection) -> Result<(), StoreError> {
     let expected_total = current_count
         .checked_add(legacy_count)
         .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
-    if schema_version != 1
+    if schema_version != expected_schema_version
         || generation < 0
         || current_count < 0
         || legacy_count < 0
@@ -1569,8 +1831,9 @@ mod tests {
     use super::{
         MigrationFault, migrate_schema, migrate_v2_revision_table, migrate_v2_with_fault,
         migrate_v3_with_fault, migrate_v4_with_fault, migrate_v5_with_fault, migrate_v6,
-        migrate_v6_with_fault, migrate_v7_with_fault, pragma_i64, validate_v2, validate_v3,
-        validate_v4, validate_v5, validate_v6, validate_v7, validate_v8,
+        migrate_v6_with_fault, migrate_v7_with_fault, migrate_v8_with_fault, pragma_i64,
+        validate_v2, validate_v3, validate_v4, validate_v5, validate_v6, validate_v7, validate_v8,
+        validate_v9,
     };
     use crate::{StoreErrorCode, usage::schema};
 
@@ -1892,11 +2155,11 @@ mod tests {
     }
 
     #[test]
-    fn exact_v2_migrates_to_v8_and_preserves_all_rows() -> TestResult {
+    fn exact_v2_migrates_to_v9_and_preserves_all_rows() -> TestResult {
         let mut connection = exact_v2_fixture(true)?;
         let before = fixture_snapshot(&connection)?;
         migrate_schema(&mut connection)?;
-        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 8);
+        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 9);
         assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
         assert_eq!(fixture_snapshot(&connection)?, before);
         assert_eq!(event_provenance(&connection)?, (Some(5), Some(5), 0));
@@ -1907,7 +2170,7 @@ mod tests {
             )?,
             1
         );
-        validate_v8(&connection)?;
+        validate_v9(&connection)?;
         let temporary_names: i64 = connection.query_row(
             "SELECT count(*) FROM sqlite_schema
              WHERE instr(sql, 'usage_replay_revision_v3') > 0
@@ -1928,7 +2191,7 @@ mod tests {
     }
 
     #[test]
-    fn exact_v3_migrates_to_v8_with_legacy_and_current_projection_provenance() -> TestResult {
+    fn exact_v3_migrates_to_v9_with_legacy_and_current_projection_provenance() -> TestResult {
         for (current_revision, expected) in [
             (false, (None, None, 0_i64)),
             (true, (Some(5_i64), Some(5_i64), 0_i64)),
@@ -1936,7 +2199,7 @@ mod tests {
             let mut connection = exact_v3_fixture(current_revision)?;
             let before = fixture_snapshot(&connection)?;
             migrate_schema(&mut connection)?;
-            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 8);
+            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 9);
             assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
             assert_eq!(fixture_snapshot(&connection)?, before);
             assert_eq!(event_provenance(&connection)?, expected);
@@ -1947,7 +2210,7 @@ mod tests {
                 )?,
                 i64::from(current_revision)
             );
-            validate_v8(&connection)?;
+            validate_v9(&connection)?;
         }
         Ok(())
     }
@@ -1982,10 +2245,10 @@ mod tests {
     }
 
     #[test]
-    fn exact_v4_scan_and_revision_migrate_to_scoped_v8() -> TestResult {
+    fn exact_v4_scan_and_revision_migrate_to_scoped_v9() -> TestResult {
         let mut connection = exact_v4_fixture_with_scan()?;
         migrate_schema(&mut connection)?;
-        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 8);
+        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 9);
         assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
         let scan: (
             i64,
@@ -2075,7 +2338,7 @@ mod tests {
             )?,
             1
         );
-        validate_v8(&connection)?;
+        validate_v9(&connection)?;
         Ok(())
     }
 
@@ -2099,6 +2362,88 @@ mod tests {
         migrate_v6(&mut connection)?;
         validate_v7(&connection)?;
         Ok(connection)
+    }
+
+    fn exact_v8_fixture() -> TestResult<Connection> {
+        let mut connection = exact_v7_fixture()?;
+        migrate_v7_with_fault(&mut connection, MigrationFault::None)?;
+        validate_v8(&connection)?;
+        Ok(connection)
+    }
+
+    #[test]
+    fn exact_v8_migrates_to_v9_without_inventing_reported_cost() -> TestResult {
+        let mut connection = exact_v8_fixture()?;
+        let before = fixture_snapshot(&connection)?;
+        migrate_v8_with_fault(&mut connection, MigrationFault::None)?;
+        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 9);
+        assert_eq!(fixture_snapshot(&connection)?, before);
+        assert_eq!(
+            pragma_i64(
+                &connection,
+                "SELECT count(*) FROM usage_observation
+                 WHERE reported_cost_usd_micros IS NOT NULL"
+            )?,
+            0
+        );
+        assert_eq!(
+            connection.query_row(
+                "SELECT aggregate_schema_version, state, current_event_count,
+                        legacy_event_count, rebuild_total_events
+                 FROM usage_aggregate_state WHERE singleton_id = 1",
+                [],
+                |row| Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, i64>(4)?,
+                )),
+            )?,
+            (2, "rebuild_required".to_owned(), 1, 1, 2)
+        );
+        validate_v9(&connection)?;
+        Ok(())
+    }
+
+    #[test]
+    fn every_v8_pricing_migration_fault_rolls_back_exactly() -> TestResult {
+        for fault in [
+            MigrationFault::AfterAddReportedCost,
+            MigrationFault::AfterUpgradeAggregateState,
+            MigrationFault::AfterCreatePriceSchema,
+            MigrationFault::AfterCreatePriceTriggers,
+        ] {
+            let mut connection = exact_v8_fixture()?;
+            let before = fixture_snapshot(&connection)?;
+            let error = match migrate_v8_with_fault(&mut connection, fault) {
+                Ok(()) => return Err("faulted pricing migration unexpectedly committed".into()),
+                Err(error) => error,
+            };
+            assert_eq!(error.code(), StoreErrorCode::Database);
+            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 8);
+            assert_eq!(fixture_snapshot(&connection)?, before);
+            assert_eq!(
+                pragma_i64(
+                    &connection,
+                    "SELECT count(*) FROM pragma_table_info('usage_event')
+                     WHERE name = 'reported_cost_usd_micros'"
+                )?,
+                0
+            );
+            assert_eq!(
+                pragma_i64(
+                    &connection,
+                    "SELECT count(*) FROM sqlite_schema
+                     WHERE name IN ('usage_aggregate_state_v8',
+                                    'usage_price_time_rollup',
+                                    'usage_price_session_rollup')"
+                )?,
+                0
+            );
+            validate_v8(&connection)?;
+        }
+        Ok(())
     }
 
     #[test]

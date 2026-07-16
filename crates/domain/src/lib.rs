@@ -15,6 +15,6 @@ pub use usage::{
     ActivityCounts, ActivityKind, LongContextState, MAX_METADATA_BYTES, MAX_MODEL_KEY_BYTES,
     MAX_PROVIDER_ID_BYTES, MAX_SESSION_ID_BYTES, MAX_USAGE_ID_BYTES, MetadataValue, ModelKey,
     ObservationDraft, ObservationDraftParts, ObservationVerification, ProjectAlias,
-    SessionRelationDraft, SessionRelationDraftParts, TokenCount, TokenUsage, UsageError,
-    UsageProfileId, UsageProviderId, UsageSessionId, UsageSourceId, UtcTimestamp,
+    ReportedCostUsdMicros, SessionRelationDraft, SessionRelationDraftParts, TokenCount, TokenUsage,
+    UsageError, UsageProfileId, UsageProviderId, UsageSessionId, UsageSourceId, UtcTimestamp,
 };
