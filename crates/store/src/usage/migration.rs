@@ -7,6 +7,10 @@ use super::price_schema::{
     price_session_update_trigger, price_time_delete_trigger, price_time_insert_trigger,
     price_time_update_trigger,
 };
+use super::quota_schema::{
+    V10_QUOTA_INDEX_CONTRACTS, V10_QUOTA_SCHEMA, V10_QUOTA_TABLE_CONTRACTS,
+    V10_QUOTA_TRIGGER_CONTRACTS,
+};
 use super::schema::{
     IndexContract, LEGACY_COPY_SQL, LEGACY_IMMUTABILITY_TRIGGERS, LEGACY_TRIGGER_CONTRACTS,
     PRE_V4_USAGE_EVENT_CONTRACT, REPLAY_AUX_SCHEMA, REPLAY_CHILD_SCHEMA, TableContract,
@@ -25,7 +29,7 @@ use super::schema::{
     V8_USAGE_EVENT_SCHEMA, V9_AGGREGATE_STATE_CONTRACT, V9_AGGREGATE_STATE_SCHEMA,
     V9_INDEX_CONTRACTS, V9_LEGACY_EVENT_CONTRACT, V9_OBSERVATION_CONTRACT,
     V9_PRICE_SESSION_ROLLUP_CONTRACT, V9_PRICE_TIME_ROLLUP_CONTRACT, V9_REPORTED_COST_TABLE_SCHEMA,
-    V9_USAGE_EVENT_CONTRACT, v8_session_update_trigger, v8_time_update_trigger,
+    V9_SCHEMA_VERSION, V9_USAGE_EVENT_CONTRACT, v8_session_update_trigger, v8_time_update_trigger,
 };
 
 pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreError> {
@@ -41,7 +45,8 @@ pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreErr
             migrate_v5(connection)?;
             migrate_v6(connection)?;
             migrate_v7(connection)?;
-            migrate_v8(connection)
+            migrate_v8(connection)?;
+            migrate_v9(connection)
         }
         V3_SCHEMA_VERSION => {
             migrate_v3(connection)?;
@@ -49,14 +54,16 @@ pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreErr
             migrate_v5(connection)?;
             migrate_v6(connection)?;
             migrate_v7(connection)?;
-            migrate_v8(connection)
+            migrate_v8(connection)?;
+            migrate_v9(connection)
         }
         V4_SCHEMA_VERSION => {
             migrate_v4(connection)?;
             migrate_v5(connection)?;
             migrate_v6(connection)?;
             migrate_v7(connection)?;
-            migrate_v8(connection)
+            migrate_v8(connection)?;
+            migrate_v9(connection)
         }
         0 | V1_SCHEMA_VERSION => {
             let transaction =
@@ -71,28 +78,36 @@ pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreErr
             migrate_v5(connection)?;
             migrate_v6(connection)?;
             migrate_v7(connection)?;
-            migrate_v8(connection)
+            migrate_v8(connection)?;
+            migrate_v9(connection)
         }
         V5_SCHEMA_VERSION => {
             migrate_v5(connection)?;
             migrate_v6(connection)?;
             migrate_v7(connection)?;
-            migrate_v8(connection)
+            migrate_v8(connection)?;
+            migrate_v9(connection)
         }
         V6_SCHEMA_VERSION => {
             migrate_v6(connection)?;
             migrate_v7(connection)?;
-            migrate_v8(connection)
+            migrate_v8(connection)?;
+            migrate_v9(connection)
         }
         V7_SCHEMA_VERSION => {
             migrate_v7(connection)?;
-            migrate_v8(connection)
+            migrate_v8(connection)?;
+            migrate_v9(connection)
         }
-        V8_SCHEMA_VERSION => migrate_v8(connection),
+        V8_SCHEMA_VERSION => {
+            migrate_v8(connection)?;
+            migrate_v9(connection)
+        }
+        V9_SCHEMA_VERSION => migrate_v9(connection),
         USAGE_SCHEMA_VERSION => {
             let transaction =
                 connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-            validate_v9(&transaction)?;
+            validate_v10(&transaction)?;
             transaction.commit()?;
             Ok(())
         }
@@ -359,6 +374,15 @@ pub(super) fn validate_v8(connection: &Connection) -> Result<(), StoreError> {
 }
 
 pub(super) fn validate_v9(connection: &Connection) -> Result<(), StoreError> {
+    validate_v9_schema(connection, false)
+}
+
+pub(super) fn validate_v10(connection: &Connection) -> Result<(), StoreError> {
+    validate_v9_schema(connection, true)?;
+    validate_quota_state(connection)
+}
+
+fn validate_v9_schema(connection: &Connection, include_quota: bool) -> Result<(), StoreError> {
     let session_update = v8_session_update_trigger()
         .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
     let time_update =
@@ -438,27 +462,48 @@ pub(super) fn validate_v9(connection: &Connection) -> Result<(), StoreError> {
         },
     ];
     trigger_contracts.extend(LEGACY_TRIGGER_CONTRACTS.iter().copied());
+    if include_quota {
+        trigger_contracts.extend(V10_QUOTA_TRIGGER_CONTRACTS.iter().copied());
+    }
+    trigger_contracts.sort_unstable_by_key(|contract| contract.name);
     let mut indexes = V5_INDEX_CONTRACTS.to_vec();
     indexes.extend_from_slice(V8_INDEX_CONTRACTS);
     indexes.extend_from_slice(V9_INDEX_CONTRACTS);
+    if include_quota {
+        indexes.extend_from_slice(V10_QUOTA_INDEX_CONTRACTS);
+    }
+    let mut schema_sources = vec![
+        V9_REPORTED_COST_TABLE_SCHEMA,
+        V9_AGGREGATE_STATE_SCHEMA,
+        V9_PRICE_ROLLUP_SCHEMA,
+        V8_AGGREGATE_SCHEMA,
+        V7_ARCHIVE_STATE_SCHEMA,
+        V5_SCAN_SET_SCHEMA,
+        V5_USAGE_SCAN_SCHEMA,
+        V5_REPLAY_REVISION_SCHEMA,
+        V1_SCHEMA,
+        REPLAY_AUX_SCHEMA,
+        REPLAY_CHILD_SCHEMA,
+    ];
+    let mut extension_tables = vec![
+        V5_SCAN_SET_CONTRACT,
+        V7_ARCHIVE_STATE_CONTRACT,
+        V9_AGGREGATE_STATE_CONTRACT,
+        V8_TIME_ROLLUP_CONTRACT,
+        V8_SESSION_ROLLUP_CONTRACT,
+        V9_PRICE_TIME_ROLLUP_CONTRACT,
+        V9_PRICE_SESSION_ROLLUP_CONTRACT,
+    ];
+    if include_quota {
+        schema_sources.push(V10_QUOTA_SCHEMA);
+        extension_tables.extend_from_slice(V10_QUOTA_TABLE_CONTRACTS);
+    }
     validate_schema(
         connection,
         USAGE_TABLE_CONTRACTS,
         USAGE_INDEX_CONTRACTS,
         &trigger_contracts,
-        &[
-            V9_REPORTED_COST_TABLE_SCHEMA,
-            V9_AGGREGATE_STATE_SCHEMA,
-            V9_PRICE_ROLLUP_SCHEMA,
-            V8_AGGREGATE_SCHEMA,
-            V7_ARCHIVE_STATE_SCHEMA,
-            V5_SCAN_SET_SCHEMA,
-            V5_USAGE_SCAN_SCHEMA,
-            V5_REPLAY_REVISION_SCHEMA,
-            V1_SCHEMA,
-            REPLAY_AUX_SCHEMA,
-            REPLAY_CHILD_SCHEMA,
-        ],
+        &schema_sources,
         &[
             V5_USAGE_SCAN_CONTRACT,
             V5_REPLAY_REVISION_CONTRACT,
@@ -467,21 +512,39 @@ pub(super) fn validate_v9(connection: &Connection) -> Result<(), StoreError> {
             V9_LEGACY_EVENT_CONTRACT,
         ],
         SchemaExtensions {
-            tables: &[
-                V5_SCAN_SET_CONTRACT,
-                V7_ARCHIVE_STATE_CONTRACT,
-                V9_AGGREGATE_STATE_CONTRACT,
-                V8_TIME_ROLLUP_CONTRACT,
-                V8_SESSION_ROLLUP_CONTRACT,
-                V9_PRICE_TIME_ROLLUP_CONTRACT,
-                V9_PRICE_SESSION_ROLLUP_CONTRACT,
-            ],
+            tables: &extension_tables,
             indexes: &indexes,
         },
     )?;
     validate_legacy_snapshot(connection)?;
     validate_archive_publication(connection)?;
     validate_aggregate_state(connection, 2)
+}
+
+fn validate_quota_state(connection: &Connection) -> Result<(), StoreError> {
+    let valid = connection
+        .query_row(
+            "SELECT revision >= 0
+                    AND retained_sample_count = (SELECT count(*) FROM quota_sample)
+                    AND retained_epoch_count = (SELECT count(*) FROM quota_epoch_history)
+                    AND retained_transition_count = (SELECT count(*) FROM quota_transition)
+                    AND ((revision = 0
+                          AND last_published_at_ms IS NULL
+                          AND NOT EXISTS (SELECT 1 FROM quota_window_current)
+                          AND NOT EXISTS (SELECT 1 FROM quota_epoch_current))
+                         OR (revision > 0 AND last_published_at_ms IS NOT NULL))
+             FROM quota_state
+             WHERE singleton_id = 1
+               AND (SELECT count(*) FROM quota_state) = 1",
+            [],
+            |row| row.get::<_, bool>(0),
+        )
+        .optional()?
+        .unwrap_or(false);
+    if !valid {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -535,6 +598,8 @@ enum MigrationFault {
     AfterCreatePriceSchema,
     #[cfg(test)]
     AfterCreatePriceTriggers,
+    #[cfg(test)]
+    AfterCreateQuotaSchema,
 }
 
 fn migrate_v2(connection: &mut Connection) -> Result<(), StoreError> {
@@ -673,6 +738,7 @@ enum MigrationBoundary {
     AggregateStateUpgraded,
     PriceSchemaCreated,
     PriceTriggersCreated,
+    QuotaSchemaCreated,
 }
 
 fn migration_fault(fault: MigrationFault, boundary: MigrationBoundary) -> Result<(), StoreError> {
@@ -771,6 +837,10 @@ fn migration_fault(fault: MigrationFault, boundary: MigrationBoundary) -> Result
                 MigrationFault::AfterCreatePriceTriggers,
                 MigrationBoundary::PriceTriggersCreated
             )
+            | (
+                MigrationFault::AfterCreateQuotaSchema,
+                MigrationBoundary::QuotaSchemaCreated
+            )
     );
     #[cfg(not(test))]
     let triggered = {
@@ -819,6 +889,24 @@ fn migrate_v7(connection: &mut Connection) -> Result<(), StoreError> {
 
 fn migrate_v8(connection: &mut Connection) -> Result<(), StoreError> {
     migrate_v8_with_fault(connection, MigrationFault::None)
+}
+
+fn migrate_v9(connection: &mut Connection) -> Result<(), StoreError> {
+    migrate_v9_with_fault(connection, MigrationFault::None)
+}
+
+fn migrate_v9_with_fault(
+    connection: &mut Connection,
+    fault: MigrationFault,
+) -> Result<(), StoreError> {
+    validate_v9(connection)?;
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    transaction.execute_batch(V10_QUOTA_SCHEMA)?;
+    migration_fault(fault, MigrationBoundary::QuotaSchemaCreated)?;
+    transaction.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
+    validate_v10(&transaction)?;
+    transaction.commit()?;
+    Ok(())
 }
 
 fn migrate_v8_with_fault(
@@ -898,7 +986,7 @@ fn migrate_v8_with_fault(
         )?;
     }
     migration_fault(fault, MigrationBoundary::PriceTriggersCreated)?;
-    transaction.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
+    transaction.pragma_update(None, "user_version", V9_SCHEMA_VERSION)?;
     validate_v9(&transaction)?;
     transaction.commit()?;
     Ok(())
@@ -1831,9 +1919,9 @@ mod tests {
     use super::{
         MigrationFault, migrate_schema, migrate_v2_revision_table, migrate_v2_with_fault,
         migrate_v3_with_fault, migrate_v4_with_fault, migrate_v5_with_fault, migrate_v6,
-        migrate_v6_with_fault, migrate_v7_with_fault, migrate_v8_with_fault, pragma_i64,
-        validate_v2, validate_v3, validate_v4, validate_v5, validate_v6, validate_v7, validate_v8,
-        validate_v9,
+        migrate_v6_with_fault, migrate_v7_with_fault, migrate_v8_with_fault, migrate_v9_with_fault,
+        pragma_i64, validate_v2, validate_v3, validate_v4, validate_v5, validate_v6, validate_v7,
+        validate_v8, validate_v9, validate_v10,
     };
     use crate::{StoreErrorCode, usage::schema};
 
@@ -2155,11 +2243,11 @@ mod tests {
     }
 
     #[test]
-    fn exact_v2_migrates_to_v9_and_preserves_all_rows() -> TestResult {
+    fn exact_v2_migrates_to_current_schema_and_preserves_all_rows() -> TestResult {
         let mut connection = exact_v2_fixture(true)?;
         let before = fixture_snapshot(&connection)?;
         migrate_schema(&mut connection)?;
-        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 9);
+        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 10);
         assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
         assert_eq!(fixture_snapshot(&connection)?, before);
         assert_eq!(event_provenance(&connection)?, (Some(5), Some(5), 0));
@@ -2170,7 +2258,7 @@ mod tests {
             )?,
             1
         );
-        validate_v9(&connection)?;
+        validate_v10(&connection)?;
         let temporary_names: i64 = connection.query_row(
             "SELECT count(*) FROM sqlite_schema
              WHERE instr(sql, 'usage_replay_revision_v3') > 0
@@ -2191,7 +2279,7 @@ mod tests {
     }
 
     #[test]
-    fn exact_v3_migrates_to_v9_with_legacy_and_current_projection_provenance() -> TestResult {
+    fn exact_v3_migrates_to_current_schema_with_projection_provenance() -> TestResult {
         for (current_revision, expected) in [
             (false, (None, None, 0_i64)),
             (true, (Some(5_i64), Some(5_i64), 0_i64)),
@@ -2199,7 +2287,7 @@ mod tests {
             let mut connection = exact_v3_fixture(current_revision)?;
             let before = fixture_snapshot(&connection)?;
             migrate_schema(&mut connection)?;
-            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 9);
+            assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 10);
             assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
             assert_eq!(fixture_snapshot(&connection)?, before);
             assert_eq!(event_provenance(&connection)?, expected);
@@ -2210,7 +2298,7 @@ mod tests {
                 )?,
                 i64::from(current_revision)
             );
-            validate_v9(&connection)?;
+            validate_v10(&connection)?;
         }
         Ok(())
     }
@@ -2245,10 +2333,10 @@ mod tests {
     }
 
     #[test]
-    fn exact_v4_scan_and_revision_migrate_to_scoped_v9() -> TestResult {
+    fn exact_v4_scan_and_revision_migrate_to_current_scoped_schema() -> TestResult {
         let mut connection = exact_v4_fixture_with_scan()?;
         migrate_schema(&mut connection)?;
-        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 9);
+        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 10);
         assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
         let scan: (
             i64,
@@ -2338,7 +2426,7 @@ mod tests {
             )?,
             1
         );
-        validate_v9(&connection)?;
+        validate_v10(&connection)?;
         Ok(())
     }
 
@@ -2368,6 +2456,13 @@ mod tests {
         let mut connection = exact_v7_fixture()?;
         migrate_v7_with_fault(&mut connection, MigrationFault::None)?;
         validate_v8(&connection)?;
+        Ok(connection)
+    }
+
+    fn exact_v9_fixture() -> TestResult<Connection> {
+        let mut connection = exact_v8_fixture()?;
+        migrate_v8_with_fault(&mut connection, MigrationFault::None)?;
+        validate_v9(&connection)?;
         Ok(connection)
     }
 
@@ -2443,6 +2538,65 @@ mod tests {
             );
             validate_v8(&connection)?;
         }
+        Ok(())
+    }
+
+    #[test]
+    fn exact_v9_migrates_to_v10_without_touching_usage_rows() -> TestResult {
+        let mut connection = exact_v9_fixture()?;
+        let before = fixture_snapshot(&connection)?;
+
+        migrate_v9_with_fault(&mut connection, MigrationFault::None)?;
+
+        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 10);
+        assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
+        assert_eq!(fixture_snapshot(&connection)?, before);
+        assert_eq!(
+            connection.query_row(
+                "SELECT revision, retained_sample_count, retained_epoch_count,
+                        retained_transition_count, last_published_at_ms
+                 FROM quota_state WHERE singleton_id = 1",
+                [],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, i64>(3)?,
+                        row.get::<_, Option<i64>>(4)?,
+                    ))
+                },
+            )?,
+            (0, 0, 0, 0, None)
+        );
+        validate_v10(&connection)?;
+        Ok(())
+    }
+
+    #[test]
+    fn quota_schema_fault_rolls_back_exact_v9_without_residue() -> TestResult {
+        let mut connection = exact_v9_fixture()?;
+        let before = fixture_snapshot(&connection)?;
+
+        let error =
+            match migrate_v9_with_fault(&mut connection, MigrationFault::AfterCreateQuotaSchema) {
+                Ok(()) => return Err("faulted quota migration unexpectedly committed".into()),
+                Err(error) => error,
+            };
+
+        assert_eq!(error.code(), StoreErrorCode::Database);
+        assert_eq!(pragma_i64(&connection, "PRAGMA user_version")?, 9);
+        assert_eq!(pragma_i64(&connection, "PRAGMA foreign_keys")?, 1);
+        assert_eq!(fixture_snapshot(&connection)?, before);
+        assert_eq!(
+            pragma_i64(
+                &connection,
+                "SELECT count(*) FROM sqlite_schema
+                 WHERE name LIKE 'quota_%'"
+            )?,
+            0
+        );
+        validate_v9(&connection)?;
         Ok(())
     }
 

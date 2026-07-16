@@ -8,7 +8,14 @@ use tokenmaster_store::{
     StoredCheckpointParts, StoredVerification, USAGE_SCHEMA_VERSION, UsageStore,
 };
 
-const USAGE_TABLES: [&str; 21] = [
+const APPLICATION_TABLES: [&str; 28] = [
+    "quota_epoch_current",
+    "quota_epoch_history",
+    "quota_sample",
+    "quota_state",
+    "quota_transition",
+    "quota_window_current",
+    "quota_window_definition",
     "usage_aggregate_state",
     "usage_archive_state",
     "usage_scan_set",
@@ -31,7 +38,12 @@ const USAGE_TABLES: [&str; 21] = [
     "usage_replay_selection",
     "usage_replay_work",
 ];
-const USAGE_TRIGGERS: [&str; 18] = [
+const APPLICATION_TRIGGERS: [&str; 23] = [
+    "quota_epoch_history_no_update",
+    "quota_sample_no_update",
+    "quota_state_no_delete",
+    "quota_transition_no_update",
+    "quota_window_definition_no_update",
     "usage_event_aggregate_session_after_delete",
     "usage_event_aggregate_session_after_insert",
     "usage_event_aggregate_session_after_update",
@@ -360,8 +372,8 @@ fn schema_is_strict_path_free_and_has_exact_usage_tables() {
     let version: i64 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user version");
-    assert_eq!(USAGE_SCHEMA_VERSION, 9);
-    assert_eq!(version, 9);
+    assert_eq!(USAGE_SCHEMA_VERSION, 10);
+    assert_eq!(version, 10);
     assert_eq!(version, USAGE_SCHEMA_VERSION);
 
     let publication_sql = table_sql(&path, "usage_archive_state")
@@ -461,20 +473,21 @@ fn schema_is_strict_path_free_and_has_exact_usage_tables() {
     let mut observed = Vec::new();
     for row in rows {
         let (name, strict) = row.expect("table row");
-        if USAGE_TABLES.contains(&name.as_str()) {
+        if APPLICATION_TABLES.contains(&name.as_str()) {
             assert_eq!(strict, 1, "{name} must be STRICT");
             observed.push(name);
         }
     }
     observed.sort();
-    let mut expected = USAGE_TABLES.map(str::to_owned);
+    let mut expected = APPLICATION_TABLES.map(str::to_owned);
     expected.sort();
     assert_eq!(observed, expected);
 
     let mut trigger_statement = connection
         .prepare(
             "SELECT name FROM sqlite_schema
-             WHERE type = 'trigger' AND name LIKE 'usage_%'
+             WHERE type = 'trigger'
+               AND (name LIKE 'quota_%' OR name LIKE 'usage_%')
              ORDER BY name",
         )
         .expect("prepare trigger list");
@@ -484,9 +497,9 @@ fn schema_is_strict_path_free_and_has_exact_usage_tables() {
     let triggers = trigger_rows
         .collect::<Result<Vec<_>, _>>()
         .expect("collect trigger names");
-    assert_eq!(triggers, USAGE_TRIGGERS);
+    assert_eq!(triggers, APPLICATION_TRIGGERS);
 
-    for table in USAGE_TABLES {
+    for table in APPLICATION_TABLES {
         let pragma = format!("PRAGMA table_info({table})");
         let mut columns = connection.prepare(&pragma).expect("prepare table info");
         let names = columns

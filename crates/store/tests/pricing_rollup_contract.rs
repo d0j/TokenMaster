@@ -11,18 +11,18 @@ fn count(connection: &Connection, table: &str) -> i64 {
 }
 
 #[test]
-fn schema_v9_reserves_reported_cost_and_strict_price_rollups() {
+fn current_schema_reserves_reported_cost_and_strict_price_rollups() {
     let directory = TempDir::new().expect("temporary directory");
     let path = directory.path().join("pricing-schema.sqlite3");
     drop(UsageStore::open(&path).expect("create archive"));
     let connection = Connection::open(&path).expect("inspect archive");
 
-    assert_eq!(USAGE_SCHEMA_VERSION, 9);
+    assert_eq!(USAGE_SCHEMA_VERSION, 10);
     assert_eq!(
         connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
             .expect("schema version"),
-        9
+        10
     );
     for table in ["usage_observation", "usage_event", "usage_legacy_event"] {
         let present: i64 = connection

@@ -10,6 +10,7 @@ mod incremental;
 mod migration;
 mod price_schema;
 mod query;
+mod quota_schema;
 mod read;
 mod replay;
 mod replay_manifest;
