@@ -363,7 +363,6 @@ For each repository it retains:
 - bounded sorted local-head fingerprint;
 - category semantics version;
 - author-set fingerprint;
-- newest scanned commit frontier;
 - immutable daily/category aggregates;
 - scan quality/freshness and counters.
 
@@ -371,10 +370,12 @@ Fast path:
 
 1. discover current local-head fingerprint;
 2. if unchanged, refresh freshness without walking history;
-3. if every prior head remains an ancestor of a current head and author/category
-   identities are unchanged, scan only newly reachable commits and merge a bounded
-   delta;
-4. otherwise schedule an authoritative rebuild.
+3. while the same process still owns a sealed bounded raw-head frontier, prove every
+   prior head remains an ancestor of a current head, scan only newly reachable commits,
+   and merge a bounded delta;
+4. after restart, if the fingerprint changed, schedule an authoritative rebuild
+   because TokenMaster deliberately persisted no raw commit ID;
+5. otherwise schedule an authoritative rebuild.
 
 Force-push, branch deletion, rewritten ancestry, changed author configuration,
 mailmap/category version change, object-format change, shallow-boundary change, or
@@ -382,8 +383,10 @@ cache inconsistency invalidates incremental authority. The prior snapshot remain
 visible as stale until a complete rebuild publishes atomically.
 
 No per-commit history is retained indefinitely. The durable projection stores daily
-and category aggregates plus only the bounded frontier/fingerprint needed to prove the
-next fast path.
+and category aggregates plus only salted fingerprints. Raw Git object IDs may exist
+only in the bounded process-lifetime scan frontier and are dropped on pause, shutdown,
+identity change, or runtime replacement. This deliberately trades occasional
+background rebuild CPU after restart for zero persisted commit IDs.
 
 ## 11. Usage and cost efficiency join
 

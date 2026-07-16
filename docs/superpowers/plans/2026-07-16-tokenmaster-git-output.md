@@ -87,15 +87,15 @@ cargo +1.97.0 clippy -p tokenmaster-domain --all-targets --locked
 
 **RED/GREEN:**
 
-- [ ] Hash common-dir, author, ref-set, and frontier identities with domain-separated
+- [x] Hash common-dir, author, ref-set, and frontier identities with domain-separated
   architecture-independent framing.
-- [ ] Classify rename destinations under the versioned precedence table without
+- [x] Classify rename destinations under the versioned precedence table without
   retaining paths.
-- [ ] Parse bounded NUL-framed commit/raw/numstat records incrementally.
-- [ ] Apply root, ordinary, first-parent merge, binary, and gitlink semantics.
-- [ ] Emit at most 256 aggregate records per batch with one commit accumulator and no
+- [x] Parse bounded NUL-framed commit/raw/numstat records incrementally.
+- [x] Apply root, ordinary, first-parent merge, binary, and gitlink semantics.
+- [x] Emit at most 256 aggregate records per batch with one commit accumulator and no
   whole-history vector.
-- [ ] Prove malformed/truncated/oversized/overflow input fails closed with stable
+- [x] Prove malformed/truncated/oversized/overflow input fails closed with stable
   path-free errors and redacted `Debug`.
 
 **Focused validator:**
@@ -214,13 +214,13 @@ cargo +1.97.0 clippy -p tokenmaster-codex -p tokenmaster-engine --all-targets --
 **RED/GREEN:**
 
 - [ ] Add installation salt, independent Git publication state, repository,
-  association, ref/frontier, daily/category, and bounded health objects.
+  association, salted ref fingerprint, daily/category, and bounded health objects.
 - [ ] Migrate exact v12 transactionally to v13 and validate fresh/v13 archives.
-- [ ] Publish complete rebuild or proven append-only delta atomically after exact
-  before/after ref fingerprints.
+- [ ] Publish complete rebuild or a same-process proven append-only delta atomically
+  after exact before/after ref fingerprints.
 - [ ] Refresh unchanged scans without history traversal or aggregate mutation.
-- [ ] Invalidate force-push/deletion/author/mailmap/category/object/shallow changes and
-  preserve prior projection stale until rebuild.
+- [ ] Invalidate restart-with-changed-refs, force-push/deletion/author/mailmap/category/
+  object/shallow changes and preserve prior projection stale until rebuild.
 - [ ] Add bounded read captures for 32 repositories and 400 daily points.
 - [ ] Fault-test every schema/projection/frontier/publication boundary and prove no
   usage/price/quota/benefit/reminder regression.
