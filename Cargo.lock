@@ -5332,6 +5332,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokenmaster-product"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "tokenmaster-query",
+ "tokenmaster-store",
+]
+
+[[package]]
 name = "tokenmaster-provider"
 version = "0.1.0"
 dependencies = [
