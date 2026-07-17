@@ -16,3 +16,11 @@ tempfile.workspace = true
 tokenmaster-codex = { path = "../codex" }
 tokenmaster-provider = { path = "../provider" }
 tokenmaster-store = { path = "../store" }
+
+[target.'cfg(windows)'.dev-dependencies]
+windows.workspace = true
+
+[[test]]
+name = "resource_contract"
+path = "tests/resource_contract.rs"
+harness = false

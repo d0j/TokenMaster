@@ -5343,6 +5343,7 @@ dependencies = [
  "tokenmaster-query",
  "tokenmaster-runtime",
  "tokenmaster-store",
+ "windows",
 ]
 
 [[package]]
