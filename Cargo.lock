@@ -5260,6 +5260,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokenmaster-desktop"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "slint",
+ "slint-build",
+ "tokenmaster-product",
+ "tokenmaster-query",
+]
+
+[[package]]
 name = "tokenmaster-domain"
 version = "0.1.0"
 dependencies = [

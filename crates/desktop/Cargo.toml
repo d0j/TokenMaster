@@ -1,0 +1,18 @@
+[package]
+name = "tokenmaster-desktop"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+build = "build.rs"
+
+[dependencies]
+anyhow.workspace = true
+slint.workspace = true
+tokenmaster-product = { path = "../product" }
+
+[build-dependencies]
+slint-build.workspace = true
+
+[dev-dependencies]
+tokenmaster-query = { path = "../query" }
