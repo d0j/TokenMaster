@@ -24,6 +24,17 @@ use crate::{StoreError, StoreErrorCode};
 pub const MAX_QUOTA_CURRENT_WINDOWS: usize = 32;
 pub const MAX_QUOTA_TRANSITION_PAGE_SIZE: usize = 256;
 
+const OVERVIEW_WINDOW_KEYS_SQL: &str = "SELECT
+       current.scope_id, current.window_id, definition.provider_id,
+       definition.account_id, definition.workspace_id
+     FROM quota_window_current AS current
+     JOIN quota_window_definition AS definition
+       ON definition.scope_id = current.scope_id
+      AND definition.window_id = current.window_id
+      AND definition.revision = current.definition_revision
+     ORDER BY current.scope_id, current.window_id
+     LIMIT ?1";
+
 const CURRENT_WINDOW_SQL: &str = "SELECT
        definition.revision, definition.provider_id, definition.account_id,
        definition.workspace_id, definition.label_key, definition.presentation,
@@ -156,6 +167,20 @@ impl QuotaCurrentQuery {
             windows: windows.into_boxed_slice(),
             deadline,
         })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct QuotaOverviewQuery {
+    deadline: Duration,
+}
+
+impl QuotaOverviewQuery {
+    pub fn new(deadline: Duration) -> Result<Self, StoreError> {
+        if deadline.is_zero() || deadline > MAX_QUERY_DURATION {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self { deadline })
     }
 }
 
@@ -530,6 +555,45 @@ impl UsageReadStore {
         self.capture_quota_windows_with_options(query, PROGRESS_OP_INTERVAL, false, || Ok(()))
     }
 
+    pub fn capture_quota_overview(
+        &mut self,
+        query: QuotaOverviewQuery,
+    ) -> Result<QuotaCurrentCapture, StoreError> {
+        self.capture_quota_overview_with_options(query, PROGRESS_OP_INTERVAL, false, || Ok(()))
+    }
+
+    fn capture_quota_overview_with_options<F>(
+        &mut self,
+        query: QuotaOverviewQuery,
+        progress_interval: i32,
+        cancel_immediately: bool,
+        after_revision: F,
+    ) -> Result<QuotaCurrentCapture, StoreError>
+    where
+        F: FnOnce() -> Result<(), StoreError>,
+    {
+        let started = Instant::now();
+        let deadline = query.deadline;
+        let progress_started = started;
+        map_sql(self.connection.progress_handler(
+            progress_interval,
+            Some(move || cancel_immediately || progress_started.elapsed() >= deadline),
+        ))?;
+        let result =
+            capture_quota_overview(&mut self.connection, after_revision).and_then(|capture| {
+                if started.elapsed() >= deadline {
+                    Err(StoreError::new(StoreErrorCode::DeadlineExceeded))
+                } else {
+                    Ok(capture)
+                }
+            });
+        let clear_result = map_sql(self.connection.progress_handler(0, None::<fn() -> bool>));
+        match (result, clear_result) {
+            (Ok(capture), Ok(())) => Ok(capture),
+            (Err(error), _) | (Ok(_), Err(error)) => Err(error),
+        }
+    }
+
     fn capture_quota_windows_with_options<F>(
         &mut self,
         query: QuotaCurrentQuery,
@@ -601,6 +665,70 @@ impl UsageReadStore {
             (Err(error), _) | (Ok(_), Err(error)) => Err(error),
         }
     }
+}
+
+fn capture_quota_overview<F>(
+    connection: &mut rusqlite::Connection,
+    after_revision: F,
+) -> Result<QuotaCurrentCapture, StoreError>
+where
+    F: FnOnce() -> Result<(), StoreError>,
+{
+    let transaction = map_sql(connection.transaction_with_behavior(TransactionBehavior::Deferred))?;
+    let quota_revision = load_quota_revision(&transaction)?;
+    after_revision()?;
+    let keys = load_overview_window_keys(&transaction)?;
+    let mut windows = Vec::with_capacity(keys.len());
+    for key in keys {
+        let current = load_current_window(&transaction, &key)?
+            .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+        windows.push(current);
+    }
+    map_sql(transaction.commit())?;
+    Ok(QuotaCurrentCapture {
+        quota_revision,
+        windows: windows.into_boxed_slice(),
+    })
+}
+
+fn load_overview_window_keys(
+    transaction: &Transaction<'_>,
+) -> Result<Vec<QuotaWindowKey>, StoreError> {
+    let lookahead = MAX_QUOTA_CURRENT_WINDOWS
+        .checked_add(1)
+        .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?;
+    let sql_limit =
+        i64::try_from(lookahead).map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))?;
+    let rows = map_quota_row((|| -> rusqlite::Result<Vec<QuotaWindowKey>> {
+        let mut statement = transaction.prepare(OVERVIEW_WINDOW_KEYS_SQL)?;
+        let mapped = statement.query_map([sql_limit], |row| {
+            let stored_scope_id = stored_bytes(row.get(0)?)?;
+            let window_id = stored_domain(QuotaWindowId::new(row.get::<_, String>(1)?))?;
+            let provider_id = stored_domain(UsageProviderId::new(row.get::<_, String>(2)?))?;
+            let account_id = stored_domain(QuotaAccountId::new(row.get::<_, String>(3)?))?;
+            let workspace_id = row
+                .get::<_, Option<String>>(4)?
+                .map(QuotaWorkspaceId::new)
+                .transpose()
+                .map_err(stored_domain_error)?;
+            let key = QuotaWindowKey::new(
+                QuotaScope::new(provider_id, account_id, workspace_id),
+                window_id,
+            );
+            if quota_scope_id(key.scope()).as_bytes() != &stored_scope_id {
+                return Err(invalid_stored_sql());
+            }
+            Ok(key)
+        })?;
+        mapped.collect()
+    })())?;
+    if rows.len() > MAX_QUOTA_CURRENT_WINDOWS {
+        return Err(StoreError::with_limit(
+            StoreErrorCode::CapacityExceeded,
+            MAX_QUOTA_CURRENT_WINDOWS as u64,
+        ));
+    }
+    Ok(rows)
 }
 
 fn capture_quota_windows<F>(
@@ -1390,6 +1518,7 @@ mod tests {
         let (_directory, path) = empty_archive()?;
         let store = UsageReadStore::open(&path)?;
         for sql in [
+            OVERVIEW_WINDOW_KEYS_SQL.to_owned(),
             CURRENT_WINDOW_SQL.to_owned(),
             transition_page_sql(false),
             transition_page_sql(true),
@@ -1403,6 +1532,19 @@ mod tests {
 
         let key = key()?;
         let scope_id = quota_scope_id(key.scope());
+        let overview = explain(
+            &store.connection,
+            OVERVIEW_WINDOW_KEYS_SQL,
+            &[Value::Integer(33)],
+        )?;
+        assert!(overview.iter().any(|detail| {
+            detail.contains("SCAN current USING INDEX quota_window_current_scope")
+        }));
+        assert!(overview.iter().any(|detail| {
+            detail.contains("SEARCH definition USING INDEX")
+                && detail.contains("quota_window_definition")
+        }));
+        assert!(!overview.iter().any(|detail| detail.contains("TEMP B-TREE")));
         let current = explain(
             &store.connection,
             CURRENT_WINDOW_SQL,
@@ -1480,6 +1622,43 @@ mod tests {
     }
 
     #[test]
+    fn quota_overview_cancellation_and_total_deadline_clear_progress() -> TestResult {
+        let (_directory, path) = empty_archive()?;
+        let mut store = UsageReadStore::open(&path)?;
+        let interrupted = match store.capture_quota_overview_with_options(
+            QuotaOverviewQuery::new(Duration::from_secs(2))?,
+            1,
+            true,
+            || Ok(()),
+        ) {
+            Ok(_) => return Err("cancelled quota overview unexpectedly succeeded".into()),
+            Err(error) => error,
+        };
+        assert_eq!(interrupted.code(), StoreErrorCode::DeadlineExceeded);
+        let next =
+            store.capture_quota_overview(QuotaOverviewQuery::new(Duration::from_secs(2))?)?;
+        assert_eq!(next.quota_revision().get(), 0);
+
+        let late = match store.capture_quota_overview_with_options(
+            QuotaOverviewQuery::new(Duration::from_millis(1))?,
+            i32::MAX,
+            false,
+            || {
+                std::thread::sleep(Duration::from_millis(5));
+                Ok(())
+            },
+        ) {
+            Ok(_) => return Err("late quota overview unexpectedly succeeded".into()),
+            Err(error) => error,
+        };
+        assert_eq!(late.code(), StoreErrorCode::DeadlineExceeded);
+        let after =
+            store.capture_quota_overview(QuotaOverviewQuery::new(Duration::from_secs(2))?)?;
+        assert_eq!(after.quota_revision().get(), 0);
+        Ok(())
+    }
+
+    #[test]
     fn quota_total_deadline_rejects_a_completed_late_capture_and_clears_progress() -> TestResult {
         let (_directory, path) = empty_archive()?;
         let mut store = UsageReadStore::open(&path)?;
@@ -1526,6 +1705,33 @@ mod tests {
             Box::default(),
             Duration::from_secs(2),
         )?)?;
+        assert_eq!(next.quota_revision().get(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn quota_overview_transaction_keeps_revision_exact_during_concurrent_change() -> TestResult {
+        let (_directory, path) = empty_archive()?;
+        let mut store = UsageReadStore::open(&path)?;
+        let writer_path = path.clone();
+        let capture = store.capture_quota_overview_with_options(
+            QuotaOverviewQuery::new(Duration::from_secs(2))?,
+            PROGRESS_OP_INTERVAL,
+            false,
+            move || {
+                let writer = Connection::open(&writer_path)?;
+                writer.execute(
+                    "UPDATE quota_state
+                     SET revision = 1, last_published_at_ms = 1
+                     WHERE singleton_id = 1",
+                    [],
+                )?;
+                Ok(())
+            },
+        )?;
+        assert_eq!(capture.quota_revision().get(), 0);
+        let next =
+            store.capture_quota_overview(QuotaOverviewQuery::new(Duration::from_secs(2))?)?;
         assert_eq!(next.quota_revision().get(), 1);
         Ok(())
     }

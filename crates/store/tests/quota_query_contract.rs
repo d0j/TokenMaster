@@ -12,7 +12,7 @@ use tokenmaster_domain::{
 use tokenmaster_quota::{QuotaTransitionKind, quota_scope_id};
 use tokenmaster_store::{
     MAX_QUOTA_CURRENT_WINDOWS, MAX_QUOTA_TRANSITION_PAGE_SIZE, QuotaCurrentQuery,
-    QuotaTransitionPageQuery, StoreErrorCode, UsageReadStore, UsageStore,
+    QuotaOverviewQuery, QuotaTransitionPageQuery, StoreErrorCode, UsageReadStore, UsageStore,
 };
 
 fn window_key(account_id: &str, window_id: &str) -> QuotaWindowKey {
@@ -171,6 +171,108 @@ fn current_capture_is_owned_revision_exact_and_missing_safe_across_scopes() {
                 == Some(200_000)
     }));
     assert_eq!(quota_counts(&path), (2, 2, 0, 0));
+}
+
+#[test]
+fn overview_discovers_every_current_window_in_opaque_order_without_changing_exact_empty() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("quota-overview-query.sqlite3");
+    let definitions = [
+        definition("team", "weekly", 1),
+        definition("personal", "daily", 1),
+        definition("personal", "weekly", 1),
+    ];
+    {
+        let mut writer = UsageStore::open(&path).expect("writer");
+        for (index, definition) in definitions.iter().enumerate() {
+            writer
+                .apply_quota_observation(
+                    definition,
+                    &sample(
+                        definition.key(),
+                        u64::try_from(index + 1).expect("observation"),
+                        &format!("epoch-{index}"),
+                        100,
+                        1_000,
+                    ),
+                )
+                .expect("observation");
+        }
+    }
+    checkpoint(&path);
+
+    let mut reader = UsageReadStore::open(&path).expect("reader");
+    let exact_empty = reader
+        .capture_quota_windows(
+            QuotaCurrentQuery::new(Box::default(), Duration::from_secs(2)).expect("exact empty"),
+        )
+        .expect("exact empty capture");
+    assert!(exact_empty.windows().is_empty());
+
+    let overview = reader
+        .capture_quota_overview(
+            QuotaOverviewQuery::new(Duration::from_secs(2)).expect("overview query"),
+        )
+        .expect("overview capture");
+    assert_eq!(overview.quota_revision().get(), 3);
+    assert_eq!(overview.windows().len(), definitions.len());
+
+    let mut expected = definitions
+        .iter()
+        .map(|definition| definition.key().clone())
+        .collect::<Vec<_>>();
+    expected.sort_by(|left, right| {
+        quota_scope_id(left.scope())
+            .as_bytes()
+            .cmp(quota_scope_id(right.scope()).as_bytes())
+            .then_with(|| left.window_id().as_str().cmp(right.window_id().as_str()))
+    });
+    assert_eq!(
+        overview
+            .windows()
+            .iter()
+            .map(|window| window.definition().key())
+            .collect::<Vec<_>>(),
+        expected.iter().collect::<Vec<_>>()
+    );
+    let debug = format!("{overview:?}");
+    assert!(!debug.contains("personal"));
+    assert!(!debug.contains("team"));
+    assert!(!debug.contains("weekly"));
+}
+
+#[test]
+fn overview_fails_closed_when_current_window_count_exceeds_the_bound() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("quota-overview-capacity.sqlite3");
+    {
+        let mut writer = UsageStore::open(&path).expect("writer");
+        for index in 0..=MAX_QUOTA_CURRENT_WINDOWS {
+            let definition = definition("personal", &format!("window-{index:02}"), 1);
+            writer
+                .apply_quota_observation(
+                    &definition,
+                    &sample(
+                        definition.key(),
+                        u64::try_from(index + 1).expect("observation"),
+                        &format!("epoch-{index}"),
+                        100,
+                        1_000,
+                    ),
+                )
+                .expect("observation");
+        }
+    }
+    checkpoint(&path);
+
+    let mut reader = UsageReadStore::open(&path).expect("reader");
+    let error = reader
+        .capture_quota_overview(
+            QuotaOverviewQuery::new(Duration::from_secs(2)).expect("overview query"),
+        )
+        .expect_err("33rd current window must fail closed");
+    assert_eq!(error.code(), StoreErrorCode::CapacityExceeded);
+    assert_eq!(error.limit(), Some(MAX_QUOTA_CURRENT_WINDOWS as u64));
 }
 
 #[test]
@@ -459,6 +561,9 @@ fn query_bounds_debug_and_read_only_capture_are_fail_closed() {
         )
         .expect_err("invalid current deadline");
         assert_eq!(error.code(), StoreErrorCode::InvalidValue);
+        let overview =
+            QuotaOverviewQuery::new(invalid_deadline).expect_err("invalid overview deadline");
+        assert_eq!(overview.code(), StoreErrorCode::InvalidValue);
     }
 
     let mut reader = UsageReadStore::open(&path).expect("reader");

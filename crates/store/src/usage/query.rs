@@ -40,8 +40,9 @@ pub use price::{
 };
 pub use quota::{
     MAX_QUOTA_CURRENT_WINDOWS, MAX_QUOTA_TRANSITION_PAGE_SIZE, QuotaCurrentCapture,
-    QuotaCurrentEpoch, QuotaCurrentQuery, QuotaCurrentWindow, QuotaTransitionCursor,
-    QuotaTransitionPageCapture, QuotaTransitionPageQuery, QuotaTransitionRecord,
+    QuotaCurrentEpoch, QuotaCurrentQuery, QuotaCurrentWindow, QuotaOverviewQuery,
+    QuotaTransitionCursor, QuotaTransitionPageCapture, QuotaTransitionPageQuery,
+    QuotaTransitionRecord,
 };
 pub use session::{
     MAX_USAGE_SESSION_DETAIL_ITEMS, MAX_USAGE_SESSION_PAGE_SIZE, UsageSessionCursor,
