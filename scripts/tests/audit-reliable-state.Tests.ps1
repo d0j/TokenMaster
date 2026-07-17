@@ -109,7 +109,7 @@ tokenmaster-state = { path = "../state" }
         $result.binary_target_count | Should -Be 0
         $result.direct_production_dependency_count | Should -Be 5
         $result.approved_std_io_import_count | Should -Be 1
-        $result.approved_platform_import_count | Should -Be 1
+        $result.approved_platform_import_count | Should -Be 2
         $result.forbidden_authority_count | Should -Be 0
     }
 
@@ -239,6 +239,15 @@ tokenmaster-state = { path = "../state" }
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-STATE-EXACT-CHILD*"
+    }
+
+    It "rejects path disclosure through the approved settings directory capability" {
+        $fixture = New-StateAuditFixture -Name "settings-directory-path-disclosure"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\settings\store.rs") `
+            -Value 'pub fn reveal(directory: &ValidatedLocalDirectory) -> Option<&str> { directory . as_path ( ) . to_str ( ) }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-VALIDATED-DIRECTORY*"
     }
 
     It "rejects public generic record authority" {

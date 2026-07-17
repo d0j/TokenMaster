@@ -220,10 +220,12 @@
 
 ## Whole-file/configuration recovery status
 
-P3-D.0 Tasks 1-3 now provide the state authority boundary, low-level controlled
-durable file publication/replacement, and a crate-private strict A/B record core for
-the future settings/run/recovery stores. They do not yet provide a public typed
-settings store, whole-file backup, import/export, quarantine workflow, recovery
+P3-D.0 Tasks 1-4 now provide the state authority boundary, low-level controlled
+durable file publication/replacement, a crate-private strict A/B record core, and the
+public fixed-purpose typed settings store. It preserves a valid-envelope newer schema
+as `UnsupportedVersion`, loads safe defaults without rewriting two invalid slots, and
+allows only explicit typed publication. It does not yet provide whole-file backup,
+container import/export, quarantine workflow, recovery
 journal state machine, automatic restore, or safe mode. The generic record core is not
 an operator command and must not be used to infer ownership when both slots conflict
 or are invalid. Until the plan at

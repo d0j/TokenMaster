@@ -115,11 +115,22 @@ $productionText = ($rustFiles | ForEach-Object {
 
 $approvedStdIoPattern = '(?m)^\s*use\s+std\s*::\s*io\s*::\s*\{\s*self\s*,\s*Write\s*,?\s*\}\s*;\s*$'
 $approvedPlatformPattern = '(?ms)^\s*use\s+tokenmaster_platform\s*::\s*\{\s*DurableFileError\s*,\s*DurableFileTarget\s*,\s*DurableStagedFile\s*,\s*MAX_DURABLE_WRITE_CHUNK_BYTES\s*,\s*ValidatedLocalDirectory\s*,?\s*\}\s*;\s*$'
+$approvedSettingsPlatformPattern = '(?m)^\s*use\s+tokenmaster_platform\s*::\s*ValidatedLocalDirectory\s*;\s*$'
 $approvedStdIoImports = @([regex]::Matches($productionText, $approvedStdIoPattern))
 $approvedPlatformImports = @([regex]::Matches($productionText, $approvedPlatformPattern))
-if ($approvedStdIoImports.Count -ne 1 -or $approvedPlatformImports.Count -ne 1) {
+$approvedSettingsPlatformImports = @(
+    [regex]::Matches($productionText, $approvedSettingsPlatformPattern)
+)
+if ($approvedStdIoImports.Count -ne 1 -or
+    $approvedPlatformImports.Count -ne 1 -or
+    $approvedSettingsPlatformImports.Count -ne 1) {
     throw 'TM-STATE-APPROVED-IO: exact bounded JSON and durable-file imports must each appear once'
 }
+$validatedDirectoryUses = @(
+    [regex]::Matches($productionText, '\bValidatedLocalDirectory\b')
+)
+$settingsConstructorPattern = '(?s)pub\s+fn\s+new\s*\(\s*directory\s*:\s*&ValidatedLocalDirectory\s*\)\s*->\s*Result\s*<\s*Self\s*,\s*StateError\s*>'
+$settingsConstructors = @([regex]::Matches($productionText, $settingsConstructorPattern))
 $approvedIoMembers = @('Error', 'ErrorKind', 'Result')
 $ioMemberUses = @([regex]::Matches($productionText, '\bio::(?<member>[A-Za-z_][A-Za-z0-9_]*)'))
 $unapprovedIoMembers = @(
@@ -149,6 +160,7 @@ if ($exactChildUses.Count -ne 6 -or
 }
 $authorityText = [regex]::Replace($productionText, $approvedStdIoPattern, '')
 $authorityText = [regex]::Replace($authorityText, $approvedPlatformPattern, '')
+$authorityText = [regex]::Replace($authorityText, $approvedSettingsPlatformPattern, '')
 
 $publicPathPattern = '(?s)\bpub(?:\([^)]*\))?\s+(?:(?:const|async|unsafe)\s+)*fn\s+\w+[^;{]*(?:std::path::)?(?:Path|PathBuf)\b[^;{]*[;{]'
 if ($productionText -match $publicPathPattern) {
@@ -162,6 +174,11 @@ $forbiddenAuthorityPattern = '(?s)https?://|\bstd\b|\btokenmaster_platform\b|\bm
 if ($authorityText -cmatch $forbiddenAuthorityPattern) {
     throw 'TM-STATE-FORBIDDEN-AUTHORITY: state source contains standard-library/platform/macro/filesystem/network/shell/process/SQL/UI/archive/external-source authority'
 }
+if ($validatedDirectoryUses.Count -ne 4 -or
+    $settingsConstructors.Count -ne 1 -or
+    $productionText -cmatch '\.\s*as_path\s*\(') {
+    throw 'TM-STATE-VALIDATED-DIRECTORY: directory capability is limited to the fixed settings constructor'
+}
 
 if ($SourceOnly) {
     [ordered]@{
@@ -173,7 +190,8 @@ if ($SourceOnly) {
         direct_production_dependency_count = $directProductionDependencies.Count
         rust_source_file_count = $rustFiles.Count
         approved_std_io_import_count = $approvedStdIoImports.Count
-        approved_platform_import_count = $approvedPlatformImports.Count
+        approved_platform_import_count = $approvedPlatformImports.Count + $approvedSettingsPlatformImports.Count
+        validated_directory_capability_use_count = $validatedDirectoryUses.Count
         forbidden_authority_count = 0
         arbitrary_path_constructor_count = 0
     } | ConvertTo-Json -Compress
@@ -230,7 +248,8 @@ if ($treeText -match '(?m)^(?:zip|tar|tokio|reqwest|ureq|slint|webbrowser|headle
     direct_production_dependency_count = $metadataDependencies.Count
     rust_source_file_count = $rustFiles.Count
     approved_std_io_import_count = $approvedStdIoImports.Count
-    approved_platform_import_count = $approvedPlatformImports.Count
+    approved_platform_import_count = $approvedPlatformImports.Count + $approvedSettingsPlatformImports.Count
+    validated_directory_capability_use_count = $validatedDirectoryUses.Count
     forbidden_authority_count = 0
     arbitrary_path_constructor_count = 0
     forbidden_transitive_dependency_count = 0

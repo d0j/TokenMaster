@@ -286,8 +286,11 @@ path-private, crash-tested, and preserves ambiguous recovery artifacts. Task 3 i
 implemented behind the crate boundary: six literal A/B slots, a strict 1 MiB checked
 envelope, two-pass bounded streaming save, corrupt-newest fallback, equal-generation
 conflict handling, post-publication recovery classification, and generation-3 process-
-death evidence. Backup, restore, typed settings, package, retention, and UI behavior
-remain unimplemented; Task 4 settings is next.
+death evidence. Task 4 is implemented: strict schema-v1 reminder/backup/device-route
+settings, safe current/fallback/default outcomes, portable-only bounded preview,
+stale/idempotent commit, and a reread-verifiable generation/digest target pass without
+generic record/path authority. SQLite snapshots, packages, retention, restore, and UI
+remain unimplemented; Task 5 snapshot/candidate verification is next.
 
 The final planning pass fixes a six-state database/settings transaction, explicit
 manual data-only or data-plus-portable-settings choice, data-only automatic recovery,

@@ -611,8 +611,21 @@ only when their payload digests agree; a disagreement is integrity failure rathe
 absence/default authority. Save measures and hashes without retaining encoded JSON,
 streams a second deterministic pass into the inactive slot, seals before publication,
 and rereads both slots. Any uncertainty after publication is recovery-required. The
-generic record/file authority remains crate-private; later typed settings/run/recovery
-stores are the only intended public surface.
+generic record/file authority remains crate-private; the typed settings store and
+later typed run/recovery stores are the only intended public surfaces.
+
+Implemented settings schema version 1 contains exactly `portable` and `device`
+classes. Portable state contains one canonical in-app reminder profile (enabled plus
+one through eight unique lead seconds from 60 through 31,536,000) and automatic-
+backup policy (periodic enabled, quiet seconds 300..3,600, interval seconds
+21,600..604,800 with quiet strictly below interval, and retention budget 256 MiB..
+64 GiB). Defaults are the recommended 7d/24h/12h/6h/1h reminder leads, five-minute
+quiet, six-hour interval, and 2 GiB budget. Device state contains only one of the 11
+implemented route keys. The schema stores no future presentation/provider field and
+no forbidden private state. Portable candidates have their own strict versioned JSON
+envelope, SHA-256 digest, bounded category/count preview, and never carry device
+state. A committed target is the exact nonzero settings generation plus portable
+digest and can be independently reread-verified.
 
 `.tmconfig` and `.tmbackup` use one fixed typed container, not a general archive.
 Version 1 permits at most eight entries, a 64 KiB manifest, a 1 MiB settings payload,

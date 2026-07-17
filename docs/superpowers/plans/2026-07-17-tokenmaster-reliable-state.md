@@ -228,7 +228,7 @@ open/handle identity validation remains a documented non-blocking hardening item
 
 ---
 
-## Task 4 — Add the settings schema, store, and config preview
+## Task 4 — Add the settings schema, store, and config preview (complete)
 
 **Files:**
 

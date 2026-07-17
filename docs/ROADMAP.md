@@ -162,8 +162,8 @@ health through lossy completion hints. P3-C is now complete: explicit all-curren
 quota/benefit overview reads feed one
 identity-free six-section projection and responsive compiled Slint Dashboard with
 32/32/240/12/8/12 presentation caps, real unknown/degraded states, and route-only
-navigation without model/window reconstruction. P3-D.0 Reliable State Tasks 1-3 are
-complete and Task 4 is next, then the remaining P3-D supporting data views.
+navigation without model/window reconstruction. P3-D.0 Reliable State Tasks 1-4 are
+complete and Task 5 is next, then the remaining P3-D supporting data views.
 
 P3-D.0 Reliable State is approved under
 `docs/superpowers/specs/2026-07-17-tokenmaster-reliable-state-design.md` with the
@@ -175,9 +175,11 @@ settings/run/recovery records, 15-point/2-GiB default retention, three-set quara
 six-state Windows replacement/rollback, automatic corruption-only data-only recovery,
 manual data-only or data-plus-portable-settings restore, safe mode, and off-UI resource
 gates. The contour is in progress and precedes the remaining P3-D views so Settings
-and future migrations do not ship before their durability contract. Tasks 1-3
+and future migrations do not ship before their durability contract. Tasks 1-4
 implement the library-only state boundary plus bounded verified platform publication
-and replacement plus the strict six-child A/B envelope; typed settings, packages,
+and replacement, the strict six-child A/B envelope, and typed schema-v1 settings with
+portable/device-local separation, safe fallback/defaults, bounded preview, and an
+independently verifiable restore target. SQLite snapshots, packages, retention,
 backup, and recovery remain pending.
 
 P2-A query foundation is approved under

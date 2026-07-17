@@ -817,14 +817,42 @@ post-publication uncertainty is `RecoveryRequired`.
 The new platform support is limited to caller-bounded exact-child reads and replacement
 of an inactive A/B slot without a third backup. Focused evidence passes 13 record unit
 contracts, two public authority contracts, 10 platform unit contracts, 14 durable-file
-integration contracts, 33/33 Pester mutations, an injected redundant before/after OS
+integration contracts, the now-expanded 34/34 Pester mutations, an injected redundant before/after OS
 boundary, 40 redundant boundary kills, 20 redundant entry races, and state process
 death during partial write, after seal/before publish, and after publish/before reread
 of generation 3. Generic record/file authority is not reexported from
-`tokenmaster-state`; Task 4 must wrap it in fixed-purpose typed settings APIs. Final
+`tokenmaster-state`; Task 4 wraps it in fixed-purpose typed settings APIs. Final
 independent review reports no Critical or Important finding. A no-follow/open-handle
 identity check for a hostile same-user path-replacement race remains recorded as
 defensive hardening outside the current threat boundary.
+
+Task 4 now adds public typed version-1 settings without exposing generic record or
+path authority. The exact schema stores only the implemented provider-neutral in-app
+reminder default, automatic-backup enabled/quiet/interval/retention policy, and the
+device-local last route. Reminder lists are canonical, unique, range checked, and
+capped at eight; backup quiet/interval relationships and the 256 MiB-through-64 GiB
+budget are validated at minimum five-minute quiet and six-hour interval. Unsupported
+versions, including a newer schema inside a valid record envelope, unknown/duplicate
+fields, invalid enum
+values, relationships, and payloads above 1 MiB fail before publication. No skin,
+locale, OS notification, pricing, provider, credential, source path, prompt, response,
+command, or source-content placeholder is persisted.
+
+`SettingsStore` returns stable `Current`, `Fallback`, or `Defaults` outcomes and
+path-private health codes. A single missing peer is healthy first-generation state; a
+corrupt peer is an explicit fallback. Two invalid slots load safe defaults without
+touching evidence; only a later explicit validated save may replace one slot and it
+keeps the other invalid file. Portable import preview reports only bounded changed
+categories/counts, rejects stale confirmation, preserves the current device route,
+and is idempotent. Commit receipts expose a nonzero generation plus portable SHA-256
+target that can be reconstructed from a future journal and independently reread-
+verified. Ten settings contracts, 13 record contracts, two public authority
+contracts, strict state Clippy, the workspace state audit, and 34/34 authority
+mutations pass. Independent high-risk review closed newer-schema overwrite, schedule-
+floor, directory-capability bypass, and unbounded sequence findings; its final pass
+reports no Critical, Important, or Minor issue and `Ready: Yes`. The fixed `.tmconfig`
+container remains Task 6; Task 4 consumes only
+its future already bounded portable-settings entry.
 
 Remaining ownership is: store for SQLite Online Backup and candidate verification,
 platform for durable same-volume replacement and sealed file selection, state for
@@ -843,17 +871,17 @@ transient-I/O, unsupported-location, and schema-too-new results preserve current
 truth. No valid backup leads to explicit quarantine and authoritative-source rebuild,
 never fabricated zero or automatic corrupt-row salvage.
 
-Only Tasks 1-3 are implemented. No typed persistent settings, backup package, retention
-worker, restore, safe mode, Data & Recovery UI, encryption, or new acceptance evidence
-exists yet. Task 4 typed settings/schema/import preview is the immediate next slice.
+Only Tasks 1-4 are implemented. No SQLite snapshot, backup package, retention worker,
+restore, safe mode, Data & Recovery UI, encryption, or new acceptance evidence exists
+yet. Task 5 verified SQLite snapshot/candidate primitives are the immediate next slice.
 
 ## Next implementation slice
 
-Execute P3-D.0 Task 4 from
-`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: add the exact settings
-schema, bounded portable/device-local ownership rules, safe-default load outcome,
-typed import preview, migration boundary, and fixed-purpose public store over the now-
-verified crate-private A/B core.
+Execute P3-D.0 Task 5 from
+`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: add store-owned
+SQLite Online Backup snapshots, cancellation/deadline/busy bounds, defensive candidate
+open, exact schema plus integrity/foreign-key/application semantic verification, and
+typed path-private failure categories without copying the live main file.
 
 P2-D quota history core is complete under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: Tasks 1-8 cover
@@ -870,7 +898,7 @@ immutable read snapshots, and publication through the existing Codex runtime wit
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
 workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, P3-B.2, P3-B.3, and P3-C are
-complete; P3-D.0 Reliable State is active with Tasks 1-3 complete and Task 4 next, followed
+complete; P3-D.0 Reliable State is active with Tasks 1-4 complete and Task 5 next, followed
 by the remaining P3-D supporting data-bearing routes. Activation
 remains a later independently authorized capability. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.

@@ -6,6 +6,23 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.0 Task 4 typed version-1 settings over the private redundant-record
+  core. The exact schema persists only a canonical bounded in-app reminder default,
+  validated automatic-backup enabled/quiet/interval/retention policy, and one device-
+  local route; future skins/locales/OS notifications/pricing/providers and forbidden
+  private state are not placeholders in v1.
+- Added fixed-purpose `SettingsStore` current/fallback/default load outcomes, strict
+  migration/version/unknown/range/relationship gates, explicit two-invalid-slot save,
+  portable-only category/count preview, stale confirmation rejection, idempotent
+  commit, and device-local preservation. Successful publication returns a nonzero
+  generation/portable-digest target that can be reconstructed and reread-verified.
+- Added ten settings contracts covering exact JSON, 1 MiB cap, bounded reminder decode,
+  duplicate rejection, safe defaults without evidence mutation, corrupt-newest
+  fallback, valid-envelope newer-schema write protection, unsupported/malformed
+  imports, generation overflow, staging collision, privacy canaries, portable-only
+  backup candidates, and target verification. The authority audit still permits only
+  six literal record children, limits the directory capability to the exact typed
+  constructor, and passes all 34 mutation cases.
 - Implemented P3-D.0 Task 3 crate-private redundant records: six fixed settings/run/
   recovery A/B children, a versioned 64-byte header and 40-byte footer, 1 MiB strict-
   JSON cap, checked generation, payload/record SHA-256, highest-valid selection,

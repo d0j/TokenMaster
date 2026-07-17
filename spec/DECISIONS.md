@@ -1152,8 +1152,16 @@ isolated candidate; compact manual export vacuums only that candidate. The fixed
 entry plus whole-package SHA-256. Optional manual passphrase protection wraps the
 package in a bounded standard age v1 stream; automatic backups store no secret.
 
-Settings, run state, and restore intent use alternating checked A/B records. Restore
-stops every archive owner, holds the stable writer lease, journals each idempotent
+Settings, run state, and restore intent use alternating checked A/B records.
+The implemented settings schema starts at v1 and stores only current product-owned
+portable reminder/backup policy plus the device-local route. It treats a valid-
+envelope newer schema as unsupported rather than corruption, so a downgraded binary
+cannot load defaults and overwrite it. Ordinary schedule settings cannot lower the
+five-minute quiet or six-hour interval gates. Portable preview/commit is base-
+generation/digest bound, preserves device state, and returns a reconstructible target
+for idempotent journal resume. Generic records and directory paths remain private.
+
+Restore stops every archive owner, holds the stable writer lease, journals each idempotent
 phase, quarantines WAL/SHM, atomically replaces the main file while preserving the old
 main, reverifies the new active database, and reconstructs one application bundle.
 Interrupted work resumes before SQLite open. Definitive corruption may select only a

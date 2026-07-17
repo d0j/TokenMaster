@@ -3,7 +3,6 @@ use core::marker::PhantomData;
 use std::io::{self, Write};
 
 use serde::Serialize;
-use serde::de::DeserializeOwned;
 use sha2::{Digest, Sha256};
 use tokenmaster_platform::{
     DurableFileError, DurableFileTarget, DurableStagedFile, MAX_DURABLE_WRITE_CHUNK_BYTES,
@@ -13,6 +12,16 @@ use tokenmaster_platform::{
 use crate::StateError;
 
 pub(crate) const MAX_RECORD_PAYLOAD_BYTES: u64 = 1024 * 1024;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RecordValueError {
+    Invalid,
+    UnsupportedVersion,
+}
+
+pub(crate) trait RecordValue: Serialize + Sized {
+    fn decode_json(bytes: &[u8]) -> Result<Self, RecordValueError>;
+}
 
 const RECORD_MAGIC: &[u8; 8] = b"TMREC001";
 const RECORD_FOOTER_MAGIC: &[u8; 8] = b"TMEND001";
@@ -33,6 +42,7 @@ pub(crate) enum RecordKind {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum RecordRedundancy {
     Complete,
+    Single,
     Fallback,
 }
 
@@ -55,6 +65,7 @@ impl<T> fmt::Debug for RecordLoad<T> {
 pub(crate) struct LoadedRecord<T> {
     generation: u64,
     redundancy: RecordRedundancy,
+    payload_sha256: [u8; 32],
     value: T,
 }
 
@@ -67,6 +78,11 @@ impl<T> LoadedRecord<T> {
     #[must_use]
     pub(crate) const fn redundancy(&self) -> RecordRedundancy {
         self.redundancy
+    }
+
+    #[must_use]
+    pub(crate) const fn payload_sha256(&self) -> [u8; 32] {
+        self.payload_sha256
     }
 
     #[must_use]
@@ -86,6 +102,7 @@ impl<T> fmt::Debug for LoadedRecord<T> {
 pub(crate) struct RecordSaveReceipt {
     generation: u64,
     redundancy: RecordRedundancy,
+    payload_sha256: [u8; 32],
 }
 
 impl RecordSaveReceipt {
@@ -97,6 +114,11 @@ impl RecordSaveReceipt {
     #[must_use]
     pub(crate) const fn redundancy(self) -> RecordRedundancy {
         self.redundancy
+    }
+
+    #[must_use]
+    pub(crate) const fn payload_sha256(self) -> [u8; 32] {
+        self.payload_sha256
     }
 }
 
@@ -152,13 +174,14 @@ impl<T> RedundantRecordStore<T> {
 
 impl<T> RedundantRecordStore<T>
 where
-    T: DeserializeOwned + Serialize,
+    T: RecordValue,
 {
     pub(crate) fn load(&self) -> Result<RecordLoad<T>, StateError> {
         Ok(match self.select_record()? {
             Some(selected) => RecordLoad::Loaded(LoadedRecord {
                 generation: selected.record.generation,
                 redundancy: selected.redundancy,
+                payload_sha256: selected.record.payload_sha256,
                 value: selected.record.value,
             }),
             None => RecordLoad::NoValidRecord,
@@ -169,14 +192,34 @@ where
         self.save_with_hook(value, &mut NoopRecordSaveHook)
     }
 
+    /// Performs an explicit typed save, including deterministic recovery from two
+    /// invalid slots. At most one invalid slot is replaced; the peer remains as
+    /// forensic evidence and the reread truth is reported as fallback redundancy.
+    pub(crate) fn save_explicit(&self, value: &T) -> Result<RecordSaveReceipt, StateError> {
+        self.save_with_policy(value, &mut NoopRecordSaveHook, true)
+    }
+
     pub(crate) fn save_with_hook(
         &self,
         value: &T,
         hook: &mut impl RecordSaveHook,
     ) -> Result<RecordSaveReceipt, StateError> {
+        self.save_with_policy(value, hook, false)
+    }
+
+    fn save_with_policy(
+        &self,
+        value: &T,
+        hook: &mut impl RecordSaveHook,
+        explicit_recovery: bool,
+    ) -> Result<RecordSaveReceipt, StateError> {
         let first = self.read_slot(0)?;
         let second = self.read_slot(1)?;
-        let plan = save_plan(&first, &second)?;
+        let plan = if explicit_recovery {
+            explicit_save_plan(&first, &second)?
+        } else {
+            save_plan(&first, &second)?
+        };
         drop(first);
         drop(second);
         let measured = measure_json(value, self.max_payload_bytes)?;
@@ -230,6 +273,7 @@ where
         Ok(RecordSaveReceipt {
             generation: selected.record.generation,
             redundancy: selected.redundancy,
+            payload_sha256: selected.record.payload_sha256,
         })
     }
 
@@ -246,10 +290,10 @@ where
             .ok_or_else(StateError::capacity_exceeded)?;
         match self.slots[slot].read_bounded(max_record_bytes) {
             Ok(None) => Ok(Slot::Missing),
-            Ok(Some(bytes)) => Ok(match decode_record(&bytes, self.max_payload_bytes) {
-                Some(record) => Slot::Valid(record),
-                None => Slot::Invalid,
-            }),
+            Ok(Some(bytes)) => match decode_record(&bytes, self.max_payload_bytes)? {
+                Some(record) => Ok(Slot::Valid(record)),
+                None => Ok(Slot::Invalid),
+            },
             Err(DurableFileError::CapacityExceeded | DurableFileError::Integrity) => {
                 Ok(Slot::Invalid)
             }
@@ -331,12 +375,41 @@ fn select_record<T>(
                 return Err(StateError::integrity());
             }
         }
-        (Slot::Valid(record), _) | (_, Slot::Valid(record)) => Some(SelectedRecord {
-            record,
-            redundancy: RecordRedundancy::Fallback,
-        }),
+        (Slot::Valid(record), Slot::Missing) | (Slot::Missing, Slot::Valid(record)) => {
+            Some(SelectedRecord {
+                record,
+                redundancy: RecordRedundancy::Single,
+            })
+        }
+        (Slot::Valid(record), Slot::Invalid) | (Slot::Invalid, Slot::Valid(record)) => {
+            Some(SelectedRecord {
+                record,
+                redundancy: RecordRedundancy::Fallback,
+            })
+        }
         _ => None,
     })
+}
+
+fn explicit_save_plan<T>(first: &Slot<T>, second: &Slot<T>) -> Result<SavePlan, StateError> {
+    match (first, second) {
+        (Slot::Missing, Slot::Invalid) => Ok(SavePlan {
+            slot: 0,
+            generation: 1,
+            target_exists: false,
+        }),
+        (Slot::Invalid, Slot::Missing) => Ok(SavePlan {
+            slot: 1,
+            generation: 1,
+            target_exists: false,
+        }),
+        (Slot::Invalid, Slot::Invalid) => Ok(SavePlan {
+            slot: 0,
+            generation: 1,
+            target_exists: true,
+        }),
+        _ => save_plan(first, second),
+    }
 }
 
 fn save_plan<T>(first: &Slot<T>, second: &Slot<T>) -> Result<SavePlan, StateError> {
@@ -547,10 +620,30 @@ fn encode_header(
     Ok(header)
 }
 
-fn decode_record<T: DeserializeOwned>(
+fn decode_record<T: RecordValue>(
     bytes: &[u8],
     max_payload_bytes: u64,
-) -> Option<DecodedRecord<T>> {
+) -> Result<Option<DecodedRecord<T>>, StateError> {
+    let Some((generation, payload_sha256, payload)) =
+        decode_record_payload(bytes, max_payload_bytes)
+    else {
+        return Ok(None);
+    };
+    let value = match T::decode_json(payload) {
+        Ok(value) => value,
+        Err(RecordValueError::Invalid) => return Ok(None),
+        Err(RecordValueError::UnsupportedVersion) => {
+            return Err(StateError::unsupported_version());
+        }
+    };
+    Ok(Some(DecodedRecord {
+        generation,
+        payload_sha256,
+        value,
+    }))
+}
+
+fn decode_record_payload(bytes: &[u8], max_payload_bytes: u64) -> Option<(u64, [u8; 32], &[u8])> {
     if bytes.len() < RECORD_HEADER_BYTES + RECORD_FOOTER_BYTES
         || bytes.get(0..8)? != RECORD_MAGIC
         || read_u16(bytes, 8)? != RECORD_FORMAT_VERSION
@@ -586,12 +679,7 @@ fn decode_record<T: DeserializeOwned>(
     if bytes.get(footer_offset.checked_add(8)?..exact_len)? != record_sha256 {
         return None;
     }
-    let value = serde_json::from_slice(payload).ok()?;
-    Some(DecodedRecord {
-        generation,
-        payload_sha256,
-        value,
-    })
+    Some((generation, payload_sha256, payload))
 }
 
 fn read_u16(bytes: &[u8], offset: usize) -> Option<u16> {

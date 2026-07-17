@@ -8,9 +8,10 @@ use std::time::{Duration, Instant};
 
 use crate::record::{
     MAX_RECORD_PAYLOAD_BYTES, RecordKind, RecordLoad, RecordRedundancy, RecordSaveBoundary,
-    RecordSaveHook, RedundantRecordStore,
+    RecordSaveHook, RecordValue, RecordValueError, RedundantRecordStore,
 };
 use crate::{StateError, StateErrorCode};
+use serde::de::DeserializeOwned;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -75,6 +76,28 @@ struct CrashRecord {
 struct ChangingRecord {
     schema: u16,
     label: String,
+}
+
+fn decode_test_record<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, RecordValueError> {
+    serde_json::from_slice(bytes).map_err(|_| RecordValueError::Invalid)
+}
+
+impl RecordValue for TestRecord {
+    fn decode_json(bytes: &[u8]) -> Result<Self, RecordValueError> {
+        decode_test_record(bytes)
+    }
+}
+
+impl RecordValue for CrashRecord {
+    fn decode_json(bytes: &[u8]) -> Result<Self, RecordValueError> {
+        decode_test_record(bytes)
+    }
+}
+
+impl RecordValue for ChangingRecord {
+    fn decode_json(bytes: &[u8]) -> Result<Self, RecordValueError> {
+        decode_test_record(bytes)
+    }
 }
 
 impl Serialize for ChangingRecord {
@@ -221,7 +244,7 @@ fn exact_envelope_round_trips_without_exposing_paths_or_payloads() {
     let store = record_store(&directory);
     let receipt = store.save(&value("first")).expect("first save");
     assert_eq!(receipt.generation(), 1);
-    assert_eq!(receipt.redundancy(), RecordRedundancy::Fallback);
+    assert_eq!(receipt.redundancy(), RecordRedundancy::Single);
 
     let encoded = fs::read(root.path().join("settings-a.tms")).expect("first slot");
     assert_eq!(&encoded[0..8], MAGIC);
@@ -245,7 +268,7 @@ fn exact_envelope_round_trips_without_exposing_paths_or_payloads() {
 
     let (generation, redundancy, loaded) = expect_loaded(store.load().expect("load"));
     assert_eq!(generation, 1);
-    assert_eq!(redundancy, RecordRedundancy::Fallback);
+    assert_eq!(redundancy, RecordRedundancy::Single);
     assert_eq!(loaded, value("first"));
     for debug in [
         format!("{store:?}"),

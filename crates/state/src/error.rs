@@ -76,6 +76,10 @@ impl StateError {
         Self::from_code(StateErrorCode::InvalidInput)
     }
 
+    pub(crate) const fn unsupported_version() -> Self {
+        Self::from_code(StateErrorCode::UnsupportedVersion)
+    }
+
     pub(crate) const fn integrity() -> Self {
         Self::from_code(StateErrorCode::Integrity)
     }

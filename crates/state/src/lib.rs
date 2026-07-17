@@ -12,8 +12,18 @@ mod error;
 mod record;
 #[cfg(test)]
 mod record_contract_tests;
+mod settings;
 
 pub use error::{StateError, StateErrorCode};
+pub use settings::{
+    BACKUP_INTERVAL_DEFAULT_SECONDS, BACKUP_INTERVAL_MAX_SECONDS, BACKUP_INTERVAL_MIN_SECONDS,
+    BACKUP_QUIET_DEFAULT_SECONDS, BACKUP_QUIET_MAX_SECONDS, BACKUP_QUIET_MIN_SECONDS,
+    BACKUP_RETENTION_DEFAULT_BYTES, BACKUP_RETENTION_MAX_BYTES, BACKUP_RETENTION_MIN_BYTES,
+    BackupPolicy, DeviceRoute, DeviceSettings, PortableSettings, PortableSettingsCandidate,
+    PortableSettingsDigest, PortableSettingsTarget, ReminderPolicy, SettingsChangeCategory,
+    SettingsCommitReceipt, SettingsHealthCode, SettingsImportPreview, SettingsLoad,
+    SettingsLoadOutcome, SettingsStore, SettingsValue,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ByteLimit(u64);

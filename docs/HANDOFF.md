@@ -353,15 +353,29 @@ names. Platform adds caller-bounded exact-child reads and inactive-slot replacem
 without a third backup. Thirteen record contracts include generation-3 process deaths
 during partial write, after seal/before publish, and after publish/before reread;
 platform adds an injected before/after redundant boundary plus 40 deterministic and
-20 race kills. The strengthened authority audit passes 33 mutation cases, including
+20 race kills. The strengthened authority audit now passes 34 mutation cases, including
 approved-alias, fixed-child, and public-generic-authority bypasses. Final independent
 review reports no remaining Critical or Important finding; platform no-follow/open-
 handle identity checking for a hostile same-user path-replacement race is a recorded
 non-blocking hardening item outside the current threat boundary.
 
-The immediate next slice is Task 4 typed settings/schema/import preview. Then continue
-Tasks 5-18 in order: verified SQLite snapshots and
-strict packages, bounded retention/maintenance, journaled recovery and startup
+Task 4 is complete. The public fixed-purpose `SettingsStore` persists a strict schema-
+v1 value through the private A/B core. Portable state is limited to the implemented
+in-app reminder default and automatic-backup enabled/quiet/interval/retention policy;
+device-local state is the 11-value last route and is never imported. Safe defaults,
+healthy single-slot startup, corrupt-peer fallback, explicit two-invalid-slot save,
+unknown/version/range/relationship rejection, valid-envelope newer-version write
+protection, bounded eight-item decode, 1 MiB input cap, stale-safe bounded
+preview, idempotent commit, privacy canaries, generation overflow, staging collision,
+and portable-only full-backup candidates pass. A typed generation/digest target is
+persistable and independently reread-verifiable for the later recovery journal.
+Independent high-risk review closed all three Important findings, the bounded-decode
+Minor, and a whitespace-obfuscated audit bypass; the final review is `Ready: Yes`
+with no remaining finding.
+
+The immediate next slice is Task 5 verified SQLite snapshots and candidate
+verification. Then continue Tasks 6-18 in order: strict packages,
+optional manual encryption, bounded retention/maintenance, journaled recovery and startup
 integration, application restart/safe mode, Data & Recovery UI, then adversarial and
 resource closure. Keep the fixed archive path and writer sidecar; never copy only the
 live main file or treat busy/disk/access/schema-newer as corruption authority. Keep
@@ -374,11 +388,11 @@ notifications, settings/help, command palette, tray, and compact lifecycle. P3-D
 presentation, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.
-The current post-P3-D.0-Task-3 focused formatting, strict locked state/platform Clippy,
-state/platform test/doctest, 33/33 Pester mutation, workspace authority, and diff-check
-gates pass. The final clean-root, formatting, strict locked workspace Clippy, and full
-locked workspace test/doctest baseline also passes in 463 seconds after project-truth
-synchronization. The
+The current post-P3-D.0-Task-4 focused formatting, strict locked state Clippy, 10
+settings plus 13 record plus two authority contracts, 34/34 Pester mutations,
+workspace state authority, and diff-check gates pass. The final clean-root,
+formatting, strict locked workspace Clippy, and full locked workspace test/doctest
+baseline also passes in 427 seconds after project-truth synchronization. The
 query resource binary uses
 an isolated `harness = false` process plus a bounded maximum-64-round warm-up that
 waits for two topology-stable eight-round retained floors before measurement and

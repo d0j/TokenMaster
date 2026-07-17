@@ -149,9 +149,15 @@ two-pass writer that does not retain encoded JSON. The platform reads only a cal
 bounded exact child and replaces only the inactive slot without creating a third
 backup. A post-publication reread is mandatory and any uncertainty becomes
 `RecoveryRequired`.
+Task 4 adds the only public settings surface over that private core. Schema v1 stores
+the implemented provider-neutral reminder default and automatic-backup schedule/
+retention policy separately from the device-local route. It rejects unknown/newer/
+invalid/unbounded input, loads safe defaults without rewriting two invalid slots,
+previews only portable category/count changes, preserves device state on import, and
+binds a confirmed publication to a reread-verifiable generation plus portable digest.
 `tokenmaster-store` will create consistent Online Backup candidates and verify
 integrity, foreign keys, schema, and semantic invariants. Later state tasks will add
-typed settings/run/recovery stores, fixed streaming `.tmconfig`/`.tmbackup`
+typed run/recovery stores, fixed streaming `.tmconfig`/`.tmbackup`
 packages, bounded retention, and one capacity-one maintenance worker.
 `tokenmaster-platform` owns durable replacement and will later own sealed file dialogs.
 `tokenmaster-app` will stop every archive user, hold the existing writer
@@ -159,7 +165,8 @@ lease, quarantine main/WAL/SHM, resume a redundant six-state restore journal bef
 SQLite open, commit the selected data-only or data-plus-portable-settings mode, and
 reconstruct one application bundle or safe mode. Automatic recovery remains data only.
 Product/Desktop receive bounded health and intents only. The contour is in progress;
-Tasks 1-3 add no public persistent settings, runtime, backup, or recovery claim.
+Tasks 1-4 now provide persistent typed settings only; they add no snapshot, package,
+maintenance runtime, restore, safe-mode, or release claim.
 
 The built-in live quota source is separate from the JSONL usage reader. Composition
 supplies one already resolved absolute native Codex executable to

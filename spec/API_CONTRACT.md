@@ -604,6 +604,19 @@ only controlled data-root capabilities and sealed selected-file descriptors. It 
 not accept arbitrary SQL, a caller-defined archive entry, extraction path, shell
 command, URL, credential, or provider payload.
 
+The implemented Task 4 subset is `SettingsStore::{load,save,preview_import,
+commit_import,full_backup_candidate,verify_target}` over one validated reliable-state
+directory and fixed slot names. Load returns `Current`, `Fallback`, or `Defaults` plus
+a stable path-private health code and optional generation. Preview owns one bounded
+portable candidate and exposes only ordered changed categories and a field count;
+commit requires the same base generation/record digest, preserves device-local state,
+and does not publish a new generation when the portable value is already current.
+Every successful publication is reread and returns a `PortableSettingsTarget` with a
+nonzero generation and portable SHA-256 digest. Reconstruction rejects generation
+zero; verification compares both generation and a freshly recomputed typed digest.
+Package, catalog, retention, maintenance, bootstrap, and restore members remain future
+fixed APIs and are not claimed by Task 4.
+
 The SQLite-specific snapshot and candidate verifier remain store-owned fixed APIs.
 The platform package owns durable same-volume replacement and native file selection.
 Application composition alone may sequence runtime shutdown, writer-lease admission,

@@ -660,7 +660,7 @@ rename and synchronized file/directory entries, but is not Windows release evide
 Implemented Task 3 keeps the generic redundant-record store crate-private and permits
 it to construct only the six literal settings/run/recovery A/B children. The state
 authority audit permits one bounded writer import, only `io::Result`, `io::Error`, and
-`io::ErrorKind` uses, and one exact platform import; 33 mutation cases reject alias
+`io::ErrorKind` uses, and one exact platform import; the expanded 34 mutation cases reject alias
 reuse, caller-selected children, public generic authority, transitive authority, and
 the earlier source/metadata bypass corpus. Record reads cap actual bytes at 1 MiB plus
 fixed envelope overhead before decode. Writes do not retain a full encoded JSON copy:
@@ -671,6 +671,20 @@ is `RecoveryRequired`. Windows evidence now includes a separate inactive-slot su
 with an injected before/after replacement boundary, 40 deterministic process kills,
 20 replacement-entry race kills, and state-level process deaths before partial write,
 after seal/before publish, and after publish/before reread of generation 3.
+
+Implemented Task 4 exposes only a fixed-purpose `SettingsStore` constructed from a
+validated local-directory capability; it does not reexport generic record/file
+authority or accept a path. The authority audit now permits exactly the original
+bounded record/platform import and one exact `ValidatedLocalDirectory` import for
+that typed constructor, while retaining all six fixed-child and alias-reuse gates.
+Schema v1 is strict and capped at 1 MiB. Unknown, duplicate, newer/older unsupported,
+invalid enum/range/relationship, and forbidden-state fields fail before publication.
+Portable input cannot contain or overwrite the device-local route. Errors, `Debug`,
+previews, and serialized values are regression-tested against password, credential,
+absolute-path, prompt/response/command, and source-content canaries. A two-invalid-
+slot load preserves both files; only an explicit validated save replaces one and
+keeps the peer as evidence. Restore identity is a nonzero generation plus portable
+SHA-256 digest and has a fixed reread verifier for later journal resume.
 
 The current exact-child read checks the pathname type before opening and validates the
 opened regular-file length, but does not claim hostile same-user no-follow/open-handle

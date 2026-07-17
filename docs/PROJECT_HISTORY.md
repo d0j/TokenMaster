@@ -2415,3 +2415,56 @@ tests, two public state authority contracts, the workspace authority receipt, an
 33/33 Pester mutations pass. Typed settings, snapshot/package generation, retention,
 maintenance, recovery, app safe mode, UI, M0 acceptance, packaging, signing, and
 release remain unimplemented. Task 4 typed settings/schema/import preview is next.
+
+## 2026-07-17 — P3-D.0 Task 4 typed settings and portable preview
+
+Added the fixed-purpose public settings API over the private A/B record core. Schema
+version 1 stores only current product-owned values: one canonical in-app reminder
+default capped at eight unique validated leads, automatic-backup periodic/quiet/
+interval/retention policy, and the device-local last route. The default schedule has
+a five-minute quiet window and no more than one ordinary periodic point per six hours
+under a 2 GiB budget; configurable bounds are 300..3,600 seconds quiet,
+21,600..604,800 seconds interval with quiet below interval, and 256 MiB..64 GiB.
+Presentation skins/locales, OS delivery, pricing/provider values, source paths,
+credentials, prompts, responses, commands, and source content are deliberately absent
+until their owners exist or forever forbidden.
+
+Load distinguishes healthy current state (including one intentional first slot),
+corrupt-peer fallback, and two-invalid safe defaults. Defaults do not rewrite evidence;
+an explicit validated save may replace only one invalid slot and preserves the peer.
+Record payload decoding now retains a valid-envelope unsupported settings version as
+`UnsupportedVersion`, so an older binary cannot downgrade newer state to generic
+corruption or overwrite it. Portable candidate decode is capped at 1 MiB, uses an
+eight-element sequence visitor, probes version before strict full decode, rejects
+unsupported/unknown/duplicate/malformed/range/relationship input, and never accepts
+device state.
+
+Preview exposes only ordered change categories/counts. Commit binds confirmation to
+the base generation and record digest, preserves the current device route, is a no-
+write success when already current, rereads publication, and returns a reconstructible
+nonzero generation plus portable SHA-256 target for later journal verification.
+Focused evidence passes ten settings integration contracts, 13 record unit contracts,
+two public authority contracts, strict locked all-target state Clippy, formatting, the
+workspace state-authority receipt, and 34/34 Pester mutations. The audit permits one
+exact bounded record/platform import plus one exact typed-store directory-capability
+import, allows exactly four capability type uses and the exact constructor signature,
+and forbids `.as_path`; generic records, caller-selected children, arbitrary paths,
+and forbidden transitive authority remain rejected.
+
+Independent high-risk review first found newer-schema downgrade/overwrite, schedule
+floors below the approved operating gates, an approved-directory path leak, and
+unbounded rejected-list allocation. RED/GREEN fixes introduced typed payload decode,
+valid-envelope newer-version write protection, exact policy floors, a bounded visitor,
+and the exact constructor/capability audit. A second pass found the whitespace form
+`directory . as_path()`; the regex and mutation were hardened. The final review
+reports Critical 0, Important 0, Minor 0, and `Ready: Yes`.
+
+The final repository baseline passes `TM-CLEAN-PASS`, formatting, strict locked
+warnings-as-errors workspace Clippy, and every locked workspace test/doctest in 427
+seconds. This is development evidence only; it does not claim P3-D.0 acceptance,
+interactive acceptance, packaging, signing, or release.
+
+SQLite snapshots, fixed `.tmconfig`/`.tmbackup` packages, encryption, catalog/
+retention, recovery journal, safe mode, UI integration, M0 acceptance, packaging,
+signing, and release remain unimplemented. Task 5 verified SQLite snapshots and
+candidates is next.
