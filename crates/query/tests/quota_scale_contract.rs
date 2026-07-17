@@ -428,6 +428,15 @@ fn quota_core_scale_restart_paging_and_usage_coexistence_meet_budgets() {
         current_elapsed < OPERATION_BUDGET,
         "32-window current read exceeded budget: {current_elapsed:?}"
     );
+    let overview_started = Instant::now();
+    let overview = service.quota_overview().expect("quota overview");
+    let overview_elapsed = overview_started.elapsed();
+    assert_eq!(overview.payload().windows().len(), WINDOW_COUNT);
+    assert_eq!(overview.header().filters().len(), WINDOW_COUNT);
+    assert!(
+        overview_elapsed < OPERATION_BUDGET,
+        "32-window overview read exceeded budget: {overview_elapsed:?}"
+    );
 
     let mut before = None;
     let mut expected_sequence = TRANSITION_COUNT;
@@ -502,6 +511,7 @@ fn quota_core_scale_restart_paging_and_usage_coexistence_meet_budgets() {
     eprintln!(
         "P2-D quota scale windows={} transitions={} redundant_polls={} \
          max_write_ms={:.3} max_redundant_poll_ms={:.3} current_32_ms={:.3} \
+         overview_32_ms={:.3} \
          max_history_256_ms={:.3} scheduled={} early={} manual={}",
         WINDOW_COUNT,
         TRANSITION_COUNT,
@@ -509,6 +519,7 @@ fn quota_core_scale_restart_paging_and_usage_coexistence_meet_budgets() {
         maximum_write.as_secs_f64() * 1_000.0,
         maximum_redundant_poll.as_secs_f64() * 1_000.0,
         current_elapsed.as_secs_f64() * 1_000.0,
+        overview_elapsed.as_secs_f64() * 1_000.0,
         maximum_history_read.as_secs_f64() * 1_000.0,
         reset_counts[0],
         reset_counts[1],

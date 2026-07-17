@@ -144,6 +144,32 @@ impl<C: QueryClock> QueryService<C> {
         Ok(QuotaEnvelope::new(header, mapped.payload))
     }
 
+    pub fn quota_overview(&mut self) -> Result<QuotaEnvelope<QuotaCurrentSnapshot>, QueryError> {
+        let time = self.clock.sample()?;
+        time.monotonic_ms()
+            .checked_add(QUERY_DEADLINE_MS)
+            .ok_or_else(|| QueryError::new(QueryErrorCode::Overflow))?;
+        let store_query = quota::build_overview_query(Duration::from_millis(QUERY_DEADLINE_MS))?;
+        let capture = self
+            .store
+            .capture_quota_overview(store_query)
+            .map_err(map_store_error)?;
+        let mapped = quota::map_overview_capture(&capture, time.wall_time_ms())?;
+        let generation = self.next_generation()?;
+        let header = QuotaQueryHeader::new(QuotaQueryHeaderParts {
+            snapshot_generation: generation,
+            quota_revision: mapped.quota_revision,
+            generated_at_ms: time.wall_time_ms(),
+            data_through_ms: mapped.data_through_ms,
+            freshness: mapped.freshness,
+            quality: mapped.quality,
+            filters: mapped.filters,
+            warnings: mapped.warnings,
+        })?;
+        self.last_generation = Some(generation);
+        Ok(QuotaEnvelope::new(header, mapped.payload))
+    }
+
     pub fn benefit_inventory(
         &mut self,
         request: BenefitCurrentRequest,

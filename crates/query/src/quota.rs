@@ -14,8 +14,8 @@ use tokenmaster_quota::{
 use tokenmaster_store::{
     MAX_QUOTA_CURRENT_WINDOWS, QuotaCurrentCapture as StoreCurrentCapture,
     QuotaCurrentEpoch as StoreCurrentEpoch, QuotaCurrentQuery as StoreCurrentQuery,
-    QuotaCurrentWindow as StoreCurrentWindow, QuotaTransitionCursor as StoreCursor,
-    QuotaTransitionPageCapture as StoreTransitionPageCapture,
+    QuotaCurrentWindow as StoreCurrentWindow, QuotaOverviewQuery as StoreOverviewQuery,
+    QuotaTransitionCursor as StoreCursor, QuotaTransitionPageCapture as StoreTransitionPageCapture,
     QuotaTransitionPageQuery as StoreTransitionPageQuery,
     QuotaTransitionRecord as StoreTransitionRecord,
 };
@@ -801,6 +801,10 @@ pub(crate) fn build_current_query(
     .map_err(crate::service::map_store_error)
 }
 
+pub(crate) fn build_overview_query(deadline: Duration) -> Result<StoreOverviewQuery, QueryError> {
+    StoreOverviewQuery::new(deadline).map_err(crate::service::map_store_error)
+}
+
 pub(crate) fn build_transition_query(
     request: &QuotaTransitionPageRequest,
     deadline: Duration,
@@ -886,6 +890,21 @@ pub(crate) fn map_current_capture(
         filters: request.filters.to_vec(),
         warnings,
     })
+}
+
+pub(crate) fn map_overview_capture(
+    capture: &StoreCurrentCapture,
+    generated_at_ms: i64,
+) -> Result<MappedQuotaPayload<QuotaCurrentSnapshot>, QueryError> {
+    let request = QuotaCurrentRequest::new(
+        capture
+            .windows()
+            .iter()
+            .map(|window| window.definition().key().clone())
+            .collect(),
+    )
+    .map_err(|_error| QueryError::new(QueryErrorCode::CorruptArchive))?;
+    map_current_capture(capture, &request, generated_at_ms)
 }
 
 pub(crate) fn map_transition_capture(

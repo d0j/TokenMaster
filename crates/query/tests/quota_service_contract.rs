@@ -13,7 +13,7 @@ use tokenmaster_query::{
     PageSize, QueryClock, QueryError, QueryErrorCode, QueryFreshness, QueryQuality, QueryService,
     QueryTimeSample, QuotaCurrentRequest, QuotaTransitionPageRequest, QuotaWarningCode,
 };
-use tokenmaster_store::UsageStore;
+use tokenmaster_store::{MAX_QUOTA_CURRENT_WINDOWS, UsageStore};
 
 #[derive(Clone, Copy)]
 struct FixedClock {
@@ -202,6 +202,116 @@ fn quota_header_uses_provider_freshness_and_strongest_truthful_quality() {
             .warnings()
             .contains(&QuotaWarningCode::WindowUnavailable)
     );
+}
+
+#[test]
+fn quota_overview_is_explicit_and_discovers_all_windows_without_redefining_empty_exact_filters() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("quota-service-overview.sqlite3");
+    let fixtures = [
+        ("weekly", 900, 1_100, 1_200),
+        ("daily", 800, 1_100, 1_200),
+        ("burst", 700, 1_100, 1_200),
+    ];
+    {
+        let mut writer = UsageStore::open(&path).expect("writer");
+        for (index, (window, observed, fresh, stale)) in fixtures.iter().enumerate() {
+            let definition = definition(window);
+            writer
+                .apply_quota_observation(
+                    &definition,
+                    &sample(
+                        definition.key(),
+                        u64::try_from(index + 1).expect("observation"),
+                        *observed,
+                        *fresh,
+                        *stale,
+                        window,
+                        QuotaSampleQuality::Authoritative,
+                    ),
+                )
+                .expect("observation");
+        }
+    }
+    checkpoint(&path);
+
+    let mut service = QueryService::open(
+        &path,
+        FixedClock {
+            wall_time_ms: 1_000,
+            monotonic_ms: 10,
+        },
+    )
+    .expect("service");
+    let exact_empty = service
+        .quota_windows(QuotaCurrentRequest::new(Vec::new()).expect("exact empty"))
+        .expect("exact empty snapshot");
+    assert!(exact_empty.payload().windows().is_empty());
+    assert!(exact_empty.header().filters().is_empty());
+
+    let overview = service.quota_overview().expect("quota overview");
+    assert_eq!(overview.header().snapshot_generation().get(), 2);
+    assert_eq!(overview.header().quota_revision().get(), 3);
+    assert_eq!(overview.payload().windows().len(), fixtures.len());
+    assert_eq!(overview.header().filters().len(), fixtures.len());
+    assert!(
+        overview
+            .payload()
+            .windows()
+            .iter()
+            .all(|window| window.snapshot().is_some())
+    );
+    let debug = format!("{overview:?}");
+    assert!(!debug.contains("personal"));
+    assert!(!debug.contains("weekly"));
+    assert!(!debug.contains("daily"));
+}
+
+#[test]
+fn quota_overview_maps_store_capacity_failure_without_consuming_a_generation() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("quota-service-overview-capacity.sqlite3");
+    {
+        let mut writer = UsageStore::open(&path).expect("writer");
+        for index in 0..=MAX_QUOTA_CURRENT_WINDOWS {
+            let window = format!("window-{index:02}");
+            let definition = definition(&window);
+            writer
+                .apply_quota_observation(
+                    &definition,
+                    &sample(
+                        definition.key(),
+                        u64::try_from(index + 1).expect("observation"),
+                        900,
+                        1_100,
+                        1_200,
+                        &window,
+                        QuotaSampleQuality::Authoritative,
+                    ),
+                )
+                .expect("observation");
+        }
+    }
+    checkpoint(&path);
+
+    let mut service = QueryService::open(
+        &path,
+        FixedClock {
+            wall_time_ms: 1_000,
+            monotonic_ms: 10,
+        },
+    )
+    .expect("service");
+    let error = service
+        .quota_overview()
+        .expect_err("33rd current window must fail");
+    assert_eq!(error.code(), QueryErrorCode::CapacityExceeded);
+    let exact = service
+        .quota_windows(QuotaCurrentRequest::new(vec![key("window-00")]).expect("exact request"))
+        .expect("exact query after failed overview");
+    assert_eq!(exact.header().snapshot_generation().get(), 1);
 }
 
 #[test]
