@@ -28,6 +28,6 @@ pub use bridge::{
 pub use controller::{
     DesktopAttempt, DesktopController, DesktopControllerError, DesktopControllerErrorCode,
     DesktopQueryPlan, DesktopQuerySource, DesktopRefreshAdmission, DesktopRefreshCompletion,
-    DesktopRefreshOutcome, DesktopRefreshReceipt, DesktopRefreshUrgency, DesktopSnapshotNotifier,
-    DesktopSnapshotReceiver,
+    DesktopRefreshOutcome, DesktopRefreshReceipt, DesktopRefreshUrgency, DesktopRuntimeObservation,
+    DesktopRuntimeObservationOutcome, DesktopSnapshotNotifier, DesktopSnapshotReceiver,
 };

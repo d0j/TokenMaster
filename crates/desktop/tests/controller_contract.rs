@@ -11,10 +11,13 @@ use std::{
 
 use tokenmaster_desktop::{
     DesktopAttempt, DesktopController, DesktopQueryPlan, DesktopQuerySource,
-    DesktopRefreshAdmission, DesktopRefreshOutcome, DesktopRefreshUrgency, DesktopSnapshotNotifier,
+    DesktopRefreshAdmission, DesktopRefreshOutcome, DesktopRefreshUrgency,
+    DesktopRuntimeObservation, DesktopRuntimeObservationOutcome, DesktopSnapshotNotifier,
     DesktopSnapshotReceiver,
 };
-use tokenmaster_product::ProductSectionKind;
+use tokenmaster_product::{
+    ProductRuntimeGeneration, ProductRuntimeObservationError, ProductSectionKind,
+};
 use tokenmaster_query::{
     BenefitCurrentRequest, BenefitCurrentSnapshot, BenefitEnvelope, GitEnvelope, GitOutputRequest,
     GitOutputSnapshot, LatestActivityPage, LatestActivityRequest, PageSize,
@@ -223,6 +226,159 @@ fn controller_contract_is_typed_bounded_and_deterministic() {
         .attach_snapshot_notifier(Arc::new(NoopNotifier))
         .expect_err("stopped controller rejects notifier attachment");
     assert_eq!(attach_error.stable_code(), "closed");
+}
+
+fn runtime_generation(value: u64) -> ProductRuntimeGeneration {
+    ProductRuntimeGeneration::new(value).expect("nonzero runtime generation")
+}
+
+fn unavailable_runtime_observation(value: u64) -> DesktopRuntimeObservation {
+    DesktopRuntimeObservation::new(
+        runtime_generation(value),
+        Err(ProductRuntimeObservationError::StoreUnavailable),
+        Err(ProductRuntimeObservationError::ProviderUnavailable),
+        Err(ProductRuntimeObservationError::Closed),
+        Err(ProductRuntimeObservationError::Faulted),
+    )
+}
+
+#[test]
+fn runtime_observations_are_capacity_one_generation_ordered_and_joined_on_refresh() {
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let mut controller = DesktopController::spawn(
+        UnavailableSource { calls },
+        DesktopQueryPlan::overview().expect("overview plan"),
+    )
+    .expect("controller starts");
+
+    assert_eq!(
+        controller
+            .observe_runtime(unavailable_runtime_observation(1))
+            .expect("first runtime observation"),
+        DesktopRuntimeObservationOutcome::Accepted
+    );
+    assert_eq!(
+        controller
+            .observe_runtime(unavailable_runtime_observation(1))
+            .expect("equal runtime observation"),
+        DesktopRuntimeObservationOutcome::IgnoredNotNewer
+    );
+    for generation in 2..=10_000 {
+        assert_eq!(
+            controller
+                .observe_runtime(unavailable_runtime_observation(generation))
+                .expect("newer runtime observation"),
+            DesktopRuntimeObservationOutcome::Accepted
+        );
+    }
+    assert_eq!(
+        controller
+            .observe_runtime(unavailable_runtime_observation(9_999))
+            .expect("older runtime observation"),
+        DesktopRuntimeObservationOutcome::IgnoredNotNewer
+    );
+
+    controller
+        .refresh(DesktopRefreshUrgency::Hint)
+        .expect("refresh starts");
+    assert_eq!(
+        wait_for_completion(&controller).outcome(),
+        DesktopRefreshOutcome::Completed
+    );
+    let snapshot = controller
+        .take_snapshot()
+        .expect("snapshot mailbox")
+        .expect("joined product snapshot");
+    for kind in [
+        snapshot.runtime().usage().kind(),
+        snapshot.runtime().quota().kind(),
+        snapshot.runtime().reminder().kind(),
+        snapshot.runtime().git().kind(),
+    ] {
+        assert_eq!(kind, ProductSectionKind::Unavailable);
+    }
+    for generation in [
+        snapshot.runtime().usage().generation(),
+        snapshot.runtime().quota().generation(),
+        snapshot.runtime().reminder().generation(),
+        snapshot.runtime().git().generation(),
+    ] {
+        assert_eq!(generation, Some(runtime_generation(10_000)));
+    }
+    assert_eq!(
+        snapshot.runtime().usage().observation_error(),
+        Some(ProductRuntimeObservationError::StoreUnavailable)
+    );
+    assert_eq!(
+        snapshot.runtime().quota().observation_error(),
+        Some(ProductRuntimeObservationError::ProviderUnavailable)
+    );
+    assert_eq!(
+        snapshot.runtime().reminder().observation_error(),
+        Some(ProductRuntimeObservationError::Closed)
+    );
+    assert_eq!(
+        snapshot.runtime().git().observation_error(),
+        Some(ProductRuntimeObservationError::Faulted)
+    );
+
+    controller.shutdown().expect("controller stops");
+}
+
+#[test]
+fn runtime_observation_racing_active_query_is_joined_by_one_follow_up() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let (entered_sender, entered_receiver) = sync_channel(1);
+    let (release_sender, release_receiver) = sync_channel(1);
+    let source = BlockingUnavailableSource {
+        calls,
+        entered: entered_sender,
+        release: Some(release_receiver),
+    };
+    let mut controller =
+        DesktopController::spawn(source, DesktopQueryPlan::overview().expect("overview plan"))
+            .expect("controller starts");
+    controller
+        .observe_runtime(unavailable_runtime_observation(1))
+        .expect("initial runtime observation");
+    let first = started_attempt(
+        controller
+            .refresh(DesktopRefreshUrgency::Hint)
+            .expect("first refresh"),
+    );
+    entered_receiver
+        .recv_timeout(Duration::from_secs(2))
+        .expect("query entered");
+
+    controller
+        .observe_runtime(unavailable_runtime_observation(2))
+        .expect("racing runtime observation");
+    let receipt = match controller
+        .refresh(DesktopRefreshUrgency::Hint)
+        .expect("coalesced runtime refresh")
+    {
+        DesktopRefreshAdmission::Coalesced {
+            receipt,
+            active_attempt,
+        } => {
+            assert_eq!(active_attempt, first);
+            receipt
+        }
+        admission => panic!("unexpected admission: {admission:?}"),
+    };
+    release_sender.send(()).expect("release query");
+
+    let follow_up = receipt.get().checked_add(1).expect("follow-up attempt");
+    let snapshot = wait_for_snapshot_attempt(&controller, follow_up);
+    assert_eq!(
+        snapshot.runtime().usage().generation(),
+        Some(runtime_generation(2))
+    );
+    assert_eq!(
+        snapshot.runtime().quota().generation(),
+        Some(runtime_generation(2))
+    );
+    controller.shutdown().expect("controller stops");
 }
 
 #[test]

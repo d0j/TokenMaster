@@ -10,7 +10,11 @@ use tokenmaster_engine::{
     RefreshRequestId, RefreshUrgency, RefreshWorker, WorkerCompletionKind, WorkerError,
     WorkerErrorCode, WorkerPhase,
 };
-use tokenmaster_product::{ProductAttemptGeneration, ProductReducer, ProductSnapshot};
+use tokenmaster_product::{
+    ProductAttemptGeneration, ProductGitRuntimeHealth, ProductQuotaRuntimeHealth, ProductReducer,
+    ProductReminderRuntimeHealth, ProductRuntimeGeneration, ProductRuntimeObservationError,
+    ProductSnapshot, ProductUsageRuntimeHealth,
+};
 use tokenmaster_query::{
     BenefitCurrentRequest, BenefitCurrentSnapshot, BenefitEnvelope, GitEnvelope, GitOutputRequest,
     GitOutputSnapshot, LatestActivityPage, LatestActivityRequest, PageSize,
@@ -258,6 +262,45 @@ pub struct DesktopRefreshCompletion {
     follow_up_started: bool,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DesktopRuntimeObservation {
+    generation: ProductRuntimeGeneration,
+    usage: Result<ProductUsageRuntimeHealth, ProductRuntimeObservationError>,
+    quota: Result<ProductQuotaRuntimeHealth, ProductRuntimeObservationError>,
+    reminder: Result<ProductReminderRuntimeHealth, ProductRuntimeObservationError>,
+    git: Result<ProductGitRuntimeHealth, ProductRuntimeObservationError>,
+}
+
+impl DesktopRuntimeObservation {
+    #[must_use]
+    pub const fn new(
+        generation: ProductRuntimeGeneration,
+        usage: Result<ProductUsageRuntimeHealth, ProductRuntimeObservationError>,
+        quota: Result<ProductQuotaRuntimeHealth, ProductRuntimeObservationError>,
+        reminder: Result<ProductReminderRuntimeHealth, ProductRuntimeObservationError>,
+        git: Result<ProductGitRuntimeHealth, ProductRuntimeObservationError>,
+    ) -> Self {
+        Self {
+            generation,
+            usage,
+            quota,
+            reminder,
+            git,
+        }
+    }
+
+    #[must_use]
+    pub const fn generation(self) -> ProductRuntimeGeneration {
+        self.generation
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopRuntimeObservationOutcome {
+    Accepted,
+    IgnoredNotNewer,
+}
+
 impl DesktopRefreshCompletion {
     #[must_use]
     pub const fn attempt(self) -> DesktopAttempt {
@@ -358,6 +401,13 @@ impl Clock for DesktopMonotonicClock {
 
 type LatestSnapshot = Arc<Mutex<Option<Arc<ProductSnapshot>>>>;
 type SnapshotNotifier = Arc<Mutex<Option<Arc<dyn DesktopSnapshotNotifier>>>>;
+type RuntimeObservationSlot = Arc<Mutex<RuntimeObservationState>>;
+
+#[derive(Default)]
+struct RuntimeObservationState {
+    latest_generation: Option<ProductRuntimeGeneration>,
+    pending: Option<DesktopRuntimeObservation>,
+}
 
 pub trait DesktopSnapshotNotifier: Send + Sync + 'static {
     fn snapshot_ready(&self);
@@ -399,6 +449,7 @@ pub struct DesktopController {
     worker: RefreshWorker,
     latest: LatestSnapshot,
     notifier: SnapshotNotifier,
+    runtime_observation: RuntimeObservationSlot,
 }
 
 impl DesktopController {
@@ -431,6 +482,8 @@ impl DesktopController {
         let worker_latest = latest.clone();
         let notifier = Arc::new(Mutex::new(None));
         let worker_notifier = notifier.clone();
+        let runtime_observation = Arc::new(Mutex::new(RuntimeObservationState::default()));
+        let worker_runtime_observation = runtime_observation.clone();
         let execute_clock = clock.clone();
         let mut reducer = ProductReducer::new();
         let worker = RefreshWorker::spawn(worker_clock, move |permit| {
@@ -442,6 +495,7 @@ impl DesktopController {
                 execute_clock.as_ref(),
                 &worker_latest,
                 &worker_notifier,
+                &worker_runtime_observation,
             )
         })
         .map_err(map_worker_error)?;
@@ -450,6 +504,7 @@ impl DesktopController {
             worker,
             latest,
             notifier,
+            runtime_observation,
         })
     }
 
@@ -476,6 +531,22 @@ impl DesktopController {
         let request_id = RefreshRequestId::new(attempt.get())
             .map_err(|_| DesktopControllerError::new(DesktopControllerErrorCode::Internal))?;
         self.worker.cancel(request_id).map_err(map_worker_error)
+    }
+
+    pub fn observe_runtime(
+        &self,
+        observation: DesktopRuntimeObservation,
+    ) -> Result<DesktopRuntimeObservationOutcome, DesktopControllerError> {
+        let mut state = lock_runtime_observation(&self.runtime_observation)?;
+        if state
+            .latest_generation
+            .is_some_and(|generation| observation.generation() <= generation)
+        {
+            return Ok(DesktopRuntimeObservationOutcome::IgnoredNotNewer);
+        }
+        state.latest_generation = Some(observation.generation());
+        state.pending = Some(observation);
+        Ok(DesktopRuntimeObservationOutcome::Accepted)
     }
 
     pub fn try_completion(
@@ -557,12 +628,23 @@ fn execute_attempt<S: DesktopQuerySource>(
     clock: &dyn Clock,
     latest: &LatestSnapshot,
     notifier: &SnapshotNotifier,
+    runtime_observation: &RuntimeObservationSlot,
 ) -> RefreshOutcome {
     let Some(attempt) = ProductAttemptGeneration::new(permit.id().get()) else {
         return RefreshOutcome::Failed;
     };
     if let Some(outcome) = stop_outcome(permit, clock) {
         return outcome;
+    }
+
+    let observation = match lock_runtime_observation(runtime_observation) {
+        Ok(mut state) => state.pending.take(),
+        Err(_) => return RefreshOutcome::Failed,
+    };
+    if let Some(observation) = observation
+        && apply_runtime_observation(reducer, observation).is_err()
+    {
+        return RefreshOutcome::Failed;
     }
 
     let result = match source.product_data_status() {
@@ -659,6 +741,45 @@ fn execute_attempt<S: DesktopQuerySource>(
     RefreshOutcome::Completed
 }
 
+fn apply_runtime_observation(
+    reducer: &mut ProductReducer,
+    observation: DesktopRuntimeObservation,
+) -> Result<(), tokenmaster_product::ProductReducerError> {
+    match observation.usage {
+        Ok(health) => {
+            reducer.publish_usage_runtime_health(observation.generation, health)?;
+        }
+        Err(error) => {
+            reducer.fail_usage_runtime_observation(observation.generation, error)?;
+        }
+    }
+    match observation.quota {
+        Ok(health) => {
+            reducer.publish_quota_runtime_health(observation.generation, health)?;
+        }
+        Err(error) => {
+            reducer.fail_quota_runtime_observation(observation.generation, error)?;
+        }
+    }
+    match observation.reminder {
+        Ok(health) => {
+            reducer.publish_reminder_runtime_health(observation.generation, health)?;
+        }
+        Err(error) => {
+            reducer.fail_reminder_runtime_observation(observation.generation, error)?;
+        }
+    }
+    match observation.git {
+        Ok(health) => {
+            reducer.publish_git_runtime_health(observation.generation, health)?;
+        }
+        Err(error) => {
+            reducer.fail_git_runtime_observation(observation.generation, error)?;
+        }
+    }
+    Ok(())
+}
+
 fn stop_outcome(permit: &RefreshPermit, clock: &dyn Clock) -> Option<RefreshOutcome> {
     if permit.is_cancelled() {
         Some(RefreshOutcome::Cancelled)
@@ -681,6 +802,14 @@ fn lock_notifier(
     notifier: &SnapshotNotifier,
 ) -> Result<MutexGuard<'_, Option<Arc<dyn DesktopSnapshotNotifier>>>, DesktopControllerError> {
     notifier
+        .lock()
+        .map_err(|_| DesktopControllerError::new(DesktopControllerErrorCode::Internal))
+}
+
+fn lock_runtime_observation(
+    observation: &RuntimeObservationSlot,
+) -> Result<MutexGuard<'_, RuntimeObservationState>, DesktopControllerError> {
+    observation
         .lock()
         .map_err(|_| DesktopControllerError::new(DesktopControllerErrorCode::Internal))
 }
