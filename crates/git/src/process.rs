@@ -19,9 +19,12 @@ pub const MAX_GIT_LOG_STDOUT_BYTES: usize = 64 * 1024 * 1024;
 
 const POLL_INTERVAL: Duration = Duration::from_millis(2);
 
-#[derive(Clone, Debug)]
+type CancellationProbe = dyn Fn() -> bool + Send + Sync;
+
+#[derive(Clone)]
 pub struct GitCancellation {
     cancelled: Arc<AtomicBool>,
+    linked: Option<Arc<CancellationProbe>>,
 }
 
 impl GitCancellation {
@@ -29,6 +32,15 @@ impl GitCancellation {
     pub fn new() -> Self {
         Self {
             cancelled: Arc::new(AtomicBool::new(false)),
+            linked: None,
+        }
+    }
+
+    #[must_use]
+    pub fn linked(probe: impl Fn() -> bool + Send + Sync + 'static) -> Self {
+        Self {
+            cancelled: Arc::new(AtomicBool::new(false)),
+            linked: Some(Arc::new(probe)),
         }
     }
 
@@ -39,6 +51,19 @@ impl GitCancellation {
     #[must_use]
     pub fn is_cancelled(&self) -> bool {
         self.cancelled.load(Ordering::Acquire)
+            || self.linked.as_ref().is_some_and(|probe| {
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| probe())).unwrap_or(true)
+            })
+    }
+}
+
+impl std::fmt::Debug for GitCancellation {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("GitCancellation")
+            .field("cancelled", &self.is_cancelled())
+            .field("linked", &self.linked.is_some())
+            .finish()
     }
 }
 

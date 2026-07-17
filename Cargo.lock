@@ -5378,6 +5378,7 @@ dependencies = [
  "tokenmaster-codex",
  "tokenmaster-domain",
  "tokenmaster-engine",
+ "tokenmaster-git",
  "tokenmaster-platform",
  "tokenmaster-provider",
  "tokenmaster-store",

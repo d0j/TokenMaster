@@ -6,6 +6,7 @@
 mod clock;
 mod codex_adapter;
 mod error;
+mod git;
 mod hints;
 mod incremental;
 mod lease;
@@ -22,6 +23,11 @@ mod watcher;
 pub use clock::SystemClock;
 pub use codex_adapter::CodexAdapter;
 pub use error::{RuntimeError, RuntimeErrorCode};
+pub use git::{
+    GitPublicationErrorCode, GitRefreshFailure, GitRefreshSnapshot, GitRepositoryHintIngress,
+    GitRuntime, GitRuntimeConfig, GitRuntimePhase, GitRuntimeSnapshot,
+    MAX_GIT_RUNTIME_REPOSITORIES,
+};
 pub use hints::{RefreshHintSink, SchedulerPhase, WatcherHealth};
 pub use incremental::{IncrementalRefreshOutcome, IncrementalRefreshReport, refresh_incremental};
 pub use lease::RuntimeWriterLease;

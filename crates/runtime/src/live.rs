@@ -20,9 +20,10 @@ use crate::publication::{
 };
 use crate::recovery::{StartupRecoveryReport, recover_startup};
 use crate::{
-    BoundedFilesystemWatcher, CodexAdapter, IncrementalRefreshOutcome, RefreshHintSink,
-    RefreshScheduler, RuntimeError, RuntimeErrorCode, SchedulerError, SchedulerErrorCode,
-    SchedulerPhase, StoreArchive, SystemClock, WatcherSnapshot, refresh_incremental,
+    BoundedFilesystemWatcher, CodexAdapter, GitRuntime, GitRuntimeConfig,
+    IncrementalRefreshOutcome, RefreshHintSink, RefreshScheduler, RuntimeError, RuntimeErrorCode,
+    SchedulerError, SchedulerErrorCode, SchedulerPhase, StoreArchive, SystemClock, WatcherSnapshot,
+    refresh_incremental,
 };
 
 pub struct LiveRuntime {
@@ -36,6 +37,7 @@ pub struct LiveRuntime {
     reset_watcher: Arc<AtomicBool>,
     latest_refresh: Arc<Mutex<LiveRefreshSnapshot>>,
     engine_publication: Arc<Mutex<EnginePublicationState>>,
+    git_runtime: GitRuntime,
 }
 
 impl LiveRuntime {
@@ -54,6 +56,7 @@ impl LiveRuntime {
         let engine_publication = Arc::new(Mutex::new(EnginePublicationState::seed(
             initial_publication,
         )));
+        let git_runtime = GitRuntime::start(GitRuntimeConfig::new(archive_path.to_path_buf())?)?;
 
         let watcher_slot = Arc::new(Mutex::new(None));
         let reset_watcher = Arc::new(AtomicBool::new(true));
@@ -66,7 +69,8 @@ impl LiveRuntime {
         let mut execution = LiveExecution {
             clock: Arc::clone(&clock),
             lease,
-            adapter: CodexAdapter::new(request)?,
+            adapter: CodexAdapter::new(request)?
+                .with_repository_hint_ingress(git_runtime.ingress()),
             archive,
             watcher_slot: execution_watcher,
             reset_watcher: execution_reset,
@@ -116,6 +120,7 @@ impl LiveRuntime {
             reset_watcher,
             latest_refresh,
             engine_publication,
+            git_runtime,
         })
     }
 
@@ -185,6 +190,7 @@ impl LiveRuntime {
             watcher,
             refresh,
             engine,
+            git: self.git_runtime.snapshot()?,
         })
     }
 
@@ -223,6 +229,10 @@ impl LiveRuntime {
             self.phase = LivePhase::Faulted;
             return Err(runtime_worker_error(error));
         }
+        if let Err(error) = self.git_runtime.pause() {
+            self.phase = LivePhase::Faulted;
+            return Err(error);
+        }
         self.phase = LivePhase::Paused;
         Ok(self.phase)
     }
@@ -244,9 +254,14 @@ impl LiveRuntime {
             }
         };
         self.reset_watcher.store(true, Ordering::Release);
+        if let Err(error) = self.git_runtime.resume() {
+            self.phase = LivePhase::Faulted;
+            return Err(error);
+        }
         *admission = true;
         if let Err(error) = self.scheduler.resume() {
             *admission = false;
+            let _ = self.git_runtime.pause();
             self.phase = LivePhase::Faulted;
             return Err(runtime_scheduler_error(error));
         }
@@ -262,6 +277,7 @@ impl LiveRuntime {
             PowerLifecycleEvent::Suspend => self.pause(),
             PowerLifecycleEvent::Resume if self.phase == LivePhase::Running => {
                 self.reset_watcher.store(true, Ordering::Release);
+                self.git_runtime.force_recovery()?;
                 self.refresh_now(RefreshUrgency::Recovery)?;
                 Ok(self.phase)
             }
@@ -314,9 +330,14 @@ impl LiveRuntime {
                 WorkerPhase::Faulted
             }
         };
+        let git_phase = self.git_runtime.shutdown().unwrap_or_else(|_| {
+            failed = true;
+            crate::GitRuntimePhase::Faulted
+        });
         if failed
             || scheduler_phase == SchedulerPhase::Faulted
             || worker_phase == WorkerPhase::Faulted
+            || git_phase == crate::GitRuntimePhase::Faulted
         {
             self.phase = LivePhase::Faulted;
             Err(RuntimeError::new(RuntimeErrorCode::Internal))

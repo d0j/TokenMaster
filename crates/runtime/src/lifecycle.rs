@@ -1,6 +1,6 @@
 use tokenmaster_engine::{PortErrorCode, RefreshOutcome, WorkerSnapshot};
 
-use crate::{EngineSnapshot, SchedulerSnapshot, WatcherSnapshot};
+use crate::{EngineSnapshot, GitRuntimeSnapshot, SchedulerSnapshot, WatcherSnapshot};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LivePhase {
@@ -70,6 +70,7 @@ pub struct LiveRuntimeSnapshot {
     pub(crate) watcher: WatcherSnapshot,
     pub(crate) refresh: LiveRefreshSnapshot,
     pub(crate) engine: EngineSnapshot,
+    pub(crate) git: GitRuntimeSnapshot,
 }
 
 impl LiveRuntimeSnapshot {
@@ -101,5 +102,10 @@ impl LiveRuntimeSnapshot {
     #[must_use]
     pub const fn engine(self) -> EngineSnapshot {
         self.engine
+    }
+
+    #[must_use]
+    pub const fn git(self) -> GitRuntimeSnapshot {
+        self.git
     }
 }

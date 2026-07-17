@@ -1,7 +1,10 @@
 use std::fmt;
 
 use sha2::{Digest, Sha256};
-use tokenmaster_domain::{GitRepositoryId, ProjectAlias};
+use tokenmaster_domain::{
+    GitActivityAssociationId, GitRepositoryId, ProjectAlias, UsageProfileId, UsageProviderId,
+    UsageSessionId, UsageSourceId,
+};
 
 use crate::{GitCoreError, MAX_GIT_AUTHOR_BYTES, MAX_GIT_REF_NAME_BYTES, MAX_GIT_REFS};
 
@@ -55,6 +58,14 @@ impl GitRefHead {
             object_id: object_id.into(),
         })
     }
+
+    pub(crate) fn name(&self) -> &[u8] {
+        &self.name
+    }
+
+    pub(crate) fn object_id(&self) -> &[u8] {
+        &self.object_id
+    }
 }
 
 impl fmt::Debug for GitRefHead {
@@ -78,6 +89,25 @@ pub fn derive_repository_id(
     Ok(GitRepositoryId::from_bytes(framed_hash(
         b"tokenmaster.git.repository.v1",
         &[salt.as_bytes(), normalized_common_dir],
+    )?))
+}
+
+pub fn derive_activity_association_id(
+    salt: &GitIdentitySalt,
+    provider: &UsageProviderId,
+    profile: &UsageProfileId,
+    source: &UsageSourceId,
+    session: &UsageSessionId,
+) -> Result<GitActivityAssociationId, GitCoreError> {
+    Ok(GitActivityAssociationId::from_bytes(framed_hash(
+        b"tokenmaster.git.activity-association.v1",
+        &[
+            salt.as_bytes(),
+            provider.as_str().as_bytes(),
+            profile.as_str().as_bytes(),
+            source.as_str().as_bytes(),
+            session.as_str().as_bytes(),
+        ],
     )?))
 }
 

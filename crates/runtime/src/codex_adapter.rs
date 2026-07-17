@@ -25,6 +25,7 @@ pub struct CodexAdapter {
     provider: CodexProvider,
     request: DiscoveryRequest,
     snapshot: Option<DiscoverySnapshot>,
+    repository_hint_ingress: Option<crate::GitRepositoryHintIngress>,
 }
 
 impl CodexAdapter {
@@ -35,7 +36,16 @@ impl CodexAdapter {
             provider,
             request,
             snapshot: None,
+            repository_hint_ingress: None,
         })
+    }
+
+    pub(crate) fn with_repository_hint_ingress(
+        mut self,
+        ingress: crate::GitRepositoryHintIngress,
+    ) -> Self {
+        self.repository_hint_ingress = Some(ingress);
+        self
     }
 
     pub(crate) fn watch_roots(&self) -> Option<Vec<PathBuf>> {
@@ -218,6 +228,7 @@ impl Adapter for CodexAdapter {
                 descriptor,
                 source: source.identity().clone(),
                 latest_repository_activity_hint: None,
+                repository_hint_ingress: self.repository_hint_ingress.clone(),
             };
             sink.on_source(source, checkpoint, &mut reader)
         })
@@ -229,6 +240,10 @@ impl core::fmt::Debug for CodexAdapter {
         formatter
             .debug_struct("CodexAdapter")
             .field("has_snapshot", &self.snapshot.is_some())
+            .field(
+                "repository_hint_ingress",
+                &self.repository_hint_ingress.is_some(),
+            )
             .finish()
     }
 }
@@ -237,6 +252,7 @@ struct CodexSourceBatchReader {
     descriptor: SourceFileDescriptor,
     source: SourceIdentity,
     latest_repository_activity_hint: Option<tokenmaster_provider::RepositoryActivityHint>,
+    repository_hint_ingress: Option<crate::GitRepositoryHintIngress>,
 }
 
 impl SourceBatchReader for CodexSourceBatchReader {
@@ -342,6 +358,12 @@ impl SourceBatchReader for CodexSourceBatchReader {
                 if result.is_ok() {
                     self.latest_repository_activity_hint =
                         batch.take_latest_repository_activity_hint();
+                    if let (Some(ingress), Some(hint)) = (
+                        self.repository_hint_ingress.as_ref(),
+                        self.latest_repository_activity_hint.as_ref(),
+                    ) {
+                        let _ = ingress.submit(hint.clone());
+                    }
                 }
                 result
             }

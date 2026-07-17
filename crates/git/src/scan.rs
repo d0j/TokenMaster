@@ -15,6 +15,7 @@ use crate::{
 const REPOSITORY_INFO_STDOUT_BYTES: usize = 64 * 1024;
 const AUTHOR_STDOUT_BYTES: usize = crate::MAX_GIT_AUTHOR_BYTES + 2;
 const REFS_STDOUT_BYTES: usize = 4 * 1024 * 1024;
+const MAX_INCREMENTAL_ARGUMENT_BYTES: usize = 24 * 1024;
 
 const REPOSITORY_INFO_ARGS: &[&str] = &[
     "rev-parse",
@@ -60,6 +61,16 @@ const LOG_ARGS: &[&str] = &[
     "--find-renames=50%",
     "--format=format:%x1e%H%x00%at%x00%ae%x00%aE%x00%P%x00",
 ];
+const MERGE_BASE_PREFIX_ARGS: &[&str] = &[
+    "--no-pager",
+    "--no-replace-objects",
+    "-c",
+    "core.pager=cat",
+    "-c",
+    "color.ui=false",
+    "merge-base",
+    "--is-ancestor",
+];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GitObjectFormat {
@@ -71,6 +82,127 @@ pub enum GitObjectFormat {
 pub enum GitAuthorSource {
     Repository,
     Global,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GitRefreshKind {
+    Rebuild,
+    Append,
+    Unchanged,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct GitRepositoryFrontier {
+    repository_id: GitRepositoryId,
+    ref_fingerprint: GitRefFingerprint,
+    mailmap_fingerprint: GitMailmapFingerprint,
+    author_fingerprint: GitAuthorFingerprint,
+    author_source: GitAuthorSource,
+    object_format: GitObjectFormat,
+    shallow: bool,
+    refs: Vec<GitRefHead>,
+}
+
+impl GitRepositoryFrontier {
+    #[must_use]
+    pub const fn repository_id(&self) -> GitRepositoryId {
+        self.repository_id
+    }
+
+    #[must_use]
+    pub const fn ref_fingerprint(&self) -> GitRefFingerprint {
+        self.ref_fingerprint
+    }
+
+    #[must_use]
+    pub const fn mailmap_fingerprint(&self) -> GitMailmapFingerprint {
+        self.mailmap_fingerprint
+    }
+
+    #[must_use]
+    pub const fn author_fingerprint(&self) -> GitAuthorFingerprint {
+        self.author_fingerprint
+    }
+
+    #[must_use]
+    pub const fn author_source(&self) -> GitAuthorSource {
+        self.author_source
+    }
+
+    #[must_use]
+    pub const fn object_format(&self) -> GitObjectFormat {
+        self.object_format
+    }
+
+    #[must_use]
+    pub const fn is_shallow(&self) -> bool {
+        self.shallow
+    }
+
+    #[must_use]
+    pub fn ref_count(&self) -> usize {
+        self.refs.len()
+    }
+
+    fn is_compatible_with(&self, other: &Self) -> bool {
+        self.repository_id == other.repository_id
+            && self.mailmap_fingerprint == other.mailmap_fingerprint
+            && self.author_fingerprint == other.author_fingerprint
+            && self.author_source == other.author_source
+            && self.object_format == other.object_format
+            && self.shallow == other.shallow
+    }
+}
+
+impl fmt::Debug for GitRepositoryFrontier {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("GitRepositoryFrontier")
+            .field("repository_id", &self.repository_id)
+            .field("ref_fingerprint", &self.ref_fingerprint)
+            .field("mailmap_fingerprint", &self.mailmap_fingerprint)
+            .field("author", &"[redacted]")
+            .field("author_source", &self.author_source)
+            .field("object_format", &self.object_format)
+            .field("shallow", &self.shallow)
+            .field("ref_count", &self.refs.len())
+            .finish()
+    }
+}
+
+#[derive(Clone)]
+pub struct GitRepositoryRefresh {
+    kind: GitRefreshKind,
+    frontier: GitRepositoryFrontier,
+    summary: Option<GitScanSummary>,
+}
+
+impl GitRepositoryRefresh {
+    #[must_use]
+    pub const fn kind(&self) -> GitRefreshKind {
+        self.kind
+    }
+
+    #[must_use]
+    pub const fn frontier(&self) -> &GitRepositoryFrontier {
+        &self.frontier
+    }
+
+    #[must_use]
+    pub const fn summary(&self) -> Option<&GitScanSummary> {
+        self.summary.as_ref()
+    }
+}
+
+impl fmt::Debug for GitRepositoryRefresh {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("GitRepositoryRefresh")
+            .field("kind", &self.kind)
+            .field("frontier", &self.frontier)
+            .field("summary", &self.summary)
+            .finish()
+    }
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -151,62 +283,115 @@ impl fmt::Debug for GitRepositoryScan {
 }
 
 impl GitProcess {
+    pub fn identify_repository(
+        &self,
+        candidate: &GitRepositoryCandidate,
+        salt: GitIdentitySalt,
+    ) -> Result<GitRepositoryId, GitBackendError> {
+        let deadline = self.operation_deadline()?;
+        self.limited_to(deadline)?.version()?;
+        let repository = self.limited_to(deadline)?.repository_info(candidate)?;
+        derive_repository_id(&salt, &repository.normalized_common_dir)
+            .map_err(|_| GitBackendError::new(GitBackendErrorCode::RepositoryPathRejected))
+    }
+
     pub fn scan(
         &self,
         candidate: &GitRepositoryCandidate,
         salt: GitIdentitySalt,
     ) -> Result<GitRepositoryScan, GitBackendError> {
+        let refresh = self.refresh(candidate, salt, None)?;
+        let GitRepositoryRefresh {
+            frontier,
+            summary: Some(summary),
+            ..
+        } = refresh
+        else {
+            return Err(GitBackendError::new(GitBackendErrorCode::ProtocolError));
+        };
+        Ok(GitRepositoryScan {
+            repository_id: frontier.repository_id,
+            ref_fingerprint: frontier.ref_fingerprint,
+            mailmap_fingerprint: frontier.mailmap_fingerprint,
+            author_fingerprint: frontier.author_fingerprint,
+            author_source: frontier.author_source,
+            object_format: frontier.object_format,
+            shallow: frontier.shallow,
+            refs: frontier.refs,
+            summary,
+        })
+    }
+
+    pub fn refresh(
+        &self,
+        candidate: &GitRepositoryCandidate,
+        salt: GitIdentitySalt,
+        previous: Option<&GitRepositoryFrontier>,
+    ) -> Result<GitRepositoryRefresh, GitBackendError> {
         let deadline = self.operation_deadline()?;
         self.limited_to(deadline)?.version()?;
-        let repository = self.limited_to(deadline)?.repository_info(candidate)?;
-        let repository_id = derive_repository_id(&salt, &repository.normalized_common_dir)
-            .map_err(|_| GitBackendError::new(GitBackendErrorCode::RepositoryPathRejected))?;
-        let (author_fingerprint, author_source) =
-            self.limited_to(deadline)?.author(candidate, &salt)?;
-        let refs = self.limited_to(deadline)?.refs(candidate)?;
-        let mailmap_fingerprint = fingerprint_mailmap(&repository.worktree_root, &salt)?;
-        let ref_fingerprint =
-            derive_ref_fingerprint(&salt, &refs).map_err(|error| match error {
-                crate::GitCoreError::CapacityExceeded { limit } => {
-                    GitBackendError::with_limit(GitBackendErrorCode::TooManyRefs, limit)
+        let (repository, frontier) = self.inspect(candidate, &salt, deadline)?;
+        if let Some(previous) = previous.filter(|value| value.is_compatible_with(&frontier)) {
+            if previous.refs == frontier.refs {
+                return Ok(GitRepositoryRefresh {
+                    kind: GitRefreshKind::Unchanged,
+                    frontier,
+                    summary: None,
+                });
+            }
+            if !frontier.shallow
+                && self.is_append_only(candidate, previous, &frontier, deadline)?
+                && let Some(args) = incremental_log_args(previous)?
+            {
+                let summary = self.scan_history(candidate, salt, &frontier, &args, deadline)?;
+                let (_, frontier_after) = self.inspect(candidate, &salt, deadline)?;
+                if frontier_after != frontier {
+                    return Err(GitBackendError::new(
+                        GitBackendErrorCode::HistoryChangedDuringScan,
+                    ));
                 }
-                _ => GitBackendError::new(GitBackendErrorCode::ProtocolError),
-            })?;
-        let summary = if refs.is_empty() {
-            crate::GitScanAccumulator::new()
-                .finish()
-                .map_err(|_| GitBackendError::new(GitBackendErrorCode::ProtocolError))?
-        } else {
-            let config =
-                GitLogParseConfig::new(salt, vec![author_fingerprint], GitStreamLimits::default())
-                    .map_err(|_| GitBackendError::new(GitBackendErrorCode::ProtocolError))?;
-            self.limited_to(deadline)?
-                .scan_log(LOG_ARGS, candidate.path(), config)?
-        };
-        let repository_after = self.limited_to(deadline)?.repository_info(candidate)?;
-        let author_after = self
-            .limited_to(deadline)?
-            .author(candidate, &salt)
-            .map_err(|error| {
-                if error.code() == GitBackendErrorCode::AuthorIdentityMissing {
-                    GitBackendError::new(GitBackendErrorCode::HistoryChangedDuringScan)
-                } else {
-                    error
-                }
-            })?;
-        let refs_after = self.limited_to(deadline)?.refs(candidate)?;
-        let mailmap_after = fingerprint_mailmap(&repository_after.worktree_root, &salt)?;
-        self.limited_to(deadline)?;
-        if repository_after != repository
-            || author_after != (author_fingerprint, author_source)
-            || refs_after != refs
-            || mailmap_after != mailmap_fingerprint
-        {
+                return Ok(GitRepositoryRefresh {
+                    kind: GitRefreshKind::Append,
+                    frontier,
+                    summary: Some(summary),
+                });
+            }
+        }
+        let summary = self.scan_history(candidate, salt, &frontier, LOG_ARGS, deadline)?;
+        let (repository_after, frontier_after) = self.inspect(candidate, &salt, deadline)?;
+        if repository_after != repository || frontier_after != frontier {
             return Err(GitBackendError::new(
                 GitBackendErrorCode::HistoryChangedDuringScan,
             ));
         }
-        Ok(GitRepositoryScan {
+        Ok(GitRepositoryRefresh {
+            kind: GitRefreshKind::Rebuild,
+            frontier,
+            summary: Some(summary),
+        })
+    }
+
+    fn inspect(
+        &self,
+        candidate: &GitRepositoryCandidate,
+        salt: &GitIdentitySalt,
+        deadline: std::time::Instant,
+    ) -> Result<(RepositoryInfo, GitRepositoryFrontier), GitBackendError> {
+        let repository = self.limited_to(deadline)?.repository_info(candidate)?;
+        let repository_id = derive_repository_id(salt, &repository.normalized_common_dir)
+            .map_err(|_| GitBackendError::new(GitBackendErrorCode::RepositoryPathRejected))?;
+        let (author_fingerprint, author_source) =
+            self.limited_to(deadline)?.author(candidate, salt)?;
+        let mut refs = self.limited_to(deadline)?.refs(candidate)?;
+        refs.sort_unstable_by(|left, right| left.name().cmp(right.name()));
+        let mailmap_fingerprint = fingerprint_mailmap(&repository.worktree_root, salt)?;
+        let ref_fingerprint = derive_ref_fingerprint(salt, &refs).map_err(|error| match error {
+            crate::GitCoreError::CapacityExceeded { limit } => {
+                GitBackendError::with_limit(GitBackendErrorCode::TooManyRefs, limit)
+            }
+            _ => GitBackendError::new(GitBackendErrorCode::ProtocolError),
+        })?;
+        let frontier = GitRepositoryFrontier {
             repository_id,
             ref_fingerprint,
             mailmap_fingerprint,
@@ -215,8 +400,68 @@ impl GitProcess {
             object_format: repository.object_format,
             shallow: repository.shallow,
             refs,
-            summary,
-        })
+        };
+        Ok((repository, frontier))
+    }
+
+    fn scan_history(
+        &self,
+        candidate: &GitRepositoryCandidate,
+        salt: GitIdentitySalt,
+        frontier: &GitRepositoryFrontier,
+        args: &[&str],
+        deadline: std::time::Instant,
+    ) -> Result<GitScanSummary, GitBackendError> {
+        let summary = if frontier.refs.is_empty() {
+            crate::GitScanAccumulator::new()
+                .finish()
+                .map_err(|_| GitBackendError::new(GitBackendErrorCode::ProtocolError))?
+        } else {
+            let config = GitLogParseConfig::new(
+                salt,
+                vec![frontier.author_fingerprint],
+                GitStreamLimits::default(),
+            )
+            .map_err(|_| GitBackendError::new(GitBackendErrorCode::ProtocolError))?;
+            self.limited_to(deadline)?
+                .scan_log(args, candidate.path(), config)?
+        };
+        Ok(summary)
+    }
+
+    fn is_append_only(
+        &self,
+        candidate: &GitRepositoryCandidate,
+        previous: &GitRepositoryFrontier,
+        current: &GitRepositoryFrontier,
+        deadline: std::time::Instant,
+    ) -> Result<bool, GitBackendError> {
+        for old in &previous.refs {
+            let Some(new) = current.refs.iter().find(|value| value.name() == old.name()) else {
+                return Ok(false);
+            };
+            if old.object_id() == new.object_id() {
+                continue;
+            }
+            let old = std::str::from_utf8(old.object_id())
+                .map_err(|_| GitBackendError::new(GitBackendErrorCode::ProtocolError))?;
+            let new = std::str::from_utf8(new.object_id())
+                .map_err(|_| GitBackendError::new(GitBackendErrorCode::ProtocolError))?;
+            let mut args = MERGE_BASE_PREFIX_ARGS.to_vec();
+            args.extend([old, new]);
+            let output = self.limited_to(deadline)?.capture_status(
+                &args,
+                Some(candidate.path()),
+                0,
+                crate::MAX_GIT_STDERR_BYTES,
+            )?;
+            match output.status.code() {
+                Some(0) => {}
+                Some(1) => return Ok(false),
+                _ => return Err(GitBackendError::new(GitBackendErrorCode::ProcessFailed)),
+            }
+        }
+        Ok(true)
     }
 
     fn repository_info(
@@ -343,6 +588,34 @@ impl GitProcess {
         }
         Ok(refs)
     }
+}
+
+fn incremental_log_args(
+    previous: &GitRepositoryFrontier,
+) -> Result<Option<Vec<&str>>, GitBackendError> {
+    let mut object_ids = previous
+        .refs
+        .iter()
+        .map(|reference| {
+            std::str::from_utf8(reference.object_id())
+                .map_err(|_| GitBackendError::new(GitBackendErrorCode::ProtocolError))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    object_ids.sort_unstable();
+    object_ids.dedup();
+    let argument_bytes = LOG_ARGS
+        .iter()
+        .map(|value| value.len())
+        .chain(object_ids.iter().map(|value| value.len()))
+        .try_fold(0_usize, usize::checked_add);
+    if argument_bytes.is_none_or(|value| value > MAX_INCREMENTAL_ARGUMENT_BYTES) {
+        return Ok(None);
+    }
+    let mut args = Vec::with_capacity(LOG_ARGS.len().saturating_add(object_ids.len() + 1));
+    args.extend_from_slice(LOG_ARGS);
+    args.push("--not");
+    args.extend(object_ids);
+    Ok(Some(args))
 }
 
 #[derive(Eq, PartialEq)]

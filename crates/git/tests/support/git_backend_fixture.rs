@@ -38,6 +38,7 @@ fn run() -> io::Result<()> {
         "missing_author" => missing_author(&args),
         "author_error" => author_error(&args),
         "history_change" => history_change(&executable, &args),
+        "incremental" => incremental_scan(&executable, &args),
         "slow_scan" => {
             std::thread::sleep(Duration::from_millis(35));
             stable_scan(&args)
@@ -163,6 +164,74 @@ fn stable_scan(args: &[String]) -> io::Result<()> {
         output.push(0x1e);
         output.extend_from_slice(OID.as_bytes());
         output.extend_from_slice(b"\x001728000001\0user@example.com\0user@example.com\0\0");
+        return io::stdout().write_all(&output);
+    }
+    std::process::exit(2);
+}
+
+fn incremental_scan(executable: &Path, args: &[String]) -> io::Result<()> {
+    const OID_A: &str = "1111111111111111111111111111111111111111";
+    const OID_B: &str = "2222222222222222222222222222222222222222";
+    const OID_C: &str = "3333333333333333333333333333333333333333";
+    let directory = executable
+        .parent()
+        .ok_or_else(|| io::Error::other("missing executable parent"))?;
+    let phase = std::fs::read_to_string(directory.join("phase.txt"))
+        .unwrap_or_else(|_| String::from("initial"));
+    let head = match phase.trim() {
+        "initial" => OID_A,
+        "append" => OID_B,
+        "rewrite" => OID_C,
+        _ => return Err(io::Error::other("invalid incremental phase")),
+    };
+    if args == ["--version"] {
+        return io::stdout().write_all(b"git version 2.54.0\n");
+    }
+    if args.iter().any(|arg| arg == "rev-parse") {
+        let worktree = env::current_dir()?;
+        let common_dir = worktree.join(".git");
+        writeln!(
+            io::stdout(),
+            "{}\nfalse\nsha1\n{}",
+            common_dir.to_string_lossy(),
+            worktree.to_string_lossy()
+        )?;
+        return Ok(());
+    }
+    if args.iter().any(|arg| arg == "config") {
+        return io::stdout().write_all(b"user@example.com\n");
+    }
+    if args.iter().any(|arg| arg == "for-each-ref") {
+        return writeln!(io::stdout(), "refs/heads/main\0{head}");
+    }
+    if args.iter().any(|arg| arg == "merge-base") {
+        if phase.trim() == "append" && args.iter().any(|arg| arg == OID_A) {
+            return Ok(());
+        }
+        std::process::exit(1);
+    }
+    if args.iter().any(|arg| arg == "log") {
+        let incremental = args.iter().any(|arg| arg == "--not");
+        let commits = if incremental {
+            vec![OID_B]
+        } else {
+            match phase.trim() {
+                "initial" => vec![OID_A],
+                "append" => vec![OID_B, OID_A],
+                "rewrite" => vec![OID_C],
+                _ => return Err(io::Error::other("invalid incremental phase")),
+            }
+        };
+        let mut output = Vec::new();
+        for (index, oid) in commits.into_iter().enumerate() {
+            output.push(0x1e);
+            output.extend_from_slice(oid.as_bytes());
+            let timestamp = 1_728_000_001_u64 + u64::try_from(index).unwrap_or(0);
+            write!(
+                output,
+                "\0{timestamp}\0user@example.com\0user@example.com\0\0"
+            )?;
+        }
         return io::stdout().write_all(&output);
     }
     std::process::exit(2);

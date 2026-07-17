@@ -9,14 +9,15 @@ rust-version.workspace = true
 notify.workspace = true
 serde_json.workspace = true
 tokenmaster-codex = { path = "../codex" }
+tokenmaster-domain = { path = "../domain" }
 tokenmaster-engine = { path = "../engine" }
+tokenmaster-git = { path = "../git" }
 tokenmaster-provider = { path = "../provider" }
 tokenmaster-platform = { path = "../platform" }
 tokenmaster-store = { path = "../store" }
 
 [dev-dependencies]
 tempfile.workspace = true
-tokenmaster-domain = { path = "../domain" }
 
 [target.'cfg(windows)'.dev-dependencies]
 windows.workspace = true
@@ -29,4 +30,9 @@ harness = false
 [[test]]
 name = "reminder_runtime_resource_contract"
 path = "tests/reminder_runtime_resource_contract.rs"
+harness = false
+
+[[test]]
+name = "git_runtime_resource_contract"
+path = "tests/git_runtime_resource_contract.rs"
 harness = false
