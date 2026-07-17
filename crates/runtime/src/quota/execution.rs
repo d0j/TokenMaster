@@ -901,6 +901,7 @@ const fn store_publication_code(error: StoreErrorCode) -> CodexQuotaPublicationE
     match error {
         StoreErrorCode::CapacityExceeded => CodexQuotaPublicationErrorCode::CapacityExceeded,
         StoreErrorCode::DeadlineExceeded => CodexQuotaPublicationErrorCode::DeadlineExceeded,
+        StoreErrorCode::Cancelled => CodexQuotaPublicationErrorCode::Cancelled,
         StoreErrorCode::InvalidValue
         | StoreErrorCode::InvalidStoredValue
         | StoreErrorCode::AccountingVersionMismatch
@@ -911,9 +912,20 @@ const fn store_publication_code(error: StoreErrorCode) -> CodexQuotaPublicationE
         | StoreErrorCode::StaleRevision
         | StoreErrorCode::StaleScan
         | StoreErrorCode::PendingScan
-        | StoreErrorCode::PendingContinuation => CodexQuotaPublicationErrorCode::InvalidData,
-        StoreErrorCode::ScanInProgress => CodexQuotaPublicationErrorCode::Busy,
+        | StoreErrorCode::PendingContinuation
+        | StoreErrorCode::BackupHeaderCorrupt
+        | StoreErrorCode::BackupPageCorrupt
+        | StoreErrorCode::BackupIndexCorrupt
+        | StoreErrorCode::BackupForeignKeyCorrupt
+        | StoreErrorCode::BackupCountCorrupt
+        | StoreErrorCode::BackupGenerationCorrupt
+        | StoreErrorCode::BackupSemanticCorrupt => CodexQuotaPublicationErrorCode::InvalidData,
+        StoreErrorCode::ScanInProgress | StoreErrorCode::Busy => {
+            CodexQuotaPublicationErrorCode::Busy
+        }
         StoreErrorCode::Database
+        | StoreErrorCode::BackupIo
+        | StoreErrorCode::StaleBackupCandidate
         | StoreErrorCode::VersionMismatch
         | StoreErrorCode::SchemaTooNew
         | StoreErrorCode::SchemaMismatch

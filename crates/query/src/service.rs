@@ -822,13 +822,24 @@ pub(crate) fn map_store_error(error: StoreError) -> QueryError {
         StoreErrorCode::VersionMismatch => QueryErrorCode::VersionMismatch,
         StoreErrorCode::StaleRevision => QueryErrorCode::StaleSnapshot,
         StoreErrorCode::DeadlineExceeded => QueryErrorCode::DeadlineExceeded,
-        StoreErrorCode::Database => QueryErrorCode::Unavailable,
+        StoreErrorCode::Database
+        | StoreErrorCode::Cancelled
+        | StoreErrorCode::Busy
+        | StoreErrorCode::BackupIo
+        | StoreErrorCode::StaleBackupCandidate => QueryErrorCode::Unavailable,
         StoreErrorCode::SchemaTooNew
         | StoreErrorCode::SchemaMismatch
         | StoreErrorCode::PolicyMismatch
         | StoreErrorCode::InvalidStoredValue
         | StoreErrorCode::AccountingVersionMismatch
-        | StoreErrorCode::ArchiveModeMismatch => QueryErrorCode::CorruptArchive,
+        | StoreErrorCode::ArchiveModeMismatch
+        | StoreErrorCode::BackupHeaderCorrupt
+        | StoreErrorCode::BackupPageCorrupt
+        | StoreErrorCode::BackupIndexCorrupt
+        | StoreErrorCode::BackupForeignKeyCorrupt
+        | StoreErrorCode::BackupCountCorrupt
+        | StoreErrorCode::BackupGenerationCorrupt
+        | StoreErrorCode::BackupSemanticCorrupt => QueryErrorCode::CorruptArchive,
         StoreErrorCode::RebuildRequired => QueryErrorCode::Unavailable,
         StoreErrorCode::StaleCheckpoint
         | StoreErrorCode::IncompleteManifest

@@ -155,8 +155,11 @@ retention policy separately from the device-local route. It rejects unknown/newe
 invalid/unbounded input, loads safe defaults without rewriting two invalid slots,
 previews only portable category/count changes, preserves device state on import, and
 binds a confirmed publication to a reread-verifiable generation plus portable digest.
-`tokenmaster-store` will create consistent Online Backup candidates and verify
-integrity, foreign keys, schema, and semantic invariants. Later state tasks will add
+Task 5 makes `tokenmaster-store` create consistent page-stepped Online Backup
+candidates and independently verify integrity, foreign keys, exact schema/indexes,
+stored counts/generations, and semantic invariants under bounded defensive SQLite
+policy. Verified candidates bind physical identity, length, and SHA-256 before and
+after every consumer; cleanup health and fixed-name recovery are bounded. Later state tasks will add
 typed run/recovery stores, fixed streaming `.tmconfig`/`.tmbackup`
 packages, bounded retention, and one capacity-one maintenance worker.
 `tokenmaster-platform` owns durable replacement and will later own sealed file dialogs.
@@ -165,8 +168,9 @@ lease, quarantine main/WAL/SHM, resume a redundant six-state restore journal bef
 SQLite open, commit the selected data-only or data-plus-portable-settings mode, and
 reconstruct one application bundle or safe mode. Automatic recovery remains data only.
 Product/Desktop receive bounded health and intents only. The contour is in progress;
-Tasks 1-4 now provide persistent typed settings only; they add no snapshot, package,
-maintenance runtime, restore, safe-mode, or release claim.
+Tasks 1-5 now provide persistent typed settings plus verified standalone SQLite
+candidates; they add no package, maintenance runtime, restore, safe-mode, or release
+claim.
 
 The built-in live quota source is separate from the JSONL usage reader. Composition
 supplies one already resolved absolute native Codex executable to

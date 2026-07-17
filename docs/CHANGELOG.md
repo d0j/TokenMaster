@@ -6,6 +6,21 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.0 Task 5 store-owned SQLite Online Backup primitives. Page-stepped
+  snapshots include committed WAL truth, use fixed create-new staging names, bound
+  busy retry/cancellation/deadline/output size, and never treat a copied live main
+  file as a backup.
+- Added defensive standalone candidate verification with exact bundled SQLite
+  identity, query-only/defensive/trusted-schema/DQS/cell-size/mmap/cache policy,
+  explicit SQLite value/SQL/column limits, integrity and foreign-key checks, exact
+  schema/index validation, stored count/generation checks, and application semantic
+  validation. Old supported versions are inspected without migration; newer versions
+  remain non-mutating typed failures.
+- Added verified `VACUUM INTO` compaction from isolated candidates, physical-file plus
+  length/SHA-256 binding before and after every consumer, stale-path rejection,
+  explicit discard, bounded cleanup health, and fixed-name abandoned-candidate
+  recovery. Five backup, ten adversarial, and one page-step barrier contract pass;
+  final independent review reports Critical 0, Important 0, Minor 0.
 - Implemented P3-D.0 Task 4 typed version-1 settings over the private redundant-record
   core. The exact schema persists only a canonical bounded in-app reminder default,
   validated automatic-backup enabled/quiet/interval/retention policy, and one device-

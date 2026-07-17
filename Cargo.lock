@@ -5452,11 +5452,13 @@ version = "0.1.0"
 dependencies = [
  "libsqlite3-sys",
  "rusqlite",
+ "sha2",
  "tempfile",
  "tokenmaster-accounting",
  "tokenmaster-benefits",
  "tokenmaster-domain",
  "tokenmaster-git",
+ "tokenmaster-platform",
  "tokenmaster-quota",
 ]
 

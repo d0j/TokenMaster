@@ -373,9 +373,18 @@ Independent high-risk review closed all three Important findings, the bounded-de
 Minor, and a whitespace-obfuscated audit bypass; the final review is `Ready: Yes`
 with no remaining finding.
 
-The immediate next slice is Task 5 verified SQLite snapshots and candidate
-verification. Then continue Tasks 6-18 in order: strict packages,
-optional manual encryption, bounded retention/maintenance, journaled recovery and startup
+Task 5 is complete. `tokenmaster-store` now creates page-stepped Online Backup
+candidates from the fixed live archive, includes committed WAL truth, applies bounded
+busy/cancel/deadline behavior, and verifies standalone candidates under defensive
+SQLite policy and explicit resource limits. Integrity, FK, exact schema/index,
+count/generation, and semantic failures remain separate. Verified candidates bind
+physical identity, length, and SHA-256 across verification and compaction; cleanup is
+observable and recoverable through one bounded fixed-name pass. Fifteen focused
+contracts, the complete store suite, query compatibility check, and independent
+review (Critical 0, Important 0, Minor 0, `Ready: Yes`) pass.
+
+The immediate next slice is Task 6 fixed `.tmconfig`/`.tmbackup` containers. Then
+continue Tasks 7-18 in order: optional manual encryption, bounded retention/maintenance, journaled recovery and startup
 integration, application restart/safe mode, Data & Recovery UI, then adversarial and
 resource closure. Keep the fixed archive path and writer sidecar; never copy only the
 live main file or treat busy/disk/access/schema-newer as corruption authority. Keep
@@ -388,11 +397,12 @@ notifications, settings/help, command palette, tray, and compact lifecycle. P3-D
 presentation, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.
-The current post-P3-D.0-Task-4 focused formatting, strict locked state Clippy, 10
-settings plus 13 record plus two authority contracts, 34/34 Pester mutations,
-workspace state authority, and diff-check gates pass. The final clean-root,
-formatting, strict locked workspace Clippy, and full locked workspace test/doctest
-baseline also passes in 427 seconds after project-truth synchronization. The
+The current post-P3-D.0-Task-5 focused evidence includes 5 backup contracts,
+10 adversarial backup contracts, the strict store Clippy gate, the complete locked
+store suite, query compatibility compilation, and final independent review. The final
+clean-root, formatting, strict locked workspace Clippy, and full locked workspace
+test/doctest baseline passes; the full test/doctest run completed in 470.7 seconds.
+The
 query resource binary uses
 an isolated `harness = false` process plus a bounded maximum-64-round warm-up that
 waits for two topology-stable eight-round retained floors before measurement and

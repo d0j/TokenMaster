@@ -627,6 +627,18 @@ envelope, SHA-256 digest, bounded category/count preview, and never carry device
 state. A committed target is the exact nonzero settings generation plus portable
 digest and can be independently reread-verified.
 
+The implemented Task 5 SQLite candidate is a temporary controlled file, not yet a
+`.tmbackup`. Online Backup copies at most 64 pages per step from the fixed live
+archive, retries at most eight consecutive busy/locked steps, and retains no page or
+row history in Rust. Verification uses fixed streaming buffers and applies 16 MiB
+SQLite value, 256 KiB SQL, and 256-column limits before reading untrusted schema.
+Schema enumeration retains at most the expected table count, names are capped at
+128 bytes, and schema SQL at 256 KiB. The accepted value carries only schema version,
+length, defensive-policy facts, physical-file identity, and SHA-256; it exposes no
+path or data content. Temporary snapshot/compact names are capped at 32 each. Cleanup
+health is one saturating counter, and recovery scans exactly those 64 names plus their
+fixed SQLite sidecars.
+
 `.tmconfig` and `.tmbackup` use one fixed typed container, not a general archive.
 Version 1 permits at most eight entries, a 64 KiB manifest, a 1 MiB settings payload,
 one database payload of at most 64 GiB, checked total expansion, one Zstandard frame

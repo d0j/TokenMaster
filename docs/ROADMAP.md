@@ -121,10 +121,9 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   11-route projection, P3-B.1 bounded controller core, P3-B.2 capacity-one Slint
   event delivery, P3-B.3 deterministic data-root/live composition, and P3-C responsive
   six-section quota-first Dashboard are complete. P3-D.0 Reliable State is in progress:
-  its library-only state/authority foundation and controlled durable file primitives
-  plus crate-private redundant bounded records are complete; typed settings are next,
-  followed by verified
-  import/export/backups,
+  its library-only state/authority foundation, controlled durable files, crate-private
+  redundant records, typed settings, and verified SQLite snapshot primitives are
+  complete; fixed package import/export is next, followed by
   bounded retention,
   staged recovery/quarantine, safe mode, and Data & Recovery controls. Full history,
   sessions, models, projects, activity, remaining health/notifications/settings/help,
@@ -162,8 +161,8 @@ health through lossy completion hints. P3-C is now complete: explicit all-curren
 quota/benefit overview reads feed one
 identity-free six-section projection and responsive compiled Slint Dashboard with
 32/32/240/12/8/12 presentation caps, real unknown/degraded states, and route-only
-navigation without model/window reconstruction. P3-D.0 Reliable State Tasks 1-4 are
-complete and Task 5 is next, then the remaining P3-D supporting data views.
+navigation without model/window reconstruction. P3-D.0 Reliable State Tasks 1-5 are
+complete and Task 6 is next, then the remaining P3-D supporting data views.
 
 P3-D.0 Reliable State is approved under
 `docs/superpowers/specs/2026-07-17-tokenmaster-reliable-state-design.md` with the
@@ -175,11 +174,11 @@ settings/run/recovery records, 15-point/2-GiB default retention, three-set quara
 six-state Windows replacement/rollback, automatic corruption-only data-only recovery,
 manual data-only or data-plus-portable-settings restore, safe mode, and off-UI resource
 gates. The contour is in progress and precedes the remaining P3-D views so Settings
-and future migrations do not ship before their durability contract. Tasks 1-4
+and future migrations do not ship before their durability contract. Tasks 1-5
 implement the library-only state boundary plus bounded verified platform publication
 and replacement, the strict six-child A/B envelope, and typed schema-v1 settings with
 portable/device-local separation, safe fallback/defaults, bounded preview, and an
-independently verifiable restore target. SQLite snapshots, packages, retention,
+independently verifiable restore target. Packages, retention,
 backup, and recovery remain pending.
 
 P2-A query foundation is approved under

@@ -617,7 +617,17 @@ zero; verification compares both generation and a freshly recomputed typed diges
 Package, catalog, retention, maintenance, bootstrap, and restore members remain future
 fixed APIs and are not claimed by Task 4.
 
-The SQLite-specific snapshot and candidate verifier remain store-owned fixed APIs.
+The implemented Task 5 store subset exposes only `BackupSource::new`,
+`BackupStaging::new`, `BackupControl::new`, `create_online_snapshot`,
+`inspect_archive_version`, `verify_backup_candidate`, and
+`create_compact_snapshot`, plus explicit candidate discard and fixed-name abandoned-
+candidate recovery. The source always names the implemented archive; staging chooses
+only fixed create-new children. A verified candidate is an owning capability bound to
+schema version, defensive runtime policy, physical file identity, exact length, and
+SHA-256. Every consumer revalidates that identity before and after use. None of these
+APIs accepts caller SQL, a filename, an output path, or a SQLite connection.
+
+The SQLite-specific snapshot and candidate verifier are store-owned fixed APIs.
 The platform package owns durable same-volume replacement and native file selection.
 Application composition alone may sequence runtime shutdown, writer-lease admission,
 restore, and bundle restart. Product/Desktop receive only bounded copied health,

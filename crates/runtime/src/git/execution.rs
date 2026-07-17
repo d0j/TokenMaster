@@ -641,18 +641,28 @@ fn map_store_error(error: &StoreError) -> GitPublicationErrorCode {
         | StoreErrorCode::StaleCheckpoint
         | StoreErrorCode::StaleScan
         | StoreErrorCode::PendingScan
-        | StoreErrorCode::PendingContinuation => GitPublicationErrorCode::Stale,
+        | StoreErrorCode::PendingContinuation
+        | StoreErrorCode::StaleBackupCandidate => GitPublicationErrorCode::Stale,
         StoreErrorCode::CapacityExceeded => GitPublicationErrorCode::CapacityExceeded,
-        StoreErrorCode::ScanInProgress => GitPublicationErrorCode::Busy,
+        StoreErrorCode::ScanInProgress | StoreErrorCode::Busy => GitPublicationErrorCode::Busy,
         StoreErrorCode::InvalidValue
         | StoreErrorCode::InvalidStoredValue
         | StoreErrorCode::AccountingVersionMismatch
         | StoreErrorCode::IncompleteManifest
         | StoreErrorCode::UnsealedRevision
-        | StoreErrorCode::ArchiveModeMismatch => GitPublicationErrorCode::InvalidData,
+        | StoreErrorCode::ArchiveModeMismatch
+        | StoreErrorCode::BackupHeaderCorrupt
+        | StoreErrorCode::BackupPageCorrupt
+        | StoreErrorCode::BackupIndexCorrupt
+        | StoreErrorCode::BackupForeignKeyCorrupt
+        | StoreErrorCode::BackupCountCorrupt
+        | StoreErrorCode::BackupGenerationCorrupt
+        | StoreErrorCode::BackupSemanticCorrupt => GitPublicationErrorCode::InvalidData,
         StoreErrorCode::DeadlineExceeded
+        | StoreErrorCode::Cancelled
         | StoreErrorCode::RebuildRequired
         | StoreErrorCode::Database
+        | StoreErrorCode::BackupIo
         | StoreErrorCode::VersionMismatch
         | StoreErrorCode::SchemaTooNew
         | StoreErrorCode::SchemaMismatch

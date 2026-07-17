@@ -44,6 +44,9 @@ use super::{
     MAX_QUOTA_EPOCHS_PER_WINDOW, MAX_QUOTA_SAMPLES_PER_WINDOW, MAX_QUOTA_TRANSITIONS_PER_WINDOW,
 };
 
+const MAX_SCHEMA_NAME_BYTES: usize = 128;
+const MAX_SCHEMA_SQL_BYTES: usize = 256 * 1024;
+
 pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreError> {
     let version = pragma_i64(connection, "PRAGMA user_version")?;
     if version > USAGE_SCHEMA_VERSION {
@@ -159,15 +162,7 @@ fn create_fresh_v4(connection: &Connection) -> Result<(), StoreError> {
 }
 
 fn migrate_v1(connection: &Connection) -> Result<(), StoreError> {
-    validate_schema(
-        connection,
-        &USAGE_TABLE_CONTRACTS[..V1_TABLE_COUNT],
-        V1_INDEX_CONTRACTS,
-        &[],
-        &[V1_SCHEMA],
-        &[PRE_V4_USAGE_EVENT_CONTRACT],
-        SchemaExtensions::EMPTY,
-    )?;
+    validate_v1(connection)?;
     connection.execute_batch(REPLAY_AUX_SCHEMA)?;
     connection.execute_batch(V3_REPLAY_REVISION_SCHEMA)?;
     connection.execute_batch(REPLAY_CHILD_SCHEMA)?;
@@ -186,6 +181,18 @@ fn migrate_v1(connection: &Connection) -> Result<(), StoreError> {
     migrate_usage_event_v4(connection, MigrationFault::None)?;
     connection.pragma_update(None, "user_version", V4_SCHEMA_VERSION)?;
     validate_v4(connection)
+}
+
+fn validate_v1(connection: &Connection) -> Result<(), StoreError> {
+    validate_schema(
+        connection,
+        &USAGE_TABLE_CONTRACTS[..V1_TABLE_COUNT],
+        V1_INDEX_CONTRACTS,
+        &[],
+        &[V1_SCHEMA],
+        &[PRE_V4_USAGE_EVENT_CONTRACT],
+        SchemaExtensions::EMPTY,
+    )
 }
 
 fn validate_v2(connection: &Connection) -> Result<(), StoreError> {
@@ -425,14 +432,77 @@ pub(super) fn validate_v12(connection: &Connection) -> Result<(), StoreError> {
 }
 
 pub(super) fn validate_v13(connection: &Connection) -> Result<(), StoreError> {
-    validate_extended_schema(connection, true, true, true, true)?;
+    validate_current_schema_only(connection)?;
+    validate_current_semantics(connection)
+}
+
+pub(crate) fn validate_archive_version(
+    connection: &Connection,
+    version: i64,
+) -> Result<(), StoreError> {
+    match version {
+        V1_SCHEMA_VERSION => validate_v1(connection),
+        V2_SCHEMA_VERSION => validate_v2(connection),
+        V3_SCHEMA_VERSION => validate_v3(connection),
+        V4_SCHEMA_VERSION => validate_v4(connection),
+        V5_SCHEMA_VERSION => validate_v5(connection),
+        V6_SCHEMA_VERSION => validate_v6(connection),
+        V7_SCHEMA_VERSION => validate_v7(connection),
+        V8_SCHEMA_VERSION => validate_v8(connection),
+        V9_SCHEMA_VERSION => validate_v9(connection),
+        V10_SCHEMA_VERSION => validate_v10(connection),
+        V11_SCHEMA_VERSION => validate_v11(connection),
+        V12_SCHEMA_VERSION => validate_v12(connection),
+        USAGE_SCHEMA_VERSION => validate_v13(connection),
+        _ if version > USAGE_SCHEMA_VERSION => Err(StoreError::new(StoreErrorCode::SchemaTooNew)),
+        _ => Err(StoreError::new(StoreErrorCode::SchemaMismatch)),
+    }
+}
+
+pub(crate) fn validate_current_schema_only(connection: &Connection) -> Result<(), StoreError> {
+    validate_extended_schema_only(connection, true, true, true, true)
+}
+
+pub(crate) fn validate_current_semantics(connection: &Connection) -> Result<(), StoreError> {
+    validate_legacy_snapshot(connection)?;
+    validate_archive_publication(connection)?;
+    validate_aggregate_state(connection, 2)?;
     validate_quota_state(connection)?;
     validate_benefit_state(connection)?;
     validate_benefit_ack_state(connection)?;
     validate_git_state(connection)
 }
 
+pub(crate) fn validate_current_indexes(connection: &Connection) -> Result<(), StoreError> {
+    let mut indexes = V5_INDEX_CONTRACTS.to_vec();
+    indexes.extend_from_slice(V8_INDEX_CONTRACTS);
+    indexes.extend_from_slice(V9_INDEX_CONTRACTS);
+    indexes.extend_from_slice(V10_QUOTA_INDEX_CONTRACTS);
+    indexes.extend_from_slice(V11_BENEFIT_INDEX_CONTRACTS);
+    indexes.extend_from_slice(V13_GIT_INDEX_CONTRACTS);
+    validate_named_sql(connection, "index", USAGE_INDEX_CONTRACTS, &indexes)
+}
+
 fn validate_extended_schema(
+    connection: &Connection,
+    include_quota: bool,
+    include_benefit: bool,
+    include_benefit_ack: bool,
+    include_git: bool,
+) -> Result<(), StoreError> {
+    validate_extended_schema_only(
+        connection,
+        include_quota,
+        include_benefit,
+        include_benefit_ack,
+        include_git,
+    )?;
+    validate_legacy_snapshot(connection)?;
+    validate_archive_publication(connection)?;
+    validate_aggregate_state(connection, 2)
+}
+
+fn validate_extended_schema_only(
     connection: &Connection,
     include_quota: bool,
     include_benefit: bool,
@@ -598,10 +668,7 @@ fn validate_extended_schema(
             tables: &extension_tables,
             indexes: &indexes,
         },
-    )?;
-    validate_legacy_snapshot(connection)?;
-    validate_archive_publication(connection)?;
-    validate_aggregate_state(connection, 2)
+    )
 }
 
 fn validate_git_state(connection: &Connection) -> Result<(), StoreError> {
@@ -2164,32 +2231,40 @@ fn validate_schema(
     column_overrides: &[TableContract],
     extensions: SchemaExtensions<'_>,
 ) -> Result<(), StoreError> {
-    let mut table_list = connection.prepare("PRAGMA table_list")?;
-    let rows = table_list.query_map([], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, String>(2)?,
-            row.get::<_, i64>(5)?,
-        ))
-    })?;
-    let mut actual_tables = Vec::new();
-    for row in rows {
-        let (schema, name, kind, strict) = row?;
-        if schema == "main" && kind == "table" && !name.starts_with("sqlite_") {
-            if strict != 1 {
-                return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
-            }
-            actual_tables.push(name);
-        }
-    }
-    actual_tables.sort_unstable();
     let mut expected_tables = table_contracts
         .iter()
         .chain(extensions.tables)
         .map(|contract| contract.name)
         .collect::<Vec<_>>();
     expected_tables.sort_unstable();
+    let mut table_list = connection.prepare("PRAGMA table_list")?;
+    let mut rows = table_list.query([])?;
+    let mut actual_tables = Vec::with_capacity(expected_tables.len());
+    while let Some(row) = rows.next()? {
+        let schema = row
+            .get_ref(0)?
+            .as_str()
+            .map_err(|_| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+        let name = row
+            .get_ref(1)?
+            .as_str()
+            .map_err(|_| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+        let kind = row
+            .get_ref(2)?
+            .as_str()
+            .map_err(|_| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+        let strict = row.get::<_, i64>(5)?;
+        if schema == "main" && kind == "table" && !name.starts_with("sqlite_") {
+            if strict != 1
+                || name.len() > MAX_SCHEMA_NAME_BYTES
+                || actual_tables.len() >= expected_tables.len()
+            {
+                return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
+            }
+            actual_tables.push(name.to_owned());
+        }
+    }
+    actual_tables.sort_unstable();
     if actual_tables != expected_tables {
         return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
     }
@@ -2204,14 +2279,21 @@ fn validate_schema(
         if statement.column_names().as_slice() != column_contract.columns {
             return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
         }
-        let actual_sql: String = connection.query_row(
-            "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ?1",
-            [contract.name],
-            |row| row.get(0),
-        )?;
         let expected_sql = expected_table_sql(table_schema_sources, contract.name)
             .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
-        if !normalized_schema_sql_equal(&actual_sql, expected_sql) {
+        let mut schema_statement = connection
+            .prepare("SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ?1")?;
+        let mut schema_rows = schema_statement.query([contract.name])?;
+        let Some(schema_row) = schema_rows.next()? else {
+            return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
+        };
+        let actual_sql = schema_row
+            .get_ref(0)?
+            .as_str()
+            .map_err(|_| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+        if actual_sql.len() > MAX_SCHEMA_SQL_BYTES
+            || !normalized_schema_sql_equal(actual_sql, expected_sql)
+        {
             return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
         }
     }
@@ -2239,22 +2321,30 @@ fn validate_named_sql(
          WHERE type = ?1 AND name NOT LIKE 'sqlite_%'
          ORDER BY name",
     )?;
-    let rows = statement.query_map([kind], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-    })?;
+    let mut rows = statement.query([kind])?;
     let mut expected = contracts.iter().chain(extra_contracts).collect::<Vec<_>>();
     expected.sort_unstable_by_key(|contract| contract.name);
-    let mut actual = rows;
     for expected in expected {
-        let Some(row) = actual.next() else {
+        let Some(row) = rows.next()? else {
             return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
         };
-        let (actual_name, actual_sql) = row?;
-        if actual_name != expected.name || !normalized_schema_sql_equal(&actual_sql, expected.sql) {
+        let actual_name = row
+            .get_ref(0)?
+            .as_str()
+            .map_err(|_| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+        let actual_sql = row
+            .get_ref(1)?
+            .as_str()
+            .map_err(|_| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+        if actual_name.len() > MAX_SCHEMA_NAME_BYTES
+            || actual_sql.len() > MAX_SCHEMA_SQL_BYTES
+            || actual_name != expected.name
+            || !normalized_schema_sql_equal(actual_sql, expected.sql)
+        {
             return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
         }
     }
-    if actual.next().transpose()?.is_some() {
+    if rows.next()?.is_some() {
         return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
     }
     Ok(())
@@ -2269,20 +2359,28 @@ fn validate_triggers(
          WHERE type = 'trigger' AND name NOT LIKE 'sqlite_%'
          ORDER BY name",
     )?;
-    let rows = statement.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-    })?;
-    let mut actual = rows;
+    let mut rows = statement.query([])?;
     for expected in contracts {
-        let Some(row) = actual.next() else {
+        let Some(row) = rows.next()? else {
             return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
         };
-        let (actual_name, actual_sql) = row?;
-        if actual_name != expected.name || !normalized_schema_sql_equal(&actual_sql, expected.sql) {
+        let actual_name = row
+            .get_ref(0)?
+            .as_str()
+            .map_err(|_| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+        let actual_sql = row
+            .get_ref(1)?
+            .as_str()
+            .map_err(|_| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+        if actual_name.len() > MAX_SCHEMA_NAME_BYTES
+            || actual_sql.len() > MAX_SCHEMA_SQL_BYTES
+            || actual_name != expected.name
+            || !normalized_schema_sql_equal(actual_sql, expected.sql)
+        {
             return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
         }
     }
-    if actual.next().transpose()?.is_some() {
+    if rows.next()?.is_some() {
         return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
     }
     Ok(())

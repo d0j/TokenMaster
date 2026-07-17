@@ -946,6 +946,7 @@ fn read_store_is_query_only_bounded_and_does_not_modify_archive() {
     assert!(!policy.trusted_schema());
     assert!(policy.defensive());
     assert!(policy.no_checkpoint_on_close());
+    assert!(policy.cell_size_check());
     assert_eq!(policy.journal_mode(), JournalMode::Wal);
     assert_eq!(policy.busy_timeout_ms(), 250);
     assert_eq!(policy.cache_size_kib(), 4 * 1024);

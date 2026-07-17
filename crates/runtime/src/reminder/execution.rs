@@ -491,7 +491,11 @@ const fn map_store_failure(code: StoreErrorCode) -> BenefitReminderFailure {
     match code {
         StoreErrorCode::CapacityExceeded => BenefitReminderFailure::CapacityExceeded,
         StoreErrorCode::DeadlineExceeded => BenefitReminderFailure::DeadlineExceeded,
+        StoreErrorCode::Cancelled => BenefitReminderFailure::Cancelled,
+        StoreErrorCode::Busy => BenefitReminderFailure::Busy,
         StoreErrorCode::Database
+        | StoreErrorCode::BackupIo
+        | StoreErrorCode::StaleBackupCandidate
         | StoreErrorCode::VersionMismatch
         | StoreErrorCode::SchemaTooNew
         | StoreErrorCode::SchemaMismatch
@@ -508,6 +512,13 @@ const fn map_store_failure(code: StoreErrorCode) -> BenefitReminderFailure {
         | StoreErrorCode::StaleScan
         | StoreErrorCode::PendingScan
         | StoreErrorCode::PendingContinuation
-        | StoreErrorCode::ScanInProgress => BenefitReminderFailure::InvalidData,
+        | StoreErrorCode::ScanInProgress
+        | StoreErrorCode::BackupHeaderCorrupt
+        | StoreErrorCode::BackupPageCorrupt
+        | StoreErrorCode::BackupIndexCorrupt
+        | StoreErrorCode::BackupForeignKeyCorrupt
+        | StoreErrorCode::BackupCountCorrupt
+        | StoreErrorCode::BackupGenerationCorrupt
+        | StoreErrorCode::BackupSemanticCorrupt => BenefitReminderFailure::InvalidData,
     }
 }

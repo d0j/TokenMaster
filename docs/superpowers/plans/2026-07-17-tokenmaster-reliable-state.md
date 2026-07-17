@@ -279,7 +279,7 @@ cargo +1.97.0 test -p tokenmaster-state --test settings_contract --locked
 
 ---
 
-## Task 5 — Add SQLite snapshot and candidate verification primitives
+## Task 5 — Add SQLite snapshot and candidate verification primitives (complete)
 
 **Files:**
 
@@ -316,7 +316,9 @@ Add tests proving:
 
 ### Green
 
-1. Enable only the pinned `rusqlite` `backup` feature in addition to current features.
+1. Enable the pinned `rusqlite` `backup` and compile-only `limits` features in
+   addition to current features; the latter closes untrusted candidate allocation
+   bounds identified by independent review.
 2. Add `create_online_snapshot`, `create_compact_snapshot`, `inspect_archive_version`,
    and `verify_backup_candidate` fixed APIs. Accept sealed controlled files rather than
    arbitrary SQL or output names.

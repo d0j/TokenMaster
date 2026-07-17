@@ -9,11 +9,18 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
+mod backup;
 mod error;
 mod schema;
 mod session_store;
 mod usage;
 
+pub use backup::{
+    ArchiveVersionInspection, ArchiveVersionStatus, BackupCandidate, BackupControl,
+    BackupRuntimePolicy, BackupSource, BackupStaging, VerifiedBackupCandidate,
+    create_compact_snapshot, create_online_snapshot, inspect_archive_version,
+    verify_backup_candidate,
+};
 pub use error::{StoreError, StoreErrorCode};
 pub use session_store::{EXPECTED_SQLITE_VERSION, MAX_PAGE_SIZE, MAX_SEED_SESSIONS, ProbeStore};
 pub use usage::{

@@ -71,9 +71,12 @@ const fn store_port_error_code(code: StoreErrorCode) -> PortErrorCode {
         | StoreErrorCode::StaleRevision
         | StoreErrorCode::StaleScan
         | StoreErrorCode::PendingScan
-        | StoreErrorCode::PendingContinuation => PortErrorCode::StaleState,
-        StoreErrorCode::ScanInProgress => PortErrorCode::Busy,
+        | StoreErrorCode::PendingContinuation
+        | StoreErrorCode::StaleBackupCandidate => PortErrorCode::StaleState,
+        StoreErrorCode::ScanInProgress | StoreErrorCode::Busy => PortErrorCode::Busy,
+        StoreErrorCode::Cancelled => PortErrorCode::Cancelled,
         StoreErrorCode::Database
+        | StoreErrorCode::BackupIo
         | StoreErrorCode::VersionMismatch
         | StoreErrorCode::SchemaTooNew
         | StoreErrorCode::SchemaMismatch
@@ -83,7 +86,14 @@ const fn store_port_error_code(code: StoreErrorCode) -> PortErrorCode {
         | StoreErrorCode::AccountingVersionMismatch
         | StoreErrorCode::IncompleteManifest
         | StoreErrorCode::UnsealedRevision
-        | StoreErrorCode::ArchiveModeMismatch => PortErrorCode::InvalidData,
+        | StoreErrorCode::ArchiveModeMismatch
+        | StoreErrorCode::BackupHeaderCorrupt
+        | StoreErrorCode::BackupPageCorrupt
+        | StoreErrorCode::BackupIndexCorrupt
+        | StoreErrorCode::BackupForeignKeyCorrupt
+        | StoreErrorCode::BackupCountCorrupt
+        | StoreErrorCode::BackupGenerationCorrupt
+        | StoreErrorCode::BackupSemanticCorrupt => PortErrorCode::InvalidData,
     }
 }
 

@@ -854,6 +854,26 @@ reports no Critical, Important, or Minor issue and `Ready: Yes`. The fixed `.tmc
 container remains Task 6; Task 4 consumes only
 its future already bounded portable-settings entry.
 
+Task 5 now adds store-owned SQLite Online Backup and verified candidate capabilities.
+The live main file is never copied as a backup: page-stepped snapshots include
+committed WAL truth, bound busy retry, cancellation, deadline, output size, and fixed
+staging names. Verification opens a standalone candidate under defensive/query-only
+policy, zero mmap, a 4 MiB cache, `cell_size_check`, exact bundled SQLite identity,
+and explicit SQLite value/SQL/column limits. Integrity, foreign keys, exact schema,
+indexes, counts, generations, and application semantics are independent gates.
+Supported old schemas are inspected without migration; newer schemas are classified
+without mutation. Compact output is created only with `VACUUM INTO` from an isolated
+verified snapshot and is reverified before acceptance.
+
+A verified candidate is bound to physical file identity, length, and streaming
+SHA-256 before and after verification and every compaction consumer. Path replacement
+therefore fails as `StaleBackupCandidate`. Candidate cleanup has explicit discard,
+one bounded failure counter, and a fixed 64-name abandoned-candidate recovery pass;
+errors and Debug remain path/SQLite-text private. Fifteen backup contracts plus one
+barrier test prove a writer commit strictly between Online Backup page steps. Final
+independent high-risk review reports Critical 0, Important 0, Minor 0 and
+`Ready: Yes`.
+
 Remaining ownership is: store for SQLite Online Backup and candidate verification,
 platform for durable same-volume replacement and sealed file selection, state for
 settings/packages/retention/recovery, and app for runtime shutdown/restart and safe
@@ -871,17 +891,17 @@ transient-I/O, unsupported-location, and schema-too-new results preserve current
 truth. No valid backup leads to explicit quarantine and authoritative-source rebuild,
 never fabricated zero or automatic corrupt-row salvage.
 
-Only Tasks 1-4 are implemented. No SQLite snapshot, backup package, retention worker,
-restore, safe mode, Data & Recovery UI, encryption, or new acceptance evidence exists
-yet. Task 5 verified SQLite snapshot/candidate primitives are the immediate next slice.
+Only Tasks 1-5 are implemented. No backup/config package, retention worker, restore,
+safe mode, Data & Recovery UI, encryption, or new acceptance evidence exists yet.
+Task 6 fixed `.tmconfig`/`.tmbackup` containers are the immediate next slice.
 
 ## Next implementation slice
 
-Execute P3-D.0 Task 5 from
-`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: add store-owned
-SQLite Online Backup snapshots, cancellation/deadline/busy bounds, defensive candidate
-open, exact schema plus integrity/foreign-key/application semantic verification, and
-typed path-private failure categories without copying the live main file.
+Execute P3-D.0 Task 6 from
+`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: build the fixed
+streaming `.tmconfig`/`.tmbackup` container over the already verified settings and
+SQLite candidates, with exact typed entries, bounded manifest/payload/window sizes,
+whole-package hashing, incomplete-output rejection, and no arbitrary extraction.
 
 P2-D quota history core is complete under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: Tasks 1-8 cover
@@ -898,7 +918,7 @@ immutable read snapshots, and publication through the existing Codex runtime wit
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
 workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, P3-B.2, P3-B.3, and P3-C are
-complete; P3-D.0 Reliable State is active with Tasks 1-4 complete and Task 5 next, followed
+complete; P3-D.0 Reliable State is active with Tasks 1-5 complete and Task 6 next, followed
 by the remaining P3-D supporting data-bearing routes. Activation
 remains a later independently authorized capability. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.

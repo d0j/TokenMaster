@@ -1161,6 +1161,14 @@ five-minute quiet or six-hour interval gates. Portable preview/commit is base-
 generation/digest bound, preserves device state, and returns a reconstructible target
 for idempotent journal resume. Generic records and directory paths remain private.
 
+The implemented snapshot layer uses 64-page Online Backup steps, bounded busy retry,
+cooperative cancellation/deadline checks, fixed staging children, and a defensive
+standalone verifier with explicit SQLite allocation limits. Accepted candidates bind
+physical identity, length, and SHA-256 across verification and compaction. Cleanup
+failure is observable and a later single-owner recovery pass scans only the fixed
+candidate namespace. These constraints were added by independent high-risk review;
+they do not change the fixed live archive identity or grant package/restore authority.
+
 Restore stops every archive owner, holds the stable writer lease, journals each idempotent
 phase, quarantines WAL/SHM, atomically replaces the main file while preserving the old
 main, reverifies the new active database, and reconstructs one application bundle.

@@ -8,11 +8,13 @@ rust-version.workspace = true
 [dependencies]
 libsqlite3-sys.workspace = true
 rusqlite.workspace = true
+sha2.workspace = true
 tokenmaster-accounting = { path = "../accounting" }
 tokenmaster-benefits = { path = "../benefits" }
 tokenmaster-domain = { path = "../domain" }
 tokenmaster-git = { path = "../git" }
 tokenmaster-quota = { path = "../quota" }
+tokenmaster-platform = { path = "../platform" }
 
 [dev-dependencies]
 tempfile.workspace = true

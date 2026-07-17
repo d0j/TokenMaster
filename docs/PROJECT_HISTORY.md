@@ -2468,3 +2468,42 @@ SQLite snapshots, fixed `.tmconfig`/`.tmbackup` packages, encryption, catalog/
 retention, recovery journal, safe mode, UI integration, M0 acceptance, packaging,
 signing, and release remain unimplemented. Task 5 verified SQLite snapshots and
 candidates is next.
+
+## 2026-07-18 — P3-D.0 Task 5 verified SQLite snapshots
+
+Added the store-owned fixed-capability snapshot boundary. `BackupSource` resolves only
+the implemented `tokenmaster.sqlite3`; `BackupStaging` allocates only 32 exact
+create-new snapshot or compact names. SQLite Online Backup copies 64 pages per step,
+includes committed WAL truth, bounds busy/locked retry, and honors cooperative
+cancellation and deadlines. Invalid source headers and non-transient failures stop
+without publishing a candidate. A deterministic barrier test pauses after an actual
+`StepResult::More`, commits a writer transaction, and releases the next backup step.
+
+Candidate verification is standalone and non-mutating. It applies defensive and
+query-only policy, trusted schema and both DQS modes off, `cell_size_check` on, zero
+mmap, fixed cache/busy policy, exact bundled SQLite 3.53.2 identity, and explicit
+16 MiB value, 256 KiB SQL, and 256-column limits. Progress handling bounds integrity,
+foreign-key, exact schema/index, stored count/generation, and semantic validation.
+Schema enumeration retains at most the expected table count and compares borrowed,
+bounded names/SQL. Supported old schemas are inspected without migration and newer
+schemas remain typed and untouched. `VACUUM INTO` accepts only an isolated verified
+snapshot, clears its progress handler, and re-verifies a smaller/equal result.
+
+Verification now binds physical file identity, length, and streaming SHA-256 before
+and after proof and every compaction consumer, so path replacement fails as
+`StaleBackupCandidate`. Busy, I/O, cancellation, deadline, corruption, and semantic
+categories are not collapsed. Candidate `discard` reports cleanup failure; Drop
+records a bounded health counter; an explicit recovery pass scans only 64 fixed names
+and resets health only after complete success. Store/query compatibility, five backup
+contracts, ten adversarial contracts, the page-step barrier, strict store Clippy, and
+the complete store suite pass. Independent high-risk review iterated to `Ready: Yes`
+with Critical 0, Important 0, Minor 0.
+
+The repository baseline then passed `TM-CLEAN-PASS`, formatting, strict locked
+warnings-as-errors workspace Clippy, and the complete locked workspace test/doctest
+suite in 470.7 seconds.
+
+This closes Task 5 only. Fixed `.tmconfig`/`.tmbackup` containers, encryption,
+catalog/retention, maintenance runtime, recovery journal, safe mode, UI integration,
+M0 acceptance, packaging, signing, and release remain unimplemented. Task 6 fixed
+bounded package containers is next.

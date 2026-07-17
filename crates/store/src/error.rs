@@ -22,6 +22,17 @@ pub enum StoreErrorCode {
     PendingScan,
     ArchiveModeMismatch,
     DeadlineExceeded,
+    Cancelled,
+    Busy,
+    BackupIo,
+    StaleBackupCandidate,
+    BackupHeaderCorrupt,
+    BackupPageCorrupt,
+    BackupIndexCorrupt,
+    BackupForeignKeyCorrupt,
+    BackupCountCorrupt,
+    BackupGenerationCorrupt,
+    BackupSemanticCorrupt,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -76,6 +87,17 @@ impl fmt::Display for StoreError {
             StoreErrorCode::PendingScan => "scan set still has running scopes",
             StoreErrorCode::ArchiveModeMismatch => "archive mode mismatched",
             StoreErrorCode::DeadlineExceeded => "query deadline exceeded",
+            StoreErrorCode::Cancelled => "store operation was cancelled",
+            StoreErrorCode::Busy => "database remained busy",
+            StoreErrorCode::BackupIo => "backup I/O operation failed",
+            StoreErrorCode::StaleBackupCandidate => "verified backup candidate changed",
+            StoreErrorCode::BackupHeaderCorrupt => "backup header is corrupt",
+            StoreErrorCode::BackupPageCorrupt => "backup page structure is corrupt",
+            StoreErrorCode::BackupIndexCorrupt => "backup index structure is corrupt",
+            StoreErrorCode::BackupForeignKeyCorrupt => "backup foreign keys are corrupt",
+            StoreErrorCode::BackupCountCorrupt => "backup stored counts are corrupt",
+            StoreErrorCode::BackupGenerationCorrupt => "backup generations are corrupt",
+            StoreErrorCode::BackupSemanticCorrupt => "backup semantics are corrupt",
         };
         formatter.write_str(message)
     }
@@ -90,6 +112,14 @@ impl From<rusqlite::Error> for StoreError {
                 if details.code == rusqlite::ErrorCode::OperationInterrupted =>
             {
                 Self::new(StoreErrorCode::DeadlineExceeded)
+            }
+            rusqlite::Error::SqliteFailure(details, _)
+                if matches!(
+                    details.code,
+                    rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked
+                ) =>
+            {
+                Self::new(StoreErrorCode::Busy)
             }
             _ => Self::new(StoreErrorCode::Database),
         }

@@ -686,6 +686,24 @@ slot load preserves both files; only an explicit validated save replaces one and
 keeps the peer as evidence. Restore identity is a nonzero generation plus portable
 SHA-256 digest and has a fixed reread verifier for later journal resume.
 
+Implemented Task 5 never copies the live SQLite main file. It uses Online Backup so
+committed WAL state is included, steps pages under cancellation/deadline control, and
+accepts no caller SQL or output name. Candidate verification enables defensive and
+query-only policy, disables trusted schema and both double-quoted string modes,
+enables cell-size checks, disables mmap, fixes cache/busy policy, pins the bundled
+SQLite identity, and applies explicit SQLite allocation limits. Integrity, foreign
+keys, exact schema/indexes, stored counts/generations, and application semantics are
+separate fail-closed gates. Only `VACUUM INTO` from an already verified isolated
+snapshot may create a compact candidate, which is independently reverified.
+
+Verification binds physical file identity, exact length, and streaming SHA-256 before
+and after proof and every consumer; pathname replacement cannot inherit prior proof.
+Busy, I/O, cancellation, deadline, schema-newer, and stale-identity outcomes are not
+corruption authority. Candidate cleanup exposes an explicit failing discard, one
+bounded failure counter, and a fixed-name recovery pass. Recovery is called only
+under the single-active-maintenance-operation invariant; it is not a concurrent
+candidate-deletion API. Public errors and Debug expose neither paths nor SQLite text.
+
 The current exact-child read checks the pathname type before opening and validates the
 opened regular-file length, but does not claim hostile same-user no-follow/open-handle
 identity resistance against replacement in that narrow interval. The documented

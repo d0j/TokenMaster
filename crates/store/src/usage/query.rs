@@ -57,10 +57,10 @@ pub use status::{
     ProductUsageStatus,
 };
 
-const READ_CACHE_SIZE_KIB: u64 = 4 * 1024;
-const READ_BUSY_TIMEOUT_MS: u64 = 250;
+pub(crate) const READ_CACHE_SIZE_KIB: u64 = 4 * 1024;
+pub(crate) const READ_BUSY_TIMEOUT_MS: u64 = 250;
 pub(super) const MAX_QUERY_DURATION: Duration = Duration::from_secs(2);
-pub(super) const PROGRESS_OP_INTERVAL: i32 = 1_000;
+pub(crate) const PROGRESS_OP_INTERVAL: i32 = 1_000;
 pub const MAX_USAGE_QUERY_SCOPES: usize = 32;
 pub const MAX_USAGE_OVERVIEW_SEGMENTS: usize = 3;
 
@@ -680,6 +680,7 @@ pub struct UsageReadRuntimePolicy {
     query_planner_stability: bool,
     double_quoted_dml: bool,
     double_quoted_ddl: bool,
+    cell_size_check: bool,
     busy_timeout_ms: u64,
     cache_size_kib: u64,
     temp_store: i64,
@@ -715,6 +716,11 @@ impl UsageReadRuntimePolicy {
     #[must_use]
     pub const fn no_checkpoint_on_close(self) -> bool {
         self.no_checkpoint_on_close
+    }
+
+    #[must_use]
+    pub const fn cell_size_check(self) -> bool {
+        self.cell_size_check
     }
 
     #[must_use]
@@ -808,6 +814,7 @@ impl UsageReadStore {
             double_quoted_ddl: map_sql(
                 self.connection.db_config(DbConfig::SQLITE_DBCONFIG_DQS_DDL),
             )?,
+            cell_size_check: pragma_i64(&self.connection, "PRAGMA cell_size_check")? == 1,
             busy_timeout_ms: pragma_u64(&self.connection, "PRAGMA busy_timeout")?,
             cache_size_kib: negative_pragma_u64(&self.connection, "PRAGMA cache_size")?,
             temp_store: pragma_i64(&self.connection, "PRAGMA temp_store")?,
@@ -822,6 +829,7 @@ impl UsageReadStore {
             || !policy.query_planner_stability
             || policy.double_quoted_dml
             || policy.double_quoted_ddl
+            || !policy.cell_size_check
             || policy.busy_timeout_ms != READ_BUSY_TIMEOUT_MS
             || policy.cache_size_kib != READ_CACHE_SIZE_KIB
             || policy.temp_store != 1
@@ -901,7 +909,7 @@ impl fmt::Debug for UsageReadStore {
     }
 }
 
-fn apply_read_policy(connection: &Connection) -> Result<(), StoreError> {
+pub(crate) fn apply_read_policy(connection: &Connection) -> Result<(), StoreError> {
     map_sql(connection.set_db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE, true))?;
     map_sql(connection.set_db_config(DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE, true))?;
     map_sql(connection.set_db_config(DbConfig::SQLITE_DBCONFIG_ENABLE_QPSG, true))?;
@@ -914,6 +922,7 @@ fn apply_read_policy(connection: &Connection) -> Result<(), StoreError> {
     map_sql(connection.pragma_update(None, "temp_store", "FILE"))?;
     map_sql(connection.pragma_update(None, "mmap_size", 0_i64))?;
     map_sql(connection.pragma_update(None, "trusted_schema", "OFF"))?;
+    map_sql(connection.pragma_update(None, "cell_size_check", "ON"))?;
     map_sql(connection.pragma_update(None, "query_only", "ON"))?;
     Ok(())
 }
@@ -1502,6 +1511,14 @@ fn map_sql_error(error: rusqlite::Error) -> StoreError {
             if details.code == ErrorCode::OperationInterrupted =>
         {
             StoreError::new(StoreErrorCode::DeadlineExceeded)
+        }
+        rusqlite::Error::SqliteFailure(details, _)
+            if matches!(
+                details.code,
+                ErrorCode::DatabaseBusy | ErrorCode::DatabaseLocked
+            ) =>
+        {
+            StoreError::new(StoreErrorCode::Busy)
         }
         _ => StoreError::new(StoreErrorCode::Database),
     }
