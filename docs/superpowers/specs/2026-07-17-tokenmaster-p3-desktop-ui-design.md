@@ -77,10 +77,13 @@ use stable semantic roles and translation keys so P4 does not require a rewrite.
 
 ### 4.1 Production package
 
-`crates/desktop` is a leaf package named `tokenmaster-desktop`. Its binary name is
-`TokenMaster`. It may consume public product snapshots but may not open SQLite, parse
-provider input, own runtime/store handles, depend on `tokenmaster-m0`, or expose a
-frontend back-reference from product/query/runtime crates.
+`crates/desktop` is a frontend leaf package named `tokenmaster-desktop`. Its binary
+name is `TokenMaster`. It may consume public product snapshots but may not directly
+open SQLite, parse provider input, own runtime/store handles, depend on
+`tokenmaster-m0`, or expose a frontend back-reference from product/query/runtime
+crates. The existing product snapshot types currently bring their implementation
+crates transitively; that compile-time graph does not grant handles or callback
+authority and is not misreported as a zero-transitive-dependency graph.
 
 The production Slint dependency enables the software renderer and excludes FemtoVG.
 `tokenmaster-m0` opts into FemtoVG explicitly for its diagnostic fallback. A package
@@ -183,8 +186,9 @@ P3-A is complete only when all of the following pass:
   rejection;
 - compiled Slint tests prove the model is applied, route callbacks switch selection
   without window recreation, and no seeded usage model exists;
-- `cargo tree -p tokenmaster-desktop` contains no `tokenmaster-m0`, store, provider,
-  engine, runtime implementation, SQLite, network, browser, shell, or FemtoVG feature;
+- the desktop manifest has no direct store/provider/engine/runtime/SQLite/network/
+  browser/shell dependency, `cargo tree -p tokenmaster-desktop` contains no
+  `tokenmaster-m0`, and its package-specific Slint graph contains no FemtoVG feature;
 - a deterministic source audit proves one production package, no mock/seed helper,
   11 fixed routes, software-renderer default, and no forbidden frontend authority;
 - clean-root, format, warnings-as-errors locked Clippy, and full locked workspace tests
