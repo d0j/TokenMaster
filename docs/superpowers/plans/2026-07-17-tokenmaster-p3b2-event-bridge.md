@@ -191,7 +191,7 @@ Expected: consistent current/remaining truth and clean diff.
 
 **Files:** all files above.
 
-- [ ] **Step 1: Run the baseline quality gate**
+- [x] **Step 1: Run the baseline quality gate**
 
 ```powershell
 pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
@@ -200,7 +200,7 @@ $env:RUSTFLAGS = '-Dwarnings'; cargo +1.97.0 clippy --workspace --all-targets --
 cargo +1.97.0 test --workspace --locked
 ```
 
-- [ ] **Step 2: Inspect repository and process cleanliness**
+- [x] **Step 2: Inspect repository and process cleanliness**
 
 Confirm only intentional files changed and no task-owned test, GUI, diagnostic,
 watcher, timer, or temporary server process remains.
