@@ -5235,6 +5235,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokenmaster-app"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "tokenmaster-platform",
+]
+
+[[package]]
 name = "tokenmaster-benefits"
 version = "0.1.0"
 dependencies = [
