@@ -120,10 +120,10 @@ fn aggregate_rebuild_is_visible_only_on_routes_that_depend_on_aggregates() {
     let snapshot = reducer.snapshot();
     assert_eq!(
         snapshot.route(ProductRoute::DataHealth).state(),
-        ProductRouteState::Degraded
+        ProductRouteState::Ready
     );
     assert!(
-        snapshot
+        !snapshot
             .route(ProductRoute::DataHealth)
             .reasons()
             .contains(ProductRouteReason::AggregateRebuilding)
@@ -131,6 +131,16 @@ fn aggregate_rebuild_is_visible_only_on_routes_that_depend_on_aggregates() {
     assert!(
         snapshot
             .route(ProductRoute::Dashboard)
+            .reasons()
+            .contains(ProductRouteReason::AggregateRebuilding)
+    );
+    assert_eq!(
+        snapshot.route(ProductRoute::History).state(),
+        ProductRouteState::Unavailable
+    );
+    assert!(
+        snapshot
+            .route(ProductRoute::History)
             .reasons()
             .contains(ProductRouteReason::AggregateRebuilding)
     );

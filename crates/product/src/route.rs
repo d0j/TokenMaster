@@ -204,11 +204,6 @@ pub(crate) fn derive_routes(snapshot: &ProductSnapshot) -> [ProductRouteStatus; 
         ProductAggregateState::Rebuilding => Some(ProductRouteReason::AggregateRebuilding),
         ProductAggregateState::Failed => Some(ProductRouteReason::AggregateFailed),
     };
-    let mut data_health = common;
-    if let Some(reason) = aggregate_reason {
-        data_health = data_health.with(reason);
-    }
-
     let usage_ready = snapshot.analytics.kind() == ProductSectionKind::Ready;
     let activity_ready = snapshot.activity.kind() == ProductSectionKind::Ready;
     let sessions_ready = snapshot.sessions.kind() == ProductSectionKind::Ready;
@@ -274,12 +269,12 @@ pub(crate) fn derive_routes(snapshot: &ProductSnapshot) -> [ProductRouteStatus; 
 
     [
         status_for(ProductRoute::Dashboard, dashboard),
-        status_for(ProductRoute::History, usage),
-        status_for(ProductRoute::Sessions, sessions),
-        status_for(ProductRoute::Models, usage),
-        status_for(ProductRoute::Projects, projects),
+        aggregate_status_for(ProductRoute::History, usage),
+        aggregate_status_for(ProductRoute::Sessions, sessions),
+        aggregate_status_for(ProductRoute::Models, usage),
+        aggregate_status_for(ProductRoute::Projects, projects),
         status_for(ProductRoute::Activity, activity),
-        status_for(ProductRoute::DataHealth, data_health),
+        status_for(ProductRoute::DataHealth, common),
         status_for(ProductRoute::Notifications, notifications),
         ProductRouteStatus::new(
             ProductRoute::Settings,
@@ -358,6 +353,23 @@ pub(crate) const fn initial_routes() -> [ProductRouteStatus; 11] {
 
 const fn status_for(route: ProductRoute, reasons: ProductRouteReasons) -> ProductRouteStatus {
     let state = if reasons.is_empty() {
+        ProductRouteState::Ready
+    } else {
+        ProductRouteState::Degraded
+    };
+    ProductRouteStatus::new(route, state, reasons)
+}
+
+const fn aggregate_status_for(
+    route: ProductRoute,
+    reasons: ProductRouteReasons,
+) -> ProductRouteStatus {
+    let aggregate_unavailable = reasons.contains(ProductRouteReason::AggregateRebuildRequired)
+        || reasons.contains(ProductRouteReason::AggregateRebuilding)
+        || reasons.contains(ProductRouteReason::AggregateFailed);
+    let state = if aggregate_unavailable {
+        ProductRouteState::Unavailable
+    } else if reasons.is_empty() {
         ProductRouteState::Ready
     } else {
         ProductRouteState::Degraded
