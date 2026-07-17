@@ -149,7 +149,7 @@ fn timeout_cancellation_and_output_caps_kill_and_reap_children() {
         .expect_err("hang must time out");
     assert_eq!(error.code(), GitBackendErrorCode::DeadlineExceeded);
     assert!(started.elapsed() < Duration::from_secs(3));
-    assert_receipt_pids_exited(&fixture.receipt(), &fixture.executable);
+    assert_fixture_processes_exited(&fixture);
 
     let fixture = Fixture::new("hang");
     let cancellation = GitCancellation::new();
@@ -166,7 +166,7 @@ fn timeout_cancellation_and_output_caps_kill_and_reap_children() {
     let error = process.version().expect_err("cancelled process");
     worker.join().expect("cancel worker");
     assert_eq!(error.code(), GitBackendErrorCode::Cancelled);
-    assert_receipt_pids_exited(&fixture.receipt(), &fixture.executable);
+    assert_fixture_processes_exited(&fixture);
 
     for (mode, expected) in [
         ("stdout_oversized", GitBackendErrorCode::StdoutLimitExceeded),
@@ -180,6 +180,18 @@ fn timeout_cancellation_and_output_caps_kill_and_reap_children() {
         assert_eq!(error.code(), expected, "mode={mode}");
         assert_receipt_pids_exited(&fixture.receipt(), &fixture.executable);
     }
+}
+
+#[test]
+fn timeout_before_fixture_initialization_still_reaps_child() {
+    let fixture = Fixture::new("delayed_start");
+    let error = fixture
+        .process(Duration::from_millis(100))
+        .version()
+        .expect_err("delayed fixture start must time out");
+    assert_eq!(error.code(), GitBackendErrorCode::DeadlineExceeded);
+    assert!(!fixture.receipt.exists());
+    assert_fixture_processes_exited(&fixture);
 }
 
 #[test]
@@ -317,7 +329,19 @@ fn scan_deadline_is_global_instead_of_reset_for_each_child() {
         .expect_err("whole scan must share one deadline");
     assert_eq!(error.code(), GitBackendErrorCode::DeadlineExceeded);
     assert!(started.elapsed() < Duration::from_millis(500));
-    assert_receipt_pids_exited(&fixture.receipt(), &fixture.executable);
+    assert_fixture_processes_exited(&fixture);
+}
+
+fn assert_fixture_processes_exited(fixture: &Fixture) {
+    match fs::read_to_string(&fixture.receipt) {
+        Ok(receipt) => assert_receipt_pids_exited(&receipt, &fixture.executable),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => panic!("fixture receipt: {error}"),
+    }
+    assert!(
+        !executable_process_exists(&fixture.executable),
+        "fixture executable still has a running process"
+    );
 }
 
 fn assert_receipt_pids_exited(receipt: &str, executable: &Path) {
@@ -344,6 +368,17 @@ fn process_exists(pid: u32, executable: &Path) -> bool {
         .is_ok_and(|status| status.success())
 }
 
+#[cfg(windows)]
+fn executable_process_exists(executable: &Path) -> bool {
+    let script = "$p = Get-Process -ErrorAction SilentlyContinue | Where-Object { try { $_.Path -eq $env:TM_FIXTURE_PATH } catch { $false } } | Select-Object -First 1; if ($p) { exit 0 } else { exit 1 }";
+    std::process::Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .env("TM_FIXTURE_PATH", executable)
+        .status()
+        .expect("inspect fixture executable process")
+        .success()
+}
+
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn process_exists(pid: u32, executable: &Path) -> bool {
     std::fs::read_link(format!("/proc/{pid}/exe"))
@@ -353,10 +388,48 @@ fn process_exists(pid: u32, executable: &Path) -> bool {
         .is_some_and(|(current, expected)| current == expected)
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn executable_process_exists(executable: &Path) -> bool {
+    let expected = executable
+        .canonicalize()
+        .expect("canonical fixture executable");
+    let entries = std::fs::read_dir("/proc").expect("inspect process directory");
+    entries.flatten().any(|entry| {
+        entry
+            .file_name()
+            .to_string_lossy()
+            .bytes()
+            .all(|byte| byte.is_ascii_digit())
+            && std::fs::read_link(entry.path().join("exe"))
+                .ok()
+                .and_then(|path| path.canonicalize().ok())
+                .is_some_and(|path| path == expected)
+    })
+}
+
 #[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
 fn process_exists(pid: u32, _executable: &Path) -> bool {
     std::process::Command::new("kill")
         .args(["-0", &pid.to_string()])
         .status()
         .is_ok_and(|status| status.success())
+}
+
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
+fn executable_process_exists(executable: &Path) -> bool {
+    let output = std::process::Command::new("ps")
+        .args(["-axo", "command="])
+        .output()
+        .expect("inspect fixture executable processes");
+    let executable = executable.to_string_lossy();
+    String::from_utf8_lossy(&output.stdout).lines().any(|line| {
+        line.trim_start()
+            .strip_prefix(executable.as_ref())
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with(' '))
+    })
+}
+
+#[cfg(not(any(windows, unix)))]
+fn executable_process_exists(_executable: &Path) -> bool {
+    panic!("fixture process inspection is unsupported on this platform")
 }

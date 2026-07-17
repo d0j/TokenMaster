@@ -33,7 +33,10 @@ if ($manifestText -match '\btokenmaster-m0\b|[\\/]probe-app\b|\brenderer-femtovg
     throw 'TM-APP-PROBE-DEPENDENCY: production composition must not depend on the M0 probe'
 }
 
-$rustFiles = @(Get-ChildItem -LiteralPath $appSource -Recurse -File -Filter '*.rs')
+$rustFiles = @(
+    Get-ChildItem -LiteralPath $appSource -Recurse -File -Filter '*.rs' |
+        Where-Object { $_.Name -notlike '*_tests.rs' }
+)
 if ($rustFiles.Count -ne 4) {
     throw 'TM-APP-FILE-COUNT: application composition must contain exactly four Rust files'
 }

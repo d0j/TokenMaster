@@ -18,6 +18,9 @@ fn run() -> io::Result<()> {
         .and_then(|name| name.to_str())
         .unwrap_or("invalid");
     let args = env::args().skip(1).collect::<Vec<_>>();
+    if mode == "delayed_start" {
+        std::thread::sleep(Duration::from_millis(500));
+    }
     write_receipt(&executable, &args)?;
 
     match mode {
