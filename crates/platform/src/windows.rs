@@ -6,8 +6,8 @@ use std::path::Path;
 use sha2::{Digest, Sha256};
 use windows::Win32::Foundation::{ERROR_UNABLE_TO_MOVE_REPLACEMENT_2, HANDLE};
 use windows::Win32::Storage::FileSystem::{
-    FILE_ID_INFO, FileIdInfo, GetFileInformationByHandleEx, MOVEFILE_WRITE_THROUGH, MoveFileExW,
-    REPLACE_FILE_FLAGS, ReplaceFileW,
+    FILE_ID_INFO, FileIdInfo, GetFileInformationByHandleEx, MOVEFILE_REPLACE_EXISTING,
+    MOVEFILE_WRITE_THROUGH, MoveFileExW, REPLACE_FILE_FLAGS, ReplaceFileW,
 };
 use windows::core::{HRESULT, PCWSTR};
 
@@ -83,6 +83,23 @@ pub(super) fn replace_file_write_through(
         }
         Err(_) => Err(DurableFileError::Unavailable),
     }
+}
+
+pub(super) fn replace_file_redundant_write_through(
+    source: &Path,
+    target: &Path,
+) -> Result<(), DurableFileError> {
+    let source = wide_path(source)?;
+    let target = wide_path(target)?;
+    // SAFETY: both vectors are valid NUL-terminated UTF-16 paths retained for the call.
+    unsafe {
+        MoveFileExW(
+            PCWSTR(source.as_ptr()),
+            PCWSTR(target.as_ptr()),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    }
+    .map_err(|_| DurableFileError::Unavailable)
 }
 
 fn restore_displaced_target(target: &[u16], backup: &[u16]) -> Result<(), DurableFileError> {

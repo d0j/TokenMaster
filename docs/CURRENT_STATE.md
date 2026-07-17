@@ -786,8 +786,9 @@ workspace package with nine stable path-private error codes, checked byte/item l
 and a Pester/workspace authority audit. The current workspace receipt records five exact
 direct dependencies, one exact workspace member, zero bin/build targets, zero forbidden
 filesystem/process/network/shell/SQL/UI/archive/external-source authority, zero public
-arbitrary-path constructors, and zero forbidden transitive dependencies. Twenty-nine
-mutation cases guard the observed source, alias/re-export, and metadata bypasses.
+arbitrary-path constructors, and zero forbidden transitive dependencies. Thirty-three
+mutation cases guard the observed source, approved-alias reuse, fixed-child,
+visibility, alias/re-export, and metadata bypasses.
 
 Task 2 now adds controlled `tokenmaster-platform` durable files. One validated local
 directory plus a restricted exact child name is the only public target constructor;
@@ -801,6 +802,29 @@ atomic rename, file/directory synchronization, and makes no Windows durability c
 Focused evidence is green: strict platform Clippy, 9 library contracts, 11 durable
 integration contracts, 40 deterministic before/after child-process kills, 20
 replacement-entry race kills, and a final independent read-only review.
+
+Task 3 now adds the crate-private redundant-record core. Its fixed envelope has a
+64-byte `TMREC001` header, strict JSON payload capped at 1 MiB, and a 40-byte
+`TMEND001` footer with payload and whole-record SHA-256 binding. Decode validates
+actual file bounds, exact version/header/flags/generation/length, both digests, no
+trailing bytes, and typed JSON before selection. The highest valid generation wins;
+one invalid slot is a typed fallback, equal generations require equal payload digests,
+and a conflict or two invalid slots cannot authorize repair. Save measures/hashes
+without retaining encoded JSON, streams a second deterministic pass in at most
+256 KiB calls, seals the inactive slot, publishes, and rereads both slots. Every
+post-publication uncertainty is `RecoveryRequired`.
+
+The new platform support is limited to caller-bounded exact-child reads and replacement
+of an inactive A/B slot without a third backup. Focused evidence passes 13 record unit
+contracts, two public authority contracts, 10 platform unit contracts, 14 durable-file
+integration contracts, 33/33 Pester mutations, an injected redundant before/after OS
+boundary, 40 redundant boundary kills, 20 redundant entry races, and state process
+death during partial write, after seal/before publish, and after publish/before reread
+of generation 3. Generic record/file authority is not reexported from
+`tokenmaster-state`; Task 4 must wrap it in fixed-purpose typed settings APIs. Final
+independent review reports no Critical or Important finding. A no-follow/open-handle
+identity check for a hostile same-user path-replacement race remains recorded as
+defensive hardening outside the current threat boundary.
 
 Remaining ownership is: store for SQLite Online Backup and candidate verification,
 platform for durable same-volume replacement and sealed file selection, state for
@@ -819,16 +843,17 @@ transient-I/O, unsupported-location, and schema-too-new results preserve current
 truth. No valid backup leads to explicit quarantine and authoritative-source rebuild,
 never fabricated zero or automatic corrupt-row salvage.
 
-Only Tasks 1-2 are implemented. No persistent settings, backup package, retention
+Only Tasks 1-3 are implemented. No typed persistent settings, backup package, retention
 worker, restore, safe mode, Data & Recovery UI, encryption, or new acceptance evidence
-exists yet. Task 3 redundant bounded records are the immediate next slice.
+exists yet. Task 4 typed settings/schema/import preview is the immediate next slice.
 
 ## Next implementation slice
 
-Execute P3-D.0 Task 3 from
-`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: build the typed A/B
-record envelope over the now-verified durable-file primitive, with bounded decode,
-generation selection, corrupt-newest fallback, and no raw path or JSON surface.
+Execute P3-D.0 Task 4 from
+`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: add the exact settings
+schema, bounded portable/device-local ownership rules, safe-default load outcome,
+typed import preview, migration boundary, and fixed-purpose public store over the now-
+verified crate-private A/B core.
 
 P2-D quota history core is complete under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: Tasks 1-8 cover
@@ -845,7 +870,7 @@ immutable read snapshots, and publication through the existing Codex runtime wit
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
 workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, P3-B.2, P3-B.3, and P3-C are
-complete; P3-D.0 Reliable State is active with Tasks 1-2 complete and Task 3 next, followed
+complete; P3-D.0 Reliable State is active with Tasks 1-3 complete and Task 4 next, followed
 by the remaining P3-D supporting data-bearing routes. Activation
 remains a later independently authorized capability. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.

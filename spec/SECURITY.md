@@ -657,6 +657,29 @@ after OS publication is `RecoveryRequired`, and ambiguous rollback preserves sta
 backup artifacts for the later journal. Unix uses no-overwrite hard links plus atomic
 rename and synchronized file/directory entries, but is not Windows release evidence.
 
+Implemented Task 3 keeps the generic redundant-record store crate-private and permits
+it to construct only the six literal settings/run/recovery A/B children. The state
+authority audit permits one bounded writer import, only `io::Result`, `io::Error`, and
+`io::ErrorKind` uses, and one exact platform import; 33 mutation cases reject alias
+reuse, caller-selected children, public generic authority, transitive authority, and
+the earlier source/metadata bypass corpus. Record reads cap actual bytes at 1 MiB plus
+fixed envelope overhead before decode. Writes do not retain a full encoded JSON copy:
+they measure/hash once, stream a second pass in at most 256 KiB calls, and reject any
+length/digest drift before publication. Equal-generation disagreement is integrity
+failure, both invalid slots remain preserved, and every failed post-publication reread
+is `RecoveryRequired`. Windows evidence now includes a separate inactive-slot suite
+with an injected before/after replacement boundary, 40 deterministic process kills,
+20 replacement-entry race kills, and state-level process deaths before partial write,
+after seal/before publish, and after publish/before reread of generation 3.
+
+The current exact-child read checks the pathname type before opening and validates the
+opened regular-file length, but does not claim hostile same-user no-follow/open-handle
+identity resistance against replacement in that narrow interval. The documented
+threat boundary does not treat another process under the same user token as hostile.
+If that boundary changes, platform-specific no-follow open plus handle/path identity
+validation is required before raising the claim; this is a recorded hardening item,
+not current release evidence.
+
 The live archive keeps one fixed identity and writer sidecar. Whole-file restore MUST
 hold that guard, close every SQLite owner, preserve current main/WAL/SHM in quarantine,
 and publish only a complete reverified candidate through a redundant idempotent

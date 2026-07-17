@@ -344,8 +344,23 @@ recovery artifacts. Focused evidence passes 9 library and 11 durable integration
 contracts, including 40 deterministic pre/post kills and 20 replacement-entry race
 kills. Final independent read-only review reports no Critical or Important finding.
 
-The immediate next slice is Task 3 redundant bounded records. Then continue
-Tasks 4-18 in order: settings, verified SQLite snapshots and
+Task 3 is complete. `tokenmaster-state` now owns a crate-private fixed-purpose A/B
+record core with exact 64-byte header/40-byte footer, 1 MiB strict-JSON cap, checked
+generation and SHA-256 binding, two-pass bounded streaming save, corrupt-newest
+fallback, equal-generation conflict detection, and post-publication
+`RecoveryRequired`. It constructs only the six literal settings/run/recovery slot
+names. Platform adds caller-bounded exact-child reads and inactive-slot replacement
+without a third backup. Thirteen record contracts include generation-3 process deaths
+during partial write, after seal/before publish, and after publish/before reread;
+platform adds an injected before/after redundant boundary plus 40 deterministic and
+20 race kills. The strengthened authority audit passes 33 mutation cases, including
+approved-alias, fixed-child, and public-generic-authority bypasses. Final independent
+review reports no remaining Critical or Important finding; platform no-follow/open-
+handle identity checking for a hostile same-user path-replacement race is a recorded
+non-blocking hardening item outside the current threat boundary.
+
+The immediate next slice is Task 4 typed settings/schema/import preview. Then continue
+Tasks 5-18 in order: verified SQLite snapshots and
 strict packages, bounded retention/maintenance, journaled recovery and startup
 integration, application restart/safe mode, Data & Recovery UI, then adversarial and
 resource closure. Keep the fixed archive path and writer sidecar; never copy only the
@@ -359,9 +374,11 @@ notifications, settings/help, command palette, tray, and compact lifecycle. P3-D
 presentation, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.
-The current post-P3-D.0-Task-2 clean-root, formatting, strict locked workspace Clippy,
-and complete locked workspace test/doctest baseline passes. Focused state evidence is
-2/2 Rust contracts, 29/29 Pester mutations, and one workspace authority receipt. The
+The current post-P3-D.0-Task-3 focused formatting, strict locked state/platform Clippy,
+state/platform test/doctest, 33/33 Pester mutation, workspace authority, and diff-check
+gates pass. The final clean-root, formatting, strict locked workspace Clippy, and full
+locked workspace test/doctest baseline also passes in 463 seconds after project-truth
+synchronization. The
 query resource binary uses
 an isolated `harness = false` process plus a bounded maximum-64-round warm-up that
 waits for two topology-stable eight-round retained floors before measurement and

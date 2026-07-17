@@ -8,11 +8,17 @@ use sha2::{Digest, Sha256};
 use crate::{LocalDirectoryError, ValidatedLocalDirectory};
 
 #[cfg(unix)]
-use crate::unix::{move_file_write_through, replace_file_write_through};
+use crate::unix::{
+    move_file_write_through, replace_file_redundant_write_through, replace_file_write_through,
+};
 #[cfg(not(any(unix, windows)))]
-use crate::unsupported::{move_file_write_through, replace_file_write_through};
+use crate::unsupported::{
+    move_file_write_through, replace_file_redundant_write_through, replace_file_write_through,
+};
 #[cfg(windows)]
-use crate::windows::{move_file_write_through, replace_file_write_through};
+use crate::windows::{
+    move_file_write_through, replace_file_redundant_write_through, replace_file_write_through,
+};
 
 /// Maximum create-new candidates retained per exact durable target.
 pub const DURABLE_STAGE_ATTEMPTS: usize = 32;
@@ -95,6 +101,51 @@ impl DurableFileTarget {
         }
         Err(DurableFileError::CollisionLimit)
     }
+
+    /// Reads one exact regular child into caller-bounded memory, or returns `None` when absent.
+    pub fn read_bounded(&self, max_bytes: u64) -> Result<Option<Vec<u8>>, DurableFileError> {
+        if max_bytes > MAX_DURABLE_FILE_BYTES {
+            return Err(DurableFileError::CapacityExceeded);
+        }
+        revalidate_parent(&self.parent)?;
+        match existing_kind(&self.path)? {
+            ExistingKind::Missing => return Ok(None),
+            ExistingKind::Regular => {}
+        }
+
+        let mut file = File::open(&self.path).map_err(|_| DurableFileError::Unavailable)?;
+        let expected_len = file
+            .metadata()
+            .map_err(|_| DurableFileError::Unavailable)?
+            .len();
+        if expected_len > max_bytes {
+            return Err(DurableFileError::CapacityExceeded);
+        }
+
+        let mut bytes = Vec::new();
+        let mut buffer = [0_u8; COPY_BUFFER_BYTES];
+        loop {
+            let count = file
+                .read(&mut buffer)
+                .map_err(|_| DurableFileError::Unavailable)?;
+            if count == 0 {
+                break;
+            }
+            let count_u64 = u64::try_from(count).map_err(|_| DurableFileError::Integrity)?;
+            let next_len = u64::try_from(bytes.len())
+                .map_err(|_| DurableFileError::CapacityExceeded)?
+                .checked_add(count_u64)
+                .ok_or(DurableFileError::CapacityExceeded)?;
+            if next_len > max_bytes {
+                return Err(DurableFileError::CapacityExceeded);
+            }
+            bytes.extend_from_slice(&buffer[..count]);
+        }
+        if u64::try_from(bytes.len()).map_err(|_| DurableFileError::Integrity)? != expected_len {
+            return Err(DurableFileError::Integrity);
+        }
+        Ok(Some(bytes))
+    }
 }
 
 impl fmt::Debug for DurableFileTarget {
@@ -171,6 +222,14 @@ impl DurableStagedFile {
         self.replace_existing_with(target, backup, &mut NoopPublicationHook)
     }
 
+    /// Replaces one inactive redundant slot without creating a third backup child.
+    pub fn replace_existing_redundant(
+        &mut self,
+        target: &DurableFileTarget,
+    ) -> Result<DurableFileReceipt, DurableFileError> {
+        self.replace_existing_redundant_with(target, &mut NoopPublicationHook)
+    }
+
     fn publish_new_with(
         &mut self,
         target: &DurableFileTarget,
@@ -204,6 +263,34 @@ impl DurableStagedFile {
         hook: &mut impl PublicationHook,
     ) -> Result<DurableFileReceipt, DurableFileError> {
         self.replace_existing_with_operation(target, backup, hook, replace_file_write_through)
+    }
+
+    fn replace_existing_redundant_with(
+        &mut self,
+        target: &DurableFileTarget,
+        hook: &mut impl PublicationHook,
+    ) -> Result<DurableFileReceipt, DurableFileError> {
+        let receipt = self.receipt.ok_or(DurableFileError::InvalidState)?;
+        let source = self.path.as_deref().ok_or(DurableFileError::InvalidState)?;
+        if source == target.path {
+            return Err(DurableFileError::InvalidState);
+        }
+        revalidate_parent(&target.parent)?;
+        verify_file(source, receipt.len, receipt.sha256)?;
+        if existing_kind(&target.path)? == ExistingKind::Missing {
+            return Err(DurableFileError::TargetMissing);
+        }
+        hook.hit(PublicationBoundary::BeforeReplace)?;
+        if let Err(error) = replace_file_redundant_write_through(source, &target.path) {
+            self.preserve_recovery_artifacts(error);
+            return Err(error);
+        }
+        self.path = None;
+        hook.hit(PublicationBoundary::AfterReplace)
+            .map_err(|_| DurableFileError::RecoveryRequired)?;
+        sync_existing_file(&target.path).map_err(|_| DurableFileError::RecoveryRequired)?;
+        verify_file(&target.path, receipt.len, receipt.sha256)
+            .map_err(|_| DurableFileError::RecoveryRequired)
     }
 
     fn replace_existing_with_operation(
@@ -636,6 +723,37 @@ mod tests {
             } else {
                 assert_eq!(std::fs::read(&target.path).expect("new"), b"new");
                 assert_eq!(std::fs::read(&backup.path).expect("backup"), b"old");
+                assert!(staged.path.is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn injected_redundant_replace_boundaries_leave_only_prepared_or_replaced_state() {
+        for boundary in [
+            PublicationBoundary::BeforeReplace,
+            PublicationBoundary::AfterReplace,
+        ] {
+            let root = TempDir::new().expect("root");
+            let directory = ValidatedLocalDirectory::new(root.path()).expect("directory");
+            let target = DurableFileTarget::exact_child(&directory, "target.slot").expect("target");
+            std::fs::write(&target.path, b"old").expect("old target");
+            let mut staged = staged(&target, b"new");
+            assert_eq!(
+                staged
+                    .replace_existing_redundant_with(&target, &mut FailAt(boundary))
+                    .expect_err("injected redundant failure"),
+                if boundary == PublicationBoundary::AfterReplace {
+                    DurableFileError::RecoveryRequired
+                } else {
+                    DurableFileError::Unavailable
+                }
+            );
+            if boundary == PublicationBoundary::BeforeReplace {
+                assert_eq!(std::fs::read(&target.path).expect("old"), b"old");
+                assert!(staged.path.is_some());
+            } else {
+                assert_eq!(std::fs::read(&target.path).expect("new"), b"new");
                 assert!(staged.path.is_none());
             }
         }

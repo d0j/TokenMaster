@@ -6,6 +6,24 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.0 Task 3 crate-private redundant records: six fixed settings/run/
+  recovery A/B children, a versioned 64-byte header and 40-byte footer, 1 MiB strict-
+  JSON cap, checked generation, payload/record SHA-256, highest-valid selection,
+  corrupt-newest fallback, equal-generation conflict detection, and explicit
+  `NoValidRecord` without destructive repair.
+- Added a bounded two-pass record writer that measures/hashes without retaining the
+  encoded payload, streams the second pass in at most 256 KiB calls, rejects
+  nondeterministic serialization, publishes only a sealed inactive slot, rereads both
+  records, and maps every post-publication uncertainty to `RecoveryRequired`.
+- Added caller-bounded exact-child platform reads and inactive-slot replacement with
+  no third backup. Record evidence covers 13 unit contracts and generation-3 process
+  death during partial write, after seal/before publish, and after publish/before
+  reread. Platform evidence adds an injected before/after redundant replacement
+  boundary, 40 deterministic kills, and 20 replacement-entry races.
+- Strengthened the reliable-state authority audit to keep generic record/file authority
+  crate-private, permit only six literal children and bounded `io` result/error uses,
+  and reject approved-alias reuse. All 33 Pester mutations, strict state/platform
+  Clippy, focused suites, workspace authority audit, and independent final review pass.
 - Implemented P3-D.0 Task 2 controlled durable files in `tokenmaster-platform`:
   restricted exact-child targets, 32-slot create-new staging, 64 GiB plus 2 MiB file
   and 256 KiB call bounds, streaming length/SHA-256 receipts, flush/close/reopen, and

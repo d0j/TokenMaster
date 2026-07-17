@@ -601,6 +601,19 @@ length, SHA-256 payload digest, and strict bounded JSON. Readers select the high
 valid generation. One invalid slot falls back; two invalid recovery slots plus staged
 artifacts fail to safe mode rather than inferring ownership.
 
+The implemented Task 3 record envelope is `TMREC001`, little-endian version 1, a
+64-byte header, strict JSON payload of at most 1 MiB, and a 40-byte `TMEND001` footer
+whose SHA-256 binds header, payload, and footer marker. Header flags are zero and every
+stored generation is nonzero. Decode checks the actual bounded file size before the
+declared payload length, rejects trailing bytes and unknown versions, verifies both
+digests, and only then deserializes the typed value. Equal generations are accepted
+only when their payload digests agree; a disagreement is integrity failure rather than
+absence/default authority. Save measures and hashes without retaining encoded JSON,
+streams a second deterministic pass into the inactive slot, seals before publication,
+and rereads both slots. Any uncertainty after publication is recovery-required. The
+generic record/file authority remains crate-private; later typed settings/run/recovery
+stores are the only intended public surface.
+
 `.tmconfig` and `.tmbackup` use one fixed typed container, not a general archive.
 Version 1 permits at most eight entries, a 64 KiB manifest, a 1 MiB settings payload,
 one database payload of at most 64 GiB, checked total expansion, one Zstandard frame

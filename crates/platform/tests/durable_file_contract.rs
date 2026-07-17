@@ -193,6 +193,23 @@ fn publish_new_is_same_volume_verified_and_preserves_source_on_preflight_failure
 }
 
 #[test]
+fn bounded_read_distinguishes_missing_exact_bytes_and_capacity_excess() {
+    let (root, directory) = fixture();
+    let target = descriptor(&directory, "record.slot").expect("target");
+    assert_eq!(target.read_bounded(16).expect("missing read"), None);
+
+    fs::write(root.path().join("record.slot"), b"exact-record").expect("record");
+    assert_eq!(
+        target.read_bounded(12).expect("bounded read"),
+        Some(b"exact-record".to_vec())
+    );
+    assert_eq!(
+        target.read_bounded(11).expect_err("oversized exact child"),
+        DurableFileError::CapacityExceeded
+    );
+}
+
+#[test]
 fn replace_existing_saves_old_target_and_preserves_all_inputs_on_preflight_failure() {
     let (root, directory) = fixture();
     let target = descriptor(&directory, "tokenmaster.sqlite3").expect("target");
@@ -229,6 +246,31 @@ fn replace_existing_saves_old_target_and_preserves_all_inputs_on_preflight_failu
     assert_eq!(
         fs::read(root.path().join("occupied.backup")).expect("preserved backup"),
         b"keep-backup"
+    );
+}
+
+#[test]
+fn redundant_slot_replacement_discards_only_the_inactive_old_target() {
+    let (root, directory) = fixture();
+    let target = descriptor(&directory, "settings-a.tms").expect("target");
+    fs::write(root.path().join("settings-a.tms"), OLD).expect("inactive old slot");
+    let mut staged = sealed(&target, NEW);
+    let receipt = staged
+        .replace_existing_redundant(&target)
+        .expect("replace inactive slot");
+
+    assert_eq!(receipt.len(), NEW.len() as u64);
+    assert_eq!(receipt.sha256(), &digest(NEW));
+    assert_eq!(
+        fs::read(root.path().join("settings-a.tms")).expect("new inactive slot"),
+        NEW
+    );
+    assert_eq!(
+        fs::read_dir(root.path())
+            .expect("controlled children")
+            .count(),
+        1,
+        "redundant replacement must not create a third backup file"
     );
 }
 
@@ -364,6 +406,115 @@ fn forty_pre_and_post_publication_kills_leave_exact_complete_files() {
         assert!(
             observed == old || observed == new,
             "target was a partial mixture"
+        );
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn redundant_replacement_survives_forty_boundary_kills_and_twenty_entry_races() {
+    let (root, _directory) = fixture();
+    let target_path = root.path().join("redundant.slot");
+    let unexpected_backup = root.path().join("unused.backup");
+    let old = vec![b'A'; 256 * 1024];
+    let new = vec![b'B'; 256 * 1024];
+    fs::write(&target_path, &old).expect("initial redundant target");
+
+    for round in 0..40 {
+        let before = fs::read(&target_path).expect("read redundant pre-round target");
+        let replacement = if before == old { &new } else { &old };
+        let mut child = Command::new(env!("CARGO_BIN_EXE_durable_file_fixture"))
+            .arg(root.path())
+            .arg("redundant.slot")
+            .arg("unused.backup")
+            .arg("redundant")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn redundant fixture");
+        let mut stdin = child.stdin.take().expect("fixture stdin");
+        let mut stdout = BufReader::new(child.stdout.take().expect("fixture stdout"));
+        let mut boundary = String::new();
+        stdout.read_line(&mut boundary).expect("prepared boundary");
+        assert_eq!(boundary, "prepared\n");
+        stdin.write_all(b"publish\n").expect("arm publication");
+        stdin.flush().expect("flush publication arm");
+        boundary.clear();
+        stdout
+            .read_line(&mut boundary)
+            .expect("publishing boundary");
+        assert_eq!(boundary, "publishing\n");
+        if round % 2 == 0 {
+            child.kill().expect("kill before redundant replacement");
+            child.wait().expect("reap pre-publication fixture");
+            assert_eq!(fs::read(&target_path).expect("old target"), before);
+        } else {
+            stdin.write_all(b"commit\n").expect("commit publication");
+            stdin.flush().expect("flush commit");
+            boundary.clear();
+            stdout.read_line(&mut boundary).expect("published boundary");
+            assert_eq!(boundary, "published\n");
+            child.kill().expect("kill after redundant replacement");
+            child.wait().expect("reap post-publication fixture");
+            assert_eq!(
+                fs::read(&target_path).expect("new target"),
+                replacement.as_slice()
+            );
+        }
+        assert!(
+            !unexpected_backup.exists(),
+            "redundant slot created a backup"
+        );
+        let observed = fs::read(&target_path).expect("redundant target always exists");
+        assert!(
+            observed == old || observed == new,
+            "target was a partial mixture"
+        );
+    }
+
+    let (root, _directory) = fixture();
+    let target_path = root.path().join("redundant.slot");
+    let unexpected_backup = root.path().join("unused.backup");
+    fs::write(&target_path, &old).expect("initial redundant race target");
+    for _ in 0..20 {
+        let before = fs::read(&target_path).expect("read redundant race target");
+        let replacement = if before == old { &new } else { &old };
+        let mut child = Command::new(env!("CARGO_BIN_EXE_durable_file_fixture"))
+            .arg(root.path())
+            .arg("redundant.slot")
+            .arg("unused.backup")
+            .arg("redundant")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn redundant race fixture");
+        let mut stdin = child.stdin.take().expect("fixture stdin");
+        let mut stdout = BufReader::new(child.stdout.take().expect("fixture stdout"));
+        let mut boundary = String::new();
+        stdout.read_line(&mut boundary).expect("prepared boundary");
+        assert_eq!(boundary, "prepared\n");
+        stdin.write_all(b"publish\n").expect("arm publication");
+        stdin.flush().expect("flush publication arm");
+        boundary.clear();
+        stdout
+            .read_line(&mut boundary)
+            .expect("publishing boundary");
+        assert_eq!(boundary, "publishing\n");
+        stdin.write_all(b"commit\n").expect("enter replacement");
+        stdin.flush().expect("flush replacement entry");
+        let _ = child.kill();
+        child.wait().expect("reap redundant race fixture");
+
+        let observed = fs::read(&target_path).expect("target always exists");
+        assert!(
+            observed == before || observed.as_slice() == replacement.as_slice(),
+            "redundant race produced a partial mixture"
+        );
+        assert!(
+            !unexpected_backup.exists(),
+            "redundant race created a backup"
         );
     }
 }

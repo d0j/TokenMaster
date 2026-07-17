@@ -142,9 +142,16 @@ audit. Task 2 establishes the platform publication boundary: validated exact chi
 bounded create-new staging, streaming length/SHA verification, Windows write-through
 same-volume move and exact-backup replacement, Unix no-overwrite publication, and an
 explicit `RecoveryRequired` outcome for every uncertain post-publication state.
+Task 3 adds the crate-private A/B record layer over that boundary: six literal slot
+names, fixed versioned envelope, 1 MiB strict-JSON cap, checked generation and dual
+SHA-256 validation, highest-valid selection, conflict-aware equal generations, and a
+two-pass writer that does not retain encoded JSON. The platform reads only a caller-
+bounded exact child and replaces only the inactive slot without creating a third
+backup. A post-publication reread is mandatory and any uncertainty becomes
+`RecoveryRequired`.
 `tokenmaster-store` will create consistent Online Backup candidates and verify
 integrity, foreign keys, schema, and semantic invariants. Later state tasks will add
-redundant settings/run/recovery records, fixed streaming `.tmconfig`/`.tmbackup`
+typed settings/run/recovery stores, fixed streaming `.tmconfig`/`.tmbackup`
 packages, bounded retention, and one capacity-one maintenance worker.
 `tokenmaster-platform` owns durable replacement and will later own sealed file dialogs.
 `tokenmaster-app` will stop every archive user, hold the existing writer
@@ -152,7 +159,7 @@ lease, quarantine main/WAL/SHM, resume a redundant six-state restore journal bef
 SQLite open, commit the selected data-only or data-plus-portable-settings mode, and
 reconstruct one application bundle or safe mode. Automatic recovery remains data only.
 Product/Desktop receive bounded health and intents only. The contour is in progress;
-Tasks 1-2 add no persistent settings, runtime, backup, or recovery claim.
+Tasks 1-3 add no public persistent settings, runtime, backup, or recovery claim.
 
 The built-in live quota source is separate from the JSONL usage reader. Composition
 supplies one already resolved absolute native Codex executable to

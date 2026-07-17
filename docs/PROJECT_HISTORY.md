@@ -2369,3 +2369,49 @@ preservation, Unix race/rollback, backup-proof, crash-evidence, and post-publica
 error-contract findings and reports no remaining Critical or Important issue. This
 does not implement records, settings, backup packages, restore, safe mode, UI, M0
 acceptance, packaging, signing, or release. Task 3 redundant bounded records is next.
+
+## 2026-07-17 — P3-D.0 Task 3 redundant bounded records
+
+Added the crate-private record core used by future typed settings, run-state, and
+recovery-journal stores. It constructs only `settings-{a,b}.tms`, `run-{a,b}.tms`, and
+`recovery-{a,b}.tms`. The version-1 envelope uses an exact 64-byte `TMREC001` header,
+strict JSON payload capped at 1 MiB, and 40-byte `TMEND001` footer. Checked nonzero
+generation, exact actual/declared length, zero flags, payload SHA-256, whole-record
+SHA-256, UTF-8/typed JSON, and absence of trailing bytes are all required before a
+slot is valid. Highest generation wins; one corrupt slot is a typed fallback; equal
+generations require an equal payload digest; conflicting or two-invalid slots write
+nothing.
+
+Save now performs a no-buffer measurement/hash pass and streams the second
+serialization directly into sealed platform staging in at most 256 KiB calls. A
+length or digest change between passes is integrity failure before publication. The
+inactive slot is replaced without a third backup, both slots are reread, and every
+failure or ambiguity after publication is `RecoveryRequired`. Pre-save decoded values
+are dropped before serialization so post-publication validation does not retain extra
+typed copies.
+
+The platform boundary gained caller-bounded exact-child reads plus Windows
+`MoveFileExW(MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)`/Unix atomic rename
+for an inactive redundant slot. It deliberately creates no third backup because the
+other independently valid slot is the fallback. Deterministic hooks cover both sides
+of the OS replacement boundary; a dedicated Windows fixture passes 40 pre/post
+process kills and 20 replacement-entry race kills. State process tests seed
+generations 1 and 2, then kill generation 3 during a partial JSON write, after seal
+before publish, and after publish before state reread. The observed state is always
+the complete prior or new generation.
+
+Independent high-risk review initially found four Important issues: weak post-publish
+error mapping, equal-generation ambiguity, public generic authority, and approved-
+alias audit bypasses. All were corrected with red/green regressions. The final review
+reports no Critical or Important finding. The authority suite now passes 33 mutation
+cases and fixes the production surface to one bounded writer import, three permitted
+`io` members, one exact platform import, and six literal child constructors. A future
+defensive no-follow/open-handle identity check could narrow a same-user path-replacement
+TOCTOU; this is outside the documented threat boundary and is not a Task 3 blocker.
+
+Focused formatting, strict state/platform all-target Clippy, 10 platform unit tests,
+14 durable-file integration tests plus the remaining platform suites, 13 record unit
+tests, two public state authority contracts, the workspace authority receipt, and
+33/33 Pester mutations pass. Typed settings, snapshot/package generation, retention,
+maintenance, recovery, app safe mode, UI, M0 acceptance, packaging, signing, and
+release remain unimplemented. Task 4 typed settings/schema/import preview is next.

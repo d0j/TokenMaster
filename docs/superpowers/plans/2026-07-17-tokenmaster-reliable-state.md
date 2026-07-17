@@ -162,13 +162,22 @@ read-only review reports no remaining Critical or Important finding.
 
 ---
 
-## Task 3 — Implement redundant bounded records (next)
+## Task 3 — Implement redundant bounded records (complete)
 
 **Files:**
 
 - Create: `crates/state/src/record.rs`
-- Create: `crates/state/tests/record_contract.rs`
+- Create: `crates/state/src/record_contract_tests.rs` (`cfg(test)` only, so the
+  generic filesystem authority remains crate-private)
 - Modify: `crates/state/src/lib.rs`
+- Modify: `crates/platform/src/durable_file.rs`
+- Modify: `crates/platform/src/windows.rs`
+- Modify: `crates/platform/src/unix.rs`
+- Modify: `crates/platform/src/unsupported.rs`
+- Modify: `crates/platform/src/bin/durable_file_fixture.rs`
+- Modify: `crates/platform/tests/durable_file_contract.rs`
+- Modify: `scripts/audit-reliable-state.ps1`
+- Modify: `scripts/tests/audit-reliable-state.Tests.ps1`
 
 ### Red
 
@@ -198,8 +207,22 @@ Add table-driven tests for:
 ### Verify
 
 ```powershell
-cargo +1.97.0 test -p tokenmaster-state --test record_contract --locked
+cargo +1.97.0 test -p tokenmaster-state --lib --locked -- --test-threads=1
 ```
+
+Completion evidence: the fixed 64-byte header, strict JSON payload, 40-byte footer,
+checked generation, payload SHA-256, and record SHA-256 are implemented behind a
+crate-private typed store. Save uses a bounded measure pass followed by direct
+256 KiB-chunk staging without retaining a full encoded payload. Thirteen unit
+contracts cover every header field, corrupt/truncated/malformed input, equal-generation
+conflicts, overflow, nondeterministic serialization, post-publication readback failure,
+and process death at three exact phases of a third-generation replacement. Platform
+evidence adds bounded reads, inactive-slot replacement without a third backup, an
+injected before/after OS boundary, 40 deterministic redundant-replacement kills, and
+20 replacement-entry race kills. The authority audit passes 33 mutation cases and
+permits only six literal record children plus the bounded writer error/result surface.
+Independent final review reports no Critical or Important finding; same-user no-follow
+open/handle identity validation remains a documented non-blocking hardening item.
 
 **Commit:** `feat(state): add redundant durable records`
 

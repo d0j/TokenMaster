@@ -108,6 +108,8 @@ tokenmaster-state = { path = "../state" }
         $result.package | Should -Be "tokenmaster-state"
         $result.binary_target_count | Should -Be 0
         $result.direct_production_dependency_count | Should -Be 5
+        $result.approved_std_io_import_count | Should -Be 1
+        $result.approved_platform_import_count | Should -Be 1
         $result.forbidden_authority_count | Should -Be 0
     }
 
@@ -210,6 +212,7 @@ tokenmaster-state = { path = "../state" }
         @{ Name = "standard-library-group-alias"; Source = 'use {std as system}; pub fn load(input: &str) { let _ = system::fs::read(input); }' }
         @{ Name = "platform-reexport"; Source = 'pub use tokenmaster_platform::ValidatedLocalDirectory;' }
         @{ Name = "platform-alias-reexport"; Source = 'use tokenmaster_platform::ExclusiveFileLease as Lease; pub use Lease as StateLease;' }
+        @{ Name = "platform-private-authority"; Source = 'use tokenmaster_platform::ExclusiveFileLease;' }
         @{ Name = "declarative-macro"; Source = 'macro_rules! expose { ($root:ident) => { pub use $root::fs::read; } } expose!(std);' }
     ) {
         $fixture = New-StateAuditFixture -Name "authority-bypass-$Name"
@@ -218,5 +221,32 @@ tokenmaster-state = { path = "../state" }
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-STATE-FORBIDDEN-AUTHORITY*"
+    }
+
+    It "rejects std io authority through the approved alias" {
+        $fixture = New-StateAuditFixture -Name "approved-io-alias-bypass"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\record.rs") `
+            -Value 'fn forbidden_io() { let _ = io::stdout(); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-APPROVED-IO*"
+    }
+
+    It "rejects caller-selected children through the approved platform alias" {
+        $fixture = New-StateAuditFixture -Name "approved-platform-alias-bypass"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\record.rs") `
+            -Value 'fn forbidden_child(directory: &ValidatedLocalDirectory, caller: &str) { let _ = DurableFileTarget::exact_child(directory, caller); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-EXACT-CHILD*"
+    }
+
+    It "rejects public generic record authority" {
+        $fixture = New-StateAuditFixture -Name "public-record-authority"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\lib.rs") `
+            -Value 'pub use record::RedundantRecordStore;'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-RECORD-VISIBILITY*"
     }
 }

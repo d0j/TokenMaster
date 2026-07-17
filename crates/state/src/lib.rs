@@ -2,6 +2,16 @@
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
 mod error;
+#[cfg_attr(
+    not(test),
+    allow(
+        dead_code,
+        reason = "Task 3 record core is consumed by Task 4 typed stores"
+    )
+)]
+mod record;
+#[cfg(test)]
+mod record_contract_tests;
 
 pub use error::{StateError, StateErrorCode};
 

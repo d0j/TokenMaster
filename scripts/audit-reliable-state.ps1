@@ -91,8 +91,20 @@ if ($directProductionDependencies.Count -ne $expectedDependencies.Count -or
     throw "TM-STATE-DEPENDENCIES: direct dependency set drifted: $($directProductionDependencies -join ', ')"
 }
 
+$testOnlySource = Join-Path $stateSource 'record_contract_tests.rs'
+$librarySource = Join-Path $stateSource 'lib.rs'
+if (-not (Test-Path -LiteralPath $testOnlySource)) {
+    throw 'TM-STATE-TEST-BOUNDARY: record contract test module is missing'
+}
+$librarySourceText = [System.IO.File]::ReadAllText($librarySource)
+$testModulePattern = '(?m)^#\[cfg\(test\)\]\s*\r?\nmod record_contract_tests;\s*$'
+if (@([regex]::Matches($librarySourceText, $testModulePattern)).Count -ne 1 -or
+    @([regex]::Matches($librarySourceText, '\brecord_contract_tests\b')).Count -ne 1) {
+    throw 'TM-STATE-TEST-BOUNDARY: record contract code must remain one cfg(test)-only module'
+}
 $rustFiles = @(
-    Get-ChildItem -LiteralPath $stateSource -Recurse -File -Filter '*.rs'
+    Get-ChildItem -LiteralPath $stateSource -Recurse -File -Filter '*.rs' |
+        Where-Object { $_.FullName -ne $testOnlySource }
 )
 if ($rustFiles.Count -eq 0) {
     throw 'TM-STATE-SOURCE: tokenmaster-state has no Rust library source'
@@ -101,12 +113,53 @@ $productionText = ($rustFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
 }) -join "`n"
 
+$approvedStdIoPattern = '(?m)^\s*use\s+std\s*::\s*io\s*::\s*\{\s*self\s*,\s*Write\s*,?\s*\}\s*;\s*$'
+$approvedPlatformPattern = '(?ms)^\s*use\s+tokenmaster_platform\s*::\s*\{\s*DurableFileError\s*,\s*DurableFileTarget\s*,\s*DurableStagedFile\s*,\s*MAX_DURABLE_WRITE_CHUNK_BYTES\s*,\s*ValidatedLocalDirectory\s*,?\s*\}\s*;\s*$'
+$approvedStdIoImports = @([regex]::Matches($productionText, $approvedStdIoPattern))
+$approvedPlatformImports = @([regex]::Matches($productionText, $approvedPlatformPattern))
+if ($approvedStdIoImports.Count -ne 1 -or $approvedPlatformImports.Count -ne 1) {
+    throw 'TM-STATE-APPROVED-IO: exact bounded JSON and durable-file imports must each appear once'
+}
+$approvedIoMembers = @('Error', 'ErrorKind', 'Result')
+$ioMemberUses = @([regex]::Matches($productionText, '\bio::(?<member>[A-Za-z_][A-Za-z0-9_]*)'))
+$unapprovedIoMembers = @(
+    $ioMemberUses |
+        Where-Object { $_.Groups['member'].Value -notin $approvedIoMembers }
+)
+if ($unapprovedIoMembers.Count -ne 0) {
+    throw 'TM-STATE-APPROVED-IO: std::io use exceeds bounded writer error/result authority'
+}
+$exactChildUses = @([regex]::Matches($productionText, '\bexact_child\b'))
+$approvedExactChildPattern = 'DurableFileTarget\s*::\s*exact_child\s*\(\s*directory\s*,\s*"(?<child>settings-a\.tms|settings-b\.tms|run-a\.tms|run-b\.tms|recovery-a\.tms|recovery-b\.tms)"\s*\)'
+$approvedExactChildUses = @([regex]::Matches($productionText, $approvedExactChildPattern))
+$expectedRecordChildren = @(
+    'settings-a.tms', 'settings-b.tms', 'run-a.tms', 'run-b.tms',
+    'recovery-a.tms', 'recovery-b.tms'
+)
+$approvedRecordChildren = @(
+    $approvedExactChildUses |
+        ForEach-Object { $_.Groups['child'].Value } |
+        Sort-Object -Unique
+)
+if ($exactChildUses.Count -ne 6 -or
+    $approvedExactChildUses.Count -ne 6 -or
+    $approvedRecordChildren.Count -ne 6 -or
+    @($expectedRecordChildren | Where-Object { $_ -notin $approvedRecordChildren }).Count -ne 0) {
+    throw 'TM-STATE-EXACT-CHILD: state may construct only the six fixed record slots'
+}
+$authorityText = [regex]::Replace($productionText, $approvedStdIoPattern, '')
+$authorityText = [regex]::Replace($authorityText, $approvedPlatformPattern, '')
+
 $publicPathPattern = '(?s)\bpub(?:\([^)]*\))?\s+(?:(?:const|async|unsafe)\s+)*fn\s+\w+[^;{]*(?:std::path::)?(?:Path|PathBuf)\b[^;{]*[;{]'
 if ($productionText -match $publicPathPattern) {
     throw 'TM-STATE-ARBITRARY-PATH: public state API must not accept filesystem paths'
 }
+$publicRecordAuthorityPattern = '(?m)^\s*pub\s+(?:use\s+record\b|mod\s+record\b|struct\s+RedundantRecordStore\b)'
+if ($productionText -match $publicRecordAuthorityPattern) {
+    throw 'TM-STATE-RECORD-VISIBILITY: generic record filesystem authority must remain crate-private'
+}
 $forbiddenAuthorityPattern = '(?s)https?://|\bstd\b|\btokenmaster_platform\b|\bmacro_rules\s*!|\b(?:Command|TcpStream|TcpListener|UdpSocket)\b|\b(?:slint|rusqlite|tokio|reqwest|ureq|webbrowser|headless_chrome|zip|tar)::|\b(?:SELECT|INSERT|UPDATE|DELETE\s+FROM|PRAGMA)\b|\b(?:include|include_str|include_bytes)!\s*\(|#\s*\[\s*path\s*=|powershell(?:\.exe)?|cmd(?:\.exe)?|bash(?:\.exe)?|\bsh\s+-c\b|\bAuthorization\b|\bBearer\s'
-if ($productionText -match $forbiddenAuthorityPattern) {
+if ($authorityText -cmatch $forbiddenAuthorityPattern) {
     throw 'TM-STATE-FORBIDDEN-AUTHORITY: state source contains standard-library/platform/macro/filesystem/network/shell/process/SQL/UI/archive/external-source authority'
 }
 
@@ -119,6 +172,8 @@ if ($SourceOnly) {
         binary_target_count = 0
         direct_production_dependency_count = $directProductionDependencies.Count
         rust_source_file_count = $rustFiles.Count
+        approved_std_io_import_count = $approvedStdIoImports.Count
+        approved_platform_import_count = $approvedPlatformImports.Count
         forbidden_authority_count = 0
         arbitrary_path_constructor_count = 0
     } | ConvertTo-Json -Compress
@@ -174,6 +229,8 @@ if ($treeText -match '(?m)^(?:zip|tar|tokio|reqwest|ureq|slint|webbrowser|headle
     direct_production_dependencies = $metadataDependencies
     direct_production_dependency_count = $metadataDependencies.Count
     rust_source_file_count = $rustFiles.Count
+    approved_std_io_import_count = $approvedStdIoImports.Count
+    approved_platform_import_count = $approvedPlatformImports.Count
     forbidden_authority_count = 0
     arbitrary_path_constructor_count = 0
     forbidden_transitive_dependency_count = 0

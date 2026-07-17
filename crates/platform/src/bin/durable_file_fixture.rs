@@ -23,13 +23,24 @@ fn run() -> Result<(), ()> {
         .next()
         .and_then(|value| value.into_string().ok())
         .ok_or(())?;
+    let mode = args
+        .next()
+        .map(|value| value.into_string().map_err(|_| ()))
+        .transpose()?
+        .unwrap_or_else(|| "backup".to_owned());
     if args.next().is_some() {
         return Err(());
     }
 
     let directory = ValidatedLocalDirectory::new(&root).map_err(|_| ())?;
     let target = DurableFileTarget::exact_child(&directory, &target_name).map_err(|_| ())?;
-    let backup = DurableFileTarget::exact_child(&directory, &backup_name).map_err(|_| ())?;
+    let backup = if mode == "backup" {
+        Some(DurableFileTarget::exact_child(&directory, &backup_name).map_err(|_| ())?)
+    } else if mode == "redundant" {
+        None
+    } else {
+        return Err(());
+    };
     let mut stdout = io::stdout().lock();
     let current = std::fs::read(root.join(&target_name)).map_err(|_| ())?;
     let byte = if current.first().copied() == Some(b'A') {
@@ -62,7 +73,11 @@ fn run() -> Result<(), ()> {
     if command != "commit\n" {
         return Err(());
     }
-    staged.replace_existing(&target, &backup).map_err(|_| ())?;
+    if let Some(backup) = &backup {
+        staged.replace_existing(&target, backup).map_err(|_| ())?;
+    } else {
+        staged.replace_existing_redundant(&target).map_err(|_| ())?;
+    }
     stdout.write_all(b"published\n").map_err(|_| ())?;
     stdout.flush().map_err(|_| ())?;
     loop {

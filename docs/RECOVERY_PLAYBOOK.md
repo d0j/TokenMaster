@@ -220,10 +220,13 @@
 
 ## Whole-file/configuration recovery status
 
-P3-D.0 Tasks 1-2 now provide the state authority boundary and low-level controlled
-durable file publication/replacement. They do not yet provide a record store, whole-
-file backup, import/export, quarantine workflow, recovery journal, automatic restore,
-or safe mode. Until the plan at
+P3-D.0 Tasks 1-3 now provide the state authority boundary, low-level controlled
+durable file publication/replacement, and a crate-private strict A/B record core for
+the future settings/run/recovery stores. They do not yet provide a public typed
+settings store, whole-file backup, import/export, quarantine workflow, recovery
+journal state machine, automatic restore, or safe mode. The generic record core is not
+an operator command and must not be used to infer ownership when both slots conflict
+or are invalid. Until the plan at
 `docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md` is complete, do not
 copy only `tokenmaster.sqlite3` while the application may be running, delete or move a
 WAL/SHM/writer-lock file, replace the archive from an unverified copy, run ad hoc SQL,

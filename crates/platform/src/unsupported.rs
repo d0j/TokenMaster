@@ -23,3 +23,10 @@ pub(super) fn replace_file_write_through(
 ) -> Result<(), DurableFileError> {
     Err(DurableFileError::UnsupportedLocation)
 }
+
+pub(super) fn replace_file_redundant_write_through(
+    _source: &Path,
+    _target: &Path,
+) -> Result<(), DurableFileError> {
+    Err(DurableFileError::UnsupportedLocation)
+}

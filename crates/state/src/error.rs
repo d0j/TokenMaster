@@ -48,6 +48,13 @@ pub struct StateError {
     code: StateErrorCode,
 }
 
+#[cfg_attr(
+    not(test),
+    allow(
+        dead_code,
+        reason = "Task 3 internal record errors are consumed by Task 4 typed stores"
+    )
+)]
 impl StateError {
     /// Constructs a path-private error from one stable category.
     #[must_use]
@@ -63,5 +70,25 @@ impl StateError {
 
     pub(crate) const fn capacity_exceeded() -> Self {
         Self::from_code(StateErrorCode::CapacityExceeded)
+    }
+
+    pub(crate) const fn invalid_input() -> Self {
+        Self::from_code(StateErrorCode::InvalidInput)
+    }
+
+    pub(crate) const fn integrity() -> Self {
+        Self::from_code(StateErrorCode::Integrity)
+    }
+
+    pub(crate) const fn unavailable() -> Self {
+        Self::from_code(StateErrorCode::Unavailable)
+    }
+
+    pub(crate) const fn recovery_required() -> Self {
+        Self::from_code(StateErrorCode::RecoveryRequired)
+    }
+
+    pub(crate) const fn internal_invariant() -> Self {
+        Self::from_code(StateErrorCode::InternalInvariant)
     }
 }

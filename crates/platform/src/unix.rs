@@ -74,6 +74,20 @@ pub(super) fn replace_file_write_through(
     Ok(())
 }
 
+pub(super) fn replace_file_redundant_write_through(
+    source: &Path,
+    target: &Path,
+) -> Result<(), DurableFileError> {
+    std::fs::rename(source, target).map_err(|_| DurableFileError::Unavailable)?;
+    if sync_file(target).is_err()
+        || sync_parent_io(source).is_err()
+        || sync_parent_io(target).is_err()
+    {
+        return Err(DurableFileError::RecoveryRequired);
+    }
+    Ok(())
+}
+
 fn sync_file(path: &Path) -> std::io::Result<()> {
     File::open(path)?.sync_all()
 }

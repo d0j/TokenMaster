@@ -282,9 +282,12 @@ corruption-only recovery, safe mode, and resource/privacy gates. Task 1 is imple
 the state package is library-only, exposes fixed path-private errors and bounded count/
 byte checks, and has an exact dependency/authority audit. Task 2 is implemented:
 platform-owned exact-child staged publication/replacement is bounded, digest-verified,
-path-private, crash-tested, and preserves ambiguous recovery artifacts. Backup,
-restore, settings, package, retention, and UI behavior remain unimplemented; Task 3
-redundant records is next.
+path-private, crash-tested, and preserves ambiguous recovery artifacts. Task 3 is
+implemented behind the crate boundary: six literal A/B slots, a strict 1 MiB checked
+envelope, two-pass bounded streaming save, corrupt-newest fallback, equal-generation
+conflict handling, post-publication recovery classification, and generation-3 process-
+death evidence. Backup, restore, typed settings, package, retention, and UI behavior
+remain unimplemented; Task 4 settings is next.
 
 The final planning pass fixes a six-state database/settings transaction, explicit
 manual data-only or data-plus-portable-settings choice, data-only automatic recovery,
