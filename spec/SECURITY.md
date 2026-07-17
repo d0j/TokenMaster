@@ -165,6 +165,16 @@ direct authority, route-count/controller-worker drift, a second result slot or e
 site, strong window retention, bridge polling, UI-query surfaces, forbidden source
 surfaces, and exact private canary strings in the release executable.
 
+P3-C adds only an owned bounded Dashboard projection. Its public/UI structs contain
+semantic keys, ordinals, values, availability, freshness, quality, and stable reasons;
+they exclude account, workspace, window, lot, repository, project, session, event,
+and source IDs. Dynamic quota discovery is explicit and an empty exact filter remains
+empty. The audit rejects fixed five-hour/weekly UI rows, seeded metric literals,
+private identity fields, UI timers/animations, Dashboard-bound drift, route-triggered
+Dashboard rebuilds, and a second worker/snapshot/event site. Slint still receives no
+SQL, store, query service, runtime, filesystem, network, process, browser, shell, or
+credential authority.
+
 Providers emit bounded observation/session-relation drafts only. They cannot create
 event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or
 canonical events. Those values are created only by TokenMaster accounting code. Store

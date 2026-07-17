@@ -40,9 +40,12 @@ if ($productionManifestText -match '\btokenmaster-(store|provider|runtime|codex|
 $rustFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.rs')
 $uiFiles = @(Get-ChildItem -LiteralPath $uiRoot -Recurse -File -Filter '*.slint')
 $productionFiles = @($rustFiles + $uiFiles)
-if ($rustFiles.Count -ne 6 -or $uiFiles.Count -ne 5) {
-    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain six Rust and five Slint files'
+if ($rustFiles.Count -ne 7 -or $uiFiles.Count -ne 9) {
+    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain seven Rust and nine Slint files'
 }
+$uiText = ($uiFiles | ForEach-Object {
+    [System.IO.File]::ReadAllText($_.FullName)
+}) -join "`n"
 $productionText = ($productionFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
 }) -join "`n"
@@ -89,9 +92,73 @@ if ($bridgeText -match 'window:\s*MainWindow|\b(slint::Timer|std::thread|thread:
     throw 'TM-DESKTOP-BRIDGE-POLLING: desktop bridge must not retain a strong window, timer, or polling thread'
 }
 $uiAdapterText = [System.IO.File]::ReadAllText((Join-Path $sourceRoot 'ui.rs')) + "`n" +
-    (($uiFiles | ForEach-Object { [System.IO.File]::ReadAllText($_.FullName) }) -join "`n")
-if ($uiAdapterText -match 'QueryService::|RefreshWorker::|DesktopController::|\.usage_analytics\(') {
+    $uiText
+if ($uiAdapterText -match 'QueryService::|RefreshWorker::|DesktopController::|\.usage_analytics\(|\.quota_overview\(|\.benefit_overview\(') {
     throw 'TM-DESKTOP-UI-QUERY: Slint callbacks must not perform controller or query work'
+}
+if ($controllerText -match 'QuotaCurrentRequest::new\s*\(\s*Vec::new\(\)\s*\)') {
+    throw 'TM-DESKTOP-EMPTY-FILTER-DISCOVERY: exact-empty quota filters must not be used for dashboard discovery'
+}
+if ($uiText -match '(?i)\b(?:text|label|title)\s*:\s*"[^"\r\n]*\b(?:5[ -]?(?:h|hour)|five[ -]?hour|weekly)\b') {
+    throw 'TM-DESKTOP-FIXED-QUOTA-ROW: quota rows must be discovered dynamically'
+}
+if ($uiText -match '(?m)\bdashboard-(?:header-(?:tokens|cost|events)|code-(?:commits|added|removed|net|efficiency))\s*:\s*"(?:\$|\+|-|−)?[0-9]') {
+    throw 'TM-DESKTOP-SEEDED-DASHBOARD: dashboard metrics must come from the immutable product snapshot'
+}
+if ($uiAdapterText -match '(?i)\b(?:account|workspace|window|lot|repo|repository|session|event|source)[_-]?id\b') {
+    throw 'TM-DESKTOP-PRIVATE-IDENTITY: private opaque identities must not cross the UI boundary'
+}
+if (
+    $uiAdapterText -match '(?i)\b(?:slint::Timer|std::thread|thread::spawn|thread::sleep)\b' -or
+    $uiText -match '(?i)(?:\bTimer\s*\{|\banimate\s+[A-Za-z_-]+\b|\banimation-[A-Za-z_-]+\b)'
+) {
+    throw 'TM-DESKTOP-UI-POLLING: UI must remain timer animation and polling free'
+}
+if ($uiAdapterText -match '(?i)\b(?:WhereMyTokens|WhereMyToken|WhereMyTokens)\b') {
+    throw 'TM-DESKTOP-LEGACY-PRODUCT: production UI must contain only TokenMaster product identity'
+}
+
+$dashboardPath = Join-Path $sourceRoot 'dashboard.rs'
+$dashboardText = [System.IO.File]::ReadAllText($dashboardPath)
+$dashboardBounds = [ordered]@{
+    DESKTOP_DASHBOARD_SECTION_COUNT = 6
+    MAX_DASHBOARD_QUOTA_ROWS = 32
+    MAX_DASHBOARD_BENEFIT_SCOPES = 32
+    MAX_DASHBOARD_TREND_POINTS = 240
+    MAX_DASHBOARD_SESSIONS = 12
+    DASHBOARD_ACTIVITY_ROWS = 8
+    MAX_DASHBOARD_MODELS = 12
+    MAX_DASHBOARD_REPOSITORIES = 32
+}
+foreach ($bound in $dashboardBounds.GetEnumerator()) {
+    $pattern = "pub const $([regex]::Escape($bound.Key)): usize = $($bound.Value);"
+    if ($dashboardText -notmatch $pattern) {
+        throw "TM-DESKTOP-DASHBOARD-BOUND: $($bound.Key) drifted"
+    }
+}
+foreach ($requiredBoundUse in @(
+    '\.take\(MAX_DASHBOARD_QUOTA_ROWS\)',
+    '\.take\(MAX_DASHBOARD_BENEFIT_SCOPES\)',
+    '\.take\(MAX_DASHBOARD_TREND_POINTS\)',
+    '\.take\(MAX_DASHBOARD_SESSIONS\)',
+    '\.take\(MAX_DASHBOARD_MODELS\)',
+    '\.take\(MAX_DASHBOARD_REPOSITORIES\)'
+)) {
+    if ($dashboardText -notmatch $requiredBoundUse) {
+        throw "TM-DESKTOP-DASHBOARD-BOUND: missing bounded projection $requiredBoundUse"
+    }
+}
+$uiRustText = [System.IO.File]::ReadAllText((Join-Path $sourceRoot 'ui.rs'))
+$dashboardProjectionCallCount = [regex]::Matches($uiRustText, 'apply_dashboard_projection\(').Count
+if ($dashboardProjectionCallCount -ne 2) {
+    throw 'TM-DESKTOP-DASHBOARD-REBUILD: dashboard models must not rebuild during route-only selection'
+}
+$dashboardModelReplacementCount = [regex]::Matches(
+    $uiRustText,
+    'set_dashboard_(?:section_rows|quota_rows|benefit_rows|trend_points|session_rows|activity_rows|model_rows)\(model\('
+).Count
+if ($dashboardModelReplacementCount -ne 7) {
+    throw 'TM-DESKTOP-DASHBOARD-MODEL: dashboard must replace each of seven bounded list models exactly once'
 }
 
 $presentationPath = Join-Path $sourceRoot 'presentation.rs'
@@ -131,7 +198,7 @@ foreach ($requiredPattern in @(
         throw "TM-DESKTOP-MISSING-CONTRACT: $requiredPattern"
     }
 }
-if ($productionText -match '\b(QuotaRow|SessionRow|ChartPoint|quota-targets|session-rows|chart-points)\b') {
+if ($productionText -match '\b(QuotaRow|SessionRow|ChartPoint|quota-targets|chart-points)\b') {
     throw 'TM-DESKTOP-MOCK-DATA: production shell contains probe data models'
 }
 
@@ -146,6 +213,11 @@ if ($SourceOnly) {
         retained_snapshot_slot_count = $snapshotSlotCount
         event_loop_schedule_site_count = $eventScheduleCount
         bridge_polling_surface_count = 0
+        dashboard_section_count = $dashboardBounds.DESKTOP_DASHBOARD_SECTION_COUNT
+        dashboard_model_replacement_count = $dashboardModelReplacementCount
+        dashboard_projection_application_count = $dashboardProjectionCallCount - 1
+        dashboard_polling_surface_count = 0
+        private_ui_identity_count = 0
     } | ConvertTo-Json -Compress
     return
 }
@@ -166,7 +238,8 @@ $directProductionDependencies = @(
         Sort-Object -Unique
 )
 $expectedDependencies = @(
-    'anyhow', 'slint', 'tokenmaster-engine', 'tokenmaster-product', 'tokenmaster-query'
+    'anyhow', 'chrono', 'slint', 'tokenmaster-domain', 'tokenmaster-engine',
+    'tokenmaster-product', 'tokenmaster-query'
 )
 if (
     $directProductionDependencies.Count -ne $expectedDependencies.Count -or
@@ -208,6 +281,11 @@ if ($LASTEXITCODE -ne 0) {
     retained_snapshot_slot_count = $snapshotSlotCount
     event_loop_schedule_site_count = $eventScheduleCount
     bridge_polling_surface_count = 0
+    dashboard_section_count = $dashboardBounds.DESKTOP_DASHBOARD_SECTION_COUNT
+    dashboard_model_replacement_count = $dashboardModelReplacementCount
+    dashboard_projection_application_count = $dashboardProjectionCallCount - 1
+    dashboard_polling_surface_count = 0
+    private_ui_identity_count = 0
     mock_data_model_count = 0
     direct_authority_dependency_count = 0
     forbidden_source_authority_count = 0

@@ -1119,3 +1119,26 @@ Rationale: putting runtimes in the UI package would erase authority isolation, w
 polling adds idle work and another lifecycle. A marker makes ZIP portability explicit
 and installed behavior deterministic. Lossy hints plus authoritative snapshots keep
 latency low and memory constant without turning the UI into an ingestion owner.
+
+## ADR-053 — Dashboard uses explicit discovery and bounded snapshot replacement
+
+Decision: P3-C introduces separate all-current quota and benefit overview APIs rather
+than changing empty exact-filter semantics. One immutable `ProductSnapshot` maps into
+exactly six ordered Dashboard sections. Presentation retains at most 32 quota rows,
+32 benefit summaries, 240 trend points, 12 sessions, eight fixed activity rows, 12
+models, and one checked Git aggregate over at most 32 repositories. Private opaque
+identities stop before the Dashboard projection.
+
+After initial construction, each accepted newer product generation replaces the seven
+bounded Slint list models once.
+Route selection updates only the fixed route projection, preserves the window and
+Dashboard models, and performs no query or background work. P3-C adds no timer,
+animation, polling thread, secondary worker, snapshot history, or renderer fallback.
+Semantic values and stable label keys stay separate from English fallback strings so
+P4 skins and locales can hot-switch without changing archive/query contracts.
+
+Rationale: overloading an empty filter would silently turn exact-empty truth into
+discovery and could display false empty limits. Per-card queries or route-triggered
+model rebuilding would add latency, hidden queues, and allocation churn. Explicit
+overview reads plus capped immutable replacement keep truth, responsiveness, privacy,
+and retained memory independently testable.

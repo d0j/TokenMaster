@@ -25,6 +25,11 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   only the newest generation with no polling timer, extra worker, second result slot,
   or strong window cycle. Race, retry, window-close, 10,000-notification coalescing,
   and real headless Slint event-loop contracts pass.
+- P3-C quota-first Dashboard: explicit all-current quota and benefit overview reads
+  feed one identity-free immutable six-section projection. The compiled responsive
+  Slint board renders real today, quota/reset, Git, trend, session, activity, and model
+  truth with 32/32/240/12/8/12 caps, section-local degradation, unknown values, and
+  route-only in-place navigation without timers, animation, polling, or model rebuild.
 - M1 usage foundation: bounded provider roots, path-private source discovery,
   reparse-safe streaming enumeration, typed bounded JSONL parser, cumulative token
   state, physical/logical source identity, byte framing, revalidation, strict SQLite
@@ -731,9 +736,44 @@ errors Clippy, all tests, and all doctests. Its Windows-load-only Git process-te
 race is now a deterministic delayed-start regression: deadline/cancellation cleanup
 checks the exact fixture executable even when the child is reaped before publishing a
 PID receipt.
-The remaining immediate work is P3-C visible quota-first route payloads and safe
-benefit-scope discovery; skins/locales/P4, automation/P5, release/P6, activation, and
+P3-C subsequently completed visible quota-first route payloads and safe all-current
+benefit-scope discovery. P3-D supporting views and P3-E desktop integration are now
+the remaining P3 work; skins/locales/P4, automation/P5, release/P6, activation, and
 acceptance evidence remain unclaimed.
+
+## P3-C quota-first Dashboard
+
+P3-C is implemented under
+`docs/superpowers/plans/2026-07-17-tokenmaster-p3c-dashboard.md`. Separate quota and
+benefit overview contracts preserve exact-empty filter semantics and capture at most
+32 current windows, 32 scopes, and 256 lots under exact revisions. Product/controller
+publication remains section-local and uses the existing one worker, reducer, snapshot
+mailbox, and Slint event gate.
+
+One pure `DesktopDashboardProjection` maps a current immutable snapshot into exactly
+six ordered sections: Plan Usage, Code Output, Usage and Cost Trend, Sessions,
+Activity, and Model Usage. Retained bounds are 32 quota rows, 32 benefit summaries,
+240 trend points, 12 sessions, eight fixed activity rows, 12 models, and checked Git
+aggregation over at most 32 repositories. Missing facts stay unavailable/partial;
+banked resets, credits, temporary usage, and unavailable lots remain separate. No
+account/workspace/window/lot/repository/project/session/event/source ID enters the UI.
+
+The responsive Slint Dashboard uses semantic models/components/tokens and switches
+between narrow and wide layouts without recreating `MainWindow`. After initial
+construction, an accepted newer snapshot replaces each of seven bounded list models
+once; route-only selection updates only
+navigation state. The UI owns no query, SQL, runtime, timer, animation, polling thread,
+filesystem/network/process/browser/shell/credential authority, or seeded metric.
+Focused tests include real fixture values, 32 dynamic quota rows, reset separation,
+unknown truth, in-place navigation, section-local degradation, checked Git sums, and
+10,000 projection replacements.
+
+The desktop adversarial suite now has 20 cases and the source receipt reports seven
+Rust files, nine Slint files, six Dashboard sections, seven bounded list replacements,
+one Dashboard application path, one controller worker, one snapshot slot, one event
+site, and zero polling/private-ID surfaces. P3-D/P3-E, P4 skin/locale/accessibility/
+paint/resource acceptance, P5 automation, activation, M0 acceptance, packaging,
+signing, and release remain unclaimed.
 
 ## Next implementation slice
 
@@ -751,8 +791,8 @@ credit inventory, expiration reconciliation, default/custom reminder profiles,
 immutable read snapshots, and publication through the existing Codex runtime with
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
-workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, P3-B.2, and P3-B.3 are complete;
-the immediate next slice is P3-C visible quota-first route payloads. Activation
+workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, P3-B.2, P3-B.3, and P3-C are
+complete; the immediate next slice is P3-D supporting data-bearing routes. Activation
 remains a later independently authorized capability. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.
 
@@ -876,8 +916,8 @@ at 117 handles, four threads, USER=1, GDI=0, a 3,440,640-byte private floor, and
 5,799,936-byte sampled high. The four-package
 benefit authority audit found 125 production dependencies, four reminder production
 source files, four release libraries, and zero forbidden dependency/source/binary
-matches. Actual P3 rendering, OS/tray delivery, snooze, quiet hours, and activation
-remain later.
+matches. Dashboard rendering is now complete in P3-C; reminder OS/tray delivery,
+snooze, quiet hours, and activation remain later.
 No view-time grouping of the full event table is allowed.
 Parser resume v1 still fails closed because its event ordinal cannot be inferred
 safely; legacy data remains immutable and must be rebuilt, never reinterpreted.

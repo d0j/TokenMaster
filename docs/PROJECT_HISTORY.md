@@ -2240,3 +2240,40 @@ reproduces that state deterministically and verifies no process remains by exact
 executable path; receipt PIDs remain an additional check when available. The renewed
 clean-root, release audits, 21-case Pester suite, format, strict Clippy, workspace
 tests, and doctests all pass.
+
+## 2026-07-17 — P3-C quota-first Dashboard
+
+Implemented the approved P3-C design and executable plan under
+`docs/superpowers/specs/2026-07-17-tokenmaster-p3c-dashboard-design.md` and
+`docs/superpowers/plans/2026-07-17-tokenmaster-p3c-dashboard.md`. Separate store/query
+overview APIs now discover all current quota windows and benefit scopes without
+changing exact-empty filter semantics. One transaction binds each overview to its
+revision, with 32-window, 32-scope, and 256-lot plus-one rejection and identity-free
+public mapping.
+
+The controller publishes quota and benefit overview envelopes through the existing
+single worker/reducer/snapshot path. A pure `DesktopDashboardProjection` maps one
+immutable product snapshot into Plan Usage, Code Output, Usage and Cost Trend,
+Sessions, Activity, and Model Usage. It retains at most 32 quota rows, 32 benefit
+summaries, 240 trend points, 12 sessions, eight fixed activity categories, 12 model
+rows, and checked aggregate Git facts from at most 32 repositories. Compatible sibling
+failure remains local and visibly degraded; missing values are never fabricated zero.
+
+The production Slint shell now renders the responsive six-section Dashboard from real
+models. Dynamic quota ratios/units/reset times, distinct banked resets and credit
+kinds, today metrics, Git efficiency, trend, recent sessions, activity, and model
+usage are visible. Semantic components/tokens and stable label keys preserve the P4
+skin/locale boundary. Narrow/wide switching and route navigation reuse `MainWindow`;
+route-only selection no longer rebuilds Dashboard models. There is no UI query, SQL,
+runtime, timer, animation, polling thread, or private opaque ID.
+
+Focused projection/UI/event-loop tests prove real fixture values, unknown truth,
+32 dynamic quota rows, reset separation, section-local bounds, checked multi-project
+Git sums, and 10,000 old-model releases. The desktop adversarial suite passes 20 cases;
+its source receipt reports seven Rust files, nine Slint files, six Dashboard sections,
+seven bounded list replacements, one Dashboard application path, one worker, one
+snapshot slot, one event-loop site, and zero polling/private-ID surfaces.
+
+P3-D supporting routes, P3-E desktop integration, P4 skins/locales/accessibility/
+paint/resource evidence, P5 automation, activation, M0 acceptance, packaging, signing,
+and release remain unclaimed.

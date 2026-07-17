@@ -593,6 +593,22 @@ typed in-app events but does not claim that the unfinished P3 UI rendered them; 
 delivery, snooze, quiet hours, activation intents, and activation receipts remain
 absent.
 
+### P3-C bounded Dashboard projection
+
+The read-only quota overview discovers at most 32 current window keys in one deferred
+transaction and restores every window under the same quota revision. The benefit
+overview captures at most 32 scopes and 256 current lots in one deferred transaction.
+Each plus-one case fails closed; neither overview treats an empty exact filter as an
+all-current request.
+
+`DesktopDashboardProjection` owns only copied presentation facts from one immutable
+`ProductSnapshot`. It retains exactly six section states and caps quota rows at 32,
+benefit summaries at 32, trend points at 240, session summaries at 12, activity rows
+at eight fixed categories, model rows at 12, and checked Git aggregation at 32
+repositories. Account, workspace, quota-window, benefit-lot, repository, project,
+session, event, and source identities do not cross this boundary. A missing scalar is
+typed unavailable or partial before formatting and is not stored as a display zero.
+
 Only explicit provider ancestry identifies a parent. A strong signature covers the
 normalized model, emitted delta, and provider cumulative snapshot. A weak signature
 covers model and delta only and cannot suppress a pre-divergence event by itself.

@@ -98,6 +98,77 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-UI-QUERY*"
     }
 
+    It "rejects exact-empty quota discovery from the dashboard controller" {
+        $fixture = New-DesktopAuditFixture -Name "empty-filter-discovery"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\controller.rs") `
+            -Value 'fn false_discovery() { let _ = QuotaCurrentRequest::new(Vec::new()); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-EMPTY-FILTER-DISCOVERY*"
+    }
+
+    It "rejects fixed five-hour or weekly quota rows" {
+        $fixture = New-DesktopAuditFixture -Name "fixed-quota-row"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\main.slint") `
+            -Value 'Text { text: "Weekly limit"; }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-FIXED-QUOTA-ROW*"
+    }
+
+    It "rejects seeded dashboard values in Slint" {
+        $fixture = New-DesktopAuditFixture -Name "seeded-dashboard"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\main.slint") `
+            -Value 'property <string> dashboard-header-tokens: "140";'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SEEDED-DASHBOARD*"
+    }
+
+    It "rejects private identity fields from the UI boundary" {
+        $fixture = New-DesktopAuditFixture -Name "private-ui-identity"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\models.slint") `
+            -Value 'export struct LeakyRow { account-id: string, session-id: string }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PRIVATE-IDENTITY*"
+    }
+
+    It "rejects UI timers or animations" {
+        $fixture = New-DesktopAuditFixture -Name "ui-animation"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\main.slint") `
+            -Value 'animate width { duration: 100ms; }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-UI-POLLING*"
+    }
+
+    It "rejects dashboard presentation-bound drift" {
+        $fixture = New-DesktopAuditFixture -Name "dashboard-bound"
+        $path = Join-Path $fixture "crates\desktop\src\dashboard.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'pub const MAX_DASHBOARD_TREND_POINTS: usize = 240;',
+            'pub const MAX_DASHBOARD_TREND_POINTS: usize = 2400;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DASHBOARD-BOUND*"
+    }
+
+    It "rejects dashboard model rebuilding from route selection" {
+        $fixture = New-DesktopAuditFixture -Name "route-dashboard-rebuild"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'apply_route_projection(&window, state.projection());',
+            "apply_route_projection(&window, state.projection());`r`n            apply_dashboard_projection(&window, state.projection().dashboard());"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DASHBOARD-REBUILD*"
+    }
+
     It "rejects a second event-loop scheduling site" {
         $fixture = New-DesktopAuditFixture -Name "bridge-event"
         Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\bridge.rs") `
@@ -138,10 +209,13 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-CONTROLLER-SLOT*"
     }
 
-    It "accepts the library-only six-Rust-file desktop boundary" {
+    It "accepts the library-only bounded dashboard desktop boundary" {
         $fixture = New-DesktopAuditFixture -Name "library-boundary"
 
-        (& $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json).rust_source_file_count |
-            Should -Be 6
+        $receipt = & $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json
+        $receipt.rust_source_file_count | Should -Be 7
+        $receipt.slint_source_file_count | Should -Be 9
+        $receipt.dashboard_section_count | Should -Be 6
+        $receipt.dashboard_model_replacement_count | Should -Be 7
     }
 }

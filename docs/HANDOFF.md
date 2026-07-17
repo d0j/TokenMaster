@@ -304,16 +304,34 @@ there is no polling/thread/queue, duplicate ingestion, runtime in desktop, path 
 or strong ownership cycle. Focused package tests, real live-bundle shutdown, 21 Pester
 cases, and both release audits pass.
 
+P3-C is complete under
+`docs/superpowers/plans/2026-07-17-tokenmaster-p3c-dashboard.md`. Explicit all-current
+quota and benefit overview reads preserve exact-empty semantics, publish through the
+existing one-worker controller, and map one immutable snapshot into six ordered
+Dashboard sections. Presentation caps are 32 quota rows, 32 benefit summaries, 240
+trend points, 12 sessions, eight activity categories, 12 models, and checked Git
+aggregation over 32 repositories. Private opaque IDs stop before the projection.
+
+The compiled responsive Slint board renders real header, dynamic quota/reset, Git,
+trend, sessions, activity, and model values plus truthful unknown/degraded states.
+Route switching preserves the window and Dashboard models; after initial construction,
+only an accepted newer product generation replaces the seven bounded list models.
+There is no UI query/SQL/runtime,
+timer, animation, polling, seeded value, or additional worker/slot/event. Focused
+desktop tests and the 20-case adversarial audit pass; the source receipt reports seven
+Rust and nine Slint files, six sections, seven replacements, one Dashboard application
+path, and zero polling/private-ID surfaces.
+
 The fresh post-P3-B.3 clean-root, format, strict locked workspace Clippy, and complete
 locked workspace test/doctest gate passes. The gate exposed and now permanently
 covers a valid Windows deadline race where the Git fixture can be killed and reaped
 before creating its PID receipt; cleanup is additionally checked by exact executable
 path, with a deterministic delayed-start regression.
 
-The immediate next slice is P3-C visible quota-first route payloads. Do not guess
-benefit identity; safe current-scope discovery/all-current query support is a separate
-prerequisite before benefit inventory becomes ready.
-P3-C-P3-E visible data/notifications, P4 presentation, CLI/MCP, activation, M0
+The immediate next slice is P3-D supporting data-bearing routes using bounded keyset
+intents and the same controller/snapshot boundary. P3-E then closes notifications,
+settings/help, command palette, tray, and compact lifecycle. P3-D-P3-E, P4
+presentation, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.
 The current post-Task-8 Git clean-root, formatting, strict locked workspace Clippy,
@@ -406,6 +424,10 @@ pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location
 pwsh -NoProfile -File scripts\audit-desktop-shell.ps1 -RepositoryRoot (Get-Location).Path
 pwsh -NoProfile -File scripts\audit-application-composition.ps1 -RepositoryRoot (Get-Location).Path
 Invoke-Pester -Path scripts\tests\audit-desktop-shell.Tests.ps1,scripts\tests\audit-application-composition.Tests.ps1 -Output Detailed
+cargo +1.97.0 test -p tokenmaster-desktop --test dashboard_projection_contract --locked
+cargo +1.97.0 test -p tokenmaster-desktop --test ui_contract --locked
+cargo +1.97.0 test -p tokenmaster-desktop --test bridge_event_loop_contract --locked
+cargo +1.97.0 test -p tokenmaster-desktop --locked
 cargo +1.97.0 test -p tokenmaster-store --test usage_ingest_contract --locked
 cargo +1.97.0 test -p tokenmaster-store --test scan_contract --locked
 cargo +1.97.0 test -p tokenmaster-accounting --locked

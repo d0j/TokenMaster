@@ -123,6 +123,18 @@ nested-Git, quota, and reminder runtimes, copies four fixed health observations 
 one controller slot, and refreshes through lossy worker-completion hints without a new
 timer, polling thread, queue, ingestion path, or strong ownership cycle.
 
+P3-C adds explicit quota and benefit overview reads on that existing worker. Empty
+exact filters retain their original empty meaning. The current product snapshot maps
+purely into six ordered Dashboard sections with hard caps of 32 quota rows, 32 benefit
+summaries, 240 trend points, 12 sessions, eight activity categories, 12 models, and a
+checked aggregate over at most 32 repositories. The projection contains no opaque
+account/workspace/window/lot/repository/session/event/source identities. Slint applies
+seven bounded list replacements at initial construction and for each accepted newer
+generation; route selection uses
+a smaller route-only path and does not reconstruct the Dashboard or window. Semantic
+tokens and label keys make future skin/locale switching a presentation concern, while
+the current Dashboard remains timer-, animation-, polling-, query-, and SQL-free.
+
 The built-in live quota source is separate from the JSONL usage reader. Composition
 supplies one already resolved absolute native Codex executable to
 `CodexQuotaTransport`. `CodexQuotaRuntime` resolves it either from authoritative

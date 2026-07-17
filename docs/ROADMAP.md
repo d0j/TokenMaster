@@ -72,8 +72,9 @@ The permitted built-in Codex quota normalizer and short-lived official app-serve
 transport, exact-native executable discovery, and dedicated quota refresh
 scheduling/writer coordination are complete for the pinned supported version.
 Banked-reset inventory/reminders are complete through their read-only authority and
-project-truth gates. The remaining Git runtime and audit closure are next, followed by
-complete UI and automation work.
+project-truth gates. Git output and joined product status are complete. P3-C now adds
+the first data-bearing production route; supporting views and shell integration remain
+before presentation and automation work.
 
 Completed P1-C.1: a no-async, constant-state coordinator with checked monotonic IDs,
 deadline/cancellation semantics, one active refresh, and one aggregate follow-up.
@@ -118,10 +119,10 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   bounded Git output metrics.
 - **P3 — complete desktop UI (in progress):** P3-A separate production shell/fixed
   11-route projection, P3-B.1 bounded controller core, P3-B.2 capacity-one Slint
-  event delivery, and P3-B.3 deterministic data-root/live composition are complete;
-  quota-first board, history,
-  sessions, models, projects, activity, health, notifications, settings, help,
-  command palette, tray, and compact widget remain P3-C-P3-E.
+  event delivery, P3-B.3 deterministic data-root/live composition, and P3-C responsive
+  six-section quota-first Dashboard are complete; full history, sessions, models,
+  projects, activity, health, notifications, settings, help, command palette, tray,
+  and compact widget remain P3-D-P3-E.
 - **P4 — presentation:** modular skins/layouts/density/scheme/locale, en/ru/pseudo,
   accessibility, DPI, reduced motion, and visible-paint/resource gates.
 - **P5 — automation:** strict bounded JSON CLI and a separate stdio MCP process for
@@ -151,7 +152,11 @@ shutdown. P3-B.2 now shares that one mailbox with a weak-window bridge, coalesce
 consumer race with one recheck, and proves the real headless Slint event loop. P3-B.3
 moves the sole production binary to `tokenmaster-app`, resolves exact installed/
 portable storage, composes sole live/quota/reminder ownership, and joins fixed runtime
-health through lossy completion hints. P3-C visible quota-first route payloads are next.
+health through lossy completion hints. P3-C is now complete: explicit all-current
+quota/benefit overview reads feed one
+identity-free six-section projection and responsive compiled Slint Dashboard with
+32/32/240/12/8/12 presentation caps, real unknown/degraded states, and route-only
+navigation without model/window reconstruction. P3-D supporting data views are next.
 
 P2-A query foundation is approved under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-query-foundation.md`. It first freezes

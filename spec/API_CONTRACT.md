@@ -365,6 +365,20 @@ latest value only on its existing query worker, and publishes it only with a com
 non-cancelled `ProductSnapshot`. The desktop API receives no runtime owner or runtime
 source type.
 
+`QueryService::quota_overview` and `QueryService::benefit_overview` are the explicit
+all-current read APIs used by the Dashboard. They are not aliases for empty exact
+filters. The desktop query worker calls them once per accepted attempt and publishes
+their immutable envelopes through `ProductReducer`; a failure is local to its product
+section and may retain only compatible last-good truth as visibly degraded.
+
+`DesktopDashboardProjection::from_snapshot` is the sole product-to-Dashboard mapping.
+It produces exactly six ordered section projections and bounded owned row sets with
+stable semantic and translation keys. `apply_projection` runs during initial window
+construction and then only for an accepted newer product generation; each application
+replaces the seven Slint list models once. Route
+callbacks call the route-only projection path; they cannot rebuild Dashboard lists,
+invoke the query facade, create a timer, or recreate `MainWindow`.
+
 `CodexAppServerCommand` accepts one already resolved absolute native executable path.
 The path must name a regular non-reparse file; Windows additionally requires an
 `.exe`. It is canonicalized but has no public getter and its `Debug` output is

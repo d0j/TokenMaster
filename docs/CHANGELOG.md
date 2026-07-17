@@ -6,6 +6,24 @@ All notable changes are recorded here.
 
 ### Added
 
+- P3-C explicit all-current quota and benefit overview contracts with exact-empty
+  semantics, one-revision capture, 32-window/32-scope/256-lot hard bounds, immutable
+  public envelopes, and section-local product/controller publication.
+- Pure identity-free `DesktopDashboardProjection` with six ordered sections and hard
+  caps of 32 quota rows, 32 benefit summaries, 240 trend points, 12 sessions, eight
+  activity categories, 12 models, and checked Git aggregation over 32 repositories.
+- Responsive semantic Slint Dashboard rendering real today, Plan Usage/banked reset,
+  Code Output, trend, session, activity, and model truth. Missing values remain
+  unavailable; narrow/wide navigation preserves the window and Dashboard models.
+- Route-only UI application path so navigation no longer rebuilds seven Dashboard
+  list models. After initial construction, accepted newer snapshots replace each
+  bounded model once; the UI adds no
+  timer, animation, polling, query/SQL/runtime authority, or seeded metrics.
+- Twenty adversarial desktop audit contracts covering empty-filter discovery drift,
+  fixed quota rows, seeded values, private IDs, UI authority/polling/animation,
+  presentation bounds, route-triggered rebuilds, worker/slot/event duplication,
+  diagnostic renderer/probe drift, and the seven-Rust/nine-Slint source boundary.
+
 - P3-B.3 `tokenmaster-app` composition package as the sole owner of
   `TokenMaster.exe`; `tokenmaster-desktop` is now a six-Rust-file library-only
   frontend with no new platform/runtime/store/provider authority.

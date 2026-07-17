@@ -177,6 +177,13 @@ responsive, and explicit about loading, stale, partial, unavailable, and failure
 states. The dark default SHOULD preserve the useful visual hierarchy of the UI
 reference without copying its implementation.
 
+The Dashboard MUST render exactly six semantic sections in this order: Plan Usage,
+Code Output, Usage and Cost Trend, Sessions, Activity, and Model Usage. Provider quota
+rows MUST be discovered dynamically and MUST NOT assume five-hour or weekly windows.
+Missing token, cost, quota, reset, or benefit evidence MUST render as unavailable,
+never as a fabricated zero. Banked resets MUST remain visually and semantically
+separate from provider quota bars, credits, temporary usage, and unavailable lots.
+
 ### TM-UI-002 — Reactive presentation boundary
 
 Skin, layout, locale, selection, and range changes MUST update bounded presentation
@@ -198,6 +205,13 @@ Runtime-to-presentation refresh MUST be driven by bounded lossy completion hints
 the existing workers, not a UI timer or polling thread. The application may retain one
 latest fixed runtime-health observation and one checked generation only. It MUST NOT
 duplicate ingestion, runtime ownership, result history, or the desktop snapshot slot.
+
+The current Dashboard projection MUST retain at most 32 quota rows, 32 benefit-scope
+summaries, 240 trend points, 12 sessions, eight fixed activity categories, 12 model
+rows, and one checked aggregate over at most 32 repositories. An accepted product
+generation MAY replace each bounded list model once. Route-only selection MUST NOT
+rebuild Dashboard models, recreate the window, query SQLite, or schedule background
+work. The production Dashboard MUST contain no idle animation or presentation timer.
 
 ## Performance requirements
 
