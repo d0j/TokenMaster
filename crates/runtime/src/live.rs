@@ -7,8 +7,8 @@ use std::sync::{
 
 use tokenmaster_engine::{
     Clock, OneShotExecutor, OperationControl, PortError, PortErrorCode, RefreshOutcome,
-    RefreshPermit, RefreshUrgency, RefreshWorker, WorkerCompletion, WorkerError, WorkerErrorCode,
-    WorkerPhase, WriterLease, WriterLeaseGuard,
+    RefreshPermit, RefreshUrgency, RefreshWorker, WorkerCompletion, WorkerCompletionNotifier,
+    WorkerError, WorkerErrorCode, WorkerPhase, WriterLease, WriterLeaseGuard,
 };
 use tokenmaster_platform::PowerLifecycleEvent;
 use tokenmaster_provider::DiscoveryRequest;
@@ -42,6 +42,22 @@ pub struct LiveRuntime {
 
 impl LiveRuntime {
     pub fn start(archive_path: &Path, request: DiscoveryRequest) -> Result<Self, RuntimeError> {
+        Self::start_with_notifier(archive_path, request, None)
+    }
+
+    pub fn start_notified(
+        archive_path: &Path,
+        request: DiscoveryRequest,
+        notifier: Arc<dyn WorkerCompletionNotifier>,
+    ) -> Result<Self, RuntimeError> {
+        Self::start_with_notifier(archive_path, request, Some(notifier))
+    }
+
+    fn start_with_notifier(
+        archive_path: &Path,
+        request: DiscoveryRequest,
+        notifier: Option<Arc<dyn WorkerCompletionNotifier>>,
+    ) -> Result<Self, RuntimeError> {
         let clock: Arc<dyn Clock> = SystemClock::shared();
         let mut lease = crate::RuntimeWriterLease::new(archive_path)?;
         let startup_guard = lease.try_acquire().map_err(startup_port_error)?;
@@ -56,7 +72,11 @@ impl LiveRuntime {
         let engine_publication = Arc::new(Mutex::new(EnginePublicationState::seed(
             initial_publication,
         )));
-        let git_runtime = GitRuntime::start(GitRuntimeConfig::new(archive_path.to_path_buf())?)?;
+        let git_config = GitRuntimeConfig::new(archive_path.to_path_buf())?;
+        let git_runtime = match notifier.as_ref() {
+            Some(notifier) => GitRuntime::start_notified(git_config, notifier.clone())?,
+            None => GitRuntime::start(git_config)?,
+        };
 
         let watcher_slot = Arc::new(Mutex::new(None));
         let reset_watcher = Arc::new(AtomicBool::new(true));
@@ -80,8 +100,15 @@ impl LiveRuntime {
             engine_publication: execution_publication,
         };
         let worker = Arc::new(
-            RefreshWorker::spawn(execution_clock, move |permit| execution.run(permit))
-                .map_err(runtime_worker_error)?,
+            match notifier {
+                Some(notifier) => {
+                    RefreshWorker::spawn_notified(execution_clock, notifier, move |permit| {
+                        execution.run(permit)
+                    })
+                }
+                None => RefreshWorker::spawn(execution_clock, move |permit| execution.run(permit)),
+            }
+            .map_err(runtime_worker_error)?,
         );
 
         let admission_open = Arc::new(Mutex::new(false));

@@ -5,8 +5,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use tokenmaster_engine::{
-    Clock, RefreshUrgency, RefreshWorker, WorkerCompletion, WorkerError, WorkerErrorCode,
-    WorkerPhase, WriterLease,
+    Clock, RefreshUrgency, RefreshWorker, WorkerCompletion, WorkerCompletionNotifier, WorkerError,
+    WorkerErrorCode, WorkerPhase, WriterLease,
 };
 use tokenmaster_git::GitRepositoryFrontier;
 use tokenmaster_platform::PowerLifecycleEvent;
@@ -113,6 +113,20 @@ pub struct GitRuntime {
 
 impl GitRuntime {
     pub fn start(config: GitRuntimeConfig) -> Result<Self, RuntimeError> {
+        Self::start_with_notifier(config, None)
+    }
+
+    pub fn start_notified(
+        config: GitRuntimeConfig,
+        notifier: Arc<dyn WorkerCompletionNotifier>,
+    ) -> Result<Self, RuntimeError> {
+        Self::start_with_notifier(config, Some(notifier))
+    }
+
+    fn start_with_notifier(
+        config: GitRuntimeConfig,
+        notifier: Option<Arc<dyn WorkerCompletionNotifier>>,
+    ) -> Result<Self, RuntimeError> {
         let mut startup_lease = crate::RuntimeWriterLease::new(config.archive_path())?;
         let startup_guard = startup_lease
             .try_acquire()
@@ -142,8 +156,17 @@ impl GitRuntime {
             Arc::clone(&latest),
         );
         let worker = Arc::new(
-            RefreshWorker::spawn(Arc::clone(&clock), move |permit| execution.run(permit))
-                .map_err(runtime_worker_error)?,
+            match notifier {
+                Some(notifier) => {
+                    RefreshWorker::spawn_notified(Arc::clone(&clock), notifier, move |permit| {
+                        execution.run(permit)
+                    })
+                }
+                None => {
+                    RefreshWorker::spawn(Arc::clone(&clock), move |permit| execution.run(permit))
+                }
+            }
+            .map_err(runtime_worker_error)?,
         );
         let admission_open = Arc::new(Mutex::new(false));
         let schedule = Arc::new(Mutex::new(None::<RefreshHintSink>));

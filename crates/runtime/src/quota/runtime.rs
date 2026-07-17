@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use tokenmaster_engine::{
     Clock, RefreshOutcome, RefreshPermit, RefreshUrgency, RefreshWorker, WorkerCompletion,
-    WorkerError, WorkerErrorCode, WorkerPhase,
+    WorkerCompletionNotifier, WorkerError, WorkerErrorCode, WorkerPhase,
 };
 use tokenmaster_platform::PowerLifecycleEvent;
 
@@ -29,6 +29,20 @@ pub struct CodexQuotaRuntime {
 
 impl CodexQuotaRuntime {
     pub fn start(config: CodexQuotaRuntimeConfig) -> Result<Self, RuntimeError> {
+        Self::start_with_notifier(config, None)
+    }
+
+    pub fn start_notified(
+        config: CodexQuotaRuntimeConfig,
+        notifier: Arc<dyn WorkerCompletionNotifier>,
+    ) -> Result<Self, RuntimeError> {
+        Self::start_with_notifier(config, Some(notifier))
+    }
+
+    fn start_with_notifier(
+        config: CodexQuotaRuntimeConfig,
+        notifier: Option<Arc<dyn WorkerCompletionNotifier>>,
+    ) -> Result<Self, RuntimeError> {
         let clock: Arc<dyn Clock> = SystemClock::shared();
         let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
         let source = RuntimeCodexQuotaSource::new(config.clone());
@@ -40,12 +54,27 @@ impl CodexQuotaRuntime {
             publisher,
             Arc::clone(&latest),
         );
-        Self::start_with_runner(clock, latest, move |permit| execution.run(permit))
+        Self::start_with_runner_notified(clock, latest, notifier, move |permit| {
+            execution.run(permit)
+        })
     }
 
+    #[cfg(test)]
     fn start_with_runner<F>(
         clock: Arc<dyn Clock>,
         latest: Arc<Mutex<CodexQuotaRefreshSnapshot>>,
+        execute: F,
+    ) -> Result<Self, RuntimeError>
+    where
+        F: FnMut(&RefreshPermit) -> RefreshOutcome + Send + 'static,
+    {
+        Self::start_with_runner_notified(clock, latest, None, execute)
+    }
+
+    fn start_with_runner_notified<F>(
+        clock: Arc<dyn Clock>,
+        latest: Arc<Mutex<CodexQuotaRefreshSnapshot>>,
+        notifier: Option<Arc<dyn WorkerCompletionNotifier>>,
         mut execute: F,
     ) -> Result<Self, RuntimeError>
     where
@@ -54,26 +83,32 @@ impl CodexQuotaRuntime {
         let cadence_slot = Arc::new(Mutex::new(None::<RefreshHintSink>));
         let execution_latest = Arc::clone(&latest);
         let execution_cadence = Arc::clone(&cadence_slot);
+        let worker_execution = move |permit: &RefreshPermit| {
+            let outcome = execute(permit);
+            let retry_mode = match execution_latest.lock() {
+                Ok(latest) => latest.retry_mode(),
+                Err(_) => return RefreshOutcome::Failed,
+            };
+            let health = match retry_mode {
+                CodexQuotaRetryMode::Normal => WatcherHealth::Healthy,
+                CodexQuotaRetryMode::Accelerated => WatcherHealth::Degraded,
+            };
+            let cadence = match execution_cadence.lock() {
+                Ok(cadence) => cadence,
+                Err(_) => return RefreshOutcome::Failed,
+            };
+            if let Some(hints) = cadence.as_ref() {
+                let _ = hints.set_poll_health(health);
+            }
+            outcome
+        };
         let worker = Arc::new(
-            RefreshWorker::spawn(Arc::clone(&clock), move |permit| {
-                let outcome = execute(permit);
-                let retry_mode = match execution_latest.lock() {
-                    Ok(latest) => latest.retry_mode(),
-                    Err(_) => return RefreshOutcome::Failed,
-                };
-                let health = match retry_mode {
-                    CodexQuotaRetryMode::Normal => WatcherHealth::Healthy,
-                    CodexQuotaRetryMode::Accelerated => WatcherHealth::Degraded,
-                };
-                let cadence = match execution_cadence.lock() {
-                    Ok(cadence) => cadence,
-                    Err(_) => return RefreshOutcome::Failed,
-                };
-                if let Some(hints) = cadence.as_ref() {
-                    let _ = hints.set_poll_health(health);
+            match notifier {
+                Some(notifier) => {
+                    RefreshWorker::spawn_notified(Arc::clone(&clock), notifier, worker_execution)
                 }
-                outcome
-            })
+                None => RefreshWorker::spawn(Arc::clone(&clock), worker_execution),
+            }
             .map_err(runtime_worker_error)?,
         );
 

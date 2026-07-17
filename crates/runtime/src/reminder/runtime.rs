@@ -5,8 +5,8 @@ use std::thread::{Builder, JoinHandle};
 use std::time::Duration;
 
 use tokenmaster_engine::{
-    Clock, RefreshUrgency, RefreshWorker, WorkerCompletion, WorkerError, WorkerErrorCode,
-    WorkerPhase,
+    Clock, RefreshUrgency, RefreshWorker, WorkerCompletion, WorkerCompletionNotifier, WorkerError,
+    WorkerErrorCode, WorkerPhase,
 };
 use tokenmaster_platform::PowerLifecycleEvent;
 
@@ -418,6 +418,20 @@ pub struct BenefitReminderRuntime {
 
 impl BenefitReminderRuntime {
     pub fn start(config: BenefitReminderRuntimeConfig) -> Result<Self, RuntimeError> {
+        Self::start_with_notifier(config, None)
+    }
+
+    pub fn start_notified(
+        config: BenefitReminderRuntimeConfig,
+        notifier: Arc<dyn WorkerCompletionNotifier>,
+    ) -> Result<Self, RuntimeError> {
+        Self::start_with_notifier(config, Some(notifier))
+    }
+
+    fn start_with_notifier(
+        config: BenefitReminderRuntimeConfig,
+        notifier: Option<Arc<dyn WorkerCompletionNotifier>>,
+    ) -> Result<Self, RuntimeError> {
         let monotonic_clock: Arc<dyn Clock> = SystemClock::shared();
         let wall_clock: Arc<dyn BenefitReminderWallClock> =
             Arc::new(SystemBenefitReminderWallClock);
@@ -437,8 +451,15 @@ impl BenefitReminderRuntime {
             Arc::clone(&control),
         )?;
         let worker = Arc::new(
-            RefreshWorker::spawn(monotonic_clock, move |permit| execution.run(permit))
-                .map_err(runtime_worker_error)?,
+            match notifier {
+                Some(notifier) => {
+                    RefreshWorker::spawn_notified(monotonic_clock, notifier, move |permit| {
+                        execution.run(permit)
+                    })
+                }
+                None => RefreshWorker::spawn(monotonic_clock, move |permit| execution.run(permit)),
+            }
+            .map_err(runtime_worker_error)?,
         );
         let admission_open = Arc::new(Mutex::new(false));
         let scheduler_worker = Arc::clone(&worker);
