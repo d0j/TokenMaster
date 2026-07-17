@@ -1,0 +1,41 @@
+import { UiTokens } from "../tokens.slint";
+
+export component RouteState inherits Rectangle {
+    in property <string> route-label;
+    in property <string> state;
+    in property <string> reasons;
+    in property <string> generation;
+
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius;
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 12px;
+
+        Text {
+            text: root.route-label;
+            color: UiTokens.text-primary;
+            font-size: 26px;
+            font-weight: 700;
+        }
+        Text {
+            text: "State: " + root.state;
+            color: root.state == "ready" ? UiTokens.ready : root.state == "degraded" ? UiTokens.degraded : UiTokens.unavailable;
+            font-size: 16px;
+        }
+        Text {
+            text: root.reasons == "" ? "No blocking reasons" : "Reasons: " + root.reasons;
+            color: UiTokens.text-secondary;
+            wrap: word-wrap;
+        }
+        Rectangle { vertical-stretch: 1; background: transparent; }
+        Text {
+            text: "Product generation " + root.generation;
+            color: UiTokens.text-secondary;
+            font-size: 12px;
+        }
+    }
+}

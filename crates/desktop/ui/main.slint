@@ -1,0 +1,93 @@
+import { RouteRow } from "models.slint";
+import { UiTokens } from "tokens.slint";
+import { RouteNavItem } from "components/route-nav-item.slint";
+import { RouteState } from "components/route-state.slint";
+
+export component MainWindow inherits Window {
+    in property <[RouteRow]> route-rows;
+    in property <string> active-route-key;
+    in property <string> active-route-label;
+    in property <string> active-route-state;
+    in property <string> active-route-reasons;
+    in property <string> product-generation;
+    callback select-route(string);
+
+    title: "TokenMaster";
+    width: 1120px;
+    height: 720px;
+    background: UiTokens.background;
+
+    VerticalLayout {
+        Rectangle {
+            height: 58px;
+            background: UiTokens.surface;
+            border-color: UiTokens.border;
+            border-width: 1px;
+
+            HorizontalLayout {
+                padding-left: UiTokens.space;
+                padding-right: UiTokens.space;
+                spacing: 12px;
+
+                Text {
+                    text: "TokenMaster";
+                    color: UiTokens.text-primary;
+                    font-size: 20px;
+                    font-weight: 800;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: "Local usage intelligence";
+                    color: UiTokens.text-secondary;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+                Text {
+                    text: root.active-route-state;
+                    color: root.active-route-state == "ready" ? UiTokens.ready : root.active-route-state == "degraded" ? UiTokens.degraded : UiTokens.unavailable;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 0px;
+
+            Rectangle {
+                width: 250px;
+                background: UiTokens.surface;
+                border-color: UiTokens.border;
+                border-width: 1px;
+
+                VerticalLayout {
+                    padding: UiTokens.space;
+                    spacing: 5px;
+
+                    for route in root.route-rows: RouteNavItem {
+                        label: route.label;
+                        state: route.state;
+                        selected: route.selected;
+                        activated => { root.select-route(route.key); }
+                    }
+                    Rectangle { vertical-stretch: 1; background: transparent; }
+                }
+            }
+
+            Rectangle {
+                background: UiTokens.background;
+                horizontal-stretch: 1;
+
+                RouteState {
+                    x: UiTokens.space;
+                    y: UiTokens.space;
+                    width: parent.width - 2 * UiTokens.space;
+                    height: parent.height - 2 * UiTokens.space;
+                    route-label: root.active-route-label;
+                    state: root.active-route-state;
+                    reasons: root.active-route-reasons;
+                    generation: root.product-generation;
+                }
+            }
+        }
+    }
+}

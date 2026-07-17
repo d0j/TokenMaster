@@ -1,0 +1,82 @@
+Describe "TokenMaster production desktop audit" {
+    BeforeAll {
+        $ScriptsRoot = Split-Path -Parent $PSScriptRoot
+        $RepositoryRoot = (Resolve-Path (Join-Path $ScriptsRoot "..")).Path
+        $Audit = Join-Path $ScriptsRoot "audit-desktop-shell.ps1"
+
+        function New-DesktopAuditFixture {
+            param([Parameter(Mandatory = $true)][string]$Name)
+
+            $fixture = Join-Path $TestDrive $Name
+            New-Item -ItemType Directory -Path $fixture -Force | Out-Null
+            Copy-Item -LiteralPath (Join-Path $RepositoryRoot "Cargo.toml") -Destination $fixture
+            $crateParent = Join-Path $fixture "crates"
+            New-Item -ItemType Directory -Path $crateParent -Force | Out-Null
+            Copy-Item -LiteralPath (Join-Path $RepositoryRoot "crates\desktop") `
+                -Destination $crateParent -Recurse
+            return $fixture
+        }
+    }
+
+    It "rejects probe dependencies" {
+        $fixture = New-DesktopAuditFixture -Name "probe"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\Cargo.toml") `
+            -Value 'tokenmaster-m0 = { path = "../probe-app" }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PROBE-DEPENDENCY*"
+    }
+
+    It "rejects mock or seeded production data" {
+        $fixture = New-DesktopAuditFixture -Name "mock"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\lib.rs") `
+            -Value "fn seed_probe_models() {}"
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-MOCK-DATA*"
+    }
+
+    It "rejects the diagnostic renderer" {
+        $fixture = New-DesktopAuditFixture -Name "femtovg"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\Cargo.toml") `
+            -Value 'slint = { workspace = true, features = ["renderer-femtovg"] }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-FEMTOVG*"
+    }
+
+    It "rejects route-count drift" {
+        $fixture = New-DesktopAuditFixture -Name "routes"
+        $path = Join-Path $fixture "crates\desktop\src\presentation.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'Self::CompactWidget => "compact_widget",',
+            'Self::CompactWidget => "compact_widget_extra",'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-ROUTE-COUNT*"
+    }
+
+    It "rejects direct store or runtime authority" {
+        $fixture = New-DesktopAuditFixture -Name "direct-authority"
+        $path = Join-Path $fixture "crates\desktop\Cargo.toml"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '[build-dependencies]',
+            "tokenmaster-store = { path = `"../store`" }`r`n`r`n[build-dependencies]"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DIRECT-AUTHORITY*"
+    }
+
+    It "rejects network browser shell SQL and filesystem surfaces" {
+        $fixture = New-DesktopAuditFixture -Name "forbidden-authority"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\lib.rs") `
+            -Value 'const PRIVATE_API: &str = "https://example.invalid";'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-FORBIDDEN-AUTHORITY*"
+    }
+}

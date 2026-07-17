@@ -1,0 +1,37 @@
+import { Button } from "std-widgets.slint";
+import { UiTokens } from "../tokens.slint";
+
+export component RouteNavItem inherits Rectangle {
+    in property <string> label;
+    in property <string> state;
+    in property <bool> selected;
+    callback activated();
+
+    height: 40px;
+    border-radius: UiTokens.radius;
+    background: root.selected ? UiTokens.surface-raised : transparent;
+
+    HorizontalLayout {
+        padding-left: 6px;
+        padding-right: 6px;
+        spacing: 8px;
+
+        Rectangle {
+            width: 4px;
+            border-radius: 2px;
+            background: root.selected ? UiTokens.accent : transparent;
+        }
+
+        Button {
+            text: root.label;
+            horizontal-stretch: 1;
+            clicked => { root.activated(); }
+        }
+
+        Text {
+            text: root.state == "ready" ? "●" : root.state == "degraded" ? "▲" : "×";
+            color: root.state == "ready" ? UiTokens.ready : root.state == "degraded" ? UiTokens.degraded : UiTokens.unavailable;
+            vertical-alignment: center;
+        }
+    }
+}
