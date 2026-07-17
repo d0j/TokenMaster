@@ -1,0 +1,28 @@
+import { UiTokens } from "../tokens.slint";
+
+export component MetricValue inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <string> availability;
+
+    min-height: 54px;
+    background: transparent;
+    accessible-role: text;
+    accessible-label: root.label + " " + root.value;
+
+    VerticalLayout {
+        spacing: UiTokens.space-xs;
+        Text {
+            text: root.label;
+            color: UiTokens.text-secondary;
+            font-size: 11px;
+        }
+        Text {
+            text: root.value;
+            color: root.availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary;
+            font-size: 19px;
+            font-weight: 700;
+            overflow: elide;
+        }
+    }
+}

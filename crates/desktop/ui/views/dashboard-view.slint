@@ -1,0 +1,353 @@
+import {
+    DashboardSectionRow, DashboardQuotaRow, DashboardBenefitRow, DashboardTrendPoint,
+    DashboardSessionRow, DashboardActivityRow, DashboardModelRow
+} from "../models.slint";
+import { UiTokens } from "../tokens.slint";
+import { SectionState } from "../components/section-state.slint";
+import { MetricValue } from "../components/metric-value.slint";
+import { QuotaRowView } from "../components/quota-row.slint";
+import { ScrollView } from "std-widgets.slint";
+
+component CardHeader inherits Rectangle {
+    in property <string> title;
+    in property <string> state;
+    in property <string> reasons;
+
+    height: 28px;
+    background: transparent;
+    HorizontalLayout {
+        spacing: UiTokens.space-sm;
+        Text {
+            text: root.title;
+            color: UiTokens.text-primary;
+            font-size: 15px;
+            font-weight: 750;
+            horizontal-stretch: 1;
+            vertical-alignment: center;
+        }
+        SectionState { state: root.state; reasons: root.reasons; }
+    }
+}
+
+component DashboardHeaderCard inherits Rectangle {
+    in property <string> tokens;
+    in property <string> cost;
+    in property <string> events;
+    in property <string> evidence;
+
+    min-height: 102px;
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: region;
+    accessible-label: "Today's usage";
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: UiTokens.space-sm;
+        HorizontalLayout {
+            spacing: UiTokens.space;
+            Text {
+                text: "Today";
+                color: UiTokens.text-primary;
+                font-size: 17px;
+                font-weight: 800;
+                horizontal-stretch: 1;
+            }
+            Text { text: root.evidence; color: UiTokens.text-secondary; font-size: 11px; vertical-alignment: center; }
+        }
+        HorizontalLayout {
+            spacing: UiTokens.space-lg;
+            MetricValue { label: "Tokens"; value: root.tokens; availability: root.tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+            MetricValue { label: "Cost"; value: root.cost; availability: root.cost == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+            MetricValue { label: "Events"; value: root.events; availability: root.events == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+        }
+    }
+}
+
+component PlanUsageCard inherits Rectangle {
+    in property <DashboardSectionRow> section;
+    in property <[DashboardQuotaRow]> quotas;
+    in property <[DashboardBenefitRow]> benefits;
+
+    min-height: 190px;
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: groupbox;
+    accessible-label: "Plan Usage";
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: UiTokens.space-sm;
+        CardHeader { title: "Plan Usage"; state: root.section.state; reasons: root.section.reasons; }
+        if root.quotas.length == 0: Text {
+            text: root.section.state == "waiting" ? "Waiting for quota evidence" : "Quota evidence unavailable";
+            color: UiTokens.text-secondary;
+            font-size: 12px;
+        }
+        for quota in root.quotas: QuotaRowView { quota-data: quota; }
+        for benefit in root.benefits: Rectangle {
+            min-height: 66px;
+            background: UiTokens.surface-raised;
+            border-radius: UiTokens.radius;
+            accessible-role: groupbox;
+            accessible-label: "Banked resets " + benefit.reset-quantity-label;
+            VerticalLayout {
+                padding: UiTokens.space-sm;
+                spacing: UiTokens.space-xs;
+                HorizontalLayout {
+                    Text { text: "Banked resets"; color: UiTokens.text-primary; font-weight: 700; horizontal-stretch: 1; }
+                    Text { text: benefit.reset-quantity-label; color: UiTokens.accent; font-size: 18px; font-weight: 800; }
+                }
+                Text {
+                    text: benefit.expiry-label + " · " + benefit.reminder-label;
+                    color: UiTokens.text-secondary;
+                    font-size: 11px;
+                    overflow: elide;
+                }
+                Text {
+                    text: "Credits " + benefit.credit-quantity-label + " · Temporary " + benefit.temporary-quantity-label + " · Unavailable " + benefit.unavailable-quantity-label;
+                    color: UiTokens.text-secondary;
+                    font-size: 11px;
+                    overflow: elide;
+                }
+            }
+        }
+    }
+}
+
+component CodeOutputCard inherits Rectangle {
+    in property <DashboardSectionRow> section;
+    in property <string> commits;
+    in property <string> added;
+    in property <string> removed;
+    in property <string> net;
+    in property <string> efficiency;
+    in property <string> evidence;
+
+    min-height: 186px;
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: groupbox;
+    accessible-label: "Code Output";
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: UiTokens.space-sm;
+        CardHeader { title: "Code Output"; state: root.section.state; reasons: root.section.reasons; }
+        HorizontalLayout {
+            spacing: UiTokens.space;
+            MetricValue { label: "Commits"; value: root.commits; availability: root.section.state; horizontal-stretch: 1; }
+            MetricValue { label: "Added"; value: root.added; availability: root.section.state; horizontal-stretch: 1; }
+            MetricValue { label: "Removed"; value: root.removed; availability: root.section.state; horizontal-stretch: 1; }
+            MetricValue { label: "Net"; value: root.net; availability: root.section.state; horizontal-stretch: 1; }
+        }
+        Text { text: root.efficiency; color: UiTokens.accent; font-size: 12px; }
+        Text { text: root.evidence; color: UiTokens.text-secondary; font-size: 11px; overflow: elide; }
+    }
+}
+
+component TrendCard inherits Rectangle {
+    in property <DashboardSectionRow> section;
+    in property <[DashboardTrendPoint]> points;
+
+    min-height: 186px;
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: groupbox;
+    accessible-label: "Usage and Cost Trend";
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: UiTokens.space-sm;
+        CardHeader { title: "Usage and Cost Trend"; state: root.section.state; reasons: root.section.reasons; }
+        Rectangle {
+            min-height: 112px;
+            background: UiTokens.surface-subtle;
+            border-radius: UiTokens.radius;
+            accessible-role: image;
+            accessible-label: "Daily token trend";
+            HorizontalLayout {
+                padding-left: UiTokens.space-sm;
+                padding-right: UiTokens.space-sm;
+                padding-top: UiTokens.space-sm;
+                spacing: 1px;
+                for point in root.points: Rectangle {
+                    min-width: 1px;
+                    horizontal-stretch: 1;
+                    background: transparent;
+                    Rectangle {
+                        y: parent.height - self.height;
+                        width: parent.width;
+                        height: max(1px, point.tokens-ratio * parent.height);
+                        background: UiTokens.accent;
+                        border-radius: 1px;
+                    }
+                }
+            }
+        }
+    }
+}
+
+component SessionsCard inherits Rectangle {
+    in property <DashboardSectionRow> section;
+    in property <[DashboardSessionRow]> rows;
+
+    min-height: 210px;
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: groupbox;
+    accessible-label: "Sessions";
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: UiTokens.space-sm;
+        CardHeader { title: "Sessions"; state: root.section.state; reasons: root.section.reasons; }
+        for row[i] in root.rows: Rectangle {
+            height: 34px;
+            background: mod(i, 2) == 0 ? UiTokens.surface-subtle : transparent;
+            border-radius: UiTokens.radius-sm;
+            accessible-role: list-item;
+            accessible-label: row.time-label + " " + row.tokens-label;
+            HorizontalLayout {
+                padding-left: UiTokens.space-sm;
+                padding-right: UiTokens.space-sm;
+                Text { text: row.time-label; color: UiTokens.text-secondary; font-size: 11px; horizontal-stretch: 1; overflow: elide; }
+                Text { text: row.tokens-label; color: UiTokens.text-primary; font-size: 11px; }
+                Text { text: row.cost-label; color: UiTokens.text-secondary; font-size: 11px; }
+            }
+        }
+    }
+}
+
+component ActivityCard inherits Rectangle {
+    in property <DashboardSectionRow> section;
+    in property <[DashboardActivityRow]> rows;
+
+    min-height: 210px;
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: groupbox;
+    accessible-label: "Activity";
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: 6px;
+        CardHeader { title: "Activity"; state: root.section.state; reasons: root.section.reasons; }
+        for row in root.rows: HorizontalLayout {
+            height: 20px;
+            spacing: UiTokens.space-sm;
+            Text { text: row.label; color: UiTokens.text-secondary; font-size: 11px; width: 74px; overflow: elide; }
+            Rectangle {
+                height: 6px;
+                horizontal-stretch: 1;
+                background: UiTokens.surface-raised;
+                border-radius: 3px;
+                Rectangle { width: row.ratio * parent.width; background: UiTokens.accent-secondary; border-radius: 3px; }
+            }
+            Text { text: row.count-label; color: UiTokens.text-primary; font-size: 11px; width: 36px; horizontal-alignment: right; }
+        }
+    }
+}
+
+component ModelsCard inherits Rectangle {
+    in property <DashboardSectionRow> section;
+    in property <[DashboardModelRow]> rows;
+
+    min-height: 170px;
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: groupbox;
+    accessible-label: "Model Usage";
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: 6px;
+        CardHeader { title: "Model Usage"; state: root.section.state; reasons: root.section.reasons; }
+        for row in root.rows: HorizontalLayout {
+            height: 28px;
+            spacing: UiTokens.space-sm;
+            Text { text: row.label; color: UiTokens.text-primary; font-size: 11px; width: 130px; overflow: elide; }
+            Rectangle {
+                height: 6px;
+                horizontal-stretch: 1;
+                background: UiTokens.surface-raised;
+                border-radius: 3px;
+                Rectangle { width: row.tokens-ratio * parent.width; background: UiTokens.accent-tertiary; border-radius: 3px; }
+            }
+            Text { text: row.tokens-label; color: UiTokens.text-primary; font-size: 11px; width: 60px; horizontal-alignment: right; }
+            Text { text: row.cost-label; color: UiTokens.text-secondary; font-size: 11px; width: 76px; horizontal-alignment: right; }
+        }
+    }
+}
+
+export component DashboardView inherits Rectangle {
+    in property <[DashboardSectionRow]> sections;
+    in property <[DashboardQuotaRow]> quotas;
+    in property <[DashboardBenefitRow]> benefits;
+    in property <[DashboardTrendPoint]> trend;
+    in property <[DashboardSessionRow]> sessions;
+    in property <[DashboardActivityRow]> activity;
+    in property <[DashboardModelRow]> models;
+    in property <string> header-tokens;
+    in property <string> header-cost;
+    in property <string> header-events;
+    in property <string> header-evidence;
+    in property <string> code-commits;
+    in property <string> code-added;
+    in property <string> code-removed;
+    in property <string> code-net;
+    in property <string> code-efficiency;
+    in property <string> code-evidence;
+    out property <bool> narrow: root.width < 760px;
+    out property <string> layout-mode: root.narrow ? "narrow" : "wide";
+
+    background: UiTokens.background;
+
+    ScrollView {
+        viewport-width: self.width;
+        if root.narrow: VerticalLayout {
+            width: parent.width;
+            padding: UiTokens.space;
+            spacing: UiTokens.space;
+            DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
+            PlanUsageCard { section: root.sections[0]; quotas: root.quotas; benefits: root.benefits; }
+            CodeOutputCard { section: root.sections[1]; commits: root.code-commits; added: root.code-added; removed: root.code-removed; net: root.code-net; efficiency: root.code-efficiency; evidence: root.code-evidence; }
+            TrendCard { section: root.sections[2]; points: root.trend; }
+            SessionsCard { section: root.sections[3]; rows: root.sessions; }
+            ActivityCard { section: root.sections[4]; rows: root.activity; }
+            ModelsCard { section: root.sections[5]; rows: root.models; }
+        }
+        if !root.narrow: VerticalLayout {
+            width: parent.width;
+            padding: UiTokens.space;
+            spacing: UiTokens.space;
+            DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
+            PlanUsageCard { section: root.sections[0]; quotas: root.quotas; benefits: root.benefits; }
+            HorizontalLayout {
+                spacing: UiTokens.space;
+                CodeOutputCard { section: root.sections[1]; commits: root.code-commits; added: root.code-added; removed: root.code-removed; net: root.code-net; efficiency: root.code-efficiency; evidence: root.code-evidence; horizontal-stretch: 1; }
+                TrendCard { section: root.sections[2]; points: root.trend; horizontal-stretch: 1; }
+            }
+            HorizontalLayout {
+                spacing: UiTokens.space;
+                SessionsCard { section: root.sections[3]; rows: root.sessions; horizontal-stretch: 1; }
+                ActivityCard { section: root.sections[4]; rows: root.activity; horizontal-stretch: 1; }
+            }
+            ModelsCard { section: root.sections[5]; rows: root.models; }
+        }
+    }
+}

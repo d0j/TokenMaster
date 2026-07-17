@@ -1,7 +1,11 @@
-import { RouteRow } from "models.slint";
+import {
+    RouteRow, DashboardSectionRow, DashboardQuotaRow, DashboardBenefitRow,
+    DashboardTrendPoint, DashboardSessionRow, DashboardActivityRow, DashboardModelRow
+} from "models.slint";
 import { UiTokens } from "tokens.slint";
 import { RouteNavItem } from "components/route-nav-item.slint";
 import { RouteState } from "components/route-state.slint";
+import { DashboardView } from "views/dashboard-view.slint";
 
 export component MainWindow inherits Window {
     in property <[RouteRow]> route-rows;
@@ -10,11 +14,32 @@ export component MainWindow inherits Window {
     in property <string> active-route-state;
     in property <string> active-route-reasons;
     in property <string> product-generation;
+    in property <[DashboardSectionRow]> dashboard-section-rows;
+    in property <[DashboardQuotaRow]> dashboard-quota-rows;
+    in property <[DashboardBenefitRow]> dashboard-benefit-rows;
+    in property <[DashboardTrendPoint]> dashboard-trend-points;
+    in property <[DashboardSessionRow]> dashboard-session-rows;
+    in property <[DashboardActivityRow]> dashboard-activity-rows;
+    in property <[DashboardModelRow]> dashboard-model-rows;
+    in property <string> dashboard-header-tokens;
+    in property <string> dashboard-header-cost;
+    in property <string> dashboard-header-events;
+    in property <string> dashboard-header-evidence;
+    in property <string> dashboard-code-commits;
+    in property <string> dashboard-code-added;
+    in property <string> dashboard-code-removed;
+    in property <string> dashboard-code-net;
+    in property <string> dashboard-code-efficiency;
+    in property <string> dashboard-code-evidence;
+    out property <bool> dashboard-visible: root.active-route-key == "dashboard";
+    out property <string> dashboard-layout-mode: root.width < 1010px ? "narrow" : "wide";
     callback select-route(string);
 
     title: "TokenMaster";
-    width: 1120px;
-    height: 720px;
+    preferred-width: 1120px;
+    preferred-height: 720px;
+    min-width: 560px;
+    min-height: 480px;
     background: UiTokens.background;
 
     VerticalLayout {
@@ -44,7 +69,7 @@ export component MainWindow inherits Window {
                 }
                 Text {
                     text: root.active-route-state;
-                    color: root.active-route-state == "ready" ? UiTokens.ready : root.active-route-state == "degraded" ? UiTokens.degraded : UiTokens.unavailable;
+                    color: root.active-route-state == "ready" ? UiTokens.ready : root.active-route-state == "degraded" ? UiTokens.degraded : root.active-route-state == "waiting" ? UiTokens.waiting : UiTokens.unavailable;
                     vertical-alignment: center;
                 }
             }
@@ -77,7 +102,29 @@ export component MainWindow inherits Window {
                 background: UiTokens.background;
                 horizontal-stretch: 1;
 
-                RouteState {
+                if root.dashboard-visible: DashboardView {
+                    width: parent.width;
+                    height: parent.height;
+                    sections: root.dashboard-section-rows;
+                    quotas: root.dashboard-quota-rows;
+                    benefits: root.dashboard-benefit-rows;
+                    trend: root.dashboard-trend-points;
+                    sessions: root.dashboard-session-rows;
+                    activity: root.dashboard-activity-rows;
+                    models: root.dashboard-model-rows;
+                    header-tokens: root.dashboard-header-tokens;
+                    header-cost: root.dashboard-header-cost;
+                    header-events: root.dashboard-header-events;
+                    header-evidence: root.dashboard-header-evidence;
+                    code-commits: root.dashboard-code-commits;
+                    code-added: root.dashboard-code-added;
+                    code-removed: root.dashboard-code-removed;
+                    code-net: root.dashboard-code-net;
+                    code-efficiency: root.dashboard-code-efficiency;
+                    code-evidence: root.dashboard-code-evidence;
+                }
+
+                if !root.dashboard-visible: RouteState {
                     x: UiTokens.space;
                     y: UiTokens.space;
                     width: parent.width - 2 * UiTokens.space;

@@ -1,0 +1,28 @@
+import { UiTokens } from "../tokens.slint";
+
+export component SectionState inherits Rectangle {
+    in property <string> state;
+    in property <string> reasons;
+    out property <color> state-color:
+        root.state == "ready" ? UiTokens.ready :
+        root.state == "degraded" ? UiTokens.degraded :
+        root.state == "waiting" ? UiTokens.waiting : UiTokens.unavailable;
+
+    height: 24px;
+    min-width: 82px;
+    background: root.state-color.with-alpha(0.12);
+    border-color: root.state-color.with-alpha(0.45);
+    border-width: 1px;
+    border-radius: 12px;
+    accessible-role: text;
+    accessible-label: root.reasons == "" ? root.state : root.state + ": " + root.reasons;
+
+    Text {
+        text: root.state;
+        color: root.state-color;
+        font-size: 11px;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}

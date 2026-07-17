@@ -5278,6 +5278,7 @@ name = "tokenmaster-desktop"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "i-slint-backend-testing",
  "rusqlite",
  "slint",

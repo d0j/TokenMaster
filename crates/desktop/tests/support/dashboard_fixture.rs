@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::path::Path;
 
 use rusqlite::{Connection, params};
@@ -252,23 +254,50 @@ fn publish_git_projection(
     store.publish_git_rebuild(&input).expect("publish Git");
 }
 
-fn quota_key() -> QuotaWindowKey {
+fn quota_key(account: &str, window: &str) -> QuotaWindowKey {
     QuotaWindowKey::new(
         QuotaScope::new(
             UsageProviderId::new("codex").expect("provider"),
-            QuotaAccountId::new("dashboard-private-account").expect("account"),
+            QuotaAccountId::new(account).expect("account"),
             None,
         ),
-        QuotaWindowId::new("dynamic-weekly").expect("window"),
+        QuotaWindowId::new(window).expect("window"),
     )
 }
 
 fn seed_quota(path: &Path) {
-    let key = quota_key();
+    publish_quota(
+        path,
+        7,
+        "dashboard-private-account",
+        "dynamic-weekly",
+        "quota.dynamic_weekly",
+        700_000,
+    );
+}
+
+pub fn add_quota_windows(path: &Path, additional: u8) {
+    for index in 0..additional {
+        let seed = index.checked_add(50).expect("bounded quota fixture");
+        let window = format!("dynamic-window-{index:02}");
+        let label = format!("quota.dynamic_window_{index:02}");
+        publish_quota(
+            path,
+            seed,
+            &format!("dashboard-private-account-{index:02}"),
+            &window,
+            &label,
+            100_000_u32.saturating_add(u32::from(index) * 10_000),
+        );
+    }
+}
+
+fn publish_quota(path: &Path, seed: u8, account: &str, window: &str, label: &str, used_ppm: u32) {
+    let key = quota_key(account, window);
     let definition = QuotaWindowDefinition::new(QuotaWindowDefinitionParts {
         key: key.clone(),
         revision: 1,
-        label_key: "quota.dynamic_weekly".to_owned(),
+        label_key: label.to_owned(),
         presentation: QuotaPresentationDirection::Used,
         semantics: QuotaWindowSemantics::Fixed,
         nominal_duration_seconds: Some(7 * 24 * 60 * 60),
@@ -277,18 +306,25 @@ fn seed_quota(path: &Path) {
     .expect("quota definition");
     let sample = QuotaSample::new(QuotaSampleParts {
         key,
-        observation_id: QuotaObservationId::from_bytes([7; 32]),
+        observation_id: QuotaObservationId::from_bytes([seed; 32]),
         observed_at_ms: WALL_TIME_MS - 1_000,
         fresh_until_ms: WALL_TIME_MS + 60_000,
         stale_after_ms: WALL_TIME_MS + 120_000,
         provider_epoch_id: Some(QuotaProviderEpochId::new("epoch-1").expect("epoch")),
-        used_ratio: Some(QuotaRatio::new(700_000).expect("used ratio")),
-        remaining_ratio: Some(QuotaRatio::new(300_000).expect("remaining ratio")),
+        used_ratio: Some(QuotaRatio::new(used_ppm).expect("used ratio")),
+        remaining_ratio: Some(
+            QuotaRatio::new(
+                1_000_000_u32
+                    .checked_sub(used_ppm)
+                    .expect("remaining ratio"),
+            )
+            .expect("remaining ratio"),
+        ),
         units: Some(
             QuotaUnits::new(
                 QuotaUnitId::new("tokens").expect("unit"),
-                Some(700),
-                Some(300),
+                Some(u64::from(used_ppm) / 1_000),
+                Some(u64::from(1_000_000_u32 - used_ppm) / 1_000),
                 Some(1_000),
             )
             .expect("quota units"),

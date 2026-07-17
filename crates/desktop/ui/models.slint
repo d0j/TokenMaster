@@ -6,3 +6,73 @@ export struct RouteRow {
     reasons: string,
     selected: bool,
 }
+
+export struct DashboardSectionRow {
+    key: string,
+    label-key: string,
+    label: string,
+    state: string,
+    reasons: string,
+    has-data: bool,
+}
+
+export struct DashboardQuotaRow {
+    ordinal: int,
+    label-key: string,
+    label: string,
+    ratio-known: bool,
+    used-ratio: float,
+    usage-label: string,
+    remaining-label: string,
+    units-label: string,
+    reset-label: string,
+    evidence-label: string,
+}
+
+export struct DashboardBenefitRow {
+    ordinal: int,
+    reset-quantity-label: string,
+    credit-quantity-label: string,
+    temporary-quantity-label: string,
+    other-quantity-label: string,
+    unavailable-quantity-label: string,
+    expiry-label: string,
+    reminder-label: string,
+    evidence-label: string,
+}
+
+export struct DashboardTrendPoint {
+    date-label: string,
+    tokens-availability: string,
+    tokens-label: string,
+    tokens-ratio: float,
+    cost-availability: string,
+    cost-label: string,
+    cost-ratio: float,
+}
+
+export struct DashboardSessionRow {
+    ordinal: int,
+    time-label: string,
+    tokens-availability: string,
+    tokens-label: string,
+    cost-availability: string,
+    cost-label: string,
+}
+
+export struct DashboardActivityRow {
+    key: string,
+    label: string,
+    count-label: string,
+    ratio: float,
+}
+
+export struct DashboardModelRow {
+    ordinal: int,
+    label: string,
+    tokens-availability: string,
+    tokens-label: string,
+    tokens-ratio: float,
+    cost-availability: string,
+    cost-label: string,
+}

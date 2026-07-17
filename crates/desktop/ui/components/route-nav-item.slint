@@ -29,8 +29,8 @@ export component RouteNavItem inherits Rectangle {
         }
 
         Text {
-            text: root.state == "ready" ? "●" : root.state == "degraded" ? "▲" : "×";
-            color: root.state == "ready" ? UiTokens.ready : root.state == "degraded" ? UiTokens.degraded : UiTokens.unavailable;
+            text: root.state == "ready" ? "●" : root.state == "degraded" ? "▲" : root.state == "waiting" ? "…" : "×";
+            color: root.state == "ready" ? UiTokens.ready : root.state == "degraded" ? UiTokens.degraded : root.state == "waiting" ? UiTokens.waiting : UiTokens.unavailable;
             vertical-alignment: center;
         }
     }

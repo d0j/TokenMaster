@@ -1,0 +1,59 @@
+import { DashboardQuotaRow } from "../models.slint";
+import { UiTokens } from "../tokens.slint";
+
+export component QuotaRowView inherits Rectangle {
+    in property <DashboardQuotaRow> quota-data;
+
+    min-height: 92px;
+    background: UiTokens.surface-subtle;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius;
+    accessible-role: groupbox;
+    accessible-label: root.quota-data.label + " " + root.quota-data.usage-label + " " + root.quota-data.reset-label;
+
+    VerticalLayout {
+        padding: UiTokens.space-sm;
+        spacing: 6px;
+        HorizontalLayout {
+            Text {
+                text: root.quota-data.label;
+                color: UiTokens.text-primary;
+                font-size: 13px;
+                font-weight: 700;
+                horizontal-stretch: 1;
+                overflow: elide;
+            }
+            Text {
+                text: root.quota-data.usage-label;
+                color: UiTokens.text-secondary;
+                font-size: 12px;
+            }
+        }
+        Rectangle {
+            height: 7px;
+            background: UiTokens.surface-raised;
+            border-radius: 4px;
+            Rectangle {
+                width: root.quota-data.ratio-known ? max(0px, min(parent.width, root.quota-data.used-ratio * parent.width)) : 0px;
+                background: UiTokens.accent;
+                border-radius: 4px;
+            }
+        }
+        HorizontalLayout {
+            Text {
+                text: root.quota-data.units-label == "" ? root.quota-data.remaining-label : root.quota-data.units-label;
+                color: UiTokens.text-secondary;
+                font-size: 11px;
+                horizontal-stretch: 1;
+                overflow: elide;
+            }
+            Text {
+                text: root.quota-data.reset-label;
+                color: UiTokens.text-secondary;
+                font-size: 11px;
+                overflow: elide;
+            }
+        }
+    }
+}
