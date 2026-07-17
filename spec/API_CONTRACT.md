@@ -221,7 +221,7 @@ internal failures use stable path-free codes. The facade clock supplies one exac
 monotonic sample; frontends do not supply publication time.
 
 `UsageReadStore` is the only archive-read implementation behind that facade. It opens
-an existing exact schema-v10 archive read-only, applies query-only/defensive/no-checkpoint
+an existing exact schema-v13 archive read-only, applies query-only/defensive/no-checkpoint
 policy, performs no migration, and returns owned data after one short deferred read
 transaction. Continuation requires its dataset identity. Current and immutable legacy
 pages use composite keyset seek and at most one lookahead row; progress interruption is
@@ -318,6 +318,31 @@ during a no-change scan without invalidating the cursor.
 `QuerySnapshotSlot` retains one candidate and rejects older generations;
 P3 wraps the synchronous facade with one bounded worker rather than calling SQLite from
 a Slint callback.
+
+`QueryService::product_data_status` is the joined scalar entry point for product
+composition. It maps one schema-v13 `UsageReadStore::capture_product_data_status`
+transaction into `ProductDataStatusEnvelope`, allocates a public generation only after
+capture and mapping succeed, and exposes separate usage, aggregate, quota, benefit,
+and Git revisions/states plus at most 16 stable warnings. The capture uses a maximum
+two-second deadline and fixed scalar/indexed statements; it never scans usage events,
+rollups, quota samples, benefit changes, or Git days.
+
+`tokenmaster-product::ProductReducer` is the only P2-F joined publication owner. Each
+data submission carries a nonzero `ProductAttemptGeneration` independent from its
+source envelope generation. Older attempts are rejected. A compatible failure retains
+the last successful payload and records only its stable path-free code; a durable
+identity change invalidates an incompatible payload. Runtime observations use an
+independent nonzero `ProductRuntimeGeneration` and copy only bounded lifecycle,
+scheduler, worker, retry, count, stable-code, and pending-state projections.
+
+The reducer retains one current `Arc<ProductSnapshot>` and derives exactly 11 fixed
+route statuses with `ready`, `degraded`, or `unavailable` state and a `u16` reason set.
+Settings and Help/About require no archive. Data Health remains reachable whenever the
+joined status is readable. During aggregate rebuild, Dashboard degrades section by
+section, Activity and Data Health remain reachable, and History, Sessions, Models, and
+Projects are unavailable. The reducer owns no SQLite connection, runtime, worker,
+callback, path, provider identity, queue, or snapshot history. P3 may marshal only this
+bounded snapshot onto the Slint event loop.
 
 `CodexAppServerCommand` accepts one already resolved absolute native executable path.
 The path must name a regular non-reparse file; Windows additionally requires an

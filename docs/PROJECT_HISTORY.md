@@ -2069,3 +2069,42 @@ locked workspace tests/doctests, specialized Git audit, diff check, dependency/
 language review, and task-owned process-return gates pass. This closes P2-E only.
 P2-F joined product status, P3 UI, P5 CLI/MCP, M0 acceptance, packaging, signing, and
 release remain unclaimed.
+
+## 2026-07-17 — Exact joined product status and immutable product reducer
+
+Completed P2-F under
+`docs/superpowers/plans/2026-07-17-tokenmaster-p2f-product-status.md`. Schema v13 now
+supports one defensive scalar status transaction binding usage publication/dataset/
+aggregate progress with independent quota, benefit, and Git state. The query facade
+maps the capture into one bounded schema-v1 `ProductDataStatusEnvelope` and consumes no
+public generation on capture or mapping failure. Fixed statements and the authority
+audit prove the status path does not scan event, rollup, quota-sample, benefit-change,
+or Git-day history.
+
+Added the leaf `tokenmaster-product` crate. Its reducer retains one current immutable
+snapshot and no history; checked attempt generation is independent from durable source
+generation and runtime health uses another checked generation. Stale async work is
+rejected, compatible failures retain last-good payloads plus stable path-free codes,
+and incompatible durable identities invalidate only affected sections. Usage, quota/
+benefit, reminder, and Git runtime owners remain outside the product layer; only
+bounded count/lifecycle/retry/failure projections are copied.
+
+Eleven fixed routes derive `ready`, `degraded`, or `unavailable` from one `u16` reason
+set. Aggregate rebuild degrades Dashboard section by section, leaves Activity and Data
+Health reachable, and disables only History, Sessions, Models, and Projects. Settings
+and Help/About remain archive-independent. Real pause/resume, reminder contention,
+quota transport failure, and sibling-fault isolation pass.
+
+The deterministic 100,000-event status fixture measured 0.125 ms p95 over 40 samples
+against the 25 ms gate. Ten thousand reducer replacements retain one current payload.
+The isolated Windows gate completed 1,152 open/capture/drop cycles with 111 stable
+handles, four threads, USER=1, GDI=0, and private memory returning below the original
++2 MiB budget after bounded topology/convergence warm-up. The product audit reports
+one leaf package, six production files, zero dynamic state collections/runtime owners,
+no direct filesystem/network/process/SQL/UI authority, 11 fixed routes, and zero
+vendored-source/release-string matches. P3 visible UI, P5 automation, M0 acceptance,
+packaging, signing, and release remain unclaimed.
+
+After project-truth synchronization, the clean-root audit, formatting check,
+warnings-as-errors locked workspace Clippy, complete locked workspace tests/doctests,
+and diff check pass.

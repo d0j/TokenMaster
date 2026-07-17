@@ -6,6 +6,24 @@ All notable changes are recorded here.
 
 ### Added
 
+- P2-F joined product status: one exact defensive schema-v13 scalar transaction binds
+  usage publication/aggregate progress with independent quota, benefit, and Git state,
+  then maps it into a bounded schema-v1 envelope without consuming a generation on
+  failure.
+- New leaf `tokenmaster-product` reducer with one current immutable snapshot, separate
+  checked attempt/source/runtime generations, compatible last-good retention,
+  incompatible-identity invalidation, and stale asynchronous result rejection.
+- Eleven fixed route-readiness projections with a `u16` reason set. Aggregate rebuild
+  keeps Activity and Data Health reachable, degrades Dashboard section by section, and
+  makes only History, Sessions, Models, and Projects unavailable.
+- Count-only product runtime health for usage, quota/benefit, reminder, and Git owners;
+  the product layer retains no runtime, worker, callback, lease, path, identity, queue,
+  SQLite handle, or snapshot history.
+- Product-status acceptance: a 100,000-event/40-sample status p95 of 0.125 ms, 10,000
+  reducer replacements, 1,152 isolated open/capture/drop cycles with stable handles,
+  threads, USER/GDI objects and bounded private-memory return, plus a zero-match
+  product authority/privacy audit.
+
 - Bounded Git runtime publication with one constant-state scheduler/worker, at most 32
   latest transient candidates, one active scan/follow-up, unchanged zero-history path,
   ancestry-proven same-process append, rewrite/recovery rebuild, stale-sequence

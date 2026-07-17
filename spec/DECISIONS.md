@@ -521,8 +521,8 @@ require an explicit dependency/provenance review.
 
 An unavailable aggregate generation cannot produce a truthful analytics envelope, so
 the analytics call returns stable `unavailable` and does not allocate a snapshot
-generation. The future joined P2-F status snapshot, which can represent engine and
-aggregate health without fabricating metrics, owns the visible
+generation. The joined P2-F status snapshot represents engine and aggregate health
+without fabricating metrics and owns the visible
 `aggregate_rebuilding` warning.
 
 Rationale: storing local buckets or exposing timezone engines couples data to mutable
@@ -996,3 +996,32 @@ and overwriting trustworthy aggregates after a failed scan would fabricate absen
 The bounded in-process locator/frontier split preserves exact recovery, minimal
 retained memory, and durable failure truth without adding an async runtime or Git
 library dependency.
+
+## ADR-048 — Exact joined status with independent immutable product sections
+
+Decision: schema-v13 exposes one scalar joined product-status capture over usage
+publication and aggregate progress plus independent quota, benefit, and Git revisions.
+The capture is one short defensive deferred transaction with a two-second maximum
+deadline and fixed statements; it never scans historical event, rollup, sample,
+change, or day rows. `QueryService` maps it into one bounded schema-v1 status envelope
+and consumes a generation only after successful capture and mapping.
+
+`tokenmaster-product` is a leaf composition crate. One reducer retains only the
+current `Arc<ProductSnapshot>`. Data refresh order uses a checked nonzero attempt
+generation independent from each source envelope generation, and runtime observation
+uses another independent generation. Compatible failures preserve the last successful
+payload plus a stable code; an incompatible durable identity invalidates the payload;
+older asynchronous work cannot publish. Runtime owners are projected into bounded
+count-only health and are never retained.
+
+Exactly 11 fixed routes derive `ready`, `degraded`, or `unavailable` state from one
+`u16` reason set. Aggregate rebuilding disables only aggregate-dependent History,
+Sessions, Models, and Projects, while Activity and Data Health remain reachable and
+Dashboard degrades section by section. Settings and Help/About require no archive.
+
+Rationale: stitching independent queries in Slint would create mixed-time truth,
+couple UI callbacks to SQLite, and make stale async replacement difficult to prove. A
+single mega-payload would couple independent fault/revision domains and force healthy
+cards to disappear. The exact scalar join plus independently replaceable immutable
+sections preserves responsiveness, truthful degradation, bounded retained memory,
+and a reusable UI/CLI/MCP projection boundary without inheriting runtime authority.

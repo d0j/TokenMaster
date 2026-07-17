@@ -250,7 +250,23 @@ passed at a 3,293,184-byte private floor, 6,422,528-byte sampled high, 118 handl
 four threads, USER=1, and GDI=0. The Git authority audit passed 126 production
 dependencies, 19 boundary files, and four release libraries with zero forbidden
 matches or vendored upstream source. P2-E is complete; the immediate next slice is
-P2-F joined product status.
+P3 complete desktop UI.
+
+P2-F joined product status is complete under
+`docs/superpowers/plans/2026-07-17-tokenmaster-p2f-product-status.md`. One defensive
+schema-v13 deferred transaction captures exact scalar usage/aggregate/quota/benefit/Git
+state without historical scans and maps it to a schema-v1 status envelope without
+consuming a generation on failure. The leaf `tokenmaster-product` reducer retains one
+current immutable snapshot, separates checked attempt/source/runtime generations,
+rejects stale async work, preserves compatible last-good payloads, invalidates
+incompatible identity, copies only count-only runtime health, and derives 11 fixed
+route states from a `u16` reason set. Aggregate rebuild keeps Activity/Data Health
+reachable and disables only aggregate-dependent views. The 100,000-event status p95 is
+0.125 ms; 10,000 replacements, 1,152 isolated resource cycles, real runtime fault/
+pause/resume contracts, and the product authority/privacy audit pass.
+The post-P2-F clean-root, format, warnings-as-errors locked workspace Clippy, and
+complete locked workspace test/doctest baseline also passes.
+
 Actual P3 visible notifications/UI, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.
@@ -308,9 +324,9 @@ aggregate; checkpoints cap at 32 KiB, event/relation batches at 256,
 chunk updates at 18, and continuation calls at 4,096 per execution. P1-D.0 removes
 the engine replay-page API: full rebuild now validates fixed per-file identity and
 lends one temporary reader at a time, while exact store seal remains completeness
-authority. Do not yet claim
-Codex is composed into this worker, live scheduling exists, or the OS lease is
-implemented.
+authority. Those P1-C-only non-claims are historical: P1-D/P1-E later implemented
+live Codex composition, scheduling, the process writer lease, and power integration
+under their separate verified contracts.
 
 Tasks 3+ in `2026-07-14-tokenmaster-p0-replay-correctness.md` are superseded. Do not
 execute its Codex-owned fingerprint/signature or destructive migration steps. Do not
@@ -366,6 +382,11 @@ cargo +1.97.0 test -p tokenmaster-store --test benefit_reminder_contract --locke
 cargo +1.97.0 test -p tokenmaster-runtime --test reminder_runtime_contract --locked
 cargo +1.97.0 test -p tokenmaster-runtime --test reminder_runtime_resource_contract --locked
 pwsh -NoProfile -File scripts\audit-benefit-inventory.ps1 -RepositoryRoot (Get-Location).Path
+cargo +1.97.0 test -p tokenmaster-store --test product_status_contract --locked
+cargo +1.97.0 test -p tokenmaster-query --test product_status_contract --locked
+cargo +1.97.0 test -p tokenmaster-query --test product_status_scale_contract --locked
+cargo +1.97.0 test -p tokenmaster-product --locked
+pwsh -NoProfile -File scripts\audit-product-status.ps1 -RepositoryRoot (Get-Location).Path
 # Optional authenticated live smoke:
 $env:TOKENMASTER_CODEX_EXECUTABLE = '<absolute native codex.exe>'
 $arguments = @('+1.97.0', 'test', '-p', 'tokenmaster-codex', '--test', 'quota_live_contract', '--locked', '--', '--ignored', '--nocapture')

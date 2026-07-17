@@ -11,6 +11,8 @@ Codex JSONL sources
   -> transactional current/staging SQLite archive
   -> transactional generation-qualified UTC/session rollups
   -> immutable query snapshots
+  -> one exact scalar product-status join
+  -> independently replaceable immutable product sections and fixed route readiness
   -> Slint desktop UI, future CLI, future MCP
 
 Exact installed Codex native executable
@@ -72,6 +74,24 @@ pagination instead of skipping rows.
 The UI receives bounded view models rather than owning archive state. Skin, layout,
 and locale selection alter presentation state only, so switching remains immediate and
 does not reparse sources or rebuild the archive.
+
+`tokenmaster-product` is the leaf composition layer between query/runtime truth and
+P3 presentation. `QueryService::product_data_status` captures usage publication,
+aggregate progress, quota, benefit, and Git scalar state in one defensive schema-v13
+transaction; fixed statements never scan history. The reducer retains one current
+`Arc<ProductSnapshot>` and no history. Checked attempt generation is independent from
+source revisions, so old async work cannot win and a failed compatible refresh keeps
+the last payload with a stable failure code. A durable identity mismatch invalidates
+only the affected payload.
+
+Usage, quota/benefit, reminder, and Git runtimes remain owners of their workers,
+schedulers, leases, processes, and cleanup. The product layer copies only bounded
+count-only lifecycle/retry/failure projections under a separate runtime generation.
+Eleven fixed route statuses use a `u16` reason set. Aggregate rebuild keeps Activity
+and Data Health reachable, degrades Dashboard section by section, and disables only
+aggregate-dependent History, Sessions, Models, and Projects. P3 will add one bounded
+query worker and marshal snapshots to Slint; Slint callbacks will not open SQLite or
+own a runtime.
 
 The built-in live quota source is separate from the JSONL usage reader. Composition
 supplies one already resolved absolute native Codex executable to

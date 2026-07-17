@@ -121,34 +121,39 @@ contracts are stable.
     improvement, requirement owner, delivery gate, validator, and status. A 1.0 parity
     claim is blocked until every row is implemented or deliberately rejected under a
     surviving normative rationale and regression gate.
+15. Product composition is one leaf crate over immutable query/runtime projections.
+    One exact scalar status transaction prevents mixed-revision UI stitching; separate
+    checked attempt/source/runtime generations prevent stale async overwrite; one
+    current snapshot and fixed route/reason topology bound retained memory. P3 may add
+    a worker and presentation mapping but no SQLite or runtime ownership to Slint.
 
 ### E. UI, quality, and documentation
 
-15. Slint software rendering does not support drop shadows. Production elevation is
+16. Slint software rendering does not support drop shadows. Production elevation is
     expressed through border tone, surface contrast, spacing, and optional solid
     offset layers; skin tokens may not require unsupported effects. Paint latency is
     measured at visible present, not at callback completion.
-16. Traceability and status documents have drift. Every normative `TM-*` requirement
+17. Traceability and status documents have drift. Every normative `TM-*` requirement
     gets a row even when planned; every ADR reference must exist; current-state,
     roadmap, README, changelog, and plan status must agree. A machine validator becomes
     a release gate.
 
 ### F. Release and supply-chain closure
 
-17. The workspace-global GNU target is a development constraint, not a signed-release
+18. The workspace-global GNU target is a development constraint, not a signed-release
     decision. The canonical 1.0 artifact is `x86_64-pc-windows-msvc`; P6 removes the
     forced global target and uses an explicit GNU/MSVC comparison before release.
-18. The 1.0 package is a signed portable ZIP. Automatic update and installer behavior
+19. The 1.0 package is a signed portable ZIP. Automatic update and installer behavior
     are deferred until signed-manifest, interrupted-update, rollback, and downgrade
     contracts exist.
-19. The Slint Royalty-free License 2.0 route is selected with attribution in Help/About
+20. The Slint Royalty-free License 2.0 route is selected with attribution in Help/About
     and on the public download page. Dependency notices, license policy, and SBOM are
     package gates.
-20. Pricing is a release-pinned embedded catalog plus bounded validated overrides; no
+21. Pricing is a release-pinned embedded catalog plus bounded validated overrides; no
     hot-path network update is allowed and unknown model cost stays unknown.
-21. P6 requires advisory, dependency/source/license, secret, SBOM, immutable-action,
+22. P6 requires advisory, dependency/source/license, secret, SBOM, immutable-action,
     artifact-attestation, deterministic-content, and clean-room-launch evidence.
-22. The complete closure rationale and self-review are recorded in
+23. The complete closure rationale and self-review are recorded in
     `docs/superpowers/specs/2026-07-16-tokenmaster-plan-closure-design.md`.
 
 ## 4. Approved delivery order
@@ -260,7 +265,12 @@ runtime, complete project-truth synchronization, and the full workspace plus
 specialized authority gates. P2-E Git output Tasks 1-8 now pass: domain/parser/native
 backend/hint/schema-v13 projection, bounded store capture, immutable public UTC/
 efficiency facade, bounded runtime publication/lifecycle, Windows resource plateau,
-and final authority audit. P2-F joined product status is the active critical path.
+and final authority audit. P2-F joined product status is complete under
+`docs/superpowers/plans/2026-07-17-tokenmaster-p2f-product-status.md`: exact scalar
+schema-v13 capture, schema-v1 joined envelope, one-current-snapshot reducer, separate
+attempt/source/runtime generations, 11 fixed route states, runtime fault isolation,
+100,000-event latency, replacement/resource plateau, and authority audit pass. P3
+complete desktop UI is the active critical path.
 View-time full scans and period-labeled
 whole-session totals remain forbidden.
 P2-A now implements the bounded public values, separate defensive read-only/query-only

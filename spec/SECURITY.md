@@ -126,6 +126,24 @@ forbidden matches. A separate isolated Windows gate repeatedly exercises success
 JSON-RPC failure, and forced timeout; private memory and handle/thread/USER/GDI
 topology return to a stable plateau and no task-owned child remains.
 
+The joined product-status boundary adds no write, migration, provider, process,
+filesystem, network, shell, UI, or runtime-owner authority. Its store capture uses one
+defensive read-only deferred transaction, fixed statements, checked scalar
+reconstruction, and a maximum two-second deadline whose progress handler is removed on
+every outcome. Public status and runtime-health values exclude paths, source/account/
+window/lot/repository/project identities, raw payloads, quota or benefit values,
+commands, credentials, and inner errors. Component revisions remain independent, so a
+fault in quota, benefit, Git, or aggregate publication cannot manufacture or suppress
+sibling truth.
+
+The product reducer copies only bounded immutable public values and count-only runtime
+health. It retains no SQLite handle, writer guard, runtime owner, callback, child,
+timer, path, identifier, or history. Stale attempt/runtime generations fail closed;
+durable identity mismatches invalidate affected payloads. `scripts/audit-product-status.ps1`
+enforces the leaf dependency direction, fixed route/reason topology, absence of
+whole-history status scans and forbidden authority, no vendored upstream source, and
+release-library string privacy.
+
 Providers emit bounded observation/session-relation drafts only. They cannot create
 event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or
 canonical events. Those values are created only by TokenMaster accounting code. Store

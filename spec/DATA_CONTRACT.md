@@ -372,11 +372,30 @@ batch capped at 401 targets and 512 returned price keys. Breakdown and session b
 retain at most 256 targets and the same global 512-key detail cap with exact per-target
 omitted counts. No result issues one SQL query per visible point or session.
 
+The joined product status capture is one exact scalar read model over schema v13. One
+short deferred transaction binds usage publication/dataset/aggregate state, independent
+quota and benefit revisions, and independent Git publication state. It returns only
+owned counts, checked revisions, quality/freshness inputs, aggregate progress, and
+stable availability facts; it never returns source, account, window, lot, repository,
+project, or archive identities. Missing independent domains remain explicitly absent
+or unavailable and do not erase readable sibling truth.
+
+The product projection retains one immutable current snapshot. Its data sections are
+keyed by checked refresh-attempt generations that are distinct from source snapshot
+generations; its runtime sections use a separate checked runtime generation. A failed
+compatible refresh keeps the last successful payload plus a bounded stable failure,
+while incompatible durable identity invalidates that payload. Exactly 11 fixed routes
+derive readiness from a fixed-width reason set; no dynamic route, reason, history,
+queue, runtime owner, path, identifier, or database value is retained by the reducer.
+
 ## TM-DATA-006 — Bounds
 
 Reader lines are limited to 16 MiB. Resume metadata is capped at 32 KiB. General
 display metadata is UTF-8 bounded; tool names, collection counts, profile roots,
 source directories, and UI snapshots have explicit contract limits.
+The product status warning set is capped at 16, route reasons are represented by one
+`u16`, and each route exposes at most eight currently defined stable reasons. Snapshot
+replacement retains one `Arc`-owned current value and no prior snapshot history.
 
 The encoded Codex adapter checkpoint, including its fixed header and parser resume,
 is capped at 32 KiB total. It stores no path or raw source bytes. Bootstrap retains at

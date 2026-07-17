@@ -268,9 +268,8 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   session page/detail values. Session continuation binds dataset plus canonical scope
   filters; rebuild/stale/failed reads consume no snapshot generation. Focused strict
   Clippy and all `tokenmaster-query` tests pass.
-  A visible `aggregate_rebuilding` warning belongs to the future joined P2-F status
-  snapshot; analytics itself returns stable `unavailable` because no truthful payload
-  exists during rebuild.
+  The P2-F joined status now exposes `aggregate_rebuilding`; analytics itself returns
+  stable `unavailable` because no truthful aggregate payload exists during rebuild.
 - P2-B scale/privacy/resource closure: deterministic release-mode current and
   immutable-legacy one-million-event fixtures rebuild in 75.528/81.142 seconds at
   13,240/12,324 events/s. Rebuild-page p95 is 246.558/268.305 ms; main+WAL+SHM
@@ -562,8 +561,45 @@ GDI=0. `scripts/audit-git-output.ps1` passed across 126 production dependencies,
 19 production boundary files, and four release libraries with zero forbidden
 dependency, foreign-language, network/browser/credential/shell/direct-SQL/mutation,
 vendored-upstream, or private binary-string matches. P2-E is complete; this does not
-claim P2-F joined status, P3 UI, P5 CLI/MCP, M0 acceptance, packaging, signing, or
-release.
+claim P3 UI, P5 CLI/MCP, M0 acceptance, packaging, signing, or release.
+
+## P2-F joined product status
+
+P2-F is implemented under
+`docs/superpowers/plans/2026-07-17-tokenmaster-p2f-product-status.md`. The read-only
+store captures usage publication/dataset/aggregate status plus independent quota,
+benefit, and Git revisions in one defensive schema-v13 deferred transaction. The
+maximum deadline is two seconds, progress cleanup is exact, mapping failures consume no
+public generation, and fixed statements never scan event, rollup, quota-sample,
+benefit-change, or Git-day history.
+
+`QueryService::product_data_status` returns the bounded schema-v1 joined envelope. The
+new leaf `tokenmaster-product` crate retains one current `Arc<ProductSnapshot>` and no
+history. Data sections use a checked attempt generation distinct from their durable
+source generation; runtime health uses a separate generation. Older asynchronous work
+is rejected, compatible refresh failures retain the last successful payload with a
+stable path-free code, and incompatible durable identity invalidates only the affected
+payload.
+
+Exactly 11 routes derive ready/degraded/unavailable state from one `u16` reason set.
+Settings and Help/About need no archive. During aggregate rebuild, Dashboard degrades
+section by section, Activity and Data Health remain reachable, and History, Sessions,
+Models, and Projects are unavailable. Usage, quota/benefit, reminder, and Git runtime
+owners remain outside the product layer; only bounded count/lifecycle/retry/failure
+projections are copied. Real pause/resume, reminder contention, quota transport fault,
+and sibling-isolation contracts pass.
+
+The 100,000-event status fixture measured 0.125 ms p95 over 40 samples against the
+25 ms gate. Ten thousand reducer replacements retain one current payload. The isolated
+Windows gate completed 1,152 open/capture/drop cycles with stable 111 handles, four
+threads, USER=1, GDI=0, and private memory returning below the original +2 MiB budget
+after topology/convergence warm-up. `scripts/audit-product-status.ps1` passed with one
+leaf package, six production files, no dynamic status collections/runtime ownership,
+no direct filesystem/network/process/SQL/UI authority, no forbidden whole-history
+status scan, 11 fixed routes, and zero vendored-source/release-string matches. This is
+developer evidence for P2-F only; visible P3 UI and release acceptance remain separate.
+The post-synchronization clean-root audit, formatting check, warnings-as-errors locked
+workspace Clippy, and complete locked workspace tests/doctests pass.
 
 ## Next implementation slice
 
@@ -581,15 +617,12 @@ credit inventory, expiration reconciliation, default/custom reminder profiles,
 immutable read snapshots, and publication through the existing Codex runtime with
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
-workspace quality gate. P2-E Tasks 1-8 are complete; the immediate next slice is P2-F
-joined product status.
-Activation
-remains a later independently authorized
-capability; visible notifications and the complete UI follow the completed data
-contracts. No quota value may be inferred from local token/cost facts and no browser/
-private-endpoint authority may be added.
-P2-F joined product status and P3
-complete UI follow the product-data contracts.
+workspace quality gate. P2-E Tasks 1-8 and P2-F joined product status are complete; the
+immediate next slice is P3 complete desktop UI. Activation remains a later
+independently authorized capability; visible notifications and the complete UI follow
+the completed data contracts. No quota value may be inferred from local token/cost
+facts and no browser/private-endpoint authority may be added.
+P3 complete UI now follows the completed product-data contracts.
 
 The architecture/release closure review is approved in
 `docs/superpowers/specs/2026-07-16-tokenmaster-plan-closure-design.md`. It freezes the
@@ -607,9 +640,10 @@ and repeated full resets under the P2 plan
 The separately approved P2 banked-reset plan models multiple quantities/expirations,
 bounded reminders, notification coverage, immutable activation receipts, and a future
 official-capability-only automatic policy:
-`docs/superpowers/plans/2026-07-15-tokenmaster-banked-reset-inventory.md`. It is design
-only; current reset discovery, notifications, assisted activation, and automatic
-activation are not implemented.
+`docs/superpowers/plans/2026-07-15-tokenmaster-banked-reset-inventory.md`. Official
+Codex reset-credit discovery, durable in-app reminder events, and joined product status
+are implemented; visible P3 notification rendering, OS delivery, assisted activation,
+and automatic activation are not implemented.
 The source-adapter seam keeps the current local Codex reader replaceable by future
 sandboxed bounded provider plugins without coupling storage, analytics, automation,
 or UI to Codex JSONL. The selected future format is a `.tmplugin` WebAssembly
@@ -655,7 +689,7 @@ implemented in `tokenmaster-query`: schema-v1 headers/envelopes, checked generat
 publication/dataset identity, an injected exact clock sample, stable path-free errors,
 bounded scopes/warnings/pages, and fingerprint-redacted activity cursors. Task 2, the
 separate query-only SQLite store and exact transaction capture, is also complete.
-`UsageReadStore` opens schema v12 read-only without migration, enforces defensive
+`UsageReadStore` opens schema v13 read-only without migration, enforces defensive
 query-only policy with a 4 MiB cache, captures publication/scan truth and current or
 legacy keyset pages in one deferred transaction, rejects stale continuation identity,
 uses indexed `pageSize + 1`, and clears its deadline handler on every result.

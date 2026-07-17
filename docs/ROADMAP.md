@@ -106,14 +106,14 @@ incremental/rebuild selection, admission-safe pause/resume, ordered joined shutd
 partial/reopen evidence, and combined Windows resource return without adding provider/
 platform/UI dependencies to the engine core. P1-E.1 immutable engine publication,
 P1-E.2 race/recovery/restart closure, and P1-E.3 isolated Windows power binding plus
-resource evidence are complete. The current gate is P2 immutable indexed query
-snapshots; interactive hibernation/soak stay in the frozen-candidate M0 gate.
+resource evidence are complete. P2 product data is complete; the current gate is P3
+complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M0 gate.
 
 ## Approved implementation rail
 
 - **P1 — runtime publication (complete):** immutable generation-ordered snapshots,
   suspend/resume integration, race/failure recovery, and bounded-resource evidence.
-- **P2 — product data:** indexed query snapshots, analytics, pinned pricing and
+- **P2 — product data (complete):** indexed query snapshots, analytics, pinned pricing and
   overrides, dynamic quotas, full-reset epochs, banked-reset inventory/reminders, and
   bounded Git output metrics.
 - **P3 — complete desktop UI:** quota-first board, history, sessions, models, projects,
@@ -134,8 +134,10 @@ native read-only inspection, transient provider-neutral repository activity hint
 strict schema-v13 immutable incremental projection with bounded store captures, and
 owned schema-v1 UTC Git envelopes with a private exact project/cost efficiency join,
 plus bounded I/O-before-lease runtime publication, lifecycle/resource evidence, and
-the final authority audit. P2-F joined product status is next, followed by the complete
-UI.
+the final authority audit. P2-F now adds the exact joined schema-v13 status capture,
+bounded schema-v1 envelope, one-current-snapshot reducer, separate attempt/source/
+runtime generations, 11 fixed route states, and scale/resource/authority closure.
+P3 complete UI is next.
 
 P2-A query foundation is approved under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-query-foundation.md`. It first freezes
@@ -191,9 +193,9 @@ surfaces, batched indexed reads, current/legacy million-event scale, resource pl
   post-ack deduplication, release/retry, hibernation/clock reconciliation, bounded
   backpressure, fault isolation, and resource/authority gates. Task 8 closes
   dependency/language/privacy authority,
-  project truth, and the complete workspace quality gate. P3 visible notification
-  delivery, later independently
-  authorized activation, P2-E Git output, and P2-F joined product status remain.
+  project truth, and the complete workspace quality gate. P2-E Git output and P2-F
+  joined product status are complete. P3 visible notification delivery and later
+  independently authorized activation remain.
 No frontend/database coupling or view-time full event grouping is accepted.
 
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset

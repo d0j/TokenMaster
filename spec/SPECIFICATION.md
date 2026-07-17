@@ -47,6 +47,14 @@ sessions, models, projects, activity, data health, notifications, settings, agen
 help, command palette, and compact-widget views. Users MUST be able to reorder, hide,
 and collapse board sections without data loss.
 
+All data-bearing routes MUST derive from one bounded immutable product snapshot. The
+snapshot MUST distinguish refresh-attempt order from durable source revisions, retain
+the last compatible successful section when a later refresh fails, reject an older
+asynchronous result, and invalidate a payload whose durable identity no longer matches
+the joined status. Route readiness MUST be explicit; an aggregate rebuild MUST keep
+activity and data-health truth available while aggregate-dependent history, session,
+model, and project views remain unavailable rather than showing fabricated zero data.
+
 ### TM-FUNC-009 — Quota reset history
 
 Provider quota windows MUST be versioned as immutable epochs. A detected full weekly
@@ -174,6 +182,9 @@ reference without copying its implementation.
 Skin, layout, locale, selection, and range changes MUST update bounded presentation
 state without mutating the archive or initiating an unbounded source scan. An older
 asynchronous result MUST NOT overwrite a newer UI generation.
+The presentation owner MUST retain only the current immutable product snapshot and
+MUST copy bounded runtime health rather than retaining runtime owners, callbacks,
+guards, paths, or database handles.
 
 ## Performance requirements
 
@@ -207,6 +218,11 @@ historical sub-minute offset. Public analytics MUST preserve known, partial, and
 unavailable token facts and cap a requested daily series at 400 owned points. A
 session continuation MUST remain bound to both its exact dataset and canonical scope
 filter set; changing either starts a new first page.
+Joined product status MUST capture usage publication, aggregate progress, quota,
+benefit, and Git scalar state in one short deferred transaction with a maximum
+two-second deadline. It MUST NOT scan event, rollup, quota-sample, benefit-change, or
+Git-day history. On the reference machine, a joined status capture over an archive
+containing at least 100,000 usage events MUST have p95 below 25 ms.
 Quota current reads MUST accept at most 32 exact windows. Reset history MUST use a
 quota-revision-bound keyset cursor, return at most 256 transitions plus one internal
 lookahead, and apply each sample's provider-defined freshness boundaries rather than

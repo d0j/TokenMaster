@@ -16,7 +16,7 @@ virtualized presentation models, and resource gates. It is not a product release
 an accepted interactive Windows validation.
 
 The data/runtime foundation has bounded Codex discovery/parsing, replay-safe
-accounting, strict SQLite schema v8, exact full rebuild, and a production incremental
+accounting, strict SQLite schema v13, exact full rebuild, and a production incremental
 tail refresh. Unchanged refreshes
 read zero JSONL payload bytes; append resumes from the persisted checkpoint; new and
 missing sources follow exact complete-scan authority; replacement, rewrite, and
@@ -24,10 +24,14 @@ truncation or a changed profile scope durably request a non-destructive full reb
 That rebuild safely recovers an unadmitted provisional source. The live runtime now
 assembles startup recovery, the process-owned writer lease, the bounded worker,
 scheduler and pathless watcher, incremental/rebuild selection, pause/resume, and
-joined shutdown. Immutable P2-A activity queries are complete. P2-B now has
-provider-self-contained canonical events, transactional UTC/session rollups, and a
-bounded resumable aggregate rebuild; aggregate readers, calendar composition, pricing,
-quota/reset data, complete UI, automation, and release evidence remain.
+joined shutdown. P2 product data is complete: indexed immutable usage/cost analytics,
+dynamic quota and full-reset history, expiring reset-benefit inventory with durable
+reminder events, bounded Git output analytics, and one exact joined product status.
+The constant-state product reducer retains one current snapshot, rejects stale async
+work, copies only bounded runtime health, and derives fixed route readiness without
+giving UI code SQLite or runtime ownership. P3 complete desktop UI is next; visible
+notifications, automation, interactive acceptance, packaging, signing, and release
+evidence remain.
 
 ## Build and verify
 
