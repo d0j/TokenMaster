@@ -289,6 +289,9 @@ bridge that applies only the newest snapshot without polling or blocking callbac
 P3-B.3 then selects an approved installed/portable archive root and composes the
 existing live runtime as the sole ingestion owner. Do not guess benefit identity;
 safe current-scope discovery/all-current query support is a separate prerequisite.
+The post-synchronization clean-root, format, strict locked workspace Clippy, and full
+locked workspace test/doctest baseline pass; process audit found no task-owned Cargo,
+compiler, test, or TokenMaster process.
 
 P3-B.2-P3-E visible data/notifications, P4 presentation, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read

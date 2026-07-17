@@ -659,6 +659,10 @@ portable data-root policy and compose the existing live runtime without duplicat
 ingestion ownership. Safe benefit scope discovery also remains an explicit query
 contract before the benefit card can be ready.
 
+The post-synchronization clean-root audit, format check, warnings-as-errors locked
+workspace Clippy, and complete locked workspace tests/doctests pass. No task-owned
+Cargo, compiler, test, or TokenMaster process remains.
+
 ## Next implementation slice
 
 P2-D quota history core is complete under
