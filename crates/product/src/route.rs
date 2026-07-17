@@ -204,15 +204,21 @@ pub(crate) fn derive_routes(snapshot: &ProductSnapshot) -> [ProductRouteStatus; 
         ProductAggregateState::Rebuilding => Some(ProductRouteReason::AggregateRebuilding),
         ProductAggregateState::Failed => Some(ProductRouteReason::AggregateFailed),
     };
-    let usage_ready = snapshot.analytics.kind() == ProductSectionKind::Ready;
-    let activity_ready = snapshot.activity.kind() == ProductSectionKind::Ready;
-    let sessions_ready = snapshot.sessions.kind() == ProductSectionKind::Ready;
+    let usage_runtime_ready = !snapshot.runtime.usage_is_degraded();
+    let usage_ready = snapshot.analytics.kind() == ProductSectionKind::Ready && usage_runtime_ready;
+    let activity_ready =
+        snapshot.activity.kind() == ProductSectionKind::Ready && usage_runtime_ready;
+    let sessions_ready =
+        snapshot.sessions.kind() == ProductSectionKind::Ready && usage_runtime_ready;
     let quota_ready = status.payload().quota().state() == ProductComponentState::Published
-        && snapshot.quota.kind() == ProductSectionKind::Ready;
+        && snapshot.quota.kind() == ProductSectionKind::Ready
+        && !snapshot.runtime.quota_is_degraded();
     let benefit_ready = status.payload().benefit().state() == ProductComponentState::Published
-        && snapshot.benefit.kind() == ProductSectionKind::Ready;
+        && snapshot.benefit.kind() == ProductSectionKind::Ready
+        && !snapshot.runtime.benefit_is_degraded();
     let git_ready = status.payload().git().state() == ProductComponentState::Published
-        && snapshot.git.kind() == ProductSectionKind::Ready;
+        && snapshot.git.kind() == ProductSectionKind::Ready
+        && !snapshot.runtime.git_is_degraded();
 
     let mut dashboard = common;
     if !usage_ready {

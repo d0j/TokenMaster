@@ -5,7 +5,7 @@ use tokenmaster_query::{
 };
 
 use crate::{
-    ProductReducerError, ProductRoute, ProductRouteStatus, ProductSection,
+    ProductReducerError, ProductRoute, ProductRouteStatus, ProductRuntimeStatus, ProductSection,
     route::{derive_routes, initial_routes},
 };
 
@@ -39,6 +39,7 @@ pub struct ProductSnapshot {
     pub(crate) activity: ProductSection<QueryEnvelope<LatestActivityPage>>,
     pub(crate) sessions: ProductSection<QueryEnvelope<UsageSessionPage>>,
     pub(crate) session_detail: ProductSection<QueryEnvelope<UsageSessionDetailResult>>,
+    pub(crate) runtime: ProductRuntimeStatus,
     pub(crate) routes: [ProductRouteStatus; 11],
 }
 
@@ -54,6 +55,7 @@ impl ProductSnapshot {
             activity: ProductSection::waiting(),
             sessions: ProductSection::waiting(),
             session_detail: ProductSection::waiting(),
+            runtime: ProductRuntimeStatus::waiting(),
             routes: initial_routes(),
         }
     }
@@ -101,6 +103,11 @@ impl ProductSnapshot {
     #[must_use]
     pub const fn session_detail(&self) -> &ProductSection<QueryEnvelope<UsageSessionDetailResult>> {
         &self.session_detail
+    }
+
+    #[must_use]
+    pub const fn runtime(&self) -> &ProductRuntimeStatus {
+        &self.runtime
     }
 
     #[must_use]

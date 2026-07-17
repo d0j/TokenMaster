@@ -5,8 +5,16 @@ use tokenmaster_query::{
     ProductDataStatusEnvelope, QueryEnvelope, QueryErrorCode, QuotaCurrentSnapshot, QuotaEnvelope,
     UsageAnalytics, UsageSessionDetailResult, UsageSessionPage,
 };
+use tokenmaster_runtime::{
+    BenefitReminderRuntimeSnapshot, CodexQuotaRuntimeSnapshot, GitRuntimeSnapshot,
+    LiveRuntimeSnapshot, RuntimeErrorCode,
+};
 
-use crate::{ProductAttemptGeneration, ProductSection, ProductSnapshot};
+use crate::{
+    ProductAttemptGeneration, ProductGitRuntimeHealth, ProductQuotaRuntimeHealth,
+    ProductReminderRuntimeHealth, ProductRuntimeGeneration, ProductRuntimeObservationError,
+    ProductRuntimeSection, ProductSection, ProductSnapshot, ProductUsageRuntimeHealth,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProductPublishOutcome {
@@ -72,6 +80,46 @@ macro_rules! section_methods {
     };
 }
 
+macro_rules! runtime_methods {
+    ($publish:ident, $fail:ident, $field:ident, $source:ty, $health:ty) => {
+        pub fn $publish(
+            &mut self,
+            generation: ProductRuntimeGeneration,
+            source: $source,
+        ) -> Result<ProductPublishOutcome, ProductReducerError> {
+            let outcome = classify(self.current.runtime.$field.generation(), generation);
+            if outcome != ProductPublishOutcome::Accepted {
+                return Ok(outcome);
+            }
+            let section = ProductRuntimeSection::<$health>::ready(generation, source.into());
+            self.replace_runtime_section(section, |next, section| {
+                next.runtime.$field = section;
+            })?;
+            Ok(ProductPublishOutcome::Accepted)
+        }
+
+        pub fn $fail(
+            &mut self,
+            generation: ProductRuntimeGeneration,
+            code: RuntimeErrorCode,
+        ) -> Result<ProductPublishOutcome, ProductReducerError> {
+            let outcome = classify(self.current.runtime.$field.generation(), generation);
+            if outcome != ProductPublishOutcome::Accepted {
+                return Ok(outcome);
+            }
+            let section = ProductRuntimeSection::<$health>::unavailable_retaining(
+                generation,
+                ProductRuntimeObservationError::from(code),
+                self.current.runtime.$field,
+            );
+            self.replace_runtime_section(section, |next, section| {
+                next.runtime.$field = section;
+            })?;
+            Ok(ProductPublishOutcome::Accepted)
+        }
+    };
+}
+
 impl ProductReducer {
     #[must_use]
     pub fn new() -> Self {
@@ -128,6 +176,35 @@ impl ProductReducer {
         QueryEnvelope<UsageAnalytics>,
         usage_compatible
     );
+
+    runtime_methods!(
+        publish_usage_runtime,
+        fail_usage_runtime,
+        usage,
+        LiveRuntimeSnapshot,
+        ProductUsageRuntimeHealth
+    );
+    runtime_methods!(
+        publish_quota_runtime,
+        fail_quota_runtime,
+        quota,
+        CodexQuotaRuntimeSnapshot,
+        ProductQuotaRuntimeHealth
+    );
+    runtime_methods!(
+        publish_reminder_runtime,
+        fail_reminder_runtime,
+        reminder,
+        BenefitReminderRuntimeSnapshot,
+        ProductReminderRuntimeHealth
+    );
+    runtime_methods!(
+        publish_git_runtime,
+        fail_git_runtime,
+        git,
+        GitRuntimeSnapshot,
+        ProductGitRuntimeHealth
+    );
     section_methods!(
         publish_quota,
         fail_quota,
@@ -183,6 +260,19 @@ impl ProductReducer {
         self.current = Arc::new(next);
         Ok(())
     }
+
+    fn replace_runtime_section<T: Copy>(
+        &mut self,
+        section: ProductRuntimeSection<T>,
+        replace: impl FnOnce(&mut ProductSnapshot, ProductRuntimeSection<T>),
+    ) -> Result<(), ProductReducerError> {
+        let mut next = (*self.current).clone();
+        next.generation = next.generation.checked_next()?;
+        replace(&mut next, section);
+        next.refresh_routes();
+        self.current = Arc::new(next);
+        Ok(())
+    }
 }
 
 impl Default for ProductReducer {
@@ -200,10 +290,7 @@ impl fmt::Debug for ProductReducer {
     }
 }
 
-fn classify(
-    current: Option<ProductAttemptGeneration>,
-    candidate: ProductAttemptGeneration,
-) -> ProductPublishOutcome {
+fn classify<T: Copy + Ord>(current: Option<T>, candidate: T) -> ProductPublishOutcome {
     match current {
         Some(current) if candidate < current => ProductPublishOutcome::RejectedOlder,
         Some(current) if candidate == current => ProductPublishOutcome::Coalesced,
