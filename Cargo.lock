@@ -5238,8 +5238,14 @@ dependencies = [
 name = "tokenmaster-app"
 version = "0.1.0"
 dependencies = [
+ "slint",
  "tempfile",
+ "tokenmaster-codex",
+ "tokenmaster-desktop",
+ "tokenmaster-engine",
  "tokenmaster-platform",
+ "tokenmaster-product",
+ "tokenmaster-runtime",
 ]
 
 [[package]]

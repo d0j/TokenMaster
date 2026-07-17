@@ -45,6 +45,14 @@ impl ApplicationEnvironment {
             std::env::var_os("CODEX_HOME"),
         ))
     }
+
+    pub(crate) fn user_profile(&self) -> Option<&Path> {
+        self.user_profile.as_deref()
+    }
+
+    pub(crate) fn codex_home(&self) -> Option<&OsString> {
+        self.codex_home.as_ref()
+    }
 }
 
 impl fmt::Debug for ApplicationEnvironment {

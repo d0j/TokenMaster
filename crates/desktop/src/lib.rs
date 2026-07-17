@@ -19,6 +19,7 @@ pub use generated_ui::*;
 mod ui;
 
 pub use presentation::DesktopApplyOutcome;
+pub use shell::select_production_renderer;
 pub use ui::{DesktopShell, DesktopUiError, DesktopUiErrorCode};
 
 pub use bridge::{

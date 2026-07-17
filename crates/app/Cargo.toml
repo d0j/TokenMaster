@@ -5,8 +5,18 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[[bin]]
+name = "TokenMaster"
+path = "src/main.rs"
+
 [dependencies]
+slint.workspace = true
+tokenmaster-codex = { path = "../codex" }
+tokenmaster-desktop = { path = "../desktop" }
+tokenmaster-engine = { path = "../engine" }
 tokenmaster-platform = { path = "../platform" }
+tokenmaster-product = { path = "../product" }
+tokenmaster-runtime = { path = "../runtime" }
 
 [dev-dependencies]
 tempfile.workspace = true

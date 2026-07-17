@@ -403,6 +403,13 @@ type LatestSnapshot = Arc<Mutex<Option<Arc<ProductSnapshot>>>>;
 type SnapshotNotifier = Arc<Mutex<Option<Arc<dyn DesktopSnapshotNotifier>>>>;
 type RuntimeObservationSlot = Arc<Mutex<RuntimeObservationState>>;
 
+#[derive(Clone)]
+struct DesktopPublication {
+    latest: LatestSnapshot,
+    notifier: SnapshotNotifier,
+    runtime_observation: RuntimeObservationSlot,
+}
+
 #[derive(Default)]
 struct RuntimeObservationState {
     latest_generation: Option<ProductRuntimeGeneration>,
@@ -447,9 +454,7 @@ impl DesktopSnapshotReceiver {
 pub struct DesktopController {
     clock: Arc<dyn Clock>,
     worker: RefreshWorker,
-    latest: LatestSnapshot,
-    notifier: SnapshotNotifier,
-    runtime_observation: RuntimeObservationSlot,
+    publication: DesktopPublication,
 }
 
 impl DesktopController {
@@ -479,11 +484,14 @@ impl DesktopController {
     {
         let worker_clock = clock.clone();
         let latest = Arc::new(Mutex::new(None));
-        let worker_latest = latest.clone();
         let notifier = Arc::new(Mutex::new(None));
-        let worker_notifier = notifier.clone();
         let runtime_observation = Arc::new(Mutex::new(RuntimeObservationState::default()));
-        let worker_runtime_observation = runtime_observation.clone();
+        let publication = DesktopPublication {
+            latest,
+            notifier,
+            runtime_observation,
+        };
+        let worker_publication = publication.clone();
         let execute_clock = clock.clone();
         let mut reducer = ProductReducer::new();
         let worker = RefreshWorker::spawn(worker_clock, move |permit| {
@@ -493,18 +501,14 @@ impl DesktopController {
                 &mut reducer,
                 permit,
                 execute_clock.as_ref(),
-                &worker_latest,
-                &worker_notifier,
-                &worker_runtime_observation,
+                &worker_publication,
             )
         })
         .map_err(map_worker_error)?;
         Ok(Self {
             clock,
             worker,
-            latest,
-            notifier,
-            runtime_observation,
+            publication,
         })
     }
 
@@ -537,7 +541,7 @@ impl DesktopController {
         &self,
         observation: DesktopRuntimeObservation,
     ) -> Result<DesktopRuntimeObservationOutcome, DesktopControllerError> {
-        let mut state = lock_runtime_observation(&self.runtime_observation)?;
+        let mut state = lock_runtime_observation(&self.publication.runtime_observation)?;
         if state
             .latest_generation
             .is_some_and(|generation| observation.generation() <= generation)
@@ -561,7 +565,7 @@ impl DesktopController {
     #[must_use]
     pub fn snapshot_receiver(&self) -> DesktopSnapshotReceiver {
         DesktopSnapshotReceiver {
-            latest: self.latest.clone(),
+            latest: self.publication.latest.clone(),
         }
     }
 
@@ -589,7 +593,7 @@ impl DesktopController {
             ));
         }
         let notify_existing = self.snapshot_receiver().has_snapshot()?;
-        let mut current = lock_notifier(&self.notifier)?;
+        let mut current = lock_notifier(&self.publication.notifier)?;
         if current.is_some() {
             return Err(DesktopControllerError::new(
                 DesktopControllerErrorCode::NotifierAlreadyAttached,
@@ -626,9 +630,7 @@ fn execute_attempt<S: DesktopQuerySource>(
     reducer: &mut ProductReducer,
     permit: &RefreshPermit,
     clock: &dyn Clock,
-    latest: &LatestSnapshot,
-    notifier: &SnapshotNotifier,
-    runtime_observation: &RuntimeObservationSlot,
+    publication: &DesktopPublication,
 ) -> RefreshOutcome {
     let Some(attempt) = ProductAttemptGeneration::new(permit.id().get()) else {
         return RefreshOutcome::Failed;
@@ -637,7 +639,7 @@ fn execute_attempt<S: DesktopQuerySource>(
         return outcome;
     }
 
-    let observation = match lock_runtime_observation(runtime_observation) {
+    let observation = match lock_runtime_observation(&publication.runtime_observation) {
         Ok(mut state) => state.pending.take(),
         Err(_) => return RefreshOutcome::Failed,
     };
@@ -727,11 +729,11 @@ fn execute_attempt<S: DesktopQuerySource>(
         return outcome;
     }
 
-    let notifier = match lock_notifier(notifier) {
+    let notifier = match lock_notifier(&publication.notifier) {
         Ok(notifier) => notifier.clone(),
         Err(_) => return RefreshOutcome::Failed,
     };
-    match lock_latest(latest) {
+    match lock_latest(&publication.latest) {
         Ok(mut slot) => *slot = Some(reducer.snapshot()),
         Err(_) => return RefreshOutcome::Failed,
     }

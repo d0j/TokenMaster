@@ -6,10 +6,6 @@ license.workspace = true
 rust-version.workspace = true
 build = "build.rs"
 
-[[bin]]
-name = "TokenMaster"
-path = "src/main.rs"
-
 [dependencies]
 anyhow.workspace = true
 slint.workspace = true
