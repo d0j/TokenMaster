@@ -9,7 +9,8 @@ use tokenmaster_benefits::{
 };
 use tokenmaster_domain::{
     BenefitInventoryCompleteness, BenefitLotId, BenefitLotObservation, BenefitObservationId,
-    BenefitScope, NotificationChannel, ReminderLeadTime, ReminderProfile,
+    BenefitScope, NotificationChannel, QuotaAccountId, QuotaWorkspaceId, ReminderLeadTime,
+    ReminderProfile, UsageProviderId,
 };
 
 use super::{MAX_QUERY_DURATION, PROGRESS_OP_INTERVAL, UsageReadStore, map_sql};
@@ -22,6 +23,14 @@ use crate::{StoreError, StoreErrorCode};
 
 pub const MAX_BENEFIT_CURRENT_LOTS: usize = tokenmaster_domain::MAX_BENEFIT_LOTS_PER_OBSERVATION;
 pub const MAX_BENEFIT_CHANGE_PAGE_SIZE: usize = 256;
+pub const MAX_BENEFIT_OVERVIEW_SCOPES: usize = 32;
+pub const MAX_BENEFIT_OVERVIEW_LOTS: usize = 256;
+
+const OVERVIEW_SCOPES_SQL: &str = "SELECT scope_id, provider_id, account_id, workspace_id,
+       current_lot_count
+     FROM benefit_scope
+     ORDER BY scope_id
+     LIMIT ?1";
 
 const LOT_REVISION_COLUMNS: &str = "
        revision.lot_id, revision.lot_revision, revision.kind,
@@ -56,6 +65,18 @@ impl fmt::Debug for BenefitCurrentQuery {
             .field("scope", &"[redacted]")
             .field("deadline", &self.deadline)
             .finish()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BenefitOverviewQuery {
+    deadline: Duration,
+}
+
+impl BenefitOverviewQuery {
+    pub fn new(deadline: Duration) -> Result<Self, StoreError> {
+        validate_deadline(deadline)?;
+        Ok(Self { deadline })
     }
 }
 
@@ -134,7 +155,7 @@ impl fmt::Debug for BenefitChangePageQuery {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct BenefitScopeSnapshot {
     inventory_revision: BenefitRevision,
     last_change_sequence: u64,
@@ -143,6 +164,21 @@ pub struct BenefitScopeSnapshot {
     fresh_until_ms: i64,
     stale_after_ms: i64,
     completeness: BenefitInventoryCompleteness,
+}
+
+impl fmt::Debug for BenefitScopeSnapshot {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("BenefitScopeSnapshot")
+            .field("inventory_revision", &self.inventory_revision)
+            .field("last_change_sequence", &self.last_change_sequence)
+            .field("observed_at_ms", &self.observed_at_ms)
+            .field("fresh_until_ms", &self.fresh_until_ms)
+            .field("stale_after_ms", &self.stale_after_ms)
+            .field("completeness", &self.completeness)
+            .field("identity", &"[redacted]")
+            .finish()
+    }
 }
 
 impl BenefitScopeSnapshot {
@@ -200,7 +236,7 @@ impl BenefitReminderProfileSnapshot {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct BenefitDueSnapshot {
     lot_id: BenefitLotId,
     lot_revision: BenefitRevision,
@@ -208,6 +244,20 @@ pub struct BenefitDueSnapshot {
     channel: NotificationChannel,
     due_at_ms: i64,
     expiry_at_ms: i64,
+}
+
+impl fmt::Debug for BenefitDueSnapshot {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("BenefitDueSnapshot")
+            .field("lot_revision", &self.lot_revision)
+            .field("lead_time", &self.lead_time)
+            .field("channel", &self.channel)
+            .field("due_at_ms", &self.due_at_ms)
+            .field("expiry_at_ms", &self.expiry_at_ms)
+            .field("identity", &"[redacted]")
+            .finish()
+    }
 }
 
 impl BenefitDueSnapshot {
@@ -242,13 +292,27 @@ impl BenefitDueSnapshot {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct BenefitCurrentCapture {
     benefit_revision: BenefitInventoryRevision,
     scope: Option<BenefitScopeSnapshot>,
     lots: Box<[BenefitCurrentLot]>,
     reminder_profile: BenefitReminderProfileSnapshot,
     nearest_due: Option<BenefitDueSnapshot>,
+}
+
+impl fmt::Debug for BenefitCurrentCapture {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("BenefitCurrentCapture")
+            .field("benefit_revision", &self.benefit_revision)
+            .field("scope", &self.scope)
+            .field("lot_count", &self.lots.len())
+            .field("reminder_profile", &self.reminder_profile)
+            .field("nearest_due", &self.nearest_due)
+            .field("identities", &"[redacted]")
+            .finish()
+    }
 }
 
 impl BenefitCurrentCapture {
@@ -275,6 +339,82 @@ impl BenefitCurrentCapture {
     #[must_use]
     pub const fn nearest_due(&self) -> Option<&BenefitDueSnapshot> {
         self.nearest_due.as_ref()
+    }
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct BenefitOverviewScopeCapture {
+    scope: BenefitScopeSnapshot,
+    lots: Box<[BenefitCurrentLot]>,
+    reminder_profile: BenefitReminderProfileSnapshot,
+    nearest_due: Option<BenefitDueSnapshot>,
+}
+
+impl BenefitOverviewScopeCapture {
+    #[must_use]
+    pub const fn scope(&self) -> &BenefitScopeSnapshot {
+        &self.scope
+    }
+
+    #[must_use]
+    pub const fn lots(&self) -> &[BenefitCurrentLot] {
+        &self.lots
+    }
+
+    #[must_use]
+    pub const fn reminder_profile(&self) -> &BenefitReminderProfileSnapshot {
+        &self.reminder_profile
+    }
+
+    #[must_use]
+    pub const fn nearest_due(&self) -> Option<&BenefitDueSnapshot> {
+        self.nearest_due.as_ref()
+    }
+}
+
+impl fmt::Debug for BenefitOverviewScopeCapture {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("BenefitOverviewScopeCapture")
+            .field("inventory_revision", &self.scope.inventory_revision)
+            .field("last_change_sequence", &self.scope.last_change_sequence)
+            .field("observed_at_ms", &self.scope.observed_at_ms)
+            .field("fresh_until_ms", &self.scope.fresh_until_ms)
+            .field("stale_after_ms", &self.scope.stale_after_ms)
+            .field("completeness", &self.scope.completeness)
+            .field("lot_count", &self.lots.len())
+            .field("reminder_profile", &self.reminder_profile)
+            .field("nearest_due", &self.nearest_due)
+            .field("identity", &"[redacted]")
+            .finish()
+    }
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct BenefitOverviewCapture {
+    benefit_revision: BenefitInventoryRevision,
+    scopes: Box<[BenefitOverviewScopeCapture]>,
+}
+
+impl BenefitOverviewCapture {
+    #[must_use]
+    pub const fn benefit_revision(&self) -> BenefitInventoryRevision {
+        self.benefit_revision
+    }
+
+    #[must_use]
+    pub const fn scopes(&self) -> &[BenefitOverviewScopeCapture] {
+        &self.scopes
+    }
+}
+
+impl fmt::Debug for BenefitOverviewCapture {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("BenefitOverviewCapture")
+            .field("benefit_revision", &self.benefit_revision)
+            .field("scopes", &self.scopes)
+            .finish()
     }
 }
 
@@ -412,6 +552,41 @@ impl UsageReadStore {
         self.capture_benefit_current_with_options(query, PROGRESS_OP_INTERVAL, false, || Ok(()))
     }
 
+    pub fn capture_benefit_overview(
+        &mut self,
+        query: BenefitOverviewQuery,
+    ) -> Result<BenefitOverviewCapture, StoreError> {
+        self.capture_benefit_overview_with_options(query, PROGRESS_OP_INTERVAL, false, || Ok(()))
+    }
+
+    fn capture_benefit_overview_with_options<F>(
+        &mut self,
+        query: BenefitOverviewQuery,
+        progress_interval: i32,
+        cancel_immediately: bool,
+        after_revision: F,
+    ) -> Result<BenefitOverviewCapture, StoreError>
+    where
+        F: FnOnce() -> Result<(), StoreError>,
+    {
+        let started = Instant::now();
+        let deadline = query.deadline;
+        let progress_started = started;
+        map_sql(self.connection.progress_handler(
+            progress_interval,
+            Some(move || cancel_immediately || progress_started.elapsed() >= deadline),
+        ))?;
+        let result =
+            capture_benefit_overview(&mut self.connection, after_revision).and_then(|capture| {
+                if started.elapsed() >= deadline {
+                    Err(StoreError::new(StoreErrorCode::DeadlineExceeded))
+                } else {
+                    Ok(capture)
+                }
+            });
+        clear_progress_handler(&self.connection, result)
+    }
+
     fn capture_benefit_current_with_options<F>(
         &mut self,
         query: BenefitCurrentQuery,
@@ -521,6 +696,112 @@ where
         reminder_profile,
         nearest_due,
     })
+}
+
+struct DiscoveredBenefitScope {
+    scope_id: BenefitScopeId,
+    scope: BenefitScope,
+    current_lot_count: usize,
+}
+
+fn capture_benefit_overview<F>(
+    connection: &mut rusqlite::Connection,
+    after_revision: F,
+) -> Result<BenefitOverviewCapture, StoreError>
+where
+    F: FnOnce() -> Result<(), StoreError>,
+{
+    let transaction = map_sql(connection.transaction_with_behavior(TransactionBehavior::Deferred))?;
+    let benefit_revision = load_benefit_revision(&transaction)?;
+    after_revision()?;
+    let discovered = load_overview_scopes(&transaction)?;
+    let mut scopes = Vec::with_capacity(discovered.len());
+    for discovered_scope in discovered {
+        let scope = load_scope_snapshot(
+            &transaction,
+            &discovered_scope.scope,
+            discovered_scope.scope_id,
+        )?
+        .ok_or_else(invalid_stored)?;
+        let lots = load_current_lots(&transaction, discovered_scope.scope_id, &scope)?;
+        if lots.len() != discovered_scope.current_lot_count {
+            return Err(invalid_stored());
+        }
+        let reminder_profile = load_profile_snapshot(&transaction, discovered_scope.scope_id)?;
+        let nearest_due = load_nearest_due(&transaction, discovered_scope.scope_id)?;
+        scopes.push(BenefitOverviewScopeCapture {
+            scope,
+            lots: lots.into_boxed_slice(),
+            reminder_profile,
+            nearest_due,
+        });
+    }
+    map_sql(transaction.commit())?;
+    Ok(BenefitOverviewCapture {
+        benefit_revision,
+        scopes: scopes.into_boxed_slice(),
+    })
+}
+
+fn load_overview_scopes(
+    transaction: &Transaction<'_>,
+) -> Result<Vec<DiscoveredBenefitScope>, StoreError> {
+    let lookahead = MAX_BENEFIT_OVERVIEW_SCOPES
+        .checked_add(1)
+        .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?;
+    let sql_limit =
+        i64::try_from(lookahead).map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))?;
+    let rows = map_benefit_rows((|| -> rusqlite::Result<Vec<DiscoveredBenefitScope>> {
+        let mut statement = transaction.prepare(OVERVIEW_SCOPES_SQL)?;
+        let mapped = statement.query_map([sql_limit], |row| {
+            let stored_scope_id: [u8; 32] = row
+                .get::<_, Vec<u8>>(0)?
+                .try_into()
+                .map_err(|_| rusqlite::Error::InvalidQuery)?;
+            let provider_id = UsageProviderId::new(row.get::<_, String>(1)?)
+                .map_err(|_| rusqlite::Error::InvalidQuery)?;
+            let account_id = QuotaAccountId::new(row.get::<_, String>(2)?)
+                .map_err(|_| rusqlite::Error::InvalidQuery)?;
+            let workspace_id = row
+                .get::<_, Option<String>>(3)?
+                .map(QuotaWorkspaceId::new)
+                .transpose()
+                .map_err(|_| rusqlite::Error::InvalidQuery)?;
+            let current_lot_count = usize::try_from(row.get::<_, i64>(4)?)
+                .map_err(|_| rusqlite::Error::InvalidQuery)?;
+            let scope = BenefitScope::new(provider_id, account_id, workspace_id);
+            let scope_id = benefit_scope_id(&scope);
+            if scope_id.as_bytes() != &stored_scope_id
+                || current_lot_count > MAX_BENEFIT_CURRENT_LOTS
+            {
+                return Err(rusqlite::Error::InvalidQuery);
+            }
+            Ok(DiscoveredBenefitScope {
+                scope_id,
+                scope,
+                current_lot_count,
+            })
+        })?;
+        mapped.collect()
+    })())?;
+    if rows.len() > MAX_BENEFIT_OVERVIEW_SCOPES {
+        return Err(StoreError::with_limit(
+            StoreErrorCode::CapacityExceeded,
+            MAX_BENEFIT_OVERVIEW_SCOPES as u64,
+        ));
+    }
+    let total_lots = rows.iter().try_fold(0_usize, |total, scope| {
+        total
+            .checked_add(scope.current_lot_count)
+            .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))
+    })?;
+    if total_lots > MAX_BENEFIT_OVERVIEW_LOTS {
+        return Err(StoreError::with_limit(
+            StoreErrorCode::CapacityExceeded,
+            MAX_BENEFIT_OVERVIEW_LOTS as u64,
+        ));
+    }
+    Ok(rows)
 }
 
 fn capture_benefit_changes<F>(
@@ -1125,5 +1406,92 @@ mod tests {
             )
             .expect("next capture");
         assert_eq!(next.lots().len(), 1);
+    }
+
+    #[test]
+    fn benefit_overview_transaction_keeps_revision_exact_during_concurrent_change() {
+        let directory = TempDir::new().expect("temporary directory");
+        let path = directory.path().join("benefit-overview-snapshot.sqlite3");
+        seed(&path);
+        let mut reader = UsageReadStore::open(&path).expect("reader");
+        let writer_path = path.clone();
+        let capture = reader
+            .capture_benefit_overview_with_options(
+                BenefitOverviewQuery::new(Duration::from_secs(2)).expect("overview query"),
+                i32::MAX,
+                false,
+                move || {
+                    thread::spawn(move || {
+                        UsageStore::open(&writer_path)
+                            .expect("concurrent writer")
+                            .apply_benefit_observation(&observation(2, 2))
+                            .expect("concurrent observation");
+                    })
+                    .join()
+                    .expect("concurrent writer join");
+                    Ok(())
+                },
+            )
+            .expect("transaction-exact overview");
+        assert_eq!(capture.benefit_revision().get(), 1);
+        assert_eq!(capture.scopes()[0].lots()[0].lot().quantity(), 1);
+
+        let next = reader
+            .capture_benefit_overview(
+                BenefitOverviewQuery::new(Duration::from_secs(2)).expect("next overview"),
+            )
+            .expect("next capture");
+        assert_eq!(next.benefit_revision().get(), 2);
+        assert_eq!(next.scopes()[0].lots()[0].lot().quantity(), 2);
+    }
+
+    #[test]
+    fn benefit_overview_cancellation_and_total_deadline_clear_progress() {
+        let directory = TempDir::new().expect("temporary directory");
+        let path = directory.path().join("benefit-overview-cancel.sqlite3");
+        seed(&path);
+        let mut reader = UsageReadStore::open(&path).expect("reader");
+        let interrupted = reader
+            .capture_benefit_overview_with_options(
+                BenefitOverviewQuery::new(Duration::from_secs(2)).expect("overview query"),
+                1,
+                true,
+                || Ok(()),
+            )
+            .expect_err("forced cancellation");
+        assert_eq!(interrupted.code(), StoreErrorCode::DeadlineExceeded);
+        assert_eq!(
+            reader
+                .capture_benefit_overview(
+                    BenefitOverviewQuery::new(Duration::from_secs(2)).expect("next overview"),
+                )
+                .expect("next capture")
+                .scopes()
+                .len(),
+            1
+        );
+
+        let late = reader
+            .capture_benefit_overview_with_options(
+                BenefitOverviewQuery::new(Duration::from_millis(1)).expect("short overview"),
+                i32::MAX,
+                false,
+                || {
+                    thread::sleep(Duration::from_millis(5));
+                    Ok(())
+                },
+            )
+            .expect_err("late overview");
+        assert_eq!(late.code(), StoreErrorCode::DeadlineExceeded);
+        assert_eq!(
+            reader
+                .capture_benefit_overview(
+                    BenefitOverviewQuery::new(Duration::from_secs(2)).expect("final overview"),
+                )
+                .expect("final capture")
+                .scopes()
+                .len(),
+            1
+        );
     }
 }

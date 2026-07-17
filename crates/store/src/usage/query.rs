@@ -27,8 +27,10 @@ pub use analytics::{
 };
 pub use benefit::{
     BenefitChangeCursor, BenefitChangePageCapture, BenefitChangePageQuery, BenefitChangeRecord,
-    BenefitCurrentCapture, BenefitCurrentQuery, BenefitDueSnapshot, BenefitReminderProfileSnapshot,
+    BenefitCurrentCapture, BenefitCurrentQuery, BenefitDueSnapshot, BenefitOverviewCapture,
+    BenefitOverviewQuery, BenefitOverviewScopeCapture, BenefitReminderProfileSnapshot,
     BenefitScopeSnapshot, MAX_BENEFIT_CHANGE_PAGE_SIZE, MAX_BENEFIT_CURRENT_LOTS,
+    MAX_BENEFIT_OVERVIEW_LOTS, MAX_BENEFIT_OVERVIEW_SCOPES,
 };
 pub use price::{
     MAX_USAGE_PRICE_BASIS_KEYS, MAX_USAGE_PRICE_BASIS_TARGETS, UsageBreakdownPriceBasisQuery,
