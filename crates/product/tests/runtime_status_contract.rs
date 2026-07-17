@@ -6,7 +6,7 @@ use tokenmaster_engine::WriterLease;
 use tokenmaster_product::{
     ProductAttemptGeneration, ProductPublishOutcome, ProductReducer, ProductRoute,
     ProductRouteReason, ProductRouteState, ProductRuntimeFailureCode, ProductRuntimeGeneration,
-    ProductRuntimeLifecycle, ProductSectionKind,
+    ProductRuntimeLifecycle, ProductRuntimeObservationError, ProductSectionKind,
 };
 use tokenmaster_query::{
     QueryClock, QueryError, QueryService, QueryTimeSample, UsageAnalyticsRequest, UsageRange,
@@ -235,6 +235,56 @@ fn live_and_git_pause_resume_snapshots_are_copied_without_runtime_ownership() {
             .lifecycle(),
         ProductRuntimeLifecycle::Paused
     );
+}
+
+#[test]
+fn copied_health_and_typed_observation_failure_need_no_runtime_owner() {
+    let directory = TempDir::new().expect("temporary directory");
+    let source = directory.path().join("source");
+    std::fs::create_dir(&source).expect("source root");
+    let configured = [ConfiguredCodexRoot::new(&source, None, true)];
+    let request = build_discovery_request(CodexRootInput {
+        user_profile: None,
+        codex_home: None,
+        configured: &configured,
+    })
+    .expect("discovery request");
+    let path = directory.path().join("copied-health.sqlite3");
+    let mut runtime = LiveRuntime::start(&path, request).expect("live runtime");
+    runtime.pause().expect("pause runtime");
+    let copied = runtime.snapshot().expect("runtime snapshot").into();
+
+    let mut reducer = ProductReducer::new();
+    assert_eq!(
+        reducer
+            .publish_usage_runtime_health(runtime_generation(4), copied)
+            .expect("publish copied health"),
+        ProductPublishOutcome::Accepted
+    );
+    assert_eq!(
+        reducer
+            .fail_usage_runtime_observation(
+                runtime_generation(5),
+                ProductRuntimeObservationError::StoreUnavailable,
+            )
+            .expect("publish typed observation failure"),
+        ProductPublishOutcome::Accepted
+    );
+    let failed = reducer.snapshot().runtime().usage();
+    assert_eq!(failed.kind(), ProductSectionKind::Unavailable);
+    assert_eq!(failed.health(), Some(copied));
+    assert_eq!(
+        failed.observation_error(),
+        Some(ProductRuntimeObservationError::StoreUnavailable)
+    );
+    assert_eq!(
+        reducer
+            .publish_usage_runtime_health(runtime_generation(4), copied)
+            .expect("reject older copied health"),
+        ProductPublishOutcome::RejectedOlder
+    );
+
+    runtime.shutdown().expect("shutdown runtime");
 }
 
 #[test]

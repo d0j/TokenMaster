@@ -81,17 +81,33 @@ macro_rules! section_methods {
 }
 
 macro_rules! runtime_methods {
-    ($publish:ident, $fail:ident, $field:ident, $source:ty, $health:ty) => {
+    (
+        $publish:ident,
+        $publish_health:ident,
+        $fail:ident,
+        $fail_observation:ident,
+        $field:ident,
+        $source:ty,
+        $health:ty
+    ) => {
         pub fn $publish(
             &mut self,
             generation: ProductRuntimeGeneration,
             source: $source,
         ) -> Result<ProductPublishOutcome, ProductReducerError> {
+            self.$publish_health(generation, source.into())
+        }
+
+        pub fn $publish_health(
+            &mut self,
+            generation: ProductRuntimeGeneration,
+            health: $health,
+        ) -> Result<ProductPublishOutcome, ProductReducerError> {
             let outcome = classify(self.current.runtime.$field.generation(), generation);
             if outcome != ProductPublishOutcome::Accepted {
                 return Ok(outcome);
             }
-            let section = ProductRuntimeSection::<$health>::ready(generation, source.into());
+            let section = ProductRuntimeSection::<$health>::ready(generation, health);
             self.replace_runtime_section(section, |next, section| {
                 next.runtime.$field = section;
             })?;
@@ -103,13 +119,21 @@ macro_rules! runtime_methods {
             generation: ProductRuntimeGeneration,
             code: RuntimeErrorCode,
         ) -> Result<ProductPublishOutcome, ProductReducerError> {
+            self.$fail_observation(generation, ProductRuntimeObservationError::from(code))
+        }
+
+        pub fn $fail_observation(
+            &mut self,
+            generation: ProductRuntimeGeneration,
+            error: ProductRuntimeObservationError,
+        ) -> Result<ProductPublishOutcome, ProductReducerError> {
             let outcome = classify(self.current.runtime.$field.generation(), generation);
             if outcome != ProductPublishOutcome::Accepted {
                 return Ok(outcome);
             }
             let section = ProductRuntimeSection::<$health>::unavailable_retaining(
                 generation,
-                ProductRuntimeObservationError::from(code),
+                error,
                 self.current.runtime.$field,
             );
             self.replace_runtime_section(section, |next, section| {
@@ -179,28 +203,36 @@ impl ProductReducer {
 
     runtime_methods!(
         publish_usage_runtime,
+        publish_usage_runtime_health,
         fail_usage_runtime,
+        fail_usage_runtime_observation,
         usage,
         LiveRuntimeSnapshot,
         ProductUsageRuntimeHealth
     );
     runtime_methods!(
         publish_quota_runtime,
+        publish_quota_runtime_health,
         fail_quota_runtime,
+        fail_quota_runtime_observation,
         quota,
         CodexQuotaRuntimeSnapshot,
         ProductQuotaRuntimeHealth
     );
     runtime_methods!(
         publish_reminder_runtime,
+        publish_reminder_runtime_health,
         fail_reminder_runtime,
+        fail_reminder_runtime_observation,
         reminder,
         BenefitReminderRuntimeSnapshot,
         ProductReminderRuntimeHealth
     );
     runtime_methods!(
         publish_git_runtime,
+        publish_git_runtime_health,
         fail_git_runtime,
+        fail_git_runtime_observation,
         git,
         GitRuntimeSnapshot,
         ProductGitRuntimeHealth
