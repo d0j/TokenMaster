@@ -11,6 +11,10 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 - M0 native architecture proof: one process, software-rendered Slint UI, tray
   lifecycle, three layouts, three skins, English/Russian/pseudo localization,
   bounded chart/session models, and explicit resource-gate contracts.
+- P3-A production desktop foundation: a separate `tokenmaster-desktop` package maps
+  one current `ProductSnapshot` into exactly 11 fixed route rows, rejects equal/older
+  generations, preserves validated selection, and renders one original software-only
+  Slint header/navigation/state shell with no probe dependency or mock usage data.
 - M1 usage foundation: bounded provider roots, path-private source discovery,
   reparse-safe streaming enumeration, typed bounded JSONL parser, cumulative token
   state, physical/logical source identity, byte framing, revalidation, strict SQLite
@@ -601,6 +605,29 @@ developer evidence for P2-F only; visible P3 UI and release acceptance remain se
 The post-synchronization clean-root audit, formatting check, warnings-as-errors locked
 workspace Clippy, and complete locked workspace tests/doctests pass.
 
+## P3-A production desktop shell
+
+P3-A is implemented under
+`docs/superpowers/plans/2026-07-17-tokenmaster-p3a-desktop-shell.md`. The existing M0
+probe remains unchanged as evidence; the new `tokenmaster-desktop` frontend has a
+package-specific software-only Slint graph and no M0 dependency. One fixed projection
+maps `ProductRoute::ALL` in canonical order, copies at most 11 stable reason codes per
+route, retains one current generation/selection, and rejects equal or older updates.
+
+The compiled `TokenMaster` shell contains one window, header, 11-route navigation, and
+truthful route state/reason panel. It starts from the real initial product snapshot;
+there are no seeded quota/session/chart values. Six adversarial Pester contracts and
+the production audit reject probe dependencies, mock/seed data, FemtoVG, route drift,
+direct store/runtime authority, and filesystem/network/process/SQL/browser/credential
+surfaces. The release executable audit reports five Rust files, five Slint files, one
+retained route model, 11 routes/reasons maximum, and zero forbidden source, dependency,
+probe, renderer, or private-canary matches.
+
+This closes only P3-A. It does not claim live archive/controller publication, the six
+dashboard sections, exploration payloads, visible reminder acknowledgement, compact
+widget lifecycle, P4 skins/localization/accessibility/paint gates, M0 acceptance,
+packaging, signing, or release.
+
 ## Next implementation slice
 
 P2-D quota history core is complete under
@@ -617,12 +644,11 @@ credit inventory, expiration reconciliation, default/custom reminder profiles,
 immutable read snapshots, and publication through the existing Codex runtime with
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
-workspace quality gate. P2-E Tasks 1-8 and P2-F joined product status are complete; the
-immediate next slice is P3 complete desktop UI. Activation remains a later
-independently authorized capability; visible notifications and the complete UI follow
-the completed data contracts. No quota value may be inferred from local token/cost
-facts and no browser/private-endpoint authority may be added.
-P3 complete UI now follows the completed product-data contracts.
+workspace quality gate. P2-E, P2-F, and P3-A are complete; the immediate next slice is
+P3-B desktop controller: one bounded query worker, coalesced intents, reducer
+publication, and deterministic startup/shutdown. Activation remains a later
+independently authorized capability. No quota value may be inferred from local
+token/cost facts and no browser/private-endpoint authority may be added.
 
 The architecture/release closure review is approved in
 `docs/superpowers/specs/2026-07-16-tokenmaster-plan-closure-design.md`. It freezes the

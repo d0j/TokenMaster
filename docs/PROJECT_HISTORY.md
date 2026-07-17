@@ -2108,3 +2108,32 @@ packaging, signing, and release remain unclaimed.
 After project-truth synchronization, the clean-root audit, formatting check,
 warnings-as-errors locked workspace Clippy, complete locked workspace tests/doctests,
 and diff check pass.
+
+## 2026-07-17 — P3-A production desktop shell
+
+Approved and implemented the first complete vertical UI contour under
+`docs/superpowers/plans/2026-07-17-tokenmaster-p3a-desktop-shell.md`. The production
+frontend is a new `tokenmaster-desktop` package; `tokenmaster-m0` remains a separate
+evidence artifact. Workspace Slint defaults now enable only the software renderer,
+while the M0 package opts into FemtoVG explicitly for its diagnostic fallback.
+
+The desktop projection maps `ProductRoute::ALL` into exactly 11 owned fixed rows with
+stable route/label/state/reason codes, retains one generation and selection, rejects
+equal or older snapshots, and has no history. The original compiled Slint shell uses
+one window, header, route navigation, and route-state panel. Startup consumes the real
+initial `ProductReducer` snapshot; no mock quota/session/chart data or probe module is
+present.
+
+Focused projection and compiled-UI contracts pass. Six adversarial Pester tests prove
+the audit rejects probe dependencies, seeded data, FemtoVG, route drift, direct
+store/runtime authority, and filesystem/network/process/SQL/browser/credential
+surfaces. The production release audit builds `TokenMaster.exe` and reports five Rust
+files, five Slint files, one retained route model, 11 routes/reasons maximum, and zero
+forbidden dependency/source/probe/renderer/private-canary matches. A broad `PRIVATE_`
+binary check was deliberately replaced by exact project canaries after evidence showed
+it matched SQLite's legitimate `SQLITE_OPEN_PRIVATE_CACHE` constant.
+
+This milestone does not claim live product-controller publication, dashboard payloads,
+visible reminder acknowledgement, compact widget lifecycle, P4 presentation gates,
+M0 acceptance, packaging, signing, or release. P3-B bounded controller publication is
+next.

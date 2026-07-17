@@ -267,7 +267,17 @@ pause/resume contracts, and the product authority/privacy audit pass.
 The post-P2-F clean-root, format, warnings-as-errors locked workspace Clippy, and
 complete locked workspace test/doctest baseline also passes.
 
-Actual P3 visible notifications/UI, CLI/MCP, activation, M0
+P3-A is complete under
+`docs/superpowers/plans/2026-07-17-tokenmaster-p3a-desktop-shell.md`. The separate
+`tokenmaster-desktop` package has a software-only production Slint graph, one fixed
+11-route projection of the current `ProductSnapshot`, stale/equal generation
+rejection, stable route selection, one compiled window, no M0 dependency, and no mock
+usage model. Focused Rust/Slint tests, six adversarial audit tests, release build, and
+the desktop authority/binary audit pass. The immediate next slice is P3-B: add one
+bounded query worker and publish accepted immutable sections through the existing
+reducer without SQLite or blocking work in Slint callbacks.
+
+P3-B-P3-E visible data/notifications, P4 presentation, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.
 The current post-Task-8 Git clean-root, formatting, strict locked workspace Clippy,

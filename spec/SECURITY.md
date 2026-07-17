@@ -144,6 +144,15 @@ enforces the leaf dependency direction, fixed route/reason topology, absence of
 whole-history status scans and forbidden authority, no vendored upstream source, and
 release-library string privacy.
 
+The P3 production frontend is a separate `tokenmaster-desktop` package and does not
+depend on `tokenmaster-m0`. Its manifest has no direct store/provider/engine/runtime/
+SQLite/network/browser/shell dependency. Slint receives one fixed 11-row projection
+of public product route state and no archive/provider/runtime handle. Route callbacks
+validate stable keys and change presentation selection only. The production binary
+selects the software renderer with no diagnostic fallback. The deterministic desktop
+audit rejects probe or seeded data, FemtoVG, direct authority, route-count drift,
+forbidden source surfaces, and exact private canary strings in the release executable.
+
 Providers emit bounded observation/session-relation drafts only. They cannot create
 event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or
 canonical events. Those values are created only by TokenMaster accounting code. Store

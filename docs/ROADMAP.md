@@ -116,8 +116,10 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
 - **P2 — product data (complete):** indexed query snapshots, analytics, pinned pricing and
   overrides, dynamic quotas, full-reset epochs, banked-reset inventory/reminders, and
   bounded Git output metrics.
-- **P3 — complete desktop UI:** quota-first board, history, sessions, models, projects,
-  activity, health, settings, help, command palette, tray, and compact widget.
+- **P3 — complete desktop UI (in progress):** P3-A separate production shell and fixed
+  11-route projection are complete; bounded controller, quota-first board, history,
+  sessions, models, projects, activity, health, notifications, settings, help,
+  command palette, tray, and compact widget remain P3-B-P3-E.
 - **P4 — presentation:** modular skins/layouts/density/scheme/locale, en/ru/pseudo,
   accessibility, DPI, reduced motion, and visible-paint/resource gates.
 - **P5 — automation:** strict bounded JSON CLI and a separate stdio MCP process for
@@ -137,7 +139,10 @@ plus bounded I/O-before-lease runtime publication, lifecycle/resource evidence, 
 the final authority audit. P2-F now adds the exact joined schema-v13 status capture,
 bounded schema-v1 envelope, one-current-snapshot reducer, separate attempt/source/
 runtime generations, 11 fixed route states, and scale/resource/authority closure.
-P3 complete UI is next.
+P3-A now adds the separate software-only `tokenmaster-desktop` package, one current
+fixed route projection, stale-generation rejection, original compiled shell, focused
+tests, release build, and authority audit with no mock/probe/FemtoVG/direct-authority
+matches. P3-B bounded query/controller publication is next.
 
 P2-A query foundation is approved under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-query-foundation.md`. It first freezes

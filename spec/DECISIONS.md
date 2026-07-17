@@ -428,7 +428,7 @@ backstop when registration is unavailable.
 
 Decision: `tokenmaster-query` owns synchronous bounded frontend values, while
 `tokenmaster-store::UsageReadStore` owns one separate SQLite `READ_ONLY|NO_MUTEX`
-connection. It requires exact schema v12 and bundled SQLite, applies WAL/query-only/
+connection. It requires exact schema v13 and bundled SQLite, applies WAL/query-only/
 defensive/QPSG/no-checkpoint policy with trusted schema and DQS disabled, a 250 ms busy
 timeout, 4 MiB cache and zero mmap, and never migrates. One short deferred transaction
 captures publication generation, independent dataset identity, exact scan truth and a
@@ -1025,3 +1025,20 @@ single mega-payload would couple independent fault/revision domains and force he
 cards to disappear. The exact scalar join plus independently replaceable immutable
 sections preserves responsiveness, truthful degradation, bounded retained memory,
 and a reusable UI/CLI/MCP projection boundary without inheriting runtime authority.
+
+## ADR-049 — Production desktop is separate from the M0 probe
+
+Decision: P3 uses a new frontend leaf package, `tokenmaster-desktop`. The historical
+`tokenmaster-m0` package remains an architecture/resource probe and is neither renamed,
+promoted, nor added as a production dependency. The production Slint package selects
+only `winit-software`; the probe opts into FemtoVG explicitly for its diagnostic
+fallback. One `DesktopState` maps the current `ProductSnapshot` into exactly 11 fixed
+route rows and rejects equal or older product generations. Slint receives only copied
+bounded strings/state and emits validated presentation intents; it receives no store,
+query service, runtime owner, path, provider input, or mock data.
+
+Rationale: promoting or depending on the probe would mix seeded M0 models, stress
+entry points, renderer diagnostics, and receipt-bound behavior into product truth.
+Keeping a separate production frontend preserves earlier evidence identity and lets
+P3 evolve without a legacy runtime dependency. A fixed snapshot projection makes
+route truth and retained memory testable before the P3-B query worker is introduced.

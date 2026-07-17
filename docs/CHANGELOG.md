@@ -6,6 +6,20 @@ All notable changes are recorded here.
 
 ### Added
 
+- P3-A separate production `tokenmaster-desktop` package with a package-specific
+  software-only Slint graph; the M0 probe remains an evidence artifact and is not a
+  runtime or source dependency.
+- One immutable bounded desktop projection of all 11 product routes, stable route/
+  label/reason codes, one retained selection/model, and equal/older generation
+  rejection before Slint replacement.
+- Original compiled `TokenMaster` header/navigation/state shell driven by the real
+  initial product snapshot with no seeded quota, session, chart, cost, or reset data.
+- Desktop source/release audit plus six adversarial Pester contracts covering probe
+  dependencies, mock data, FemtoVG, route drift, direct authority, and forbidden
+  filesystem/network/process/SQL/browser/credential surfaces. The release audit
+  reports five Rust and five Slint files, one model, 11 routes/reasons maximum, and
+  zero forbidden dependency/source/private-canary matches.
+
 - P2-F joined product status: one exact defensive schema-v13 scalar transaction binds
   usage publication/aggregate progress with independent quota, benefit, and Git state,
   then maps it into a bounded schema-v1 envelope without consuming a generation on
