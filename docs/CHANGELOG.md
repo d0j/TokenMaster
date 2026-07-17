@@ -6,6 +6,18 @@ All notable changes are recorded here.
 
 ### Added
 
+- P3-B.2 capacity-one Slint event-loop bridge sharing the controller's sole latest
+  snapshot mailbox, with one idle-only weak notifier, one atomic scheduled gate, one
+  weak window, newest-generation application, and a post-drain race recheck.
+- Stable fixed bridge health for scheduled/coalesced/delivered/ignored/failure counts
+  and last generation/failure, with retryable event-loop unavailability and explicit
+  terminated/window/state lifecycle truth.
+- Six bridge unit/race contracts, eight controller contracts including populated-
+  idle attachment wakeup, and a real headless Slint integration event loop.
+- Expanded desktop audit with 12 adversarial Pester contracts and exact invariants:
+  seven Rust/five Slint files, one worker, one shared result slot, one event-loop site,
+  zero bridge polling, and no strong window retention or direct authority.
+
 - P3-B.1 bounded desktop controller over one proven refresh worker, one typed query
   source, one worker-confined product reducer, and one replaceable latest immutable
   snapshot; Slint callbacks remain non-blocking and query-free.

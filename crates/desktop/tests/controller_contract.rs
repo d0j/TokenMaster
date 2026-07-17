@@ -11,7 +11,8 @@ use std::{
 
 use tokenmaster_desktop::{
     DesktopAttempt, DesktopController, DesktopQueryPlan, DesktopQuerySource,
-    DesktopRefreshAdmission, DesktopRefreshOutcome, DesktopRefreshUrgency,
+    DesktopRefreshAdmission, DesktopRefreshOutcome, DesktopRefreshUrgency, DesktopSnapshotNotifier,
+    DesktopSnapshotReceiver,
 };
 use tokenmaster_product::ProductSectionKind;
 use tokenmaster_query::{
@@ -218,6 +219,115 @@ fn controller_contract_is_typed_bounded_and_deterministic() {
         .refresh(DesktopRefreshUrgency::Hint)
         .expect_err("stopped controller rejects work");
     assert_eq!(error.stable_code(), "closed");
+    let attach_error = controller
+        .attach_snapshot_notifier(Arc::new(NoopNotifier))
+        .expect_err("stopped controller rejects notifier attachment");
+    assert_eq!(attach_error.stable_code(), "closed");
+}
+
+#[test]
+fn one_idle_notifier_observes_the_published_mailbox_before_wakeup() {
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let mut controller = DesktopController::spawn(
+        UnavailableSource { calls },
+        DesktopQueryPlan::overview().expect("overview plan"),
+    )
+    .expect("controller starts");
+    let receiver = controller.snapshot_receiver();
+    let notifications = Arc::new(AtomicUsize::new(0));
+    let populated = Arc::new(AtomicUsize::new(0));
+    controller
+        .attach_snapshot_notifier(Arc::new(InspectingNotifier {
+            receiver: receiver.clone(),
+            notifications: notifications.clone(),
+            populated: populated.clone(),
+        }))
+        .expect("first idle notifier attaches");
+
+    let second_error = controller
+        .attach_snapshot_notifier(Arc::new(InspectingNotifier {
+            receiver: receiver.clone(),
+            notifications: Arc::new(AtomicUsize::new(0)),
+            populated: Arc::new(AtomicUsize::new(0)),
+        }))
+        .expect_err("second notifier is rejected");
+    assert_eq!(second_error.stable_code(), "notifier_already_attached");
+
+    controller
+        .refresh(DesktopRefreshUrgency::Interactive)
+        .expect("refresh admitted");
+    let completion = wait_for_completion(&controller);
+    assert_eq!(completion.outcome(), DesktopRefreshOutcome::Completed);
+    assert_eq!(notifications.load(Ordering::Acquire), 1);
+    assert_eq!(populated.load(Ordering::Acquire), 1);
+    assert!(receiver.has_snapshot().expect("mailbox remains available"));
+    assert!(
+        receiver
+            .take_snapshot()
+            .expect("mailbox remains available")
+            .is_some()
+    );
+    controller.shutdown().expect("controller stops");
+}
+
+#[test]
+fn attaching_to_an_idle_populated_mailbox_triggers_one_wakeup() {
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let mut controller = DesktopController::spawn(
+        UnavailableSource { calls },
+        DesktopQueryPlan::overview().expect("overview plan"),
+    )
+    .expect("controller starts");
+    controller
+        .refresh(DesktopRefreshUrgency::Interactive)
+        .expect("refresh admitted");
+    let completion = wait_for_completion(&controller);
+    assert_eq!(completion.outcome(), DesktopRefreshOutcome::Completed);
+
+    let receiver = controller.snapshot_receiver();
+    let notifications = Arc::new(AtomicUsize::new(0));
+    let populated = Arc::new(AtomicUsize::new(0));
+    controller
+        .attach_snapshot_notifier(Arc::new(InspectingNotifier {
+            receiver: receiver.clone(),
+            notifications: notifications.clone(),
+            populated: populated.clone(),
+        }))
+        .expect("idle notifier attaches after publication");
+
+    assert_eq!(notifications.load(Ordering::Acquire), 1);
+    assert_eq!(populated.load(Ordering::Acquire), 1);
+    assert!(receiver.has_snapshot().expect("mailbox remains available"));
+    controller.shutdown().expect("controller stops");
+}
+
+#[test]
+fn notifier_attachment_is_rejected_while_refresh_is_active() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let (entered_sender, entered_receiver) = sync_channel(1);
+    let (release_sender, release_receiver) = sync_channel(1);
+    let source = BlockingUnavailableSource {
+        calls,
+        entered: entered_sender,
+        release: Some(release_receiver),
+    };
+    let mut controller =
+        DesktopController::spawn(source, DesktopQueryPlan::overview().expect("overview plan"))
+            .expect("controller starts");
+    controller
+        .refresh(DesktopRefreshUrgency::Interactive)
+        .expect("refresh starts");
+    entered_receiver
+        .recv_timeout(Duration::from_secs(2))
+        .expect("query entered");
+
+    let error = controller
+        .attach_snapshot_notifier(Arc::new(NoopNotifier))
+        .expect_err("active refresh rejects attachment");
+    assert_eq!(error.stable_code(), "busy");
+    release_sender.send(()).expect("release query");
+    let _ = wait_for_completion(&controller);
+    controller.shutdown().expect("controller stops");
 }
 
 #[test]
@@ -380,6 +490,27 @@ struct BlockingUnavailableSource {
     calls: Arc<AtomicUsize>,
     entered: SyncSender<()>,
     release: Option<Receiver<()>>,
+}
+
+struct InspectingNotifier {
+    receiver: DesktopSnapshotReceiver,
+    notifications: Arc<AtomicUsize>,
+    populated: Arc<AtomicUsize>,
+}
+
+impl DesktopSnapshotNotifier for InspectingNotifier {
+    fn snapshot_ready(&self) {
+        self.notifications.fetch_add(1, Ordering::AcqRel);
+        if self.receiver.has_snapshot().unwrap_or(false) {
+            self.populated.fetch_add(1, Ordering::AcqRel);
+        }
+    }
+}
+
+struct NoopNotifier;
+
+impl DesktopSnapshotNotifier for NoopNotifier {
+    fn snapshot_ready(&self) {}
 }
 
 impl DesktopQuerySource for BlockingUnavailableSource {

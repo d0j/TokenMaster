@@ -89,9 +89,15 @@ boundary. It owns one typed `QueryService` source and one `ProductReducer`, redu
 status first, continues independent sections after a local query failure, and replaces
 one latest immutable snapshot only after a complete non-cancelled attempt. Repeated
 intents retain one pending follow-up; intent receipts are distinct from executed
-product-attempt generations. P3-B.2 will marshal that latest snapshot through one
-capacity-one event-loop delivery, and P3-B.3 will compose the sole live-runtime owner
-after the installed/portable data-root policy is approved.
+product-attempt generations. P3-B.2 marshals that latest snapshot through one
+capacity-one event-loop delivery. It shares the controller mailbox instead of
+retaining a second result, holds one weak window, and uses one atomic scheduled flag
+to coalesce publications into at most one `invoke_from_event_loop` closure. The event
+takes only the newest snapshot, applies only a newer generation, clears scheduling
+state even after window loss, and rechecks once for a racing publication. There is no
+timer, polling thread, event queue owned by TokenMaster, or strong ownership cycle.
+P3-B.3 will compose the sole live-runtime owner after the installed/portable data-root
+policy is approved.
 
 `tokenmaster-product` is the leaf composition layer between query/runtime truth and
 P3 presentation. `QueryService::product_data_status` captures usage publication,
@@ -107,9 +113,10 @@ schedulers, leases, processes, and cleanup. The product layer copies only bounde
 count-only lifecycle/retry/failure projections under a separate runtime generation.
 Eleven fixed route statuses use a `u16` reason set. Aggregate rebuild keeps Activity
 and Data Health reachable, degrades Dashboard section by section, and disables only
-aggregate-dependent History, Sessions, Models, and Projects. P3 will add one bounded
-query worker and marshal snapshots to Slint; Slint callbacks will not open SQLite or
-own a runtime.
+aggregate-dependent History, Sessions, Models, and Projects. The P3-B.1 worker and
+P3-B.2 newest-only event bridge now marshal complete snapshots to Slint; Slint
+callbacks still cannot open SQLite or own a runtime. Production archive/runtime
+composition remains P3-B.3.
 
 The built-in live quota source is separate from the JSONL usage reader. Composition
 supplies one already resolved absolute native Codex executable to

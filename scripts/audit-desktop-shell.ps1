@@ -40,8 +40,8 @@ if ($productionManifestText -match '\btokenmaster-(store|provider|runtime|codex|
 $rustFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.rs')
 $uiFiles = @(Get-ChildItem -LiteralPath $uiRoot -Recurse -File -Filter '*.slint')
 $productionFiles = @($rustFiles + $uiFiles)
-if ($rustFiles.Count -ne 6 -or $uiFiles.Count -ne 5) {
-    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain six Rust and five Slint files'
+if ($rustFiles.Count -ne 7 -or $uiFiles.Count -ne 5) {
+    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain seven Rust and five Slint files'
 }
 $productionText = ($productionFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
@@ -65,12 +65,28 @@ if ($productionText -cmatch $forbiddenAuthorityPattern) {
 
 $controllerPath = Join-Path $sourceRoot 'controller.rs'
 $controllerText = [System.IO.File]::ReadAllText($controllerPath)
+$bridgePath = Join-Path $sourceRoot 'bridge.rs'
+$bridgeText = [System.IO.File]::ReadAllText($bridgePath)
 $workerConstructionCount = [regex]::Matches($controllerText, 'RefreshWorker::spawn\(').Count
 if ($workerConstructionCount -ne 1) {
     throw 'TM-DESKTOP-CONTROLLER-WORKER: desktop controller must construct exactly one bounded refresh worker'
 }
-if ($controllerText -notmatch 'Arc<Mutex<Option<Arc<ProductSnapshot>>>>') {
-    throw 'TM-DESKTOP-CONTROLLER-SLOT: desktop controller must retain one optional latest product snapshot'
+$snapshotSlotCount = [regex]::Matches(
+    $productionText,
+    'Arc<Mutex<Option<Arc<ProductSnapshot>>>>'
+).Count
+if ($snapshotSlotCount -ne 1) {
+    throw 'TM-DESKTOP-CONTROLLER-SLOT: desktop and bridge must share exactly one latest product snapshot slot'
+}
+$eventScheduleCount = [regex]::Matches($bridgeText, 'slint::invoke_from_event_loop\(').Count
+if ($eventScheduleCount -ne 1) {
+    throw 'TM-DESKTOP-BRIDGE-EVENT: desktop bridge must contain exactly one event-loop scheduling site'
+}
+if ($bridgeText -notmatch 'window:\s*slint::Weak<MainWindow>') {
+    throw 'TM-DESKTOP-BRIDGE-WEAK: desktop bridge must retain only a weak Slint window handle'
+}
+if ($bridgeText -match 'window:\s*MainWindow|\b(slint::Timer|std::thread|thread::spawn|thread::sleep)\b') {
+    throw 'TM-DESKTOP-BRIDGE-POLLING: desktop bridge must not retain a strong window, timer, or polling thread'
 }
 $uiAdapterText = [System.IO.File]::ReadAllText((Join-Path $sourceRoot 'ui.rs')) + "`n" +
     (($uiFiles | ForEach-Object { [System.IO.File]::ReadAllText($_.FullName) }) -join "`n")
@@ -127,7 +143,9 @@ if ($SourceOnly) {
         rust_source_file_count = $rustFiles.Count
         slint_source_file_count = $uiFiles.Count
         controller_worker_count = $workerConstructionCount
-        retained_snapshot_slot_count = 1
+        retained_snapshot_slot_count = $snapshotSlotCount
+        event_loop_schedule_site_count = $eventScheduleCount
+        bridge_polling_surface_count = 0
     } | ConvertTo-Json -Compress
     return
 }
@@ -209,7 +227,9 @@ foreach ($needle in @(
     maximum_route_reason_count = 11
     retained_route_model_count = 1
     controller_worker_count = $workerConstructionCount
-    retained_snapshot_slot_count = 1
+    retained_snapshot_slot_count = $snapshotSlotCount
+    event_loop_schedule_site_count = $eventScheduleCount
+    bridge_polling_surface_count = 0
     mock_data_model_count = 0
     direct_authority_dependency_count = 0
     forbidden_source_authority_count = 0

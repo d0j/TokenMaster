@@ -1057,7 +1057,7 @@ a receipt, not an attempt generation; the coordinator allocates the real follow-
 attempt after the active attempt finishes. Cancellation/deadline checks between reads
 prevent partial visible publication. Query failure is section-local and path-free;
 controller fault is reserved for lifecycle/invariant failure. Slint callbacks own no
-query handle and P3-B.2 must deliver through one coalesced event-loop operation.
+query handle; P3-B.2 delivers through one coalesced event-loop operation.
 
 The controller accepts an already selected archive path but does not choose an
 installed or portable data root. That policy and sole-live-runtime composition remain
@@ -1070,3 +1070,26 @@ connections, and permit unbounded pending results. Reusing the proven coordinato
 retaining one reducer/result gives deterministic coalescing, stale-generation
 authority, constant result memory, sibling-fault isolation, and shutdown without
 inventing data-root or benefit identity policy.
+
+## ADR-051 — Desktop delivery shares one mailbox and queues at most one Slint event
+
+Decision: P3-B.2 keeps the P3-B.1 latest-snapshot mailbox as the sole retained result
+slot. The controller accepts one notifier only while running and idle; attachment to
+an already populated idle mailbox triggers one wakeup. The notifier holds only a weak
+bridge reference. One atomic scheduled flag coalesces all publications into at most
+one `slint::invoke_from_event_loop` closure, which takes the newest snapshot, upgrades
+one weak `MainWindow`, applies only a newer product generation, clears the flag, and
+performs one post-drain mailbox recheck.
+
+The bridge adds no timer, polling thread, queue, data source, or strong window cycle.
+Scheduler-unavailable failure clears the scheduled flag and retains the one current
+snapshot for a later explicit notification; terminated event loop, dropped window,
+or poisoned presentation state closes or faults with a stable code. Fixed saturating
+counters expose delivery health without retaining events or history.
+
+Rationale: timer polling trades idle CPU for latency, while one closure per
+publication turns the Slint event queue into unbounded hidden history. Sharing the
+capacity-one mailbox preserves newest-only truth and constant retention. Explicit
+weak-window upgrade inside the queued closure guarantees scheduled-flag cleanup even
+when the component has been destroyed. P3-B.3 still owns data-root and live-runtime
+composition; P3-B.2 does not grant the UI filesystem, query, or ingestion authority.

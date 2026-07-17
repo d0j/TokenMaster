@@ -26,13 +26,14 @@ headless Slint integration-test backend, Cargo workspace, PowerShell source audi
 - Modify: `crates/desktop/src/lib.rs`
 - Modify: `crates/desktop/tests/controller_contract.rs`
 
-- [ ] **Step 1: Write failing public contracts**
+- [x] **Step 1: Write failing public contracts**
 
 Require `DesktopSnapshotReceiver`, `DesktopSnapshotNotifier`, one idle-only
 `attach_snapshot_notifier`, and stable `busy`/`notifier_already_attached` failures.
-The notifier must observe that the latest mailbox is populated before it is called.
+The notifier must observe that the latest mailbox is populated before it is called,
+including when it attaches after an idle publication.
 
-- [ ] **Step 2: Observe the intended compile failure**
+- [x] **Step 2: Observe the intended compile failure**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-desktop --test controller_contract --locked
@@ -40,13 +41,13 @@ cargo +1.97.0 test -p tokenmaster-desktop --test controller_contract --locked
 
 Expected: FAIL because receiver/notifier APIs do not exist.
 
-- [ ] **Step 3: Implement the minimum shared mailbox API**
+- [x] **Step 3: Implement the minimum shared mailbox API**
 
 Keep one existing `Arc<Mutex<Option<Arc<ProductSnapshot>>>>`; expose only a cloneable
 take/has receiver. Retain one optional notifier and invoke it after complete mailbox
 replacement, outside all locks. Do not change query completion truth.
 
-- [ ] **Step 4: Run the focused controller contract**
+- [x] **Step 4: Run the focused controller contract**
 
 Expected: PASS.
 
@@ -57,18 +58,18 @@ Expected: PASS.
 - Modify: `crates/desktop/src/lib.rs`
 - Modify: `crates/desktop/tests/ui_contract.rs`
 
-- [ ] **Step 1: Write failing UI error/ownership tests**
+- [x] **Step 1: Write failing UI error/ownership tests**
 
 Require `DesktopShell::apply_snapshot` to return a stable result, selection and stale
 generation behavior to remain unchanged, and the shared state handle to be usable by
 a `Send` delivery closure without making the strong `MainWindow` cross-thread.
 
-- [ ] **Step 2: Replace `Rc<RefCell<_>>` with `Arc<Mutex<_>>`**
+- [x] **Step 2: Replace `Rc<RefCell<_>>` with `Arc<Mutex<_>>`**
 
 Add stable `DesktopUiError`/code mapping. Keep state/model operations on the UI thread
 and keep route callbacks query-free and non-blocking.
 
-- [ ] **Step 3: Run presentation and UI contracts**
+- [x] **Step 3: Run presentation and UI contracts**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-desktop --test presentation_contract --locked
@@ -84,25 +85,25 @@ Expected: PASS.
 - Modify: `crates/desktop/src/lib.rs`
 - Modify: `crates/desktop/src/ui.rs`
 
-- [ ] **Step 1: Add red deterministic gate tests**
+- [x] **Step 1: Add red deterministic gate tests**
 
 With a private manual scheduler, require 10,000 notifications to queue one task and
 deliver only newest; a publication inside delivery must queue one follow-up; a failed
 schedule must retain the snapshot and retry; close/drop must stop new scheduling.
 
-- [ ] **Step 2: Implement bridge core and fixed status**
+- [x] **Step 2: Implement bridge core and fixed status**
 
 Use one atomic scheduled flag, saturating atomic counters, weak notifier, shared
 mailbox receiver, and post-drain recheck. No timer, loop thread, queue, or second
 snapshot slot.
 
-- [ ] **Step 3: Add the Slint scheduler and weak-window delivery**
+- [x] **Step 3: Add the Slint scheduler and weak-window delivery**
 
 Call `slint::invoke_from_event_loop` exactly once in production source. Upgrade the
 weak window inside the queued closure; apply only newer state and clean scheduled
 state even if the component is gone.
 
-- [ ] **Step 4: Run package unit tests**
+- [x] **Step 4: Run package unit tests**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-desktop --lib --locked
@@ -116,14 +117,14 @@ Expected: PASS.
 - Create: `crates/desktop/tests/bridge_event_loop_contract.rs`
 - Modify: `crates/desktop/Cargo.toml`
 
-- [ ] **Step 1: Add the failing integration test**
+- [x] **Step 1: Add the failing integration test**
 
 Initialize Slint's integration testing backend with an event loop, create the real
 generated window/shell, attach the bridge to a controller, submit one refresh, and
 quit from a bounded observer after one delivered generation. Assert the generated
 window property changed and all owned work joined.
 
-- [ ] **Step 2: Run the isolated event-loop test**
+- [x] **Step 2: Run the isolated event-loop test**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-desktop --test bridge_event_loop_contract --locked
@@ -137,19 +138,19 @@ Expected: PASS without a visible/native window or external service.
 - Modify: `scripts/audit-desktop-shell.ps1`
 - Modify: `scripts/tests/audit-desktop-shell.Tests.ps1`
 
-- [ ] **Step 1: Add failing audit fixtures**
+- [x] **Step 1: Add failing audit fixtures**
 
 Require rejection of a second `invoke_from_event_loop` site, any Slint/standard timer
 or polling thread, strong `MainWindow` retention in the bridge, a second latest slot,
 and all prior direct authority violations.
 
-- [ ] **Step 2: Update the audit**
+- [x] **Step 2: Update the audit**
 
 Require seven Rust/five Slint files, one controller worker, one shared snapshot slot,
 one event scheduling site, one weak window, zero UI queries, and zero bridge timer/
 thread surfaces.
 
-- [ ] **Step 3: Run Pester and release audit**
+- [x] **Step 3: Run Pester and release audit**
 
 ```powershell
 Invoke-Pester -Path scripts\tests\audit-desktop-shell.Tests.ps1 -Output Detailed
@@ -171,13 +172,13 @@ Expected: PASS.
 - Modify: `docs/PROJECT_HISTORY.md`
 - Modify: `docs/CHANGELOG.md`
 
-- [ ] **Step 1: Record P3-B.2 honestly**
+- [x] **Step 1: Record P3-B.2 honestly**
 
 Record one shared mailbox, one event, race/cleanup behavior, tests, and P3-B.3 as next.
 Do not claim production archive composition, visible dashboard payloads, benefit scope
 discovery, P4 paint/resource gates, package, signing, or release.
 
-- [ ] **Step 2: Check documentation consistency**
+- [x] **Step 2: Check documentation consistency**
 
 ```powershell
 rg -n "P3-B\.2|event-loop bridge|P3-B\.3" spec docs

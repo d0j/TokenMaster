@@ -117,10 +117,10 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   overrides, dynamic quotas, full-reset epochs, banked-reset inventory/reminders, and
   bounded Git output metrics.
 - **P3 — complete desktop UI (in progress):** P3-A separate production shell/fixed
-  11-route projection and P3-B.1 bounded controller core are complete; Slint delivery,
-  data-root/runtime composition, quota-first board, history,
+  11-route projection, P3-B.1 bounded controller core, and P3-B.2 capacity-one Slint
+  event delivery are complete; data-root/runtime composition, quota-first board, history,
   sessions, models, projects, activity, health, notifications, settings, help,
-  command palette, tray, and compact widget remain P3-B.2-P3-E.
+  command palette, tray, and compact widget remain P3-B.3-P3-E.
 - **P4 — presentation:** modular skins/layouts/density/scheme/locale, en/ru/pseudo,
   accessibility, DPI, reduced motion, and visible-paint/resource gates.
 - **P5 — automation:** strict bounded JSON CLI and a separate stdio MCP process for
@@ -145,8 +145,10 @@ fixed route projection, stale-generation rejection, original compiled shell, foc
 tests, release build, and authority audit with no mock/probe/FemtoVG/direct-authority
 matches. P3-B.1 now adds one query worker, one reducer, coalesced intent receipts,
 complete-attempt publication, one latest snapshot, stable redaction, and deterministic
-shutdown. P3-B.2 Slint event-loop delivery and P3-B.3 data-root/live-runtime
-composition are next.
+shutdown. P3-B.2 now shares that one mailbox with a weak-window bridge, coalesces
+10,000 notifications into one queued event/newest delivery, closes the producer/
+consumer race with one recheck, and proves the real headless Slint event loop. P3-B.3
+data-root/live-runtime composition is next.
 
 P2-A query foundation is approved under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-query-foundation.md`. It first freezes

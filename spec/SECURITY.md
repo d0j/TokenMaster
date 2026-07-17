@@ -152,13 +152,18 @@ controller accepts an already selected archive path only at composition, maps op
 failure to a stable path-free code, and keeps one query source plus reducer inside one
 worker. At most one active and one coalesced follow-up exist, and only one completed
 immutable snapshot is retained. Cancellation/deadline termination cannot publish the
-partial reducer state. Slint receives one fixed 11-row projection and no query,
-archive, provider, or runtime handle. Route callbacks validate stable keys and change
-presentation selection only; the UI adapter contains no query call. The production
-binary selects the software renderer with no diagnostic fallback. The deterministic
-desktop audit rejects probe or seeded data, FemtoVG, direct authority, route-count or
-controller-worker drift, UI-query surfaces, forbidden source surfaces, and exact
-private canary strings in the release executable.
+partial reducer state. P3-B.2 shares that same mailbox with one receiver and one weak
+notifier; one atomic gate queues at most one Slint event and retains no second
+snapshot, timer, polling thread, or strong window handle. Delivery upgrades the weak
+window and applies only a newer generation on the event-loop thread. Failure exposes
+fixed counters/codes and no path or model contents. Slint receives one fixed 11-row
+projection and no query, archive, provider, or runtime handle. Route callbacks
+validate stable keys and change presentation selection only; the UI adapter contains
+no query call. The production binary selects the software renderer with no diagnostic
+fallback. The deterministic desktop audit rejects probe or seeded data, FemtoVG,
+direct authority, route-count/controller-worker drift, a second result slot or event
+site, strong window retention, bridge polling, UI-query surfaces, forbidden source
+surfaces, and exact private canary strings in the release executable.
 
 Providers emit bounded observation/session-relation drafts only. They cannot create
 event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or

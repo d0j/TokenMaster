@@ -5264,6 +5264,7 @@ name = "tokenmaster-desktop"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "i-slint-backend-testing",
  "slint",
  "slint-build",
  "tempfile",

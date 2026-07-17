@@ -284,16 +284,25 @@ schema-v13, sibling-fault, path-redaction, focused package/Clippy, eight Pester,
 desktop release-audit gates pass. A coalesced receipt is intentionally not exposed as
 an executed product attempt.
 
-The immediate next slice is P3-B.2: add one capacity-one Slint weak-handle/event-loop
-bridge that applies only the newest snapshot without polling or blocking callbacks.
-P3-B.3 then selects an approved installed/portable archive root and composes the
-existing live runtime as the sole ingestion owner. Do not guess benefit identity;
-safe current-scope discovery/all-current query support is a separate prerequisite.
+P3-B.2 is complete under
+`docs/superpowers/plans/2026-07-17-tokenmaster-p3b2-event-bridge.md`. The controller
+and Slint share one latest-snapshot mailbox; one idle-only weak notifier and atomic
+gate queue at most one event, deliver only a newer generation, and recheck once for a
+racing publication. Idle attachment wakes an already populated mailbox. There is no
+second result slot, polling timer/thread, extra worker, strong window cycle, query, or
+runtime authority. Six bridge unit/race tests, eight controller contracts, a real
+headless Slint event-loop integration, 12 adversarial Pester cases, and the desktop
+source audit pass.
+
+The immediate next slice is P3-B.3: select an approved installed/portable archive
+root and compose the existing live runtime as the sole ingestion owner. Do not guess
+benefit identity; safe current-scope discovery/all-current query support is a separate
+prerequisite.
 The post-synchronization clean-root, format, strict locked workspace Clippy, and full
 locked workspace test/doctest baseline pass; process audit found no task-owned Cargo,
 compiler, test, or TokenMaster process.
 
-P3-B.2-P3-E visible data/notifications, P4 presentation, CLI/MCP, activation, M0
+P3-B.3-P3-E visible data/notifications, P4 presentation, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.
 The current post-Task-8 Git clean-root, formatting, strict locked workspace Clippy,

@@ -21,5 +21,6 @@ tokenmaster-query = { path = "../query" }
 slint-build.workspace = true
 
 [dev-dependencies]
+i-slint-backend-testing = "=1.17.1"
 tempfile.workspace = true
 tokenmaster-store = { path = "../store" }

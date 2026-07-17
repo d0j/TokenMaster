@@ -6,6 +6,7 @@
 pub mod presentation;
 pub mod shell;
 
+mod bridge;
 mod controller;
 
 #[allow(clippy::unwrap_used, clippy::expect_used)]
@@ -17,10 +18,16 @@ pub use generated_ui::*;
 
 mod ui;
 
-pub use ui::DesktopShell;
+pub use presentation::DesktopApplyOutcome;
+pub use ui::{DesktopShell, DesktopUiError, DesktopUiErrorCode};
 
+pub use bridge::{
+    DesktopBridgeFailureCode, DesktopBridgeGeneration, DesktopBridgeObserver, DesktopBridgePhase,
+    DesktopBridgeSnapshot, DesktopSnapshotBridge,
+};
 pub use controller::{
     DesktopAttempt, DesktopController, DesktopControllerError, DesktopControllerErrorCode,
     DesktopQueryPlan, DesktopQuerySource, DesktopRefreshAdmission, DesktopRefreshCompletion,
-    DesktopRefreshOutcome, DesktopRefreshReceipt, DesktopRefreshUrgency,
+    DesktopRefreshOutcome, DesktopRefreshReceipt, DesktopRefreshUrgency, DesktopSnapshotNotifier,
+    DesktopSnapshotReceiver,
 };

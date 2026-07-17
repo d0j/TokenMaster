@@ -86,7 +86,9 @@ silent fallback.
 The controller exposes a cloneable `DesktopSnapshotReceiver` and permits one notifier
 attachment while no refresh is active or pending. A second attachment fails with
 `notifier_already_attached`; attachment during work fails with `busy`. No detach or
-notifier replacement is allowed in P3-B.2.
+notifier replacement is allowed in P3-B.2. If the idle mailbox was populated before
+attachment, the controller invokes the newly installed notifier once outside all
+locks so the first visible snapshot cannot remain stranded until another refresh.
 
 After a complete attempt, the worker:
 
@@ -168,6 +170,7 @@ remain P4/P6 gates. It does prove constant queue/slot/thread topology.
 P3-B.2 is complete only when tests prove:
 
 - one notifier attaches only while idle and is called after mailbox publication;
+- attachment to an already populated idle mailbox produces one immediate wakeup;
 - 10,000 notifications create one scheduled task and deliver only the newest
   generation;
 - publication during delivery schedules exactly one follow-up and loses no newest

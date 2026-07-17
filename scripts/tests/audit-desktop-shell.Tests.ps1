@@ -97,4 +97,44 @@ Describe "TokenMaster production desktop audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-UI-QUERY*"
     }
+
+    It "rejects a second event-loop scheduling site" {
+        $fixture = New-DesktopAuditFixture -Name "bridge-event"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\bridge.rs") `
+            -Value 'fn extra_event() { let _ = slint::invoke_from_event_loop('
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-BRIDGE-EVENT*"
+    }
+
+    It "rejects a bridge polling thread or timer" {
+        $fixture = New-DesktopAuditFixture -Name "bridge-polling"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\bridge.rs") `
+            -Value 'fn polling() { std::thread::spawn(|| {}); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-BRIDGE-POLLING*"
+    }
+
+    It "rejects a strong Slint window in the bridge" {
+        $fixture = New-DesktopAuditFixture -Name "bridge-strong-window"
+        $path = Join-Path $fixture "crates\desktop\src\bridge.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'window: slint::Weak<MainWindow>',
+            'window: MainWindow'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-BRIDGE-WEAK*"
+    }
+
+    It "rejects a second retained product snapshot slot" {
+        $fixture = New-DesktopAuditFixture -Name "bridge-second-slot"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\bridge.rs") `
+            -Value 'type ExtraSlot = Arc<Mutex<Option<Arc<ProductSnapshot>>>>;'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-CONTROLLER-SLOT*"
+    }
 }

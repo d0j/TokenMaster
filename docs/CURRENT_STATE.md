@@ -20,6 +20,11 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   and replaces one latest immutable snapshot only after a complete attempt. Query,
   cancellation, deadline, redaction, and shutdown contracts pass without Slint-thread
   blocking or partial visible publication.
+- P3-B.2 capacity-one event bridge: the controller and Slint share the same latest
+  snapshot mailbox, one weak notifier queues at most one event, and the UI applies
+  only the newest generation with no polling timer, extra worker, second result slot,
+  or strong window cycle. Race, retry, window-close, 10,000-notification coalescing,
+  and real headless Slint event-loop contracts pass.
 - M1 usage foundation: bounded provider roots, path-private source discovery,
   reparse-safe streaming enumeration, typed bounded JSONL parser, cumulative token
   state, physical/logical source identity, byte framing, revalidation, strict SQLite
@@ -652,16 +657,48 @@ five Slint files, one controller worker, one retained snapshot slot, no UI-threa
 query surface, no direct store/provider/runtime/network/shell/SQL authority, and no
 forbidden release-binary strings.
 
-This is the controller core only. The production executable still starts from the
-truthful initial snapshot. P3-B.2 must marshal the latest snapshot onto the Slint
-event loop with one coalesced scheduled event; P3-B.3 must approve the installed/
-portable data-root policy and compose the existing live runtime without duplicating
-ingestion ownership. Safe benefit scope discovery also remains an explicit query
-contract before the benefit card can be ready.
+At P3-B.1 closure this was the controller core only. P3-B.2 now marshals its latest
+snapshot through one coalesced Slint event. The production executable still starts
+from the truthful initial snapshot; P3-B.3 must approve the installed/portable
+data-root policy and compose the existing live runtime without duplicating ingestion
+ownership. Safe benefit scope discovery also remains an explicit query contract
+before the benefit card can be ready.
 
 The post-synchronization clean-root audit, format check, warnings-as-errors locked
 workspace Clippy, and complete locked workspace tests/doctests pass. No task-owned
 Cargo, compiler, test, or TokenMaster process remains.
+
+## P3-B.2 capacity-one Slint event-loop bridge
+
+P3-B.2 is implemented under
+`docs/superpowers/plans/2026-07-17-tokenmaster-p3b2-event-bridge.md`. The existing
+controller mailbox remains the only retained `ProductSnapshot` result. One idle-only
+notifier attachment holds a weak bridge reference; attaching after an idle
+publication immediately wakes the populated mailbox. One atomic scheduled flag
+coalesces all notifications into at most one Slint event. The event takes only the
+newest snapshot, upgrades one weak window, applies only a newer generation, clears the
+flag, and performs one post-drain race recheck.
+
+The bridge owns no timer, polling thread, query, store, runtime, path, data source,
+second queue, or strong window cycle. Fixed saturating counters and stable failure
+codes expose delivery health. Deterministic contracts prove 10,000 notifications
+retain one event and deliver generation 10,000 only, a publication during delivery
+gets exactly one follow-up, a scheduler-unavailable snapshot retries without loss,
+bridge/window close stops scheduling, and bridge/observer handles are `Send + Sync`.
+A real headless Slint integration event loop applies a controller-produced snapshot
+to the generated `MainWindow` and exits deterministically.
+
+The desktop audit now has 12 adversarial Pester contracts and reports seven Rust/five
+Slint files, one controller worker, one retained snapshot slot shared with the bridge,
+one event-loop schedule site, and zero bridge polling surfaces. It also rejects a
+second slot/event site, timer/thread polling, strong window retention, UI queries, and
+all prior direct-authority, renderer, probe, seeded-data, and private-string drift.
+
+This closes only P3-B.2. The production executable still starts from the truthful
+initial snapshot because P3-B.3 must select the installed/portable archive root and
+compose the existing live runtime as sole ingestion owner. Safe benefit-scope
+discovery, visible route payloads, P4 paint/resource gates, M0 acceptance, packaging,
+signing, and release remain unclaimed.
 
 ## Next implementation slice
 
@@ -679,11 +716,10 @@ credit inventory, expiration reconciliation, default/custom reminder profiles,
 immutable read snapshots, and publication through the existing Codex runtime with
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
-workspace quality gate. P2-E, P2-F, P3-A, and P3-B.1 are complete; the immediate next
-slice is P3-B.2 capacity-one Slint event-loop delivery, followed by P3-B.3 approved
-data-root/live-runtime composition. Activation remains a later
-independently authorized capability. No quota value may be inferred from local
-token/cost facts and no browser/private-endpoint authority may be added.
+workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, and P3-B.2 are complete; the
+immediate next slice is P3-B.3 approved data-root/live-runtime composition. Activation
+remains a later independently authorized capability. No quota value may be inferred
+from local token/cost facts and no browser/private-endpoint authority may be added.
 
 The architecture/release closure review is approved in
 `docs/superpowers/specs/2026-07-16-tokenmaster-plan-closure-design.md`. It freezes the

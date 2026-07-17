@@ -1,27 +1,75 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    fmt,
+    sync::{Arc, Mutex},
+};
 
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use tokenmaster_product::ProductSnapshot;
 
 use crate::{
-    MainWindow, RouteRow,
+    DesktopSnapshotBridge, DesktopSnapshotReceiver, MainWindow, RouteRow,
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
 };
 
 pub struct DesktopShell {
     window: MainWindow,
-    state: Rc<RefCell<DesktopState>>,
+    state: SharedDesktopState,
 }
+
+pub(crate) type SharedDesktopState = Arc<Mutex<DesktopState>>;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopUiErrorCode {
+    StateUnavailable,
+}
+
+impl DesktopUiErrorCode {
+    #[must_use]
+    pub const fn stable_code(self) -> &'static str {
+        match self {
+            Self::StateUnavailable => "state_unavailable",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DesktopUiError {
+    code: DesktopUiErrorCode,
+}
+
+impl DesktopUiError {
+    const fn state_unavailable() -> Self {
+        Self {
+            code: DesktopUiErrorCode::StateUnavailable,
+        }
+    }
+
+    #[must_use]
+    pub const fn code(self) -> DesktopUiErrorCode {
+        self.code
+    }
+
+    #[must_use]
+    pub const fn stable_code(self) -> &'static str {
+        self.code.stable_code()
+    }
+}
+
+impl fmt::Display for DesktopUiError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.stable_code())
+    }
+}
+
+impl std::error::Error for DesktopUiError {}
 
 impl DesktopShell {
     pub fn new(snapshot: &ProductSnapshot) -> Result<Self, slint::PlatformError> {
         let window = MainWindow::new()?;
-        let state = Rc::new(RefCell::new(DesktopState::new(
-            snapshot,
-            DesktopRouteKey::Dashboard,
-        )));
-        apply_projection(&window, state.borrow().projection());
-        wire_route_selection(&window, Rc::clone(&state));
+        let initial_state = DesktopState::new(snapshot, DesktopRouteKey::Dashboard);
+        apply_projection(&window, initial_state.projection());
+        let state = Arc::new(Mutex::new(initial_state));
+        wire_route_selection(&window, state.clone());
         Ok(Self { window, state })
     }
 
@@ -30,29 +78,47 @@ impl DesktopShell {
         &self.window
     }
 
-    pub fn apply_snapshot(&self, snapshot: &ProductSnapshot) -> DesktopApplyOutcome {
-        let outcome = self.state.borrow_mut().apply_snapshot(snapshot);
+    pub fn apply_snapshot(
+        &self,
+        snapshot: &ProductSnapshot,
+    ) -> Result<DesktopApplyOutcome, DesktopUiError> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| DesktopUiError::state_unavailable())?;
+        let outcome = state.apply_snapshot(snapshot);
         if outcome == DesktopApplyOutcome::Accepted {
-            apply_projection(&self.window, self.state.borrow().projection());
+            apply_projection(&self.window, state.projection());
         }
-        outcome
+        Ok(outcome)
+    }
+
+    pub(crate) fn state_handle(&self) -> SharedDesktopState {
+        self.state.clone()
+    }
+
+    #[must_use]
+    pub fn snapshot_bridge(&self, receiver: DesktopSnapshotReceiver) -> DesktopSnapshotBridge {
+        DesktopSnapshotBridge::new(self.window.as_weak(), self.state_handle(), receiver)
     }
 }
 
-fn wire_route_selection(window: &MainWindow, state: Rc<RefCell<DesktopState>>) {
+fn wire_route_selection(window: &MainWindow, state: SharedDesktopState) {
     let weak = window.as_weak();
     window.on_select_route(move |key| {
         let Some(window) = weak.upgrade() else {
             return;
         };
-        let mut state = state.borrow_mut();
+        let Ok(mut state) = state.lock() else {
+            return;
+        };
         if state.select_stable_key(key.as_str()).is_ok() {
             apply_projection(&window, state.projection());
         }
     });
 }
 
-fn apply_projection(window: &MainWindow, projection: &DesktopProjection) {
+pub(crate) fn apply_projection(window: &MainWindow, projection: &DesktopProjection) {
     let rows = projection
         .routes()
         .iter()

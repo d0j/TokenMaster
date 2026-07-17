@@ -1,6 +1,7 @@
 use slint::{Model, SharedString};
-use tokenmaster_desktop::DesktopShell;
-use tokenmaster_product::ProductReducer;
+use tokenmaster_desktop::{DesktopApplyOutcome, DesktopShell};
+use tokenmaster_product::{ProductAttemptGeneration, ProductReducer};
+use tokenmaster_query::QueryErrorCode;
 
 #[test]
 fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
@@ -31,5 +32,29 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     );
 
     window.invoke_select_route(SharedString::from("not-a-route"));
+    assert_eq!(window.get_active_route_key(), "settings");
+
+    let attempt = ProductAttemptGeneration::new(1).expect("attempt");
+    let mut reducer = reducer;
+    reducer
+        .fail_data_status(attempt, QueryErrorCode::Unavailable)
+        .expect("new product generation");
+    let newer = reducer.snapshot();
+    assert_eq!(
+        shell
+            .apply_snapshot(&newer)
+            .expect("shared presentation state remains available"),
+        DesktopApplyOutcome::Accepted
+    );
+    assert_eq!(
+        window.get_product_generation(),
+        newer.generation().get().to_string()
+    );
+    assert_eq!(
+        shell
+            .apply_snapshot(&newer)
+            .expect("shared presentation state remains available"),
+        DesktopApplyOutcome::IgnoredNotNewer
+    );
     assert_eq!(window.get_active_route_key(), "settings");
 }

@@ -279,6 +279,8 @@ impl DesktopRefreshCompletion {
 pub enum DesktopControllerErrorCode {
     Closed,
     Faulted,
+    Busy,
+    NotifierAlreadyAttached,
     CapacityExceeded,
     Unavailable,
     InvalidPlan,
@@ -293,6 +295,8 @@ impl DesktopControllerErrorCode {
         match self {
             Self::Closed => "closed",
             Self::Faulted => "faulted",
+            Self::Busy => "busy",
+            Self::NotifierAlreadyAttached => "notifier_already_attached",
             Self::CapacityExceeded => "capacity_exceeded",
             Self::Unavailable => "unavailable",
             Self::InvalidPlan => "invalid_plan",
@@ -353,11 +357,48 @@ impl Clock for DesktopMonotonicClock {
 }
 
 type LatestSnapshot = Arc<Mutex<Option<Arc<ProductSnapshot>>>>;
+type SnapshotNotifier = Arc<Mutex<Option<Arc<dyn DesktopSnapshotNotifier>>>>;
+
+pub trait DesktopSnapshotNotifier: Send + Sync + 'static {
+    fn snapshot_ready(&self);
+}
+
+#[derive(Clone)]
+pub struct DesktopSnapshotReceiver {
+    latest: LatestSnapshot,
+}
+
+impl DesktopSnapshotReceiver {
+    #[cfg(test)]
+    pub(crate) fn empty_for_test() -> Self {
+        Self {
+            latest: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    pub fn take_snapshot(&self) -> Result<Option<Arc<ProductSnapshot>>, DesktopControllerError> {
+        Ok(lock_latest(&self.latest)?.take())
+    }
+
+    pub fn has_snapshot(&self) -> Result<bool, DesktopControllerError> {
+        Ok(lock_latest(&self.latest)?.is_some())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn replace_snapshot(
+        &self,
+        snapshot: Arc<ProductSnapshot>,
+    ) -> Result<(), DesktopControllerError> {
+        *lock_latest(&self.latest)? = Some(snapshot);
+        Ok(())
+    }
+}
 
 pub struct DesktopController {
     clock: Arc<dyn Clock>,
     worker: RefreshWorker,
     latest: LatestSnapshot,
+    notifier: SnapshotNotifier,
 }
 
 impl DesktopController {
@@ -388,6 +429,8 @@ impl DesktopController {
         let worker_clock = clock.clone();
         let latest = Arc::new(Mutex::new(None));
         let worker_latest = latest.clone();
+        let notifier = Arc::new(Mutex::new(None));
+        let worker_notifier = notifier.clone();
         let execute_clock = clock.clone();
         let mut reducer = ProductReducer::new();
         let worker = RefreshWorker::spawn(worker_clock, move |permit| {
@@ -398,6 +441,7 @@ impl DesktopController {
                 permit,
                 execute_clock.as_ref(),
                 &worker_latest,
+                &worker_notifier,
             )
         })
         .map_err(map_worker_error)?;
@@ -405,6 +449,7 @@ impl DesktopController {
             clock,
             worker,
             latest,
+            notifier,
         })
     }
 
@@ -442,8 +487,53 @@ impl DesktopController {
             .map_err(map_worker_error)
     }
 
+    #[must_use]
+    pub fn snapshot_receiver(&self) -> DesktopSnapshotReceiver {
+        DesktopSnapshotReceiver {
+            latest: self.latest.clone(),
+        }
+    }
+
+    pub fn attach_snapshot_notifier(
+        &mut self,
+        notifier: Arc<dyn DesktopSnapshotNotifier>,
+    ) -> Result<(), DesktopControllerError> {
+        let worker = self.worker.snapshot().map_err(map_worker_error)?;
+        match worker.phase() {
+            WorkerPhase::Running => {}
+            WorkerPhase::Faulted => {
+                return Err(DesktopControllerError::new(
+                    DesktopControllerErrorCode::Faulted,
+                ));
+            }
+            WorkerPhase::ShuttingDown | WorkerPhase::Stopped => {
+                return Err(DesktopControllerError::new(
+                    DesktopControllerErrorCode::Closed,
+                ));
+            }
+        }
+        if worker.active_request_id().is_some() || worker.pending_count() != 0 {
+            return Err(DesktopControllerError::new(
+                DesktopControllerErrorCode::Busy,
+            ));
+        }
+        let notify_existing = self.snapshot_receiver().has_snapshot()?;
+        let mut current = lock_notifier(&self.notifier)?;
+        if current.is_some() {
+            return Err(DesktopControllerError::new(
+                DesktopControllerErrorCode::NotifierAlreadyAttached,
+            ));
+        }
+        *current = Some(notifier.clone());
+        drop(current);
+        if notify_existing {
+            notifier.snapshot_ready();
+        }
+        Ok(())
+    }
+
     pub fn take_snapshot(&self) -> Result<Option<Arc<ProductSnapshot>>, DesktopControllerError> {
-        Ok(lock_latest(&self.latest)?.take())
+        self.snapshot_receiver().take_snapshot()
     }
 
     pub fn shutdown(&mut self) -> Result<(), DesktopControllerError> {
@@ -466,6 +556,7 @@ fn execute_attempt<S: DesktopQuerySource>(
     permit: &RefreshPermit,
     clock: &dyn Clock,
     latest: &LatestSnapshot,
+    notifier: &SnapshotNotifier,
 ) -> RefreshOutcome {
     let Some(attempt) = ProductAttemptGeneration::new(permit.id().get()) else {
         return RefreshOutcome::Failed;
@@ -554,13 +645,18 @@ fn execute_attempt<S: DesktopQuerySource>(
         return outcome;
     }
 
+    let notifier = match lock_notifier(notifier) {
+        Ok(notifier) => notifier.clone(),
+        Err(_) => return RefreshOutcome::Failed,
+    };
     match lock_latest(latest) {
-        Ok(mut slot) => {
-            *slot = Some(reducer.snapshot());
-            RefreshOutcome::Completed
-        }
-        Err(_) => RefreshOutcome::Failed,
+        Ok(mut slot) => *slot = Some(reducer.snapshot()),
+        Err(_) => return RefreshOutcome::Failed,
     }
+    if let Some(notifier) = notifier {
+        notifier.snapshot_ready();
+    }
+    RefreshOutcome::Completed
 }
 
 fn stop_outcome(permit: &RefreshPermit, clock: &dyn Clock) -> Option<RefreshOutcome> {
@@ -577,6 +673,14 @@ fn lock_latest(
     latest: &LatestSnapshot,
 ) -> Result<MutexGuard<'_, Option<Arc<ProductSnapshot>>>, DesktopControllerError> {
     latest
+        .lock()
+        .map_err(|_| DesktopControllerError::new(DesktopControllerErrorCode::Internal))
+}
+
+fn lock_notifier(
+    notifier: &SnapshotNotifier,
+) -> Result<MutexGuard<'_, Option<Arc<dyn DesktopSnapshotNotifier>>>, DesktopControllerError> {
+    notifier
         .lock()
         .map_err(|_| DesktopControllerError::new(DesktopControllerErrorCode::Internal))
 }

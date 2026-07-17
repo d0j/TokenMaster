@@ -2176,3 +2176,31 @@ After project-truth synchronization, the clean-root audit, formatting check,
 warnings-as-errors locked workspace Clippy, and complete locked workspace tests/
 doctests pass. Process inspection found no task-owned Cargo, compiler, test, GUI, or
 temporary server process.
+
+## 2026-07-17 — P3-B.2 capacity-one Slint event bridge
+
+Approved and implemented the event-delivery design and TDD plan under
+`docs/superpowers/specs/2026-07-17-tokenmaster-p3b2-event-bridge-design.md` and
+`docs/superpowers/plans/2026-07-17-tokenmaster-p3b2-event-bridge.md`. The P3-B.1
+mailbox remains the sole retained snapshot slot. One notifier attaches only while the
+controller is running and idle, wakes an already populated mailbox, and holds only a
+weak bridge reference.
+
+One atomic scheduled flag coalesces publications into at most one
+`invoke_from_event_loop` closure. The closure takes the newest snapshot, upgrades a
+weak Slint window, applies only a newer generation, clears scheduling state, and
+rechecks once for a racing publication. The bridge owns no timer, polling thread,
+second result queue, query/store/runtime authority, or strong window cycle; fixed
+saturating counters and stable codes report delivery health.
+
+Six deterministic bridge tests cover 10,000-to-one coalescing, newest-only
+delivery, the drain race, schedule retry, window/drop lifecycle, and `Send + Sync`
+handles. Eight controller contracts include idle-post-publication wakeup. A real
+headless Slint event loop applies the controller snapshot to the generated window.
+The 12-case adversarial audit rejects a second slot/event site, bridge polling, and
+strong window retention in addition to all earlier desktop authority drift.
+
+This milestone does not select a production archive root or compose the live runtime.
+Those remain P3-B.3, followed by visible route payloads and P4 presentation/resource
+acceptance. M0 acceptance, automation, packaging, signing, and release remain
+unclaimed.
