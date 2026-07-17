@@ -3,16 +3,17 @@ use std::{fmt, sync::Arc};
 use tokenmaster_query::{
     BenefitCurrentSnapshot, BenefitEnvelope, GitEnvelope, GitOutputSnapshot, LatestActivityPage,
     ProductDataStatusEnvelope, QueryEnvelope, QueryErrorCode, QuotaCurrentSnapshot, QuotaEnvelope,
-    SnapshotGeneration, UsageAnalytics, UsageSessionDetailResult, UsageSessionPage,
+    UsageAnalytics, UsageSessionDetailResult, UsageSessionPage,
 };
 
-use crate::{ProductSection, ProductSnapshot};
+use crate::{ProductAttemptGeneration, ProductSection, ProductSnapshot};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProductPublishOutcome {
     Accepted,
     Coalesced,
     RejectedOlder,
+    RejectedIncompatible,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -33,37 +34,40 @@ pub struct ProductReducer {
 }
 
 macro_rules! section_methods {
-    ($publish:ident, $fail:ident, $field:ident, $value:ty, $generation:expr) => {
+    ($publish:ident, $fail:ident, $field:ident, $value:ty, $compatible:expr) => {
         pub fn $publish(
             &mut self,
+            attempt: ProductAttemptGeneration,
             value: $value,
         ) -> Result<ProductPublishOutcome, ProductReducerError> {
-            let generation = ($generation)(&value);
-            let current = self.current.$field.attempt_generation();
-            self.apply(
-                current,
-                generation,
-                ProductSection::ready(generation, value),
-                |next, section| {
-                    next.$field = section;
-                },
-            )
+            let outcome = classify(self.current.$field.attempt_generation(), attempt);
+            if outcome != ProductPublishOutcome::Accepted {
+                return Ok(outcome);
+            }
+            if !($compatible)(&self.current, &value) {
+                return Ok(ProductPublishOutcome::RejectedIncompatible);
+            }
+            self.replace_section(ProductSection::ready(attempt, value), |next, section| {
+                next.$field = section;
+            })?;
+            Ok(ProductPublishOutcome::Accepted)
         }
 
         pub fn $fail(
             &mut self,
-            generation: SnapshotGeneration,
+            attempt: ProductAttemptGeneration,
             code: QueryErrorCode,
         ) -> Result<ProductPublishOutcome, ProductReducerError> {
-            let current = self.current.$field.attempt_generation();
-            self.apply(
-                current,
-                generation,
-                ProductSection::unavailable(generation, code),
-                |next, section| {
-                    next.$field = section;
-                },
-            )
+            let outcome = classify(self.current.$field.attempt_generation(), attempt);
+            if outcome != ProductPublishOutcome::Accepted {
+                return Ok(outcome);
+            }
+            let section =
+                ProductSection::unavailable_retaining(attempt, code, &self.current.$field);
+            self.replace_section(section, |next, section| {
+                next.$field = section;
+            })?;
+            Ok(ProductPublishOutcome::Accepted)
         }
     };
 }
@@ -81,79 +85,103 @@ impl ProductReducer {
         Arc::clone(&self.current)
     }
 
-    section_methods!(
-        publish_data_status,
-        fail_data_status,
-        data_status,
-        ProductDataStatusEnvelope,
-        |value: &ProductDataStatusEnvelope| value.snapshot_generation()
-    );
+    pub fn publish_data_status(
+        &mut self,
+        attempt: ProductAttemptGeneration,
+        value: ProductDataStatusEnvelope,
+    ) -> Result<ProductPublishOutcome, ProductReducerError> {
+        let outcome = classify(self.current.data_status.attempt_generation(), attempt);
+        if outcome != ProductPublishOutcome::Accepted {
+            return Ok(outcome);
+        }
+
+        let mut next = (*self.current).clone();
+        next.generation = next.generation.checked_next()?;
+        next.data_status = ProductSection::ready(attempt, value);
+        invalidate_incompatible_sections(&mut next, attempt);
+        next.refresh_routes();
+        self.current = Arc::new(next);
+        Ok(ProductPublishOutcome::Accepted)
+    }
+
+    pub fn fail_data_status(
+        &mut self,
+        attempt: ProductAttemptGeneration,
+        code: QueryErrorCode,
+    ) -> Result<ProductPublishOutcome, ProductReducerError> {
+        let outcome = classify(self.current.data_status.attempt_generation(), attempt);
+        if outcome != ProductPublishOutcome::Accepted {
+            return Ok(outcome);
+        }
+        let section =
+            ProductSection::unavailable_retaining(attempt, code, &self.current.data_status);
+        self.replace_section(section, |next, section| {
+            next.data_status = section;
+        })?;
+        Ok(ProductPublishOutcome::Accepted)
+    }
+
     section_methods!(
         publish_analytics,
         fail_analytics,
         analytics,
         QueryEnvelope<UsageAnalytics>,
-        |value: &QueryEnvelope<UsageAnalytics>| value.header().snapshot_generation()
+        usage_compatible
     );
     section_methods!(
         publish_quota,
         fail_quota,
         quota,
         QuotaEnvelope<QuotaCurrentSnapshot>,
-        |value: &QuotaEnvelope<QuotaCurrentSnapshot>| value.header().snapshot_generation()
+        quota_compatible
     );
     section_methods!(
         publish_benefit,
         fail_benefit,
         benefit,
         BenefitEnvelope<BenefitCurrentSnapshot>,
-        |value: &BenefitEnvelope<BenefitCurrentSnapshot>| value.header().snapshot_generation()
+        benefit_compatible
     );
     section_methods!(
         publish_git,
         fail_git,
         git,
         GitEnvelope<GitOutputSnapshot>,
-        |value: &GitEnvelope<GitOutputSnapshot>| value.header().snapshot_generation()
+        git_compatible
     );
     section_methods!(
         publish_activity,
         fail_activity,
         activity,
         QueryEnvelope<LatestActivityPage>,
-        |value: &QueryEnvelope<LatestActivityPage>| value.header().snapshot_generation()
+        usage_compatible
     );
     section_methods!(
         publish_sessions,
         fail_sessions,
         sessions,
         QueryEnvelope<UsageSessionPage>,
-        |value: &QueryEnvelope<UsageSessionPage>| value.header().snapshot_generation()
+        usage_compatible
     );
     section_methods!(
         publish_session_detail,
         fail_session_detail,
         session_detail,
         QueryEnvelope<UsageSessionDetailResult>,
-        |value: &QueryEnvelope<UsageSessionDetailResult>| value.header().snapshot_generation()
+        usage_compatible
     );
 
-    fn apply<T>(
+    fn replace_section<T>(
         &mut self,
-        current: Option<SnapshotGeneration>,
-        candidate: SnapshotGeneration,
         section: ProductSection<T>,
         replace: impl FnOnce(&mut ProductSnapshot, ProductSection<T>),
-    ) -> Result<ProductPublishOutcome, ProductReducerError> {
-        let outcome = classify(current, candidate);
-        if outcome != ProductPublishOutcome::Accepted {
-            return Ok(outcome);
-        }
+    ) -> Result<(), ProductReducerError> {
         let mut next = (*self.current).clone();
         next.generation = next.generation.checked_next()?;
         replace(&mut next, section);
+        next.refresh_routes();
         self.current = Arc::new(next);
-        Ok(ProductPublishOutcome::Accepted)
+        Ok(())
     }
 }
 
@@ -173,12 +201,91 @@ impl fmt::Debug for ProductReducer {
 }
 
 fn classify(
-    current: Option<SnapshotGeneration>,
-    candidate: SnapshotGeneration,
+    current: Option<ProductAttemptGeneration>,
+    candidate: ProductAttemptGeneration,
 ) -> ProductPublishOutcome {
     match current {
         Some(current) if candidate < current => ProductPublishOutcome::RejectedOlder,
         Some(current) if candidate == current => ProductPublishOutcome::Coalesced,
         _ => ProductPublishOutcome::Accepted,
     }
+}
+
+fn usage_compatible<T>(snapshot: &ProductSnapshot, value: &QueryEnvelope<T>) -> bool {
+    snapshot.data_status.payload().is_none_or(|status| {
+        value.header().dataset_identity() == status.payload().usage().dataset_identity()
+    })
+}
+
+fn quota_compatible<T>(snapshot: &ProductSnapshot, value: &QuotaEnvelope<T>) -> bool {
+    snapshot
+        .data_status
+        .payload()
+        .is_none_or(|status| value.header().quota_revision() == status.payload().quota().revision())
+}
+
+fn benefit_compatible<T>(snapshot: &ProductSnapshot, value: &BenefitEnvelope<T>) -> bool {
+    snapshot.data_status.payload().is_none_or(|status| {
+        value.header().benefit_revision() == status.payload().benefit().revision()
+    })
+}
+
+fn git_compatible<T>(snapshot: &ProductSnapshot, value: &GitEnvelope<T>) -> bool {
+    snapshot.data_status.payload().is_none_or(|status| {
+        value.header().publication_revision() == status.payload().git().revision()
+    })
+}
+
+fn invalidate_incompatible_sections(
+    snapshot: &mut ProductSnapshot,
+    status_attempt: ProductAttemptGeneration,
+) {
+    let Some(status) = snapshot.data_status.payload() else {
+        return;
+    };
+    let usage_identity = status.payload().usage().dataset_identity();
+    let quota_revision = status.payload().quota().revision();
+    let benefit_revision = status.payload().benefit().revision();
+    let git_revision = status.payload().git().revision();
+
+    invalidate_usage(&mut snapshot.analytics, status_attempt, usage_identity);
+    invalidate_usage(&mut snapshot.activity, status_attempt, usage_identity);
+    invalidate_usage(&mut snapshot.sessions, status_attempt, usage_identity);
+    invalidate_usage(&mut snapshot.session_detail, status_attempt, usage_identity);
+    invalidate_if(&mut snapshot.quota, status_attempt, |value| {
+        value.header().quota_revision() != quota_revision
+    });
+    invalidate_if(&mut snapshot.benefit, status_attempt, |value| {
+        value.header().benefit_revision() != benefit_revision
+    });
+    invalidate_if(&mut snapshot.git, status_attempt, |value| {
+        value.header().publication_revision() != git_revision
+    });
+}
+
+fn invalidate_usage<T>(
+    section: &mut ProductSection<QueryEnvelope<T>>,
+    status_attempt: ProductAttemptGeneration,
+    expected: tokenmaster_query::DatasetIdentity,
+) {
+    invalidate_if(section, status_attempt, |value| {
+        value.header().dataset_identity() != expected
+    });
+}
+
+fn invalidate_if<T>(
+    section: &mut ProductSection<T>,
+    status_attempt: ProductAttemptGeneration,
+    incompatible: impl FnOnce(&T) -> bool,
+) {
+    let Some(payload) = section.payload() else {
+        return;
+    };
+    if !incompatible(payload) {
+        return;
+    }
+    let attempt = section
+        .attempt_generation()
+        .map_or(status_attempt, |current| current.max(status_attempt));
+    *section = ProductSection::unavailable(attempt, QueryErrorCode::StaleSnapshot);
 }

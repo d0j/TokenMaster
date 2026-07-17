@@ -1,6 +1,24 @@
-use std::sync::Arc;
+use std::{num::NonZeroU64, sync::Arc};
 
-use tokenmaster_query::{QueryErrorCode, SnapshotGeneration};
+use tokenmaster_query::QueryErrorCode;
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ProductAttemptGeneration(NonZeroU64);
+
+impl ProductAttemptGeneration {
+    #[must_use]
+    pub const fn new(value: u64) -> Option<Self> {
+        match NonZeroU64::new(value) {
+            Some(value) => Some(Self(value)),
+            None => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0.get()
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProductSectionKind {
@@ -23,7 +41,7 @@ impl ProductSectionFailure {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProductSection<T> {
-    attempt_generation: Option<SnapshotGeneration>,
+    attempt_generation: Option<ProductAttemptGeneration>,
     payload: Option<Arc<T>>,
     failure: Option<ProductSectionFailure>,
 }
@@ -37,7 +55,7 @@ impl<T> ProductSection<T> {
         }
     }
 
-    pub(crate) fn ready(generation: SnapshotGeneration, payload: T) -> Self {
+    pub(crate) fn ready(generation: ProductAttemptGeneration, payload: T) -> Self {
         Self {
             attempt_generation: Some(generation),
             payload: Some(Arc::new(payload)),
@@ -45,10 +63,25 @@ impl<T> ProductSection<T> {
         }
     }
 
-    pub(crate) const fn unavailable(generation: SnapshotGeneration, code: QueryErrorCode) -> Self {
+    pub(crate) const fn unavailable(
+        generation: ProductAttemptGeneration,
+        code: QueryErrorCode,
+    ) -> Self {
         Self {
             attempt_generation: Some(generation),
             payload: None,
+            failure: Some(ProductSectionFailure { code }),
+        }
+    }
+
+    pub(crate) fn unavailable_retaining(
+        generation: ProductAttemptGeneration,
+        code: QueryErrorCode,
+        current: &Self,
+    ) -> Self {
+        Self {
+            attempt_generation: Some(generation),
+            payload: current.payload.as_ref().map(Arc::clone),
             failure: Some(ProductSectionFailure { code }),
         }
     }
@@ -64,7 +97,7 @@ impl<T> ProductSection<T> {
     }
 
     #[must_use]
-    pub const fn attempt_generation(&self) -> Option<SnapshotGeneration> {
+    pub const fn attempt_generation(&self) -> Option<ProductAttemptGeneration> {
         self.attempt_generation
     }
 
@@ -76,5 +109,10 @@ impl<T> ProductSection<T> {
     #[must_use]
     pub const fn failure(&self) -> Option<ProductSectionFailure> {
         self.failure
+    }
+
+    #[must_use]
+    pub const fn retains_payload(&self) -> bool {
+        self.payload.is_some() && self.failure.is_some()
     }
 }

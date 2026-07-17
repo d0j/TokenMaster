@@ -1,6 +1,7 @@
 use tempfile::TempDir;
 use tokenmaster_product::{
-    ProductGeneration, ProductPublishOutcome, ProductReducer, ProductSectionKind,
+    ProductAttemptGeneration, ProductGeneration, ProductPublishOutcome, ProductReducer,
+    ProductSectionKind,
 };
 use tokenmaster_query::{
     QueryClock, QueryError, QueryErrorCode, QueryService, QueryTimeSample, UsageAnalyticsRequest,
@@ -15,6 +16,10 @@ impl QueryClock for FixedClock {
     fn sample(&self) -> Result<QueryTimeSample, QueryError> {
         Ok(QueryTimeSample::new(1_800_000_000_000, 1))
     }
+}
+
+fn attempt(value: u64) -> ProductAttemptGeneration {
+    ProductAttemptGeneration::new(value).expect("non-zero attempt")
 }
 
 #[test]
@@ -47,7 +52,7 @@ fn reducer_accepts_only_newer_sections_and_keeps_faults_independent() {
 
     assert_eq!(
         reducer
-            .publish_data_status(second_status.clone())
+            .publish_data_status(attempt(2), second_status.clone())
             .expect("publish"),
         ProductPublishOutcome::Accepted
     );
@@ -59,13 +64,13 @@ fn reducer_accepts_only_newer_sections_and_keeps_faults_independent() {
 
     assert_eq!(
         reducer
-            .publish_data_status(first_status)
+            .publish_data_status(attempt(1), first_status)
             .expect("older result"),
         ProductPublishOutcome::RejectedOlder
     );
     assert_eq!(
         reducer
-            .publish_data_status(second_status)
+            .publish_data_status(attempt(2), second_status)
             .expect("equal result"),
         ProductPublishOutcome::Coalesced
     );
@@ -73,10 +78,7 @@ fn reducer_accepts_only_newer_sections_and_keeps_faults_independent() {
 
     assert_eq!(
         reducer
-            .fail_analytics(
-                tokenmaster_query::SnapshotGeneration::new(2).expect("attempt"),
-                QueryErrorCode::DeadlineExceeded,
-            )
+            .fail_analytics(attempt(1), QueryErrorCode::DeadlineExceeded,)
             .expect("independent failure"),
         ProductPublishOutcome::Accepted
     );
@@ -91,7 +93,7 @@ fn reducer_accepts_only_newer_sections_and_keeps_faults_independent() {
 
     assert_eq!(
         reducer
-            .publish_analytics(analytics)
+            .publish_analytics(attempt(2), analytics)
             .expect("newer analytics"),
         ProductPublishOutcome::Accepted
     );
@@ -99,4 +101,45 @@ fn reducer_accepts_only_newer_sections_and_keeps_faults_independent() {
     assert_eq!(ready.generation().get(), 3);
     assert_eq!(ready.analytics().kind(), ProductSectionKind::Ready);
     assert_eq!(failed.analytics().kind(), ProductSectionKind::Unavailable);
+}
+
+#[test]
+fn newer_attempt_recovers_a_retained_status_after_refresh_failure() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("product-recovery.sqlite3");
+    drop(UsageStore::open(&path).expect("create archive"));
+    let mut service = QueryService::open(&path, FixedClock).expect("query service");
+    let first = service.product_data_status().expect("first status");
+    let second = service.product_data_status().expect("second status");
+    let mut reducer = ProductReducer::new();
+
+    reducer
+        .publish_data_status(attempt(1), first)
+        .expect("publish status");
+    reducer
+        .fail_data_status(attempt(2), QueryErrorCode::DeadlineExceeded)
+        .expect("fail refresh");
+    let retained = reducer.snapshot();
+    assert_eq!(
+        retained.data_status().kind(),
+        ProductSectionKind::Unavailable
+    );
+    assert!(retained.data_status().retains_payload());
+
+    assert_eq!(
+        reducer
+            .publish_data_status(attempt(2), second.clone())
+            .expect("same attempt"),
+        ProductPublishOutcome::Coalesced
+    );
+    assert_eq!(
+        reducer
+            .publish_data_status(attempt(3), second)
+            .expect("newer successful refresh"),
+        ProductPublishOutcome::Accepted
+    );
+    let recovered = reducer.snapshot();
+    assert_eq!(recovered.data_status().kind(), ProductSectionKind::Ready);
+    assert!(!recovered.data_status().retains_payload());
+    assert!(recovered.data_status().failure().is_none());
 }

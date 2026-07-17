@@ -4,7 +4,10 @@ use tokenmaster_query::{
     UsageSessionDetailResult, UsageSessionPage,
 };
 
-use crate::{ProductReducerError, ProductSection};
+use crate::{
+    ProductReducerError, ProductRoute, ProductRouteStatus, ProductSection,
+    route::{derive_routes, initial_routes},
+};
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ProductGeneration(u64);
@@ -36,6 +39,7 @@ pub struct ProductSnapshot {
     pub(crate) activity: ProductSection<QueryEnvelope<LatestActivityPage>>,
     pub(crate) sessions: ProductSection<QueryEnvelope<UsageSessionPage>>,
     pub(crate) session_detail: ProductSection<QueryEnvelope<UsageSessionDetailResult>>,
+    pub(crate) routes: [ProductRouteStatus; 11],
 }
 
 impl ProductSnapshot {
@@ -50,6 +54,7 @@ impl ProductSnapshot {
             activity: ProductSection::waiting(),
             sessions: ProductSection::waiting(),
             session_detail: ProductSection::waiting(),
+            routes: initial_routes(),
         }
     }
 
@@ -96,5 +101,14 @@ impl ProductSnapshot {
     #[must_use]
     pub const fn session_detail(&self) -> &ProductSection<QueryEnvelope<UsageSessionDetailResult>> {
         &self.session_detail
+    }
+
+    #[must_use]
+    pub const fn route(&self, route: ProductRoute) -> ProductRouteStatus {
+        self.routes[route.index()]
+    }
+
+    pub(crate) fn refresh_routes(&mut self) {
+        self.routes = derive_routes(self);
     }
 }
