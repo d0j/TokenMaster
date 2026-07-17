@@ -2274,6 +2274,40 @@ its source receipt reports seven Rust files, nine Slint files, six Dashboard sec
 seven bounded list replacements, one Dashboard application path, one worker, one
 snapshot slot, one event-loop site, and zero polling/private-ID surfaces.
 
-P3-D supporting routes, P3-E desktop integration, P4 skins/locales/accessibility/
-paint/resource evidence, P5 automation, activation, M0 acceptance, packaging, signing,
-and release remain unclaimed.
+P3-D.0 Reliable State, the remaining P3-D supporting routes, P3-E desktop integration,
+P4 skins/locales/accessibility/paint/resource evidence, P5 automation, activation, M0
+acceptance, packaging, signing, and release remain unclaimed.
+
+## 2026-07-17 — P3-D.0 reliable-state architecture approved
+
+Re-audited whole-file/configuration failure handling against the implemented WAL,
+schema migration, fixed archive identity, process writer lease, live application
+lifecycle, privacy rules, Windows replacement semantics, and long-run resource goals.
+The approved design and 18-task executable rail are recorded in
+`docs/superpowers/specs/2026-07-17-tokenmaster-reliable-state-design.md` and
+`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`.
+
+The review rejected main-only ZIP copies, a continuously mirrored database, and live
+database generation paths. The selected contour keeps `tokenmaster.sqlite3` and its
+existing writer sidecar fixed, creates verified Online Backup snapshots, uses strict
+streaming `.tmconfig`/`.tmbackup` packages, bounds automatic retention, and restores
+through redundant records, complete main/WAL/SHM quarantine, Windows atomic
+replacement, revalidation, and an idempotent crash-resumable journal. Automatic
+replacement is limited to definitive corruption; busy, access, disk, transient I/O,
+and newer-schema failures preserve current truth.
+
+The closure review expanded the journal to six exact states so full restore can commit
+the chosen data-only or data-plus-portable-settings result without partial state.
+Automatic recovery always preserves current settings; device-local settings are never
+restored. It also distinguishes existing-main atomic replacement, missing-damaged-main
+same-volume promotion, and brand-new schema creation; binds every package byte with a
+footer digest; freezes the 256 MiB-through-64 GiB retention range; and keeps mandatory
+safety points active when ordinary periodic backup is disabled.
+
+The design also freezes safe defaults/fallback settings, optional bounded standard
+age protection for manual exports, no-secret automatic recovery, no automatic SQLite
+salvage, three-set quarantine stop, safe mode, explicit no-backup rebuild/data-loss
+truth, one capacity-one maintenance worker, and memory/latency/fault-injection gates.
+Traceability remains `planned`: no reliable-state source, backup, restore, settings,
+safe mode, encryption, UI, M0 acceptance, package, signature, or release was produced
+by this planning milestone.

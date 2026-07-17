@@ -328,9 +328,20 @@ covers a valid Windows deadline race where the Git fixture can be killed and rea
 before creating its PID receipt; cleanup is additionally checked by exact executable
 path, with a deterministic delayed-start regression.
 
-The immediate next slice is P3-D supporting data-bearing routes using bounded keyset
-intents and the same controller/snapshot boundary. P3-E then closes notifications,
-settings/help, command palette, tray, and compact lifecycle. P3-D-P3-E, P4
+The immediate next slice is P3-D.0 Reliable State under
+`docs/superpowers/specs/2026-07-17-tokenmaster-reliable-state-design.md` and
+`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`. Execute its 18 tasks
+in order: durable primitives and redundant settings, verified SQLite snapshots and
+strict packages, bounded retention/maintenance, journaled recovery and startup
+integration, application restart/safe mode, Data & Recovery UI, then adversarial and
+resource closure. Keep the fixed archive path and writer sidecar; never copy only the
+live main file or treat busy/disk/access/schema-newer as corruption authority. Keep
+automatic recovery data only; manual full restore must explicitly choose data only or
+data plus portable settings, and device-local settings never move between machines.
+
+After P3-D.0, continue P3-D supporting data-bearing routes using bounded keyset
+intents and the same controller/snapshot boundary. P3-E then closes remaining
+notifications, settings/help, command palette, tray, and compact lifecycle. P3-D-P3-E, P4
 presentation, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.

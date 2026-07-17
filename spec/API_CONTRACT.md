@@ -596,6 +596,38 @@ expected inventory/policy revisions, deterministic idempotency key, durable inte
 and a reconciled receipt. No plugin or LLM may infer mutation authority from inventory
 read access.
 
+## Reliable state boundary
+
+`tokenmaster-state` exposes typed settings load/save/import-preview, package create/
+verify, catalog, retention, maintenance, bootstrap, and restore operations. It accepts
+only controlled data-root capabilities and sealed selected-file descriptors. It does
+not accept arbitrary SQL, a caller-defined archive entry, extraction path, shell
+command, URL, credential, or provider payload.
+
+The SQLite-specific snapshot and candidate verifier remain store-owned fixed APIs.
+The platform package owns durable same-volume replacement and native file selection.
+Application composition alone may sequence runtime shutdown, writer-lease admission,
+restore, and bundle restart. Product/Desktop receive only bounded copied health,
+phase/progress, settings-preview, and at most 15 catalog-generation-bound ordinal
+choices; they receive no path, file handle, SQLite connection, package digest,
+recovery journal, or mutation capability.
+
+Manual restore requires a typed selected candidate, current catalog/preview identity,
+an explicit data-only or data-plus-portable-settings mode, and a second explicit
+confirmation. Device-local settings are never an input. Cancellation is valid only
+before atomic publication/replacement. Automatic recovery accepts no UI/CLI/MCP
+request, always uses data-only mode, and is limited to definitive corruption plus a
+newest-first fully reverified candidate.
+Safe mode exposes retry, verified restore, fresh rebuild, and quarantine export only;
+it never exposes arbitrary filesystem or corrupt-row salvage.
+
+Restore records the selected mode and optional staged portable-settings target in the
+redundant journal. Application composition may complete only after the active database
+and selected settings target are reread and verified. A settings-publish failure must
+roll the database back while retaining the prior settings generation; a crash after
+durable settings publication resumes by exact generation/digest rather than publishing
+a second generation.
+
 ## Provider plugin ABI
 
 The future external-provider ABI is `tokenmaster:provider@1` expressed in WIT and

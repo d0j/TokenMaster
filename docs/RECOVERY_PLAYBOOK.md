@@ -218,6 +218,21 @@
   or incoherent terminal state fails closed. Never delete the database to bypass a
   migration error.
 
+## Whole-file/configuration recovery status
+
+P3-D.0 whole-file backup, import/export, quarantine, automatic restore, and safe mode
+are approved but not implemented. Until the plan at
+`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md` is complete, do not
+copy only `tokenmaster.sqlite3` while the application may be running, delete or move a
+WAL/SHM/writer-lock file, replace the archive from an unverified copy, run ad hoc SQL,
+or treat SQLite `.recover` output as authoritative.
+
+For a current whole-file corruption incident, stop TokenMaster normally if possible,
+preserve the complete data directory as an operator-owned copy, and reproduce only
+against a synthetic/copy fixture. The future design will automate verified Online
+Backup, complete-set quarantine, and journaled replacement; this paragraph is not a
+claim that those commands exist today.
+
 Generated `target/`, `reports/`, and `dist/` content is disposable developer output.
 Do not use it as a release claim. M0 acceptance requires the exact external receipts
 listed in `M0_ACCEPTANCE.md`.

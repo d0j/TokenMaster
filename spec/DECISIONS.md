@@ -1142,3 +1142,37 @@ discovery and could display false empty limits. Per-card queries or route-trigge
 model rebuilding would add latency, hidden queues, and allocation churn. Explicit
 overview reads plus capped immutable replacement keep truth, responsiveness, privacy,
 and retained memory independently testable.
+
+## ADR-054 — Keep one fixed live archive and add verified staged recovery
+
+Decision: P3-D.0 keeps the implemented `tokenmaster.sqlite3` identity and its
+`.tokenmaster-writer.lock` sidecar. Live backups use SQLite Online Backup into an
+isolated candidate; compact manual export vacuums only that candidate. The fixed
+`.tmconfig`/`.tmbackup` container uses bounded streaming Zstandard, exact lengths, and
+entry plus whole-package SHA-256. Optional manual passphrase protection wraps the
+package in a bounded standard age v1 stream; automatic backups store no secret.
+
+Settings, run state, and restore intent use alternating checked A/B records. Restore
+stops every archive owner, holds the stable writer lease, journals each idempotent
+phase, quarantines WAL/SHM, atomically replaces the main file while preserving the old
+main, reverifies the new active database, and reconstructs one application bundle.
+Interrupted work resumes before SQLite open. Definitive corruption may select only a
+newest-first fully reverified backup. Busy, access, capacity, transient-I/O, and
+schema-too-new failures do not authorize replacement. No valid backup produces an
+explicit quarantine plus authoritative-source rebuild, never silent zero truth.
+
+The journal has six exact states ending in `settings_published` then `complete`.
+Manual restore chooses data only or data plus portable settings; automatic recovery is
+always data only, and device-local settings are never restored. A settings-publish
+failure rolls the database back while keeping the prior settings generation. An
+existing main uses atomic replacement; a missing main with prior durable artifacts
+uses separately journaled same-volume promotion; no prior artifacts means normal first
+install. Disabling periodic backups never disables mandatory healthy-source safety
+points.
+
+Rationale: copying the main file can omit committed WAL state; a hot mirror propagates
+logical errors; moving the active archive through generation directories would change
+the proved lease identity and let older binaries split truth. A fixed archive plus
+Online Backup, independent historical points, Windows atomic replacement, and a
+redundant recovery journal has the smallest auditable crash state space while keeping
+foreground writes and Slint independent.

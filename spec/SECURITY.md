@@ -634,3 +634,42 @@ idempotency/status semantics, and bounded reconciliation. Ambiguous outcomes MUS
 be retried blindly or reported as success. Browser scraping, synthetic clicks, session
 cookies, private endpoint replay, raw response storage, and secret-bearing diagnostics
 are forbidden.
+
+## TM-SEC-008 — Backup and recovery containment
+
+Configuration, backup packages, encrypted envelopes, catalogs, SQLite candidates,
+run markers, and recovery journals are untrusted. Validation order is exact header and
+bounds, bounded encryption work, streaming decompression count, hashes, defensive
+SQLite open, full integrity and foreign-key checks, exact schema, then TokenMaster
+semantic invariants. Declared sizes MUST NOT cause proportional allocation. Unknown
+required versions, flags, entries, codecs, trailing data, oversized windows, excessive
+password work factors, and ambiguous controlled-directory state fail closed.
+
+The live archive keeps one fixed identity and writer sidecar. Whole-file restore MUST
+hold that guard, close every SQLite owner, preserve current main/WAL/SHM in quarantine,
+and publish only a complete reverified candidate through a redundant idempotent
+journal. No failed settings save, backup, retention pass, migration, import, restore,
+or rollback may delete the last verified state. A corrupt backup is skipped; a corrupt
+catalog is rebuilt; corrupt control slots fall back only when the alternate slot is
+independently valid.
+
+An existing active main MUST be replaced through the platform's atomic replace
+primitive with the old main preserved. A missing main with prior durable TokenMaster
+artifacts MUST use the separately journaled same-volume promotion path; absence of a
+main alone MUST NOT authorize silent first-install creation. Manual data-plus-portable-
+settings restore MUST bind the exact staged settings generation/digest to the journal.
+Automatic recovery MUST preserve current settings, and no restore may import
+device-local state.
+
+Automatic restore is authorized only by definitive active-archive corruption or
+repeated semantic verification failure. Busy locks, access denial, disk exhaustion,
+transient I/O, unsupported media, provider unavailability, and newer schema are not
+corruption authority. SQLite `.recover`, main-only copies, ad hoc row edits, lock-file
+deletion, arbitrary extraction, and automatic quarantine deletion are forbidden.
+
+Optional manual password protection uses the standard age v1 stream with fixed
+bounded scrypt work and never stores the passphrase. New passphrases MUST be confirmed,
+contain 12 through 128 Unicode scalar values, and MUST NOT be trimmed or normalized.
+Automatic backups remain credential-free and recoverable under the user's local ACL.
+Neither hashes nor local encryption are claimed to defend against malicious code
+running as the same user or complete-disk destruction.

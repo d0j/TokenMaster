@@ -6,6 +6,23 @@ All notable changes are recorded here.
 
 ### Added
 
+- Approved P3-D.0 Reliable State design and 18-task TDD rail covering redundant typed
+  settings, strict `.tmconfig`/`.tmbackup` import/export, SQLite Online Backup,
+  streaming Zstandard, optional bounded age protection for manual exports,
+  self-describing retention, and Data & Recovery/safe-mode UI.
+- Frozen corruption containment around the existing fixed archive/writer identity:
+  complete main/WAL/SHM quarantine, redundant six-state idempotent restore journal,
+  distinct existing/missing/new-install paths, Windows atomic replacement/rollback,
+  newest-first revalidation, crash-loop stop, and explicit authoritative-source
+  rebuild when no backup is usable.
+- Defined manual data-only versus data-plus-portable-settings restore, data-only
+  automatic recovery, settings-publication rollback/resume, mandatory safety points
+  independent of the periodic schedule, exact 256 MiB-through-64 GiB retention budget,
+  and a whole-package footer digest. Device-local settings are never restored.
+- Added planned TM-FUNC-012, TM-PERF-004, TM-DATA-011, TM-SEC-008, and ADR-054
+  contracts. These planning entries do not claim that backup or recovery behavior is
+  implemented.
+
 - P3-C explicit all-current quota and benefit overview contracts with exact-empty
   semantics, one-revision capture, 32-window/32-scope/256-lot hard bounds, immutable
   public envelopes, and section-local product/controller publication.

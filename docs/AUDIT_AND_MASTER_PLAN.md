@@ -175,8 +175,10 @@ contracts are stable.
 7. **P2 — product data:** built-in Codex quota source and runtime publication,
    immutable weekly reset epochs and before/after history, pricing catalog/overrides,
    bounded Git output metrics, indexed analytics, and data-quality semantics.
-8. **P3 — complete desktop UI:** six-section board and all history/session/model/
-   project/activity/health/settings/help/widget routes from immutable snapshots.
+8. **P3 — complete desktop UI:** six-section board; P3-D.0 reliable settings,
+   verified import/export/backups, bounded retention, corruption recovery and safe
+   mode; then all history/session/model/project/activity/health/settings/help/widget
+   routes from immutable snapshots.
 9. **P4 — presentation:** independent skin/layout/density/scheme/locale axes, dynamic
     quota bars, en/ru/pseudo, keyboard/accessibility, DPI, and visible-paint gates.
 10. **P5 — automation:** strict JSON CLI, separate stdio MCP process, capabilities,
@@ -270,7 +272,20 @@ and final authority audit. P2-F joined product status is complete under
 schema-v13 capture, schema-v1 joined envelope, one-current-snapshot reducer, separate
 attempt/source/runtime generations, 11 fixed route states, runtime fault isolation,
 100,000-event latency, replacement/resource plateau, and authority audit pass. P3
-complete desktop UI is the active critical path.
+complete desktop UI is the active critical path. Before the remaining P3-D views,
+P3-D.0 Reliable State is approved under
+`docs/superpowers/specs/2026-07-17-tokenmaster-reliable-state-design.md` and
+`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: it keeps the fixed
+archive/lease identity and adds redundant settings, consistent verified snapshots,
+strict compressed packages, bounded retention, durable restore/quarantine, automatic
+corruption-only recovery, safe mode, and resource/privacy gates. This rail is planned;
+no backup or restore implementation is claimed yet.
+
+The final planning pass fixes a six-state database/settings transaction, explicit
+manual data-only or data-plus-portable-settings choice, data-only automatic recovery,
+distinct missing-damaged-main and first-install paths, mandatory safety points even
+when periodic scheduling is disabled, and a separate P3-D.0 acceptance receipt rather
+than modifying M0 evidence.
 View-time full scans and period-labeled
 whole-session totals remain forbidden.
 P2-A now implements the bounded public values, separate defensive read-only/query-only

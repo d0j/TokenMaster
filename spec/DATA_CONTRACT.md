@@ -593,6 +593,40 @@ typed in-app events but does not claim that the unfinished P3 UI rendered them; 
 delivery, snooze, quiet hours, activation intents, and activation receipts remain
 absent.
 
+## TM-DATA-011 — Reliable-state records and packages
+
+Settings, run state, and recovery intent use two alternating bounded records. Each
+record has exact magic and version, a checked monotonic generation, exact payload
+length, SHA-256 payload digest, and strict bounded JSON. Readers select the highest
+valid generation. One invalid slot falls back; two invalid recovery slots plus staged
+artifacts fail to safe mode rather than inferring ownership.
+
+`.tmconfig` and `.tmbackup` use one fixed typed container, not a general archive.
+Version 1 permits at most eight entries, a 64 KiB manifest, a 1 MiB settings payload,
+one database payload of at most 64 GiB, checked total expansion, one Zstandard frame
+per compressed entry, an 8 MiB decoder window, exact expanded lengths, and SHA-256
+entry/manifest binding. Its footer carries an exact end marker and SHA-256 of every
+preceding package byte. It contains no filenames, paths, links, permissions, devices,
+credentials, prompts, responses, reasoning, commands, output, source content, or raw
+provider data. Optional manual password protection wraps the complete package in a
+bounded standard age v1 envelope; automatic recovery stores no decryption secret.
+
+Automatic retention considers at most 32 controlled package files and keeps at most
+15 verified restore points under a default 2 GiB compressed-byte budget configurable
+only from 256 MiB through 64 GiB: four newest, seven daily, and four weekly
+representatives. The newest two verified points and the last pre-migration point are
+protected. A package catalog is disposable and reconstructible from self-describing
+headers. Quarantine retains at most three complete main/WAL/SHM sets and never deletes
+them automatically.
+
+Recovery journals the exact states `prepared`, `sidecars_quarantined`,
+`main_replaced`, `reopened_verified`, `settings_published`, and `complete`. It stores
+only a checked operation generation, bounded opaque operation/candidate identity,
+optional portable-settings target generation/digest, data-only or data-plus-portable-
+settings mode, reason, attempt, and state. A data-only restore journals an explicit
+settings no-op. It never stores or accepts an arbitrary path. Every transition is
+idempotent; uncertainty preserves all artifacts and enters safe mode.
+
 ### P3-C bounded Dashboard projection
 
 The read-only quota overview discovers at most 32 current window keys in one deferred

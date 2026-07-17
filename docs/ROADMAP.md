@@ -120,9 +120,11 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
 - **P3 — complete desktop UI (in progress):** P3-A separate production shell/fixed
   11-route projection, P3-B.1 bounded controller core, P3-B.2 capacity-one Slint
   event delivery, P3-B.3 deterministic data-root/live composition, and P3-C responsive
-  six-section quota-first Dashboard are complete; full history, sessions, models,
-  projects, activity, health, notifications, settings, help, command palette, tray,
-  and compact widget remain P3-D-P3-E.
+  six-section quota-first Dashboard are complete. P3-D.0 Reliable State is the next
+  foundation: redundant settings, verified import/export/backups, bounded retention,
+  staged recovery/quarantine, safe mode, and Data & Recovery controls. Full history,
+  sessions, models, projects, activity, remaining health/notifications/settings/help,
+  command palette, tray, and compact widget then remain P3-D-P3-E.
 - **P4 — presentation:** modular skins/layouts/density/scheme/locale, en/ru/pseudo,
   accessibility, DPI, reduced motion, and visible-paint/resource gates.
 - **P5 — automation:** strict bounded JSON CLI and a separate stdio MCP process for
@@ -156,7 +158,20 @@ health through lossy completion hints. P3-C is now complete: explicit all-curren
 quota/benefit overview reads feed one
 identity-free six-section projection and responsive compiled Slint Dashboard with
 32/32/240/12/8/12 presentation caps, real unknown/degraded states, and route-only
-navigation without model/window reconstruction. P3-D supporting data views are next.
+navigation without model/window reconstruction. P3-D.0 Reliable State is next, then
+the remaining P3-D supporting data views.
+
+P3-D.0 Reliable State is approved under
+`docs/superpowers/specs/2026-07-17-tokenmaster-reliable-state-design.md` with the
+executable rail in
+`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`. It keeps the fixed
+live archive/writer identity, adds SQLite Online Backup, strict `.tmconfig`/
+`.tmbackup` streaming packages, optional bounded age passphrase export, redundant
+settings/run/recovery records, 15-point/2-GiB default retention, three-set quarantine,
+six-state Windows replacement/rollback, automatic corruption-only data-only recovery,
+manual data-only or data-plus-portable-settings restore, safe mode, and off-UI resource
+gates. The contour is planned, not implemented. It now precedes the remaining P3-D
+views so Settings and future migrations do not ship before their durability contract.
 
 P2-A query foundation is approved under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-query-foundation.md`. It first freezes

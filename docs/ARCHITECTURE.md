@@ -135,6 +135,19 @@ a smaller route-only path and does not reconstruct the Dashboard or window. Sema
 tokens and label keys make future skin/locale switching a presentation concern, while
 the current Dashboard remains timer-, animation-, polling-, query-, and SQL-free.
 
+The approved next P3-D.0 contour adds reliable state without changing the current live
+archive identity. `tokenmaster-store` will create consistent Online Backup candidates
+and verify integrity, foreign keys, schema, and semantic invariants.
+`tokenmaster-state` will own redundant settings/run/recovery records, fixed streaming
+`.tmconfig`/`.tmbackup` packages, bounded retention, and one capacity-one maintenance
+worker. `tokenmaster-platform` will own same-volume durable replacement and sealed file
+dialogs. `tokenmaster-app` will stop every archive user, hold the existing writer
+lease, quarantine main/WAL/SHM, resume a redundant six-state restore journal before
+SQLite open, commit the selected data-only or data-plus-portable-settings mode, and
+reconstruct one application bundle or safe mode. Automatic recovery remains data only.
+Product/Desktop receive bounded health and intents only. This contour is planned and
+adds no current runtime or backup claim.
+
 The built-in live quota source is separate from the JSONL usage reader. Composition
 supplies one already resolved absolute native Codex executable to
 `CodexQuotaTransport`. `CodexQuotaRuntime` resolves it either from authoritative

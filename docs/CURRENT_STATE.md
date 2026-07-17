@@ -775,6 +775,34 @@ site, and zero polling/private-ID surfaces. P3-D/P3-E, P4 skin/locale/accessibil
 paint/resource acceptance, P5 automation, activation, M0 acceptance, packaging,
 signing, and release remain unclaimed.
 
+## Approved P3-D.0 reliable-state contour
+
+The reliable-state design and 18-task TDD rail are approved in
+`docs/superpowers/specs/2026-07-17-tokenmaster-reliable-state-design.md` and
+`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`. They keep the
+implemented fixed `tokenmaster.sqlite3` and writer sidecar rather than introducing a
+second live database identity. Planned ownership is: store for SQLite Online Backup
+and candidate verification, platform for durable same-volume replacement and sealed
+file selection, new `tokenmaster-state` for settings/packages/retention/recovery, and
+app for runtime shutdown/restart and safe mode. Product/Desktop receive copied bounded
+health and typed intents only.
+
+The planned v1 contract uses redundant settings/run/recovery records, strict
+`.tmconfig`/`.tmbackup` packages, streaming Zstandard levels 6/12/19 with an 8 MiB
+window, optional bounded age passphrase protection for manual exports, default
+four-newest/seven-daily/four-weekly retention under 15 points and 2 GiB, a maximum
+three quarantine sets, and an idempotent six-state restore journal. Manual restore
+selects data only or data plus portable settings; automatic recovery is data only and
+device-local settings remain untouched. Definitive corruption alone may authorize
+automatic restore; busy, permission, disk-full,
+transient-I/O, unsupported-location, and schema-too-new results preserve current
+truth. No valid backup leads to explicit quarantine and authoritative-source rebuild,
+never fabricated zero or automatic corrupt-row salvage.
+
+This is architecture and planning truth only. No persistent settings, backup package,
+retention worker, restore, safe mode, Data & Recovery UI, encryption, or new acceptance
+evidence is implemented by the planning commit.
+
 ## Next implementation slice
 
 P2-D quota history core is complete under
@@ -792,7 +820,8 @@ immutable read snapshots, and publication through the existing Codex runtime wit
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
 workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, P3-B.2, P3-B.3, and P3-C are
-complete; the immediate next slice is P3-D supporting data-bearing routes. Activation
+complete; the immediate next slice is P3-D.0 Reliable State, followed by the remaining
+P3-D supporting data-bearing routes. Activation
 remains a later independently authorized capability. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.
 

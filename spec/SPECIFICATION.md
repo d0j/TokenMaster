@@ -117,6 +117,43 @@ trustworthy generation. Pause MUST close admission, cancel/reap the exact active
 and discard raw object-ID frontiers; resume and power recovery MUST force rediscovery.
 Shutdown and `Drop` MUST join all owned work.
 
+### TM-FUNC-012 — Reliable settings, backup, and recovery
+
+The product MUST persist typed versioned settings through redundant atomic records and
+MUST provide bounded `.tmconfig` import/export plus verified `.tmbackup` export,
+verification, retention, and restore. A live backup MUST use a SQLite-consistent
+snapshot and MUST NOT copy only the main file while WAL may contain committed state.
+Every published backup and every restore candidate MUST pass container hashes,
+bounded decompression, SQLite integrity, foreign-key, exact schema, and application
+semantic checks.
+
+Automatic backups MUST be coalesced off the UI thread, bounded by count and bytes, and
+preserve at least the newest protected verified restore points. Restore MUST stop all
+archive users, hold the stable writer lease, quarantine the complete prior main/WAL/
+SHM set, and use a durable idempotent journal. Interrupted restore MUST resume before
+any SQLite open. Busy, access-denied, disk-full, transient-I/O, unsupported-location,
+and schema-too-new failures MUST NOT authorize replacement.
+
+Disabling scheduled periodic backup MUST NOT disable mandatory pre-migration,
+pre-restore, or pre-destructive-maintenance safety points for a healthy non-empty
+archive. If such a point cannot be created and reverified, its mutation MUST be
+blocked. Manual full restore MUST explicitly choose data only or data plus portable
+settings; automatic recovery MUST be data only, and device-local settings MUST never
+be restored. Database and selected portable-settings publication MUST complete
+idempotently together or restore the prior database/settings truth.
+
+Definitive corruption MAY automatically select the newest previously verified backup
+only after revalidation. When no backup is usable, the corrupt set MUST remain in
+quarantine and reconstructible usage MAY rebuild from authoritative local sources;
+lost non-reconstructible domains MUST remain explicitly unavailable. Automatic
+salvage of corrupt rows is forbidden. Data Health and safe mode MUST remain usable
+without starting archive/query/runtime owners.
+
+Startup MUST durably publish and reread an unclean-run marker before any writable
+SQLite open. A missing active main with prior durable TokenMaster artifacts MUST be
+treated as damaged state, while a root with no prior durable artifacts MAY use normal
+first-install schema creation.
+
 ### TM-FUNC-005 — Native interaction
 
 The product MUST provide single-instance tray behavior, dashboard/compact access,
@@ -267,6 +304,20 @@ second, and first/cursor session-page p95 below 100 ms. SQLite footprint measure
 MUST include the main file, WAL, and SHM and MUST remain at or below 3.0 times the
 matching pre-aggregate fixture. These developer gates do not replace package-bound
 release performance or soak receipts.
+
+### TM-PERF-004 — Bounded background maintenance
+
+Settings, backup, verification, import, restore preparation, and compression MUST run
+outside the Slint event thread. Maintenance MUST retain at most one active operation,
+one aggregate follow-up, one latest health snapshot, fixed streaming buffers, and one
+compression context. It MUST NOT allocate a database-sized buffer, create a thread or
+queue node per trigger, or use multithreaded compression.
+
+A 10,000-trigger burst MUST remain capacity one. Repeated success, failure, cancel,
+sleep/resume, and restore cycles MUST return private memory, file/process handles,
+threads, USER objects, and GDI objects to the measured post-warm-up envelope. On the
+reference machine, an automatic backup MUST add no more than 10 ms to cached Dashboard
+query p95 or measured input-to-paint p95.
 
 ## Release requirements
 
