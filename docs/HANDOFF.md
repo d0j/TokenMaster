@@ -294,15 +294,26 @@ runtime authority. Six bridge unit/race tests, eight controller contracts, a rea
 headless Slint event-loop integration, 12 adversarial Pester cases, and the desktop
 source audit pass.
 
-The immediate next slice is P3-B.3: select an approved installed/portable archive
-root and compose the existing live runtime as the sole ingestion owner. Do not guess
-benefit identity; safe current-scope discovery/all-current query support is a separate
-prerequisite.
-The post-synchronization clean-root, format, strict locked workspace Clippy, and full
-locked workspace test/doctest baseline pass; process audit found no task-owned Cargo,
-compiler, test, or TokenMaster process.
+P3-B.3 is complete under
+`docs/superpowers/plans/2026-07-17-tokenmaster-p3b3-application-composition.md`.
+`tokenmaster-app` owns the sole production binary, exact empty-marker portable versus
+`LOCALAPPDATA` installed selection, mandatory live/nested-Git ownership, independently
+degradable quota/reminder owners, one controller, and one bridge. Optional lossy
+worker hints copy four fixed health results into one generation-ordered desktop slot;
+there is no polling/thread/queue, duplicate ingestion, runtime in desktop, path leak,
+or strong ownership cycle. Focused package tests, real live-bundle shutdown, 21 Pester
+cases, and both release audits pass.
 
-P3-B.3-P3-E visible data/notifications, P4 presentation, CLI/MCP, activation, M0
+The fresh post-P3-B.3 clean-root, format, strict locked workspace Clippy, and complete
+locked workspace test/doctest gate passes. The gate exposed and now permanently
+covers a valid Windows deadline race where the Git fixture can be killed and reaped
+before creating its PID receipt; cleanup is additionally checked by exact executable
+path, with a deterministic delayed-start regression.
+
+The immediate next slice is P3-C visible quota-first route payloads. Do not guess
+benefit identity; safe current-scope discovery/all-current query support is a separate
+prerequisite before benefit inventory becomes ready.
+P3-C-P3-E visible data/notifications, P4 presentation, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.
 The current post-Task-8 Git clean-root, formatting, strict locked workspace Clippy,
@@ -392,6 +403,9 @@ pending, stale, or invalid rebuilds remain blocked.
 
 ```powershell
 pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
+pwsh -NoProfile -File scripts\audit-desktop-shell.ps1 -RepositoryRoot (Get-Location).Path
+pwsh -NoProfile -File scripts\audit-application-composition.ps1 -RepositoryRoot (Get-Location).Path
+Invoke-Pester -Path scripts\tests\audit-desktop-shell.Tests.ps1,scripts\tests\audit-application-composition.Tests.ps1 -Output Detailed
 cargo +1.97.0 test -p tokenmaster-store --test usage_ingest_contract --locked
 cargo +1.97.0 test -p tokenmaster-store --test scan_contract --locked
 cargo +1.97.0 test -p tokenmaster-accounting --locked

@@ -1093,3 +1093,29 @@ capacity-one mailbox preserves newest-only truth and constant retention. Explici
 weak-window upgrade inside the queued closure guarantees scheduled-flag cleanup even
 when the component has been destroyed. P3-B.3 still owns data-root and live-runtime
 composition; P3-B.2 does not grant the UI filesystem, query, or ingestion authority.
+
+## ADR-052 — A separate app owns deterministic storage and live composition
+
+Decision: `tokenmaster-app` is the sole owner of the production `TokenMaster.exe`.
+`tokenmaster-desktop` is library-only and retains its audited frontend/query boundary.
+An exact empty `tokenmaster.portable` marker beside the validated current executable
+selects `<exe-dir>\data\tokenmaster.sqlite3`; marker absence selects
+`%LOCALAPPDATA%\TokenMaster\tokenmaster.sqlite3`. Invalid marker/location fails closed
+without fallback, CWD, general override, or path-bearing errors.
+
+Existing usage, nested Git, quota, and reminder workers accept one optional lossy
+completion notifier. Notification occurs after capacity-one receipt publication and
+outside worker locks; notifier panic is isolated from ingestion. The app notifier owns
+only weak shared state, copies four fixed product-health observations under a checked
+generation, and requests the existing capacity-one desktop refresh. The controller
+retains one newest observation, not a runtime or second product snapshot.
+
+Live usage/Git startup is mandatory. Quota and reminder startup failures publish
+independent unavailable health so healthy usage remains usable. On event-loop exit the
+app removes shared state, pauses all runtime admission, joins the controller, and then
+shuts down reminder, quota, and live/nested-Git ownership without a lock across joins.
+
+Rationale: putting runtimes in the UI package would erase authority isolation, while
+polling adds idle work and another lifecycle. A marker makes ZIP portability explicit
+and installed behavior deterministic. Lossy hints plus authoritative snapshots keep
+latency low and memory constant without turning the UI into an ingestion owner.

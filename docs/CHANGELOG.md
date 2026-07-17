@@ -6,6 +6,27 @@ All notable changes are recorded here.
 
 ### Added
 
+- P3-B.3 `tokenmaster-app` composition package as the sole owner of
+  `TokenMaster.exe`; `tokenmaster-desktop` is now a six-Rust-file library-only
+  frontend with no new platform/runtime/store/provider authority.
+- Deterministic installed/portable data-root policy: an exact empty
+  `tokenmaster.portable` marker selects adjacent `data`, absence selects
+  `%LOCALAPPDATA%\TokenMaster`, and invalid intent fails without fallback or path
+  disclosure.
+- Optional engine completion notifier propagated through usage, nested Git, quota,
+  and reminder runtimes, with receipt-before-hint ordering, lock-free callback entry,
+  panic isolation, no dispatcher/timer/queue, and legacy constructor compatibility.
+- One generation-ordered desktop runtime-health observation slot joining four copied
+  product health/error values on the existing query worker; 10,000 replacements and
+  active-query race/coalescing contracts pass.
+- Application composition/data-root/live-bundle tests plus 21 adversarial desktop/app
+  Pester cases and release audits proving one binary, one owner per runtime/controller/
+  bridge, software-only rendering, zero polling/arbitrary-root surfaces, and zero
+  forbidden private/old-project binary strings.
+- Deterministic Git process regression for a deadline reached before the fixture can
+  create its PID receipt. Cleanup tests now inspect the exact executable path as well
+  as any published PIDs, so a valid kill-and-reap cannot flake under workspace load.
+
 - P3-B.2 capacity-one Slint event-loop bridge sharing the controller's sole latest
   snapshot mailbox, with one idle-only weak notifier, one atomic scheduled gate, one
   weak window, newest-generation application, and a post-drain race recheck.
@@ -15,8 +36,9 @@ All notable changes are recorded here.
 - Six bridge unit/race contracts, eight controller contracts including populated-
   idle attachment wakeup, and a real headless Slint integration event loop.
 - Expanded desktop audit with 12 adversarial Pester contracts and exact invariants:
-  seven Rust/five Slint files, one worker, one shared result slot, one event-loop site,
-  zero bridge polling, and no strong window retention or direct authority.
+  the then-seven Rust/five Slint files, one worker, one shared result slot, one
+  event-loop site, zero bridge polling, and no strong window retention or direct
+  authority.
 
 - P3-B.1 bounded desktop controller over one proven refresh worker, one typed query
   source, one worker-confined product reducer, and one replaceable latest immutable

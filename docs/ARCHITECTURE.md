@@ -82,7 +82,8 @@ stable reason codes per row. A complete candidate projection replaces the prior 
 only when its product generation is newer. The initial shell uses the real waiting
 product snapshot and contains no quota/session/chart fixtures.
 
-The production binary selects only the Slint software renderer. Slint callbacks may
+The production binary is owned only by `tokenmaster-app` and selects only the Slint
+software renderer. `tokenmaster-desktop` is library-only. Slint callbacks may
 validate and emit presentation intents but cannot open SQLite, read provider input,
 own a runtime/worker, or block. P3-B.1 adds one bounded worker outside the callback
 boundary. It owns one typed `QueryService` source and one `ProductReducer`, reduces
@@ -96,8 +97,10 @@ to coalesce publications into at most one `invoke_from_event_loop` closure. The 
 takes only the newest snapshot, applies only a newer generation, clears scheduling
 state even after window loss, and rechecks once for a racing publication. There is no
 timer, polling thread, event queue owned by TokenMaster, or strong ownership cycle.
-P3-B.3 will compose the sole live-runtime owner after the installed/portable data-root
-policy is approved.
+P3-B.3 adds the separate application composition root. An exact empty
+`tokenmaster.portable` marker selects `<exe-dir>\data`; absence selects
+`%LOCALAPPDATA%\TokenMaster`. Both paths are canonical local non-reparse directories,
+and invalid portable intent fails without fallback.
 
 `tokenmaster-product` is the leaf composition layer between query/runtime truth and
 P3 presentation. `QueryService::product_data_status` captures usage publication,
@@ -115,8 +118,10 @@ Eleven fixed route statuses use a `u16` reason set. Aggregate rebuild keeps Acti
 and Data Health reachable, degrades Dashboard section by section, and disables only
 aggregate-dependent History, Sessions, Models, and Projects. The P3-B.1 worker and
 P3-B.2 newest-only event bridge now marshal complete snapshots to Slint; Slint
-callbacks still cannot open SQLite or own a runtime. Production archive/runtime
-composition remains P3-B.3.
+callbacks still cannot open SQLite or own a runtime. The app owns the sole usage/
+nested-Git, quota, and reminder runtimes, copies four fixed health observations into
+one controller slot, and refreshes through lossy worker-completion hints without a new
+timer, polling thread, queue, ingestion path, or strong ownership cycle.
 
 The built-in live quota source is separate from the JSONL usage reader. Composition
 supplies one already resolved absolute native Codex executable to

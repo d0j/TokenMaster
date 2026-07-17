@@ -530,6 +530,26 @@ completion channel, snapshot, archive, or diagnostics. `tokenmaster-engine` fail
 compilation under `panic=abort`; only unwind builds can provide the required contained
 fault transition.
 
+The application composition root is separate from `tokenmaster-desktop`. Only
+`tokenmaster-app` may combine platform path validation, Codex discovery, live/quota/
+reminder runtime owners, the read-only desktop controller, and the Slint event loop.
+The frontend remains directly free of platform, Codex, provider, store, runtime,
+process, network, browser, shell, and arbitrary filesystem authority.
+
+Installed/portable selection validates the current executable and every selected
+directory as local, absolute, non-link/non-reparse state. A portable marker must be a
+zero-byte regular non-link file. An invalid marker never falls back to installed
+storage. Only one exact child is created non-recursively and revalidated. Paths remain
+private to composition and cannot enter application errors, UI/product snapshots,
+worker completions, or diagnostics.
+
+Application runtime notification is a weak, lossy wake capability only. It grants no
+read/write/provider action authority, retains no runtime/window strongly, allocates no
+thread/timer/queue, and recomputes only fixed product health. Shutdown removes the
+shared bundle before joins, closes runtime admission, joins the query worker, then
+closes reminder, quota, usage, and nested Git ownership without holding the bundle
+mutex.
+
 The Codex quota runtime is a separate composition from usage ingestion. Automatic
 discovery captures only the bounded process `PATH`, visits absolute entries in order,
 and validates the exact platform-native Codex filename through the path-private

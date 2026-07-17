@@ -2204,3 +2204,39 @@ This milestone does not select a production archive root or compose the live run
 Those remain P3-B.3, followed by visible route payloads and P4 presentation/resource
 acceptance. M0 acceptance, automation, packaging, signing, and release remain
 unclaimed.
+
+## 2026-07-17 — P3-B.3 deterministic data root and live application composition
+
+Approved and implemented the composition design and TDD plan under
+`docs/superpowers/specs/2026-07-17-tokenmaster-p3b3-application-composition-design.md`
+and `docs/superpowers/plans/2026-07-17-tokenmaster-p3b3-application-composition.md`.
+The new `tokenmaster-app` package owns the sole production `TokenMaster.exe` while
+`tokenmaster-desktop` is library-only and retains its no-runtime/no-filesystem
+authority boundary.
+
+An exact zero-byte `tokenmaster.portable` marker selects the validated adjacent
+`data` child; absence selects validated `%LOCALAPPDATA%\TokenMaster`. Invalid marker
+or location fails closed without fallback, CWD, or path-bearing errors. The app
+composes mandatory usage/nested-Git plus independently degradable quota/reminder
+runtimes, one query controller, one bridge, and ordered no-lock-across-join shutdown.
+
+Engine workers now support an optional lossy completion notifier after receipt
+publication. The same weak notifier observes all four runtime workers, copies fixed
+product health under a checked generation, and replaces one desktop observation slot.
+Existing controller/event coalescing handles bursts; no timer, polling thread,
+dispatcher, queue, duplicate ingestion, or strong ownership cycle was added.
+
+Focused notifier, runtime, product, desktop, data-root, real-bundle, and shutdown
+contracts pass. Twenty-one adversarial Pester cases and both release audits prove one
+binary/runtime/controller/bridge composition, exact dependencies, software rendering,
+zero arbitrary-root/polling/old-project/private-string drift, and a successful release
+build. Visible P3-C routes, safe benefit-scope discovery, P4-P6, activation, M0
+acceptance, packaging, signing, and release remain unclaimed.
+
+The complete post-milestone workspace gate exposed a Windows scheduling race in the
+Git process-test oracle, not in the reaping implementation: a 100 ms deadline could
+reap the fixture before its first receipt write. A delayed-start regression now
+reproduces that state deterministically and verifies no process remains by exact
+executable path; receipt PIDs remain an additional check when available. The renewed
+clean-root, release audits, 21-case Pester suite, format, strict Clippy, workspace
+tests, and doctests all pass.

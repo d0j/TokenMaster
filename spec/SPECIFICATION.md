@@ -186,6 +186,19 @@ The presentation owner MUST retain only the current immutable product snapshot a
 MUST copy bounded runtime health rather than retaining runtime owners, callbacks,
 guards, paths, or database handles.
 
+The production `TokenMaster.exe` MUST be owned by a composition package separate from
+the desktop frontend. The composition owner MUST select exactly one validated archive
+root before starting live data: an empty regular `tokenmaster.portable` marker beside
+the executable selects the adjacent `data` directory; absence selects
+`%LOCALAPPDATA%\TokenMaster`. An invalid marker or unavailable/unsupported selected
+location MUST fail closed without fallback, current-working-directory use, or path
+disclosure.
+
+Runtime-to-presentation refresh MUST be driven by bounded lossy completion hints from
+the existing workers, not a UI timer or polling thread. The application may retain one
+latest fixed runtime-health observation and one checked generation only. It MUST NOT
+duplicate ingestion, runtime ownership, result history, or the desktop snapshot slot.
+
 ## Performance requirements
 
 ### TM-PERF-001 — Bounded hot paths

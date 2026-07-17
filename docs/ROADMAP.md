@@ -117,10 +117,11 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   overrides, dynamic quotas, full-reset epochs, banked-reset inventory/reminders, and
   bounded Git output metrics.
 - **P3 — complete desktop UI (in progress):** P3-A separate production shell/fixed
-  11-route projection, P3-B.1 bounded controller core, and P3-B.2 capacity-one Slint
-  event delivery are complete; data-root/runtime composition, quota-first board, history,
+  11-route projection, P3-B.1 bounded controller core, P3-B.2 capacity-one Slint
+  event delivery, and P3-B.3 deterministic data-root/live composition are complete;
+  quota-first board, history,
   sessions, models, projects, activity, health, notifications, settings, help,
-  command palette, tray, and compact widget remain P3-B.3-P3-E.
+  command palette, tray, and compact widget remain P3-C-P3-E.
 - **P4 — presentation:** modular skins/layouts/density/scheme/locale, en/ru/pseudo,
   accessibility, DPI, reduced motion, and visible-paint/resource gates.
 - **P5 — automation:** strict bounded JSON CLI and a separate stdio MCP process for
@@ -148,7 +149,9 @@ complete-attempt publication, one latest snapshot, stable redaction, and determi
 shutdown. P3-B.2 now shares that one mailbox with a weak-window bridge, coalesces
 10,000 notifications into one queued event/newest delivery, closes the producer/
 consumer race with one recheck, and proves the real headless Slint event loop. P3-B.3
-data-root/live-runtime composition is next.
+moves the sole production binary to `tokenmaster-app`, resolves exact installed/
+portable storage, composes sole live/quota/reminder ownership, and joins fixed runtime
+health through lossy completion hints. P3-C visible quota-first route payloads are next.
 
 P2-A query foundation is approved under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-query-foundation.md`. It first freezes

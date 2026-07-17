@@ -658,11 +658,9 @@ query surface, no direct store/provider/runtime/network/shell/SQL authority, and
 forbidden release-binary strings.
 
 At P3-B.1 closure this was the controller core only. P3-B.2 now marshals its latest
-snapshot through one coalesced Slint event. The production executable still starts
-from the truthful initial snapshot; P3-B.3 must approve the installed/portable
-data-root policy and compose the existing live runtime without duplicating ingestion
-ownership. Safe benefit scope discovery also remains an explicit query contract
-before the benefit card can be ready.
+snapshot through one coalesced Slint event, and P3-B.3 now owns the validated data root
+and sole live-runtime composition. Safe benefit scope discovery remains an explicit
+query contract before the benefit card can be ready.
 
 The post-synchronization clean-root audit, format check, warnings-as-errors locked
 workspace Clippy, and complete locked workspace tests/doctests pass. No task-owned
@@ -688,17 +686,54 @@ bridge/window close stops scheduling, and bridge/observer handles are `Send + Sy
 A real headless Slint integration event loop applies a controller-produced snapshot
 to the generated `MainWindow` and exits deterministically.
 
-The desktop audit now has 12 adversarial Pester contracts and reports seven Rust/five
+At P3-B.2 closure the desktop audit had 12 adversarial Pester contracts and reported
+seven Rust/five
 Slint files, one controller worker, one retained snapshot slot shared with the bridge,
 one event-loop schedule site, and zero bridge polling surfaces. It also rejects a
 second slot/event site, timer/thread polling, strong window retention, UI queries, and
 all prior direct-authority, renderer, probe, seeded-data, and private-string drift.
 
-This closes only P3-B.2. The production executable still starts from the truthful
+At P3-B.2 closure the production executable still started from the truthful
 initial snapshot because P3-B.3 must select the installed/portable archive root and
 compose the existing live runtime as sole ingestion owner. Safe benefit-scope
 discovery, visible route payloads, P4 paint/resource gates, M0 acceptance, packaging,
 signing, and release remain unclaimed.
+
+## P3-B.3 deterministic application composition
+
+P3-B.3 is implemented under
+`docs/superpowers/plans/2026-07-17-tokenmaster-p3b3-application-composition.md`.
+`tokenmaster-app` now owns the only production `TokenMaster.exe`; the six-Rust-file
+`tokenmaster-desktop` package is library-only and remains directly limited to Slint,
+engine, product, query, and error-context support.
+
+An exact empty `tokenmaster.portable` file beside the validated executable selects the
+adjacent `data` child; absence selects `%LOCALAPPDATA%\TokenMaster`. Both resolve to
+one canonical local non-reparse directory and `tokenmaster.sqlite3`. Invalid marker,
+missing installed base, unsupported media, or creation failure is stable/path-free and
+never changes mode or falls back to CWD.
+
+The app starts one mandatory `LiveRuntime` with nested Git plus independently
+degradable quota and reminder runtimes, one desktop controller, and one Slint bridge.
+The existing workers emit optional lossy completion hints after receipt publication.
+One weak app notifier copies four fixed product health/error values under a checked
+generation into one capacity-one controller observation; the existing controller and
+bridge coalesce query/event work. There is no new timer, polling thread, queue, second
+ingestion owner, runtime in desktop, or strong window/application cycle.
+
+Focused evidence includes two notifier-order/panic contracts, four runtime propagation
+contracts, typed product-health publication, 10,000 desktop observation replacement,
+an active-query follow-up race, five data-root contracts, early-notification and
+generation-overflow tests, a real live-bundle health/join/shutdown test, 21 adversarial
+Pester cases, both source/release audits, and a successful release application build.
+The fresh post-P3-B.3 workspace gate also passes clean-root, formatting, warnings-as-
+errors Clippy, all tests, and all doctests. Its Windows-load-only Git process-test
+race is now a deterministic delayed-start regression: deadline/cancellation cleanup
+checks the exact fixture executable even when the child is reaped before publishing a
+PID receipt.
+The remaining immediate work is P3-C visible quota-first route payloads and safe
+benefit-scope discovery; skins/locales/P4, automation/P5, release/P6, activation, and
+acceptance evidence remain unclaimed.
 
 ## Next implementation slice
 
@@ -716,8 +751,8 @@ credit inventory, expiration reconciliation, default/custom reminder profiles,
 immutable read snapshots, and publication through the existing Codex runtime with
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
-workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, and P3-B.2 are complete; the
-immediate next slice is P3-B.3 approved data-root/live-runtime composition. Activation
+workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, P3-B.2, and P3-B.3 are complete;
+the immediate next slice is P3-C visible quota-first route payloads. Activation
 remains a later independently authorized capability. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.
 
@@ -859,7 +894,7 @@ GNU/MSVC comparison, attribution/notices, SBOM, advisory/source/license/secret/a
 audits, attestation, deterministic package, clean-room launch, signing, interactive
 matrix, and release-candidate soak all remain unverified.
 
-The clean-root audit, all three Pester contract files, root format check, strict
+The clean-root audit, required Pester contract files, root format check, strict
 Clippy with `RUSTFLAGS=-Dwarnings`, full locked Rust workspace tests, release build,
 and M0 developer stress verification pass from the root workspace. The exact commands
 are recorded in `docs/HANDOFF.md` and the M0 script; this does not replace external

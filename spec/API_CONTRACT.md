@@ -344,6 +344,27 @@ Projects are unavailable. The reducer owns no SQLite connection, runtime, worker
 callback, path, provider identity, queue, or snapshot history. P3 may marshal only this
 bounded snapshot onto the Slint event loop.
 
+`tokenmaster-app` is the sole production application composition boundary.
+`ApplicationEnvironment` captures only the current executable, `LOCALAPPDATA`,
+`USERPROFILE`, and `CODEX_HOME`; production accepts no archive argument, CWD fallback,
+or general environment-selected data path. `DataRoot::resolve` returns one canonical
+local directory and archive filename under the exact installed/portable marker policy.
+Its errors and `Debug` output are stable and path-free.
+
+`RefreshWorker::spawn_notified` accepts one optional
+`Arc<dyn WorkerCompletionNotifier>`. After publishing the capacity-one completion
+receipt and outside worker locks, it sends one copied lossy completion hint. Notifier
+panic is caught/redacted and cannot fault the worker or remove the receipt. Live,
+nested Git, quota, and reminder runtimes expose additive `start_notified` constructors;
+their existing `start` constructors retain identical no-notifier behavior.
+
+`DesktopRuntimeObservation` carries one `ProductRuntimeGeneration` and exactly four
+copied `Result<...Health, ProductRuntimeObservationError>` values. The controller
+retains at most one pending observation, rejects equal/older generations, applies the
+latest value only on its existing query worker, and publishes it only with a complete
+non-cancelled `ProductSnapshot`. The desktop API receives no runtime owner or runtime
+source type.
+
 `CodexAppServerCommand` accepts one already resolved absolute native executable path.
 The path must name a regular non-reparse file; Windows additionally requires an
 `.exe`. It is canonicalized but has no public getter and its `Debug` output is
