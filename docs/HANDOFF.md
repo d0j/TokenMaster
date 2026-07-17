@@ -328,10 +328,15 @@ covers a valid Windows deadline race where the Git fixture can be killed and rea
 before creating its PID receipt; cleanup is additionally checked by exact executable
 path, with a deterministic delayed-start regression.
 
-The immediate next slice is P3-D.0 Reliable State under
+P3-D.0 Reliable State is active under
 `docs/superpowers/specs/2026-07-17-tokenmaster-reliable-state-design.md` and
-`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`. Execute its 18 tasks
-in order: durable primitives and redundant settings, verified SQLite snapshots and
+`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`. Task 1 is complete:
+`tokenmaster-state` is a library-only workspace package with fixed path-private errors,
+checked byte/item limits, five exact direct dependencies, and deterministic Rust/Pester
+authority gates. The future crash fixture was corrected to avoid a state binary target.
+
+The immediate next slice is Task 2 controlled durable file primitives. Then continue
+Tasks 3-18 in order: redundant settings, verified SQLite snapshots and
 strict packages, bounded retention/maintenance, journaled recovery and startup
 integration, application restart/safe mode, Data & Recovery UI, then adversarial and
 resource closure. Keep the fixed archive path and writer sidecar; never copy only the
@@ -345,8 +350,10 @@ notifications, settings/help, command palette, tray, and compact lifecycle. P3-D
 presentation, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.
-The current post-Task-8 Git clean-root, formatting, strict locked workspace Clippy,
-and complete locked workspace test/doctest baseline passes. The query resource binary uses
+The current post-P3-D.0-Task-1 clean-root, formatting, strict locked workspace Clippy,
+and complete locked workspace test/doctest baseline passes. Focused state evidence is
+2/2 Rust contracts, 29/29 Pester mutations, and one workspace authority receipt. The
+query resource binary uses
 an isolated `harness = false` process plus a bounded maximum-64-round warm-up that
 waits for two topology-stable eight-round retained floors before measurement and
 ignores one transient low allocator sample only while choosing the warm-up floor. The

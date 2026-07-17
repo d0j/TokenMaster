@@ -15,6 +15,7 @@ members = [
   "crates/quota",
   "crates/query",
   "crates/runtime",
+  "crates/state",
   "crates/store",
   "crates/gates",
   "crates/git",

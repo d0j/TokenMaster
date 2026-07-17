@@ -2311,3 +2311,33 @@ truth, one capacity-one maintenance worker, and memory/latency/fault-injection g
 Traceability remains `planned`: no reliable-state source, backup, restore, settings,
 safe mode, encryption, UI, M0 acceptance, package, signature, or release was produced
 by this planning milestone.
+
+## 2026-07-17 — P3-D.0 Task 1 reliable-state boundary
+
+Added `tokenmaster-state` as the single library-only reliable-state workspace package.
+It currently contains nine stable serialized/path-private error categories and one
+bounded byte/item limit value whose private wrappers reject limit excess and arithmetic
+overflow. It stores no source error text and exposes no filesystem-path constructor.
+
+Added a deterministic Pester/workspace authority audit plus 29 mutation cases. The
+receipt records exactly five direct production dependencies (`serde`, `serde_json`,
+`sha2`, `thiserror`, and `tokenmaster-platform`), one exact workspace member, two Rust
+source files, no binary or build target, no filesystem/process/network/shell/SQL/Slint/
+archive/external-source authority, no public arbitrary-path constructor, and no
+forbidden transitive dependency. Rust contracts cover all
+nine stable codes, serialization, redacted diagnostics, inclusive limits, excess, and
+integer overflow.
+
+Focused evidence passes 2/2 Rust contracts, 29/29 Pester mutation cases, and the full
+workspace authority receipt. Clean-root, formatting, strict warnings-as-errors
+workspace Clippy, and the complete locked workspace test/doctest suite also pass.
+Independent review added red/green regressions for direct and grouped filesystem/path
+authority, standard-library aliases, platform re-exports, public aliases/traits,
+declarative macros, external source inclusion, commented workspace entries, excluded
+path dependencies, and forbidden transitive authority.
+
+The plan review also removed a future `src/bin` recovery fixture that contradicted the
+library-only invariant; Task 10 will reinvoke its integration-test executable through a
+test-support module instead. Persistent records, settings, durable file operations,
+packages, backup, recovery, runtime, and UI remain unimplemented. Task 2 controlled
+durable file primitives are next.

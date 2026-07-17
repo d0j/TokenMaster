@@ -54,7 +54,7 @@ Windows bindings, PowerShell/Pester authority audits.
 
 ---
 
-## Task 1 — Establish the reliable-state crate and authority audit
+## Task 1 — Establish the reliable-state crate and authority audit (complete)
 
 **Files:**
 
@@ -100,7 +100,7 @@ pwsh -NoProfile -File scripts/audit-reliable-state.ps1 -RepositoryRoot (Get-Loca
 
 ---
 
-## Task 2 — Add controlled durable file primitives
+## Task 2 — Add controlled durable file primitives (next)
 
 **Files:**
 
@@ -530,7 +530,7 @@ cargo +1.97.0 test -p tokenmaster-state --test maintenance_resource_contract --l
 - Create: `crates/state/src/recovery/restore.rs`
 - Create: `crates/state/tests/recovery_journal_contract.rs`
 - Create: `crates/state/tests/restore_contract.rs`
-- Create: `crates/state/src/bin/recovery_crash_fixture.rs`
+- Create: `crates/state/tests/support/recovery_crash_fixture.rs`
 - Modify: `crates/state/Cargo.toml`
 - Modify: `crates/state/src/lib.rs`
 
@@ -577,6 +577,8 @@ Add failure-injection and child-process tests for every phase:
 4. Keep recovery code independent of runtime/UI packages.
 5. Record the selected settings mode and optional staged settings target generation/
    digest in the path-free journal. Conflicting settings state fails to safe mode.
+6. Reinvoke the exact integration-test executable for crash-phase fixtures; do not add
+   a `tokenmaster-state` binary target or an auto-discovered `src/bin` surface.
 
 ### Verify
 

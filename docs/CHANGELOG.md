@@ -6,6 +6,16 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.0 Task 1: the library-only `tokenmaster-state` workspace package,
+  nine stable path-private error categories, checked byte/item limits, and a
+  deterministic Rust/Pester authority contract. The audit pins five direct
+  dependencies and rejects bin/build targets, process/network/shell/SQL/Slint/archive
+  authority, direct filesystem/path authority, source inclusion, public arbitrary-path
+  constructors, false workspace membership, standard-library/platform aliases and
+  re-exports, declarative macros, and forbidden transitive packages. Its 29 mutation
+  cases include the independent-review bypass corpus.
+- Corrected the future recovery crash fixture to reuse an integration-test executable
+  instead of introducing a `tokenmaster-state` binary target.
 - Approved P3-D.0 Reliable State design and 18-task TDD rail covering redundant typed
   settings, strict `.tmconfig`/`.tmbackup` import/export, SQLite Online Backup,
   streaming Zstandard, optional bounded age protection for manual exports,

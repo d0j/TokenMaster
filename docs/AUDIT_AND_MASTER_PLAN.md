@@ -278,8 +278,10 @@ P3-D.0 Reliable State is approved under
 `docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: it keeps the fixed
 archive/lease identity and adds redundant settings, consistent verified snapshots,
 strict compressed packages, bounded retention, durable restore/quarantine, automatic
-corruption-only recovery, safe mode, and resource/privacy gates. This rail is planned;
-no backup or restore implementation is claimed yet.
+corruption-only recovery, safe mode, and resource/privacy gates. Task 1 is implemented:
+the state package is library-only, exposes fixed path-private errors and bounded count/
+byte checks, and has an exact dependency/authority audit. Backup, restore, settings,
+package, retention, and UI behavior remain unimplemented.
 
 The final planning pass fixes a six-state database/settings transaction, explicit
 manual data-only or data-plus-portable-settings choice, data-only automatic recovery,
