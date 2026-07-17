@@ -18,6 +18,7 @@ mod benefit;
 mod price;
 mod quota;
 mod session;
+mod status;
 
 pub use analytics::{
     MAX_USAGE_BREAKDOWN_ITEMS, MAX_USAGE_BREAKDOWNS, MAX_USAGE_SERIES_POINTS, UsageAggregateRange,
@@ -46,6 +47,11 @@ pub use session::{
     MAX_USAGE_SESSION_DETAIL_ITEMS, MAX_USAGE_SESSION_PAGE_SIZE, UsageSessionCursor,
     UsageSessionDetail, UsageSessionDetailCapture, UsageSessionDetailQuery, UsageSessionKey,
     UsageSessionPageCapture, UsageSessionPageQuery, UsageSessionSummary,
+};
+pub use status::{
+    ProductAggregateProgress, ProductAggregateState, ProductAggregateStatus, ProductBenefitStatus,
+    ProductDataStatusCapture, ProductDataStatusQuery, ProductGitStatus, ProductQuotaStatus,
+    ProductUsageStatus,
 };
 
 const READ_CACHE_SIZE_KIB: u64 = 4 * 1024;
