@@ -88,6 +88,6 @@ pub use values::{
     ScopeManifest, SourceIdentity, SourceKind,
 };
 pub use worker::{
-    RefreshWorker, WorkerCompletion, WorkerCompletionKind, WorkerError, WorkerErrorCode,
-    WorkerPhase, WorkerSnapshot,
+    RefreshWorker, WorkerCompletion, WorkerCompletionKind, WorkerCompletionNotifier, WorkerError,
+    WorkerErrorCode, WorkerPhase, WorkerSnapshot,
 };

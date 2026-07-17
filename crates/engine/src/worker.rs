@@ -94,6 +94,14 @@ impl WorkerCompletion {
     }
 }
 
+/// Lossy, nonblocking hint emitted after the latest completion receipt is published.
+///
+/// Implementations must not block. A panic is contained by the worker and does not
+/// fault refresh execution or remove the published completion receipt.
+pub trait WorkerCompletionNotifier: Send + Sync + 'static {
+    fn completion_ready(&self, completion: WorkerCompletion);
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WorkerSnapshot {
     phase: WorkerPhase,
@@ -189,6 +197,28 @@ impl RefreshWorker {
     where
         F: FnMut(&RefreshPermit) -> RefreshOutcome + Send + 'static,
     {
+        Self::spawn_with_notifier(clock, None, execute)
+    }
+
+    pub fn spawn_notified<F>(
+        clock: Arc<dyn Clock>,
+        notifier: Arc<dyn WorkerCompletionNotifier>,
+        execute: F,
+    ) -> Result<Self, WorkerError>
+    where
+        F: FnMut(&RefreshPermit) -> RefreshOutcome + Send + 'static,
+    {
+        Self::spawn_with_notifier(clock, Some(notifier), execute)
+    }
+
+    fn spawn_with_notifier<F>(
+        clock: Arc<dyn Clock>,
+        notifier: Option<Arc<dyn WorkerCompletionNotifier>>,
+        execute: F,
+    ) -> Result<Self, WorkerError>
+    where
+        F: FnMut(&RefreshPermit) -> RefreshOutcome + Send + 'static,
+    {
         install_worker_panic_redaction();
         let state = Arc::new(Mutex::new(WorkerState {
             coordinator: RefreshCoordinator::new(),
@@ -214,6 +244,7 @@ impl RefreshWorker {
                         wake_receiver,
                         result_sender,
                         worker_result_receiver,
+                        notifier,
                         execute,
                     );
                 }))
@@ -339,6 +370,7 @@ fn run_worker<F>(
     wake_receiver: Receiver<Wake>,
     result_sender: SyncSender<WorkerCompletion>,
     result_receiver: Arc<Mutex<Receiver<WorkerCompletion>>>,
+    notifier: Option<Arc<dyn WorkerCompletionNotifier>>,
     mut execute: F,
 ) where
     F: FnMut(&RefreshPermit) -> RefreshOutcome,
@@ -434,6 +466,7 @@ fn run_worker<F>(
                     if let Ok(mut worker_state) = state.lock() {
                         worker_state.phase = WorkerPhase::Faulted;
                     }
+                    notify_completion(notifier.as_deref(), completion);
                     return;
                 }
             };
@@ -466,6 +499,7 @@ fn run_worker<F>(
             if publish_latest(&state, &result_sender, &result_receiver, completion).is_err() {
                 return;
             }
+            notify_completion(notifier.as_deref(), completion);
             next = follow_up;
         }
 
@@ -480,6 +514,15 @@ fn run_worker<F>(
     }
     if let Ok(mut state) = state.lock() {
         state.phase = WorkerPhase::Stopped;
+    }
+}
+
+fn notify_completion(
+    notifier: Option<&dyn WorkerCompletionNotifier>,
+    completion: WorkerCompletion,
+) {
+    if let Some(notifier) = notifier {
+        let _ = catch_unwind(AssertUnwindSafe(|| notifier.completion_ready(completion)));
     }
 }
 

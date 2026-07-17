@@ -9,7 +9,8 @@ use std::{
 
 use tokenmaster_engine::{
     Clock, MonotonicTime, RefreshAdmission, RefreshDeadline, RefreshOutcome, RefreshUrgency,
-    RefreshWorker, WorkerCompletion, WorkerCompletionKind, WorkerErrorCode, WorkerPhase,
+    RefreshWorker, WorkerCompletion, WorkerCompletionKind, WorkerCompletionNotifier,
+    WorkerErrorCode, WorkerPhase,
 };
 
 #[derive(Default)]
@@ -607,4 +608,85 @@ fn worker_port_panic_faults_clears_and_joins_without_payload_result() {
         worker.shutdown().expect("join faulted worker"),
         WorkerPhase::Faulted
     );
+}
+
+struct CompletionRecorder {
+    calls: AtomicU64,
+    latest: Mutex<Option<WorkerCompletion>>,
+}
+
+impl CompletionRecorder {
+    fn new() -> Self {
+        Self {
+            calls: AtomicU64::new(0),
+            latest: Mutex::new(None),
+        }
+    }
+}
+
+impl WorkerCompletionNotifier for CompletionRecorder {
+    fn completion_ready(&self, completion: WorkerCompletion) {
+        *self.latest.lock().expect("latest notification") = Some(completion);
+        self.calls.fetch_add(1, Ordering::AcqRel);
+    }
+}
+
+#[test]
+fn notified_worker_publishes_receipt_before_one_completion_hint() {
+    let clock = Arc::new(TestClock::default());
+    let notifier = Arc::new(CompletionRecorder::new());
+    let mut worker =
+        RefreshWorker::spawn_notified(clock, notifier.clone(), |_| RefreshOutcome::Completed)
+            .expect("spawn notified worker");
+    let request_id = match worker
+        .submit(RefreshUrgency::Hint, None)
+        .expect("submit notified work")
+    {
+        RefreshAdmission::Started(permit) => permit.id(),
+        admission => panic!("unexpected admission: {admission:?}"),
+    };
+
+    wait_until(|| notifier.calls.load(Ordering::Acquire) == 1);
+    let notified = notifier
+        .latest
+        .lock()
+        .expect("latest notification")
+        .expect("notification payload");
+    assert_eq!(notified.request_id(), request_id);
+    assert_eq!(notified.outcome(), RefreshOutcome::Completed);
+    let receipt = wait_completion(&worker);
+    assert_eq!(receipt, notified);
+    assert_eq!(notifier.calls.load(Ordering::Acquire), 1);
+    assert_eq!(worker.shutdown().expect("shutdown"), WorkerPhase::Stopped);
+}
+
+struct PanickingNotifier;
+
+impl WorkerCompletionNotifier for PanickingNotifier {
+    fn completion_ready(&self, _completion: WorkerCompletion) {
+        panic!("private notifier payload must be redacted");
+    }
+}
+
+#[test]
+fn notifier_panic_does_not_fault_worker_or_lose_completion_receipt() {
+    let clock = Arc::new(TestClock::default());
+    let mut worker = RefreshWorker::spawn_notified(clock, Arc::new(PanickingNotifier), |_| {
+        RefreshOutcome::Completed
+    })
+    .expect("spawn notified worker");
+    assert!(matches!(
+        worker
+            .submit(RefreshUrgency::Hint, None)
+            .expect("submit notified work"),
+        RefreshAdmission::Started(_)
+    ));
+
+    let completion = wait_completion(&worker);
+    assert_eq!(completion.outcome(), RefreshOutcome::Completed);
+    assert_eq!(
+        worker.snapshot().expect("worker snapshot").phase(),
+        WorkerPhase::Running
+    );
+    assert_eq!(worker.shutdown().expect("shutdown"), WorkerPhase::Stopped);
 }
