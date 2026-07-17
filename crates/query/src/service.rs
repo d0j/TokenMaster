@@ -94,6 +94,26 @@ impl<C: QueryClock> QueryService<C> {
         self.cost_mode
     }
 
+    pub fn product_data_status(&mut self) -> Result<crate::ProductDataStatusEnvelope, QueryError> {
+        let time = self.clock.sample()?;
+        time.monotonic_ms()
+            .checked_add(QUERY_DEADLINE_MS)
+            .ok_or_else(|| QueryError::new(QueryErrorCode::Overflow))?;
+        let capture = self
+            .store
+            .capture_product_data_status(
+                tokenmaster_store::ProductDataStatusQuery::new(Duration::from_millis(
+                    QUERY_DEADLINE_MS,
+                ))
+                .map_err(map_store_error)?,
+            )
+            .map_err(map_store_error)?;
+        let generation = self.next_generation()?;
+        let envelope = crate::status::map_capture(capture, generation, time.wall_time_ms())?;
+        self.last_generation = Some(generation);
+        Ok(envelope)
+    }
+
     pub fn quota_windows(
         &mut self,
         request: QuotaCurrentRequest,
@@ -645,7 +665,7 @@ const fn token_count(value: Option<u64>) -> TokenCount {
     }
 }
 
-fn map_quality(
+pub(crate) fn map_quality(
     identity: DatasetIdentity,
     quality: ArchivePublicationQuality,
     accounting_versions_current: bool,
@@ -678,7 +698,7 @@ fn map_quality(
     }
 }
 
-fn map_freshness(
+pub(crate) fn map_freshness(
     generated_at_ms: i64,
     data_through_ms: Option<i64>,
     warnings: &mut Vec<QueryWarningCode>,

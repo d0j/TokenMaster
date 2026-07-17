@@ -16,6 +16,7 @@ mod quota;
 mod quota_identity;
 mod service;
 mod session;
+mod status;
 
 pub use activity::{
     ActivityCursor, ActivityItem, ActivityItemParts, LatestActivityPage, MAX_QUERY_PAGE_SIZE,
@@ -67,6 +68,12 @@ pub use service::{
 pub use session::{
     UsageSessionCursor, UsageSessionDetail, UsageSessionDetailResult, UsageSessionKey,
     UsageSessionPage, UsageSessionPageRequest, UsageSessionSummary,
+};
+pub use status::{
+    PRODUCT_DATA_STATUS_SCHEMA_VERSION, ProductAggregateProgress, ProductAggregateState,
+    ProductAggregateStatus, ProductBenefitDataStatus, ProductComponentState,
+    ProductDataStatusEnvelope, ProductDataStatusSnapshot, ProductDataWarningCode,
+    ProductGitDataStatus, ProductQuotaDataStatus, ProductUsageDataStatus,
 };
 pub use tokenmaster_pricing::{
     CostAvailability, CostComposition, CostCounters, CostMode, CostResult, MissingCost,
