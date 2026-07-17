@@ -137,4 +137,11 @@ Describe "TokenMaster production desktop audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-CONTROLLER-SLOT*"
     }
+
+    It "accepts the library-only six-Rust-file desktop boundary" {
+        $fixture = New-DesktopAuditFixture -Name "library-boundary"
+
+        (& $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json).rust_source_file_count |
+            Should -Be 6
+    }
 }

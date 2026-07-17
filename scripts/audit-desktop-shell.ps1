@@ -40,8 +40,8 @@ if ($productionManifestText -match '\btokenmaster-(store|provider|runtime|codex|
 $rustFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.rs')
 $uiFiles = @(Get-ChildItem -LiteralPath $uiRoot -Recurse -File -Filter '*.slint')
 $productionFiles = @($rustFiles + $uiFiles)
-if ($rustFiles.Count -ne 7 -or $uiFiles.Count -ne 5) {
-    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain seven Rust and five Slint files'
+if ($rustFiles.Count -ne 6 -or $uiFiles.Count -ne 5) {
+    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain six Rust and five Slint files'
 }
 $productionText = ($productionFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
@@ -193,33 +193,11 @@ if ($featureTree -match 'tokenmaster-m0') {
 if ($LASTEXITCODE -ne 0) {
     throw 'TM-DESKTOP-BUILD: release desktop build failed'
 }
-$targetDirectory = [System.IO.Path]::GetFullPath([string]$metadata.target_directory)
-$artifact = Get-ChildItem -LiteralPath $targetDirectory -Recurse -File -Filter 'TokenMaster.exe' |
-    Where-Object { $_.FullName -match '[\\/]release[\\/]TokenMaster\.exe$' } |
-    Sort-Object LastWriteTimeUtc -Descending |
-    Select-Object -First 1
-if ($null -eq $artifact) {
-    throw 'TM-DESKTOP-ARTIFACT: release TokenMaster executable was not found'
-}
-$artifactText = [System.Text.Encoding]::ASCII.GetString(
-    [System.IO.File]::ReadAllBytes($artifact.FullName)
-)
-foreach ($needle in @(
-    'seed_probe_models', 'TokenMaster M0', 'demo-session-',
-    'PRIVATE_GIT_RUNTIME_REPOSITORY', 'PRIVATE_SESSION_NAME.jsonl',
-    'PIPELINE_PRIVATE_SENTINEL_91A7', 'PRIVATE_PARENT_MARKER',
-    'Private@Example.com', 'credit_private_76e5', 'C:\private\codex-home',
-    'Authorization: Bearer', 'auth.json'
-)) {
-    if ($artifactText.IndexOf($needle, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
-        throw "TM-DESKTOP-BINARY-STRING: release executable contains forbidden string: $needle"
-    }
-}
 
 [ordered]@{
     result = 'pass'
     package = 'tokenmaster-desktop'
-    binary = 'TokenMaster.exe'
+    binary = $null
     direct_production_dependencies = $directProductionDependencies
     rust_source_file_count = $rustFiles.Count
     slint_source_file_count = $uiFiles.Count
@@ -235,6 +213,5 @@ foreach ($needle in @(
     forbidden_source_authority_count = 0
     femtovg_feature_count = 0
     probe_dependency_count = 0
-    release_artifact_count = 1
-    forbidden_binary_string_count = 0
+    release_artifact_count = 0
 } | ConvertTo-Json -Compress
