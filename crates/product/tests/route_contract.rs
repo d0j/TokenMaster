@@ -1,13 +1,17 @@
 use rusqlite::Connection;
 use tempfile::TempDir;
+use tokenmaster_domain::{
+    BenefitInventoryCompleteness, BenefitInventoryObservation, BenefitInventoryObservationParts,
+    BenefitObservationId, BenefitScope, QuotaAccountId, UsageProviderId,
+};
 use tokenmaster_product::{
     ProductAttemptGeneration, ProductPublishOutcome, ProductReducer, ProductRoute,
     ProductRouteReason, ProductRouteState, ProductSectionKind,
 };
 use tokenmaster_query::{
-    DatasetIdentity, LatestActivityPage, PublicationGeneration, QueryClock, QueryEnvelope,
-    QueryError, QueryFreshness, QueryHeader, QueryHeaderParts, QueryQuality, QueryService,
-    QueryTimeSample, SnapshotGeneration,
+    BenefitOverviewRequest, DatasetIdentity, LatestActivityPage, PublicationGeneration, QueryClock,
+    QueryEnvelope, QueryError, QueryFreshness, QueryHeader, QueryHeaderParts, QueryQuality,
+    QueryService, QueryTimeSample, SnapshotGeneration,
 };
 use tokenmaster_store::UsageStore;
 
@@ -240,5 +244,67 @@ fn failed_status_retains_last_truth_but_marks_data_health_degraded() {
             .route(ProductRoute::DataHealth)
             .reasons()
             .contains(ProductRouteReason::DataStatusUnavailable)
+    );
+}
+
+#[test]
+fn published_benefit_overview_clears_only_the_benefit_route_reason() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("route-benefit-overview.sqlite3");
+    let scope = BenefitScope::new(
+        UsageProviderId::new("codex").expect("provider"),
+        QuotaAccountId::new("route-private-account").expect("account"),
+        None,
+    );
+    UsageStore::open(&path)
+        .expect("writer")
+        .apply_benefit_observation(
+            &BenefitInventoryObservation::new(BenefitInventoryObservationParts {
+                scope,
+                observation_id: BenefitObservationId::from_bytes([7; 32]),
+                observed_at_ms: 1_800_000_000_000,
+                fresh_until_ms: 1_800_000_001_000,
+                stale_after_ms: 1_800_000_002_000,
+                completeness: BenefitInventoryCompleteness::Complete,
+                lots: Vec::new(),
+            })
+            .expect("benefit observation"),
+        )
+        .expect("publish benefit observation");
+    let mut service = QueryService::open(&path, FixedClock).expect("query service");
+    let status = service.product_data_status().expect("status");
+    let overview = service
+        .benefit_overview(BenefitOverviewRequest::new())
+        .expect("benefit overview");
+    let mut reducer = ProductReducer::new();
+    reducer
+        .publish_data_status(attempt(1), status)
+        .expect("publish status");
+    assert!(
+        reducer
+            .snapshot()
+            .route(ProductRoute::Dashboard)
+            .reasons()
+            .contains(ProductRouteReason::BenefitUnavailable)
+    );
+
+    reducer
+        .publish_benefit(attempt(1), overview)
+        .expect("publish overview");
+    let dashboard = reducer.snapshot().route(ProductRoute::Dashboard);
+    assert!(
+        !dashboard
+            .reasons()
+            .contains(ProductRouteReason::BenefitUnavailable)
+    );
+    assert!(
+        dashboard
+            .reasons()
+            .contains(ProductRouteReason::UsageUnavailable)
+    );
+    assert!(
+        dashboard
+            .reasons()
+            .contains(ProductRouteReason::QuotaUnavailable)
     );
 }

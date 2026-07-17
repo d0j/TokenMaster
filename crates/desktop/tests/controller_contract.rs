@@ -19,11 +19,11 @@ use tokenmaster_product::{
     ProductRuntimeGeneration, ProductRuntimeObservationError, ProductSectionKind,
 };
 use tokenmaster_query::{
-    BenefitCurrentRequest, BenefitCurrentSnapshot, BenefitEnvelope, GitEnvelope, GitOutputRequest,
-    GitOutputSnapshot, LatestActivityPage, LatestActivityRequest, PageSize,
-    ProductDataStatusEnvelope, QueryEnvelope, QueryError, QueryService, QuotaCurrentRequest,
-    QuotaCurrentSnapshot, QuotaEnvelope, SystemQueryClock, UsageAnalytics, UsageAnalyticsRequest,
-    UsageSessionPage, UsageSessionPageRequest,
+    BenefitOverviewEnvelope, BenefitOverviewRequest, BenefitOverviewSnapshot, GitEnvelope,
+    GitOutputRequest, GitOutputSnapshot, LatestActivityPage, LatestActivityRequest, PageSize,
+    ProductDataStatusEnvelope, QueryEnvelope, QueryError, QueryService, QuotaCurrentSnapshot,
+    QuotaEnvelope, SystemQueryClock, UsageAnalytics, UsageAnalyticsRequest, UsageSessionPage,
+    UsageSessionPageRequest,
 };
 use tokenmaster_store::UsageStore;
 
@@ -36,17 +36,14 @@ macro_rules! delegate_unavailable_methods {
             Err(query_failure())
         }
 
-        fn quota_windows(
-            &mut self,
-            _request: QuotaCurrentRequest,
-        ) -> Result<QuotaEnvelope<QuotaCurrentSnapshot>, QueryError> {
+        fn quota_overview(&mut self) -> Result<QuotaEnvelope<QuotaCurrentSnapshot>, QueryError> {
             Err(query_failure())
         }
 
-        fn benefit_inventory(
+        fn benefit_overview(
             &mut self,
-            _request: BenefitCurrentRequest,
-        ) -> Result<BenefitEnvelope<BenefitCurrentSnapshot>, QueryError> {
+            _request: BenefitOverviewRequest,
+        ) -> Result<BenefitOverviewEnvelope<BenefitOverviewSnapshot>, QueryError> {
             Err(query_failure())
         }
 
@@ -97,18 +94,15 @@ impl DesktopQuerySource for UnavailableSource {
         Err(query_failure())
     }
 
-    fn quota_windows(
-        &mut self,
-        _request: QuotaCurrentRequest,
-    ) -> Result<QuotaEnvelope<QuotaCurrentSnapshot>, QueryError> {
+    fn quota_overview(&mut self) -> Result<QuotaEnvelope<QuotaCurrentSnapshot>, QueryError> {
         self.record("quota");
         Err(query_failure())
     }
 
-    fn benefit_inventory(
+    fn benefit_overview(
         &mut self,
-        _request: BenefitCurrentRequest,
-    ) -> Result<BenefitEnvelope<BenefitCurrentSnapshot>, QueryError> {
+        _request: BenefitOverviewRequest,
+    ) -> Result<BenefitOverviewEnvelope<BenefitOverviewSnapshot>, QueryError> {
         self.record("benefit");
         Err(query_failure())
     }
@@ -123,16 +117,24 @@ impl DesktopQuerySource for UnavailableSource {
 
     fn latest_activity(
         &mut self,
-        _request: LatestActivityRequest,
+        request: LatestActivityRequest,
     ) -> Result<QueryEnvelope<LatestActivityPage>, QueryError> {
+        assert_eq!(
+            request.page_size().get(),
+            DesktopQueryPlan::MAX_DASHBOARD_ROWS
+        );
         self.record("activity");
         Err(query_failure())
     }
 
     fn usage_sessions(
         &mut self,
-        _request: UsageSessionPageRequest,
+        request: UsageSessionPageRequest,
     ) -> Result<QueryEnvelope<UsageSessionPage>, QueryError> {
+        assert_eq!(
+            request.page_size().get(),
+            DesktopQueryPlan::MAX_DASHBOARD_ROWS
+        );
         self.record("sessions");
         Err(query_failure())
     }
@@ -142,9 +144,8 @@ impl DesktopQuerySource for UnavailableSource {
 fn controller_contract_is_typed_bounded_and_deterministic() {
     let plan = DesktopQueryPlan::overview().expect("bounded overview plan");
     assert_eq!(DesktopQueryPlan::MAX_SERIES_POINTS, 240);
-    assert_eq!(DesktopQueryPlan::MAX_PAGE_ROWS, 256);
+    assert_eq!(DesktopQueryPlan::MAX_DASHBOARD_ROWS, 12);
     assert_eq!(DesktopQueryPlan::MAX_REPOSITORIES, 32);
-    assert!(plan.benefit_request().is_none());
 
     let calls = Arc::new(Mutex::new(Vec::new()));
     let mut controller = DesktopController::spawn(
@@ -171,6 +172,7 @@ fn controller_contract_is_typed_bounded_and_deterministic() {
             "status",
             "analytics",
             "quota",
+            "benefit",
             "git",
             "activity",
             "sessions"
@@ -613,7 +615,7 @@ fn real_empty_archive_publishes_truth_and_keeps_one_section_failure_local() {
     assert_eq!(snapshot.data_status().kind(), ProductSectionKind::Ready);
     assert_eq!(snapshot.analytics().kind(), ProductSectionKind::Unavailable);
     assert_eq!(snapshot.quota().kind(), ProductSectionKind::Ready);
-    assert_eq!(snapshot.benefit().kind(), ProductSectionKind::Unavailable);
+    assert_eq!(snapshot.benefit().kind(), ProductSectionKind::Ready);
     assert_eq!(snapshot.git().kind(), ProductSectionKind::Ready);
     assert_eq!(snapshot.activity().kind(), ProductSectionKind::Ready);
     assert_eq!(snapshot.sessions().kind(), ProductSectionKind::Ready);
@@ -702,18 +704,15 @@ impl DesktopQuerySource for AnalyticsFaultSource {
         Err(query_failure())
     }
 
-    fn quota_windows(
-        &mut self,
-        request: QuotaCurrentRequest,
-    ) -> Result<QuotaEnvelope<QuotaCurrentSnapshot>, QueryError> {
-        self.inner.quota_windows(request)
+    fn quota_overview(&mut self) -> Result<QuotaEnvelope<QuotaCurrentSnapshot>, QueryError> {
+        self.inner.quota_overview()
     }
 
-    fn benefit_inventory(
+    fn benefit_overview(
         &mut self,
-        request: BenefitCurrentRequest,
-    ) -> Result<BenefitEnvelope<BenefitCurrentSnapshot>, QueryError> {
-        self.inner.benefit_inventory(request)
+        request: BenefitOverviewRequest,
+    ) -> Result<BenefitOverviewEnvelope<BenefitOverviewSnapshot>, QueryError> {
+        self.inner.benefit_overview(request)
     }
 
     fn git_output(

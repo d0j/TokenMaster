@@ -55,6 +55,11 @@ impl LatestActivityRequest {
             continuation: Some((dataset_identity, cursor)),
         }
     }
+
+    #[must_use]
+    pub const fn page_size(self) -> PageSize {
+        self.page_size
+    }
 }
 
 pub struct QueryService<C> {

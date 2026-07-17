@@ -14,6 +14,7 @@ tokenmaster-runtime = { path = "../runtime" }
 rusqlite.workspace = true
 tempfile.workspace = true
 tokenmaster-codex = { path = "../codex" }
+tokenmaster-domain = { path = "../domain" }
 tokenmaster-provider = { path = "../provider" }
 tokenmaster-store = { path = "../store" }
 

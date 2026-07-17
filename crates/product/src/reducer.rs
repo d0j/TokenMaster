@@ -1,9 +1,10 @@
 use std::{fmt, sync::Arc};
 
 use tokenmaster_query::{
-    BenefitCurrentSnapshot, BenefitEnvelope, GitEnvelope, GitOutputSnapshot, LatestActivityPage,
-    ProductDataStatusEnvelope, QueryEnvelope, QueryErrorCode, QuotaCurrentSnapshot, QuotaEnvelope,
-    UsageAnalytics, UsageSessionDetailResult, UsageSessionPage,
+    BenefitOverviewEnvelope, BenefitOverviewSnapshot, GitEnvelope, GitOutputSnapshot,
+    LatestActivityPage, ProductDataStatusEnvelope, QueryEnvelope, QueryErrorCode,
+    QuotaCurrentSnapshot, QuotaEnvelope, UsageAnalytics, UsageSessionDetailResult,
+    UsageSessionPage,
 };
 use tokenmaster_runtime::{
     BenefitReminderRuntimeSnapshot, CodexQuotaRuntimeSnapshot, GitRuntimeSnapshot,
@@ -248,8 +249,8 @@ impl ProductReducer {
         publish_benefit,
         fail_benefit,
         benefit,
-        BenefitEnvelope<BenefitCurrentSnapshot>,
-        benefit_compatible
+        BenefitOverviewEnvelope<BenefitOverviewSnapshot>,
+        benefit_overview_compatible
     );
     section_methods!(
         publish_git,
@@ -343,7 +344,10 @@ fn quota_compatible<T>(snapshot: &ProductSnapshot, value: &QuotaEnvelope<T>) -> 
         .is_none_or(|status| value.header().quota_revision() == status.payload().quota().revision())
 }
 
-fn benefit_compatible<T>(snapshot: &ProductSnapshot, value: &BenefitEnvelope<T>) -> bool {
+fn benefit_overview_compatible<T>(
+    snapshot: &ProductSnapshot,
+    value: &BenefitOverviewEnvelope<T>,
+) -> bool {
     snapshot.data_status.payload().is_none_or(|status| {
         value.header().benefit_revision() == status.payload().benefit().revision()
     })

@@ -1,7 +1,7 @@
 use tokenmaster_query::{
-    BenefitCurrentSnapshot, BenefitEnvelope, GitEnvelope, GitOutputSnapshot, LatestActivityPage,
-    ProductDataStatusEnvelope, QueryEnvelope, QuotaCurrentSnapshot, QuotaEnvelope, UsageAnalytics,
-    UsageSessionDetailResult, UsageSessionPage,
+    BenefitOverviewEnvelope, BenefitOverviewSnapshot, GitEnvelope, GitOutputSnapshot,
+    LatestActivityPage, ProductDataStatusEnvelope, QueryEnvelope, QuotaCurrentSnapshot,
+    QuotaEnvelope, UsageAnalytics, UsageSessionDetailResult, UsageSessionPage,
 };
 
 use crate::{
@@ -34,7 +34,7 @@ pub struct ProductSnapshot {
     pub(crate) data_status: ProductSection<ProductDataStatusEnvelope>,
     pub(crate) analytics: ProductSection<QueryEnvelope<UsageAnalytics>>,
     pub(crate) quota: ProductSection<QuotaEnvelope<QuotaCurrentSnapshot>>,
-    pub(crate) benefit: ProductSection<BenefitEnvelope<BenefitCurrentSnapshot>>,
+    pub(crate) benefit: ProductSection<BenefitOverviewEnvelope<BenefitOverviewSnapshot>>,
     pub(crate) git: ProductSection<GitEnvelope<GitOutputSnapshot>>,
     pub(crate) activity: ProductSection<QueryEnvelope<LatestActivityPage>>,
     pub(crate) sessions: ProductSection<QueryEnvelope<UsageSessionPage>>,
@@ -81,7 +81,9 @@ impl ProductSnapshot {
     }
 
     #[must_use]
-    pub const fn benefit(&self) -> &ProductSection<BenefitEnvelope<BenefitCurrentSnapshot>> {
+    pub const fn benefit(
+        &self,
+    ) -> &ProductSection<BenefitOverviewEnvelope<BenefitOverviewSnapshot>> {
         &self.benefit
     }
 

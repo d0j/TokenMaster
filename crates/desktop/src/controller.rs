@@ -16,19 +16,17 @@ use tokenmaster_product::{
     ProductSnapshot, ProductUsageRuntimeHealth,
 };
 use tokenmaster_query::{
-    BenefitCurrentRequest, BenefitCurrentSnapshot, BenefitEnvelope, GitEnvelope, GitOutputRequest,
-    GitOutputSnapshot, LatestActivityPage, LatestActivityRequest, PageSize,
+    BenefitOverviewEnvelope, BenefitOverviewRequest, BenefitOverviewSnapshot, GitEnvelope,
+    GitOutputRequest, GitOutputSnapshot, LatestActivityPage, LatestActivityRequest, PageSize,
     ProductDataStatusEnvelope, QueryClock, QueryEnvelope, QueryError, QueryErrorCode, QueryService,
-    QuotaCurrentRequest, QuotaCurrentSnapshot, QuotaEnvelope, SystemQueryClock, UsageAnalytics,
-    UsageAnalyticsRequest, UsageBreakdownKind, UsageRange, UsageSeriesSelection, UsageSessionPage,
+    QuotaCurrentSnapshot, QuotaEnvelope, SystemQueryClock, UsageAnalytics, UsageAnalyticsRequest,
+    UsageBreakdownKind, UsageRange, UsageSeriesSelection, UsageSessionPage,
     UsageSessionPageRequest, UsageTimeZone, WeekStart,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DesktopQueryPlan {
     analytics: UsageAnalyticsRequest,
-    quota: QuotaCurrentRequest,
-    benefit: Option<BenefitCurrentRequest>,
     git: GitOutputRequest,
     activity: LatestActivityRequest,
     sessions: UsageSessionPageRequest,
@@ -36,11 +34,11 @@ pub struct DesktopQueryPlan {
 
 impl DesktopQueryPlan {
     pub const MAX_SERIES_POINTS: usize = 240;
-    pub const MAX_PAGE_ROWS: usize = 256;
+    pub const MAX_DASHBOARD_ROWS: usize = 12;
     pub const MAX_REPOSITORIES: usize = 32;
 
     pub fn overview() -> Result<Self, DesktopControllerError> {
-        let page_size = PageSize::new(Self::MAX_PAGE_ROWS).map_err(map_query_error)?;
+        let page_size = PageSize::new(Self::MAX_DASHBOARD_ROWS).map_err(map_query_error)?;
         let analytics = UsageAnalyticsRequest::new(
             UsageRange::today(),
             UsageTimeZone::system(),
@@ -55,7 +53,6 @@ impl DesktopQueryPlan {
             ],
         )
         .map_err(map_query_error)?;
-        let quota = QuotaCurrentRequest::new(Vec::new()).map_err(map_query_error)?;
         let git = GitOutputRequest::new(
             UsageRange::today(),
             WeekStart::Monday,
@@ -67,23 +64,10 @@ impl DesktopQueryPlan {
             UsageSessionPageRequest::first(page_size, Vec::new()).map_err(map_query_error)?;
         Ok(Self {
             analytics,
-            quota,
-            benefit: None,
             git,
             activity: LatestActivityRequest::first(page_size),
             sessions,
         })
-    }
-
-    #[must_use]
-    pub fn with_benefit_request(mut self, request: BenefitCurrentRequest) -> Self {
-        self.benefit = Some(request);
-        self
-    }
-
-    #[must_use]
-    pub const fn benefit_request(&self) -> Option<&BenefitCurrentRequest> {
-        self.benefit.as_ref()
     }
 }
 
@@ -95,15 +79,12 @@ pub trait DesktopQuerySource: Send + 'static {
         request: UsageAnalyticsRequest,
     ) -> Result<QueryEnvelope<UsageAnalytics>, QueryError>;
 
-    fn quota_windows(
-        &mut self,
-        request: QuotaCurrentRequest,
-    ) -> Result<QuotaEnvelope<QuotaCurrentSnapshot>, QueryError>;
+    fn quota_overview(&mut self) -> Result<QuotaEnvelope<QuotaCurrentSnapshot>, QueryError>;
 
-    fn benefit_inventory(
+    fn benefit_overview(
         &mut self,
-        request: BenefitCurrentRequest,
-    ) -> Result<BenefitEnvelope<BenefitCurrentSnapshot>, QueryError>;
+        request: BenefitOverviewRequest,
+    ) -> Result<BenefitOverviewEnvelope<BenefitOverviewSnapshot>, QueryError>;
 
     fn git_output(
         &mut self,
@@ -136,18 +117,15 @@ where
         QueryService::usage_analytics(self, request)
     }
 
-    fn quota_windows(
-        &mut self,
-        request: QuotaCurrentRequest,
-    ) -> Result<QuotaEnvelope<QuotaCurrentSnapshot>, QueryError> {
-        QueryService::quota_windows(self, request)
+    fn quota_overview(&mut self) -> Result<QuotaEnvelope<QuotaCurrentSnapshot>, QueryError> {
+        QueryService::quota_overview(self)
     }
 
-    fn benefit_inventory(
+    fn benefit_overview(
         &mut self,
-        request: BenefitCurrentRequest,
-    ) -> Result<BenefitEnvelope<BenefitCurrentSnapshot>, QueryError> {
-        QueryService::benefit_inventory(self, request)
+        request: BenefitOverviewRequest,
+    ) -> Result<BenefitOverviewEnvelope<BenefitOverviewSnapshot>, QueryError> {
+        QueryService::benefit_overview(self, request)
     }
 
     fn git_output(
@@ -671,7 +649,7 @@ fn execute_attempt<S: DesktopQuerySource>(
         return outcome;
     }
 
-    let result = match source.quota_windows(plan.quota.clone()) {
+    let result = match source.quota_overview() {
         Ok(value) => reducer.publish_quota(attempt, value),
         Err(error) => reducer.fail_quota(attempt, error.code()),
     };
@@ -682,12 +660,9 @@ fn execute_attempt<S: DesktopQuerySource>(
         return outcome;
     }
 
-    let result = match plan.benefit.clone() {
-        Some(request) => match source.benefit_inventory(request) {
-            Ok(value) => reducer.publish_benefit(attempt, value),
-            Err(error) => reducer.fail_benefit(attempt, error.code()),
-        },
-        None => reducer.fail_benefit(attempt, QueryErrorCode::Unavailable),
+    let result = match source.benefit_overview(BenefitOverviewRequest::new()) {
+        Ok(value) => reducer.publish_benefit(attempt, value),
+        Err(error) => reducer.fail_benefit(attempt, error.code()),
     };
     if result.is_err() {
         return RefreshOutcome::Failed;
@@ -933,17 +908,14 @@ mod tests {
             unreachable!("deadline stops before analytics")
         }
 
-        fn quota_windows(
-            &mut self,
-            _request: QuotaCurrentRequest,
-        ) -> Result<QuotaEnvelope<QuotaCurrentSnapshot>, QueryError> {
+        fn quota_overview(&mut self) -> Result<QuotaEnvelope<QuotaCurrentSnapshot>, QueryError> {
             unreachable!("deadline stops before quota")
         }
 
-        fn benefit_inventory(
+        fn benefit_overview(
             &mut self,
-            _request: BenefitCurrentRequest,
-        ) -> Result<BenefitEnvelope<BenefitCurrentSnapshot>, QueryError> {
+            _request: BenefitOverviewRequest,
+        ) -> Result<BenefitOverviewEnvelope<BenefitOverviewSnapshot>, QueryError> {
             unreachable!("deadline stops before benefit")
         }
 

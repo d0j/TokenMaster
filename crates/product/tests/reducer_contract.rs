@@ -1,11 +1,15 @@
 use tempfile::TempDir;
+use tokenmaster_domain::{
+    BenefitInventoryCompleteness, BenefitInventoryObservation, BenefitInventoryObservationParts,
+    BenefitObservationId, BenefitScope, QuotaAccountId, UsageProviderId,
+};
 use tokenmaster_product::{
     ProductAttemptGeneration, ProductGeneration, ProductPublishOutcome, ProductReducer,
     ProductSectionKind,
 };
 use tokenmaster_query::{
-    QueryClock, QueryError, QueryErrorCode, QueryService, QueryTimeSample, UsageAnalyticsRequest,
-    UsageRange, UsageSeriesSelection, UsageTimeZone, WeekStart,
+    BenefitOverviewRequest, QueryClock, QueryError, QueryErrorCode, QueryService, QueryTimeSample,
+    UsageAnalyticsRequest, UsageRange, UsageSeriesSelection, UsageTimeZone, WeekStart,
 };
 use tokenmaster_store::UsageStore;
 
@@ -142,4 +146,67 @@ fn newer_attempt_recovers_a_retained_status_after_refresh_failure() {
     assert_eq!(recovered.data_status().kind(), ProductSectionKind::Ready);
     assert!(!recovered.data_status().retains_payload());
     assert!(recovered.data_status().failure().is_none());
+}
+
+#[test]
+fn benefit_overview_is_revision_compatible_and_retained_only_as_degraded_truth() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("product-benefit-overview.sqlite3");
+    drop(UsageStore::open(&path).expect("create archive"));
+    let mut service = QueryService::open(&path, FixedClock).expect("query service");
+    let empty_status = service.product_data_status().expect("empty status");
+    UsageStore::open(&path)
+        .expect("writer")
+        .apply_benefit_observation(
+            &BenefitInventoryObservation::new(BenefitInventoryObservationParts {
+                scope: BenefitScope::new(
+                    UsageProviderId::new("codex").expect("provider"),
+                    QuotaAccountId::new("reducer-private-account").expect("account"),
+                    None,
+                ),
+                observation_id: BenefitObservationId::from_bytes([8; 32]),
+                observed_at_ms: 1_800_000_000_000,
+                fresh_until_ms: 1_800_000_001_000,
+                stale_after_ms: 1_800_000_002_000,
+                completeness: BenefitInventoryCompleteness::Complete,
+                lots: Vec::new(),
+            })
+            .expect("benefit observation"),
+        )
+        .expect("publish benefit observation");
+    let overview = service
+        .benefit_overview(BenefitOverviewRequest::new())
+        .expect("benefit overview");
+    let current_status = service.product_data_status().expect("current status");
+    let mut reducer = ProductReducer::new();
+    reducer
+        .publish_data_status(attempt(1), empty_status)
+        .expect("publish empty status");
+    assert_eq!(
+        reducer
+            .publish_benefit(attempt(1), overview.clone())
+            .expect("reject incompatible overview"),
+        ProductPublishOutcome::RejectedIncompatible
+    );
+    reducer
+        .publish_data_status(attempt(2), current_status)
+        .expect("publish current status");
+    assert_eq!(
+        reducer
+            .publish_benefit(attempt(2), overview)
+            .expect("publish overview"),
+        ProductPublishOutcome::Accepted
+    );
+    assert_eq!(
+        reducer.snapshot().benefit().kind(),
+        ProductSectionKind::Ready
+    );
+
+    reducer
+        .fail_benefit(attempt(3), QueryErrorCode::DeadlineExceeded)
+        .expect("fail newer benefit attempt");
+    let degraded = reducer.snapshot();
+    assert_eq!(degraded.benefit().kind(), ProductSectionKind::Unavailable);
+    assert!(degraded.benefit().retains_payload());
+    assert!(degraded.benefit().payload().is_some());
 }
