@@ -100,6 +100,15 @@ disable the efficiency join instead of selecting one silently. Reads MUST use a 
 caller deadline of at most two seconds and one-row lookahead when a repository limit
 can omit results.
 
+Git population MUST run on one dedicated constant-state scheduler/worker pair with at
+most 32 latest in-memory repository candidates, one active scan, and one aggregate
+follow-up. Every native Git child MUST exit and be reaped before a non-waiting writer
+lease and SQLite open. A superseded scan MUST NOT publish; a failed known repository
+MUST publish explicit unavailable or rebuild-required truth without erasing its last
+trustworthy generation. Pause MUST close admission, cancel/reap the exact active child,
+and discard raw object-ID frontiers; resume and power recovery MUST force rediscovery.
+Shutdown and `Drop` MUST join all owned work.
+
 ### TM-FUNC-005 — Native interaction
 
 The product MUST provide single-instance tray behavior, dashboard/compact access,

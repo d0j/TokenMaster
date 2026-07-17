@@ -48,6 +48,15 @@ must take it before the next pull. The value is never a field of `AdapterBatch`,
 `CanonicalBatch`, `AdapterCheckpoint`, `Archive`, or a public refresh result. Taking
 or dropping the hint cannot alter usage accounting or archive publication.
 
+`GitRepositoryHintIngress` accepts one sealed transient hint, replaces the same
+candidate, evicts the oldest candidate above the fixed 32-repository cap, and returns
+only stable runtime errors. `GitRuntime` owns asynchronous `refresh_now`, count-only
+snapshot, pause, resume, power recovery, and shutdown operations. It completes all Git
+I/O before a non-waiting writer lease and store open, rejects superseded sequences,
+and never scans on a caller/query/UI thread. `LiveRuntime` routes a successful Codex
+reader side channel into this independent runtime; Git failure cannot change usage
+accounting or its publication outcome.
+
 `UsageReadStore::capture_git_output` returns one owned immutable bounded store
 projection with an independent publication revision, monotonic publication time,
 freshness/quality, all-time and requested-range totals/categories, retained daily

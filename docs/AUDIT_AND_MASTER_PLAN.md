@@ -257,10 +257,10 @@ pass. Exact-native discovery plus dedicated refresh/store publication now pass t
 focused, resource, and release-authority gates. Banked-reset inventory Tasks 1-8 now
 also pass through combined runtime publication, the isolated durable reminder event
 runtime, complete project-truth synchronization, and the full workspace plus
-specialized authority gates. P2-E Git output is the active critical path; its Tasks
-1-6 domain/parser/native-backend/hint/schema-v13 projection, bounded store capture,
-and immutable public UTC/efficiency facade now pass, with runtime publication/resource
-evidence and final audit remaining.
+specialized authority gates. P2-E Git output Tasks 1-8 now pass: domain/parser/native
+backend/hint/schema-v13 projection, bounded store capture, immutable public UTC/
+efficiency facade, bounded runtime publication/lifecycle, Windows resource plateau,
+and final authority audit. P2-F joined product status is the active critical path.
 View-time full scans and period-labeled
 whole-session totals remain forbidden.
 P2-A now implements the bounded public values, separate defensive read-only/query-only
@@ -278,11 +278,12 @@ are implemented for the pinned version. Typed banked-reset values, pure
 reconciliation/reminder planning, Codex normalization, strict schema-v12 storage,
 immutable FEFO current/revision-bound history queries, Codex runtime benefit
 publication, and one-timer crash-safe outbox/ack reminder delivery are implemented.
-P2-E Git output Tasks 1-6 are implemented: bounded domain/parser/native inspection,
+P2-E Git output Tasks 1-8 are implemented: bounded domain/parser/native inspection,
 transient path-private activity hints, schema-v13 immutable projection/store capture,
 and schema-v1 explicit-UTC public envelopes with aggregate-only exact project/cost
-joining and typed graceful degradation. Bounded runtime publication and its resource/
-authority closure remain.
+joining and typed graceful degradation, plus constant-state runtime publication,
+pause/resume recovery, durable unavailable truth, resource evidence, and authority
+closure.
 Visible P3 notification rendering, OS/tray scheduling, snooze/quiet hours, and
 activation remain separate.
 The older replay plan remains historical evidence for

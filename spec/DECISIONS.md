@@ -969,3 +969,30 @@ calendar precision. Failing the whole Git card when only usage pricing is unavai
 would also couple independent evidence streams and reduce UI resilience. The bounded
 store matcher plus explicit UTC contract preserves privacy, exactness, responsiveness,
 and graceful degradation.
+
+## ADR-047 — Git runtime keeps bounded transient locators and publishes after I/O
+
+Decision: one independent constant-state scheduler/worker owns at most 32 latest
+in-memory repository candidates, one active native Git scan, and one aggregate
+follow-up. Native discovery, scanning, parsing, and exact child cleanup finish before
+one non-waiting shared writer-lease attempt and one SQLite open. Publications compare
+the candidate sequence after the scan. Same-process compatible frontiers allow
+unchanged or ancestry-proven append; recovery, pause/resume, rewrite, identity change,
+or lost frontier forces an authoritative rebuild. A known repository scan failure
+publishes explicit unavailable truth or marks the last trustworthy projection
+rebuild-required instead of replacing it with zero.
+
+Pause closes hint and worker admission, invalidates all object-ID frontiers, cancels
+and waits for the exact child, but keeps only the latest bounded canonical candidates
+so resume can force rediscovery without persisting a path. Shutdown and `Drop` clear
+all candidates and join the scheduler, worker, and child. Health is count-only and
+`LiveRuntime` routes Codex's side channel without coupling Git success to usage
+accounting.
+
+Rationale: rescanning on UI/query threads or while holding SQLite would harm response
+time and contention; persisting commit IDs or paths would violate privacy; clearing
+every candidate on suspend would make the required resume rediscovery impossible;
+and overwriting trustworthy aggregates after a failed scan would fabricate absence.
+The bounded in-process locator/frontier split preserves exact recovery, minimal
+retained memory, and durable failure truth without adding an async runtime or Git
+library dependency.

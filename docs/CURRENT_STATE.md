@@ -543,6 +543,28 @@ neutrality, restart and concurrent publication isolation, corruption rejection,
 32 repositories by 400 days, repeated handle/transaction return, and sub-two-second
 maximum reads.
 
+Tasks 7-8 are now implemented. `LiveRuntime` routes each successful Codex repository
+side-channel hint into one independent `GitRuntime` without changing usage accounting.
+The runtime owns one constant-state scheduler/worker, one active scan, one follow-up,
+and at most 32 latest transient candidates. Unchanged refs skip history, compatible
+same-process refs scan only newly reachable commits, and rewrite/recovery/pause-resume
+force an authoritative rebuild. Git I/O and exact child cleanup finish before one
+non-waiting writer lease and one SQLite open. Superseded sequences cannot publish;
+known scan failures publish explicit unavailable truth or preserve the prior generation
+as rebuild-required. Health is count-only and path-free.
+
+Focused contracts cover 32-candidate eviction, sibling isolation, contention after Git
+I/O and before SQLite, stale-result rejection plus one follow-up, missing-author durable
+unavailable state, pause cancellation/reap, automatic resume rediscovery, and joined
+shutdown. The Windows 16-warm-up/48-measured resource gate passed with a 3,293,184-byte
+private floor, 6,422,528-byte sampled high, 118 handles, four threads, USER=1, and
+GDI=0. `scripts/audit-git-output.ps1` passed across 126 production dependencies,
+19 production boundary files, and four release libraries with zero forbidden
+dependency, foreign-language, network/browser/credential/shell/direct-SQL/mutation,
+vendored-upstream, or private binary-string matches. P2-E is complete; this does not
+claim P2-F joined status, P3 UI, P5 CLI/MCP, M0 acceptance, packaging, signing, or
+release.
+
 ## Next implementation slice
 
 P2-D quota history core is complete under
@@ -559,14 +581,13 @@ credit inventory, expiration reconciliation, default/custom reminder profiles,
 immutable read snapshots, and publication through the existing Codex runtime with
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
- workspace quality gate. P2-E Tasks 1-6 are complete; the immediate next slice is Task
- 7, bounded Git runtime discovery/scan/publication and lifecycle evidence.
+workspace quality gate. P2-E Tasks 1-8 are complete; the immediate next slice is P2-F
+joined product status.
 Activation
 remains a later independently authorized
 capability; visible notifications and the complete UI follow the completed data
 contracts. No quota value may be inferred from local token/cost facts and no browser/
 private-endpoint authority may be added.
-The remaining P2-E work is runtime scheduling/resource evidence and final audit.
 P2-F joined product status and P3
 complete UI follow the product-data contracts.
 

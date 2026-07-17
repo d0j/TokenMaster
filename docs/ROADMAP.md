@@ -129,12 +129,13 @@ snapshots; interactive hibernation/soak stay in the frozen-candidate M0 gate.
 - **1.1 — providers:** isolated signed WebAssembly Component packages after 1.0
   observation/query/quota contracts freeze.
 
-P2-E Tasks 1-6 are complete: strict bounded Git values, streaming aggregation, exact
+P2-E Tasks 1-8 are complete: strict bounded Git values, streaming aggregation, exact
 native read-only inspection, transient provider-neutral repository activity hints,
 strict schema-v13 immutable incremental projection with bounded store captures, and
-owned schema-v1 UTC Git envelopes with a private exact project/cost efficiency join.
-Task 7 bounded runtime is next, followed by final Git audit, joined product status,
-and the complete UI.
+owned schema-v1 UTC Git envelopes with a private exact project/cost efficiency join,
+plus bounded I/O-before-lease runtime publication, lifecycle/resource evidence, and
+the final authority audit. P2-F joined product status is next, followed by the complete
+UI.
 
 P2-A query foundation is approved under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-query-foundation.md`. It first freezes

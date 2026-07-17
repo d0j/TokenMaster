@@ -6,7 +6,7 @@
 > `superpowers:verification-before-completion`. Mark a checkbox only after its
 > validator passes.
 
-**Status:** in progress; Tasks 1-6 complete
+**Status:** complete; Tasks 1-8 accepted on 2026-07-17
 
 **Goal:** derive bounded local Git output metrics for repositories associated with
 normalized activity, preserve private incremental projections, and expose immutable
@@ -320,16 +320,16 @@ cargo +1.97.0 clippy -p tokenmaster-query --all-targets --locked
 
 **RED/GREEN:**
 
-- [ ] Reuse one constant-state scheduler/worker and retain at most 32 latest transient
+- [x] Reuse one constant-state scheduler/worker and retain at most 32 latest transient
   repository hints, one active scan, and one aggregate follow-up.
-- [ ] Complete Git discovery/scan/child cleanup before one non-waiting writer lease and
+- [x] Complete Git discovery/scan/child cleanup before one non-waiting writer lease and
   one store open.
-- [ ] Publish unchanged, incremental, rebuild, partial, unavailable, cancelled, and
+- [x] Publish unchanged, incremental, rebuild, partial, unavailable, cancelled, and
   stale outcomes truthfully with count-only health.
-- [ ] Coalesce activity/manual/resume/clock hints; never scan on UI/query threads.
-- [ ] Pause closes admission and cancels the exact child; resume forces rediscovery;
+- [x] Coalesce activity/manual/resume/clock hints; never scan on UI/query threads.
+- [x] Pause closes admission and cancels the exact child; resume forces rediscovery;
   shutdown/`Drop` join all owned threads/processes.
-- [ ] Prove contention-before-SQLite, stale-result rejection, no sibling-runtime fault,
+- [x] Prove contention-before-SQLite, stale-result rejection, no sibling-runtime fault,
   fixed memory/handles/threads/USER/GDI, and no task-owned child after every path.
 
 **Focused validator:**
@@ -366,14 +366,14 @@ cargo +1.97.0 clippy -p tokenmaster-runtime --all-targets --locked
 
 **RED/GREEN:**
 
-- [ ] Audit four production boundaries for forbidden shell/network/credential/mutation/
+- [x] Audit four production boundaries for forbidden shell/network/credential/mutation/
   raw-path/raw-author/raw-output surface and exact lease/I/O/query ordering.
-- [ ] Scan release binaries for forbidden private fixture markers and command strings.
-- [ ] Confirm no vendored upstream source or foreign production language returned.
-- [ ] Run focused Git/store/query/runtime suites, clean-root, format, strict locked
+- [x] Scan release binaries for forbidden private fixture markers and command strings.
+- [x] Confirm no vendored upstream source or foreign production language returned.
+- [x] Run focused Git/store/query/runtime suites, clean-root, format, strict locked
   workspace Clippy, complete locked workspace tests/doctests, dependency review, and
   task-owned process audit.
-- [ ] Record only measured evidence and leave P3/P5/M0/package/release unclaimed.
+- [x] Record only measured evidence and leave P3/P5/M0/package/release unclaimed.
 
 **Final validators:**
 

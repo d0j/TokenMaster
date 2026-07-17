@@ -6,6 +6,23 @@ All notable changes are recorded here.
 
 ### Added
 
+- Bounded Git runtime publication with one constant-state scheduler/worker, at most 32
+  latest transient candidates, one active scan/follow-up, unchanged zero-history path,
+  ancestry-proven same-process append, rewrite/recovery rebuild, stale-sequence
+  rejection, and Git-I/O-before-nonwaiting-lease/SQLite ordering.
+- Exact Git lifecycle and failure truth: missing-author and other identifiable scan
+  failures publish durable unavailable/rebuild-required state without erasing the last
+  trustworthy generation; pause cancels/reaps the exact child and drops raw object-ID
+  frontiers; resume forces rediscovery; shutdown and `Drop` join owned work.
+- Git runtime acceptance for 32-candidate eviction, sibling fault isolation, writer
+  contention, stale-result follow-up, Codex live side-channel routing, pause/resume,
+  child cleanup, and 16 warm-up plus 48 measured Windows rounds at a 3,293,184-byte
+  private floor, 6,422,528-byte sampled high, 118 handles, four threads, USER=1, and
+  GDI=0.
+- Git production authority audit across four packages, 126 production dependencies,
+  19 production boundary files, and four release libraries, with zero forbidden
+  dependency, foreign-language, network/browser/credential/shell/direct-SQL/mutation,
+  vendored-upstream, or private binary-string matches.
 - Immutable schema-v1 public Git output envelopes with checked process-local
   generation, independent Git publication revision, explicit UTC half-open ranges,
   owned all-time/range/category/day values, freshness/quality/retention truth, and

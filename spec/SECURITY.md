@@ -182,6 +182,17 @@ unavailability, stale evidence, or corruption disables only efficiency and canno
 erase independently captured Git facts; internal request/invariant errors still fail
 the whole call.
 
+The Git runtime stores raw candidates and object-ID frontiers only inside its bounded
+process-lifetime slots. It runs fixed native commands before acquiring the shared
+non-waiting writer lease, opens SQLite only while that lease is held, and publishes
+through typed store methods rather than direct SQL. Pause invalidates frontiers,
+cancels the exact child, and waits for cleanup; resume forces a rebuild. The
+count-only health contract contains no path, repository/activity/project identity,
+author, ref, output, or inner error text. `scripts/audit-git-output.ps1` verifies the
+four Git production boundaries, dependency closure, fixed read-only command/lifecycle
+patterns, Git-I/O/lease/store ordering, no vendored upstream source, and release
+library strings.
+
 The facade exports fixed request methods only and never arbitrary SQL, filesystem,
 shell, HTTP, plugin, or provider-mutation authority. Public query results omit source
 IDs and private source content. Obsolete accounting versions fail truthful quality

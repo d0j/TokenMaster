@@ -2036,3 +2036,36 @@ stability. The clean-root audit, formatting, warnings-as-errors locked workspace
 Clippy, complete locked workspace tests/doctests, and diff check pass. Runtime
 discovery/scan/publication, its lifecycle/resource/authority gates, joined status, P3
 UI, CLI/MCP, M0 acceptance, packaging, signing, and release remain unclaimed.
+
+## 2026-07-17 — Bounded Git runtime and P2-E authority closure
+
+Completed P2-E Tasks 7-8. `tokenmaster-git` now retains one compatible in-process
+frontier and selects unchanged, ancestry-proven append, or authoritative rebuild
+without persisting commit IDs. `GitRuntime` owns one constant-state scheduler/worker,
+one active scan, one aggregate follow-up, and at most 32 latest transient repository
+candidates. `LiveRuntime` routes the Codex reader side channel into it without changing
+usage accounting.
+
+All Git discovery, scanning, bounded parsing, and exact child cleanup finish before
+one non-waiting writer-lease attempt and one SQLite open. Publication rechecks the
+candidate sequence, so superseded work cannot commit. Known scan failures now publish
+durable unavailable truth or mark an existing trustworthy generation rebuild-required
+instead of writing zero. Pause closes admission, invalidates raw object-ID frontiers,
+cancels and reaps the exact child, and retains only bounded process-memory candidates;
+resume forces rediscovery. Shutdown and `Drop` clear candidates and join owned work.
+
+Focused contracts cover unchanged/append/rewrite, 32-candidate eviction, sibling
+fault isolation, contention after Git I/O, stale-result follow-up, missing-author
+durable failure, live Codex routing, pause/resume recovery, and child cleanup. The
+Windows 16-warm-up/48-measured runtime gate passed at a 3,293,184-byte private floor,
+6,422,528-byte sampled high, 118 handles, four threads, USER=1, and GDI=0. The Git
+authority audit passed across 126 production dependencies, 19 production boundary
+files, and four release libraries with zero forbidden dependency, foreign-language,
+network/browser/credential/shell/direct-SQL/mutation, vendored-upstream, or private
+binary-string matches.
+
+The clean-root, formatting, warnings-as-errors locked workspace Clippy, complete
+locked workspace tests/doctests, specialized Git audit, diff check, dependency/
+language review, and task-owned process-return gates pass. This closes P2-E only.
+P2-F joined product status, P3 UI, P5 CLI/MCP, M0 acceptance, packaging, signing, and
+release remain unclaimed.

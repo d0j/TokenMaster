@@ -51,6 +51,14 @@ MUST take the side-channel hint immediately after its source batch; a later read
 replace it. Explicit invalid `cwd` clears prior transient association rather than
 reusing an older repository.
 
+The Git runtime may retain at most 32 latest canonical candidates only in process
+memory. Each candidate has one checked sequence and at most one raw-head frontier.
+Pause and power recovery MUST invalidate every frontier and sequence before a result
+can publish; shutdown MUST clear candidates and frontiers. Candidates and raw Git
+object IDs MUST NOT cross restart, serialization, SQLite, health, query, or Debug
+boundaries. Count-only health contains only stable codes, outcomes, counts, elapsed
+time, and bounded scheduler/worker topology.
+
 The durable Git projection uses installation-salted opaque repository and activity
 association identities. It retains bounded scan/publication state and aggregate
 facts only: exact day/category line metrics, commit and merge counts, explicit

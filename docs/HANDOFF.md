@@ -220,7 +220,7 @@ clean-root, formatting, strict locked workspace Clippy, complete locked workspac
 test/doctest, specialized benefit audit, complete-diff, process-return, and
 dependency/language-surface gates.
 
-P2-E Git output Tasks 1-6 are complete under
+P2-E Git output Tasks 1-8 are complete under
 `docs/superpowers/plans/2026-07-16-tokenmaster-git-output.md`: strict opaque domain
 values; bounded NUL parsing/aggregation; an exact native read-only Git backend with
 owned process cleanup and synthetic repository coverage; and one latest transient
@@ -241,12 +241,20 @@ invalidation, 400-day retention truth, exact association ambiguity, rollback-tes
  case is typed unavailable, while a usage-side failure cannot hide Git facts. Focused
  acceptance includes 32 repositories by 400 days, aggregate-only reads, restart/
  publication isolation, failed-generation neutrality, corruption rejection, and
- repeated transaction/handle return. The immediate next slice is Task 7: bounded Git
- runtime discovery, scanning, publication, cancellation, and resource evidence.
+repeated transaction/handle return. One independent bounded Git runtime now retains
+at most 32 latest transient candidates, performs all Git I/O before one non-waiting
+lease/store open, rejects stale sequences, publishes rebuild/append/unchanged and
+durable unavailable truth, invalidates object frontiers on pause/recovery, cancels and
+reaps the exact child, and forces resume rediscovery. The 16+48 Windows resource gate
+passed at a 3,293,184-byte private floor, 6,422,528-byte sampled high, 118 handles,
+four threads, USER=1, and GDI=0. The Git authority audit passed 126 production
+dependencies, 19 boundary files, and four release libraries with zero forbidden
+matches or vendored upstream source. P2-E is complete; the immediate next slice is
+P2-F joined product status.
 Actual P3 visible notifications/UI, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.
-The current post-Task-6 Git clean-root, formatting, strict locked workspace Clippy,
+The current post-Task-8 Git clean-root, formatting, strict locked workspace Clippy,
 and complete locked workspace test/doctest baseline passes. The query resource binary uses
 an isolated `harness = false` process plus a bounded maximum-64-round warm-up that
 waits for two topology-stable eight-round retained floors before measurement and
