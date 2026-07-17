@@ -26,13 +26,13 @@ workspace, PowerShell source audit.
 - Create: `crates/desktop/tests/controller_contract.rs`
 - Modify: `crates/desktop/Cargo.toml`
 
-- [ ] **Step 1: Write the public contract test**
+- [x] **Step 1: Write the public contract test**
 
 Require typed `DesktopQueryPlan`, refresh urgency/admission/completion values,
 `DesktopController::spawn`, `refresh`, `take_snapshot`, and `shutdown`. The test must
 use a controllable typed source, not raw SQL or a filesystem mock.
 
-- [ ] **Step 2: Observe the intended compile failure**
+- [x] **Step 2: Observe the intended compile failure**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-desktop --test controller_contract --locked
@@ -47,19 +47,19 @@ Expected: FAIL because the controller module and API do not exist.
 - Modify: `crates/desktop/src/lib.rs`
 - Modify: `crates/desktop/Cargo.toml`
 
-- [ ] **Step 1: Add bounded plan tests**
+- [x] **Step 1: Add bounded plan tests**
 
 Require overview requests to stay within 240 chart points, 256 activity/session rows,
 and 32 repositories. Benefit scope must be explicit and optional. No plan field may
 accept arbitrary SQL, provider text, command, URL, or output path.
 
-- [ ] **Step 2: Add `DesktopQuerySource`**
+- [x] **Step 2: Add `DesktopQuerySource`**
 
 Define only the seven typed read methods needed by one refresh. Implement it for
 `QueryService<C>` where the query clock is safe to move to the worker. Map failures by
 stable `QueryErrorCode`, never formatted raw errors.
 
-- [ ] **Step 3: Prove the focused contract**
+- [x] **Step 3: Prove the focused contract**
 
 Run the focused controller test. Expected: it advances to worker-related failures,
 with plan/source tests passing.
@@ -70,25 +70,25 @@ with plan/source tests passing.
 - Modify: `crates/desktop/src/controller.rs`
 - Modify: `crates/desktop/tests/controller_contract.rs`
 
-- [ ] **Step 1: Add red tests for complete publication**
+- [x] **Step 1: Add red tests for complete publication**
 
 Require data status first, sibling publication through `ProductReducer`, one attempt
 to one product generation, and exactly one final snapshot. A section-local query
 failure must not suppress successful sibling sections.
 
-- [ ] **Step 2: Add red tests for bounded admission**
+- [x] **Step 2: Add red tests for bounded admission**
 
 Block the first source call, submit many refresh hints, release it, and require at
 most one coalesced follow-up. Publish multiple results without consuming them and
 require `take_snapshot` to return only the newest one.
 
-- [ ] **Step 3: Implement the minimum controller**
+- [x] **Step 3: Implement the minimum controller**
 
 Reuse `RefreshWorker`; keep the source and reducer in its closure; use permit IDs as
 product attempt generations; check cancellation/deadline between reads; replace one
 `Option<Arc<ProductSnapshot>>` under a short lock only after all reads finish.
 
-- [ ] **Step 4: Run focused tests**
+- [x] **Step 4: Run focused tests**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-desktop --test controller_contract --locked
@@ -102,23 +102,23 @@ Expected: PASS.
 - Modify: `crates/desktop/src/controller.rs`
 - Modify: `crates/desktop/tests/controller_contract.rs`
 
-- [ ] **Step 1: Add red lifecycle tests**
+- [x] **Step 1: Add red lifecycle tests**
 
 Require cancellation/deadline before completion to leave the prior latest snapshot
 unchanged, explicit shutdown to join the worker, and post-shutdown admission to fail
 with a stable controller error.
 
-- [ ] **Step 2: Add red privacy tests**
+- [x] **Step 2: Add red privacy tests**
 
 Open a deliberately invalid path containing a unique marker and require the public
 error/display text to omit that marker and all wrapped raw SQLite/OS text.
 
-- [ ] **Step 3: Implement stable lifecycle/error mapping**
+- [x] **Step 3: Implement stable lifecycle/error mapping**
 
 Expose bounded enums and stable ASCII codes. Do not expose engine worker errors,
 panic payloads, raw `QueryError`, or paths through the public desktop surface.
 
-- [ ] **Step 4: Run focused package tests**
+- [x] **Step 4: Run focused package tests**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-desktop --locked
@@ -132,19 +132,19 @@ Expected: PASS.
 - Modify: `scripts/audit-desktop-shell.ps1`
 - Modify: `scripts/tests/audit-desktop-shell.Tests.ps1`
 
-- [ ] **Step 1: Add failing audit fixtures**
+- [x] **Step 1: Add failing audit fixtures**
 
 Permit direct desktop dependencies only on `anyhow`, `slint`, `tokenmaster-product`,
 `tokenmaster-query`, and `tokenmaster-engine`. Continue rejecting M0, runtime, store,
 provider, SQLite, HTTP, browser, shell, arbitrary SQL, and seeded/mock production
 surfaces.
 
-- [ ] **Step 2: Update the deterministic audit**
+- [x] **Step 2: Update the deterministic audit**
 
 Require exactly one controller worker construction, one capacity-one latest slot,
 and no controller query call from Slint callbacks.
 
-- [ ] **Step 3: Run focused audit gates**
+- [x] **Step 3: Run focused audit gates**
 
 ```powershell
 Invoke-Pester -Path scripts\tests\audit-desktop-shell.Tests.ps1 -Output Detailed
@@ -159,13 +159,13 @@ Expected: PASS.
 - Modify: `crates/desktop/tests/controller_contract.rs`
 - Modify: `crates/desktop/Cargo.toml`
 
-- [ ] **Step 1: Add a real empty-archive test**
+- [x] **Step 1: Add a real empty-archive test**
 
 Create a temporary schema-v13 archive through the existing store test API, open it
 through `QueryService`, refresh once, and require truthful data-status, analytics,
 quota, Git, activity, and sessions route inputs. Do not seed usage or identity data.
 
-- [ ] **Step 2: Prove package build and tests**
+- [x] **Step 2: Prove package build and tests**
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-desktop --locked
@@ -186,13 +186,13 @@ Expected: PASS.
 - Modify: `docs/PROJECT_HISTORY.md`
 - Modify: `docs/CHANGELOG.md`
 
-- [ ] **Step 1: Record P3-B.1 honestly**
+- [x] **Step 1: Record P3-B.1 honestly**
 
 Record the controller ownership, bounds, tests, and exact remaining P3-B.2/P3-B.3
 work. Preserve benefit-scope and data-root decisions as open bounded contracts. Do
 not claim a live-wired GUI, complete P3, resource soak, package, signing, or release.
 
-- [ ] **Step 2: Check documentation consistency**
+- [x] **Step 2: Check documentation consistency**
 
 ```powershell
 rg -n "P3-B|DesktopController|data-root|benefit scope" spec docs

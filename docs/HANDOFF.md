@@ -272,12 +272,25 @@ P3-A is complete under
 `tokenmaster-desktop` package has a software-only production Slint graph, one fixed
 11-route projection of the current `ProductSnapshot`, stale/equal generation
 rejection, stable route selection, one compiled window, no M0 dependency, and no mock
-usage model. Focused Rust/Slint tests, six adversarial audit tests, release build, and
-the desktop authority/binary audit pass. The immediate next slice is P3-B: add one
-bounded query worker and publish accepted immutable sections through the existing
-reducer without SQLite or blocking work in Slint callbacks.
+usage model. Focused Rust/Slint tests, the original six adversarial audit tests,
+release build, and the desktop authority/binary audit pass.
 
-P3-B-P3-E visible data/notifications, P4 presentation, CLI/MCP, activation, M0
+P3-B.1 is complete under
+`docs/superpowers/plans/2026-07-17-tokenmaster-p3b-controller.md`. One reused bounded
+refresh worker owns the typed query source and product reducer; 1,000 hints retain one
+pending follow-up, one latest immutable snapshot slot replaces rather than queues
+results, and cancellation/deadline/shutdown never publish partial state. Real empty
+schema-v13, sibling-fault, path-redaction, focused package/Clippy, eight Pester, and
+desktop release-audit gates pass. A coalesced receipt is intentionally not exposed as
+an executed product attempt.
+
+The immediate next slice is P3-B.2: add one capacity-one Slint weak-handle/event-loop
+bridge that applies only the newest snapshot without polling or blocking callbacks.
+P3-B.3 then selects an approved installed/portable archive root and composes the
+existing live runtime as the sole ingestion owner. Do not guess benefit identity;
+safe current-scope discovery/all-current query support is a separate prerequisite.
+
+P3-B.2-P3-E visible data/notifications, P4 presentation, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.
 The current post-Task-8 Git clean-root, formatting, strict locked workspace Clippy,

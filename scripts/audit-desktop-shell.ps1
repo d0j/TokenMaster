@@ -33,15 +33,15 @@ if ($manifestText -match '\btokenmaster-m0\b|[\\/]probe-app\b') {
 if ($manifestText -match '\brenderer-femtovg\b') {
     throw 'TM-DESKTOP-FEMTOVG: production desktop must remain software-renderer only'
 }
-if ($productionManifestText -match '\btokenmaster-(store|provider|engine|runtime|codex|query|git|platform)\b|\b(rusqlite|libsqlite3-sys|notify)\b') {
+if ($productionManifestText -match '\btokenmaster-(store|provider|runtime|codex|git|platform)\b|\b(rusqlite|libsqlite3-sys|notify)\b') {
     throw 'TM-DESKTOP-DIRECT-AUTHORITY: desktop manifest contains a forbidden direct authority dependency'
 }
 
 $rustFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.rs')
 $uiFiles = @(Get-ChildItem -LiteralPath $uiRoot -Recurse -File -Filter '*.slint')
 $productionFiles = @($rustFiles + $uiFiles)
-if ($rustFiles.Count -ne 5 -or $uiFiles.Count -ne 5) {
-    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain five Rust and five Slint files'
+if ($rustFiles.Count -ne 6 -or $uiFiles.Count -ne 5) {
+    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain six Rust and five Slint files'
 }
 $productionText = ($productionFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
@@ -52,8 +52,8 @@ if ($productionText -match '\b(seed_probe_models|mock|fixture|seeded|seed)\b') {
 }
 $forbiddenAuthorityPattern = @(
     'https?://',
-    '\bstd::(fs|net|path|process)\b',
-    '\b(Path|PathBuf|Command|TcpStream|TcpListener|UdpSocket)\b',
+    '\bstd::(fs|net|process)\b',
+    '\b(Command|TcpStream|TcpListener|UdpSocket)\b',
     '\b(rusqlite|notify|reqwest|ureq|webbrowser|headless_chrome)\b',
     '\b(SELECT|INSERT|UPDATE|DELETE\s+FROM|PRAGMA)\b',
     'powershell(?:\.exe)?|cmd(?:\.exe)?|bash(?:\.exe)?|\bsh\s+-c\b',
@@ -61,6 +61,21 @@ $forbiddenAuthorityPattern = @(
 ) -join '|'
 if ($productionText -cmatch $forbiddenAuthorityPattern) {
     throw 'TM-DESKTOP-FORBIDDEN-AUTHORITY: desktop source contains filesystem/network/process/SQL/browser/credential authority'
+}
+
+$controllerPath = Join-Path $sourceRoot 'controller.rs'
+$controllerText = [System.IO.File]::ReadAllText($controllerPath)
+$workerConstructionCount = [regex]::Matches($controllerText, 'RefreshWorker::spawn\(').Count
+if ($workerConstructionCount -ne 1) {
+    throw 'TM-DESKTOP-CONTROLLER-WORKER: desktop controller must construct exactly one bounded refresh worker'
+}
+if ($controllerText -notmatch 'Arc<Mutex<Option<Arc<ProductSnapshot>>>>') {
+    throw 'TM-DESKTOP-CONTROLLER-SLOT: desktop controller must retain one optional latest product snapshot'
+}
+$uiAdapterText = [System.IO.File]::ReadAllText((Join-Path $sourceRoot 'ui.rs')) + "`n" +
+    (($uiFiles | ForEach-Object { [System.IO.File]::ReadAllText($_.FullName) }) -join "`n")
+if ($uiAdapterText -match 'QueryService::|RefreshWorker::|DesktopController::|\.usage_analytics\(') {
+    throw 'TM-DESKTOP-UI-QUERY: Slint callbacks must not perform controller or query work'
 }
 
 $presentationPath = Join-Path $sourceRoot 'presentation.rs'
@@ -111,6 +126,8 @@ if ($SourceOnly) {
         fixed_route_count = 11
         rust_source_file_count = $rustFiles.Count
         slint_source_file_count = $uiFiles.Count
+        controller_worker_count = $workerConstructionCount
+        retained_snapshot_slot_count = 1
     } | ConvertTo-Json -Compress
     return
 }
@@ -130,7 +147,9 @@ $directProductionDependencies = @(
         ForEach-Object { $_.name } |
         Sort-Object -Unique
 )
-$expectedDependencies = @('anyhow', 'slint', 'tokenmaster-product')
+$expectedDependencies = @(
+    'anyhow', 'slint', 'tokenmaster-engine', 'tokenmaster-product', 'tokenmaster-query'
+)
 if (
     $directProductionDependencies.Count -ne $expectedDependencies.Count -or
     @($expectedDependencies | Where-Object { $_ -notin $directProductionDependencies }).Count -ne 0
@@ -189,6 +208,8 @@ foreach ($needle in @(
     fixed_route_count = 11
     maximum_route_reason_count = 11
     retained_route_model_count = 1
+    controller_worker_count = $workerConstructionCount
+    retained_snapshot_slot_count = 1
     mock_data_model_count = 0
     direct_authority_dependency_count = 0
     forbidden_source_authority_count = 0

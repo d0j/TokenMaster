@@ -6,6 +6,18 @@ All notable changes are recorded here.
 
 ### Added
 
+- P3-B.1 bounded desktop controller over one proven refresh worker, one typed query
+  source, one worker-confined product reducer, and one replaceable latest immutable
+  snapshot; Slint callbacks remain non-blocking and query-free.
+- Typed refresh urgency, admission, receipt/attempt, completion, cancellation, and
+  stable error contracts. One thousand hints collapse into one follow-up, and
+  cancellation/deadline termination discards partial visible publication.
+- Real empty schema-v13 controller integration, sibling query-fault isolation,
+  deterministic shutdown/post-close rejection, and archive-path redaction tests.
+- Expanded desktop audit with eight adversarial Pester contracts, explicit one-worker/
+  one-slot/UI-query checks, five allowed production dependencies, and zero forbidden
+  source or release-binary matches across six Rust and five Slint files.
+
 - P3-A separate production `tokenmaster-desktop` package with a package-specific
   software-only Slint graph; the M0 probe remains an evidence artifact and is not a
   runtime or source dependency.
@@ -14,10 +26,10 @@ All notable changes are recorded here.
   rejection before Slint replacement.
 - Original compiled `TokenMaster` header/navigation/state shell driven by the real
   initial product snapshot with no seeded quota, session, chart, cost, or reset data.
-- Desktop source/release audit plus six adversarial Pester contracts covering probe
+- Desktop source/release audit plus the original six adversarial Pester contracts covering probe
   dependencies, mock data, FemtoVG, route drift, direct authority, and forbidden
   filesystem/network/process/SQL/browser/credential surfaces. The release audit
-  reports five Rust and five Slint files, one model, 11 routes/reasons maximum, and
+  reported five Rust and five Slint files at P3-A closure, one model, 11 routes/reasons maximum, and
   zero forbidden dependency/source/private-canary matches.
 
 - P2-F joined product status: one exact defensive schema-v13 scalar transaction binds

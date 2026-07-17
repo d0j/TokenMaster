@@ -84,9 +84,14 @@ product snapshot and contains no quota/session/chart fixtures.
 
 The production binary selects only the Slint software renderer. Slint callbacks may
 validate and emit presentation intents but cannot open SQLite, read provider input,
-own a runtime/worker, or block. P3-B adds one bounded worker outside the callback
-boundary; it will publish accepted query/runtime values through `ProductReducer` and
-marshal one bounded model replacement onto the event loop.
+own a runtime/worker, or block. P3-B.1 adds one bounded worker outside the callback
+boundary. It owns one typed `QueryService` source and one `ProductReducer`, reduces
+status first, continues independent sections after a local query failure, and replaces
+one latest immutable snapshot only after a complete non-cancelled attempt. Repeated
+intents retain one pending follow-up; intent receipts are distinct from executed
+product-attempt generations. P3-B.2 will marshal that latest snapshot through one
+capacity-one event-loop delivery, and P3-B.3 will compose the sole live-runtime owner
+after the installed/portable data-root policy is approved.
 
 `tokenmaster-product` is the leaf composition layer between query/runtime truth and
 P3 presentation. `QueryService::product_data_status` captures usage publication,

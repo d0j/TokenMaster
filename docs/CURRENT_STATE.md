@@ -15,6 +15,11 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   one current `ProductSnapshot` into exactly 11 fixed route rows, rejects equal/older
   generations, preserves validated selection, and renders one original software-only
   Slint header/navigation/state shell with no probe dependency or mock usage data.
+- P3-B.1 bounded desktop controller: one reused refresh worker owns one typed query
+  source and `ProductReducer`, coalesces refresh intents into at most one follow-up,
+  and replaces one latest immutable snapshot only after a complete attempt. Query,
+  cancellation, deadline, redaction, and shutdown contracts pass without Slint-thread
+  blocking or partial visible publication.
 - M1 usage foundation: bounded provider roots, path-private source discovery,
   reparse-safe streaming enumeration, typed bounded JSONL parser, cumulative token
   state, physical/logical source identity, byte framing, revalidation, strict SQLite
@@ -628,6 +633,32 @@ dashboard sections, exploration payloads, visible reminder acknowledgement, comp
 widget lifecycle, P4 skins/localization/accessibility/paint gates, M0 acceptance,
 packaging, signing, or release.
 
+## P3-B.1 bounded desktop controller
+
+P3-B.1 is implemented under
+`docs/superpowers/plans/2026-07-17-tokenmaster-p3b-controller.md`. The desktop now
+depends directly only on the read-only `tokenmaster-query` facade and the proven
+`tokenmaster-engine` refresh coordinator in addition to product/Slint support. One
+worker-confined query source and reducer publish through one capacity-one latest
+snapshot slot. Started attempts are distinct from coalesced intent receipts; the
+eventual follow-up receives its own product attempt generation.
+
+Focused contracts prove status-first reduction, one attempt generation across all
+sections, section-local failure, real empty schema-v13 reads, 1,000 hints collapsing
+to one follow-up, latest-only result retention, cancellation/deadline without partial
+publication, deterministic shutdown/post-close rejection, and path-free open errors.
+The desktop audit now has eight adversarial Pester contracts and reports six Rust/
+five Slint files, one controller worker, one retained snapshot slot, no UI-thread
+query surface, no direct store/provider/runtime/network/shell/SQL authority, and no
+forbidden release-binary strings.
+
+This is the controller core only. The production executable still starts from the
+truthful initial snapshot. P3-B.2 must marshal the latest snapshot onto the Slint
+event loop with one coalesced scheduled event; P3-B.3 must approve the installed/
+portable data-root policy and compose the existing live runtime without duplicating
+ingestion ownership. Safe benefit scope discovery also remains an explicit query
+contract before the benefit card can be ready.
+
 ## Next implementation slice
 
 P2-D quota history core is complete under
@@ -644,9 +675,9 @@ credit inventory, expiration reconciliation, default/custom reminder profiles,
 immutable read snapshots, and publication through the existing Codex runtime with
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
-workspace quality gate. P2-E, P2-F, and P3-A are complete; the immediate next slice is
-P3-B desktop controller: one bounded query worker, coalesced intents, reducer
-publication, and deterministic startup/shutdown. Activation remains a later
+workspace quality gate. P2-E, P2-F, P3-A, and P3-B.1 are complete; the immediate next
+slice is P3-B.2 capacity-one Slint event-loop delivery, followed by P3-B.3 approved
+data-root/live-runtime composition. Activation remains a later
 independently authorized capability. No quota value may be inferred from local
 token/cost facts and no browser/private-endpoint authority may be added.
 

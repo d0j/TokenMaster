@@ -1042,3 +1042,31 @@ entry points, renderer diagnostics, and receipt-bound behavior into product trut
 Keeping a separate production frontend preserves earlier evidence identity and lets
 P3 evolve without a legacy runtime dependency. A fixed snapshot projection makes
 route truth and retained memory testable before the P3-B query worker is introduced.
+
+## ADR-050 — Desktop refresh uses one worker, one reducer, and one latest slot
+
+Decision: P3-B uses the existing `tokenmaster-engine::RefreshWorker` as the sole
+desktop query coordinator. One worker-confined typed `QueryService` source runs data
+status first, then bounded analytics, quota, optional exact-scope benefit, Git,
+activity, and first-session-page reads. One worker-confined `ProductReducer` applies
+typed success/failure values. Only after a complete non-cancelled attempt does the
+controller replace one optional latest `Arc<ProductSnapshot>`.
+
+At most one attempt runs and one follow-up is retained. Each coalesced intent returns
+a receipt, not an attempt generation; the coordinator allocates the real follow-up
+attempt after the active attempt finishes. Cancellation/deadline checks between reads
+prevent partial visible publication. Query failure is section-local and path-free;
+controller fault is reserved for lifecycle/invariant failure. Slint callbacks own no
+query handle and P3-B.2 must deliver through one coalesced event-loop operation.
+
+The controller accepts an already selected archive path but does not choose an
+installed or portable data root. That policy and sole-live-runtime composition remain
+P3-B.3. Benefit querying stays unavailable unless an exact `BenefitScope` is supplied;
+safe scope discovery/all-current support requires a separate public query contract and
+must not be inferred from identity-free status values.
+
+Rationale: direct or per-card UI queries would block callbacks, multiply workers and
+connections, and permit unbounded pending results. Reusing the proven coordinator and
+retaining one reducer/result gives deterministic coalescing, stale-generation
+authority, constant result memory, sibling-fault isolation, and shutdown without
+inventing data-root or benefit identity policy.

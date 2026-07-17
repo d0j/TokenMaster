@@ -101,10 +101,13 @@ separate query change before the benefit card becomes production-ready.
 ### 3.3 Refresh admission
 
 The public desktop API exposes typed urgency and stable admission/outcome enums; it
-does not leak engine internals. At most one attempt is running and one follow-up is
-remembered. Repeated hints update the single pending request rather than allocating a
-queue. Every attempt number is monotonic and maps to one
-`ProductAttemptGeneration`.
+does not leak engine internals. A started ID is a real attempt, while each coalesced
+intent receives only a receipt ID: the coordinator allocates the eventual follow-up
+attempt after the active attempt completes. This distinction prevents callers from
+treating an intent receipt as product-generation authority. At most one attempt is
+running and one follow-up is remembered. Repeated hints update the single pending
+request rather than allocating a queue. Every executed attempt number is monotonic
+and maps to one `ProductAttemptGeneration`.
 
 An attempt checks cancellation and its monotonic deadline between section queries.
 The underlying QueryService retains its own bounded per-query deadlines. Cancellation

@@ -5266,8 +5266,11 @@ dependencies = [
  "anyhow",
  "slint",
  "slint-build",
+ "tempfile",
+ "tokenmaster-engine",
  "tokenmaster-product",
  "tokenmaster-query",
+ "tokenmaster-store",
 ]
 
 [[package]]

@@ -13,10 +13,13 @@ path = "src/main.rs"
 [dependencies]
 anyhow.workspace = true
 slint.workspace = true
+tokenmaster-engine = { path = "../engine" }
 tokenmaster-product = { path = "../product" }
+tokenmaster-query = { path = "../query" }
 
 [build-dependencies]
 slint-build.workspace = true
 
 [dev-dependencies]
-tokenmaster-query = { path = "../query" }
+tempfile.workspace = true
+tokenmaster-store = { path = "../store" }

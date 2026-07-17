@@ -2137,3 +2137,37 @@ This milestone does not claim live product-controller publication, dashboard pay
 visible reminder acknowledgement, compact widget lifecycle, P4 presentation gates,
 M0 acceptance, packaging, signing, or release. P3-B bounded controller publication is
 next.
+
+## 2026-07-17 — P3-B.1 bounded desktop controller
+
+Approved the controller design and executable TDD plan under
+`docs/superpowers/specs/2026-07-17-tokenmaster-p3b-controller-design.md` and
+`docs/superpowers/plans/2026-07-17-tokenmaster-p3b-controller.md`. The review exposed
+two contracts that must not be guessed: identity-free product status cannot supply the
+exact benefit scope required by the query facade, and the repository has no approved
+installed/portable production data-root policy. The work was therefore split into
+controller core, Slint delivery, and application composition.
+
+P3-B.1 adds one typed desktop query plan/source, one reused engine `RefreshWorker`, one
+worker-confined `ProductReducer`, and one replaceable latest immutable product
+snapshot. Status is reduced before sibling sections; a section query error remains
+local while healthy reads continue. Cancellation or the fixed monotonic attempt
+deadline discards partial visible publication. Started attempt IDs are distinct from
+coalesced intent receipts because the real follow-up attempt is allocated only after
+the active attempt finishes. Shutdown joins the worker and rejects later admission
+with a stable path-free code.
+
+Focused tests prove one attempt generation across sections, exact status-first order,
+1,000 hints to one follow-up, latest-only retention, cancellation/deadline discard,
+real empty schema-v13 reads, injected analytics fault isolation, path redaction, and
+post-close rejection. The expanded eight-case Pester audit rejects a second controller
+worker and UI-query calls in addition to the P3-A authority gates. The release audit
+reports six Rust files, five Slint files, five approved production dependencies, one
+worker, one retained snapshot slot, and zero forbidden source, renderer, probe,
+private-canary, or direct store/provider/runtime/network/shell/SQL matches.
+
+This milestone does not wire queries to the visible window or select an archive root.
+P3-B.2 capacity-one Slint event-loop delivery and P3-B.3 approved data-root/live-
+runtime composition are next. Dashboard payloads, benefit scope discovery, remaining
+P3 routes, P4 presentation, P5 automation, M0 acceptance, packaging, signing, and
+release remain unclaimed.

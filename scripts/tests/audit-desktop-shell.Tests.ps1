@@ -79,4 +79,22 @@ Describe "TokenMaster production desktop audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-FORBIDDEN-AUTHORITY*"
     }
+
+    It "rejects a second desktop controller worker" {
+        $fixture = New-DesktopAuditFixture -Name "controller-worker"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\controller.rs") `
+            -Value 'fn extra_worker() { let _ = RefreshWorker::spawn('
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-CONTROLLER-WORKER*"
+    }
+
+    It "rejects query work from the Slint adapter" {
+        $fixture = New-DesktopAuditFixture -Name "ui-query"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\ui.rs") `
+            -Value 'fn callback_query() { let _ = DesktopController::refresh; }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-UI-QUERY*"
+    }
 }
