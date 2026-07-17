@@ -645,6 +645,18 @@ semantic invariants. Declared sizes MUST NOT cause proportional allocation. Unkn
 required versions, flags, entries, codecs, trailing data, oversized windows, excessive
 password work factors, and ambiguous controlled-directory state fail closed.
 
+The implemented Task 2 platform primitive accepts only one validated local directory
+and one restricted exact child. It rejects links, reparse points, directories, device/
+remote locations, traversal, reserved names, and unexpected types; retains at most 32
+create-new staging candidates; caps a file at 64 GiB plus 2 MiB and each write call at
+256 KiB; and verifies length plus SHA-256 by bounded streaming after flush, close, and
+reopen. Public errors and `Debug` contain no path or OS message. Windows uses
+`MoveFileExW(MOVEFILE_WRITE_THROUGH)` without cross-volume copy fallback and
+`ReplaceFileW` with an exact independently verified old-target backup. Any uncertainty
+after OS publication is `RecoveryRequired`, and ambiguous rollback preserves staged/
+backup artifacts for the later journal. Unix uses no-overwrite hard links plus atomic
+rename and synchronized file/directory entries, but is not Windows release evidence.
+
 The live archive keeps one fixed identity and writer sidecar. Whole-file restore MUST
 hold that guard, close every SQLite owner, preserve current main/WAL/SHM in quarantine,
 and publish only a complete reverified candidate through a redundant idempotent

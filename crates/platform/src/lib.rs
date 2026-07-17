@@ -4,6 +4,7 @@
 use std::fmt;
 use std::fs::File;
 
+mod durable_file;
 mod lease;
 mod local_directory;
 mod power;
@@ -15,6 +16,10 @@ mod unsupported;
 #[cfg(windows)]
 mod windows;
 
+pub use durable_file::{
+    DURABLE_STAGE_ATTEMPTS, DurableFileError, DurableFileReceipt, DurableFileTarget,
+    DurableStagedFile, MAX_DURABLE_FILE_BYTES, MAX_DURABLE_WRITE_CHUNK_BYTES,
+};
 pub use lease::{
     ExclusiveFileLease, ExclusiveFileLeaseError, ExclusiveFileLeaseGuard, WRITER_LEASE_SUFFIX,
 };

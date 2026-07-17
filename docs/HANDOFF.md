@@ -335,8 +335,17 @@ P3-D.0 Reliable State is active under
 checked byte/item limits, five exact direct dependencies, and deterministic Rust/Pester
 authority gates. The future crash fixture was corrected to avoid a state binary target.
 
-The immediate next slice is Task 2 controlled durable file primitives. Then continue
-Tasks 3-18 in order: redundant settings, verified SQLite snapshots and
+Task 2 is also complete. `tokenmaster-platform` now owns sealed bounded staged files,
+exact-child target descriptors, verified create-new publication, and exact-backup
+replacement. Windows uses `MoveFileExW(MOVEFILE_WRITE_THROUGH)` without
+`MOVEFILE_COPY_ALLOWED` and zero unsupported `ReplaceFileW` flags. Every error after
+the OS publication boundary is `RecoveryRequired`; rollback ambiguity preserves
+recovery artifacts. Focused evidence passes 9 library and 11 durable integration
+contracts, including 40 deterministic pre/post kills and 20 replacement-entry race
+kills. Final independent read-only review reports no Critical or Important finding.
+
+The immediate next slice is Task 3 redundant bounded records. Then continue
+Tasks 4-18 in order: settings, verified SQLite snapshots and
 strict packages, bounded retention/maintenance, journaled recovery and startup
 integration, application restart/safe mode, Data & Recovery UI, then adversarial and
 resource closure. Keep the fixed archive path and writer sidecar; never copy only the
@@ -350,7 +359,7 @@ notifications, settings/help, command palette, tray, and compact lifecycle. P3-D
 presentation, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.
-The current post-P3-D.0-Task-1 clean-root, formatting, strict locked workspace Clippy,
+The current post-P3-D.0-Task-2 clean-root, formatting, strict locked workspace Clippy,
 and complete locked workspace test/doctest baseline passes. Focused state evidence is
 2/2 Rust contracts, 29/29 Pester mutations, and one workspace authority receipt. The
 query resource binary uses

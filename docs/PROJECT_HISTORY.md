@@ -2341,3 +2341,31 @@ library-only invariant; Task 10 will reinvoke its integration-test executable th
 test-support module instead. Persistent records, settings, durable file operations,
 packages, backup, recovery, runtime, and UI remain unimplemented. Task 2 controlled
 durable file primitives are next.
+
+## 2026-07-17 — P3-D.0 Task 2 controlled durable files
+
+Added a sealed platform publication boundary without exposing arbitrary filesystem
+paths. `DurableFileTarget` accepts only one validated local directory and restricted
+exact child; `DurableStagedFile` provides 32 create-new candidates, a 64 GiB plus 2 MiB
+ceiling, 256 KiB call chunks, partial-write accounting, poisoned I/O failure state,
+flush/close/reopen, and bounded exact length/SHA-256 receipts. Paths, handles, OS
+messages, and digests remain absent from public diagnostics.
+
+Windows new-target publication uses `MoveFileExW(MOVEFILE_WRITE_THROUGH)` without
+`MOVEFILE_COPY_ALLOWED`; existing-target publication uses `ReplaceFileW` with zero
+unsupported flags and an independently captured/reverified exact old-target backup.
+The documented displaced-target error is rolled back write-through when possible.
+Every ambiguous rollback and every hook/sync/verification failure after successful OS
+publication is `RecoveryRequired`, preserving discoverable recovery artifacts instead
+of authorizing a blind retry. Unix uses no-overwrite hard links, atomic rename, and
+file/parent synchronization while explicitly not claiming the Windows guarantee.
+
+Focused evidence passes strict all-target platform Clippy, 9 library tests, and 11
+durable integration tests. The process fixture performs 20 deterministic kills before
+the replace call, 20 after verified publication, and 20 immediate replacement-entry
+race kills; every round retains a complete old or new target and validates any backup
+as the exact old bytes. Independent Sol High review closed partial-write, artifact-
+preservation, Unix race/rollback, backup-proof, crash-evidence, and post-publication
+error-contract findings and reports no remaining Critical or Important issue. This
+does not implement records, settings, backup packages, restore, safe mode, UI, M0
+acceptance, packaging, signing, or release. Task 3 redundant bounded records is next.

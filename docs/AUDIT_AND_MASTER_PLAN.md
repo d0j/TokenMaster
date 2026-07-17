@@ -280,8 +280,11 @@ archive/lease identity and adds redundant settings, consistent verified snapshot
 strict compressed packages, bounded retention, durable restore/quarantine, automatic
 corruption-only recovery, safe mode, and resource/privacy gates. Task 1 is implemented:
 the state package is library-only, exposes fixed path-private errors and bounded count/
-byte checks, and has an exact dependency/authority audit. Backup, restore, settings,
-package, retention, and UI behavior remain unimplemented.
+byte checks, and has an exact dependency/authority audit. Task 2 is implemented:
+platform-owned exact-child staged publication/replacement is bounded, digest-verified,
+path-private, crash-tested, and preserves ambiguous recovery artifacts. Backup,
+restore, settings, package, retention, and UI behavior remain unimplemented; Task 3
+redundant records is next.
 
 The final planning pass fixes a six-state database/settings transaction, explicit
 manual data-only or data-plus-portable-settings choice, data-only automatic recovery,

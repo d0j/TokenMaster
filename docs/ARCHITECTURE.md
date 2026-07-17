@@ -138,17 +138,21 @@ the current Dashboard remains timer-, animation-, polling-, query-, and SQL-free
 The active P3-D.0 contour adds reliable state without changing the current live archive
 identity. Task 1 establishes library-only `tokenmaster-state` with stable path-private
 errors, checked byte/item limits, exact dependencies, and a deterministic authority
-audit. `tokenmaster-store` will create consistent Online Backup candidates and verify
+audit. Task 2 establishes the platform publication boundary: validated exact children,
+bounded create-new staging, streaming length/SHA verification, Windows write-through
+same-volume move and exact-backup replacement, Unix no-overwrite publication, and an
+explicit `RecoveryRequired` outcome for every uncertain post-publication state.
+`tokenmaster-store` will create consistent Online Backup candidates and verify
 integrity, foreign keys, schema, and semantic invariants. Later state tasks will add
 redundant settings/run/recovery records, fixed streaming `.tmconfig`/`.tmbackup`
 packages, bounded retention, and one capacity-one maintenance worker.
-`tokenmaster-platform` will own same-volume durable replacement and sealed file dialogs.
+`tokenmaster-platform` owns durable replacement and will later own sealed file dialogs.
 `tokenmaster-app` will stop every archive user, hold the existing writer
 lease, quarantine main/WAL/SHM, resume a redundant six-state restore journal before
 SQLite open, commit the selected data-only or data-plus-portable-settings mode, and
 reconstruct one application bundle or safe mode. Automatic recovery remains data only.
 Product/Desktop receive bounded health and intents only. The contour is in progress;
-Task 1 adds no persistent settings, runtime, backup, or recovery claim.
+Tasks 1-2 add no persistent settings, runtime, backup, or recovery claim.
 
 The built-in live quota source is separate from the JSONL usage reader. Composition
 supplies one already resolved absolute native Codex executable to

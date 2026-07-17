@@ -6,6 +6,18 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.0 Task 2 controlled durable files in `tokenmaster-platform`:
+  restricted exact-child targets, 32-slot create-new staging, 64 GiB plus 2 MiB file
+  and 256 KiB call bounds, streaming length/SHA-256 receipts, flush/close/reopen, and
+  path-private fixed failures.
+- Added Windows same-volume `MoveFileExW(MOVEFILE_WRITE_THROUGH)` publication without
+  copy fallback and `ReplaceFileW` replacement with independently verified exact old-
+  target backup. Post-publication hook/sync/verification uncertainty is always
+  `RecoveryRequired`; failed rollback preserves staged and backup artifacts.
+- Added Unix no-overwrite hard-link publication and exact-backup atomic replacement,
+  deterministic partial-write/recovery regressions, 40 handshake-controlled pre/post
+  child kills, and 20 replacement-entry race kills. Focused strict Clippy, 9 library
+  tests, 11 durable integration tests, and final independent review pass.
 - Implemented P3-D.0 Task 1: the library-only `tokenmaster-state` workspace package,
   nine stable path-private error categories, checked byte/item limits, and a
   deterministic Rust/Pester authority contract. The audit pins five direct

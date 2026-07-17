@@ -100,7 +100,7 @@ pwsh -NoProfile -File scripts/audit-reliable-state.ps1 -RepositoryRoot (Get-Loca
 
 ---
 
-## Task 2 — Add controlled durable file primitives (next)
+## Task 2 — Add controlled durable file primitives (complete)
 
 **Files:**
 
@@ -111,8 +111,8 @@ pwsh -NoProfile -File scripts/audit-reliable-state.ps1 -RepositoryRoot (Get-Loca
 - Modify: `crates/platform/src/windows.rs`
 - Modify: `crates/platform/src/unix.rs`
 - Modify: `crates/platform/src/unsupported.rs`
-- Modify: `crates/platform/Cargo.toml`
-- Modify: `Cargo.toml`
+- Review unchanged: `crates/platform/Cargo.toml`, `Cargo.toml` (the exact pinned
+  `sha2`, `thiserror`, and Windows FileSystem bindings were already available)
 
 ### Red
 
@@ -149,11 +149,20 @@ cargo +1.97.0 test -p tokenmaster-platform --test durable_file_contract --locked
 cargo +1.97.0 test -p tokenmaster-platform --locked
 ```
 
+Completion evidence: strict platform Clippy passes; 9 library and 11 durable-file
+integration contracts pass. Windows crash evidence covers 20 handshake-kills before
+publication, 20 after verified publication, and 20 additional race kills immediately
+after entering the replacement call. Every round retains a complete old or new target;
+published rounds retain the exact old backup. Independent Sol High review found no
+Critical issue and required post-publication failures to become unambiguously
+`RecoveryRequired`; the focused regressions enforce that contract and the final
+read-only review reports no remaining Critical or Important finding.
+
 **Commit:** `feat(platform): add durable file replacement`
 
 ---
 
-## Task 3 — Implement redundant bounded records
+## Task 3 — Implement redundant bounded records (next)
 
 **Files:**
 

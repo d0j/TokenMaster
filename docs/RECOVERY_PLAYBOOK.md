@@ -220,8 +220,10 @@
 
 ## Whole-file/configuration recovery status
 
-P3-D.0 whole-file backup, import/export, quarantine, automatic restore, and safe mode
-are approved but not implemented. Until the plan at
+P3-D.0 Tasks 1-2 now provide the state authority boundary and low-level controlled
+durable file publication/replacement. They do not yet provide a record store, whole-
+file backup, import/export, quarantine workflow, recovery journal, automatic restore,
+or safe mode. Until the plan at
 `docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md` is complete, do not
 copy only `tokenmaster.sqlite3` while the application may be running, delete or move a
 WAL/SHM/writer-lock file, replace the archive from an unverified copy, run ad hoc SQL,
