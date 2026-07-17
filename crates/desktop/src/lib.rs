@@ -3,6 +3,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
+pub mod dashboard;
 pub mod presentation;
 pub mod shell;
 
@@ -18,7 +19,8 @@ pub use generated_ui::*;
 
 mod ui;
 
-pub use presentation::DesktopApplyOutcome;
+pub use dashboard::*;
+pub use presentation::{DesktopApplyOutcome, DesktopRouteKey, DesktopState};
 pub use shell::select_production_renderer;
 pub use ui::{DesktopShell, DesktopUiError, DesktopUiErrorCode};
 

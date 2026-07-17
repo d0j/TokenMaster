@@ -5279,10 +5279,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "i-slint-backend-testing",
+ "rusqlite",
  "slint",
  "slint-build",
  "tempfile",
+ "tokenmaster-domain",
  "tokenmaster-engine",
+ "tokenmaster-git",
  "tokenmaster-product",
  "tokenmaster-query",
  "tokenmaster-store",

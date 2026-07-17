@@ -10,6 +10,7 @@ build = "build.rs"
 anyhow.workspace = true
 slint.workspace = true
 tokenmaster-engine = { path = "../engine" }
+tokenmaster-domain = { path = "../domain" }
 tokenmaster-product = { path = "../product" }
 tokenmaster-query = { path = "../query" }
 
@@ -18,5 +19,7 @@ slint-build.workspace = true
 
 [dev-dependencies]
 i-slint-backend-testing = "=1.17.1"
+rusqlite.workspace = true
 tempfile.workspace = true
+tokenmaster-git = { path = "../git" }
 tokenmaster-store = { path = "../store" }
