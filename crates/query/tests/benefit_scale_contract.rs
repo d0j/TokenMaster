@@ -12,10 +12,10 @@ use tokenmaster_domain::{
     UsageProviderId,
 };
 use tokenmaster_query::{
-    BenefitChangePageRequest, BenefitCurrentRequest, PageSize, QueryClock, QueryError,
-    QueryService, QueryTimeSample,
+    BenefitChangePageRequest, BenefitCurrentRequest, BenefitOverviewRequest, PageSize, QueryClock,
+    QueryError, QueryService, QueryTimeSample,
 };
-use tokenmaster_store::{MAX_BENEFIT_CHANGES_PER_SCOPE, UsageStore};
+use tokenmaster_store::{MAX_BENEFIT_CHANGES_PER_SCOPE, MAX_BENEFIT_OVERVIEW_LOTS, UsageStore};
 
 const OBSERVED_AT_MS: i64 = 1_800_000_000_000;
 const CURRENT_LOTS: usize = 64;
@@ -110,6 +110,21 @@ fn maximum_inventory_and_history_are_bounded_paged_and_return_resources() {
                 .collect(),
         ))
         .expect("maximum current inventory");
+    for (account, count) in [
+        ("overview-a", 64_usize),
+        ("overview-b", 64),
+        ("overview-c", 63),
+    ] {
+        writer
+            .apply_benefit_observation(&observation(
+                scope(account),
+                u64::try_from(count + 10_000).expect("overview observation"),
+                (0..count)
+                    .map(|index| lot(index as u64, index as u64 + 1))
+                    .collect(),
+            ))
+            .expect("overview inventory");
+    }
     for revision in 1..=HISTORY_CHANGES {
         writer
             .apply_benefit_observation(&observation(
@@ -144,6 +159,24 @@ fn maximum_inventory_and_history_are_bounded_paged_and_return_resources() {
     assert!(
         current_elapsed < OPERATION_BUDGET,
         "64-lot current read exceeded budget: {current_elapsed:?}"
+    );
+    let overview_started = Instant::now();
+    let overview = service
+        .benefit_overview(BenefitOverviewRequest::new())
+        .expect("maximum overview");
+    let overview_elapsed = overview_started.elapsed();
+    assert_eq!(
+        overview
+            .payload()
+            .scopes()
+            .iter()
+            .map(|scope| scope.current_lots().len())
+            .sum::<usize>(),
+        MAX_BENEFIT_OVERVIEW_LOTS
+    );
+    assert!(
+        overview_elapsed < OPERATION_BUDGET,
+        "256-lot overview read exceeded budget: {overview_elapsed:?}"
     );
 
     let mut cursor = None;
@@ -189,16 +222,16 @@ fn maximum_inventory_and_history_are_bounded_paged_and_return_resources() {
     for _ in 0..32 {
         let snapshot = QueryService::open(&path, FixedClock)
             .expect("cycle service")
-            .benefit_inventory(BenefitCurrentRequest::new(current_scope.clone()))
+            .benefit_overview(BenefitOverviewRequest::new())
             .expect("cycle snapshot");
         assert_eq!(
             snapshot
                 .payload()
-                .inventory()
-                .expect("cycle inventory")
-                .current_lots()
-                .len(),
-            CURRENT_LOTS
+                .scopes()
+                .iter()
+                .map(|scope| scope.current_lots().len())
+                .sum::<usize>(),
+            MAX_BENEFIT_OVERVIEW_LOTS
         );
     }
     let returned = resource_counts();
@@ -220,9 +253,11 @@ fn maximum_inventory_and_history_are_bounded_paged_and_return_resources() {
         "benefit query retained excessive private bytes: baseline={baseline:?}, returned={returned:?}"
     );
     eprintln!(
-        "benefit scale current_lots={CURRENT_LOTS} changes={HISTORY_CHANGES} \
-         current_ms={:.3} max_page_ms={:.3} baseline={baseline:?} returned={returned:?}",
+        "benefit scale current_lots={CURRENT_LOTS} overview_lots={MAX_BENEFIT_OVERVIEW_LOTS} \
+         changes={HISTORY_CHANGES} current_ms={:.3} overview_ms={:.3} max_page_ms={:.3} \
+         baseline={baseline:?} returned={returned:?}",
         current_elapsed.as_secs_f64() * 1_000.0,
+        overview_elapsed.as_secs_f64() * 1_000.0,
         maximum_page.as_secs_f64() * 1_000.0,
     );
 }

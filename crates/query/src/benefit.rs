@@ -10,7 +10,12 @@ use tokenmaster_store::{
     BenefitChangeCursor as StoreCursor, BenefitChangePageCapture as StoreChangePageCapture,
     BenefitChangePageQuery as StoreChangePageQuery, BenefitChangeRecord as StoreChangeRecord,
     BenefitCurrentCapture as StoreCurrentCapture, BenefitCurrentQuery as StoreCurrentQuery,
-    BenefitInventoryRevision as StoreRevision, BenefitScopeSnapshot as StoreScopeSnapshot,
+    BenefitInventoryRevision as StoreRevision, BenefitOverviewCapture as StoreOverviewCapture,
+    BenefitOverviewQuery as StoreOverviewQuery,
+    BenefitOverviewScopeCapture as StoreOverviewScopeCapture,
+    BenefitReminderProfileSnapshot as StoreProfileSnapshot,
+    BenefitScopeSnapshot as StoreScopeSnapshot, MAX_BENEFIT_OVERVIEW_LOTS,
+    MAX_BENEFIT_OVERVIEW_SCOPES,
 };
 
 use crate::{
@@ -19,6 +24,7 @@ use crate::{
 };
 
 pub const BENEFIT_QUERY_SCHEMA_VERSION: u16 = 1;
+pub const BENEFIT_OVERVIEW_QUERY_SCHEMA_VERSION: u16 = 1;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct BenefitRevision(u64);
@@ -224,9 +230,149 @@ impl<T> BenefitEnvelope<T> {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BenefitOverviewQueryHeaderParts {
+    pub snapshot_generation: SnapshotGeneration,
+    pub benefit_revision: BenefitRevision,
+    pub generated_at_ms: i64,
+    pub data_through_ms: Option<i64>,
+    pub freshness: QueryFreshness,
+    pub quality: QueryQuality,
+    pub warnings: Vec<BenefitWarningCode>,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct BenefitOverviewQueryHeader {
+    snapshot_generation: SnapshotGeneration,
+    benefit_revision: BenefitRevision,
+    generated_at_ms: i64,
+    data_through_ms: Option<i64>,
+    freshness: QueryFreshness,
+    quality: QueryQuality,
+    warnings: Arc<[BenefitWarningCode]>,
+}
+
+impl BenefitOverviewQueryHeader {
+    pub fn new(parts: BenefitOverviewQueryHeaderParts) -> Result<Self, QueryError> {
+        if parts.warnings.len() > MAX_QUERY_WARNINGS {
+            return Err(QueryError::new(QueryErrorCode::CapacityExceeded));
+        }
+        Ok(Self {
+            snapshot_generation: parts.snapshot_generation,
+            benefit_revision: parts.benefit_revision,
+            generated_at_ms: parts.generated_at_ms,
+            data_through_ms: parts.data_through_ms,
+            freshness: parts.freshness,
+            quality: parts.quality,
+            warnings: Arc::from(parts.warnings),
+        })
+    }
+
+    #[must_use]
+    pub const fn schema_version(&self) -> u16 {
+        BENEFIT_OVERVIEW_QUERY_SCHEMA_VERSION
+    }
+
+    #[must_use]
+    pub const fn snapshot_generation(&self) -> SnapshotGeneration {
+        self.snapshot_generation
+    }
+
+    #[must_use]
+    pub const fn benefit_revision(&self) -> BenefitRevision {
+        self.benefit_revision
+    }
+
+    #[must_use]
+    pub const fn generated_at_ms(&self) -> i64 {
+        self.generated_at_ms
+    }
+
+    #[must_use]
+    pub const fn data_through_ms(&self) -> Option<i64> {
+        self.data_through_ms
+    }
+
+    #[must_use]
+    pub const fn freshness(&self) -> QueryFreshness {
+        self.freshness
+    }
+
+    #[must_use]
+    pub const fn quality(&self) -> QueryQuality {
+        self.quality
+    }
+
+    #[must_use]
+    pub const fn warnings(&self) -> &Arc<[BenefitWarningCode]> {
+        &self.warnings
+    }
+}
+
+impl fmt::Debug for BenefitOverviewQueryHeader {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("BenefitOverviewQueryHeader")
+            .field("schema_version", &self.schema_version())
+            .field("snapshot_generation", &self.snapshot_generation)
+            .field("benefit_revision", &self.benefit_revision)
+            .field("generated_at_ms", &self.generated_at_ms)
+            .field("data_through_ms", &self.data_through_ms)
+            .field("freshness", &self.freshness)
+            .field("quality", &self.quality)
+            .field("warnings", &self.warnings)
+            .finish()
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BenefitOverviewEnvelope<T> {
+    header: BenefitOverviewQueryHeader,
+    payload: T,
+}
+
+impl<T> BenefitOverviewEnvelope<T> {
+    #[must_use]
+    pub const fn new(header: BenefitOverviewQueryHeader, payload: T) -> Self {
+        Self { header, payload }
+    }
+
+    #[must_use]
+    pub const fn header(&self) -> &BenefitOverviewQueryHeader {
+        &self.header
+    }
+
+    #[must_use]
+    pub const fn payload(&self) -> &T {
+        &self.payload
+    }
+
+    #[must_use]
+    pub fn is_newer_than(&self, current: Option<&Self>) -> bool {
+        self.header
+            .snapshot_generation
+            .is_newer_than(current.map(|current| current.header.snapshot_generation))
+    }
+
+    #[must_use]
+    pub fn into_parts(self) -> (BenefitOverviewQueryHeader, T) {
+        (self.header, self.payload)
+    }
+}
+
 #[derive(Clone, Eq, PartialEq)]
 pub struct BenefitCurrentRequest {
     filter: BenefitScopeFilter,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct BenefitOverviewRequest;
+
+impl BenefitOverviewRequest {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self
+    }
 }
 
 impl BenefitCurrentRequest {
@@ -481,6 +627,179 @@ pub struct BenefitInventoryValue {
     reminder_profile: BenefitReminderProfileValue,
 }
 
+#[derive(Clone, Eq, PartialEq)]
+pub struct BenefitOverviewLotValue {
+    kind: BenefitKind,
+    quantity: u64,
+    state: BenefitState,
+    granted_at_ms: Option<i64>,
+    expiry: BenefitExpiry,
+    source: BenefitEvidenceSource,
+    confidence: BenefitConfidence,
+    detail_kind: BenefitDetailKind,
+    label_key: Arc<str>,
+}
+
+impl BenefitOverviewLotValue {
+    #[must_use]
+    pub const fn kind(&self) -> BenefitKind {
+        self.kind
+    }
+
+    #[must_use]
+    pub const fn quantity(&self) -> u64 {
+        self.quantity
+    }
+
+    #[must_use]
+    pub const fn state(&self) -> BenefitState {
+        self.state
+    }
+
+    #[must_use]
+    pub const fn granted_at_ms(&self) -> Option<i64> {
+        self.granted_at_ms
+    }
+
+    #[must_use]
+    pub const fn expiry(&self) -> &BenefitExpiry {
+        &self.expiry
+    }
+
+    #[must_use]
+    pub const fn source(&self) -> BenefitEvidenceSource {
+        self.source
+    }
+
+    #[must_use]
+    pub const fn confidence(&self) -> BenefitConfidence {
+        self.confidence
+    }
+
+    #[must_use]
+    pub const fn detail_kind(&self) -> BenefitDetailKind {
+        self.detail_kind
+    }
+
+    #[must_use]
+    pub fn label_key(&self) -> &str {
+        &self.label_key
+    }
+}
+
+impl fmt::Debug for BenefitOverviewLotValue {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("BenefitOverviewLotValue")
+            .field("kind", &self.kind)
+            .field("quantity", &self.quantity)
+            .field("state", &self.state)
+            .field("granted_at_ms", &self.granted_at_ms)
+            .field("expiry", &self.expiry)
+            .field("source", &self.source)
+            .field("confidence", &self.confidence)
+            .field("detail_kind", &self.detail_kind)
+            .field("label_key", &"[redacted]")
+            .finish()
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BenefitOverviewScopeValue {
+    inventory_revision: u64,
+    last_change_sequence: u64,
+    observed_at_ms: i64,
+    fresh_until_ms: i64,
+    stale_after_ms: i64,
+    completeness: BenefitInventoryCompleteness,
+    current_lots: Arc<[BenefitOverviewLotValue]>,
+    nearest_expiry_at_ms: Option<i64>,
+    nearest_due_at_ms: Option<i64>,
+    reminder_profile: BenefitReminderProfileValue,
+    freshness: QueryFreshness,
+    quality: QueryQuality,
+    warnings: Arc<[BenefitWarningCode]>,
+}
+
+impl BenefitOverviewScopeValue {
+    #[must_use]
+    pub const fn inventory_revision(&self) -> u64 {
+        self.inventory_revision
+    }
+
+    #[must_use]
+    pub const fn last_change_sequence(&self) -> u64 {
+        self.last_change_sequence
+    }
+
+    #[must_use]
+    pub const fn observed_at_ms(&self) -> i64 {
+        self.observed_at_ms
+    }
+
+    #[must_use]
+    pub const fn fresh_until_ms(&self) -> i64 {
+        self.fresh_until_ms
+    }
+
+    #[must_use]
+    pub const fn stale_after_ms(&self) -> i64 {
+        self.stale_after_ms
+    }
+
+    #[must_use]
+    pub const fn completeness(&self) -> BenefitInventoryCompleteness {
+        self.completeness
+    }
+
+    #[must_use]
+    pub const fn current_lots(&self) -> &Arc<[BenefitOverviewLotValue]> {
+        &self.current_lots
+    }
+
+    #[must_use]
+    pub const fn nearest_expiry_at_ms(&self) -> Option<i64> {
+        self.nearest_expiry_at_ms
+    }
+
+    #[must_use]
+    pub const fn nearest_due_at_ms(&self) -> Option<i64> {
+        self.nearest_due_at_ms
+    }
+
+    #[must_use]
+    pub const fn reminder_profile(&self) -> &BenefitReminderProfileValue {
+        &self.reminder_profile
+    }
+
+    #[must_use]
+    pub const fn freshness(&self) -> QueryFreshness {
+        self.freshness
+    }
+
+    #[must_use]
+    pub const fn quality(&self) -> QueryQuality {
+        self.quality
+    }
+
+    #[must_use]
+    pub const fn warnings(&self) -> &Arc<[BenefitWarningCode]> {
+        &self.warnings
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BenefitOverviewSnapshot {
+    scopes: Arc<[BenefitOverviewScopeValue]>,
+}
+
+impl BenefitOverviewSnapshot {
+    #[must_use]
+    pub const fn scopes(&self) -> &Arc<[BenefitOverviewScopeValue]> {
+        &self.scopes
+    }
+}
+
 impl BenefitInventoryValue {
     #[must_use]
     pub const fn inventory_revision(&self) -> u64 {
@@ -639,12 +958,28 @@ pub(crate) struct MappedBenefitPayload<T> {
     pub warnings: Vec<BenefitWarningCode>,
 }
 
+pub(crate) struct MappedBenefitOverviewPayload<T> {
+    pub payload: T,
+    pub benefit_revision: BenefitRevision,
+    pub data_through_ms: Option<i64>,
+    pub freshness: QueryFreshness,
+    pub quality: QueryQuality,
+    pub warnings: Vec<BenefitWarningCode>,
+}
+
 pub(crate) fn build_current_query(
     request: &BenefitCurrentRequest,
     deadline: Duration,
 ) -> Result<StoreCurrentQuery, QueryError> {
     StoreCurrentQuery::new(request.filter.scope().clone(), deadline)
         .map_err(crate::service::map_store_error)
+}
+
+pub(crate) fn build_overview_query(
+    _request: BenefitOverviewRequest,
+    deadline: Duration,
+) -> Result<StoreOverviewQuery, QueryError> {
+    StoreOverviewQuery::new(deadline).map_err(crate::service::map_store_error)
 }
 
 pub(crate) fn build_change_query(
@@ -739,6 +1074,62 @@ pub(crate) fn map_current_capture(
     })
 }
 
+pub(crate) fn map_overview_capture(
+    capture: &StoreOverviewCapture,
+    generated_at_ms: i64,
+) -> Result<MappedBenefitOverviewPayload<BenefitOverviewSnapshot>, QueryError> {
+    if capture.scopes().len() > MAX_BENEFIT_OVERVIEW_SCOPES {
+        return Err(corrupt());
+    }
+    let total_lots = capture.scopes().iter().try_fold(0_usize, |total, scope| {
+        total.checked_add(scope.lots().len()).ok_or_else(corrupt)
+    })?;
+    if total_lots > MAX_BENEFIT_OVERVIEW_LOTS {
+        return Err(corrupt());
+    }
+
+    let benefit_revision = map_revision(capture.benefit_revision())?;
+    let mut warnings = Vec::new();
+    let mut scopes = Vec::with_capacity(capture.scopes().len());
+    let mut data_through_ms: Option<i64> = None;
+    let mut freshness = if capture.scopes().is_empty() {
+        QueryFreshness::Unavailable
+    } else {
+        QueryFreshness::Fresh
+    };
+    let mut quality = if capture.scopes().is_empty() {
+        QueryQuality::Unknown
+    } else {
+        QueryQuality::Authoritative
+    };
+    for scope in capture.scopes() {
+        let mapped = map_overview_scope(scope, generated_at_ms)?;
+        data_through_ms = Some(match data_through_ms {
+            Some(current) => current.min(mapped.observed_at_ms),
+            None => mapped.observed_at_ms,
+        });
+        freshness = merge_freshness(freshness, mapped.freshness);
+        quality = merge_quality(quality, mapped.quality);
+        for warning in mapped.warnings.iter().copied() {
+            push_warning(&mut warnings, warning);
+        }
+        scopes.push(mapped);
+    }
+    if scopes.is_empty() {
+        push_warning(&mut warnings, BenefitWarningCode::InventoryAbsent);
+    }
+    Ok(MappedBenefitOverviewPayload {
+        payload: BenefitOverviewSnapshot {
+            scopes: Arc::from(scopes),
+        },
+        benefit_revision,
+        data_through_ms,
+        freshness,
+        quality,
+        warnings,
+    })
+}
+
 pub(crate) fn map_change_capture(
     capture: &StoreChangePageCapture,
     request: &BenefitChangePageRequest,
@@ -789,6 +1180,56 @@ pub(crate) fn map_change_capture(
     })
 }
 
+fn map_overview_scope(
+    capture: &StoreOverviewScopeCapture,
+    generated_at_ms: i64,
+) -> Result<BenefitOverviewScopeValue, QueryError> {
+    if capture.lots().len() > tokenmaster_domain::MAX_BENEFIT_LOTS_PER_OBSERVATION
+        || !current_lots_are_ordered(capture.lots())
+    {
+        return Err(corrupt());
+    }
+    let mut warnings = Vec::new();
+    let reminder_profile = map_profile_snapshot(capture.reminder_profile(), &mut warnings);
+    let lots = capture
+        .lots()
+        .iter()
+        .map(map_overview_lot)
+        .collect::<Vec<_>>();
+    for lot in &lots {
+        if lot.expiry.conservative_utc_ms().is_none() {
+            push_warning(&mut warnings, BenefitWarningCode::UnknownExpiry);
+        }
+        if lot.confidence == BenefitConfidence::Unknown
+            || lot.source == BenefitEvidenceSource::Unknown
+        {
+            push_warning(&mut warnings, BenefitWarningCode::UnknownEvidence);
+        }
+    }
+    add_completeness_warning(capture.scope().completeness(), &mut warnings);
+    let (_data_through_ms, freshness, quality) =
+        map_scope_status(Some(capture.scope()), generated_at_ms, &mut warnings);
+    Ok(BenefitOverviewScopeValue {
+        inventory_revision: capture.scope().inventory_revision().get(),
+        last_change_sequence: capture.scope().last_change_sequence(),
+        observed_at_ms: capture.scope().observed_at_ms(),
+        fresh_until_ms: capture.scope().fresh_until_ms(),
+        stale_after_ms: capture.scope().stale_after_ms(),
+        completeness: capture.scope().completeness(),
+        nearest_expiry_at_ms: lots
+            .iter()
+            .filter(|lot| lot.state == BenefitState::Available)
+            .filter_map(|lot| lot.expiry.conservative_utc_ms())
+            .min(),
+        nearest_due_at_ms: capture.nearest_due().map(|due| due.due_at_ms()),
+        current_lots: Arc::from(lots),
+        reminder_profile,
+        freshness,
+        quality,
+        warnings: Arc::from(warnings),
+    })
+}
+
 fn map_revision(revision: StoreRevision) -> Result<BenefitRevision, QueryError> {
     BenefitRevision::new(revision.get()).map_err(|_error| corrupt())
 }
@@ -797,7 +1238,14 @@ fn map_profile(
     capture: &StoreCurrentCapture,
     warnings: &mut Vec<BenefitWarningCode>,
 ) -> BenefitReminderProfileValue {
-    let profile = capture.reminder_profile().profile();
+    map_profile_snapshot(capture.reminder_profile(), warnings)
+}
+
+fn map_profile_snapshot(
+    snapshot: &StoreProfileSnapshot,
+    warnings: &mut Vec<BenefitWarningCode>,
+) -> BenefitReminderProfileValue {
+    let profile = snapshot.profile();
     let has_in_app = profile.channels().contains(&NotificationChannel::InApp);
     if profile
         .channels()
@@ -809,7 +1257,7 @@ fn map_profile(
         revision: profile.revision().get(),
         lead_times: Arc::from(profile.lead_times()),
         configured_channels: Arc::from(profile.channels()),
-        source: if capture.reminder_profile().inherited() {
+        source: if snapshot.inherited() {
             BenefitReminderProfileSource::Inherited
         } else {
             BenefitReminderProfileSource::Override
@@ -865,6 +1313,21 @@ fn add_completeness_warning(
 
 fn map_current_lot(value: &tokenmaster_benefits::BenefitCurrentLot) -> BenefitLotValue {
     map_lot(value.lot(), value.revision().get())
+}
+
+fn map_overview_lot(value: &tokenmaster_benefits::BenefitCurrentLot) -> BenefitOverviewLotValue {
+    let lot = value.lot();
+    BenefitOverviewLotValue {
+        kind: lot.kind(),
+        quantity: lot.quantity(),
+        state: lot.state(),
+        granted_at_ms: lot.granted_at_ms(),
+        expiry: lot.expiry().clone(),
+        source: lot.source(),
+        confidence: lot.confidence(),
+        detail_kind: lot.detail_kind(),
+        label_key: Arc::from(lot.label_key()),
+    }
 }
 
 fn map_lot(value: &BenefitLotObservation, revision: u64) -> BenefitLotValue {
@@ -958,6 +1421,42 @@ const fn benefit_kind_code(value: BenefitKind) -> u8 {
 fn push_warning(warnings: &mut Vec<BenefitWarningCode>, warning: BenefitWarningCode) {
     if !warnings.contains(&warning) {
         warnings.push(warning);
+    }
+}
+
+const fn merge_freshness(left: QueryFreshness, right: QueryFreshness) -> QueryFreshness {
+    if freshness_rank(left) >= freshness_rank(right) {
+        left
+    } else {
+        right
+    }
+}
+
+const fn freshness_rank(value: QueryFreshness) -> u8 {
+    match value {
+        QueryFreshness::Fresh => 0,
+        QueryFreshness::Aging => 1,
+        QueryFreshness::Stale => 2,
+        QueryFreshness::Unavailable => 3,
+    }
+}
+
+const fn merge_quality(left: QueryQuality, right: QueryQuality) -> QueryQuality {
+    if quality_rank(left) >= quality_rank(right) {
+        left
+    } else {
+        right
+    }
+}
+
+const fn quality_rank(value: QueryQuality) -> u8 {
+    match value {
+        QueryQuality::Authoritative => 0,
+        QueryQuality::Derived => 1,
+        QueryQuality::Estimated => 2,
+        QueryQuality::Partial => 3,
+        QueryQuality::Conflict => 4,
+        QueryQuality::Unknown => 5,
     }
 }
 

@@ -8,9 +8,10 @@ use tokenmaster_domain::{
     ReminderProfileRevision, UsageProviderId,
 };
 use tokenmaster_query::{
-    BenefitChangeKind, BenefitChangePageRequest, BenefitCurrentRequest, BenefitReminderCoverage,
-    BenefitReminderProfileSource, BenefitWarningCode, PageSize, QueryClock, QueryError,
-    QueryErrorCode, QueryFreshness, QueryQuality, QueryService, QueryTimeSample,
+    BenefitChangeKind, BenefitChangePageRequest, BenefitCurrentRequest, BenefitOverviewRequest,
+    BenefitReminderCoverage, BenefitReminderProfileSource, BenefitWarningCode, PageSize,
+    QueryClock, QueryError, QueryErrorCode, QueryFreshness, QueryQuality, QueryService,
+    QueryTimeSample,
 };
 use tokenmaster_store::UsageStore;
 
@@ -373,4 +374,209 @@ fn change_history_is_revision_and_scope_bound_without_consuming_failed_generatio
         .benefit_inventory(BenefitCurrentRequest::new(requested_scope))
         .expect("next successful snapshot");
     assert_eq!(next.header().snapshot_generation().get(), 2);
+}
+
+#[test]
+fn overview_is_multi_scope_identity_free_kind_preserving_and_reminder_aware() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("benefit-query-overview.sqlite3");
+    let first_scope = scope("overview-private-first");
+    let second_scope = scope("overview-private-second");
+    let earliest = OBSERVED_AT_MS + 10_000;
+    {
+        let mut writer = UsageStore::open(&path).expect("writer");
+        writer
+            .apply_benefit_observation(&observation(
+                first_scope.clone(),
+                10,
+                OBSERVED_AT_MS,
+                BenefitInventoryCompleteness::Complete,
+                vec![
+                    lot(
+                        1,
+                        BenefitKind::BankedRateLimitReset,
+                        2,
+                        BenefitState::Available,
+                        BenefitExpiry::exact_utc(earliest).expect("earliest expiry"),
+                        BenefitDetailKind::ProviderDetail,
+                    ),
+                    lot(
+                        2,
+                        BenefitKind::UsageCredit,
+                        4,
+                        BenefitState::Available,
+                        BenefitExpiry::unknown(),
+                        BenefitDetailKind::ProviderAggregate,
+                    ),
+                ],
+            ))
+            .expect("first observation");
+        writer
+            .apply_benefit_observation(&observation(
+                second_scope.clone(),
+                11,
+                OBSERVED_AT_MS + 1,
+                BenefitInventoryCompleteness::Partial,
+                vec![
+                    lot(
+                        3,
+                        BenefitKind::BankedRateLimitReset,
+                        7,
+                        BenefitState::Expired,
+                        BenefitExpiry::exact_utc(OBSERVED_AT_MS + 20_000)
+                            .expect("expired lot expiry"),
+                        BenefitDetailKind::ProviderDetail,
+                    ),
+                    lot(
+                        4,
+                        BenefitKind::TemporaryUsage,
+                        3,
+                        BenefitState::ActivationPending,
+                        BenefitExpiry::unknown(),
+                        BenefitDetailKind::ProviderDetail,
+                    ),
+                    lot(
+                        5,
+                        BenefitKind::Unknown,
+                        5,
+                        BenefitState::Ambiguous,
+                        BenefitExpiry::unknown(),
+                        BenefitDetailKind::ProviderAggregate,
+                    ),
+                ],
+            ))
+            .expect("second observation");
+    }
+
+    let overview = QueryService::open(&path, FixedClock(OBSERVED_AT_MS + 500))
+        .expect("query service")
+        .benefit_overview(BenefitOverviewRequest::new())
+        .expect("benefit overview");
+    assert_eq!(overview.header().schema_version(), 1);
+    assert_eq!(overview.header().benefit_revision().get(), 2);
+    assert_eq!(overview.header().freshness(), QueryFreshness::Fresh);
+    assert_eq!(overview.header().quality(), QueryQuality::Partial);
+    assert!(
+        overview
+            .header()
+            .warnings()
+            .contains(&BenefitWarningCode::PartialInventory)
+    );
+    assert_eq!(overview.payload().scopes().len(), 2);
+
+    let lots = overview
+        .payload()
+        .scopes()
+        .iter()
+        .flat_map(|scope| scope.current_lots().iter())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        lots.iter()
+            .filter(|lot| {
+                lot.kind() == BenefitKind::BankedRateLimitReset
+                    && lot.state() == BenefitState::Available
+            })
+            .map(|lot| lot.quantity())
+            .sum::<u64>(),
+        2
+    );
+    assert_eq!(
+        lots.iter()
+            .find(|lot| lot.kind() == BenefitKind::UsageCredit)
+            .expect("usage credit")
+            .quantity(),
+        4
+    );
+    assert!(lots.iter().any(|lot| {
+        lot.kind() == BenefitKind::TemporaryUsage && lot.state() == BenefitState::ActivationPending
+    }));
+    assert!(lots.iter().any(|lot| {
+        lot.kind() == BenefitKind::Unknown && lot.state() == BenefitState::Ambiguous
+    }));
+    let reset_scope = overview
+        .payload()
+        .scopes()
+        .iter()
+        .find(|scope| scope.nearest_expiry_at_ms() == Some(earliest))
+        .expect("reset scope");
+    assert_eq!(
+        reset_scope.reminder_profile().coverage(),
+        BenefitReminderCoverage::InAppOnly
+    );
+    assert_eq!(
+        reset_scope.nearest_due_at_ms(),
+        Some(earliest - 7 * 24 * 60 * 60 * 1_000)
+    );
+    assert!(reset_scope.freshness() == QueryFreshness::Fresh);
+
+    let debug = format!("{overview:?}");
+    for private in ["overview-private-first", "overview-private-second"] {
+        assert!(!debug.contains(private), "overview Debug exposed {private}");
+    }
+
+    let exact = QueryService::open(&path, FixedClock(OBSERVED_AT_MS + 500))
+        .expect("exact query service")
+        .benefit_inventory(BenefitCurrentRequest::new(first_scope))
+        .expect("exact benefit snapshot");
+    assert!(format!("{:?}", exact.header().filter()).contains("[redacted]"));
+}
+
+#[test]
+fn overview_capacity_failure_does_not_consume_a_snapshot_generation() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("benefit-query-overview-capacity.sqlite3");
+    {
+        let mut writer = UsageStore::open(&path).expect("writer");
+        for index in 0_u8..33 {
+            writer
+                .apply_benefit_observation(&observation(
+                    scope(&format!("capacity-private-{index:02}")),
+                    index.saturating_add(100),
+                    OBSERVED_AT_MS + i64::from(index),
+                    BenefitInventoryCompleteness::Complete,
+                    Vec::new(),
+                ))
+                .expect("benefit observation");
+        }
+    }
+
+    let mut service =
+        QueryService::open(&path, FixedClock(OBSERVED_AT_MS + 500)).expect("query service");
+    let error = service
+        .benefit_overview(BenefitOverviewRequest::new())
+        .expect_err("33rd scope must fail closed");
+    assert_eq!(error.code(), QueryErrorCode::CapacityExceeded);
+    let next = service
+        .benefit_inventory(BenefitCurrentRequest::new(scope("missing-after-capacity")))
+        .expect("next successful snapshot");
+    assert_eq!(next.header().snapshot_generation().get(), 1);
+    let debug = format!("{error:?}");
+    assert!(!debug.contains("capacity-private"));
+    assert!(!debug.contains(path.to_string_lossy().as_ref()));
+}
+
+#[test]
+fn empty_overview_is_explicitly_unavailable_instead_of_a_zero_inventory() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("benefit-query-overview-empty.sqlite3");
+    UsageStore::open(&path).expect("initialize archive");
+
+    let overview = QueryService::open(&path, FixedClock(OBSERVED_AT_MS))
+        .expect("query service")
+        .benefit_overview(BenefitOverviewRequest::new())
+        .expect("empty overview");
+    assert!(overview.payload().scopes().is_empty());
+    assert_eq!(overview.header().snapshot_generation().get(), 1);
+    assert_eq!(overview.header().benefit_revision().get(), 0);
+    assert_eq!(overview.header().data_through_ms(), None);
+    assert_eq!(overview.header().freshness(), QueryFreshness::Unavailable);
+    assert_eq!(overview.header().quality(), QueryQuality::Unknown);
+    assert_eq!(
+        overview.header().warnings().as_ref(),
+        &[BenefitWarningCode::InventoryAbsent]
+    );
 }

@@ -13,15 +13,16 @@ use tokenmaster_store::{
 
 use crate::{
     ActivityCursor, ActivityItem, BenefitChangePage, BenefitChangePageRequest,
-    BenefitCurrentRequest, BenefitCurrentSnapshot, BenefitEnvelope, BenefitQueryHeader,
-    BenefitQueryHeaderParts, DatasetGeneration, DatasetIdentity, GitEnvelope, GitOutputRequest,
-    GitOutputSnapshot, LatestActivityPage, PageSize, PublicationGeneration, QueryClock,
-    QueryEnvelope, QueryError, QueryErrorCode, QueryFreshness, QueryHeader, QueryHeaderParts,
-    QueryQuality, QueryScope, QueryWarningCode, QuotaCurrentRequest, QuotaCurrentSnapshot,
-    QuotaEnvelope, QuotaQueryHeader, QuotaQueryHeaderParts, QuotaTransitionPage,
-    QuotaTransitionPageRequest, ReplayRevision, SnapshotGeneration, UsageAnalytics,
-    UsageAnalyticsRequest, UsageSessionDetailResult, UsageSessionKey, UsageSessionPage,
-    UsageSessionPageRequest, analytics, benefit, quota, session,
+    BenefitCurrentRequest, BenefitCurrentSnapshot, BenefitEnvelope, BenefitOverviewEnvelope,
+    BenefitOverviewQueryHeader, BenefitOverviewQueryHeaderParts, BenefitOverviewRequest,
+    BenefitOverviewSnapshot, BenefitQueryHeader, BenefitQueryHeaderParts, DatasetGeneration,
+    DatasetIdentity, GitEnvelope, GitOutputRequest, GitOutputSnapshot, LatestActivityPage,
+    PageSize, PublicationGeneration, QueryClock, QueryEnvelope, QueryError, QueryErrorCode,
+    QueryFreshness, QueryHeader, QueryHeaderParts, QueryQuality, QueryScope, QueryWarningCode,
+    QuotaCurrentRequest, QuotaCurrentSnapshot, QuotaEnvelope, QuotaQueryHeader,
+    QuotaQueryHeaderParts, QuotaTransitionPage, QuotaTransitionPageRequest, ReplayRevision,
+    SnapshotGeneration, UsageAnalytics, UsageAnalyticsRequest, UsageSessionDetailResult,
+    UsageSessionKey, UsageSessionPage, UsageSessionPageRequest, analytics, benefit, quota, session,
 };
 
 pub const QUERY_FRESH_MAX_AGE_MS: i64 = 20 * 60 * 1_000;
@@ -198,6 +199,35 @@ impl<C: QueryClock> QueryService<C> {
         })?;
         self.last_generation = Some(generation);
         Ok(BenefitEnvelope::new(header, mapped.payload))
+    }
+
+    pub fn benefit_overview(
+        &mut self,
+        request: BenefitOverviewRequest,
+    ) -> Result<BenefitOverviewEnvelope<BenefitOverviewSnapshot>, QueryError> {
+        let time = self.clock.sample()?;
+        time.monotonic_ms()
+            .checked_add(QUERY_DEADLINE_MS)
+            .ok_or_else(|| QueryError::new(QueryErrorCode::Overflow))?;
+        let store_query =
+            benefit::build_overview_query(request, Duration::from_millis(QUERY_DEADLINE_MS))?;
+        let capture = self
+            .store
+            .capture_benefit_overview(store_query)
+            .map_err(map_store_error)?;
+        let mapped = benefit::map_overview_capture(&capture, time.wall_time_ms())?;
+        let generation = self.next_generation()?;
+        let header = BenefitOverviewQueryHeader::new(BenefitOverviewQueryHeaderParts {
+            snapshot_generation: generation,
+            benefit_revision: mapped.benefit_revision,
+            generated_at_ms: time.wall_time_ms(),
+            data_through_ms: mapped.data_through_ms,
+            freshness: mapped.freshness,
+            quality: mapped.quality,
+            warnings: mapped.warnings,
+        })?;
+        self.last_generation = Some(generation);
+        Ok(BenefitOverviewEnvelope::new(header, mapped.payload))
     }
 
     pub fn benefit_changes(
