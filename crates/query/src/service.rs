@@ -1,4 +1,8 @@
-use std::{fmt, path::Path, time::Duration};
+use std::{
+    fmt,
+    path::Path,
+    time::{Duration, Instant},
+};
 
 use tokenmaster_domain::{ModelKey, TokenCount, TokenUsage, UsageProfileId, UsageProviderId};
 use tokenmaster_pricing::{CostMode, PricingEngine};
@@ -10,13 +14,14 @@ use tokenmaster_store::{
 use crate::{
     ActivityCursor, ActivityItem, BenefitChangePage, BenefitChangePageRequest,
     BenefitCurrentRequest, BenefitCurrentSnapshot, BenefitEnvelope, BenefitQueryHeader,
-    BenefitQueryHeaderParts, DatasetGeneration, DatasetIdentity, LatestActivityPage, PageSize,
-    PublicationGeneration, QueryClock, QueryEnvelope, QueryError, QueryErrorCode, QueryFreshness,
-    QueryHeader, QueryHeaderParts, QueryQuality, QueryScope, QueryWarningCode, QuotaCurrentRequest,
-    QuotaCurrentSnapshot, QuotaEnvelope, QuotaQueryHeader, QuotaQueryHeaderParts,
-    QuotaTransitionPage, QuotaTransitionPageRequest, ReplayRevision, SnapshotGeneration,
-    UsageAnalytics, UsageAnalyticsRequest, UsageSessionDetailResult, UsageSessionKey,
-    UsageSessionPage, UsageSessionPageRequest, analytics, benefit, quota, session,
+    BenefitQueryHeaderParts, DatasetGeneration, DatasetIdentity, GitEnvelope, GitOutputRequest,
+    GitOutputSnapshot, LatestActivityPage, PageSize, PublicationGeneration, QueryClock,
+    QueryEnvelope, QueryError, QueryErrorCode, QueryFreshness, QueryHeader, QueryHeaderParts,
+    QueryQuality, QueryScope, QueryWarningCode, QuotaCurrentRequest, QuotaCurrentSnapshot,
+    QuotaEnvelope, QuotaQueryHeader, QuotaQueryHeaderParts, QuotaTransitionPage,
+    QuotaTransitionPageRequest, ReplayRevision, SnapshotGeneration, UsageAnalytics,
+    UsageAnalyticsRequest, UsageSessionDetailResult, UsageSessionKey, UsageSessionPage,
+    UsageSessionPageRequest, analytics, benefit, quota, session,
 };
 
 pub const QUERY_FRESH_MAX_AGE_MS: i64 = 20 * 60 * 1_000;
@@ -312,6 +317,132 @@ impl<C: QueryClock> QueryService<C> {
         Ok(QueryEnvelope::new(header, payload))
     }
 
+    pub fn git_output(
+        &mut self,
+        request: GitOutputRequest,
+    ) -> Result<GitEnvelope<GitOutputSnapshot>, QueryError> {
+        let generation = self.next_generation()?;
+        let time = self.clock.sample()?;
+        time.monotonic_ms()
+            .checked_add(QUERY_DEADLINE_MS)
+            .ok_or_else(|| QueryError::new(QueryErrorCode::Overflow))?;
+        let started = Instant::now();
+        let usage_request = crate::git_output::usage_request(&request)?;
+        let plan = analytics::build_plan(&usage_request, time.wall_time_ms())?;
+        let range = crate::git_output::range_from_plan(&plan)?;
+        let end_day_index = range
+            .end_day_index_exclusive()
+            .checked_sub(1)
+            .ok_or_else(|| QueryError::new(QueryErrorCode::Overflow))?;
+        let git_query = tokenmaster_store::GitOutputQuery::new(
+            range.start_day_index(),
+            end_day_index,
+            request.max_repositories(),
+            remaining(started)?,
+        )
+        .map_err(map_store_error)?;
+        let capture = self
+            .store
+            .capture_git_output(git_query)
+            .map_err(map_store_error)?;
+
+        let usage_join = (|| {
+            let usage_query =
+                analytics::build_store_query_from_plan(&plan, &usage_request, remaining(started)?)?;
+            let usage_capture = self
+                .store
+                .capture_usage_analytics(usage_query)
+                .map_err(map_store_error)?;
+            let price_queries = analytics::build_store_breakdown_price_queries(
+                &plan,
+                &usage_capture,
+                usage_request.scopes(),
+                remaining(started)?,
+            )?;
+            if price_queries.len() != 1 {
+                return Err(QueryError::new(QueryErrorCode::CorruptArchive));
+            }
+            let price_capture = price_queries
+                .into_iter()
+                .next()
+                .flatten()
+                .map(|query| {
+                    self.store
+                        .capture_usage_breakdown_price_basis(query)
+                        .map_err(map_store_error)
+                })
+                .transpose()?;
+            let store_breakdown = usage_capture
+                .breakdowns()
+                .first()
+                .ok_or_else(|| QueryError::new(QueryErrorCode::CorruptArchive))?;
+            let breakdown = analytics::map_breakdown(
+                store_breakdown,
+                price_capture.as_ref(),
+                &self.pricing,
+                self.cost_mode,
+            )?;
+            let projects = crate::git_output::project_aliases(store_breakdown)?;
+            let project_keys = capture
+                .repositories()
+                .iter()
+                .filter_map(tokenmaster_store::GitOutputRepositoryCapture::project_key)
+                .collect::<Vec<_>>();
+            let matches = tokenmaster_store::GitProjectMatchQuery::new(
+                project_keys,
+                projects,
+                remaining(started)?,
+            )
+            .map_err(map_store_error)?;
+            let matches = self
+                .store
+                .capture_git_project_matches(matches)
+                .map_err(map_store_error)?;
+            Ok::<_, QueryError>((
+                crate::git_output::GitUsageEvidence::Available {
+                    publication: usage_capture.publication().clone(),
+                    breakdown,
+                },
+                matches.project_indices().to_vec(),
+            ))
+        })();
+        let (evidence, project_indices) = match usage_join {
+            Ok(value) => value,
+            Err(error) => {
+                let reason = match error.code() {
+                    QueryErrorCode::DeadlineExceeded => {
+                        crate::GitEfficiencyUnavailableReason::UsageDeadlineExceeded
+                    }
+                    QueryErrorCode::Unavailable | QueryErrorCode::StaleSnapshot => {
+                        crate::GitEfficiencyUnavailableReason::UsageEvidenceUnavailable
+                    }
+                    QueryErrorCode::CapacityExceeded
+                    | QueryErrorCode::CorruptArchive
+                    | QueryErrorCode::Overflow
+                    | QueryErrorCode::VersionMismatch => {
+                        crate::GitEfficiencyUnavailableReason::UsageEvidenceInvalid
+                    }
+                    _ => return Err(error),
+                };
+                (
+                    crate::git_output::GitUsageEvidence::Unavailable(reason),
+                    Vec::new(),
+                )
+            }
+        };
+        let envelope = crate::git_output::map_snapshot(
+            capture,
+            range,
+            generation,
+            time.wall_time_ms(),
+            evidence,
+            &project_indices,
+            request.scopes().to_vec(),
+        )?;
+        self.last_generation = Some(generation);
+        Ok(envelope)
+    }
+
     pub fn usage_sessions(
         &mut self,
         request: UsageSessionPageRequest,
@@ -420,6 +551,13 @@ impl<C: QueryClock> QueryService<C> {
             None => SnapshotGeneration::new(1),
         }
     }
+}
+
+fn remaining(started: Instant) -> Result<Duration, QueryError> {
+    Duration::from_millis(QUERY_DEADLINE_MS)
+        .checked_sub(started.elapsed())
+        .filter(|duration| !duration.is_zero())
+        .ok_or_else(|| QueryError::new(QueryErrorCode::DeadlineExceeded))
 }
 
 impl<C> fmt::Debug for QueryService<C> {

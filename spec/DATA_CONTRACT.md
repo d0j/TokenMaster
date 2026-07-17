@@ -75,6 +75,12 @@ key clears the earlier key. Unavailable repositories have no cache identity,
 aggregate, category, daily, or warning rows and therefore represent absence rather
 than fabricated zero activity.
 
+The project key is a domain-separated SHA-256 fingerprint of the exact safe
+`ProjectAlias` from the transient provider hint plus the installation salt. Public
+query code never receives that salt. It supplies at most 256 already-bounded usage
+project candidates to one fixed store matcher and receives only candidate indices.
+This is an exact association to the usage contract, not a repository-basename guess.
+
 ## TM-DATA-004 — Current and staging generations
 
 Current-generation append writes observations, canonical selections, chunk coverage,

@@ -566,11 +566,16 @@ pub(crate) struct UsageAnalyticsPlan {
     series: Box<[CalendarBucket]>,
 }
 
-pub(crate) fn build_store_query(
+impl UsageAnalyticsPlan {
+    pub(crate) const fn overview(&self) -> &CalendarBucket {
+        &self.overview
+    }
+}
+
+pub(crate) fn build_plan(
     request: &UsageAnalyticsRequest,
     generated_at_ms: i64,
-    deadline: Duration,
-) -> Result<(UsageAnalyticsPlan, StoreQuery), QueryError> {
+) -> Result<UsageAnalyticsPlan, QueryError> {
     let resolver = CalendarBoundaryResolver::new(request.time_zone.clone())?;
     let overview = match request.range.0 {
         UsageRangeValue::Today => resolver.day(resolver.local_date_at_ms(generated_at_ms)?)?,
@@ -590,6 +595,30 @@ pub(crate) fn build_store_query(
             date = date.tomorrow()?;
         }
     }
+    Ok(UsageAnalyticsPlan {
+        time_zone_id: Arc::from(resolver.canonical_id()),
+        overview,
+        series: series.into_boxed_slice(),
+    })
+}
+
+pub(crate) fn build_store_query(
+    request: &UsageAnalyticsRequest,
+    generated_at_ms: i64,
+    deadline: Duration,
+) -> Result<(UsageAnalyticsPlan, StoreQuery), QueryError> {
+    let plan = build_plan(request, generated_at_ms)?;
+    let query = build_store_query_from_plan(&plan, request, deadline)?;
+    Ok((plan, query))
+}
+
+pub(crate) fn build_store_query_from_plan(
+    plan: &UsageAnalyticsPlan,
+    request: &UsageAnalyticsRequest,
+    deadline: Duration,
+) -> Result<StoreQuery, QueryError> {
+    let overview = &plan.overview;
+    let series = &plan.series;
     let store_overview = overview.clone().into_store_range()?;
     let store_series = series
         .iter()
@@ -620,14 +649,7 @@ pub(crate) fn build_store_query(
         deadline,
     )
     .map_err(crate::service::map_store_error)?;
-    Ok((
-        UsageAnalyticsPlan {
-            time_zone_id: Arc::from(resolver.canonical_id()),
-            overview,
-            series: series.into_boxed_slice(),
-        },
-        query,
-    ))
+    Ok(query)
 }
 
 pub(crate) fn build_store_price_query(

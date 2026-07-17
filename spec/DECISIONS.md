@@ -938,3 +938,34 @@ authority is unsafe after rewritten history; and silently retained project keys 
 truncated daily series would manufacture exactness. Immutable generations plus
 bounded salted metadata keep restart cost acceptable while making failure, staleness,
 retention, association ambiguity, and omission truth explicit.
+
+## ADR-046 — Git query uses explicit UTC days and a store-owned exact project join
+
+Decision: `QueryService::git_output` publishes one independent schema-v1 immutable
+envelope. Git days are the UTC buckets already proven by the parser/projection and are
+labelled UTC in the public half-open range; they are never presented as local civil
+days. One successful call advances one checked process-local snapshot generation and
+binds the payload to the independent Git publication revision.
+
+The transient hint's exact safe `ProjectAlias` becomes a domain-separated SHA-256
+fingerprint under the private installation salt. Query code obtains bounded
+materialized project and price aggregates, then asks the store to match at most 32
+opaque keys against at most 256 safe candidates. Only matched aliases enter the
+product snapshot; neither salt nor project key does. Cost per 100 product-code added
+lines uses round-half-up fixed-point arithmetic only for exact compatible UTC range,
+complete association/range/Git evidence, non-stale usage evidence, complete or exact
+zero non-conflicting cost, and a nonzero denominator.
+
+The Git capture and all optional join reads share one two-second wall-clock budget.
+Usage rebuild/unavailability/deadline/corruption becomes a typed efficiency absence
+without hiding independent Git facts. Internal construction or invariant errors still
+fail the call. No raw usage event, Git process, repository traversal, filesystem
+lookup, per-repository SQL, or long-lived transaction exists on this path.
+
+Rationale: hashing in the query layer would disclose salt authority; storing a label
+would weaken the opaque archive boundary; basename matching would silently attribute
+cost to the wrong repository; and treating local dates as UTC would manufacture
+calendar precision. Failing the whole Git card when only usage pricing is unavailable
+would also couple independent evidence streams and reduce UI resilience. The bounded
+store matcher plus explicit UTC contract preserves privacy, exactness, responsiveness,
+and graceful degradation.

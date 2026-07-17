@@ -58,11 +58,27 @@ and a nonzero hard deadline no longer than two seconds. SQLite interruption and 
 completed-late read both return `deadline_exceeded`, and the progress handler is
 cleared before reuse.
 
-The later public query facade maps this store capture into independent product
-envelopes. Store and public values expose opaque repository/association/project
-identity only when required for exact selection or joining; no path, ref, email,
-commit, file, process, SQL, or command value is public. Conflicting or absent project
-associations remain explicitly unavailable for the later efficiency join.
+`QueryService::git_output` maps this store capture into an owned schema-v1 product
+envelope with a checked process-local snapshot generation and independent Git
+publication revision. Its range is an explicitly labelled UTC half-open calendar
+range. It exposes all-time/range totals, eight categories, retained days, freshness,
+quality, stable warnings/unavailable reasons, retention truth, and exact 32+1
+lookahead without a transaction, connection, path, ref, email, commit, file, process,
+SQL, or command value.
+
+The optional usage/cost join reuses the same resolved UTC boundaries, materialized
+usage/project/price aggregates, and one fixed store-owned salted project matcher.
+The salt and opaque project key do not enter the product envelope. Only complete
+range/association/Git quality, non-stale compatible evidence, exact complete or zero
+cost, and nonzero product-code additions produce fixed-point cost per 100 added lines.
+Missing/conflicting association, retention, partial/stale/corrupt/unavailable usage
+evidence, unknown/conflicting cost, and zero lines remain typed unavailable. A usage
+projection failure cannot hide independent Git metrics.
+
+One `git_output` call shares one wall-clock read budget of at most two seconds across
+Git capture, aggregate usage evidence, price evidence, and project matching. It never
+scans raw usage events or a repository. Only a successful completed envelope consumes
+the next process-local snapshot generation.
 
 `OneShotExecutor` acquires `WriterLease` before adapter or archive work. It retains
 only the bounded scope manifest, one temporary reader/batch, opaque checkpoints,

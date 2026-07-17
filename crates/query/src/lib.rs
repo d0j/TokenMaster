@@ -9,6 +9,7 @@ mod benefit;
 mod calendar;
 mod clock;
 mod error;
+mod git_output;
 mod identity;
 mod publication;
 mod quota;
@@ -36,6 +37,11 @@ pub use benefit::{
 pub use calendar::{CalendarDate, UsageTimeZone, WeekStart};
 pub use clock::{QueryClock, QueryTimeSample, SystemQueryClock};
 pub use error::{QueryError, QueryErrorCode};
+pub use git_output::{
+    GIT_QUERY_SCHEMA_VERSION, GitEfficiency, GitEfficiencyUnavailableReason, GitEfficiencyValue,
+    GitEnvelope, GitOutputRange, GitOutputRepository, GitOutputRequest, GitOutputSnapshot,
+    GitPublicationRevision, GitQueryHeader, GitRangeMetrics,
+};
 pub use identity::{
     DatasetGeneration, DatasetIdentity, MAX_QUERY_SCOPES, MAX_QUERY_WARNINGS,
     PublicationGeneration, QUERY_SCHEMA_VERSION, QueryEnvelope, QueryFreshness, QueryHeader,

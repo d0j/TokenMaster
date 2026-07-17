@@ -524,6 +524,25 @@ key only when all agree, otherwise the capture adds `association_incomplete`.
 quality through a 32+1 repository lookahead, at most 400 inclusive days, and a hard
 maximum two-second deadline whose progress handler is cleared before reuse.
 
+Task 6 is now implemented. `QueryService::git_output` returns owned schema-v1
+envelopes with checked process-local generation, independent Git publication
+revision, explicit UTC half-open range, per-repository freshness/quality, all-time and
+range totals/categories, retained days, warnings, unavailable/retention truth, and
+lookahead. Exact safe project aliases are recovered only through a store-owned
+domain-separated salted matcher over at most 32 keys and 256 materialized project
+candidates; salt and project keys never enter the product snapshot.
+
+The optional fixed-point cost-per-100-product-code-lines join shares one maximum
+two-second budget with Git capture and reads only materialized usage/price aggregates.
+It requires exact association/range, complete Git evidence, current compatible usage,
+exact non-conflicting cost, and a nonzero denominator. Ambiguous/unmatched projects,
+partial ranges, stale Git or usage, unknown cost, zero lines, usage rebuild/deadline/
+corruption remain typed unavailable. Usage failure does not hide independent Git
+metrics. Focused contracts cover UTC/privacy, aggregate-only reads, failed-generation
+neutrality, restart and concurrent publication isolation, corruption rejection,
+32 repositories by 400 days, repeated handle/transaction return, and sub-two-second
+maximum reads.
+
 ## Next implementation slice
 
 P2-D quota history core is complete under
@@ -540,15 +559,15 @@ credit inventory, expiration reconciliation, default/custom reminder profiles,
 immutable read snapshots, and publication through the existing Codex runtime with
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
-workspace quality gate. P2-E Tasks 1-5 are complete; the immediate next slice is Task
-6, the immutable public Git query envelopes and exact usage/cost efficiency join.
+ workspace quality gate. P2-E Tasks 1-6 are complete; the immediate next slice is Task
+ 7, bounded Git runtime discovery/scan/publication and lifecycle evidence.
 Activation
 remains a later independently authorized
 capability; visible notifications and the complete UI follow the completed data
 contracts. No quota value may be inferred from local token/cost facts and no browser/
 private-endpoint authority may be added.
-The remaining P2-E work is public query mapping/efficiency evidence, runtime
-scheduling/resource evidence, and final audit. P2-F joined product status and P3
+The remaining P2-E work is runtime scheduling/resource evidence and final audit.
+P2-F joined product status and P3
 complete UI follow the product-data contracts.
 
 The architecture/release closure review is approved in

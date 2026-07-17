@@ -2004,3 +2004,35 @@ formatting check, warnings-as-errors locked workspace Clippy, complete locked
 workspace tests/doctests, and diff check also pass. Public query envelopes, the
 cost-efficiency join, runtime publication/resource evidence, final authority audit,
 joined status, and UI remain unclaimed.
+
+## 2026-07-16 — Immutable Git query and exact efficiency facade added
+
+Completed P2-E Task 6. `QueryService::git_output` now returns a schema-v1 owned
+envelope with checked process-local generation, independent Git publication revision,
+an explicitly labelled UTC half-open range, all-time and requested totals/categories,
+retained days, freshness, quality, warnings, omission/retention truth, and 32+1
+repository lookahead. Old snapshots remain independent across later publication and
+service restart, and failed calls do not consume a generation.
+
+Project attribution no longer requires query-layer access to the installation salt.
+The exact safe `ProjectAlias` from the transient activity hint is domain-separated and
+installation-salted; one fixed store matcher compares at most 32 opaque keys with 256
+materialized usage project candidates and returns only candidate indices. Public Git
+values expose a matched safe alias but no salt, path, or opaque project key.
+
+The cost-per-100-added-product-code-lines join uses round-half-up fixed-point
+arithmetic and one shared maximum two-second budget. It reads only materialized
+usage/project/price aggregates and produces a value only for exact UTC range,
+association, complete Git evidence, compatible non-stale usage, exact non-conflicting
+cost, and a nonzero denominator. Ambiguity, retention, stale/unavailable/corrupt
+evidence, deadline, unknown cost, and zero lines are typed absence. A usage-side
+failure degrades only efficiency and cannot hide independent Git facts.
+
+Focused acceptance covers privacy/UTC boundaries, aggregate-only reads with the raw
+usage table unavailable, 32 repositories by 400 days under the service deadline,
+one-row lookahead, restart and concurrent publication isolation, failed-generation
+neutrality, corruption rejection, repeated transaction release, and Windows handle
+stability. The clean-root audit, formatting, warnings-as-errors locked workspace
+Clippy, complete locked workspace tests/doctests, and diff check pass. Runtime
+discovery/scan/publication, its lifecycle/resource/authority gates, joined status, P3
+UI, CLI/MCP, M0 acceptance, packaging, signing, and release remain unclaimed.

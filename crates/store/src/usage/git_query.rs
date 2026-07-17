@@ -5,13 +5,16 @@ use tokenmaster_domain::{
     GitActivityAssociationId, GitLineMetrics, GitOutputCategory, GitOutputCategoryMetrics,
     GitOutputDay, GitOutputQuality, GitOutputTotals, GitOutputUnavailableReason, GitOutputWarning,
     GitRepositoryId, MAX_GIT_OUTPUT_CATEGORIES, MAX_GIT_OUTPUT_DAYS, MAX_GIT_OUTPUT_REPOSITORIES,
-    MAX_GIT_OUTPUT_WARNINGS,
+    MAX_GIT_OUTPUT_WARNINGS, ProjectAlias,
 };
+use tokenmaster_git::{GitIdentitySalt, derive_project_fingerprint};
 
 use crate::{StoreError, StoreErrorCode};
 
 use super::GitProjectKey;
-use super::query::{MAX_QUERY_DURATION, PROGRESS_OP_INTERVAL, UsageReadStore, map_sql};
+use super::query::{
+    MAX_QUERY_DURATION, MAX_USAGE_BREAKDOWN_ITEMS, PROGRESS_OP_INTERVAL, UsageReadStore, map_sql,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct GitOutputQuery {
@@ -19,6 +22,60 @@ pub struct GitOutputQuery {
     end_day_index: i32,
     max_repositories: usize,
     deadline: Duration,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GitProjectMatchQuery {
+    project_keys: Box<[GitProjectKey]>,
+    projects: Box<[ProjectAlias]>,
+    deadline: Duration,
+}
+
+impl GitProjectMatchQuery {
+    pub fn new(
+        project_keys: Vec<GitProjectKey>,
+        projects: Vec<ProjectAlias>,
+        deadline: Duration,
+    ) -> Result<Self, StoreError> {
+        if project_keys.len() > MAX_GIT_OUTPUT_REPOSITORIES
+            || projects.len() > MAX_USAGE_BREAKDOWN_ITEMS
+        {
+            return Err(StoreError::with_limit(
+                StoreErrorCode::CapacityExceeded,
+                if project_keys.len() > MAX_GIT_OUTPUT_REPOSITORIES {
+                    MAX_GIT_OUTPUT_REPOSITORIES as u64
+                } else {
+                    MAX_USAGE_BREAKDOWN_ITEMS as u64
+                },
+            ));
+        }
+        if deadline.is_zero()
+            || deadline > MAX_QUERY_DURATION
+            || projects
+                .iter()
+                .enumerate()
+                .any(|(index, project)| projects[..index].contains(project))
+        {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self {
+            project_keys: project_keys.into_boxed_slice(),
+            projects: projects.into_boxed_slice(),
+            deadline,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GitProjectMatchCapture {
+    project_indices: Box<[Option<usize>]>,
+}
+
+impl GitProjectMatchCapture {
+    #[must_use]
+    pub fn project_indices(&self) -> &[Option<usize>] {
+        &self.project_indices
+    }
 }
 
 impl GitOutputQuery {
@@ -264,6 +321,59 @@ impl UsageReadStore {
             (Err(error), _) | (Ok(_), Err(error)) => Err(error),
         }
     }
+
+    pub fn capture_git_project_matches(
+        &mut self,
+        query: GitProjectMatchQuery,
+    ) -> Result<GitProjectMatchCapture, StoreError> {
+        let started = Instant::now();
+        let deadline = query.deadline;
+        map_sql(self.connection.progress_handler(
+            PROGRESS_OP_INTERVAL,
+            Some(move || started.elapsed() >= deadline),
+        ))?;
+        let mut result = capture_git_project_matches(&self.connection, &query);
+        if started.elapsed() >= deadline {
+            result = Err(StoreError::new(StoreErrorCode::DeadlineExceeded));
+        }
+        let clear_result = map_sql(self.connection.progress_handler(0, None::<fn() -> bool>));
+        match (result, clear_result) {
+            (Ok(capture), Ok(())) => Ok(capture),
+            (Err(error), _) | (Ok(_), Err(error)) => Err(error),
+        }
+    }
+}
+
+fn capture_git_project_matches(
+    connection: &Connection,
+    query: &GitProjectMatchQuery,
+) -> Result<GitProjectMatchCapture, StoreError> {
+    let salt = connection.query_row(
+        "SELECT installation_salt
+         FROM git_installation_state WHERE singleton_id = 1",
+        [],
+        |row| row.get::<_, Vec<u8>>(0),
+    )?;
+    let salt: [u8; 32] = salt
+        .try_into()
+        .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+    let salt = GitIdentitySalt::from_bytes(salt);
+    let fingerprints = query
+        .projects
+        .iter()
+        .map(|project| {
+            derive_project_fingerprint(&salt, project)
+                .map(|value| GitProjectKey::from_bytes(*value.as_bytes()))
+                .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let project_indices = query
+        .project_keys
+        .iter()
+        .map(|key| fingerprints.iter().position(|candidate| candidate == key))
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    Ok(GitProjectMatchCapture { project_indices })
 }
 
 fn capture_git_output(

@@ -258,9 +258,9 @@ focused, resource, and release-authority gates. Banked-reset inventory Tasks 1-8
 also pass through combined runtime publication, the isolated durable reminder event
 runtime, complete project-truth synchronization, and the full workspace plus
 specialized authority gates. P2-E Git output is the active critical path; its Tasks
-1-5 domain/parser/native-backend/hint/schema-v13 projection and bounded store capture
-now pass, with public efficiency query, runtime/resource evidence, and final audit
-remaining.
+1-6 domain/parser/native-backend/hint/schema-v13 projection, bounded store capture,
+and immutable public UTC/efficiency facade now pass, with runtime publication/resource
+evidence and final audit remaining.
 View-time full scans and period-labeled
 whole-session totals remain forbidden.
 P2-A now implements the bounded public values, separate defensive read-only/query-only
@@ -278,6 +278,11 @@ are implemented for the pinned version. Typed banked-reset values, pure
 reconciliation/reminder planning, Codex normalization, strict schema-v12 storage,
 immutable FEFO current/revision-bound history queries, Codex runtime benefit
 publication, and one-timer crash-safe outbox/ack reminder delivery are implemented.
+P2-E Git output Tasks 1-6 are implemented: bounded domain/parser/native inspection,
+transient path-private activity hints, schema-v13 immutable projection/store capture,
+and schema-v1 explicit-UTC public envelopes with aggregate-only exact project/cost
+joining and typed graceful degradation. Bounded runtime publication and its resource/
+authority closure remain.
 Visible P3 notification rendering, OS/tray scheduling, snooze/quiet hours, and
 activation remain separate.
 The older replay plan remains historical evidence for

@@ -6,7 +6,7 @@
 > `superpowers:verification-before-completion`. Mark a checkbox only after its
 > validator passes.
 
-**Status:** in progress; Tasks 1-5 complete
+**Status:** in progress; Tasks 1-6 complete
 
 **Goal:** derive bounded local Git output metrics for repositories associated with
 normalized activity, preserve private incremental projections, and expose immutable
@@ -261,25 +261,33 @@ cargo +1.97.0 clippy -p tokenmaster-store --all-targets --locked
 
 **Files:**
 
+- Modify: `Cargo.lock`
+- Modify: `crates/git/src/identity.rs`
+- Modify: `crates/git/src/lib.rs`
+- Modify: `crates/store/src/usage/git_query.rs`
+- Modify: `crates/store/src/usage/mod.rs`
+- Modify: `crates/store/src/lib.rs`
+- Modify: `crates/query/Cargo.toml`
 - Create: `crates/query/src/git_output.rs`
 - Modify: `crates/query/src/service.rs`
 - Modify: `crates/query/src/lib.rs`
-- Modify: `crates/query/src/calendar.rs`
+- Modify: `crates/query/src/analytics.rs`
 - Create: `crates/query/tests/git_output_contract.rs`
 - Create: `crates/query/tests/git_efficiency_contract.rs`
 - Create: `crates/query/tests/git_scale_contract.rs`
+- Create: `crates/query/tests/support/git_output.rs`
 
 **RED/GREEN:**
 
-- [ ] Map store captures into independent immutable Git envelopes with checked
+- [x] Map store captures into independent immutable Git envelopes with checked
   process-local snapshot generation.
-- [ ] Preserve complete/partial/stale/unavailable reasons and exact omission counters.
-- [ ] Expose bounded totals/categories/daily points with no path/ref/commit/file data.
-- [ ] Join fixed-point cost per 100 product-code lines only for exact compatible
+- [x] Preserve complete/partial/stale/unavailable reasons and exact omission counters.
+- [x] Expose bounded totals/categories/daily points with no path/ref/commit/file data.
+- [x] Join fixed-point cost per 100 product-code lines only for exact compatible
   repository/project/range/freshness/quality evidence.
-- [ ] Keep zero lines, unknown cost, conflicts, partial history, ambiguous association,
+- [x] Keep zero lines, unknown cost, conflicts, partial history, ambiguous association,
   and mismatched boundaries explicitly unavailable.
-- [ ] Prove 32 repositories, 400 points, concurrent snapshot isolation, no raw event
+- [x] Prove 32 repositories, 400 points, concurrent snapshot isolation, no raw event
   scan, read deadline cleanup, restart, corruption rejection, and resource return.
 
 **Focused validator:**

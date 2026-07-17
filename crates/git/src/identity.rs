@@ -1,7 +1,7 @@
 use std::fmt;
 
 use sha2::{Digest, Sha256};
-use tokenmaster_domain::GitRepositoryId;
+use tokenmaster_domain::{GitRepositoryId, ProjectAlias};
 
 use crate::{GitCoreError, MAX_GIT_AUTHOR_BYTES, MAX_GIT_REF_NAME_BYTES, MAX_GIT_REFS};
 
@@ -37,6 +37,7 @@ opaque_identity!(GitIdentitySalt);
 opaque_identity!(GitAuthorFingerprint);
 opaque_identity!(GitCommitFingerprint);
 opaque_identity!(GitMailmapFingerprint);
+opaque_identity!(GitProjectFingerprint);
 opaque_identity!(GitRefFingerprint);
 
 #[derive(Clone, Eq, PartialEq)]
@@ -110,6 +111,16 @@ pub fn derive_mailmap_fingerprint(
     Ok(GitMailmapFingerprint::from_bytes(framed_hash(
         b"tokenmaster.git.mailmap.v1",
         &[salt.as_bytes(), &presence, contents.unwrap_or_default()],
+    )?))
+}
+
+pub fn derive_project_fingerprint(
+    salt: &GitIdentitySalt,
+    project: &ProjectAlias,
+) -> Result<GitProjectFingerprint, GitCoreError> {
+    Ok(GitProjectFingerprint::from_bytes(framed_hash(
+        b"tokenmaster.git.project.v1",
+        &[salt.as_bytes(), project.as_str().as_bytes()],
     )?))
 }
 

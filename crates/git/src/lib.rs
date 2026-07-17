@@ -168,8 +168,9 @@ pub use discovery::{
 };
 pub use identity::{
     GitAuthorFingerprint, GitCommitFingerprint, GitIdentitySalt, GitMailmapFingerprint,
-    GitRefFingerprint, GitRefHead, derive_author_fingerprint, derive_commit_fingerprint,
-    derive_mailmap_fingerprint, derive_ref_fingerprint, derive_repository_id,
+    GitProjectFingerprint, GitRefFingerprint, GitRefHead, derive_author_fingerprint,
+    derive_commit_fingerprint, derive_mailmap_fingerprint, derive_project_fingerprint,
+    derive_ref_fingerprint, derive_repository_id,
 };
 pub use process::{
     GitCancellation, GitProcess, GitRunControl, GitVersion, MAX_GIT_LOG_STDOUT_BYTES,

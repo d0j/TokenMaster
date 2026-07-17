@@ -173,6 +173,15 @@ one-row lookahead. A missing, cleared, or conflicting opaque project association
 cannot inherit an older key or authorize cost attribution. Daily retention is visible
 as `daily_history_truncated` and cannot be reported as complete.
 
+Public Git query mapping labels its durable day buckets as UTC and uses no raw-event,
+filesystem, repository, or per-visible-row query. Exact alias recovery is a fixed
+store-owned batch over at most 32 salted keys and 256 safe `ProjectAlias` candidates;
+the installation salt and opaque project key never cross into the product snapshot.
+The batch progress handler is cleared on every outcome. Usage-side deadline,
+unavailability, stale evidence, or corruption disables only efficiency and cannot
+erase independently captured Git facts; internal request/invariant errors still fail
+the whole call.
+
 The facade exports fixed request methods only and never arbitrary SQL, filesystem,
 shell, HTTP, plugin, or provider-mutation authority. Public query results omit source
 IDs and private source content. Obsolete accounting versions fail truthful quality

@@ -5353,6 +5353,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokenmaster-benefits",
  "tokenmaster-domain",
+ "tokenmaster-git",
  "tokenmaster-pricing",
  "tokenmaster-quota",
  "tokenmaster-store",

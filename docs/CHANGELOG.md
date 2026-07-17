@@ -6,6 +6,22 @@ All notable changes are recorded here.
 
 ### Added
 
+- Immutable schema-v1 public Git output envelopes with checked process-local
+  generation, independent Git publication revision, explicit UTC half-open ranges,
+  owned all-time/range/category/day values, freshness/quality/retention truth, and
+  32+1 repository lookahead.
+- Exact private Git-to-usage project joining through a domain-separated installation-
+  salted fingerprint and fixed store-owned 32-key/256-candidate matcher. The public
+  snapshot receives only a matched safe alias, never the salt or opaque project key.
+- Fixed-point cost per 100 added product-code lines only for exact complete non-stale
+  UTC evidence, exact non-conflicting cost, and a nonzero denominator. Ambiguity,
+  partial retention, stale/unavailable/corrupt usage, deadline, unknown cost, and zero
+  lines remain typed unavailable; usage failure does not suppress independent Git
+  facts.
+- Git query acceptance for aggregate-only usage reads, no raw event scan, one shared
+  two-second budget, failed-generation neutrality, restart/publication snapshot
+  isolation, corruption rejection, 32 repositories by 400 days, repeated transaction
+  return, and Windows handle stability.
 - Strict SQLite schema v13 Git projection with a random installation salt,
   independent monotonic publication state, 32 opaque repositories, 4,096 activity
   associations, immutable rebuild/append aggregate generations, exact rollback-safe

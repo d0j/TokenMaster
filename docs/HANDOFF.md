@@ -220,7 +220,7 @@ clean-root, formatting, strict locked workspace Clippy, complete locked workspac
 test/doctest, specialized benefit audit, complete-diff, process-return, and
 dependency/language-surface gates.
 
-P2-E Git output Tasks 1-5 are complete under
+P2-E Git output Tasks 1-6 are complete under
 `docs/superpowers/plans/2026-07-16-tokenmaster-git-output.md`: strict opaque domain
 values; bounded NUL parsing/aggregation; an exact native read-only Git backend with
 owned process cleanup and synthetic repository coverage; and one latest transient
@@ -232,13 +232,22 @@ relative/traversal/network/device/mapped-remote and linked/reparse ancestry. The
 strict schema-v13 store now adds salted opaque identities, 32 repositories, 4,096
 associations, immutable rebuild/append generations, unchanged refresh, stale
 invalidation, 400-day retention truth, exact association ambiguity, rollback-tested
-v12 migration, and deadline-bounded owned captures. The immediate next slice is Task
-6: immutable public Git envelopes plus the exact usage/cost efficiency join.
+ v12 migration, and deadline-bounded owned captures. The schema-v1 public Git facade
+ now adds checked snapshot/Git revisions, explicit UTC ranges, immutable
+ all-time/range/category/day values, freshness/quality/retention truth, and a
+ store-owned salted exact project matcher. The aggregate-only cost join uses one
+ shared two-second budget and produces a value only for exact complete non-stale
+ evidence with nonzero product-code additions; every ambiguity/staleness/unknown-cost
+ case is typed unavailable, while a usage-side failure cannot hide Git facts. Focused
+ acceptance includes 32 repositories by 400 days, aggregate-only reads, restart/
+ publication isolation, failed-generation neutrality, corruption rejection, and
+ repeated transaction/handle return. The immediate next slice is Task 7: bounded Git
+ runtime discovery, scanning, publication, cancellation, and resource evidence.
 Actual P3 visible notifications/UI, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.
-The current post-Task-8 clean-root, formatting, strict locked workspace Clippy, and
-complete locked workspace test/doctest baseline passes. The query resource binary uses
+The current post-Task-6 Git clean-root, formatting, strict locked workspace Clippy,
+and complete locked workspace test/doctest baseline passes. The query resource binary uses
 an isolated `harness = false` process plus a bounded maximum-64-round warm-up that
 waits for two topology-stable eight-round retained floors before measurement and
 ignores one transient low allocator sample only while choosing the warm-up floor. The

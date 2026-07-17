@@ -86,6 +86,8 @@ shallow-history, history-change, partial, and unavailable semantics MUST remain
 explicit. Missing or ambiguous evidence MUST NOT become zero or complete quality.
 Persistent projections and queries MUST remain bounded to 32 repositories and 400
 daily points per snapshot.
+Git daily buckets are UTC calendar days and every public Git range MUST label that
+boundary explicitly; the facade MUST NOT relabel a UTC bucket as a local civil day.
 
 The durable projection MUST use immutable aggregate generations and one independent
 monotonic Git publication revision. Rebuild, proven same-process append, unchanged

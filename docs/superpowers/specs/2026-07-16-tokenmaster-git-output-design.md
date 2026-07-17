@@ -1,6 +1,6 @@
 # TokenMaster Bounded Git Output Design
 
-**Status:** approved; implementation Tasks 1-5 complete on 2026-07-16
+**Status:** approved; implementation Tasks 1-6 complete on 2026-07-16
 
 **Scope:** local read-only Git code-output metrics, transient repository association,
 bounded incremental projection, immutable query snapshots, and usage/cost efficiency
@@ -172,6 +172,14 @@ The Git subsystem resolves the candidate with exact native Git read-only command
 obtains the absolute common Git directory, and computes:
 
 `repository_id = SHA256(domain, installation_salt, normalized_common_dir_identity)`.
+
+The exact safe project alias from that same hint is separately derived as:
+
+`project_key = SHA256(project-domain, installation_salt, safe_project_alias)`.
+
+The query layer never receives the salt. A fixed store-owned matcher compares at most
+32 project keys with at most 256 materialized safe usage aliases and returns only
+candidate indices.
 
 The installation salt is generated once and stored as opaque random bytes in the
 local archive state. It prevents cross-installation correlation. The raw common-dir
@@ -411,7 +419,7 @@ Git output and usage events are independent evidence streams.
 
 The query layer may expose cost per 100 added product-code lines only when:
 
-- the requested time range and project/repository association are exact;
+- the requested UTC time range and project/repository association are exact;
 - Git quality for that range is complete;
 - usage cost is available and non-conflicting;
 - neither side is stale beyond the accepted query policy;
@@ -425,6 +433,13 @@ Missing cost, partial Git history, ambiguous association, zero added lines, mism
 time boundaries, or incompatible dataset freshness remains explicitly unavailable.
 TokenMaster never treats total token usage as code output and never attributes all
 project cost to a repository by basename guess.
+
+Git parser/projection day indices are UTC calendar days. The public Git range therefore
+uses and labels UTC half-open dates; it never relabels these buckets as local civil
+days. Usage evidence is resolved from the same UTC range plan. One facade call shares
+one maximum two-second read budget across Git, materialized usage/price, and project
+matching. Failure of the optional usage side disables efficiency without hiding
+independent Git facts.
 
 ## 12. Query/UI contract
 

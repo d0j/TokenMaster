@@ -40,7 +40,8 @@ pub use benefit_types::{
     MAX_BENEFIT_REMINDER_DUE_PAGE_SIZE,
 };
 pub use git_query::{
-    GitOutputCapture, GitOutputQuery, GitOutputRepositoryCapture, GitRangeMetrics,
+    GitOutputCapture, GitOutputQuery, GitOutputRepositoryCapture, GitProjectMatchCapture,
+    GitProjectMatchQuery, GitRangeMetrics,
 };
 pub use git_types::{
     GitCacheIdentity, GitIncrementalAuthority, GitProjectKey, GitProjectionInput,
