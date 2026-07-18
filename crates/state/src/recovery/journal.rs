@@ -29,6 +29,7 @@ pub enum RecoverySettingsMode {
     DataOnly,
     DataAndPortableSettings,
     AutomaticDataOnly,
+    ReconstructionDataOnly,
 }
 
 #[derive(Clone, Copy, Deserialize, Eq, PartialEq, Serialize)]
@@ -309,7 +310,8 @@ pub struct RecoveryJournal {
     schema_version: u16,
     operation_generation: u64,
     operation_id: [u8; 16],
-    backup: RecoveryBackupIdentity,
+    #[serde(default)]
+    backup: Option<RecoveryBackupIdentity>,
     candidate: RecoveryCandidateIdentity,
     before: RecoveryArchiveFacts,
     settings_mode: RecoverySettingsMode,
@@ -344,7 +346,7 @@ impl RecoveryJournal {
         Self::new(
             operation_generation,
             operation_id,
-            backup,
+            Some(backup),
             candidate,
             before,
             settings_mode,
@@ -364,7 +366,7 @@ impl RecoveryJournal {
         Self::new(
             operation_generation,
             operation_id,
-            backup,
+            Some(backup),
             candidate,
             before,
             RecoverySettingsMode::AutomaticDataOnly,
@@ -373,11 +375,29 @@ impl RecoveryJournal {
         )
     }
 
+    pub fn reconstruction(
+        operation_generation: u64,
+        operation_id: RecoveryOperationId,
+        candidate: RecoveryCandidateIdentity,
+        before: RecoveryArchiveFacts,
+    ) -> Result<Self, StateError> {
+        Self::new(
+            operation_generation,
+            operation_id,
+            None,
+            candidate,
+            before,
+            RecoverySettingsMode::ReconstructionDataOnly,
+            None,
+            1,
+        )
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn new(
         operation_generation: u64,
         operation_id: RecoveryOperationId,
-        backup: RecoveryBackupIdentity,
+        backup: Option<RecoveryBackupIdentity>,
         candidate: RecoveryCandidateIdentity,
         before: RecoveryArchiveFacts,
         settings_mode: RecoverySettingsMode,
@@ -429,7 +449,7 @@ impl RecoveryJournal {
     }
 
     #[must_use]
-    pub const fn backup(&self) -> RecoveryBackupIdentity {
+    pub const fn backup(&self) -> Option<RecoveryBackupIdentity> {
         self.backup
     }
 
@@ -446,14 +466,21 @@ impl RecoveryJournal {
         {
             return Err(StateError::invalid_input());
         }
-        self.backup.validate()?;
+        if let Some(backup) = self.backup {
+            backup.validate()?;
+        }
         self.candidate.validate()?;
         self.before.validate()?;
-        match (self.settings_mode, self.settings_target) {
-            (RecoverySettingsMode::DataAndPortableSettings, Some(target)) => target.validate(),
-            (RecoverySettingsMode::DataOnly | RecoverySettingsMode::AutomaticDataOnly, None) => {
-                Ok(())
+        match (self.backup, self.settings_mode, self.settings_target) {
+            (Some(_), RecoverySettingsMode::DataAndPortableSettings, Some(target)) => {
+                target.validate()
             }
+            (
+                Some(_),
+                RecoverySettingsMode::DataOnly | RecoverySettingsMode::AutomaticDataOnly,
+                None,
+            )
+            | (None, RecoverySettingsMode::ReconstructionDataOnly, None) => Ok(()),
             _ => Err(StateError::invalid_input()),
         }
     }

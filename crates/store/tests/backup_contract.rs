@@ -10,11 +10,35 @@ use tempfile::tempdir;
 use tokenmaster_platform::ValidatedLocalDirectory;
 use tokenmaster_store::{
     ArchiveVersionStatus, BackupControl, BackupSource, BackupStaging, UsageStore,
-    create_compact_snapshot, create_online_snapshot, inspect_archive_version,
-    verify_backup_candidate,
+    create_compact_snapshot, create_fresh_recovery_archive, create_online_snapshot,
+    inspect_archive_version, verify_backup_candidate,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
+
+#[test]
+fn fresh_recovery_archive_uses_the_normal_schema_constructor_and_full_verifier() -> TestResult {
+    let root = tempdir()?;
+    let staging_path = root.path().join("staging");
+    fs::create_dir(&staging_path)?;
+    let staging_root = ValidatedLocalDirectory::new(&staging_path)?;
+    let staging = BackupStaging::new(&staging_root)?;
+    let control = BackupControl::new(Arc::new(AtomicBool::new(false)), Duration::from_secs(5))?;
+
+    let fresh = create_fresh_recovery_archive(&staging, &control)?;
+
+    assert_eq!(
+        fresh.schema_version(),
+        tokenmaster_store::USAGE_SCHEMA_VERSION as u32
+    );
+    assert!(!fresh.is_empty());
+    assert!(fresh.integrity_verified());
+    assert!(fresh.foreign_keys_verified());
+    assert!(fresh.schema_verified());
+    assert!(fresh.semantics_verified());
+    assert!(!fresh.sha256().iter().all(|byte| *byte == 0));
+    Ok(())
+}
 
 #[test]
 fn fresh_live_wal_archive_is_snapshot_safe_before_first_checkpoint() -> TestResult {

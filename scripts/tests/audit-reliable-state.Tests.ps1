@@ -472,6 +472,15 @@ tokenmaster-state = { path = "../state" }
             Should -Throw "*TM-STATE-BACKUP-DIRECTORY-AUTHORITY*"
     }
 
+    It "rejects a second verified stage-to-durable copy escape" {
+        $fixture = New-StateAuditFixture -Name "second-verified-stage-copy"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\package\writer.rs") `
+            -Value 'pub fn copy_verified_stage_to_durable(source: &BackupStagedFile, verified: &VerifiedBackupPackage, destination: &mut DurableStagedFile) -> Result<PackageReceipt, StateError> { let _ = (source, verified, destination); Err(StateError::unavailable()) }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-BACKUP-DIRECTORY-AUTHORITY*"
+    }
+
     It "rejects a second verified-candidate package bridge" {
         $fixture = New-StateAuditFixture -Name "second-verified-candidate-writer"
         Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\package\writer.rs") `

@@ -225,6 +225,15 @@ impl LiveRuntime {
         self.worker.try_completion().map_err(runtime_worker_error)
     }
 
+    pub fn wait_for_completion(
+        &self,
+        timeout: std::time::Duration,
+    ) -> Result<Option<WorkerCompletion>, RuntimeError> {
+        self.worker
+            .wait_for_completion(timeout)
+            .map_err(runtime_worker_error)
+    }
+
     pub fn snapshot(&self) -> Result<LiveRuntimeSnapshot, RuntimeError> {
         let scheduler = self.scheduler.snapshot();
         let worker = self.worker.snapshot().map_err(runtime_worker_error)?;

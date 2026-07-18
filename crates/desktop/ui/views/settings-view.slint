@@ -1,0 +1,95 @@
+import { Button, CheckBox, SpinBox } from "std-widgets.slint";
+import { UiTokens } from "../tokens.slint";
+
+export component SettingsView inherits Rectangle {
+    in property <bool> periodic-enabled;
+    in property <int> quiet-seconds;
+    in property <int> interval-seconds;
+    in property <int> retention-budget-mib;
+    in property <string> settings-health;
+    in property <bool> config-import-preview-visible;
+    in property <string> config-import-created-label;
+    in property <string> config-import-bytes-label;
+    in property <string> config-import-changes-label;
+    in property <bool> high-contrast;
+    in property <bool> reduced-motion;
+    out property <string> settings-layout-mode: root.width < 760px ? "narrow" : "wide";
+
+    callback export-config();
+    callback import-config();
+    callback confirm-config-import();
+    callback cancel-config-import();
+    callback update-backup-policy(bool, int, int, int);
+
+    background: UiTokens.background;
+    accessible-role: groupbox;
+    accessible-label: "TokenMaster settings";
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: UiTokens.space;
+
+        Text { text: "Settings"; color: UiTokens.text-primary; font-size: 24px; font-weight: 700; }
+        Text { text: "Settings health: " + root.settings-health; color: UiTokens.text-secondary; }
+
+        Rectangle {
+            height: 214px;
+            background: UiTokens.surface;
+            border-color: UiTokens.border;
+            border-width: root.high-contrast ? 2px : 1px;
+            border-radius: UiTokens.radius;
+
+            VerticalLayout {
+                padding: UiTokens.space;
+                spacing: UiTokens.space-sm;
+                Text { text: "Automatic backup policy"; color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
+                enabled := CheckBox { text: "Enable periodic backups"; checked: root.periodic-enabled; accessible-label: "Enable periodic backups"; }
+                HorizontalLayout {
+                    spacing: UiTokens.space-sm;
+                    Text { text: "Quiet seconds"; color: UiTokens.text-secondary; vertical-alignment: center; }
+                    quiet := SpinBox { minimum: 300; maximum: 3600; value: root.quiet-seconds; accessible-label: "Backup quiet period in seconds"; }
+                    Text { text: "Interval seconds"; color: UiTokens.text-secondary; vertical-alignment: center; }
+                    interval := SpinBox { minimum: 21600; maximum: 604800; value: root.interval-seconds; accessible-label: "Backup interval in seconds"; }
+                    Text { text: "Budget MiB"; color: UiTokens.text-secondary; vertical-alignment: center; }
+                    budget := SpinBox { minimum: 256; maximum: 65536; value: root.retention-budget-mib; accessible-label: "Backup retention budget in mebibytes"; }
+                }
+                Button {
+                    text: "Save backup policy";
+                    accessible-label: "Save automatic backup policy";
+                    clicked => { root.update-backup-policy(enabled.checked, quiet.value, interval.value, budget.value); }
+                }
+            }
+        }
+
+        Rectangle {
+            height: root.config-import-preview-visible ? 182px : 118px;
+            background: UiTokens.surface;
+            border-color: UiTokens.border;
+            border-width: root.high-contrast ? 2px : 1px;
+            border-radius: UiTokens.radius;
+            VerticalLayout {
+                padding: UiTokens.space;
+                spacing: UiTokens.space-sm;
+                Text { text: "Portable configuration"; color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
+                HorizontalLayout {
+                    spacing: UiTokens.space-sm;
+                    Button { text: "Export configuration"; accessible-label: "Export TokenMaster configuration"; clicked => { root.export-config(); } }
+                    Button { text: "Import configuration"; accessible-label: "Import TokenMaster configuration"; clicked => { root.import-config(); } }
+                }
+                if root.config-import-preview-visible: HorizontalLayout {
+                    spacing: UiTokens.space-sm;
+                    Text {
+                        text: "Import review · " + root.config-import-created-label + " · " + root.config-import-bytes-label + " · " + root.config-import-changes-label;
+                        color: UiTokens.degraded;
+                        horizontal-stretch: 1;
+                        wrap: word-wrap;
+                    }
+                    Button { text: "Apply"; accessible-label: "Apply reviewed configuration import"; clicked => { root.confirm-config-import(); } }
+                    Button { text: "Discard"; accessible-label: "Discard reviewed configuration import"; clicked => { root.cancel-config-import(); } }
+                }
+            }
+        }
+        Text { text: root.reduced-motion ? "Reduced motion enabled" : "Reduced motion ready"; color: UiTokens.text-secondary; font-size: 12px; }
+        Rectangle { vertical-stretch: 1; background: transparent; }
+    }
+}

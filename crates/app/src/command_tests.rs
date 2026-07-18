@@ -79,8 +79,11 @@ fn cancellation_is_exact_and_stops_at_the_irreversible_boundary() {
     else {
         panic!("rebuild must start");
     };
+    let cancellation_flag = cancelled.cancellation_flag();
+    assert!(!cancellation_flag.load(std::sync::atomic::Ordering::Acquire));
     assert!(coordinator.cancel(cancelled.id()));
     assert!(cancelled.is_cancelled());
+    assert!(cancellation_flag.load(std::sync::atomic::Ordering::Acquire));
     assert!(cancelled.begin_irreversible().is_err());
     coordinator
         .finish(cancelled.id(), ApplicationCommandExecution::Cancelled)
@@ -166,14 +169,10 @@ fn completion_promotes_one_follow_up_and_retry_is_explicit() {
     assert_eq!(transition.follow_up().expect("follow-up").id(), pending);
     assert_eq!(
         coordinator.retry_last(),
-        ApplicationCommandAdmission::Queued {
-            request_id: coordinator
-                .snapshot()
-                .pending_request_id()
-                .expect("retry pending"),
-            active_request_id: pending,
-        }
+        ApplicationCommandAdmission::Rejected(ApplicationCommandRejection::Busy)
     );
+    assert_eq!(coordinator.snapshot().active_request_id(), Some(pending));
+    assert_eq!(coordinator.snapshot().pending_count(), 0);
 }
 
 #[test]
@@ -200,9 +199,9 @@ fn close_rejects_new_work_without_discarding_the_active_receipt() {
 fn restart_pause_discards_only_the_follow_up_and_can_resume_admission() {
     let mut coordinator = ApplicationCommandCoordinator::new();
     let ApplicationCommandAdmission::Started(active) =
-        coordinator.submit(ApplicationCommand::Rebuild)
+        coordinator.submit(ApplicationCommand::ExportConfig)
     else {
-        panic!("rebuild must start");
+        panic!("config export must start");
     };
     assert!(matches!(
         coordinator.submit(ApplicationCommand::Backup),

@@ -18,6 +18,7 @@ use super::{
     BackupCompression, BackupMetadata, BackupPackage, ConfigPackage, MAX_CONFIG_PACKAGE_BYTES,
     MAX_DATABASE_PACKAGE_BYTES, MAX_ENCODED_PACKAGE_BYTES, MAX_PACKAGE_TOTAL_EXPANDED_BYTES,
     MAX_SETTINGS_PACKAGE_BYTES, PACKAGE_IO_BUFFER_BYTES, PACKAGE_WINDOW_LOG, PackageReceipt,
+    VerifiedBackupPackage,
 };
 
 impl ConfigPackage {
@@ -84,6 +85,68 @@ fn write_config_stream<W: Write>(
 }
 
 impl BackupPackage {
+    /// Copies one already verified sealed backup stage into a controlled durable stage.
+    ///
+    /// The source is recounted and rehashed against the opaque verification receipt;
+    /// callers receive no generic stream or digest authority.
+    pub fn copy_verified_stage_to_durable(
+        source: &BackupStagedFile,
+        verified: &VerifiedBackupPackage,
+        destination: &mut DurableStagedFile,
+    ) -> Result<PackageReceipt, StateError> {
+        let result = (|| {
+            let expected = verified.receipt();
+            let mut source = source.open_reader().map_err(map_backup_directory_error)?;
+            if source.len() != expected.package_len() {
+                return Err(StateError::integrity());
+            }
+            let (result, failures) = {
+                let mut source_adapter = DurableReaderAdapter::new(&mut source);
+                let mut destination_adapter = DurableWriterAdapter::new(destination);
+                let result = (|| {
+                    let mut hasher = Sha256::new();
+                    let mut observed_len = 0_u64;
+                    let mut buffer = [0_u8; PACKAGE_IO_BUFFER_BYTES];
+                    loop {
+                        let count = source_adapter
+                            .read(&mut buffer)
+                            .map_err(|_| StateError::integrity())?;
+                        if count == 0 {
+                            break;
+                        }
+                        destination_adapter
+                            .write_all(&buffer[..count])
+                            .map_err(|_| StateError::unavailable())?;
+                        hasher.update(&buffer[..count]);
+                        observed_len = observed_len
+                            .checked_add(
+                                u64::try_from(count)
+                                    .map_err(|_| StateError::capacity_exceeded())?,
+                            )
+                            .ok_or_else(StateError::capacity_exceeded)?;
+                    }
+                    let observed_sha256: [u8; 32] = hasher.finalize().into();
+                    if observed_len != expected.package_len()
+                        || &observed_sha256 != expected.file_sha256()
+                    {
+                        return Err(StateError::integrity());
+                    }
+                    Ok(expected)
+                })();
+                (
+                    result,
+                    [source_adapter.failure(), destination_adapter.failure()],
+                )
+            };
+            let receipt = resolve_codec_error(result, &failures)?;
+            destination
+                .seal(receipt.package_len(), *receipt.file_sha256())
+                .map_err(map_durable_error)?;
+            Ok(receipt)
+        })();
+        discard_failed_stage(result, destination)
+    }
+
     /// Writes and seals a typed settings-plus-database package in a controlled stage.
     ///
     /// `database_len` and `database_sha256` must come from a verified standalone

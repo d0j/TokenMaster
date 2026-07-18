@@ -1,0 +1,151 @@
+import { Button, LineEdit, ScrollView } from "std-widgets.slint";
+import { RestorePointRow } from "../models.slint";
+import { UiTokens } from "../tokens.slint";
+import { BackupRow } from "../components/backup-row.slint";
+import { OperationProgress } from "../components/operation-progress.slint";
+import { RecoveryBanner } from "../components/recovery-banner.slint";
+
+export component DataHealthView inherits Rectangle {
+    in property <string> health;
+    in property <bool> safe-mode;
+    in property <string> recovery-kind;
+    in property <bool> non-reconstructible-domains-lost;
+    in property <string> generation;
+    in property <string> latest-success-label;
+    in property <string> latest-attempt-label;
+    in property <string> successful-count-label;
+    in property <string> failure-count-label;
+    in property <string> published-bytes-label;
+    in property <string> latest-failure-code;
+    in property <[RestorePointRow]> restore-points;
+    in property <string> operation-kind;
+    in property <string> operation-phase;
+    in property <string> operation-failure-code;
+    in property <bool> operation-cancel-enabled;
+    in property <bool> restore-confirmation-visible;
+    in property <int> restore-confirmation-row;
+    in property <string> restore-confirmation-detail;
+    in property <bool> high-contrast;
+    in property <bool> reduced-motion;
+    out property <string> data-health-layout-mode: root.width < 760px ? "narrow" : "wide";
+
+    callback backup-normal();
+    callback backup-compact();
+    callback backup-encrypted(string, string);
+    callback verify-backups();
+    callback preview-restore(int);
+    callback confirm-restore(int, bool);
+    callback dismiss-restore-confirmation();
+    callback rebuild-data();
+    callback retry-operation();
+    callback cancel-operation();
+
+    background: UiTokens.background;
+    accessible-role: groupbox;
+    accessible-label: "Data health and recovery";
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: UiTokens.space-sm;
+
+        RecoveryBanner {
+            safe-mode: root.safe-mode;
+            health: root.health;
+            recovery-kind: root.recovery-kind;
+            non-reconstructible-domains-lost: root.non-reconstructible-domains-lost;
+        }
+
+        HorizontalLayout {
+            spacing: UiTokens.space;
+            Text { text: "Data & Recovery"; color: UiTokens.text-primary; font-size: 24px; font-weight: 700; horizontal-stretch: 1; }
+            Text { text: root.health; color: root.health == "healthy" ? UiTokens.ready : root.health == "degraded" ? UiTokens.degraded : UiTokens.unavailable; vertical-alignment: center; }
+        }
+
+        Text {
+            text: "Last success " + root.latest-success-label + " · Last attempt " + root.latest-attempt-label + " · " + root.successful-count-label + " successful · " + root.failure-count-label + " failed · " + root.published-bytes-label;
+            color: UiTokens.text-secondary;
+            wrap: word-wrap;
+        }
+
+        OperationProgress {
+            operation-kind: root.operation-kind;
+            operation-phase: root.operation-phase;
+            failure-code: root.operation-failure-code;
+            cancel-enabled: root.operation-cancel-enabled;
+            retry => { root.retry-operation(); }
+            cancel => { root.cancel-operation(); }
+        }
+
+        HorizontalLayout {
+            spacing: UiTokens.space-sm;
+            Button { text: "Backup"; accessible-label: "Create normal backup"; clicked => { root.backup-normal(); } }
+            Button { text: "Compact export"; accessible-label: "Export maximum compact backup"; clicked => { root.backup-compact(); } }
+            Button { text: "Verify"; accessible-label: "Verify all backups"; clicked => { root.verify-backups(); } }
+            Button { text: "Rebuild"; accessible-label: "Rebuild local usage data"; clicked => { root.rebuild-data(); } }
+        }
+
+        Rectangle {
+            height: 92px;
+            background: UiTokens.surface;
+            border-color: UiTokens.border;
+            border-width: 1px;
+            border-radius: UiTokens.radius-sm;
+
+            VerticalLayout {
+                padding: UiTokens.space-sm;
+                spacing: UiTokens.space-xs;
+                HorizontalLayout {
+                    spacing: UiTokens.space-sm;
+                    passphrase := LineEdit { placeholder-text: "Encryption passphrase"; input-type: password; accessible-label: "Encryption passphrase"; }
+                    confirmation := LineEdit { placeholder-text: "Confirm passphrase"; input-type: password; accessible-label: "Confirm encryption passphrase"; }
+                    Button {
+                        text: "Encrypted export";
+                        accessible-label: "Export encrypted backup";
+                        clicked => {
+                            root.backup-encrypted(passphrase.text, confirmation.text);
+                            passphrase.text = "";
+                            confirmation.text = "";
+                        }
+                    }
+                }
+                Text { text: "Use 12–128 Unicode characters. Values are cleared after admission."; color: UiTokens.text-secondary; font-size: 12px; }
+            }
+        }
+
+        Text { text: "Restore points"; color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
+        if root.restore-confirmation-visible: Rectangle {
+            height: 78px;
+            background: UiTokens.surface-raised;
+            border-color: UiTokens.degraded;
+            border-width: root.high-contrast ? 2px : 1px;
+            border-radius: UiTokens.radius-sm;
+            accessible-role: groupbox;
+            accessible-label: "Confirm destructive restore";
+            HorizontalLayout {
+                padding: UiTokens.space-sm;
+                spacing: UiTokens.space-sm;
+                Text { text: "Restore review · " + root.restore-confirmation-detail; color: UiTokens.text-primary; wrap: word-wrap; horizontal-stretch: 1; }
+                Button { text: "Data only"; accessible-label: "Confirm restore data only"; clicked => { root.confirm-restore(root.restore-confirmation-row, false); } }
+                Button { text: "Data + settings"; accessible-label: "Confirm restore data and portable settings"; clicked => { root.confirm-restore(root.restore-confirmation-row, true); } }
+                Button { text: "Cancel"; accessible-label: "Cancel restore review"; clicked => { root.dismiss-restore-confirmation(); } }
+            }
+        }
+        ScrollView {
+            vertical-stretch: 1;
+            VerticalLayout {
+                spacing: UiTokens.space-xs;
+                for point in root.restore-points: BackupRow {
+                    row-index: point.row-index;
+                    created-label: point.created-label;
+                    size-label: point.size-label;
+                    health: point.health;
+                    purpose-label: point.purpose-label;
+                    schema-label: point.schema-label;
+                    compression-label: point.compression-label;
+                    preview(index) => { root.preview-restore(index); }
+                }
+            }
+        }
+        Text { text: "Generation " + root.generation + (root.latest-failure-code == "" ? "" : " · Latest failure " + root.latest-failure-code); color: UiTokens.text-secondary; font-size: 12px; }
+    }
+}

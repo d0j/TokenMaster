@@ -874,9 +874,40 @@ counts, creation time, and package bytes. Confirm consumes that exact preview an
 the existing atomic settings commit, preserving device-local settings. The codec rejects
 encoded config input above 2 MiB before parsing.
 
-Task 12B.2b still owns native-file selection, worker/UI config preview-confirm binding,
-verify/selected-restore/rebuild execution, complete cancellation propagation, confirmed
-full-restore UX, and authoritative no-backup reconstruction.
+Implemented Task 12B.2b/Task 15 binds the sealed selector to the owning Slint thread and
+dispatches only `SelectedInputFile`/`SelectedOutputFile` capabilities to the single
+operation worker. Desktop submits fixed path-free intents for config preview/confirm/
+cancel, normal/compact/encrypted backup, verification, confirmed restore, rebuild,
+retry, cancel, and backup-policy changes. The UI receives admission immediately and
+observes only newest immutable operation/reliable-state projections; it never waits for
+file, compression, SQLite, recovery, or provider work.
+
+Application composition publishes `AtomicPromotion` and disables cancellation exactly
+when each mutation crosses its one-way boundary. Config export, compact/encrypted
+export, settings commit, policy commit, selected restore, and rebuild cannot report a
+late cancellation. Dialog cancellation performs no command admission or write. Restore
+keeps its generation/ordinal confirmation and explicit data-only or data-plus-portable-
+settings mode; the confirmation consumes the exact identity retained at preview even
+if the catalog row changes meanwhile. Device-local settings remain excluded. Operation
+`Running` publication occurs at actual worker execution start for both an admitted
+permit and a promoted follow-up. Manual backup is cancellable before
+`begin_irreversible`, then publishes `AtomicPromotion` and disables cancellation before
+its exact maintenance wait.
+
+`RecoveryCoordinator::reconstruct_definitively_corrupt` accepts only the fixed archive
+scope, matching lease, proven definitive corruption, and absence of a usable verified
+backup. It creates a fresh archive with the ordinary store schema, fully verifies it,
+publishes a reconstruction journal without backup identity, quarantines the exact
+corrupt main/WAL/SHM set, atomically promotes, and fully verifies the active result.
+Application then starts one guarded live runtime, requests `RefreshUrgency::Recovery`,
+and waits on a bounded event-driven worker completion until the source reconciliation
+is complete and no refresh remains active or pending. Maintenance starts as `Healthy`
+only after that barrier. The durable projection exposes only verified-backup or
+authoritative-source kind plus an explicit non-reconstructible-loss boolean. A complete
+source-reconstruction journal is also durable preflight evidence: after process death,
+startup must run this same barrier before healthy publication. A failed same-process
+barrier leaves a retryable obligation that reopens the promoted archive without
+repeating reconstruction.
 
 ## Provider plugin ABI
 

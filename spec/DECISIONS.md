@@ -1534,3 +1534,48 @@ This decision does not claim equivalent hostile-race cleanup on Unix. Native sel
 is unavailable there; the controlled selector remains deterministic and fail-closed on
 observed identity drift, while conditional handle/directory-relative deletion is a
 portability gate before enabling a future Unix native selector.
+
+## ADR-063 — Reconstruct into fresh truth and publish loss explicitly
+
+Decision: when the active archive is definitively corrupt and no fully reverified
+backup is usable, the recovery coordinator may create only one fresh normal-schema
+archive through the ordinary store constructor. It fully verifies that archive, stages
+and reverifies it, proves active corruption again, publishes a reconstruction journal
+with no backup identity, quarantines the exact main/WAL/SHM set, atomically promotes,
+and fully verifies the new active archive. Journal backup absence is accepted only for
+this explicit reconstruction mode; normal restore keeps its exact backup identity.
+There is no corrupt-row salvage, partial copy, main-only copy, or plausible zero fill.
+
+Application composition does not treat the empty verified archive as healthy. It starts
+one guarded live runtime, forces `RefreshUrgency::Recovery`, and waits through the
+worker's bounded event-driven completion path until one successful authoritative local
+source reconciliation is complete and no refresh is active or pending. Only then does
+it start backup maintenance from `Healthy`. Failure or timeout returns to safe mode.
+The durable path-free recovery projection distinguishes verified-backup restoration
+from authoritative-source reconstruction and explicitly marks quota, reset-credit,
+reminder, and Git history as non-reconstructible and unavailable.
+
+A complete reconstruction journal is also durable evidence of an unfinished source
+reconciliation whenever bootstrap starts that candidate. Application preflight maps
+that state to an effective recovery-required outcome, retries the bounded source refresh
+on cold start, and clears the obligation only after successful reconciliation. A failed
+same-process refresh reuses the promoted archive on explicit retry; it does not require
+the archive to remain corrupt and does not repeat quarantine or promotion.
+
+The same application/UI milestone binds native dialogs on their owning Slint/STA thread
+and sends only sealed capabilities to the single joined operation worker. One latest-
+only projection carries bounded state, preview, operation phase, and recovery receipt.
+Each mutating operation publishes `AtomicPromotion` and disables cancel exactly after
+its irreversible boundary. Manual backup remains cancellable until that boundary.
+Queued follow-ups publish `Running` when execution actually starts. Restore confirmation
+consumes the exact reviewed generation/ordinal identity, and unknown reliable-state
+metrics remain unavailable rather than zero. Desktop owns no path, file, SQLite, state/store/runtime,
+provider, or recovery capability and uses no polling timer or progress queue.
+
+Rationale: immediately exposing a structurally valid empty archive would turn temporary
+reconstruction state into false healthy zero truth and could publish a backup before
+authoritative input was restored. Reusing the normal store schema and live refresh path
+avoids a second ingestion implementation. An optional journal backup identity preserves
+old restore compatibility while making source reconstruction explicit and resumable.
+Latest-only UI state and exact irreversible phases keep retained memory constant and
+prevent cancellation receipts from contradicting durable mutation.

@@ -1,0 +1,49 @@
+import { Button } from "std-widgets.slint";
+import { UiTokens } from "../tokens.slint";
+
+export component BackupRow inherits Rectangle {
+    in property <int> row-index;
+    in property <string> created-label;
+    in property <string> size-label;
+    in property <string> health;
+    in property <string> purpose-label;
+    in property <string> schema-label;
+    in property <string> compression-label;
+    callback preview(int);
+
+    height: 56px;
+    background: UiTokens.surface-subtle;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-sm;
+
+    HorizontalLayout {
+        padding-left: UiTokens.space-sm;
+        padding-right: UiTokens.space-sm;
+        spacing: UiTokens.space-sm;
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            Text {
+                text: root.created-label + " · " + root.purpose-label;
+                color: UiTokens.text-primary;
+                font-weight: 650;
+            }
+            Text {
+                text: root.size-label + " · " + root.schema-label + " · " + root.compression-label;
+                color: UiTokens.text-secondary;
+                font-size: 12px;
+            }
+        }
+        Text {
+            text: root.health;
+            color: root.health == "verified" ? UiTokens.ready : root.health == "header_valid" ? UiTokens.degraded : UiTokens.unavailable;
+            vertical-alignment: center;
+        }
+        Button {
+            text: "Review";
+            accessible-label: "Review restore point " + root.created-label;
+            clicked => { root.preview(root.row-index); }
+        }
+    }
+}

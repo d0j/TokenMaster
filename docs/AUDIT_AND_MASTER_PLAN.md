@@ -279,18 +279,20 @@ P3-D.0 Reliable State is approved under
 archive/lease identity and adds redundant settings, consistent verified snapshots,
 strict compressed packages, bounded retention, durable restore/quarantine, automatic
 corruption-only recovery, safe mode, and resource/privacy gates. Task 1 is implemented:
-the state package is library-only, exposes fixed path-private errors and bounded count/
-byte checks, and has an exact dependency/authority audit. Task 2 is implemented:
-platform-owned exact-child staged publication/replacement is bounded, digest-verified,
-path-private, crash-tested, and preserves ambiguous recovery artifacts. Task 3 is
-implemented behind the crate boundary: six literal A/B slots, a strict 1 MiB checked
-envelope, two-pass bounded streaming save, corrupt-newest fallback, equal-generation
-conflict handling, post-publication recovery classification, and generation-3 process-
-death evidence. Task 4 is implemented: strict schema-v1 reminder/backup/device-route
-settings, safe current/fallback/default outcomes, portable-only bounded preview,
-stale/idempotent commit, and a reread-verifiable generation/digest target pass without
-generic record/path authority. SQLite snapshots, packages, retention, restore, and UI
-remain unimplemented; Task 5 snapshot/candidate verification is next.
+the state package is library-only and the sealed platform/store/state/app authority
+chain is now implemented through Task 15. This includes bounded durable files and A/B
+records, typed settings/packages, WAL-consistent verified snapshots, optional manual age
+protection, fixed-slot catalog/retention, capacity-one maintenance, journaled restore/
+quarantine, pre-open recovery, migration safety, identity-pinned selected restore, one
+joined application worker, sealed native selection, complete path-free command/UI
+binding, exact irreversible operation phases, and bounded Data Health/Settings views.
+No-backup rebuild creates and fully verifies a normal fresh archive, preserves the
+corrupt set, and completes mandatory authoritative-source reconciliation before healthy
+publication, including restart/retry after promotion, while reporting unknown metrics
+and non-reconstructible domains unavailable. Restore confirmation remains bound to its
+exact reviewed generation/ordinal and queued operation state changes at actual worker
+execution. Tasks 16-18 fault,
+resource-return/UI-latency, documentation, and P3-D.0 acceptance closure are next.
 
 The final planning pass fixes a six-state database/settings transaction, explicit
 manual data-only or data-plus-portable-settings choice, data-only automatic recovery,

@@ -17,6 +17,7 @@ use crate::command::{
     ApplicationCommand, ApplicationCommandAdmission, ApplicationCommandCompletion,
     ApplicationCommandCoordinator, ApplicationCommandExecution, ApplicationCommandFailure,
     ApplicationCommandId, ApplicationCommandPermit, ApplicationCommandRejection,
+    ApplicationOperationPayload, ApplicationOperationRequest,
 };
 
 thread_local! {
@@ -119,9 +120,131 @@ enum WorkerWake {
 
 struct WorkerState {
     coordinator: ApplicationCommandCoordinator,
-    pending_start: Option<ApplicationCommandPermit>,
+    pending_start: Option<ApplicationOperationTask>,
+    pending_follow_up: Option<PendingOperationPayload>,
     latest_completion: Option<ApplicationCommandCompletion>,
     phase: ApplicationOperationWorkerPhase,
+}
+
+struct ApplicationOperationTask {
+    permit: ApplicationCommandPermit,
+    payload: ApplicationOperationPayload,
+}
+
+struct PendingOperationPayload {
+    request_id: ApplicationCommandId,
+    payload: ApplicationOperationPayload,
+}
+
+#[derive(Clone)]
+pub(crate) struct ApplicationOperationSubmitter {
+    state: Arc<Mutex<WorkerState>>,
+    wake_sender: SyncSender<WorkerWake>,
+}
+
+impl ApplicationOperationSubmitter {
+    pub(crate) fn submit(&self, command: ApplicationCommand) -> ApplicationCommandAdmission {
+        self.submit_request(ApplicationOperationRequest::plain(command))
+    }
+
+    pub(crate) fn submit_request(
+        &self,
+        request: ApplicationOperationRequest,
+    ) -> ApplicationCommandAdmission {
+        let (command, payload) = request.into_parts();
+        let admission = {
+            let Ok(mut state) = self.state.lock() else {
+                return ApplicationCommandAdmission::Rejected(ApplicationCommandRejection::Closed);
+            };
+            if state.phase != ApplicationOperationWorkerPhase::Running {
+                return ApplicationCommandAdmission::Rejected(ApplicationCommandRejection::Closed);
+            }
+            let admission = state.coordinator.submit(command);
+            match &admission {
+                ApplicationCommandAdmission::Started(permit) => {
+                    state.pending_start = Some(ApplicationOperationTask {
+                        permit: permit.clone(),
+                        payload,
+                    });
+                }
+                ApplicationCommandAdmission::Queued { request_id, .. } => {
+                    state.pending_follow_up = Some(PendingOperationPayload {
+                        request_id: *request_id,
+                        payload,
+                    });
+                }
+                ApplicationCommandAdmission::Coalesced { .. }
+                | ApplicationCommandAdmission::Rejected(_) => {}
+            }
+            admission
+        };
+        self.wake_if_started(admission)
+    }
+
+    pub(crate) fn retry_last(&self) -> ApplicationCommandAdmission {
+        let admission = {
+            let Ok(mut state) = self.state.lock() else {
+                return ApplicationCommandAdmission::Rejected(ApplicationCommandRejection::Closed);
+            };
+            if state.phase != ApplicationOperationWorkerPhase::Running {
+                return ApplicationCommandAdmission::Rejected(ApplicationCommandRejection::Closed);
+            }
+            let admission = state.coordinator.retry_last();
+            if let ApplicationCommandAdmission::Started(permit) = &admission {
+                state.pending_start = Some(ApplicationOperationTask {
+                    permit: permit.clone(),
+                    payload: ApplicationOperationPayload::Empty,
+                });
+            }
+            admission
+        };
+        self.wake_if_started(admission)
+    }
+
+    #[must_use]
+    pub(crate) fn cancel_active(&self) -> bool {
+        let request_id = self
+            .state
+            .lock()
+            .ok()
+            .and_then(|state| state.coordinator.snapshot().active_request_id());
+        request_id.is_some_and(|request_id| self.cancel(request_id))
+    }
+
+    #[must_use]
+    pub(crate) fn cancel(&self, request_id: ApplicationCommandId) -> bool {
+        let Ok(mut state) = self.state.lock() else {
+            return false;
+        };
+        let cancelled = state.coordinator.cancel(request_id);
+        if cancelled
+            && state
+                .pending_follow_up
+                .as_ref()
+                .is_some_and(|pending| pending.request_id == request_id)
+        {
+            state.pending_follow_up = None;
+        }
+        cancelled
+    }
+
+    fn wake_if_started(
+        &self,
+        admission: ApplicationCommandAdmission,
+    ) -> ApplicationCommandAdmission {
+        if matches!(admission, ApplicationCommandAdmission::Started(_)) {
+            match self.wake_sender.try_send(WorkerWake::Work) {
+                Ok(()) | Err(TrySendError::Full(_)) => {}
+                Err(TrySendError::Disconnected(_)) => {
+                    fault_state(&self.state);
+                    return ApplicationCommandAdmission::Rejected(
+                        ApplicationCommandRejection::Closed,
+                    );
+                }
+            }
+        }
+        admission
+    }
 }
 
 pub(crate) struct ApplicationOperationWorker {
@@ -135,6 +258,19 @@ impl ApplicationOperationWorker {
     where
         F: FnMut(&ApplicationCommandPermit) -> ApplicationCommandExecution + Send + 'static,
     {
+        let mut execute = execute;
+        Self::spawn_inner(move |permit, _payload| execute(permit), |_| {})
+    }
+
+    pub(crate) fn spawn_with_payload<F>(execute: F) -> Result<Self, ApplicationOperationWorkerError>
+    where
+        F: FnMut(
+                &ApplicationCommandPermit,
+                ApplicationOperationPayload,
+            ) -> ApplicationCommandExecution
+            + Send
+            + 'static,
+    {
         Self::spawn_inner(execute, |_| {})
     }
 
@@ -147,7 +283,8 @@ impl ApplicationOperationWorker {
         F: FnMut(&ApplicationCommandPermit) -> ApplicationCommandExecution + Send + 'static,
         H: FnMut(ApplicationCommandId) + Send + 'static,
     {
-        Self::spawn_inner(execute, before_finish)
+        let mut execute = execute;
+        Self::spawn_inner(move |permit, _payload| execute(permit), before_finish)
     }
 
     fn spawn_inner<F, H>(
@@ -155,13 +292,19 @@ impl ApplicationOperationWorker {
         before_finish: H,
     ) -> Result<Self, ApplicationOperationWorkerError>
     where
-        F: FnMut(&ApplicationCommandPermit) -> ApplicationCommandExecution + Send + 'static,
+        F: FnMut(
+                &ApplicationCommandPermit,
+                ApplicationOperationPayload,
+            ) -> ApplicationCommandExecution
+            + Send
+            + 'static,
         H: FnMut(ApplicationCommandId) + Send + 'static,
     {
         install_panic_redaction();
         let state = Arc::new(Mutex::new(WorkerState {
             coordinator: ApplicationCommandCoordinator::new(),
             pending_start: None,
+            pending_follow_up: None,
             latest_completion: None,
             phase: ApplicationOperationWorkerPhase::Running,
         }));
@@ -189,59 +332,18 @@ impl ApplicationOperationWorker {
     }
 
     pub(crate) fn submit(&self, command: ApplicationCommand) -> ApplicationCommandAdmission {
-        let admission = {
-            let Ok(mut state) = self.state.lock() else {
-                return ApplicationCommandAdmission::Rejected(ApplicationCommandRejection::Closed);
-            };
-            if state.phase != ApplicationOperationWorkerPhase::Running {
-                return ApplicationCommandAdmission::Rejected(ApplicationCommandRejection::Closed);
-            }
-            let admission = state.coordinator.submit(command);
-            if let ApplicationCommandAdmission::Started(permit) = &admission {
-                state.pending_start = Some(permit.clone());
-            }
-            admission
-        };
-        if matches!(admission, ApplicationCommandAdmission::Started(_)) {
-            match self.wake_sender.try_send(WorkerWake::Work) {
-                Ok(()) | Err(TrySendError::Full(_)) => {}
-                Err(TrySendError::Disconnected(_)) => {
-                    self.fault();
-                    return ApplicationCommandAdmission::Rejected(
-                        ApplicationCommandRejection::Closed,
-                    );
-                }
-            }
-        }
-        admission
+        self.submitter().submit(command)
     }
 
     pub(crate) fn retry_last(&self) -> ApplicationCommandAdmission {
-        let admission = {
-            let Ok(mut state) = self.state.lock() else {
-                return ApplicationCommandAdmission::Rejected(ApplicationCommandRejection::Closed);
-            };
-            if state.phase != ApplicationOperationWorkerPhase::Running {
-                return ApplicationCommandAdmission::Rejected(ApplicationCommandRejection::Closed);
-            }
-            let admission = state.coordinator.retry_last();
-            if let ApplicationCommandAdmission::Started(permit) = &admission {
-                state.pending_start = Some(permit.clone());
-            }
-            admission
-        };
-        if matches!(admission, ApplicationCommandAdmission::Started(_)) {
-            match self.wake_sender.try_send(WorkerWake::Work) {
-                Ok(()) | Err(TrySendError::Full(_)) => {}
-                Err(TrySendError::Disconnected(_)) => {
-                    self.fault();
-                    return ApplicationCommandAdmission::Rejected(
-                        ApplicationCommandRejection::Closed,
-                    );
-                }
-            }
+        self.submitter().retry_last()
+    }
+
+    pub(crate) fn submitter(&self) -> ApplicationOperationSubmitter {
+        ApplicationOperationSubmitter {
+            state: Arc::clone(&self.state),
+            wake_sender: self.wake_sender.clone(),
         }
-        admission
     }
 
     pub(crate) fn pause_admission(&self) -> Result<(), ApplicationOperationWorkerError> {
@@ -253,6 +355,7 @@ impl ApplicationOperationWorker {
             return Err(ApplicationOperationWorkerError::internal());
         }
         state.coordinator.pause_admission();
+        state.pending_follow_up = None;
         Ok(())
     }
 
@@ -270,9 +373,7 @@ impl ApplicationOperationWorker {
 
     #[must_use]
     pub(crate) fn cancel(&self, request_id: ApplicationCommandId) -> bool {
-        self.state
-            .lock()
-            .is_ok_and(|mut state| state.coordinator.cancel(request_id))
+        self.submitter().cancel(request_id)
     }
 
     pub(crate) fn try_completion(
@@ -318,6 +419,7 @@ impl ApplicationOperationWorker {
                     state.phase = ApplicationOperationWorkerPhase::Stopping;
                 }
                 state.coordinator.close();
+                state.pending_follow_up = None;
             }
             Err(_) => internal_failure = true,
         }
@@ -342,11 +444,7 @@ impl ApplicationOperationWorker {
     }
 
     fn fault(&self) {
-        if let Ok(mut state) = self.state.lock() {
-            state.phase = ApplicationOperationWorkerPhase::Faulted;
-            state.pending_start = None;
-            state.coordinator.close();
-        }
+        fault_state(&self.state);
     }
 }
 
@@ -362,14 +460,14 @@ fn run_worker<F, H>(
     execute: &mut F,
     before_finish: &mut H,
 ) where
-    F: FnMut(&ApplicationCommandPermit) -> ApplicationCommandExecution,
+    F: FnMut(&ApplicationCommandPermit, ApplicationOperationPayload) -> ApplicationCommandExecution,
     H: FnMut(ApplicationCommandId),
 {
     loop {
-        let permit = match state.lock() {
+        let task = match state.lock() {
             Ok(mut state) => {
-                if let Some(permit) = state.pending_start.take() {
-                    Some(permit)
+                if let Some(task) = state.pending_start.take() {
+                    Some(task)
                 } else if state.phase == ApplicationOperationWorkerPhase::Running {
                     None
                 } else {
@@ -378,17 +476,19 @@ fn run_worker<F, H>(
             }
             Err(_) => break,
         };
-        let Some(permit) = permit else {
+        let Some(task) = task else {
             match wake_receiver.recv() {
                 Ok(WorkerWake::Work) => continue,
                 Ok(WorkerWake::Stop) | Err(_) => break,
             }
         };
 
+        let ApplicationOperationTask { permit, payload } = task;
+
         let execution = if permit.is_cancelled() {
             Ok(ApplicationCommandExecution::Cancelled)
         } else {
-            catch_unwind(AssertUnwindSafe(|| execute(&permit)))
+            catch_unwind(AssertUnwindSafe(|| execute(&permit, payload)))
         };
         let panicked = execution.is_err();
         let execution = execution.unwrap_or(ApplicationCommandExecution::Failed(
@@ -419,11 +519,33 @@ fn run_worker<F, H>(
             // outcome, but an executor panic always faults the worker.
             state.phase = ApplicationOperationWorkerPhase::Faulted;
             state.pending_start = None;
+            state.pending_follow_up = None;
             state.coordinator.close();
             break;
         }
         if state.phase == ApplicationOperationWorkerPhase::Running {
-            state.pending_start = transition.follow_up().cloned();
+            state.pending_start = match transition.follow_up().cloned() {
+                Some(permit) => {
+                    let Some(pending) = state.pending_follow_up.take() else {
+                        state.phase = ApplicationOperationWorkerPhase::Faulted;
+                        state.coordinator.close();
+                        break;
+                    };
+                    if pending.request_id != permit.id() {
+                        state.phase = ApplicationOperationWorkerPhase::Faulted;
+                        state.coordinator.close();
+                        break;
+                    }
+                    Some(ApplicationOperationTask {
+                        permit,
+                        payload: pending.payload,
+                    })
+                }
+                None => {
+                    state.pending_follow_up = None;
+                    None
+                }
+            };
         }
     }
 
@@ -432,6 +554,16 @@ fn run_worker<F, H>(
             state.phase = ApplicationOperationWorkerPhase::Stopped;
         }
         state.pending_start = None;
+        state.pending_follow_up = None;
+        state.coordinator.close();
+    }
+}
+
+fn fault_state(state: &Arc<Mutex<WorkerState>>) {
+    if let Ok(mut state) = state.lock() {
+        state.phase = ApplicationOperationWorkerPhase::Faulted;
+        state.pending_start = None;
+        state.pending_follow_up = None;
         state.coordinator.close();
     }
 }

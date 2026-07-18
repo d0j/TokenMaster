@@ -8,7 +8,9 @@
 
 use core::fmt;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use tokenmaster_platform::{SelectedInputFile, SelectedOutputFile};
+use tokenmaster_state::BackupPassphrase;
 
 const COMMAND_RUNNING: u8 = 0;
 const COMMAND_CANCELLED: u8 = 1;
@@ -19,11 +21,175 @@ const COMMAND_IRREVERSIBLE: u8 = 2;
 pub(crate) enum ApplicationCommand {
     ExportConfig,
     ImportConfig,
+    ConfirmConfigImport,
+    CancelConfigImport,
     Backup,
+    BackupCompact,
+    BackupEncrypted,
     Verify,
     RestoreData(ApplicationBackupSelection),
     RestoreDataAndPortableSettings(ApplicationBackupSelection),
     Rebuild,
+    UpdateBackupPolicy,
+}
+
+impl ApplicationCommand {
+    const fn supports_payloadless_retry(self) -> bool {
+        matches!(self, Self::Backup | Self::Verify | Self::Rebuild)
+    }
+
+    const fn is_exclusive(self) -> bool {
+        matches!(
+            self,
+            Self::RestoreData(_) | Self::RestoreDataAndPortableSettings(_) | Self::Rebuild
+        )
+    }
+}
+
+pub(crate) enum ApplicationOperationPayload {
+    Empty,
+    ConfigOutput(SelectedOutputFile),
+    ConfigInput(SelectedInputFile),
+    BackupOutput(SelectedOutputFile),
+    EncryptedBackupOutput {
+        output: SelectedOutputFile,
+        passphrase: BackupPassphrase,
+    },
+    BackupPolicy(ApplicationBackupPolicyUpdate),
+}
+
+impl fmt::Debug for ApplicationOperationPayload {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Empty => formatter.write_str("ApplicationOperationPayload::Empty"),
+            Self::ConfigOutput(_) => {
+                formatter.write_str("ApplicationOperationPayload::ConfigOutput([redacted])")
+            }
+            Self::ConfigInput(_) => {
+                formatter.write_str("ApplicationOperationPayload::ConfigInput([redacted])")
+            }
+            Self::BackupOutput(_) => {
+                formatter.write_str("ApplicationOperationPayload::BackupOutput([redacted])")
+            }
+            Self::EncryptedBackupOutput { .. } => formatter
+                .write_str("ApplicationOperationPayload::EncryptedBackupOutput([redacted])"),
+            Self::BackupPolicy(_) => {
+                formatter.write_str("ApplicationOperationPayload::BackupPolicy([redacted])")
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub(crate) struct ApplicationBackupPolicyUpdate {
+    periodic_enabled: bool,
+    quiet_seconds: u32,
+    interval_seconds: u32,
+    retention_budget_mib: u32,
+}
+
+impl ApplicationBackupPolicyUpdate {
+    pub(crate) const fn new(
+        periodic_enabled: bool,
+        quiet_seconds: u32,
+        interval_seconds: u32,
+        retention_budget_mib: u32,
+    ) -> Self {
+        Self {
+            periodic_enabled,
+            quiet_seconds,
+            interval_seconds,
+            retention_budget_mib,
+        }
+    }
+
+    pub(crate) const fn periodic_enabled(self) -> bool {
+        self.periodic_enabled
+    }
+
+    pub(crate) const fn quiet_seconds(self) -> u32 {
+        self.quiet_seconds
+    }
+
+    pub(crate) const fn interval_seconds(self) -> u32 {
+        self.interval_seconds
+    }
+
+    pub(crate) const fn retention_budget_mib(self) -> u32 {
+        self.retention_budget_mib
+    }
+}
+
+impl fmt::Debug for ApplicationBackupPolicyUpdate {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("ApplicationBackupPolicyUpdate([redacted])")
+    }
+}
+
+pub(crate) struct ApplicationOperationRequest {
+    command: ApplicationCommand,
+    payload: ApplicationOperationPayload,
+}
+
+impl ApplicationOperationRequest {
+    pub(crate) const fn plain(command: ApplicationCommand) -> Self {
+        Self {
+            command,
+            payload: ApplicationOperationPayload::Empty,
+        }
+    }
+
+    pub(crate) const fn export_config(output: SelectedOutputFile) -> Self {
+        Self {
+            command: ApplicationCommand::ExportConfig,
+            payload: ApplicationOperationPayload::ConfigOutput(output),
+        }
+    }
+
+    pub(crate) const fn import_config(input: SelectedInputFile) -> Self {
+        Self {
+            command: ApplicationCommand::ImportConfig,
+            payload: ApplicationOperationPayload::ConfigInput(input),
+        }
+    }
+
+    pub(crate) const fn compact_backup(output: SelectedOutputFile) -> Self {
+        Self {
+            command: ApplicationCommand::BackupCompact,
+            payload: ApplicationOperationPayload::BackupOutput(output),
+        }
+    }
+
+    pub(crate) const fn encrypted_backup(
+        output: SelectedOutputFile,
+        passphrase: BackupPassphrase,
+    ) -> Self {
+        Self {
+            command: ApplicationCommand::BackupEncrypted,
+            payload: ApplicationOperationPayload::EncryptedBackupOutput { output, passphrase },
+        }
+    }
+
+    pub(crate) const fn update_backup_policy(update: ApplicationBackupPolicyUpdate) -> Self {
+        Self {
+            command: ApplicationCommand::UpdateBackupPolicy,
+            payload: ApplicationOperationPayload::BackupPolicy(update),
+        }
+    }
+
+    pub(crate) fn into_parts(self) -> (ApplicationCommand, ApplicationOperationPayload) {
+        (self.command, self.payload)
+    }
+}
+
+impl fmt::Debug for ApplicationOperationRequest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "ApplicationOperationRequest({:?}, [redacted])",
+            self.command
+        )
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -66,6 +232,7 @@ pub(crate) struct ApplicationCommandPermit {
     id: ApplicationCommandId,
     command: ApplicationCommand,
     state: Arc<AtomicU8>,
+    cancelled: Arc<AtomicBool>,
 }
 
 impl ApplicationCommandPermit {
@@ -74,6 +241,7 @@ impl ApplicationCommandPermit {
             id,
             command,
             state: Arc::new(AtomicU8::new(COMMAND_RUNNING)),
+            cancelled: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -89,19 +257,28 @@ impl ApplicationCommandPermit {
 
     #[must_use]
     pub(crate) fn is_cancelled(&self) -> bool {
-        self.state.load(Ordering::Acquire) == COMMAND_CANCELLED
+        self.cancelled.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn cancellation_flag(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.cancelled)
     }
 
     #[must_use]
     fn cancel(&self) -> bool {
-        self.state
+        let cancelled = self
+            .state
             .compare_exchange(
                 COMMAND_RUNNING,
                 COMMAND_CANCELLED,
                 Ordering::AcqRel,
                 Ordering::Acquire,
             )
-            .is_ok()
+            .is_ok();
+        if cancelled {
+            self.cancelled.store(true, Ordering::Release);
+        }
+        cancelled
     }
 
     pub(crate) fn begin_irreversible(&self) -> Result<(), ApplicationCommandStateError> {
@@ -133,6 +310,7 @@ impl PartialEq for ApplicationCommandPermit {
         self.id == other.id
             && self.command == other.command
             && Arc::ptr_eq(&self.state, &other.state)
+            && Arc::ptr_eq(&self.cancelled, &other.cancelled)
     }
 }
 
@@ -271,11 +449,6 @@ impl ApplicationCommandCoordinatorSnapshot {
     }
 
     #[must_use]
-    pub(crate) const fn pending_request_id(self) -> Option<ApplicationCommandId> {
-        self.pending_request_id
-    }
-
-    #[must_use]
     pub(crate) const fn pending_command(self) -> Option<ApplicationCommand> {
         self.pending_command
     }
@@ -327,6 +500,9 @@ impl ApplicationCommandCoordinator {
             return ApplicationCommandAdmission::Rejected(ApplicationCommandRejection::Closed);
         }
         if let Some(active) = self.active.as_ref() {
+            if active.permit.command().is_exclusive() {
+                return ApplicationCommandAdmission::Rejected(ApplicationCommandRejection::Busy);
+            }
             if active.permit.command() == command {
                 return ApplicationCommandAdmission::Coalesced {
                     request_id: active.permit.id(),
@@ -410,7 +586,11 @@ impl ApplicationCommandCoordinator {
         let (outcome, failure) = match execution {
             ApplicationCommandExecution::Succeeded => (ApplicationCommandOutcome::Succeeded, None),
             ApplicationCommandExecution::Failed(failure) => {
-                self.last_retryable = Some(active.permit.command());
+                self.last_retryable = active
+                    .permit
+                    .command()
+                    .supports_payloadless_retry()
+                    .then_some(active.permit.command());
                 (ApplicationCommandOutcome::Failed, Some(failure))
             }
             ApplicationCommandExecution::Cancelled => (ApplicationCommandOutcome::Cancelled, None),

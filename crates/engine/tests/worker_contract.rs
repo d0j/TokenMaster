@@ -96,6 +96,49 @@ fn wait_completion(worker: &RefreshWorker) -> WorkerCompletion {
 }
 
 #[test]
+fn completion_wait_is_bounded_and_returns_the_exact_published_receipt() {
+    let clock = Arc::new(TestClock::default());
+    let (entered_tx, entered_rx) = sync_channel(1);
+    let (release_tx, release_rx) = sync_channel(1);
+    let mut worker = RefreshWorker::spawn(clock, move |permit| {
+        entered_tx.send(permit.id()).expect("signal active task");
+        release_rx.recv().expect("release active task");
+        RefreshOutcome::Completed
+    })
+    .expect("spawn worker");
+    let request_id = match worker
+        .submit(RefreshUrgency::Recovery, None)
+        .expect("submit recovery")
+    {
+        RefreshAdmission::Started(permit) => permit.id(),
+        admission => panic!("unexpected recovery admission: {admission:?}"),
+    };
+    assert_eq!(
+        entered_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("active task entered"),
+        request_id
+    );
+    assert_eq!(
+        worker
+            .wait_for_completion(Duration::from_millis(1))
+            .expect("bounded empty wait"),
+        None
+    );
+    release_tx.send(()).expect("release active task");
+    let completion = worker
+        .wait_for_completion(Duration::from_secs(2))
+        .expect("bounded completion wait")
+        .expect("published completion");
+    assert_eq!(completion.request_id(), request_id);
+    assert_eq!(completion.outcome(), RefreshOutcome::Completed);
+    assert_eq!(
+        worker.shutdown().expect("worker shutdown"),
+        WorkerPhase::Stopped
+    );
+}
+
+#[test]
 fn ten_thousand_hints_use_one_follow_up_and_latest_only_result_slot() {
     let clock = Arc::new(TestClock::default());
     let calls = Arc::new(AtomicU64::new(0));

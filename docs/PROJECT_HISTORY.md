@@ -3021,3 +3021,61 @@ Clean-root, formatting/diff, warnings-as-errors locked workspace Clippy, MSVC al
 platform check, release application composition, application 38/38 and reliable-state
 55/55 authority mutations also pass. Application/UI binding and interactive Windows
 evidence remain Task 15 work; no product or release acceptance is claimed.
+
+## 2026-07-18 — P3-D.0 Task 12B.2b and Task 15 reliable recovery UI
+
+Completed the reliable-state application/Desktop contour without granting the UI file,
+store, runtime, provider, or recovery authority. Native dialog selection stays on the
+owning Slint/STA thread; only sealed input/output capabilities enter the existing single
+joined worker. Config preview/confirm/cancel, normal/compact/encrypted backup, verify,
+confirmed selected restore, rebuild, retry/cancel, and backup-policy updates are fixed
+path-free intents. The worker retains one active request, one follow-up, and one latest
+completion. All durable operations now publish the non-cancellable `AtomicPromotion`
+phase at their exact one-way boundary.
+
+Added the Data & Recovery and Settings views over one latest-only bounded Desktop
+projection. It carries scalar health/policy/receipt facts, at most fifteen generation/
+ordinal restore choices, one config preview, and one operation. Restore has an explicit
+second review and data-only or data-plus-portable-settings choice. Passphrases are
+redacted and cleared after admission. The views include accessibility, high-contrast,
+reduced-motion, and narrow/wide hooks and add no timer, animation, progress queue, or
+history-sized model. Reliable state remains separate from the archive-backed product
+snapshot so safe mode can render it without starting query/controller/runtime owners.
+
+Implemented the previously missing no-backup reconstruction. Proven definitive active
+corruption plus absence of a usable fully reverified point authorizes a fresh archive
+created through the ordinary store schema. State fully verifies it, stages and
+reverifies it, writes an explicit reconstruction journal with no backup identity,
+preserves main/WAL/SHM in bounded quarantine, atomically promotes, and fully verifies
+the active result. Application then starts one guarded live runtime, forces
+`RefreshUrgency::Recovery`, and waits through the bounded worker completion path until
+authoritative local Codex reconciliation completes and no refresh remains active or
+pending. Only then does backup maintenance start healthy. The durable UI receipt marks
+quota, reset-credit, reminder, and Git history unavailable rather than creating false
+zeros.
+
+Focused evidence passes application tests, the new engine completion-wait contract, the
+complete engine/runtime/store/state/desktop package set including Windows resource
+contracts, source audits, and application 42/42, reliable-state 56/56, and desktop 26/26
+policy mutations. Clean-root, formatting, warnings-as-errors locked workspace Clippy,
+and the complete locked workspace test/doctest suite in 494.3 seconds also pass. One
+initial parallel GNU link of the query value contract returned no diagnostic; its exact
+target passed 7/7 sequentially and the unchanged full command then passed. The
+authenticated live Codex contract remains the sole expected environment-gated ignored
+test. Task 16 adversarial matrix, Task 17 release-mode resource/UI latency receipts,
+interactive Windows evidence, M0 acceptance, packaging, signing, and release remain
+unclaimed.
+
+Independent review then identified four Important UI/operation truth defects and the
+root audit found a fifth restart/retry lifecycle gap. The corrected contour pins restore
+confirmation to the exact reviewed selection, publishes follow-up `Running` only at
+actual execution start, keeps manual backup cancellable until its real irreversible
+boundary, and represents unknown counts/bytes as unavailable. Source-reconstruction
+reconciliation is now a preflight obligation derived from durable journal/run-state
+evidence: it survives cold restart, failed same-process retry, and two interrupted
+launches into Safe Mode, while explicit retry reconciles the promoted archive without
+repeating reconstruction. Application 46/46, desktop 28/28, and reliable-state 56/56
+mutations, clean-root, formatting, strict workspace Clippy, and the complete locked
+workspace test/doctest suite in 540.8 seconds pass. Independent rereview reports
+Critical/Important/Minor 0/0/0 and `Ready`; Tasks 16-18 and release acceptance remain
+open.

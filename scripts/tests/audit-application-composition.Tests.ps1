@@ -88,7 +88,7 @@ Describe "TokenMaster application composition audit" {
     It "rejects a second application operation worker" {
         $fixture = New-AppAuditFixture -Name "duplicate-operation-worker"
         Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\application.rs") `
-            -Value 'fn duplicate_operation_worker() { let _ = ApplicationOperationWorker::spawn('
+            -Value 'fn duplicate_operation_worker() { let _ = ApplicationOperationWorker::spawn_with_payload('
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-APP-OPERATION-WORKER*"
@@ -120,7 +120,7 @@ Describe "TokenMaster application composition audit" {
         $fixture = New-AppAuditFixture -Name "unsealed-config-target"
         $path = Join-Path $fixture "crates\app\src\state.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            'target: &DurableFileTarget',
+            'mut target: SelectedOutputFile',
             'target: &std::path::Path'
         )
         [System.IO.File]::WriteAllText($path, $text)
@@ -146,13 +146,65 @@ Describe "TokenMaster application composition audit" {
         $fixture = New-AppAuditFixture -Name "backup-command-drift"
         $path = Join-Path $fixture "crates\app\src\application.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            'ApplicationCommand::Backup => execute_manual_backup_command(',
-            'ApplicationCommand::Backup => execute_unbound_backup('
+            'execute_manual_backup_command(bundle, reliable_state, permit)',
+            'execute_unbound_backup(bundle, permit)'
         )
         [System.IO.File]::WriteAllText($path, $text)
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-APP-BACKUP-COMMAND*"
+    }
+
+    It "rejects publishing running state only at admission instead of actual execution" {
+        $fixture = New-AppAuditFixture -Name "operation-actual-start-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '.publish_operation(Some(application_operation_running(permit.command())))',
+            '.publish_operation(Some(application_operation_completion(permit.command(), ApplicationCommandExecution::Succeeded)))'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-OPERATION-ACTUAL-START*"
+    }
+
+    It "rejects removing the manual backup atomic promotion projection" {
+        $fixture = New-AppAuditFixture -Name "manual-backup-atomic-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'publish_atomic_operation(reliable_state, permit.command());',
+            'publish_manual_backup_state(reliable_state, permit.command());'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-MANUAL-BACKUP-ATOMIC*"
+    }
+
+    It "rejects losing the durable source-reconciliation obligation after reconstruction" {
+        $fixture = New-AppAuditFixture -Name "rebuild-durable-reconcile-drift"
+        $path = Join-Path $fixture "crates\app\src\state.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'journal.phase() == RecoveryPhase::Complete && journal.backup().is_none()',
+            'journal.phase() == RecoveryPhase::Complete && journal.backup().is_some()'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-REBUILD-DURABLE-RECONCILE*"
+    }
+
+    It "rejects bypassing cold-start reconstruction reconciliation" {
+        $fixture = New-AppAuditFixture -Name "rebuild-cold-reconcile-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'if preflight.requires_source_reconciliation() {',
+            'if false {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-REBUILD-COLD-RECONCILE*"
     }
 
     It "rejects detaching the application operation worker at shutdown" {
@@ -269,17 +321,57 @@ Describe "TokenMaster application composition audit" {
         [System.IO.File]::WriteAllText($path, $text)
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
-            Should -Throw "*TM-APP-RESTORE-RECOVERY-LAUNCH*"
+            Should -Throw "*TM-APP-RECOVERY-LAUNCH*"
+    }
+
+    It "rejects removing the no-backup rebuild binding" {
+        $fixture = New-AppAuditFixture -Name "rebuild-binding-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '(ApplicationCommand::Rebuild, ApplicationOperationPayload::Empty)',
+            '(ApplicationCommand::Rebuild, ApplicationOperationPayload::ConfigInput(_))'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-REBUILD-BINDING*"
+    }
+
+    It "rejects weakening authoritative recovery reconciliation" {
+        $fixture = New-AppAuditFixture -Name "rebuild-reconcile-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '.refresh_now(RefreshUrgency::Recovery)',
+            '.refresh_now(RefreshUrgency::Hint)'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-REBUILD-RECONCILE*"
+    }
+
+    It "rejects reporting rebuild success before reconciliation completes" {
+        $fixture = New-AppAuditFixture -Name "rebuild-reconcile-wait-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'wait_for_reconstructed_reconciliation(&started.live)',
+            'skip_reconstructed_reconciliation(&started.live)'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-REBUILD-RECONCILE-WAIT*"
     }
 
     It "rejects binding the recovery receipt after restored lifecycle work" {
         $fixture = New-AppAuditFixture -Name "restore-receipt-order-drift"
         $path = Join-Path $fixture "crates\app\src\application.rs"
-        $text = [System.IO.File]::ReadAllText($path).Replace(
-            'self.preflight.bind_recovery_launch(receipt)?;',
-            ''
-        )
-        $text += "`nfn bind_too_late() { self.preflight.bind_recovery_launch(receipt)?; }`n"
+        $text = [System.IO.File]::ReadAllText($path)
+        $needle = '.bind_recovery_launch(receipt)?;'
+        $binding = $text.IndexOf($needle, [System.StringComparison]::Ordinal)
+        $binding | Should -BeGreaterOrEqual 0
+        $text = $text.Remove($binding, $needle.Length)
+        $text += "`nfn bind_too_late() { preflight.bind_recovery_launch(receipt)?; }`n"
         [System.IO.File]::WriteAllText($path, $text)
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
@@ -430,6 +522,15 @@ Describe "TokenMaster application composition audit" {
         $fixture = New-AppAuditFixture -Name "forbidden-authority"
         Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\application.rs") `
             -Value 'const PRIVATE_API: &str = "https://example.invalid";'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-FORBIDDEN-AUTHORITY*"
+    }
+
+    It "rejects direct SQL authority without confusing policy update identifiers" {
+        $fixture = New-AppAuditFixture -Name "forbidden-sql-authority"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\application.rs") `
+            -Value 'const PRIVATE_SQL: &str = "UPDATE settings SET value = 1";'
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-APP-FORBIDDEN-AUTHORITY*"

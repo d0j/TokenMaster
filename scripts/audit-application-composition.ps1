@@ -56,31 +56,49 @@ foreach ($contract in @(
     @{ Name = 'TM-APP-LIVE-OWNER'; Pattern = 'LiveRuntime::start_notified_guarded\('; Count = 1 },
     @{ Name = 'TM-APP-MAINTENANCE-OWNER'; Pattern = 'BackupMaintenanceRuntime::spawn\('; Count = 1 },
     @{ Name = 'TM-APP-COMMAND-COORDINATOR'; Pattern = 'ApplicationCommandCoordinator::new\('; Count = 1 },
-    @{ Name = 'TM-APP-OPERATION-WORKER'; Pattern = 'ApplicationOperationWorker::spawn\('; Count = 1 },
+    @{ Name = 'TM-APP-OPERATION-WORKER'; Pattern = 'ApplicationOperationWorker::spawn_with_payload\('; Count = 1 },
     @{ Name = 'TM-APP-OPERATION-THREAD'; Pattern = '"tokenmaster-operation-worker"'; Count = 1 },
     @{ Name = 'TM-APP-OPERATION-WAKE'; Pattern = 'sync_channel\(1\)'; Count = 1 },
     @{ Name = 'TM-APP-OPERATION-SPAWN'; Pattern = 'Builder::new\(\)'; Count = 1 },
-    @{ Name = 'TM-APP-BACKUP-COMMAND'; Pattern = 'ApplicationCommand::Backup => execute_manual_backup_command\('; Count = 1 },
+    @{ Name = 'TM-APP-OPERATION-ACTUAL-START'; Pattern = 'ApplicationOperationWorker::spawn_with_payload\(move \|permit, payload\| \{\s*let _ = command_notifier\s*\.publish_operation\(Some\(application_operation_running\(permit\.command\(\)\)\)\)'; Count = 1 },
+    @{ Name = 'TM-APP-BACKUP-COMMAND'; Pattern = 'ApplicationCommand::Backup,\s*ApplicationOperationPayload::Empty\)\s*=>\s*\{\s*execute_manual_backup_command\('; Count = 1 },
     @{ Name = 'TM-APP-OPERATION-JOIN'; Pattern = 'self\.commands\.shutdown\(\)'; Count = 1 },
-    @{ Name = 'TM-APP-CONFIG-SEALED-TARGET'; Pattern = 'target:\s*&DurableFileTarget'; Count = 1 },
-    @{ Name = 'TM-APP-CONFIG-SEALED-SOURCE'; Pattern = 'mut source:\s*DurableFileReader'; Count = 1 },
+    @{ Name = 'TM-APP-CONFIG-SEALED-TARGET'; Pattern = 'pub\(crate\)\s+fn export_config\([\s\S]{0,256}?mut target:\s*SelectedOutputFile'; Count = 1 },
+    @{ Name = 'TM-APP-CONFIG-SEALED-SOURCE'; Pattern = 'pub\(crate\)\s+fn preview_config_import\([\s\S]{0,256}?source:\s*SelectedInputFile'; Count = 1 },
     @{ Name = 'TM-APP-CONFIG-BOUNDED-STAGE'; Pattern = '\.create_staged\(MAX_CONFIG_PACKAGE_BYTES\)'; Count = 1 },
     @{ Name = 'TM-APP-CONFIG-BOUNDED-READ'; Pattern = '\.open_reader\(MAX_CONFIG_PACKAGE_BYTES\)'; Count = 1 },
+    @{ Name = 'TM-APP-COMPACT-EXPORT-REQUEST'; Pattern = 'ApplicationOperationRequest::compact_backup\(output\)'; Count = 1 },
+    @{ Name = 'TM-APP-COMPACT-EXPORT-VERIFIED-COPY'; Pattern = 'BackupPackage::copy_verified_stage_to_durable\('; Count = 1 },
+    @{ Name = 'TM-APP-ENCRYPTED-EXPORT-REQUEST'; Pattern = 'ApplicationOperationRequest::encrypted_backup\(output,\s*passphrase\)'; Count = 1 },
+    @{ Name = 'TM-APP-ENCRYPTED-EXPORT-PASSPHRASE'; Pattern = 'BackupPassphrase::existing\(&mut secret\)'; Count = 1 },
+    @{ Name = 'TM-APP-ENCRYPTED-EXPORT-WRITE'; Pattern = 'EncryptedBackupPackage::encrypt\('; Count = 1 },
+    @{ Name = 'TM-APP-BACKUP-POLICY-REQUEST'; Pattern = 'ApplicationOperationRequest::update_backup_policy\('; Count = 1 },
+    @{ Name = 'TM-APP-BACKUP-POLICY-COMMIT'; Pattern = 'state\s*\.update_backup_policy\('; Count = 1 },
     @{ Name = 'TM-APP-RESTART-PAUSE'; Pattern = 'self\.commands\s*\.pause_admission\(\)'; Count = 2 },
     @{ Name = 'TM-APP-RESTART-RESUME'; Pattern = 'self\.commands\s*\.resume_admission\(\)'; Count = 2 },
     @{ Name = 'TM-APP-RESTART-GUARD'; Pattern = '\.acquire_runtime_guard\(&self\.data_root\)'; Count = 2 },
-    @{ Name = 'TM-APP-RESTORE-BINDING'; Pattern = '\.bind_backup_selection\(selection\)'; Count = 1 },
+    @{ Name = 'TM-APP-RESTORE-BINDING'; Pattern = '\.bind_backup_selection\(selection\)'; Count = 2 },
     @{ Name = 'TM-APP-RESTORE-CURRENT-BIND'; Pattern = '\.bind_current_selection\(&self\.backups'; Count = 1 },
     @{ Name = 'TM-APP-RESTORE-DYNAMIC-PIN'; Pattern = 'retention\.delete_next_protected\('; Count = 1 },
     @{ Name = 'TM-APP-RESTORE-PIN-DROP'; Pattern = 'impl Drop for ApplicationBackupSelectionPin'; Count = 1 },
-    @{ Name = 'TM-APP-RESTORE-PROTECTED'; Pattern = '\.start_protected_maintenance\('; Count = 1 },
-    @{ Name = 'TM-APP-PRE-RESTORE'; Pattern = 'MaintenancePurpose::PreRestore'; Count = 1 },
-    @{ Name = 'TM-APP-RESTORE-SAFETY'; Pattern = 'RestoreSafety::PreRestoreBackupPublished\('; Count = 1 },
-    @{ Name = 'TM-APP-SELECTED-RESTORE'; Pattern = 'self\.state\.restore_selected\('; Count = 1 },
-    @{ Name = 'TM-APP-RESTORE-RECOVERY-LAUNCH'; Pattern = '\.bind_recovery_launch\(receipt\)'; Count = 1 },
-    @{ Name = 'TM-APP-RESTORED-MIGRATION'; Pattern = 'start_restored_bundle\(\s*&self\.environment'; Count = 1 },
-    @{ Name = 'TM-APP-PRE-MIGRATION'; Pattern = 'MaintenancePurpose::PreMigration'; Count = 2 },
-    @{ Name = 'TM-APP-POST-MIGRATION'; Pattern = 'MaintenancePurpose::PostMigration'; Count = 2 },
+    @{ Name = 'TM-APP-RESTORE-PROTECTED'; Pattern = '\.start_protected_maintenance\('; Count = 2 },
+    @{ Name = 'TM-APP-PRE-RESTORE'; Pattern = 'wait_for_mandatory_backup\(\s*&maintenance,\s*MaintenancePurpose::PreRestore\s*\)'; Count = 2 },
+    @{ Name = 'TM-APP-RESTORE-SAFETY'; Pattern = 'RestoreSafety::PreRestoreBackupPublished\('; Count = 2 },
+    @{ Name = 'TM-APP-SELECTED-RESTORE'; Pattern = '(?:self\.)?state\.restore_selected\('; Count = 2 },
+    @{ Name = 'TM-APP-RECOVERY-LAUNCH'; Pattern = '\.bind_recovery_launch\(receipt\)'; Count = 3 },
+    @{ Name = 'TM-APP-REBUILD-BINDING'; Pattern = 'ApplicationCommand::Rebuild,\s*ApplicationOperationPayload::Empty\)\s*=>\s*\{\s*execute_rebuild_operation\('; Count = 1 },
+    @{ Name = 'TM-APP-REBUILD-AUTHORITATIVE'; Pattern = 'state\.reconstruct_definitively_corrupt\('; Count = 1 },
+    @{ Name = 'TM-APP-REBUILD-RECONCILE'; Pattern = '\.refresh_now\(RefreshUrgency::Recovery\)'; Count = 1 },
+    @{ Name = 'TM-APP-REBUILD-RECONCILE-WAIT'; Pattern = 'wait_for_reconstructed_reconciliation\(&started\.live\)'; Count = 1 },
+    @{ Name = 'TM-APP-REBUILD-DURABLE-RECONCILE'; Pattern = 'RecoveryLaunchDecision::Start \{ \.\. \} \| RecoveryLaunchDecision::SafeMode \{ \.\. \}[\s\S]{0,256}?RecoveryPhase::Complete && journal\.backup\(\)\.is_none\(\)'; Count = 1 },
+    @{ Name = 'TM-APP-REBUILD-COLD-RECONCILE'; Pattern = 'if preflight\.requires_source_reconciliation\(\) \{[\s\S]{0,512}?ApplicationStartBoundary::BeforeReconstructionReconciliation[\s\S]{0,512}?start_reconstructed_bundle\('; Count = 1 },
+    @{ Name = 'TM-APP-REBUILD-RETRY-RECONCILE'; Pattern = 'if source_reconciliation_required \{[\s\S]{0,256}?permit\.begin_irreversible\(\)[\s\S]{0,512}?start_reconstructed_bundle\('; Count = 1 },
+    @{ Name = 'TM-APP-REBUILD-ATOMIC'; Pattern = 'RecoveryBoundary::BeforeJournalPublication[\s\S]{0,256}?on_irreversible\(\)'; Count = 1 },
+    @{ Name = 'TM-APP-MANUAL-BACKUP-ATOMIC'; Pattern = 'fn execute_manual_backup_command\([\s\S]{0,1024}?permit\.begin_irreversible\(\)[\s\S]{0,512}?publish_atomic_operation\(reliable_state, permit\.command\(\)\)'; Count = 1 },
+    @{ Name = 'TM-APP-ATOMIC-PROJECTION'; Pattern = 'publish_atomic_operation\(reliable_state, permit\.command\(\)\)'; Count = 9 },
+    @{ Name = 'TM-APP-RESTORED-MIGRATION'; Pattern = 'fn start_restored_bundle\('; Count = 1 },
+    @{ Name = 'TM-APP-PRE-MIGRATION'; Pattern = 'wait_for_mandatory_backup\([\s\S]{0,96}?MaintenancePurpose::PreMigration\s*\)'; Count = 2 },
+    @{ Name = 'TM-APP-POST-MIGRATION'; Pattern = 'wait_for_mandatory_backup\([\s\S]{0,96}?MaintenancePurpose::PostMigration\s*\)'; Count = 2 },
     @{ Name = 'TM-APP-MIGRATION-PENDING'; Pattern = '\.require_post_migration\('; Count = 2 },
     @{ Name = 'TM-APP-MIGRATION-COMPLETE'; Pattern = '\.complete_post_migration\('; Count = 2 },
     @{ Name = 'TM-APP-ATOMIC-MAINTENANCE-WAIT'; Pattern = '\.submit_and_wait\('; Count = 2 },
@@ -99,17 +117,11 @@ foreach ($contract in @(
     }
 }
 
-$restoreReceiptBinding = $applicationText.IndexOf(
-    'self.preflight.bind_recovery_launch(receipt)?;',
-    [System.StringComparison]::Ordinal
-)
-$restoredBundleStart = $applicationText.IndexOf(
-    'start_restored_bundle(',
-    [System.StringComparison]::Ordinal
-)
-if ($restoreReceiptBinding -lt 0 -or
-    $restoredBundleStart -lt 0 -or
-    $restoreReceiptBinding -ge $restoredBundleStart) {
+$orderedRestoreLaunches = [regex]::Matches(
+    $applicationText,
+    '\.bind_recovery_launch\(receipt\)\?;[\s\S]{0,1024}?start_restored_bundle\('
+).Count
+if ($orderedRestoreLaunches -ne 2) {
     throw 'TM-APP-RESTORE-RECOVERY-ORDER: recovery receipt must bind before restored lifecycle work'
 }
 
@@ -139,7 +151,7 @@ if ($environmentNames.Count -ne $expectedEnvironmentNames.Count -or
 $authorityText = $productionText -replace `
     '(?m)^\s*use\s+std\s*::\s*process\s*::\s*ExitCode\s*;\s*$', `
     ''
-if ($authorityText -match 'https?://|\bstd\s*::\s*process\b|\bprocess\s*::|\buse\s+std\s*::\s*\{[^;]*\bprocess\b|\bCommand\s*::\s*new\b|\b(TcpStream|TcpListener|UdpSocket)\b|\b(rusqlite|notify|reqwest|ureq|webbrowser|headless_chrome)\b|\b(SELECT|INSERT|UPDATE|DELETE\s+FROM|PRAGMA)\b|powershell(?:\.exe)?|cmd(?:\.exe)?|bash(?:\.exe)?|\bsh\s+-c\b|\bAuthorization\b|\bBearer\s') {
+if ($authorityText -match 'https?://|\bstd\s*::\s*process\b|\bprocess\s*::|\buse\s+std\s*::\s*\{[^;]*\bprocess\b|\bCommand\s*::\s*new\b|\b(TcpStream|TcpListener|UdpSocket)\b|\b(rusqlite|notify|reqwest|ureq|webbrowser|headless_chrome)\b|\bSELECT\s+[^;\r\n]+\s+FROM\b|\bINSERT\s+INTO\b|\bUPDATE\s+[A-Za-z_][A-Za-z0-9_]*\s+SET\b|\bDELETE\s+FROM\b|\bPRAGMA\s+[A-Za-z_]|powershell(?:\.exe)?|cmd(?:\.exe)?|bash(?:\.exe)?|\bsh\s+-c\b|\bAuthorization\b|\bBearer\s') {
     throw 'TM-APP-FORBIDDEN-AUTHORITY: composition contains network/shell/SQL/browser/credential authority'
 }
 if ($productionText -match '\b(WhereMyTokens|WhereMyToken|WhereMyTokensGo|ccusage-go)\b') {
@@ -173,11 +185,11 @@ if ($SourceOnly) {
         application_config_bounded_read_count = 1
         controlled_restart_count = 1
         bundle_generation_guard_count = 1
-        selected_restore_count = 1
-        protected_pre_restore_count = 1
+        selected_restore_count = 2
+        protected_pre_restore_count = 2
         dynamic_restore_pin_count = 1
-        recovery_launch_binding_count = 1
-        restored_migration_lifecycle_count = 1
+        recovery_launch_binding_count = 2
+        restored_migration_lifecycle_count = 2
         pre_migration_gate_count = 2
         post_migration_gate_count = 2
         pending_migration_transition_count = 2
@@ -288,11 +300,11 @@ foreach ($needle in @(
     application_config_bounded_read_count = 1
     controlled_restart_count = 1
     bundle_generation_guard_count = 1
-    selected_restore_count = 1
-    protected_pre_restore_count = 1
+    selected_restore_count = 2
+    protected_pre_restore_count = 2
     dynamic_restore_pin_count = 1
-    recovery_launch_binding_count = 1
-    restored_migration_lifecycle_count = 1
+    recovery_launch_binding_count = 2
+    restored_migration_lifecycle_count = 2
     pre_migration_gate_count = 2
     post_migration_gate_count = 2
     pending_migration_transition_count = 2

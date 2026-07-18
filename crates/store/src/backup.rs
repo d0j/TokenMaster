@@ -14,8 +14,9 @@ use rusqlite::limits::Limit;
 use rusqlite::{Connection, ErrorCode, OpenFlags};
 use sha2::{Digest, Sha256};
 use tokenmaster_platform::{
-    DurableFileError, DurableFileReader, MAX_DURABLE_FILE_BYTES, MAX_RECOVERY_STAGING_ARTIFACTS,
-    PhysicalFileIdentity, ValidatedLocalDirectory,
+    ArchiveRecoveryError, DurableFileError, DurableFileReader, MAX_DURABLE_FILE_BYTES,
+    MAX_RECOVERY_STAGING_ARTIFACTS, PhysicalFileIdentity, RecoveryStagedArchive,
+    ValidatedLocalDirectory,
 };
 
 use crate::usage::migration::{
@@ -25,7 +26,9 @@ use crate::usage::migration::{
 use crate::usage::query::{
     PROGRESS_OP_INTERVAL, READ_BUSY_TIMEOUT_MS, READ_CACHE_SIZE_KIB, apply_read_policy,
 };
-use crate::{EXPECTED_SQLITE_VERSION, StoreError, StoreErrorCode, USAGE_SCHEMA_VERSION};
+use crate::{
+    EXPECTED_SQLITE_VERSION, StoreError, StoreErrorCode, USAGE_SCHEMA_VERSION, UsageStore,
+};
 
 const ARCHIVE_FILE_NAME: &str = "tokenmaster.sqlite3";
 const SNAPSHOT_ATTEMPTS: usize = 32;
@@ -547,6 +550,34 @@ impl VerifiedRecoveryArchive {
     pub const fn semantics_verified(&self) -> bool {
         self.candidate.semantics_verified()
     }
+
+    /// Streams this exact verified archive into a sealed platform recovery stage.
+    /// Both the source identity and the sealed destination digest are rechecked.
+    pub fn stage_for_recovery(
+        &self,
+        stage: &mut RecoveryStagedArchive,
+        control: &BackupControl,
+    ) -> Result<(), StoreError> {
+        let mut reader = self.candidate.open_reader(control)?;
+        let mut buffer = [0_u8; IDENTITY_HASH_BUFFER_BYTES];
+        loop {
+            let count = reader.read_chunk(&mut buffer)?;
+            if count == 0 {
+                break;
+            }
+            stage
+                .write_chunk(&buffer[..count])
+                .map_err(map_recovery_stage_error)?;
+        }
+        reader.finish()?;
+        let sealed = stage
+            .seal(self.len(), *self.sha256())
+            .map_err(map_recovery_stage_error)?;
+        if sealed.len() != self.len() || sealed.sha256() != self.sha256() {
+            return Err(StoreError::new(StoreErrorCode::StaleBackupCandidate));
+        }
+        Ok(())
+    }
 }
 
 impl fmt::Debug for VerifiedRecoveryArchive {
@@ -673,6 +704,26 @@ pub fn create_online_snapshot(
     create_online_snapshot_with_step_hook(source, staging, control, || Ok(()))
 }
 
+/// Creates a current empty TokenMaster archive through the normal store schema
+/// constructor and returns only after the complete standalone verifier accepts it.
+///
+/// This is intentionally limited to recovery staging. It does not expose the
+/// candidate path or a writable SQLite connection to recovery callers.
+pub fn create_fresh_recovery_archive(
+    staging: &BackupStaging,
+    control: &BackupControl,
+) -> Result<VerifiedRecoveryArchive, StoreError> {
+    control.check()?;
+    staging.require_recovery_artifact_capacity()?;
+    let candidate = create_candidate(staging, "recovery")?;
+    let path = candidate.path()?.to_path_buf();
+    drop(UsageStore::open(&path)?);
+    control.check()?;
+    validate_candidate_length(&path)?;
+    verify_backup_candidate(candidate, control)
+        .map(|candidate| VerifiedRecoveryArchive { candidate })
+}
+
 /// Copies one bounded path-free archive stream into the store-owned candidate
 /// namespace and applies the complete standalone SQLite verifier.
 pub fn verify_recovery_archive(
@@ -759,6 +810,24 @@ const fn map_recovery_reader_error(error: DurableFileError) -> StoreError {
         | DurableFileError::UnexpectedType
         | DurableFileError::Unavailable
         | DurableFileError::RecoveryRequired => StoreError::new(StoreErrorCode::BackupIo),
+    }
+}
+
+const fn map_recovery_stage_error(error: ArchiveRecoveryError) -> StoreError {
+    match error {
+        ArchiveRecoveryError::CapacityExceeded | ArchiveRecoveryError::CollisionLimit => {
+            StoreError::new(StoreErrorCode::CapacityExceeded)
+        }
+        ArchiveRecoveryError::ArtifactMismatch
+        | ArchiveRecoveryError::UnexpectedArtifact
+        | ArchiveRecoveryError::InvalidState => {
+            StoreError::new(StoreErrorCode::StaleBackupCandidate)
+        }
+        ArchiveRecoveryError::DiskCapacity
+        | ArchiveRecoveryError::UnsupportedLocation
+        | ArchiveRecoveryError::WrongLease
+        | ArchiveRecoveryError::Unavailable
+        | ArchiveRecoveryError::RecoveryRequired => StoreError::new(StoreErrorCode::BackupIo),
     }
 }
 

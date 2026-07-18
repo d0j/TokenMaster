@@ -159,7 +159,7 @@ $approvedRecoveryJournalPlatformPattern = '(?ms)^\s*use\s+tokenmaster_platform\s
 $approvedRecoveryPlatformPattern = '(?ms)^\s*use\s+tokenmaster_platform\s*::\s*\{\s*ArchiveRecoveryError\s*,\s*ArchiveRecoveryScope\s*,\s*ArchiveSetObservation\s*,\s*BackupDirectory\s*,\s*BackupDirectoryError\s*,\s*DurableFileReader\s*,\s*ExclusiveFileLeaseGuard\s*,\s*RecoveryMainMode\s*,\s*RecoveryOperation\s*,\s*RecoveryStagedArchive\s*,\s*ValidatedLocalDirectory\s*,?\s*\}\s*;\s*$'
 $approvedBootstrapPlatformPattern = '(?ms)^\s*use\s+tokenmaster_platform\s*::\s*\{\s*ArchiveRecoveryError\s*,\s*ArchiveRecoveryScope\s*,\s*BackupDirectory\s*,\s*BackupDirectoryError\s*,\s*ExclusiveFileLeaseGuard\s*,\s*ValidatedLocalDirectory\s*,?\s*\}\s*;\s*$'
 $approvedStoreCandidatePattern = '(?m)^\s*use\s+tokenmaster_store\s*::\s*\{\s*StoreErrorCode\s*,\s*VerifiedBackupCandidateReader\s*,?\s*\}\s*;\s*$'
-$approvedRecoveryStorePattern = '(?ms)^\s*use\s+tokenmaster_store\s*::\s*\{\s*BackupControl\s*,\s*BackupStaging\s*,\s*RecoveryVerificationBoundary\s*,\s*StoreErrorCode\s*,\s*VerifiedRecoveryArchive\s*,\s*verify_recovery_archive_with_observer\s*,?\s*\}\s*;\s*$'
+$approvedRecoveryStorePattern = '(?ms)^\s*use\s+tokenmaster_store\s*::\s*\{\s*BackupControl\s*,\s*BackupStaging\s*,\s*RecoveryVerificationBoundary\s*,\s*StoreErrorCode\s*,\s*VerifiedRecoveryArchive\s*,\s*create_fresh_recovery_archive\s*,\s*verify_recovery_archive_with_observer\s*,?\s*\}\s*;\s*$'
 $approvedBootstrapStorePattern = '(?ms)^\s*use\s+tokenmaster_store\s*::\s*\{\s*BackupControl\s*,\s*BackupStaging\s*,\s*StartupArchiveStatus\s*,\s*StartupValidationMode\s*,\s*StoreErrorCode\s*,\s*inspect_startup_archive\s*,?\s*\}\s*;\s*$'
 $approvedMaintenanceStoreControlPattern = '(?m)^use tokenmaster_store::BackupControl;\r?$'
 $approvedMaintenanceCoordinatorStdPattern = '(?m)^use std::sync::Arc;\r?\nuse std::sync::atomic::\{AtomicBool, AtomicU8, Ordering\};\r?\nuse std::time::Duration;\r?$'
@@ -272,7 +272,7 @@ $backupControlUses = @([regex]::Matches($productionText, '\bBackupControl\b'))
 $verifiedCandidateReaderUses = @(
     [regex]::Matches($productionText, '\bVerifiedBackupCandidateReader\b')
 )
-if ($backupControlUses.Count -ne 18 -or $verifiedCandidateReaderUses.Count -ne 4) {
+if ($backupControlUses.Count -ne 21 -or $verifiedCandidateReaderUses.Count -ne 4) {
     throw 'TM-STATE-STORE-AUTHORITY: exact store capability use count drifted'
 }
 $sealedRecoveryCapabilityCounts = [ordered]@{
@@ -280,13 +280,14 @@ $sealedRecoveryCapabilityCounts = [ordered]@{
     RecoveryVerificationBoundary = 3
     VerifiedRecoveryArchive = 4
     verify_recovery_archive_with_observer = 3
+    create_fresh_recovery_archive = 2
     ArchiveRecoveryScope = 6
-    ExclusiveFileLeaseGuard = 13
+    ExclusiveFileLeaseGuard = 15
     RecoveryOperation = 2
-    RecoveryStagedArchive = 8
+    RecoveryStagedArchive = 9
     ArchiveSetExpectation = 3
     ArchiveSetObservation = 4
-    RecoveryOperationId = 4
+    RecoveryOperationId = 5
 }
 foreach ($capability in $sealedRecoveryCapabilityCounts.Keys) {
     $actual = @([regex]::Matches($productionText, "\b$capability\b")).Count
@@ -388,6 +389,13 @@ $approvedBackupStageVerifiers = @(
 if ($approvedBackupStageVerifiers.Count -ne 1) {
     throw 'TM-STATE-BACKUP-DIRECTORY-AUTHORITY: exactly one typed backup-stage verifier is allowed'
 }
+$approvedVerifiedStageCopyPattern = '(?s)\bpub\s+fn\s+copy_verified_stage_to_durable\s*\(\s*source\s*:\s*&BackupStagedFile\s*,\s*verified\s*:\s*&VerifiedBackupPackage\s*,\s*destination\s*:\s*&mut\s+DurableStagedFile\s*,?\s*\)\s*->\s*Result\s*<\s*PackageReceipt\s*,\s*StateError\s*>\s*\{'
+$approvedVerifiedStageCopies = @(
+    [regex]::Matches($productionText, $approvedVerifiedStageCopyPattern)
+)
+if ($approvedVerifiedStageCopies.Count -ne 1) {
+    throw 'TM-STATE-BACKUP-DIRECTORY-AUTHORITY: exactly one verified stage-to-durable copy is allowed'
+}
 $approvedVerifiedCandidateStageWriterPattern = '(?s)\bpub\s+fn\s+write_verified_candidate_to_backup_stage\s*\(\s*settings\s*:\s*&PortableSettingsCandidate\s*,\s*mut\s+database\s*:\s*VerifiedBackupCandidateReader\s*<\s*''_\s*>\s*,\s*compression\s*:\s*BackupCompression\s*,\s*metadata\s*:\s*BackupMetadata\s*,\s*destination\s*:\s*&mut\s+BackupStagedFile\s*,?\s*\)\s*->\s*Result\s*<\s*PackageReceipt\s*,\s*StateError\s*>\s*\{'
 $approvedVerifiedCandidateStageWriters = @(
     [regex]::Matches($productionText, $approvedVerifiedCandidateStageWriterPattern)
@@ -411,6 +419,11 @@ $backupAuthorityText = [regex]::Replace(
     $backupAuthorityText,
     $approvedBackupStageVerifierPattern,
     'pub fn verify_backup_stage() {'
+)
+$backupAuthorityText = [regex]::Replace(
+    $backupAuthorityText,
+    $approvedVerifiedStageCopyPattern,
+    'pub fn copy_verified_stage_to_durable() {'
 )
 $backupAuthorityText = [regex]::Replace(
     $backupAuthorityText,

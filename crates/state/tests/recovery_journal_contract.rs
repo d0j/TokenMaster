@@ -225,3 +225,35 @@ fn automatic_recovery_is_always_data_only_and_attempts_are_bounded() {
         tokenmaster_state::StateError::from_code(StateErrorCode::CapacityExceeded)
     );
 }
+
+#[test]
+fn reconstruction_journal_is_data_only_and_has_no_fabricated_backup_identity() {
+    let fixture = Fixture::new();
+    let candidate =
+        RecoveryCandidateIdentity::from_persisted(13, 8192, [0x91; 32]).expect("candidate");
+    let facts = RecoveryArchiveFacts::from_persisted(
+        Some((16_384, [0x81; 32])),
+        Some((4096, [0x82; 32])),
+        None,
+    )
+    .expect("archive facts");
+
+    let journal = RecoveryJournal::reconstruction(1, fixture.operation.id(), candidate, facts)
+        .expect("reconstruction journal");
+
+    assert_eq!(journal.phase(), RecoveryPhase::Prepared);
+    assert_eq!(
+        journal.settings_mode(),
+        RecoverySettingsMode::ReconstructionDataOnly
+    );
+    assert!(journal.backup().is_none());
+    assert!(journal.settings_target().is_none());
+    fixture
+        .journal
+        .begin(&journal)
+        .expect("durable reconstruction");
+    assert!(matches!(
+        fixture.journal.load().expect("reload"),
+        RecoveryJournalLoad::Pending(loaded) if loaded == journal
+    ));
+}

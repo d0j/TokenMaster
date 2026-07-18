@@ -2,6 +2,7 @@ use std::time::{Duration, Instant};
 
 use rusqlite::Connection;
 use tempfile::TempDir;
+use tokenmaster_engine::RefreshOutcome;
 use tokenmaster_platform::BackupDirectory;
 use tokenmaster_product::ProductSectionKind;
 use tokenmaster_state::{
@@ -12,6 +13,9 @@ use tokenmaster_state::{
 use tokenmaster_store::{USAGE_SCHEMA_VERSION, UsageStore};
 
 use super::*;
+use crate::command::{
+    ApplicationCommandCompletion, ApplicationCommandCoordinator, ApplicationCommandOutcome,
+};
 use crate::state::ApplicationStateOwner;
 
 fn application_environment(temporary: &TempDir) -> ApplicationEnvironment {
@@ -73,6 +77,330 @@ fn disable_periodic_backups(root: &DataRoot) {
         .expect("migration settings store")
         .save(&settings)
         .expect("persist disabled periodic policy");
+}
+
+fn wait_for_application_completion(application: &Application) -> ApplicationCommandCompletion {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        if let Some(completion) = application
+            .commands
+            .try_completion()
+            .expect("operation completion")
+        {
+            return completion;
+        }
+        assert!(Instant::now() < deadline, "application operation timed out");
+        std::thread::yield_now();
+    }
+}
+
+#[test]
+fn operation_projection_is_typed_path_free_and_never_offers_atomic_cancel() {
+    let running_restore = application_operation_running(ApplicationCommand::RestoreData(
+        ApplicationBackupSelection::new(1, 0).expect("selection"),
+    ));
+    assert_eq!(running_restore.kind(), DesktopOperationKind::Restore);
+    assert_eq!(running_restore.phase(), DesktopOperationPhase::Running);
+    assert!(running_restore.cancellable());
+
+    let running_backup = application_operation_running(ApplicationCommand::Backup);
+    assert_eq!(running_backup.kind(), DesktopOperationKind::Backup);
+    assert!(running_backup.cancellable());
+
+    let running_rebuild = application_operation_running(ApplicationCommand::Rebuild);
+    assert_eq!(running_rebuild.kind(), DesktopOperationKind::Rebuild);
+    assert!(running_rebuild.cancellable());
+
+    let failed = application_operation_completion(
+        ApplicationCommand::BackupCompact,
+        ApplicationCommandExecution::Failed(ApplicationCommandFailure::Integrity),
+    );
+    assert_eq!(failed.phase(), DesktopOperationPhase::Failed);
+    assert_eq!(failed.failure_code(), Some("integrity"));
+    assert!(!failed.cancellable());
+    assert!(!format!("{failed:?}").contains("C:\\private\\canary"));
+
+    let atomic = DesktopOperationSnapshot::new(
+        DesktopOperationKind::Restore,
+        DesktopOperationPhase::AtomicPromotion,
+        true,
+        None,
+    );
+    assert!(!atomic.cancellable());
+}
+
+fn assert_no_backup_rebuild_preserves_corrupt_truth_and_completes_authoritative_reconciliation() {
+    let temporary = TempDir::new().expect("rebuild temporary directory");
+    let environment = application_environment(&temporary);
+    let root = DataRoot::resolve(&environment).expect("rebuild data root");
+    let owner = ApplicationStateOwner::open(&root).expect("rebuild state owner");
+    let corrupt = b"definitively-corrupt-application-archive";
+    std::fs::write(root.archive_path(), corrupt).expect("corrupt active archive");
+    std::fs::write(
+        temporary.path().join("codex").join("session.jsonl"),
+        concat!(
+            r#"{"timestamp":"2026-07-18T08:00:00Z","type":"event_msg","payload":{"type":"token_count","model":"gpt-test","info":{"last_token_usage":{"input_tokens":10,"output_tokens":2,"total_tokens":12},"total_token_usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}}}}"#,
+            "\n",
+        ),
+    )
+    .expect("authoritative Codex fixture");
+    drop(owner);
+
+    let mut application = Application::start(&environment).expect("safe-mode rebuild startup");
+    assert_eq!(
+        application
+            .preflight
+            .lock()
+            .expect("preflight")
+            .effective_outcome(),
+        BootstrapOutcome::RecoveryRequired
+    );
+    assert!(!application.live_started.load(Ordering::Acquire));
+    assert!(application.bundle.lock().expect("bundle slot").is_none());
+
+    let ApplicationCommandAdmission::Started(request) =
+        application.commands.submit(ApplicationCommand::Rebuild)
+    else {
+        panic!("rebuild command must start");
+    };
+    let completion = wait_for_application_completion(&application);
+    assert_eq!(completion.request_id(), request.id());
+    assert_eq!(completion.outcome(), ApplicationCommandOutcome::Succeeded);
+    assert!(application.live_started.load(Ordering::Acquire));
+    assert_eq!(
+        application
+            .preflight
+            .lock()
+            .expect("healthy preflight")
+            .effective_outcome(),
+        BootstrapOutcome::Healthy
+    );
+    let recovery_projection = application
+        .state
+        .reliable_state_projection_for_outcome(BootstrapOutcome::Healthy, None)
+        .expect("durable recovery projection");
+    let recovery_receipt = recovery_projection
+        .recovery_receipt()
+        .expect("visible recovery receipt");
+    assert_eq!(
+        recovery_receipt.kind(),
+        tokenmaster_desktop::DesktopRecoveryKind::AuthoritativeSource
+    );
+    assert!(recovery_receipt.non_reconstructible_domains_lost());
+    let bundle = application.bundle.lock().expect("rebuilt bundle");
+    let rebuilt = bundle.as_ref().expect("rebuilt live bundle");
+    let live = rebuilt.live.snapshot().expect("rebuilt live snapshot");
+    assert_eq!(live.refresh().outcome(), Some(RefreshOutcome::Completed));
+    assert!(live.engine().diagnostics().completed_refreshes() > 0);
+    assert_eq!(
+        rebuilt.maintenance.snapshot().worker().source_state(),
+        MaintenanceSourceState::Healthy
+    );
+    drop(bundle);
+
+    let readable = Connection::open(root.archive_path()).expect("read rebuilt archive");
+    assert!(
+        readable
+            .query_row("SELECT count(*) FROM usage_event", [], |row| row
+                .get::<_, i64>(0))
+            .expect("reconstructed usage count")
+            > 0
+    );
+    drop(readable);
+
+    drop(UsageStore::open(root.archive_path()).expect("current rebuilt archive"));
+    let quarantine = root.reliable_state().as_path().join("quarantine");
+    let quarantine_set = std::fs::read_dir(quarantine)
+        .expect("quarantine directory")
+        .next()
+        .expect("quarantine set")
+        .expect("quarantine entry")
+        .path();
+    assert_eq!(
+        std::fs::read(quarantine_set.join("tokenmaster.sqlite3"))
+            .expect("quarantined corrupt archive"),
+        corrupt
+    );
+
+    application
+        .shutdown()
+        .expect("rebuilt application shutdown");
+}
+
+fn assert_reconstruction_reconciliation_survives_restart_and_retries_without_rebuild() {
+    let temporary = TempDir::new().expect("reconciliation restart temporary directory");
+    let environment = application_environment(&temporary);
+    let root = DataRoot::resolve(&environment).expect("reconciliation restart data root");
+    let owner = ApplicationStateOwner::open(&root).expect("reconciliation restart owner");
+    std::fs::write(root.archive_path(), b"definitively-corrupt-restart-archive")
+        .expect("corrupt restart archive");
+    std::fs::write(
+        temporary.path().join("codex").join("restart-session.jsonl"),
+        concat!(
+            r#"{"timestamp":"2026-07-18T09:00:00Z","type":"event_msg","payload":{"type":"token_count","model":"gpt-test","info":{"last_token_usage":{"input_tokens":8,"output_tokens":3,"total_tokens":11},"total_token_usage":{"input_tokens":80,"output_tokens":30,"total_tokens":110}}}}"#,
+            "\n",
+        ),
+    )
+    .expect("restart authoritative Codex fixture");
+    let mut preflight = owner.prepare(&root).expect("corrupt preflight");
+    assert_eq!(
+        preflight.effective_outcome(),
+        BootstrapOutcome::RecoveryRequired
+    );
+    let guard = preflight
+        .take_startup_guard()
+        .expect("reconstruction guard");
+    let mut coordinator = ApplicationCommandCoordinator::new();
+    let ApplicationCommandAdmission::Started(permit) =
+        coordinator.submit(ApplicationCommand::Rebuild)
+    else {
+        panic!("reconstruction permit must start");
+    };
+    let receipt = owner
+        .reconstruct_definitively_corrupt(&permit, &guard, || {})
+        .expect("publish reconstructed archive");
+    assert!(receipt.reconstructed_from_authoritative_source());
+    drop(guard);
+    drop(preflight);
+    drop(owner);
+
+    let mut observed_reconciliation = false;
+    let mut interrupted =
+        Application::start_with_observer(&environment, |boundary| match boundary {
+            ApplicationStartBoundary::BeforeReconstructionReconciliation => {
+                observed_reconciliation = true;
+                Err(ApplicationError::live_runtime())
+            }
+            ApplicationStartBoundary::PreMigrationBackupPublished
+            | ApplicationStartBoundary::BeforePostMigrationBackup => Ok(()),
+        })
+        .expect("interrupted reconciliation opens recovery UI");
+    assert!(observed_reconciliation);
+    assert!(!interrupted.live_started.load(Ordering::Acquire));
+    {
+        let preflight = interrupted.preflight.lock().expect("interrupted preflight");
+        assert!(preflight.requires_source_reconciliation());
+        assert_eq!(
+            preflight.effective_outcome(),
+            BootstrapOutcome::RecoveryRequired
+        );
+    }
+
+    let ApplicationCommandAdmission::Started(request) =
+        interrupted.commands.submit(ApplicationCommand::Rebuild)
+    else {
+        panic!("reconciliation retry must start");
+    };
+    let completion = wait_for_application_completion(&interrupted);
+    assert_eq!(completion.request_id(), request.id());
+    assert_eq!(completion.outcome(), ApplicationCommandOutcome::Succeeded);
+    assert!(interrupted.live_started.load(Ordering::Acquire));
+    assert!(
+        !interrupted
+            .preflight
+            .lock()
+            .expect("reconciled preflight")
+            .requires_source_reconciliation()
+    );
+    let readable = Connection::open(root.archive_path()).expect("reconciled archive");
+    assert!(
+        readable
+            .query_row("SELECT count(*) FROM usage_event", [], |row| row
+                .get::<_, i64>(0))
+            .expect("reconciled usage count")
+            > 0
+    );
+    drop(readable);
+    interrupted
+        .shutdown()
+        .expect("reconciliation retry shutdown");
+}
+
+fn assert_reconstruction_safe_mode_keeps_explicit_reconciliation_retry() {
+    let temporary = TempDir::new().expect("reconciliation safe-mode temporary directory");
+    let environment = application_environment(&temporary);
+    let root = DataRoot::resolve(&environment).expect("reconciliation safe-mode data root");
+    let owner = ApplicationStateOwner::open(&root).expect("reconciliation safe-mode owner");
+    std::fs::write(
+        root.archive_path(),
+        b"definitively-corrupt-safe-mode-archive",
+    )
+    .expect("corrupt safe-mode archive");
+    std::fs::write(
+        temporary.path().join("codex").join("safe-mode-session.jsonl"),
+        concat!(
+            r#"{"timestamp":"2026-07-18T10:00:00Z","type":"event_msg","payload":{"type":"token_count","model":"gpt-test","info":{"last_token_usage":{"input_tokens":7,"output_tokens":4,"total_tokens":11},"total_token_usage":{"input_tokens":70,"output_tokens":40,"total_tokens":110}}}}"#,
+            "\n",
+        ),
+    )
+    .expect("safe-mode authoritative Codex fixture");
+    let mut preflight = owner.prepare(&root).expect("safe-mode corrupt preflight");
+    let guard = preflight
+        .take_startup_guard()
+        .expect("safe-mode reconstruction guard");
+    let mut coordinator = ApplicationCommandCoordinator::new();
+    let ApplicationCommandAdmission::Started(permit) =
+        coordinator.submit(ApplicationCommand::Rebuild)
+    else {
+        panic!("safe-mode reconstruction permit must start");
+    };
+    owner
+        .reconstruct_definitively_corrupt(&permit, &guard, || {})
+        .expect("publish safe-mode reconstructed archive");
+    drop(guard);
+    drop(preflight);
+    drop(owner);
+
+    for expected_launch in 1_u8..=2 {
+        let mut observed = false;
+        let mut interrupted =
+            Application::start_with_observer(&environment, |boundary| match boundary {
+                ApplicationStartBoundary::BeforeReconstructionReconciliation => {
+                    observed = true;
+                    Err(ApplicationError::live_runtime())
+                }
+                ApplicationStartBoundary::PreMigrationBackupPublished
+                | ApplicationStartBoundary::BeforePostMigrationBackup => Ok(()),
+            })
+            .expect("interrupted recovery launch opens recovery UI");
+        assert!(observed);
+        let preflight = interrupted.preflight.lock().expect("launch preflight");
+        assert!(preflight.requires_source_reconciliation());
+        assert_eq!(
+            preflight.report().recovery_launch(),
+            tokenmaster_state::RecoveryLaunchDecision::Start {
+                launch: expected_launch
+            }
+        );
+        drop(preflight);
+        interrupted
+            .shutdown()
+            .expect("interrupted recovery launch shutdown");
+    }
+
+    let mut safe_mode = Application::start(&environment).expect("bounded recovery safe mode");
+    assert!(!safe_mode.live_started.load(Ordering::Acquire));
+    {
+        let preflight = safe_mode.preflight.lock().expect("safe-mode preflight");
+        assert_eq!(preflight.effective_outcome(), BootstrapOutcome::SafeMode);
+        assert!(preflight.requires_source_reconciliation());
+        assert!(matches!(
+            preflight.report().recovery_launch(),
+            tokenmaster_state::RecoveryLaunchDecision::SafeMode { failed_launches: 2 }
+        ));
+    }
+    let ApplicationCommandAdmission::Started(request) =
+        safe_mode.commands.submit(ApplicationCommand::Rebuild)
+    else {
+        panic!("explicit safe-mode reconciliation must start");
+    };
+    let completion = wait_for_application_completion(&safe_mode);
+    assert_eq!(completion.request_id(), request.id());
+    assert_eq!(completion.outcome(), ApplicationCommandOutcome::Succeeded);
+    assert!(safe_mode.live_started.load(Ordering::Acquire));
+    safe_mode
+        .shutdown()
+        .expect("explicit safe-mode reconciliation shutdown");
 }
 
 #[test]
@@ -208,25 +536,40 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     else {
         panic!("manual backup command must start");
     };
-    let deadline = Instant::now() + Duration::from_secs(10);
-    let manual_completion = loop {
-        if let Some(completion) = application
-            .commands
-            .try_completion()
-            .expect("operation completion")
-        {
-            break completion;
-        }
-        assert!(Instant::now() < deadline, "manual backup command timed out");
-        std::thread::yield_now();
-    };
+    let manual_completion = wait_for_application_completion(&application);
     assert_eq!(manual_completion.request_id(), manual.id());
     assert_eq!(
         manual_completion.outcome(),
         crate::command::ApplicationCommandOutcome::Succeeded
     );
+    let policy_update = crate::command::ApplicationBackupPolicyUpdate::new(
+        false,
+        tokenmaster_state::BACKUP_QUIET_MIN_SECONDS,
+        tokenmaster_state::BACKUP_INTERVAL_MIN_SECONDS,
+        256,
+    );
+    let ApplicationCommandAdmission::Started(policy_request) =
+        application.commands.submitter().submit_request(
+            crate::command::ApplicationOperationRequest::update_backup_policy(policy_update),
+        )
+    else {
+        panic!("backup policy update must start");
+    };
+    let policy_completion = wait_for_application_completion(&application);
+    assert_eq!(policy_completion.request_id(), policy_request.id());
+    assert_eq!(
+        policy_completion.outcome(),
+        ApplicationCommandOutcome::Succeeded
+    );
     let bundle_slot = application.bundle.lock().expect("bundle slot");
     let maintenance = &bundle_slot.as_ref().expect("healthy bundle").maintenance;
+    assert!(
+        !maintenance
+            .snapshot()
+            .scheduler()
+            .schedule()
+            .periodic_enabled()
+    );
     assert_eq!(
         maintenance.snapshot().worker().source_state(),
         MaintenanceSourceState::Healthy
@@ -266,9 +609,18 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
         .lock()
         .expect("pre-restore bundle")
         .generation;
-    application
-        .restore_selected(selected_restore, RestoreMode::DataOnly)
-        .expect("identity-bound selected restore");
+    let ApplicationCommandAdmission::Started(restore) = application
+        .commands
+        .submit(ApplicationCommand::RestoreData(selected_restore))
+    else {
+        panic!("identity-bound selected restore must start");
+    };
+    let restore_completion = wait_for_application_completion(&application);
+    assert_eq!(restore_completion.request_id(), restore.id());
+    assert_eq!(
+        restore_completion.outcome(),
+        ApplicationCommandOutcome::Succeeded
+    );
     let restored_slot = application.bundle.lock().expect("restored bundle slot");
     assert!(restored_slot.generation > pre_restore_generation);
     assert!(restored_slot.is_some());
@@ -289,8 +641,14 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     assert!(live_catalog.points().len() <= 15);
     assert!(live_catalog.points().iter().all(|point| {
         matches!(
-            point.purpose(),
-            Some(BackupPurpose::Manual | BackupPurpose::PreRestore)
+            (point.purpose(), point.compression()),
+            (
+                Some(BackupPurpose::Manual),
+                Some(tokenmaster_state::BackupCompression::Normal)
+            ) | (
+                Some(BackupPurpose::PreRestore),
+                Some(tokenmaster_state::BackupCompression::Automatic)
+            )
         ) && point.database_schema_version() == Some(USAGE_SCHEMA_VERSION as u16)
     }));
     assert!(
@@ -500,6 +858,9 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
         PriorRunCondition::Clean
     );
     assert_migrated_archive_retries_pending_post_backup_before_live_restart();
+    assert_no_backup_rebuild_preserves_corrupt_truth_and_completes_authoritative_reconciliation();
+    assert_reconstruction_reconciliation_survives_restart_and_retries_without_rebuild();
+    assert_reconstruction_safe_mode_keeps_explicit_reconciliation_retry();
 }
 
 fn assert_migrated_archive_retries_pending_post_backup_before_live_restart() {
@@ -510,6 +871,7 @@ fn assert_migrated_archive_retries_pending_post_backup_before_live_restart() {
     disable_periodic_backups(&root);
 
     let mut failed = Application::start_with_observer(&environment, |boundary| match boundary {
+        ApplicationStartBoundary::BeforeReconstructionReconciliation => Ok(()),
         ApplicationStartBoundary::PreMigrationBackupPublished => Ok(()),
         ApplicationStartBoundary::BeforePostMigrationBackup => {
             Err(ApplicationError::live_runtime())

@@ -223,11 +223,11 @@
 P3-D.0 Tasks 1-11A now implement typed settings, verified Online Backup candidates,
 strict `.tmconfig`/`.tmbackup`, sealed catalog/retention, capacity-one maintenance,
 the durable restore journal/quarantine path, A/B run truth, read-only pre-open diagnosis,
-cold journal resume, and verified-backup automatic recovery. Task 12 application
-stop/restart, migration safety points, no-backup authoritative reconstruction, and safe
-mode plus the later Data & Recovery UI are not implemented. Therefore Tasks 10-11A are
-development infrastructure, not an operator command or proof that the current desktop
-fully recovers a real installation.
+cold journal resume, and verified-backup automatic recovery. Tasks 12-15 now add joined
+application stop/restart, migration safety points, typed selected restore, sealed native
+selection, no-backup authoritative reconstruction, safe mode, and the bounded Data &
+Recovery UI. This is verified developer behavior; Task 16-18, interactive Windows, M0,
+package, and release acceptance remain open.
 
 The implemented bootstrap and later application integration follow this exact order:
 
@@ -256,16 +256,25 @@ The implemented bootstrap and later application integration follow this exact or
    Keep the same writer guard through live-runtime archive open and startup recovery,
    then release it; later mutations reacquire the same fixed lease per operation.
    Publish clean only after every application owner joins.
-7. If no backup is usable, preserve the corrupt set and return recovery-required. Task
-   12 alone may create a fresh archive through normal store code and repopulate only
-   reconstructible data from authoritative local providers. Never do this in state or
-   silently replace damage with an empty database.
+7. If no backup is usable, remain in safe mode until the user chooses the typed rebuild.
+   Application may authorize it only for proven definitive corruption. Store creates and
+   fully verifies one fresh normal-schema archive; state stages/reverifies it, journals
+   explicit reconstruction without a backup identity, quarantines main/WAL/SHM, promotes,
+   and verifies again. Application then forces and awaits one bounded recovery-urgency
+   refresh from authoritative local sources before healthy maintenance. Quota, reset-
+   credit, reminder, and Git history remain explicitly unavailable. Never salvage rows
+   or silently treat the fresh empty archive as healthy truth. If the process stops
+   after promotion but before this refresh completes, the complete reconstruction
+   journal and recovery-launch state force the barrier again on restart. If the refresh
+   fails in-process, use the typed retry; it reuses the promoted archive and must not
+   repeat reconstruction or discard quarantine evidence.
 
 For a current real incident, stop TokenMaster normally if possible, preserve the
 complete data directory as an operator-owned copy, and reproduce only against a
-synthetic/copy fixture. Until Task 12 and the Data & Recovery UI expose the typed flow,
-do not copy only `tokenmaster.sqlite3`, move WAL/SHM/writer-lock files, call internal restore APIs from
-an ad hoc helper, run arbitrary SQL, or treat SQLite `.recover` output as authoritative.
+synthetic/copy fixture. Use only the typed Data Health restore/rebuild flow. Do not copy
+only `tokenmaster.sqlite3`, move WAL/SHM/writer-lock files, call internal restore APIs
+from an ad hoc helper, run arbitrary SQL, or treat SQLite `.recover` output as
+authoritative.
 
 Generated `target/`, `reports/`, and `dist/` content is disposable developer output.
 Do not use it as a release claim. M0 acceptance requires the exact external receipts

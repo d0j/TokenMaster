@@ -1139,10 +1139,12 @@ Critical/Important/Minor 0/0/0 and `Ready`; the authenticated live Codex contrac
 intentionally ignored without explicit environment binding. This is developer evidence,
 not product or release acceptance.
 
-Task 12B.2b remains open for application/UI config preview-confirm binding, verify and
-selected-restore/rebuild command execution, complete cancellation propagation, and
-authoritative Codex reconstruction when no backup is usable.
-Data & Recovery UI and new release acceptance evidence also do not exist yet.
+Task 12B.2b is now implemented through the application/UI boundary. Config selection,
+preview/confirm/cancel, normal/compact/encrypted backup, verification, confirmed
+selected restore, rebuild, retry/cancel, and backup-policy updates are fixed path-free
+intents. Native dialogs run on their owning Slint/STA thread and only sealed input/output
+capabilities cross to the single operation worker. Each mutating path publishes
+`AtomicPromotion` and clears cancellation at its exact irreversible boundary.
 
 Task 14 sealed native file selection is implemented below that application/UI boundary.
 `tokenmaster-platform` uses the existing pinned Windows bindings for the Common Item
@@ -1157,13 +1159,49 @@ the new identity/bytes verify. Local/reparse/hard-link/type/extension/path/size 
 selection-drift failures are stable and path-private; the deterministic selector supports
 tests and unsupported hosts. The native selector is thread-affine and requires an active
 owner. File-dialog 11/11, the 19-test platform unit set including five new race/recovery
-contracts, full platform tests, and strict platform Clippy pass. Application binding and
-interactive Windows evidence remain open. Independent final rereview reports Critical/
+contracts, full platform tests, and strict platform Clippy pass. Application binding is
+now supplied by Task 15; interactive Windows evidence remains open. Independent final rereview reports Critical/
 Important/Minor 0/0/0 and `Ready`. Clean-root, formatting/diff, warnings-as-errors
 locked workspace Clippy, release application composition, application 38/38 and reliable-
 state 55/55 authority mutations, and the complete locked workspace test/doctest suite
 in approximately 473 seconds pass. Interactive behavior and release acceptance remain
 unclaimed.
+
+Task 15 now adds the bounded Data & Recovery and Settings surfaces. One latest-only
+`DesktopReliableStateProjection` carries fixed health/policy/optional counters/times, at most
+fifteen generation/ordinal restore points, one config preview, one operation, and one
+optional path-free recovery receipt. It is kept outside the archive-backed product
+snapshot so safe mode can render it with no query/controller/runtime owner. Slint owns
+no path, file, SQLite, state/store/runtime/platform, provider, or recovery capability;
+there is no polling timer, progress queue, or per-operation history. Restore requires a
+second age/size/quality review and explicit data-only or data-plus-portable-settings
+choice. Confirmation consumes the exact reviewed selection even if a newer projection
+reorders the row. Unknown counts and bytes render unavailable, not zero. Passphrases
+are redacted and cleared after admission. The UI exposes semantic
+accessibility/high-contrast/reduced-motion and narrow/wide hooks; hot en/ru locale and
+interactive Windows/accessibility evidence remain later P4/Task 17 gates.
+
+The no-backup rebuild now exists and remains fail-closed. Only proven definitive active
+corruption plus no usable reverified backup authorizes a fresh archive created through
+the ordinary store schema. State fully verifies it, stages and reverifies it, records an
+explicit reconstruction journal with no backup identity, preserves main/WAL/SHM in
+bounded quarantine, atomically promotes, and fully verifies the active result. The app
+then starts one guarded live runtime, forces a recovery-urgency refresh, and waits on the
+bounded worker completion path until authoritative local Codex reconciliation is done
+and no refresh remains pending. Backup maintenance becomes `Healthy` only after this
+barrier. A durable banner explicitly marks quota, reset-credit, reminder, and Git
+history unavailable rather than displaying fabricated zeros. Complete reconstruction
+journal evidence keeps this source-reconciliation obligation across cold restart,
+same-process failure, and the bounded two-launch Safe Mode; explicit retry reuses the
+promoted archive instead of attempting destructive reconstruction again.
+
+The current developer gate passes clean-root, formatting, warnings-as-errors locked
+workspace Clippy, all three source audits, application 46/46, reliable-state 56/56, and
+desktop 28/28 policy mutations, plus the complete locked workspace test/doctest suite
+in 540.8 seconds. The authenticated live Codex contract remains the single expected
+environment-gated ignored test. Independent rereview reports Critical/Important/Minor
+0/0/0 and `Ready`. This evidence does not close Tasks 16-18 or interactive/M0/package/
+release acceptance.
 
 Task 12A focused store backup 8/8 and adversarial 10/10, catalog 6/6, maintenance
 19/19, state bootstrap 13/13, app 6 unit plus 7 integration, application authority
@@ -1178,12 +1216,12 @@ zero polling/arbitrary-root/forbidden-string surface, and one release artifact.
 
 ## Next implementation slice
 
-Continue P3-D.0 Task 12B.2b from
-`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: bind the implemented
-sealed native selectors and config preview/confirm to the operation worker/UI without
-blocking Slint, then bind verify,
-selected restore, rebuild, cancellation/retry, and authoritative no-backup
-reconstruction over the Task 12A/12B.1/12B.2a/12B.2b.1 boundaries.
+Continue P3-D.0 with Task 16 from
+`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: close the consolidated
+package/recovery fault matrix, process-death boundaries, compatibility cases, privacy
+canaries, and dependency/authority audit without broadening the sealed capabilities.
+Then run Task 17 release-mode UI-latency/resource-return receipts and Task 18 final
+documentation/acceptance closure. This does not claim M0, packaging, signing, or release.
 
 P2-D quota history core is complete under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: Tasks 1-8 cover
@@ -1200,9 +1238,9 @@ immutable read snapshots, and publication through the existing Codex runtime wit
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
 workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, P3-B.2, P3-B.3, and P3-C are
-complete; P3-D.0 Reliable State is active with Tasks 1-11A, Task 12A, Task 12B.1,
-Task 12B.2a, and Task 12B.2b.1 implemented, followed by the remaining Task 12B.2b and
-P3-D supporting data-bearing routes. Activation
+complete; P3-D.0 Reliable State is active with Tasks 1-15 implemented through the
+application/Desktop contour, followed by Tasks 16-18 and P3-D supporting data-bearing
+routes. Activation
 remains a later independently authorized capability. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.
 

@@ -960,9 +960,16 @@ a new recovered launch. Restored legacy bytes MUST repeat the full pre/pending/p
 migration protocol; direct current-bundle start is forbidden. Catalog mutex ownership
 MUST NOT span online snapshot, package verification, recovery, or migration I/O. Any
 stale selection, changed bytes, failed safety point, receipt conflict, or ambiguous
-lifecycle leaves admission resumed only into safe mode with no archive owner. Task
-12B.2b still owns application/UI native-file binding, remaining command bindings, reconstruction,
-and resource/release closure.
+lifecycle leaves admission resumed only into safe mode with no archive owner.
+
+Task 12B.2b/Task 15 binds native selection and the remaining reliable-state commands
+without moving file or recovery authority into Desktop. The UI submits fixed intents
+and receives only bounded path-free projections. Every durable mutation publishes the
+non-cancellable `AtomicPromotion` phase at its exact irreversible boundary; a late
+cancel cannot relabel published state. Dialog cancellation admits no worker command and
+performs no write. Restore confirmation is bound to the exact reviewed generation and
+ordinal rather than a mutable row index. Unknown counts/bytes remain typed unavailable,
+and each queued follow-up publishes `Running` only when it becomes the executing permit.
 
 Implemented Task 12B.2b.1 owns one operation thread with no async runtime, per-command
 thread, unbounded sender, result history, path, file capability, SQL, shell, browser,
@@ -1021,6 +1028,29 @@ Native selection is unavailable on Unix in Task 14. The deterministic controlled
 selector there revalidates parent/file identity before path deletion, but hostile
 same-user unlink-after-check resistance remains a portability hardening gate before a
 future Unix native selector may claim equivalent cleanup behavior.
+
+No-backup reconstruction is authorized only after complete active verification proves
+definitive corruption and the bounded verified catalog yields no usable point. It does
+not parse or salvage corrupt rows. Store creates a fresh normal-schema archive through
+its ordinary constructor; state fully verifies it before and after staging, journals
+the explicit no-backup mode, preserves the prior main/WAL/SHM set in bounded quarantine,
+and atomically promotes under the fixed writer guard. Resume treats journal backup
+absence as valid only for that reconstruction mode.
+
+The reconstructed archive is not healthy authority by itself. Application forces one
+bounded recovery-urgency source refresh and waits through the worker's condition-based
+completion channel before starting healthy backup maintenance. Failure or timeout
+returns to safe mode with no fabricated data. The durable UI receipt is path-free and
+must explicitly state that quota, reset-credit, reminder, and Git history are
+non-reconstructible and unavailable. It never exposes quarantined bytes, filenames,
+source identities, provider payloads, or raw errors.
+
+A completed no-backup journal is not proof that source truth has been reconciled. When
+bootstrap starts that reconstructed candidate, application preflight records a durable-
+evidence-derived reconciliation obligation and presents recovery-required truth until
+the bounded recovery refresh succeeds. Process death or refresh failure cannot clear
+the obligation, start healthy maintenance, fabricate zeros, or authorize a second
+destructive reconstruction of the already promoted archive.
 
 Optional manual password protection uses the implemented standard age v1 stream with
 fixed bounded scrypt work and never stores the passphrase. New passphrases are

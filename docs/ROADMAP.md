@@ -127,8 +127,9 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   deterministic bounded retention, capacity-one maintenance, and sealed journaled
   recovery/quarantine, application backup/migration ownership, bounded command/restart,
   identity-pinned selected restore, one joined operation worker/manual-backup binding,
-  and sealed config core are complete; application/UI config binding, verify/rebuild/
-  no-backup reconstruction, then Data & Recovery controls remain. Full history,
+  sealed config/native-dialog composition, exact operation phases, authoritative-source
+  no-backup reconstruction, and bounded Data & Recovery/Settings controls are complete;
+  adversarial, resource-return, and P3-D.0 acceptance closure remain. Full history,
   sessions, models, projects, activity, remaining health/notifications/settings/help,
   command palette, tray, and compact widget then remain P3-D-P3-E.
 - **P4 — presentation:** modular skins/layouts/density/scheme/locale, en/ru/pseudo,
@@ -167,11 +168,11 @@ identity-free six-section projection and responsive compiled Slint Dashboard wit
 navigation without model/window reconstruction. P3-D.0 Reliable State Tasks 1-11A,
 Task 12A application backup/migration composition, and the Task 12B.1 bounded command/
 generation-safe current-bundle restart foundation and Task 12B.2a identity-pinned
-selected-restore lifecycle, Task 12B.2b.1 joined worker/manual-backup/config core, and
-Task 14 sealed native file-dialog backend are implemented; the remaining Task 12B.2b
-application/UI config binding, verify/rebuild,
-and no-backup reconstruction are next, then the remaining P3-D
-supporting data views.
+  selected-restore lifecycle, Task 12B.2b joined worker and complete typed command/UI
+  bindings, Task 14 sealed native file-dialog backend, and Task 15 bounded Data Health/
+  Settings UI plus no-backup reconstruction are implemented. Tasks 16-18 adversarial,
+  resource, and acceptance closure are next, then the remaining P3-D supporting data
+  views.
 
 P3-D.0 Reliable State is approved under
 `docs/superpowers/specs/2026-07-17-tokenmaster-reliable-state-design.md` with the
@@ -217,10 +218,14 @@ legacy migration gates. Task 12B.2b.1 adds the one joined capacity-one operation
 off-UI manual-backup command, 2 MiB typed config ceiling, create-new verified export,
 and base-bound device-preserving import preview/commit. Task 14 adds the existing-
 dependency Windows Common Item Dialog backend, exact config/backup/encrypted filters,
-already-open bounded input, identity-bound create/replace output, deterministic
-controlled selection, and path-private stable outcomes. The remaining Task 12B.2b owns
-application/UI dialog bindings, verify/selected-restore/rebuild execution, complete cancellation
-propagation, and provider-backed no-backup rebuild. These slices add no
+  already-open bounded input, identity-bound create/replace output, deterministic
+  controlled selection, and path-private stable outcomes. Task 15 binds those
+  capabilities plus verify/selected-restore/rebuild/cancel/policy intents to the one
+  worker and adds provider-backed no-backup rebuild with mandatory restart-safe source
+  reconciliation before healthy state. Review hardening pins confirmation to the exact
+  previewed restore identity, publishes follow-up running state at actual execution,
+  preserves pre-boundary backup cancellation, and keeps unknown metrics unavailable.
+  These slices add no
 path, generic stream, SQL, or batch-deletion authority.
 
 P2-A query foundation is approved under

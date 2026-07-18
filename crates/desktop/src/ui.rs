@@ -1,6 +1,11 @@
 use std::{
+    cell::RefCell,
     fmt,
-    sync::{Arc, Mutex},
+    rc::Rc,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use chrono::{DateTime, Utc};
@@ -11,17 +16,128 @@ use crate::{
     DashboardActivityRow, DashboardBenefitRow, DashboardModelRow, DashboardQuotaRow,
     DashboardSectionRow, DashboardSessionRow, DashboardTrendPoint, DesktopActivityKey,
     DesktopCostValue, DesktopDashboardProjection, DesktopDashboardSectionKey, DesktopFreshness,
-    DesktopQuality, DesktopSnapshotBridge, DesktopSnapshotReceiver, DesktopTokenValue,
-    DesktopValueAvailability, MainWindow, RouteRow,
+    DesktopIntent, DesktopIntentSink, DesktopOperationSnapshot, DesktopQuality,
+    DesktopReliableStateProjection, DesktopSnapshotBridge, DesktopSnapshotReceiver,
+    DesktopTokenValue, DesktopValueAvailability, MainWindow, RestorePointRow, RouteRow,
+    UnavailableDesktopIntentSink,
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
 };
 
 pub struct DesktopShell {
     window: MainWindow,
     state: SharedDesktopState,
+    reliable_state: SharedReliableState,
 }
 
 pub(crate) type SharedDesktopState = Arc<Mutex<DesktopState>>;
+type SharedReliableState = Arc<Mutex<DesktopReliableStateProjection>>;
+
+#[derive(Clone)]
+pub struct DesktopReliableStateNotifier {
+    inner: Arc<ReliableStateNotifierInner>,
+}
+
+#[derive(Clone)]
+pub struct DesktopBridgeFactory {
+    window: slint::Weak<MainWindow>,
+    state: SharedDesktopState,
+}
+
+impl DesktopBridgeFactory {
+    #[must_use]
+    pub fn snapshot_bridge(&self, receiver: DesktopSnapshotReceiver) -> DesktopSnapshotBridge {
+        DesktopSnapshotBridge::new(self.window.clone(), Arc::clone(&self.state), receiver)
+    }
+}
+
+struct ReliableStateNotifierInner {
+    window: slint::Weak<MainWindow>,
+    state: SharedReliableState,
+    latest: Mutex<Option<DesktopReliableStateProjection>>,
+    scheduled: AtomicBool,
+    closed: AtomicBool,
+}
+
+impl DesktopReliableStateNotifier {
+    pub fn publish(
+        &self,
+        projection: DesktopReliableStateProjection,
+    ) -> Result<(), DesktopUiError> {
+        if self.inner.closed.load(Ordering::Acquire) {
+            return Err(DesktopUiError::state_unavailable());
+        }
+        *self
+            .inner
+            .latest
+            .lock()
+            .map_err(|_| DesktopUiError::state_unavailable())? = Some(projection);
+        self.inner.request_delivery()
+    }
+
+    pub fn publish_operation(
+        &self,
+        operation: Option<DesktopOperationSnapshot>,
+    ) -> Result<(), DesktopUiError> {
+        {
+            let mut latest = self
+                .inner
+                .latest
+                .lock()
+                .map_err(|_| DesktopUiError::state_unavailable())?;
+            if let Some(projection) = latest.as_mut() {
+                projection.set_operation(operation);
+                drop(latest);
+                return self.inner.request_delivery();
+            }
+        }
+        let projection = self
+            .inner
+            .state
+            .lock()
+            .map_err(|_| DesktopUiError::state_unavailable())?
+            .clone()
+            .with_operation(operation);
+        self.publish(projection)
+    }
+}
+
+impl ReliableStateNotifierInner {
+    fn request_delivery(self: &Arc<Self>) -> Result<(), DesktopUiError> {
+        if self.scheduled.swap(true, Ordering::AcqRel) {
+            return Ok(());
+        }
+        let inner = Arc::clone(self);
+        if slint::invoke_from_event_loop(move || inner.deliver_latest()).is_err() {
+            self.scheduled.store(false, Ordering::Release);
+            return Err(DesktopUiError::state_unavailable());
+        }
+        Ok(())
+    }
+
+    fn deliver_latest(self: &Arc<Self>) {
+        let projection = self.latest.lock().ok().and_then(|mut latest| latest.take());
+        let delivered = projection.is_none_or(|projection| {
+            let Some(window) = self.window.upgrade() else {
+                return false;
+            };
+            let Ok(mut state) = self.state.lock() else {
+                return false;
+            };
+            apply_reliable_state_projection(&window, &projection);
+            *state = projection;
+            true
+        });
+        if !delivered {
+            self.closed.store(true, Ordering::Release);
+        }
+        self.scheduled.store(false, Ordering::Release);
+        if !self.closed.load(Ordering::Acquire)
+            && self.latest.lock().is_ok_and(|latest| latest.is_some())
+        {
+            let _ = self.request_delivery();
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DesktopUiErrorCode {
@@ -70,12 +186,41 @@ impl std::error::Error for DesktopUiError {}
 
 impl DesktopShell {
     pub fn new(snapshot: &ProductSnapshot) -> Result<Self, slint::PlatformError> {
+        Self::new_with_reliable_state_unbound(
+            snapshot,
+            DesktopReliableStateProjection::unavailable(),
+        )
+    }
+
+    pub fn new_with_reliable_state_unbound(
+        snapshot: &ProductSnapshot,
+        reliable_state: DesktopReliableStateProjection,
+    ) -> Result<Self, slint::PlatformError> {
+        Self::new_with_reliable_state(
+            snapshot,
+            reliable_state,
+            Rc::new(UnavailableDesktopIntentSink),
+        )
+    }
+
+    pub fn new_with_reliable_state(
+        snapshot: &ProductSnapshot,
+        reliable_state: DesktopReliableStateProjection,
+        intent_sink: Rc<dyn DesktopIntentSink>,
+    ) -> Result<Self, slint::PlatformError> {
         let window = MainWindow::new()?;
         let initial_state = DesktopState::new(snapshot, DesktopRouteKey::Dashboard);
         apply_projection(&window, initial_state.projection());
+        apply_reliable_state_projection(&window, &reliable_state);
         let state = Arc::new(Mutex::new(initial_state));
+        let reliable_state = Arc::new(Mutex::new(reliable_state));
         wire_route_selection(&window, state.clone());
-        Ok(Self { window, state })
+        wire_reliable_state_intents(&window, reliable_state.clone(), intent_sink);
+        Ok(Self {
+            window,
+            state,
+            reliable_state,
+        })
     }
 
     #[must_use]
@@ -98,14 +243,173 @@ impl DesktopShell {
         Ok(outcome)
     }
 
+    pub fn apply_reliable_state(
+        &self,
+        projection: DesktopReliableStateProjection,
+    ) -> Result<(), DesktopUiError> {
+        let mut reliable_state = self
+            .reliable_state
+            .lock()
+            .map_err(|_| DesktopUiError::state_unavailable())?;
+        apply_reliable_state_projection(&self.window, &projection);
+        *reliable_state = projection;
+        Ok(())
+    }
+
     pub(crate) fn state_handle(&self) -> SharedDesktopState {
         self.state.clone()
     }
 
     #[must_use]
-    pub fn snapshot_bridge(&self, receiver: DesktopSnapshotReceiver) -> DesktopSnapshotBridge {
-        DesktopSnapshotBridge::new(self.window.as_weak(), self.state_handle(), receiver)
+    pub fn reliable_state_notifier(&self) -> DesktopReliableStateNotifier {
+        DesktopReliableStateNotifier {
+            inner: Arc::new(ReliableStateNotifierInner {
+                window: self.window.as_weak(),
+                state: Arc::clone(&self.reliable_state),
+                latest: Mutex::new(None),
+                scheduled: AtomicBool::new(false),
+                closed: AtomicBool::new(false),
+            }),
+        }
     }
+
+    #[must_use]
+    pub fn snapshot_bridge(&self, receiver: DesktopSnapshotReceiver) -> DesktopSnapshotBridge {
+        self.bridge_factory().snapshot_bridge(receiver)
+    }
+
+    #[must_use]
+    pub fn bridge_factory(&self) -> DesktopBridgeFactory {
+        DesktopBridgeFactory {
+            window: self.window.as_weak(),
+            state: self.state_handle(),
+        }
+    }
+}
+
+fn wire_reliable_state_intents(
+    window: &MainWindow,
+    reliable_state: SharedReliableState,
+    intent_sink: Rc<dyn DesktopIntentSink>,
+) {
+    let reviewed_restore_selection = Rc::new(RefCell::new(None));
+    let sink = intent_sink.clone();
+    window.on_export_config(move || {
+        let _ = sink.submit(DesktopIntent::ExportConfig);
+    });
+    let sink = intent_sink.clone();
+    window.on_import_config(move || {
+        let _ = sink.submit(DesktopIntent::ImportConfig);
+    });
+    let sink = intent_sink.clone();
+    window.on_confirm_config_import(move || {
+        let _ = sink.submit(DesktopIntent::ConfirmConfigImport);
+    });
+    let sink = intent_sink.clone();
+    window.on_cancel_config_import(move || {
+        let _ = sink.submit(DesktopIntent::CancelConfigImport);
+    });
+    let sink = intent_sink.clone();
+    window.on_backup_normal(move || {
+        let _ = sink.submit(DesktopIntent::BackupNormal);
+    });
+    let sink = intent_sink.clone();
+    window.on_backup_compact(move || {
+        let _ = sink.submit(DesktopIntent::BackupCompact);
+    });
+    let sink = intent_sink.clone();
+    window.on_backup_encrypted(move |passphrase, confirmation| {
+        if let Ok(intent) = DesktopIntent::encrypted_backup(&passphrase, &confirmation) {
+            let _ = sink.submit(intent);
+        }
+    });
+    let sink = intent_sink.clone();
+    window.on_verify_backups(move || {
+        let _ = sink.submit(DesktopIntent::VerifyBackups);
+    });
+    let sink = intent_sink.clone();
+    let state = reliable_state.clone();
+    let reviewed_selection = Rc::clone(&reviewed_restore_selection);
+    let weak = window.as_weak();
+    window.on_preview_restore(move |row| {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        let Ok(row) = usize::try_from(row) else {
+            return;
+        };
+        let selection_and_point = state.lock().ok().and_then(|state| {
+            Some((
+                state.restore_selection(row)?,
+                state.restore_points().get(row)?.clone(),
+            ))
+        });
+        if let Some((selection, point)) = selection_and_point {
+            let admission = sink.submit(DesktopIntent::PreviewRestore(selection));
+            if admission != crate::DesktopIntentAdmission::Rejected {
+                reviewed_selection.replace(Some(selection));
+                window.set_restore_confirmation_visible(true);
+                window.set_restore_confirmation_row(saturating_i32(row as u64));
+                window.set_restore_confirmation_detail(
+                    format!(
+                        "{} · {} · {}",
+                        format_restore_age(point.created_at_utc_ms()),
+                        format_bytes(point.size_bytes()),
+                        point.health().stable_code()
+                    )
+                    .into(),
+                );
+            }
+        }
+    });
+    let sink = intent_sink.clone();
+    let reviewed_selection = Rc::clone(&reviewed_restore_selection);
+    let weak = window.as_weak();
+    window.on_confirm_restore(move |_row, portable_settings| {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        let selection = *reviewed_selection.borrow();
+        if let Some(selection) = selection {
+            let admission = sink.submit(DesktopIntent::ConfirmRestore {
+                selection,
+                portable_settings,
+            });
+            if admission != crate::DesktopIntentAdmission::Rejected {
+                reviewed_selection.replace(None);
+                window.set_restore_confirmation_visible(false);
+                window.set_restore_confirmation_row(-1);
+                window.set_restore_confirmation_detail("".into());
+            }
+        }
+    });
+    let sink = intent_sink.clone();
+    window.on_rebuild_data(move || {
+        let _ = sink.submit(DesktopIntent::RebuildData);
+    });
+    let sink = intent_sink.clone();
+    window.on_retry_operation(move || {
+        let _ = sink.submit(DesktopIntent::RetryOperation);
+    });
+    let sink = intent_sink.clone();
+    window.on_cancel_operation(move || {
+        let _ = sink.submit(DesktopIntent::CancelOperation);
+    });
+    window.on_update_backup_policy(move |enabled, quiet, interval, budget| {
+        let (Ok(quiet_seconds), Ok(interval_seconds), Ok(retention_budget_mib)) = (
+            u32::try_from(quiet),
+            u32::try_from(interval),
+            u32::try_from(budget),
+        ) else {
+            return;
+        };
+        let _ = intent_sink.submit(DesktopIntent::UpdateBackupPolicy {
+            periodic_enabled: enabled,
+            quiet_seconds,
+            interval_seconds,
+            retention_budget_mib,
+        });
+    });
 }
 
 fn wire_route_selection(window: &MainWindow, state: SharedDesktopState) {
@@ -153,6 +457,172 @@ fn apply_route_projection(window: &MainWindow, projection: &DesktopProjection) {
     window.set_product_generation(SharedString::from(
         projection.generation().get().to_string(),
     ));
+}
+
+fn apply_reliable_state_projection(
+    window: &MainWindow,
+    projection: &DesktopReliableStateProjection,
+) {
+    window.set_reliable_state_generation(projection.generation().to_string().into());
+    window.set_reliable_state_health(projection.health().stable_code().into());
+    window.set_reliable_state_safe_mode(projection.safe_mode());
+    let recovery_receipt = projection.recovery_receipt();
+    window.set_reliable_recovery_kind(
+        recovery_receipt
+            .map_or("", |receipt| receipt.kind().stable_code())
+            .into(),
+    );
+    window.set_reliable_non_reconstructible_domains_lost(
+        recovery_receipt.is_some_and(|receipt| receipt.non_reconstructible_domains_lost()),
+    );
+    window.set_settings_health(projection.settings_health_code().into());
+    let config_preview = projection.config_import_preview();
+    window.set_config_import_preview_visible(config_preview.is_some());
+    window.set_config_import_created_label(
+        config_preview
+            .map_or_else(
+                || "Unavailable".to_owned(),
+                |preview| format_timestamp_ms(preview.created_at_utc_ms()),
+            )
+            .into(),
+    );
+    window.set_config_import_bytes_label(
+        config_preview
+            .map_or_else(
+                || "0 B".to_owned(),
+                |preview| format_bytes(preview.package_bytes()),
+            )
+            .into(),
+    );
+    window.set_config_import_changes_label(
+        config_preview
+            .map_or_else(
+                || "No pending changes".to_owned(),
+                |preview| {
+                    format!(
+                        "{} categories · {} fields",
+                        preview.changed_category_count(),
+                        preview.changed_field_count()
+                    )
+                },
+            )
+            .into(),
+    );
+    window.set_reliable_latest_success_label(
+        projection
+            .latest_success_at_utc_ms()
+            .map_or_else(|| "Unavailable".to_owned(), format_timestamp_ms)
+            .into(),
+    );
+    window.set_reliable_latest_attempt_label(
+        projection
+            .latest_attempt_at_utc_ms()
+            .map_or_else(|| "Unavailable".to_owned(), format_timestamp_ms)
+            .into(),
+    );
+    window.set_reliable_successful_count_label(
+        projection
+            .successful_count()
+            .map_or_else(|| "Unavailable".to_owned(), |count| count.to_string())
+            .into(),
+    );
+    window.set_reliable_failure_count_label(
+        projection
+            .failure_count()
+            .map_or_else(|| "Unavailable".to_owned(), |count| count.to_string())
+            .into(),
+    );
+    window.set_reliable_published_bytes_label(
+        projection
+            .published_bytes()
+            .map_or_else(|| "Unavailable".to_owned(), format_bytes)
+            .into(),
+    );
+    window.set_reliable_latest_failure_code(
+        projection.latest_failure_code().unwrap_or_default().into(),
+    );
+    let operation = projection.operation();
+    window.set_reliable_operation_kind(
+        operation
+            .map_or("idle", |value| value.kind().stable_code())
+            .into(),
+    );
+    window.set_reliable_operation_phase(
+        operation
+            .map_or("idle", |value| value.phase().stable_code())
+            .into(),
+    );
+    window.set_reliable_operation_failure_code(
+        operation
+            .and_then(|value| value.failure_code())
+            .unwrap_or_default()
+            .into(),
+    );
+    window
+        .set_reliable_operation_cancel_enabled(operation.is_some_and(|value| value.cancellable()));
+
+    let policy = projection.policy();
+    window.set_backup_periodic_enabled(policy.periodic_enabled());
+    window.set_backup_quiet_seconds(saturating_i32(u64::from(policy.quiet_seconds())));
+    window.set_backup_interval_seconds(saturating_i32(u64::from(policy.interval_seconds())));
+    window.set_backup_retention_budget_mib(saturating_i32(
+        policy.retention_budget_bytes() / 1_048_576,
+    ));
+
+    let rows = projection
+        .restore_points()
+        .iter()
+        .enumerate()
+        .map(|(index, point)| RestorePointRow {
+            row_index: saturating_i32(index as u64),
+            created_label: point
+                .created_at_utc_ms()
+                .map_or_else(|| "Time unavailable".to_owned(), format_timestamp_ms)
+                .into(),
+            size_label: format_bytes(point.size_bytes()).into(),
+            health: point.health().stable_code().into(),
+            purpose_label: humanize_key(point.purpose_code()).into(),
+            schema_label: point
+                .database_schema_version()
+                .map_or_else(
+                    || "Schema unavailable".to_owned(),
+                    |version| format!("Schema {version}"),
+                )
+                .into(),
+            compression_label: humanize_key(point.compression_code()).into(),
+        })
+        .collect::<Vec<_>>();
+    window.set_restore_point_rows(model(rows));
+}
+
+fn saturating_i32(value: u64) -> i32 {
+    i32::try_from(value).unwrap_or(i32::MAX)
+}
+
+fn format_bytes(value: u64) -> String {
+    const MIB: u64 = 1_048_576;
+    const KIB: u64 = 1_024;
+    if value >= MIB {
+        format!("{:.1} MiB", value as f64 / MIB as f64)
+    } else if value >= KIB {
+        format!("{:.1} KiB", value as f64 / KIB as f64)
+    } else {
+        format!("{value} B")
+    }
+}
+
+fn format_restore_age(created_at_utc_ms: Option<i64>) -> String {
+    let Some(created_at_utc_ms) = created_at_utc_ms else {
+        return "Age unavailable".to_owned();
+    };
+    let now = Utc::now().timestamp_millis();
+    let elapsed = now.saturating_sub(created_at_utc_ms).max(0) as u64;
+    let hours = elapsed / 3_600_000;
+    if hours < 24 {
+        format!("{hours} h old")
+    } else {
+        format!("{} d old", hours / 24)
+    }
 }
 
 fn join_reasons(reasons: impl Iterator<Item = &'static str>) -> String {

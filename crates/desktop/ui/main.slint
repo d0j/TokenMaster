@@ -1,11 +1,14 @@
 import {
     RouteRow, DashboardSectionRow, DashboardQuotaRow, DashboardBenefitRow,
-    DashboardTrendPoint, DashboardSessionRow, DashboardActivityRow, DashboardModelRow
+    DashboardTrendPoint, DashboardSessionRow, DashboardActivityRow, DashboardModelRow,
+    RestorePointRow
 } from "models.slint";
 import { UiTokens } from "tokens.slint";
 import { RouteNavItem } from "components/route-nav-item.slint";
 import { RouteState } from "components/route-state.slint";
 import { DashboardView } from "views/dashboard-view.slint";
+import { DataHealthView } from "views/data-health-view.slint";
+import { SettingsView } from "views/settings-view.slint";
 
 export component MainWindow inherits Window {
     in property <[RouteRow]> route-rows;
@@ -32,8 +35,54 @@ export component MainWindow inherits Window {
     in property <string> dashboard-code-efficiency;
     in property <string> dashboard-code-evidence;
     out property <bool> dashboard-visible: root.active-route-key == "dashboard";
+    out property <bool> data-health-visible: root.active-route-key == "data_health";
+    out property <bool> settings-visible: root.active-route-key == "settings";
     out property <string> dashboard-layout-mode: root.width < 1010px ? "narrow" : "wide";
+    in property <string> reliable-state-generation;
+    in property <string> reliable-state-health;
+    in property <bool> reliable-state-safe-mode;
+    in property <string> reliable-recovery-kind;
+    in property <bool> reliable-non-reconstructible-domains-lost;
+    in property <string> settings-health;
+    in property <bool> config-import-preview-visible;
+    in property <string> config-import-created-label;
+    in property <string> config-import-bytes-label;
+    in property <string> config-import-changes-label;
+    in property <string> reliable-latest-success-label;
+    in property <string> reliable-latest-attempt-label;
+    in property <string> reliable-successful-count-label;
+    in property <string> reliable-failure-count-label;
+    in property <string> reliable-published-bytes-label;
+    in property <string> reliable-latest-failure-code;
+    in property <[RestorePointRow]> restore-point-rows;
+    in property <string> reliable-operation-kind;
+    in property <string> reliable-operation-phase;
+    in property <string> reliable-operation-failure-code;
+    in property <bool> reliable-operation-cancel-enabled;
+    in-out property <bool> restore-confirmation-visible: false;
+    in-out property <int> restore-confirmation-row: -1;
+    in-out property <string> restore-confirmation-detail;
+    in property <bool> backup-periodic-enabled;
+    in property <int> backup-quiet-seconds;
+    in property <int> backup-interval-seconds;
+    in property <int> backup-retention-budget-mib;
+    in property <bool> high-contrast: false;
+    in property <bool> reduced-motion: false;
     callback select-route(string);
+    callback export-config();
+    callback import-config();
+    callback confirm-config-import();
+    callback cancel-config-import();
+    callback backup-normal();
+    callback backup-compact();
+    callback backup-encrypted(string, string);
+    callback verify-backups();
+    callback preview-restore(int);
+    callback confirm-restore(int, bool);
+    callback rebuild-data();
+    callback retry-operation();
+    callback cancel-operation();
+    callback update-backup-policy(bool, int, int, int);
 
     title: "TokenMaster";
     preferred-width: 1120px;
@@ -124,7 +173,68 @@ export component MainWindow inherits Window {
                     code-evidence: root.dashboard-code-evidence;
                 }
 
-                if !root.dashboard-visible: RouteState {
+                if root.data-health-visible: DataHealthView {
+                    width: parent.width;
+                    height: parent.height;
+                    health: root.reliable-state-health;
+                    safe-mode: root.reliable-state-safe-mode;
+                    recovery-kind: root.reliable-recovery-kind;
+                    non-reconstructible-domains-lost: root.reliable-non-reconstructible-domains-lost;
+                    generation: root.reliable-state-generation;
+                    latest-success-label: root.reliable-latest-success-label;
+                    latest-attempt-label: root.reliable-latest-attempt-label;
+                    successful-count-label: root.reliable-successful-count-label;
+                    failure-count-label: root.reliable-failure-count-label;
+                    published-bytes-label: root.reliable-published-bytes-label;
+                    latest-failure-code: root.reliable-latest-failure-code;
+                    restore-points: root.restore-point-rows;
+                    operation-kind: root.reliable-operation-kind;
+                    operation-phase: root.reliable-operation-phase;
+                    operation-failure-code: root.reliable-operation-failure-code;
+                    operation-cancel-enabled: root.reliable-operation-cancel-enabled;
+                    restore-confirmation-visible: root.restore-confirmation-visible;
+                    restore-confirmation-row: root.restore-confirmation-row;
+                    restore-confirmation-detail: root.restore-confirmation-detail;
+                    high-contrast: root.high-contrast;
+                    reduced-motion: root.reduced-motion;
+                    backup-normal => { root.backup-normal(); }
+                    backup-compact => { root.backup-compact(); }
+                    backup-encrypted(passphrase, confirmation) => { root.backup-encrypted(passphrase, confirmation); }
+                    verify-backups => { root.verify-backups(); }
+                    preview-restore(index) => { root.preview-restore(index); }
+                    confirm-restore(index, portable-settings) => { root.confirm-restore(index, portable-settings); }
+                    dismiss-restore-confirmation => {
+                        root.restore-confirmation-visible = false;
+                        root.restore-confirmation-row = -1;
+                        root.restore-confirmation-detail = "";
+                    }
+                    rebuild-data => { root.rebuild-data(); }
+                    retry-operation => { root.retry-operation(); }
+                    cancel-operation => { root.cancel-operation(); }
+                }
+
+                if root.settings-visible: SettingsView {
+                    width: parent.width;
+                    height: parent.height;
+                    periodic-enabled: root.backup-periodic-enabled;
+                    quiet-seconds: root.backup-quiet-seconds;
+                    interval-seconds: root.backup-interval-seconds;
+                    retention-budget-mib: root.backup-retention-budget-mib;
+                    settings-health: root.settings-health;
+                    config-import-preview-visible: root.config-import-preview-visible;
+                    config-import-created-label: root.config-import-created-label;
+                    config-import-bytes-label: root.config-import-bytes-label;
+                    config-import-changes-label: root.config-import-changes-label;
+                    high-contrast: root.high-contrast;
+                    reduced-motion: root.reduced-motion;
+                    export-config => { root.export-config(); }
+                    import-config => { root.import-config(); }
+                    confirm-config-import => { root.confirm-config-import(); }
+                    cancel-config-import => { root.cancel-config-import(); }
+                    update-backup-policy(enabled, quiet, interval, budget) => { root.update-backup-policy(enabled, quiet, interval, budget); }
+                }
+
+                if !root.dashboard-visible && !root.data-health-visible && !root.settings-visible: RouteState {
                     x: UiTokens.space;
                     y: UiTokens.space;
                     width: parent.width - 2 * UiTokens.space;

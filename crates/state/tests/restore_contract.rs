@@ -14,8 +14,8 @@ use tokenmaster_state::{
     BACKUP_RETENTION_MIN_BYTES, BackupCatalog, BackupCompression, BackupMetadata, BackupPackage,
     BackupPolicy, BackupPurpose, CatalogSelection, DeviceRoute, DeviceSettings, PortableSettings,
     PortableSettingsCandidate, RecoveryArchiveFacts, RecoveryBoundary, RecoveryCoordinator,
-    RecoveryJournalLoad, RecoveryJournalStore, RecoveryPhase, ReminderPolicy, RestoreMode,
-    SettingsStore, SettingsValue, StateErrorCode,
+    RecoveryJournalLoad, RecoveryJournalStore, RecoveryPhase, RecoverySettingsMode, ReminderPolicy,
+    RestoreMode, SettingsStore, SettingsValue, StateErrorCode,
 };
 use tokenmaster_store::{
     BackupControl, BackupSource, BackupStaging, UsageStore, create_online_snapshot,
@@ -48,6 +48,119 @@ fn persisted_archive_facts_accept_empty_sidecars_but_reject_empty_main() {
             .code(),
         StateErrorCode::InvalidInput
     );
+}
+
+#[test]
+fn no_usable_backup_reconstructs_a_verified_fresh_archive_and_preserves_corrupt_truth() {
+    let fixture = Fixture::new();
+    corrupt_only_backup(&fixture);
+    let mut catalog = BackupCatalog::rebuild(&fixture.backups, None).expect("cold catalog");
+    let guard = fixture.guard();
+
+    let mut boundaries = Vec::new();
+    let receipt = fixture
+        .coordinator()
+        .reconstruct_definitively_corrupt_with_observer(
+            &fixture.backups,
+            &mut catalog,
+            &guard,
+            &fixture.control,
+            |boundary| {
+                boundaries.push(boundary);
+                Ok(())
+            },
+        )
+        .unwrap_or_else(|error| {
+            panic!("authoritative reconstruction stage: {error:?}, boundaries={boundaries:?}")
+        });
+
+    assert!(receipt.reconstructed_from_authoritative_source());
+    assert!(receipt.non_reconstructible_domains_lost());
+    assert_eq!(
+        receipt.settings_mode(),
+        RecoverySettingsMode::ReconstructionDataOnly
+    );
+    let journal = match fixture.journal.load().expect("journal") {
+        RecoveryJournalLoad::Pending(journal) => journal,
+        other => panic!("expected complete reconstruction journal, got {other:?}"),
+    };
+    assert_eq!(journal.phase(), RecoveryPhase::Complete);
+    assert!(journal.backup().is_none());
+    assert_eq!(
+        fs::read(
+            fixture
+                .reliable
+                .as_path()
+                .join("quarantine")
+                .read_dir()
+                .expect("quarantine directory")
+                .next()
+                .expect("quarantine set")
+                .expect("quarantine entry")
+                .path()
+                .join("tokenmaster.sqlite3")
+        )
+        .expect("quarantined main"),
+        b"definitively-corrupt-active"
+    );
+    drop(guard);
+    drop(
+        UsageStore::open(fixture.data.as_path().join("tokenmaster.sqlite3"))
+            .expect("normal store reopens reconstructed archive"),
+    );
+}
+
+#[test]
+fn reconstruction_resumes_after_promotion_before_journal_advance() {
+    let fixture = Fixture::new();
+    corrupt_only_backup(&fixture);
+    let mut catalog = BackupCatalog::rebuild(&fixture.backups, None).expect("cold catalog");
+    let guard = fixture.guard();
+    let error = fixture
+        .coordinator()
+        .reconstruct_definitively_corrupt_with_observer(
+            &fixture.backups,
+            &mut catalog,
+            &guard,
+            &fixture.control,
+            |boundary| {
+                if boundary == RecoveryBoundary::MainPromotedBeforeJournal {
+                    return Err(tokenmaster_state::StateError::from_code(
+                        StateErrorCode::Unavailable,
+                    ));
+                }
+                Ok(())
+            },
+        )
+        .expect_err("injected promotion crash boundary");
+    assert_eq!(error.code(), StateErrorCode::Unavailable);
+    let cold = BackupCatalog::rebuild(&fixture.backups, None).expect("resume catalog");
+
+    let receipt = fixture
+        .coordinator()
+        .resume(&fixture.backups, &cold, &guard, &fixture.control)
+        .expect("resume reconstruction")
+        .expect("reconstruction receipt");
+
+    assert!(receipt.reconstructed_from_authoritative_source());
+    assert!(matches!(
+        fixture.journal.load().expect("complete journal"),
+        RecoveryJournalLoad::Pending(journal) if journal.phase() == RecoveryPhase::Complete
+            && journal.backup().is_none()
+    ));
+}
+
+fn corrupt_only_backup(fixture: &Fixture) {
+    let backup_path = fs::read_dir(fixture.reliable.as_path().join("backups"))
+        .expect("backup directory")
+        .next()
+        .expect("one backup")
+        .expect("backup entry")
+        .path();
+    let mut bytes = fs::read(&backup_path).expect("backup bytes");
+    let last = bytes.last_mut().expect("non-empty backup");
+    *last ^= 0xff;
+    fs::write(&backup_path, bytes).expect("corrupt only backup");
 }
 
 struct Fixture {
@@ -894,6 +1007,15 @@ fn recovery_crash_child() {
             &fixture.control,
             |boundary| {
                 let boundary_name = match boundary {
+                    RecoveryBoundary::BeforeJournalPublication => {
+                        "BeforeJournalPublication".to_owned()
+                    }
+                    RecoveryBoundary::ReconstructionCandidateCreated => {
+                        "ReconstructionCandidateCreated".to_owned()
+                    }
+                    RecoveryBoundary::ReconstructionCandidateStaged => {
+                        "ReconstructionCandidateStaged".to_owned()
+                    }
                     RecoveryBoundary::JournalDurable(phase) => format!("{phase:?}"),
                     RecoveryBoundary::SidecarsQuarantinedBeforeJournal => {
                         "SidecarsQuarantinedBeforeJournal".to_owned()

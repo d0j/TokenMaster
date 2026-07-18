@@ -1,18 +1,27 @@
 use std::fmt;
+use std::rc::Rc;
 use std::sync::{
     Arc, Mutex, Weak,
     atomic::{AtomicBool, AtomicU64, Ordering},
 };
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use slint::ComponentHandle;
 use tokenmaster_codex::{CodexRootInput, ConfiguredCodexRoot, build_discovery_request};
 use tokenmaster_desktop::{
-    DesktopController, DesktopQueryPlan, DesktopRefreshUrgency, DesktopRuntimeObservation,
-    DesktopShell, DesktopSnapshotBridge, select_production_renderer,
+    DesktopBridgeFactory, DesktopController, DesktopIntent, DesktopIntentAdmission,
+    DesktopIntentRouter, DesktopIntentSink, DesktopOperationKind, DesktopOperationPhase,
+    DesktopOperationSnapshot, DesktopQueryPlan, DesktopRefreshUrgency,
+    DesktopReliableStateNotifier, DesktopReliableStateProjection, DesktopRestoreSelection,
+    DesktopRuntimeObservation, DesktopShell, DesktopSnapshotBridge, select_production_renderer,
 };
-use tokenmaster_engine::{WorkerCompletion, WorkerCompletionNotifier};
-use tokenmaster_platform::ExclusiveFileLeaseGuard;
+use tokenmaster_engine::{
+    RefreshOutcome, RefreshUrgency, WorkerCompletion, WorkerCompletionNotifier,
+};
+use tokenmaster_platform::{
+    ExclusiveFileLeaseGuard, FileDialogFileType, FileDialogResult, FileDialogSelector,
+    NativeFileDialog,
+};
 use tokenmaster_product::{
     ProductGitRuntimeHealth, ProductQuotaRuntimeHealth, ProductReducer,
     ProductReminderRuntimeHealth, ProductRuntimeGeneration, ProductRuntimeObservationError,
@@ -23,20 +32,25 @@ use tokenmaster_runtime::{
     CodexQuotaRuntimeConfig, LiveRuntime, RuntimeErrorCode,
 };
 use tokenmaster_state::{
-    BackupMaintenanceRuntime, BootstrapOutcome, MaintenanceCompletion, MaintenanceOutcome,
-    MaintenancePurpose, MaintenanceSourceState, RestoreMode, RestoreSafety, StateErrorCode,
+    BackupMaintenanceRuntime, BackupPassphrase, BootstrapOutcome, MAX_CONFIG_PACKAGE_BYTES,
+    MaintenanceCompletion, MaintenanceOutcome, MaintenancePurpose, MaintenanceSourceState,
+    RestoreMode, RestoreSafety, StateErrorCode,
 };
 use tokenmaster_store::BackupControl;
 
 use crate::command::{
-    ApplicationBackupSelection, ApplicationCommand, ApplicationCommandExecution,
-    ApplicationCommandFailure, ApplicationCommandPermit,
+    ApplicationBackupPolicyUpdate, ApplicationBackupSelection, ApplicationCommand,
+    ApplicationCommandAdmission, ApplicationCommandExecution, ApplicationCommandFailure,
+    ApplicationCommandPermit, ApplicationOperationPayload, ApplicationOperationRequest,
 };
-use crate::operation::{ApplicationOperationWorker, ApplicationOperationWorkerPhase};
+use crate::operation::{
+    ApplicationOperationSubmitter, ApplicationOperationWorker, ApplicationOperationWorkerPhase,
+};
 use crate::state::{ApplicationPreflight, ApplicationStateOwner};
 use crate::{ApplicationEnvironment, DataRoot};
 
 type SharedBundle = Arc<Mutex<ApplicationBundleSlot>>;
+type SharedBridge = Arc<Mutex<Option<DesktopSnapshotBridge>>>;
 const MANDATORY_BACKUP_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 struct ApplicationBundleSlot {
@@ -52,7 +66,6 @@ impl ApplicationBundleSlot {
         }
     }
 
-    #[cfg(test)]
     const fn as_ref(&self) -> Option<&ApplicationBundle> {
         self.bundle.as_ref()
     }
@@ -96,21 +109,23 @@ struct Application {
     )]
     data_root: DataRoot,
     shell: DesktopShell,
-    _bridge: Option<DesktopSnapshotBridge>,
+    bridge_factory: DesktopBridgeFactory,
+    bridge: SharedBridge,
     bundle: SharedBundle,
     commands: ApplicationOperationWorker,
     #[cfg_attr(
         not(test),
         expect(dead_code, reason = "Task 12B command worker binds controlled restart")
     )]
-    state: ApplicationStateOwner,
-    preflight: ApplicationPreflight,
-    live_started: bool,
+    state: Arc<ApplicationStateOwner>,
+    preflight: Arc<Mutex<ApplicationPreflight>>,
+    live_started: Arc<AtomicBool>,
     shutdown: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ApplicationStartBoundary {
+    BeforeReconstructionReconciliation,
     PreMigrationBackupPublished,
     BeforePostMigrationBackup,
 }
@@ -128,10 +143,17 @@ impl Application {
         F: FnMut(ApplicationStartBoundary) -> Result<(), ApplicationError>,
     {
         let data_root = DataRoot::resolve(environment).map_err(|_| ApplicationError::data())?;
-        let state = ApplicationStateOwner::open(&data_root)?;
+        let state = Arc::new(ApplicationStateOwner::open(&data_root)?);
         let mut preflight = state.prepare(&data_root)?;
         let initial = ProductReducer::new().snapshot();
-        let shell = DesktopShell::new(&initial).map_err(|_| ApplicationError::ui_unavailable())?;
+        let reliable_state = state
+            .reliable_state_projection_for_outcome(preflight.effective_outcome(), None)
+            .unwrap_or_else(|_| DesktopReliableStateProjection::unavailable());
+        let intent_router = Rc::new(DesktopIntentRouter::new());
+        let shell =
+            DesktopShell::new_with_reliable_state(&initial, reliable_state, intent_router.clone())
+                .map_err(|_| ApplicationError::ui_unavailable())?;
+        let bridge_factory = shell.bridge_factory();
         let bundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
         let outcome = preflight.report().outcome();
         let may_start_live = matches!(
@@ -146,7 +168,7 @@ impl Application {
                 &data_root,
                 &state,
                 &mut preflight,
-                &shell,
+                &bridge_factory,
                 &bundle,
                 outcome,
                 &mut observer,
@@ -166,16 +188,68 @@ impl Application {
             (false, None)
         };
 
+        let bridge = Arc::new(Mutex::new(bridge));
+        let preflight = Arc::new(Mutex::new(preflight));
+        let live_started = Arc::new(AtomicBool::new(live_started));
+        let reliable_notifier = shell.reliable_state_notifier();
+        let command_environment = environment.clone();
+        let command_data_root = data_root.clone();
+        let command_state = Arc::clone(&state);
+        let command_preflight = Arc::clone(&preflight);
         let command_bundle = Arc::clone(&bundle);
-        let commands = ApplicationOperationWorker::spawn(move |permit| {
-            execute_application_operation(&command_bundle, permit)
+        let command_factory = bridge_factory.clone();
+        let command_bridge = Arc::clone(&bridge);
+        let command_live_started = Arc::clone(&live_started);
+        let command_notifier = reliable_notifier.clone();
+        let commands = ApplicationOperationWorker::spawn_with_payload(move |permit, payload| {
+            let _ = command_notifier
+                .publish_operation(Some(application_operation_running(permit.command())));
+            let execution = execute_application_operation(
+                &command_environment,
+                &command_data_root,
+                &command_state,
+                &command_preflight,
+                &command_bundle,
+                &command_factory,
+                &command_bridge,
+                &command_live_started,
+                &command_notifier,
+                permit,
+                payload,
+            );
+            let operation = application_operation_completion(permit.command(), execution);
+            let projection = command_preflight
+                .lock()
+                .map_err(|_| ApplicationError::internal())
+                .and_then(|preflight| {
+                    command_state.reliable_state_projection_for_outcome(
+                        preflight.effective_outcome(),
+                        Some(operation),
+                    )
+                });
+            match projection {
+                Ok(projection) => {
+                    let _ = command_notifier.publish(projection);
+                }
+                Err(_) => {
+                    let _ = command_notifier.publish_operation(Some(operation));
+                }
+            }
+            execution
         })
         .map_err(|_| ApplicationError::internal())?;
+        intent_router
+            .install(Rc::new(ApplicationDesktopIntentSink::new(
+                commands.submitter(),
+            )))
+            .map_err(|_| ApplicationError::internal())?;
+
         Ok(Self {
             environment: environment.clone(),
             data_root,
             shell,
-            _bridge: bridge,
+            bridge_factory,
+            bridge,
             bundle,
             commands,
             state,
@@ -198,7 +272,7 @@ impl Application {
         expect(dead_code, reason = "Task 12B command worker binds controlled restart")
     )]
     fn restart_services(&mut self) -> Result<(), ApplicationError> {
-        if self.shutdown || !self.live_started {
+        if self.shutdown || !self.live_started.load(Ordering::Acquire) {
             return Err(ApplicationError::invalid_lifecycle());
         }
         if self
@@ -212,8 +286,13 @@ impl Application {
         self.commands
             .pause_admission()
             .map_err(|_| ApplicationError::internal())?;
-        self.live_started = false;
-        drop(self._bridge.take());
+        self.live_started.store(false, Ordering::Release);
+        drop(
+            self.bridge
+                .lock()
+                .map_err(|_| ApplicationError::internal())?
+                .take(),
+        );
         let result = (|| {
             let owned = self
                 .bundle
@@ -227,7 +306,7 @@ impl Application {
                 &self.environment,
                 &self.data_root,
                 &self.state,
-                &self.shell,
+                &self.bridge_factory,
                 &self.bundle,
                 guard,
             )
@@ -237,8 +316,11 @@ impl Application {
             .map_err(|_| ApplicationError::internal())?;
         match result {
             Ok(bridge) => {
-                self._bridge = Some(bridge);
-                self.live_started = true;
+                *self
+                    .bridge
+                    .lock()
+                    .map_err(|_| ApplicationError::internal())? = Some(bridge);
+                self.live_started.store(true, Ordering::Release);
                 Ok(())
             }
             Err(error) => {
@@ -258,7 +340,7 @@ impl Application {
         mode: RestoreMode,
     ) -> Result<(), ApplicationError> {
         if self.shutdown
-            || !self.live_started
+            || !self.live_started.load(Ordering::Acquire)
             || mode == RestoreMode::AutomaticDataOnly
             || self
                 .bundle
@@ -273,8 +355,13 @@ impl Application {
         self.commands
             .pause_admission()
             .map_err(|_| ApplicationError::internal())?;
-        self.live_started = false;
-        drop(self._bridge.take());
+        self.live_started.store(false, Ordering::Release);
+        drop(
+            self.bridge
+                .lock()
+                .map_err(|_| ApplicationError::internal())?
+                .take(),
+        );
         let result = (|| {
             let owned = self
                 .bundle
@@ -306,13 +393,17 @@ impl Application {
                 &guard,
                 &control,
             )?;
-            self.preflight.bind_recovery_launch(receipt)?;
+            let mut preflight = self
+                .preflight
+                .lock()
+                .map_err(|_| ApplicationError::internal())?;
+            preflight.bind_recovery_launch(receipt)?;
             start_restored_bundle(
                 &self.environment,
                 &self.data_root,
                 &self.state,
-                &mut self.preflight,
-                &self.shell,
+                &mut preflight,
+                &self.bridge_factory,
                 &self.bundle,
                 guard,
             )
@@ -322,8 +413,11 @@ impl Application {
             .map_err(|_| ApplicationError::internal())?;
         match result {
             Ok(bridge) => {
-                self._bridge = Some(bridge);
-                self.live_started = true;
+                *self
+                    .bridge
+                    .lock()
+                    .map_err(|_| ApplicationError::internal())? = Some(bridge);
+                self.live_started.store(true, Ordering::Release);
                 Ok(())
             }
             Err(error) => {
@@ -347,6 +441,12 @@ impl Application {
             )
             | Err(_) => Err(ApplicationError::shutdown()),
         };
+        drop(
+            self.bridge
+                .lock()
+                .map_err(|_| ApplicationError::internal())?
+                .take(),
+        );
         let bundle = self
             .bundle
             .lock()
@@ -357,14 +457,226 @@ impl Application {
             None => Ok(()),
         };
         let result = command_result.and(bundle_result);
-        if result.is_ok() && self.live_started {
+        if result.is_ok() && self.live_started.load(Ordering::Acquire) {
             self.preflight
+                .lock()
+                .map_err(|_| ApplicationError::internal())?
                 .session_mut()
                 .mark_clean()
                 .map_err(|_| ApplicationError::state())?;
         }
+        self.live_started.store(false, Ordering::Release);
         result
     }
+}
+
+struct ApplicationDesktopIntentSink {
+    dialog: NativeFileDialog,
+    submitter: ApplicationOperationSubmitter,
+}
+
+impl ApplicationDesktopIntentSink {
+    fn new(submitter: ApplicationOperationSubmitter) -> Self {
+        Self {
+            dialog: NativeFileDialog::default(),
+            submitter,
+        }
+    }
+
+    fn submit_plain(&self, command: ApplicationCommand) -> DesktopIntentAdmission {
+        self.map_admission(self.submitter.submit(command))
+    }
+
+    fn submit_request(&self, request: ApplicationOperationRequest) -> DesktopIntentAdmission {
+        self.map_admission(self.submitter.submit_request(request))
+    }
+
+    fn map_admission(&self, admission: ApplicationCommandAdmission) -> DesktopIntentAdmission {
+        map_command_admission(admission)
+    }
+
+    fn selection(selection: DesktopRestoreSelection) -> Option<ApplicationBackupSelection> {
+        ApplicationBackupSelection::new(selection.catalog_generation(), selection.ordinal())
+    }
+}
+
+impl DesktopIntentSink for ApplicationDesktopIntentSink {
+    fn submit(&self, intent: DesktopIntent) -> DesktopIntentAdmission {
+        match intent {
+            DesktopIntent::ExportConfig => {
+                match self.dialog.select_output(FileDialogFileType::Config) {
+                    FileDialogResult::Selected(output) => {
+                        self.submit_request(ApplicationOperationRequest::export_config(output))
+                    }
+                    FileDialogResult::Cancelled | FileDialogResult::Failed(_) => {
+                        DesktopIntentAdmission::Rejected
+                    }
+                }
+            }
+            DesktopIntent::ImportConfig => match self
+                .dialog
+                .select_input(FileDialogFileType::Config, MAX_CONFIG_PACKAGE_BYTES)
+            {
+                FileDialogResult::Selected(input) => {
+                    self.submit_request(ApplicationOperationRequest::import_config(input))
+                }
+                FileDialogResult::Cancelled | FileDialogResult::Failed(_) => {
+                    DesktopIntentAdmission::Rejected
+                }
+            },
+            DesktopIntent::ConfirmConfigImport => {
+                self.submit_plain(ApplicationCommand::ConfirmConfigImport)
+            }
+            DesktopIntent::CancelConfigImport => {
+                self.submit_plain(ApplicationCommand::CancelConfigImport)
+            }
+            DesktopIntent::BackupNormal => self.submit_plain(ApplicationCommand::Backup),
+            DesktopIntent::BackupCompact => {
+                match self.dialog.select_output(FileDialogFileType::Backup) {
+                    FileDialogResult::Selected(output) => {
+                        self.submit_request(ApplicationOperationRequest::compact_backup(output))
+                    }
+                    FileDialogResult::Cancelled | FileDialogResult::Failed(_) => {
+                        DesktopIntentAdmission::Rejected
+                    }
+                }
+            }
+            DesktopIntent::BackupEncrypted { passphrase } => {
+                let mut secret = passphrase.into_string();
+                let Ok(passphrase) = BackupPassphrase::existing(&mut secret) else {
+                    return DesktopIntentAdmission::Rejected;
+                };
+                match self
+                    .dialog
+                    .select_output(FileDialogFileType::EncryptedBackup)
+                {
+                    FileDialogResult::Selected(output) => self.submit_request(
+                        ApplicationOperationRequest::encrypted_backup(output, passphrase),
+                    ),
+                    FileDialogResult::Cancelled | FileDialogResult::Failed(_) => {
+                        DesktopIntentAdmission::Rejected
+                    }
+                }
+            }
+            DesktopIntent::VerifyBackups => self.submit_plain(ApplicationCommand::Verify),
+            DesktopIntent::PreviewRestore(selection) => {
+                if Self::selection(selection).is_some() {
+                    DesktopIntentAdmission::Started
+                } else {
+                    DesktopIntentAdmission::Rejected
+                }
+            }
+            DesktopIntent::ConfirmRestore {
+                selection,
+                portable_settings,
+            } => Self::selection(selection).map_or(DesktopIntentAdmission::Rejected, |selection| {
+                self.submit_plain(if portable_settings {
+                    ApplicationCommand::RestoreDataAndPortableSettings(selection)
+                } else {
+                    ApplicationCommand::RestoreData(selection)
+                })
+            }),
+            DesktopIntent::RetryOperation => self.map_admission(self.submitter.retry_last()),
+            DesktopIntent::CancelOperation => {
+                if self.submitter.cancel_active() {
+                    DesktopIntentAdmission::Started
+                } else {
+                    DesktopIntentAdmission::Rejected
+                }
+            }
+            DesktopIntent::UpdateBackupPolicy {
+                periodic_enabled,
+                quiet_seconds,
+                interval_seconds,
+                retention_budget_mib,
+            } => self.submit_request(ApplicationOperationRequest::update_backup_policy(
+                ApplicationBackupPolicyUpdate::new(
+                    periodic_enabled,
+                    quiet_seconds,
+                    interval_seconds,
+                    retention_budget_mib,
+                ),
+            )),
+            DesktopIntent::RebuildData => self.submit_plain(ApplicationCommand::Rebuild),
+        }
+    }
+}
+
+fn map_command_admission(admission: ApplicationCommandAdmission) -> DesktopIntentAdmission {
+    match admission {
+        ApplicationCommandAdmission::Started(_) => DesktopIntentAdmission::Started,
+        ApplicationCommandAdmission::Queued { .. } => DesktopIntentAdmission::Queued,
+        ApplicationCommandAdmission::Coalesced { .. } => DesktopIntentAdmission::Coalesced,
+        ApplicationCommandAdmission::Rejected(_) => DesktopIntentAdmission::Rejected,
+    }
+}
+
+const fn application_operation_kind(command: ApplicationCommand) -> DesktopOperationKind {
+    match command {
+        ApplicationCommand::ExportConfig => DesktopOperationKind::ExportConfig,
+        ApplicationCommand::ImportConfig
+        | ApplicationCommand::ConfirmConfigImport
+        | ApplicationCommand::CancelConfigImport => DesktopOperationKind::ImportConfig,
+        ApplicationCommand::Backup
+        | ApplicationCommand::BackupCompact
+        | ApplicationCommand::BackupEncrypted => DesktopOperationKind::Backup,
+        ApplicationCommand::Verify => DesktopOperationKind::Verify,
+        ApplicationCommand::RestoreData(_)
+        | ApplicationCommand::RestoreDataAndPortableSettings(_) => DesktopOperationKind::Restore,
+        ApplicationCommand::Rebuild => DesktopOperationKind::Rebuild,
+        ApplicationCommand::UpdateBackupPolicy => DesktopOperationKind::UpdatePolicy,
+    }
+}
+
+const fn application_operation_cancellable(command: ApplicationCommand) -> bool {
+    !matches!(command, ApplicationCommand::CancelConfigImport)
+}
+
+fn application_operation_running(command: ApplicationCommand) -> DesktopOperationSnapshot {
+    DesktopOperationSnapshot::new(
+        application_operation_kind(command),
+        DesktopOperationPhase::Running,
+        application_operation_cancellable(command),
+        None,
+    )
+}
+
+fn publish_atomic_operation(
+    reliable_state: &DesktopReliableStateNotifier,
+    command: ApplicationCommand,
+) {
+    let _ = reliable_state.publish_operation(Some(DesktopOperationSnapshot::new(
+        application_operation_kind(command),
+        DesktopOperationPhase::AtomicPromotion,
+        false,
+        None,
+    )));
+}
+
+fn application_operation_completion(
+    command: ApplicationCommand,
+    execution: ApplicationCommandExecution,
+) -> DesktopOperationSnapshot {
+    let (phase, failure_code) = match execution {
+        ApplicationCommandExecution::Succeeded => (DesktopOperationPhase::Succeeded, None),
+        ApplicationCommandExecution::Cancelled => (DesktopOperationPhase::Cancelled, None),
+        ApplicationCommandExecution::Failed(failure) => (
+            DesktopOperationPhase::Failed,
+            Some(match failure {
+                ApplicationCommandFailure::Unavailable => "unavailable",
+                ApplicationCommandFailure::InvalidSelection => "invalid_selection",
+                ApplicationCommandFailure::Integrity => "integrity",
+                ApplicationCommandFailure::CapacityExceeded => "capacity_exceeded",
+                ApplicationCommandFailure::Internal => "internal",
+            }),
+        ),
+    };
+    DesktopOperationSnapshot::new(
+        application_operation_kind(command),
+        phase,
+        false,
+        failure_code,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -373,11 +685,28 @@ fn start_live_bundle(
     data_root: &DataRoot,
     state: &ApplicationStateOwner,
     preflight: &mut ApplicationPreflight,
-    shell: &DesktopShell,
+    bridge_factory: &DesktopBridgeFactory,
     bundle: &SharedBundle,
     outcome: BootstrapOutcome,
     observer: &mut dyn FnMut(ApplicationStartBoundary) -> Result<(), ApplicationError>,
 ) -> Result<DesktopSnapshotBridge, ApplicationError> {
+    if preflight.requires_source_reconciliation() {
+        if outcome != BootstrapOutcome::Healthy {
+            return Err(ApplicationError::state());
+        }
+        observer(ApplicationStartBoundary::BeforeReconstructionReconciliation)?;
+        let startup_guard = preflight.take_startup_guard()?;
+        let bridge = start_reconstructed_bundle(
+            environment,
+            data_root,
+            state,
+            bridge_factory,
+            bundle,
+            startup_guard,
+        )?;
+        preflight.mark_live_healthy();
+        return Ok(bridge);
+    }
     let mut pending_migration = preflight.report().prior_run().pending_migration();
     if let Some(pending) = pending_migration {
         state.validate_pending_migration(pending)?;
@@ -431,7 +760,7 @@ fn start_live_bundle(
     finish_live_bundle(
         data_root,
         state,
-        shell,
+        bridge_factory,
         bundle,
         started,
         maintenance,
@@ -439,15 +768,11 @@ fn start_live_bundle(
     )
 }
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "Task 12B command worker binds controlled restart")
-)]
 fn start_current_bundle(
     environment: &ApplicationEnvironment,
     data_root: &DataRoot,
     state: &ApplicationStateOwner,
-    shell: &DesktopShell,
+    bridge_factory: &DesktopBridgeFactory,
     bundle: &SharedBundle,
     guard: ExclusiveFileLeaseGuard,
 ) -> Result<DesktopSnapshotBridge, ApplicationError> {
@@ -455,7 +780,7 @@ fn start_current_bundle(
     finish_live_bundle(
         data_root,
         state,
-        shell,
+        bridge_factory,
         bundle,
         started,
         None,
@@ -469,12 +794,12 @@ fn start_restored_bundle(
     data_root: &DataRoot,
     state: &ApplicationStateOwner,
     preflight: &mut ApplicationPreflight,
-    shell: &DesktopShell,
+    bridge_factory: &DesktopBridgeFactory,
     bundle: &SharedBundle,
     guard: ExclusiveFileLeaseGuard,
 ) -> Result<DesktopSnapshotBridge, ApplicationError> {
     if !state.restored_archive_requires_migration(data_root)? {
-        return start_current_bundle(environment, data_root, state, shell, bundle, guard);
+        return start_current_bundle(environment, data_root, state, bridge_factory, bundle, guard);
     }
 
     let maintenance =
@@ -494,12 +819,73 @@ fn start_restored_bundle(
     finish_live_bundle(
         data_root,
         state,
-        shell,
+        bridge_factory,
         bundle,
         started,
         Some(maintenance),
         MaintenanceSourceState::Healthy,
     )
+}
+
+fn start_reconstructed_bundle(
+    environment: &ApplicationEnvironment,
+    data_root: &DataRoot,
+    state: &ApplicationStateOwner,
+    bridge_factory: &DesktopBridgeFactory,
+    bundle: &SharedBundle,
+    guard: ExclusiveFileLeaseGuard,
+) -> Result<DesktopSnapshotBridge, ApplicationError> {
+    let started = start_guarded_live(environment, data_root, bundle, guard)?;
+    started
+        .live
+        .refresh_now(RefreshUrgency::Recovery)
+        .map_err(|_| ApplicationError::live_runtime())?;
+    wait_for_reconstructed_reconciliation(&started.live)?;
+    finish_live_bundle(
+        data_root,
+        state,
+        bridge_factory,
+        bundle,
+        started,
+        None,
+        MaintenanceSourceState::Healthy,
+    )
+}
+
+fn wait_for_reconstructed_reconciliation(live: &LiveRuntime) -> Result<(), ApplicationError> {
+    let deadline = std::time::Instant::now() + MANDATORY_BACKUP_TIMEOUT;
+    let mut observed_completion = false;
+    loop {
+        let snapshot = live
+            .snapshot()
+            .map_err(|_| ApplicationError::live_runtime())?;
+        let refresh = snapshot.refresh();
+        if observed_completion
+            && refresh.outcome() == Some(RefreshOutcome::Completed)
+            && refresh.error().is_none()
+            && snapshot.engine().diagnostics().completed_refreshes() > 0
+            && !snapshot.scheduler().dirty()
+            && !snapshot.scheduler().force_reconcile()
+            && snapshot.worker().active_request_id().is_none()
+            && snapshot.worker().pending_count() == 0
+        {
+            return Ok(());
+        }
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining.is_zero() {
+            return Err(ApplicationError::live_runtime());
+        }
+        let Some(completion) = live
+            .wait_for_completion(remaining)
+            .map_err(|_| ApplicationError::live_runtime())?
+        else {
+            return Err(ApplicationError::live_runtime());
+        };
+        if completion.outcome() != RefreshOutcome::Completed {
+            return Err(ApplicationError::live_runtime());
+        }
+        observed_completion = true;
+    }
 }
 
 struct GuardedLiveStart {
@@ -551,7 +937,7 @@ fn start_guarded_live(
 fn finish_live_bundle(
     data_root: &DataRoot,
     state: &ApplicationStateOwner,
-    shell: &DesktopShell,
+    bridge_factory: &DesktopBridgeFactory,
     bundle: &SharedBundle,
     started: GuardedLiveStart,
     maintenance: Option<BackupMaintenanceRuntime>,
@@ -576,7 +962,7 @@ fn finish_live_bundle(
         DesktopQueryPlan::overview().map_err(|_| ApplicationError::controller())?,
     )
     .map_err(|_| ApplicationError::controller())?;
-    let live_bridge = shell.snapshot_bridge(controller.snapshot_receiver());
+    let live_bridge = bridge_factory.snapshot_bridge(controller.snapshot_receiver());
     controller
         .attach_snapshot_notifier(live_bridge.notifier())
         .map_err(|_| ApplicationError::controller())?;
@@ -642,37 +1028,526 @@ fn wait_for_mandatory_backup(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn execute_application_operation(
+    environment: &ApplicationEnvironment,
+    data_root: &DataRoot,
+    state: &ApplicationStateOwner,
+    preflight: &Arc<Mutex<ApplicationPreflight>>,
     bundle: &SharedBundle,
+    bridge_factory: &DesktopBridgeFactory,
+    bridge: &SharedBridge,
+    live_started: &Arc<AtomicBool>,
+    reliable_state: &DesktopReliableStateNotifier,
     permit: &ApplicationCommandPermit,
+    payload: ApplicationOperationPayload,
 ) -> ApplicationCommandExecution {
     if permit.is_cancelled() {
         return ApplicationCommandExecution::Cancelled;
     }
-    match permit.command() {
-        ApplicationCommand::Backup => execute_manual_backup_command(bundle, permit),
-        ApplicationCommand::ExportConfig
-        | ApplicationCommand::ImportConfig
-        | ApplicationCommand::Verify
-        | ApplicationCommand::RestoreData(_)
-        | ApplicationCommand::RestoreDataAndPortableSettings(_)
-        | ApplicationCommand::Rebuild => {
-            ApplicationCommandExecution::Failed(ApplicationCommandFailure::Unavailable)
+    match (permit.command(), payload) {
+        (ApplicationCommand::Backup, ApplicationOperationPayload::Empty) => {
+            execute_manual_backup_command(bundle, reliable_state, permit)
+        }
+        (ApplicationCommand::BackupCompact, ApplicationOperationPayload::BackupOutput(output)) => {
+            execute_state_command(state.export_compact_backup(data_root, permit, output, || {
+                publish_atomic_operation(reliable_state, permit.command());
+            }))
+        }
+        (
+            ApplicationCommand::BackupEncrypted,
+            ApplicationOperationPayload::EncryptedBackupOutput { output, passphrase },
+        ) => execute_state_command(state.export_encrypted_backup(
+            data_root,
+            permit,
+            output,
+            passphrase,
+            || {
+                publish_atomic_operation(reliable_state, permit.command());
+            },
+        )),
+        (ApplicationCommand::ExportConfig, ApplicationOperationPayload::ConfigOutput(output)) => {
+            execute_state_command(current_utc_millis().and_then(|now| {
+                state.export_config(permit, output, now, || {
+                    publish_atomic_operation(reliable_state, permit.command());
+                })
+            }))
+        }
+        (ApplicationCommand::ImportConfig, ApplicationOperationPayload::ConfigInput(input)) => {
+            execute_state_command(state.stage_config_import_preview(permit, input))
+        }
+        (ApplicationCommand::ConfirmConfigImport, ApplicationOperationPayload::Empty) => {
+            execute_state_command(state.commit_pending_config_import(permit, || {
+                publish_atomic_operation(reliable_state, permit.command());
+            }))
+        }
+        (ApplicationCommand::CancelConfigImport, ApplicationOperationPayload::Empty) => {
+            execute_state_command(state.cancel_pending_config_import(permit))
+        }
+        (ApplicationCommand::Verify, ApplicationOperationPayload::Empty) => {
+            execute_state_command(state.verify_backups(permit))
+        }
+        (
+            ApplicationCommand::UpdateBackupPolicy,
+            ApplicationOperationPayload::BackupPolicy(update),
+        ) => execute_state_command(
+            state
+                .update_backup_policy(permit, update, || {
+                    publish_atomic_operation(reliable_state, permit.command());
+                })
+                .and_then(|policy| update_live_backup_policy(bundle, &policy)),
+        ),
+        (ApplicationCommand::RestoreData(selection), ApplicationOperationPayload::Empty) => {
+            execute_restore_operation(
+                environment,
+                data_root,
+                state,
+                preflight,
+                bundle,
+                bridge_factory,
+                bridge,
+                live_started,
+                reliable_state,
+                selection,
+                RestoreMode::DataOnly,
+                permit,
+            )
+        }
+        (
+            ApplicationCommand::RestoreDataAndPortableSettings(selection),
+            ApplicationOperationPayload::Empty,
+        ) => execute_restore_operation(
+            environment,
+            data_root,
+            state,
+            preflight,
+            bundle,
+            bridge_factory,
+            bridge,
+            live_started,
+            reliable_state,
+            selection,
+            RestoreMode::DataAndPortableSettings,
+            permit,
+        ),
+        (ApplicationCommand::Rebuild, ApplicationOperationPayload::Empty) => {
+            execute_rebuild_operation(
+                environment,
+                data_root,
+                state,
+                preflight,
+                bundle,
+                bridge_factory,
+                bridge,
+                live_started,
+                reliable_state,
+                permit,
+            )
+        }
+        _ => ApplicationCommandExecution::Failed(ApplicationCommandFailure::InvalidSelection),
+    }
+}
+
+fn update_live_backup_policy(
+    bundle: &SharedBundle,
+    policy: &tokenmaster_state::BackupPolicy,
+) -> Result<(), ApplicationError> {
+    let slot = bundle.lock().map_err(|_| ApplicationError::internal())?;
+    match slot.as_ref() {
+        Some(bundle) => bundle
+            .maintenance
+            .update_policy(policy)
+            .map_err(|_| ApplicationError::state()),
+        None => Ok(()),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn execute_rebuild_operation(
+    environment: &ApplicationEnvironment,
+    data_root: &DataRoot,
+    state: &ApplicationStateOwner,
+    preflight: &Arc<Mutex<ApplicationPreflight>>,
+    bundle: &SharedBundle,
+    bridge_factory: &DesktopBridgeFactory,
+    bridge: &SharedBridge,
+    live_started: &Arc<AtomicBool>,
+    reliable_state: &DesktopReliableStateNotifier,
+    permit: &ApplicationCommandPermit,
+) -> ApplicationCommandExecution {
+    match try_rebuild_operation(
+        environment,
+        data_root,
+        state,
+        preflight,
+        bundle,
+        bridge_factory,
+        bridge,
+        live_started,
+        reliable_state,
+        permit,
+    ) {
+        Ok(true) => ApplicationCommandExecution::Succeeded,
+        Ok(false) => ApplicationCommandExecution::Cancelled,
+        Err(error) => execute_state_command::<()>(Err(error)),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn try_rebuild_operation(
+    environment: &ApplicationEnvironment,
+    data_root: &DataRoot,
+    state: &ApplicationStateOwner,
+    preflight: &Arc<Mutex<ApplicationPreflight>>,
+    bundle: &SharedBundle,
+    bridge_factory: &DesktopBridgeFactory,
+    bridge: &SharedBridge,
+    live_started: &Arc<AtomicBool>,
+    reliable_state: &DesktopReliableStateNotifier,
+    permit: &ApplicationCommandPermit,
+) -> Result<bool, ApplicationError> {
+    if live_started.load(Ordering::Acquire)
+        || !bundle
+            .lock()
+            .map_err(|_| ApplicationError::internal())?
+            .is_none()
+        || bridge
+            .lock()
+            .map_err(|_| ApplicationError::internal())?
+            .is_some()
+    {
+        return Err(ApplicationError::invalid_lifecycle());
+    }
+    let (outcome, source_reconciliation_required) = {
+        let preflight = preflight.lock().map_err(|_| ApplicationError::internal())?;
+        (
+            preflight.effective_outcome(),
+            preflight.requires_source_reconciliation(),
+        )
+    };
+    if !matches!(
+        outcome,
+        BootstrapOutcome::RecoveryRequired | BootstrapOutcome::SafeMode
+    ) {
+        return Err(ApplicationError::invalid_lifecycle());
+    }
+    let guard = state.acquire_runtime_guard(data_root)?;
+    if source_reconciliation_required {
+        if permit.begin_irreversible().is_err() {
+            return Ok(false);
+        }
+        publish_atomic_operation(reliable_state, permit.command());
+        let start_result = (|| {
+            let mut preflight = preflight.lock().map_err(|_| ApplicationError::internal())?;
+            let rebuilt_bridge = start_reconstructed_bundle(
+                environment,
+                data_root,
+                state,
+                bridge_factory,
+                bundle,
+                guard,
+            )?;
+            preflight.session_mut().authorize_healthy_launch();
+            preflight.mark_live_healthy();
+            Ok(rebuilt_bridge)
+        })();
+        return match start_result {
+            Ok(rebuilt_bridge) => {
+                *bridge.lock().map_err(|_| ApplicationError::internal())? = Some(rebuilt_bridge);
+                live_started.store(true, Ordering::Release);
+                Ok(true)
+            }
+            Err(error) => {
+                let _ = discard_bundle(bundle);
+                Err(error)
+            }
+        };
+    }
+    let receipt = match state.reconstruct_definitively_corrupt(permit, &guard, || {
+        publish_atomic_operation(reliable_state, permit.command());
+    }) {
+        Ok(receipt) => receipt,
+        Err(_) if permit.is_cancelled() => return Ok(false),
+        Err(error) => return Err(error),
+    };
+    let start_result = (|| {
+        let mut preflight = preflight.lock().map_err(|_| ApplicationError::internal())?;
+        preflight.bind_recovery_launch(receipt)?;
+        let rebuilt_bridge = start_reconstructed_bundle(
+            environment,
+            data_root,
+            state,
+            bridge_factory,
+            bundle,
+            guard,
+        )?;
+        preflight.mark_live_healthy();
+        Ok(rebuilt_bridge)
+    })();
+    match start_result {
+        Ok(rebuilt_bridge) => {
+            *bridge.lock().map_err(|_| ApplicationError::internal())? = Some(rebuilt_bridge);
+            live_started.store(true, Ordering::Release);
+            Ok(true)
+        }
+        Err(error) => {
+            let _ = discard_bundle(bundle);
+            Err(error)
         }
     }
 }
 
-fn execute_manual_backup_command(
+#[allow(clippy::too_many_arguments)]
+fn execute_restore_operation(
+    environment: &ApplicationEnvironment,
+    data_root: &DataRoot,
+    state: &ApplicationStateOwner,
+    preflight: &Arc<Mutex<ApplicationPreflight>>,
     bundle: &SharedBundle,
+    bridge_factory: &DesktopBridgeFactory,
+    bridge: &SharedBridge,
+    live_started: &Arc<AtomicBool>,
+    reliable_state: &DesktopReliableStateNotifier,
+    selection: ApplicationBackupSelection,
+    mode: RestoreMode,
     permit: &ApplicationCommandPermit,
 ) -> ApplicationCommandExecution {
+    match try_restore_operation(
+        environment,
+        data_root,
+        state,
+        preflight,
+        bundle,
+        bridge_factory,
+        bridge,
+        live_started,
+        reliable_state,
+        selection,
+        mode,
+        permit,
+    ) {
+        Ok(true) => ApplicationCommandExecution::Succeeded,
+        Ok(false) => ApplicationCommandExecution::Cancelled,
+        Err(error) => execute_state_command::<()>(Err(error)),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn try_restore_operation(
+    environment: &ApplicationEnvironment,
+    data_root: &DataRoot,
+    state: &ApplicationStateOwner,
+    preflight: &Arc<Mutex<ApplicationPreflight>>,
+    bundle: &SharedBundle,
+    bridge_factory: &DesktopBridgeFactory,
+    bridge: &SharedBridge,
+    live_started: &Arc<AtomicBool>,
+    reliable_state: &DesktopReliableStateNotifier,
+    selection: ApplicationBackupSelection,
+    mode: RestoreMode,
+    permit: &ApplicationCommandPermit,
+) -> Result<bool, ApplicationError> {
+    if !live_started.load(Ordering::Acquire) || mode == RestoreMode::AutomaticDataOnly {
+        return Err(ApplicationError::invalid_lifecycle());
+    }
+    let selection_pin = state.bind_backup_selection(selection)?;
+    let binding = selection_pin.binding();
+    live_started.store(false, Ordering::Release);
+    drop(
+        bridge
+            .lock()
+            .map_err(|_| ApplicationError::internal())?
+            .take(),
+    );
+    let owned = bundle
+        .lock()
+        .map_err(|_| ApplicationError::internal())?
+        .take()
+        .ok_or_else(ApplicationError::invalid_lifecycle)?;
+    let mut owned = owned;
+    owned.shutdown()?;
+
+    let guard = state.acquire_runtime_guard(data_root)?;
+    let mut maintenance = match state.start_protected_maintenance(
+        data_root,
+        MaintenanceSourceState::Healthy,
+        binding,
+    ) {
+        Ok(maintenance) => maintenance,
+        Err(error) => {
+            drop(selection_pin);
+            restart_current_after_pre_mutation_exit(
+                environment,
+                data_root,
+                state,
+                bridge_factory,
+                bundle,
+                bridge,
+                live_started,
+                guard,
+            )?;
+            return Err(error);
+        }
+    };
+    let safety_result = wait_for_mandatory_backup(&maintenance, MaintenancePurpose::PreRestore);
+    let shutdown_result = maintenance
+        .shutdown()
+        .map_err(|_| ApplicationError::state());
+    drop(maintenance);
+    let safety = match (safety_result, shutdown_result) {
+        (Ok(safety), Ok(())) => safety,
+        (Err(error), _) | (Ok(_), Err(error)) => {
+            drop(selection_pin);
+            restart_current_after_pre_mutation_exit(
+                environment,
+                data_root,
+                state,
+                bridge_factory,
+                bundle,
+                bridge,
+                live_started,
+                guard,
+            )?;
+            return Err(error);
+        }
+    };
+
     if permit.begin_irreversible().is_err() {
-        return if permit.is_cancelled() {
-            ApplicationCommandExecution::Cancelled
+        let cancelled = permit.is_cancelled();
+        drop(selection_pin);
+        restart_current_after_pre_mutation_exit(
+            environment,
+            data_root,
+            state,
+            bridge_factory,
+            bundle,
+            bridge,
+            live_started,
+            guard,
+        )?;
+        return if cancelled {
+            Ok(false)
         } else {
-            ApplicationCommandExecution::Failed(ApplicationCommandFailure::Internal)
+            Err(ApplicationError::internal())
         };
     }
+    publish_atomic_operation(reliable_state, permit.command());
+
+    drop(selection_pin);
+    let control = BackupControl::new(Arc::new(AtomicBool::new(false)), MANDATORY_BACKUP_TIMEOUT)
+        .map_err(|_| ApplicationError::state())?;
+    let receipt = match state.restore_selected(
+        binding,
+        mode,
+        RestoreSafety::PreRestoreBackupPublished(safety),
+        &guard,
+        &control,
+    ) {
+        Ok(receipt) => receipt,
+        Err(error) => {
+            let _ = discard_bundle(bundle);
+            return Err(error);
+        }
+    };
+    let start_result = (|| {
+        let mut preflight = preflight.lock().map_err(|_| ApplicationError::internal())?;
+        preflight.bind_recovery_launch(receipt)?;
+        start_restored_bundle(
+            environment,
+            data_root,
+            state,
+            &mut preflight,
+            bridge_factory,
+            bundle,
+            guard,
+        )
+    })();
+    match start_result {
+        Ok(restored_bridge) => {
+            let mut bridge_slot = match bridge.lock() {
+                Ok(bridge_slot) => bridge_slot,
+                Err(_) => {
+                    drop(restored_bridge);
+                    let _ = discard_bundle(bundle);
+                    return Err(ApplicationError::internal());
+                }
+            };
+            *bridge_slot = Some(restored_bridge);
+            live_started.store(true, Ordering::Release);
+            Ok(true)
+        }
+        Err(error) => {
+            let _ = discard_bundle(bundle);
+            Err(error)
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn restart_current_after_pre_mutation_exit(
+    environment: &ApplicationEnvironment,
+    data_root: &DataRoot,
+    state: &ApplicationStateOwner,
+    bridge_factory: &DesktopBridgeFactory,
+    bundle: &SharedBundle,
+    bridge: &SharedBridge,
+    live_started: &Arc<AtomicBool>,
+    guard: ExclusiveFileLeaseGuard,
+) -> Result<(), ApplicationError> {
+    match start_current_bundle(environment, data_root, state, bridge_factory, bundle, guard) {
+        Ok(current_bridge) => {
+            let mut bridge_slot = match bridge.lock() {
+                Ok(bridge_slot) => bridge_slot,
+                Err(_) => {
+                    drop(current_bridge);
+                    let _ = discard_bundle(bundle);
+                    return Err(ApplicationError::internal());
+                }
+            };
+            *bridge_slot = Some(current_bridge);
+            live_started.store(true, Ordering::Release);
+            Ok(())
+        }
+        Err(error) => {
+            let _ = discard_bundle(bundle);
+            Err(error)
+        }
+    }
+}
+
+fn execute_state_command<T>(result: Result<T, ApplicationError>) -> ApplicationCommandExecution {
+    match result {
+        Ok(_) => ApplicationCommandExecution::Succeeded,
+        Err(error) => ApplicationCommandExecution::Failed(match error.code() {
+            ApplicationErrorCode::InvalidLifecycle => ApplicationCommandFailure::InvalidSelection,
+            ApplicationErrorCode::GenerationOverflow => ApplicationCommandFailure::CapacityExceeded,
+            ApplicationErrorCode::Internal => ApplicationCommandFailure::Internal,
+            ApplicationErrorCode::DataUnavailable
+            | ApplicationErrorCode::DiscoveryUnavailable
+            | ApplicationErrorCode::LiveRuntimeUnavailable
+            | ApplicationErrorCode::StateUnavailable
+            | ApplicationErrorCode::ControllerUnavailable
+            | ApplicationErrorCode::UiUnavailable
+            | ApplicationErrorCode::EventLoopUnavailable
+            | ApplicationErrorCode::ShutdownFailed => ApplicationCommandFailure::Unavailable,
+        }),
+    }
+}
+
+fn current_utc_millis() -> Result<i64, ApplicationError> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| ApplicationError::state())
+        .and_then(|duration| {
+            i64::try_from(duration.as_millis()).map_err(|_| ApplicationError::generation_overflow())
+        })
+}
+
+fn execute_manual_backup_command(
+    bundle: &SharedBundle,
+    reliable_state: &DesktopReliableStateNotifier,
+    permit: &ApplicationCommandPermit,
+) -> ApplicationCommandExecution {
     let slot = match bundle.lock() {
         Ok(slot) => slot,
         Err(_) => {
@@ -682,6 +1557,14 @@ fn execute_manual_backup_command(
     let Some(bundle) = slot.bundle.as_ref() else {
         return ApplicationCommandExecution::Failed(ApplicationCommandFailure::Unavailable);
     };
+    if permit.begin_irreversible().is_err() {
+        return if permit.is_cancelled() {
+            ApplicationCommandExecution::Cancelled
+        } else {
+            ApplicationCommandExecution::Failed(ApplicationCommandFailure::Internal)
+        };
+    }
+    publish_atomic_operation(reliable_state, permit.command());
     let completion = match bundle
         .maintenance
         .submit_and_wait(MaintenancePurpose::Manual, MANDATORY_BACKUP_TIMEOUT)

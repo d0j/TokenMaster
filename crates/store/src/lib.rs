@@ -20,9 +20,9 @@ pub use backup::{
     BackupRuntimePolicy, BackupSource, BackupStaging, MAX_VERIFIED_BACKUP_READ_CHUNK_BYTES,
     RecoveryVerificationBoundary, StartupArchiveInspection, StartupArchiveStatus,
     StartupValidationMode, VerifiedBackupCandidate, VerifiedBackupCandidateReader,
-    VerifiedRecoveryArchive, create_compact_snapshot, create_online_snapshot,
-    inspect_archive_version, inspect_startup_archive, verify_backup_candidate,
-    verify_recovery_archive, verify_recovery_archive_with_observer,
+    VerifiedRecoveryArchive, create_compact_snapshot, create_fresh_recovery_archive,
+    create_online_snapshot, inspect_archive_version, inspect_startup_archive,
+    verify_backup_candidate, verify_recovery_archive, verify_recovery_archive_with_observer,
 };
 pub use error::{StoreError, StoreErrorCode};
 pub use session_store::{EXPECTED_SQLITE_VERSION, MAX_PAGE_SIZE, MAX_SEED_SESSIONS, ProbeStore};

@@ -5,6 +5,7 @@
 
 pub mod dashboard;
 pub mod presentation;
+pub mod reliable_state;
 pub mod shell;
 
 mod bridge;
@@ -21,8 +22,12 @@ mod ui;
 
 pub use dashboard::*;
 pub use presentation::{DesktopApplyOutcome, DesktopRouteKey, DesktopState};
+pub use reliable_state::*;
 pub use shell::select_production_renderer;
-pub use ui::{DesktopShell, DesktopUiError, DesktopUiErrorCode};
+pub use ui::{
+    DesktopBridgeFactory, DesktopReliableStateNotifier, DesktopShell, DesktopUiError,
+    DesktopUiErrorCode,
+};
 
 pub use bridge::{
     DesktopBridgeFailureCode, DesktopBridgeGeneration, DesktopBridgeObserver, DesktopBridgePhase,

@@ -198,12 +198,28 @@ Existing-target publication captures the displaced file, validates its selection
 identity, rolls back a raced replacement, and deletes old bytes only after the new file
 is reverified. The thread-affine native selector requires an active owner and cannot be
 sent to a worker. Paths remain private to platform and every result is selected/
-cancelled/stable-error. Application worker dispatch after selection, UI preview/confirm,
-and interactive Windows binding remain open, so no UI filesystem authority or
-interactive acceptance is claimed. Product/
-Desktop continue to receive only bounded health and intents. Automatic recovery remains
-data only; remaining verify/
-restore/rebuild command bindings and no-backup reconstruction stay inside Task 12B.2b.
+cancelled/stable-error. Task 15 invokes it on the owning Slint/STA thread and dispatches
+only the sealed capability to the worker. Config, backup, verify, confirmed restore,
+rebuild, retry/cancel, and policy changes are path-free typed intents. Desktop receives
+one latest-only bounded reliable-state projection rather than adding reliable state to
+the archive-backed product snapshot; safe mode can therefore render Data Health and
+Settings with no query/controller/runtime owner. No UI filesystem authority or
+interactive acceptance is claimed.
+
+No-backup reconstruction remains split by authority. Store creates the ordinary fresh
+schema and owns complete verification; state owns the explicit no-backup journal,
+bounded staging/quarantine, and atomic recovery sequence; app owns definitive command
+composition, live startup, and the mandatory recovery-urgency source refresh barrier.
+The fresh archive is not exposed as healthy and maintenance does not seed until that
+bounded refresh completes. The durable path-free receipt marks non-reconstructible
+quota, reset-credit, reminder, and Git history unavailable. Desktop receives the receipt
+and exact operation phase only; it has no recovery capability, polling timer, or progress
+queue. A complete reconstruction journal plus a started recovery candidate becomes a
+preflight reconciliation obligation: cold start runs the same barrier before healthy
+publication, while a failed in-process attempt remains retryable without repeating
+quarantine/promotion. Desktop retains the exact restore identity reviewed by the user,
+publishes follow-up `Running` at actual worker start, and represents unknown counts and
+bytes as unavailable rather than zero.
 
 The built-in live quota source is separate from the JSONL usage reader. Composition
 supplies one already resolved absolute native Codex executable to

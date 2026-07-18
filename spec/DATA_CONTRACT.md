@@ -840,9 +840,7 @@ next request ID, and closed/paused flags. A restore selection is only a nonzero 
 generation and bounded ordinal; it contains no path, slot, filename, digest, or package
 metadata. Active permits retain one atomic running/cancelled/irreversible byte. Bundle
 state retains one checked generation and one optional current bundle. These values are
-not persisted and never become recovery authority. Task 12B.2 must add operation/
-restart receipts and the explicit authoritative-source reconstruction result; it may
-not encode fabricated zeros for domains that cannot be reconstructed.
+not persisted and never become recovery authority.
 
 Implemented Task 12B.2a seals a generation/ordinal selection into one opaque identity
 containing only the private physical slot, package length, and full package digest. It
@@ -860,8 +858,38 @@ written into the existing run session before any restored-archive lifecycle work
 clean joined shutdown accepts that exact generation. A supported legacy candidate is
 not treated as current: it receives a new verified old-schema `PreMigration` point,
 durable source/target pending pair, guarded migration, and verified current-schema
-`PostMigration` point before the fresh bundle is exposed. Task 12B.2b remains
-responsible for public operation receipts and authoritative-source reconstruction.
+`PostMigration` point before the fresh bundle is exposed.
+
+Implemented Task 12B.2b/Task 15 adds one latest-only bounded reliable-state projection
+and one latest-only operation completion. Public state contains fixed health, backup
+policy, scalar counts/times, at most fifteen generation/ordinal restore choices, one
+optional config preview, one optional operation, and one optional path-free recovery
+receipt. It contains no path, slot, digest, archive identity, source identity, raw
+settings, password, or history-sized collection. `AtomicPromotion` always clears the
+cancellable flag and is published at the exact irreversible boundary rather than at
+operation admission. Counts and published bytes are typed optional values, so an
+unavailable projection cannot fabricate zero history. Restore preview retains one
+exact reviewed generation/ordinal value; confirmation consumes that value instead of
+resolving the current row again. Running is published when each permit actually begins
+execution, including a promoted follow-up. Manual backup stays cancellable until its
+maintenance permit crosses the irreversible boundary and then publishes
+`AtomicPromotion`.
+
+The redundant recovery journal keeps its existing backup identity for verified restore
+and stores no backup identity for authoritative-source reconstruction. A missing backup
+identity is valid only for the explicit reconstruction mode; older valid restore
+records remain compatible and every other missing/ambiguous identity fails closed. The
+reconstruction candidate is a fresh normal-schema archive created through the ordinary
+store constructor, fully verified, staged, reverified, and promoted only after active
+corruption is proved. Main, WAL, and SHM evidence remains quarantined. A mandatory
+bounded recovery-urgency source refresh must complete before healthy publication and
+backup scheduling. The durable public receipt marks reconstruction and non-
+reconstructible quota, reset-credit, reminder, and Git history loss; these domains are
+unavailable, never fabricated zero. A complete no-backup journal plus an active
+recovery launch becomes a preflight source-reconciliation obligation. It survives a
+restart, keeps the effective outcome recovery-required, and is cleared only after the
+bounded refresh completes; retry reuses the promoted archive and never reruns corrupt-
+archive replacement.
 
 ### P3-C bounded Dashboard projection
 

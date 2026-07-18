@@ -1,0 +1,50 @@
+import { Button } from "std-widgets.slint";
+import { UiTokens } from "../tokens.slint";
+
+export component OperationProgress inherits Rectangle {
+    in property <string> operation-kind;
+    in property <string> operation-phase;
+    in property <string> failure-code;
+    in property <bool> cancel-enabled;
+    callback retry();
+    callback cancel();
+
+    height: root.operation-phase == "idle" ? 0px : 52px;
+    visible: root.operation-phase != "idle";
+    background: UiTokens.surface-raised;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-sm;
+    accessible-role: groupbox;
+    accessible-label: "Reliable state operation " + root.operation-kind + " " + root.operation-phase;
+
+    HorizontalLayout {
+        padding-left: UiTokens.space-sm;
+        padding-right: UiTokens.space-sm;
+        spacing: UiTokens.space-sm;
+        Text {
+            text: root.operation-kind + " · " + root.operation-phase;
+            color: UiTokens.text-primary;
+            horizontal-stretch: 1;
+            vertical-alignment: center;
+        }
+        Text {
+            text: root.failure-code;
+            color: UiTokens.unavailable;
+            visible: root.failure-code != "";
+            vertical-alignment: center;
+        }
+        Button {
+            text: "Retry";
+            enabled: root.operation-phase == "failed";
+            accessible-label: "Retry reliable state operation";
+            clicked => { root.retry(); }
+        }
+        Button {
+            text: "Cancel";
+            enabled: root.cancel-enabled && root.operation-phase != "atomic_promotion";
+            accessible-label: "Cancel reliable state operation";
+            clicked => { root.cancel(); }
+        }
+    }
+}

@@ -2,31 +2,42 @@ use std::fmt;
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use tokenmaster_desktop::{
+    DesktopBackupHealth, DesktopBackupPolicy, DesktopConfigImportPreview, DesktopOperationSnapshot,
+    DesktopRecoveryReceipt, DesktopReliableStateHealth, DesktopReliableStateInput,
+    DesktopReliableStateProjection, DesktopReliableStateSummary, DesktopRestorePointInput,
+    DesktopRestoreSelection,
+};
 use tokenmaster_platform::{
-    ArchiveRecoveryScope, BackupDirectory, BackupDirectoryError, DurableFileReader,
-    DurableFileTarget, ExclusiveFileLease, ExclusiveFileLeaseGuard, MAX_DURABLE_FILE_BYTES,
+    ArchiveRecoveryScope, BackupDirectory, BackupDirectoryError, ExclusiveFileLease,
+    ExclusiveFileLeaseGuard, MAX_DURABLE_FILE_BYTES, SelectedInputFile, SelectedOutputFile,
     ValidatedLocalDirectory,
 };
 use tokenmaster_state::{
-    BackupCatalog, BackupCompression, BackupMaintenanceRuntime, BackupMetadata, BackupPackage,
-    BootstrapReport, CatalogSelectionBinding, ConfigPackage, MAX_CONFIG_PACKAGE_BYTES,
-    MaintenanceExecution, MaintenancePermit, MaintenanceSourceState, PendingMigration,
-    PreparedBootstrap, RecoveryCoordinator, RecoveryJournalStore, RecoveryLaunchDecision,
+    BackupCatalog, BackupCompression, BackupEncryptionContext, BackupMaintenanceRuntime,
+    BackupMetadata, BackupPackage, BackupPassphrase, BackupPolicy, BackupPurpose, BootstrapOutcome,
+    BootstrapReport, CatalogHealth, CatalogSelectionBinding, ConfigPackage, EncryptedBackupPackage,
+    MAX_CONFIG_PACKAGE_BYTES, MaintenanceExecution, MaintenancePermit, MaintenanceSourceState,
+    PendingMigration, PortableSettings, PreparedBootstrap, RecoveryBoundary, RecoveryCoordinator,
+    RecoveryJournalLoad, RecoveryJournalStore, RecoveryLaunchDecision, RecoveryPhase,
     RecoveryReceipt, RestoreMode, RestoreSafety, RetentionAdmission, RetentionPolicy, RunSession,
-    RunStateStore, SettingsChangeCategory, SettingsCommitReceipt, SettingsImportPreview,
-    SettingsStore, StateBootstrap, StateErrorCode, SystemMaintenanceClock,
+    RunStateStore, SettingsCommitReceipt, SettingsImportPreview, SettingsStore, SettingsValue,
+    StateBootstrap, StateErrorCode, SystemMaintenanceClock,
 };
-use tokenmaster_store::{
-    BackupControl, BackupSource, BackupStaging, StartupArchiveStatus, StartupValidationMode,
-    StoreErrorCode, USAGE_SCHEMA_VERSION, create_online_snapshot, inspect_startup_archive,
-    verify_backup_candidate,
-};
-
-use crate::command::{ApplicationBackupSelection, ApplicationCommand, ApplicationCommandPermit};
-use crate::{ApplicationError, DataRoot};
 
 #[cfg(test)]
-use tokenmaster_state::BackupPurpose;
+use tokenmaster_state::SettingsChangeCategory;
+use tokenmaster_store::{
+    BackupControl, BackupSource, BackupStaging, StartupArchiveStatus, StartupValidationMode,
+    StoreErrorCode, USAGE_SCHEMA_VERSION, create_compact_snapshot, create_online_snapshot,
+    inspect_startup_archive, verify_backup_candidate,
+};
+
+use crate::command::{
+    ApplicationBackupPolicyUpdate, ApplicationBackupSelection, ApplicationCommand,
+    ApplicationCommandPermit,
+};
+use crate::{ApplicationError, DataRoot};
 
 const STARTUP_RECOVERY_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
@@ -39,28 +50,16 @@ pub(crate) struct ApplicationStateOwner {
     run_state: RunStateStore,
     catalog: Arc<Mutex<Option<Arc<BackupCatalog>>>>,
     restore_pin: Arc<Mutex<Option<CatalogSelectionBinding>>>,
+    pending_config_import: Mutex<Option<ApplicationConfigImportPreview>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "Task 12B.2b config worker binding follows the sealed config operations"
-    )
-)]
 pub(crate) struct ApplicationConfigExportReceipt {
     created_at_utc_ms: i64,
     package_bytes: u64,
 }
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "Task 12B.2b config worker binding follows the sealed config operations"
-    )
-)]
+#[cfg_attr(not(test), allow(dead_code))]
 impl ApplicationConfigExportReceipt {
     #[must_use]
     pub(crate) const fn created_at_utc_ms(self) -> i64 {
@@ -73,26 +72,12 @@ impl ApplicationConfigExportReceipt {
     }
 }
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "Task 12B.2b config worker binding follows the sealed config operations"
-    )
-)]
 pub(crate) struct ApplicationConfigImportPreview {
     settings: SettingsImportPreview,
     created_at_utc_ms: i64,
     package_bytes: u64,
 }
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "Task 12B.2b config worker binding follows the sealed config operations"
-    )
-)]
 impl ApplicationConfigImportPreview {
     #[must_use]
     pub(crate) fn changed_category_count(&self) -> usize {
@@ -105,6 +90,7 @@ impl ApplicationConfigImportPreview {
     }
 
     #[must_use]
+    #[cfg(test)]
     pub(crate) fn categories(&self) -> &[SettingsChangeCategory] {
         self.settings.categories()
     }
@@ -158,6 +144,7 @@ impl ApplicationStateOwner {
             run_state,
             catalog: Arc::new(Mutex::new(None)),
             restore_pin: Arc::new(Mutex::new(None)),
+            pending_config_import: Mutex::new(None),
         })
     }
 
@@ -183,24 +170,142 @@ impl ApplicationStateOwner {
         .map_err(|_| ApplicationError::state())?
         .prepare(&guard, &control)
         .map_err(|_| ApplicationError::state())?;
+        let recovery_launch = bootstrap.report().recovery_launch();
+        let source_reconciliation_required = matches!(
+            recovery_launch,
+            RecoveryLaunchDecision::Start { .. } | RecoveryLaunchDecision::SafeMode { .. }
+        ) && matches!(
+            self.journal.load().map_err(|_| ApplicationError::state())?,
+            RecoveryJournalLoad::Pending(journal)
+                if journal.phase() == RecoveryPhase::Complete && journal.backup().is_none()
+        );
+        let effective_outcome = match (source_reconciliation_required, recovery_launch) {
+            (true, RecoveryLaunchDecision::Start { .. }) => BootstrapOutcome::RecoveryRequired,
+            _ => bootstrap.report().outcome(),
+        };
         Ok(ApplicationPreflight {
             bootstrap,
             startup_guard: Some(guard),
+            effective_outcome,
+            source_reconciliation_required,
         })
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Task 12B.2b config worker binding follows the sealed config operations"
-        )
-    )]
+    #[cfg(test)]
+    pub(crate) fn reliable_state_projection(
+        &self,
+        report: BootstrapReport,
+    ) -> Result<DesktopReliableStateProjection, ApplicationError> {
+        self.reliable_state_projection_for_outcome(report.outcome(), None)
+    }
+
+    pub(crate) fn reliable_state_projection_for_outcome(
+        &self,
+        outcome: BootstrapOutcome,
+        operation: Option<DesktopOperationSnapshot>,
+    ) -> Result<DesktopReliableStateProjection, ApplicationError> {
+        let settings = self
+            .settings
+            .load()
+            .map_err(|_| ApplicationError::state())?;
+        let policy = settings.value().portable().backup();
+        let previous = self
+            .catalog
+            .lock()
+            .map_err(|_| ApplicationError::state())?
+            .clone();
+        let catalog = Arc::new(
+            BackupCatalog::rebuild(&self.backups, previous.as_deref())
+                .map_err(|_| ApplicationError::state())?,
+        );
+        *self.catalog.lock().map_err(|_| ApplicationError::state())? = Some(Arc::clone(&catalog));
+
+        let corrupt_count = catalog
+            .points()
+            .iter()
+            .filter(|point| point.health() == CatalogHealth::Corrupt)
+            .count() as u64;
+        let usable_count = catalog.points().len() as u64 - corrupt_count;
+        let usable_bytes = catalog
+            .points()
+            .iter()
+            .filter(|point| point.health() != CatalogHealth::Corrupt)
+            .try_fold(0_u64, |total, point| total.checked_add(point.size_bytes()))
+            .ok_or_else(ApplicationError::state)?;
+        let latest_success = catalog
+            .points()
+            .iter()
+            .find(|point| point.health() != CatalogHealth::Corrupt)
+            .and_then(|point| point.created_at_utc_ms());
+        let recovery_receipt = match self.journal.load().map_err(|_| ApplicationError::state())? {
+            RecoveryJournalLoad::Pending(journal) if journal.phase() == RecoveryPhase::Complete => {
+                Some(if journal.backup().is_some() {
+                    DesktopRecoveryReceipt::restored_from_verified_backup()
+                } else {
+                    DesktopRecoveryReceipt::reconstructed_from_authoritative_source()
+                })
+            }
+            RecoveryJournalLoad::Absent | RecoveryJournalLoad::Pending(_) => None,
+            RecoveryJournalLoad::Invalid => return Err(ApplicationError::state()),
+        };
+        let health = reliable_health(outcome, corrupt_count != 0, settings.health_code());
+        let summary = DesktopReliableStateSummary::new(
+            health,
+            matches!(
+                outcome,
+                BootstrapOutcome::SafeMode | BootstrapOutcome::RecoveryRequired
+            ),
+            settings.health_code().as_str(),
+            DesktopBackupPolicy::new(
+                policy.periodic_enabled(),
+                policy.quiet_seconds(),
+                policy.interval_seconds(),
+                policy.retention_budget_bytes(),
+            ),
+            latest_success,
+            catalog
+                .points()
+                .first()
+                .and_then(|point| point.created_at_utc_ms()),
+            Some(usable_count),
+            Some(corrupt_count),
+            Some(usable_bytes),
+            (corrupt_count != 0).then_some("integrity"),
+            recovery_receipt,
+            operation,
+            self.config_import_preview()?,
+        );
+        let restore_points = catalog
+            .points()
+            .iter()
+            .filter_map(|point| {
+                Some(DesktopRestorePointInput::new(
+                    DesktopRestoreSelection::new(
+                        point.selection().generation().get(),
+                        point.selection().ordinal(),
+                    )?,
+                    point.created_at_utc_ms(),
+                    point.size_bytes(),
+                    map_catalog_health(point.health()),
+                    point.purpose().map_or("unavailable", backup_purpose_code),
+                    point.database_schema_version(),
+                    point
+                        .compression()
+                        .map_or("unavailable", backup_compression_code),
+                ))
+            })
+            .collect();
+        Ok(DesktopReliableStateProjection::from_input(
+            DesktopReliableStateInput::new(catalog.generation().get(), summary, restore_points),
+        ))
+    }
+
     pub(crate) fn export_config(
         &self,
         permit: &ApplicationCommandPermit,
-        target: &DurableFileTarget,
+        mut target: SelectedOutputFile,
         created_at_utc_ms: i64,
+        mut on_irreversible: impl FnMut(),
     ) -> Result<ApplicationConfigExportReceipt, ApplicationError> {
         if permit.command() != ApplicationCommand::ExportConfig || permit.is_cancelled() {
             return Err(ApplicationError::invalid_lifecycle());
@@ -221,8 +326,9 @@ impl ApplicationStateOwner {
         permit
             .begin_irreversible()
             .map_err(|_| ApplicationError::invalid_lifecycle())?;
-        let published = staged
-            .publish_new(target)
+        on_irreversible();
+        let published = target
+            .publish(&mut staged)
             .map_err(|_| ApplicationError::state())?;
         if published.len() != package.package_len() {
             return Err(ApplicationError::state());
@@ -230,7 +336,7 @@ impl ApplicationStateOwner {
         let mut reader = target
             .open_reader(MAX_CONFIG_PACKAGE_BYTES)
             .map_err(|_| ApplicationError::state())?
-            .ok_or_else(ApplicationError::state)?;
+            .into_reader();
         let verified = ConfigPackage::read(&mut reader).map_err(|_| ApplicationError::state())?;
         if verified.receipt() != package || verified.settings().digest() != settings.digest() {
             return Err(ApplicationError::state());
@@ -241,21 +347,215 @@ impl ApplicationStateOwner {
         })
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Task 12B.2b config worker binding follows the sealed config operations"
+    pub(crate) fn export_compact_backup(
+        &self,
+        root: &DataRoot,
+        permit: &ApplicationCommandPermit,
+        mut target: SelectedOutputFile,
+        mut on_irreversible: impl FnMut(),
+    ) -> Result<(), ApplicationError> {
+        if permit.command() != ApplicationCommand::BackupCompact || permit.is_cancelled() {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        let (mut package_stage, verified) =
+            self.prepare_manual_export(root, permit, true, BackupCompression::Compact)?;
+        let expected = verified.receipt();
+        let mut output_stage = target
+            .create_staged(MAX_DURABLE_FILE_BYTES)
+            .map_err(|_| ApplicationError::state())?;
+        BackupPackage::copy_verified_stage_to_durable(&package_stage, &verified, &mut output_stage)
+            .map_err(|_| ApplicationError::state())?;
+        package_stage
+            .discard()
+            .map_err(|_| ApplicationError::state())?;
+        if permit.is_cancelled() {
+            output_stage
+                .discard()
+                .map_err(|_| ApplicationError::state())?;
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        permit
+            .begin_irreversible()
+            .map_err(|_| ApplicationError::invalid_lifecycle())?;
+        on_irreversible();
+        let published = target
+            .publish(&mut output_stage)
+            .map_err(|_| ApplicationError::state())?;
+        if published.len() != expected.package_len() {
+            return Err(ApplicationError::state());
+        }
+        let mut reader = target
+            .open_reader(MAX_DURABLE_FILE_BYTES)
+            .map_err(|_| ApplicationError::state())?
+            .into_reader();
+        let reread = BackupPackage::inspect(&mut reader).map_err(|_| ApplicationError::state())?;
+        if reread.receipt() != expected || reread.compression() != BackupCompression::Compact {
+            return Err(ApplicationError::state());
+        }
+        Ok(())
+    }
+
+    pub(crate) fn export_encrypted_backup(
+        &self,
+        root: &DataRoot,
+        permit: &ApplicationCommandPermit,
+        mut target: SelectedOutputFile,
+        passphrase: BackupPassphrase,
+        mut on_irreversible: impl FnMut(),
+    ) -> Result<(), ApplicationError> {
+        if permit.command() != ApplicationCommand::BackupEncrypted || permit.is_cancelled() {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        let (mut package_stage, verified) =
+            self.prepare_manual_export(root, permit, false, BackupCompression::Normal)?;
+        let mut output_stage = target
+            .create_staged(MAX_DURABLE_FILE_BYTES)
+            .map_err(|_| ApplicationError::state())?;
+        let protected = {
+            let mut reader = package_stage
+                .open_reader()
+                .map_err(|_| ApplicationError::state())?;
+            EncryptedBackupPackage::encrypt(
+                BackupEncryptionContext::ManualExport,
+                &mut reader,
+                &verified,
+                passphrase,
+                &mut output_stage,
+            )
+            .map_err(|_| ApplicationError::state())?
+        };
+        package_stage
+            .discard()
+            .map_err(|_| ApplicationError::state())?;
+        if permit.is_cancelled() {
+            output_stage
+                .discard()
+                .map_err(|_| ApplicationError::state())?;
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        permit
+            .begin_irreversible()
+            .map_err(|_| ApplicationError::invalid_lifecycle())?;
+        on_irreversible();
+        let published = target
+            .publish(&mut output_stage)
+            .map_err(|_| ApplicationError::state())?;
+        if published.len() != protected.output_len()
+            || published.sha256() != protected.output_sha256()
+        {
+            return Err(ApplicationError::state());
+        }
+        Ok(())
+    }
+
+    fn prepare_manual_export(
+        &self,
+        root: &DataRoot,
+        permit: &ApplicationCommandPermit,
+        compact: bool,
+        compression: BackupCompression,
+    ) -> Result<
+        (
+            tokenmaster_platform::BackupStagedFile,
+            tokenmaster_state::VerifiedBackupPackage,
+        ),
+        ApplicationError,
+    > {
+        let control = BackupControl::new(permit.cancellation_flag(), STARTUP_RECOVERY_TIMEOUT)
+            .map_err(|_| ApplicationError::state())?;
+        let source =
+            BackupSource::new(root.validated_directory()).map_err(|_| ApplicationError::state())?;
+        let snapshot = create_online_snapshot(&source, &self.verification_staging, &control)
+            .and_then(|candidate| verify_backup_candidate(candidate, &control))
+            .map_err(|_| ApplicationError::state())?;
+        let compact_candidate = compact
+            .then(|| create_compact_snapshot(&snapshot, &self.verification_staging, &control))
+            .transpose()
+            .map_err(|_| ApplicationError::state())?;
+        let candidate = compact_candidate.as_ref().unwrap_or(&snapshot);
+        let settings = self
+            .settings
+            .full_backup_candidate()
+            .map_err(|_| ApplicationError::state())?;
+        let mut stage = self
+            .backups
+            .create_staged(MAX_DURABLE_FILE_BYTES)
+            .map_err(|_| ApplicationError::state())?;
+        let reader = candidate
+            .open_reader(&control)
+            .map_err(|_| ApplicationError::state())?;
+        let metadata = BackupMetadata::new(
+            current_utc_millis().map_err(|_| ApplicationError::state())?,
+            BackupPurpose::Manual,
         )
-    )]
+        .map_err(|_| ApplicationError::state())?;
+        BackupPackage::write_verified_candidate_to_backup_stage(
+            &settings,
+            reader,
+            compression,
+            metadata,
+            &mut stage,
+        )
+        .map_err(|_| ApplicationError::state())?;
+        let verified =
+            BackupPackage::verify_backup_stage(&stage).map_err(|_| ApplicationError::state())?;
+        if permit.is_cancelled() {
+            stage.discard().map_err(|_| ApplicationError::state())?;
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        Ok((stage, verified))
+    }
+
+    pub(crate) fn update_backup_policy(
+        &self,
+        permit: &ApplicationCommandPermit,
+        update: ApplicationBackupPolicyUpdate,
+        mut on_irreversible: impl FnMut(),
+    ) -> Result<BackupPolicy, ApplicationError> {
+        if permit.command() != ApplicationCommand::UpdateBackupPolicy || permit.is_cancelled() {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        let retention_budget_bytes = u64::from(update.retention_budget_mib()) * 1024 * 1024;
+        let policy = BackupPolicy::new(
+            update.periodic_enabled(),
+            update.quiet_seconds(),
+            update.interval_seconds(),
+            retention_budget_bytes,
+        )
+        .map_err(|_| ApplicationError::state())?;
+        let current = self
+            .settings
+            .load()
+            .map_err(|_| ApplicationError::state())?;
+        let value = SettingsValue::new(
+            PortableSettings::new(
+                current.value().portable().reminders().clone(),
+                policy.clone(),
+            ),
+            current.value().device().clone(),
+        );
+        if permit.is_cancelled() {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        permit
+            .begin_irreversible()
+            .map_err(|_| ApplicationError::invalid_lifecycle())?;
+        on_irreversible();
+        self.settings
+            .save(&value)
+            .map_err(|_| ApplicationError::state())?;
+        Ok(policy)
+    }
+
     pub(crate) fn preview_config_import(
         &self,
         permit: &ApplicationCommandPermit,
-        mut source: DurableFileReader,
+        source: SelectedInputFile,
     ) -> Result<ApplicationConfigImportPreview, ApplicationError> {
         if permit.command() != ApplicationCommand::ImportConfig || permit.is_cancelled() {
             return Err(ApplicationError::invalid_lifecycle());
         }
+        let mut source = source.into_reader();
         let verified = ConfigPackage::read(&mut source).map_err(|_| ApplicationError::state())?;
         if permit.is_cancelled() {
             return Err(ApplicationError::invalid_lifecycle());
@@ -271,19 +571,42 @@ impl ApplicationStateOwner {
         })
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Task 12B.2b config worker binding follows the sealed config operations"
-        )
-    )]
+    pub(crate) fn stage_config_import_preview(
+        &self,
+        permit: &ApplicationCommandPermit,
+        source: SelectedInputFile,
+    ) -> Result<(), ApplicationError> {
+        if self
+            .pending_config_import
+            .lock()
+            .map_err(|_| ApplicationError::state())?
+            .is_some()
+        {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        let preview = self.preview_config_import(permit, source)?;
+        let mut pending = self
+            .pending_config_import
+            .lock()
+            .map_err(|_| ApplicationError::state())?;
+        if pending.is_some() {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        *pending = Some(preview);
+        Ok(())
+    }
+
+    #[cfg(test)]
     pub(crate) fn commit_config_import(
         &self,
         permit: &ApplicationCommandPermit,
         preview: ApplicationConfigImportPreview,
     ) -> Result<SettingsCommitReceipt, ApplicationError> {
-        if permit.command() != ApplicationCommand::ImportConfig || permit.is_cancelled() {
+        if !matches!(
+            permit.command(),
+            ApplicationCommand::ImportConfig | ApplicationCommand::ConfirmConfigImport
+        ) || permit.is_cancelled()
+        {
             return Err(ApplicationError::invalid_lifecycle());
         }
         permit
@@ -294,10 +617,73 @@ impl ApplicationStateOwner {
             .map_err(|_| ApplicationError::state())
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "Task 12B command worker binds controlled restart")
-    )]
+    pub(crate) fn commit_pending_config_import(
+        &self,
+        permit: &ApplicationCommandPermit,
+        mut on_irreversible: impl FnMut(),
+    ) -> Result<SettingsCommitReceipt, ApplicationError> {
+        if permit.command() != ApplicationCommand::ConfirmConfigImport || permit.is_cancelled() {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        let preview = self
+            .pending_config_import
+            .lock()
+            .map_err(|_| ApplicationError::state())?
+            .take()
+            .ok_or_else(ApplicationError::invalid_lifecycle)?;
+        if permit.begin_irreversible().is_err() {
+            let mut pending = self
+                .pending_config_import
+                .lock()
+                .map_err(|_| ApplicationError::state())?;
+            if pending.is_none() {
+                *pending = Some(preview);
+            }
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        on_irreversible();
+        self.settings
+            .commit_import(&preview.settings)
+            .map_err(|_| ApplicationError::state())
+    }
+
+    pub(crate) fn cancel_pending_config_import(
+        &self,
+        permit: &ApplicationCommandPermit,
+    ) -> Result<(), ApplicationError> {
+        if permit.command() != ApplicationCommand::CancelConfigImport || permit.is_cancelled() {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        self.pending_config_import
+            .lock()
+            .map_err(|_| ApplicationError::state())?
+            .take()
+            .ok_or_else(ApplicationError::invalid_lifecycle)?;
+        Ok(())
+    }
+
+    fn config_import_preview(
+        &self,
+    ) -> Result<Option<DesktopConfigImportPreview>, ApplicationError> {
+        let pending = self
+            .pending_config_import
+            .lock()
+            .map_err(|_| ApplicationError::state())?;
+        pending
+            .as_ref()
+            .map(|preview| {
+                Ok(DesktopConfigImportPreview::new(
+                    preview.created_at_utc_ms(),
+                    preview.package_bytes(),
+                    u8::try_from(preview.changed_category_count())
+                        .map_err(|_| ApplicationError::state())?,
+                    u16::try_from(preview.changed_field_count())
+                        .map_err(|_| ApplicationError::state())?,
+                ))
+            })
+            .transpose()
+    }
+
     pub(crate) fn acquire_runtime_guard(
         &self,
         root: &DataRoot,
@@ -424,6 +810,26 @@ impl ApplicationStateOwner {
         })
     }
 
+    pub(crate) fn verify_backups(
+        &self,
+        permit: &ApplicationCommandPermit,
+    ) -> Result<(), ApplicationError> {
+        if permit.command() != ApplicationCommand::Verify || permit.is_cancelled() {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        let previous = self.catalog_snapshot().ok();
+        let mut catalog = BackupCatalog::rebuild(&self.backups, previous.as_deref())
+            .map_err(|_| ApplicationError::state())?;
+        catalog
+            .verify_all_packages(&self.backups)
+            .map_err(|_| ApplicationError::state())?;
+        if permit.is_cancelled() {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        *self.catalog.lock().map_err(|_| ApplicationError::state())? = Some(Arc::new(catalog));
+        Ok(())
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn restore_selected(
         &self,
@@ -462,6 +868,50 @@ impl ApplicationStateOwner {
             )
         })
         .map_err(|_| ApplicationError::state())
+    }
+
+    pub(crate) fn reconstruct_definitively_corrupt<F>(
+        &self,
+        permit: &ApplicationCommandPermit,
+        guard: &ExclusiveFileLeaseGuard,
+        mut on_irreversible: F,
+    ) -> Result<RecoveryReceipt, ApplicationError>
+    where
+        F: FnMut(),
+    {
+        if permit.command() != ApplicationCommand::Rebuild || permit.is_cancelled() {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        let previous = self.catalog_snapshot().ok();
+        let mut catalog = BackupCatalog::rebuild(&self.backups, previous.as_deref())
+            .map_err(|_| ApplicationError::state())?;
+        let control = BackupControl::new(permit.cancellation_flag(), STARTUP_RECOVERY_TIMEOUT)
+            .map_err(|_| ApplicationError::state())?;
+        let result = RecoveryCoordinator::new(
+            &self.scope,
+            &self.verification_staging,
+            &self.journal,
+            &self.settings,
+        )
+        .and_then(|recovery| {
+            recovery.reconstruct_definitively_corrupt_with_observer(
+                &self.backups,
+                &mut catalog,
+                guard,
+                &control,
+                |boundary| {
+                    if boundary == RecoveryBoundary::BeforeJournalPublication {
+                        permit.begin_irreversible().map_err(|_| {
+                            tokenmaster_state::StateError::from_code(StateErrorCode::Unavailable)
+                        })?;
+                        on_irreversible();
+                    }
+                    Ok(())
+                },
+            )
+        });
+        *self.catalog.lock().map_err(|_| ApplicationError::state())? = Some(Arc::new(catalog));
+        result.map_err(|_| ApplicationError::state())
     }
 
     fn catalog_snapshot(&self) -> Result<Arc<BackupCatalog>, ApplicationError> {
@@ -557,11 +1007,26 @@ impl fmt::Debug for ApplicationBackupSelectionPin {
 pub(crate) struct ApplicationPreflight {
     bootstrap: PreparedBootstrap,
     startup_guard: Option<ExclusiveFileLeaseGuard>,
+    effective_outcome: BootstrapOutcome,
+    source_reconciliation_required: bool,
 }
 
 impl ApplicationPreflight {
     pub(crate) fn report(&self) -> BootstrapReport {
         self.bootstrap.report()
+    }
+
+    pub(crate) const fn effective_outcome(&self) -> BootstrapOutcome {
+        self.effective_outcome
+    }
+
+    pub(crate) fn mark_live_healthy(&mut self) {
+        self.effective_outcome = BootstrapOutcome::Healthy;
+        self.source_reconciliation_required = false;
+    }
+
+    pub(crate) const fn requires_source_reconciliation(&self) -> bool {
+        self.source_reconciliation_required
     }
 
     pub(crate) fn take_startup_guard(
@@ -580,14 +1045,18 @@ impl ApplicationPreflight {
         &mut self,
         receipt: RecoveryReceipt,
     ) -> Result<(), ApplicationError> {
-        match self
+        let decision = self
             .bootstrap
             .session_mut()
             .start_recovered_candidate(receipt.operation_generation(), receipt.candidate())
-            .map_err(|_| ApplicationError::state())?
-        {
+            .map_err(|_| ApplicationError::state())?;
+        match decision {
             RecoveryLaunchDecision::Start { .. }
-            | RecoveryLaunchDecision::AlreadyAccepted { .. } => Ok(()),
+            | RecoveryLaunchDecision::AlreadyAccepted { .. } => {
+                self.source_reconciliation_required =
+                    receipt.reconstructed_from_authoritative_source();
+                Ok(())
+            }
             RecoveryLaunchDecision::NotTracked | RecoveryLaunchDecision::SafeMode { .. } => {
                 Err(ApplicationError::state())
             }
@@ -605,6 +1074,10 @@ impl fmt::Debug for ApplicationPreflight {
             .debug_struct("ApplicationPreflight")
             .field("report", &self.bootstrap.report())
             .field("startup_guard", &"[redacted]")
+            .field(
+                "source_reconciliation_required",
+                &self.source_reconciliation_required,
+            )
             .finish()
     }
 }
@@ -696,7 +1169,16 @@ impl ApplicationBackupOperation {
         let receipt = BackupPackage::write_verified_candidate_to_backup_stage(
             &settings,
             reader,
-            BackupCompression::Automatic,
+            match permit.purpose() {
+                tokenmaster_state::MaintenancePurpose::Manual => BackupCompression::Normal,
+                tokenmaster_state::MaintenancePurpose::Periodic
+                | tokenmaster_state::MaintenancePurpose::PreMigration
+                | tokenmaster_state::MaintenancePurpose::PostMigration
+                | tokenmaster_state::MaintenancePurpose::PreRestore
+                | tokenmaster_state::MaintenancePurpose::PreDestructiveMaintenance => {
+                    BackupCompression::Automatic
+                }
+            },
             metadata,
             &mut stage,
         )
@@ -758,6 +1240,65 @@ fn current_utc_millis() -> Result<i64, StateErrorCode> {
         .map_err(|_| StateErrorCode::Unavailable)?
         .as_millis();
     i64::try_from(millis).map_err(|_| StateErrorCode::CapacityExceeded)
+}
+
+const fn reliable_health(
+    outcome: BootstrapOutcome,
+    has_corrupt_backup: bool,
+    settings_health: tokenmaster_state::SettingsHealthCode,
+) -> DesktopReliableStateHealth {
+    if matches!(
+        outcome,
+        BootstrapOutcome::SafeMode | BootstrapOutcome::RecoveryRequired
+    ) {
+        return DesktopReliableStateHealth::RecoveryRequired;
+    }
+    if matches!(
+        outcome,
+        BootstrapOutcome::UpgradeRequired | BootstrapOutcome::Unavailable
+    ) {
+        return DesktopReliableStateHealth::Unavailable;
+    }
+    let settings_degraded = !matches!(
+        settings_health,
+        tokenmaster_state::SettingsHealthCode::Healthy
+    ) && !(matches!(outcome, BootstrapOutcome::FirstInstall)
+        && matches!(
+            settings_health,
+            tokenmaster_state::SettingsHealthCode::DefaultsNoValidRecord
+        ));
+    if has_corrupt_backup || settings_degraded {
+        DesktopReliableStateHealth::Degraded
+    } else {
+        DesktopReliableStateHealth::Healthy
+    }
+}
+
+const fn map_catalog_health(health: CatalogHealth) -> DesktopBackupHealth {
+    match health {
+        CatalogHealth::Corrupt => DesktopBackupHealth::Corrupt,
+        CatalogHealth::HeaderValid => DesktopBackupHealth::HeaderValid,
+        CatalogHealth::Verified => DesktopBackupHealth::Verified,
+    }
+}
+
+const fn backup_purpose_code(purpose: BackupPurpose) -> &'static str {
+    match purpose {
+        BackupPurpose::Periodic => "periodic",
+        BackupPurpose::Manual => "manual",
+        BackupPurpose::PreMigration => "pre_migration",
+        BackupPurpose::PostMigration => "post_migration",
+        BackupPurpose::PreRestore => "pre_restore",
+        BackupPurpose::PreDestructiveMaintenance => "pre_destructive_maintenance",
+    }
+}
+
+const fn backup_compression_code(compression: BackupCompression) -> &'static str {
+    match compression {
+        BackupCompression::Automatic => "automatic",
+        BackupCompression::Normal => "normal",
+        BackupCompression::Compact => "compact",
+    }
 }
 
 const fn map_store_error(error: tokenmaster_store::StoreError) -> StateErrorCode {

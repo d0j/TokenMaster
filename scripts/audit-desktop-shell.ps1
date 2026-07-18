@@ -40,8 +40,8 @@ if ($productionManifestText -match '\btokenmaster-(store|provider|runtime|codex|
 $rustFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.rs')
 $uiFiles = @(Get-ChildItem -LiteralPath $uiRoot -Recurse -File -Filter '*.slint')
 $productionFiles = @($rustFiles + $uiFiles)
-if ($rustFiles.Count -ne 7 -or $uiFiles.Count -ne 9) {
-    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain seven Rust and nine Slint files'
+if ($rustFiles.Count -ne 8 -or $uiFiles.Count -ne 14) {
+    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain eight Rust and fourteen Slint files'
 }
 $uiText = ($uiFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
@@ -70,6 +70,9 @@ $controllerPath = Join-Path $sourceRoot 'controller.rs'
 $controllerText = [System.IO.File]::ReadAllText($controllerPath)
 $bridgePath = Join-Path $sourceRoot 'bridge.rs'
 $bridgeText = [System.IO.File]::ReadAllText($bridgePath)
+$uiRustPath = Join-Path $sourceRoot 'ui.rs'
+$uiRustText = [System.IO.File]::ReadAllText($uiRustPath)
+$reliableStateText = [System.IO.File]::ReadAllText((Join-Path $sourceRoot 'reliable_state.rs'))
 $workerConstructionCount = [regex]::Matches($controllerText, 'RefreshWorker::spawn\(').Count
 if ($workerConstructionCount -ne 1) {
     throw 'TM-DESKTOP-CONTROLLER-WORKER: desktop controller must construct exactly one bounded refresh worker'
@@ -81,15 +84,39 @@ $snapshotSlotCount = [regex]::Matches(
 if ($snapshotSlotCount -ne 1) {
     throw 'TM-DESKTOP-CONTROLLER-SLOT: desktop and bridge must share exactly one latest product snapshot slot'
 }
-$eventScheduleCount = [regex]::Matches($bridgeText, 'slint::invoke_from_event_loop\(').Count
-if ($eventScheduleCount -ne 1) {
+$bridgeEventScheduleCount = [regex]::Matches($bridgeText, 'slint::invoke_from_event_loop\(').Count
+if ($bridgeEventScheduleCount -ne 1) {
     throw 'TM-DESKTOP-BRIDGE-EVENT: desktop bridge must contain exactly one event-loop scheduling site'
+}
+$reliableEventScheduleCount = [regex]::Matches($uiRustText, 'slint::invoke_from_event_loop\(').Count
+if ($reliableEventScheduleCount -ne 1) {
+    throw 'TM-DESKTOP-RELIABLE-EVENT: reliable-state delivery must contain exactly one event-loop scheduling site'
+}
+$eventScheduleCount = [regex]::Matches($productionText, 'slint::invoke_from_event_loop\(').Count
+if ($eventScheduleCount -ne 2) {
+    throw 'TM-DESKTOP-EVENT-SITES: desktop must contain exactly two bounded event-loop scheduling sites'
 }
 if ($bridgeText -notmatch 'window:\s*slint::Weak<MainWindow>') {
     throw 'TM-DESKTOP-BRIDGE-WEAK: desktop bridge must retain only a weak Slint window handle'
 }
 if ($bridgeText -match 'window:\s*MainWindow|\b(slint::Timer|std::thread|thread::spawn|thread::sleep)\b') {
     throw 'TM-DESKTOP-BRIDGE-POLLING: desktop bridge must not retain a strong window, timer, or polling thread'
+}
+if ($uiRustText -notmatch 'window:\s*slint::Weak<MainWindow>' -or
+    $uiRustText -notmatch 'latest:\s*Mutex<Option<DesktopReliableStateProjection>>' -or
+    $uiRustText -notmatch 'scheduled:\s*AtomicBool') {
+    throw 'TM-DESKTOP-RELIABLE-SLOT: reliable-state delivery must use one latest-only slot, one atomic gate, and a weak window'
+}
+if ($uiRustText -match '\bVecDeque\b|\b(?:sync_)?channel\b') {
+    throw 'TM-DESKTOP-RELIABLE-QUEUE: reliable-state delivery must not retain an unbounded or ordered event queue'
+}
+if ($reliableStateText -notmatch 'pub struct DesktopRecoveryReceipt' -or
+    $reliableStateText -notmatch 'reconstructed_from_authoritative_source' -or
+    $reliableStateText -notmatch 'non_reconstructible_domains_lost' -or
+    $uiRustText -notmatch 'set_reliable_recovery_kind' -or
+    $uiRustText -notmatch 'set_reliable_non_reconstructible_domains_lost' -or
+    $uiText -notmatch 'Previous quota, reset-credit, reminder, and Git history is unavailable\.') {
+    throw 'TM-DESKTOP-RECOVERY-RECEIPT: durable recovery loss must remain explicit and visible'
 }
 $uiAdapterText = [System.IO.File]::ReadAllText((Join-Path $sourceRoot 'ui.rs')) + "`n" +
     $uiText
@@ -107,6 +134,10 @@ if ($uiText -match '(?m)\bdashboard-(?:header-(?:tokens|cost|events)|code-(?:com
 }
 if ($uiAdapterText -match '(?i)\b(?:account|workspace|window|lot|repo|repository|session|event|source)[_-]?id\b') {
     throw 'TM-DESKTOP-PRIVATE-IDENTITY: private opaque identities must not cross the UI boundary'
+}
+$modelsText = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'models.slint'))
+if ($modelsText -match '(?i)passphrase|password|confirmation') {
+    throw 'TM-DESKTOP-SECRET-MODEL: passphrases must never enter a Slint list or global model'
 }
 if (
     $uiAdapterText -match '(?i)\b(?:slint::Timer|std::thread|thread::spawn|thread::sleep)\b' -or
@@ -148,10 +179,63 @@ foreach ($requiredBoundUse in @(
         throw "TM-DESKTOP-DASHBOARD-BOUND: missing bounded projection $requiredBoundUse"
     }
 }
-$uiRustText = [System.IO.File]::ReadAllText((Join-Path $sourceRoot 'ui.rs'))
 $dashboardProjectionCallCount = [regex]::Matches($uiRustText, 'apply_dashboard_projection\(').Count
 if ($dashboardProjectionCallCount -ne 2) {
     throw 'TM-DESKTOP-DASHBOARD-REBUILD: dashboard models must not rebuild during route-only selection'
+}
+$reliableStatePath = Join-Path $sourceRoot 'reliable_state.rs'
+$reliableStateText = [System.IO.File]::ReadAllText($reliableStatePath)
+if ($reliableStateText -notmatch 'pub const MAX_DESKTOP_RESTORE_POINTS: usize = 15;' -or
+    $reliableStateText -notmatch '\.take\(MAX_DESKTOP_RESTORE_POINTS\)') {
+    throw 'TM-DESKTOP-RESTORE-BOUND: reliable-state projection must retain at most fifteen points'
+}
+$restoreModelReplacementCount = [regex]::Matches($uiRustText, 'set_restore_point_rows\(model\(rows\)\)').Count
+if ($restoreModelReplacementCount -ne 1) {
+    throw 'TM-DESKTOP-RESTORE-MODEL: restore-point model must have one bounded replacement site'
+}
+if ($uiRustText -notmatch 'reviewed_restore_selection = Rc::new\(RefCell::new\(None\)\)' -or
+    $uiRustText -notmatch 'reviewed_selection\.replace\(Some\(selection\)\)' -or
+    $uiRustText -notmatch 'let selection = \*reviewed_selection\.borrow\(\)') {
+    throw 'TM-DESKTOP-RESTORE-IDENTITY: confirmation must retain the exact reviewed generation and ordinal'
+}
+if ($reliableStateText -notmatch 'successful_count: Option<u64>' -or
+    $reliableStateText -notmatch 'failure_count: Option<u64>' -or
+    $reliableStateText -notmatch 'published_bytes: Option<u64>' -or
+    [regex]::Matches($uiRustText, 'map_or_else\(\|\| "Unavailable"\.to_owned\(\)').Count -lt 3) {
+    throw 'TM-DESKTOP-UNKNOWN-METRICS: unavailable metrics must remain typed unknowns in the UI'
+}
+foreach ($requiredIntent in @(
+    'callback export-config\(\)',
+    'callback import-config\(\)',
+    'callback confirm-config-import\(\)',
+    'callback cancel-config-import\(\)',
+    'callback backup-normal\(\)',
+    'callback backup-compact\(\)',
+    'callback backup-encrypted\(string, string\)',
+    'callback verify-backups\(\)',
+    'callback preview-restore\(int\)',
+    'callback confirm-restore\(int, bool\)',
+    'callback rebuild-data\(\)',
+    'callback retry-operation\(\)',
+    'callback cancel-operation\(\)',
+    'callback update-backup-policy\(bool, int, int, int\)'
+)) {
+    if ($uiText -notmatch $requiredIntent) {
+        throw "TM-DESKTOP-RELIABLE-INTENT: missing typed intent $requiredIntent"
+    }
+}
+if ($uiText -notmatch 'passphrase\.text\s*=\s*""' -or
+    $uiText -notmatch 'confirmation\.text\s*=\s*""') {
+    throw 'TM-DESKTOP-SECRET-CLEAR: transient passphrase fields must clear after admission'
+}
+foreach ($requiredPolicyBound in @(
+    'minimum:\s*300;\s*maximum:\s*3600',
+    'minimum:\s*21600;\s*maximum:\s*604800',
+    'minimum:\s*256;\s*maximum:\s*65536'
+)) {
+    if ($uiText -notmatch $requiredPolicyBound) {
+        throw "TM-DESKTOP-POLICY-BOUND: backup policy control drifted: $requiredPolicyBound"
+    }
 }
 $dashboardModelReplacementCount = [regex]::Matches(
     $uiRustText,
@@ -212,11 +296,16 @@ if ($SourceOnly) {
         controller_worker_count = $workerConstructionCount
         retained_snapshot_slot_count = $snapshotSlotCount
         event_loop_schedule_site_count = $eventScheduleCount
+        bridge_event_loop_schedule_site_count = $bridgeEventScheduleCount
+        reliable_event_loop_schedule_site_count = $reliableEventScheduleCount
         bridge_polling_surface_count = 0
         dashboard_section_count = $dashboardBounds.DESKTOP_DASHBOARD_SECTION_COUNT
         dashboard_model_replacement_count = $dashboardModelReplacementCount
         dashboard_projection_application_count = $dashboardProjectionCallCount - 1
         dashboard_polling_surface_count = 0
+        restore_point_maximum = 15
+        restore_model_replacement_count = $restoreModelReplacementCount
+        secret_model_count = 0
         private_ui_identity_count = 0
     } | ConvertTo-Json -Compress
     return
@@ -280,11 +369,16 @@ if ($LASTEXITCODE -ne 0) {
     controller_worker_count = $workerConstructionCount
     retained_snapshot_slot_count = $snapshotSlotCount
     event_loop_schedule_site_count = $eventScheduleCount
+    bridge_event_loop_schedule_site_count = $bridgeEventScheduleCount
+    reliable_event_loop_schedule_site_count = $reliableEventScheduleCount
     bridge_polling_surface_count = 0
     dashboard_section_count = $dashboardBounds.DESKTOP_DASHBOARD_SECTION_COUNT
     dashboard_model_replacement_count = $dashboardModelReplacementCount
     dashboard_projection_application_count = $dashboardProjectionCallCount - 1
     dashboard_polling_surface_count = 0
+    restore_point_maximum = 15
+    restore_model_replacement_count = $restoreModelReplacementCount
+    secret_model_count = 0
     private_ui_identity_count = 0
     mock_data_model_count = 0
     direct_authority_dependency_count = 0

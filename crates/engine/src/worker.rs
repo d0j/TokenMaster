@@ -4,9 +4,10 @@ use std::{
     panic::{AssertUnwindSafe, catch_unwind},
     sync::{
         Arc, Mutex, MutexGuard, Once,
-        mpsc::{Receiver, SyncSender, TryRecvError, TrySendError, sync_channel},
+        mpsc::{Receiver, RecvTimeoutError, SyncSender, TryRecvError, TrySendError, sync_channel},
     },
     thread::{Builder, JoinHandle},
+    time::Duration,
 };
 
 use crate::{
@@ -323,6 +324,21 @@ impl RefreshWorker {
         match receiver.try_recv() {
             Ok(completion) => Ok(Some(completion)),
             Err(TryRecvError::Empty | TryRecvError::Disconnected) => Ok(None),
+        }
+    }
+
+    pub fn wait_for_completion(
+        &self,
+        timeout: Duration,
+    ) -> Result<Option<WorkerCompletion>, WorkerError> {
+        let receiver = self
+            .result_receiver
+            .lock()
+            .map_err(|_| WorkerError::new(WorkerErrorCode::Internal))?;
+        match receiver.recv_timeout(timeout) {
+            Ok(completion) => Ok(Some(completion)),
+            Err(RecvTimeoutError::Timeout) => Ok(None),
+            Err(RecvTimeoutError::Disconnected) => Err(WorkerError::new(WorkerErrorCode::Closed)),
         }
     }
 

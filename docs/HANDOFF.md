@@ -593,7 +593,8 @@ gate in 507.5 seconds, and release composition audits pass. Independent final re
 reports Critical/Important/Minor 0/0/0. The live-auth Codex executable contract remains
 intentionally ignored without its explicit environment binding. This is developer
 evidence, not product or release acceptance; the selected-restore primitive is not yet
-bound through the operation worker or UI.
+bound through the operation worker or UI in that historical slice. Task 15 below now
+provides that binding.
 
 Task 12B.2b.1 now composes one joined operation worker around the sole bounded command
 coordinator. It owns one standard thread, capacity-one wake, active plus one follow-up,
@@ -612,7 +613,8 @@ rolls back a raced target, and deletes old bytes only after new identity/byte pr
 The native selector is thread-affine and requires an active owner. File-dialog 11/11,
 19 platform unit tests including five deterministic race/recovery additions, full
 platform tests, and strict platform Clippy pass. Application/UI binding and interactive
-Windows evidence do not yet exist. Independent final Task 14 rereview reports Critical/
+Windows evidence did not yet exist in Task 14 itself; Task 15 now supplies application/
+UI binding, while interactive evidence remains open. Independent final Task 14 rereview reports Critical/
 Important/Minor 0/0/0 and `Ready`. Clean-root, formatting/diff, strict locked workspace
 Clippy, MSVC platform check, release composition, application 38/38 and reliable-state
 55/55 mutations, focused encryption 7/7, and the complete locked workspace test/doctest
@@ -626,12 +628,42 @@ final review reports Critical/Important/Minor 0/0/0 and `Ready`. The live-auth C
 contract remains intentionally ignored without explicit environment binding. This is
 developer evidence, not product or release acceptance.
 
-The immediate next slice remains Task 12B.2b: bind the sealed native config selector and
-preview/confirm to the operation worker/UI without blocking Slint, then verify, selected
-restore, rebuild, retry/cancel propagation, and provider-
-backed fresh reconstruction when no backup is usable. Then continue Tasks 13-18 in
-order: health/product projection, Data & Recovery UI, adversarial/resource/release
-closure. Keep the fixed archive path and
+Task 12B.2b/Task 15 is now implemented through the application/Desktop boundary. The
+owning Slint/STA thread invokes the sealed selector and sends only controlled input/
+output capabilities to the sole joined worker. Config preview/confirm/cancel, normal/
+compact/encrypted backup, verify, confirmed selected restore, rebuild, retry/cancel, and
+backup-policy updates are path-free typed intents. A latest-only bounded Data Health/
+Settings projection contains at most fifteen ordinal restore choices, one preview, one
+operation, and one path-free recovery receipt. No UI polling timer, progress queue, or
+storage/runtime/platform authority was added. Exact `AtomicPromotion` phases disable
+cancel only at the real irreversible boundary. Restore confirmation retains the exact
+reviewed generation/ordinal across projection drift, queued follow-ups publish running
+state at actual execution, manual backup stays cancellable before its boundary, and
+unknown metrics render unavailable.
+
+No-backup rebuild requires proven definitive corruption and no usable fully reverified
+point. It creates and verifies a fresh normal-schema archive, journals explicit source
+reconstruction without a backup identity, quarantines main/WAL/SHM, atomically promotes,
+and verifies again. The app forces one recovery-urgency local Codex refresh and waits on
+the bounded completion channel before healthy backup scheduling. The durable UI receipt
+explicitly marks quota, reset-credit, reminder, and Git history unavailable; no zeros
+are fabricated. Complete reconstruction journal evidence preserves the mandatory source
+reconciliation across restart, failed in-process attempts, and bounded recovery-launch
+Safe Mode. Explicit retry reuses the already promoted archive and cannot repeat
+destructive reconstruction.
+
+Current developer evidence passes clean-root, formatting, warnings-as-errors locked
+workspace Clippy, all three source audits, application 46/46, reliable-state 56/56, and
+desktop 28/28 policy mutations, and the complete locked workspace test/doctest suite in
+540.8 seconds. The only ignored test is the explicitly environment-gated authenticated
+live Codex contract. Independent rereview reports Critical/Important/Minor 0/0/0 and
+`Ready`. This is not Task 16-18, interactive, M0, packaging, signing, or release
+acceptance.
+
+The immediate next slice is Task 16: consolidate the adversarial package/recovery fault
+matrix, process-death/compatibility/privacy canaries, and authority audit. Then Task 17
+must produce release-mode UI-latency/resource-return receipts, followed by Task 18
+documentation/acceptance closure. Keep the fixed archive path and
 writer sidecar; never copy only the live main file or treat busy/disk/access/schema-
 newer as corruption authority. Keep automatic recovery data only; device-local settings
 never move. Do not relax Tasks 6-11A into path, generic-stream, generic age-extraction,

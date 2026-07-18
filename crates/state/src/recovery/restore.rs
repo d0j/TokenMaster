@@ -7,7 +7,7 @@ use tokenmaster_platform::{
 };
 use tokenmaster_store::{
     BackupControl, BackupStaging, RecoveryVerificationBoundary, StoreErrorCode,
-    VerifiedRecoveryArchive, verify_recovery_archive_with_observer,
+    VerifiedRecoveryArchive, create_fresh_recovery_archive, verify_recovery_archive_with_observer,
 };
 
 use super::{
@@ -16,9 +16,9 @@ use super::{
 };
 use crate::settings::SettingsRestoreBoundary;
 use crate::{
-    BackupCatalog, BackupPackage, CatalogSelection, MaintenanceCompletion, MaintenanceOutcome,
-    MaintenancePurpose, PortableSettingsCandidate, PreparedSettingsRestore, SettingsStore,
-    StateError, StateErrorCode, VerifiedBackupPackage,
+    BackupCatalog, BackupPackage, CatalogHealth, CatalogSelection, MaintenanceCompletion,
+    MaintenanceOutcome, MaintenancePurpose, PortableSettingsCandidate, PreparedSettingsRestore,
+    SettingsStore, StateError, StateErrorCode, VerifiedBackupPackage,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -50,6 +50,12 @@ enum RestoreAuthority {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[doc(hidden)]
 pub enum RecoveryBoundary {
+    /// All cancellable preparation is complete; the next action publishes the journal.
+    BeforeJournalPublication,
+    /// The normal store constructor and complete verifier produced a fresh archive.
+    ReconstructionCandidateCreated,
+    /// The fresh verified archive reached the sealed platform recovery stage.
+    ReconstructionCandidateStaged,
     /// The named recovery phase has been durably published and reread.
     JournalDurable(RecoveryPhase),
     /// The exact sidecars reached quarantine before their phase advanced.
@@ -75,6 +81,7 @@ pub struct RecoveryReceipt {
     operation_generation: u64,
     candidate: RecoveryCandidateIdentity,
     settings_mode: RecoverySettingsMode,
+    reconstructed_from_authoritative_source: bool,
 }
 
 impl RecoveryReceipt {
@@ -91,6 +98,16 @@ impl RecoveryReceipt {
     #[must_use]
     pub const fn settings_mode(self) -> RecoverySettingsMode {
         self.settings_mode
+    }
+
+    #[must_use]
+    pub const fn reconstructed_from_authoritative_source(self) -> bool {
+        self.reconstructed_from_authoritative_source
+    }
+
+    #[must_use]
+    pub const fn non_reconstructible_domains_lost(self) -> bool {
+        self.reconstructed_from_authoritative_source
     }
 }
 
@@ -173,6 +190,117 @@ impl<'a> RecoveryCoordinator<'a> {
             guard,
             control,
             |_| Ok(()),
+        )
+    }
+
+    pub fn reconstruct_definitively_corrupt(
+        &self,
+        directory: &BackupDirectory,
+        catalog: &mut BackupCatalog,
+        guard: &ExclusiveFileLeaseGuard,
+        control: &BackupControl,
+    ) -> Result<RecoveryReceipt, StateError> {
+        self.reconstruct_definitively_corrupt_with_observer(
+            directory,
+            catalog,
+            guard,
+            control,
+            |_| Ok(()),
+        )
+    }
+
+    #[doc(hidden)]
+    pub fn reconstruct_definitively_corrupt_with_observer<F>(
+        &self,
+        directory: &BackupDirectory,
+        catalog: &mut BackupCatalog,
+        guard: &ExclusiveFileLeaseGuard,
+        control: &BackupControl,
+        mut observer: F,
+    ) -> Result<RecoveryReceipt, StateError>
+    where
+        F: FnMut(RecoveryBoundary) -> Result<(), StateError>,
+    {
+        self.scope
+            .authorize_guard(guard)
+            .map_err(map_platform_error)?;
+        self.authorize_backup_directory(directory)?;
+        catalog.verify_all_packages(directory)?;
+        if catalog
+            .points()
+            .iter()
+            .any(|point| point.health() == CatalogHealth::Verified)
+        {
+            return Err(StateError::invalid_input());
+        }
+        let has_backup_evidence = !catalog.points().is_empty();
+        let operation_generation = self.journal.next_operation_generation()?;
+        self.recover_verifier_staging()?;
+        self.scope
+            .discard_abandoned_staging(guard)
+            .map_err(map_platform_error)?;
+        let preflight_observation = self.scope.observe(guard).map_err(map_platform_error)?;
+        if !preflight_observation.has_any_archive_artifact() && !has_backup_evidence {
+            return Err(StateError::invalid_input());
+        }
+
+        let operation = self
+            .scope
+            .reserve_operation(guard)
+            .map_err(map_platform_error)?;
+        let mut candidate_stage = self
+            .scope
+            .create_candidate(&operation, crate::MAX_DATABASE_PACKAGE_BYTES)
+            .map_err(map_platform_error)?;
+        let fresh = create_fresh_recovery_archive(self.verification_staging, control)
+            .map_err(|error| map_store_error(error.code()))?;
+        observer(RecoveryBoundary::ReconstructionCandidateCreated)?;
+        self.scope
+            .require_available_staging_bytes(
+                guard,
+                required_recovery_capacity(
+                    fresh.len(),
+                    preflight_observation.main().map_or(0, |main| main.len()),
+                )?,
+            )
+            .map_err(map_platform_error)?;
+        let candidate = recovery_candidate_identity(&fresh)?;
+        fresh
+            .stage_for_recovery(&mut candidate_stage, control)
+            .map_err(|error| map_store_error(error.code()))?;
+        observer(RecoveryBoundary::ReconstructionCandidateStaged)?;
+        drop(fresh);
+        self.verify_reconstruction_candidate(&candidate_stage, candidate, control, &mut observer)?;
+
+        let before_observation = self.scope.observe(guard).map_err(map_platform_error)?;
+        if before_observation != preflight_observation {
+            return Err(StateError::integrity());
+        }
+        self.require_definitive_corruption(before_observation, guard, control, &mut observer)?;
+        if self.scope.observe(guard).map_err(map_platform_error)? != before_observation {
+            return Err(StateError::integrity());
+        }
+        let prepared = RecoveryJournal::reconstruction(
+            operation_generation,
+            operation.id(),
+            candidate,
+            RecoveryArchiveFacts::from_observation(before_observation)?,
+        )?;
+        observer(RecoveryBoundary::BeforeJournalPublication)?;
+        self.journal.begin_with_observer(&prepared, || {
+            observer(RecoveryBoundary::FirstPreparedJournalSlotPublished)
+        })?;
+        observer(RecoveryBoundary::JournalDurable(RecoveryPhase::Prepared))?;
+        self.continue_restore(
+            directory,
+            catalog,
+            prepared,
+            operation,
+            Some(candidate_stage),
+            None,
+            guard,
+            control,
+            &mut observer,
         )
     }
 
@@ -389,18 +517,24 @@ impl<'a> RecoveryCoordinator<'a> {
         if journal.phase() == RecoveryPhase::Prepared {
             self.journal.begin(&journal)?;
         }
-        let backup = journal.backup();
-        let selection = catalog.selection_for_package_identity(
-            backup.backup_slot(),
-            backup.package_len(),
-            *backup.package_sha256(),
-        )?;
-        let mut package_reader = catalog.open_recovery_selection(directory, selection)?;
-        let package = BackupPackage::inspect(&mut package_reader)?;
-        require_package_identity(&package, backup)?;
-        require_package_database(&package, journal.candidate())?;
-        let prepared_settings = match journal.settings_mode() {
-            RecoverySettingsMode::DataAndPortableSettings => {
+        let package = match journal.backup() {
+            Some(backup) => {
+                let selection = catalog.selection_for_package_identity(
+                    backup.backup_slot(),
+                    backup.package_len(),
+                    *backup.package_sha256(),
+                )?;
+                let mut package_reader = catalog.open_recovery_selection(directory, selection)?;
+                let package = BackupPackage::inspect(&mut package_reader)?;
+                require_package_identity(&package, backup)?;
+                require_package_database(&package, journal.candidate())?;
+                Some(package)
+            }
+            None if journal.settings_mode() == RecoverySettingsMode::ReconstructionDataOnly => None,
+            None => return Err(StateError::integrity()),
+        };
+        let prepared_settings = match (journal.settings_mode(), package.as_ref()) {
+            (RecoverySettingsMode::DataAndPortableSettings, Some(package)) => {
                 let prepared = self.settings.prepare_restore(package.settings())?;
                 let expected = journal
                     .settings_target()
@@ -411,7 +545,13 @@ impl<'a> RecoveryCoordinator<'a> {
                 }
                 Some(prepared)
             }
-            RecoverySettingsMode::DataOnly | RecoverySettingsMode::AutomaticDataOnly => None,
+            (
+                RecoverySettingsMode::DataOnly
+                | RecoverySettingsMode::AutomaticDataOnly
+                | RecoverySettingsMode::ReconstructionDataOnly,
+                _,
+            ) => None,
+            _ => return Err(StateError::integrity()),
         };
         let operation = self
             .scope
@@ -428,9 +568,20 @@ impl<'a> RecoveryCoordinator<'a> {
                 .resume_candidate(&operation, candidate.len(), *candidate.sha256())
                 .map_err(map_platform_error)?;
             if stage.is_staged() {
-                let verified = self.verify_candidate(&stage, &package, control, &mut observer)?;
-                if recovery_candidate_identity(&verified)? != candidate {
-                    return Err(StateError::integrity());
+                match package.as_ref() {
+                    Some(package) => {
+                        let verified =
+                            self.verify_candidate(&stage, package, control, &mut observer)?;
+                        if recovery_candidate_identity(&verified)? != candidate {
+                            return Err(StateError::integrity());
+                        }
+                    }
+                    None => self.verify_reconstruction_candidate(
+                        &stage,
+                        candidate,
+                        control,
+                        &mut observer,
+                    )?,
                 }
             } else {
                 self.verify_active(candidate, guard, control, &mut observer)?;
@@ -530,7 +681,9 @@ impl<'a> RecoveryCoordinator<'a> {
                 return Err(error);
             }
             let settings_result = match journal.settings_mode() {
-                RecoverySettingsMode::DataOnly | RecoverySettingsMode::AutomaticDataOnly => Ok(()),
+                RecoverySettingsMode::DataOnly
+                | RecoverySettingsMode::AutomaticDataOnly
+                | RecoverySettingsMode::ReconstructionDataOnly => Ok(()),
                 RecoverySettingsMode::DataAndPortableSettings => {
                     let prepared = prepared_settings
                         .as_ref()
@@ -629,6 +782,29 @@ impl<'a> RecoveryCoordinator<'a> {
         let identity = recovery_candidate_identity(&verified)?;
         require_package_database(package, identity)?;
         Ok(verified)
+    }
+
+    fn verify_reconstruction_candidate(
+        &self,
+        candidate: &RecoveryStagedArchive,
+        expected: RecoveryCandidateIdentity,
+        control: &BackupControl,
+        observer: &mut dyn FnMut(RecoveryBoundary) -> Result<(), StateError>,
+    ) -> Result<(), StateError> {
+        let reader = self
+            .scope
+            .open_candidate_reader(candidate)
+            .map_err(map_platform_error)?;
+        let verified = self.verify_reader(
+            reader,
+            control,
+            RecoveryBoundary::CandidateVerifierFileCreated,
+            observer,
+        )?;
+        if recovery_candidate_identity(&verified)? != expected {
+            return Err(StateError::integrity());
+        }
+        Ok(())
     }
 
     fn verify_active(
@@ -847,6 +1023,7 @@ fn receipt_from_journal(journal: &RecoveryJournal) -> RecoveryReceipt {
         operation_generation: journal.operation_generation(),
         candidate: journal.candidate(),
         settings_mode: journal.settings_mode(),
+        reconstructed_from_authoritative_source: journal.backup().is_none(),
     }
 }
 

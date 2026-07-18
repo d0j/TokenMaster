@@ -4,9 +4,16 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, ThreadId};
 use std::time::{Duration, Instant};
 
+use tempfile::tempdir;
+use tokenmaster_platform::{
+    ControlledFileDialog, FileDialogFileType, FileDialogResult, FileDialogSelector,
+    ValidatedLocalDirectory,
+};
+
 use crate::command::{
     ApplicationCommand, ApplicationCommandAdmission, ApplicationCommandExecution,
     ApplicationCommandFailure, ApplicationCommandOutcome, ApplicationCommandRejection,
+    ApplicationOperationPayload, ApplicationOperationRequest,
 };
 use crate::operation::{
     ApplicationOperationWorker, ApplicationOperationWorkerError,
@@ -124,7 +131,7 @@ fn failed_command_is_the_only_retry_source_and_reexecutes_once() {
         ApplicationCommandAdmission::Rejected(ApplicationCommandRejection::NoRetryAvailable)
     );
     assert!(matches!(
-        worker.submit(ApplicationCommand::ExportConfig),
+        worker.submit(ApplicationCommand::Backup),
         ApplicationCommandAdmission::Started(_)
     ));
     wait_until(|| {
@@ -390,4 +397,55 @@ fn worker_errors_expose_only_stable_path_private_codes() {
         assert_eq!(code.stable_code(), stable);
         assert!(!format!("{error:?}").contains('\\'));
     }
+}
+
+#[test]
+fn cloned_submitter_moves_one_sealed_output_to_the_single_worker_without_disclosure() {
+    let root = tempdir().expect("temporary root");
+    let directory = ValidatedLocalDirectory::new(root.path()).expect("validated root");
+    let dialog = ControlledFileDialog::selected(&directory, "settings.tmconfig").expect("dialog");
+    let FileDialogResult::Selected(output) = dialog.select_output(FileDialogFileType::Config)
+    else {
+        panic!("output selection");
+    };
+    let request = ApplicationOperationRequest::export_config(output);
+    assert_eq!(
+        format!("{request:?}"),
+        "ApplicationOperationRequest(ExportConfig, [redacted])"
+    );
+    assert!(!format!("{request:?}").contains(&root.path().display().to_string()));
+
+    let (started_tx, started_rx) = channel();
+    let mut worker = ApplicationOperationWorker::spawn_with_payload(move |permit, payload| {
+        assert!(matches!(
+            payload,
+            ApplicationOperationPayload::ConfigOutput(_)
+        ));
+        started_tx.send(permit.command()).expect("started signal");
+        ApplicationCommandExecution::Succeeded
+    })
+    .expect("worker");
+    let submitter = worker.submitter();
+    assert!(matches!(
+        submitter.submit_request(request),
+        ApplicationCommandAdmission::Started(_)
+    ));
+    assert_eq!(receive(&started_rx), ApplicationCommand::ExportConfig);
+    wait_until(|| {
+        worker
+            .snapshot()
+            .is_ok_and(|snapshot| snapshot.active_count() == 0)
+    });
+    assert_eq!(
+        worker
+            .try_completion()
+            .expect("completion mailbox")
+            .expect("completion")
+            .outcome(),
+        ApplicationCommandOutcome::Succeeded
+    );
+    assert_eq!(
+        worker.shutdown().expect("shutdown"),
+        ApplicationOperationWorkerPhase::Stopped
+    );
 }

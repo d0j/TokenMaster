@@ -820,7 +820,7 @@ cargo +1.97.0 test -p tokenmaster-runtime --locked
 
 ## Task 12 — Integrate application-owned recovery, migration, and service restart
 
-**Status:** In progress. Task 12A implements items 1-4, 10, and 14-17 plus the concrete
+**Status:** Implemented through the application/UI boundary. Task 12A implements items 1-4, 10, and 14-17 plus the concrete
 application backup operation. Task 12B.1 adds the bounded typed command admission core,
 one active/one follow-up under 10,000 hints, exact cancellation/irreversible boundary,
 controlled current-bundle restart, and obsolete-notifier suppression for items 7-9,
@@ -830,9 +830,12 @@ joined old owners, journaled replacement, immediate run-session receipt binding,
 restored-legacy pre/post-migration gates, and one fresh bundle or safe mode. Task
 12B.2b.1 adds one joined capacity-one operation worker, real manual-backup execution,
 the 2 MiB config codec ceiling, sealed create-new/reread export, and base-bound typed
-import preview/commit. Task 12B.2b retains application/UI config binding, actual verify/
-restore/rebuild/retry/cancel bindings, and no-backup reconstruction in
-items 5-9 and 13. This status is implementation truth, not release acceptance.
+import preview/commit. Task 12B.2b/Task 15 bind native selection, config/backup/verify/
+restore/rebuild/retry/cancel/policy intents, exact irreversible operation phases, and
+the no-backup reconstruction in items 5-9 and 13. Reconstruction completes one
+mandatory recovery-urgency authoritative-source refresh before healthy publication and
+reports non-reconstructible domains explicitly unavailable. This status is
+implementation truth, not Task 16-18, interactive, M0, package, or release acceptance.
 
 **Files:**
 
@@ -915,6 +918,12 @@ cargo +1.97.0 test -p tokenmaster-app --locked
 
 ## Task 13 — Publish bounded reliable-state health and choices
 
+**Status:** Implemented at the Desktop projection boundary. The planned product-owned
+snapshot was deliberately not added: reliable-state health must remain available in
+safe mode without an archive-backed `ProductSnapshot`. Application maps sealed state
+into one latest-only `DesktopReliableStateProjection` with at most fifteen ordinal
+choices, scalar health/policy/receipt fields, and no file or recovery authority.
+
 **Files:**
 
 - Create: `crates/product/src/reliable_state.rs`
@@ -966,9 +975,8 @@ identity-bound staged output with exact type, no-follow/parent/link/type/path/si
 validation and stable selected/cancelled/error outcomes. Existing replace captures and
 post-checks displaced identity, rolls back a raced target, and retains Windows handle-
 bound stage cleanup. The native selector is thread-affine and requires an active owner.
-Task 15 still
-owns application invocation, post-selection worker dispatch, visible preview/confirm,
-and interactive Windows evidence.
+Task 15 now owns and implements application invocation, post-selection worker dispatch,
+and visible preview/confirm. Interactive Windows evidence remains Task 17/release work.
 
 **Files:**
 
@@ -1017,6 +1025,20 @@ cargo +1.97.0 test -p tokenmaster-platform --locked
 
 ## Task 15 — Build Data & Recovery, settings import, and safe-mode UI
 
+**Status:** Implemented for the P3-D.0 application/Desktop contour. Data Health and
+Settings render bounded latest-only state, at most fifteen restore points, config
+preview, exact operation phases, a destructive restore review, backup/rebuild controls,
+and an explicit verified-backup versus authoritative-source recovery banner. Sealed
+dialog capabilities are dispatched to the single joined worker; Slint receives no path,
+file, state/store/runtime, SQLite, provider, or recovery authority. Passphrases clear
+after admission, cancel is disabled during atomic promotion, and no UI timer/progress
+queue was added. Hot English/Russian locale switching and interactive accessibility/
+Windows acceptance remain P4/Task 17 rather than being claimed by this developer slice.
+Independent review hardening binds confirmation to the exact previewed restore identity,
+publishes queued follow-up running state at actual execution start, keeps manual backup
+cancellable until its real irreversible boundary, preserves unavailable metrics as
+typed unknowns, and makes source-reconciliation restart/retry durable.
+
 **Files:**
 
 - Create: `crates/desktop/src/reliable_state.rs`
@@ -1050,6 +1072,7 @@ Add tests proving:
 4. passphrase and confirmation accept exactly 12 through 128 Unicode scalar values,
    are never stored in a Slint list/global model, and are both cleared after admission;
 5. cancel disabled during atomic promotion and enabled only in cancellable phases;
+   manual backup remains cancellable before its irreversible boundary;
 6. safe mode renders Data Health/Settings/Help without a query controller;
 7. section-local backup failure does not rebuild Dashboard models or window;
 8. no SQLite, state/store/runtime/platform dependency or arbitrary path callback in
@@ -1058,6 +1081,12 @@ Add tests proving:
    retention;
 10. English/Russian label keys, keyboard order, screen-reader names, high contrast,
     reduced-motion behavior, and narrow/wide layout hooks.
+11. restore confirmation consumes the exact reviewed generation/ordinal after a newer
+    projection arrives; unknown counts/bytes render unavailable, and a promoted queued
+    operation publishes running at actual execution start.
+12. process death after no-backup promotion but before source reconciliation forces the
+    barrier on restart, while failed reconciliation retries without reconstructing the
+    already promoted archive.
 
 ### Green
 

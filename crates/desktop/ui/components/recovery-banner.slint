@@ -1,0 +1,35 @@
+import { UiTokens } from "../tokens.slint";
+
+export component RecoveryBanner inherits Rectangle {
+    in property <bool> safe-mode;
+    in property <string> health;
+    in property <string> recovery-kind;
+    in property <bool> non-reconstructible-domains-lost;
+
+    visible: root.safe-mode || root.health == "recovery_required" || root.recovery-kind != "";
+    height: self.visible ? 52px : 0px;
+    background: UiTokens.surface-raised;
+    border-color: UiTokens.degraded;
+    border-width: 1px;
+    border-radius: UiTokens.radius-sm;
+    accessible-role: text;
+    accessible-label: "Recovery mode status";
+
+    Text {
+        x: UiTokens.space;
+        width: parent.width - 2 * UiTokens.space;
+        height: parent.height;
+        text: root.safe-mode
+            ? "Safe mode is active. Usage data remains offline while recovery controls stay available."
+            : root.recovery-kind == "authoritative_source"
+                ? (root.non-reconstructible-domains-lost
+                    ? "Usage was rebuilt from local Codex sources. Previous quota, reset-credit, reminder, and Git history is unavailable."
+                    : "Usage was rebuilt from local Codex sources.")
+                : root.recovery-kind == "verified_backup"
+                    ? "Data recovery completed from a verified backup."
+                    : "Data recovery requires attention.";
+        color: UiTokens.text-primary;
+        vertical-alignment: center;
+        wrap: word-wrap;
+    }
+}

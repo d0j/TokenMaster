@@ -6,6 +6,45 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.0 Task 12B.2b/Task 15 application and UI reliable-state composition.
+  The owning Slint/STA thread invokes the sealed config/backup dialogs and submits only
+  controlled capabilities to the single joined operation worker. Config preview/
+  confirm/cancel, normal/compact/encrypted backup, verification, confirmed selected
+  restore, rebuild, retry/cancel, and backup-policy changes use fixed path-free intents.
+  Each mutating path publishes `AtomicPromotion` and disables cancellation at its exact
+  irreversible boundary.
+- Added bounded Data & Recovery and Settings views with one latest-only projection, at
+  most fifteen generation/ordinal restore points, one config preview, one operation,
+  responsive/accessibility presentation hooks, destructive restore review, cleared
+  passphrases, and no UI polling/progress queue. A durable path-free recovery banner
+  distinguishes verified-backup restore from authoritative-source reconstruction.
+- Added fail-closed no-backup reconstruction. Only proven definitive corruption plus no
+  usable reverified point can create a fresh normal-schema archive. The archive is fully
+  verified before/after staging and after atomic promotion; the prior main/WAL/SHM set
+  remains quarantined and the redundant journal records explicit reconstruction without
+  a backup identity. Application forces and awaits a bounded recovery-urgency local
+  Codex reconciliation before healthy backup maintenance. Quota, reset-credit, reminder,
+  and Git history remain explicitly unavailable rather than fabricated zero.
+- Closed the independent Task 15 review findings. Restore confirmation now consumes
+  the exact reviewed generation/ordinal identity after projection drift; promoted
+  follow-ups publish `Running` at actual worker start; manual backup remains
+  cancellable until its exact irreversible boundary and then publishes
+  `AtomicPromotion`; unavailable counts/bytes are typed unknowns and render
+  `Unavailable`. A complete no-backup journal now preserves the source-reconciliation
+  obligation across restart, failed retry, and the bounded two-launch Safe Mode;
+  explicit retry reconciles the promoted archive without repeating reconstruction.
+- Strengthened application, desktop, and reliable-state audits to pin the rebuild
+  binding, recovery urgency/completion barrier, exact irreversible phase count, visible
+  non-reconstructible-loss receipt, reviewed restore identity, actual worker-start
+  phase, typed unknown metrics, restart/retry reconciliation, and sole allowlisted
+  store-to-state staging bridge. Focused application/engine/runtime/store/state/desktop
+  tests and the application 46/46, reliable-state 56/56, and desktop 28/28 policy
+  mutation suites pass. Clean-root, formatting, warnings-as-errors workspace Clippy,
+  and the complete locked workspace test/doctest suite in 540.8 seconds also pass.
+  Independent rereview reports Critical/Important/Minor 0/0/0 and `Ready`. Task 16-18
+  adversarial/resource/acceptance and interactive Windows evidence remain open; no
+  product or release acceptance is claimed.
+
 - Implemented P3-D.0 Task 14 sealed native file selection in `tokenmaster-platform`.
   The existing pinned Windows bindings now call the Common Item Dialog directly with
   exact `.tmconfig`, `.tmbackup`, and `.tmbackup.age` filters, balanced STA COM lifetime,

@@ -156,6 +156,67 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-DASHBOARD-BOUND*"
     }
 
+    It "rejects restore-point presentation-bound drift" {
+        $fixture = New-DesktopAuditFixture -Name "restore-bound"
+        $path = Join-Path $fixture "crates\desktop\src\reliable_state.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'pub const MAX_DESKTOP_RESTORE_POINTS: usize = 15;',
+            'pub const MAX_DESKTOP_RESTORE_POINTS: usize = 150;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-RESTORE-BOUND*"
+    }
+
+    It "rejects re-resolving restore identity after preview" {
+        $fixture = New-DesktopAuditFixture -Name "restore-identity-drift"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'let selection = *reviewed_selection.borrow();',
+            'let selection = None;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-RESTORE-IDENTITY*"
+    }
+
+    It "rejects fabricating zero values for unavailable reliable-state metrics" {
+        $fixture = New-DesktopAuditFixture -Name "unknown-metrics-drift"
+        $path = Join-Path $fixture "crates\desktop\src\reliable_state.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'successful_count: Option<u64>',
+            'successful_count: u64'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-UNKNOWN-METRICS*"
+    }
+
+    It "rejects passphrase retention in Slint models" {
+        $fixture = New-DesktopAuditFixture -Name "secret-model"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\models.slint") `
+            -Value 'export struct SecretRow { passphrase: string }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SECRET-MODEL*"
+    }
+
+    It "rejects backup policy control range drift" {
+        $fixture = New-DesktopAuditFixture -Name "policy-bound"
+        $path = Join-Path $fixture "crates\desktop\ui\views\settings-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'minimum: 256; maximum: 65536',
+            'minimum: 64; maximum: 32768'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-POLICY-BOUND*"
+    }
+
     It "rejects dashboard model rebuilding from route selection" {
         $fixture = New-DesktopAuditFixture -Name "route-dashboard-rebuild"
         $path = Join-Path $fixture "crates\desktop\src\ui.rs"
@@ -176,6 +237,41 @@ Describe "TokenMaster production desktop audit" {
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-BRIDGE-EVENT*"
+    }
+
+    It "rejects a second reliable-state event-loop scheduling site" {
+        $fixture = New-DesktopAuditFixture -Name "reliable-event"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\ui.rs") `
+            -Value 'fn extra_reliable_event() { let _ = slint::invoke_from_event_loop('
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-RELIABLE-EVENT*"
+    }
+
+    It "rejects replacement of the reliable-state latest-only slot" {
+        $fixture = New-DesktopAuditFixture -Name "reliable-slot"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'latest: Mutex<Option<DesktopReliableStateProjection>>',
+            'latest: Mutex<Vec<DesktopReliableStateProjection>>'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-RELIABLE-SLOT*"
+    }
+
+    It "rejects hiding non-reconstructible loss after source rebuild" {
+        $fixture = New-DesktopAuditFixture -Name "recovery-receipt-hidden"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'set_reliable_non_reconstructible_domains_lost',
+            'discard_non_reconstructible_domains_lost'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-RECOVERY-RECEIPT*"
     }
 
     It "rejects a bridge polling thread or timer" {
@@ -213,9 +309,15 @@ Describe "TokenMaster production desktop audit" {
         $fixture = New-DesktopAuditFixture -Name "library-boundary"
 
         $receipt = & $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json
-        $receipt.rust_source_file_count | Should -Be 7
-        $receipt.slint_source_file_count | Should -Be 9
+        $receipt.rust_source_file_count | Should -Be 8
+        $receipt.slint_source_file_count | Should -Be 14
         $receipt.dashboard_section_count | Should -Be 6
         $receipt.dashboard_model_replacement_count | Should -Be 7
+        $receipt.restore_point_maximum | Should -Be 15
+        $receipt.restore_model_replacement_count | Should -Be 1
+        $receipt.secret_model_count | Should -Be 0
+        $receipt.event_loop_schedule_site_count | Should -Be 2
+        $receipt.bridge_event_loop_schedule_site_count | Should -Be 1
+        $receipt.reliable_event_loop_schedule_site_count | Should -Be 1
     }
 }

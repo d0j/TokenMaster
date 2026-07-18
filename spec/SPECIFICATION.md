@@ -185,6 +185,17 @@ lost non-reconstructible domains MUST remain explicitly unavailable. Automatic
 salvage of corrupt rows is forbidden. Data Health and safe mode MUST remain usable
 without starting archive/query/runtime owners.
 
+A no-backup rebuild MUST create and fully verify a fresh normal-schema archive before
+atomically replacing the definitively corrupt set. The replacement MUST NOT become
+healthy, seed ordinary backup scheduling, or present reconstructed zero values until a
+bounded recovery-urgency refresh has completed from authoritative local sources. Its
+durable path-free recovery receipt MUST distinguish verified-backup restoration from
+authoritative-source reconstruction and MUST explicitly report non-reconstructible
+quota, reset-credit, reminder, and Git history as unavailable. A completed source-
+reconstruction journal MUST preserve this reconciliation obligation across process
+death; restart or retry MUST complete reconciliation without attempting to reconstruct
+the already promoted healthy-schema archive again.
+
 Startup MUST durably publish and reread an unclean-run marker before any writable
 SQLite open. A missing active main with prior durable TokenMaster artifacts MUST be
 treated as damaged state, while a root with no prior durable artifacts MAY use normal
@@ -256,12 +267,16 @@ rows MUST be discovered dynamically and MUST NOT assume five-hour or weekly wind
 Missing token, cost, quota, reset, or benefit evidence MUST render as unavailable,
 never as a fabricated zero. Banked resets MUST remain visually and semantically
 separate from provider quota bars, credits, temporary usage, and unavailable lots.
+Unknown reliable-state backup counts and byte totals MUST also render as unavailable;
+legitimate known zero values remain distinct.
 
 ### TM-UI-002 — Reactive presentation boundary
 
 Skin, layout, locale, selection, and range changes MUST update bounded presentation
 state without mutating the archive or initiating an unbounded source scan. An older
 asynchronous result MUST NOT overwrite a newer UI generation.
+Restore confirmation MUST authorize the exact generation/ordinal identity reviewed by
+the user even if a newer reliable-state projection arrives before confirmation.
 The presentation owner MUST retain only the current immutable product snapshot and
 MUST copy bounded runtime health rather than retaining runtime owners, callbacks,
 guards, paths, or database handles.
