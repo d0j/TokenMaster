@@ -17,9 +17,10 @@ use crate::{
     DashboardSectionRow, DashboardSessionRow, DashboardTrendPoint, DesktopActivityKey,
     DesktopCostValue, DesktopDashboardProjection, DesktopDashboardSectionKey, DesktopFreshness,
     DesktopHistoryProjection, DesktopIntent, DesktopIntentSink, DesktopOperationSnapshot,
-    DesktopQuality, DesktopReliableStateProjection, DesktopSnapshotBridge, DesktopSnapshotReceiver,
-    DesktopTokenValue, DesktopValueAvailability, HistoryDayRow, MainWindow, RestorePointRow,
-    RouteRow, UnavailableDesktopIntentSink,
+    DesktopQuality, DesktopReliableStateProjection, DesktopSessionsProjection,
+    DesktopSnapshotBridge, DesktopSnapshotReceiver, DesktopTokenValue, DesktopValueAvailability,
+    HistoryDayRow, MainWindow, RestorePointRow, RouteRow, SessionListRow,
+    UnavailableDesktopIntentSink,
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
 };
 
@@ -431,6 +432,7 @@ pub(crate) fn apply_projection(window: &MainWindow, projection: &DesktopProjecti
     apply_route_projection(window, projection);
     apply_dashboard_projection(window, projection.dashboard());
     apply_history_projection(window, projection.history());
+    apply_sessions_projection(window, projection.sessions());
 }
 
 fn apply_route_projection(window: &MainWindow, projection: &DesktopProjection) {
@@ -791,6 +793,98 @@ fn format_history_range(history: &DesktopHistoryProjection) -> String {
 
 fn format_date(year: i16, month: u8, day: u8) -> String {
     format!("{year:04}-{month:02}-{day:02}")
+}
+
+fn apply_sessions_projection(window: &MainWindow, sessions: &DesktopSessionsProjection) {
+    window.set_sessions_state(sessions.state().stable_code().into());
+    window.set_sessions_reasons(join_reasons(sessions.reason_codes().iter()).into());
+    window.set_sessions_evidence_label(
+        format_evidence(sessions.freshness(), sessions.quality()).into(),
+    );
+    window.set_sessions_loaded_label(
+        sessions
+            .has_more()
+            .map_or_else(
+                || "Unavailable".to_owned(),
+                |_| format!("{} loaded", format_integer(sessions.rows().len() as u64)),
+            )
+            .into(),
+    );
+    window.set_sessions_page_status_label(
+        sessions
+            .has_more()
+            .map_or("Page status unavailable", |has_more| {
+                if has_more {
+                    "More sessions available"
+                } else {
+                    "All sessions loaded"
+                }
+            })
+            .into(),
+    );
+
+    let rows = sessions
+        .rows()
+        .iter()
+        .map(|session| SessionListRow {
+            first_label: format_timestamp_seconds_utc(session.first_timestamp_seconds()).into(),
+            last_label: format_timestamp_seconds_utc(session.last_timestamp_seconds()).into(),
+            duration_label: format_session_duration(
+                session.first_timestamp_seconds(),
+                session.first_timestamp_nanos(),
+                session.last_timestamp_seconds(),
+                session.last_timestamp_nanos(),
+            )
+            .into(),
+            event_label: format_integer(session.event_count()).into(),
+            input_availability: availability_code(session.input().availability()).into(),
+            input_label: format_tokens(session.input()).into(),
+            cached_availability: availability_code(session.cached().availability()).into(),
+            cached_label: format_tokens(session.cached()).into(),
+            output_availability: availability_code(session.output().availability()).into(),
+            output_label: format_tokens(session.output()).into(),
+            reasoning_availability: availability_code(session.reasoning().availability()).into(),
+            reasoning_label: format_tokens(session.reasoning()).into(),
+            total_availability: availability_code(session.total_tokens().availability()).into(),
+            total_label: format_tokens(session.total_tokens()).into(),
+            cost_availability: availability_code(session.cost().availability()).into(),
+            cost_label: format_cost(session.cost()).into(),
+        })
+        .collect::<Vec<_>>();
+    window.set_session_list_rows(model(rows));
+}
+
+fn format_session_duration(
+    first_seconds: i64,
+    first_nanos: u32,
+    last_seconds: i64,
+    last_nanos: u32,
+) -> String {
+    let Some(seconds) = last_seconds
+        .checked_sub(first_seconds)
+        .and_then(|value| u64::try_from(value).ok())
+    else {
+        return "Unavailable".to_owned();
+    };
+    if seconds == 0 {
+        return if last_nanos < first_nanos {
+            "Unavailable".to_owned()
+        } else if last_nanos > first_nanos {
+            "<1s".to_owned()
+        } else {
+            "0s".to_owned()
+        };
+    }
+    let hours = seconds / 3_600;
+    let minutes = (seconds % 3_600) / 60;
+    let seconds = seconds % 60;
+    if hours > 0 {
+        format!("{hours}h {minutes}m")
+    } else if minutes > 0 {
+        format!("{minutes}m {seconds}s")
+    } else {
+        format!("{seconds}s")
+    }
 }
 
 fn apply_code_output(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
@@ -1167,5 +1261,12 @@ fn format_timestamp_seconds(value: i64) -> String {
     DateTime::<Utc>::from_timestamp(value, 0).map_or_else(
         || "unknown".to_owned(),
         |value| value.format("%H:%M:%S").to_string(),
+    )
+}
+
+fn format_timestamp_seconds_utc(value: i64) -> String {
+    DateTime::<Utc>::from_timestamp(value, 0).map_or_else(
+        || "Unavailable".to_owned(),
+        |value| value.format("%Y-%m-%d %H:%M:%S UTC").to_string(),
     )
 }

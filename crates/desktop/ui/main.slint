@@ -1,13 +1,14 @@
 import {
     RouteRow, DashboardSectionRow, DashboardQuotaRow, DashboardBenefitRow,
     DashboardTrendPoint, DashboardSessionRow, DashboardActivityRow, DashboardModelRow,
-    HistoryDayRow, RestorePointRow
+    HistoryDayRow, SessionListRow, RestorePointRow
 } from "models.slint";
 import { UiTokens } from "tokens.slint";
 import { RouteNavItem } from "components/route-nav-item.slint";
 import { RouteState } from "components/route-state.slint";
 import { DashboardView } from "views/dashboard-view.slint";
 import { HistoryView } from "views/history-view.slint";
+import { SessionsView } from "views/sessions-view.slint";
 import { DataHealthView } from "views/data-health-view.slint";
 import { SettingsView } from "views/settings-view.slint";
 
@@ -48,11 +49,19 @@ export component MainWindow inherits Window {
     in property <string> history-total-tokens;
     in property <string> history-cost;
     in property <string> history-events;
+    in property <[SessionListRow]> session-list-rows;
+    in property <string> sessions-state;
+    in property <string> sessions-reasons;
+    in property <string> sessions-evidence-label;
+    in property <string> sessions-loaded-label;
+    in property <string> sessions-page-status-label;
     out property <bool> dashboard-visible: root.active-route-key == "dashboard";
     out property <bool> history-visible: root.active-route-key == "history";
+    out property <bool> sessions-visible: root.active-route-key == "sessions";
     out property <bool> data-health-visible: root.active-route-key == "data_health";
     out property <bool> settings-visible: root.active-route-key == "settings";
     out property <string> dashboard-layout-mode: root.width < 1010px ? "narrow" : "wide";
+    out property <string> sessions-layout-mode: root.width < 1010px ? "narrow" : "wide";
     in property <string> reliable-state-generation;
     in property <string> reliable-state-health;
     in property <bool> reliable-state-safe-mode;
@@ -206,6 +215,17 @@ export component MainWindow inherits Window {
                     events: root.history-events;
                 }
 
+                if root.sessions-visible: SessionsView {
+                    width: parent.width;
+                    height: parent.height;
+                    rows: root.session-list-rows;
+                    state: root.sessions-state;
+                    reasons: root.sessions-reasons;
+                    evidence-label: root.sessions-evidence-label;
+                    loaded-label: root.sessions-loaded-label;
+                    page-status-label: root.sessions-page-status-label;
+                }
+
                 if root.data-health-visible: DataHealthView {
                     width: parent.width;
                     height: parent.height;
@@ -267,7 +287,7 @@ export component MainWindow inherits Window {
                     update-backup-policy(enabled, quiet, interval, budget) => { root.update-backup-policy(enabled, quiet, interval, budget); }
                 }
 
-                if !root.dashboard-visible && !root.history-visible && !root.data-health-visible && !root.settings-visible: RouteState {
+                if !root.dashboard-visible && !root.history-visible && !root.sessions-visible && !root.data-health-visible && !root.settings-visible: RouteState {
                     x: UiTokens.space;
                     y: UiTokens.space;
                     width: parent.width - 2 * UiTokens.space;

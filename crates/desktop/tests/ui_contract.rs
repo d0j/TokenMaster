@@ -9,11 +9,22 @@ use tokenmaster_query::{
     UsageSessionPageRequest, UsageTimeZone, WeekStart,
 };
 
-use support::dashboard_fixture::{FixedClock, add_quota_windows, range, seed};
+use support::dashboard_fixture::{
+    FixedClock, add_distinct_usage_rows, add_quota_windows, range, seed,
+};
 
 fn ready_reducer(path: &std::path::Path, additional_quota_windows: u8) -> ProductReducer {
+    ready_reducer_with_usage(path, additional_quota_windows, 0)
+}
+
+fn ready_reducer_with_usage(
+    path: &std::path::Path,
+    additional_quota_windows: u8,
+    additional_usage_rows: u8,
+) -> ProductReducer {
     seed(path);
     add_quota_windows(path, additional_quota_windows);
+    add_distinct_usage_rows(path, additional_usage_rows);
     let mut service = QueryService::open(path, FixedClock).expect("query service");
     let status = service.product_data_status().expect("status");
     let analytics = service
@@ -53,7 +64,7 @@ fn ready_reducer(path: &std::path::Path, additional_quota_windows: u8) -> Produc
         .expect("Git output");
     let sessions = service
         .usage_sessions(
-            UsageSessionPageRequest::first(PageSize::new(12).expect("page size"), Vec::new())
+            UsageSessionPageRequest::first(PageSize::new(64).expect("page size"), Vec::new())
                 .expect("session request"),
         )
         .expect("sessions");
@@ -99,8 +110,11 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert_eq!(window.get_active_route_reasons(), "data_status_unavailable");
     assert!(window.get_dashboard_visible());
     assert!(!window.get_history_visible());
+    assert!(!window.get_sessions_visible());
     assert_eq!(window.get_history_day_rows().row_count(), 0);
     assert_eq!(window.get_history_total_tokens(), "—");
+    assert_eq!(window.get_session_list_rows().row_count(), 0);
+    assert_eq!(window.get_sessions_loaded_label(), "Unavailable");
     assert_eq!(window.get_dashboard_section_rows().row_count(), 6);
     assert_eq!(window.get_dashboard_header_tokens(), "—");
     assert_eq!(window.get_dashboard_header_cost(), "—");
@@ -152,6 +166,7 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert_eq!(window.get_active_route_key(), "settings");
 
     assert_compiled_dashboard_renders_real_bounded_models_and_switches_layout_in_place();
+    assert_compiled_sessions_render_one_bounded_page_without_recreating_the_window();
 }
 
 fn assert_compiled_dashboard_renders_real_bounded_models_and_switches_layout_in_place() {
@@ -265,4 +280,52 @@ fn assert_compiled_dashboard_renders_real_bounded_models_and_switches_layout_in_
         .map(|quota| quota.label_key.to_string())
         .collect::<std::collections::BTreeSet<_>>();
     assert_eq!(label_keys.len(), 32);
+}
+
+fn assert_compiled_sessions_render_one_bounded_page_without_recreating_the_window() {
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory.path().join("ui-sessions.sqlite3");
+    let reducer = ready_reducer_with_usage(&path, 0, 64);
+    let snapshot = reducer.snapshot();
+    let shell = DesktopShell::new(&snapshot).expect("desktop shell");
+    let window = shell.window();
+    let component_address = window as *const _;
+
+    window.invoke_select_route(SharedString::from("sessions"));
+    assert!(window.get_sessions_visible());
+    assert!(!window.get_dashboard_visible());
+    assert!(!window.get_history_visible());
+    assert_eq!(window.get_active_route_state(), "ready");
+    assert_eq!(window.get_sessions_state(), "ready");
+    assert_eq!(window.get_sessions_loaded_label(), "64 loaded");
+    assert_eq!(
+        window.get_sessions_page_status_label(),
+        "More sessions available"
+    );
+    assert_eq!(
+        window.get_sessions_evidence_label(),
+        "Fresh · Authoritative"
+    );
+    let rows = window.get_session_list_rows();
+    assert_eq!(rows.row_count(), 64);
+    let newest = rows.row_data(0).expect("newest session");
+    assert_eq!(newest.last_label, "2026-07-16 01:07:43 UTC");
+    assert_eq!(newest.event_label, "1");
+    assert_eq!(newest.input_label, "1");
+    assert_eq!(newest.total_label, "2");
+    assert_eq!(newest.cost_label, "$0.000001");
+
+    window.window().set_size(slint::PhysicalSize::new(760, 720));
+    assert_eq!(window.get_sessions_layout_mode(), "narrow");
+    window
+        .window()
+        .set_size(slint::PhysicalSize::new(1120, 720));
+    assert_eq!(window.get_sessions_layout_mode(), "wide");
+
+    window.invoke_select_route(SharedString::from("dashboard"));
+    assert!(!window.get_sessions_visible());
+    window.invoke_select_route(SharedString::from("sessions"));
+    assert!(window.get_sessions_visible());
+    assert_eq!(component_address, shell.window() as *const _);
+    assert_eq!(window.get_session_list_rows().row_count(), 64);
 }
