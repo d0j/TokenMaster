@@ -1,6 +1,11 @@
 mod package_support;
 
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::time::Duration;
 
 use tempfile::TempDir;
 use tokenmaster_platform::{
@@ -9,6 +14,10 @@ use tokenmaster_platform::{
 use tokenmaster_state::{
     BackupCatalog, BackupCompression, BackupMetadata, BackupPackage, BackupPurpose, CatalogHealth,
     RetentionAdmission, RetentionPolicy, StateErrorCode,
+};
+use tokenmaster_store::{
+    BackupControl, BackupSource, BackupStaging, UsageStore, VerifiedBackupCandidate,
+    create_online_snapshot, verify_backup_candidate,
 };
 
 use package_support::{ControlledRoot, backup_bytes_at, digest, read_backup_bytes, settings};
@@ -29,6 +38,27 @@ fn publish(directory: &BackupDirectory, bytes: &[u8]) -> BackupDirectoryEntry {
         .seal(bytes.len() as u64, digest(bytes))
         .expect("seal backup");
     directory.publish(&mut staged).expect("publish backup")
+}
+
+fn verified_sqlite_candidate() -> (TempDir, VerifiedBackupCandidate, BackupControl, PathBuf) {
+    let root = TempDir::new().expect("verified candidate root");
+    let archive = root.path().join("tokenmaster.sqlite3");
+    drop(UsageStore::open(&archive).expect("usage archive"));
+    let staging_path = root.path().join("staging");
+    fs::create_dir(&staging_path).expect("staging directory");
+    let data_root = ValidatedLocalDirectory::new(root.path()).expect("data root");
+    let staging_root = ValidatedLocalDirectory::new(&staging_path).expect("staging root");
+    let source = BackupSource::new(&data_root).expect("backup source");
+    let staging = BackupStaging::new(&staging_root).expect("backup staging");
+    let control = BackupControl::new(Arc::new(AtomicBool::new(false)), Duration::from_secs(5))
+        .expect("backup control");
+    let verified = verify_backup_candidate(
+        create_online_snapshot(&source, &staging, &control).expect("online snapshot"),
+        &control,
+    )
+    .expect("verified snapshot");
+    let candidate_path = staging_path.join(".tokenmaster-snapshot-00.sqlite3");
+    (root, verified, control, candidate_path)
 }
 
 #[test]
@@ -78,6 +108,92 @@ fn typed_package_writer_composes_with_backup_directory_and_catalog_verification(
         cycle.next_deletion(&published).expect("retention plan"),
         None
     );
+}
+
+#[test]
+fn store_verified_candidate_stream_composes_without_path_or_memory_copy() {
+    let (root, verified_candidate, control, _candidate_path) = verified_sqlite_candidate();
+    let validated = ValidatedLocalDirectory::new(root.path()).expect("validated root");
+    let directory = BackupDirectory::open_or_create(&validated).expect("backup directory");
+    let expected_len = verified_candidate.len();
+    let expected_schema = verified_candidate.schema_version();
+    let reader = verified_candidate
+        .open_reader(&control)
+        .expect("verified candidate reader");
+    let mut package_stage = directory
+        .create_staged(MAX_DURABLE_FILE_BYTES)
+        .expect("backup stage");
+
+    let receipt = BackupPackage::write_verified_candidate_to_backup_stage(
+        &settings(),
+        reader,
+        BackupCompression::Automatic,
+        BackupMetadata::new(1_735_689_600_000, BackupPurpose::Periodic).expect("backup metadata"),
+        &mut package_stage,
+    )
+    .expect("store candidate package");
+    let package =
+        BackupPackage::verify_backup_stage(&package_stage).expect("verify store candidate package");
+    assert_eq!(package.receipt(), receipt);
+    assert_eq!(package.database_len(), expected_len);
+    assert_eq!(package.database_schema_version(), expected_schema as u16);
+}
+
+#[test]
+fn changed_store_candidate_fails_closed_and_poisons_package_stage() {
+    for mutation in ["replace", "truncate", "append"] {
+        let (root, verified_candidate, control, candidate_path) = verified_sqlite_candidate();
+        let validated = ValidatedLocalDirectory::new(root.path()).expect("validated root");
+        let directory = BackupDirectory::open_or_create(&validated).expect("backup directory");
+        let reader = verified_candidate
+            .open_reader(&control)
+            .expect("verified candidate reader");
+        match mutation {
+            "replace" => {
+                let moved = root.path().join("moved.sqlite3");
+                fs::rename(&candidate_path, &moved).expect("move verified candidate");
+                fs::copy(&moved, &candidate_path).expect("replace verified candidate");
+            }
+            "truncate" => OpenOptions::new()
+                .write(true)
+                .open(&candidate_path)
+                .expect("open candidate")
+                .set_len(512)
+                .expect("truncate candidate"),
+            "append" => OpenOptions::new()
+                .append(true)
+                .open(&candidate_path)
+                .expect("open candidate")
+                .write_all(&[0_u8; 512])
+                .expect("append candidate"),
+            _ => unreachable!(),
+        }
+        let mut package_stage = directory
+            .create_staged(MAX_DURABLE_FILE_BYTES)
+            .expect("backup stage");
+        let error = BackupPackage::write_verified_candidate_to_backup_stage(
+            &settings(),
+            reader,
+            BackupCompression::Automatic,
+            BackupMetadata::new(1_735_689_600_000, BackupPurpose::Periodic)
+                .expect("backup metadata"),
+            &mut package_stage,
+        )
+        .expect_err("changed verified source must fail");
+        assert_eq!(
+            error.code(),
+            StateErrorCode::Integrity,
+            "mutation={mutation}"
+        );
+        assert!(
+            directory
+                .scan()
+                .expect("failed stage removed")
+                .entries()
+                .is_empty(),
+            "mutation={mutation}"
+        );
+    }
 }
 
 #[test]

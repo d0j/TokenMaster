@@ -1,6 +1,7 @@
 use std::io::{self, Read, Write};
 
 use sha2::{Digest, Sha256};
+use tokenmaster_store::{StoreErrorCode, VerifiedBackupCandidateReader};
 
 use crate::{PortableSettingsCandidate, StateError};
 
@@ -171,6 +172,131 @@ impl BackupPackage {
             Ok(receipt)
         })();
         discard_failed_backup_stage(result, destination)
+    }
+
+    /// Writes a package from one exact store-verified SQLite candidate stream.
+    ///
+    /// The typed source is revalidated by the store before opening and after complete
+    /// consumption. Any source, codec, or destination failure discards the package
+    /// stage and leaves no publication capability.
+    pub fn write_verified_candidate_to_backup_stage(
+        settings: &PortableSettingsCandidate,
+        mut database: VerifiedBackupCandidateReader<'_>,
+        compression: BackupCompression,
+        metadata: BackupMetadata,
+        destination: &mut BackupStagedFile,
+    ) -> Result<PackageReceipt, StateError> {
+        let result = (|| {
+            let database_len = database.len();
+            let database_sha256 = *database.sha256();
+            let database_schema_version = u16::try_from(database.schema_version())
+                .map_err(|_| StateError::unsupported_version())?;
+            let (codec_result, source_failure, destination_failure) = {
+                let mut database_adapter = VerifiedCandidateAdapter::new(&mut database);
+                let mut destination_adapter = BackupWriterAdapter::new(destination);
+                let result = write_backup_stream(
+                    settings,
+                    &mut database_adapter,
+                    database_len,
+                    database_sha256,
+                    database_schema_version,
+                    compression,
+                    metadata,
+                    &mut destination_adapter,
+                );
+                (
+                    result,
+                    database_adapter.failure(),
+                    destination_adapter.failure(),
+                )
+            };
+            let receipt = match codec_result {
+                Ok(receipt) => receipt,
+                Err(codec_error) => {
+                    return Err(source_failure
+                        .map(map_store_error)
+                        .or_else(|| destination_failure.map(map_backup_directory_error))
+                        .unwrap_or(codec_error));
+                }
+            };
+            database
+                .finish()
+                .map_err(|error| map_store_error(error.code()))?;
+            destination
+                .seal(receipt.package_len(), *receipt.file_sha256())
+                .map_err(map_backup_directory_error)?;
+            Ok(receipt)
+        })();
+        discard_failed_backup_stage(result, destination)
+    }
+}
+
+struct VerifiedCandidateAdapter<'reader, 'candidate> {
+    source: &'reader mut VerifiedBackupCandidateReader<'candidate>,
+    failure: Option<StoreErrorCode>,
+}
+
+impl<'reader, 'candidate> VerifiedCandidateAdapter<'reader, 'candidate> {
+    const fn new(source: &'reader mut VerifiedBackupCandidateReader<'candidate>) -> Self {
+        Self {
+            source,
+            failure: None,
+        }
+    }
+
+    const fn failure(&self) -> Option<StoreErrorCode> {
+        self.failure
+    }
+}
+
+impl Read for VerifiedCandidateAdapter<'_, '_> {
+    fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+        if bytes.is_empty() {
+            return Ok(0);
+        }
+        match self.source.read_chunk(bytes) {
+            Ok(read) => Ok(read),
+            Err(error) => {
+                self.failure = Some(error.code());
+                Err(io::ErrorKind::Other.into())
+            }
+        }
+    }
+}
+
+const fn map_store_error(code: StoreErrorCode) -> StateError {
+    match code {
+        StoreErrorCode::CapacityExceeded => StateError::capacity_exceeded(),
+        StoreErrorCode::Busy => StateError::from_code(crate::StateErrorCode::Busy),
+        StoreErrorCode::StaleBackupCandidate
+        | StoreErrorCode::BackupHeaderCorrupt
+        | StoreErrorCode::BackupPageCorrupt
+        | StoreErrorCode::BackupIndexCorrupt
+        | StoreErrorCode::BackupForeignKeyCorrupt
+        | StoreErrorCode::BackupCountCorrupt
+        | StoreErrorCode::BackupGenerationCorrupt
+        | StoreErrorCode::BackupSemanticCorrupt => StateError::integrity(),
+        StoreErrorCode::InvalidValue => StateError::invalid_input(),
+        StoreErrorCode::VersionMismatch
+        | StoreErrorCode::SchemaTooNew
+        | StoreErrorCode::SchemaMismatch
+        | StoreErrorCode::PolicyMismatch => StateError::unsupported_version(),
+        StoreErrorCode::Cancelled
+        | StoreErrorCode::DeadlineExceeded
+        | StoreErrorCode::BackupIo
+        | StoreErrorCode::Database => StateError::unavailable(),
+        StoreErrorCode::InvalidStoredValue
+        | StoreErrorCode::StaleCheckpoint
+        | StoreErrorCode::RebuildRequired
+        | StoreErrorCode::StaleRevision
+        | StoreErrorCode::AccountingVersionMismatch
+        | StoreErrorCode::IncompleteManifest
+        | StoreErrorCode::UnsealedRevision
+        | StoreErrorCode::PendingContinuation
+        | StoreErrorCode::ScanInProgress
+        | StoreErrorCode::StaleScan
+        | StoreErrorCode::PendingScan
+        | StoreErrorCode::ArchiveModeMismatch => StateError::internal_invariant(),
     }
 }
 

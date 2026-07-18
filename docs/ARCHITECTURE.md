@@ -182,11 +182,12 @@ lease, quarantine main/WAL/SHM, resume a redundant six-state restore journal bef
 SQLite open, commit the selected data-only or data-plus-portable-settings mode, and
 reconstruct one application bundle or safe mode. Automatic recovery remains data only.
 Product/Desktop receive bounded health and intents only. The contour is in progress;
-Tasks 1-8 now provide persistent typed settings, verified standalone SQLite candidates,
+Tasks 1-9 now provide persistent typed settings, verified standalone SQLite candidates,
 fixed packages, verified-source-bound optional manual encryption, and a sealed bounded
-catalog/retention core; they add no maintenance runtime, restore, safe-mode, or release
-claim. Task 9 must compose the existing sealed backup-directory and verified-candidate
-capabilities rather than paths or generic streams.
+catalog/retention core plus one bounded maintenance worker and one shared scheduler;
+they add no bootstrap recovery, restore, safe-mode, or release claim. Task 10 must add
+the redundant recovery journal and startup decision surface without widening these
+path-free capabilities.
 
 The built-in live quota source is separate from the JSONL usage reader. Composition
 supplies one already resolved absolute native Codex executable to

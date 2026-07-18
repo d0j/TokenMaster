@@ -1,4 +1,5 @@
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -231,5 +232,102 @@ fn compact_snapshot_is_isolated_not_larger_and_reverified() -> TestResult {
     assert!(compact.len() <= snapshot.len());
     assert_eq!(compact.schema_version(), snapshot.schema_version());
     assert!(compact.integrity_verified());
+    Ok(())
+}
+
+#[test]
+fn verified_candidate_reader_streams_exact_identity_and_finishes_once() -> TestResult {
+    let root = tempdir()?;
+    let archive = root.path().join("tokenmaster.sqlite3");
+    drop(UsageStore::open(&archive)?);
+    let staging_path = root.path().join("staging");
+    fs::create_dir(&staging_path)?;
+    let data_root = ValidatedLocalDirectory::new(root.path())?;
+    let staging_root = ValidatedLocalDirectory::new(&staging_path)?;
+    let source = BackupSource::new(&data_root)?;
+    let staging = BackupStaging::new(&staging_root)?;
+    let control = BackupControl::new(Arc::new(AtomicBool::new(false)), Duration::from_secs(5))?;
+    let verified = verify_backup_candidate(
+        create_online_snapshot(&source, &staging, &control)?,
+        &control,
+    )?;
+    let expected = fs::read(staging_path.join(".tokenmaster-snapshot-00.sqlite3"))?;
+
+    let mut reader = verified.open_reader(&control)?;
+    assert_eq!(reader.len(), expected.len() as u64);
+    assert_eq!(reader.schema_version(), verified.schema_version());
+    let mut observed = Vec::new();
+    let mut chunk = [0_u8; 4096];
+    loop {
+        let read = reader.read_chunk(&mut chunk)?;
+        if read == 0 {
+            break;
+        }
+        observed.extend_from_slice(&chunk[..read]);
+    }
+    reader.finish()?;
+    assert_eq!(observed, expected);
+    Ok(())
+}
+
+#[test]
+fn verified_candidate_reader_rejects_replacement_truncation_and_append() -> TestResult {
+    for mutation in ["replace", "truncate", "append"] {
+        let root = tempdir()?;
+        let archive = root.path().join("tokenmaster.sqlite3");
+        drop(UsageStore::open(&archive)?);
+        let staging_path = root.path().join("staging");
+        fs::create_dir(&staging_path)?;
+        let data_root = ValidatedLocalDirectory::new(root.path())?;
+        let staging_root = ValidatedLocalDirectory::new(&staging_path)?;
+        let source = BackupSource::new(&data_root)?;
+        let staging = BackupStaging::new(&staging_root)?;
+        let control = BackupControl::new(Arc::new(AtomicBool::new(false)), Duration::from_secs(5))?;
+        let verified = verify_backup_candidate(
+            create_online_snapshot(&source, &staging, &control)?,
+            &control,
+        )?;
+        let candidate_path = staging_path.join(".tokenmaster-snapshot-00.sqlite3");
+        let mut reader = verified.open_reader(&control)?;
+
+        match mutation {
+            "replace" => {
+                let moved = staging_path.join("moved.sqlite3");
+                fs::rename(&candidate_path, &moved)?;
+                fs::copy(&moved, &candidate_path)?;
+            }
+            "truncate" => {
+                OpenOptions::new()
+                    .write(true)
+                    .open(&candidate_path)?
+                    .set_len(512)?;
+            }
+            "append" => {
+                OpenOptions::new()
+                    .append(true)
+                    .open(&candidate_path)?
+                    .write_all(&[0_u8; 512])?;
+            }
+            _ => unreachable!(),
+        }
+
+        let mut chunk = [0_u8; 4096];
+        let stream_error = loop {
+            match reader.read_chunk(&mut chunk) {
+                Ok(0) => break None,
+                Ok(_) => {}
+                Err(error) => break Some(error),
+            }
+        };
+        let error = match stream_error {
+            Some(error) => error,
+            None => reader.finish().expect_err("changed candidate must fail"),
+        };
+        assert_eq!(
+            error.code(),
+            tokenmaster_store::StoreErrorCode::StaleBackupCandidate,
+            "mutation={mutation}"
+        );
+    }
     Ok(())
 }

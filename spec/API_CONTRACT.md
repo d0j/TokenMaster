@@ -615,23 +615,25 @@ Every successful publication is reread and returns a `PortableSettingsTarget` wi
 nonzero generation and portable SHA-256 digest. Reconstruction rejects generation
 zero; verification compares both generation and a freshly recomputed typed digest.
 Task 4 alone does not claim catalog, retention, maintenance, bootstrap, or restore.
-Task 8 implements the catalog/retention subset below; maintenance, bootstrap, and
-restore remain future fixed APIs.
+Tasks 8-9 implement the catalog/retention and maintenance subsets below; bootstrap
+and restore remain future fixed APIs.
 
-The implemented Task 5 store subset exposes only `BackupSource::new`,
-`BackupStaging::new`, `BackupControl::new`, `create_online_snapshot`,
+The implemented Task 5/9 store subset exposes only `BackupSource::new`,
+`BackupStaging::new`, `BackupControl::{new,is_cancelled}`, `create_online_snapshot`,
 `inspect_archive_version`, `verify_backup_candidate`, and
 `create_compact_snapshot`, plus explicit candidate discard and fixed-name abandoned-
 candidate recovery. The source always names the implemented archive; staging chooses
 only fixed create-new children. A verified candidate is an owning capability bound to
 schema version, defensive runtime policy, physical file identity, exact length, and
-SHA-256. Every consumer revalidates that identity before and after use. None of these
-APIs accepts caller SQL, a filename, an output path, or a SQLite connection.
+SHA-256. Task 9 adds only its bounded path-free reader through
+`VerifiedBackupCandidate::open_reader`; every consumer revalidates identity before and
+after use. None of these APIs accepts caller SQL, a filename, an output path, or a
+SQLite connection.
 
 The implemented Task 6/8 state subset exposes typed `ConfigPackage::{write,read}` and
 `BackupPackage::{write,write_to_backup_stage,verify_backup_stage,read}`,
 `BackupMetadata`, the three fixed compression profiles,
-the five fixed backup purposes, verified package values, and path-private receipts.
+the six fixed backup purposes, verified package values, and path-private receipts.
 Public codec methods accept only a platform-owned `DurableFileReader`,
 `DurableStagedFile`, or sealed exact-slot `BackupStagedFile`; raw generic `Read`/`Write`
 helpers remain private and the authority audit permits exactly the named typed writer
@@ -679,6 +681,34 @@ returns or deletes at most one exact verified unprotected point, after full curr
 verified-set and target content revalidation plus directory-generation confirmation;
 another deletion requires rebuild and replan. No public state value returns a path,
 filename, physical identity, or digest.
+
+The implemented Task 9 subset exposes `MaintenanceCoordinator`, `MaintenanceSchedule`,
+`MaintenanceWorker`, and `BackupMaintenanceRuntime`. Admission is started, coalesced,
+an explicit empty-install/corrupt-quarantine mandatory bypass, or a stable rejection.
+The coordinator owns one active and one merged follow-up; a second distinct mandatory
+guard is busy rather than silently replaced. `MaintenancePermit` exposes typed purpose,
+urgency, attempt/root request IDs, cooperative cancel, the final-publication boundary,
+and a linked store-owned `BackupControl`; it exposes no raw atomic, path, stream, or
+database handle. `MaintenancePurpose` has no source-retry variant: source retry is an
+internally constructed urgency that preserves the original purpose. A published result
+is accepted only after the permit entered the non-cancellable boundary.
+
+`BackupMaintenanceRuntime` owns and joins exactly one worker and one scheduler. It
+accepts typed manual/mandatory intents, a bounded automatic dirty hint, settings-policy
+updates, and pause/resume/shutdown. Snapshots contain fixed phase/source/purpose/latest-
+completion/counter facts only. The last mandatory-guard completion is retained
+separately from lossy general health so a caller can match the root request and block
+its mutation until exact final success. Empty-install and already quarantined corrupt
+sources are the only explicit no-prior-backup bypasses. `Healthy` startup seeds the
+first ordinary interval at runtime creation; `HealthyUnpublished` stays closed. Turning
+periodic work off removes a merged periodic-origin follow-up without removing an
+internal retry or any mandatory guard.
+
+`VerifiedBackupCandidate::open_reader` returns only a store-owned bounded
+`VerifiedBackupCandidateReader`; `BackupPackage::write_verified_candidate_to_backup_stage`
+is the sole state/store codec bridge. The bridge accepts no path or generic `Read`,
+streams without a database-sized copy, revalidates source identity/length/SHA-256
+before and after consumption, and poisons the package stage on every failure.
 
 The SQLite-specific snapshot and candidate verifier are store-owned fixed APIs.
 The platform package owns durable same-volume replacement and native file selection.

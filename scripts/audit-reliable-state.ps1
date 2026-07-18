@@ -84,11 +84,18 @@ foreach ($line in ($manifestText -split "`r?`n")) {
 }
 $directProductionDependencies = @($dependencyNames | Sort-Object -Unique)
 $expectedDependencies = @(
-    'age', 'serde', 'serde_json', 'sha2', 'thiserror', 'tokenmaster-platform', 'zstd'
+    'age', 'serde', 'serde_json', 'sha2', 'thiserror', 'tokenmaster-platform',
+    'tokenmaster-store', 'zstd'
 )
 if ($directProductionDependencies.Count -ne $expectedDependencies.Count -or
     @($expectedDependencies | Where-Object { $_ -notin $directProductionDependencies }).Count -ne 0) {
     throw "TM-STATE-DEPENDENCIES: direct dependency set drifted: $($directProductionDependencies -join ', ')"
+}
+if (@([regex]::Matches(
+            $manifestText,
+            '(?m)^tokenmaster-store\s*=\s*\{\s*path\s*=\s*"\.\./store"\s*\}\s*$'
+        )).Count -ne 1) {
+    throw 'TM-STATE-STORE-PIN: store interop must resolve through the exact workspace path'
 }
 if ($rootManifestText -notmatch '(?m)^zstd\s*=\s*\{\s*version\s*=\s*"=0\.13\.3"\s*,\s*default-features\s*=\s*false\s*\}\s*$' -or
     $manifestText -notmatch '(?m)^zstd\.workspace\s*=\s*true\s*$') {
@@ -130,6 +137,12 @@ $approvedPackageCapabilityImportPattern = '(?ms)^\s*use\s+tokenmaster_platform\s
 $approvedSettingsPlatformPattern = '(?m)^\s*use\s+tokenmaster_platform\s*::\s*ValidatedLocalDirectory\s*;\s*$'
 $approvedCatalogPlatformPattern = '(?ms)^\s*use\s+tokenmaster_platform\s*::\s*\{\s*BackupDirectory\s*,\s*BackupDirectoryEntry\s*,\s*BackupDirectoryError\s*,\s*BackupDirectoryGeneration\s*,\s*MAX_DURABLE_FILE_BYTES\s*,?\s*\}\s*;\s*$'
 $approvedRetentionPlatformPattern = '(?m)^\s*use\s+tokenmaster_platform\s*::\s*\{\s*BackupDirectory\s*,\s*BackupDirectoryError\s*,\s*MAX_BACKUP_DIRECTORY_FILES\s*,?\s*\}\s*;\s*$'
+$approvedStoreCandidatePattern = '(?m)^\s*use\s+tokenmaster_store\s*::\s*\{\s*StoreErrorCode\s*,\s*VerifiedBackupCandidateReader\s*,?\s*\}\s*;\s*$'
+$approvedMaintenanceStoreControlPattern = '(?m)^use tokenmaster_store::BackupControl;\r?$'
+$approvedMaintenanceCoordinatorStdPattern = '(?m)^use std::sync::Arc;\r?\nuse std::sync::atomic::\{AtomicBool, AtomicU8, Ordering\};\r?\nuse std::time::Duration;\r?$'
+$approvedMaintenanceSchedulerStdPattern = '(?m)^use std::sync::mpsc::\{Receiver, RecvTimeoutError, SyncSender, TrySendError, sync_channel\};\r?\nuse std::sync::\{Arc, Mutex\};\r?\nuse std::thread::\{Builder, JoinHandle\};\r?\nuse std::time::\{Duration, Instant\};\r?$'
+$approvedMaintenanceWorkerStdPattern = '(?m)^use std::panic::\{AssertUnwindSafe, catch_unwind, set_hook, take_hook\};\r?\nuse std::sync::mpsc::\{Receiver, SyncSender, TrySendError, sync_channel\};\r?\nuse std::sync::\{Arc, Mutex, Once\};\r?\nuse std::thread::\{Builder, JoinHandle\};\r?$'
+$approvedMaintenanceOwnerStdPattern = '(?m)^mod coordinator;\r?\nmod scheduler;\r?\nmod worker;\r?\n\r?\nuse core::fmt;\r?\nuse std::sync::\{Arc, Mutex\};\r?$'
 $approvedStdIoImports = @([regex]::Matches($productionText, $approvedStdIoPattern))
 $approvedPackageReaderIoImports = @(
     [regex]::Matches($productionText, $approvedPackageReaderIoPattern)
@@ -153,6 +166,24 @@ $approvedCatalogPlatformImports = @(
 $approvedRetentionPlatformImports = @(
     [regex]::Matches($productionText, $approvedRetentionPlatformPattern)
 )
+$approvedStoreCandidateImports = @(
+    [regex]::Matches($productionText, $approvedStoreCandidatePattern)
+)
+$approvedMaintenanceStoreControlImports = @(
+    [regex]::Matches($productionText, $approvedMaintenanceStoreControlPattern)
+)
+$approvedMaintenanceCoordinatorStdImports = @(
+    [regex]::Matches($productionText, $approvedMaintenanceCoordinatorStdPattern)
+)
+$approvedMaintenanceSchedulerStdImports = @(
+    [regex]::Matches($productionText, $approvedMaintenanceSchedulerStdPattern)
+)
+$approvedMaintenanceWorkerStdImports = @(
+    [regex]::Matches($productionText, $approvedMaintenanceWorkerStdPattern)
+)
+$approvedMaintenanceOwnerStdImports = @(
+    [regex]::Matches($productionText, $approvedMaintenanceOwnerStdPattern)
+)
 if ($approvedStdIoImports.Count -ne 1 -or
     $approvedPackageReaderIoImports.Count -ne 1 -or
     $approvedPackageWriterIoImports.Count -ne 3 -or
@@ -161,8 +192,21 @@ if ($approvedStdIoImports.Count -ne 1 -or
     $approvedPackageCapabilityImports.Count -ne 1 -or
     $approvedSettingsPlatformImports.Count -ne 1 -or
     $approvedCatalogPlatformImports.Count -ne 1 -or
-    $approvedRetentionPlatformImports.Count -ne 1) {
+    $approvedRetentionPlatformImports.Count -ne 1 -or
+    $approvedStoreCandidateImports.Count -ne 1 -or
+    $approvedMaintenanceStoreControlImports.Count -ne 1 -or
+    $approvedMaintenanceCoordinatorStdImports.Count -ne 1 -or
+    $approvedMaintenanceSchedulerStdImports.Count -ne 1 -or
+    $approvedMaintenanceWorkerStdImports.Count -ne 1 -or
+    $approvedMaintenanceOwnerStdImports.Count -ne 1) {
     throw 'TM-STATE-APPROVED-IO: exact bounded record/package capability imports must match the fixed allowlist'
+}
+$backupControlUses = @([regex]::Matches($productionText, '\bBackupControl\b'))
+$verifiedCandidateReaderUses = @(
+    [regex]::Matches($productionText, '\bVerifiedBackupCandidateReader\b')
+)
+if ($backupControlUses.Count -ne 3 -or $verifiedCandidateReaderUses.Count -ne 4) {
+    throw 'TM-STATE-STORE-AUTHORITY: exact store capability use count drifted'
 }
 $validatedDirectoryUses = @(
     [regex]::Matches($productionText, '\bValidatedLocalDirectory\b')
@@ -205,6 +249,12 @@ $authorityText = [regex]::Replace($authorityText, $approvedPackageCapabilityImpo
 $authorityText = [regex]::Replace($authorityText, $approvedSettingsPlatformPattern, '')
 $authorityText = [regex]::Replace($authorityText, $approvedCatalogPlatformPattern, '')
 $authorityText = [regex]::Replace($authorityText, $approvedRetentionPlatformPattern, '')
+$authorityText = [regex]::Replace($authorityText, $approvedStoreCandidatePattern, '')
+$authorityText = [regex]::Replace($authorityText, $approvedMaintenanceStoreControlPattern, '')
+$authorityText = [regex]::Replace($authorityText, $approvedMaintenanceCoordinatorStdPattern, '')
+$authorityText = [regex]::Replace($authorityText, $approvedMaintenanceSchedulerStdPattern, '')
+$authorityText = [regex]::Replace($authorityText, $approvedMaintenanceWorkerStdPattern, '')
+$authorityText = [regex]::Replace($authorityText, $approvedMaintenanceOwnerStdPattern, '')
 
 $publicPathPattern = '(?s)\bpub(?:\([^)]*\))?\s+(?:(?:const|async|unsafe)\s+)*fn\s+\w+[^;{]*(?:std::path::)?(?:Path|PathBuf)\b[^;{]*[;{]'
 if ($productionText -match $publicPathPattern) {
@@ -232,6 +282,20 @@ $approvedBackupStageVerifiers = @(
 if ($approvedBackupStageVerifiers.Count -ne 1) {
     throw 'TM-STATE-BACKUP-DIRECTORY-AUTHORITY: exactly one typed backup-stage verifier is allowed'
 }
+$approvedVerifiedCandidateStageWriterPattern = '(?s)\bpub\s+fn\s+write_verified_candidate_to_backup_stage\s*\(\s*settings\s*:\s*&PortableSettingsCandidate\s*,\s*mut\s+database\s*:\s*VerifiedBackupCandidateReader\s*<\s*''_\s*>\s*,\s*compression\s*:\s*BackupCompression\s*,\s*metadata\s*:\s*BackupMetadata\s*,\s*destination\s*:\s*&mut\s+BackupStagedFile\s*,?\s*\)\s*->\s*Result\s*<\s*PackageReceipt\s*,\s*StateError\s*>\s*\{'
+$approvedVerifiedCandidateStageWriters = @(
+    [regex]::Matches($productionText, $approvedVerifiedCandidateStageWriterPattern)
+)
+if ($approvedVerifiedCandidateStageWriters.Count -ne 1) {
+    throw 'TM-STATE-BACKUP-DIRECTORY-AUTHORITY: exactly one verified-candidate stage writer is allowed'
+}
+$approvedMaintenanceBackupControlPattern = '(?s)\bpub\s+fn\s+backup_control\s*\(\s*&self\s*\)\s*->\s*Result\s*<\s*BackupControl\s*,\s*StateError\s*>\s*\{'
+$approvedMaintenanceBackupControls = @(
+    [regex]::Matches($productionText, $approvedMaintenanceBackupControlPattern)
+)
+if ($approvedMaintenanceBackupControls.Count -ne 1) {
+    throw 'TM-STATE-STORE-AUTHORITY: exactly one permit-linked backup control is allowed'
+}
 $backupAuthorityText = [regex]::Replace(
     $productionText,
     $approvedBackupStageWriterPattern,
@@ -242,11 +306,25 @@ $backupAuthorityText = [regex]::Replace(
     $approvedBackupStageVerifierPattern,
     'pub fn verify_backup_stage() {'
 )
+$backupAuthorityText = [regex]::Replace(
+    $backupAuthorityText,
+    $approvedVerifiedCandidateStageWriterPattern,
+    'pub fn write_verified_candidate_to_backup_stage() {'
+)
+$backupAuthorityText = [regex]::Replace(
+    $backupAuthorityText,
+    $approvedMaintenanceBackupControlPattern,
+    'pub fn backup_control() {'
+)
 $publicBackupDirectoryAuthorityPattern = '(?s)\bpub\s+(?:(?:const|async|unsafe)\s+)*fn\s+\w+[^;{]*\b(?:BackupDirectoryEntry|BackupDirectoryGeneration|BackupStagedFile)\b[^;{]*[;{]'
 if ($backupAuthorityText -match $publicBackupDirectoryAuthorityPattern) {
     throw 'TM-STATE-BACKUP-DIRECTORY-AUTHORITY: raw platform backup tokens must remain inside typed catalog and retention operations'
 }
-$forbiddenAuthorityPattern = '(?s)https?://|\bstd\b|\btokenmaster_platform\b|\bmacro_rules\s*!|\b(?:Command|TcpStream|TcpListener|UdpSocket)\b|\b(?:slint|rusqlite|tokio|reqwest|ureq|webbrowser|headless_chrome|zip|tar)::|\b(?:SELECT|INSERT|UPDATE|DELETE\s+FROM|PRAGMA)\b|\b(?:include|include_str|include_bytes)!\s*\(|#\s*\[\s*path\s*=|powershell(?:\.exe)?|cmd(?:\.exe)?|bash(?:\.exe)?|\bsh\s+-c\b|\bAuthorization\b|\bBearer\s'
+$publicStoreAuthorityPattern = '(?s)\bpub\s+(?:(?:const|async|unsafe)\s+)*fn\s+\w+[^;{]*\b(?:BackupControl|VerifiedBackupCandidateReader)\b[^;{]*[;{]'
+if ($backupAuthorityText -match $publicStoreAuthorityPattern) {
+    throw 'TM-STATE-STORE-AUTHORITY: raw store capabilities must remain inside the exact maintenance and package bridges'
+}
+$forbiddenAuthorityPattern = '(?s)https?://|\bstd\b|\btokenmaster_platform\b|\btokenmaster_store\b|\bmacro_rules\s*!|\b(?:Command|TcpStream|TcpListener|UdpSocket)\b|\b(?:slint|rusqlite|tokio|reqwest|ureq|webbrowser|headless_chrome|zip|tar)::|\b(?:SELECT|INSERT|UPDATE|DELETE\s+FROM|PRAGMA)\b|\b(?:include|include_str|include_bytes)!\s*\(|#\s*\[\s*path\s*=|powershell(?:\.exe)?|cmd(?:\.exe)?|bash(?:\.exe)?|\bsh\s+-c\b|\bAuthorization\b|\bBearer\s'
 if ($authorityText -cmatch $forbiddenAuthorityPattern) {
     throw 'TM-STATE-FORBIDDEN-AUTHORITY: state source contains standard-library/platform/macro/filesystem/network/shell/process/SQL/UI/archive/external-source authority'
 }
@@ -266,6 +344,9 @@ if ($SourceOnly) {
         direct_production_dependency_count = $directProductionDependencies.Count
         rust_source_file_count = $rustFiles.Count
         approved_std_io_import_count = $approvedStdIoImports.Count + $approvedPackageReaderIoImports.Count + $approvedPackageWriterIoImports.Count
+        approved_maintenance_std_import_count = $approvedMaintenanceCoordinatorStdImports.Count + $approvedMaintenanceSchedulerStdImports.Count + $approvedMaintenanceWorkerStdImports.Count + $approvedMaintenanceOwnerStdImports.Count
+        approved_store_candidate_import_count = $approvedStoreCandidateImports.Count
+        approved_maintenance_store_control_import_count = $approvedMaintenanceStoreControlImports.Count
         approved_platform_import_count = $approvedPlatformImports.Count + $approvedPackageCapabilityExports.Count + $approvedPackageCapabilityImports.Count + $approvedSettingsPlatformImports.Count + $approvedCatalogPlatformImports.Count + $approvedRetentionPlatformImports.Count
         validated_directory_capability_use_count = $validatedDirectoryUses.Count
         forbidden_authority_count = 0
@@ -354,6 +435,9 @@ if ($featureTreeText -match '(?i)\bage feature "(?:armor|async|cli-common|plugin
     direct_production_dependency_count = $metadataDependencies.Count
     rust_source_file_count = $rustFiles.Count
     approved_std_io_import_count = $approvedStdIoImports.Count + $approvedPackageReaderIoImports.Count + $approvedPackageWriterIoImports.Count
+    approved_maintenance_std_import_count = $approvedMaintenanceCoordinatorStdImports.Count + $approvedMaintenanceSchedulerStdImports.Count + $approvedMaintenanceWorkerStdImports.Count + $approvedMaintenanceOwnerStdImports.Count
+    approved_store_candidate_import_count = $approvedStoreCandidateImports.Count
+    approved_maintenance_store_control_import_count = $approvedMaintenanceStoreControlImports.Count
     approved_platform_import_count = $approvedPlatformImports.Count + $approvedPackageCapabilityExports.Count + $approvedPackageCapabilityImports.Count + $approvedSettingsPlatformImports.Count + $approvedCatalogPlatformImports.Count + $approvedRetentionPlatformImports.Count
     validated_directory_capability_use_count = $validatedDirectoryUses.Count
     forbidden_authority_count = 0

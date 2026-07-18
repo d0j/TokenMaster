@@ -141,6 +141,26 @@ SHM set, and use a durable idempotent journal. Interrupted restore MUST resume b
 any SQLite open. Busy, access-denied, disk-full, transient-I/O, unsupported-location,
 and schema-too-new failures MUST NOT authorize replacement.
 
+Automatic maintenance MUST own exactly one worker and one scheduler. It MUST retain
+only one active request, one urgency-merged follow-up, one latest general completion,
+and one latest mandatory-guard completion. Priority is mandatory safety point, manual,
+source retry, then periodic. Automatic work MUST remain disabled until the first
+healthy publication. A startup state already proved `Healthy` MAY seed that truth at
+the current monotonic tick; `HealthyUnpublished` MUST NOT. Automatic work MUST run only
+after the configured quiet window and ordinary minimum interval and coalesce resume or
+clock-discontinuity catch-up to one request. The periodic-disable setting MUST affect
+only quiet/interval work and MUST discard an already merged periodic-origin follow-up.
+Source retry is internal urgency, never a caller-submit purpose.
+
+Cancellation MUST propagate into the bounded SQLite backup control before final
+publication. Final publication and the immediately following proof/retention update
+MUST be non-cancellable. A `Published` completion without first entering that boundary,
+or a `Cancelled` completion after it, MUST fail as an internal invariant. A failed
+candidate MAY trigger one fresh retry while retaining
+the original backup purpose and guarded request identity; two integrity/semantic
+failures for the same unchanged source identity MUST mark the source suspect and stop
+new backup mutation admission.
+
 The automatic-backup namespace MUST contain at most 32 fixed private slots and MUST
 reject unexpected names, links, reparse points, hard links, and ambiguous physical
 identities. Its catalog MUST be disposable and rebuildable from bounded package
@@ -326,8 +346,10 @@ release performance or soak receipts.
 Settings, backup, verification, import, restore preparation, and compression MUST run
 outside the Slint event thread. Maintenance MUST retain at most one active operation,
 one aggregate follow-up, one latest health snapshot, fixed streaming buffers, and one
-compression context. It MUST NOT allocate a database-sized buffer, create a thread or
-queue node per trigger, or use multithreaded compression.
+compression context. The backup contour MUST own exactly one worker thread and one
+scheduler thread with one shared timer, not a timer per request. It MUST NOT allocate
+a database-sized buffer, create a thread or queue node per trigger, or use
+multithreaded compression.
 
 A 10,000-trigger burst MUST remain capacity one. Repeated success, failure, cancel,
 sleep/resume, and restore cycles MUST return private memory, file/process handles,

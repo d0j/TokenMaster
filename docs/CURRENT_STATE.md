@@ -892,7 +892,7 @@ audit rejects public generic stream authority. Codec/final-seal failure irrevers
 discards and poisons output so later write/seal/publish is `InvalidState`.
 
 Evidence passes a frozen 405-byte config vector with complete-file SHA-256, all three
-profiles times all five purposes, a 24 MiB streaming database, every structural
+profiles times the then-five purposes, a 24 MiB streaming database, every structural
 flip/truncation class, overflow/unknown/duplicate/concat/trailing/checksum/digest
 mutations, an independently resealed missing frame end, a 16 MiB-window frame, and a
 300-to-256 content-size bomb. Focused package tests are 5/5 and adversarial tests
@@ -956,6 +956,40 @@ The final Task 8 workspace baseline passes clean-root (17.4 seconds), formatting
 seconds), strict locked full-workspace Clippy (13.3 seconds), and the complete locked
 workspace test/doctest suite (566.3 seconds total).
 
+Task 9 now adds constant-size backup maintenance. `MaintenanceCoordinator` retains
+one active request and one urgency-merged follow-up; 10,000 concurrent hints do not
+create a queue. Mandatory safety points outrank manual, source retry, and periodic
+work, while a second unresolved mandatory guard is explicitly busy. A retry gets a
+fresh attempt ID and lower scheduling urgency but preserves the original root request
+and backup purpose, so a failed pre-migration point cannot turn into periodic truth.
+Two failures against the same opaque source identity enter `Suspect`.
+
+`BackupMaintenanceRuntime` owns exactly one worker and one scheduler/shared timer,
+with joined pause/resume/shutdown/Drop lifecycle. Exact `Healthy` restart truth seeds
+the first interval at the current monotonic tick while `HealthyUnpublished` remains
+closed. Automatic work requires both quiet and ordinary interval gates, emits one
+resume/clock-rollback catch-up, and periodic disablement discards a merged periodic-
+origin follow-up without discarding an internal retry or mandatory guard. Health is fixed latest completion/counters plus one exact
+mandatory-guard completion; no request/progress history is retained. A permit creates
+a store-owned `BackupControl` linked to the same cancellation state, and final
+publication is a non-cancellable compare-exchange boundary. `Published` before or
+`Cancelled` after that boundary is an internal-invariant failure.
+
+The store now exposes one bounded path-free `VerifiedBackupCandidateReader`. It checks
+physical identity, length, and full SHA-256 before open and after complete streamed
+consumption. The sole state/store package bridge writes that reader directly into a
+sealed unpublished stage and discards/poisons output on replacement, truncation,
+append, cancellation, source/destination, codec, or seal failure. The package format
+adds backward-compatible purpose value 6 for pre-destructive maintenance; prior values
+remain unchanged. Focused maintenance 17/17, resource 1/1, store backup 7/7, catalog
+6/6, strict state Clippy, workspace authority audit, and 47/47 mutation tests pass.
+The first independent review's four Important findings and one Minor evidence finding
+have corresponding regressions and fixes; post-fix rereview reports Critical 0,
+Important 0, Minor 0 and `Ready`. The final Task 9 baseline passes clean-root in 14.940
+seconds, formatting in 1.256 seconds, strict locked workspace Clippy in 12.340 seconds,
+and the complete locked workspace test/doctest suite in 507.6 seconds. The live-auth
+Codex transport test remains the one expected environment-gated ignored test.
+
 Remaining ownership is: store for SQLite Online Backup and candidate verification,
 platform for durable same-volume replacement and sealed file selection, state for
 settings/packages/retention/recovery, and app for runtime shutdown/restart and safe
@@ -973,18 +1007,18 @@ transient-I/O, unsupported-location, and schema-too-new results preserve current
 truth. No valid backup leads to explicit quarantine and authoritative-source rebuild,
 never fabricated zero or automatic corrupt-row salvage.
 
-Only Tasks 1-8 are implemented. No maintenance worker, restore, safe mode, Data &
-Recovery UI, or new acceptance evidence exists yet. Task 9 capacity-one backup
-maintenance runtime is the immediate next slice and must compose the existing store-
-owned verified candidate, sealed stage verification, admission, publication, and
-one-delete/rebuild cycle without introducing path or generic-stream access.
+Only Tasks 1-9 are implemented. No restore journal, safe mode, Data & Recovery UI, or
+new acceptance evidence exists yet. Task 10 durable restore journal and quarantine is
+the immediate next slice. Application composition of the complete snapshot -> verify
+-> package -> verify -> publish -> retain operation remains Task 12 and must use the
+fixed Task 9 runtime/reader boundaries.
 
 ## Next implementation slice
 
-Execute P3-D.0 Task 9 from
-`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: build the capacity-
-one maintenance runtime over the completed snapshot/package/catalog/retention
-capabilities while preserving off-UI bounded work and exact proof identities.
+Execute P3-D.0 Task 10 from
+`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: implement the durable
+six-state restore journal, bounded quarantine, rollback, and crash-resume path before
+any SQLite open.
 
 P2-D quota history core is complete under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: Tasks 1-8 cover
@@ -1001,7 +1035,7 @@ immutable read snapshots, and publication through the existing Codex runtime wit
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
 workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, P3-B.2, P3-B.3, and P3-C are
-complete; P3-D.0 Reliable State is active with Tasks 1-8 complete and Task 9 next, followed
+complete; P3-D.0 Reliable State is active with Tasks 1-9 complete and Task 10 next, followed
 by the remaining P3-D supporting data-bearing routes. Activation
 remains a later independently authorized capability. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.

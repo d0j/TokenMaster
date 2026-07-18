@@ -27,8 +27,9 @@ Describe "TokenMaster reliable-state authority audit" {
             $fixture = Join-Path $TestDrive $Name
             $stateRoot = Join-Path $fixture "crates\state"
             $platformRoot = Join-Path $fixture "crates\platform"
+            $storeRoot = Join-Path $fixture "crates\store"
             $hostRoot = Join-Path $fixture "crates\host"
-            New-Item -ItemType Directory -Path $stateRoot, $platformRoot, $hostRoot -Force |
+            New-Item -ItemType Directory -Path $stateRoot, $platformRoot, $storeRoot, $hostRoot -Force |
                 Out-Null
             Copy-Item -LiteralPath (Join-Path $RepositoryRoot "crates\state\src") `
                 -Destination $stateRoot -Recurse
@@ -37,7 +38,7 @@ Describe "TokenMaster reliable-state authority audit" {
                 @'
 [workspace]
 resolver = "3"
-members = ["crates/state", "crates/platform"]
+members = ["crates/state", "crates/platform", "crates/store"]
 
 [workspace.dependencies]
 age = { version = "=0.12.1", default-features = false }
@@ -72,6 +73,7 @@ serde_json = "1"
 sha2 = "0.11"
 thiserror = "2"
 tokenmaster-platform = { path = "../platform" }
+tokenmaster-store = { path = "../store" }
 zstd.workspace = true
 '@ | Set-Content -LiteralPath (Join-Path $stateRoot "Cargo.toml")
             if (-not $IncludeStateMember) {
@@ -103,6 +105,17 @@ edition = "2024"
             "#![forbid(unsafe_code)]" |
                 Set-Content -LiteralPath (Join-Path $platformRoot "src\lib.rs")
 
+            New-Item -ItemType Directory -Path (Join-Path $storeRoot "src") -Force |
+                Out-Null
+            @'
+[package]
+name = "tokenmaster-store"
+version = "0.1.0"
+edition = "2024"
+'@ | Set-Content -LiteralPath (Join-Path $storeRoot "Cargo.toml")
+            "#![forbid(unsafe_code)]" |
+                Set-Content -LiteralPath (Join-Path $storeRoot "src\lib.rs")
+
             New-Item -ItemType Directory -Path (Join-Path $hostRoot "src") -Force |
                 Out-Null
             @'
@@ -133,8 +146,11 @@ tokenmaster-state = { path = "../state" }
         $result.result | Should -Be "pass"
         $result.package | Should -Be "tokenmaster-state"
         $result.binary_target_count | Should -Be 0
-        $result.direct_production_dependency_count | Should -Be 7
+        $result.direct_production_dependency_count | Should -Be 8
         $result.approved_std_io_import_count | Should -Be 5
+        $result.approved_maintenance_std_import_count | Should -Be 4
+        $result.approved_store_candidate_import_count | Should -Be 1
+        $result.approved_maintenance_store_control_import_count | Should -Be 1
         $result.approved_platform_import_count | Should -Be 6
         $result.forbidden_authority_count | Should -Be 0
     }
@@ -169,6 +185,22 @@ tokenmaster-state = { path = "../state" }
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-STATE-AGE-PIN*"
+    }
+
+    It "rejects store interop dependency source drift" {
+        $fixture = New-StateAuditFixture -Name "store-source-drift"
+        $manifest = Join-Path $fixture "crates\state\Cargo.toml"
+        $text = [System.IO.File]::ReadAllText($manifest)
+        [System.IO.File]::WriteAllText(
+            $manifest,
+            $text.Replace(
+                'tokenmaster-store = { path = "../store" }',
+                'tokenmaster-store = "0.1"'
+            )
+        )
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-STORE-PIN*"
     }
 
     It "rejects a state binary target" {
@@ -293,6 +325,15 @@ tokenmaster-state = { path = "../state" }
             Should -Throw "*TM-STATE-FORBIDDEN-AUTHORITY*"
     }
 
+    It "rejects a direct store capability reexport" {
+        $fixture = New-StateAuditFixture -Name "store-reexport"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\lib.rs") `
+            -Value 'pub use tokenmaster_store::VerifiedBackupCandidateReader;'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-STORE-AUTHORITY*"
+    }
+
     It "rejects std io authority through the approved alias" {
         $fixture = New-StateAuditFixture -Name "approved-io-alias-bypass"
         Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\record.rs") `
@@ -354,6 +395,33 @@ tokenmaster-state = { path = "../state" }
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-STATE-BACKUP-DIRECTORY-AUTHORITY*"
+    }
+
+    It "rejects a second verified-candidate package bridge" {
+        $fixture = New-StateAuditFixture -Name "second-verified-candidate-writer"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\package\writer.rs") `
+            -Value "pub fn leak_candidate(database: VerifiedBackupCandidateReader<'_>) { let _ = database; }"
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-STORE-AUTHORITY*"
+    }
+
+    It "rejects a second public store cancellation-control escape" {
+        $fixture = New-StateAuditFixture -Name "second-store-control"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\maintenance\coordinator.rs") `
+            -Value 'pub fn leak_control(control: BackupControl) { let _ = control; }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-STORE-AUTHORITY*"
+    }
+
+    It "rejects an alias escape of an approved store capability" {
+        $fixture = New-StateAuditFixture -Name "store-capability-alias"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\maintenance\coordinator.rs") `
+            -Value 'pub type LeakedBackupControl = BackupControl;'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-STORE-AUTHORITY*"
     }
 
     It "keeps backup staging publication sealed behind BackupDirectory" {

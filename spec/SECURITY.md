@@ -792,6 +792,43 @@ If that boundary changes, platform-specific no-follow open plus handle/path iden
 validation is required before raising the claim; this is a recorded hardening item,
 not current release evidence.
 
+Implemented Task 9 adds no path, generic stream, SQL, shell, network, UI, or async
+authority. State depends on store only for the exact `BackupControl` and
+`VerifiedBackupCandidateReader` capabilities; the source audit permits those named
+imports plus four exact standard-library synchronization/thread import blocks. It
+still rejects arbitrary public paths/streams, direct filesystem enumeration, Slint,
+Tokio, and a second archive/extractor surface.
+
+The verified-candidate reader revalidates the complete physical identity, length, and
+SHA-256 before open, binds the opened handle, counts/hashes every bounded chunk, rejects
+early EOF and appended data, and repeats namespace identity verification after EOF.
+The sole state/store package bridge gives source errors precedence over destination
+errors and irreversibly discards the unpublished stage on replacement, truncation,
+append, cancellation, codec, seal, or destination failure.
+
+Maintenance owns one capacity-one worker and one capacity-one scheduler wake channel.
+Ten thousand hints retain one active request and one merged follow-up, not attacker-
+proportional queue nodes. Only one shared scheduler timeout exists. Worker panics are
+contained behind the existing thread-local redaction pattern; `Debug`, completion,
+and snapshot values contain fixed enums/counters only. Pause and shutdown cooperatively
+cancel the linked store control and `Drop` joins both threads. A compare-exchange makes
+final publication non-cancellable, preventing a late cancel from reporting that an
+already published backup was discarded. The coordinator additionally rejects
+`Published` before that state and `Cancelled` after it, so the executor cannot bypass
+the state machine by returning an advisory enum.
+
+Automatic scheduling is ineligible before first healthy publication and while the
+source is suspect; exact `Healthy` startup truth seeds a new monotonic interval anchor,
+while `HealthyUnpublished` does not. One failed source attempt may continue only as a fresh retry with
+the same root request and backup purpose; two failures against the same opaque source
+identity enter `Suspect`. Source retry is not a public submit purpose. Disabling
+periodic scheduling also removes a pending periodic-origin follow-up but preserves an
+already owned internal retry. Mandatory pre-migration, pre-restore, and pre-destructive
+guards remain active. A second guard cannot overwrite
+an unresolved guard, and only the separately retained matching final completion may
+authorize its mutation. Empty first install and an already quarantined definitively
+corrupt source are explicit typed bypasses, not inferred success.
+
 The live archive keeps one fixed identity and writer sidecar. Whole-file restore MUST
 hold that guard, close every SQLite owner, preserve current main/WAL/SHM in quarantine,
 and publish only a complete reverified candidate through a redundant idempotent

@@ -6,6 +6,35 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.0 Task 9 capacity-one backup maintenance. The native runtime owns
+  exactly one worker and one scheduler/shared timer, one active request, one urgency-
+  merged follow-up, one latest completion, and one latest mandatory-guard completion.
+  Ten thousand hints remain constant state; pause/resume/shutdown/Drop join all owned
+  work and a Windows 12-warm-up/24-measured success/failure/cancel gate returns thread,
+  handle, private-memory, USER, and GDI topology to its post-warm-up envelope.
+- Added scalar automatic scheduling: `Healthy` restart truth seeds a new monotonic
+  interval anchor while `HealthyUnpublished` stays closed; the default is five-minute
+  quiet plus six-hour ordinary minimum with one resume/clock-rollback catch-up.
+  Periodic disablement drops an already merged periodic-origin follow-up but cannot
+  disable pre-migration, pre-restore, pre-destructive guards, or an owned internal
+  retry. Retry is internal urgency, not a submit purpose; it keeps the original root
+  request and package purpose, and two same-identity failures enter `Suspect`.
+- Linked `MaintenancePermit` cancellation directly to store `BackupControl` without
+  exposing raw atomics, made final publication non-cancellable, and reject `Published`
+  before or `Cancelled` after that state boundary. Added the bounded
+  path-free `VerifiedBackupCandidateReader` and sole typed state/store package bridge;
+  replacement, truncation, append, cancellation, codec/output, or seal failure rechecks
+  identity/length/SHA-256 and irreversibly poisons the unpublished stage.
+- Added backward-compatible backup purpose value 6 for pre-destructive maintenance,
+  leaving the first five v1 values unchanged. Added 17 maintenance contracts, one
+  Windows resource contract, two verified-reader store contracts, and success plus
+  three-mutation state/store composition coverage. Focused strict state Clippy and the
+  reliable-state source/workspace authority audit and 47 mutation tests pass. The
+  post-fix independent rereview reports Critical 0, Important 0, Minor 0 and `Ready`;
+  the final baseline passes clean-root in 14.940 seconds, formatting in 1.256 seconds,
+  strict locked workspace Clippy in 12.340 seconds, and the complete locked workspace
+  test/doctest suite in 507.6 seconds.
+
 - Implemented P3-D.0 Task 8 sealed backup catalog and bounded retention. Platform owns
   the canonical local `backups` directory, exactly 32 private package slots, opaque
   physical entry/generation tokens, bounded staging/read/publication, link/reparse/
@@ -61,7 +90,7 @@ All notable changes are recorded here.
   and irreversible staged-file discard/poison. Public package APIs accept only these
   capabilities; every codec/final-seal failure prevents later write, seal, and publish.
   The authority audit also rejects future public generic stream methods.
-- Added a frozen 405-byte config vector, all three profiles across all five backup
+- Added a frozen 405-byte config vector, all three profiles across the then-five backup
   purposes, 24 MiB streaming coverage, structural flips/truncation, false/overflowing
   lengths, unknown/duplicate/concatenated/trailing frames, resealed missing-end,
   checksum/digest, 16 MiB-window, 300-to-256 bomb, privacy, late-footer, and partial-

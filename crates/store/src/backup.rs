@@ -36,6 +36,7 @@ const SQLITE_HEADER_BYTES: usize = 100;
 const SQLITE_MAGIC: &[u8; 16] = b"SQLite format 3\0";
 const MAX_INTEGRITY_ROWS: usize = 100;
 const IDENTITY_HASH_BUFFER_BYTES: usize = 64 * 1024;
+pub const MAX_VERIFIED_BACKUP_READ_CHUNK_BYTES: usize = IDENTITY_HASH_BUFFER_BYTES;
 const SQLITE_LENGTH_LIMIT_BYTES: i32 = 16 * 1024 * 1024;
 const SQLITE_SQL_LENGTH_LIMIT_BYTES: i32 = 256 * 1024;
 const SQLITE_COLUMN_LIMIT: i32 = 256;
@@ -139,6 +140,11 @@ impl BackupControl {
             return Err(StoreError::new(StoreErrorCode::DeadlineExceeded));
         }
         Ok(())
+    }
+
+    #[must_use]
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Acquire)
     }
 
     fn interrupted_code(&self) -> StoreErrorCode {
@@ -381,11 +387,146 @@ impl VerifiedBackupCandidate {
             Err(StoreError::new(StoreErrorCode::StaleBackupCandidate))
         }
     }
+
+    /// Opens a bounded path-free stream over this exact verified candidate.
+    ///
+    /// The returned reader remains bound to the candidate's physical identity,
+    /// length, and complete SHA-256 proof. Callers must consume it and call
+    /// [`VerifiedBackupCandidateReader::finish`] before publishing derived output.
+    pub fn open_reader<'a>(
+        &'a self,
+        control: &'a BackupControl,
+    ) -> Result<VerifiedBackupCandidateReader<'a>, StoreError> {
+        self.revalidate_identity(control)?;
+        let path = self.candidate.path()?;
+        let file = File::open(path).map_err(|_| StoreError::new(StoreErrorCode::BackupIo))?;
+        let metadata = file
+            .metadata()
+            .map_err(|_| StoreError::new(StoreErrorCode::BackupIo))?;
+        if !metadata.is_file()
+            || is_reparse_point(&metadata)
+            || metadata.len() != self.identity.len
+            || PhysicalFileIdentity::from_file(&file)
+                .map_err(|_| StoreError::new(StoreErrorCode::BackupIo))?
+                != self.identity.physical
+        {
+            return Err(StoreError::new(StoreErrorCode::StaleBackupCandidate));
+        }
+        Ok(VerifiedBackupCandidateReader {
+            candidate: self,
+            control,
+            file,
+            observed_len: 0,
+            hasher: Sha256::new(),
+        })
+    }
 }
 
 impl fmt::Debug for VerifiedBackupCandidate {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("VerifiedBackupCandidate([redacted])")
+    }
+}
+
+/// Bounded stream capability for one unchanged verified SQLite candidate.
+///
+/// This type exposes neither a path nor generic `Read` authority. Its final proof
+/// checks both the opened handle and the candidate namespace after consumption.
+pub struct VerifiedBackupCandidateReader<'a> {
+    candidate: &'a VerifiedBackupCandidate,
+    control: &'a BackupControl,
+    file: File,
+    observed_len: u64,
+    hasher: Sha256,
+}
+
+impl VerifiedBackupCandidateReader<'_> {
+    #[must_use]
+    pub const fn len(&self) -> u64 {
+        self.candidate.identity.len
+    }
+
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.candidate.identity.len == 0
+    }
+
+    #[must_use]
+    pub const fn schema_version(&self) -> u32 {
+        self.candidate.schema_version
+    }
+
+    #[must_use]
+    pub const fn sha256(&self) -> &[u8; 32] {
+        &self.candidate.identity.sha256
+    }
+
+    pub fn read_chunk(&mut self, bytes: &mut [u8]) -> Result<usize, StoreError> {
+        if bytes.is_empty() || bytes.len() > MAX_VERIFIED_BACKUP_READ_CHUNK_BYTES {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        self.control.check()?;
+        let remaining = self
+            .candidate
+            .identity
+            .len
+            .checked_sub(self.observed_len)
+            .ok_or_else(|| StoreError::new(StoreErrorCode::StaleBackupCandidate))?;
+        if remaining == 0 {
+            return self.require_eof();
+        }
+        let read_limit = bytes.len().min(
+            usize::try_from(remaining)
+                .map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))?,
+        );
+        let read = self
+            .file
+            .read(&mut bytes[..read_limit])
+            .map_err(|_| StoreError::new(StoreErrorCode::BackupIo))?;
+        if read == 0 {
+            return Err(StoreError::new(StoreErrorCode::StaleBackupCandidate));
+        }
+        self.observed_len = self
+            .observed_len
+            .checked_add(
+                u64::try_from(read)
+                    .map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))?,
+            )
+            .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?;
+        self.hasher.update(&bytes[..read]);
+        Ok(read)
+    }
+
+    /// Completes the stream and revalidates the exact source proof after EOF.
+    pub fn finish(mut self) -> Result<(), StoreError> {
+        self.control.check()?;
+        if self.observed_len != self.candidate.identity.len || self.require_eof()? != 0 {
+            return Err(StoreError::new(StoreErrorCode::StaleBackupCandidate));
+        }
+        let observed_sha256: [u8; 32] = self.hasher.finalize().into();
+        if observed_sha256 != self.candidate.identity.sha256 {
+            return Err(StoreError::new(StoreErrorCode::StaleBackupCandidate));
+        }
+        self.candidate.revalidate_identity(self.control)
+    }
+
+    fn require_eof(&mut self) -> Result<usize, StoreError> {
+        let mut extra = [0_u8; 1];
+        let read = self
+            .file
+            .read(&mut extra)
+            .map_err(|_| StoreError::new(StoreErrorCode::BackupIo))?;
+        if read == 0 {
+            Ok(0)
+        } else {
+            Err(StoreError::new(StoreErrorCode::StaleBackupCandidate))
+        }
+    }
+}
+
+impl fmt::Debug for VerifiedBackupCandidateReader<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("VerifiedBackupCandidateReader([redacted])")
     }
 }
 

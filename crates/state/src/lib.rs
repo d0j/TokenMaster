@@ -3,6 +3,7 @@
 
 mod catalog;
 mod error;
+mod maintenance;
 mod package;
 #[cfg_attr(
     not(test),
@@ -21,6 +22,16 @@ pub use catalog::{
     BackupCatalog, CatalogGeneration, CatalogHealth, CatalogPoint, CatalogSelection,
 };
 pub use error::{StateError, StateErrorCode};
+pub use maintenance::{
+    BackupMaintenanceRuntime, BackupMaintenanceRuntimeSnapshot, MaintenanceAdmission,
+    MaintenanceClock, MaintenanceCompletion, MaintenanceCoordinator,
+    MaintenanceCoordinatorSnapshot, MaintenanceExecution, MaintenanceOutcome, MaintenancePermit,
+    MaintenancePurpose, MaintenanceRejection, MaintenanceRequestId, MaintenanceSchedule,
+    MaintenanceScheduleSnapshot, MaintenanceSchedulerPhase, MaintenanceSchedulerSnapshot,
+    MaintenanceSourceIdentity, MaintenanceSourceState, MaintenanceTick, MaintenanceTransition,
+    MaintenanceUrgency, MaintenanceWorker, MaintenanceWorkerPhase, MaintenanceWorkerSnapshot,
+    SystemMaintenanceClock,
+};
 pub use package::{
     AGE_SCRYPT_LOG_N, BackupCompression, BackupEncryptionContext, BackupMetadata, BackupPackage,
     BackupPassphrase, BackupPurpose, ConfigPackage, EncryptedBackupPackage,

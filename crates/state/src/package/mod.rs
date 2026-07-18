@@ -98,6 +98,7 @@ pub enum BackupPurpose {
     PreMigration = 3,
     PostMigration = 4,
     PreRestore = 5,
+    PreDestructiveMaintenance = 6,
 }
 
 impl BackupPurpose {
@@ -108,6 +109,7 @@ impl BackupPurpose {
             3 => Some(Self::PreMigration),
             4 => Some(Self::PostMigration),
             5 => Some(Self::PreRestore),
+            6 => Some(Self::PreDestructiveMaintenance),
             _ => None,
         }
     }

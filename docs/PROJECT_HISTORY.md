@@ -2540,7 +2540,7 @@ stream helpers remain private, and a new authority mutation rejects future publi
 `Read`/`Write` methods.
 
 Focused evidence passes a frozen 405-byte config golden and complete-file SHA-256,
-all three compression profiles times all five purposes, a 24 MiB controlled streaming
+all three compression profiles times the then-five purposes, a 24 MiB controlled streaming
 round trip, 5 package contracts, 10 adversarial package contracts, and 17 durable-file
 contracts. Strict platform/state warnings-as-errors Clippy, the reliable-state
 workspace audit, exact Zstd feature-tree inspection, 36/36 Pester mutations, and
@@ -2665,3 +2665,46 @@ unclaimed. The final review is Critical 0, Important 0, Minor 0 and `Ready: Yes`
 The unchanged Rust source passes clean-root in 17.4 seconds, formatting in 1.3
 seconds, strict locked full-workspace Clippy in 13.3 seconds, and the complete locked
 workspace test/doctest gate in 566.3 seconds total.
+
+## 2026-07-18 — P3-D.0 Task 9 capacity-one backup maintenance
+
+Added a constant-state maintenance coordinator with checked request IDs, one active
+permit, and one urgency-merged follow-up. Mandatory safety points outrank manual,
+source-retry, and periodic work; a second unresolved mandatory guard is rejected busy.
+A source retry gets a fresh attempt ID and lower scheduling urgency while preserving
+the root request and original backup purpose. This closes a design bug found during
+implementation where a failed pre-migration attempt could otherwise have become a
+periodic-labeled retry. Two failures against the same opaque identity enter `Suspect`.
+
+Added the native `BackupMaintenanceRuntime` with exactly one worker, one scheduler,
+capacity-one wake channels, one shared timeout, joined pause/resume/shutdown/Drop, and
+fixed latest completion/counters plus a separate mandatory-guard completion. Automatic
+work seeds a new monotonic interval only from exact `Healthy` restart truth;
+`HealthyUnpublished` remains closed. It requires both quiet and ordinary minimum
+intervals and emits one resume/clock-rollback catch-up. Disabling periodic work removes
+a pending periodic-origin follow-up without removing internal retry or mandatory
+guards. Source retry remains internal urgency, never a synthetic caller purpose.
+Worker panic payloads use the thread-local redaction boundary.
+
+Linked each permit to a typed store `BackupControl` so cancellation reaches page-stepped
+SQLite work without exposing a raw atomic. A compare-exchange makes final publication
+non-cancellable, and impossible completion/state combinations fail closed. The store
+now owns a bounded path-free reader for one verified SQLite
+candidate; it rechecks physical identity, exact length, and full SHA-256 before open,
+during complete consumption, and after EOF. State adds the sole typed bridge from that
+reader into an unpublished sealed package stage. Replacement, truncation, append, or
+source/output failure poisons and removes the stage. Backup purpose value 6 records
+pre-destructive maintenance without changing prior v1 values.
+
+Focused evidence passes 17 maintenance contracts, the strengthened Windows 12-warm-up/
+24-measured resource contract, seven store backup contracts, six catalog contracts,
+strict state Clippy, the workspace reliable-state authority audit, and 47 mutation
+tests. The first independent review reported Critical 0, Important 4, Minor 1; all five
+findings now have focused regressions and fixes. Post-fix rereview reports Critical 0,
+Important 0, Minor 0 and `Ready`. The final baseline passes clean-root in 14.940
+seconds, formatting in 1.256 seconds, strict locked workspace Clippy in 12.340 seconds,
+and the complete locked workspace test/doctest suite in 507.6 seconds. The one
+live-auth Codex transport test remains explicitly environment-gated and ignored.
+Task 10 durable restore journal/quarantine is next; startup recovery, application
+composition, safe mode, UI, acceptance, packaging, signing, and release remain
+unclaimed.

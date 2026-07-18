@@ -1243,3 +1243,43 @@ the proved lease identity and let older binaries split truth. A fixed archive pl
 Online Backup, independent historical points, Windows atomic replacement, and a
 redundant recovery journal has the smallest auditable crash state space while keeping
 foreground writes and Slint independent.
+
+## ADR-055 — Use a capacity-one native maintenance runtime with typed store interop
+
+Decision: backup maintenance uses one standard-library worker thread and one scheduler
+thread, capacity-one wake channels, one active request, and one urgency-merged follow-
+up. It adds no async runtime. Mandatory safety points outrank manual work, manual work
+outranks source retry, and source retry outranks periodic work. A second unresolved
+mandatory guard is rejected busy rather than queued or replaced.
+
+The automatic schedule is scalar constant state. Exact `Healthy` startup truth seeds
+the first interval at the current monotonic tick; `HealthyUnpublished` remains closed.
+It otherwise opens only after first healthy publication, requires the configured quiet
+and ordinary minimum intervals, and emits one catch-up after resume or clock rollback.
+Disabling periodic work removes a merged periodic-origin follow-up but does not remove
+an internal retry or disable pre-migration, pre-restore, or pre-destructive-maintenance
+guards. The runtime retains
+one latest general completion plus one latest mandatory-guard completion; it never
+retains a request or progress history.
+
+Each permit creates a store-owned `BackupControl` linked to the same cancellation
+state. Cancellation is cooperative through snapshot, verification, and package work;
+a compare-exchange enters a short non-cancellable final-publication section. A source
+retry receives a fresh attempt ID and lower scheduling urgency but preserves the root
+request and exact backup purpose, so a mandatory point cannot be satisfied by a
+periodic-labeled package. Source retry is therefore not a caller-submit purpose, and
+the state machine rejects `Published` before or `Cancelled` after the boundary.
+
+The store owns the only path-free reader over a verified SQLite candidate. State owns
+the only explicit bridge from that reader into a sealed unpublished backup stage. It
+streams with fixed buffers and revalidates physical identity, exact length, and full
+SHA-256 before and after consumption; any changed source or output error poisons the
+stage. Application composition in Task 12 will supply the owned snapshot -> verify ->
+package -> verify -> publish -> retain operation through this fixed runtime boundary.
+
+Rationale: an unbounded executor queue, timer per request, async runtime, or generic
+path/`Read` bridge would increase retained memory and authority while making shutdown
+and data-loss behavior harder to prove. Treating retry as a new periodic request would
+also break mandatory migration/restore semantics. The capacity-one native design keeps
+latency, memory, cancellation, and guarded mutation receipts deterministic without
+coupling state to Slint or application lifetime.

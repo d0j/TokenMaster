@@ -85,6 +85,7 @@ fn backup_vector_round_trips_every_allowed_profile_and_purpose() {
             BackupPurpose::PreMigration,
             BackupPurpose::PostMigration,
             BackupPurpose::PreRestore,
+            BackupPurpose::PreDestructiveMaintenance,
         ] {
             let (encoded, _) = backup_bytes_with(database, profile, purpose);
             let (verified, restored) = read_backup_bytes(&encoded).expect("read backup");

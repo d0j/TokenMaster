@@ -652,7 +652,9 @@ Header and manifest kind/count must agree: config is exactly one settings entry;
 backup is exactly settings then database. The manifest carries settings schema 1,
 database schema (zero only for config), compression profile, creation time in
 0..253402300799999 UTC milliseconds, and one of periodic/manual/pre-migration/
-post-migration/pre-restore for backup. Reserved bytes/flags are zero. The implemented
+post-migration/pre-restore/pre-destructive-maintenance for backup. The sixth value is
+an additive v1 enum value; the five existing wire values remain unchanged. Reserved
+bytes/flags are zero. The implemented
 limits are eight entries and 64 KiB manifest at the version boundary, 1 MiB expanded
 settings, one 64 GiB database, 64 GiB plus 2 MiB checked total/encoded ceilings, and
 64 KiB codec buffers.
@@ -710,6 +712,36 @@ one oldest verified unprotected point. Immediately before deletion it streams an
 rechecks the complete current verified set, rechecks the exact deletion target and
 directory generation, then uses a write-through same-volume tombstone and removes at
 most that one file. The caller must rebuild and replan before another deletion.
+
+Implemented Task 9 maintenance state is constant-size. It contains one active permit,
+one merged pending request, a checked request counter, one previous source-failure
+identity/count pair, one latest general completion, one latest mandatory-guard
+completion, and fixed success/failure/byte counters. A retry has a new attempt ID but
+retains the original root request and backup purpose; only its scheduling urgency
+becomes `source_retry`. Thus a pre-migration retry can never be mislabeled periodic or
+authorize the guarded mutation with the wrong restore-point purpose.
+
+The automatic schedule stores only enabled/healthy/dirty/paused/catch-up flags and
+five scalar ticks. `Healthy` startup seeds the already-proved publication flag and its
+first interval anchor at the current monotonic tick; `HealthyUnpublished`, empty,
+suspect, and quarantined states do not. It otherwise emits no automatic request before
+the first healthy publication, enforces both quiet time and the ordinary minimum
+interval, consumes one catch-up after a missed resume interval or clock rollback, and
+drops a merged periodic-origin follow-up when periodic scheduling is disabled. Source
+retry exists only as internal urgency and always retains the root purpose. One worker
+thread and one scheduler thread communicate through capacity-one wake channels. A
+permit owns a typed `BackupControl` linked to the same cancellation state; cancellation
+becomes immutable when the permit enters final publication, and execution-state
+validation rejects `Published` before or `Cancelled` after that boundary. Runtime health contains no path, SQL, source
+content, prompt, response, command, or history collection.
+
+The store-owned `VerifiedBackupCandidateReader` exposes a bounded path-free chunk
+capability over one exact verified SQLite candidate. Opening rechecks physical
+identity, length, and full SHA-256. Complete package consumption recounts and rehashes
+the open handle, rejects early EOF or appended bytes, and rechecks the namespace
+identity after EOF. Replacement, truncation, append, cancellation, codec failure, or
+destination failure discards and poisons the unpublished package stage.
+
 Quarantine retains at most three complete main/WAL/SHM sets and never deletes them
 automatically.
 

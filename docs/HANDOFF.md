@@ -444,16 +444,42 @@ The final Task 8 workspace baseline passes clean-root in 17.4 seconds, formattin
 1.3 seconds, strict locked full-workspace Clippy in 13.3 seconds, and the complete
 locked workspace test/doctest suite in 566.3 seconds total.
 
-The immediate next slice is Task 9 capacity-one backup maintenance. Then continue
-Tasks 10-18 in order: journaled recovery and startup
+Task 9 is implemented in the working tree. State owns one active/one merged-follow-up
+coordinator, one worker, one scheduler/shared timer, scalar automatic schedule, and
+fixed latest plus mandatory-guard health. Ten thousand hints remain capacity one.
+Exact `Healthy` restart truth seeds a monotonic interval anchor; `HealthyUnpublished`
+remains closed. Automatic work obeys quiet plus minimum interval and coalesces one
+resume/rollback catch-up. Periodic disablement removes a merged periodic-origin request
+without removing an internal retry or mandatory guard. Retry is urgency rather than a
+caller purpose, preserves the root request and original package purpose, and two
+failures against the same opaque identity enter `Suspect`.
+
+`MaintenancePermit::backup_control` links runtime cancellation directly into store
+Online Backup without exposing a raw atomic. Cancellation is cooperative until the
+non-cancellable final-publication compare-exchange; impossible `Published`-before and
+`Cancelled`-after results fail closed. The store-owned verified-candidate
+reader rechecks physical identity/length/full SHA before and after bounded streaming;
+the exact state codec bridge accepts no path or generic `Read` and poisons its sealed
+stage on replacement/truncation/append or any source/output failure. Package purpose 6
+now records pre-destructive maintenance without changing the first five wire values.
+Focused maintenance 17/17, Windows resource 1/1, store backup 7/7, catalog 6/6, strict
+state Clippy, workspace authority audit, and 47/47 mutation tests pass. The first
+independent review reported Critical 0, Important 4, Minor 1; every finding now has a
+regression and fix. Post-fix rereview reports Critical 0, Important 0, Minor 0 and
+`Ready`. The final Task 9 baseline passes clean-root in 14.940 seconds, formatting in
+1.256 seconds, strict locked workspace Clippy in 12.340 seconds, and the complete
+locked workspace test/doctest suite in 507.6 seconds. The one live-auth Codex transport
+test remains explicitly ignored without its external authenticated environment.
+
+The immediate next slice is Task 10 durable restore journal/quarantine. Then continue
+Tasks 11-18 in order: startup recovery and
 integration, application restart/safe mode, Data & Recovery UI, then adversarial and
 resource closure. Keep the fixed archive path and writer sidecar; never copy only the
 live main file or treat busy/disk/access/schema-newer as corruption authority. Keep
 automatic recovery data only; manual full restore must explicitly choose data only or
 data plus portable settings, and device-local settings never move between machines.
-Task 9 must compose store-owned verified-candidate streaming with the sealed stage and
-must not relax Tasks 6-8 into path, generic-stream, generic age-extraction, or batch-
-deletion authority.
+Task 10 must preserve the fixed Task 9 runtime/reader boundary and must not relax Tasks
+6-9 into path, generic-stream, generic age-extraction, or batch-deletion authority.
 
 After P3-D.0, continue P3-D supporting data-bearing routes using bounded keyset
 intents and the same controller/snapshot boundary. P3-E then closes remaining
@@ -461,11 +487,12 @@ notifications, settings/help, command palette, tray, and compact lifecycle. P3-D
 presentation, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.
-The current post-P3-D.0-Task-8 focused evidence includes the Task 5 store contracts,
+The current post-P3-D.0-Task-9 focused evidence includes the Task 5 store contracts,
 5 package contracts, 10 package adversarial contracts, 17 durable-file contracts,
-7 grouped encryption contracts, 4 catalog contracts, 2 retention contracts, 5 backup-
-directory contracts, strict platform/state Clippy, the reliable-state workspace audit,
-42 authority mutations, and exact Zstd/age feature-tree verification.
+7 grouped encryption contracts, 6 catalog contracts, 2 retention contracts, 5 backup-
+directory contracts, 17 maintenance contracts, the Windows maintenance resource gate,
+strict platform/state Clippy, the reliable-state workspace audit, 47 authority mutations,
+and exact Zstd/age feature-tree verification.
 The prior Task 7 component baseline passed on its unchanged source tree: clean-root
 15.9 seconds, formatting 1.4 seconds, strict locked full-workspace Clippy 35.6
 seconds, and the complete locked workspace test/doctest suite 491.2 seconds (544.1
