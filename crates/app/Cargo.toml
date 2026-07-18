@@ -21,6 +21,8 @@ tokenmaster-state = { path = "../state" }
 tokenmaster-store = { path = "../store" }
 
 [dev-dependencies]
+i-slint-backend-testing = { version = "=1.17.1", features = ["renderer-software"] }
 rusqlite.workspace = true
+serde_json.workspace = true
 sha2.workspace = true
 tempfile.workspace = true

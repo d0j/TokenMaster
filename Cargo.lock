@@ -6079,7 +6079,9 @@ dependencies = [
 name = "tokenmaster-app"
 version = "0.1.0"
 dependencies = [
+ "i-slint-backend-testing",
  "rusqlite",
+ "serde_json",
  "sha2 0.11.0",
  "slint",
  "tempfile",
@@ -6286,6 +6288,7 @@ name = "tokenmaster-state"
 version = "0.1.0"
 dependencies = [
  "age",
+ "rusqlite",
  "serde",
  "serde_json",
  "sha2 0.11.0",
