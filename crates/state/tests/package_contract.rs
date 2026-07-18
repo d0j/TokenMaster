@@ -4,9 +4,10 @@ mod package_support;
 
 use sha2::{Digest, Sha256};
 use tokenmaster_state::{
-    BackupCompression, BackupMetadata, BackupPackage, BackupPurpose, MAX_DATABASE_PACKAGE_BYTES,
-    MAX_PACKAGE_ENTRIES, MAX_PACKAGE_MANIFEST_BYTES, MAX_PACKAGE_TOTAL_EXPANDED_BYTES,
-    MAX_SETTINGS_PACKAGE_BYTES, PACKAGE_DECODER_WINDOW_BYTES, PACKAGE_IO_BUFFER_BYTES,
+    BackupCompression, BackupMetadata, BackupPackage, BackupPurpose, MAX_CONFIG_PACKAGE_BYTES,
+    MAX_DATABASE_PACKAGE_BYTES, MAX_PACKAGE_ENTRIES, MAX_PACKAGE_MANIFEST_BYTES,
+    MAX_PACKAGE_TOTAL_EXPANDED_BYTES, MAX_SETTINGS_PACKAGE_BYTES, PACKAGE_DECODER_WINDOW_BYTES,
+    PACKAGE_IO_BUFFER_BYTES, StateErrorCode,
 };
 
 use package_support::{
@@ -107,6 +108,7 @@ fn hard_bounds_and_profiles_are_exact() {
     assert_eq!(MAX_PACKAGE_ENTRIES, 8);
     assert_eq!(MAX_PACKAGE_MANIFEST_BYTES, 64 * 1024);
     assert_eq!(MAX_SETTINGS_PACKAGE_BYTES, 1024 * 1024);
+    assert_eq!(MAX_CONFIG_PACKAGE_BYTES, 2 * 1024 * 1024);
     assert_eq!(MAX_DATABASE_PACKAGE_BYTES, 64 * 1024 * 1024 * 1024);
     assert_eq!(
         MAX_PACKAGE_TOTAL_EXPANDED_BYTES,
@@ -118,6 +120,17 @@ fn hard_bounds_and_profiles_are_exact() {
     assert_eq!(BackupCompression::Normal.level(), 12);
     assert_eq!(BackupCompression::Compact.level(), 19);
     assert!(BackupMetadata::new(-1, BackupPurpose::Periodic).is_err());
+}
+
+#[test]
+fn config_reader_rejects_the_encoded_ceiling_before_parsing() {
+    let oversized = vec![0_u8; (MAX_CONFIG_PACKAGE_BYTES + 1) as usize];
+    assert_eq!(
+        read_config_bytes(&oversized)
+            .expect_err("oversized config")
+            .code(),
+        StateErrorCode::CapacityExceeded
+    );
 }
 
 #[test]

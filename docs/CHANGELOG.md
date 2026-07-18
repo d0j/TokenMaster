@@ -6,6 +6,33 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.0 Task 12B.2b.1 bounded operation execution. The production app now
+  owns one standard-library operation thread over the sole command coordinator, one
+  capacity-one wake, active plus one follow-up, and one latest-only completion. Work
+  runs outside the mutex; exact cancel, irreversible state, retry, caught-panic fault,
+  explicit shutdown, and `Drop` all retain fixed path-private outcomes and joined
+  ownership. Manual backup is the first real binding and executes through the existing
+  atomic maintenance receipt wait off the Slint thread.
+- Added sealed application config export/import operations. `.tmconfig` now has a
+  separate 2 MiB encoded reader/writer ceiling. Export stages portable settings into an
+  already controlled create-new target, crosses irreversible state before publication,
+  then reopens and fully verifies it. Import fully verifies an already open reader,
+  retains one bounded category/count/base-identity preview, and commits that exact
+  candidate while preserving device-local settings. Native file dialogs and UI
+  preview/confirm binding remain open and no UI path authority is claimed.
+- Added nine operation-worker contracts, two app config lifecycle contracts, a package
+  fail-fast bound contract, real application manual-backup command coverage, and seven
+  new source-policy mutations covering duplicate/unbounded worker ownership, lost
+  binding, detached shutdown, and sealed/bounded config capabilities.
+  Task 12B.2b still owns native-file/UI config binding, verify/selected-restore/rebuild
+  execution, complete cancellation propagation, and no-backup reconstruction.
+- Closed the Task 12B.2b.1 developer gate with clean-root, formatting/diff, warnings-as-
+  errors locked workspace Clippy, the complete locked workspace test/doctest suite in
+  502.1 seconds, the release composition audit, reliable-state 55/55 plus application
+  38/38 authority mutations, and an independent Critical/Important/Minor 0/0/0 review.
+  The authenticated live Codex contract remains intentionally ignored without its
+  explicit environment binding; product and release acceptance remain unclaimed.
+
 - Implemented P3-D.0 Task 12B.2a selected restore composition. A UI generation/ordinal
   is sealed into one opaque verified package identity before admission closes; the
   selected point is held by one RAII pin shared with every post-publication deletion,

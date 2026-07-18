@@ -15,9 +15,9 @@ use super::manifest::{
     EntryKind, EntryPrefix, EntrySuffix, FOOTER_MAGIC, MANIFEST_BYTES, Manifest,
 };
 use super::{
-    BackupCompression, BackupMetadata, BackupPackage, ConfigPackage, MAX_DATABASE_PACKAGE_BYTES,
-    MAX_ENCODED_PACKAGE_BYTES, MAX_PACKAGE_TOTAL_EXPANDED_BYTES, MAX_SETTINGS_PACKAGE_BYTES,
-    PACKAGE_IO_BUFFER_BYTES, PACKAGE_WINDOW_LOG, PackageReceipt,
+    BackupCompression, BackupMetadata, BackupPackage, ConfigPackage, MAX_CONFIG_PACKAGE_BYTES,
+    MAX_DATABASE_PACKAGE_BYTES, MAX_ENCODED_PACKAGE_BYTES, MAX_PACKAGE_TOTAL_EXPANDED_BYTES,
+    MAX_SETTINGS_PACKAGE_BYTES, PACKAGE_IO_BUFFER_BYTES, PACKAGE_WINDOW_LOG, PackageReceipt,
 };
 
 impl ConfigPackage {
@@ -35,6 +35,9 @@ impl ConfigPackage {
                 (result, destination_adapter.failure())
             };
             let receipt = resolve_codec_error(result, &[failure])?;
+            if receipt.package_len() > MAX_CONFIG_PACKAGE_BYTES {
+                return Err(StateError::capacity_exceeded());
+            }
             destination
                 .seal(receipt.package_len(), *receipt.file_sha256())
                 .map_err(map_durable_error)?;

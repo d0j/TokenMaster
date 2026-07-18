@@ -656,8 +656,9 @@ post-migration/pre-restore/pre-destructive-maintenance for backup. The sixth val
 an additive v1 enum value; the five existing wire values remain unchanged. Reserved
 bytes/flags are zero. The implemented
 limits are eight entries and 64 KiB manifest at the version boundary, 1 MiB expanded
-settings, one 64 GiB database, 64 GiB plus 2 MiB checked total/encoded ceilings, and
-64 KiB codec buffers.
+settings, a separate 2 MiB encoded `.tmconfig` ceiling checked before parsing, one
+64 GiB database, a 64 GiB plus 2 MiB checked backup total/encoded ceiling, and 64 KiB
+codec buffers.
 
 Every entry descriptor binds kind, Zstd codec 1, profile level 6/12/19, checksum plus
 content-size flags, expanded length/SHA-256, and window log 23. Dictionary IDs,
@@ -669,6 +670,15 @@ fail closed. Codec input is only `DurableFileReader`; output is either
 backup writer. No public generic extractor exists. A codec or final-seal failure
 irreversibly discards and poisons the output stage, so later write, seal, or
 publication cannot recover partial bytes as truth.
+
+Application config preview retains exactly one decoded `PortableSettingsCandidate`,
+its base settings generation/record digest, at most three ordered change categories,
+one changed-field count, creation time, and package byte count. It retains no source
+path, filename, reader, raw package bytes, digest, history, or device-local candidate.
+Commit consumes the preview, rejects base identity drift, preserves the current device
+settings, and publishes through the existing redundant settings record. Export receipts
+contain only creation time and package byte count; package and durable receipts remain
+redacted capabilities.
 
 The wire format contains no filenames, paths, links, permissions, devices,
 credentials, prompts, responses, reasoning, commands, output, source content, or raw

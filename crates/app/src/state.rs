@@ -3,16 +3,18 @@ use std::sync::{Arc, Mutex, atomic::AtomicBool};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tokenmaster_platform::{
-    ArchiveRecoveryScope, BackupDirectory, BackupDirectoryError, ExclusiveFileLease,
-    ExclusiveFileLeaseGuard, MAX_DURABLE_FILE_BYTES, ValidatedLocalDirectory,
+    ArchiveRecoveryScope, BackupDirectory, BackupDirectoryError, DurableFileReader,
+    DurableFileTarget, ExclusiveFileLease, ExclusiveFileLeaseGuard, MAX_DURABLE_FILE_BYTES,
+    ValidatedLocalDirectory,
 };
 use tokenmaster_state::{
     BackupCatalog, BackupCompression, BackupMaintenanceRuntime, BackupMetadata, BackupPackage,
-    BootstrapReport, CatalogSelectionBinding, MaintenanceExecution, MaintenancePermit,
-    MaintenanceSourceState, PendingMigration, PreparedBootstrap, RecoveryCoordinator,
-    RecoveryJournalStore, RecoveryLaunchDecision, RecoveryReceipt, RestoreMode, RestoreSafety,
-    RetentionAdmission, RetentionPolicy, RunSession, RunStateStore, SettingsStore, StateBootstrap,
-    StateErrorCode, SystemMaintenanceClock,
+    BootstrapReport, CatalogSelectionBinding, ConfigPackage, MAX_CONFIG_PACKAGE_BYTES,
+    MaintenanceExecution, MaintenancePermit, MaintenanceSourceState, PendingMigration,
+    PreparedBootstrap, RecoveryCoordinator, RecoveryJournalStore, RecoveryLaunchDecision,
+    RecoveryReceipt, RestoreMode, RestoreSafety, RetentionAdmission, RetentionPolicy, RunSession,
+    RunStateStore, SettingsChangeCategory, SettingsCommitReceipt, SettingsImportPreview,
+    SettingsStore, StateBootstrap, StateErrorCode, SystemMaintenanceClock,
 };
 use tokenmaster_store::{
     BackupControl, BackupSource, BackupStaging, StartupArchiveStatus, StartupValidationMode,
@@ -20,7 +22,7 @@ use tokenmaster_store::{
     verify_backup_candidate,
 };
 
-use crate::command::ApplicationBackupSelection;
+use crate::command::{ApplicationBackupSelection, ApplicationCommand, ApplicationCommandPermit};
 use crate::{ApplicationError, DataRoot};
 
 #[cfg(test)]
@@ -37,6 +39,97 @@ pub(crate) struct ApplicationStateOwner {
     run_state: RunStateStore,
     catalog: Arc<Mutex<Option<Arc<BackupCatalog>>>>,
     restore_pin: Arc<Mutex<Option<CatalogSelectionBinding>>>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Task 12B.2b config worker binding follows the sealed config operations"
+    )
+)]
+pub(crate) struct ApplicationConfigExportReceipt {
+    created_at_utc_ms: i64,
+    package_bytes: u64,
+}
+
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Task 12B.2b config worker binding follows the sealed config operations"
+    )
+)]
+impl ApplicationConfigExportReceipt {
+    #[must_use]
+    pub(crate) const fn created_at_utc_ms(self) -> i64 {
+        self.created_at_utc_ms
+    }
+
+    #[must_use]
+    pub(crate) const fn package_bytes(self) -> u64 {
+        self.package_bytes
+    }
+}
+
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Task 12B.2b config worker binding follows the sealed config operations"
+    )
+)]
+pub(crate) struct ApplicationConfigImportPreview {
+    settings: SettingsImportPreview,
+    created_at_utc_ms: i64,
+    package_bytes: u64,
+}
+
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Task 12B.2b config worker binding follows the sealed config operations"
+    )
+)]
+impl ApplicationConfigImportPreview {
+    #[must_use]
+    pub(crate) fn changed_category_count(&self) -> usize {
+        self.settings.changed_category_count()
+    }
+
+    #[must_use]
+    pub(crate) const fn changed_field_count(&self) -> usize {
+        self.settings.changed_field_count()
+    }
+
+    #[must_use]
+    pub(crate) fn categories(&self) -> &[SettingsChangeCategory] {
+        self.settings.categories()
+    }
+
+    #[must_use]
+    pub(crate) const fn created_at_utc_ms(&self) -> i64 {
+        self.created_at_utc_ms
+    }
+
+    #[must_use]
+    pub(crate) const fn package_bytes(&self) -> u64 {
+        self.package_bytes
+    }
+}
+
+impl fmt::Debug for ApplicationConfigImportPreview {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ApplicationConfigImportPreview")
+            .field("changed_category_count", &self.changed_category_count())
+            .field("changed_field_count", &self.changed_field_count())
+            .field("created_at_utc_ms", &self.created_at_utc_ms)
+            .field("package_bytes", &self.package_bytes)
+            .finish()
+    }
 }
 
 impl ApplicationStateOwner {
@@ -94,6 +187,111 @@ impl ApplicationStateOwner {
             bootstrap,
             startup_guard: Some(guard),
         })
+    }
+
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Task 12B.2b config worker binding follows the sealed config operations"
+        )
+    )]
+    pub(crate) fn export_config(
+        &self,
+        permit: &ApplicationCommandPermit,
+        target: &DurableFileTarget,
+        created_at_utc_ms: i64,
+    ) -> Result<ApplicationConfigExportReceipt, ApplicationError> {
+        if permit.command() != ApplicationCommand::ExportConfig || permit.is_cancelled() {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        let settings = self
+            .settings
+            .full_backup_candidate()
+            .map_err(|_| ApplicationError::state())?;
+        let mut staged = target
+            .create_staged(MAX_CONFIG_PACKAGE_BYTES)
+            .map_err(|_| ApplicationError::state())?;
+        let package = ConfigPackage::write(&settings, created_at_utc_ms, &mut staged)
+            .map_err(|_| ApplicationError::state())?;
+        if permit.is_cancelled() {
+            staged.discard().map_err(|_| ApplicationError::state())?;
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        permit
+            .begin_irreversible()
+            .map_err(|_| ApplicationError::invalid_lifecycle())?;
+        let published = staged
+            .publish_new(target)
+            .map_err(|_| ApplicationError::state())?;
+        if published.len() != package.package_len() {
+            return Err(ApplicationError::state());
+        }
+        let mut reader = target
+            .open_reader(MAX_CONFIG_PACKAGE_BYTES)
+            .map_err(|_| ApplicationError::state())?
+            .ok_or_else(ApplicationError::state)?;
+        let verified = ConfigPackage::read(&mut reader).map_err(|_| ApplicationError::state())?;
+        if verified.receipt() != package || verified.settings().digest() != settings.digest() {
+            return Err(ApplicationError::state());
+        }
+        Ok(ApplicationConfigExportReceipt {
+            created_at_utc_ms,
+            package_bytes: package.package_len(),
+        })
+    }
+
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Task 12B.2b config worker binding follows the sealed config operations"
+        )
+    )]
+    pub(crate) fn preview_config_import(
+        &self,
+        permit: &ApplicationCommandPermit,
+        mut source: DurableFileReader,
+    ) -> Result<ApplicationConfigImportPreview, ApplicationError> {
+        if permit.command() != ApplicationCommand::ImportConfig || permit.is_cancelled() {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        let verified = ConfigPackage::read(&mut source).map_err(|_| ApplicationError::state())?;
+        if permit.is_cancelled() {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        let settings = self
+            .settings
+            .preview_candidate(verified.settings().clone())
+            .map_err(|_| ApplicationError::state())?;
+        Ok(ApplicationConfigImportPreview {
+            settings,
+            created_at_utc_ms: verified.created_at_utc_ms(),
+            package_bytes: verified.receipt().package_len(),
+        })
+    }
+
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Task 12B.2b config worker binding follows the sealed config operations"
+        )
+    )]
+    pub(crate) fn commit_config_import(
+        &self,
+        permit: &ApplicationCommandPermit,
+        preview: ApplicationConfigImportPreview,
+    ) -> Result<SettingsCommitReceipt, ApplicationError> {
+        if permit.command() != ApplicationCommand::ImportConfig || permit.is_cancelled() {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        permit
+            .begin_irreversible()
+            .map_err(|_| ApplicationError::invalid_lifecycle())?;
+        self.settings
+            .commit_import(&preview.settings)
+            .map_err(|_| ApplicationError::state())
     }
 
     #[cfg_attr(

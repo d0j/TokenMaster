@@ -2935,3 +2935,44 @@ intentionally ignored without its explicit environment binding; no product or re
 acceptance is claimed.
 Task 12B.2b worker/UI/native-file bindings, config operations, verify/rebuild,
 cancellation propagation, no-backup reconstruction, and release gates remain open.
+
+## 2026-07-18 — P3-D.0 Task 12B.2b.1 joined operation worker and config core
+
+Replaced the production application's bare command coordinator with one joined
+`ApplicationOperationWorker`. The worker owns the sole coordinator, one standard-
+library thread, one capacity-one wake, one active permit plus one follow-up, and one
+latest-only completion. Execution is outside the mutex. Exact cancellation is
+normalized under the coordinator lock immediately before completion, irreversible
+state rejects late cancel, retry uses only
+the last failed typed command, a caught executor panic publishes fixed internal failure
+and closes admission, and explicit shutdown plus `Drop` cancel/wake/join without a
+detached thread or result history.
+
+Bound the first real production command: manual backup now executes off the Slint thread
+through the existing maintenance runtime's atomic exact-root receipt wait. It crosses
+irreversible state before maintenance can mutate and holds the bundle slot stable, so
+restart, restore, or shutdown cannot replace owners during publication. Application
+shutdown joins the operation worker before the backend bundle; clean run state requires
+both joins.
+
+Added the sealed config operation core without claiming native dialogs. `.tmconfig` has
+a separate 2 MiB encoded ceiling checked by writer and before reader parsing. Export
+accepts only an already controlled create-new durable target, writes portable settings,
+publishes after the command irreversible boundary, then reopens and fully verifies the
+exact package. Import fully verifies an already open bounded reader and retains one
+typed base-identity preview with at most three categories and scalar counts. Confirm
+consumes that preview through the existing atomic settings store and preserves device-
+local settings. No UI value receives a target, reader, path, filename, raw bytes, or
+digest.
+
+Final developer evidence passes nine worker contracts, two application config contracts, all
+six package contracts including fail-fast encoded size, 25 application unit plus seven
+integration tests, strict state/app Clippy, the application source audit, and 38/38
+policy mutations. Clean-root, formatting/diff, warnings-as-errors locked workspace
+Clippy, the complete locked workspace test/doctest suite in 502.1 seconds, the release
+composition audit, and reliable-state 55/55 mutations also pass. Independent final
+review reports Critical/Important/Minor 0/0/0 and `Ready`; the authenticated live Codex
+contract remains intentionally ignored without explicit environment binding. Native-
+file/UI config preview-confirm, verify/selected-restore/rebuild
+execution, full cancellation propagation, no-backup reconstruction, final resource/
+product release gates, and product or release acceptance remain open.

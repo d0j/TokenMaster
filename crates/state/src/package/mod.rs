@@ -53,6 +53,8 @@ pub(crate) fn decode_catalog_header(
 pub const MAX_PACKAGE_ENTRIES: usize = 8;
 pub const MAX_PACKAGE_MANIFEST_BYTES: usize = 64 * 1024;
 pub const MAX_SETTINGS_PACKAGE_BYTES: u64 = 1024 * 1024;
+/// Maximum encoded size accepted for a settings-only `.tmconfig` package.
+pub const MAX_CONFIG_PACKAGE_BYTES: u64 = 2 * 1024 * 1024;
 pub const MAX_DATABASE_PACKAGE_BYTES: u64 = 64 * 1024 * 1024 * 1024;
 pub const MAX_PACKAGE_TOTAL_EXPANDED_BYTES: u64 = MAX_DATABASE_PACKAGE_BYTES + 2 * 1024 * 1024;
 pub const PACKAGE_DECODER_WINDOW_BYTES: u64 = 8 * 1024 * 1024;

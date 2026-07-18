@@ -592,14 +592,30 @@ warnings-as-errors locked workspace Clippy, the complete locked workspace test/d
 gate in 507.5 seconds, and release composition audits pass. Independent final review
 reports Critical/Important/Minor 0/0/0. The live-auth Codex executable contract remains
 intentionally ignored without its explicit environment binding. This is developer
-evidence, not product or release acceptance; the primitive is not yet bound to the
-command worker or UI.
+evidence, not product or release acceptance; the selected-restore primitive is not yet
+bound through the operation worker or UI.
 
-The immediate next slice is Task 12B.2b operation execution. It owns the worker and
-actual typed config export/import, backup/verify, selected restore command/UI/native-
-file binding, rebuild/retry/cancel propagation, and provider-backed fresh reconstruction
-when no backup is usable. Then continue Tasks 13-18 in order: health/product projection, Data
-& Recovery UI, adversarial/resource/release closure. Keep the fixed archive path and
+Task 12B.2b.1 now composes one joined operation worker around the sole bounded command
+coordinator. It owns one standard thread, capacity-one wake, active plus one follow-up,
+and latest-only completion; callback work is outside the mutex and panic/cancel/retry/
+shutdown remain fixed and path-private. Manual backup is the first production binding
+and waits on the existing maintenance receipt off the Slint thread while the bundle is
+stable. Config export/import is implemented over already sealed targets/readers with a
+2 MiB encoded ceiling, create-new plus reread-verified export, base-bound bounded preview,
+and device-preserving atomic confirm. Native file selection and UI binding do not exist.
+Focused worker 9/9, config 2/2, package 6/6, app 25 unit plus 7 integration, strict
+focused Clippy, and application policy 38/38 pass. Clean-root, formatting/diff, strict
+locked workspace Clippy, the complete locked workspace test/doctest suite in 502.1
+seconds, release composition, and reliable-state 55/55 mutations also pass. Independent
+final review reports Critical/Important/Minor 0/0/0 and `Ready`. The live-auth Codex
+contract remains intentionally ignored without explicit environment binding. This is
+developer evidence, not product or release acceptance.
+
+The immediate next slice remains Task 12B.2b: sealed native-file config preview/confirm
+binding, then verify, selected restore, rebuild, retry/cancel propagation, and provider-
+backed fresh reconstruction when no backup is usable. Then continue Tasks 13-18 in
+order: health/product projection, Data & Recovery UI, adversarial/resource/release
+closure. Keep the fixed archive path and
 writer sidecar; never copy only the live main file or treat busy/disk/access/schema-
 newer as corruption authority. Keep automatic recovery data only; device-local settings
 never move. Do not relax Tasks 6-11A into path, generic-stream, generic age-extraction,

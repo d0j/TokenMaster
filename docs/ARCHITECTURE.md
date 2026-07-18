@@ -164,7 +164,8 @@ the fixed typed streaming `.tmconfig`/`.tmbackup` package codec over platform-ow
 bounded readers and stages. One checksummed/content-sized Zstd frame per typed entry,
 exact length/hash/descriptor/footer binding, an 8 MiB decoder window, and independent
 expanded counters fail closed; every failed output is irreversibly poisoned before it
-can be sealed or published. Task 7 adds binary age v1 only for manual exports. It
+can be sealed or published. Config additionally has a 2 MiB encoded fail-fast ceiling.
+Task 7 adds binary age v1 only for manual exports. It
 requires an opaque verified backup proof, rechecks exact source length/SHA-256 during
 encryption, fixes scrypt work at 16 and import maximum at 16, owns zeroizing redacted
 passphrases, parses authenticated plaintext through the private typed backup reader,
@@ -177,17 +178,21 @@ current verified set plus exact target and removes only one write-through tombst
 file before rebuild/replan. Later state tasks add typed run/recovery stores and one
 capacity-one maintenance worker.
 `tokenmaster-platform` owns durable replacement and will later own sealed file dialogs.
-`tokenmaster-app` will stop every archive user, hold the existing writer
-lease, quarantine main/WAL/SHM, resume a redundant six-state restore journal before
-SQLite open, commit the selected data-only or data-plus-portable-settings mode, and
-reconstruct one application bundle or safe mode. Automatic recovery remains data only.
-Product/Desktop receive bounded health and intents only. The contour is in progress;
-Tasks 1-9 now provide persistent typed settings, verified standalone SQLite candidates,
-fixed packages, verified-source-bound optional manual encryption, and a sealed bounded
-catalog/retention core plus one bounded maintenance worker and one shared scheduler;
-they add no bootstrap recovery, restore, safe-mode, or release claim. Task 10 must add
-the redundant recovery journal and startup decision surface without widening these
-path-free capabilities.
+`tokenmaster-app` now owns bootstrap, migration safety, selected journaled restore, and
+one joined bounded operation worker in addition to the replaceable backend bundle. The
+worker embeds the sole fixed command coordinator, one capacity-one wake, one latest-only
+completion, and no async runtime or generic task queue. Its first production binding
+submits and waits for manual backup outside the Slint thread while holding the current
+bundle stable. Shutdown cancels/wakes/joins this worker before bundle shutdown and clean
+run publication.
+
+Application config export/import is already sequenced over platform-owned controlled
+targets/readers and state-owned typed packages/settings: create-new export is reread-
+verified, import retains one bounded category/count preview, and confirm preserves
+device-local settings. Native file selection and UI preview/confirm binding remain open,
+so no UI filesystem authority is claimed. Product/Desktop continue to receive only
+bounded health and intents. Automatic recovery remains data only; remaining verify/
+restore/rebuild command bindings and no-backup reconstruction stay inside Task 12B.2b.
 
 The built-in live quota source is separate from the JSONL usage reader. Composition
 supplies one already resolved absolute native Codex executable to

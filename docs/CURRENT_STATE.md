@@ -1116,10 +1116,32 @@ Independent final review reports Critical/Important/Minor 0/0/0. The live-auth C
 executable contract remains intentionally ignored without its explicit environment
 binding. This is Task 12B.2a developer evidence, not product or release acceptance.
 
-Task 12B.2b remains open for the operation worker and actual typed config export/import,
-backup/verify, command/UI/native-file binding for selected data-only or confirmed
-portable-settings restore, rebuild, retry/cancel propagation, and authoritative Codex
-reconstruction when no backup is usable.
+Task 12B.2b.1 is implemented in the current development contour. The production app
+owns one joined standard-library operation worker containing the sole command
+coordinator, one capacity-one wake, active plus one follow-up, and one latest-only
+completion. Execution occurs outside the worker mutex; cancellation, irreversible
+transition, retry, panic fault/closure, explicit shutdown, and `Drop` remain constant-
+state and path-private. The first real binding runs manual backup through the existing
+atomic maintenance receipt wait off the Slint thread while keeping the current bundle
+generation stable. Clean publication now also requires the operation worker to join.
+
+Sealed config operations are implemented below the native-file/UI boundary. A separate
+2 MiB encoded `.tmconfig` ceiling fails before parsing. Export writes portable settings
+to an already controlled create-new target and reread-verifies the published package.
+Import fully verifies an already open reader, retains one typed base-bound preview with
+at most three categories and scalar counts, and commits only that candidate while
+preserving device-local settings. Nine worker, two app config, six package, 25 app unit
+plus 7 app integration, strict focused Clippy, and 38/38 application source-policy
+contracts pass. Clean-root, formatting/diff, warnings-as-errors locked workspace Clippy,
+the complete locked workspace test/doctest suite in 502.1 seconds, release composition,
+and reliable-state 55/55 mutations also pass. Independent final review reports
+Critical/Important/Minor 0/0/0 and `Ready`; the authenticated live Codex contract remains
+intentionally ignored without explicit environment binding. This is developer evidence,
+not product or release acceptance.
+
+Task 12B.2b remains open for native-file/UI config preview-confirm binding, verify and
+selected-restore/rebuild command execution, complete cancellation propagation, and
+authoritative Codex reconstruction when no backup is usable.
 Data & Recovery UI and new release acceptance evidence also do not exist yet.
 
 Task 12A focused store backup 8/8 and adversarial 10/10, catalog 6/6, maintenance
@@ -1135,11 +1157,11 @@ zero polling/arbitrary-root/forbidden-string surface, and one release artifact.
 
 ## Next implementation slice
 
-Complete P3-D.0 Task 12B.2b from
-`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: compose the reliable
-state operation worker, command/UI/native-file bindings, config/backup/verify/rebuild,
-cancellation/retry, and authoritative no-backup reconstruction over the Task 12A,
-Task 12B.1, and Task 12B.2a boundaries.
+Continue P3-D.0 Task 12B.2b from
+`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: add sealed native-file
+selection and bind config preview/confirm to the implemented worker, then bind verify,
+selected restore, rebuild, cancellation/retry, and authoritative no-backup
+reconstruction over the Task 12A/12B.1/12B.2a/12B.2b.1 boundaries.
 
 P2-D quota history core is complete under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: Tasks 1-8 cover
@@ -1156,8 +1178,9 @@ immutable read snapshots, and publication through the existing Codex runtime wit
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
 workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, P3-B.2, P3-B.3, and P3-C are
-complete; P3-D.0 Reliable State is active with Tasks 1-11A, Task 12A, Task 12B.1, and
-Task 12B.2a implemented, followed by Task 12B.2b and the remaining P3-D supporting data-bearing routes. Activation
+complete; P3-D.0 Reliable State is active with Tasks 1-11A, Task 12A, Task 12B.1,
+Task 12B.2a, and Task 12B.2b.1 implemented, followed by the remaining Task 12B.2b and
+P3-D supporting data-bearing routes. Activation
 remains a later independently authorized capability. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.
 

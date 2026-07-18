@@ -837,9 +837,29 @@ durable pending pair before publication. Any ambiguity leaves no bundle and no s
 owner. The catalog is an immutable bounded `Arc` snapshot, so its mutex is held only
 while copying or replacing the projection, never across backup or recovery I/O.
 
-Task 12B.2b still owns the operation worker, actual import/export/verify/rebuild and
-command/UI/native-file bindings, cancellation propagation, confirmed full-restore UX,
-and authoritative no-backup reconstruction.
+Implemented Task 12B.2b.1 replaces the production root's bare coordinator with one
+joined `ApplicationOperationWorker`. It uses one standard-library thread, one
+capacity-one wake, the existing active-plus-one-follow-up coordinator, and one
+latest-only completion slot. Execution occurs outside the worker mutex; exact
+cancellation is normalized before completion, callback panic becomes only fixed
+`internal` failure and closes admission, and shutdown/`Drop` cancel, wake, and join.
+The first production binding is manual backup: it crosses the command irreversible
+boundary before atomically submitting/waiting on the existing maintenance root while
+holding the bundle generation stable, then returns only a fixed command outcome.
+
+The same slice adds sealed config operations below the worker/UI boundary. Export
+accepts only an already controlled `DurableFileTarget`, writes and seals portable
+settings into a create-new stage, crosses the irreversible boundary immediately before
+publication, then reopens and fully verifies the published package. Import accepts only
+an already open bounded `DurableFileReader`, fully verifies one `.tmconfig`, retains one
+bounded typed candidate plus base settings identity, and exposes only category/field
+counts, creation time, and package bytes. Confirm consumes that exact preview and uses
+the existing atomic settings commit, preserving device-local settings. The codec rejects
+encoded config input above 2 MiB before parsing.
+
+Task 12B.2b still owns native-file selection, worker/UI config preview-confirm binding,
+verify/selected-restore/rebuild execution, complete cancellation propagation, confirmed
+full-restore UX, and authoritative no-backup reconstruction.
 
 ## Provider plugin ABI
 

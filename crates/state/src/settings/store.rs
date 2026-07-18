@@ -226,6 +226,13 @@ impl SettingsStore {
 
     pub fn preview_import(&self, bytes: &[u8]) -> Result<SettingsImportPreview, StateError> {
         let candidate = PortableSettingsCandidate::decode(bytes)?;
+        self.preview_candidate(candidate)
+    }
+
+    pub fn preview_candidate(
+        &self,
+        candidate: PortableSettingsCandidate,
+    ) -> Result<SettingsImportPreview, StateError> {
         let current = self.load()?;
         Ok(SettingsImportPreview::new(
             current.generation,

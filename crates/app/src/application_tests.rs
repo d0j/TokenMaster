@@ -202,17 +202,34 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
 
     let root = DataRoot::resolve(&environment).expect("data root");
     assert!(root.archive_path().exists());
+    let crate::command::ApplicationCommandAdmission::Started(manual) = application
+        .commands
+        .submit(crate::command::ApplicationCommand::Backup)
+    else {
+        panic!("manual backup command must start");
+    };
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let manual_completion = loop {
+        if let Some(completion) = application
+            .commands
+            .try_completion()
+            .expect("operation completion")
+        {
+            break completion;
+        }
+        assert!(Instant::now() < deadline, "manual backup command timed out");
+        std::thread::yield_now();
+    };
+    assert_eq!(manual_completion.request_id(), manual.id());
+    assert_eq!(
+        manual_completion.outcome(),
+        crate::command::ApplicationCommandOutcome::Succeeded
+    );
     let bundle_slot = application.bundle.lock().expect("bundle slot");
     let maintenance = &bundle_slot.as_ref().expect("healthy bundle").maintenance;
     assert_eq!(
         maintenance.snapshot().worker().source_state(),
-        MaintenanceSourceState::HealthyUnpublished
-    );
-    let manual = wait_for_mandatory_backup(maintenance, MaintenancePurpose::Manual);
-    assert!(
-        manual.is_ok(),
-        "manual backup publication failed: {:?}",
-        maintenance.snapshot()
+        MaintenanceSourceState::Healthy
     );
     assert_eq!(maintenance.snapshot().worker().successful_count(), 1);
     for _ in 0..18 {

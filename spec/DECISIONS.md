@@ -1448,6 +1448,43 @@ an avoidable safe-mode transition. A generic global operation mutex would block
 unrelated catalog reads and enlarge latency. One fixed late-pin gate serializes only
 binding versus deletion, preserves constant memory, and keeps heavy I/O outside the
 mutex. Receipt-before-restored-lifecycle ordering closes the independent crash window
-between a complete journal and run-state acceptance. Task 12B.2b still owns worker/UI/
-native-file bindings, cancellation propagation, config operations, verification,
-rebuild, and no-backup reconstruction.
+between a complete journal and run-state acceptance. Task 12B.2b.1 now supplies the
+worker/manual-backup/config core in ADR-061; the remaining Task 12B.2b owns native-file/
+UI bindings, cancellation propagation, verification, restore/rebuild execution, and
+no-backup reconstruction.
+
+## ADR-061 — Execute application operations on one joined bounded worker
+
+Decision: the production application replaces its bare command coordinator with one
+`ApplicationOperationWorker`. The worker owns the sole coordinator, one
+standard-library thread named `tokenmaster-operation-worker`, one capacity-one wake,
+and one latest-only completion. It executes the fixed typed permit outside its mutex,
+normalizes exact cancellation before coordinator completion, converts a caught callback
+panic to a fixed internal failure and faulted/closed state, and joins on explicit
+shutdown and `Drop`. Clean run state requires this join before bundle shutdown can be
+accepted. It adds no async runtime, generic closure queue, unbounded channel, operation
+history, per-command thread, or detached owner.
+
+The first production executor binding is manual backup. The command crosses its
+irreversible boundary immediately before handing mutation authority to the existing
+maintenance runtime, holds the bundle slot stable through one atomic exact-root wait,
+and maps only the path-private maintenance receipt to a fixed command outcome. This is
+conservative cancellation: once maintenance submission can publish, late cancel is
+rejected and shutdown joins the result.
+
+The same milestone establishes config operations over sealed capabilities without
+claiming native dialogs. `.tmconfig` has a separate 2 MiB encoded ceiling enforced by
+writer and reader. Export accepts a controlled create-new target, stages typed portable
+settings, crosses irreversible state immediately before publication, and rereads the
+published package. Import fully verifies an already open bounded reader and retains one
+typed candidate/base-identity preview with at most three categories; confirm consumes
+that preview through the existing atomic settings commit and preserves device-local
+state. UI never receives a target, reader, path, filename, raw bytes, or digest.
+
+Rationale: executing backup or package work in a Slint callback would make visible input
+latency depend on disk, compression, SQLite, and antivirus behavior. A general executor
+or command-payload channel would expand authority and retained memory. Reusing the
+constant-state coordinator inside one joined worker keeps memory independent of command
+count, provides a single shutdown barrier, and lets later sealed native-file, verify,
+restore, and rebuild capabilities attach without changing the UI intent contract.
+Task 12B.2b still owns those remaining bindings and no-backup reconstruction.

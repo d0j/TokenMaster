@@ -37,8 +37,8 @@ $rustFiles = @(
     Get-ChildItem -LiteralPath $appSource -Recurse -File -Filter '*.rs' |
         Where-Object { $_.Name -notlike '*_tests.rs' }
 )
-if ($rustFiles.Count -ne 6) {
-    throw 'TM-APP-FILE-COUNT: application composition must contain exactly six Rust files'
+if ($rustFiles.Count -ne 7) {
+    throw 'TM-APP-FILE-COUNT: application composition must contain exactly seven Rust files'
 }
 $productionText = ($rustFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
@@ -56,8 +56,18 @@ foreach ($contract in @(
     @{ Name = 'TM-APP-LIVE-OWNER'; Pattern = 'LiveRuntime::start_notified_guarded\('; Count = 1 },
     @{ Name = 'TM-APP-MAINTENANCE-OWNER'; Pattern = 'BackupMaintenanceRuntime::spawn\('; Count = 1 },
     @{ Name = 'TM-APP-COMMAND-COORDINATOR'; Pattern = 'ApplicationCommandCoordinator::new\('; Count = 1 },
-    @{ Name = 'TM-APP-RESTART-PAUSE'; Pattern = '\.pause_admission\(\)'; Count = 2 },
-    @{ Name = 'TM-APP-RESTART-RESUME'; Pattern = '\.resume_admission\(\)'; Count = 2 },
+    @{ Name = 'TM-APP-OPERATION-WORKER'; Pattern = 'ApplicationOperationWorker::spawn\('; Count = 1 },
+    @{ Name = 'TM-APP-OPERATION-THREAD'; Pattern = '"tokenmaster-operation-worker"'; Count = 1 },
+    @{ Name = 'TM-APP-OPERATION-WAKE'; Pattern = 'sync_channel\(1\)'; Count = 1 },
+    @{ Name = 'TM-APP-OPERATION-SPAWN'; Pattern = 'Builder::new\(\)'; Count = 1 },
+    @{ Name = 'TM-APP-BACKUP-COMMAND'; Pattern = 'ApplicationCommand::Backup => execute_manual_backup_command\('; Count = 1 },
+    @{ Name = 'TM-APP-OPERATION-JOIN'; Pattern = 'self\.commands\.shutdown\(\)'; Count = 1 },
+    @{ Name = 'TM-APP-CONFIG-SEALED-TARGET'; Pattern = 'target:\s*&DurableFileTarget'; Count = 1 },
+    @{ Name = 'TM-APP-CONFIG-SEALED-SOURCE'; Pattern = 'mut source:\s*DurableFileReader'; Count = 1 },
+    @{ Name = 'TM-APP-CONFIG-BOUNDED-STAGE'; Pattern = '\.create_staged\(MAX_CONFIG_PACKAGE_BYTES\)'; Count = 1 },
+    @{ Name = 'TM-APP-CONFIG-BOUNDED-READ'; Pattern = '\.open_reader\(MAX_CONFIG_PACKAGE_BYTES\)'; Count = 1 },
+    @{ Name = 'TM-APP-RESTART-PAUSE'; Pattern = 'self\.commands\s*\.pause_admission\(\)'; Count = 2 },
+    @{ Name = 'TM-APP-RESTART-RESUME'; Pattern = 'self\.commands\s*\.resume_admission\(\)'; Count = 2 },
     @{ Name = 'TM-APP-RESTART-GUARD'; Pattern = '\.acquire_runtime_guard\(&self\.data_root\)'; Count = 2 },
     @{ Name = 'TM-APP-RESTORE-BINDING'; Pattern = '\.bind_backup_selection\(selection\)'; Count = 1 },
     @{ Name = 'TM-APP-RESTORE-CURRENT-BIND'; Pattern = '\.bind_current_selection\(&self\.backups'; Count = 1 },
@@ -73,7 +83,7 @@ foreach ($contract in @(
     @{ Name = 'TM-APP-POST-MIGRATION'; Pattern = 'MaintenancePurpose::PostMigration'; Count = 2 },
     @{ Name = 'TM-APP-MIGRATION-PENDING'; Pattern = '\.require_post_migration\('; Count = 2 },
     @{ Name = 'TM-APP-MIGRATION-COMPLETE'; Pattern = '\.complete_post_migration\('; Count = 2 },
-    @{ Name = 'TM-APP-ATOMIC-MAINTENANCE-WAIT'; Pattern = '\.submit_and_wait\('; Count = 1 },
+    @{ Name = 'TM-APP-ATOMIC-MAINTENANCE-WAIT'; Pattern = '\.submit_and_wait\('; Count = 2 },
     @{ Name = 'TM-APP-CLEAN-STATE'; Pattern = '\.mark_clean\(\)'; Count = 1 },
     @{ Name = 'TM-APP-QUOTA-OWNER'; Pattern = 'CodexQuotaRuntime::start_notified\('; Count = 1 },
     @{ Name = 'TM-APP-REMINDER-OWNER'; Pattern = 'BenefitReminderRuntime::start_notified\('; Count = 1 },
@@ -152,6 +162,15 @@ if ($SourceOnly) {
         live_runtime_owner_count = 1
         maintenance_runtime_owner_count = 1
         application_command_coordinator_count = 1
+        application_operation_worker_count = 1
+        application_operation_capacity_one_wake_count = 1
+        application_operation_owned_spawn_count = 1
+        application_backup_command_binding_count = 1
+        application_operation_join_count = 1
+        application_config_sealed_target_count = 1
+        application_config_sealed_source_count = 1
+        application_config_bounded_stage_count = 1
+        application_config_bounded_read_count = 1
         controlled_restart_count = 1
         bundle_generation_guard_count = 1
         selected_restore_count = 1
@@ -163,7 +182,7 @@ if ($SourceOnly) {
         post_migration_gate_count = 2
         pending_migration_transition_count = 2
         completed_migration_transition_count = 2
-        atomic_maintenance_wait_count = 1
+        atomic_maintenance_wait_count = 2
         clean_state_transition_count = 1
         quota_runtime_owner_count = 1
         reminder_runtime_owner_count = 1
@@ -258,6 +277,15 @@ foreach ($needle in @(
     live_runtime_owner_count = 1
     maintenance_runtime_owner_count = 1
     application_command_coordinator_count = 1
+    application_operation_worker_count = 1
+    application_operation_capacity_one_wake_count = 1
+    application_operation_owned_spawn_count = 1
+    application_backup_command_binding_count = 1
+    application_operation_join_count = 1
+    application_config_sealed_target_count = 1
+    application_config_sealed_source_count = 1
+    application_config_bounded_stage_count = 1
+    application_config_bounded_read_count = 1
     controlled_restart_count = 1
     bundle_generation_guard_count = 1
     selected_restore_count = 1
@@ -269,7 +297,7 @@ foreach ($needle in @(
     post_migration_gate_count = 2
     pending_migration_transition_count = 2
     completed_migration_transition_count = 2
-    atomic_maintenance_wait_count = 1
+    atomic_maintenance_wait_count = 2
     clean_state_transition_count = 1
     quota_runtime_owner_count = 1
     reminder_runtime_owner_count = 1

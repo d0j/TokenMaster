@@ -85,6 +85,89 @@ Describe "TokenMaster application composition audit" {
             Should -Throw "*TM-APP-COMMAND-COORDINATOR*"
     }
 
+    It "rejects a second application operation worker" {
+        $fixture = New-AppAuditFixture -Name "duplicate-operation-worker"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\application.rs") `
+            -Value 'fn duplicate_operation_worker() { let _ = ApplicationOperationWorker::spawn('
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-OPERATION-WORKER*"
+    }
+
+    It "rejects an unbounded application operation wake" {
+        $fixture = New-AppAuditFixture -Name "unbounded-operation-wake"
+        $path = Join-Path $fixture "crates\app\src\operation.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'sync_channel(1)',
+            'channel()'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-OPERATION-WAKE*"
+    }
+
+    It "rejects a second application operation thread builder" {
+        $fixture = New-AppAuditFixture -Name "duplicate-operation-thread-builder"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\operation.rs") `
+            -Value 'fn detached_operation_thread() { let _ = Builder::new(); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-OPERATION-SPAWN*"
+    }
+
+    It "rejects replacing the sealed config export target" {
+        $fixture = New-AppAuditFixture -Name "unsealed-config-target"
+        $path = Join-Path $fixture "crates\app\src\state.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'target: &DurableFileTarget',
+            'target: &std::path::Path'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-CONFIG-SEALED-TARGET*"
+    }
+
+    It "rejects removing the config import read ceiling" {
+        $fixture = New-AppAuditFixture -Name "unbounded-config-read"
+        $path = Join-Path $fixture "crates\app\src\state.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '.open_reader(MAX_CONFIG_PACKAGE_BYTES)',
+            '.open_reader(MAX_DURABLE_FILE_BYTES)'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-CONFIG-BOUNDED-READ*"
+    }
+
+    It "rejects removal of the manual backup command binding" {
+        $fixture = New-AppAuditFixture -Name "backup-command-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'ApplicationCommand::Backup => execute_manual_backup_command(',
+            'ApplicationCommand::Backup => execute_unbound_backup('
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-BACKUP-COMMAND*"
+    }
+
+    It "rejects detaching the application operation worker at shutdown" {
+        $fixture = New-AppAuditFixture -Name "operation-join-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'self.commands.shutdown()',
+            'self.commands.detach()'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-OPERATION-JOIN*"
+    }
+
     It "rejects removal of restart admission closure" {
         $fixture = New-AppAuditFixture -Name "restart-admission-drift"
         $path = Join-Path $fixture "crates\app\src\application.rs"

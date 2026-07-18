@@ -16,14 +16,18 @@ use super::manifest::{
     FOOTER_DIGEST_BYTES, FOOTER_MAGIC, MANIFEST_BYTES, Manifest,
 };
 use super::{
-    BackupCompression, BackupMetadata, BackupPackage, ConfigPackage, MAX_DATABASE_PACKAGE_BYTES,
-    MAX_ENCODED_PACKAGE_BYTES, MAX_SETTINGS_PACKAGE_BYTES, PACKAGE_IO_BUFFER_BYTES,
-    PACKAGE_WINDOW_LOG, PackageReceipt, VerifiedBackupPackage, VerifiedConfigPackage,
+    BackupCompression, BackupMetadata, BackupPackage, ConfigPackage, MAX_CONFIG_PACKAGE_BYTES,
+    MAX_DATABASE_PACKAGE_BYTES, MAX_ENCODED_PACKAGE_BYTES, MAX_SETTINGS_PACKAGE_BYTES,
+    PACKAGE_IO_BUFFER_BYTES, PACKAGE_WINDOW_LOG, PackageReceipt, VerifiedBackupPackage,
+    VerifiedConfigPackage,
 };
 
 impl ConfigPackage {
     /// Verifies and decodes a settings-only package from a controlled durable reader.
     pub fn read(source: &mut DurableFileReader) -> Result<VerifiedConfigPackage, StateError> {
+        if source.len() > MAX_CONFIG_PACKAGE_BYTES {
+            return Err(StateError::capacity_exceeded());
+        }
         let mut source_adapter = DurableReaderAdapter::new(source);
         let mut sink = io::sink();
         let result = read_package(&mut source_adapter, PackageKind::Config, &mut sink);

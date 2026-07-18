@@ -6,6 +6,7 @@
 mod application;
 mod command;
 mod data_root;
+mod operation;
 mod state;
 
 pub use application::{ApplicationError, ApplicationErrorCode, run};
@@ -21,3 +22,8 @@ mod state_tests;
 #[path = "command_tests.rs"]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod command_tests;
+
+#[cfg(test)]
+#[path = "operation_tests.rs"]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod operation_tests;

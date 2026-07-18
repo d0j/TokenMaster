@@ -941,8 +941,8 @@ identity. Exact cancellation is cooperative until a one-way irreversible transit
 restart pauses new admission and discards only the queued follow-up. The old bundle is
 joined before a fresh archive guard is acquired. Runtime notifier generation is checked
 while holding the bundle-slot mutex, preventing a check/use race into a replacement
-controller. Task 12B.2 operation execution, restore authority, and no-backup
-reconstruction remain outside this implemented boundary.
+controller. Task 12B.2a supplies selected restore below; Task 12B.2b.1 supplies the
+bounded worker/manual-backup and sealed config subset below.
 
 Implemented Task 12B.2a adds only the selected-restore authority contour. The public
 choice remains generation/ordinal; application state alone may bind it to one fully
@@ -961,8 +961,30 @@ migration protocol; direct current-bundle start is forbidden. Catalog mutex owne
 MUST NOT span online snapshot, package verification, recovery, or migration I/O. Any
 stale selection, changed bytes, failed safety point, receipt conflict, or ambiguous
 lifecycle leaves admission resumed only into safe mode with no archive owner. Task
-12B.2b still owns external command execution, native-file authority, reconstruction,
+12B.2b still owns native-file authority, remaining command bindings, reconstruction,
 and resource/release closure.
+
+Implemented Task 12B.2b.1 owns one operation thread with no async runtime, per-command
+thread, unbounded sender, result history, path, file capability, SQL, shell, browser,
+network, or credential authority. The wake channel and completion mailbox each retain
+at most one value; the coordinator still retains only one active permit and one
+follow-up. The callback runs outside the mutex. Worker panic output is thread-locally
+redacted, the active command completes with a stable internal failure unless an exact
+cancellation already won the shared state lock; in that race the command remains
+cancelled while the worker still faults closed. Pending work is discarded and admission
+closes in either case. Shutdown and `Drop` never detach the owned
+thread. Clean run publication is forbidden unless the operation worker and every bundle
+owner join successfully.
+
+Manual backup crosses irreversible state before the worker hands mutation authority to
+the maintenance runtime and holds the bundle slot through the exact-root wait, so
+restart/restore/shutdown cannot replace the bundle during publication. Config export is
+create-new only, uses a 2 MiB stage, and rereads the published file through the typed
+codec. An occupied target is preserved. Config import fully consumes and verifies an
+already open bounded reader before preview, retains no reader/path/raw bytes, and commits
+only the retained typed candidate against the previewed base identity. Device-local
+settings never enter the package or preview and remain unchanged. Native file dialogs
+are not implemented by this slice and no UI filesystem authority is claimed.
 
 Optional manual password protection uses the implemented standard age v1 stream with
 fixed bounded scrypt work and never stores the passphrase. New passphrases are

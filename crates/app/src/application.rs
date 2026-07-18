@@ -24,11 +24,15 @@ use tokenmaster_runtime::{
 };
 use tokenmaster_state::{
     BackupMaintenanceRuntime, BootstrapOutcome, MaintenanceCompletion, MaintenanceOutcome,
-    MaintenancePurpose, MaintenanceSourceState, RestoreMode, RestoreSafety,
+    MaintenancePurpose, MaintenanceSourceState, RestoreMode, RestoreSafety, StateErrorCode,
 };
 use tokenmaster_store::BackupControl;
 
-use crate::command::{ApplicationBackupSelection, ApplicationCommandCoordinator};
+use crate::command::{
+    ApplicationBackupSelection, ApplicationCommand, ApplicationCommandExecution,
+    ApplicationCommandFailure, ApplicationCommandPermit,
+};
+use crate::operation::{ApplicationOperationWorker, ApplicationOperationWorkerPhase};
 use crate::state::{ApplicationPreflight, ApplicationStateOwner};
 use crate::{ApplicationEnvironment, DataRoot};
 
@@ -94,7 +98,7 @@ struct Application {
     shell: DesktopShell,
     _bridge: Option<DesktopSnapshotBridge>,
     bundle: SharedBundle,
-    commands: ApplicationCommandCoordinator,
+    commands: ApplicationOperationWorker,
     #[cfg_attr(
         not(test),
         expect(dead_code, reason = "Task 12B command worker binds controlled restart")
@@ -162,13 +166,18 @@ impl Application {
             (false, None)
         };
 
+        let command_bundle = Arc::clone(&bundle);
+        let commands = ApplicationOperationWorker::spawn(move |permit| {
+            execute_application_operation(&command_bundle, permit)
+        })
+        .map_err(|_| ApplicationError::internal())?;
         Ok(Self {
             environment: environment.clone(),
             data_root,
             shell,
             _bridge: bridge,
             bundle,
-            commands: ApplicationCommandCoordinator::new(),
+            commands,
             state,
             preflight,
             live_started,
@@ -200,7 +209,9 @@ impl Application {
         {
             return Err(ApplicationError::invalid_lifecycle());
         }
-        self.commands.pause_admission();
+        self.commands
+            .pause_admission()
+            .map_err(|_| ApplicationError::internal())?;
         self.live_started = false;
         drop(self._bridge.take());
         let result = (|| {
@@ -221,7 +232,9 @@ impl Application {
                 guard,
             )
         })();
-        self.commands.resume_admission();
+        self.commands
+            .resume_admission()
+            .map_err(|_| ApplicationError::internal())?;
         match result {
             Ok(bridge) => {
                 self._bridge = Some(bridge);
@@ -257,7 +270,9 @@ impl Application {
         }
         let selection_pin = self.state.bind_backup_selection(selection)?;
         let binding = selection_pin.binding();
-        self.commands.pause_admission();
+        self.commands
+            .pause_admission()
+            .map_err(|_| ApplicationError::internal())?;
         self.live_started = false;
         drop(self._bridge.take());
         let result = (|| {
@@ -302,7 +317,9 @@ impl Application {
                 guard,
             )
         })();
-        self.commands.resume_admission();
+        self.commands
+            .resume_admission()
+            .map_err(|_| ApplicationError::internal())?;
         match result {
             Ok(bridge) => {
                 self._bridge = Some(bridge);
@@ -321,16 +338,25 @@ impl Application {
             return Ok(());
         }
         self.shutdown = true;
-        self.commands.close();
+        let command_result = match self.commands.shutdown() {
+            Ok(ApplicationOperationWorkerPhase::Stopped) => Ok(()),
+            Ok(
+                ApplicationOperationWorkerPhase::Running
+                | ApplicationOperationWorkerPhase::Stopping
+                | ApplicationOperationWorkerPhase::Faulted,
+            )
+            | Err(_) => Err(ApplicationError::shutdown()),
+        };
         let bundle = self
             .bundle
             .lock()
             .map_err(|_| ApplicationError::internal())?
             .take();
-        let result = match bundle {
+        let bundle_result = match bundle {
             Some(mut bundle) => bundle.shutdown(),
             None => Ok(()),
         };
+        let result = command_result.and(bundle_result);
         if result.is_ok() && self.live_started {
             self.preflight
                 .session_mut()
@@ -616,6 +642,85 @@ fn wait_for_mandatory_backup(
     }
 }
 
+fn execute_application_operation(
+    bundle: &SharedBundle,
+    permit: &ApplicationCommandPermit,
+) -> ApplicationCommandExecution {
+    if permit.is_cancelled() {
+        return ApplicationCommandExecution::Cancelled;
+    }
+    match permit.command() {
+        ApplicationCommand::Backup => execute_manual_backup_command(bundle, permit),
+        ApplicationCommand::ExportConfig
+        | ApplicationCommand::ImportConfig
+        | ApplicationCommand::Verify
+        | ApplicationCommand::RestoreData(_)
+        | ApplicationCommand::RestoreDataAndPortableSettings(_)
+        | ApplicationCommand::Rebuild => {
+            ApplicationCommandExecution::Failed(ApplicationCommandFailure::Unavailable)
+        }
+    }
+}
+
+fn execute_manual_backup_command(
+    bundle: &SharedBundle,
+    permit: &ApplicationCommandPermit,
+) -> ApplicationCommandExecution {
+    if permit.begin_irreversible().is_err() {
+        return if permit.is_cancelled() {
+            ApplicationCommandExecution::Cancelled
+        } else {
+            ApplicationCommandExecution::Failed(ApplicationCommandFailure::Internal)
+        };
+    }
+    let slot = match bundle.lock() {
+        Ok(slot) => slot,
+        Err(_) => {
+            return ApplicationCommandExecution::Failed(ApplicationCommandFailure::Internal);
+        }
+    };
+    let Some(bundle) = slot.bundle.as_ref() else {
+        return ApplicationCommandExecution::Failed(ApplicationCommandFailure::Unavailable);
+    };
+    let completion = match bundle
+        .maintenance
+        .submit_and_wait(MaintenancePurpose::Manual, MANDATORY_BACKUP_TIMEOUT)
+    {
+        Ok(completion) => completion,
+        Err(error) => {
+            return ApplicationCommandExecution::Failed(map_state_command_failure(error.code()));
+        }
+    };
+    match completion.outcome() {
+        MaintenanceOutcome::Published => ApplicationCommandExecution::Succeeded,
+        MaintenanceOutcome::RetryScheduled
+        | MaintenanceOutcome::SourceSuspect
+        | MaintenanceOutcome::Cancelled
+        | MaintenanceOutcome::Failed => {
+            ApplicationCommandExecution::Failed(completion.failure_code().map_or(
+                ApplicationCommandFailure::Unavailable,
+                map_state_command_failure,
+            ))
+        }
+    }
+}
+
+const fn map_state_command_failure(code: StateErrorCode) -> ApplicationCommandFailure {
+    match code {
+        StateErrorCode::CapacityExceeded | StateErrorCode::DiskCapacity => {
+            ApplicationCommandFailure::CapacityExceeded
+        }
+        StateErrorCode::Integrity | StateErrorCode::RecoveryRequired => {
+            ApplicationCommandFailure::Integrity
+        }
+        StateErrorCode::InternalInvariant => ApplicationCommandFailure::Internal,
+        StateErrorCode::InvalidInput
+        | StateErrorCode::UnsupportedVersion
+        | StateErrorCode::Unavailable
+        | StateErrorCode::Busy => ApplicationCommandFailure::Unavailable,
+    }
+}
+
 impl Drop for Application {
     fn drop(&mut self) {
         let _ = self.shutdown();
@@ -884,7 +989,7 @@ impl ApplicationError {
         }
     }
 
-    const fn invalid_lifecycle() -> Self {
+    pub(crate) const fn invalid_lifecycle() -> Self {
         Self {
             code: ApplicationErrorCode::InvalidLifecycle,
         }
