@@ -111,6 +111,111 @@ Describe "TokenMaster application composition audit" {
             Should -Throw "*TM-APP-RESTART-GUARD*"
     }
 
+    It "rejects ordinal-only selected restore" {
+        $fixture = New-AppAuditFixture -Name "restore-binding-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '.bind_backup_selection(selection)',
+            '.trust_backup_ordinal(selection)'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-RESTORE-BINDING*"
+    }
+
+    It "rejects binding against a stale directory projection" {
+        $fixture = New-AppAuditFixture -Name "restore-current-binding-drift"
+        $path = Join-Path $fixture "crates\app\src\state.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '.bind_current_selection(&self.backups, point.selection())',
+            '.bind_selection(point.selection())'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-RESTORE-CURRENT-BIND*"
+    }
+
+    It "rejects deleting without consulting the late restore pin" {
+        $fixture = New-AppAuditFixture -Name "restore-dynamic-pin-drift"
+        $path = Join-Path $fixture "crates\app\src\state.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'retention.delete_next_protected(',
+            'retention.delete_next_unprotected('
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-RESTORE-DYNAMIC-PIN*"
+    }
+
+    It "rejects leaking the process-local restore pin" {
+        $fixture = New-AppAuditFixture -Name "restore-pin-drop-drift"
+        $path = Join-Path $fixture "crates\app\src\state.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'impl Drop for ApplicationBackupSelectionPin',
+            'impl Leak for ApplicationBackupSelectionPin'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-RESTORE-PIN-DROP*"
+    }
+
+    It "rejects unprotected pre-restore maintenance" {
+        $fixture = New-AppAuditFixture -Name "restore-protection-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '.start_protected_maintenance(',
+            '.start_maintenance('
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-RESTORE-PROTECTED*"
+    }
+
+    It "rejects dropping the selected recovery receipt" {
+        $fixture = New-AppAuditFixture -Name "restore-receipt-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '.bind_recovery_launch(receipt)',
+            '.discard_recovery_launch(receipt)'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-RESTORE-RECOVERY-LAUNCH*"
+    }
+
+    It "rejects binding the recovery receipt after restored lifecycle work" {
+        $fixture = New-AppAuditFixture -Name "restore-receipt-order-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'self.preflight.bind_recovery_launch(receipt)?;',
+            ''
+        )
+        $text += "`nfn bind_too_late() { self.preflight.bind_recovery_launch(receipt)?; }`n"
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-RESTORE-RECOVERY-ORDER*"
+    }
+
+    It "rejects bypassing restored-archive migration gates" {
+        $fixture = New-AppAuditFixture -Name "restored-migration-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'start_restored_bundle(',
+            'start_current_bundle('
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-RESTORED-MIGRATION*"
+    }
+
     It "rejects migration safety-point drift" {
         $fixture = New-AppAuditFixture -Name "migration-gate-drift"
         $path = Join-Path $fixture "crates\app\src\application.rs"

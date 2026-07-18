@@ -824,9 +824,13 @@ cargo +1.97.0 test -p tokenmaster-runtime --locked
 application backup operation. Task 12B.1 adds the bounded typed command admission core,
 one active/one follow-up under 10,000 hints, exact cancellation/irreversible boundary,
 controlled current-bundle restart, and obsolete-notifier suppression for items 7-9,
-11, and 12. Task 12B.2 retains the operation worker, actual config/backup/verify/
-restore/rebuild/retry bindings, selected restore and no-backup reconstruction in items
-5-9 and 13. This status is implementation truth, not release acceptance.
+11, and 12. Task 12B.2a adds the identity-bound selected restore lifecycle in items 6-7:
+current-directory binding, one deletion-serialized RAII pin, protected `PreRestore`,
+joined old owners, journaled replacement, immediate run-session receipt binding,
+restored-legacy pre/post-migration gates, and one fresh bundle or safe mode. Task 12B.2b
+retains the operation worker, actual config/backup/verify/restore/rebuild/retry/cancel
+bindings, native-file surfaces, and no-backup reconstruction in
+items 5-9 and 13. This status is implementation truth, not release acceptance.
 
 **Files:**
 

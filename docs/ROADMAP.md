@@ -125,8 +125,9 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   redundant records, typed settings, verified SQLite snapshot primitives, and fixed
   typed package import/export, optional manual age protection, sealed backup catalog,
   deterministic bounded retention, capacity-one maintenance, and sealed journaled
-  recovery/quarantine are complete; startup recovery is next, then safe mode and Data
-  & Recovery controls. Full history,
+  recovery/quarantine, application backup/migration ownership, bounded command/restart,
+  and identity-pinned selected-restore lifecycle are complete; the operation worker,
+  config/verify/rebuild/no-backup reconstruction, then Data & Recovery controls remain. Full history,
   sessions, models, projects, activity, remaining health/notifications/settings/help,
   command palette, tray, and compact widget then remain P3-D-P3-E.
 - **P4 — presentation:** modular skins/layouts/density/scheme/locale, en/ru/pseudo,
@@ -164,8 +165,9 @@ identity-free six-section projection and responsive compiled Slint Dashboard wit
 32/32/240/12/8/12 presentation caps, real unknown/degraded states, and route-only
 navigation without model/window reconstruction. P3-D.0 Reliable State Tasks 1-11A,
 Task 12A application backup/migration composition, and the Task 12B.1 bounded command/
-generation-safe current-bundle restart foundation are implemented; Task 12B.2 command
-execution, selected restore, and no-backup reconstruction are next, then the remaining P3-D
+generation-safe current-bundle restart foundation and Task 12B.2a identity-pinned
+selected-restore lifecycle are implemented; Task 12B.2b command execution, config/
+verify/rebuild, and no-backup reconstruction are next, then the remaining P3-D
 supporting data views.
 
 P3-D.0 Reliable State is approved under
@@ -205,9 +207,12 @@ periodic work is disabled, redundant pending-post restart completion, atomic exa
 receipt waiting, partial-owner discard, and final clean-after-join
 publication. Task 12B.1 now adds one bounded typed command coordinator, admission pause/
 resume, a fresh-lease current-bundle restart without window reconstruction, and
-generation-bound obsolete-notifier suppression. Task 12B.2 remains next for the
-operation worker, typed command bindings, selected restore, and provider-backed
-no-backup rebuild. These slices add no
+generation-bound obsolete-notifier suppression. Task 12B.2a adds current-directory
+selection revalidation, one deletion-serialized RAII identity pin, protected
+`PreRestore`, journaled selected replacement, recovery receipt acceptance, and repeated
+legacy migration gates. Task 12B.2b remains next for the operation worker, typed
+command/UI/native-file bindings, config/verify/rebuild, cancellation propagation, and
+provider-backed no-backup rebuild. These slices add no
 path, generic stream, SQL, or batch-deletion authority.
 
 P2-A query foundation is approved under

@@ -819,6 +819,25 @@ not persisted and never become recovery authority. Task 12B.2 must add operation
 restart receipts and the explicit authoritative-source reconstruction result; it may
 not encode fabricated zeros for domains that cannot be reconstructed.
 
+Implemented Task 12B.2a seals a generation/ordinal selection into one opaque identity
+containing only the private physical slot, package length, and full package digest. It
+can be resolved after catalog generation or ordinal changes only when those exact bytes
+remain fully verified; deletion, slot reuse, byte replacement, ambiguity, or non-
+verified health fails closed. One RAII pin serializes current-directory binding with
+each actual retention deletion. A cycle admitted before the pin must replan with that
+identity protected in addition to the candidate and ordinary protected tiers. The pin
+remains through the statically protected `PreRestore` publication, then clears before
+journaled replacement. Catalog projections remain bounded and immutable behind short-
+lived `Arc` replacement; no operation retains catalog history.
+
+After journal completion, the recovery operation generation and candidate identity are
+written into the existing run session before any restored-archive lifecycle work. A
+clean joined shutdown accepts that exact generation. A supported legacy candidate is
+not treated as current: it receives a new verified old-schema `PreMigration` point,
+durable source/target pending pair, guarded migration, and verified current-schema
+`PostMigration` point before the fresh bundle is exposed. Task 12B.2b remains
+responsible for public operation receipts and authoritative-source reconstruction.
+
 ### P3-C bounded Dashboard projection
 
 The read-only quota overview discovers at most 32 current window keys in one deferred

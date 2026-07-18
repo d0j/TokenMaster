@@ -24,6 +24,7 @@ mod settings;
 pub use bootstrap::{BootstrapOutcome, BootstrapReport, PreparedBootstrap, StateBootstrap};
 pub use catalog::{
     BackupCatalog, CatalogGeneration, CatalogHealth, CatalogPoint, CatalogSelection,
+    CatalogSelectionBinding,
 };
 pub use error::{StateError, StateErrorCode};
 pub use maintenance::{

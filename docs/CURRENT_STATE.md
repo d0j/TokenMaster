@@ -1092,9 +1092,34 @@ state workspace audit and 55/55 authority mutations also pass. Independent follo
 review reports Critical/Important/Minor 0/0/0. This is developer evidence, not product
 or release acceptance.
 
-Task 12B.2 remains open for the operation worker and actual typed config export/import,
-backup/verify, selected data-only or confirmed portable-settings restore, rebuild,
-retry/cancel bindings, and authoritative Codex reconstruction when no backup is usable.
+Task 12B.2a selected restore composition is implemented. A current
+generation/ordinal choice is revalidated against the complete directory and becomes one
+opaque RAII identity pin. Every in-flight retention deletion consults the same pin gate,
+including cycles admitted before the command, so the selected package survives old-
+maintenance join and protected `PreRestore` publication. Catalog projections are
+immutable bounded `Arc` snapshots; heavy snapshot, verify, retention planning, and
+recovery I/O do not hold the projection mutex.
+
+After all old owners join, a fresh fixed guard enters the existing journaled restore.
+The exact recovery receipt is durably bound to the current run session before any
+restored lifecycle work. Current schema rebuilds one fresh bundle; supported legacy
+schema repeats verified pre/post migration points and the pending source/target pair.
+Stale selections and shutdown attempts fail before mutation; any later ambiguity leaves
+safe mode with zero bundle owners. The sequential lifecycle regression covers current
+and v12 selected restore, stale reuse, bounded retention, clean recovery acceptance,
+and final shutdown. Catalog 7/7, retention 3/3, app 14 unit plus 7 integration, and
+31/31 application source-policy mutations pass. Clean-root, formatting,
+warnings-as-errors locked workspace Clippy, and the complete locked workspace
+test/doctest gate pass; the latter takes 507.5 seconds. Release composition and the
+reliable-state workspace audit pass, as do all 55/55 reliable-state authority mutations.
+Independent final review reports Critical/Important/Minor 0/0/0. The live-auth Codex
+executable contract remains intentionally ignored without its explicit environment
+binding. This is Task 12B.2a developer evidence, not product or release acceptance.
+
+Task 12B.2b remains open for the operation worker and actual typed config export/import,
+backup/verify, command/UI/native-file binding for selected data-only or confirmed
+portable-settings restore, rebuild, retry/cancel propagation, and authoritative Codex
+reconstruction when no backup is usable.
 Data & Recovery UI and new release acceptance evidence also do not exist yet.
 
 Task 12A focused store backup 8/8 and adversarial 10/10, catalog 6/6, maintenance
@@ -1110,10 +1135,11 @@ zero polling/arbitrary-root/forbidden-string surface, and one release artifact.
 
 ## Next implementation slice
 
-Complete P3-D.0 Task 12B.2 from
+Complete P3-D.0 Task 12B.2b from
 `docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: compose the reliable
-state operation worker, selected restore lifecycle, and authoritative no-backup
-reconstruction over the Task 12A owner and Task 12B.1 command/restart boundary.
+state operation worker, command/UI/native-file bindings, config/backup/verify/rebuild,
+cancellation/retry, and authoritative no-backup reconstruction over the Task 12A,
+Task 12B.1, and Task 12B.2a boundaries.
 
 P2-D quota history core is complete under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: Tasks 1-8 cover
@@ -1130,8 +1156,8 @@ immutable read snapshots, and publication through the existing Codex runtime wit
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
 workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, P3-B.2, P3-B.3, and P3-C are
-complete; P3-D.0 Reliable State is active with Tasks 1-11A, Task 12A, and Task 12B.1
-implemented, followed by Task 12B.2 and the remaining P3-D supporting data-bearing routes. Activation
+complete; P3-D.0 Reliable State is active with Tasks 1-11A, Task 12A, Task 12B.1, and
+Task 12B.2a implemented, followed by Task 12B.2b and the remaining P3-D supporting data-bearing routes. Activation
 remains a later independently authorized capability. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.
 

@@ -111,8 +111,23 @@ fn post_publication_cycle_keeps_bounded_tiers_and_replans_after_each_delete() {
         candidate_time,
     );
     let (candidate, _) = read_backup_bytes(&candidate_bytes).expect("verified candidate");
-    let admission = RetentionAdmission::preflight(&catalog, &candidate, RetentionPolicy::default())
-        .expect("capacity preflight");
+    let protected_time = base - 20 * day_ms;
+    let protected_selection = catalog
+        .points()
+        .iter()
+        .find(|point| point.created_at_utc_ms() == Some(protected_time))
+        .expect("old selected restore point")
+        .selection();
+    let protected_binding = catalog
+        .bind_selection(protected_selection)
+        .expect("bind selected restore point");
+    let admission = RetentionAdmission::preflight_protected(
+        &catalog,
+        &candidate,
+        RetentionPolicy::default(),
+        protected_binding,
+    )
+    .expect("protected capacity preflight");
     assert_eq!(format!("{admission:?}"), "RetentionAdmission([redacted])");
 
     publish(&directory, &candidate_bytes);
@@ -281,6 +296,13 @@ fn post_publication_cycle_keeps_bounded_tiers_and_replans_after_each_delete() {
         point.created_at_utc_ms() == Some(base - 18 * day_ms)
             && point.purpose() == Some(BackupPurpose::PreMigration)
     }));
+    let protected_current = current
+        .resolve_binding(protected_binding)
+        .expect("selected restore point survives pre-restore retention");
+    assert_eq!(
+        current.points()[usize::from(protected_current.ordinal())].created_at_utc_ms(),
+        Some(protected_time)
+    );
     for newest in 0..4 {
         let expected = base - i64::from(newest) * day_ms;
         assert!(
@@ -293,4 +315,78 @@ fn post_publication_cycle_keeps_bounded_tiers_and_replans_after_each_delete() {
     let rendered = format!("{current:?}");
     assert!(!rendered.contains(root.path().to_string_lossy().as_ref()));
     assert!(!rendered.contains("sha256"));
+}
+
+#[test]
+fn late_restore_pin_protects_a_cycle_admitted_before_the_selection() {
+    let (_root, directory) = fixture();
+    let base = 1_735_689_600_000_i64;
+    for age in (1..=5).rev() {
+        let (bytes, _) = backup_bytes_at(
+            format!("SQLite format 3\0late-pin-{age}").as_bytes(),
+            BackupCompression::Normal,
+            BackupPurpose::Periodic,
+            base - i64::from(age),
+        );
+        publish(&directory, &bytes);
+    }
+    let mut catalog = BackupCatalog::rebuild(&directory, None).expect("historical catalog");
+    catalog
+        .verify_all_packages(&directory)
+        .expect("verify historical catalog");
+    let selected = catalog.points().last().expect("oldest point").selection();
+    let binding = catalog
+        .bind_current_selection(&directory, selected)
+        .expect("bind exact current point");
+
+    let (candidate_bytes, _) = backup_bytes_at(
+        b"SQLite format 3\0late-pin-candidate",
+        BackupCompression::Normal,
+        BackupPurpose::Periodic,
+        base,
+    );
+    let (candidate, _) = read_backup_bytes(&candidate_bytes).expect("verified candidate");
+    let admission = RetentionAdmission::preflight(&catalog, &candidate, RetentionPolicy::default())
+        .expect("cycle admitted before restore pin");
+    publish(&directory, &candidate_bytes);
+    let mut current =
+        BackupCatalog::rebuild(&directory, Some(&catalog)).expect("published catalog");
+    let candidate_selection = current
+        .points()
+        .iter()
+        .find(|point| point.created_at_utc_ms() == Some(base))
+        .expect("published candidate")
+        .selection();
+    current
+        .bind_verified(candidate_selection, &candidate)
+        .expect("bind candidate proof");
+    let cycle = admission
+        .confirm_published(&current, candidate_selection)
+        .expect("confirm in-flight publication");
+
+    let unprotected = cycle
+        .next_deletion(&current)
+        .expect("unprotected plan")
+        .expect("old point is otherwise deletable");
+    assert_eq!(
+        current.points()[usize::from(unprotected.ordinal())].selection(),
+        current
+            .resolve_binding(binding)
+            .expect("selected point before protected deletion")
+    );
+
+    let mut deletions = 0_usize;
+    while cycle
+        .delete_next_protected(&current, &directory, binding)
+        .expect("dynamically protected deletion")
+    {
+        deletions += 1;
+        assert!(deletions <= 32, "bounded deletion loop");
+        current = BackupCatalog::rebuild(&directory, Some(&current))
+            .expect("rebuild after protected deletion");
+    }
+    assert!(deletions > 0);
+    current
+        .resolve_binding(binding)
+        .expect("late-pinned selected point survives the in-flight cycle");
 }

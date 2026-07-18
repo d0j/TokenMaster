@@ -23,11 +23,12 @@ use tokenmaster_runtime::{
     CodexQuotaRuntimeConfig, LiveRuntime, RuntimeErrorCode,
 };
 use tokenmaster_state::{
-    BackupMaintenanceRuntime, BootstrapOutcome, MaintenanceOutcome, MaintenancePurpose,
-    MaintenanceSourceState,
+    BackupMaintenanceRuntime, BootstrapOutcome, MaintenanceCompletion, MaintenanceOutcome,
+    MaintenancePurpose, MaintenanceSourceState, RestoreMode, RestoreSafety,
 };
+use tokenmaster_store::BackupControl;
 
-use crate::command::ApplicationCommandCoordinator;
+use crate::command::{ApplicationBackupSelection, ApplicationCommandCoordinator};
 use crate::state::{ApplicationPreflight, ApplicationStateOwner};
 use crate::{ApplicationEnvironment, DataRoot};
 
@@ -234,6 +235,87 @@ impl Application {
         }
     }
 
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "Task 12B command worker binds selected restore")
+    )]
+    fn restore_selected(
+        &mut self,
+        selection: ApplicationBackupSelection,
+        mode: RestoreMode,
+    ) -> Result<(), ApplicationError> {
+        if self.shutdown
+            || !self.live_started
+            || mode == RestoreMode::AutomaticDataOnly
+            || self
+                .bundle
+                .lock()
+                .map_err(|_| ApplicationError::internal())?
+                .is_none()
+        {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        let selection_pin = self.state.bind_backup_selection(selection)?;
+        let binding = selection_pin.binding();
+        self.commands.pause_admission();
+        self.live_started = false;
+        drop(self._bridge.take());
+        let result = (|| {
+            let owned = self
+                .bundle
+                .lock()
+                .map_err(|_| ApplicationError::internal())?
+                .take();
+            let mut owned = owned.ok_or_else(ApplicationError::invalid_lifecycle)?;
+            owned.shutdown()?;
+
+            let guard = self.state.acquire_runtime_guard(&self.data_root)?;
+            let mut maintenance = self.state.start_protected_maintenance(
+                &self.data_root,
+                MaintenanceSourceState::Healthy,
+                binding,
+            )?;
+            let safety = wait_for_mandatory_backup(&maintenance, MaintenancePurpose::PreRestore);
+            let maintenance_shutdown = maintenance.shutdown();
+            let safety = safety?;
+            maintenance_shutdown.map_err(|_| ApplicationError::state())?;
+            drop(selection_pin);
+
+            let control =
+                BackupControl::new(Arc::new(AtomicBool::new(false)), MANDATORY_BACKUP_TIMEOUT)
+                    .map_err(|_| ApplicationError::state())?;
+            let receipt = self.state.restore_selected(
+                binding,
+                mode,
+                RestoreSafety::PreRestoreBackupPublished(safety),
+                &guard,
+                &control,
+            )?;
+            self.preflight.bind_recovery_launch(receipt)?;
+            start_restored_bundle(
+                &self.environment,
+                &self.data_root,
+                &self.state,
+                &mut self.preflight,
+                &self.shell,
+                &self.bundle,
+                guard,
+            )
+        })();
+        self.commands.resume_admission();
+        match result {
+            Ok(bridge) => {
+                self._bridge = Some(bridge);
+                self.live_started = true;
+                Ok(())
+            }
+            Err(error) => {
+                discard_bundle(&self.bundle)?;
+                Err(error)
+            }
+        }
+    }
+
     fn shutdown(&mut self) -> Result<(), ApplicationError> {
         if self.shutdown {
             return Ok(());
@@ -292,7 +374,7 @@ fn start_live_bundle(
         let runtime = maintenance
             .as_ref()
             .ok_or_else(ApplicationError::internal)?;
-        wait_for_mandatory_backup(runtime, MaintenancePurpose::PreMigration)?;
+        let _ = wait_for_mandatory_backup(runtime, MaintenancePurpose::PreMigration)?;
         let (from_schema_version, to_schema_version) = state.migration_versions(data_root)?;
         let pending = preflight
             .session_mut()
@@ -308,7 +390,7 @@ fn start_live_bundle(
         let runtime = maintenance
             .as_ref()
             .ok_or_else(ApplicationError::internal)?;
-        wait_for_mandatory_backup(runtime, MaintenancePurpose::PostMigration)?;
+        let _ = wait_for_mandatory_backup(runtime, MaintenancePurpose::PostMigration)?;
         preflight
             .session_mut()
             .complete_post_migration(pending)
@@ -351,6 +433,45 @@ fn start_current_bundle(
         bundle,
         started,
         None,
+        MaintenanceSourceState::Healthy,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn start_restored_bundle(
+    environment: &ApplicationEnvironment,
+    data_root: &DataRoot,
+    state: &ApplicationStateOwner,
+    preflight: &mut ApplicationPreflight,
+    shell: &DesktopShell,
+    bundle: &SharedBundle,
+    guard: ExclusiveFileLeaseGuard,
+) -> Result<DesktopSnapshotBridge, ApplicationError> {
+    if !state.restored_archive_requires_migration(data_root)? {
+        return start_current_bundle(environment, data_root, state, shell, bundle, guard);
+    }
+
+    let maintenance =
+        state.start_maintenance(data_root, MaintenanceSourceState::HealthyUnpublished)?;
+    let _ = wait_for_mandatory_backup(&maintenance, MaintenancePurpose::PreMigration)?;
+    let (from_schema_version, to_schema_version) = state.migration_versions(data_root)?;
+    let pending = preflight
+        .session_mut()
+        .require_post_migration(from_schema_version, to_schema_version)
+        .map_err(|_| ApplicationError::state())?;
+    let started = start_guarded_live(environment, data_root, bundle, guard)?;
+    let _ = wait_for_mandatory_backup(&maintenance, MaintenancePurpose::PostMigration)?;
+    preflight
+        .session_mut()
+        .complete_post_migration(pending)
+        .map_err(|_| ApplicationError::state())?;
+    finish_live_bundle(
+        data_root,
+        state,
+        shell,
+        bundle,
+        started,
+        Some(maintenance),
         MaintenanceSourceState::Healthy,
     )
 }
@@ -482,12 +603,12 @@ fn discard_bundle(bundle: &SharedBundle) -> Result<(), ApplicationError> {
 fn wait_for_mandatory_backup(
     maintenance: &BackupMaintenanceRuntime,
     purpose: MaintenancePurpose,
-) -> Result<(), ApplicationError> {
+) -> Result<MaintenanceCompletion, ApplicationError> {
     let completion = maintenance
         .submit_and_wait(purpose, MANDATORY_BACKUP_TIMEOUT)
         .map_err(|_| ApplicationError::state())?;
     match completion.outcome() {
-        MaintenanceOutcome::Published => Ok(()),
+        MaintenanceOutcome::Published => Ok(completion),
         MaintenanceOutcome::RetryScheduled
         | MaintenanceOutcome::SourceSuspect
         | MaintenanceOutcome::Cancelled

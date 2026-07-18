@@ -822,9 +822,24 @@ The controlled current-bundle restart joins the old owners, acquires a fresh fix
 archive guard, and reuses the one guarded construction path without replacing the Slint
 window. Each bundle/notifier pair has one checked generation. The notifier compares it
 under the same mutex that protects slot replacement, so an obsolete completion returns
-before allocating a product-runtime generation or touching a new controller. Task
-12B.2 still owns the operation worker, actual import/export/verify/restore/rebuild
-bindings, restore receipts, and authoritative no-backup reconstruction.
+before allocating a product-runtime generation or touching a new controller.
+Implemented Task 12B.2a adds one internal selected-restore lifecycle primitive. The
+caller supplies only a generation/ordinal choice and fixed restore mode. Application
+state converts it to an opaque, path/digest-private verified package binding and one
+RAII pin before closing admission. Every retention deletion shares its narrow gate and
+replans around a pin that arrived after the cycle's admission. After a protected
+mandatory `PreRestore` receipt and joined old
+bundle, one fresh fixed guard authorizes the existing journaled recovery coordinator.
+Its exact `RecoveryReceipt` is bound to the retained `RunSession` before archive
+inspection or replacement startup. Current archives enter the ordinary guarded bundle
+path; supported legacy archives repeat the mandatory pre/post-migration protocol and
+durable pending pair before publication. Any ambiguity leaves no bundle and no second
+owner. The catalog is an immutable bounded `Arc` snapshot, so its mutex is held only
+while copying or replacing the projection, never across backup or recovery I/O.
+
+Task 12B.2b still owns the operation worker, actual import/export/verify/rebuild and
+command/UI/native-file bindings, cancellation propagation, confirmed full-restore UX,
+and authoritative no-backup reconstruction.
 
 ## Provider plugin ABI
 

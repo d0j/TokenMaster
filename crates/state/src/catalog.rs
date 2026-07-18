@@ -39,6 +39,23 @@ pub struct CatalogSelection {
     ordinal: u8,
 }
 
+/// Opaque, path-free identity for one fully verified catalog point.
+///
+/// The binding survives catalog generation and ordinal changes, but not package-byte
+/// replacement. It exposes no slot, length, or digest accessors outside this crate.
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub struct CatalogSelectionBinding {
+    pub(crate) backup_slot: u8,
+    pub(crate) package_len: u64,
+    pub(crate) package_sha256: [u8; 32],
+}
+
+impl fmt::Debug for CatalogSelectionBinding {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("CatalogSelectionBinding([redacted])")
+    }
+}
+
 impl CatalogSelection {
     #[must_use]
     pub const fn generation(self) -> CatalogGeneration {
@@ -320,6 +337,54 @@ impl BackupCatalog {
         }
         self.bind_verified(selection, verified)?;
         Ok(selection)
+    }
+
+    /// Seals one exact verified selection into a path- and digest-private identity.
+    pub fn bind_selection(
+        &self,
+        selection: CatalogSelection,
+    ) -> Result<CatalogSelectionBinding, StateError> {
+        let (backup_slot, package_len, package_sha256) =
+            self.selected_package_identity(selection)?;
+        Ok(CatalogSelectionBinding {
+            backup_slot,
+            package_len,
+            package_sha256,
+        })
+    }
+
+    /// Binds only while the complete controlled directory and selected package still
+    /// match this verified projection.
+    pub fn bind_current_selection(
+        &self,
+        directory: &BackupDirectory,
+        selection: CatalogSelection,
+    ) -> Result<CatalogSelectionBinding, StateError> {
+        if !self.matches_directory(directory)? || !self.revalidate_point(directory, selection)? {
+            return Err(StateError::integrity());
+        }
+        let binding = self.bind_selection(selection)?;
+        if !self.matches_directory(directory)? {
+            return Err(StateError::integrity());
+        }
+        Ok(binding)
+    }
+
+    /// Resolves an unchanged opaque identity in the current verified generation.
+    pub fn resolve_binding(
+        &self,
+        binding: CatalogSelectionBinding,
+    ) -> Result<CatalogSelection, StateError> {
+        let mut matches = self.points.iter().filter(|point| {
+            point.entry.ordinal() == binding.backup_slot
+                && point.entry.len() == binding.package_len
+                && point.observed_file_sha256 == binding.package_sha256
+        });
+        let point = matches.next().ok_or_else(StateError::integrity)?;
+        if matches.next().is_some() || point.health != CatalogHealth::Verified {
+            return Err(StateError::integrity());
+        }
+        Ok(point.selection)
     }
 
     pub(crate) const fn directory_identity(&self) -> CatalogDirectoryIdentity {

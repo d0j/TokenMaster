@@ -52,6 +52,7 @@ pub struct RetentionAdmission {
     candidate_hash: [u8; 32],
     candidate_size: u64,
     candidate_metadata: BackupMetadata,
+    protected_hash: Option<[u8; 32]>,
     policy: RetentionPolicy,
 }
 
@@ -61,6 +62,31 @@ impl RetentionAdmission {
         catalog: &BackupCatalog,
         candidate: &VerifiedBackupPackage,
         policy: RetentionPolicy,
+    ) -> Result<Self, StateError> {
+        Self::preflight_inner(catalog, candidate, policy, None)
+    }
+
+    /// Protects one exact selected restore point while the safety backup is published.
+    pub fn preflight_protected(
+        catalog: &BackupCatalog,
+        candidate: &VerifiedBackupPackage,
+        policy: RetentionPolicy,
+        protected: crate::CatalogSelectionBinding,
+    ) -> Result<Self, StateError> {
+        let selection = catalog.resolve_binding(protected)?;
+        let point = catalog
+            .points()
+            .get(usize::from(selection.ordinal()))
+            .filter(|point| point.selection == selection)
+            .ok_or_else(StateError::integrity)?;
+        Self::preflight_inner(catalog, candidate, policy, Some(point.observed_file_sha256))
+    }
+
+    fn preflight_inner(
+        catalog: &BackupCatalog,
+        candidate: &VerifiedBackupPackage,
+        policy: RetentionPolicy,
+        protected_hash: Option<[u8; 32]>,
     ) -> Result<Self, StateError> {
         if catalog.points().len() >= MAX_BACKUP_DIRECTORY_FILES {
             return Err(StateError::capacity_exceeded());
@@ -83,7 +109,13 @@ impl RetentionAdmission {
             candidate: true,
             selection: None,
         };
-        let _ = plan_retention(catalog, Some(candidate_fact), candidate_hash, policy)?;
+        let _ = plan_retention(
+            catalog,
+            Some(candidate_fact),
+            candidate_hash,
+            protected_hash,
+            policy,
+        )?;
         Ok(Self {
             prior_catalog_generation: catalog.generation(),
             prior_directory_identity: catalog.directory_identity(),
@@ -95,6 +127,7 @@ impl RetentionAdmission {
             candidate_hash,
             candidate_size: receipt.package_len(),
             candidate_metadata: candidate.metadata(),
+            protected_hash,
             policy,
         })
     }
@@ -137,6 +170,7 @@ impl RetentionAdmission {
         }
         let cycle = RetentionCycle {
             candidate_hash: self.candidate_hash,
+            protected_hash: self.protected_hash,
             policy: self.policy,
         };
         let _ = cycle.next_deletion(catalog)?;
@@ -153,6 +187,7 @@ impl fmt::Debug for RetentionAdmission {
 /// Post-publication authority to recompute and delete one exact point at a time.
 pub struct RetentionCycle {
     candidate_hash: [u8; 32],
+    protected_hash: Option<[u8; 32]>,
     policy: RetentionPolicy,
 }
 
@@ -162,6 +197,14 @@ impl RetentionCycle {
         &self,
         catalog: &BackupCatalog,
     ) -> Result<Option<CatalogSelection>, StateError> {
+        self.next_deletion_with_hash(catalog, self.protected_hash)
+    }
+
+    fn next_deletion_with_hash(
+        &self,
+        catalog: &BackupCatalog,
+        protected_hash: Option<[u8; 32]>,
+    ) -> Result<Option<CatalogSelection>, StateError> {
         let candidate = catalog
             .points()
             .iter()
@@ -170,12 +213,16 @@ impl RetentionCycle {
         if candidate.health != CatalogHealth::Verified {
             return Err(StateError::recovery_required());
         }
-        Ok(
-            plan_retention(catalog, None, self.candidate_hash, self.policy)?
-                .deletions
-                .first()
-                .copied(),
-        )
+        Ok(plan_retention(
+            catalog,
+            None,
+            self.candidate_hash,
+            protected_hash,
+            self.policy,
+        )?
+        .deletions
+        .first()
+        .copied())
     }
 
     /// Deletes at most one exact current point. The caller must rebuild before retrying.
@@ -183,6 +230,39 @@ impl RetentionCycle {
         &self,
         catalog: &BackupCatalog,
         directory: &BackupDirectory,
+    ) -> Result<bool, StateError> {
+        self.delete_next_with_hash(catalog, directory, self.protected_hash)
+    }
+
+    /// Applies one late restore pin to a cycle that may have crossed publication
+    /// before the restore command was admitted.
+    pub fn delete_next_protected(
+        &self,
+        catalog: &BackupCatalog,
+        directory: &BackupDirectory,
+        protected: crate::CatalogSelectionBinding,
+    ) -> Result<bool, StateError> {
+        let selection = catalog.resolve_binding(protected)?;
+        let point = catalog
+            .points()
+            .get(usize::from(selection.ordinal()))
+            .filter(|point| point.selection == selection)
+            .ok_or_else(StateError::integrity)?;
+        let protected_hash = Some(point.observed_file_sha256);
+        if self
+            .protected_hash
+            .is_some_and(|existing| Some(existing) != protected_hash)
+        {
+            return Err(StateError::integrity());
+        }
+        self.delete_next_with_hash(catalog, directory, protected_hash)
+    }
+
+    fn delete_next_with_hash(
+        &self,
+        catalog: &BackupCatalog,
+        directory: &BackupDirectory,
+        protected_hash: Option<[u8; 32]>,
     ) -> Result<bool, StateError> {
         let candidate = catalog
             .points()
@@ -194,7 +274,7 @@ impl RetentionCycle {
         {
             return Err(StateError::recovery_required());
         }
-        let Some(selection) = self.next_deletion(catalog)? else {
+        let Some(selection) = self.next_deletion_with_hash(catalog, protected_hash)? else {
             return Ok(false);
         };
         if !catalog.matches_directory(directory)? {
@@ -245,6 +325,7 @@ fn plan_retention(
     catalog: &BackupCatalog,
     candidate: Option<RetentionFact>,
     candidate_hash: [u8; 32],
+    protected_hash: Option<[u8; 32]>,
     policy: RetentionPolicy,
 ) -> Result<RetentionOutcome, StateError> {
     let mut facts = catalog
@@ -263,11 +344,12 @@ fn plan_retention(
     if let Some(candidate) = candidate {
         facts.push(candidate);
     }
-    plan_facts(facts, policy)
+    plan_facts(facts, protected_hash, policy)
 }
 
 fn plan_facts(
     mut facts: Vec<RetentionFact>,
+    protected_hash: Option<[u8; 32]>,
     policy: RetentionPolicy,
 ) -> Result<RetentionOutcome, StateError> {
     facts.sort_unstable_by(|left, right| {
@@ -286,7 +368,7 @@ fn plan_facts(
     let mut protected = vec![false; facts.len()];
 
     for &index in &verified {
-        if facts[index].candidate {
+        if facts[index].candidate || protected_hash == Some(facts[index].key) {
             protected[index] = true;
         }
     }
@@ -478,7 +560,7 @@ mod tests {
             fact(2, 200, BackupPurpose::Periodic, 80 * mebibyte, false),
             fact(3, 100, BackupPurpose::PreMigration, 100 * mebibyte, false),
         ];
-        let error = match plan_facts(without_post, policy) {
+        let error = match plan_facts(without_post, None, policy) {
             Ok(_) => panic!("protected bytes must exceed budget"),
             Err(error) => error,
         };
@@ -489,7 +571,7 @@ mod tests {
             fact(2, 200, BackupPurpose::Periodic, 80 * mebibyte, false),
             fact(3, 100, BackupPurpose::PreMigration, 100 * mebibyte, false),
         ];
-        assert!(plan_facts(with_post, policy).is_ok());
+        assert!(plan_facts(with_post, None, policy).is_ok());
     }
 
     #[test]
@@ -503,7 +585,7 @@ mod tests {
             fact(2, 300, BackupPurpose::Periodic, 80 * mebibyte, false),
             fact(3, 100, BackupPurpose::Periodic, 100 * mebibyte, true),
         ];
-        let error = match plan_facts(facts, policy) {
+        let error = match plan_facts(facts, None, policy) {
             Ok(_) => panic!("time-skewed candidate bytes must stay protected"),
             Err(error) => error,
         };
@@ -545,7 +627,7 @@ mod tests {
         let policy = RetentionPolicy {
             budget_bytes: BACKUP_RETENTION_MIN_BYTES,
         };
-        let outcome = match plan_facts(facts, policy) {
+        let outcome = match plan_facts(facts, None, policy) {
             Ok(outcome) => outcome,
             Err(error) => panic!("tier selection failed: {error}"),
         };

@@ -578,10 +578,27 @@ audit, and 55/55 reliable-state authority mutations pass. Independent follow-up 
 reports Critical/Important/Minor 0/0/0. This is developer evidence, not product or
 release acceptance.
 
-The immediate next slice is Task 12B.2 operation execution and recovery composition. It
-owns the worker and actual typed config export/import, backup/verify, selected data-only
-and confirmed portable-settings restore, rebuild/retry/cancel bindings, and provider-
-backed fresh reconstruction when no backup is usable. Then continue Tasks 13-18 in order: health/product projection, Data
+Task 12B.2a selected restore composition is implemented. The current directory and
+selected package are revalidated into one opaque RAII pin. The pin shares a narrow gate
+with every post-publication deletion, so an already irreversible maintenance cycle must
+replan around a late selection. It remains through old-owner join and protected
+`PreRestore`, then clears before journaled mutation. The recovery receipt is attached to
+the current run session before restored archive work; current candidates use the normal
+guarded bundle path and v12 candidates repeat the complete pre/pending/post migration
+protocol. Catalog publication uses immutable bounded `Arc` snapshots and no heavy I/O
+under its mutex. Catalog 7/7, retention 3/3, app 14 unit plus 7 integration,
+application policy 31/31, reliable-state authority 55/55, clean-root, formatting,
+warnings-as-errors locked workspace Clippy, the complete locked workspace test/doctest
+gate in 507.5 seconds, and release composition audits pass. Independent final review
+reports Critical/Important/Minor 0/0/0. The live-auth Codex executable contract remains
+intentionally ignored without its explicit environment binding. This is developer
+evidence, not product or release acceptance; the primitive is not yet bound to the
+command worker or UI.
+
+The immediate next slice is Task 12B.2b operation execution. It owns the worker and
+actual typed config export/import, backup/verify, selected restore command/UI/native-
+file binding, rebuild/retry/cancel propagation, and provider-backed fresh reconstruction
+when no backup is usable. Then continue Tasks 13-18 in order: health/product projection, Data
 & Recovery UI, adversarial/resource/release closure. Keep the fixed archive path and
 writer sidecar; never copy only the live main file or treat busy/disk/access/schema-
 newer as corruption authority. Keep automatic recovery data only; device-local settings

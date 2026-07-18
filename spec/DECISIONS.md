@@ -1368,10 +1368,12 @@ Decision: `tokenmaster-app` owns one `ApplicationStateOwner` before every live o
 and one capacity-one backup maintenance runtime inside a healthy bundle. The concrete
 backup operation follows only sealed store/state/platform capabilities through online
 snapshot, full verification, typed package creation and re-verification, publication,
-verified-package catalog binding, and bounded retention. The operation owns one catalog
-projection: its first worker execution fully verifies the bounded cold directory, and
-later rebuilds carry proofs only for unchanged identities. This keeps retention active
-across restart without putting package decompression on the UI/startup thread. A condition variable exposes
+verified-package catalog binding, and bounded retention. The operation publishes one
+current immutable bounded catalog projection: its first worker execution fully verifies
+the bounded cold directory, and later rebuilds carry proofs only for unchanged
+identities. This keeps retention active across restart without putting package
+decompression on the UI/startup thread. Heavy snapshot, verification, and recovery I/O
+uses an `Arc` snapshot outside the short-held projection mutex. A condition variable exposes
 one deadline-bounded terminal receipt without adding polling, a UI timer, or another
 thread. Mandatory application waits atomically reserve one exact maintenance root
 before the worker is woken. While reserved, later submissions are rejected busy, so a
@@ -1419,3 +1421,33 @@ or stale publication after restore/restart. The bounded coordinator and same-loc
 generation check keep admission, cancellation, and observation deterministic. Task
 12B.2 must bind these intents to one operation worker and sealed state/platform
 capabilities; this decision alone does not claim import, restore, or reconstruction.
+
+## ADR-060 — Identity-pin selected restore through retention and recovery launch
+
+Decision: one restore choice is generation/ordinal only until `tokenmaster-app` seals
+it against the current fully verified backup directory. Application state returns an
+RAII process-local pin containing a private exact package binding. The pin gate is
+shared with every post-publication retention deletion. A cycle admitted before the
+restore command must consult a late pin immediately before each deletion; it replans
+with the selected identity protected or fails closed. The pin remains active while the
+old bundle joins and the protected `PreRestore` maintenance root publishes, then clears
+before journaled replacement when no backup writer remains.
+
+After recovery reaches its durable complete phase, the application binds the exact
+operation generation/candidate receipt to the retained run session before inspecting
+or starting restored bytes. A current candidate enters the normal guarded bundle path.
+A supported legacy candidate instead repeats verified `PreMigration`, durable pending
+source/target publication, guarded migration, verified `PostMigration`, and exact
+pending completion. Only then may the replacement bundle publish. Clean-after-join
+accepts the recovery generation, preventing a completed manual restore from becoming a
+new recovery launch on the next start.
+
+Rationale: a snapshot-only binding can race an already irreversible retention cycle,
+while binding only after joining maintenance can turn a valid UI choice stale and force
+an avoidable safe-mode transition. A generic global operation mutex would block
+unrelated catalog reads and enlarge latency. One fixed late-pin gate serializes only
+binding versus deletion, preserves constant memory, and keeps heavy I/O outside the
+mutex. Receipt-before-restored-lifecycle ordering closes the independent crash window
+between a complete journal and run-state acceptance. Task 12B.2b still owns worker/UI/
+native-file bindings, cancellation propagation, config operations, verification,
+rebuild, and no-backup reconstruction.

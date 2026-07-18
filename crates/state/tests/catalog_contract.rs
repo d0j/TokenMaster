@@ -312,6 +312,78 @@ fn rebuild_uses_self_describing_headers_and_only_current_proof_marks_verified() 
 }
 
 #[test]
+fn opaque_selection_binding_survives_reordering_but_rejects_changed_package_bytes() {
+    let (root, directory) = fixture();
+    let (older_bytes, _) = backup_bytes_at(
+        b"SQLite format 3\0bound restore point",
+        BackupCompression::Normal,
+        BackupPurpose::Periodic,
+        1_735_689_600_000,
+    );
+    publish(&directory, &older_bytes);
+    let mut original = BackupCatalog::rebuild(&directory, None).expect("original catalog");
+    original
+        .verify_all_packages(&directory)
+        .expect("verify original catalog");
+    let original_selection = original.points()[0].selection();
+    let binding = original
+        .bind_selection(original_selection)
+        .expect("bind opaque restore identity");
+    assert_eq!(
+        original
+            .bind_current_selection(&directory, original_selection)
+            .expect("bind current directory identity"),
+        binding
+    );
+    assert_eq!(
+        format!("{binding:?}"),
+        "CatalogSelectionBinding([redacted])"
+    );
+
+    let (newer_bytes, _) = backup_bytes_at(
+        b"SQLite format 3\0new pre-restore point",
+        BackupCompression::Normal,
+        BackupPurpose::PreRestore,
+        1_735_776_000_000,
+    );
+    publish(&directory, &newer_bytes);
+    assert_eq!(
+        original
+            .bind_current_selection(&directory, original_selection)
+            .expect_err("directory drift rejects stale current selection")
+            .code(),
+        StateErrorCode::Integrity
+    );
+    let reordered = BackupCatalog::rebuild(&directory, Some(&original)).expect("reordered catalog");
+    let rebound = reordered
+        .resolve_binding(binding)
+        .expect("identity survives generation and ordinal drift");
+    assert_eq!(
+        reordered.points()[usize::from(rebound.ordinal())].created_at_utc_ms(),
+        Some(1_735_689_600_000)
+    );
+
+    let older_path = fs::read_dir(root.path().join("backups"))
+        .expect("backup directory")
+        .map(|entry| entry.expect("backup entry").path())
+        .find(|path| fs::read(path).expect("backup bytes") == older_bytes)
+        .expect("bound package path");
+    let mut changed = older_bytes;
+    let changed_index = changed.len() / 2;
+    changed[changed_index] ^= 1;
+    fs::write(older_path, changed).expect("change bound package bytes");
+    let changed_catalog =
+        BackupCatalog::rebuild(&directory, Some(&reordered)).expect("changed catalog");
+    assert_eq!(
+        changed_catalog
+            .resolve_binding(binding)
+            .expect_err("changed bytes invalidate the opaque binding")
+            .code(),
+        StateErrorCode::Integrity
+    );
+}
+
+#[test]
 fn corrupt_headers_are_visible_but_duplicates_and_stale_generations_fail_closed() {
     let (_root, directory) = fixture();
     let (valid, _) = backup_bytes_at(

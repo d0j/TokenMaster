@@ -944,6 +944,26 @@ while holding the bundle-slot mutex, preventing a check/use race into a replacem
 controller. Task 12B.2 operation execution, restore authority, and no-backup
 reconstruction remain outside this implemented boundary.
 
+Implemented Task 12B.2a adds only the selected-restore authority contour. The public
+choice remains generation/ordinal; application state alone may bind it to one fully
+verified package identity, and that binding exposes neither path, filename, slot,
+length, nor digest. Current-directory revalidation and every post-publication deletion
+share one process-local RAII pin gate. A retention cycle admitted before selection must
+replan around the late pin or fail closed. The same identity remains protected while
+publishing the mandatory healthy-source `PreRestore` point. Only after every old owner
+joins may a fresh fixed guard enter the existing journaled recovery coordinator.
+
+The returned recovery receipt MUST be durably attached to the retained run session
+before archive inspection, migration backup, or fresh-bundle construction. This closes
+the crash window in which a completed manual restore could otherwise be rediscovered as
+a new recovered launch. Restored legacy bytes MUST repeat the full pre/pending/post
+migration protocol; direct current-bundle start is forbidden. Catalog mutex ownership
+MUST NOT span online snapshot, package verification, recovery, or migration I/O. Any
+stale selection, changed bytes, failed safety point, receipt conflict, or ambiguous
+lifecycle leaves admission resumed only into safe mode with no archive owner. Task
+12B.2b still owns external command execution, native-file authority, reconstruction,
+and resource/release closure.
+
 Optional manual password protection uses the implemented standard age v1 stream with
 fixed bounded scrypt work and never stores the passphrase. New passphrases are
 confirmed, contain 12 through 128 Unicode scalar values, and are not trimmed or

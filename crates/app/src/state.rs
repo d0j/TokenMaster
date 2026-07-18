@@ -1,5 +1,5 @@
 use std::fmt;
-use std::sync::{Arc, atomic::AtomicBool};
+use std::sync::{Arc, Mutex, atomic::AtomicBool};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tokenmaster_platform::{
@@ -8,10 +8,11 @@ use tokenmaster_platform::{
 };
 use tokenmaster_state::{
     BackupCatalog, BackupCompression, BackupMaintenanceRuntime, BackupMetadata, BackupPackage,
-    BootstrapReport, MaintenanceExecution, MaintenancePermit, MaintenanceSourceState,
-    PendingMigration, PreparedBootstrap, RecoveryJournalStore, RetentionAdmission, RetentionPolicy,
-    RunSession, RunStateStore, SettingsStore, StateBootstrap, StateErrorCode,
-    SystemMaintenanceClock,
+    BootstrapReport, CatalogSelectionBinding, MaintenanceExecution, MaintenancePermit,
+    MaintenanceSourceState, PendingMigration, PreparedBootstrap, RecoveryCoordinator,
+    RecoveryJournalStore, RecoveryLaunchDecision, RecoveryReceipt, RestoreMode, RestoreSafety,
+    RetentionAdmission, RetentionPolicy, RunSession, RunStateStore, SettingsStore, StateBootstrap,
+    StateErrorCode, SystemMaintenanceClock,
 };
 use tokenmaster_store::{
     BackupControl, BackupSource, BackupStaging, StartupArchiveStatus, StartupValidationMode,
@@ -19,7 +20,11 @@ use tokenmaster_store::{
     verify_backup_candidate,
 };
 
+use crate::command::ApplicationBackupSelection;
 use crate::{ApplicationError, DataRoot};
+
+#[cfg(test)]
+use tokenmaster_state::BackupPurpose;
 
 const STARTUP_RECOVERY_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
@@ -30,6 +35,8 @@ pub(crate) struct ApplicationStateOwner {
     settings: SettingsStore,
     journal: RecoveryJournalStore,
     run_state: RunStateStore,
+    catalog: Arc<Mutex<Option<Arc<BackupCatalog>>>>,
+    restore_pin: Arc<Mutex<Option<CatalogSelectionBinding>>>,
 }
 
 impl ApplicationStateOwner {
@@ -56,6 +63,8 @@ impl ApplicationStateOwner {
             settings,
             journal,
             run_state,
+            catalog: Arc::new(Mutex::new(None)),
+            restore_pin: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -105,6 +114,24 @@ impl ApplicationStateOwner {
         root: &DataRoot,
         source_state: MaintenanceSourceState,
     ) -> Result<BackupMaintenanceRuntime, ApplicationError> {
+        self.start_maintenance_inner(root, source_state, None)
+    }
+
+    pub(crate) fn start_protected_maintenance(
+        &self,
+        root: &DataRoot,
+        source_state: MaintenanceSourceState,
+        protected: CatalogSelectionBinding,
+    ) -> Result<BackupMaintenanceRuntime, ApplicationError> {
+        self.start_maintenance_inner(root, source_state, Some(protected))
+    }
+
+    fn start_maintenance_inner(
+        &self,
+        root: &DataRoot,
+        source_state: MaintenanceSourceState,
+        protected: Option<CatalogSelectionBinding>,
+    ) -> Result<BackupMaintenanceRuntime, ApplicationError> {
         let settings = self
             .settings
             .load()
@@ -112,7 +139,13 @@ impl ApplicationStateOwner {
         let policy = settings.value().portable().backup().clone();
         let retention = RetentionPolicy::new(policy.retention_budget_bytes())
             .map_err(|_| ApplicationError::state())?;
-        let mut operation = ApplicationBackupOperation::open(root, retention)?;
+        let mut operation = ApplicationBackupOperation::open(
+            root,
+            retention,
+            Arc::clone(&self.catalog),
+            Arc::clone(&self.restore_pin),
+            protected,
+        )?;
         BackupMaintenanceRuntime::spawn(
             Arc::new(SystemMaintenanceClock::new()),
             policy,
@@ -120,6 +153,126 @@ impl ApplicationStateOwner {
             move |permit| operation.execute(permit),
         )
         .map_err(|_| ApplicationError::state())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn oldest_verified_backup_selection(
+        &self,
+    ) -> Result<ApplicationBackupSelection, ApplicationError> {
+        let catalog = self.catalog_snapshot()?;
+        let point = catalog
+            .points()
+            .iter()
+            .rev()
+            .find(|point| point.health() == tokenmaster_state::CatalogHealth::Verified)
+            .ok_or_else(ApplicationError::state)?;
+        ApplicationBackupSelection::new(
+            point.selection().generation().get(),
+            point.selection().ordinal(),
+        )
+        .ok_or_else(ApplicationError::state)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn verified_backup_selection(
+        &self,
+        purpose: BackupPurpose,
+        schema_version: u16,
+    ) -> Result<ApplicationBackupSelection, ApplicationError> {
+        let catalog = self.catalog_snapshot()?;
+        let point = catalog
+            .points()
+            .iter()
+            .find(|point| {
+                point.health() == tokenmaster_state::CatalogHealth::Verified
+                    && point.purpose() == Some(purpose)
+                    && point.database_schema_version() == Some(schema_version)
+            })
+            .ok_or_else(ApplicationError::state)?;
+        ApplicationBackupSelection::new(
+            point.selection().generation().get(),
+            point.selection().ordinal(),
+        )
+        .ok_or_else(ApplicationError::state)
+    }
+
+    pub(crate) fn bind_backup_selection(
+        &self,
+        selection: ApplicationBackupSelection,
+    ) -> Result<ApplicationBackupSelectionPin, ApplicationError> {
+        let mut restore_pin = self
+            .restore_pin
+            .lock()
+            .map_err(|_| ApplicationError::state())?;
+        if restore_pin.is_some() {
+            return Err(ApplicationError::state());
+        }
+        let catalog = self.catalog_snapshot()?;
+        let point = catalog
+            .points()
+            .get(usize::from(selection.ordinal()))
+            .filter(|point| {
+                point.selection().generation().get() == selection.catalog_generation()
+                    && point.selection().ordinal() == selection.ordinal()
+            })
+            .ok_or_else(ApplicationError::state)?;
+        let binding = catalog
+            .bind_current_selection(&self.backups, point.selection())
+            .map_err(|_| ApplicationError::state())?;
+        *restore_pin = Some(binding);
+        Ok(ApplicationBackupSelectionPin {
+            binding,
+            shared: Arc::clone(&self.restore_pin),
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn restore_selected(
+        &self,
+        binding: CatalogSelectionBinding,
+        mode: RestoreMode,
+        safety: RestoreSafety,
+        guard: &ExclusiveFileLeaseGuard,
+        control: &BackupControl,
+    ) -> Result<RecoveryReceipt, ApplicationError> {
+        let previous = self.catalog_snapshot()?;
+        let mut catalog = BackupCatalog::rebuild(&self.backups, Some(previous.as_ref()))
+            .map_err(|_| ApplicationError::state())?;
+        catalog
+            .verify_all_packages(&self.backups)
+            .map_err(|_| ApplicationError::state())?;
+        let selection = catalog
+            .resolve_binding(binding)
+            .map_err(|_| ApplicationError::state())?;
+        let catalog = Arc::new(catalog);
+        *self.catalog.lock().map_err(|_| ApplicationError::state())? = Some(Arc::clone(&catalog));
+        RecoveryCoordinator::new(
+            &self.scope,
+            &self.verification_staging,
+            &self.journal,
+            &self.settings,
+        )
+        .and_then(|recovery| {
+            recovery.restore_selected(
+                &self.backups,
+                catalog.as_ref(),
+                selection,
+                mode,
+                safety,
+                guard,
+                control,
+            )
+        })
+        .map_err(|_| ApplicationError::state())
+    }
+
+    fn catalog_snapshot(&self) -> Result<Arc<BackupCatalog>, ApplicationError> {
+        self.catalog
+            .lock()
+            .map_err(|_| ApplicationError::state())?
+            .as_ref()
+            .map(Arc::clone)
+            .ok_or_else(ApplicationError::state)
     }
 
     pub(crate) fn migration_versions(
@@ -143,6 +296,20 @@ impl ApplicationStateOwner {
         Ok((from, to))
     }
 
+    pub(crate) fn restored_archive_requires_migration(
+        &self,
+        root: &DataRoot,
+    ) -> Result<bool, ApplicationError> {
+        let inspection =
+            inspect_startup_archive(root.validated_directory(), StartupValidationMode::Normal)
+                .map_err(|_| ApplicationError::state())?;
+        match inspection.status() {
+            StartupArchiveStatus::Current => Ok(false),
+            StartupArchiveStatus::SupportedLegacy => Ok(true),
+            StartupArchiveStatus::Missing => Err(ApplicationError::state()),
+        }
+    }
+
     pub(crate) fn validate_pending_migration(
         &self,
         pending: PendingMigration,
@@ -158,6 +325,34 @@ impl ApplicationStateOwner {
 impl fmt::Debug for ApplicationStateOwner {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("ApplicationStateOwner([redacted])")
+    }
+}
+
+pub(crate) struct ApplicationBackupSelectionPin {
+    binding: CatalogSelectionBinding,
+    shared: Arc<Mutex<Option<CatalogSelectionBinding>>>,
+}
+
+impl ApplicationBackupSelectionPin {
+    pub(crate) const fn binding(&self) -> CatalogSelectionBinding {
+        self.binding
+    }
+}
+
+impl Drop for ApplicationBackupSelectionPin {
+    fn drop(&mut self) {
+        let Ok(mut shared) = self.shared.lock() else {
+            return;
+        };
+        if *shared == Some(self.binding) {
+            *shared = None;
+        }
+    }
+}
+
+impl fmt::Debug for ApplicationBackupSelectionPin {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("ApplicationBackupSelectionPin([redacted])")
     }
 }
 
@@ -183,6 +378,24 @@ impl ApplicationPreflight {
         self.bootstrap.session_mut()
     }
 
+    pub(crate) fn bind_recovery_launch(
+        &mut self,
+        receipt: RecoveryReceipt,
+    ) -> Result<(), ApplicationError> {
+        match self
+            .bootstrap
+            .session_mut()
+            .start_recovered_candidate(receipt.operation_generation(), receipt.candidate())
+            .map_err(|_| ApplicationError::state())?
+        {
+            RecoveryLaunchDecision::Start { .. }
+            | RecoveryLaunchDecision::AlreadyAccepted { .. } => Ok(()),
+            RecoveryLaunchDecision::NotTracked | RecoveryLaunchDecision::SafeMode { .. } => {
+                Err(ApplicationError::state())
+            }
+        }
+    }
+
     pub(crate) fn release_startup_guard(&mut self) {
         drop(self.startup_guard.take());
     }
@@ -204,11 +417,19 @@ struct ApplicationBackupOperation {
     backups: BackupDirectory,
     settings: SettingsStore,
     retention: RetentionPolicy,
-    catalog: Option<BackupCatalog>,
+    catalog: Arc<Mutex<Option<Arc<BackupCatalog>>>>,
+    restore_pin: Arc<Mutex<Option<CatalogSelectionBinding>>>,
+    protected: Option<CatalogSelectionBinding>,
 }
 
 impl ApplicationBackupOperation {
-    fn open(root: &DataRoot, retention: RetentionPolicy) -> Result<Self, ApplicationError> {
+    fn open(
+        root: &DataRoot,
+        retention: RetentionPolicy,
+        catalog: Arc<Mutex<Option<Arc<BackupCatalog>>>>,
+        restore_pin: Arc<Mutex<Option<CatalogSelectionBinding>>>,
+        protected: Option<CatalogSelectionBinding>,
+    ) -> Result<Self, ApplicationError> {
         let scope = ArchiveRecoveryScope::new(root.validated_directory(), root.reliable_state())
             .map_err(|_| ApplicationError::state())?;
         let staging = BackupStaging::new(
@@ -227,7 +448,9 @@ impl ApplicationBackupOperation {
             backups,
             settings,
             retention,
-            catalog: None,
+            catalog,
+            restore_pin,
+            protected,
         })
     }
 
@@ -240,12 +463,21 @@ impl ApplicationBackupOperation {
     }
 
     fn try_execute(&mut self, permit: &MaintenancePermit) -> Result<u64, StateErrorCode> {
-        let mut catalog = BackupCatalog::rebuild(&self.backups, self.catalog.as_ref())
+        let previous = self
+            .catalog
+            .lock()
+            .map_err(|_| StateErrorCode::InternalInvariant)?
+            .clone();
+        let mut catalog = BackupCatalog::rebuild(&self.backups, previous.as_deref())
             .map_err(|error| error.code())?;
         catalog
             .verify_all_packages(&self.backups)
             .map_err(|error| error.code())?;
-        self.catalog = Some(catalog);
+        let catalog = Arc::new(catalog);
+        *self
+            .catalog
+            .lock()
+            .map_err(|_| StateErrorCode::InternalInvariant)? = Some(Arc::clone(&catalog));
         let control = permit.backup_control().map_err(|error| error.code())?;
         let source = BackupSource::new(&self.data_root).map_err(map_store_error)?;
         let candidate = create_online_snapshot(&source, &self.staging, &control)
@@ -272,18 +504,22 @@ impl ApplicationBackupOperation {
         )
         .map_err(|error| error.code())?;
         let verified = BackupPackage::verify_backup_stage(&stage).map_err(|error| error.code())?;
-        let current_catalog = self
-            .catalog
-            .as_ref()
-            .ok_or(StateErrorCode::InternalInvariant)?;
-        let admission = RetentionAdmission::preflight(current_catalog, &verified, self.retention)
-            .map_err(|error| error.code())?;
+        let admission = match self.protected {
+            Some(protected) => RetentionAdmission::preflight_protected(
+                catalog.as_ref(),
+                &verified,
+                self.retention,
+                protected,
+            ),
+            None => RetentionAdmission::preflight(catalog.as_ref(), &verified, self.retention),
+        }
+        .map_err(|error| error.code())?;
 
         permit.begin_publication().map_err(|error| error.code())?;
         self.backups
             .publish(&mut stage)
             .map_err(map_directory_error)?;
-        let mut published = BackupCatalog::rebuild(&self.backups, Some(current_catalog))
+        let mut published = BackupCatalog::rebuild(&self.backups, Some(catalog.as_ref()))
             .map_err(|error| error.code())?;
         let selection = published
             .bind_published(&verified)
@@ -291,14 +527,29 @@ impl ApplicationBackupOperation {
         let retention = admission
             .confirm_published(&published, selection)
             .map_err(|error| error.code())?;
-        while retention
-            .delete_next(&published, &self.backups)
-            .map_err(|error| error.code())?
-        {
+        loop {
+            let restore_pin = self
+                .restore_pin
+                .lock()
+                .map_err(|_| StateErrorCode::InternalInvariant)?;
+            let deleted = match *restore_pin {
+                Some(protected) => {
+                    retention.delete_next_protected(&published, &self.backups, protected)
+                }
+                None => retention.delete_next(&published, &self.backups),
+            }
+            .map_err(|error| error.code())?;
+            drop(restore_pin);
+            if !deleted {
+                break;
+            }
             published = BackupCatalog::rebuild(&self.backups, Some(&published))
                 .map_err(|error| error.code())?;
         }
-        self.catalog = Some(published);
+        *self
+            .catalog
+            .lock()
+            .map_err(|_| StateErrorCode::InternalInvariant)? = Some(Arc::new(published));
         Ok(receipt.package_len())
     }
 }

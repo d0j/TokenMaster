@@ -6,6 +6,31 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.0 Task 12B.2a selected restore composition. A UI generation/ordinal
+  is sealed into one opaque verified package identity before admission closes; the
+  selected point is held by one RAII pin shared with every post-publication deletion,
+  including cycles admitted before selection, while a verified `PreRestore` package is
+  published. Every old bundle owner then joins, one fresh fixed archive guard enters
+  journaled restore, and the returned recovery receipt is durably bound to the current
+  run before any replacement lifecycle work.
+- Added restored-archive schema routing. Current archives rebuild one fresh bundle;
+  supported legacy archives repeat mandatory verified `PreMigration` and
+  `PostMigration` gates with the durable pending obligation before returning live.
+  Clean shutdown accepts the exact recovery generation, so the completed journal is
+  not replayed on the next start. The shared bounded catalog is published as immutable
+  `Arc` snapshots, keeping heavy snapshot/verification/recovery work outside its mutex.
+- Added catalog-reordering/byte-replacement/directory-drift, late-pin retention, current/legacy
+  selected-restore, stale-selection, shutdown, recovery-replay, and source-policy
+  regressions. Task 12B.2b still owns the operation worker, UI/native-file binding,
+  config import/export, verify/rebuild, cancellation propagation, and authoritative
+  no-backup reconstruction; this entry does not claim those or release acceptance.
+- Closed the Task 12B.2a developer gate with catalog 7/7, retention 3/3, app 14 unit
+  plus 7 integration, application policy 31/31, reliable-state authority 55/55,
+  clean-root, formatting, warnings-as-errors locked workspace Clippy, the complete
+  locked workspace test/doctest gate in 507.5 seconds, release composition audits, and
+  an independent Critical/Important/Minor 0/0/0 review. The live-auth Codex executable
+  contract remains intentionally ignored when its explicit environment binding is absent.
+
 - Began P3-D.0 Task 12B with a path-free, constant-state application command
   coordinator. Typed config/backup/verify/restore/rebuild intents retain at most one
   active operation and one follow-up, coalesce 10,000 identical hints, reject a third

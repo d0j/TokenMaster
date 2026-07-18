@@ -56,13 +56,23 @@ foreach ($contract in @(
     @{ Name = 'TM-APP-LIVE-OWNER'; Pattern = 'LiveRuntime::start_notified_guarded\('; Count = 1 },
     @{ Name = 'TM-APP-MAINTENANCE-OWNER'; Pattern = 'BackupMaintenanceRuntime::spawn\('; Count = 1 },
     @{ Name = 'TM-APP-COMMAND-COORDINATOR'; Pattern = 'ApplicationCommandCoordinator::new\('; Count = 1 },
-    @{ Name = 'TM-APP-RESTART-PAUSE'; Pattern = '\.pause_admission\(\)'; Count = 1 },
-    @{ Name = 'TM-APP-RESTART-RESUME'; Pattern = '\.resume_admission\(\)'; Count = 1 },
-    @{ Name = 'TM-APP-RESTART-GUARD'; Pattern = '\.acquire_runtime_guard\(&self\.data_root\)'; Count = 1 },
-    @{ Name = 'TM-APP-PRE-MIGRATION'; Pattern = 'MaintenancePurpose::PreMigration'; Count = 1 },
-    @{ Name = 'TM-APP-POST-MIGRATION'; Pattern = 'MaintenancePurpose::PostMigration'; Count = 1 },
-    @{ Name = 'TM-APP-MIGRATION-PENDING'; Pattern = '\.require_post_migration\('; Count = 1 },
-    @{ Name = 'TM-APP-MIGRATION-COMPLETE'; Pattern = '\.complete_post_migration\('; Count = 1 },
+    @{ Name = 'TM-APP-RESTART-PAUSE'; Pattern = '\.pause_admission\(\)'; Count = 2 },
+    @{ Name = 'TM-APP-RESTART-RESUME'; Pattern = '\.resume_admission\(\)'; Count = 2 },
+    @{ Name = 'TM-APP-RESTART-GUARD'; Pattern = '\.acquire_runtime_guard\(&self\.data_root\)'; Count = 2 },
+    @{ Name = 'TM-APP-RESTORE-BINDING'; Pattern = '\.bind_backup_selection\(selection\)'; Count = 1 },
+    @{ Name = 'TM-APP-RESTORE-CURRENT-BIND'; Pattern = '\.bind_current_selection\(&self\.backups'; Count = 1 },
+    @{ Name = 'TM-APP-RESTORE-DYNAMIC-PIN'; Pattern = 'retention\.delete_next_protected\('; Count = 1 },
+    @{ Name = 'TM-APP-RESTORE-PIN-DROP'; Pattern = 'impl Drop for ApplicationBackupSelectionPin'; Count = 1 },
+    @{ Name = 'TM-APP-RESTORE-PROTECTED'; Pattern = '\.start_protected_maintenance\('; Count = 1 },
+    @{ Name = 'TM-APP-PRE-RESTORE'; Pattern = 'MaintenancePurpose::PreRestore'; Count = 1 },
+    @{ Name = 'TM-APP-RESTORE-SAFETY'; Pattern = 'RestoreSafety::PreRestoreBackupPublished\('; Count = 1 },
+    @{ Name = 'TM-APP-SELECTED-RESTORE'; Pattern = 'self\.state\.restore_selected\('; Count = 1 },
+    @{ Name = 'TM-APP-RESTORE-RECOVERY-LAUNCH'; Pattern = '\.bind_recovery_launch\(receipt\)'; Count = 1 },
+    @{ Name = 'TM-APP-RESTORED-MIGRATION'; Pattern = 'start_restored_bundle\(\s*&self\.environment'; Count = 1 },
+    @{ Name = 'TM-APP-PRE-MIGRATION'; Pattern = 'MaintenancePurpose::PreMigration'; Count = 2 },
+    @{ Name = 'TM-APP-POST-MIGRATION'; Pattern = 'MaintenancePurpose::PostMigration'; Count = 2 },
+    @{ Name = 'TM-APP-MIGRATION-PENDING'; Pattern = '\.require_post_migration\('; Count = 2 },
+    @{ Name = 'TM-APP-MIGRATION-COMPLETE'; Pattern = '\.complete_post_migration\('; Count = 2 },
     @{ Name = 'TM-APP-ATOMIC-MAINTENANCE-WAIT'; Pattern = '\.submit_and_wait\('; Count = 1 },
     @{ Name = 'TM-APP-CLEAN-STATE'; Pattern = '\.mark_clean\(\)'; Count = 1 },
     @{ Name = 'TM-APP-QUOTA-OWNER'; Pattern = 'CodexQuotaRuntime::start_notified\('; Count = 1 },
@@ -77,6 +87,20 @@ foreach ($contract in @(
     if ($actual -ne $contract.Count) {
         throw "$($contract.Name): expected $($contract.Count), observed $actual"
     }
+}
+
+$restoreReceiptBinding = $applicationText.IndexOf(
+    'self.preflight.bind_recovery_launch(receipt)?;',
+    [System.StringComparison]::Ordinal
+)
+$restoredBundleStart = $applicationText.IndexOf(
+    'start_restored_bundle(',
+    [System.StringComparison]::Ordinal
+)
+if ($restoreReceiptBinding -lt 0 -or
+    $restoredBundleStart -lt 0 -or
+    $restoreReceiptBinding -ge $restoredBundleStart) {
+    throw 'TM-APP-RESTORE-RECOVERY-ORDER: recovery receipt must bind before restored lifecycle work'
 }
 
 if ($applicationText -notmatch 'Weak<Mutex<ApplicationBundleSlot>>' -or
@@ -130,10 +154,15 @@ if ($SourceOnly) {
         application_command_coordinator_count = 1
         controlled_restart_count = 1
         bundle_generation_guard_count = 1
-        pre_migration_gate_count = 1
-        post_migration_gate_count = 1
-        pending_migration_transition_count = 1
-        completed_migration_transition_count = 1
+        selected_restore_count = 1
+        protected_pre_restore_count = 1
+        dynamic_restore_pin_count = 1
+        recovery_launch_binding_count = 1
+        restored_migration_lifecycle_count = 1
+        pre_migration_gate_count = 2
+        post_migration_gate_count = 2
+        pending_migration_transition_count = 2
+        completed_migration_transition_count = 2
         atomic_maintenance_wait_count = 1
         clean_state_transition_count = 1
         quota_runtime_owner_count = 1
@@ -231,10 +260,15 @@ foreach ($needle in @(
     application_command_coordinator_count = 1
     controlled_restart_count = 1
     bundle_generation_guard_count = 1
-    pre_migration_gate_count = 1
-    post_migration_gate_count = 1
-    pending_migration_transition_count = 1
-    completed_migration_transition_count = 1
+    selected_restore_count = 1
+    protected_pre_restore_count = 1
+    dynamic_restore_pin_count = 1
+    recovery_launch_binding_count = 1
+    restored_migration_lifecycle_count = 1
+    pre_migration_gate_count = 2
+    post_migration_gate_count = 2
+    pending_migration_transition_count = 2
+    completed_migration_transition_count = 2
     atomic_maintenance_wait_count = 1
     clean_state_transition_count = 1
     quota_runtime_owner_count = 1

@@ -6,7 +6,7 @@ use tokenmaster_platform::BackupDirectory;
 use tokenmaster_product::ProductSectionKind;
 use tokenmaster_state::{
     BackupCatalog, BackupMaintenanceRuntime, BackupPolicy, BackupPurpose, BootstrapOutcome,
-    MaintenanceExecution, MaintenanceSourceState, PortableSettings, PriorRunCondition,
+    MaintenanceExecution, MaintenanceSourceState, PortableSettings, PriorRunCondition, RestoreMode,
     RunStateStore, SettingsStore, SettingsValue, SystemMaintenanceClock,
 };
 use tokenmaster_store::{USAGE_SCHEMA_VERSION, UsageStore};
@@ -240,14 +240,48 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
         obsolete_runtime_generation
     );
 
+    let selected_restore = application
+        .state
+        .oldest_verified_backup_selection()
+        .expect("oldest verified restore selection");
+    let pre_restore_generation = application
+        .bundle
+        .lock()
+        .expect("pre-restore bundle")
+        .generation;
+    application
+        .restore_selected(selected_restore, RestoreMode::DataOnly)
+        .expect("identity-bound selected restore");
+    let restored_slot = application.bundle.lock().expect("restored bundle slot");
+    assert!(restored_slot.generation > pre_restore_generation);
+    assert!(restored_slot.is_some());
+    let restored_generation = restored_slot.generation;
+    drop(restored_slot);
+    let stale_restore = application
+        .restore_selected(selected_restore, RestoreMode::DataOnly)
+        .expect_err("stale catalog selection fails before lifecycle mutation");
+    assert_eq!(stale_restore.code(), ApplicationErrorCode::StateUnavailable);
+    let unchanged_slot = application.bundle.lock().expect("unchanged live bundle");
+    assert_eq!(unchanged_slot.generation, restored_generation);
+    assert!(unchanged_slot.is_some());
+    drop(unchanged_slot);
+
     let live_backups =
         BackupDirectory::open_or_create(root.reliable_state()).expect("live backup directory");
     let live_catalog = BackupCatalog::rebuild(&live_backups, None).expect("live backup catalog");
     assert!(live_catalog.points().len() <= 15);
     assert!(live_catalog.points().iter().all(|point| {
-        point.purpose() == Some(BackupPurpose::Manual)
-            && point.database_schema_version() == Some(USAGE_SCHEMA_VERSION as u16)
+        matches!(
+            point.purpose(),
+            Some(BackupPurpose::Manual | BackupPurpose::PreRestore)
+        ) && point.database_schema_version() == Some(USAGE_SCHEMA_VERSION as u16)
     }));
+    assert!(
+        live_catalog
+            .points()
+            .iter()
+            .any(|point| point.purpose() == Some(BackupPurpose::PreRestore))
+    );
 
     let safe_temporary = TempDir::new().expect("safe-mode temporary directory");
     let safe_environment = application_environment(&safe_temporary);
@@ -318,6 +352,53 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
         Some(BackupPurpose::PostMigration),
         Some(USAGE_SCHEMA_VERSION as u16)
     )));
+    let legacy_restore = migration_application
+        .state
+        .verified_backup_selection(BackupPurpose::PreMigration, 12)
+        .expect("legacy pre-migration restore selection");
+    let pre_legacy_restore_generation = migration_application
+        .bundle
+        .lock()
+        .expect("pre-legacy-restore bundle")
+        .generation;
+    migration_application
+        .restore_selected(legacy_restore, RestoreMode::DataOnly)
+        .expect("legacy selected restore passes guarded migration lifecycle");
+    let restored_legacy_slot = migration_application
+        .bundle
+        .lock()
+        .expect("restored legacy bundle");
+    assert!(restored_legacy_slot.generation > pre_legacy_restore_generation);
+    assert!(restored_legacy_slot.is_some());
+    assert_eq!(
+        restored_legacy_slot
+            .as_ref()
+            .expect("restored legacy live bundle")
+            .maintenance
+            .snapshot()
+            .worker()
+            .successful_count(),
+        2,
+        "restored legacy archive must publish both migration safety points"
+    );
+    drop(restored_legacy_slot);
+    let restored_legacy_catalog =
+        BackupCatalog::rebuild(&backups, None).expect("restored legacy backup catalog");
+    let restored_legacy_points = restored_legacy_catalog
+        .points()
+        .iter()
+        .map(|point| (point.purpose(), point.database_schema_version()))
+        .collect::<Vec<_>>();
+    assert!(restored_legacy_points.contains(&(Some(BackupPurpose::PreMigration), Some(12))));
+    assert!(restored_legacy_points.contains(&(
+        Some(BackupPurpose::PostMigration),
+        Some(USAGE_SCHEMA_VERSION as u16)
+    )));
+    assert!(
+        restored_legacy_points
+            .iter()
+            .any(|point| point.0 == Some(BackupPurpose::PreRestore))
+    );
     migration_application
         .shutdown()
         .expect("migration application shutdown");
@@ -380,6 +461,10 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
         .restart_services()
         .expect_err("final shutdown cannot resurrect a bundle");
     assert_eq!(final_restart.code(), ApplicationErrorCode::InvalidLifecycle);
+    let final_restore = application
+        .restore_selected(selected_restore, RestoreMode::DataOnly)
+        .expect_err("final shutdown cannot begin selected restore");
+    assert_eq!(final_restore.code(), ApplicationErrorCode::InvalidLifecycle);
     assert!(
         application
             .bundle
@@ -392,6 +477,7 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     let owner = ApplicationStateOwner::open(&root).expect("state owner");
     let next = owner.prepare(&root).expect("next preflight");
     assert_eq!(next.report().outcome(), BootstrapOutcome::Healthy);
+    assert!(!next.report().recovery_resumed());
     assert_eq!(
         next.report().prior_run().condition(),
         PriorRunCondition::Clean

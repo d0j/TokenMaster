@@ -2900,3 +2900,38 @@ runtime tests. The subsequent complete locked workspace test/doctest gate passes
 binary/artifact and exact owner counts, the reliable-state workspace audit and 55/55
 authority mutations pass, and independent follow-up review reports
 Critical/Important/Minor 0/0/0.
+
+## 2026-07-18 — P3-D.0 Task 12B.2a identity-pinned selected restore
+
+Added the internal selected-restore lifecycle without exposing filesystem authority.
+A generation/ordinal choice is checked against the current complete backup directory,
+sealed into one opaque identity, and held by an RAII process-local pin. Every retention
+deletion shares the same gate and consults a late pin even when its cycle crossed
+publication before the restore command. This closes the independent-review race where
+old maintenance could otherwise delete the actively selected point while shutdown
+joined. The pin survives old-owner join and the protected mandatory `PreRestore`
+publication, then clears before journaled archive replacement.
+
+The old bundle is fully joined before one fresh fixed guard enters recovery. A complete
+recovery receipt is immediately attached to the existing run session. Current archives
+start through the existing guarded bundle path; restored supported legacy archives
+publish a new old-schema `PreMigration`, record the exact pending source/target pair,
+migrate under the guard, publish current-schema `PostMigration`, and clear the pair
+before becoming live. A later clean joined shutdown accepts the recovery generation,
+so cold startup does not replay the completed manual restore as a new candidate.
+
+The shared catalog was changed from a long-held mutable projection to immutable bounded
+`Arc` snapshots. Snapshot/compression/verification/recovery work occurs outside its
+mutex, while only current-projection replacement is locked. Deterministic contracts
+prove directory-drift rejection, generation/ordinal reorder survival, byte-replacement
+rejection, an admitted-before-pin retention cycle preserving the selected point,
+current and v12 restore, stale reuse, safe shutdown, and clean recovery acceptance.
+Final evidence passes catalog 7/7, retention 3/3, app 14 unit plus 7 integration,
+application policy 31/31, reliable-state authority 55/55, clean-root, formatting,
+warnings-as-errors locked workspace Clippy, the complete locked workspace test/doctest
+gate in 507.5 seconds, and release composition audits. Independent final review reports
+Critical/Important/Minor 0/0/0. The live-auth Codex executable contract remains
+intentionally ignored without its explicit environment binding; no product or release
+acceptance is claimed.
+Task 12B.2b worker/UI/native-file bindings, config operations, verify/rebuild,
+cancellation propagation, no-backup reconstruction, and release gates remain open.
