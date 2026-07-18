@@ -4,7 +4,7 @@ use tokenmaster_product::{
     ProductGeneration, ProductRoute, ProductRouteState, ProductRouteStatus, ProductSnapshot,
 };
 
-use crate::DesktopDashboardProjection;
+use crate::{DesktopDashboardProjection, DesktopHistoryProjection};
 
 pub const DESKTOP_ROUTE_COUNT: usize = ProductRoute::ALL.len();
 const MAX_ROUTE_REASONS: usize = 11;
@@ -220,6 +220,7 @@ pub struct DesktopProjection {
     selected: DesktopRouteKey,
     routes: [DesktopRouteProjection; DESKTOP_ROUTE_COUNT],
     dashboard: DesktopDashboardProjection,
+    history: DesktopHistoryProjection,
 }
 
 impl DesktopProjection {
@@ -232,6 +233,7 @@ impl DesktopProjection {
                 DesktopRouteProjection::from_status(snapshot.route(ProductRoute::ALL[index]))
             }),
             dashboard: DesktopDashboardProjection::from_snapshot(snapshot),
+            history: DesktopHistoryProjection::from_snapshot(snapshot),
         }
     }
 
@@ -258,6 +260,11 @@ impl DesktopProjection {
     #[must_use]
     pub const fn dashboard(&self) -> &DesktopDashboardProjection {
         &self.dashboard
+    }
+
+    #[must_use]
+    pub const fn history(&self) -> &DesktopHistoryProjection {
+        &self.history
     }
 
     pub fn select_stable_key(&mut self, value: &str) -> Result<(), DesktopSelectionError> {

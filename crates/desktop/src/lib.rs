@@ -4,6 +4,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
 pub mod dashboard;
+pub mod history;
 pub mod presentation;
 pub mod reliable_state;
 pub mod shell;
@@ -21,6 +22,7 @@ pub use generated_ui::*;
 mod ui;
 
 pub use dashboard::*;
+pub use history::*;
 pub use presentation::{DesktopApplyOutcome, DesktopRouteKey, DesktopState};
 pub use reliable_state::*;
 pub use shell::select_production_renderer;

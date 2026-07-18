@@ -179,7 +179,7 @@ pub struct DesktopTokenValue {
 }
 
 impl DesktopTokenValue {
-    const UNAVAILABLE: Self = Self {
+    pub(crate) const UNAVAILABLE: Self = Self {
         availability: DesktopValueAvailability::Unavailable,
         known_sum: None,
         known_count: 0,
@@ -216,7 +216,7 @@ pub struct DesktopCostValue {
 }
 
 impl DesktopCostValue {
-    const UNAVAILABLE: Self = Self {
+    pub(crate) const UNAVAILABLE: Self = Self {
         availability: DesktopValueAvailability::Unavailable,
         micros: None,
         total_events: 0,
@@ -1275,7 +1275,7 @@ fn empty_activity() -> [DesktopActivityRow; DASHBOARD_ACTIVITY_ROWS] {
     })
 }
 
-fn map_tokens(value: AggregateTokenValue, event_count: u64) -> DesktopTokenValue {
+pub(crate) fn map_tokens(value: AggregateTokenValue, event_count: u64) -> DesktopTokenValue {
     match value {
         AggregateTokenValue::Unavailable => DesktopTokenValue {
             event_count,
@@ -1300,7 +1300,7 @@ fn map_tokens(value: AggregateTokenValue, event_count: u64) -> DesktopTokenValue
     }
 }
 
-fn map_cost(value: &CostResult) -> DesktopCostValue {
+pub(crate) fn map_cost(value: &CostResult) -> DesktopCostValue {
     let counters = value.counters();
     let priced_events = counters
         .priced_events
@@ -1328,7 +1328,7 @@ fn map_cost(value: &CostResult) -> DesktopCostValue {
     }
 }
 
-fn base_section<T>(section: &ProductSection<T>) -> DesktopDashboardSectionProjection {
+pub(crate) fn base_section<T>(section: &ProductSection<T>) -> DesktopDashboardSectionProjection {
     let mut reasons = DesktopSectionReasonCodes::empty();
     if let Some(failure) = section.failure() {
         reasons.push(failure.code().stable_code());
@@ -1390,7 +1390,7 @@ fn combine_sections(
     }
 }
 
-fn add_evidence_state(
+pub(crate) fn add_evidence_state(
     section: &mut DesktopDashboardSectionProjection,
     freshness: QueryFreshness,
     quality: QueryQuality,
@@ -1435,7 +1435,7 @@ fn code_overflow(
     (DesktopCodeOutputProjection::EMPTY, section)
 }
 
-const fn map_freshness(value: QueryFreshness) -> DesktopFreshness {
+pub(crate) const fn map_freshness(value: QueryFreshness) -> DesktopFreshness {
     match value {
         QueryFreshness::Fresh => DesktopFreshness::Fresh,
         QueryFreshness::Aging => DesktopFreshness::Aging,
@@ -1444,7 +1444,7 @@ const fn map_freshness(value: QueryFreshness) -> DesktopFreshness {
     }
 }
 
-const fn map_quality(value: QueryQuality) -> DesktopQuality {
+pub(crate) const fn map_quality(value: QueryQuality) -> DesktopQuality {
     match value {
         QueryQuality::Authoritative => DesktopQuality::Authoritative,
         QueryQuality::Derived => DesktopQuality::Derived,
