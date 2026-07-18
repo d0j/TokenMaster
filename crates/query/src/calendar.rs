@@ -47,6 +47,13 @@ impl CalendarDate {
             .and_then(Self::from_jiff)
     }
 
+    pub(crate) fn days_before(self, day_count: u16) -> Result<Self, QueryError> {
+        self.to_jiff()?
+            .checked_sub(Span::new().days(i64::from(day_count)))
+            .map_err(|_error| QueryError::new(QueryErrorCode::Overflow))
+            .and_then(Self::from_jiff)
+    }
+
     pub(crate) fn days_until(self, end: Self) -> Result<i64, QueryError> {
         self.to_jiff()?
             .until(end.to_jiff()?)

@@ -29,6 +29,7 @@ const MAX_QUERY_BREAKDOWNS: usize = 4;
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum UsageRangeValue {
     Today,
+    RecentDays(u16),
     Day(CalendarDate),
     Week(CalendarDate),
     Month(CalendarDate),
@@ -45,6 +46,16 @@ impl UsageRange {
     #[must_use]
     pub const fn today() -> Self {
         Self(UsageRangeValue::Today)
+    }
+
+    pub fn recent_days(day_count: u16) -> Result<Self, QueryError> {
+        if day_count == 0 {
+            return Err(QueryError::new(QueryErrorCode::InvalidValue));
+        }
+        if usize::from(day_count) > MAX_QUERY_SERIES_POINTS {
+            return Err(QueryError::new(QueryErrorCode::CapacityExceeded));
+        }
+        Ok(Self(UsageRangeValue::RecentDays(day_count)))
     }
 
     #[must_use]
@@ -77,6 +88,7 @@ impl UsageRange {
     pub const fn stable_code(&self) -> &'static str {
         match self.0 {
             UsageRangeValue::Today => "today",
+            UsageRangeValue::RecentDays(_) => "recent_days",
             UsageRangeValue::Day(_) => "day",
             UsageRangeValue::Week(_) => "week",
             UsageRangeValue::Month(_) => "month",
@@ -579,6 +591,11 @@ pub(crate) fn build_plan(
     let resolver = CalendarBoundaryResolver::new(request.time_zone.clone())?;
     let overview = match request.range.0 {
         UsageRangeValue::Today => resolver.day(resolver.local_date_at_ms(generated_at_ms)?)?,
+        UsageRangeValue::RecentDays(day_count) => {
+            let today = resolver.local_date_at_ms(generated_at_ms)?;
+            let start = today.days_before(day_count - 1)?;
+            resolver.custom(start, today.tomorrow()?)?
+        }
         UsageRangeValue::Day(date) => resolver.day(date)?,
         UsageRangeValue::Week(date) => resolver.week_containing(date, request.week_start)?,
         UsageRangeValue::Month(date) => resolver.month(date)?,

@@ -58,6 +58,28 @@ fn dates_zones_ranges_and_daily_point_bounds_are_validated() {
 }
 
 #[test]
+fn recent_days_is_bounded_and_has_a_stable_code() {
+    assert_eq!(
+        UsageRange::recent_days(30)
+            .expect("30-day recent range")
+            .stable_code(),
+        "recent_days"
+    );
+    assert_eq!(
+        UsageRange::recent_days(0)
+            .expect_err("zero-day recent range")
+            .code(),
+        QueryErrorCode::InvalidValue
+    );
+    assert_eq!(
+        UsageRange::recent_days(401)
+            .expect_err("recent range over the series cap")
+            .code(),
+        QueryErrorCode::CapacityExceeded
+    );
+}
+
+#[test]
 fn analytics_requests_canonicalize_bounded_filters_and_breakdowns() {
     let request = UsageAnalyticsRequest::new(
         UsageRange::month(date(2024, 2, 15)),
