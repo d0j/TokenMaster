@@ -3118,3 +3118,55 @@ suite passes in 604.1 seconds, strict
 warnings-as-errors workspace Clippy passes, and independent rereview reports Critical/
 Important/Minor 0/0/0 with `READY`. Task 16 closes; Task 17-18 and release acceptance
 remain open.
+
+## 2026-07-18 — P3-D.0 Tasks 17-18 performance and acceptance closure
+
+Task 17 added three release-mode evidence targets and a separate P3-D.0 acceptance
+contract. The state performance target runs real Online Backup, optional compact
+snapshot, typed package write, and full verification for automatic, normal, and compact
+profiles against deterministic schema-13 freelist fixtures. The initial fixture hash
+was not reproducible because schema v13 deliberately seeds the Git installation salt
+with `randomblob(32)`; the test now normalizes only that test salt. Two consecutive runs
+produce the same 8 MiB and 96 MiB fixture hashes. An initial small-versus-large sampled
+peak comparison also proved timing-sensitive: constant Zstd allocator high water could
+be missed on the short small run. The final stronger gate uses a fixed 64 MiB growth
+ceiling and more than 16 MiB headroom to the 101,519,360-byte database. Latest large
+automatic/normal/compact throughput measured 70.96/65.03/0.612 MiB/s.
+The test-only direct `rusqlite`, `serde_json`, and Slint software-testing edges reuse
+already locked packages; no resolved package/version/license or production dependency
+was added, so the existing notices/SBOM inputs do not change.
+
+The Windows lifecycle target warms every contour, then executes 256 real backup/package/
+verify/import-inspect-cancel/retention cycles. The first independent review found that
+the forced cancel happened before resource acquisition, encryption reset its tolerance,
+restore was absent, and disk could grow by one package. The corrected contract cancels
+after the recovery source reader and candidate exist, performs 16 complete isolated
+data-only restores through the real coordinator/journal/promotion path, compares final
+encryption resources with the original baseline, and requires exact filled-tier disk
+equality on every cycle. The accepted run retained 15 points at a constant 340,155
+bytes; private memory returned 4,194,304 to 8,261,632 bytes, handles 151 to 152, threads
+5 to 3, USER 2 to 2, GDI 0 to 0, and child processes stayed zero.
+
+The UI target performs real software rendering, not a callback-only proxy. The first
+review showed that a backup could finish only during join. The final test warms one
+cycle, pins cycle two, and asserts that exact 96 MiB automatic backup remains in progress
+before, between, and after all loaded query and paint samples. Cached Dashboard query
+p95 increased 0.0326 ms and software-paint p95 did not increase against 10 ms limits.
+Corrected independent rereview reports Critical/Important/Minor 0/0/0 and `Ready for
+Task 17 integration`.
+
+Task 18 updates specification, data/API/security boundaries, traceability, ADR-064,
+architecture, roadmap, recovery operations, current state, handoff, changelog, and this
+history. `P3D0_ACCEPTANCE.md` binds eleven gates to one clean commit, application SHA-256,
+exact versions, fixture identities, commands, durations, resource/latency/disk metrics,
+and `dirty=false`. The ignored receipt is developer output only. Interactive Windows,
+M0, soak, MSVC packaging, signing, and product release remain separate and unaccepted.
+The first full debug workspace run also exposed that the non-ignored UI target attempted
+its 96 MiB release measurement under unoptimized code and could not finish warm-up inside
+the ten-second release deadline. The debug target now compiles and reports an explicit
+release-only measurement skip; the exact mandatory `--release` gate remains unchanged.
+Fresh clean-root, reliable-state, package, application-composition, and Desktop audits,
+formatting, strict warnings-as-errors workspace Clippy, the complete locked workspace
+test plus doctest gate in 665.4 seconds, and the GNU release application build pass on
+the closure tree. The known upstream `proc-macro-error2 2.0.1` future-incompatibility
+warning remains non-fatal and unchanged.

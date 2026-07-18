@@ -63,7 +63,9 @@ $arguments = @('+1.97.0', 'test', '-p', 'tokenmaster-app', '--test', 'backup_ui_
 ```
 
 The first command MUST execute both ignored contracts. Skipped, filtered, retried, or
-non-release tests do not satisfy this contract.
+non-release tests do not satisfy this contract. The ordinary debug workspace suite
+compiles the UI target but explicitly skips its measurement; only the mandatory
+`--release` command above can pass `P3D0-UI-01` and `P3D0-UI-02`.
 
 ## Gates
 
@@ -150,3 +152,11 @@ and Task 18 closes documentation, traceability, focused audits, the full locked
 workspace suite/doctests, strict Clippy, and the release build. Even then, M0 and the
 product remain unaccepted until their separate interactive, soak, packaging, signing,
 and release requirements pass.
+
+The tracked repository contains this contract and the executable gates, not a mutable
+golden measurement. A valid local completion run writes the ignored receipt only after
+the documentation closure commit, validates all eleven unique gate IDs, and rereads the
+commit, worktree, executable hash, versions, fixtures, and parsed command results before
+returning `pass`. Deleting or regenerating `reports/` cannot change implementation or
+release truth; absence of that local receipt means only that P3-D.0 acceptance has not
+been reproduced on that machine.

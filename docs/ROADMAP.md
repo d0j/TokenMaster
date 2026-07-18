@@ -120,7 +120,7 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
 - **P3 — complete desktop UI (in progress):** P3-A separate production shell/fixed
   11-route projection, P3-B.1 bounded controller core, P3-B.2 capacity-one Slint
   event delivery, P3-B.3 deterministic data-root/live composition, and P3-C responsive
-  six-section quota-first Dashboard are complete. P3-D.0 Reliable State is in progress:
+  six-section quota-first Dashboard are complete. P3-D.0 Reliable State is complete:
   its library-only state/authority foundation, controlled durable files, crate-private
   redundant records, typed settings, verified SQLite snapshot primitives, and fixed
   typed package import/export, optional manual age protection, sealed backup catalog,
@@ -129,8 +129,9 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   identity-pinned selected restore, one joined operation worker/manual-backup binding,
   sealed config/native-dialog composition, exact operation phases, authoritative-source
   no-backup reconstruction, bounded Data & Recovery/Settings controls, exhaustive
-  package/WAL-SHM adversarial closure, and package privacy/dependency/license audit are
-  complete; resource-return and P3-D.0 acceptance closure remain. Full history,
+  package/WAL-SHM adversarial closure, package privacy/dependency/license audit,
+  deterministic backup performance, repeated resource return, exact disk plateau,
+  spanning backup/UI latency, and clean-identity developer acceptance are complete. Full history,
   sessions, models, projects, activity, remaining health/notifications/settings/help,
   command palette, tray, and compact widget then remain P3-D-P3-E.
 - **P4 — presentation:** modular skins/layouts/density/scheme/locale, en/ru/pseudo,
@@ -172,9 +173,9 @@ generation-safe current-bundle restart foundation and Task 12B.2a identity-pinne
   selected-restore lifecycle, Task 12B.2b joined worker and complete typed command/UI
   bindings, Task 14 sealed native file-dialog backend, and Task 15 bounded Data Health/
   Settings UI plus no-backup reconstruction, and Task 16 adversarial/privacy/
-  compatibility closure are implemented. Tasks 17-18 resource and acceptance closure
-  are next, then the remaining P3-D supporting data
-  views.
+  compatibility closure, Task 17 resource/performance evidence, and Task 18
+  documentation/acceptance closure are implemented. The remaining P3-D supporting data
+  views are next.
 
 P3-D.0 Reliable State is approved under
 `docs/superpowers/specs/2026-07-17-tokenmaster-reliable-state-design.md` with the
@@ -185,7 +186,7 @@ live archive/writer identity, adds SQLite Online Backup, strict `.tmconfig`/
 settings/run/recovery records, 15-point/2-GiB default retention, three-set quarantine,
 six-state Windows replacement/rollback, automatic corruption-only data-only recovery,
 manual data-only or data-plus-portable-settings restore, safe mode, and off-UI resource
-gates. The contour is in progress and precedes the remaining P3-D views so Settings
+gates. The contour is complete and precedes the remaining P3-D views so Settings
 and future migrations do not ship before their durability contract. Tasks 1-11A
 implement the library-only state boundary plus bounded verified platform publication
 and replacement, the strict six-child A/B envelope, and typed schema-v1 settings with

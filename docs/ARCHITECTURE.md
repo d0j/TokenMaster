@@ -291,3 +291,29 @@ reset mutation is a separate host-owned official capability with explicit local
 policy, compare-and-swap admission, durable intent, provider idempotency/status, and
 post-action inventory/quota reconciliation. Browser/session automation and generic
 plugin/LLM mutation are outside the product boundary.
+
+## P3-D.0 evidence boundary
+
+Reliable State closes through a separate release-mode developer rail rather than the
+M0 or product-release pipeline. State owns deterministic 8/96 MiB schema-13 fixtures,
+real automatic/normal/compact backup/package verification, the 10,000-trigger and
+resume coalescing model, and one Windows process sampler. The sampler is the only added
+measurement thread and records private bytes, process handles, threads, USER/GDI
+objects, and child processes after both ToolHelp snapshots close.
+
+The lifecycle contract establishes one baseline only after backup, acquired-candidate
+cancellation, and a complete restore have initialized their process-global state. It
+then runs 256 backup/import-cancel/retention cycles plus 16 forced cancel/recovery and
+16 isolated restore cycles. Disk truth is not a trend estimate: every cycle must return
+to the exact filled 15-point retention bytes and verification staging to zero. Manual
+compact age encryption is included before final settlement against that original
+baseline.
+
+Desktop evidence uses the software renderer but performs a real Slint snapshot paint.
+It waits for one background backup to complete, pins the identity of the next in-progress
+96 MiB cycle, and requires that same cycle to span all loaded cached-query and
+route-input-to-paint samples. The UI remains capability-free; the workload uses the
+production typed state/store surfaces on its own joined test worker. The resulting
+strict JSON receipt binds a clean commit and application SHA-256 but is ignored local
+developer output. Physical-display/OS-input, DPI/accessibility, soak, MSVC packaging,
+signing, and release acceptance stay on their separate later rails.

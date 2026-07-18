@@ -1083,3 +1083,17 @@ and scans 247 production Rust/Slint sources, a synthetic exported package, and t
 release executable for fixed path, credential, prompt, response, reasoning, command,
 and source canaries. This is a
 development security gate, not the future P6 SBOM/advisory/attestation or release claim.
+
+Task 17 adds a separate Windows release-mode containment rail. Deterministic 8/96 MiB
+fixtures prove the package path stays below a fixed 64 MiB private-growth ceiling,
+keeps the 8 MiB decoder window and one-thread compression policy, and creates no child
+process. After backup, acquired-candidate cancellation, and real restore warm-up, 256
+backup/import-cancel/retention cycles, 16 forced cancellation/recovery cycles, and 16
+complete isolated restores must return private memory within 16 MiB, handles within one
+handle for stable process-global measurement state, and threads/USER/GDI at or below
+the original baseline. Verification staging returns to zero and retained bytes equal the filled
+15-point plateau on every cycle. Manual compact age encryption is measured inside the
+same window and must return to that original baseline rather than receiving a second
+tolerance. The clean P3-D.0 receipt rejects dirty/mismatched identity and excludes all
+private content. This rail grants no release authority and does not weaken the separate
+interactive, soak, packaging, signing, or Unix portability gates.

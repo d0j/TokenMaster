@@ -6,6 +6,25 @@ All notable changes are recorded here.
 
 ### Added
 
+- Completed P3-D.0 Tasks 17-18 with a separate fail-closed Reliable State developer
+  acceptance rail. New release contracts measure deterministic 8/96 MiB schema-13
+  automatic/normal/compact backup throughput, fixed 64 KiB streaming and 8 MiB decoder
+  window, a 64 MiB private-growth ceiling with database-size headroom, sampler-only
+  thread delta, 10,000-trigger/resume coalescing, and reproducible fixture SHA-256.
+- Added 64 warm-up plus 256 backup/package/verify/import-cancel/retention cycles, 16
+  cancellations after recovery source/candidate acquisition, and 16 complete isolated
+  data-only restores. Every measured pass returns verification staging to zero and the
+  retained catalog to the exact 15-point byte plateau. Private memory, handles, threads,
+  USER/GDI objects, child processes, and manual compact age-encryption return are bound
+  to one original all-contours post-warm-up envelope.
+- Added real Slint software-paint evidence under one identity-tracked 96 MiB automatic
+  backup cycle that spans every loaded Dashboard query and route-input-to-paint sample.
+  The strict P3-D.0 receipt binds a clean commit, application SHA-256, exact format and
+  dependency versions, deterministic fixtures, command arrays, durations, metrics,
+  limits, and eleven individual gates. Independent first review found four Important
+  harness gaps; corrected rereview reports Critical/Important/Minor 0/0/0. This remains
+  developer evidence and does not accept interactive Windows, M0, soak, packaging,
+  signing, or product release.
 - Implemented P3-D.0 Task 16 adversarial/privacy closure. Dedicated state contracts
   reject every proper config/backup package prefix, every one-bit mutation, and every
   WAL/SHM add/remove/change drift case. The RED matrix found and fixed both pre-existing

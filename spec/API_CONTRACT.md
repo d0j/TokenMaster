@@ -914,6 +914,16 @@ startup must run this same barrier before healthy publication. A failed same-pro
 barrier leaves a retryable obligation that reopens the promoted archive without
 repeating reconstruction.
 
+P3-D.0 performance and resource evidence does not widen this API. The three release
+contracts call the same typed backup, package, retention, recovery, query, and Desktop
+surfaces used by production composition. Their JSON lines and the ignored
+`reports/p3d0-developer-evidence.json` receipt are developer-only evidence formats, not
+CLI, MCP, plugin, UI, recovery, or mutation authority. The receipt may contain only
+version/commit/executable/fixture identities, non-private machine class, exact command
+arrays, durations, bounded scalar measurements, limits, and individual gate results.
+It contains no raw path, filename, settings value, database row, provider payload,
+prompt, response, command observed from a user session, or general extraction handle.
+
 ## Provider plugin ABI
 
 The future external-provider ABI is `tokenmaster:provider@1` expressed in WIT and

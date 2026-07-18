@@ -891,6 +891,19 @@ restart, keeps the effective outcome recovery-required, and is cleared only afte
 bounded refresh completes; retry reuses the promoted archive and never reruns corrupt-
 archive replacement.
 
+Task 17 closes the bounded data-plane evidence without adding a production schema or
+public payload. The release-only fixtures normalize the schema-13 installation salt to
+a fixed test value and bind exact byte length plus SHA-256 for 8 MiB and 96 MiB
+freelist databases. Package I/O remains 64 KiB, the Zstd decoder window remains at most
+8 MiB, and sampled private growth remains within 64 MiB with more than 16 MiB headroom
+to the large database. The lifecycle fixture fills the exact daily/weekly retention
+tiers before its baseline, then requires all 256 measured publications to return to
+the same 15-point byte total and verification staging to zero. Sixteen cancellations
+occur only after a recovery source reader and candidate exist; sixteen independent
+data-only restores use the real journal/coordinator/promotion contour. The evidence
+retains only scalar counts, durations, hashes, resource counters, limits, and gate
+results and never a fixture path or database content.
+
 ### P3-C bounded Dashboard projection
 
 The read-only quota overview discovers at most 32 current window keys in one deferred

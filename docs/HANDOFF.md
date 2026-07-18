@@ -328,7 +328,7 @@ covers a valid Windows deadline race where the Git fixture can be killed and rea
 before creating its PID receipt; cleanup is additionally checked by exact executable
 path, with a deterministic delayed-start regression.
 
-P3-D.0 Reliable State is active under
+P3-D.0 Reliable State is complete under
 `docs/superpowers/specs/2026-07-17-tokenmaster-reliable-state-design.md` and
 `docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`. Task 1 is complete:
 `tokenmaster-state` is a library-only workspace package with fixed path-private errors,
@@ -681,22 +681,42 @@ move resume, target-collision preflight, executable app coverage, exact dependen
 feature policy, and real exported-archive canaries now close those findings. Fresh full
 locked workspace test/doctest gate passes in 604.1 seconds, strict warnings-as-errors
 workspace Clippy passes, and independent rereview reports Critical/Important/Minor
-0/0/0 with `READY`. Task 16 is closed; Task 17 is next.
+0/0/0 with `READY`. Task 16 is closed.
 
-The immediate next implementation slice after that close is Task 17: produce separate
-release-mode UI-latency/resource-return/throughput/resume/disk-plateau receipts, followed
-by Task 18 documentation/acceptance closure. Keep the fixed archive path and
-writer sidecar; never copy only the live main file or treat busy/disk/access/schema-
-newer as corruption authority. Keep automatic recovery data only; device-local settings
-never move. Do not relax Tasks 6-11A into path, generic-stream, generic age-extraction,
-or batch-deletion authority.
+Tasks 17-18 close P3-D.0. Release-mode contracts cover deterministic 8/96 MiB
+automatic/normal/compact throughput, fixed 64 KiB I/O and 8 MiB decoder window,
+less-than-database private high water, 10,000-trigger/resume coalescing, 64+256 backup
+cycles, 16 acquired-candidate cancellation/recovery cycles, 16 complete isolated
+restores, exact 15-point/340,155-byte disk plateau, encrypted compact return, and one
+identity-pinned 96 MiB backup spanning all loaded Dashboard query/software-paint
+samples. Independent first review found four Important harness findings; its combined
+cancellation/restore finding plus the UI, encryption, and disk findings required five
+concrete corrections: exact cycle overlap, mid-operation cancellation, real restore
+cycles, original-baseline encryption return, and exact plateau assertions. Rereview
+reports Critical/Important/Minor 0/0/0 and `Ready for Task 17 integration`.
+`P3D0_ACCEPTANCE.md` is the separate
+fail-closed developer rail; it never accepts M0 or a product release.
 
-After P3-D.0, continue P3-D supporting data-bearing routes using bounded keyset
-intents and the same controller/snapshot boundary. P3-E then closes remaining
-notifications, settings/help, command palette, tray, and compact lifecycle. P3-D-P3-E, P4
-presentation, CLI/MCP, activation, M0
-acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
-must not imply activation authority.
+Task 18 focused clean-root/reliable-state/package/application/Desktop audits, formatting,
+strict warnings-as-errors workspace Clippy, the complete locked workspace test plus
+doctest gate in 665.4 seconds, and the GNU release application build pass. The first
+full debug run exposed the release-only UI target attempting its 96 MiB measurement
+unoptimized; debug now compiles and explicitly skips only that measurement, while the
+mandatory release target passes unchanged. The local ignored P3-D.0 receipt must still
+be regenerated and identity-validated after the final documentation commit on any
+machine reproducing acceptance.
+
+The immediate next implementation slice is the remaining P3-D data-bearing routes over
+bounded keyset intents and the existing controller/snapshot boundary. Keep the fixed
+archive path and writer sidecar; never copy only the live main file or treat busy/disk/
+access/schema-newer as corruption authority. Keep automatic recovery data only;
+device-local settings never move. Do not relax the state boundary into path,
+generic-stream, generic age-extraction, or batch-deletion authority.
+
+P3-E then closes remaining notifications, settings/help, command palette, tray, and
+compact lifecycle. P3-D-P3-E, P4 presentation, CLI/MCP, activation, M0 acceptance,
+packaging, signing, and release remain unclaimed. Inventory/reminder read must not
+imply activation authority.
 The prior post-P3-D.0-Task-10 focused evidence includes the Task 5 store contracts,
 5 package contracts, 10 package adversarial contracts, 17 durable-file contracts,
 7 grouped encryption contracts, 6 catalog contracts, 2 retention contracts, 5 backup-

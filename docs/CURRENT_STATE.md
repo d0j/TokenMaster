@@ -775,7 +775,7 @@ site, and zero polling/private-ID surfaces. P3-D/P3-E, P4 skin/locale/accessibil
 paint/resource acceptance, P5 automation, activation, M0 acceptance, packaging,
 signing, and release remain unclaimed.
 
-## P3-D.0 reliable-state contour in progress
+## P3-D.0 reliable-state implementation record
 
 The reliable-state design and 18-task TDD rail are approved in
 `docs/superpowers/specs/2026-07-17-tokenmaster-reliable-state-design.md` and
@@ -1220,7 +1220,7 @@ name/version/license and enabled-feature closures, two MIT upstream notices, for
 process/network/shell/generic-archive/plugin/UI/SQL authority, 247 production-source
 privacy scan, synthetic-export privacy proof, and the release executable are checked.
 Focused state 4/4, app aggregate 57/57, platform archive-recovery 13/13, package Pester
-14/14, and combined package/reliable-state/app Pester 120/120 pass. Task 17-18,
+14/14, and combined package/reliable-state/app Pester 120/120 pass. At that checkpoint Task 17-18,
 interactive/M0/package/signing/release acceptance remain unclaimed.
 
 The pre-review complete workspace gate passed in 476.7 seconds and exposed a pre-existing
@@ -1231,7 +1231,7 @@ focused runs. The first independent Task 16 review reported 0 Critical, 4 Import
 and 1 Minor; all four technical gaps now have RED/GREEN coverage above. The fresh locked
 workspace test/doctest suite passes on the post-review tree in 604.1 seconds, strict
 warnings-as-errors workspace Clippy passes, and independent rereview reports Critical/
-Important/Minor 0/0/0 with `READY`. Task 16 is closed; this is not Task 17-18,
+Important/Minor 0/0/0 with `READY`. Task 16 is closed; that evidence was not Task 17-18,
 interactive/M0, packaging, signing, or release acceptance.
 
 Task 12A focused store backup 8/8 and adversarial 10/10, catalog 6/6, maintenance
@@ -1245,14 +1245,41 @@ gated. The release application composition audit also passes with one production
 one state/maintenance/live/quota/reminder/controller/bridge owner, both migration gates,
 zero polling/arbitrary-root/forbidden-string surface, and one release artifact.
 
+Task 17 is implemented and independently rereviewed at Critical/Important/Minor 0/0/0.
+The deterministic release fixture is 9,125,888 bytes at 8 MiB target with SHA-256
+`a5cf28d370d3d6a38f0c3588e2a41e614c693aa4a39ee4dbfb470ac87d9f5fdd` and
+101,519,360 bytes at 96 MiB target with SHA-256
+`292190892f7f067405a07f686f540b42bc6eed6f21b4f153a8c0c0697ccc1b78`.
+Automatic/normal/compact large-fixture throughput measured 70.96/65.03/0.612 MiB/s;
+the largest sampled private growth was 51,732,480 bytes, below the fixed 64 MiB limit
+and more than 16 MiB below the database. Package I/O is 64 KiB, decoder window 8 MiB,
+and the only thread delta is the sampler. The 10,000-trigger and resume gates retain
+one active/follow-up and one catch-up without burst.
+
+The lifecycle gate warms backup, acquired-candidate cancellation, and restore, then
+passes 256 measured backup/verify/import-cancel/retention cycles, 16 forced candidate
+cancel/recovery cycles, and 16 complete isolated restores. It retains 15 points and
+returns to the exact 340,155-byte disk plateau on every cycle. Private memory returned
+from 4,194,304 to 8,261,632 bytes, handles 151 to 152, threads 5 to 3, USER 2 to 2,
+GDI 0 to 0, and child processes remained zero; encrypted compact high water was
+75,558,912 bytes and returned to that same original envelope. One exact 96 MiB backup
+cycle spans the loaded UI window: cached Dashboard query p95 delta was 0.0326 ms and
+software-paint delta 0 ms against the 10 ms limits. Task 18 binds these gates through
+`P3D0_ACCEPTANCE.md`; the ignored clean-commit receipt remains developer evidence only.
+Fresh Task 18 clean-root/reliable-state/package/application/Desktop audits, formatting,
+strict workspace Clippy, the complete locked workspace test/doctest gate in 665.4
+seconds, and the GNU release application build pass. The only new ordinary-suite
+behavior is an explicit debug skip for the release-only UI measurement; its exact
+release target passes independently.
+
 ## Next implementation slice
 
-Continue P3-D.0 with Task 17 from
-`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: produce the separate
-release-mode backup throughput, UI-latency, repeated recovery resource-return, resume,
-and disk-plateau receipts without relaxing fixed queues, threads, buffers, or windows.
-Then run Task 18 final documentation/acceptance closure. This does not claim M0,
-packaging, signing, or release.
+P3-D.0 Reliable State is complete. Continue P3-D with the remaining bounded
+data-bearing History, Sessions, Models, Projects, Activity, and supporting health/
+notification/settings/help routes over the existing query/controller/snapshot
+boundary. P3-E then owns command palette, tray, compact widget, and remaining shell
+lifecycle. Interactive Windows, P4 presentation, P5 CLI/MCP, activation, M0,
+packaging, signing, soak, and product release remain unclaimed.
 
 P2-D quota history core is complete under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: Tasks 1-8 cover
@@ -1269,9 +1296,8 @@ immutable read snapshots, and publication through the existing Codex runtime wit
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
 workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, P3-B.2, P3-B.3, and P3-C are
-complete; P3-D.0 Reliable State is active with Tasks 1-16 implemented through the
-adversarial/privacy contour, followed by Tasks 17-18 and P3-D supporting data-bearing
-routes. Activation
+complete; P3-D.0 Reliable State is complete through Tasks 1-18, followed by P3-D
+supporting data-bearing routes. Activation
 remains a later independently authorized capability. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.
 

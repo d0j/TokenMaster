@@ -1164,6 +1164,11 @@ pwsh -NoProfile -File scripts/audit-application-composition.ps1 -RepositoryRoot 
 
 ## Task 17 — Prove responsiveness and resource return
 
+**Status:** Implemented and independently rereviewed. Deterministic performance,
+coalescing/resume, 64+256 lifecycle, 16 acquired-candidate cancellations, 16 real
+restores, exact disk plateau, encrypted compact return, and spanning software-paint
+contracts pass in release mode.
+
 **Files:**
 
 - Create: `crates/state/tests/backup_performance_contract.rs`
@@ -1218,6 +1223,10 @@ separate non-release acceptance rail.
 ---
 
 ## Task 18 — Close documentation, traceability, and the full gate
+
+**Status:** Implemented. Source-of-truth documents, ADR-064, operational recovery,
+traceability, full locked workspace validation, release build, and the separate clean-
+identity P3-D.0 developer receipt close this task without accepting M0 or release.
 
 **Files:**
 
@@ -1313,6 +1322,9 @@ P3-D.0 is complete only when all are true:
 - Data & Recovery UI never blocks or receives a path/SQLite/state authority;
 - 10,000 hints remain capacity one;
 - repeated operations return memory/handles/threads and meet UI/query latency gates;
+- the separate P3-D.0 receipt contains all eleven unique passing gates and binds the
+  same full clean commit, `dirty=false`, application SHA-256, exact versions, fixtures,
+  command results, durations, resource/latency metrics, and disk plateau;
 - privacy/dependency/release audits and the complete locked workspace gate pass;
 - project truth remains honest about unfinished UI, M0, packaging, signing, and
   release evidence.

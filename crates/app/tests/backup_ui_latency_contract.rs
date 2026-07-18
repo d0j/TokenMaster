@@ -270,6 +270,11 @@ fn percentile_95(mut samples: Vec<f64>) -> f64 {
 
 #[test]
 fn automatic_backup_adds_at_most_ten_ms_to_dashboard_query_and_real_paint_p95() {
+    if cfg!(debug_assertions) {
+        println!("backup_ui_latency_contract: skipped (release-only measurement)");
+        return;
+    }
+
     slint::platform::set_platform(Box::new(TestingBackend::new(TestingBackendOptions {
         mock_time: false,
         threading: true,

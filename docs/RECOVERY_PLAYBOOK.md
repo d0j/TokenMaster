@@ -226,8 +226,11 @@ the durable restore journal/quarantine path, A/B run truth, read-only pre-open d
 cold journal resume, and verified-backup automatic recovery. Tasks 12-15 now add joined
 application stop/restart, migration safety points, typed selected restore, sealed native
 selection, no-backup authoritative reconstruction, safe mode, and the bounded Data &
-Recovery UI. This is verified developer behavior; Task 16-18, interactive Windows, M0,
-package, and release acceptance remain open.
+Recovery UI. Tasks 16-18 close adversarial/package privacy, deterministic streaming,
+256-cycle resource return, acquired-candidate cancellation, repeated real restore,
+exact retention/staging plateau, spanning software-paint latency, and the separate
+clean-identity P3-D.0 developer receipt. This does not close interactive Windows, M0,
+package, signing, soak, or product-release acceptance.
 
 The implemented bootstrap and later application integration follow this exact order:
 
@@ -268,6 +271,12 @@ The implemented bootstrap and later application integration follow this exact or
    journal and recovery-launch state force the barrier again on restart. If the refresh
    fails in-process, use the typed retry; it reuses the promoted archive and must not
    repeat reconstruction or discard quarantine evidence.
+8. Diagnose resource or latency regressions only with the release-mode P3-D.0 contracts
+   on a synthetic fixture. Warm backup, acquired-candidate cancellation, and one complete
+   restore before taking the process baseline. Never delete quarantine, edit settings/
+   journal rows, raise queue/thread/window limits, or copy only the SQLite main file to
+   make a measurement pass. A missing or identity-mismatched developer receipt is no
+   evidence; rerun it on one clean commit instead.
 
 For a current real incident, stop TokenMaster normally if possible, preserve the
 complete data directory as an operator-owned copy, and reproduce only against a

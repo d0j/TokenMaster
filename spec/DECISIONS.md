@@ -1579,3 +1579,32 @@ avoids a second ingestion implementation. An optional journal backup identity pr
 old restore compatibility while making source reconstruction explicit and resumable.
 Latest-only UI state and exact irreversible phases keep retained memory constant and
 prevent cancellation receipts from contradicting durable mutation.
+
+## ADR-064 — Accept Reliable State through a separate bounded evidence rail
+
+Decision: P3-D.0 uses three release-mode developer contracts and one strict receipt,
+separate from M0 and product release. Backup throughput runs automatic, normal, and
+compact pipelines against deterministic 8 MiB and 96 MiB schema-13 freelist fixtures.
+The fixture's intentionally random Git installation salt is normalized only in test so
+its byte length and SHA-256 are reproducible. Streaming evidence uses an absolute 64 MiB
+private-growth ceiling plus 16 MiB large-database headroom rather than comparing two
+single sampled peaks, because allocator/Zstd high water can be constant yet shorter than
+the Windows sampling interval on the small fixture.
+
+Resource evidence warms backup, acquired-candidate cancellation, and a complete restore
+before establishing one immutable baseline. It then runs 256 backup/package/verify/
+import-inspect-cancel/retention cycles, 16 cancellations after source-reader/candidate
+acquisition, and 16 complete isolated data-only restores. Every measured retention pass
+must return to the exact filled-tier bytes; final encrypted compact resources are
+compared with the original baseline, never a newly relaxed one. UI evidence waits for
+one completed warm-up backup and pins the next started cycle; that same cycle must remain
+in progress across all loaded Dashboard query and software-paint samples and complete
+only during joined shutdown.
+
+The acceptance receipt binds a full clean commit, `dirty=false`, the tested application
+SHA-256, exact format/tool versions, fixture identities, command arrays, durations,
+metrics, limits, and each gate. It is generated only under ignored `reports/`, contains
+no private data, and fails closed on missing or duplicate fields. A software-rendered
+paint is real Slint paint work but not physical-display or OS-input evidence. Therefore
+this receipt can close P3-D.0 only after Task 18 documentation and full workspace gates;
+it can never accept M0, packaging, signing, soak, or a product release.

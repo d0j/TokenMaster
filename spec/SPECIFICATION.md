@@ -372,6 +372,19 @@ threads, USER objects, and GDI objects to the measured post-warm-up envelope. On
 reference machine, an automatic backup MUST add no more than 10 ms to cached Dashboard
 query p95 or measured input-to-paint p95.
 
+P3-D.0 developer acceptance measures automatic, normal, and compact pipelines against
+deterministic 8 MiB and 96 MiB schema-13 fixtures in release mode. Private-memory growth
+MUST remain within a fixed 64 MiB envelope and at least 16 MiB below the large database;
+the only permitted sampled thread delta is the measurement thread. The resource gate
+MUST warm every contour, then execute 256 backup/package/verify/import-cancel/retention
+cycles, 16 acquired-candidate cancellation/recovery cycles, and 16 complete isolated
+restore cycles while returning to the original post-warm-up envelope. Retention bytes
+MUST equal the filled-tier plateau on every measured cycle. One identity-tracked
+automatic backup cycle MUST span the complete loaded Dashboard-query and
+route-input-to-software-paint sample windows. These measurements remain developer
+evidence and do not replace physical-display/OS-input, M0, soak, or product-release
+acceptance.
+
 ## Release requirements
 
 ### TM-REL-001 — Evidence identity
