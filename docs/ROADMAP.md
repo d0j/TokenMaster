@@ -128,8 +128,9 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   recovery/quarantine, application backup/migration ownership, bounded command/restart,
   identity-pinned selected restore, one joined operation worker/manual-backup binding,
   sealed config/native-dialog composition, exact operation phases, authoritative-source
-  no-backup reconstruction, and bounded Data & Recovery/Settings controls are complete;
-  adversarial, resource-return, and P3-D.0 acceptance closure remain. Full history,
+  no-backup reconstruction, bounded Data & Recovery/Settings controls, exhaustive
+  package/WAL-SHM adversarial closure, and package privacy/dependency/license audit are
+  complete; resource-return and P3-D.0 acceptance closure remain. Full history,
   sessions, models, projects, activity, remaining health/notifications/settings/help,
   command palette, tray, and compact widget then remain P3-D-P3-E.
 - **P4 — presentation:** modular skins/layouts/density/scheme/locale, en/ru/pseudo,
@@ -170,8 +171,9 @@ Task 12A application backup/migration composition, and the Task 12B.1 bounded co
 generation-safe current-bundle restart foundation and Task 12B.2a identity-pinned
   selected-restore lifecycle, Task 12B.2b joined worker and complete typed command/UI
   bindings, Task 14 sealed native file-dialog backend, and Task 15 bounded Data Health/
-  Settings UI plus no-backup reconstruction are implemented. Tasks 16-18 adversarial,
-  resource, and acceptance closure are next, then the remaining P3-D supporting data
+  Settings UI plus no-backup reconstruction, and Task 16 adversarial/privacy/
+  compatibility closure are implemented. Tasks 17-18 resource and acceptance closure
+  are next, then the remaining P3-D supporting data
   views.
 
 P3-D.0 Reliable State is approved under
@@ -225,7 +227,9 @@ dependency Windows Common Item Dialog backend, exact config/backup/encrypted fil
   reconciliation before healthy state. Review hardening pins confirmation to the exact
   previewed restore identity, publishes follow-up running state at actual execution,
   preserves pre-boundary backup cancellation, and keeps unknown metrics unavailable.
-  These slices add no
+  Task 16 adds exhaustive prefix/one-bit package rejection, coherent resumable WAL/SHM
+  preflight before new movement, a 57-test executable application recovery aggregate,
+  and exact package dependency/license/feature/privacy/authority audits. These slices add no
 path, generic stream, SQL, or batch-deletion authority.
 
 P2-A query foundation is approved under

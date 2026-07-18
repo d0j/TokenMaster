@@ -758,7 +758,12 @@ create-new marker and derive all children; staging retains at most three exact r
 artifacts and may be discarded only after journal absence or completion,
 while quarantine retains at most three complete sets and is never auto-deleted.
 Existing-main promotion uses `ReplaceFileW`; missing damaged main uses a write-through
-same-volume move. Every promotion and rollback rechecks fixed main/WAL/SHM identities.
+same-volume move. Before the first new sidecar move, quarantine rechecks main plus the
+active/quarantine WAL and SHM locations as one coherent layout. Pre-existing drift or a
+conflicting target fails without moving a different member; an exact already-moved
+member is accepted only for the same opaque resumed operation. Every individual move,
+promotion, and rollback repeats the relevant fixed main/WAL/SHM identity check so a
+later namespace race remains fail-closed and an exact interrupted move can resume.
 
 `RecoveryCoordinator::{restore_selected,restore_definitively_corrupt_selected,resume}`
 accepts only a generation-bound catalog selection, typed mode/proof, exact archive/store

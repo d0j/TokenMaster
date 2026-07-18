@@ -6080,6 +6080,7 @@ name = "tokenmaster-app"
 version = "0.1.0"
 dependencies = [
  "rusqlite",
+ "sha2 0.11.0",
  "slint",
  "tempfile",
  "tokenmaster-codex",

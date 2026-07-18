@@ -1200,8 +1200,39 @@ workspace Clippy, all three source audits, application 46/46, reliable-state 56/
 desktop 28/28 policy mutations, plus the complete locked workspace test/doctest suite
 in 540.8 seconds. The authenticated live Codex contract remains the single expected
 environment-gated ignored test. Independent rereview reports Critical/Important/Minor
-0/0/0 and `Ready`. This evidence does not close Tasks 16-18 or interactive/M0/package/
-release acceptance.
+0/0/0 and `Ready` for Task 15.
+
+Task 16 now closes the consolidated adversarial/privacy/compatibility contour. The new
+state matrix rejects every proper package prefix and every one-bit package mutation and
+tests WAL/SHM add/remove/change drift. That test exposed and fixed a real partial-move
+defect: pre-existing SHM drift could move WAL before returning `ArtifactMismatch`.
+Platform now verifies main and both active/quarantine sidecar locations before the first
+new move, rejects conflicting targets before another active child moves, resumes an
+exact already-moved sidecar, and retains the per-move checks. The application gate
+executes the already stronger six-state journal, process-death, settings rollback,
+automatic data-only, missing-main, and periodic-disabled safety contracts directly;
+private application migration tests remain source-bound without opening test-only
+production APIs.
+
+`scripts/audit-backup-package.ps1` adds a distinct package security rail: seven exact
+codec files, twenty-three coverage anchors, SHA-256 identities for the 196-package exact
+name/version/license and enabled-feature closures, two MIT upstream notices, forbidden
+process/network/shell/generic-archive/plugin/UI/SQL authority, 247 production-source
+privacy scan, synthetic-export privacy proof, and the release executable are checked.
+Focused state 4/4, app aggregate 57/57, platform archive-recovery 13/13, package Pester
+14/14, and combined package/reliable-state/app Pester 120/120 pass. Task 17-18,
+interactive/M0/package/signing/release acceptance remain unclaimed.
+
+The pre-review complete workspace gate passed in 476.7 seconds and exposed a pre-existing
+Codex timeout-test race: the fixture could be killed before writing its PID receipt. The
+contract now treats that receipt as optional only on the deadline path, proves no
+task-owned process remains by exact executable path, and passed eleven consecutive
+focused runs. The first independent Task 16 review reported 0 Critical, 4 Important,
+and 1 Minor; all four technical gaps now have RED/GREEN coverage above. The fresh locked
+workspace test/doctest suite passes on the post-review tree in 604.1 seconds, strict
+warnings-as-errors workspace Clippy passes, and independent rereview reports Critical/
+Important/Minor 0/0/0 with `READY`. Task 16 is closed; this is not Task 17-18,
+interactive/M0, packaging, signing, or release acceptance.
 
 Task 12A focused store backup 8/8 and adversarial 10/10, catalog 6/6, maintenance
 19/19, state bootstrap 13/13, app 6 unit plus 7 integration, application authority
@@ -1216,12 +1247,12 @@ zero polling/arbitrary-root/forbidden-string surface, and one release artifact.
 
 ## Next implementation slice
 
-Continue P3-D.0 with Task 16 from
-`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: close the consolidated
-package/recovery fault matrix, process-death boundaries, compatibility cases, privacy
-canaries, and dependency/authority audit without broadening the sealed capabilities.
-Then run Task 17 release-mode UI-latency/resource-return receipts and Task 18 final
-documentation/acceptance closure. This does not claim M0, packaging, signing, or release.
+Continue P3-D.0 with Task 17 from
+`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: produce the separate
+release-mode backup throughput, UI-latency, repeated recovery resource-return, resume,
+and disk-plateau receipts without relaxing fixed queues, threads, buffers, or windows.
+Then run Task 18 final documentation/acceptance closure. This does not claim M0,
+packaging, signing, or release.
 
 P2-D quota history core is complete under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: Tasks 1-8 cover
@@ -1238,8 +1269,8 @@ immutable read snapshots, and publication through the existing Codex runtime wit
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
 workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, P3-B.2, P3-B.3, and P3-C are
-complete; P3-D.0 Reliable State is active with Tasks 1-15 implemented through the
-application/Desktop contour, followed by Tasks 16-18 and P3-D supporting data-bearing
+complete; P3-D.0 Reliable State is active with Tasks 1-16 implemented through the
+adversarial/privacy contour, followed by Tasks 17-18 and P3-D supporting data-bearing
 routes. Activation
 remains a later independently authorized capability. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.

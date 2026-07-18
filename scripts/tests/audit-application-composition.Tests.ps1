@@ -553,4 +553,30 @@ Describe "TokenMaster application composition audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-APP-DUPLICATE-BINARY*"
     }
+
+    It "rejects loss of the dedicated recovery adversarial gate" {
+        $fixture = New-AppAuditFixture -Name "missing-recovery-adversarial"
+        $path = Join-Path $fixture "crates\app\tests\recovery_adversarial_contract.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'application_gate_is_bound_to_the_complete_state_recovery_matrix',
+            'coverage_removed'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-RECOVERY-ADVERSARIAL*"
+    }
+
+    It "rejects replacing executable recovery coverage with source-only anchors" {
+        $fixture = New-AppAuditFixture -Name "missing-executable-recovery-module"
+        $path = Join-Path $fixture "crates\app\tests\recovery_adversarial_contract.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'mod restore_contract;',
+            'mod removed_restore_contract;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-RECOVERY-ADVERSARIAL*"
+    }
 }

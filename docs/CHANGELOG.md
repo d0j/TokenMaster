@@ -6,6 +6,28 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.0 Task 16 adversarial/privacy closure. Dedicated state contracts
+  reject every proper config/backup package prefix, every one-bit mutation, and every
+  WAL/SHM add/remove/change drift case. The RED matrix found and fixed both pre-existing
+  drift moving WAL and conflicting/resumed partial layouts. Platform now preflights main
+  plus both active/quarantine sidecar locations, accepts only an exact same-operation
+  partial resume, and retains per-move race checks. A dedicated app target directly
+  executes 57 journal/crash/rollback/automatic-recovery/mandatory-safety tests without
+  adding test-only production authority.
+- Added `audit-backup-package.ps1` and fourteen mutation contracts. The rail pins the
+  seven codec files, twenty-three security/compatibility/execution anchors, exact
+  SHA-256 identities for the 196-package name/version/license and enabled-feature
+  closures, both MIT upstream notices, 247 production-source plus synthetic-export and
+  release privacy canaries, and zero process/network/shell/generic-extraction/plugin/UI/
+  SQL codec authority. Focused state 4/4, app 57/57, platform 13/13, and combined Pester
+  120/120 pass. The post-review locked workspace test/doctest suite passes in 604.1
+  seconds, strict warnings-as-errors workspace Clippy passes, and independent rereview
+  reports Critical/Important/Minor 0/0/0 with `READY`.
+- Made the existing Codex timeout cleanup contract deterministic under Windows process
+  startup load. A deadline may legally expire before the fixture writes its PID receipt;
+  that case now verifies cleanup by exact executable path. The target passes eleven
+  consecutive runs and remains covered by the complete workspace suite.
+
 - Implemented P3-D.0 Task 12B.2b/Task 15 application and UI reliable-state composition.
   The owning Slint/STA thread invokes the sealed config/backup dialogs and submits only
   controlled capabilities to the single joined operation worker. Config preview/

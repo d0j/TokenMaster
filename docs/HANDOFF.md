@@ -657,13 +657,35 @@ workspace Clippy, all three source audits, application 46/46, reliable-state 56/
 desktop 28/28 policy mutations, and the complete locked workspace test/doctest suite in
 540.8 seconds. The only ignored test is the explicitly environment-gated authenticated
 live Codex contract. Independent rereview reports Critical/Important/Minor 0/0/0 and
-`Ready`. This is not Task 16-18, interactive, M0, packaging, signing, or release
-acceptance.
+`Ready` for Task 15.
 
-The immediate next slice is Task 16: consolidate the adversarial package/recovery fault
-matrix, process-death/compatibility/privacy canaries, and authority audit. Then Task 17
-must produce release-mode UI-latency/resource-return receipts, followed by Task 18
-documentation/acceptance closure. Keep the fixed archive path and
+Task 16 is implemented. A dedicated state target exhaustively rejects every proper
+package prefix and every one-bit mutation and tests WAL/SHM add/remove/change. The RED
+matrix exposed pre-existing SHM drift moving WAL before failure; platform now preflights
+the coherent active/quarantine sidecar layout, rejects target conflicts before another
+active move, resumes exact partially moved operations, and retains per-move checks.
+A dedicated app target executes the existing journal/process-death/rollback/automatic-
+recovery/mandatory-safety suites as a 57-test aggregate without exporting internal
+application authority. The new package audit pins twenty-three coverage anchors, the
+seven codec files, exact SHA-256 identities for 196 name/version/license plus enabled-
+feature records, two MIT upstream notices, 247 production-source/export/release privacy
+canaries, and zero process/network/shell/generic-archive/plugin/UI/SQL codec authority.
+Focused state 4/4, app 57/57, platform recovery 13/13, and combined Pester 120/120 pass.
+The pre-review complete workspace gate passed in 476.7 seconds. Its first attempt
+reproduced an existing Codex timeout-test race: process cleanup can complete before the
+fixture writes its PID receipt. The
+contract now permits a missing receipt only on that deadline path and verifies no
+process remains by exact executable path; the target passes eleven consecutive runs.
+The first independent review reported 0 Critical/4 Important/1 Minor. Exact partial-
+move resume, target-collision preflight, executable app coverage, exact dependency/
+feature policy, and real exported-archive canaries now close those findings. Fresh full
+locked workspace test/doctest gate passes in 604.1 seconds, strict warnings-as-errors
+workspace Clippy passes, and independent rereview reports Critical/Important/Minor
+0/0/0 with `READY`. Task 16 is closed; Task 17 is next.
+
+The immediate next implementation slice after that close is Task 17: produce separate
+release-mode UI-latency/resource-return/throughput/resume/disk-plateau receipts, followed
+by Task 18 documentation/acceptance closure. Keep the fixed archive path and
 writer sidecar; never copy only the live main file or treat busy/disk/access/schema-
 newer as corruption authority. Keep automatic recovery data only; device-local settings
 never move. Do not relax Tasks 6-11A into path, generic-stream, generic age-extraction,

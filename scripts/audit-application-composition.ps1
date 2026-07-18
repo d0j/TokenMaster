@@ -11,11 +11,32 @@ $rootManifest = Join-Path $root 'Cargo.toml'
 $appRoot = Join-Path $root 'crates\app'
 $appManifest = Join-Path $appRoot 'Cargo.toml'
 $appSource = Join-Path $appRoot 'src'
+$recoveryAdversarial = Join-Path $appRoot 'tests\recovery_adversarial_contract.rs'
 $desktopManifest = Join-Path $root 'crates\desktop\Cargo.toml'
 
-foreach ($required in @($rootManifest, $appManifest, $appSource, $desktopManifest)) {
+foreach ($required in @(
+    $rootManifest,
+    $appManifest,
+    $appSource,
+    $recoveryAdversarial,
+    $desktopManifest
+)) {
     if (-not (Test-Path -LiteralPath $required)) {
         throw "TM-APP-MISSING-BOUNDARY: $([System.IO.Path]::GetFileName($required))"
+    }
+}
+$recoveryAdversarialText = [System.IO.File]::ReadAllText($recoveryAdversarial)
+$recoveryAdversarialAnchors = @(
+    'fn application_recovery_and_migration_matrix_remains_executable()',
+    'fn application_gate_is_bound_to_the_complete_state_recovery_matrix()',
+    'mod automatic_recovery_contract;',
+    'mod maintenance_contract;',
+    'mod recovery_journal_contract;',
+    'mod restore_contract;'
+)
+foreach ($anchor in $recoveryAdversarialAnchors) {
+    if ([regex]::Matches($recoveryAdversarialText, [regex]::Escape($anchor)).Count -ne 1) {
+        throw "TM-APP-RECOVERY-ADVERSARIAL: missing exact anchor $anchor"
     }
 }
 
@@ -202,6 +223,7 @@ if ($SourceOnly) {
         desktop_bridge_count = 1
         application_polling_surface_count = 0
         arbitrary_root_surface_count = 0
+        recovery_adversarial_anchor_count = $recoveryAdversarialAnchors.Count
     } | ConvertTo-Json -Compress
     return
 }
@@ -321,4 +343,5 @@ foreach ($needle in @(
     probe_dependency_count = 0
     release_artifact_count = 1
     forbidden_binary_string_count = 0
+    recovery_adversarial_anchor_count = $recoveryAdversarialAnchors.Count
 } | ConvertTo-Json -Compress

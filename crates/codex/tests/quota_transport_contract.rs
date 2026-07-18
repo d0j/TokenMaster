@@ -1,7 +1,5 @@
 use std::fs;
-#[cfg(not(windows))]
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use tempfile::TempDir;
@@ -18,6 +16,7 @@ fn fixture_path() -> PathBuf {
 
 struct FixtureTransport {
     _temp: TempDir,
+    executable: PathBuf,
     receipt: PathBuf,
     transport: CodexQuotaTransport,
 }
@@ -31,10 +30,11 @@ impl FixtureTransport {
             .join(format!("codex_app_server_fixture__{mode}{extension}"));
         fs::copy(fixture_path(), &executable).expect("copy fixture executable");
         let receipt = executable.with_extension("receipt");
-        let command = CodexAppServerCommand::new(executable).expect("fixture command");
+        let command = CodexAppServerCommand::new(executable.clone()).expect("fixture command");
         let transport = CodexQuotaTransport::new(command, timeout).expect("fixture transport");
         Self {
             _temp: temp,
+            executable,
             receipt,
             transport,
         }
@@ -148,7 +148,7 @@ fn timeout_terminates_the_task_owned_child() {
 
     assert_eq!(error.code(), CodexQuotaErrorCode::DeadlineExceeded);
     assert!(started.elapsed() < Duration::from_secs(3));
-    assert_fixture_process_exited(&fixture.receipt());
+    assert_timeout_fixture_process_exited(&fixture);
 }
 
 #[test]
@@ -184,6 +184,18 @@ fn assert_fixture_process_exited(receipt: &str) {
     assert!(!process_exists(pid), "fixture process {pid} still exists");
 }
 
+fn assert_timeout_fixture_process_exited(fixture: &FixtureTransport) {
+    match fs::read_to_string(&fixture.receipt) {
+        Ok(receipt) => assert_fixture_process_exited(&receipt),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => panic!("fixture receipt: {error}"),
+    }
+    assert!(
+        !executable_process_exists(&fixture.executable),
+        "fixture executable still has a running process"
+    );
+}
+
 #[cfg(windows)]
 fn process_exists(pid: u32) -> bool {
     let script = "if (Get-Process -Id $env:TM_FIXTURE_PID -ErrorAction SilentlyContinue) { exit 0 } else { exit 1 }";
@@ -194,7 +206,56 @@ fn process_exists(pid: u32) -> bool {
         .is_ok_and(|status| status.success())
 }
 
+#[cfg(windows)]
+fn executable_process_exists(executable: &Path) -> bool {
+    let script = "$p = Get-Process -ErrorAction SilentlyContinue | Where-Object { try { $_.Path -eq $env:TM_FIXTURE_PATH } catch { $false } } | Select-Object -First 1; if ($p) { exit 0 } else { exit 1 }";
+    std::process::Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .env("TM_FIXTURE_PATH", executable)
+        .status()
+        .expect("inspect fixture executable process")
+        .success()
+}
+
 #[cfg(not(windows))]
 fn process_exists(pid: u32) -> bool {
     Path::new(&format!("/proc/{pid}")).exists()
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn executable_process_exists(executable: &Path) -> bool {
+    let expected = executable
+        .canonicalize()
+        .expect("canonical fixture executable");
+    let entries = std::fs::read_dir("/proc").expect("inspect process directory");
+    entries.flatten().any(|entry| {
+        entry
+            .file_name()
+            .to_string_lossy()
+            .bytes()
+            .all(|byte| byte.is_ascii_digit())
+            && std::fs::read_link(entry.path().join("exe"))
+                .ok()
+                .and_then(|path| path.canonicalize().ok())
+                .is_some_and(|path| path == expected)
+    })
+}
+
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
+fn executable_process_exists(executable: &Path) -> bool {
+    let output = std::process::Command::new("ps")
+        .args(["-axo", "command="])
+        .output()
+        .expect("inspect fixture executable processes");
+    let executable = executable.to_string_lossy();
+    String::from_utf8_lossy(&output.stdout).lines().any(|line| {
+        line.trim_start()
+            .strip_prefix(executable.as_ref())
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with(' '))
+    })
+}
+
+#[cfg(not(any(windows, unix)))]
+fn executable_process_exists(_executable: &Path) -> bool {
+    panic!("fixture process inspection is unsupported on this platform")
 }

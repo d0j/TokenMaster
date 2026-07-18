@@ -467,3 +467,28 @@ fn package_wire_and_debug_surfaces_contain_no_private_archive_metadata() {
     assert!(!debug.contains("adversarial"));
     assert!(!debug.contains("path"));
 }
+
+#[test]
+fn synthetic_exported_archive_is_free_of_private_input_canaries() {
+    let archive = backup_bytes();
+    for canary in [
+        r"C:\private\codex-home",
+        "/home/private/tokenmaster",
+        "Private@Example.com",
+        "PRIVATE_SESSION_NAME.jsonl",
+        "PIPELINE_PRIVATE_SENTINEL_91A7",
+        "Authorization: Bearer private",
+        "prompt-private-canary",
+        "response-private-canary",
+        "reasoning-private-canary",
+        "command-private-canary",
+        "source-private-canary",
+    ] {
+        assert!(
+            !archive
+                .windows(canary.len())
+                .any(|window| window.eq_ignore_ascii_case(canary.as_bytes())),
+            "synthetic exported archive exposed private input canary"
+        );
+    }
+}

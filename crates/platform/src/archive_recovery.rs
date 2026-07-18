@@ -346,6 +346,16 @@ impl ArchiveRecoveryScope {
         if inspect_optional(&self.active_main)? != before.main {
             return Err(ArchiveRecoveryError::ArtifactMismatch);
         }
+        require_movable_layout(
+            &self.active_wal,
+            &operation.directory.join(ACTIVE_WAL),
+            before.wal,
+        )?;
+        require_movable_layout(
+            &self.active_shm,
+            &operation.directory.join(ACTIVE_SHM),
+            before.shm,
+        )?;
         move_expected(
             &self.active_wal,
             &operation.directory.join(ACTIVE_WAL),
@@ -1177,6 +1187,25 @@ fn move_expected(
         }
         Some(receipt) if source_observed.is_none() && target_observed == Some(receipt) => Ok(()),
         _ => Err(ArchiveRecoveryError::ArtifactMismatch),
+    }
+}
+
+fn require_movable_layout(
+    source: &Path,
+    target: &Path,
+    expected: Option<DurableFileReceipt>,
+) -> Result<(), ArchiveRecoveryError> {
+    let source_observed = inspect_optional(source)?;
+    let target_observed = inspect_optional(target)?;
+    match expected {
+        None if source_observed.is_none() && target_observed.is_none() => Ok(()),
+        Some(receipt)
+            if (source_observed == Some(receipt) && target_observed.is_none())
+                || (source_observed.is_none() && target_observed == Some(receipt)) =>
+        {
+            Ok(())
+        }
+        None | Some(_) => Err(ArchiveRecoveryError::ArtifactMismatch),
     }
 }
 

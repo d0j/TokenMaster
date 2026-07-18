@@ -641,7 +641,15 @@ fn atomic_submit_and_wait_reserves_the_exact_root_until_terminal_receipt() {
 
 #[test]
 fn maintenance_source_has_two_fixed_threads_no_ui_async_or_trigger_queue() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let manifest_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let root = if manifest_root
+        .file_name()
+        .is_some_and(|name| name == "state")
+    {
+        manifest_root.to_path_buf()
+    } else {
+        manifest_root.join("..").join("state")
+    };
     let maintenance_root = root.join("src").join("maintenance");
     let mut source = String::new();
     for name in ["mod.rs", "coordinator.rs", "scheduler.rs", "worker.rs"] {

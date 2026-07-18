@@ -1059,3 +1059,27 @@ normalized. Automatic backups remain credential-free and recoverable under the u
 local ACL.
 Neither hashes nor local encryption are claimed to defend against malicious code
 running as the same user or complete-disk destruction.
+
+Task 16 closes the consolidated adversarial rail without widening any production
+capability. Every proper prefix and every one-bit mutation of deterministic config and
+backup packages is rejected. The existing Zstd window/bomb, age work-factor/password,
+SQLite structural/semantic, six-phase crash, schema compatibility, settings rollback,
+automatic data-only, and mandatory-safety-point contracts are bound into dedicated
+state/application gates instead of being duplicated behind a weaker parser.
+
+Archive quarantine now preflights main plus both active/quarantine sidecar locations
+before the first new move. A WAL or SHM that was added, removed, changed, or conflicts
+with an operation target returns `ArtifactMismatch` while the other active child remains
+in place. An exact sidecar already moved by the same persisted operation is the only
+accepted partial layout, so process-death resume can complete deterministically.
+Per-move identity checks remain, so this preflight does not weaken later race detection.
+
+The separate backup-package audit pins the seven-file typed codec boundary, twenty-three
+adversarial/executable coverage anchors, two immutable MIT upstream references/notices,
+and SHA-256 identities for the exact 196-package name/version/license and resolved-
+feature closures. It rejects
+process, network, shell, generic extraction, plugin, UI, and SQL authority in the codec
+and scans 247 production Rust/Slint sources, a synthetic exported package, and the
+release executable for fixed path, credential, prompt, response, reasoning, command,
+and source canaries. This is a
+development security gate, not the future P6 SBOM/advisory/attestation or release claim.

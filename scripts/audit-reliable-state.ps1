@@ -11,10 +11,23 @@ $rootManifest = Join-Path $root 'Cargo.toml'
 $stateRoot = Join-Path $root 'crates\state'
 $stateManifest = Join-Path $stateRoot 'Cargo.toml'
 $stateSource = Join-Path $stateRoot 'src'
+$faultMatrix = Join-Path $stateRoot 'tests\fault_matrix_contract.rs'
 
-foreach ($required in @($rootManifest, $stateManifest, $stateSource)) {
+foreach ($required in @($rootManifest, $stateManifest, $stateSource, $faultMatrix)) {
     if (-not (Test-Path -LiteralPath $required)) {
         throw "TM-STATE-MISSING-BOUNDARY: $([System.IO.Path]::GetFileName($required))"
+    }
+}
+$faultMatrixText = [System.IO.File]::ReadAllText($faultMatrix)
+$faultMatrixAnchors = @(
+    'fn every_package_prefix_and_one_bit_mutation_fails_closed()',
+    'fn preexisting_wal_and_shm_drift_fails_before_any_archive_move()',
+    'fn prepared_resume_completes_an_exact_partially_moved_sidecar_set()',
+    'fn conflicting_resumed_sidecar_target_fails_before_any_active_move()'
+)
+foreach ($anchor in $faultMatrixAnchors) {
+    if ([regex]::Matches($faultMatrixText, [regex]::Escape($anchor)).Count -ne 1) {
+        throw "TM-STATE-FAULT-MATRIX: missing exact anchor $anchor"
     }
 }
 
@@ -474,6 +487,7 @@ if ($SourceOnly) {
         validated_directory_capability_use_count = $validatedDirectoryUses.Count
         forbidden_authority_count = 0
         arbitrary_path_constructor_count = 0
+        fault_matrix_anchor_count = $faultMatrixAnchors.Count
     } | ConvertTo-Json -Compress
     return
 }
@@ -568,4 +582,5 @@ if ($featureTreeText -match '(?i)\bage feature "(?:armor|async|cli-common|plugin
     forbidden_authority_count = 0
     arbitrary_path_constructor_count = 0
     forbidden_transitive_dependency_count = 0
+    fault_matrix_anchor_count = $faultMatrixAnchors.Count
 } | ConvertTo-Json -Compress

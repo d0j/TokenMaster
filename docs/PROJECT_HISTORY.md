@@ -3079,3 +3079,42 @@ mutations, clean-root, formatting, strict workspace Clippy, and the complete loc
 workspace test/doctest suite in 540.8 seconds pass. Independent rereview reports
 Critical/Important/Minor 0/0/0 and `Ready`; Tasks 16-18 and release acceptance remain
 open.
+
+## 2026-07-18 — P3-D.0 Task 16 adversarial and privacy closure
+
+Added the dedicated state fault matrix, application recovery coverage gate, and backup-
+package audit rail. The package matrix rejects every proper prefix and every one-bit
+mutation of deterministic config and backup packages, while retaining the earlier Zstd
+bomb/window, age work-factor/password, duplicate/trailing/version, SQLite corruption,
+six-phase crash, migration, rollback, data-only, and mandatory-safety evidence as named
+independent contracts rather than duplicating weaker implementations.
+
+The WAL/SHM matrix found a real recovery bug: a pre-existing SHM mismatch could be
+detected only after the expected WAL had already moved to quarantine. Recovery now
+preflights main plus active/quarantine WAL and SHM as one coherent layout before the
+first new sidecar move; the existing per-move checks still catch later races. The
+regression covers adding, removing, and changing either sidecar, conflicting operation
+targets, and exact partially moved resume.
+
+The new PowerShell audit pins the seven-file package codec, twenty-three attack/
+compatibility/execution anchors, SHA-256 identities for all 196 resolved name/version/
+license and enabled-feature records, both immutable MIT upstream references/notices,
+247 production-source files, a synthetic exported archive, and the release binary. It
+rejects process, network, shell, generic extraction, plugin, UI, and SQL authority inside
+the package codec. Focused state 4/4, app aggregate 57/57, platform archive-recovery
+13/13, package Pester 14/14, and the combined package/state/application 120/120 Pester
+suite pass. The pre-review locked workspace suite passed in 476.7 seconds.
+
+The first full-suite attempt also converted a previously unexplained intermittent event
+into a deterministic regression fix. A 100 ms Codex transport deadline can expire and
+reap the child before the fixture writes its PID receipt; the test had incorrectly
+required that file. The timeout-only assertion now accepts the absent receipt and checks
+the exact copied executable path for a surviving process. The focused target passes
+eleven consecutive runs. The first independent review then found four Important gaps:
+exact partially moved sidecars could not resume, target collision could move WAL first,
+the app gate was source-only, and dependency/feature/export privacy rails were not exact.
+New RED/GREEN contracts close each issue. The post-review locked workspace test/doctest
+suite passes in 604.1 seconds, strict
+warnings-as-errors workspace Clippy passes, and independent rereview reports Critical/
+Important/Minor 0/0/0 with `READY`. Task 16 closes; Task 17-18 and release acceptance
+remain open.

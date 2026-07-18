@@ -33,6 +33,11 @@ Describe "TokenMaster reliable-state authority audit" {
                 Out-Null
             Copy-Item -LiteralPath (Join-Path $RepositoryRoot "crates\state\src") `
                 -Destination $stateRoot -Recurse
+            $stateTests = Join-Path $stateRoot "tests"
+            New-Item -ItemType Directory -Path $stateTests -Force | Out-Null
+            Copy-Item -LiteralPath `
+                (Join-Path $RepositoryRoot "crates\state\tests\fault_matrix_contract.rs") `
+                -Destination $stateTests
 
             $rootManifest = if ($IncludeStateMember) {
                 @'
@@ -534,5 +539,31 @@ tokenmaster-state = { path = "../state" }
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-STATE-RECORD-VISIBILITY*"
+    }
+
+    It "rejects loss of the dedicated fault matrix" {
+        $fixture = New-StateAuditFixture -Name "missing-fault-matrix"
+        $path = Join-Path $fixture "crates\state\tests\fault_matrix_contract.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'preexisting_wal_and_shm_drift_fails_before_any_archive_move',
+            'coverage_removed'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-FAULT-MATRIX*"
+    }
+
+    It "rejects loss of partial sidecar resume coverage" {
+        $fixture = New-StateAuditFixture -Name "missing-partial-sidecar-resume"
+        $path = Join-Path $fixture "crates\state\tests\fault_matrix_contract.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'prepared_resume_completes_an_exact_partially_moved_sidecar_set',
+            'coverage_removed'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-FAULT-MATRIX*"
     }
 }

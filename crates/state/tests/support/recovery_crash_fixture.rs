@@ -24,12 +24,7 @@ pub fn kill_after_durable_phase(root: &Path, phase: &str) {
     let marker = root.join(READY_FILE);
     let _ = std::fs::remove_file(&marker);
     let mut child = Command::new(std::env::current_exe().expect("current test executable"))
-        .args([
-            "--exact",
-            "recovery_crash_child",
-            "--nocapture",
-            "--test-threads=1",
-        ])
+        .args(["recovery_crash_child", "--nocapture", "--test-threads=1"])
         .env(ROOT_ENV, root)
         .env(PHASE_ENV, phase)
         .stdin(Stdio::null())
