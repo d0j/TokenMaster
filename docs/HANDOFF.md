@@ -552,7 +552,7 @@ Focused store backup 8/8 and adversarial 10/10, catalog 6/6, maintenance 19/19, 
 bootstrap 13/13, app 6 unit plus 7 integration, application authority 17/17, and
 reliable-state authority 55/55 contracts pass. The app lifecycle test includes 19 real
 sequential manual backups and proves the retained catalog remains at or below the
-default 15-point bound. The required clean-root, formatting,
+default 15-point bound. The prior required clean-root, formatting,
 strict locked workspace
 Clippy, and complete locked workspace test/doctest gate passes in 617.2 seconds; the
 one live-auth Codex transport test remains intentionally environment-gated. The release
@@ -560,11 +560,28 @@ application audit passes with exactly one production binary and owner of every d
 runtime, both migration gates, zero polling/arbitrary-root/forbidden-string surface,
 and one release artifact. This is developer evidence, not product/release acceptance.
 
-The immediate next slice is Task 12B command and restart composition. It owns typed
-config export/import, backup/verify, data-only and confirmed portable-settings restore,
-rebuild/retry/cancel, capacity-one command admission, complete bundle teardown/restart,
-obsolete notifier suppression, and provider-backed fresh reconstruction when no backup
-is usable. Then continue Tasks 13-18 in order: health/product projection, Data
+Task 12B.1 is implemented. One path-free typed application command
+coordinator retains one active plus one distinct follow-up, coalesces 10,000 identical
+hints, rejects a third request busy, supports exact active/queued cancellation and
+retry, and seals cancellation at the irreversible boundary. Controlled restart pauses
+admission, removes only the follow-up, joins every old owner, acquires a fresh archive
+guard, starts one higher bundle generation, preserves the Slint window, and resumes
+admission. A notifier compares its exact generation while holding the shared bundle
+mutex, so an old completion cannot publish through the replacement bundle.
+Focused Task 12B.1 evidence passes: 7/7 command contracts, 14 app unit plus 7 app
+integration contracts, strict app Clippy, and 23/23 application authority contracts,
+including a clean-composition control and grouped process-import rejection.
+The required clean-root, formatting, warnings-as-errors locked workspace Clippy, and
+complete locked workspace test/doctest gates pass on the same tree; the test gate takes
+481.6 seconds. The release application composition audit, reliable-state workspace
+audit, and 55/55 reliable-state authority mutations pass. Independent follow-up review
+reports Critical/Important/Minor 0/0/0. This is developer evidence, not product or
+release acceptance.
+
+The immediate next slice is Task 12B.2 operation execution and recovery composition. It
+owns the worker and actual typed config export/import, backup/verify, selected data-only
+and confirmed portable-settings restore, rebuild/retry/cancel bindings, and provider-
+backed fresh reconstruction when no backup is usable. Then continue Tasks 13-18 in order: health/product projection, Data
 & Recovery UI, adversarial/resource/release closure. Keep the fixed archive path and
 writer sidecar; never copy only the live main file or treat busy/disk/access/schema-
 newer as corruption authority. Keep automatic recovery data only; device-local settings

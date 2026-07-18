@@ -77,8 +77,9 @@ fn disable_periodic_backups(root: &DataRoot) {
 
 #[test]
 fn early_notification_sets_one_pending_bit_without_allocating_generation() {
-    let bundle: SharedBundle = Arc::new(Mutex::new(None));
-    let notifier = ApplicationRuntimeNotifier::new(Arc::downgrade(&bundle));
+    let bundle: SharedBundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
+    let generation = begin_bundle_generation(&bundle).expect("bundle generation");
+    let notifier = ApplicationRuntimeNotifier::new(Arc::downgrade(&bundle), generation);
 
     notifier.publish().expect("lossy early notification");
 
@@ -88,8 +89,9 @@ fn early_notification_sets_one_pending_bit_without_allocating_generation() {
 
 #[test]
 fn runtime_generation_overflow_is_checked_and_path_free() {
-    let bundle: SharedBundle = Arc::new(Mutex::new(None));
-    let notifier = ApplicationRuntimeNotifier::new(Arc::downgrade(&bundle));
+    let bundle: SharedBundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
+    let generation = begin_bundle_generation(&bundle).expect("bundle generation");
+    let notifier = ApplicationRuntimeNotifier::new(Arc::downgrade(&bundle), generation);
     notifier.next_generation.store(u64::MAX, Ordering::Release);
 
     let error = notifier
@@ -97,6 +99,22 @@ fn runtime_generation_overflow_is_checked_and_path_free() {
         .expect_err("generation must not wrap");
     assert_eq!(error.code(), ApplicationErrorCode::GenerationOverflow);
     assert_eq!(error.to_string(), "generation_overflow");
+}
+
+#[test]
+fn obsolete_bundle_notifier_cannot_publish_after_generation_replacement() {
+    let bundle: SharedBundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
+    let first = begin_bundle_generation(&bundle).expect("first bundle generation");
+    let notifier = ApplicationRuntimeNotifier::new(Arc::downgrade(&bundle), first);
+
+    let second = begin_bundle_generation(&bundle).expect("replacement bundle generation");
+    assert!(second > first);
+    notifier
+        .publish()
+        .expect("obsolete notification is discarded");
+
+    assert!(!notifier.pending.load(Ordering::Acquire));
+    assert_eq!(notifier.next_generation.load(Ordering::Acquire), 1);
 }
 
 #[test]
@@ -138,6 +156,7 @@ fn real_bundle_joins_live_health_and_independent_optional_failures_then_shuts_do
         },
         controller,
         maintenance,
+        notifier: Arc::new(ApplicationRuntimeNotifier::new(Weak::new(), 1)),
     };
 
     bundle
@@ -201,7 +220,26 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
             .expect("bounded repeated manual backup");
     }
     assert_eq!(maintenance.snapshot().worker().successful_count(), 19);
+    let old_bundle_generation = bundle_slot.generation;
+    let old_notifier = Arc::clone(&bundle_slot.as_ref().expect("healthy bundle").notifier);
     drop(bundle_slot);
+
+    application
+        .restart_services()
+        .expect("controlled service restart");
+    let restarted_slot = application.bundle.lock().expect("restarted bundle slot");
+    assert!(restarted_slot.generation > old_bundle_generation);
+    assert!(restarted_slot.is_some());
+    drop(restarted_slot);
+    let obsolete_runtime_generation = old_notifier.next_generation.load(Ordering::Acquire);
+    old_notifier
+        .publish()
+        .expect("obsolete notifier is discarded after real restart");
+    assert_eq!(
+        old_notifier.next_generation.load(Ordering::Acquire),
+        obsolete_runtime_generation
+    );
+
     let live_backups =
         BackupDirectory::open_or_create(root.reliable_state()).expect("live backup directory");
     let live_catalog = BackupCatalog::rebuild(&live_backups, None).expect("live backup catalog");
@@ -232,6 +270,18 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
             .bundle
             .lock()
             .expect("bundle slot")
+            .is_none()
+    );
+    assert!(!safe_root.archive_path().exists());
+    let safe_restart = safe_application
+        .restart_services()
+        .expect_err("safe mode cannot bypass bootstrap through service restart");
+    assert_eq!(safe_restart.code(), ApplicationErrorCode::InvalidLifecycle);
+    assert!(
+        safe_application
+            .bundle
+            .lock()
+            .expect("safe bundle slot")
             .is_none()
     );
     assert!(!safe_root.archive_path().exists());
@@ -326,6 +376,17 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
         .expect("failed migration safe-mode shutdown");
 
     application.shutdown().expect("joined application shutdown");
+    let final_restart = application
+        .restart_services()
+        .expect_err("final shutdown cannot resurrect a bundle");
+    assert_eq!(final_restart.code(), ApplicationErrorCode::InvalidLifecycle);
+    assert!(
+        application
+            .bundle
+            .lock()
+            .expect("final bundle slot")
+            .is_none()
+    );
     drop(application);
 
     let owner = ApplicationStateOwner::open(&root).expect("state owner");

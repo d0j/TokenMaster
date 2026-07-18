@@ -162,9 +162,10 @@ health through lossy completion hints. P3-C is now complete: explicit all-curren
 quota/benefit overview reads feed one
 identity-free six-section projection and responsive compiled Slint Dashboard with
 32/32/240/12/8/12 presentation caps, real unknown/degraded states, and route-only
-navigation without model/window reconstruction. P3-D.0 Reliable State Tasks 1-11A and
-Task 12A application backup/migration composition are implemented; Task 12B command,
-restart, and no-backup reconstruction is next, then the remaining P3-D
+navigation without model/window reconstruction. P3-D.0 Reliable State Tasks 1-11A,
+Task 12A application backup/migration composition, and the Task 12B.1 bounded command/
+generation-safe current-bundle restart foundation are implemented; Task 12B.2 command
+execution, selected restore, and no-backup reconstruction are next, then the remaining P3-D
 supporting data views.
 
 P3-D.0 Reliable State is approved under
@@ -202,8 +203,11 @@ one app state owner before live work, one real capacity-one snapshot-to-retentio
 runtime, safe-shell isolation, mandatory verified pre/post-migration points even when
 periodic work is disabled, redundant pending-post restart completion, atomic exact-root
 receipt waiting, partial-owner discard, and final clean-after-join
-publication. Task 12B remains next for typed commands, restore/service restart,
-obsolete-bundle suppression, and provider-backed no-backup rebuild. These slices add no
+publication. Task 12B.1 now adds one bounded typed command coordinator, admission pause/
+resume, a fresh-lease current-bundle restart without window reconstruction, and
+generation-bound obsolete-notifier suppression. Task 12B.2 remains next for the
+operation worker, typed command bindings, selected restore, and provider-backed
+no-backup rebuild. These slices add no
 path, generic stream, SQL, or batch-deletion authority.
 
 P2-A query foundation is approved under

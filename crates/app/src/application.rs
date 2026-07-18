@@ -12,6 +12,7 @@ use tokenmaster_desktop::{
     DesktopShell, DesktopSnapshotBridge, select_production_renderer,
 };
 use tokenmaster_engine::{WorkerCompletion, WorkerCompletionNotifier};
+use tokenmaster_platform::ExclusiveFileLeaseGuard;
 use tokenmaster_product::{
     ProductGitRuntimeHealth, ProductQuotaRuntimeHealth, ProductReducer,
     ProductReminderRuntimeHealth, ProductRuntimeGeneration, ProductRuntimeObservationError,
@@ -26,11 +27,48 @@ use tokenmaster_state::{
     MaintenanceSourceState,
 };
 
+use crate::command::ApplicationCommandCoordinator;
 use crate::state::{ApplicationPreflight, ApplicationStateOwner};
 use crate::{ApplicationEnvironment, DataRoot};
 
-type SharedBundle = Arc<Mutex<Option<ApplicationBundle>>>;
+type SharedBundle = Arc<Mutex<ApplicationBundleSlot>>;
 const MANDATORY_BACKUP_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+
+struct ApplicationBundleSlot {
+    generation: u64,
+    bundle: Option<ApplicationBundle>,
+}
+
+impl ApplicationBundleSlot {
+    const fn new() -> Self {
+        Self {
+            generation: 0,
+            bundle: None,
+        }
+    }
+
+    #[cfg(test)]
+    const fn as_ref(&self) -> Option<&ApplicationBundle> {
+        self.bundle.as_ref()
+    }
+
+    fn as_mut(&mut self) -> Option<&mut ApplicationBundle> {
+        self.bundle.as_mut()
+    }
+
+    const fn is_none(&self) -> bool {
+        self.bundle.is_none()
+    }
+
+    #[cfg(test)]
+    const fn is_some(&self) -> bool {
+        self.bundle.is_some()
+    }
+
+    fn take(&mut self) -> Option<ApplicationBundle> {
+        self.bundle.take()
+    }
+}
 
 pub fn run() -> Result<(), ApplicationError> {
     select_production_renderer().map_err(|_| ApplicationError::ui_unavailable())?;
@@ -42,10 +80,25 @@ pub fn run() -> Result<(), ApplicationError> {
 }
 
 struct Application {
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "Task 12B command worker binds controlled restart")
+    )]
+    environment: ApplicationEnvironment,
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "Task 12B command worker binds controlled restart")
+    )]
+    data_root: DataRoot,
     shell: DesktopShell,
     _bridge: Option<DesktopSnapshotBridge>,
     bundle: SharedBundle,
-    _state: ApplicationStateOwner,
+    commands: ApplicationCommandCoordinator,
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "Task 12B command worker binds controlled restart")
+    )]
+    state: ApplicationStateOwner,
     preflight: ApplicationPreflight,
     live_started: bool,
     shutdown: bool,
@@ -74,7 +127,7 @@ impl Application {
         let mut preflight = state.prepare(&data_root)?;
         let initial = ProductReducer::new().snapshot();
         let shell = DesktopShell::new(&initial).map_err(|_| ApplicationError::ui_unavailable())?;
-        let bundle = Arc::new(Mutex::new(None));
+        let bundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
         let outcome = preflight.report().outcome();
         let may_start_live = matches!(
             outcome,
@@ -109,10 +162,13 @@ impl Application {
         };
 
         Ok(Self {
+            environment: environment.clone(),
+            data_root,
             shell,
             _bridge: bridge,
             bundle,
-            _state: state,
+            commands: ApplicationCommandCoordinator::new(),
+            state,
             preflight,
             live_started,
             shutdown: false,
@@ -127,11 +183,63 @@ impl Application {
         slint::run_event_loop().map_err(|_| ApplicationError::event_loop())
     }
 
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "Task 12B command worker binds controlled restart")
+    )]
+    fn restart_services(&mut self) -> Result<(), ApplicationError> {
+        if self.shutdown || !self.live_started {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        if self
+            .bundle
+            .lock()
+            .map_err(|_| ApplicationError::internal())?
+            .is_none()
+        {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        self.commands.pause_admission();
+        self.live_started = false;
+        drop(self._bridge.take());
+        let result = (|| {
+            let owned = self
+                .bundle
+                .lock()
+                .map_err(|_| ApplicationError::internal())?
+                .take();
+            let mut owned = owned.ok_or_else(ApplicationError::invalid_lifecycle)?;
+            owned.shutdown()?;
+            let guard = self.state.acquire_runtime_guard(&self.data_root)?;
+            start_current_bundle(
+                &self.environment,
+                &self.data_root,
+                &self.state,
+                &self.shell,
+                &self.bundle,
+                guard,
+            )
+        })();
+        self.commands.resume_admission();
+        match result {
+            Ok(bridge) => {
+                self._bridge = Some(bridge);
+                self.live_started = true;
+                Ok(())
+            }
+            Err(error) => {
+                discard_bundle(&self.bundle)?;
+                Err(error)
+            }
+        }
+    }
+
     fn shutdown(&mut self) -> Result<(), ApplicationError> {
         if self.shutdown {
             return Ok(());
         }
         self.shutdown = true;
+        self.commands.close();
         let bundle = self
             .bundle
             .lock()
@@ -162,19 +270,6 @@ fn start_live_bundle(
     outcome: BootstrapOutcome,
     observer: &mut dyn FnMut(ApplicationStartBoundary) -> Result<(), ApplicationError>,
 ) -> Result<DesktopSnapshotBridge, ApplicationError> {
-    let codex_home = environment
-        .codex_home()
-        .map(|value| value.to_str().ok_or_else(ApplicationError::discovery))
-        .transpose()?;
-    let configured: [ConfiguredCodexRoot; 0] = [];
-    let discovery = build_discovery_request(CodexRootInput {
-        user_profile: environment.user_profile(),
-        codex_home,
-        configured: &configured,
-    })
-    .map_err(|_| ApplicationError::discovery())?;
-    let notifier = Arc::new(ApplicationRuntimeNotifier::new(Arc::downgrade(bundle)));
-    let notifier_port: Arc<dyn WorkerCompletionNotifier> = notifier.clone();
     let mut pending_migration = preflight.report().prior_run().pending_migration();
     if let Some(pending) = pending_migration {
         state.validate_pending_migration(pending)?;
@@ -185,7 +280,7 @@ fn start_live_bundle(
             return Err(ApplicationError::state());
         }
     }
-    let mut maintenance =
+    let maintenance =
         if outcome == BootstrapOutcome::MigrationRequired || pending_migration.is_some() {
             let runtime =
                 state.start_maintenance(data_root, MaintenanceSourceState::HealthyUnpublished)?;
@@ -207,13 +302,7 @@ fn start_live_bundle(
         observer(ApplicationStartBoundary::PreMigrationBackupPublished)?;
     }
     let startup_guard = preflight.take_startup_guard()?;
-    let live = LiveRuntime::start_notified_guarded(
-        data_root.archive_path(),
-        discovery,
-        startup_guard,
-        notifier_port.clone(),
-    )
-    .map_err(|_| ApplicationError::live_runtime())?;
+    let started = start_guarded_live(environment, data_root, bundle, startup_guard)?;
     if let Some(pending) = pending_migration {
         observer(ApplicationStartBoundary::BeforePostMigrationBackup)?;
         let runtime = maintenance
@@ -225,23 +314,113 @@ fn start_live_bundle(
             .complete_post_migration(pending)
             .map_err(|_| ApplicationError::state())?;
     }
-    let archive_path = data_root.archive_path().to_path_buf();
-    let quota = OptionalRuntime::start(
-        CodexQuotaRuntimeConfig::new(archive_path.clone())
-            .and_then(|config| CodexQuotaRuntime::start_notified(config, notifier_port.clone())),
-    );
-    let reminder = OptionalRuntime::start(
-        BenefitReminderRuntimeConfig::new(archive_path.clone()).and_then(|config| {
-            BenefitReminderRuntime::start_notified(config, notifier_port.clone())
-        }),
-    );
     let maintenance_source = match outcome {
         BootstrapOutcome::Healthy => MaintenanceSourceState::Healthy,
         BootstrapOutcome::FirstInstall => MaintenanceSourceState::HealthyUnpublished,
         BootstrapOutcome::MigrationRequired => MaintenanceSourceState::Healthy,
         _ => return Err(ApplicationError::internal()),
     };
-    let maintenance = match maintenance.take() {
+    finish_live_bundle(
+        data_root,
+        state,
+        shell,
+        bundle,
+        started,
+        maintenance,
+        maintenance_source,
+    )
+}
+
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "Task 12B command worker binds controlled restart")
+)]
+fn start_current_bundle(
+    environment: &ApplicationEnvironment,
+    data_root: &DataRoot,
+    state: &ApplicationStateOwner,
+    shell: &DesktopShell,
+    bundle: &SharedBundle,
+    guard: ExclusiveFileLeaseGuard,
+) -> Result<DesktopSnapshotBridge, ApplicationError> {
+    let started = start_guarded_live(environment, data_root, bundle, guard)?;
+    finish_live_bundle(
+        data_root,
+        state,
+        shell,
+        bundle,
+        started,
+        None,
+        MaintenanceSourceState::Healthy,
+    )
+}
+
+struct GuardedLiveStart {
+    live: LiveRuntime,
+    notifier: Arc<ApplicationRuntimeNotifier>,
+    notifier_port: Arc<dyn WorkerCompletionNotifier>,
+    bundle_generation: u64,
+}
+
+fn start_guarded_live(
+    environment: &ApplicationEnvironment,
+    data_root: &DataRoot,
+    bundle: &SharedBundle,
+    guard: ExclusiveFileLeaseGuard,
+) -> Result<GuardedLiveStart, ApplicationError> {
+    let codex_home = environment
+        .codex_home()
+        .map(|value| value.to_str().ok_or_else(ApplicationError::discovery))
+        .transpose()?;
+    let configured: [ConfiguredCodexRoot; 0] = [];
+    let discovery = build_discovery_request(CodexRootInput {
+        user_profile: environment.user_profile(),
+        codex_home,
+        configured: &configured,
+    })
+    .map_err(|_| ApplicationError::discovery())?;
+    let bundle_generation = begin_bundle_generation(bundle)?;
+    let notifier = Arc::new(ApplicationRuntimeNotifier::new(
+        Arc::downgrade(bundle),
+        bundle_generation,
+    ));
+    let notifier_port: Arc<dyn WorkerCompletionNotifier> = notifier.clone();
+    let live = LiveRuntime::start_notified_guarded(
+        data_root.archive_path(),
+        discovery,
+        guard,
+        notifier_port.clone(),
+    )
+    .map_err(|_| ApplicationError::live_runtime())?;
+    Ok(GuardedLiveStart {
+        live,
+        notifier,
+        notifier_port,
+        bundle_generation,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn finish_live_bundle(
+    data_root: &DataRoot,
+    state: &ApplicationStateOwner,
+    shell: &DesktopShell,
+    bundle: &SharedBundle,
+    started: GuardedLiveStart,
+    maintenance: Option<BackupMaintenanceRuntime>,
+    maintenance_source: MaintenanceSourceState,
+) -> Result<DesktopSnapshotBridge, ApplicationError> {
+    let archive_path = data_root.archive_path().to_path_buf();
+    let quota =
+        OptionalRuntime::start(CodexQuotaRuntimeConfig::new(archive_path.clone()).and_then(
+            |config| CodexQuotaRuntime::start_notified(config, started.notifier_port.clone()),
+        ));
+    let reminder = OptionalRuntime::start(
+        BenefitReminderRuntimeConfig::new(archive_path.clone()).and_then(|config| {
+            BenefitReminderRuntime::start_notified(config, started.notifier_port.clone())
+        }),
+    );
+    let maintenance = match maintenance {
         Some(maintenance) => maintenance,
         None => state.start_maintenance(data_root, maintenance_source)?,
     };
@@ -257,18 +436,36 @@ fn start_live_bundle(
 
     {
         let mut slot = bundle.lock().map_err(|_| ApplicationError::internal())?;
-        *slot = Some(ApplicationBundle {
-            live,
+        if slot.generation != started.bundle_generation || slot.bundle.is_some() {
+            return Err(ApplicationError::internal());
+        }
+        slot.bundle = Some(ApplicationBundle {
+            live: started.live,
             quota,
             reminder,
             controller,
             maintenance,
+            #[cfg(test)]
+            notifier: Arc::clone(&started.notifier),
         });
     }
-    notifier
+    started
+        .notifier
         .publish()
         .map_err(|_| ApplicationError::controller())?;
     Ok(live_bridge)
+}
+
+fn begin_bundle_generation(bundle: &SharedBundle) -> Result<u64, ApplicationError> {
+    let mut slot = bundle.lock().map_err(|_| ApplicationError::internal())?;
+    if slot.bundle.is_some() {
+        return Err(ApplicationError::internal());
+    }
+    slot.generation = slot
+        .generation
+        .checked_add(1)
+        .ok_or_else(ApplicationError::generation_overflow)?;
+    Ok(slot.generation)
 }
 
 fn discard_bundle(bundle: &SharedBundle) -> Result<(), ApplicationError> {
@@ -310,6 +507,8 @@ struct ApplicationBundle {
     reminder: OptionalRuntime<BenefitReminderRuntime>,
     controller: DesktopController,
     maintenance: BackupMaintenanceRuntime,
+    #[cfg(test)]
+    notifier: Arc<ApplicationRuntimeNotifier>,
 }
 
 impl ApplicationBundle {
@@ -423,15 +622,17 @@ impl<T> OptionalRuntime<T> {
 }
 
 struct ApplicationRuntimeNotifier {
-    bundle: Weak<Mutex<Option<ApplicationBundle>>>,
+    bundle: Weak<Mutex<ApplicationBundleSlot>>,
+    bundle_generation: u64,
     pending: AtomicBool,
     next_generation: AtomicU64,
 }
 
 impl ApplicationRuntimeNotifier {
-    fn new(bundle: Weak<Mutex<Option<ApplicationBundle>>>) -> Self {
+    fn new(bundle: Weak<Mutex<ApplicationBundleSlot>>, bundle_generation: u64) -> Self {
         Self {
             bundle,
+            bundle_generation,
             pending: AtomicBool::new(false),
             next_generation: AtomicU64::new(1),
         }
@@ -449,6 +650,10 @@ impl ApplicationRuntimeNotifier {
                 return Err(ApplicationError::internal());
             }
         };
+        if slot.generation != self.bundle_generation {
+            self.pending.store(false, Ordering::Release);
+            return Ok(());
+        }
         let Some(bundle) = slot.as_mut() else {
             self.pending.store(true, Ordering::Release);
             return Ok(());
@@ -485,6 +690,7 @@ pub enum ApplicationErrorCode {
     ControllerUnavailable,
     UiUnavailable,
     EventLoopUnavailable,
+    InvalidLifecycle,
     GenerationOverflow,
     ShutdownFailed,
     Internal,
@@ -501,6 +707,7 @@ impl ApplicationErrorCode {
             Self::ControllerUnavailable => "controller_unavailable",
             Self::UiUnavailable => "ui_unavailable",
             Self::EventLoopUnavailable => "event_loop_unavailable",
+            Self::InvalidLifecycle => "invalid_lifecycle",
             Self::GenerationOverflow => "generation_overflow",
             Self::ShutdownFailed => "shutdown_failed",
             Self::Internal => "internal",
@@ -553,6 +760,12 @@ impl ApplicationError {
     const fn event_loop() -> Self {
         Self {
             code: ApplicationErrorCode::EventLoopUnavailable,
+        }
+    }
+
+    const fn invalid_lifecycle() -> Self {
+        Self {
+            code: ApplicationErrorCode::InvalidLifecycle,
         }
     }
 

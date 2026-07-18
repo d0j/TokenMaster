@@ -1396,3 +1396,26 @@ would also enlarge retained state and latency variance. One application owner pr
 dependency direction, deterministic shutdown, constant-state scheduling, and the exact
 pre/post safety invariant. Typed restore/restart commands and provider-backed no-backup
 reconstruction remain a separate Task 12B milestone.
+
+## ADR-059 — Bound application commands and generation-bind service restart
+
+Decision: the application owns one constant-state typed command coordinator. It retains
+one active permit and at most one distinct pending value; identical active or pending
+hints coalesce, while a third distinct request is rejected busy. Request IDs are
+checked, cancellation targets the exact active or queued ID, and an atomic
+running/cancelled/irreversible state prevents late cancellation. Retry is an explicit
+resubmission of only the last failed typed command. Pause removes the follow-up but
+preserves the active receipt; final close additionally prevents admission permanently.
+
+Current-bundle restart retains the Slint window, joins all old backend owners, acquires
+a fresh fixed archive guard, and invokes the same guarded live construction path with a
+strictly increasing bundle generation. Every runtime notifier holds only a weak bundle
+slot plus its exact generation. It compares generation under the slot mutex before
+publishing, so an old notifier cannot race from a successful precheck into a new bundle.
+
+Rationale: an unbounded executor, generic command payload, per-command thread, or
+notifier keyed only by a shared slot would permit memory growth, authority expansion,
+or stale publication after restore/restart. The bounded coordinator and same-lock
+generation check keep admission, cancellation, and observation deterministic. Task
+12B.2 must bind these intents to one operation worker and sealed state/platform
+capabilities; this decision alone does not claim import, restore, or reconstruction.

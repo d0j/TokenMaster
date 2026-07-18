@@ -807,10 +807,17 @@ mandatory package purposes and receipts. The pre point records the old schema an
 pinned until the post point is verified. Periodic policy does not alter this rule. A
 failure before writable migration retains the old archive; a later failure retains the
 migrated archive with the durable pending-post pair. Both publish no live bundle, and
-restart completes the post point before clearing the pair. Task 12B must add
-command/restart receipts and the explicit authoritative-
-source reconstruction result; it may not encode fabricated zeros for domains that
-cannot be reconstructed.
+restart completes the post point before clearing the pair.
+
+Implemented Task 12B.1 command state is process-local and constant: one optional active
+permit, one optional pending command, one optional last-retryable command, one checked
+next request ID, and closed/paused flags. A restore selection is only a nonzero catalog
+generation and bounded ordinal; it contains no path, slot, filename, digest, or package
+metadata. Active permits retain one atomic running/cancelled/irreversible byte. Bundle
+state retains one checked generation and one optional current bundle. These values are
+not persisted and never become recovery authority. Task 12B.2 must add operation/
+restart receipts and the explicit authoritative-source reconstruction result; it may
+not encode fabricated zeros for domains that cannot be reconstructed.
 
 ### P3-C bounded Dashboard projection
 

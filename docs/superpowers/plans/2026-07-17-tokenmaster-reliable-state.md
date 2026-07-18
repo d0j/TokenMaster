@@ -821,10 +821,12 @@ cargo +1.97.0 test -p tokenmaster-runtime --locked
 ## Task 12 — Integrate application-owned recovery, migration, and service restart
 
 **Status:** In progress. Task 12A implements items 1-4, 10, and 14-17 plus the concrete
-application backup operation. Task 12B retains items 5-9 and 11-13: typed commands,
-restore/restart, command coalescing/privacy, obsolete-bundle suppression, settings
-restart, and authoritative no-backup reconstruction. This status is implementation
-truth, not release acceptance.
+application backup operation. Task 12B.1 adds the bounded typed command admission core,
+one active/one follow-up under 10,000 hints, exact cancellation/irreversible boundary,
+controlled current-bundle restart, and obsolete-notifier suppression for items 7-9,
+11, and 12. Task 12B.2 retains the operation worker, actual config/backup/verify/
+restore/rebuild/retry bindings, selected restore and no-backup reconstruction in items
+5-9 and 13. This status is implementation truth, not release acceptance.
 
 **Files:**
 

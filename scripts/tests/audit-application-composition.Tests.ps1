@@ -20,6 +20,13 @@ Describe "TokenMaster application composition audit" {
         }
     }
 
+    It "accepts the current allowlisted ExitCode composition" {
+        $fixture = New-AppAuditFixture -Name "current-composition"
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Not -Throw
+    }
+
     It "rejects a second live runtime owner" {
         $fixture = New-AppAuditFixture -Name "duplicate-live"
         Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\application.rs") `
@@ -67,6 +74,41 @@ Describe "TokenMaster application composition audit" {
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-APP-MAINTENANCE-OWNER*"
+    }
+
+    It "rejects a second application command coordinator" {
+        $fixture = New-AppAuditFixture -Name "duplicate-command-coordinator"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\application.rs") `
+            -Value 'fn duplicate_commands() { let _ = ApplicationCommandCoordinator::new(); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-COMMAND-COORDINATOR*"
+    }
+
+    It "rejects removal of restart admission closure" {
+        $fixture = New-AppAuditFixture -Name "restart-admission-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '.pause_admission()',
+            '.leave_admission_open()'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-RESTART-PAUSE*"
+    }
+
+    It "rejects removal of the fresh restart lease guard" {
+        $fixture = New-AppAuditFixture -Name "restart-guard-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '.acquire_runtime_guard(&self.data_root)',
+            '.reuse_obsolete_runtime_guard(&self.data_root)'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-RESTART-GUARD*"
     }
 
     It "rejects migration safety-point drift" {
@@ -165,13 +207,26 @@ Describe "TokenMaster application composition audit" {
         $fixture = New-AppAuditFixture -Name "strong-notifier"
         $path = Join-Path $fixture "crates\app\src\application.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            'Weak<Mutex<Option<ApplicationBundle>>>',
-            'Arc<Mutex<Option<ApplicationBundle>>>'
+            'Weak<Mutex<ApplicationBundleSlot>>',
+            'Arc<Mutex<ApplicationBundleSlot>>'
         )
         [System.IO.File]::WriteAllText($path, $text)
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-APP-WEAK-NOTIFIER*"
+    }
+
+    It "rejects removal of obsolete bundle generation suppression" {
+        $fixture = New-AppAuditFixture -Name "obsolete-bundle-generation"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'slot.generation != self.bundle_generation',
+            'false'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-BUNDLE-GENERATION*"
     }
 
     It "rejects probe dependencies" {
@@ -187,6 +242,15 @@ Describe "TokenMaster application composition audit" {
         $fixture = New-AppAuditFixture -Name "forbidden-authority"
         Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\application.rs") `
             -Value 'const PRIVATE_API: &str = "https://example.invalid";'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-FORBIDDEN-AUTHORITY*"
+    }
+
+    It "rejects grouped process command imports" {
+        $fixture = New-AppAuditFixture -Name "grouped-process-command"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\command.rs") `
+            -Value 'use std::process::{Command}; fn escaped_process() { let _ = Command::new("tool"); }'
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-APP-FORBIDDEN-AUTHORITY*"

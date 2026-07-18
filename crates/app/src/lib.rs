@@ -4,6 +4,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
 mod application;
+mod command;
 mod data_root;
 mod state;
 
@@ -15,3 +16,8 @@ pub use data_root::{ApplicationEnvironment, DataMode, DataRoot, DataRootError, D
 #[path = "state_tests.rs"]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod state_tests;
+
+#[cfg(test)]
+#[path = "command_tests.rs"]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod command_tests;

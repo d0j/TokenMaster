@@ -37,8 +37,8 @@ $rustFiles = @(
     Get-ChildItem -LiteralPath $appSource -Recurse -File -Filter '*.rs' |
         Where-Object { $_.Name -notlike '*_tests.rs' }
 )
-if ($rustFiles.Count -ne 5) {
-    throw 'TM-APP-FILE-COUNT: application composition must contain exactly five Rust files'
+if ($rustFiles.Count -ne 6) {
+    throw 'TM-APP-FILE-COUNT: application composition must contain exactly six Rust files'
 }
 $productionText = ($rustFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
@@ -55,6 +55,10 @@ foreach ($contract in @(
     @{ Name = 'TM-APP-PREFLIGHT'; Pattern = '\.prepare\(&data_root\)'; Count = 1 },
     @{ Name = 'TM-APP-LIVE-OWNER'; Pattern = 'LiveRuntime::start_notified_guarded\('; Count = 1 },
     @{ Name = 'TM-APP-MAINTENANCE-OWNER'; Pattern = 'BackupMaintenanceRuntime::spawn\('; Count = 1 },
+    @{ Name = 'TM-APP-COMMAND-COORDINATOR'; Pattern = 'ApplicationCommandCoordinator::new\('; Count = 1 },
+    @{ Name = 'TM-APP-RESTART-PAUSE'; Pattern = '\.pause_admission\(\)'; Count = 1 },
+    @{ Name = 'TM-APP-RESTART-RESUME'; Pattern = '\.resume_admission\(\)'; Count = 1 },
+    @{ Name = 'TM-APP-RESTART-GUARD'; Pattern = '\.acquire_runtime_guard\(&self\.data_root\)'; Count = 1 },
     @{ Name = 'TM-APP-PRE-MIGRATION'; Pattern = 'MaintenancePurpose::PreMigration'; Count = 1 },
     @{ Name = 'TM-APP-POST-MIGRATION'; Pattern = 'MaintenancePurpose::PostMigration'; Count = 1 },
     @{ Name = 'TM-APP-MIGRATION-PENDING'; Pattern = '\.require_post_migration\('; Count = 1 },
@@ -75,9 +79,12 @@ foreach ($contract in @(
     }
 }
 
-if ($applicationText -notmatch 'Weak<Mutex<Option<ApplicationBundle>>>' -or
+if ($applicationText -notmatch 'Weak<Mutex<ApplicationBundleSlot>>' -or
     $applicationText -notmatch 'impl WorkerCompletionNotifier for ApplicationRuntimeNotifier') {
     throw 'TM-APP-WEAK-NOTIFIER: runtime completion notifier must retain only weak application state'
+}
+if ([regex]::Matches($applicationText, 'slot\.generation != self\.bundle_generation').Count -ne 1) {
+    throw 'TM-APP-BUNDLE-GENERATION: obsolete runtime notifiers must fail closed'
 }
 if ($applicationText -match '\b(slint::Timer|std::thread|thread::spawn|thread::sleep)\b') {
     throw 'TM-APP-POLLING: application composition must not add a timer or polling thread'
@@ -95,7 +102,10 @@ if ($environmentNames.Count -ne $expectedEnvironmentNames.Count -or
     @($expectedEnvironmentNames | Where-Object { $_ -notin $environmentNames }).Count -ne 0) {
     throw "TM-APP-ARBITRARY-ROOT: environment surface drifted: $($environmentNames -join ', ')"
 }
-if ($productionText -match 'https?://|\b(Command|TcpStream|TcpListener|UdpSocket)\b|\b(rusqlite|notify|reqwest|ureq|webbrowser|headless_chrome)\b|\b(SELECT|INSERT|UPDATE|DELETE\s+FROM|PRAGMA)\b|powershell(?:\.exe)?|cmd(?:\.exe)?|bash(?:\.exe)?|\bsh\s+-c\b|\bAuthorization\b|\bBearer\s') {
+$authorityText = $productionText -replace `
+    '(?m)^\s*use\s+std\s*::\s*process\s*::\s*ExitCode\s*;\s*$', `
+    ''
+if ($authorityText -match 'https?://|\bstd\s*::\s*process\b|\bprocess\s*::|\buse\s+std\s*::\s*\{[^;]*\bprocess\b|\bCommand\s*::\s*new\b|\b(TcpStream|TcpListener|UdpSocket)\b|\b(rusqlite|notify|reqwest|ureq|webbrowser|headless_chrome)\b|\b(SELECT|INSERT|UPDATE|DELETE\s+FROM|PRAGMA)\b|powershell(?:\.exe)?|cmd(?:\.exe)?|bash(?:\.exe)?|\bsh\s+-c\b|\bAuthorization\b|\bBearer\s') {
     throw 'TM-APP-FORBIDDEN-AUTHORITY: composition contains network/shell/SQL/browser/credential authority'
 }
 if ($productionText -match '\b(WhereMyTokens|WhereMyToken|WhereMyTokensGo|ccusage-go)\b') {
@@ -117,6 +127,9 @@ if ($SourceOnly) {
         application_preflight_count = 1
         live_runtime_owner_count = 1
         maintenance_runtime_owner_count = 1
+        application_command_coordinator_count = 1
+        controlled_restart_count = 1
+        bundle_generation_guard_count = 1
         pre_migration_gate_count = 1
         post_migration_gate_count = 1
         pending_migration_transition_count = 1
@@ -215,6 +228,9 @@ foreach ($needle in @(
     application_preflight_count = 1
     live_runtime_owner_count = 1
     maintenance_runtime_owner_count = 1
+    application_command_coordinator_count = 1
+    controlled_restart_count = 1
+    bundle_generation_guard_count = 1
     pre_migration_gate_count = 1
     post_migration_gate_count = 1
     pending_migration_transition_count = 1

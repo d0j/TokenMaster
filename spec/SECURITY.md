@@ -932,8 +932,17 @@ safe mode. Restart must complete and durably clear the post obligation before li
 clean publication. The live-source
 snapshot precheck may accept SQLite schema-format byte zero only while a regular WAL
 exists; every copied candidate and published package still passes the strict standalone
-format-four header plus complete database verifier. Task 12B restore/restart and
-no-backup reconstruction remain outside this implemented boundary.
+format-four header plus complete database verifier.
+
+Implemented Task 12B.1 command admission stores only fixed enums, checked request IDs,
+one path-free generation/ordinal restore selection, one active permit, and one pending
+value. It accepts no SQL, shell, network, path, filename, raw bytes, digest, or provider
+identity. Exact cancellation is cooperative until a one-way irreversible transition;
+restart pauses new admission and discards only the queued follow-up. The old bundle is
+joined before a fresh archive guard is acquired. Runtime notifier generation is checked
+while holding the bundle-slot mutex, preventing a check/use race into a replacement
+controller. Task 12B.2 operation execution, restore authority, and no-backup
+reconstruction remain outside this implemented boundary.
 
 Optional manual password protection uses the implemented standard age v1 stream with
 fixed bounded scrypt work and never stores the passphrase. New passphrases are

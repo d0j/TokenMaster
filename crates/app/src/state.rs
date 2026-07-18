@@ -87,6 +87,19 @@ impl ApplicationStateOwner {
         })
     }
 
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "Task 12B command worker binds controlled restart")
+    )]
+    pub(crate) fn acquire_runtime_guard(
+        &self,
+        root: &DataRoot,
+    ) -> Result<ExclusiveFileLeaseGuard, ApplicationError> {
+        ExclusiveFileLease::for_archive(root.archive_path())
+            .and_then(|lease| lease.try_acquire())
+            .map_err(|_| ApplicationError::state())
+    }
+
     pub(crate) fn start_maintenance(
         &self,
         root: &DataRoot,

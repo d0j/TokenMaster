@@ -2865,3 +2865,38 @@ the one live-auth Codex transport test remains intentionally environment-gated. 
 release application composition audit also proves one production binary/artifact, one
 owner for every declared state/runtime component, both migration gates, and zero
 polling, arbitrary-root, renderer-fallback, probe, or forbidden-binary-string surface.
+
+## 2026-07-18 — P3-D.0 Task 12B.1 bounded commands and generation-safe restart
+
+Added one application-owned, path-free command admission core for config export/import,
+backup, verification, data-only or portable-settings restore, and rebuild intents. It
+keeps one active request plus one distinct follow-up, coalesces 10,000 repeated hints,
+rejects a third command busy, supports exact active and queued cancellation, preserves
+one retryable failure, and rejects cancellation after an explicit irreversible
+boundary. Closing or pausing admission retains the active receipt and removes only the
+queued request; restart may resume admission while final shutdown remains closed.
+
+Refactored live-bundle creation into one guarded start/finalization path and added a
+controlled current-bundle restart. It keeps the compiled Slint window, joins the old
+maintenance/controller/reminder/quota/live owners, acquires a fresh fixed archive
+lease, and installs one higher bundle generation. Runtime completion notifiers now
+carry that generation and compare it while holding the same bundle mutex; an obsolete
+notifier returns without allocating a product observation or touching the new bundle.
+The real lifecycle regression exercises this across the existing 19-backup retention,
+safe-mode, migration, and crash-window scenario. The Task 12B.2 operation worker,
+actual command bindings, selected restore, no-backup reconstruction, and UI remain
+unclaimed.
+
+Focused verification passes 7/7 command contracts, 14 application unit plus 7
+integration contracts, strict app Clippy, and 23/23 application authority contracts,
+including a clean-composition control and grouped process-import rejection.
+The required clean-root, formatting, and warnings-as-errors locked workspace Clippy
+gates pass. Two earlier full validation attempts ended at unrelated, non-repeating
+environmental points: one MinGW link returned exit 1 without diagnostics and one
+parallel runtime-library invocation returned exit 101; each exact target immediately
+passed focused reruns, including 15/15 Codex enumeration and serial plus parallel 22/22
+runtime tests. The subsequent complete locked workspace test/doctest gate passes in
+481.6 seconds. The release application composition audit passes with one production
+binary/artifact and exact owner counts, the reliable-state workspace audit and 55/55
+authority mutations pass, and independent follow-up review reports
+Critical/Important/Minor 0/0/0.

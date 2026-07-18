@@ -6,6 +6,23 @@ All notable changes are recorded here.
 
 ### Added
 
+- Began P3-D.0 Task 12B with a path-free, constant-state application command
+  coordinator. Typed config/backup/verify/restore/rebuild intents retain at most one
+  active operation and one follow-up, coalesce 10,000 identical hints, reject a third
+  distinct request busy, support exact queued/active cancellation, and stop
+  cancellation at one irreversible boundary. Actual operation-worker and native-file
+  bindings remain Task 12B.2.
+- Added controlled current-bundle restart without reconstructing the Slint window. It
+  pauses command admission, discards only the queued follow-up, joins every old owner,
+  acquires a fresh archive lease, starts one new bundle generation, and resumes
+  admission. Completion notifiers are generation-bound under the bundle mutex, so an
+  obsolete notifier cannot publish into the replacement bundle.
+- Verified Task 12B.1 with 7/7 command contracts, 14 app unit plus 7 app integration
+  contracts, 23/23 application authority contracts, the complete clean-root/format/
+  strict-Clippy/workspace-test gate, release application composition audit, reliable-
+  state audit, 55/55 reliable-state authority mutations, and independent follow-up
+  review with no findings. This does not claim product acceptance or release readiness.
+
 - Implemented P3-D.0 Task 12A application reliability composition. One state owner runs
   before live/query/controller construction; safe mode owns no archive user; a healthy
   bundle owns one capacity-one maintenance runtime and a complete online-snapshot ->

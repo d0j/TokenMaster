@@ -1072,16 +1072,36 @@ source with a regular WAL may have schema-format byte zero; copied candidates st
 require format four and the complete verifier. Healthy shutdown pauses and joins
 maintenance, then controller/quota/reminder/live owners, and only then publishes clean.
 
-Task 12B remains open for typed import/export/backup/verify/restore/rebuild/cancel
-commands, controlled service restart and obsolete-notifier rejection, and authoritative
-Codex reconstruction when no backup is usable. Data & Recovery UI and new release
-acceptance evidence also do not exist yet.
+Task 12B.1 is also implemented. One application-owned typed command
+coordinator keeps one active request and at most one distinct follow-up, coalesces
+10,000 identical hints, rejects a third distinct request, supports exact active/queued
+cancel plus explicit retry, and makes cancellation impossible after the irreversible
+boundary. Restart pauses admission and discards only the follow-up, joins the current
+bundle, acquires a fresh archive guard, builds one higher bundle generation, preserves
+the Slint window, and resumes admission. Runtime notifiers carry the exact bundle
+generation and compare it under the same slot mutex, so obsolete completion hints are
+discarded before allocating a product-runtime generation.
+Focused Task 12B.1 evidence passes: 7/7 command contracts, 14 app unit plus 7 app
+integration contracts, strict app Clippy, and 23/23 application authority contracts,
+including a clean-composition control and grouped process-import rejection.
+The required clean-root, formatting, and warnings-as-errors locked workspace Clippy
+gates pass on this tree. The complete locked workspace test/doctest gate then passes
+in 481.6 seconds. The release application composition audit passes with one production
+binary/artifact and exactly one command/restart/runtime owner surface; the reliable-
+state workspace audit and 55/55 authority mutations also pass. Independent follow-up
+review reports Critical/Important/Minor 0/0/0. This is developer evidence, not product
+or release acceptance.
+
+Task 12B.2 remains open for the operation worker and actual typed config export/import,
+backup/verify, selected data-only or confirmed portable-settings restore, rebuild,
+retry/cancel bindings, and authoritative Codex reconstruction when no backup is usable.
+Data & Recovery UI and new release acceptance evidence also do not exist yet.
 
 Task 12A focused store backup 8/8 and adversarial 10/10, catalog 6/6, maintenance
 19/19, state bootstrap 13/13, app 6 unit plus 7 integration, application authority
 17/17, and reliable-state authority 55/55 contracts pass. The app lifecycle contract
 also executes 19 real sequential manual backups and proves the retained catalog remains
-within the default 15-point bound. The required clean-root, formatting, strict locked
+within the default 15-point bound. The prior required clean-root, formatting, strict locked
 workspace Clippy, and complete locked workspace test/doctest gate passes in 617.2
 seconds; the one live-auth Codex transport test remains intentionally environment-
 gated. The release application composition audit also passes with one production binary,
@@ -1090,11 +1110,10 @@ zero polling/arbitrary-root/forbidden-string surface, and one release artifact.
 
 ## Next implementation slice
 
-Complete P3-D.0 Task 12B from
+Complete P3-D.0 Task 12B.2 from
 `docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: compose the reliable
-state command coordinator, restore/restart lifecycle, obsolete-bundle suppression, and
-authoritative no-backup reconstruction over the Task 12A owner, maintenance, migration,
-safe-mode, and clean-publication boundary.
+state operation worker, selected restore lifecycle, and authoritative no-backup
+reconstruction over the Task 12A owner and Task 12B.1 command/restart boundary.
 
 P2-D quota history core is complete under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: Tasks 1-8 cover
@@ -1111,8 +1130,8 @@ immutable read snapshots, and publication through the existing Codex runtime wit
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
 workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, P3-B.2, P3-B.3, and P3-C are
-complete; P3-D.0 Reliable State is active with Tasks 1-11A and Task 12A implemented,
-followed by Task 12B and the remaining P3-D supporting data-bearing routes. Activation
+complete; P3-D.0 Reliable State is active with Tasks 1-11A, Task 12A, and Task 12B.1
+implemented, followed by Task 12B.2 and the remaining P3-D supporting data-bearing routes. Activation
 remains a later independently authorized capability. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.
 

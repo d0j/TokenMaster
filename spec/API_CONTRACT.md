@@ -810,8 +810,21 @@ publication. Periodic backup disablement does not suppress either point. Any sta
 migration ambiguity retains the unclean run and the safe-mode shell. Clean publication
 occurs only after the
 maintenance runtime, controller, quota/reminder runtimes, and live runtime join.
-Task 12B still owns typed restore/import/export/rebuild commands, controlled service
-restart, obsolete-bundle suppression, and authoritative no-backup reconstruction.
+Implemented Task 12B.1 adds one application-owned, path-free command admission core.
+It retains one active command plus at most one distinct follow-up, coalesces identical
+hints, rejects a third distinct request, cancels an exact active or queued request, and
+forbids cancellation after an explicit irreversible boundary. Admission can pause for
+a controlled restart without losing the active receipt and can close permanently for
+shutdown. Config, backup, verification, generation/ordinal restore, and rebuild intents
+carry no path, bytes, digest, provider identity, or arbitrary command payload.
+
+The controlled current-bundle restart joins the old owners, acquires a fresh fixed
+archive guard, and reuses the one guarded construction path without replacing the Slint
+window. Each bundle/notifier pair has one checked generation. The notifier compares it
+under the same mutex that protects slot replacement, so an obsolete completion returns
+before allocating a product-runtime generation or touching a new controller. Task
+12B.2 still owns the operation worker, actual import/export/verify/restore/rebuild
+bindings, restore receipts, and authoritative no-backup reconstruction.
 
 ## Provider plugin ABI
 
