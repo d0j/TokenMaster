@@ -1169,6 +1169,16 @@ failure is observable and a later single-owner recovery pass scans only the fixe
 candidate namespace. These constraints were added by independent high-risk review;
 they do not change the fixed live archive identity or grant package/restore authority.
 
+The implemented package layer is an exact typed v1 container rather than ZIP/TAR or
+a generic extractor. It uses a fixed header/manifest/ordered-entry/footer grammar,
+one checksummed content-sized Zstd frame per entry, levels 6/12/19, an 8 MiB decoder
+window, expanded-entry and descriptor binding, and both preceding-byte and complete-
+file SHA-256 receipts. Public methods accept only platform-owned bounded readers and
+staged files. A failed encode, decode, outer verification, or final seal irreversibly
+poisons/discards its output stage before returning; cleanup uncertainty becomes
+`RecoveryRequired`. This closes the partial-output publication gap found by independent
+review without introducing a second archive library or runtime thread.
+
 Restore stops every archive owner, holds the stable writer lease, journals each idempotent
 phase, quarantines WAL/SHM, atomically replaces the main file while preserving the old
 main, reverifies the new active database, and reconstructs one application bundle.

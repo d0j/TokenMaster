@@ -783,12 +783,13 @@ The reliable-state design and 18-task TDD rail are approved in
 implemented fixed `tokenmaster.sqlite3` and writer sidecar rather than introducing a
 second live database identity. Task 1 now adds the library-only `tokenmaster-state`
 workspace package with nine stable path-private error codes, checked byte/item limits,
-and a Pester/workspace authority audit. The current workspace receipt records five exact
-direct dependencies, one exact workspace member, zero bin/build targets, zero forbidden
+and a Pester/workspace authority audit. After Task 6, the current workspace receipt
+records six exact direct dependencies, one exact workspace member, zero bin/build
+targets, zero forbidden
 filesystem/process/network/shell/SQL/UI/archive/external-source authority, zero public
-arbitrary-path constructors, and zero forbidden transitive dependencies. Thirty-three
-mutation cases guard the observed source, approved-alias reuse, fixed-child,
-visibility, alias/re-export, and metadata bypasses.
+arbitrary-path constructors, and zero forbidden transitive dependencies. The original
+mutation corpus now totals 36 cases guarding observed source, approved-alias reuse,
+fixed-child, visibility, generic-stream, alias/re-export, and metadata bypasses.
 
 Task 2 now adds controlled `tokenmaster-platform` durable files. One validated local
 directory plus a restricted exact child name is the only public target constructor;
@@ -851,8 +852,8 @@ contracts, strict state Clippy, the workspace state audit, and 34/34 authority
 mutations pass. Independent high-risk review closed newer-schema overwrite, schedule-
 floor, directory-capability bypass, and unbounded sequence findings; its final pass
 reports no Critical, Important, or Minor issue and `Ready: Yes`. The fixed `.tmconfig`
-container remains Task 6; Task 4 consumes only
-its future already bounded portable-settings entry.
+container is now implemented by Task 6; Task 4 supplies its bounded portable-settings
+entry without gaining package authority.
 
 Task 5 now adds store-owned SQLite Online Backup and verified candidate capabilities.
 The live main file is never copied as a backup: page-stepped snapshots include
@@ -874,6 +875,31 @@ barrier test prove a writer commit strictly between Online Backup page steps. Fi
 independent high-risk review reports Critical 0, Important 0, Minor 0 and
 `Ready: Yes`.
 
+Task 6 now adds the fixed `.tmconfig`/`.tmbackup` v1 codec. The deterministic layout
+is one 32-byte header, one 40-byte self-describing manifest, ordered typed entries
+with 64-byte descriptors and 24-byte suffixes, then descriptor binding, `TMEND001`,
+and a preceding-byte SHA-256; the complete controlled file is independently hashed
+and sealed. Config contains exactly portable settings. Backup contains settings then
+one database plus creation time, database schema, compression profile, and one of
+five periodic/manual/pre-/post-migration/pre-restore purposes.
+
+`zstd` is pinned to 0.13.3 with default features off. Every entry is one checksummed,
+content-sized frame at level 6/12/19, one thread, window log 23, exact expanded length
+and SHA-256. Parsing uses 64 KiB buffers, an independent output counter, 1 MiB
+settings, 64 GiB database, and checked 64 GiB-plus-2-MiB ceilings. Public APIs accept
+only `DurableFileReader`/`DurableStagedFile`; raw stream helpers are private and the
+audit rejects public generic stream authority. Codec/final-seal failure irreversibly
+discards and poisons output so later write/seal/publish is `InvalidState`.
+
+Evidence passes a frozen 405-byte config vector with complete-file SHA-256, all three
+profiles times all five purposes, a 24 MiB streaming database, every structural
+flip/truncation class, overflow/unknown/duplicate/concat/trailing/checksum/digest
+mutations, an independently resealed missing frame end, a 16 MiB-window frame, and a
+300-to-256 content-size bomb. Focused package tests are 5/5 and adversarial tests
+10/10; platform durable contracts are 17/17; strict Clippy, the workspace authority
+audit, and 36/36 Pester mutations pass. Final independent review reports Critical 0,
+Important 0, Minor 0 and `Ready: Yes`.
+
 Remaining ownership is: store for SQLite Online Backup and candidate verification,
 platform for durable same-volume replacement and sealed file selection, state for
 settings/packages/retention/recovery, and app for runtime shutdown/restart and safe
@@ -891,17 +917,18 @@ transient-I/O, unsupported-location, and schema-too-new results preserve current
 truth. No valid backup leads to explicit quarantine and authoritative-source rebuild,
 never fabricated zero or automatic corrupt-row salvage.
 
-Only Tasks 1-5 are implemented. No backup/config package, retention worker, restore,
-safe mode, Data & Recovery UI, encryption, or new acceptance evidence exists yet.
-Task 6 fixed `.tmconfig`/`.tmbackup` containers are the immediate next slice.
+Only Tasks 1-6 are implemented. No retention worker, restore, safe mode, Data &
+Recovery UI, encryption, or new acceptance evidence exists yet. Task 7 optional manual
+age protection is the immediate next slice. Task 8 first adds the planned sealed
+platform backup-directory capability; Task 9 adds store-owned verified-candidate
+reader/state interop rather than introducing path or generic-stream access.
 
 ## Next implementation slice
 
-Execute P3-D.0 Task 6 from
-`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: build the fixed
-streaming `.tmconfig`/`.tmbackup` container over the already verified settings and
-SQLite candidates, with exact typed entries, bounded manifest/payload/window sizes,
-whole-package hashing, incomplete-output rejection, and no arbitrary extraction.
+Execute P3-D.0 Task 7 from
+`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: wrap only complete
+manual packages in bounded standard age v1 passphrase encryption with fixed scrypt
+work, exact password confirmation/scalar bounds, cleanup, and secret/privacy gates.
 
 P2-D quota history core is complete under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: Tasks 1-8 cover
@@ -918,7 +945,7 @@ immutable read snapshots, and publication through the existing Codex runtime wit
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
 workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, P3-B.2, P3-B.3, and P3-C are
-complete; P3-D.0 Reliable State is active with Tasks 1-5 complete and Task 6 next, followed
+complete; P3-D.0 Reliable State is active with Tasks 1-6 complete and Task 7 next, followed
 by the remaining P3-D supporting data-bearing routes. Activation
 remains a later independently authorized capability. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.

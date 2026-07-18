@@ -38,6 +38,9 @@ Describe "TokenMaster reliable-state authority audit" {
 [workspace]
 resolver = "3"
 members = ["crates/state", "crates/platform"]
+
+[workspace.dependencies]
+zstd = { version = "=0.13.3", default-features = false }
 '@
             } else {
                 @'
@@ -45,6 +48,9 @@ members = ["crates/state", "crates/platform"]
 resolver = "3"
 members = ["crates/host"]
 exclude = ["crates/state", "crates/platform"]
+
+[workspace.dependencies]
+zstd = { version = "=0.13.3", default-features = false }
 '@
             }
             $rootManifest | Set-Content -LiteralPath (Join-Path $fixture "Cargo.toml")
@@ -63,7 +69,19 @@ serde_json = "1"
 sha2 = "0.11"
 thiserror = "2"
 tokenmaster-platform = { path = "../platform" }
+zstd.workspace = true
 '@ | Set-Content -LiteralPath (Join-Path $stateRoot "Cargo.toml")
+            if (-not $IncludeStateMember) {
+                $excludedStateManifest = Join-Path $stateRoot "Cargo.toml"
+                $excludedStateText = [System.IO.File]::ReadAllText($excludedStateManifest)
+                [System.IO.File]::WriteAllText(
+                    $excludedStateManifest,
+                    $excludedStateText.Replace(
+                        'zstd.workspace = true',
+                        'zstd = { version = "=0.13.3", default-features = false }'
+                    )
+                )
+            }
 
             New-Item -ItemType Directory -Path (Join-Path $platformRoot "src") -Force |
                 Out-Null
@@ -107,10 +125,26 @@ tokenmaster-state = { path = "../state" }
         $result.result | Should -Be "pass"
         $result.package | Should -Be "tokenmaster-state"
         $result.binary_target_count | Should -Be 0
-        $result.direct_production_dependency_count | Should -Be 5
-        $result.approved_std_io_import_count | Should -Be 1
-        $result.approved_platform_import_count | Should -Be 2
+        $result.direct_production_dependency_count | Should -Be 6
+        $result.approved_std_io_import_count | Should -Be 4
+        $result.approved_platform_import_count | Should -Be 4
         $result.forbidden_authority_count | Should -Be 0
+    }
+
+    It "rejects zstd version or feature drift" {
+        $fixture = New-StateAuditFixture -Name "zstd-drift"
+        $manifest = Join-Path $fixture "Cargo.toml"
+        $text = [System.IO.File]::ReadAllText($manifest)
+        [System.IO.File]::WriteAllText(
+            $manifest,
+            $text.Replace(
+                'zstd = { version = "=0.13.3", default-features = false }',
+                'zstd = { version = "0.13", features = ["zstdmt"] }'
+            )
+        )
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-ZSTD-PIN*"
     }
 
     It "rejects a state binary target" {
@@ -168,6 +202,18 @@ tokenmaster-state = { path = "../state" }
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-STATE-ARBITRARY-PATH*"
+    }
+
+    It "rejects public generic stream authority" {
+        $fixture = New-StateAuditFixture -Name "public-stream"
+        $source = Join-Path $fixture "crates\state\src\lib.rs"
+        [System.IO.File]::AppendAllText(
+            $source,
+            "`npub fn leaked_stream<R: Read>(_source: R) {}`n"
+        )
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-STREAM-AUTHORITY*"
     }
 
     It "does not count a commented workspace member" {

@@ -614,8 +614,8 @@ and does not publish a new generation when the portable value is already current
 Every successful publication is reread and returns a `PortableSettingsTarget` with a
 nonzero generation and portable SHA-256 digest. Reconstruction rejects generation
 zero; verification compares both generation and a freshly recomputed typed digest.
-Package, catalog, retention, maintenance, bootstrap, and restore members remain future
-fixed APIs and are not claimed by Task 4.
+Catalog, retention, maintenance, bootstrap, and restore members remain future fixed
+APIs and are not claimed by Task 4.
 
 The implemented Task 5 store subset exposes only `BackupSource::new`,
 `BackupStaging::new`, `BackupControl::new`, `create_online_snapshot`,
@@ -626,6 +626,20 @@ only fixed create-new children. A verified candidate is an owning capability bou
 schema version, defensive runtime policy, physical file identity, exact length, and
 SHA-256. Every consumer revalidates that identity before and after use. None of these
 APIs accepts caller SQL, a filename, an output path, or a SQLite connection.
+
+The implemented Task 6 state subset exposes typed `ConfigPackage::{write,read}` and
+`BackupPackage::{write,read}`, `BackupMetadata`, the three fixed compression profiles,
+the five fixed backup purposes, verified package values, and path-private receipts.
+Public codec methods accept only a platform-owned `DurableFileReader` and
+`DurableStagedFile`; raw generic `Read`/`Write` helpers remain private and the
+authority audit rejects any future public generic stream surface. Config write emits
+portable settings only. Backup write requires a declared length/SHA-256 from an
+already verified standalone database source and independently recounts/rehashes it.
+Config read returns owned verified portable settings. Backup read streams the database
+into an unpublished stage and seals it only after the complete outer footer, every
+descriptor/entry digest, and settings decode pass. Any codec or seal error poisons and
+discards the stage; subsequent write, seal, and publication return `InvalidState`.
+No API accepts an extraction name/path or returns a package entry iterator.
 
 The SQLite-specific snapshot and candidate verifier are store-owned fixed APIs.
 The platform package owns durable same-volume replacement and native file selection.

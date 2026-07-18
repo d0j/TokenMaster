@@ -6,6 +6,27 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.0 Task 6 fixed typed `.tmconfig`/`.tmbackup` v1 packages. The
+  deterministic header/manifest/settings/database/footer grammar has exact checked
+  little-endian fields, expanded entry SHA-256, descriptor binding, preceding-byte
+  package SHA-256, and an independently sealed complete-file receipt; it is not a
+  generic archive or extractor.
+- Pinned `zstd` 0.13.3 with default features disabled. Each entry is one checksummed,
+  content-sized frame at level 6/12/19, one thread, an 8 MiB decoder window, fixed
+  64 KiB buffers, and an independent expanded-byte counter. Bounds are 1 MiB settings,
+  64 GiB database, eight entries/64 KiB manifest at the version boundary, and checked
+  64 GiB-plus-2-MiB total/encoded ceilings.
+- Added platform-owned bounded durable readers with early-EOF/appended-byte detection
+  and irreversible staged-file discard/poison. Public package APIs accept only these
+  capabilities; every codec/final-seal failure prevents later write, seal, and publish.
+  The authority audit also rejects future public generic stream methods.
+- Added a frozen 405-byte config vector, all three profiles across all five backup
+  purposes, 24 MiB streaming coverage, structural flips/truncation, false/overflowing
+  lengths, unknown/duplicate/concatenated/trailing frames, resealed missing-end,
+  checksum/digest, 16 MiB-window, 300-to-256 bomb, privacy, late-footer, and partial-
+  writer regressions. Package 5/5, adversarial 10/10, durable-file 17/17, and authority
+  mutations 36/36 pass; final independent review is Critical 0, Important 0, Minor 0,
+  `Ready: Yes`.
 - Implemented P3-D.0 Task 5 store-owned SQLite Online Backup primitives. Page-stepped
   snapshots include committed WAL truth, use fixed create-new staging names, bound
   busy retry/cancellation/deadline/output size, and never treat a copied live main

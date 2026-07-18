@@ -458,6 +458,9 @@ cargo +1.97.0 tree -p tokenmaster-state -e features
 - Create: `crates/state/src/retention.rs`
 - Create: `crates/state/tests/catalog_contract.rs`
 - Create: `crates/state/tests/retention_contract.rs`
+- Create: `crates/platform/src/backup_directory.rs`
+- Create: `crates/platform/tests/backup_directory_contract.rs`
+- Modify: `crates/platform/src/lib.rs`
 - Modify: `crates/state/src/lib.rs`
 
 ### Red
@@ -477,6 +480,11 @@ Add tests for:
 9. interruption on every deletion leaving the next scan deterministic;
 10. catalog values exposing ordinal/time/size/type/health only, never a path or raw
     digest through public `Debug`.
+11. the platform-owned backup-directory capability exposing at most 32 exact
+    TokenMaster package children, rejecting links/reparse points/unexpected names and
+    types, and permitting only bounded reader/create-stage/publish/delete operations;
+12. state catalog/retention code having no direct directory enumeration, path, or
+    generic filesystem authority.
 
 ### Green
 
@@ -485,6 +493,10 @@ Add tests for:
 2. Use a checked catalog generation plus bounded ordinal as the UI selection token.
 3. Delete only exact validated files inside `backups/`, one at a time, after candidate
    publication and selection recomputation.
+4. Add a sealed platform `BackupDirectory` capability whose public values are opaque
+   child tokens, never names or paths. It owns bounded enumeration and exact deletion;
+   state receives only `DurableFileReader`, staged publication, length, time/type, and
+   ordinal facts needed by the typed package/catalog contract.
 
 ### Verify
 
@@ -507,6 +519,9 @@ cargo +1.97.0 test -p tokenmaster-state --test retention_contract --locked
 - Create: `crates/state/src/maintenance/scheduler.rs`
 - Create: `crates/state/tests/maintenance_contract.rs`
 - Create: `crates/state/tests/maintenance_resource_contract.rs`
+- Modify: `crates/store/src/backup.rs`
+- Modify: `crates/store/src/lib.rs`
+- Modify: `crates/store/tests/backup_contract.rs`
 - Modify: `crates/state/Cargo.toml`
 - Modify: `crates/state/src/lib.rs`
 
@@ -531,6 +546,9 @@ Add deterministic tests for:
 12. failure of a mandatory healthy-source safety point blocking the mutation, while
     a brand-new empty installation and definitively corrupt quarantined source follow
     their distinct explicit paths.
+13. the verified SQLite candidate opening only a sealed, path-free, identity-bound
+    streaming reader; replacement/truncation/append between verification and package
+    completion fails stale/integrity and poisons package output.
 
 ### Green
 
@@ -542,6 +560,10 @@ Add deterministic tests for:
 3. Publish fixed phase/progress/last-success/failure/count/byte health only.
 4. Keep a failed post-migration backup degraded and the pre-migration point pinned;
    do not report that a completed database migration rolled back.
+5. Add a store-owned verified-candidate reader and one explicit state/store interop
+   method over the existing private package stream codec. Do not make state accept a
+   path or generic `Read`, do not copy the candidate into memory, and revalidate the
+   verified physical identity/length/SHA-256 before and after package consumption.
 
 ### Verify
 

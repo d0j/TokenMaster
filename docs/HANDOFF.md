@@ -333,7 +333,8 @@ P3-D.0 Reliable State is active under
 `docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`. Task 1 is complete:
 `tokenmaster-state` is a library-only workspace package with fixed path-private errors,
 checked byte/item limits, five exact direct dependencies, and deterministic Rust/Pester
-authority gates. The future crash fixture was corrected to avoid a state binary target.
+authority gates. Task 6 adds the sixth exact dependency (`zstd`); the future crash
+fixture remains outside production targets.
 
 Task 2 is also complete. `tokenmaster-platform` now owns sealed bounded staged files,
 exact-child target descriptors, verified create-new publication, and exact-backup
@@ -383,13 +384,34 @@ observable and recoverable through one bounded fixed-name pass. Fifteen focused
 contracts, the complete store suite, query compatibility check, and independent
 review (Critical 0, Important 0, Minor 0, `Ready: Yes`) pass.
 
-The immediate next slice is Task 6 fixed `.tmconfig`/`.tmbackup` containers. Then
-continue Tasks 7-18 in order: optional manual encryption, bounded retention/maintenance, journaled recovery and startup
+Task 6 is complete in the working tree. `tokenmaster-state` now owns the fixed typed
+v1 `.tmconfig`/`.tmbackup` codec over platform-owned bounded readers/stages. The exact
+header/manifest/ordered-entry/footer grammar is deterministic; Zstd 0.13.3 has default
+features off, one checksummed content-sized frame per entry, levels 6/12/19, one
+thread, window log 23, 64 KiB buffers, and an independent expanded-byte counter.
+Config is portable settings only; backup adds one verified database plus timestamp,
+schema, profile, and five-purpose metadata. Unknown/duplicate/overflow/trailing/
+concatenated/window/end/checksum/digest failures close before publication.
+
+Public package APIs accept no generic stream, path, filename, SQL, or extractor.
+Early EOF/appended input is detected. Every codec/final-seal failure irreversibly
+discards and poisons its output; late-footer, partial-writer, and bomb tests prove both
+later `seal` and `publish` return `InvalidState`. The frozen config vector is 405 bytes;
+all 3 profiles x 5 purposes, a 24 MiB streaming round trip, 5 package contracts,
+10 adversarial contracts, 17 durable-file contracts, strict Clippy, the workspace
+authority receipt, and 36/36 Pester mutations pass. Independent final review reports
+Critical 0, Important 0, Minor 0 and `Ready: Yes`.
+
+The immediate next slice is Task 7 optional manual age passphrase protection. Then
+continue Tasks 8-18 in order: bounded retention/maintenance, journaled recovery and startup
 integration, application restart/safe mode, Data & Recovery UI, then adversarial and
 resource closure. Keep the fixed archive path and writer sidecar; never copy only the
 live main file or treat busy/disk/access/schema-newer as corruption authority. Keep
 automatic recovery data only; manual full restore must explicitly choose data only or
 data plus portable settings, and device-local settings never move between machines.
+Task 8 must first introduce the sealed platform backup-directory capability; Task 9
+must introduce store-owned verified-candidate streaming/state interop. Neither may
+relax Task 6 into path or public generic-stream authority.
 
 After P3-D.0, continue P3-D supporting data-bearing routes using bounded keyset
 intents and the same controller/snapshot boundary. P3-E then closes remaining
@@ -397,11 +419,14 @@ notifications, settings/help, command palette, tray, and compact lifecycle. P3-D
 presentation, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.
-The current post-P3-D.0-Task-5 focused evidence includes 5 backup contracts,
-10 adversarial backup contracts, the strict store Clippy gate, the complete locked
-store suite, query compatibility compilation, and final independent review. The final
-clean-root, formatting, strict locked workspace Clippy, and full locked workspace
-test/doctest baseline passes; the full test/doctest run completed in 470.7 seconds.
+The current post-P3-D.0-Task-6 focused evidence includes the Task 5 store contracts,
+5 package contracts, 10 package adversarial contracts, 17 durable-file contracts,
+strict platform/state Clippy, the reliable-state workspace audit, 36 authority
+mutations, feature-tree verification, and final independent review. The new final
+clean-root, formatting, strict locked full-workspace Clippy, and complete locked
+workspace test/doctest baseline passes in 548.2 seconds total; Clippy took 22.5
+seconds. The authenticated live Codex transport contract remains intentionally ignored
+without its opt-in executable/session input.
 The
 query resource binary uses
 an isolated `harness = false` process plus a bounded maximum-64-round warm-up that

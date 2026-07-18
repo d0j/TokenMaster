@@ -2507,3 +2507,54 @@ This closes Task 5 only. Fixed `.tmconfig`/`.tmbackup` containers, encryption,
 catalog/retention, maintenance runtime, recovery journal, safe mode, UI integration,
 M0 acceptance, packaging, signing, and release remain unimplemented. Task 6 fixed
 bounded package containers is next.
+
+## 2026-07-18 — P3-D.0 Task 6 bounded typed backup packages
+
+Added the fixed deterministic v1 `.tmconfig`/`.tmbackup` format in
+`tokenmaster-state`. The wire order is a 32-byte `TMPKG001` header, one 40-byte
+`TMMNF001` self-describing manifest, ordered `TMENTR01` settings/database entries
+with 64-byte descriptors and 24-byte `TMENEND1` suffixes, then descriptor binding,
+`TMEND001`, and SHA-256 of every preceding package byte. The controlled complete file
+is independently SHA-256 sealed. Config carries portable settings only. Backup also
+carries database schema, creation UTC milliseconds, compression profile, and one of
+periodic/manual/pre-migration/post-migration/pre-restore.
+
+Pinned `zstd` 0.13.3 with `default-features = false`; the resolved feature tree adds
+only `zstd-safe/std`. Each entry is exactly one checksummed, content-sized frame at
+level 6, 12, or 19, without multithreading, training, legacy, or experimental modes.
+The codec fixes window log 23, 64 KiB buffers, exact expanded counts/hashes, 1 MiB
+settings, 64 GiB database, and checked 64 GiB-plus-2-MiB ceilings. Reader validation
+rejects unknown/reserved fields, duplicate/wrong order, overflow, concatenation,
+trailing data, missing end, checksum/digest/length/content-size mismatch, oversized
+windows, and expanded output beyond its independent counter.
+
+Independent review found that merely leaving a failed borrowed stage unsealed was
+insufficient because the platform seal API remained public. The final design adds
+irreversible `DurableStagedFile::discard`: it clears receipt, closes/removes the
+unpublished file, and poisons the handle before any codec error returns. Cleanup
+uncertainty is `RecoveryRequired`. Late-footer corruption after full database
+extraction, partial writer output, a crafted 300-to-256 content-size bomb, and the
+platform contract now prove subsequent write/seal/publish all fail `InvalidState`.
+Public codec methods accept only `DurableFileReader`/`DurableStagedFile`; raw generic
+stream helpers remain private, and a new authority mutation rejects future public
+`Read`/`Write` methods.
+
+Focused evidence passes a frozen 405-byte config golden and complete-file SHA-256,
+all three compression profiles times all five purposes, a 24 MiB controlled streaming
+round trip, 5 package contracts, 10 adversarial package contracts, and 17 durable-file
+contracts. Strict platform/state warnings-as-errors Clippy, the reliable-state
+workspace audit, exact Zstd feature-tree inspection, 36/36 Pester mutations, and
+`git diff --check` pass. Final independent review reports Critical 0, Important 0,
+Minor 0 and `Ready: Yes`.
+
+The final repository baseline passes `TM-CLEAN-PASS`, formatting, strict locked
+warnings-as-errors workspace Clippy, and the complete locked workspace test/doctest
+suite in 548.2 seconds total; Clippy takes 22.5 seconds. The authenticated live Codex
+transport contract remains the one intentional opt-in ignore.
+
+The implementation plan was hardened before continuing: Task 8 now requires a sealed
+platform backup-directory capability for bounded enumeration/publication/deletion,
+and Task 9 requires a store-owned identity-bound verified-candidate reader plus exact
+state interop. Neither may add paths or public generic streams. Task 7 optional manual
+age protection is next. Retention, maintenance, recovery, safe mode, UI integration,
+M0 acceptance, packaging, signing, and release remain unimplemented.

@@ -84,11 +84,15 @@ foreach ($line in ($manifestText -split "`r?`n")) {
 }
 $directProductionDependencies = @($dependencyNames | Sort-Object -Unique)
 $expectedDependencies = @(
-    'serde', 'serde_json', 'sha2', 'thiserror', 'tokenmaster-platform'
+    'serde', 'serde_json', 'sha2', 'thiserror', 'tokenmaster-platform', 'zstd'
 )
 if ($directProductionDependencies.Count -ne $expectedDependencies.Count -or
     @($expectedDependencies | Where-Object { $_ -notin $directProductionDependencies }).Count -ne 0) {
     throw "TM-STATE-DEPENDENCIES: direct dependency set drifted: $($directProductionDependencies -join ', ')"
+}
+if ($rootManifestText -notmatch '(?m)^zstd\s*=\s*\{\s*version\s*=\s*"=0\.13\.3"\s*,\s*default-features\s*=\s*false\s*\}\s*$' -or
+    $manifestText -notmatch '(?m)^zstd\.workspace\s*=\s*true\s*$') {
+    throw 'TM-STATE-ZSTD-PIN: zstd must remain exactly 0.13.3 with default features disabled'
 }
 
 $testOnlySource = Join-Path $stateSource 'record_contract_tests.rs'
@@ -114,24 +118,44 @@ $productionText = ($rustFiles | ForEach-Object {
 }) -join "`n"
 
 $approvedStdIoPattern = '(?m)^\s*use\s+std\s*::\s*io\s*::\s*\{\s*self\s*,\s*Write\s*,?\s*\}\s*;\s*$'
+$approvedPackageReaderIoPattern = '(?m)^\s*use\s+std\s*::\s*io\s*::\s*\{\s*self\s*,\s*BufRead\s*,\s*Read\s*,\s*Write\s*,?\s*\}\s*;\s*$'
+$approvedPackageWriterIoPattern = '(?m)^\s*use\s+std\s*::\s*io\s*::\s*\{\s*self\s*,\s*Read\s*,\s*Write\s*,?\s*\}\s*;\s*$'
 $approvedPlatformPattern = '(?ms)^\s*use\s+tokenmaster_platform\s*::\s*\{\s*DurableFileError\s*,\s*DurableFileTarget\s*,\s*DurableStagedFile\s*,\s*MAX_DURABLE_WRITE_CHUNK_BYTES\s*,\s*ValidatedLocalDirectory\s*,?\s*\}\s*;\s*$'
+$approvedPackageCapabilityExportPattern = '(?m)^\s*pub\(crate\)\s+use\s+tokenmaster_platform\s*::\s*\{\s*DurableFileReader\s*,\s*DurableStagedFile\s*,?\s*\}\s*;\s*$'
+$approvedPackageCapabilityImportPattern = '(?m)^\s*use\s+tokenmaster_platform\s*::\s*\{\s*DurableFileError\s*,\s*MAX_DURABLE_WRITE_CHUNK_BYTES\s*,?\s*\}\s*;\s*$'
 $approvedSettingsPlatformPattern = '(?m)^\s*use\s+tokenmaster_platform\s*::\s*ValidatedLocalDirectory\s*;\s*$'
 $approvedStdIoImports = @([regex]::Matches($productionText, $approvedStdIoPattern))
+$approvedPackageReaderIoImports = @(
+    [regex]::Matches($productionText, $approvedPackageReaderIoPattern)
+)
+$approvedPackageWriterIoImports = @(
+    [regex]::Matches($productionText, $approvedPackageWriterIoPattern)
+)
 $approvedPlatformImports = @([regex]::Matches($productionText, $approvedPlatformPattern))
+$approvedPackageCapabilityExports = @(
+    [regex]::Matches($productionText, $approvedPackageCapabilityExportPattern)
+)
+$approvedPackageCapabilityImports = @(
+    [regex]::Matches($productionText, $approvedPackageCapabilityImportPattern)
+)
 $approvedSettingsPlatformImports = @(
     [regex]::Matches($productionText, $approvedSettingsPlatformPattern)
 )
 if ($approvedStdIoImports.Count -ne 1 -or
+    $approvedPackageReaderIoImports.Count -ne 1 -or
+    $approvedPackageWriterIoImports.Count -ne 2 -or
     $approvedPlatformImports.Count -ne 1 -or
+    $approvedPackageCapabilityExports.Count -ne 1 -or
+    $approvedPackageCapabilityImports.Count -ne 1 -or
     $approvedSettingsPlatformImports.Count -ne 1) {
-    throw 'TM-STATE-APPROVED-IO: exact bounded JSON and durable-file imports must each appear once'
+    throw 'TM-STATE-APPROVED-IO: exact bounded record/package capability imports must match the fixed allowlist'
 }
 $validatedDirectoryUses = @(
     [regex]::Matches($productionText, '\bValidatedLocalDirectory\b')
 )
 $settingsConstructorPattern = '(?s)pub\s+fn\s+new\s*\(\s*directory\s*:\s*&ValidatedLocalDirectory\s*\)\s*->\s*Result\s*<\s*Self\s*,\s*StateError\s*>'
 $settingsConstructors = @([regex]::Matches($productionText, $settingsConstructorPattern))
-$approvedIoMembers = @('Error', 'ErrorKind', 'Result')
+$approvedIoMembers = @('Error', 'ErrorKind', 'Result', 'sink')
 $ioMemberUses = @([regex]::Matches($productionText, '\bio::(?<member>[A-Za-z_][A-Za-z0-9_]*)'))
 $unapprovedIoMembers = @(
     $ioMemberUses |
@@ -159,12 +183,20 @@ if ($exactChildUses.Count -ne 6 -or
     throw 'TM-STATE-EXACT-CHILD: state may construct only the six fixed record slots'
 }
 $authorityText = [regex]::Replace($productionText, $approvedStdIoPattern, '')
+$authorityText = [regex]::Replace($authorityText, $approvedPackageReaderIoPattern, '')
+$authorityText = [regex]::Replace($authorityText, $approvedPackageWriterIoPattern, '')
 $authorityText = [regex]::Replace($authorityText, $approvedPlatformPattern, '')
+$authorityText = [regex]::Replace($authorityText, $approvedPackageCapabilityExportPattern, '')
+$authorityText = [regex]::Replace($authorityText, $approvedPackageCapabilityImportPattern, '')
 $authorityText = [regex]::Replace($authorityText, $approvedSettingsPlatformPattern, '')
 
 $publicPathPattern = '(?s)\bpub(?:\([^)]*\))?\s+(?:(?:const|async|unsafe)\s+)*fn\s+\w+[^;{]*(?:std::path::)?(?:Path|PathBuf)\b[^;{]*[;{]'
 if ($productionText -match $publicPathPattern) {
     throw 'TM-STATE-ARBITRARY-PATH: public state API must not accept filesystem paths'
+}
+$publicStreamAuthorityPattern = '(?s)\bpub(?:\([^)]*\))?\s+(?:(?:const|async|unsafe)\s+)*fn\s+\w+(?=[^;{]*\b(?:Read|Write)\b)[^;{]*[;{]'
+if ($productionText -match $publicStreamAuthorityPattern) {
+    throw 'TM-STATE-STREAM-AUTHORITY: public state API must use controlled file capabilities, not generic streams'
 }
 $publicRecordAuthorityPattern = '(?m)^\s*pub\s+(?:use\s+record\b|mod\s+record\b|struct\s+RedundantRecordStore\b)'
 if ($productionText -match $publicRecordAuthorityPattern) {
@@ -189,8 +221,8 @@ if ($SourceOnly) {
         binary_target_count = 0
         direct_production_dependency_count = $directProductionDependencies.Count
         rust_source_file_count = $rustFiles.Count
-        approved_std_io_import_count = $approvedStdIoImports.Count
-        approved_platform_import_count = $approvedPlatformImports.Count + $approvedSettingsPlatformImports.Count
+        approved_std_io_import_count = $approvedStdIoImports.Count + $approvedPackageReaderIoImports.Count + $approvedPackageWriterIoImports.Count
+        approved_platform_import_count = $approvedPlatformImports.Count + $approvedPackageCapabilityExports.Count + $approvedPackageCapabilityImports.Count + $approvedSettingsPlatformImports.Count
         validated_directory_capability_use_count = $validatedDirectoryUses.Count
         forbidden_authority_count = 0
         arbitrary_path_constructor_count = 0
@@ -225,6 +257,16 @@ if ($metadataDependencies.Count -ne $expectedDependencies.Count -or
     @($expectedDependencies | Where-Object { $_ -notin $metadataDependencies }).Count -ne 0) {
     throw "TM-STATE-DEPENDENCIES: metadata dependency set drifted: $($metadataDependencies -join ', ')"
 }
+$zstdDependencies = @(
+    $statePackages[0].dependencies |
+        Where-Object { $_.name -eq 'zstd' -and $null -eq $_.kind }
+)
+if ($zstdDependencies.Count -ne 1 -or
+    $zstdDependencies[0].req -ne '=0.13.3' -or
+    $zstdDependencies[0].uses_default_features -ne $false -or
+    @($zstdDependencies[0].features).Count -ne 0) {
+    throw 'TM-STATE-ZSTD-PIN: resolved zstd dependency contract drifted'
+}
 $binaryTargets = @($statePackages[0].targets | Where-Object { $_.kind -contains 'bin' })
 if ($binaryTargets.Count -ne 0) {
     throw 'TM-STATE-BINARY-TARGET: metadata contains a state binary target'
@@ -237,6 +279,13 @@ if ($LASTEXITCODE -ne 0) {
 if ($treeText -match '(?m)^(?:zip|tar|tokio|reqwest|ureq|slint|webbrowser|headless_chrome)\s+v') {
     throw 'TM-STATE-TRANSITIVE-AUTHORITY: forbidden dependency entered the state tree'
 }
+$featureTreeText = (& $cargo +1.97.0 tree -p tokenmaster-state -e features --manifest-path $rootManifest) -join "`n"
+if ($LASTEXITCODE -ne 0) {
+    throw 'TM-STATE-TREE: cargo feature tree failed'
+}
+if ($featureTreeText -match '(?i)zstd(?:-safe|-sys)? feature "(?:zstdmt|training|legacy|experimental)"') {
+    throw 'TM-STATE-ZSTD-FEATURES: forbidden zstd feature entered the state tree'
+}
 
 [ordered]@{
     result = 'pass'
@@ -247,8 +296,8 @@ if ($treeText -match '(?m)^(?:zip|tar|tokio|reqwest|ureq|slint|webbrowser|headle
     direct_production_dependencies = $metadataDependencies
     direct_production_dependency_count = $metadataDependencies.Count
     rust_source_file_count = $rustFiles.Count
-    approved_std_io_import_count = $approvedStdIoImports.Count
-    approved_platform_import_count = $approvedPlatformImports.Count + $approvedSettingsPlatformImports.Count
+    approved_std_io_import_count = $approvedStdIoImports.Count + $approvedPackageReaderIoImports.Count + $approvedPackageWriterIoImports.Count
+    approved_platform_import_count = $approvedPlatformImports.Count + $approvedPackageCapabilityExports.Count + $approvedPackageCapabilityImports.Count + $approvedSettingsPlatformImports.Count
     validated_directory_capability_use_count = $validatedDirectoryUses.Count
     forbidden_authority_count = 0
     arbitrary_path_constructor_count = 0

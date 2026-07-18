@@ -17,8 +17,8 @@ mod unsupported;
 mod windows;
 
 pub use durable_file::{
-    DURABLE_STAGE_ATTEMPTS, DurableFileError, DurableFileReceipt, DurableFileTarget,
-    DurableStagedFile, MAX_DURABLE_FILE_BYTES, MAX_DURABLE_WRITE_CHUNK_BYTES,
+    DURABLE_STAGE_ATTEMPTS, DurableFileError, DurableFileReader, DurableFileReceipt,
+    DurableFileTarget, DurableStagedFile, MAX_DURABLE_FILE_BYTES, MAX_DURABLE_WRITE_CHUNK_BYTES,
 };
 pub use lease::{
     ExclusiveFileLease, ExclusiveFileLeaseError, ExclusiveFileLeaseGuard, WRITER_LEASE_SUFFIX,

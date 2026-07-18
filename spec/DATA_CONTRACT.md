@@ -639,15 +639,39 @@ path or data content. Temporary snapshot/compact names are capped at 32 each. Cl
 health is one saturating counter, and recovery scans exactly those 64 names plus their
 fixed SQLite sidecars.
 
-`.tmconfig` and `.tmbackup` use one fixed typed container, not a general archive.
-Version 1 permits at most eight entries, a 64 KiB manifest, a 1 MiB settings payload,
-one database payload of at most 64 GiB, checked total expansion, one Zstandard frame
-per compressed entry, an 8 MiB decoder window, exact expanded lengths, and SHA-256
-entry/manifest binding. Its footer carries an exact end marker and SHA-256 of every
-preceding package byte. It contains no filenames, paths, links, permissions, devices,
+Implemented Task 6 `.tmconfig` and `.tmbackup` use one fixed typed little-endian
+container, not a general archive. The exact v1 order is a 32-byte `TMPKG001` header,
+one 40-byte `TMMNF001` manifest, then one settings entry and, for `.tmbackup` only,
+one database entry. Each entry is a 64-byte `TMENTR01` descriptor, exactly one Zstd
+frame, and a 24-byte `TMENEND1` suffix. The footer is the SHA-256 binding of the
+manifest plus every entry descriptor/suffix, the exact `TMEND001` marker, and the
+stored SHA-256 of every preceding byte. The complete file also receives an independent
+SHA-256 before its controlled stage is sealable.
+
+Header and manifest kind/count must agree: config is exactly one settings entry;
+backup is exactly settings then database. The manifest carries settings schema 1,
+database schema (zero only for config), compression profile, creation time in
+0..253402300799999 UTC milliseconds, and one of periodic/manual/pre-migration/
+post-migration/pre-restore for backup. Reserved bytes/flags are zero. The implemented
+limits are eight entries and 64 KiB manifest at the version boundary, 1 MiB expanded
+settings, one 64 GiB database, 64 GiB plus 2 MiB checked total/encoded ceilings, and
+64 KiB codec buffers.
+
+Every entry descriptor binds kind, Zstd codec 1, profile level 6/12/19, checksum plus
+content-size flags, expanded length/SHA-256, and window log 23. Dictionary IDs,
+reserved bits, concatenated frames, missing frame ends, trailing bytes, a frame
+content-size mismatch, windows above 8 MiB, expanded output above the independent
+counter, suffix-length mismatch, unknown values, overflow, and any digest mismatch
+fail closed. Codec input/output is only `DurableFileReader`/`DurableStagedFile`; no
+public generic extractor exists. A codec or final-seal failure irreversibly discards
+and poisons the output stage, so later write, seal, or publication cannot recover
+partial bytes as truth.
+
+The wire format contains no filenames, paths, links, permissions, devices,
 credentials, prompts, responses, reasoning, commands, output, source content, or raw
-provider data. Optional manual password protection wraps the complete package in a
-bounded standard age v1 envelope; automatic recovery stores no decryption secret.
+provider data. Optional manual password protection remains Task 7 and will wrap only
+an already complete package in a bounded standard age v1 envelope; automatic recovery
+stores no decryption secret.
 
 Automatic retention considers at most 32 controlled package files and keeps at most
 15 verified restore points under a default 2 GiB compressed-byte budget configurable

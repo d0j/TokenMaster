@@ -159,18 +159,23 @@ Task 5 makes `tokenmaster-store` create consistent page-stepped Online Backup
 candidates and independently verify integrity, foreign keys, exact schema/indexes,
 stored counts/generations, and semantic invariants under bounded defensive SQLite
 policy. Verified candidates bind physical identity, length, and SHA-256 before and
-after every consumer; cleanup health and fixed-name recovery are bounded. Later state tasks will add
-typed run/recovery stores, fixed streaming `.tmconfig`/`.tmbackup`
-packages, bounded retention, and one capacity-one maintenance worker.
+after every consumer; cleanup health and fixed-name recovery are bounded. Task 6 adds
+the fixed typed streaming `.tmconfig`/`.tmbackup` package codec over platform-owned
+bounded readers and stages. One checksummed/content-sized Zstd frame per typed entry,
+exact length/hash/descriptor/footer binding, an 8 MiB decoder window, and independent
+expanded counters fail closed; every failed output is irreversibly poisoned before it
+can be sealed or published. Later state tasks add typed run/recovery stores, optional
+manual age protection, bounded retention, and one capacity-one maintenance worker.
 `tokenmaster-platform` owns durable replacement and will later own sealed file dialogs.
 `tokenmaster-app` will stop every archive user, hold the existing writer
 lease, quarantine main/WAL/SHM, resume a redundant six-state restore journal before
 SQLite open, commit the selected data-only or data-plus-portable-settings mode, and
 reconstruct one application bundle or safe mode. Automatic recovery remains data only.
 Product/Desktop receive bounded health and intents only. The contour is in progress;
-Tasks 1-5 now provide persistent typed settings plus verified standalone SQLite
-candidates; they add no package, maintenance runtime, restore, safe-mode, or release
-claim.
+Tasks 1-6 now provide persistent typed settings, verified standalone SQLite candidates,
+and fixed packages; they add no encryption, catalog/maintenance runtime, restore,
+safe-mode, or release claim. Task 8/9 must use the planned sealed backup-directory and
+verified-candidate reader capabilities rather than paths or generic streams.
 
 The built-in live quota source is separate from the JSONL usage reader. Composition
 supplies one already resolved absolute native Codex executable to

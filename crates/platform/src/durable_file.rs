@@ -146,11 +146,128 @@ impl DurableFileTarget {
         }
         Ok(Some(bytes))
     }
+
+    /// Opens one exact regular child for bounded, path-free streaming.
+    pub fn open_reader(
+        &self,
+        max_bytes: u64,
+    ) -> Result<Option<DurableFileReader>, DurableFileError> {
+        if max_bytes > MAX_DURABLE_FILE_BYTES {
+            return Err(DurableFileError::CapacityExceeded);
+        }
+        revalidate_parent(&self.parent)?;
+        match existing_kind(&self.path)? {
+            ExistingKind::Missing => return Ok(None),
+            ExistingKind::Regular => {}
+        }
+
+        let file = File::open(&self.path).map_err(|_| DurableFileError::Unavailable)?;
+        let metadata = file.metadata().map_err(|_| DurableFileError::Unavailable)?;
+        if !metadata.is_file() {
+            return Err(DurableFileError::UnexpectedType);
+        }
+        let expected_len = metadata.len();
+        if expected_len > max_bytes {
+            return Err(DurableFileError::CapacityExceeded);
+        }
+        Ok(Some(DurableFileReader {
+            file,
+            expected_len,
+            consumed: 0,
+            finished: false,
+            read_failed: false,
+        }))
+    }
 }
 
 impl fmt::Debug for DurableFileTarget {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("DurableFileTarget([redacted])")
+    }
+}
+
+/// Bounded path-free reader for one already-open exact durable file.
+pub struct DurableFileReader {
+    file: File,
+    expected_len: u64,
+    consumed: u64,
+    finished: bool,
+    read_failed: bool,
+}
+
+impl DurableFileReader {
+    /// Reads one bounded chunk and verifies that the open file ends at its observed length.
+    pub fn read_chunk(&mut self, buffer: &mut [u8]) -> Result<usize, DurableFileError> {
+        if self.read_failed {
+            return Err(DurableFileError::InvalidState);
+        }
+        if buffer.len() > MAX_DURABLE_WRITE_CHUNK_BYTES {
+            return Err(DurableFileError::CapacityExceeded);
+        }
+        if buffer.is_empty() {
+            return Ok(0);
+        }
+        if self.finished {
+            return Ok(0);
+        }
+
+        let remaining = self
+            .expected_len
+            .checked_sub(self.consumed)
+            .ok_or(DurableFileError::Integrity)?;
+        if remaining == 0 {
+            let mut trailing = [0_u8; 1];
+            return match self.file.read(&mut trailing) {
+                Ok(0) => {
+                    self.finished = true;
+                    Ok(0)
+                }
+                Ok(_) => {
+                    self.read_failed = true;
+                    Err(DurableFileError::Integrity)
+                }
+                Err(_) => {
+                    self.read_failed = true;
+                    Err(DurableFileError::Unavailable)
+                }
+            };
+        }
+
+        let request = usize::try_from(remaining.min(buffer.len() as u64))
+            .map_err(|_| DurableFileError::CapacityExceeded)?;
+        match self.file.read(&mut buffer[..request]) {
+            Ok(0) => {
+                self.read_failed = true;
+                Err(DurableFileError::Integrity)
+            }
+            Ok(count) => {
+                self.consumed = self
+                    .consumed
+                    .checked_add(u64::try_from(count).map_err(|_| DurableFileError::Integrity)?)
+                    .ok_or(DurableFileError::Integrity)?;
+                Ok(count)
+            }
+            Err(_) => {
+                self.read_failed = true;
+                Err(DurableFileError::Unavailable)
+            }
+        }
+    }
+
+    #[must_use]
+    pub const fn len(&self) -> u64 {
+        self.expected_len
+    }
+
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.expected_len == 0
+    }
+}
+
+impl fmt::Debug for DurableFileReader {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("DurableFileReader([redacted])")
     }
 }
 
@@ -166,6 +283,30 @@ pub struct DurableStagedFile {
 }
 
 impl DurableStagedFile {
+    /// Returns the number of bytes accepted by this unpublished stage.
+    #[must_use]
+    pub const fn written_len(&self) -> u64 {
+        self.written
+    }
+
+    /// Irreversibly invalidates this stage and removes its unpublished file when possible.
+    pub fn discard(&mut self) -> Result<(), DurableFileError> {
+        self.write_failed = true;
+        self.receipt = None;
+        self.file.take();
+        let Some(path) = self.path.take() else {
+            return Ok(());
+        };
+        match std::fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
+            Err(_) => {
+                self.path = Some(path);
+                Err(DurableFileError::Unavailable)
+            }
+        }
+    }
+
     /// Appends one bounded caller-owned chunk without exposing raw I/O errors.
     pub fn write_chunk(&mut self, bytes: &[u8]) -> Result<(), DurableFileError> {
         if self.write_failed {

@@ -2,6 +2,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
 mod error;
+mod package;
 #[cfg_attr(
     not(test),
     allow(
@@ -15,6 +16,12 @@ mod record_contract_tests;
 mod settings;
 
 pub use error::{StateError, StateErrorCode};
+pub use package::{
+    BackupCompression, BackupMetadata, BackupPackage, BackupPurpose, ConfigPackage,
+    MAX_DATABASE_PACKAGE_BYTES, MAX_PACKAGE_ENTRIES, MAX_PACKAGE_MANIFEST_BYTES,
+    MAX_PACKAGE_TOTAL_EXPANDED_BYTES, MAX_SETTINGS_PACKAGE_BYTES, PACKAGE_DECODER_WINDOW_BYTES,
+    PACKAGE_IO_BUFFER_BYTES, PackageReceipt, VerifiedBackupPackage, VerifiedConfigPackage,
+};
 pub use settings::{
     BACKUP_INTERVAL_DEFAULT_SECONDS, BACKUP_INTERVAL_MAX_SECONDS, BACKUP_INTERVAL_MIN_SECONDS,
     BACKUP_QUIET_DEFAULT_SECONDS, BACKUP_QUIET_MAX_SECONDS, BACKUP_QUIET_MIN_SECONDS,

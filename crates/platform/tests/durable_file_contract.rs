@@ -162,6 +162,32 @@ fn seal_flushes_reopens_and_rejects_wrong_length_or_digest() {
 }
 
 #[test]
+fn discarded_stage_is_irreversibly_unsealable_unpublishable_and_removed() {
+    let (root, directory) = fixture();
+    let target = descriptor(&directory, "discarded.slot").expect("target");
+    let mut staged = target.create_staged(TEST_MAX_BYTES).expect("stage");
+    staged.write_chunk(NEW).expect("write stage");
+    staged.discard().expect("discard stage");
+    staged.discard().expect("discard is idempotent");
+    assert_eq!(staged.written_len(), NEW.len() as u64);
+    assert_eq!(
+        staged.write_chunk(b"x").expect_err("discarded write"),
+        DurableFileError::InvalidState
+    );
+    assert_eq!(
+        staged
+            .seal(NEW.len() as u64, digest(NEW))
+            .expect_err("discarded seal"),
+        DurableFileError::InvalidState
+    );
+    assert_eq!(
+        staged.publish_new(&target).expect_err("discarded publish"),
+        DurableFileError::InvalidState
+    );
+    assert_eq!(fs::read_dir(root.path()).expect("empty root").count(), 0);
+}
+
+#[test]
 fn publish_new_is_same_volume_verified_and_preserves_source_on_preflight_failure() {
     let (root, directory) = fixture();
     let target = descriptor(&directory, "settings.a").expect("target");
@@ -207,6 +233,94 @@ fn bounded_read_distinguishes_missing_exact_bytes_and_capacity_excess() {
         target.read_bounded(11).expect_err("oversized exact child"),
         DurableFileError::CapacityExceeded
     );
+}
+
+#[test]
+fn bounded_reader_streams_exact_bytes_and_detects_short_or_appended_files() {
+    let (root, directory) = fixture();
+    let target = descriptor(&directory, "stream.slot").expect("target");
+    assert!(target.open_reader(16).expect("missing reader").is_none());
+    fs::write(root.path().join("stream.slot"), b"exact-record").expect("record");
+
+    let mut reader = target
+        .open_reader(12)
+        .expect("open reader")
+        .expect("present reader");
+    assert_eq!(reader.len(), 12);
+    assert!(!reader.is_empty());
+    assert_eq!(format!("{reader:?}"), "DurableFileReader([redacted])");
+    let mut observed = Vec::new();
+    let mut chunk = [0_u8; 5];
+    loop {
+        let count = reader.read_chunk(&mut chunk).expect("stream chunk");
+        if count == 0 {
+            break;
+        }
+        observed.extend_from_slice(&chunk[..count]);
+    }
+    assert_eq!(observed, b"exact-record");
+
+    let mut too_small = target
+        .open_reader(12)
+        .expect("open short reader")
+        .expect("present short reader");
+    fs::write(root.path().join("stream.slot"), b"short").expect("truncate after open");
+    let mut chunk = [0_u8; 16];
+    assert_eq!(too_small.read_chunk(&mut chunk).expect("short prefix"), 5);
+    assert_eq!(
+        too_small
+            .read_chunk(&mut chunk)
+            .expect_err("short file must fail"),
+        DurableFileError::Integrity
+    );
+
+    fs::write(root.path().join("stream.slot"), b"base").expect("base file");
+    let mut appended = target
+        .open_reader(16)
+        .expect("open append reader")
+        .expect("present append reader");
+    fs::write(root.path().join("stream.slot"), b"base-extra").expect("append after open");
+    let mut base = [0_u8; 4];
+    assert_eq!(appended.read_chunk(&mut base).expect("base chunk"), 4);
+    assert_eq!(
+        appended
+            .read_chunk(&mut base)
+            .expect_err("appended bytes must fail"),
+        DurableFileError::Integrity
+    );
+}
+
+#[test]
+fn bounded_reader_rejects_capacity_and_oversized_chunks_before_reading() {
+    let (root, directory) = fixture();
+    let target = descriptor(&directory, "reader-bounds.slot").expect("target");
+    fs::write(root.path().join("reader-bounds.slot"), b"bounded").expect("payload");
+    assert_eq!(
+        target
+            .open_reader(6)
+            .expect_err("file exceeds caller bound"),
+        DurableFileError::CapacityExceeded
+    );
+    assert_eq!(
+        target
+            .open_reader(MAX_DURABLE_FILE_BYTES + 1)
+            .expect_err("global limit"),
+        DurableFileError::CapacityExceeded
+    );
+    let mut reader = target
+        .open_reader(7)
+        .expect("open reader")
+        .expect("present reader");
+    let mut oversized = vec![0_u8; MAX_DURABLE_WRITE_CHUNK_BYTES + 1];
+    assert_eq!(
+        reader
+            .read_chunk(&mut oversized)
+            .expect_err("oversized chunk"),
+        DurableFileError::CapacityExceeded
+    );
+    let mut exact = [0_u8; 7];
+    assert_eq!(reader.read_chunk(&mut exact).expect("reader untouched"), 7);
+    assert_eq!(&exact, b"bounded");
 }
 
 #[test]

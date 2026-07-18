@@ -704,6 +704,30 @@ bounded failure counter, and a fixed-name recovery pass. Recovery is called only
 under the single-active-maintenance-operation invariant; it is not a concurrent
 candidate-deletion API. Public errors and Debug expose neither paths nor SQLite text.
 
+Implemented Task 6 pins `zstd` 0.13.3 with default features disabled and permits only
+the transitive `std` feature; multithreading, training, legacy, and experimental
+features are absent. Package parsing is exact typed little-endian decoding with fixed
+64 KiB buffers, an 8 MiB maximum decoder window, declared content size, frame
+checksum, single-frame termination, checked expanded counters, entry SHA-256,
+descriptor binding, and whole-package SHA-256. The mutation corpus covers every
+structural region, unknown/duplicate fields, false/overflowing lengths, concatenation,
+trailing data, a missing frame end with otherwise resealed outer digests, checksum and
+digest corruption, an actual 16 MiB-advertised frame, and a 300-byte frame whose
+content-size header lies that it expands to 256 bytes. Output is counted before each
+sink write.
+
+The public state codec has no generic `Read`, `Write`, archive iterator, entry name,
+path, SQL, shell, or network surface. Platform readers detect early EOF and bytes
+appended beyond the opened length. Writers and backup restore sinks remain unpublished
+until complete verification and final file sealing. Every codec or seal failure first
+irreversibly clears the stage receipt, closes/removes the unpublished file, and poisons
+the handle; even cleanup failure cannot restore publication authority and is surfaced
+as `RecoveryRequired`. Late-footer, partial-writer, bomb, and platform contracts prove
+that later seal and publication return `InvalidState`. The reliable-state authority
+suite now has 36 mutation cases, including an explicit public generic-stream bypass.
+Wire bytes, stable errors, receipts, and `Debug` exclude private archive metadata and
+OS text.
+
 The current exact-child read checks the pathname type before opening and validates the
 opened regular-file length, but does not claim hostile same-user no-follow/open-handle
 identity resistance against replacement in that narrow interval. The documented
