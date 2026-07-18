@@ -7,6 +7,7 @@ pub mod dashboard;
 pub mod history;
 pub mod presentation;
 pub mod reliable_state;
+pub mod sessions;
 pub mod shell;
 
 mod bridge;
@@ -25,6 +26,7 @@ pub use dashboard::*;
 pub use history::*;
 pub use presentation::{DesktopApplyOutcome, DesktopRouteKey, DesktopState};
 pub use reliable_state::*;
+pub use sessions::*;
 pub use shell::select_production_renderer;
 pub use ui::{
     DesktopBridgeFactory, DesktopReliableStateNotifier, DesktopShell, DesktopUiError,

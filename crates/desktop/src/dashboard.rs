@@ -1415,7 +1415,7 @@ pub(crate) fn add_evidence_state(
     }
 }
 
-fn degrade(section: &mut DesktopDashboardSectionProjection, reason: &'static str) {
+pub(crate) fn degrade(section: &mut DesktopDashboardSectionProjection, reason: &'static str) {
     if section.state == DesktopDashboardSectionState::Ready {
         section.state = DesktopDashboardSectionState::Degraded;
     }
