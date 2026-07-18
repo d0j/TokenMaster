@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, num::NonZeroU64};
 
 use tokenmaster_product::{
     ProductGeneration, ProductRoute, ProductRouteState, ProductRouteStatus, ProductSnapshot,
@@ -298,9 +298,28 @@ pub enum DesktopApplyOutcome {
     IgnoredNotNewer,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct DesktopSnapshotEpoch(NonZeroU64);
+
+impl DesktopSnapshotEpoch {
+    #[must_use]
+    pub const fn new(value: u64) -> Option<Self> {
+        match NonZeroU64::new(value) {
+            Some(value) => Some(Self(value)),
+            None => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0.get()
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DesktopState {
     projection: DesktopProjection,
+    snapshot_epoch: Option<DesktopSnapshotEpoch>,
 }
 
 impl DesktopState {
@@ -308,12 +327,18 @@ impl DesktopState {
     pub fn new(snapshot: &ProductSnapshot, selected: DesktopRouteKey) -> Self {
         Self {
             projection: DesktopProjection::from_snapshot(snapshot, selected),
+            snapshot_epoch: None,
         }
     }
 
     #[must_use]
     pub const fn projection(&self) -> &DesktopProjection {
         &self.projection
+    }
+
+    #[must_use]
+    pub const fn snapshot_epoch(&self) -> Option<DesktopSnapshotEpoch> {
+        self.snapshot_epoch
     }
 
     pub fn select_stable_key(&mut self, value: &str) -> Result<(), DesktopSelectionError> {
@@ -325,8 +350,31 @@ impl DesktopState {
             return DesktopApplyOutcome::IgnoredNotNewer;
         }
 
-        let next = DesktopProjection::from_snapshot(snapshot, self.projection.selected());
-        self.projection = next;
+        self.replace_projection(snapshot);
         DesktopApplyOutcome::Accepted
+    }
+
+    pub fn apply_snapshot_for_epoch(
+        &mut self,
+        epoch: DesktopSnapshotEpoch,
+        snapshot: &ProductSnapshot,
+    ) -> DesktopApplyOutcome {
+        match self.snapshot_epoch {
+            Some(current) if epoch < current => return DesktopApplyOutcome::IgnoredNotNewer,
+            Some(current)
+                if epoch == current && snapshot.generation() <= self.projection.generation() =>
+            {
+                return DesktopApplyOutcome::IgnoredNotNewer;
+            }
+            Some(_) | None => {}
+        }
+
+        self.snapshot_epoch = Some(epoch);
+        self.replace_projection(snapshot);
+        DesktopApplyOutcome::Accepted
+    }
+
+    fn replace_projection(&mut self, snapshot: &ProductSnapshot) {
+        self.projection = DesktopProjection::from_snapshot(snapshot, self.projection.selected());
     }
 }

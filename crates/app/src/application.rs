@@ -962,7 +962,12 @@ fn finish_live_bundle(
         DesktopQueryPlan::overview().map_err(|_| ApplicationError::controller())?,
     )
     .map_err(|_| ApplicationError::controller())?;
-    let live_bridge = bridge_factory.snapshot_bridge(controller.snapshot_receiver());
+    let live_bridge = bridge_factory
+        .snapshot_bridge(controller.snapshot_receiver())
+        .map_err(|_| ApplicationError::controller())?;
+    controller
+        .bind_snapshot_epoch(live_bridge.epoch())
+        .map_err(|_| ApplicationError::controller())?;
     controller
         .attach_snapshot_notifier(live_bridge.notifier())
         .map_err(|_| ApplicationError::controller())?;

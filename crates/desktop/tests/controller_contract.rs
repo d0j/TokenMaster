@@ -12,8 +12,8 @@ use std::{
 use tokenmaster_desktop::{
     DesktopAttempt, DesktopController, DesktopQueryPlan, DesktopQuerySource,
     DesktopRefreshAdmission, DesktopRefreshOutcome, DesktopRefreshUrgency,
-    DesktopRuntimeObservation, DesktopRuntimeObservationOutcome, DesktopSnapshotNotifier,
-    DesktopSnapshotReceiver,
+    DesktopRuntimeObservation, DesktopRuntimeObservationOutcome, DesktopSnapshotEpoch,
+    DesktopSnapshotNotifier, DesktopSnapshotReceiver,
 };
 use tokenmaster_product::{
     ProductRuntimeGeneration, ProductRuntimeObservationError, ProductSectionKind,
@@ -236,6 +236,28 @@ fn controller_contract_is_typed_bounded_and_deterministic() {
         .attach_snapshot_notifier(Arc::new(NoopNotifier))
         .expect_err("stopped controller rejects notifier attachment");
     assert_eq!(attach_error.stable_code(), "closed");
+}
+
+#[test]
+fn controller_snapshot_epoch_is_bound_once_before_work() {
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let mut controller = DesktopController::spawn(
+        UnavailableSource { calls },
+        DesktopQueryPlan::overview().expect("bounded overview plan"),
+    )
+    .expect("controller starts");
+    let epoch = DesktopSnapshotEpoch::new(7).expect("nonzero epoch");
+
+    controller
+        .bind_snapshot_epoch(epoch)
+        .expect("first binding is accepted");
+    assert_eq!(controller.snapshot_epoch(), Some(epoch));
+    let error = controller
+        .bind_snapshot_epoch(epoch)
+        .expect_err("rebinding must fail closed");
+    assert_eq!(error.stable_code(), "busy");
+
+    controller.shutdown().expect("controller stops");
 }
 
 fn runtime_generation(value: u64) -> ProductRuntimeGeneration {

@@ -8,7 +8,7 @@ use tokenmaster_product::ProductSnapshot;
 use crate::{
     MainWindow,
     controller::{DesktopSnapshotNotifier, DesktopSnapshotReceiver},
-    presentation::DesktopApplyOutcome,
+    presentation::{DesktopApplyOutcome, DesktopSnapshotEpoch},
     ui::{SharedDesktopState, apply_projection},
 };
 
@@ -42,6 +42,7 @@ trait SnapshotDelivery: Send + Sync + 'static {
 }
 
 struct SlintSnapshotDelivery {
+    epoch: DesktopSnapshotEpoch,
     window: slint::Weak<MainWindow>,
     state: SharedDesktopState,
 }
@@ -54,7 +55,7 @@ impl SnapshotDelivery for SlintSnapshotDelivery {
         let Ok(mut state) = self.state.lock() else {
             return DeliveryOutcome::StateUnavailable;
         };
-        match state.apply_snapshot(&snapshot) {
+        match state.apply_snapshot_for_epoch(self.epoch, &snapshot) {
             DesktopApplyOutcome::Accepted => {
                 apply_projection(&window, state.projection());
                 DeliveryOutcome::Delivered(snapshot.generation().get())
@@ -377,6 +378,7 @@ impl DesktopSnapshotNotifier for BridgeNotifier {
 }
 
 pub struct DesktopSnapshotBridge {
+    epoch: DesktopSnapshotEpoch,
     inner: Arc<BridgeInner>,
 }
 
@@ -394,25 +396,38 @@ impl DesktopBridgeObserver {
 
 impl DesktopSnapshotBridge {
     pub(crate) fn new(
+        epoch: DesktopSnapshotEpoch,
         window: slint::Weak<MainWindow>,
         state: SharedDesktopState,
         receiver: DesktopSnapshotReceiver,
     ) -> Self {
         Self::with_parts(
+            epoch,
             receiver,
             Arc::new(SlintEventScheduler),
-            Arc::new(SlintSnapshotDelivery { window, state }),
+            Arc::new(SlintSnapshotDelivery {
+                epoch,
+                window,
+                state,
+            }),
         )
     }
 
     fn with_parts(
+        epoch: DesktopSnapshotEpoch,
         receiver: DesktopSnapshotReceiver,
         scheduler: Arc<dyn EventScheduler>,
         delivery: Arc<dyn SnapshotDelivery>,
     ) -> Self {
         Self {
+            epoch,
             inner: BridgeInner::new(receiver, scheduler, delivery),
         }
+    }
+
+    #[must_use]
+    pub const fn epoch(&self) -> DesktopSnapshotEpoch {
+        self.epoch
     }
 
     #[must_use]
@@ -461,6 +476,10 @@ mod tests {
     use tokenmaster_query::QueryErrorCode;
 
     use super::*;
+
+    fn test_epoch() -> DesktopSnapshotEpoch {
+        DesktopSnapshotEpoch::new(1).expect("nonzero test epoch")
+    }
 
     struct ManualScheduler {
         tasks: Mutex<VecDeque<EventTask>>,
@@ -516,6 +535,7 @@ mod tests {
         let delivered = Arc::new(Mutex::new(Vec::new()));
         let delivery_log = delivered.clone();
         let bridge = DesktopSnapshotBridge::with_parts(
+            test_epoch(),
             receiver.clone(),
             scheduler.clone(),
             Arc::new(CallbackDelivery {
@@ -589,6 +609,7 @@ mod tests {
         let callback_notifier = notifier_slot.clone();
         let callback_delivered = delivered.clone();
         let bridge = DesktopSnapshotBridge::with_parts(
+            test_epoch(),
             receiver.clone(),
             scheduler.clone(),
             Arc::new(CallbackDelivery {
@@ -632,6 +653,7 @@ mod tests {
         let delivered = Arc::new(AtomicU64::new(0));
         let callback_delivered = delivered.clone();
         let bridge = DesktopSnapshotBridge::with_parts(
+            test_epoch(),
             receiver.clone(),
             scheduler.clone(),
             Arc::new(CallbackDelivery {
@@ -677,6 +699,7 @@ mod tests {
         let receiver = DesktopSnapshotReceiver::empty_for_test();
         let scheduler = Arc::new(ManualScheduler::new());
         let bridge = DesktopSnapshotBridge::with_parts(
+            test_epoch(),
             receiver,
             scheduler.clone(),
             Arc::new(CallbackDelivery {
@@ -696,6 +719,7 @@ mod tests {
         let receiver = DesktopSnapshotReceiver::empty_for_test();
         let scheduler = Arc::new(ManualScheduler::new());
         let bridge = DesktopSnapshotBridge::with_parts(
+            test_epoch(),
             receiver.clone(),
             scheduler.clone(),
             Arc::new(CallbackDelivery {

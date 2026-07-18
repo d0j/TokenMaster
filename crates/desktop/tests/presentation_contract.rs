@@ -1,3 +1,4 @@
+use tokenmaster_desktop::DesktopSnapshotEpoch;
 use tokenmaster_desktop::presentation::{
     DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopRouteState,
     DesktopSelectionError, DesktopState,
@@ -133,4 +134,49 @@ fn state_accepts_only_newer_product_generations_and_retains_selection() {
     );
     assert_eq!(state.projection().generation(), newer.generation());
     assert_eq!(state.projection().selected(), DesktopRouteKey::Settings);
+}
+
+#[test]
+fn higher_snapshot_epoch_accepts_restarted_generation_and_rejects_old_backend() {
+    let mut reducer = ProductReducer::new();
+    let initial = reducer.snapshot();
+    reducer
+        .fail_data_status(
+            ProductAttemptGeneration::new(1).expect("nonzero attempt"),
+            QueryErrorCode::DeadlineExceeded,
+        )
+        .expect("new product generation");
+    let newer = reducer.snapshot();
+    let epoch_one = DesktopSnapshotEpoch::new(1).expect("epoch one");
+    let epoch_two = DesktopSnapshotEpoch::new(2).expect("epoch two");
+    let mut state = DesktopState::new(&initial, DesktopRouteKey::Dashboard);
+    state
+        .select_stable_key("settings")
+        .expect("known route must select");
+
+    assert_eq!(
+        state.apply_snapshot_for_epoch(epoch_one, &newer),
+        DesktopApplyOutcome::Accepted
+    );
+    assert_eq!(state.snapshot_epoch(), Some(epoch_one));
+    assert_eq!(state.projection().generation(), newer.generation());
+    assert_eq!(
+        state.apply_snapshot_for_epoch(epoch_one, &newer),
+        DesktopApplyOutcome::IgnoredNotNewer
+    );
+
+    assert_eq!(
+        state.apply_snapshot_for_epoch(epoch_two, &initial),
+        DesktopApplyOutcome::Accepted
+    );
+    assert_eq!(state.snapshot_epoch(), Some(epoch_two));
+    assert_eq!(state.projection().generation(), initial.generation());
+    assert_eq!(state.projection().selected(), DesktopRouteKey::Settings);
+
+    assert_eq!(
+        state.apply_snapshot_for_epoch(epoch_one, &newer),
+        DesktopApplyOutcome::IgnoredNotNewer
+    );
+    assert_eq!(state.snapshot_epoch(), Some(epoch_two));
+    assert_eq!(state.projection().generation(), initial.generation());
 }

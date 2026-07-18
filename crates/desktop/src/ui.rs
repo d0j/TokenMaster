@@ -4,7 +4,7 @@ use std::{
     rc::Rc,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
 };
 
@@ -18,8 +18,8 @@ use crate::{
     DesktopCostValue, DesktopDashboardProjection, DesktopDashboardSectionKey, DesktopFreshness,
     DesktopHistoryProjection, DesktopIntent, DesktopIntentSink, DesktopOperationSnapshot,
     DesktopQuality, DesktopReliableStateProjection, DesktopSessionsProjection,
-    DesktopSnapshotBridge, DesktopSnapshotReceiver, DesktopTokenValue, DesktopValueAvailability,
-    HistoryDayRow, MainWindow, RestorePointRow, RouteRow, SessionListRow,
+    DesktopSnapshotBridge, DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue,
+    DesktopValueAvailability, HistoryDayRow, MainWindow, RestorePointRow, RouteRow, SessionListRow,
     UnavailableDesktopIntentSink,
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
 };
@@ -28,6 +28,7 @@ pub struct DesktopShell {
     window: MainWindow,
     state: SharedDesktopState,
     reliable_state: SharedReliableState,
+    snapshot_epochs: Arc<AtomicU64>,
 }
 
 pub(crate) type SharedDesktopState = Arc<Mutex<DesktopState>>;
@@ -42,12 +43,32 @@ pub struct DesktopReliableStateNotifier {
 pub struct DesktopBridgeFactory {
     window: slint::Weak<MainWindow>,
     state: SharedDesktopState,
+    snapshot_epochs: Arc<AtomicU64>,
 }
 
 impl DesktopBridgeFactory {
-    #[must_use]
-    pub fn snapshot_bridge(&self, receiver: DesktopSnapshotReceiver) -> DesktopSnapshotBridge {
-        DesktopSnapshotBridge::new(self.window.clone(), Arc::clone(&self.state), receiver)
+    pub fn snapshot_bridge(
+        &self,
+        receiver: DesktopSnapshotReceiver,
+    ) -> Result<DesktopSnapshotBridge, DesktopUiError> {
+        let raw_epoch = self
+            .snapshot_epochs
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                if current == 0 {
+                    None
+                } else {
+                    Some(current.checked_add(1).unwrap_or(0))
+                }
+            })
+            .map_err(|_| DesktopUiError::state_unavailable())?;
+        let epoch =
+            DesktopSnapshotEpoch::new(raw_epoch).ok_or_else(DesktopUiError::state_unavailable)?;
+        Ok(DesktopSnapshotBridge::new(
+            epoch,
+            self.window.clone(),
+            Arc::clone(&self.state),
+            receiver,
+        ))
     }
 }
 
@@ -221,6 +242,7 @@ impl DesktopShell {
             window,
             state,
             reliable_state,
+            snapshot_epochs: Arc::new(AtomicU64::new(1)),
         })
     }
 
@@ -274,8 +296,10 @@ impl DesktopShell {
         }
     }
 
-    #[must_use]
-    pub fn snapshot_bridge(&self, receiver: DesktopSnapshotReceiver) -> DesktopSnapshotBridge {
+    pub fn snapshot_bridge(
+        &self,
+        receiver: DesktopSnapshotReceiver,
+    ) -> Result<DesktopSnapshotBridge, DesktopUiError> {
         self.bridge_factory().snapshot_bridge(receiver)
     }
 
@@ -284,6 +308,7 @@ impl DesktopShell {
         DesktopBridgeFactory {
             window: self.window.as_weak(),
             state: self.state_handle(),
+            snapshot_epochs: Arc::clone(&self.snapshot_epochs),
         }
     }
 }

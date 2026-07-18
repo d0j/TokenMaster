@@ -21,7 +21,12 @@ fn controller_snapshot_reaches_the_real_headless_slint_event_loop() {
         DesktopQueryPlan::overview().expect("overview plan"),
     )
     .expect("controller");
-    let bridge = shell.snapshot_bridge(controller.snapshot_receiver());
+    let bridge = shell
+        .snapshot_bridge(controller.snapshot_receiver())
+        .expect("bridge epoch");
+    controller
+        .bind_snapshot_epoch(bridge.epoch())
+        .expect("controller epoch binding");
     controller
         .attach_snapshot_notifier(bridge.notifier())
         .expect("bridge notifier");

@@ -24,6 +24,8 @@ use tokenmaster_query::{
     UsageSessionPageRequest, UsageTimeZone, WeekStart,
 };
 
+use crate::presentation::DesktopSnapshotEpoch;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DesktopQueryPlan {
     analytics: UsageAnalyticsRequest,
@@ -448,6 +450,7 @@ pub struct DesktopController {
     clock: Arc<dyn Clock>,
     worker: RefreshWorker,
     publication: DesktopPublication,
+    snapshot_epoch: Option<DesktopSnapshotEpoch>,
 }
 
 impl DesktopController {
@@ -502,7 +505,43 @@ impl DesktopController {
             clock,
             worker,
             publication,
+            snapshot_epoch: None,
         })
+    }
+
+    pub fn bind_snapshot_epoch(
+        &mut self,
+        epoch: DesktopSnapshotEpoch,
+    ) -> Result<(), DesktopControllerError> {
+        let worker = self.worker.snapshot().map_err(map_worker_error)?;
+        match worker.phase() {
+            WorkerPhase::Running => {}
+            WorkerPhase::Faulted => {
+                return Err(DesktopControllerError::new(
+                    DesktopControllerErrorCode::Faulted,
+                ));
+            }
+            WorkerPhase::ShuttingDown | WorkerPhase::Stopped => {
+                return Err(DesktopControllerError::new(
+                    DesktopControllerErrorCode::Closed,
+                ));
+            }
+        }
+        if self.snapshot_epoch.is_some()
+            || worker.active_request_id().is_some()
+            || worker.pending_count() != 0
+        {
+            return Err(DesktopControllerError::new(
+                DesktopControllerErrorCode::Busy,
+            ));
+        }
+        self.snapshot_epoch = Some(epoch);
+        Ok(())
+    }
+
+    #[must_use]
+    pub const fn snapshot_epoch(&self) -> Option<DesktopSnapshotEpoch> {
+        self.snapshot_epoch
     }
 
     pub fn refresh(
