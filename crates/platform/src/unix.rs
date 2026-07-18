@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::Path;
 
 pub(super) fn available_space(path: &Path) -> Result<u64, DurableFileError> {
@@ -37,6 +37,44 @@ pub(super) fn platform_identity(
     hasher.update(metadata.dev().to_le_bytes());
     hasher.update(metadata.ino().to_le_bytes());
     Ok(from_digest(hasher.finalize()))
+}
+
+pub(super) fn create_stage_file(path: &Path) -> std::io::Result<File> {
+    std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)
+}
+
+pub(super) fn open_regular_no_follow(path: &Path) -> Result<File, DurableFileError> {
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)
+        .map_err(|_| DurableFileError::Unavailable)?;
+    if !file
+        .metadata()
+        .map_err(|_| DurableFileError::Unavailable)?
+        .is_file()
+    {
+        return Err(DurableFileError::UnexpectedType);
+    }
+    Ok(file)
+}
+
+pub(super) fn open_regular_for_delete_no_follow(path: &Path) -> Result<File, DurableFileError> {
+    open_regular_no_follow(path)
+}
+
+pub(super) fn directory_identity(path: &Path) -> Result<PhysicalFileIdentity, DurableFileError> {
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_DIRECTORY)
+        .open(path)
+        .map_err(|_| DurableFileError::Unavailable)?;
+    platform_identity(&file).map_err(|_| DurableFileError::Unavailable)
 }
 
 pub(super) fn move_file_write_through(

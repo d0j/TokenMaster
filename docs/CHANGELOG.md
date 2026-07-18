@@ -6,6 +6,35 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.0 Task 14 sealed native file selection in `tokenmaster-platform`.
+  The existing pinned Windows bindings now call the Common Item Dialog directly with
+  exact `.tmconfig`, `.tmbackup`, and `.tmbackup.age` filters, balanced STA COM lifetime,
+  explicit cancellation, filesystem-only/no-link/no-process flags, and no new dependency.
+  The thread-affine selector requires an active owner. Platform returns only an already
+  open bounded single-link no-follow input or an output capability bound to the selected
+  parent and selection-time absent/physical identity state. Windows output uses a
+  retained exact cleanup handle and bounded adjacent create-new stage. Existing replace
+  preserves the target until sealed atomic publish, validates the displaced identity
+  after the syscall,
+  rolls back a raced replacement, and deletes old bytes only after new identity/byte
+  verification. Unicode names are supported while local/
+  namespace/reparse/hard-link/type/extension/path/size failures stay stable and redacted.
+- Added a deterministic controlled selector and eleven file-dialog contracts covering exact
+  filters/defaults, cancellation, input bounds, Unicode, create/replace/no-truncate,
+  identity drift, link/type rejection, source-pinned balanced COM cleanup, and zero
+  shell/process authority. Five platform unit contracts additionally cover the post-check replace
+  race, retained displaced recovery evidence, Windows handle-pinned cleanup namespace,
+  and identity-query failure after both replace and rollback. One contract proves a
+  selected output capability can grant only one stage for its complete lifetime.
+  Full platform tests and strict platform Clippy pass. Application/UI binding and
+  interactive Windows evidence remain open. Independent final rereview reports
+  Critical/Important/Minor 0/0/0 and `Ready`.
+- Updated the encryption cleanup-failure fixture to add a second physical hard link.
+  This preserves a real ambiguous-cleanup fault after Windows handle-bound cleanup made
+  the former path-rename-only sabotage safely removable. The complete locked workspace
+  test/doctest suite passes in approximately 473 seconds alongside clean-root, strict
+  workspace Clippy, release composition, and 38/38 plus 55/55 authority mutations.
+
 - Implemented P3-D.0 Task 12B.2b.1 bounded operation execution. The production app now
   owns one standard-library operation thread over the sole command coordinator, one
   capacity-one wake, active plus one follow-up, and one latest-only completion. Work
@@ -24,7 +53,7 @@ All notable changes are recorded here.
   fail-fast bound contract, real application manual-backup command coverage, and seven
   new source-policy mutations covering duplicate/unbounded worker ownership, lost
   binding, detached shutdown, and sealed/bounded config capabilities.
-  Task 12B.2b still owns native-file/UI config binding, verify/selected-restore/rebuild
+  Task 12B.2b still owns application/UI config binding, verify/selected-restore/rebuild
   execution, complete cancellation propagation, and no-backup reconstruction.
 - Closed the Task 12B.2b.1 developer gate with clean-root, formatting/diff, warnings-as-
   errors locked workspace Clippy, the complete locked workspace test/doctest suite in

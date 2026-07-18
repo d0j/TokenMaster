@@ -2976,3 +2976,48 @@ contract remains intentionally ignored without explicit environment binding. Nat
 file/UI config preview-confirm, verify/selected-restore/rebuild
 execution, full cancellation propagation, no-backup reconstruction, final resource/
 product release gates, and product or release acceptance remain open.
+
+## 2026-07-18 — P3-D.0 Task 14 sealed native file selection
+
+Added the platform-only file selection boundary without a new dependency or process.
+The existing pinned Windows bindings now compose the Common Item Dialog with balanced
+STA COM lifetime, exact `.tmconfig`, `.tmbackup`, and `.tmbackup.age` filters/defaults,
+filesystem/path/no-link/no-working-directory-change flags, strict non-mutating Save
+selection, required active-window ownership, and explicit `ERROR_CANCELLED`. The native
+selector is thread-affine instead of a `Send`/`Sync` worker service.
+The returned COM path is copied only into transient platform memory and freed before
+the selection call returns.
+
+The public selector returns only selected, cancelled, or a fixed error. Selected input
+is already open with final-component no-follow semantics, bounded, regular, and single-
+link. Selected output retains the parent identity and target absence/opaque identity,
+rechecks them before stage/publication, and on Windows pins one adjacent create-new
+bounded stage with an exact delete-capable cleanup handle. Existing replace captures the
+displaced
+target, checks its physical identity after the syscall boundary, rolls back a raced
+replacement, reverifies the new identity/bytes, and deletes old bytes last. An existing
+export remains byte-for-byte untouched until publication; changed identity,
+wrong extension, remote/device/mapped-remote parent, directory, reparse/symlink,
+hard-link, invalid/bound-exceeding Unicode child, and oversize input all fail closed.
+Capabilities and `Debug` expose no path, filename, raw file, shell, or process.
+
+The deterministic controlled selector provides the same capability contract for tests
+and unsupported hosts without a path callback or queue. Focused evidence passes file-
+dialog 11/11, 19 platform unit tests including five deterministic replacement/rollback/
+displaced-evidence/cleanup-namespace races, every platform integration/resource/
+process-death contract, strict platform Clippy, and formatting. The first independent
+review found 0 Critical / 3 Important / 1 Minor and correctly blocked the slice; those
+findings plus its later post-mutation and one-stage observations are implemented.
+Independent final rereview reports Critical/Important/Minor 0/0/0 and `Ready`.
+
+The strengthened handle cleanup made the prior encryption cleanup fault fixture no
+longer fail: a renamed open stage was now deleted by its physical handle as intended.
+The fixture was corrected to add a second hard link to the same stage, restoring genuine
+cleanup ambiguity and the required `RecoveryRequired` result. Focused encryption 7/7
+then passes. One initial full workspace attempt encountered a transient parallel GNU
+linker failure; both named test targets passed immediately when run sequentially. The
+next complete locked workspace test/doctest suite passes in approximately 473 seconds.
+Clean-root, formatting/diff, warnings-as-errors locked workspace Clippy, MSVC all-target
+platform check, release application composition, application 38/38 and reliable-state
+55/55 authority mutations also pass. Application/UI binding and interactive Windows
+evidence remain Task 15 work; no product or release acceptance is claimed.

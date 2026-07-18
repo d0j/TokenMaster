@@ -1125,7 +1125,7 @@ state and path-private. The first real binding runs manual backup through the ex
 atomic maintenance receipt wait off the Slint thread while keeping the current bundle
 generation stable. Clean publication now also requires the operation worker to join.
 
-Sealed config operations are implemented below the native-file/UI boundary. A separate
+Sealed config operations are implemented below the application/UI boundary. A separate
 2 MiB encoded `.tmconfig` ceiling fails before parsing. Export writes portable settings
 to an already controlled create-new target and reread-verifies the published package.
 Import fully verifies an already open reader, retains one typed base-bound preview with
@@ -1139,10 +1139,31 @@ Critical/Important/Minor 0/0/0 and `Ready`; the authenticated live Codex contrac
 intentionally ignored without explicit environment binding. This is developer evidence,
 not product or release acceptance.
 
-Task 12B.2b remains open for native-file/UI config preview-confirm binding, verify and
+Task 12B.2b remains open for application/UI config preview-confirm binding, verify and
 selected-restore/rebuild command execution, complete cancellation propagation, and
 authoritative Codex reconstruction when no backup is usable.
 Data & Recovery UI and new release acceptance evidence also do not exist yet.
+
+Task 14 sealed native file selection is implemented below that application/UI boundary.
+`tokenmaster-platform` uses the existing pinned Windows bindings for the Common Item
+Dialog, exact `.tmconfig`/`.tmbackup`/`.tmbackup.age` filters, balanced STA COM lifetime,
+and explicit user-cancel classification. Selection returns only an already open bounded
+single-link no-follow input or an output capability bound to absent/existing physical
+identity plus the selected parent's physical identity. Windows output retains an exact
+cleanup handle, writes a bounded create-new adjacent stage, and leaves an existing target
+untouched until sealed atomic publication. Existing replace captures and validates the
+displaced target, rolls back post-check identity drift, and deletes old bytes only after
+the new identity/bytes verify. Local/reparse/hard-link/type/extension/path/size and
+selection-drift failures are stable and path-private; the deterministic selector supports
+tests and unsupported hosts. The native selector is thread-affine and requires an active
+owner. File-dialog 11/11, the 19-test platform unit set including five new race/recovery
+contracts, full platform tests, and strict platform Clippy pass. Application binding and
+interactive Windows evidence remain open. Independent final rereview reports Critical/
+Important/Minor 0/0/0 and `Ready`. Clean-root, formatting/diff, warnings-as-errors
+locked workspace Clippy, release application composition, application 38/38 and reliable-
+state 55/55 authority mutations, and the complete locked workspace test/doctest suite
+in approximately 473 seconds pass. Interactive behavior and release acceptance remain
+unclaimed.
 
 Task 12A focused store backup 8/8 and adversarial 10/10, catalog 6/6, maintenance
 19/19, state bootstrap 13/13, app 6 unit plus 7 integration, application authority
@@ -1158,8 +1179,9 @@ zero polling/arbitrary-root/forbidden-string surface, and one release artifact.
 ## Next implementation slice
 
 Continue P3-D.0 Task 12B.2b from
-`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: add sealed native-file
-selection and bind config preview/confirm to the implemented worker, then bind verify,
+`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: bind the implemented
+sealed native selectors and config preview/confirm to the operation worker/UI without
+blocking Slint, then bind verify,
 selected restore, rebuild, cancellation/retry, and authoritative no-backup
 reconstruction over the Task 12A/12B.1/12B.2a/12B.2b.1 boundaries.
 

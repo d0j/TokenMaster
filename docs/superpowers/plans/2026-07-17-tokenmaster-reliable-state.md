@@ -830,7 +830,7 @@ joined old owners, journaled replacement, immediate run-session receipt binding,
 restored-legacy pre/post-migration gates, and one fresh bundle or safe mode. Task
 12B.2b.1 adds one joined capacity-one operation worker, real manual-backup execution,
 the 2 MiB config codec ceiling, sealed create-new/reread export, and base-bound typed
-import preview/commit. Task 12B.2b retains native-file/UI config binding, actual verify/
+import preview/commit. Task 12B.2b retains application/UI config binding, actual verify/
 restore/rebuild/retry/cancel bindings, and no-backup reconstruction in
 items 5-9 and 13. This status is implementation truth, not release acceptance.
 
@@ -959,6 +959,16 @@ cargo +1.97.0 test -p tokenmaster-product --locked
 ---
 
 ## Task 14 — Add sealed native import/export file selection
+
+**Status:** Implemented below the application/UI boundary. The Windows Common Item
+Dialog and deterministic controlled selector return only a bounded opened input or an
+identity-bound staged output with exact type, no-follow/parent/link/type/path/size
+validation and stable selected/cancelled/error outcomes. Existing replace captures and
+post-checks displaced identity, rolls back a raced target, and retains Windows handle-
+bound stage cleanup. The native selector is thread-affine and requires an active owner.
+Task 15 still
+owns application invocation, post-selection worker dispatch, visible preview/confirm,
+and interactive Windows evidence.
 
 **Files:**
 

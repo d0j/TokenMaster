@@ -961,7 +961,7 @@ migration protocol; direct current-bundle start is forbidden. Catalog mutex owne
 MUST NOT span online snapshot, package verification, recovery, or migration I/O. Any
 stale selection, changed bytes, failed safety point, receipt conflict, or ambiguous
 lifecycle leaves admission resumed only into safe mode with no archive owner. Task
-12B.2b still owns native-file authority, remaining command bindings, reconstruction,
+12B.2b still owns application/UI native-file binding, remaining command bindings, reconstruction,
 and resource/release closure.
 
 Implemented Task 12B.2b.1 owns one operation thread with no async runtime, per-command
@@ -983,8 +983,44 @@ create-new only, uses a 2 MiB stage, and rereads the published file through the 
 codec. An occupied target is preserved. Config import fully consumes and verifies an
 already open bounded reader before preview, retains no reader/path/raw bytes, and commits
 only the retained typed candidate against the previewed base identity. Device-local
-settings never enter the package or preview and remain unchanged. Native file dialogs
-are not implemented by this slice and no UI filesystem authority is claimed.
+settings never enter the package or preview and remain unchanged.
+
+Task 14 implements native file selection only inside `tokenmaster-platform`. Windows
+uses the in-process Common Item Dialog in a balanced STA COM lifetime with exact typed
+filters, filesystem-only/path-must-exist/no-link/no-working-directory-change flags,
+strict save types, no test-file creation, and distinct `ERROR_CANCELLED` handling. It
+does not invoke Explorer, shell, PowerShell, `cmd`, browser, network, or another process.
+Every returned path is transient, length-bounded, split into one canonical validated
+local parent plus one bounded Unicode child, and rejected for remote/device/mapped-
+remote namespace, directory, symlink/reparse, hard link, wrong suffix, or oversized
+input before a capability leaves platform. Final-component input opens use no-follow
+Windows handle semantics and repeat the selected parent's physical-identity check after
+open. `NativeFileDialog` is deliberately thread-affine, requires a current active owner,
+and fails unavailable instead of running COM from an arbitrary worker or producing an
+unowned dialog.
+
+Input leaves platform only as an already open bounded reader. Output is bound to target
+absence or opaque physical identity at selection, rechecks before stage and publication,
+uses an adjacent create-new bounded stage, and does not truncate existing bytes before
+the candidate is sealed. One selected output capability can successfully grant only one
+stage over its complete lifetime. On Windows, a delete-capable retained handle pins
+exact stage cleanup.
+Existing replacement atomically captures the displaced path, checks that physical
+identity after the replace boundary, rolls back a raced target, and deletes displaced
+bytes only after the published identity and complete bytes verify. Ambiguous rollback
+retains recovery evidence. Public results and `Debug` expose only selected/cancelled/
+stable-error. The synchronous platform primitive is not yet bound to Slint, so active-
+owner invocation, post-selection worker dispatch, and interactive acceptance are not
+yet evidenced as application behavior.
+
+The displaced-target protocol closes a single replacement between precheck and native
+publication without expanding the repository-wide same-user threat boundary. Malicious
+code repeatedly mutating the namespace under the same user token can still force
+`RecoveryRequired` and retained evidence; it is not claimed to be contained or out-raced.
+Native selection is unavailable on Unix in Task 14. The deterministic controlled
+selector there revalidates parent/file identity before path deletion, but hostile
+same-user unlink-after-check resistance remains a portability hardening gate before a
+future Unix native selector may claim equivalent cleanup behavior.
 
 Optional manual password protection uses the implemented standard age v1 stream with
 fixed bounded scrypt work and never stores the passphrase. New passphrases are

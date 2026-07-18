@@ -680,6 +680,21 @@ settings, and publishes through the existing redundant settings record. Export r
 contain only creation time and package byte count; package and durable receipts remain
 redacted capabilities.
 
+Task 14 native selection retains no history. One input capability owns only its open
+bounded reader. One output capability owns one private target descriptor plus either
+`Absent` or one opaque physical identity; it may additionally own one adjacent bounded
+create-new stage while an export is in progress. During existing-target publication,
+one adjacent displaced file is retained only until the new file is identity/byte-
+verified; ambiguity retains it as recovery evidence instead of deleting it. On Windows,
+a stage owns one delete-capable cleanup handle, not a path-only cleanup promise. Unix
+controlled-selection cleanup retains an open identity and revalidates the namespace but
+does not claim containment of a hostile same-user unlink race. Selected path/name and
+COM result
+strings are transient platform-only values and never enter config/package bytes,
+settings preview, archive, logs, diagnostics, errors, `Debug`, Product, Desktop, or
+future CLI/MCP. A deterministic controlled selector retains one redacted target or one
+cancelled/stable-failure value, never a queue.
+
 The wire format contains no filenames, paths, links, permissions, devices,
 credentials, prompts, responses, reasoning, commands, output, source content, or raw
 provider data. Implemented optional manual protection wraps only the exact

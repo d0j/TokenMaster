@@ -1488,3 +1488,49 @@ constant-state coordinator inside one joined worker keeps memory independent of 
 count, provides a single shutdown barrier, and lets later sealed native-file, verify,
 restore, and rebuild capabilities attach without changing the UI intent contract.
 Task 12B.2b still owns those remaining bindings and no-backup reconstruction.
+
+## ADR-062 — Keep native file selection sealed inside platform capabilities
+
+Decision: Task 14 uses the existing pinned `windows = 0.62.2` bindings for the Windows
+Common Item Dialog instead of adding `rfd`, a webview, a shell command, or an Explorer
+child. `NativeFileDialog` initializes the calling thread as STA, balances every
+successful COM initialization, installs one exact file filter/default extension, keeps
+the working directory unchanged, requests filesystem/non-link results, distinguishes
+user cancellation from failure, copies the returned path into transient platform-owned
+memory, and frees the COM allocation. It is deliberately `!Send`/`!Sync`, requires an
+active current-thread owner, and fails unavailable instead of moving COM to an arbitrary
+worker or showing an unowned dialog. Unsupported native hosts return one stable
+unavailable result; `ControlledFileDialog` supplies a deterministic capability-only
+selector without a path callback or queue.
+
+The public boundary has three fixed file kinds and one generic result with only
+selected/cancelled/stable-failure states. Selected input is already opened, regular,
+single-link, and caller-size-bounded. Selected output records target absence or opaque
+physical identity, creates only one bounded adjacent stage, rechecks selection state
+before stage/publication, and publishes only a sealed candidate through atomic
+create-new or replace. Input uses a final-component no-follow open and selected-parent
+physical binding. Windows stage cleanup remains bound to a retained delete-capable
+handle.
+Existing replace captures the displaced target, validates its physical identity after
+the syscall boundary, rolls back concurrent identity drift, revalidates the published
+identity/bytes, and only then deletes the old target; ambiguity preserves recovery
+evidence. Existing target bytes are never opened for truncating writes.
+Unicode child names are accepted under fixed UTF-16/path bounds; invalid suffix,
+remote/device/mapped-remote parent, linked/reparse/hard-linked target, directory,
+capacity excess, and observed identity drift fail closed. Every capability/error/
+`Debug` is path-private and nothing is persisted.
+
+Rationale: a raw `PathBuf`, generic `File`, or callback returning a path would move
+filesystem authority into app/Desktop/CLI and make later plugin confinement impossible.
+Writing directly to the Save-dialog result would let cancellation, codec failure, or
+process death truncate the user's prior export. A new cross-platform dialog dependency
+would expand supply chain and renderer/event-loop behavior without improving the
+Windows-first contract. The synchronous platform primitive is intentionally not a UI
+binding: Task 15 must invoke selection on the owning Slint/STA thread, then dispatch
+only its sealed capability to bounded operation work; interactive acceptance must be
+recorded separately.
+
+This decision does not claim equivalent hostile-race cleanup on Unix. Native selection
+is unavailable there; the controlled selector remains deterministic and fail-closed on
+observed identity drift, while conditional handle/directory-relative deletion is a
+portability gate before enabling a future Unix native selector.

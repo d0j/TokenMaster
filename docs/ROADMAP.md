@@ -127,7 +127,7 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   deterministic bounded retention, capacity-one maintenance, and sealed journaled
   recovery/quarantine, application backup/migration ownership, bounded command/restart,
   identity-pinned selected restore, one joined operation worker/manual-backup binding,
-  and sealed config core are complete; native-file/UI config binding, verify/rebuild/
+  and sealed config core are complete; application/UI config binding, verify/rebuild/
   no-backup reconstruction, then Data & Recovery controls remain. Full history,
   sessions, models, projects, activity, remaining health/notifications/settings/help,
   command palette, tray, and compact widget then remain P3-D-P3-E.
@@ -167,8 +167,9 @@ identity-free six-section projection and responsive compiled Slint Dashboard wit
 navigation without model/window reconstruction. P3-D.0 Reliable State Tasks 1-11A,
 Task 12A application backup/migration composition, and the Task 12B.1 bounded command/
 generation-safe current-bundle restart foundation and Task 12B.2a identity-pinned
-selected-restore lifecycle and Task 12B.2b.1 joined worker/manual-backup/config core are
-implemented; the remaining Task 12B.2b native-file/UI config binding, verify/rebuild,
+selected-restore lifecycle, Task 12B.2b.1 joined worker/manual-backup/config core, and
+Task 14 sealed native file-dialog backend are implemented; the remaining Task 12B.2b
+application/UI config binding, verify/rebuild,
 and no-backup reconstruction are next, then the remaining P3-D
 supporting data views.
 
@@ -214,8 +215,11 @@ selection revalidation, one deletion-serialized RAII identity pin, protected
 `PreRestore`, journaled selected replacement, recovery receipt acceptance, and repeated
 legacy migration gates. Task 12B.2b.1 adds the one joined capacity-one operation worker,
 off-UI manual-backup command, 2 MiB typed config ceiling, create-new verified export,
-and base-bound device-preserving import preview/commit. The remaining Task 12B.2b owns
-native-file/UI bindings, verify/selected-restore/rebuild execution, complete cancellation
+and base-bound device-preserving import preview/commit. Task 14 adds the existing-
+dependency Windows Common Item Dialog backend, exact config/backup/encrypted filters,
+already-open bounded input, identity-bound create/replace output, deterministic
+controlled selection, and path-private stable outcomes. The remaining Task 12B.2b owns
+application/UI dialog bindings, verify/selected-restore/rebuild execution, complete cancellation
 propagation, and provider-backed no-backup rebuild. These slices add no
 path, generic stream, SQL, or batch-deletion authority.
 

@@ -111,6 +111,12 @@ impl ControlledRoot {
         let stage_path = stages[0].path();
         let held_path = self.directory.as_path().join("held-stage-bytes");
         std::fs::rename(&stage_path, held_path).expect("move open stage fixture");
+        let linked_path = self.directory.as_path().join("linked-stage-bytes");
+        std::fs::hard_link(
+            self.directory.as_path().join("held-stage-bytes"),
+            linked_path,
+        )
+        .expect("make exact stage cleanup identity ambiguous");
         std::fs::create_dir(&stage_path).expect("replace stage path with directory");
         std::fs::write(stage_path.join("blocker"), b"not removable as a file")
             .expect("make replacement directory nonempty");

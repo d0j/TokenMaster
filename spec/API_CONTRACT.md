@@ -718,6 +718,23 @@ phase/progress, settings-preview, and at most 15 catalog-generation-bound ordina
 choices; they receive no path, file handle, SQLite connection, package digest,
 recovery journal, or mutation capability.
 
+Implemented Task 14 exposes only `FileDialogSelector::select_input` and
+`select_output` over fixed `Config`/`Backup`/`EncryptedBackup` types. A result is exactly
+`Selected`, `Cancelled`, or `Failed(FileDialogError)` with a fixed path-private code.
+Native selection uses the Windows Common Item Dialog directly; the controlled selector
+accepts one already validated local directory plus one bounded child for deterministic
+tests and unsupported hosts. Selected input owns an already open, size-capped, regular,
+single-link `DurableFileReader`. Selected output exposes only one successful bounded
+stage creation over its complete lifetime, selection-current publication, and bounded
+reread. It records absent or opaque physical
+identity at selection; create-new/replace publication rechecks that state and never
+opens the selected target for truncating writes. Existing replacement captures and
+identity-checks the displaced target, restores a raced target before returning
+`selection_changed`, and retains recovery evidence if rollback becomes ambiguous.
+`NativeFileDialog` is thread-affine and requires a current active owner; it is not a
+`Send`/`Sync` worker service. Neither capability exposes a path, filename, generic file/
+stream, arbitrary child constructor, shell, or process.
+
 Manual restore requires a typed selected candidate, current catalog/preview identity,
 an explicit data-only or data-plus-portable-settings mode, and a second explicit
 confirmation. Device-local settings are never an input. Cancellation is valid only

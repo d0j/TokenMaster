@@ -602,7 +602,22 @@ shutdown remain fixed and path-private. Manual backup is the first production bi
 and waits on the existing maintenance receipt off the Slint thread while the bundle is
 stable. Config export/import is implemented over already sealed targets/readers with a
 2 MiB encoded ceiling, create-new plus reread-verified export, base-bound bounded preview,
-and device-preserving atomic confirm. Native file selection and UI binding do not exist.
+and device-preserving atomic confirm. Task 14 now adds the platform-only Windows Common
+Item Dialog and deterministic selector: exact typed filters return only an already open
+bounded no-follow input or parent/target-identity-bound staged output, while cancellation/
+errors/Debug remain path-private. On Windows a retained exact cleanup handle pins the
+stage;
+existing replacement captures and validates displaced identity after the syscall,
+rolls back a raced target, and deletes old bytes only after new identity/byte proof.
+The native selector is thread-affine and requires an active owner. File-dialog 11/11,
+19 platform unit tests including five deterministic race/recovery additions, full
+platform tests, and strict platform Clippy pass. Application/UI binding and interactive
+Windows evidence do not yet exist. Independent final Task 14 rereview reports Critical/
+Important/Minor 0/0/0 and `Ready`. Clean-root, formatting/diff, strict locked workspace
+Clippy, MSVC platform check, release composition, application 38/38 and reliable-state
+55/55 mutations, focused encryption 7/7, and the complete locked workspace test/doctest
+suite in approximately 473 seconds pass. Interactive behavior and release acceptance
+remain unclaimed.
 Focused worker 9/9, config 2/2, package 6/6, app 25 unit plus 7 integration, strict
 focused Clippy, and application policy 38/38 pass. Clean-root, formatting/diff, strict
 locked workspace Clippy, the complete locked workspace test/doctest suite in 502.1
@@ -611,8 +626,9 @@ final review reports Critical/Important/Minor 0/0/0 and `Ready`. The live-auth C
 contract remains intentionally ignored without explicit environment binding. This is
 developer evidence, not product or release acceptance.
 
-The immediate next slice remains Task 12B.2b: sealed native-file config preview/confirm
-binding, then verify, selected restore, rebuild, retry/cancel propagation, and provider-
+The immediate next slice remains Task 12B.2b: bind the sealed native config selector and
+preview/confirm to the operation worker/UI without blocking Slint, then verify, selected
+restore, rebuild, retry/cancel propagation, and provider-
 backed fresh reconstruction when no backup is usable. Then continue Tasks 13-18 in
 order: health/product projection, Data & Recovery UI, adversarial/resource/release
 closure. Keep the fixed archive path and

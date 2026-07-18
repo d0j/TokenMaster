@@ -177,7 +177,7 @@ no-delete admission; after exact publication/bind, each deletion revalidates the
 current verified set plus exact target and removes only one write-through tombstoned
 file before rebuild/replan. Later state tasks add typed run/recovery stores and one
 capacity-one maintenance worker.
-`tokenmaster-platform` owns durable replacement and will later own sealed file dialogs.
+`tokenmaster-platform` owns durable replacement and now owns sealed file dialogs.
 `tokenmaster-app` now owns bootstrap, migration safety, selected journaled restore, and
 one joined bounded operation worker in addition to the replaceable backend bundle. The
 worker embeds the sole fixed command coordinator, one capacity-one wake, one latest-only
@@ -189,9 +189,20 @@ run publication.
 Application config export/import is already sequenced over platform-owned controlled
 targets/readers and state-owned typed packages/settings: create-new export is reread-
 verified, import retains one bounded category/count preview, and confirm preserves
-device-local settings. Native file selection and UI preview/confirm binding remain open,
-so no UI filesystem authority is claimed. Product/Desktop continue to receive only
-bounded health and intents. Automatic recovery remains data only; remaining verify/
+device-local settings. Task 14 adds a synchronous lower-level Windows Common Item Dialog
+backend plus a deterministic controlled selector. Exact typed filters produce only an
+already open no-follow bounded input or an identity-bound staged output. The selected
+parent is bound by physical identity; on Windows a retained delete-capable stage handle
+pins cleanup.
+Existing-target publication captures the displaced file, validates its selection-time
+identity, rolls back a raced replacement, and deletes old bytes only after the new file
+is reverified. The thread-affine native selector requires an active owner and cannot be
+sent to a worker. Paths remain private to platform and every result is selected/
+cancelled/stable-error. Application worker dispatch after selection, UI preview/confirm,
+and interactive Windows binding remain open, so no UI filesystem authority or
+interactive acceptance is claimed. Product/
+Desktop continue to receive only bounded health and intents. Automatic recovery remains
+data only; remaining verify/
 restore/rebuild command bindings and no-backup reconstruction stay inside Task 12B.2b.
 
 The built-in live quota source is separate from the JSONL usage reader. Composition

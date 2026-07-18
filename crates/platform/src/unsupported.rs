@@ -13,6 +13,25 @@ pub(super) fn platform_identity(
     Err(PhysicalIdentityError::Unavailable)
 }
 
+pub(super) fn create_stage_file(_path: &Path) -> std::io::Result<File> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "unsupported platform",
+    ))
+}
+
+pub(super) fn open_regular_no_follow(_path: &Path) -> Result<File, DurableFileError> {
+    Err(DurableFileError::UnsupportedLocation)
+}
+
+pub(super) fn open_regular_for_delete_no_follow(_path: &Path) -> Result<File, DurableFileError> {
+    Err(DurableFileError::UnsupportedLocation)
+}
+
+pub(super) fn directory_identity(_path: &Path) -> Result<PhysicalFileIdentity, DurableFileError> {
+    Err(DurableFileError::UnsupportedLocation)
+}
+
 pub(super) fn move_file_write_through(
     _source: &Path,
     _target: &Path,

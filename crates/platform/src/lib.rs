@@ -7,6 +7,7 @@ use std::fs::File;
 mod archive_recovery;
 mod backup_directory;
 mod durable_file;
+mod file_dialog;
 mod lease;
 mod local_directory;
 mod power;
@@ -30,6 +31,10 @@ pub use backup_directory::{
 pub use durable_file::{
     DURABLE_STAGE_ATTEMPTS, DurableFileError, DurableFileReader, DurableFileReceipt,
     DurableFileTarget, DurableStagedFile, MAX_DURABLE_FILE_BYTES, MAX_DURABLE_WRITE_CHUNK_BYTES,
+};
+pub use file_dialog::{
+    ControlledFileDialog, FileDialogError, FileDialogErrorCode, FileDialogFileType,
+    FileDialogResult, FileDialogSelector, NativeFileDialog, SelectedInputFile, SelectedOutputFile,
 };
 pub use lease::{
     ExclusiveFileLease, ExclusiveFileLeaseError, ExclusiveFileLeaseGuard, WRITER_LEASE_SUFFIX,
