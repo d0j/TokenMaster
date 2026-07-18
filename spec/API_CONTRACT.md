@@ -379,6 +379,20 @@ replaces the seven Slint list models once. Route
 callbacks call the route-only projection path; they cannot rebuild Dashboard lists,
 invoke the query facade, create a timer, or recreate `MainWindow`.
 
+`UsageRange::recent_days(day_count)` is the bounded default-history request and rejects
+zero or more than 400 days. `DesktopQueryPlan` owns one fixed 30-day daily History
+request alongside the today-only Dashboard request. Both execute sequentially on the
+existing capacity-one query worker; History success/failure publishes only the
+independent product History section, and cancellation or deadline still discards the
+entire unpublished attempt.
+
+`DesktopHistoryProjection::from_snapshot` is the sole product-to-History mapping. It
+copies one overview, exact resolved range/timezone/evidence, and at most 30 daily rows
+newest-first. `apply_projection` replaces the single History Slint model only on
+initial construction or an accepted newer product generation. The History route
+callback remains route-only and cannot query, allocate a prior-range cache, create a
+timer/worker, or recreate `MainWindow`.
+
 `CodexAppServerCommand` accepts one already resolved absolute native executable path.
 The path must name a regular non-reparse file; Windows additionally requires an
 `.exe`. It is canonicalized but has no public getter and its `Debug` output is

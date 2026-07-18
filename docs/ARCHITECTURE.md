@@ -135,6 +135,15 @@ a smaller route-only path and does not reconstruct the Dashboard or window. Sema
 tokens and label keys make future skin/locale switching a presentation concern, while
 the current Dashboard remains timer-, animation-, polling-, query-, and SQL-free.
 
+P3-D.1 extends the same path with an independent History section. The query plan
+resolves one fixed recent-30-day daily request and executes it sequentially on the
+existing capacity-one worker. Product failure/retention and dataset invalidation stay
+section-local. `DesktopHistoryProjection` copies at most 30 newest-first daily rows
+plus overview/range/timezone/evidence into one Slint model. Route selection remains a
+pure in-place presentation update; there is no History timer, worker, cache, prior
+range, database handle, or private row identity. Future bounded range controls replace
+this section rather than adding query ownership to Slint.
+
 The active P3-D.0 contour adds reliable state without changing the current live archive
 identity. Task 1 establishes library-only `tokenmaster-state` with stable path-private
 errors, checked byte/item limits, exact dependencies, and a deterministic authority

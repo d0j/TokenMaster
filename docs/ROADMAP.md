@@ -131,9 +131,11 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   no-backup reconstruction, bounded Data & Recovery/Settings controls, exhaustive
   package/WAL-SHM adversarial closure, package privacy/dependency/license audit,
   deterministic backup performance, repeated resource return, exact disk plateau,
-  spanning backup/UI latency, and clean-identity developer acceptance are complete. Full history,
-  sessions, models, projects, activity, remaining health/notifications/settings/help,
-  command palette, tray, and compact widget then remain P3-D-P3-E.
+  spanning backup/UI latency, and clean-identity developer acceptance are complete.
+  P3-D.1 History is complete with an independent exact recent-30-day section, one
+  existing-worker request, bounded newest-first projection, and responsive real view.
+  Sessions/detail, models, projects, activity, remaining notifications/help, interactive
+  History ranges, command palette, tray, and compact widget remain P3-D-P3-E.
 - **P4 — presentation:** modular skins/layouts/density/scheme/locale, en/ru/pseudo,
   accessibility, DPI, reduced motion, and visible-paint/resource gates.
 - **P5 — automation:** strict bounded JSON CLI and a separate stdio MCP process for
@@ -174,8 +176,9 @@ generation-safe current-bundle restart foundation and Task 12B.2a identity-pinne
   bindings, Task 14 sealed native file-dialog backend, and Task 15 bounded Data Health/
   Settings UI plus no-backup reconstruction, and Task 16 adversarial/privacy/
   compatibility closure, Task 17 resource/performance evidence, and Task 18
-  documentation/acceptance closure are implemented. The remaining P3-D supporting data
-  views are next.
+  documentation/acceptance closure are implemented. P3-D.1 History is implemented over
+  the same immutable snapshot/controller boundary with no new worker/timer/cache. Sessions
+  plus exact detail are the next P3-D supporting data view.
 
 P3-D.0 Reliable State is approved under
 `docs/superpowers/specs/2026-07-17-tokenmaster-reliable-state-design.md` with the

@@ -706,11 +706,24 @@ mandatory release target passes unchanged. A local ignored P3-D.0 receipt is val
 when generated and identity-validated after the final documentation commit on the
 machine reproducing acceptance.
 
-The immediate next implementation slice is the remaining P3-D data-bearing routes over
-bounded keyset intents and the existing controller/snapshot boundary. Keep the fixed
-archive path and writer sidecar; never copy only the live main file or treat busy/disk/
-access/schema-newer as corruption authority. Keep automatic recovery data only;
-device-local settings never move. Do not relax the state boundary into path,
+P3-D.1 History is complete under
+`docs/superpowers/specs/2026-07-19-tokenmaster-history-route-design.md` and
+`docs/superpowers/plans/2026-07-19-tokenmaster-history-route.md`. It adds exact
+`recent_days(30)` calendar resolution, an independent product History section, one
+sequential request on the existing desktop worker, a 30-row newest-first identity-free
+projection, and a responsive real Slint overview/trend/table. Route selection remains
+query-free and reconstructs neither models nor window. No timer, worker, cache, prior
+range, dependency, database connection, or private identity was added. Focused tests,
+strict workspace Clippy, the 30/30 desktop mutation audit, release desktop audit/build,
+and the complete locked workspace test/doctest suite pass; the full suite completed in
+710.7 seconds.
+
+The immediate next implementation slice is Sessions plus exact session detail over the
+existing dataset-bound keyset APIs, then Models, Projects, and Activity. Interactive
+History range selection remains a later bounded replacement of the same product section.
+Keep the fixed archive path and writer sidecar; never copy only the live main file or
+treat busy/disk/access/schema-newer as corruption authority. Keep automatic recovery
+data only; device-local settings never move. Do not relax the state boundary into path,
 generic-stream, generic age-extraction, or batch-deletion authority.
 
 P3-E then closes remaining notifications, settings/help, command palette, tray, and
@@ -826,6 +839,8 @@ pwsh -NoProfile -File scripts\audit-desktop-shell.ps1 -RepositoryRoot (Get-Locat
 pwsh -NoProfile -File scripts\audit-application-composition.ps1 -RepositoryRoot (Get-Location).Path
 Invoke-Pester -Path scripts\tests\audit-desktop-shell.Tests.ps1,scripts\tests\audit-application-composition.Tests.ps1 -Output Detailed
 cargo +1.97.0 test -p tokenmaster-desktop --test dashboard_projection_contract --locked
+cargo +1.97.0 test -p tokenmaster-query --test recent_history_contract --locked
+cargo +1.97.0 test -p tokenmaster-desktop --test history_projection_contract --locked
 cargo +1.97.0 test -p tokenmaster-desktop --test ui_contract --locked
 cargo +1.97.0 test -p tokenmaster-desktop --test bridge_event_loop_contract --locked
 cargo +1.97.0 test -p tokenmaster-desktop --locked

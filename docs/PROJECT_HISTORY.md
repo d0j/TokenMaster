@@ -3170,3 +3170,29 @@ formatting, strict warnings-as-errors workspace Clippy, the complete locked work
 test plus doctest gate in 665.4 seconds, and the GNU release application build pass on
 the closure tree. The known upstream `proc-macro-error2 2.0.1` future-incompatibility
 warning remains non-fatal and unchanged.
+
+## 2026-07-19 — P3-D.1 bounded History route
+
+After a product-priority audit, development returned from infrastructure-heavy work to
+the first visible supporting data route. The selected slice deliberately did not reuse
+the today-only Dashboard payload and did not introduce the final mutable range scheduler.
+Instead, `UsageRange::recent_days` resolves an exact 1-through-400-day civil range;
+the production plan requests the latest 30 days with daily points and no breakdowns.
+
+The product reducer now publishes History independently from Dashboard analytics and
+invalidates it with dataset identity. The existing capacity-one controller executes the
+second request sequentially, preserving complete-attempt cancellation/deadline rules.
+Desktop copies one overview plus at most 30 newest-first rows, exact range/timezone,
+freshness, quality, and stable reasons. The compiled responsive Slint view renders a
+header, overview metrics, daily trend, and wide/narrow detail table without query-time
+route behavior, another thread, timer, cache, connection, dependency, or private ID.
+
+TDD first proved the missing recent-range, product section, second query, projection,
+and UI contracts. Focused query/product/controller/desktop/UI tests pass. The desktop
+audit was extended from its prior fixed file count to exact 9 Rust/15 Slint boundaries,
+one History model/application path, 30-day cap, and zero added polling/private-ID/
+authority surfaces; all 30 mutation cases and the release audit/build pass. Clean-root,
+formatting, strict warnings-as-errors workspace Clippy, and the complete locked workspace
+test/doctest suite pass in 710.7 seconds. Interactive arbitrary ranges, Sessions/detail,
+remaining supporting routes, P4 presentation, release evidence, packaging, signing, and
+product release remain open.

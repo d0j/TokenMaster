@@ -175,6 +175,14 @@ Dashboard rebuilds, and a second worker/snapshot/event site. Slint still receive
 SQL, store, query service, runtime, filesystem, network, process, browser, shell, or
 credential authority.
 
+P3-D.1 adds one independent owned History projection and one 30-row Slint model. It
+contains only civil dates, aggregate counts, typed token/cost values, resolved timezone,
+freshness, quality, and stable reasons. It contains no raw session/event/account/
+workspace/project/source identity, absolute path, cursor, SQL, prompt, response,
+reasoning content, command, or credential. Route selection remains presentation-only;
+the existing query worker performs the fixed bounded request during refresh and owns
+no History cache or snapshot history.
+
 Providers emit bounded observation/session-relation drafts only. They cannot create
 event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or
 canonical events. Those values are created only by TokenMaster accounting code. Store

@@ -40,8 +40,8 @@ if ($productionManifestText -match '\btokenmaster-(store|provider|runtime|codex|
 $rustFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.rs')
 $uiFiles = @(Get-ChildItem -LiteralPath $uiRoot -Recurse -File -Filter '*.slint')
 $productionFiles = @($rustFiles + $uiFiles)
-if ($rustFiles.Count -ne 8 -or $uiFiles.Count -ne 14) {
-    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain eight Rust and fourteen Slint files'
+if ($rustFiles.Count -ne 9 -or $uiFiles.Count -ne 15) {
+    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain nine Rust and fifteen Slint files'
 }
 $uiText = ($uiFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
@@ -183,6 +183,27 @@ $dashboardProjectionCallCount = [regex]::Matches($uiRustText, 'apply_dashboard_p
 if ($dashboardProjectionCallCount -ne 2) {
     throw 'TM-DESKTOP-DASHBOARD-REBUILD: dashboard models must not rebuild during route-only selection'
 }
+$historyPath = Join-Path $sourceRoot 'history.rs'
+$historyText = [System.IO.File]::ReadAllText($historyPath)
+if ($historyText -notmatch 'pub const MAX_HISTORY_DAYS: usize = 30;' -or
+    $historyText -notmatch '\.take\(MAX_HISTORY_DAYS\)') {
+    throw 'TM-DESKTOP-HISTORY-BOUND: history projection must retain at most thirty daily rows'
+}
+if ($controllerText -notmatch 'pub const HISTORY_DAYS: u16 = 30;' -or
+    $controllerText -notmatch 'UsageRange::recent_days\(Self::HISTORY_DAYS\)') {
+    throw 'TM-DESKTOP-HISTORY-REQUEST: history query must remain one fixed bounded recent-days request'
+}
+$historyProjectionCallCount = [regex]::Matches($uiRustText, 'apply_history_projection\(').Count
+if ($historyProjectionCallCount -ne 2) {
+    throw 'TM-DESKTOP-HISTORY-REBUILD: history models must not rebuild during route-only selection'
+}
+$historyModelReplacementCount = [regex]::Matches(
+    $uiRustText,
+    'set_history_day_rows\(model\(rows\)\)'
+).Count
+if ($historyModelReplacementCount -ne 1) {
+    throw 'TM-DESKTOP-HISTORY-MODEL: history must have one bounded model replacement site'
+}
 $reliableStatePath = Join-Path $sourceRoot 'reliable_state.rs'
 $reliableStateText = [System.IO.File]::ReadAllText($reliableStatePath)
 if ($reliableStateText -notmatch 'pub const MAX_DESKTOP_RESTORE_POINTS: usize = 15;' -or
@@ -303,6 +324,10 @@ if ($SourceOnly) {
         dashboard_model_replacement_count = $dashboardModelReplacementCount
         dashboard_projection_application_count = $dashboardProjectionCallCount - 1
         dashboard_polling_surface_count = 0
+        history_day_maximum = 30
+        history_model_replacement_count = $historyModelReplacementCount
+        history_projection_application_count = $historyProjectionCallCount - 1
+        history_polling_surface_count = 0
         restore_point_maximum = 15
         restore_model_replacement_count = $restoreModelReplacementCount
         secret_model_count = 0
@@ -376,6 +401,10 @@ if ($LASTEXITCODE -ne 0) {
     dashboard_model_replacement_count = $dashboardModelReplacementCount
     dashboard_projection_application_count = $dashboardProjectionCallCount - 1
     dashboard_polling_surface_count = 0
+    history_day_maximum = 30
+    history_model_replacement_count = $historyModelReplacementCount
+    history_projection_application_count = $historyProjectionCallCount - 1
+    history_polling_surface_count = 0
     restore_point_maximum = 15
     restore_model_replacement_count = $restoreModelReplacementCount
     secret_model_count = 0

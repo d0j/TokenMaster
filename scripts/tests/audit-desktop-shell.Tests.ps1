@@ -156,6 +156,19 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-DASHBOARD-BOUND*"
     }
 
+    It "rejects history presentation-bound drift" {
+        $fixture = New-DesktopAuditFixture -Name "history-bound"
+        $path = Join-Path $fixture "crates\desktop\src\history.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'pub const MAX_HISTORY_DAYS: usize = 30;',
+            'pub const MAX_HISTORY_DAYS: usize = 300;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-BOUND*"
+    }
+
     It "rejects restore-point presentation-bound drift" {
         $fixture = New-DesktopAuditFixture -Name "restore-bound"
         $path = Join-Path $fixture "crates\desktop\src\reliable_state.rs"
@@ -228,6 +241,19 @@ Describe "TokenMaster production desktop audit" {
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-DASHBOARD-REBUILD*"
+    }
+
+    It "rejects history model rebuilding from route selection" {
+        $fixture = New-DesktopAuditFixture -Name "route-history-rebuild"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'apply_route_projection(&window, state.projection());',
+            "apply_route_projection(&window, state.projection());`r`n            apply_history_projection(&window, state.projection().history());"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-REBUILD*"
     }
 
     It "rejects a second event-loop scheduling site" {
@@ -305,14 +331,17 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-CONTROLLER-SLOT*"
     }
 
-    It "accepts the library-only bounded dashboard desktop boundary" {
+    It "accepts the library-only bounded dashboard and history desktop boundary" {
         $fixture = New-DesktopAuditFixture -Name "library-boundary"
 
         $receipt = & $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json
-        $receipt.rust_source_file_count | Should -Be 8
-        $receipt.slint_source_file_count | Should -Be 14
+        $receipt.rust_source_file_count | Should -Be 9
+        $receipt.slint_source_file_count | Should -Be 15
         $receipt.dashboard_section_count | Should -Be 6
         $receipt.dashboard_model_replacement_count | Should -Be 7
+        $receipt.history_day_maximum | Should -Be 30
+        $receipt.history_model_replacement_count | Should -Be 1
+        $receipt.history_projection_application_count | Should -Be 1
         $receipt.restore_point_maximum | Should -Be 15
         $receipt.restore_model_replacement_count | Should -Be 1
         $receipt.secret_model_count | Should -Be 0

@@ -47,6 +47,14 @@ sessions, models, projects, activity, data health, notifications, settings, agen
 help, command palette, and compact-widget views. Users MUST be able to reorder, hide,
 and collapse board sections without data loss.
 
+The default History route MUST show the latest 30 resolved civil days as an exact
+half-open analytics request, daily newest-first rows, range and timezone context,
+overview tokens/cost/events, and evidence freshness/quality. Empty days MUST preserve
+unavailable token components and legitimate-zero cost semantics rather than fabricate
+complete zero usage. Future range controls MUST replace this bounded request through
+the same snapshot section; they MUST NOT query on route selection or retain prior
+ranges in the frontend.
+
 All data-bearing routes MUST derive from one bounded immutable product snapshot. The
 snapshot MUST distinguish refresh-attempt order from durable source revisions, retain
 the last compatible successful section when a later refresh fails, reject an older
@@ -270,6 +278,11 @@ separate from provider quota bars, credits, temporary usage, and unavailable lot
 Unknown reliable-state backup counts and byte totals MUST also render as unavailable;
 legitimate known zero values remain distinct.
 
+History MUST render a bounded daily trend plus responsive daily details. The wide
+layout shows input, cached, output, reasoning, total, cost, and event evidence; the
+narrow layout may reduce visible columns but MUST retain the same owned bounded model
+and accessible row meaning.
+
 ### TM-UI-002 — Reactive presentation boundary
 
 Skin, layout, locale, selection, and range changes MUST update bounded presentation
@@ -300,6 +313,8 @@ rows, and one checked aggregate over at most 32 repositories. An accepted produc
 generation MAY replace each bounded list model once. Route-only selection MUST NOT
 rebuild Dashboard models, recreate the window, query SQLite, or schedule background
 work. The production Dashboard MUST contain no idle animation or presentation timer.
+The current History projection MUST retain at most 30 daily rows in one model and no
+prior range, query service, timer, worker, or archive handle.
 
 ## Performance requirements
 

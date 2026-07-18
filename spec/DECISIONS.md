@@ -1608,3 +1608,25 @@ no private data, and fails closed on missing or duplicate fields. A software-ren
 paint is real Slint paint work but not physical-display or OS-input evidence. Therefore
 this receipt can close P3-D.0 only after Task 18 documentation and full workspace gates;
 it can never accept M0, packaging, signing, soak, or a product release.
+
+## ADR-065 — Ship History as an independent bounded product slice
+
+Decision: P3-D.1 introduces a separate product History analytics section rather than
+reusing the today-only Dashboard payload. Its initial request is the exact latest 30
+civil days in the positively identified system timezone, daily series, no breakdowns,
+with the existing 400-day query maximum as the future range ceiling. The request runs
+sequentially on the existing capacity-one desktop query worker and publishes/fails
+independently. Cancellation and deadline preserve complete-attempt publication.
+
+The desktop copies at most 30 rows newest-first into one identity-free projection and
+one Slint model. The view presents overview tokens/cost/events, exact display range,
+timezone, freshness/quality, trend, and responsive daily detail. Route selection does
+not query, create a worker/timer/cache, reconstruct the window, or retain prior ranges.
+Interactive ranges and pagination remain later work over the same replace-only section.
+
+Rationale: reusing Dashboard analytics would make History depend on a today-only
+request and risk misleading totals. A final mutable range scheduler now would widen
+the state machine before one real supporting route proves the complete vertical path.
+One fixed bounded request validates query, reducer, controller, projection, and UI
+contracts while preserving constant frontend memory and a direct upgrade path to
+bounded range controls.

@@ -920,6 +920,22 @@ repositories. Account, workspace, quota-window, benefit-lot, repository, project
 session, event, and source identities do not cross this boundary. A missing scalar is
 typed unavailable or partial before formatting and is not stored as a display zero.
 
+### P3-D.1 bounded History projection
+
+`UsageRange::recent_days` accepts only 1 through 400 days. Resolution samples the
+query clock once, uses the requested explicit/system IANA timezone, and produces the
+exact half-open interval `[today - (days - 1), tomorrow)`. The daily series remains
+an ordered exact partition, including civil days with no events, and therefore cannot
+silently collapse gaps or substitute UTC boundaries.
+
+The product snapshot owns a History analytics section independent from the today-only
+Dashboard analytics section. Compatible failure may retain only its own last-good
+payload as degraded; dataset-identity change invalidates it. The desktop projection
+copies at most 30 daily rows, reverses them newest-first for display, retains one
+overview and exact range/timezone/evidence facts, and owns no query service, cursor,
+archive handle, prior range, or row identity. Missing token components remain typed
+unavailable/partial and cost preserves complete/partial/unavailable/legitimate-zero.
+
 Only explicit provider ancestry identifies a parent. A strong signature covers the
 normalized model, emitted delta, and provider cumulative snapshot. A weak signature
 covers model and delta only and cannot suppress a pre-divergence event by itself.

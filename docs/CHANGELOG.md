@@ -6,6 +6,22 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.1 as the first complete supporting data route. Query now resolves
+  an exact bounded `recent_days(30)` range in the selected IANA timezone, including
+  DST-correct civil-day partitions and the existing 400-day hard ceiling.
+- Added an independent History product section and one sequential request on the
+  existing capacity-one desktop worker. Compatible failures remain section-local,
+  dataset changes invalidate stale History, and cancellation/deadline still prevent
+  partial-attempt publication.
+- Added one identity-free 30-row newest-first desktop projection and responsive compiled
+  Slint History view with overview tokens/cost/events, exact range/timezone/evidence,
+  daily trend, and wide/narrow detail tables. Route switching remains query-free and
+  adds no timer, worker, cache, prior-range history, database handle, or dependency.
+- Expanded the production desktop audit to 30 mutation contracts and exact History
+  bounds/model/application receipts. Clean-root, formatting, strict warnings-as-errors
+  workspace Clippy, release desktop audit/build, and the complete locked workspace
+  test/doctest suite pass; the full suite completed in 710.7 seconds.
+
 - Completed P3-D.0 Tasks 17-18 with a separate fail-closed Reliable State developer
   acceptance rail. New release contracts measure deterministic 8/96 MiB schema-13
   automatic/normal/compact backup throughput, fixed 64 KiB streaming and 8 MiB decoder
