@@ -37,10 +37,13 @@ impl DesktopQueryPlan {
     pub const MAX_SERIES_POINTS: usize = 240;
     pub const HISTORY_DAYS: u16 = 30;
     pub const MAX_DASHBOARD_ROWS: usize = 12;
+    pub const MAX_SESSION_ROWS: usize = 64;
     pub const MAX_REPOSITORIES: usize = 32;
 
     pub fn overview() -> Result<Self, DesktopControllerError> {
-        let page_size = PageSize::new(Self::MAX_DASHBOARD_ROWS).map_err(map_query_error)?;
+        let overview_page_size =
+            PageSize::new(Self::MAX_DASHBOARD_ROWS).map_err(map_query_error)?;
+        let session_page_size = PageSize::new(Self::MAX_SESSION_ROWS).map_err(map_query_error)?;
         let analytics = UsageAnalyticsRequest::new(
             UsageRange::today(),
             UsageTimeZone::system(),
@@ -71,13 +74,13 @@ impl DesktopQueryPlan {
             Self::MAX_REPOSITORIES,
         )
         .map_err(map_query_error)?;
-        let sessions =
-            UsageSessionPageRequest::first(page_size, Vec::new()).map_err(map_query_error)?;
+        let sessions = UsageSessionPageRequest::first(session_page_size, Vec::new())
+            .map_err(map_query_error)?;
         Ok(Self {
             analytics,
             history,
             git,
-            activity: LatestActivityRequest::first(page_size),
+            activity: LatestActivityRequest::first(overview_page_size),
             sessions,
         })
     }

@@ -137,7 +137,7 @@ impl DesktopQuerySource for UnavailableSource {
     ) -> Result<QueryEnvelope<UsageSessionPage>, QueryError> {
         assert_eq!(
             request.page_size().get(),
-            DesktopQueryPlan::MAX_DASHBOARD_ROWS
+            DesktopQueryPlan::MAX_SESSION_ROWS
         );
         self.record("sessions");
         Err(query_failure())
@@ -149,6 +149,7 @@ fn controller_contract_is_typed_bounded_and_deterministic() {
     let plan = DesktopQueryPlan::overview().expect("bounded overview plan");
     assert_eq!(DesktopQueryPlan::MAX_SERIES_POINTS, 240);
     assert_eq!(DesktopQueryPlan::MAX_DASHBOARD_ROWS, 12);
+    assert_eq!(DesktopQueryPlan::MAX_SESSION_ROWS, 64);
     assert_eq!(DesktopQueryPlan::MAX_REPOSITORIES, 32);
 
     let calls = Arc::new(Mutex::new(Vec::new()));
