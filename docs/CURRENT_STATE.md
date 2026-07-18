@@ -1259,7 +1259,7 @@ one active/follow-up and one catch-up without burst.
 The lifecycle gate warms backup, acquired-candidate cancellation, and restore, then
 passes 256 measured backup/verify/import-cancel/retention cycles, 16 forced candidate
 cancel/recovery cycles, and 16 complete isolated restores. It retains 15 points and
-returns to the exact 340,155-byte disk plateau on every cycle. Private memory returned
+returns to the exact filled per-run disk plateau on every cycle. Private memory returned
 from 4,194,304 to 8,261,632 bytes, handles 151 to 152, threads 5 to 3, USER 2 to 2,
 GDI 0 to 0, and child processes remained zero; encrypted compact high water was
 75,558,912 bytes and returned to that same original envelope. One exact 96 MiB backup

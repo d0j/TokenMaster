@@ -687,7 +687,7 @@ Tasks 17-18 close P3-D.0. Release-mode contracts cover deterministic 8/96 MiB
 automatic/normal/compact throughput, fixed 64 KiB I/O and 8 MiB decoder window,
 less-than-database private high water, 10,000-trigger/resume coalescing, 64+256 backup
 cycles, 16 acquired-candidate cancellation/recovery cycles, 16 complete isolated
-restores, exact 15-point/340,155-byte disk plateau, encrypted compact return, and one
+restores, exact per-run 15-point disk plateau, encrypted compact return, and one
 identity-pinned 96 MiB backup spanning all loaded Dashboard query/software-paint
 samples. Independent first review found four Important harness findings; its combined
 cancellation/restore finding plus the UI, encryption, and disk findings required five
@@ -702,8 +702,8 @@ strict warnings-as-errors workspace Clippy, the complete locked workspace test p
 doctest gate in 665.4 seconds, and the GNU release application build pass. The first
 full debug run exposed the release-only UI target attempting its 96 MiB measurement
 unoptimized; debug now compiles and explicitly skips only that measurement, while the
-mandatory release target passes unchanged. The local ignored P3-D.0 receipt must still
-be regenerated and identity-validated after the final documentation commit on any
+mandatory release target passes unchanged. A local ignored P3-D.0 receipt is valid only
+when generated and identity-validated after the final documentation commit on the
 machine reproducing acceptance.
 
 The immediate next implementation slice is the remaining P3-D data-bearing routes over
