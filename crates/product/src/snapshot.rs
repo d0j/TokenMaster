@@ -1,3 +1,5 @@
+use std::num::NonZeroU64;
+
 use tokenmaster_query::{
     BenefitOverviewEnvelope, BenefitOverviewSnapshot, GitEnvelope, GitOutputSnapshot,
     LatestActivityPage, ProductDataStatusEnvelope, QueryEnvelope, QuotaCurrentSnapshot,
@@ -28,6 +30,50 @@ impl ProductGeneration {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct ProductSessionDetailSelectionGeneration(NonZeroU64);
+
+impl ProductSessionDetailSelectionGeneration {
+    #[must_use]
+    pub const fn new(value: u64) -> Option<Self> {
+        match NonZeroU64::new(value) {
+            Some(value) => Some(Self(value)),
+            None => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0.get()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProductSessionDetailSelection {
+    generation: ProductSessionDetailSelectionGeneration,
+    row_ordinal: u8,
+}
+
+impl ProductSessionDetailSelection {
+    #[must_use]
+    pub const fn new(generation: ProductSessionDetailSelectionGeneration, row_ordinal: u8) -> Self {
+        Self {
+            generation,
+            row_ordinal,
+        }
+    }
+
+    #[must_use]
+    pub const fn generation(self) -> ProductSessionDetailSelectionGeneration {
+        self.generation
+    }
+
+    #[must_use]
+    pub const fn row_ordinal(self) -> u8 {
+        self.row_ordinal
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProductSnapshot {
     pub(crate) generation: ProductGeneration,
@@ -39,6 +85,7 @@ pub struct ProductSnapshot {
     pub(crate) git: ProductSection<GitEnvelope<GitOutputSnapshot>>,
     pub(crate) activity: ProductSection<QueryEnvelope<LatestActivityPage>>,
     pub(crate) sessions: ProductSection<QueryEnvelope<UsageSessionPage>>,
+    pub(crate) session_detail_selection: Option<ProductSessionDetailSelection>,
     pub(crate) session_detail: ProductSection<QueryEnvelope<UsageSessionDetailResult>>,
     pub(crate) runtime: ProductRuntimeStatus,
     pub(crate) routes: [ProductRouteStatus; 11],
@@ -56,6 +103,7 @@ impl ProductSnapshot {
             git: ProductSection::waiting(),
             activity: ProductSection::waiting(),
             sessions: ProductSection::waiting(),
+            session_detail_selection: None,
             session_detail: ProductSection::waiting(),
             runtime: ProductRuntimeStatus::waiting(),
             routes: initial_routes(),
@@ -112,6 +160,11 @@ impl ProductSnapshot {
     #[must_use]
     pub const fn session_detail(&self) -> &ProductSection<QueryEnvelope<UsageSessionDetailResult>> {
         &self.session_detail
+    }
+
+    #[must_use]
+    pub const fn session_detail_selection(&self) -> Option<ProductSessionDetailSelection> {
+        self.session_detail_selection
     }
 
     #[must_use]

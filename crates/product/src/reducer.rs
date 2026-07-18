@@ -14,7 +14,8 @@ use tokenmaster_runtime::{
 use crate::{
     ProductAttemptGeneration, ProductGitRuntimeHealth, ProductQuotaRuntimeHealth,
     ProductReminderRuntimeHealth, ProductRuntimeGeneration, ProductRuntimeObservationError,
-    ProductRuntimeSection, ProductSection, ProductSnapshot, ProductUsageRuntimeHealth,
+    ProductRuntimeSection, ProductSection, ProductSessionDetailSelection, ProductSnapshot,
+    ProductUsageRuntimeHealth,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -280,13 +281,36 @@ impl ProductReducer {
         QueryEnvelope<UsageSessionPage>,
         usage_compatible
     );
-    section_methods!(
-        publish_session_detail,
-        fail_session_detail,
-        session_detail,
-        QueryEnvelope<UsageSessionDetailResult>,
-        usage_compatible
-    );
+    pub fn publish_session_detail(
+        &mut self,
+        attempt: ProductAttemptGeneration,
+        selection: ProductSessionDetailSelection,
+        value: QueryEnvelope<UsageSessionDetailResult>,
+    ) -> Result<ProductPublishOutcome, ProductReducerError> {
+        let outcome = classify_session_detail(&self.current, attempt, selection);
+        if outcome != ProductPublishOutcome::Accepted {
+            return Ok(outcome);
+        }
+        if !usage_compatible(&self.current, &value) {
+            return Ok(ProductPublishOutcome::RejectedIncompatible);
+        }
+        self.replace_session_detail(selection, ProductSection::ready(attempt, value))?;
+        Ok(ProductPublishOutcome::Accepted)
+    }
+
+    pub fn fail_session_detail(
+        &mut self,
+        attempt: ProductAttemptGeneration,
+        selection: ProductSessionDetailSelection,
+        code: QueryErrorCode,
+    ) -> Result<ProductPublishOutcome, ProductReducerError> {
+        let outcome = classify_session_detail(&self.current, attempt, selection);
+        if outcome != ProductPublishOutcome::Accepted {
+            return Ok(outcome);
+        }
+        self.replace_session_detail(selection, ProductSection::unavailable(attempt, code))?;
+        Ok(ProductPublishOutcome::Accepted)
+    }
 
     fn replace_section<T>(
         &mut self,
@@ -313,6 +337,20 @@ impl ProductReducer {
         self.current = Arc::new(next);
         Ok(())
     }
+
+    fn replace_session_detail(
+        &mut self,
+        selection: ProductSessionDetailSelection,
+        section: ProductSection<QueryEnvelope<UsageSessionDetailResult>>,
+    ) -> Result<(), ProductReducerError> {
+        let mut next = (*self.current).clone();
+        next.generation = next.generation.checked_next()?;
+        next.session_detail_selection = Some(selection);
+        next.session_detail = section;
+        next.refresh_routes();
+        self.current = Arc::new(next);
+        Ok(())
+    }
 }
 
 impl Default for ProductReducer {
@@ -335,6 +373,28 @@ fn classify<T: Copy + Ord>(current: Option<T>, candidate: T) -> ProductPublishOu
         Some(current) if candidate < current => ProductPublishOutcome::RejectedOlder,
         Some(current) if candidate == current => ProductPublishOutcome::Coalesced,
         _ => ProductPublishOutcome::Accepted,
+    }
+}
+
+fn classify_session_detail(
+    snapshot: &ProductSnapshot,
+    attempt: ProductAttemptGeneration,
+    selection: ProductSessionDetailSelection,
+) -> ProductPublishOutcome {
+    match snapshot.session_detail_selection {
+        Some(current) if selection.generation() < current.generation() => {
+            ProductPublishOutcome::RejectedOlder
+        }
+        Some(current)
+            if selection.generation() == current.generation()
+                && selection.row_ordinal() != current.row_ordinal() =>
+        {
+            ProductPublishOutcome::RejectedIncompatible
+        }
+        Some(current) if selection.generation() == current.generation() => {
+            classify(snapshot.session_detail.attempt_generation(), attempt)
+        }
+        Some(_) | None => ProductPublishOutcome::Accepted,
     }
 }
 

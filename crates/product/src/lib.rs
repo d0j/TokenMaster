@@ -24,4 +24,7 @@ pub use runtime::{
 pub use section::{
     ProductAttemptGeneration, ProductSection, ProductSectionFailure, ProductSectionKind,
 };
-pub use snapshot::{ProductGeneration, ProductSnapshot};
+pub use snapshot::{
+    ProductGeneration, ProductSessionDetailSelection, ProductSessionDetailSelectionGeneration,
+    ProductSnapshot,
+};
