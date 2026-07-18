@@ -17,10 +17,12 @@ mod settings;
 
 pub use error::{StateError, StateErrorCode};
 pub use package::{
-    BackupCompression, BackupMetadata, BackupPackage, BackupPurpose, ConfigPackage,
-    MAX_DATABASE_PACKAGE_BYTES, MAX_PACKAGE_ENTRIES, MAX_PACKAGE_MANIFEST_BYTES,
-    MAX_PACKAGE_TOTAL_EXPANDED_BYTES, MAX_SETTINGS_PACKAGE_BYTES, PACKAGE_DECODER_WINDOW_BYTES,
-    PACKAGE_IO_BUFFER_BYTES, PackageReceipt, VerifiedBackupPackage, VerifiedConfigPackage,
+    AGE_SCRYPT_LOG_N, BackupCompression, BackupEncryptionContext, BackupMetadata, BackupPackage,
+    BackupPassphrase, BackupPurpose, ConfigPackage, EncryptedBackupPackage,
+    MAX_BACKUP_PASSPHRASE_SCALARS, MAX_DATABASE_PACKAGE_BYTES, MAX_PACKAGE_ENTRIES,
+    MAX_PACKAGE_MANIFEST_BYTES, MAX_PACKAGE_TOTAL_EXPANDED_BYTES, MAX_SETTINGS_PACKAGE_BYTES,
+    MIN_BACKUP_PASSPHRASE_SCALARS, PACKAGE_DECODER_WINDOW_BYTES, PACKAGE_IO_BUFFER_BYTES,
+    PackageReceipt, ProtectedPackageReceipt, VerifiedBackupPackage, VerifiedConfigPackage,
 };
 pub use settings::{
     BACKUP_INTERVAL_DEFAULT_SECONDS, BACKUP_INTERVAL_MAX_SECONDS, BACKUP_INTERVAL_MIN_SECONDS,

@@ -84,7 +84,7 @@ foreach ($line in ($manifestText -split "`r?`n")) {
 }
 $directProductionDependencies = @($dependencyNames | Sort-Object -Unique)
 $expectedDependencies = @(
-    'serde', 'serde_json', 'sha2', 'thiserror', 'tokenmaster-platform', 'zstd'
+    'age', 'serde', 'serde_json', 'sha2', 'thiserror', 'tokenmaster-platform', 'zstd'
 )
 if ($directProductionDependencies.Count -ne $expectedDependencies.Count -or
     @($expectedDependencies | Where-Object { $_ -notin $directProductionDependencies }).Count -ne 0) {
@@ -93,6 +93,10 @@ if ($directProductionDependencies.Count -ne $expectedDependencies.Count -or
 if ($rootManifestText -notmatch '(?m)^zstd\s*=\s*\{\s*version\s*=\s*"=0\.13\.3"\s*,\s*default-features\s*=\s*false\s*\}\s*$' -or
     $manifestText -notmatch '(?m)^zstd\.workspace\s*=\s*true\s*$') {
     throw 'TM-STATE-ZSTD-PIN: zstd must remain exactly 0.13.3 with default features disabled'
+}
+if ($rootManifestText -notmatch '(?m)^age\s*=\s*\{\s*version\s*=\s*"=0\.12\.1"\s*,\s*default-features\s*=\s*false\s*\}\s*$' -or
+    $manifestText -notmatch '(?m)^age\.workspace\s*=\s*true\s*$') {
+    throw 'TM-STATE-AGE-PIN: age must remain exactly 0.12.1 with default features disabled'
 }
 
 $testOnlySource = Join-Path $stateSource 'record_contract_tests.rs'
@@ -143,7 +147,7 @@ $approvedSettingsPlatformImports = @(
 )
 if ($approvedStdIoImports.Count -ne 1 -or
     $approvedPackageReaderIoImports.Count -ne 1 -or
-    $approvedPackageWriterIoImports.Count -ne 2 -or
+    $approvedPackageWriterIoImports.Count -ne 3 -or
     $approvedPlatformImports.Count -ne 1 -or
     $approvedPackageCapabilityExports.Count -ne 1 -or
     $approvedPackageCapabilityImports.Count -ne 1 -or
@@ -267,6 +271,16 @@ if ($zstdDependencies.Count -ne 1 -or
     @($zstdDependencies[0].features).Count -ne 0) {
     throw 'TM-STATE-ZSTD-PIN: resolved zstd dependency contract drifted'
 }
+$ageDependencies = @(
+    $statePackages[0].dependencies |
+        Where-Object { $_.name -eq 'age' -and $null -eq $_.kind }
+)
+if ($ageDependencies.Count -ne 1 -or
+    $ageDependencies[0].req -ne '=0.12.1' -or
+    $ageDependencies[0].uses_default_features -ne $false -or
+    @($ageDependencies[0].features).Count -ne 0) {
+    throw 'TM-STATE-AGE-PIN: resolved age dependency contract drifted'
+}
 $binaryTargets = @($statePackages[0].targets | Where-Object { $_.kind -contains 'bin' })
 if ($binaryTargets.Count -ne 0) {
     throw 'TM-STATE-BINARY-TARGET: metadata contains a state binary target'
@@ -285,6 +299,9 @@ if ($LASTEXITCODE -ne 0) {
 }
 if ($featureTreeText -match '(?i)zstd(?:-safe|-sys)? feature "(?:zstdmt|training|legacy|experimental)"') {
     throw 'TM-STATE-ZSTD-FEATURES: forbidden zstd feature entered the state tree'
+}
+if ($featureTreeText -match '(?i)\bage feature "(?:armor|async|cli-common|plugin|ssh|unstable|web-sys)"') {
+    throw 'TM-STATE-AGE-FEATURES: forbidden age feature entered the state tree'
 }
 
 [ordered]@{

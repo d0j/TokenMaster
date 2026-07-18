@@ -641,6 +641,23 @@ descriptor/entry digest, and settings decode pass. Any codec or seal error poiso
 discards the stage; subsequent write, seal, and publication return `InvalidState`.
 No API accepts an extraction name/path or returns a package entry iterator.
 
+The implemented Task 7 subset exposes `BackupPassphrase`, the explicit
+`BackupEncryptionContext`, `EncryptedBackupPackage::{encrypt,decrypt}`, and one
+path-private sealed-output receipt. New and existing passphrase constructors take
+caller-owned `String` buffers, move them immediately into zeroizing secret storage,
+and clear every supplied buffer on success or failure. New passphrases additionally
+require exact confirmation. `encrypt` accepts only `ManualExport`, a controlled
+reader, and an opaque `VerifiedBackupPackage`; it recounts and rehashes the source
+against that proof while streaming the standard age v1 envelope. `AutomaticBackup`
+is rejected before source I/O and automatic packages keep no secret. `decrypt` accepts
+only the controlled age reader and unpublished database stage, authenticates the outer
+stream, and runs the private typed backup parser before sealing that database.
+Excessive scrypt work,
+wrong password, malformed/non-scrypt header, authentication failure, truncation,
+trailing bytes, source substitution, output failure, or final seal failure discards
+and poisons the output before return. Neither operation accepts a path, generic
+stream, command, environment variable, recovery password, or arbitrary recipient.
+
 The SQLite-specific snapshot and candidate verifier are store-owned fixed APIs.
 The platform package owns durable same-volume replacement and native file selection.
 Application composition alone may sequence runtime shutdown, writer-lease admission,

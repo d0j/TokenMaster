@@ -1,9 +1,12 @@
+use core::cell::Cell;
 use std::io::{self, Read, Write};
 
 use tokenmaster_platform::{DurableFileError, MAX_DURABLE_WRITE_CHUNK_BYTES};
 pub(crate) use tokenmaster_platform::{DurableFileReader, DurableStagedFile};
 
 use crate::StateError;
+
+pub(crate) type DurableCapabilityError = DurableFileError;
 
 pub(crate) struct DurableReaderAdapter<'a> {
     source: &'a mut DurableFileReader,
@@ -29,6 +32,48 @@ impl Read for DurableReaderAdapter<'_> {
             Ok(count) => Ok(count),
             Err(error) => {
                 self.failure = Some(error);
+                Err(io_error(error))
+            }
+        }
+    }
+}
+
+pub(crate) struct DurableReaderFailure {
+    failure: Cell<Option<DurableFileError>>,
+}
+
+impl DurableReaderFailure {
+    pub(crate) const fn new() -> Self {
+        Self {
+            failure: Cell::new(None),
+        }
+    }
+
+    pub(crate) const fn get(&self) -> Option<DurableFileError> {
+        self.failure.get()
+    }
+}
+
+pub(crate) struct TrackedDurableReaderAdapter<'a, 'failure> {
+    source: &'a mut DurableFileReader,
+    failure: &'failure DurableReaderFailure,
+}
+
+impl<'a, 'failure> TrackedDurableReaderAdapter<'a, 'failure> {
+    pub(crate) fn new(
+        source: &'a mut DurableFileReader,
+        failure: &'failure DurableReaderFailure,
+    ) -> Self {
+        Self { source, failure }
+    }
+}
+
+impl Read for TrackedDurableReaderAdapter<'_, '_> {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        match self.source.read_chunk(buffer) {
+            Ok(count) => Ok(count),
+            Err(error) => {
+                self.failure.failure.set(Some(error));
                 Err(io_error(error))
             }
         }

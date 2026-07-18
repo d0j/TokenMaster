@@ -724,9 +724,37 @@ irreversibly clears the stage receipt, closes/removes the unpublished file, and 
 the handle; even cleanup failure cannot restore publication authority and is surfaced
 as `RecoveryRequired`. Late-footer, partial-writer, bomb, and platform contracts prove
 that later seal and publication return `InvalidState`. The reliable-state authority
-suite now has 36 mutation cases, including an explicit public generic-stream bypass.
+suite now has 37 mutation cases, including explicit public generic-stream and
+cryptographic dependency-drift bypasses.
 Wire bytes, stable errors, receipts, and `Debug` exclude private archive metadata and
 OS text.
+
+Implemented Task 7 pins `age` 0.12.1 with default features disabled; TokenMaster does
+not enable age CLI, plugin, SSH, armor, async, unstable, or web features and implements
+no cryptographic primitive itself. Export constructs the standard scrypt recipient
+and fixes `log_n = 16`; import constructs the standard identity and sets the maximum
+accepted factor to 16 before attempting stanza unwrap. An attacker-selected larger
+factor therefore maps to bounded capacity failure before scrypt derivation.
+
+Encryption is manual-export-only and is bound to an opaque previously verified backup
+receipt: the same pass streams once while independently checking exact source length
+and complete-file SHA-256. A same-length substitution fails and poisons ciphertext
+output. Decryption authenticates the complete binary age stream and passes it directly
+to the private typed backup parser before sealing only its verified database stage;
+authenticated non-package plaintext, wrong password, malformed/non-scrypt header,
+header/body/final-tag
+corruption, truncation, trailing data, or platform I/O cannot publish partial bytes.
+Every failure irreversibly discards its output; cleanup uncertainty is
+`RecoveryRequired`.
+
+`BackupPassphrase` is non-cloneable and redacted. Its age `SecretString` allocation
+zeroizes on drop. Constructors move caller-owned UI strings into secret storage
+immediately, clear every supplied field on every outcome, count exactly 12 through
+128 Unicode scalar values, compare confirmation byte-for-byte, and perform no trim or
+Unicode normalization. Passphrases are absent from settings, packages, manifests,
+receipts, errors, `Debug`, health, arguments, and environment. Automatic backups are
+explicitly rejected by the encryption API and remain recoverable without stored
+credentials.
 
 The current exact-child read checks the pathname type before opening and validates the
 opened regular-file length, but does not claim hostile same-user no-follow/open-handle
@@ -758,9 +786,10 @@ transient I/O, unsupported media, provider unavailability, and newer schema are 
 corruption authority. SQLite `.recover`, main-only copies, ad hoc row edits, lock-file
 deletion, arbitrary extraction, and automatic quarantine deletion are forbidden.
 
-Optional manual password protection uses the standard age v1 stream with fixed
-bounded scrypt work and never stores the passphrase. New passphrases MUST be confirmed,
-contain 12 through 128 Unicode scalar values, and MUST NOT be trimmed or normalized.
-Automatic backups remain credential-free and recoverable under the user's local ACL.
+Optional manual password protection uses the implemented standard age v1 stream with
+fixed bounded scrypt work and never stores the passphrase. New passphrases are
+confirmed, contain 12 through 128 Unicode scalar values, and are not trimmed or
+normalized. Automatic backups remain credential-free and recoverable under the user's
+local ACL.
 Neither hashes nor local encryption are claimed to defend against malicious code
 running as the same user or complete-disk destruction.

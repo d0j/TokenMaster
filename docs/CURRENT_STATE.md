@@ -900,6 +900,32 @@ mutations, an independently resealed missing frame end, a 16 MiB-window frame, a
 audit, and 36/36 Pester mutations pass. Final independent review reports Critical 0,
 Important 0, Minor 0 and `Ready: Yes`.
 
+Task 7 now adds optional binary age v1 protection for manual backup exports.
+`age = 0.12.1` is exact with default features disabled; no CLI, plugin, SSH, armor,
+async, unstable, or web feature is enabled. Encryption accepts only
+`ManualExport`, a controlled reader, and an opaque `VerifiedBackupPackage`; the same
+streaming pass rechecks exact source length and complete-file SHA-256 before the
+ciphertext stage remains sealable. Automatic mode and same-length source substitution
+fail closed. Export fixes scrypt `log_n = 16`; import sets maximum 16 before stanza
+unwrap, so a malicious larger factor returns before attacker-selected derivation.
+
+`BackupPassphrase` is a non-cloneable redacted zeroizing secret. New values require an
+exact confirmation and 12 through 128 Unicode scalar values; neither trim nor
+normalization occurs. Both caller-owned fields are taken and cleared on every outcome.
+Decrypt authenticates the complete age stream and immediately feeds it to the private
+typed `BackupPackage` parser; only the verified inner database stage is sealed.
+Authenticated non-package plaintext, wrong password, malformed/non-scrypt header,
+header MAC/body/final-tag corruption, truncation, trailing data, platform I/O, output
+capacity failure, and final seal failure all irreversibly discard/poison the output;
+cleanup uncertainty is `RecoveryRequired`. Seven grouped encryption contracts cover
+the full matrix. Strict state Clippy, the workspace authority audit, exact feature
+inspection, and 37/37 Pester mutations pass. The generic inner stream parser is fully
+private behind a typed authenticated-payload bridge; final independent security
+rereview reports Critical 0, Important 0, Minor 0 and `Ready: Yes`. The final
+unchanged-source component baseline passes clean-root, formatting, strict locked
+full-workspace Clippy, and the complete locked workspace test/doctest suite in 544.1
+seconds combined.
+
 Remaining ownership is: store for SQLite Online Backup and candidate verification,
 platform for durable same-volume replacement and sealed file selection, state for
 settings/packages/retention/recovery, and app for runtime shutdown/restart and safe
@@ -917,18 +943,18 @@ transient-I/O, unsupported-location, and schema-too-new results preserve current
 truth. No valid backup leads to explicit quarantine and authoritative-source rebuild,
 never fabricated zero or automatic corrupt-row salvage.
 
-Only Tasks 1-6 are implemented. No retention worker, restore, safe mode, Data &
-Recovery UI, encryption, or new acceptance evidence exists yet. Task 7 optional manual
-age protection is the immediate next slice. Task 8 first adds the planned sealed
+Only Tasks 1-7 are implemented. No retention worker, restore, safe mode, Data &
+Recovery UI, or new acceptance evidence exists yet. Task 8 bounded catalog/retention
+is the immediate next slice and first adds the planned sealed
 platform backup-directory capability; Task 9 adds store-owned verified-candidate
 reader/state interop rather than introducing path or generic-stream access.
 
 ## Next implementation slice
 
-Execute P3-D.0 Task 7 from
-`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: wrap only complete
-manual packages in bounded standard age v1 passphrase encryption with fixed scrypt
-work, exact password confirmation/scalar bounds, cleanup, and secret/privacy gates.
+Execute P3-D.0 Task 8 from
+`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: add the sealed
+platform backup-directory capability, self-describing bounded catalog, and
+deterministic protected retention without exposing paths or generic streams.
 
 P2-D quota history core is complete under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: Tasks 1-8 cover
@@ -945,7 +971,7 @@ immutable read snapshots, and publication through the existing Codex runtime wit
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
 workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, P3-B.2, P3-B.3, and P3-C are
-complete; P3-D.0 Reliable State is active with Tasks 1-6 complete and Task 7 next, followed
+complete; P3-D.0 Reliable State is active with Tasks 1-7 complete and Task 8 next, followed
 by the remaining P3-D supporting data-bearing routes. Activation
 remains a later independently authorized capability. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.

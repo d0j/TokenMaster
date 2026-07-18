@@ -3,6 +3,7 @@ use core::fmt;
 use crate::PortableSettingsCandidate;
 
 mod capability;
+mod encryption;
 mod header;
 mod manifest;
 mod reader;
@@ -230,3 +231,8 @@ impl fmt::Debug for VerifiedBackupPackage {
 pub struct ConfigPackage;
 
 pub struct BackupPackage;
+
+pub use encryption::{
+    AGE_SCRYPT_LOG_N, BackupEncryptionContext, BackupPassphrase, EncryptedBackupPackage,
+    MAX_BACKUP_PASSPHRASE_SCALARS, MIN_BACKUP_PASSPHRASE_SCALARS, ProtectedPackageReceipt,
+};

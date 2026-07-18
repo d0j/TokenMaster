@@ -8,6 +8,7 @@ use super::capability::{
     DurableFileReader, DurableReaderAdapter, DurableStagedFile, DurableWriterAdapter,
     map_durable_error, resolve_codec_error,
 };
+use super::encryption::AuthenticatedBackupPayload;
 use super::header::{HEADER_BYTES, Header, PackageKind};
 use super::manifest::{
     ENTRY_PREFIX_BYTES, ENTRY_SUFFIX_BYTES, EntryKind, EntryPrefix, EntrySuffix,
@@ -41,43 +42,57 @@ impl BackupPackage {
         source: &mut DurableFileReader,
         database_sink: &mut DurableStagedFile,
     ) -> Result<VerifiedBackupPackage, StateError> {
-        let result = (|| {
-            let (result, failures) = {
-                let mut source_adapter = DurableReaderAdapter::new(source);
-                let mut sink_adapter = DurableWriterAdapter::new(database_sink);
-                let result =
-                    read_package(&mut source_adapter, PackageKind::Backup, &mut sink_adapter);
-                (result, [source_adapter.failure(), sink_adapter.failure()])
-            };
-            let parsed = resolve_codec_error(result, &failures)?;
-            let database = parsed.database.ok_or_else(StateError::internal_invariant)?;
+        let mut source_adapter = DurableReaderAdapter::new(source);
+        let result = read_backup_stream(&mut source_adapter, database_sink);
+        resolve_codec_error(result, &[source_adapter.failure()])
+    }
+}
+
+pub(super) fn read_authenticated_backup(
+    source: AuthenticatedBackupPayload<'_>,
+    database_sink: &mut DurableStagedFile,
+) -> Result<VerifiedBackupPackage, StateError> {
+    read_backup_stream(source, database_sink)
+}
+
+fn read_backup_stream<R: Read>(
+    source: R,
+    database_sink: &mut DurableStagedFile,
+) -> Result<VerifiedBackupPackage, StateError> {
+    let result = (|| {
+        let (result, failure) = {
+            let mut sink_adapter = DurableWriterAdapter::new(database_sink);
+            let result = read_package(source, PackageKind::Backup, &mut sink_adapter);
+            (result, sink_adapter.failure())
+        };
+        let parsed = resolve_codec_error(result, &[failure])?;
+        let database = parsed.database.ok_or_else(StateError::internal_invariant)?;
+        database_sink
+            .seal(database.expanded_len, database.expanded_sha256)
+            .map_err(map_durable_error)?;
+        Ok(VerifiedBackupPackage {
+            settings: parsed.settings,
+            receipt: parsed.receipt,
+            database_schema_version: parsed.manifest.database_schema_version,
+            database_len: database.expanded_len,
+            database_sha256: database.expanded_sha256,
+            compression: parsed.manifest.compression,
+            metadata: BackupMetadata::new(
+                parsed.manifest.created_at_utc_ms,
+                parsed
+                    .manifest
+                    .backup_purpose
+                    .ok_or_else(StateError::internal_invariant)?,
+            )?,
+        })
+    })();
+    match result {
+        Ok(verified) => Ok(verified),
+        Err(error) => {
             database_sink
-                .seal(database.expanded_len, database.expanded_sha256)
-                .map_err(map_durable_error)?;
-            Ok(VerifiedBackupPackage {
-                settings: parsed.settings,
-                receipt: parsed.receipt,
-                database_schema_version: parsed.manifest.database_schema_version,
-                database_len: database.expanded_len,
-                database_sha256: database.expanded_sha256,
-                compression: parsed.manifest.compression,
-                metadata: BackupMetadata::new(
-                    parsed.manifest.created_at_utc_ms,
-                    parsed
-                        .manifest
-                        .backup_purpose
-                        .ok_or_else(StateError::internal_invariant)?,
-                )?,
-            })
-        })();
-        match result {
-            Ok(verified) => Ok(verified),
-            Err(error) => {
-                database_sink
-                    .discard()
-                    .map_err(|_| StateError::recovery_required())?;
-                Err(error)
-            }
+                .discard()
+                .map_err(|_| StateError::recovery_required())?;
+            Err(error)
         }
     }
 }
@@ -242,8 +257,8 @@ fn decode_frame<R: Read>(
     if input.capacity_exceeded {
         return Err(StateError::capacity_exceeded());
     }
-    if input.source_failed {
-        return Err(StateError::unavailable());
+    if let Some(kind) = input.source_error {
+        return Err(map_source_error(kind));
     }
     decode_result?;
     let expanded_sha256: [u8; 32] = hasher.finalize().into();
@@ -279,7 +294,7 @@ struct PackageInput<R: Read> {
     hasher: Sha256,
     file_hasher: Sha256,
     consumed: u64,
-    source_failed: bool,
+    source_error: Option<io::ErrorKind>,
     capacity_exceeded: bool,
 }
 
@@ -293,7 +308,7 @@ impl<R: Read> PackageInput<R> {
             hasher: Sha256::new(),
             file_hasher: Sha256::new(),
             consumed: 0,
-            source_failed: false,
+            source_error: None,
             capacity_exceeded: false,
         }
     }
@@ -332,6 +347,8 @@ impl<R: Read> PackageInput<R> {
         if self.refill().is_err() {
             return Err(if self.capacity_exceeded {
                 StateError::capacity_exceeded()
+            } else if let Some(kind) = self.source_error {
+                map_source_error(kind)
             } else {
                 StateError::unavailable()
             });
@@ -352,7 +369,7 @@ impl<R: Read> PackageInput<R> {
             self.available = match self.source.read(&mut self.buffer[..request]) {
                 Ok(count) => count,
                 Err(error) => {
-                    self.source_failed = true;
+                    self.source_error = Some(error.kind());
                     return Err(error);
                 }
             };
@@ -368,7 +385,7 @@ impl<R: Read> PackageInput<R> {
         self.source
             .read(&mut byte)
             .map(|count| count != 0)
-            .map_err(|_| StateError::unavailable())
+            .map_err(|error| map_source_error(error.kind()))
     }
 
     fn consume_internal(&mut self, count: usize, hashed: bool) {
@@ -381,6 +398,14 @@ impl<R: Read> PackageInput<R> {
         }
         self.position += count;
         self.consumed = self.consumed.saturating_add(count as u64);
+    }
+}
+
+const fn map_source_error(kind: io::ErrorKind) -> StateError {
+    match kind {
+        io::ErrorKind::InvalidData | io::ErrorKind::UnexpectedEof => StateError::integrity(),
+        io::ErrorKind::OutOfMemory => StateError::capacity_exceeded(),
+        _ => StateError::unavailable(),
     }
 }
 

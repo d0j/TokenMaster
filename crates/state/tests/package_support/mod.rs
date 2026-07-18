@@ -71,6 +71,50 @@ impl ControlledRoot {
             .expect("read controlled bytes")
             .expect("controlled bytes exist")
     }
+
+    pub fn append_child(&self, name: &str, bytes: &[u8]) {
+        use std::io::Write as _;
+
+        let path = self.directory.as_path().join(name);
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(path)
+            .expect("open controlled child for append");
+        file.write_all(bytes).expect("append controlled child");
+    }
+
+    pub fn unpublished_stage_count(&self) -> usize {
+        std::fs::read_dir(self.directory.as_path())
+            .expect("enumerate controlled test root")
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .contains(".tokenmaster-stage-")
+            })
+            .count()
+    }
+
+    pub fn sabotage_only_stage_cleanup(&self) {
+        let stages = std::fs::read_dir(self.directory.as_path())
+            .expect("enumerate controlled test root")
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .contains(".tokenmaster-stage-")
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(stages.len(), 1, "one stage required for cleanup sabotage");
+        let stage_path = stages[0].path();
+        let held_path = self.directory.as_path().join("held-stage-bytes");
+        std::fs::rename(&stage_path, held_path).expect("move open stage fixture");
+        std::fs::create_dir(&stage_path).expect("replace stage path with directory");
+        std::fs::write(stage_path.join("blocker"), b"not removable as a file")
+            .expect("make replacement directory nonempty");
+    }
 }
 
 pub fn settings() -> PortableSettingsCandidate {

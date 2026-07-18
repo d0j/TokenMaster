@@ -333,7 +333,8 @@ P3-D.0 Reliable State is active under
 `docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`. Task 1 is complete:
 `tokenmaster-state` is a library-only workspace package with fixed path-private errors,
 checked byte/item limits, five exact direct dependencies, and deterministic Rust/Pester
-authority gates. Task 6 adds the sixth exact dependency (`zstd`); the future crash
+authority gates. Task 6 adds the sixth exact dependency (`zstd`), and Task 7 adds the
+seventh (`age`); the future crash
 fixture remains outside production targets.
 
 Task 2 is also complete. `tokenmaster-platform` now owns sealed bounded staged files,
@@ -384,7 +385,7 @@ observable and recoverable through one bounded fixed-name pass. Fifteen focused
 contracts, the complete store suite, query compatibility check, and independent
 review (Critical 0, Important 0, Minor 0, `Ready: Yes`) pass.
 
-Task 6 is complete in the working tree. `tokenmaster-state` now owns the fixed typed
+Task 6 is complete. `tokenmaster-state` owns the fixed typed
 v1 `.tmconfig`/`.tmbackup` codec over platform-owned bounded readers/stages. The exact
 header/manifest/ordered-entry/footer grammar is deterministic; Zstd 0.13.3 has default
 features off, one checksummed content-sized frame per entry, levels 6/12/19, one
@@ -402,16 +403,35 @@ all 3 profiles x 5 purposes, a 24 MiB streaming round trip, 5 package contracts,
 authority receipt, and 36/36 Pester mutations pass. Independent final review reports
 Critical 0, Important 0, Minor 0 and `Ready: Yes`.
 
-The immediate next slice is Task 7 optional manual age passphrase protection. Then
-continue Tasks 8-18 in order: bounded retention/maintenance, journaled recovery and startup
+Task 7 is complete. `tokenmaster-state` now owns optional binary age v1 protection for
+manual exports only. `age = 0.12.1` is exact with default features disabled and no
+CLI/plugin/SSH/armor/async/unstable/web feature. Export requires an opaque
+`VerifiedBackupPackage` and rechecks its exact length/complete-file SHA-256 in the
+same streaming pass. Scrypt export is fixed at `log_n = 16` and import sets maximum
+16 before derivation. Automatic encryption and same-length source substitution fail
+closed.
+
+Passphrases are non-cloneable redacted zeroizing values. Both caller buffers are
+cleared on every outcome; new values require exact 12-through-128-scalar confirmation
+without trim or normalization. Decrypt never publishes a generic plaintext package:
+the authenticated age stream feeds the private typed backup parser and only its
+verified database stage can be sealed. Authenticated non-package plaintext, wrong
+password, every outer corruption class, truncation/trailing data, capacity failure,
+cleanup failure, and final seal failure are covered; output is poisoned and cleanup
+uncertainty becomes `RecoveryRequired`. Seven grouped encryption contracts, strict
+state Clippy, the workspace authority audit, exact age feature inspection, and 37/37
+Pester mutations pass.
+
+The immediate next slice is Task 8 bounded catalog and retention. Then continue Tasks
+9-18 in order: maintenance, journaled recovery and startup
 integration, application restart/safe mode, Data & Recovery UI, then adversarial and
 resource closure. Keep the fixed archive path and writer sidecar; never copy only the
 live main file or treat busy/disk/access/schema-newer as corruption authority. Keep
 automatic recovery data only; manual full restore must explicitly choose data only or
 data plus portable settings, and device-local settings never move between machines.
-Task 8 must first introduce the sealed platform backup-directory capability; Task 9
+Task 8 must introduce the sealed platform backup-directory capability; Task 9
 must introduce store-owned verified-candidate streaming/state interop. Neither may
-relax Task 6 into path or public generic-stream authority.
+relax Tasks 6-7 into path, generic-stream, or generic age-extraction authority.
 
 After P3-D.0, continue P3-D supporting data-bearing routes using bounded keyset
 intents and the same controller/snapshot boundary. P3-E then closes remaining
@@ -419,13 +439,19 @@ notifications, settings/help, command palette, tray, and compact lifecycle. P3-D
 presentation, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.
-The current post-P3-D.0-Task-6 focused evidence includes the Task 5 store contracts,
+The current post-P3-D.0-Task-7 focused evidence includes the Task 5 store contracts,
 5 package contracts, 10 package adversarial contracts, 17 durable-file contracts,
-strict platform/state Clippy, the reliable-state workspace audit, 36 authority
-mutations, feature-tree verification, and final independent review. The new final
-clean-root, formatting, strict locked full-workspace Clippy, and complete locked
-workspace test/doctest baseline passes in 548.2 seconds total; Clippy took 22.5
-seconds. The authenticated live Codex transport contract remains intentionally ignored
+7 grouped encryption contracts, strict platform/state Clippy, the reliable-state
+workspace audit, 37 authority mutations, and exact Zstd/age feature-tree verification.
+The final Task 7 component baseline passes on the unchanged source tree: clean-root
+15.9 seconds, formatting 1.4 seconds, strict locked full-workspace Clippy 35.6
+seconds, and the complete locked workspace test/doctest suite 491.2 seconds (544.1
+seconds combined). One initial full-suite attempt stopped in the existing
+`quota_transport_contract` target without a retained failure body; that exact target
+then passed 11 consecutive runs and the complete workspace rerun passed without an
+intervening source edit. Independent security rereview reports Critical 0, Important
+0, Minor 0 and `Ready: Yes`.
+The authenticated live Codex transport contract remains intentionally ignored
 without its opt-in executable/session input.
 The
 query resource binary uses

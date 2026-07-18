@@ -6,6 +6,26 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.0 Task 7 optional manual age v1 backup protection. Pinned
+  `age = 0.12.1` with default features disabled and no CLI/plugin/SSH/armor/async/
+  unstable/web feature. Manual export uses the standard scrypt recipient with fixed
+  `log_n = 16`; import caps accepted work at 16 before derivation. Automatic encryption
+  is explicitly rejected and automatic recovery stores no secret.
+- Bound encryption to an opaque `VerifiedBackupPackage` and recheck its exact length
+  and complete-file SHA-256 in the encryption pass. Added non-cloneable redacted
+  zeroizing passphrases, exact 12-through-128 Unicode-scalar confirmation with no trim
+  or normalization, immediate caller-buffer clearing, sealed output receipts, direct
+  authenticated-inner-package verification, and irreversible ciphertext/database
+  stage discard on every failure.
+- Added seven grouped encryption contracts covering standard age round-trip, fixed and
+  malicious work factors, wrong password, header/MAC/body/final-tag corruption,
+  truncation/trailing data, authenticated non-package plaintext, destination capacity,
+  cleanup failure, changed and same-length-substituted sources, automatic-mode
+  rejection, stage poison/removal, passphrase boundaries/redaction, and typed inner
+  package validity. The generic inner parser remains fully private behind a typed
+  authenticated-payload bridge. Reliable-state authority mutations pass 37/37 and
+  final independent security rereview is Critical 0, Important 0, Minor 0,
+  `Ready: Yes`.
 - Implemented P3-D.0 Task 6 fixed typed `.tmconfig`/`.tmbackup` v1 packages. The
   deterministic header/manifest/settings/database/footer grammar has exact checked
   little-endian fields, expanded entry SHA-256, descriptor binding, preceding-byte

@@ -127,6 +127,13 @@ Every published backup and every restore candidate MUST pass container hashes,
 bounded decompression, SQLite integrity, foreign-key, exact schema, and application
 semantic checks.
 
+Optional manual export protection MUST wrap only an already complete, verified
+`.tmbackup` in a standard age v1 passphrase envelope. Export MUST use scrypt
+`log_n = 16`; import MUST reject any larger work factor before derivation. New
+passphrases MUST be confirmed exactly, contain 12 through 128 Unicode scalar values,
+and be neither trimmed nor normalized. Automatic backups MUST remain unencrypted and
+MUST NOT store a recovery secret.
+
 Automatic backups MUST be coalesced off the UI thread, bounded by count and bytes, and
 preserve at least the newest protected verified restore points. Restore MUST stop all
 archive users, hold the stable writer lease, quarantine the complete prior main/WAL/

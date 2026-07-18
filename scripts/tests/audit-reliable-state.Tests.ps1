@@ -40,6 +40,7 @@ resolver = "3"
 members = ["crates/state", "crates/platform"]
 
 [workspace.dependencies]
+age = { version = "=0.12.1", default-features = false }
 zstd = { version = "=0.13.3", default-features = false }
 '@
             } else {
@@ -50,6 +51,7 @@ members = ["crates/host"]
 exclude = ["crates/state", "crates/platform"]
 
 [workspace.dependencies]
+age = { version = "=0.12.1", default-features = false }
 zstd = { version = "=0.13.3", default-features = false }
 '@
             }
@@ -64,6 +66,7 @@ license = "MIT"
 rust-version = "1.97"
 
 [dependencies]
+age.workspace = true
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
@@ -76,10 +79,15 @@ zstd.workspace = true
                 $excludedStateText = [System.IO.File]::ReadAllText($excludedStateManifest)
                 [System.IO.File]::WriteAllText(
                     $excludedStateManifest,
-                    $excludedStateText.Replace(
-                        'zstd.workspace = true',
-                        'zstd = { version = "=0.13.3", default-features = false }'
-                    )
+                    $excludedStateText.
+                        Replace(
+                            'age.workspace = true',
+                            'age = { version = "=0.12.1", default-features = false }'
+                        ).
+                        Replace(
+                            'zstd.workspace = true',
+                            'zstd = { version = "=0.13.3", default-features = false }'
+                        )
                 )
             }
 
@@ -125,8 +133,8 @@ tokenmaster-state = { path = "../state" }
         $result.result | Should -Be "pass"
         $result.package | Should -Be "tokenmaster-state"
         $result.binary_target_count | Should -Be 0
-        $result.direct_production_dependency_count | Should -Be 6
-        $result.approved_std_io_import_count | Should -Be 4
+        $result.direct_production_dependency_count | Should -Be 7
+        $result.approved_std_io_import_count | Should -Be 5
         $result.approved_platform_import_count | Should -Be 4
         $result.forbidden_authority_count | Should -Be 0
     }
@@ -145,6 +153,22 @@ tokenmaster-state = { path = "../state" }
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-STATE-ZSTD-PIN*"
+    }
+
+    It "rejects age version or feature drift" {
+        $fixture = New-StateAuditFixture -Name "age-drift"
+        $manifest = Join-Path $fixture "Cargo.toml"
+        $text = [System.IO.File]::ReadAllText($manifest)
+        [System.IO.File]::WriteAllText(
+            $manifest,
+            $text.Replace(
+                'age = { version = "=0.12.1", default-features = false }',
+                'age = { version = "0.12", features = ["ssh"] }'
+            )
+        )
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-AGE-PIN*"
     }
 
     It "rejects a state binary target" {

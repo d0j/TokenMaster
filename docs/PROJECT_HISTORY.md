@@ -2558,3 +2558,55 @@ and Task 9 requires a store-owned identity-bound verified-candidate reader plus 
 state interop. Neither may add paths or public generic streams. Task 7 optional manual
 age protection is next. Retention, maintenance, recovery, safe mode, UI integration,
 M0 acceptance, packaging, signing, and release remain unimplemented.
+
+## 2026-07-18 — P3-D.0 Task 7 bounded manual age protection
+
+Pinned `age = 0.12.1` with default features disabled and added only the standard
+binary age v1 scrypt envelope for manual backup export/import. No CLI, plugin, SSH,
+armor, async, unstable, or web age feature is enabled. Export fixes
+`log_n = 16`; import constructs the identity with maximum 16 before stanza unwrap, so
+an attacker-selected higher factor is rejected before derivation. Automatic encryption
+is explicitly rejected and automatic recovery keeps no secret.
+
+Encryption requires an opaque `VerifiedBackupPackage` and rechecks its exact source
+length plus complete-file SHA-256 during the same streaming pass. A changed file,
+appended byte, or same-length substitution poisons ciphertext output. New passphrases
+require exact 12-through-128 Unicode-scalar confirmation without trim or normalization.
+New and existing constructors immediately take caller-owned buffers into a
+non-cloneable redacted zeroizing `SecretString` and clear every supplied field on all
+outcomes.
+
+Independent review found that the first decrypt API authenticated age but could seal
+arbitrary plaintext before verifying the inner TokenMaster package. The final design
+removes that generic extraction surface: the authenticated age reader feeds the
+existing private typed `BackupPackage` parser directly and only its verified database
+stage can be sealed. The same correction preserves `InvalidData`/`UnexpectedEof` as
+integrity failures without exposing source text. Authenticated non-package plaintext,
+wrong password, header/MAC/body/final-tag corruption, truncation, trailing data,
+ciphertext/database capacity, failed cleanup, and inner package failure all poison
+output; cleanup uncertainty is `RecoveryRequired`.
+
+Seven grouped encryption contracts pass the complete matrix, including typed
+round-trip, malicious work-factor early rejection, same-length substitution,
+authenticated non-package plaintext, destination bounds, cleanup failure, exact
+passphrase boundaries, and privacy canaries. The state authority audit now pins seven
+direct dependencies and rejects age version/feature drift; 37/37 Pester mutations
+pass. The pinned age tree currently emits an upstream future-incompatibility warning
+from `proc-macro-error2 2.0.1` through mandatory `i18n-embed-fl`; Rust 1.97 builds it
+successfully, and TokenMaster does not carry an unaudited local cryptographic patch.
+The final authority gate additionally caught that the first shared inner parser was
+crate-visible as `R: Read`. The gate was preserved: the generic parser is now fully
+private, while the age module alone can construct a package-private typed
+authenticated-payload proof for direct inner verification. Independent security
+rereview then reported Critical 0, Important 0, Minor 0 and `Ready: Yes`.
+
+The final unchanged-source component baseline passes: clean-root 15.9 seconds,
+formatting 1.4 seconds, strict locked full-workspace Clippy 35.6 seconds, and the
+complete locked workspace test/doctest suite 491.2 seconds (544.1 seconds combined).
+One initial full-suite attempt stopped in `quota_transport_contract` without a retained
+failure body; the exact target then passed 11 consecutive runs and the complete
+workspace rerun passed without an intervening source edit. This remains recorded as a
+transient test event rather than hidden or claimed as a product regression.
+
+Retention, maintenance, recovery, safe mode, UI integration, M0 acceptance, packaging,
+signing, and release remain unimplemented; Task 8 bounded catalog/retention is next.

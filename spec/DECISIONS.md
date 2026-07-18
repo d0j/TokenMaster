@@ -1179,6 +1179,24 @@ poisons/discards its output stage before returning; cleanup uncertainty becomes
 `RecoveryRequired`. This closes the partial-output publication gap found by independent
 review without introducing a second archive library or runtime thread.
 
+The implemented encryption layer uses `age = 0.12.1` with default features disabled
+and the standard binary age v1 scrypt recipient only. Manual export fixes
+`log_n = 16`; import accepts at most 16 before derivation. Encryption requires an
+opaque `VerifiedBackupPackage` and rechecks its exact length/complete-file SHA-256 in
+the encryption pass, so a typed name alone cannot grant authority. Passphrases are
+non-cloneable redacted zeroizing values created by taking and clearing caller UI
+buffers; new values require exact 12-through-128-scalar confirmation without trim or
+normalization. Automatic encryption is explicitly rejected. Every failed encrypt or
+decrypt poisons/removes its output stage, and cleanup uncertainty is
+`RecoveryRequired`.
+
+Rationale: a generic age file wrapper could encrypt unverified input, leave plaintext
+or ciphertext fragments publishable, or let attacker-controlled scrypt parameters
+consume unbounded resources. Binding the standard interoperable envelope to the
+already verified package proof preserves cryptographic interoperability without
+adding custom crypto, filesystem authority, password persistence, or unattended
+recovery credentials.
+
 Restore stops every archive owner, holds the stable writer lease, journals each idempotent
 phase, quarantines WAL/SHM, atomically replaces the main file while preserving the old
 main, reverifies the new active database, and reconstructs one application bundle.

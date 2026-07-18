@@ -164,16 +164,22 @@ the fixed typed streaming `.tmconfig`/`.tmbackup` package codec over platform-ow
 bounded readers and stages. One checksummed/content-sized Zstd frame per typed entry,
 exact length/hash/descriptor/footer binding, an 8 MiB decoder window, and independent
 expanded counters fail closed; every failed output is irreversibly poisoned before it
-can be sealed or published. Later state tasks add typed run/recovery stores, optional
-manual age protection, bounded retention, and one capacity-one maintenance worker.
+can be sealed or published. Task 7 adds binary age v1 only for manual exports. It
+requires an opaque verified backup proof, rechecks exact source length/SHA-256 during
+encryption, fixes scrypt work at 16 and import maximum at 16, owns zeroizing redacted
+passphrases, parses authenticated plaintext through the private typed backup reader,
+and poisons failed ciphertext/database stages. Automatic backups remain
+unencrypted. Later state tasks add typed run/recovery stores, bounded retention, and
+one capacity-one maintenance worker.
 `tokenmaster-platform` owns durable replacement and will later own sealed file dialogs.
 `tokenmaster-app` will stop every archive user, hold the existing writer
 lease, quarantine main/WAL/SHM, resume a redundant six-state restore journal before
 SQLite open, commit the selected data-only or data-plus-portable-settings mode, and
 reconstruct one application bundle or safe mode. Automatic recovery remains data only.
 Product/Desktop receive bounded health and intents only. The contour is in progress;
-Tasks 1-6 now provide persistent typed settings, verified standalone SQLite candidates,
-and fixed packages; they add no encryption, catalog/maintenance runtime, restore,
+Tasks 1-7 now provide persistent typed settings, verified standalone SQLite candidates,
+fixed packages, and verified-source-bound optional manual encryption; they add no
+catalog/maintenance runtime, restore,
 safe-mode, or release claim. Task 8/9 must use the planned sealed backup-directory and
 verified-candidate reader capabilities rather than paths or generic streams.
 

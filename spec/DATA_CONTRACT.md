@@ -669,9 +669,12 @@ partial bytes as truth.
 
 The wire format contains no filenames, paths, links, permissions, devices,
 credentials, prompts, responses, reasoning, commands, output, source content, or raw
-provider data. Optional manual password protection remains Task 7 and will wrap only
-an already complete package in a bounded standard age v1 envelope; automatic recovery
-stores no decryption secret.
+provider data. Implemented optional manual protection wraps only the exact
+length/SHA-256 identity of an opaque `VerifiedBackupPackage` in a binary standard age
+v1 passphrase envelope. Its recipient stanza uses scrypt `log_n = 16`; import caps the
+accepted value at 16 before derivation. Passphrase bytes never enter package metadata,
+receipts, stable errors, `Debug`, process arguments, environment, settings, or health.
+Automatic recovery packages remain unencrypted and store no decryption secret.
 
 Automatic retention considers at most 32 controlled package files and keeps at most
 15 verified restore points under a default 2 GiB compressed-byte budget configurable
