@@ -16,10 +16,10 @@ use crate::{
     DashboardActivityRow, DashboardBenefitRow, DashboardModelRow, DashboardQuotaRow,
     DashboardSectionRow, DashboardSessionRow, DashboardTrendPoint, DesktopActivityKey,
     DesktopCostValue, DesktopDashboardProjection, DesktopDashboardSectionKey, DesktopFreshness,
-    DesktopIntent, DesktopIntentSink, DesktopOperationSnapshot, DesktopQuality,
-    DesktopReliableStateProjection, DesktopSnapshotBridge, DesktopSnapshotReceiver,
-    DesktopTokenValue, DesktopValueAvailability, MainWindow, RestorePointRow, RouteRow,
-    UnavailableDesktopIntentSink,
+    DesktopHistoryProjection, DesktopIntent, DesktopIntentSink, DesktopOperationSnapshot,
+    DesktopQuality, DesktopReliableStateProjection, DesktopSnapshotBridge, DesktopSnapshotReceiver,
+    DesktopTokenValue, DesktopValueAvailability, HistoryDayRow, MainWindow, RestorePointRow,
+    RouteRow, UnavailableDesktopIntentSink,
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
 };
 
@@ -430,6 +430,7 @@ fn wire_route_selection(window: &MainWindow, state: SharedDesktopState) {
 pub(crate) fn apply_projection(window: &MainWindow, projection: &DesktopProjection) {
     apply_route_projection(window, projection);
     apply_dashboard_projection(window, projection.dashboard());
+    apply_history_projection(window, projection.history());
 }
 
 fn apply_route_projection(window: &MainWindow, projection: &DesktopProjection) {
@@ -721,6 +722,75 @@ fn apply_dashboard_projection(window: &MainWindow, dashboard: &DesktopDashboardP
     apply_sessions(window, dashboard);
     apply_activity(window, dashboard);
     apply_models(window, dashboard);
+}
+
+fn apply_history_projection(window: &MainWindow, history: &DesktopHistoryProjection) {
+    window.set_history_state(history.state().stable_code().into());
+    window.set_history_reasons(join_reasons(history.reason_codes().iter()).into());
+    window.set_history_range_label(format_history_range(history).into());
+    window.set_history_time_zone_label(history.time_zone_id().unwrap_or("Unavailable").into());
+    window
+        .set_history_evidence_label(format_evidence(history.freshness(), history.quality()).into());
+    window.set_history_input_tokens(format_tokens(history.input()).into());
+    window.set_history_cached_tokens(format_tokens(history.cached()).into());
+    window.set_history_output_tokens(format_tokens(history.output()).into());
+    window.set_history_reasoning_tokens(format_tokens(history.reasoning()).into());
+    window.set_history_total_tokens(format_tokens(history.total_tokens()).into());
+    window.set_history_cost(format_cost(history.cost()).into());
+    window.set_history_events(format_optional_events(history.event_count()).into());
+
+    let rows = history
+        .rows()
+        .iter()
+        .map(|row| {
+            let (year, month, day) = row.date();
+            HistoryDayRow {
+                date_label: format_date(year, month, day).into(),
+                event_label: format_integer(row.event_count()).into(),
+                input_availability: availability_code(row.input().availability()).into(),
+                input_label: format_tokens(row.input()).into(),
+                cached_availability: availability_code(row.cached().availability()).into(),
+                cached_label: format_tokens(row.cached()).into(),
+                output_availability: availability_code(row.output().availability()).into(),
+                output_label: format_tokens(row.output()).into(),
+                reasoning_availability: availability_code(row.reasoning().availability()).into(),
+                reasoning_label: format_tokens(row.reasoning()).into(),
+                total_availability: availability_code(row.total_tokens().availability()).into(),
+                total_label: format_tokens(row.total_tokens()).into(),
+                cost_availability: availability_code(row.cost().availability()).into(),
+                cost_label: format_cost(row.cost()).into(),
+                token_ratio: ratio(row.total_tokens().known_sum(), history.token_maximum()),
+                cost_ratio: ratio(row.cost().micros(), history.cost_maximum_micros()),
+            }
+        })
+        .collect::<Vec<_>>();
+    window.set_history_day_rows(model(rows));
+}
+
+fn format_history_range(history: &DesktopHistoryProjection) -> String {
+    if let (Some(oldest), Some(newest)) = (history.rows().last(), history.rows().first()) {
+        let (start_year, start_month, start_day) = oldest.date();
+        let (end_year, end_month, end_day) = newest.date();
+        return format!(
+            "{} – {}",
+            format_date(start_year, start_month, start_day),
+            format_date(end_year, end_month, end_day)
+        );
+    }
+    history.range().map_or_else(
+        || "Range unavailable".to_owned(),
+        |(start, end)| {
+            format!(
+                "{} – before {}",
+                format_date(start.0, start.1, start.2),
+                format_date(end.0, end.1, end.2)
+            )
+        },
+    )
+}
+
+fn format_date(year: i16, month: u8, day: u8) -> String {
+    format!("{year:04}-{month:02}-{day:02}")
 }
 
 fn apply_code_output(window: &MainWindow, dashboard: &DesktopDashboardProjection) {

@@ -77,6 +77,25 @@ export struct DashboardModelRow {
     cost-label: string,
 }
 
+export struct HistoryDayRow {
+    date-label: string,
+    event-label: string,
+    input-availability: string,
+    input-label: string,
+    cached-availability: string,
+    cached-label: string,
+    output-availability: string,
+    output-label: string,
+    reasoning-availability: string,
+    reasoning-label: string,
+    total-availability: string,
+    total-label: string,
+    cost-availability: string,
+    cost-label: string,
+    token-ratio: float,
+    cost-ratio: float,
+}
+
 export struct RestorePointRow {
     row-index: int,
     created-label: string,

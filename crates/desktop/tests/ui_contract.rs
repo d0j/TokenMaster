@@ -5,8 +5,8 @@ use tokenmaster_desktop::{DesktopApplyOutcome, DesktopShell};
 use tokenmaster_product::{ProductAttemptGeneration, ProductReducer};
 use tokenmaster_query::{
     BenefitOverviewRequest, GitOutputRequest, PageSize, QueryErrorCode, QueryService,
-    UsageAnalyticsRequest, UsageBreakdownKind, UsageSeriesSelection, UsageSessionPageRequest,
-    UsageTimeZone, WeekStart,
+    UsageAnalyticsRequest, UsageBreakdownKind, UsageRange, UsageSeriesSelection,
+    UsageSessionPageRequest, UsageTimeZone, WeekStart,
 };
 
 use support::dashboard_fixture::{FixedClock, add_quota_windows, range, seed};
@@ -29,6 +29,19 @@ fn ready_reducer(path: &std::path::Path, additional_quota_windows: u8) -> Produc
             .expect("analytics request"),
         )
         .expect("analytics");
+    let history = service
+        .usage_analytics(
+            UsageAnalyticsRequest::new(
+                UsageRange::recent_days(30).expect("recent history range"),
+                UsageTimeZone::iana("UTC").expect("UTC"),
+                WeekStart::Monday,
+                UsageSeriesSelection::Daily,
+                Vec::new(),
+                Vec::new(),
+            )
+            .expect("history request"),
+        )
+        .expect("history");
     let quota = service.quota_overview().expect("quota overview");
     let benefits = service
         .benefit_overview(BenefitOverviewRequest::new())
@@ -53,6 +66,9 @@ fn ready_reducer(path: &std::path::Path, additional_quota_windows: u8) -> Produc
     reducer
         .publish_analytics(attempt, analytics)
         .expect("publish analytics");
+    reducer
+        .publish_history(attempt, history)
+        .expect("publish history");
     reducer
         .publish_quota(attempt, quota)
         .expect("publish quota");
@@ -82,6 +98,9 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert_eq!(window.get_active_route_state(), "unavailable");
     assert_eq!(window.get_active_route_reasons(), "data_status_unavailable");
     assert!(window.get_dashboard_visible());
+    assert!(!window.get_history_visible());
+    assert_eq!(window.get_history_day_rows().row_count(), 0);
+    assert_eq!(window.get_history_total_tokens(), "—");
     assert_eq!(window.get_dashboard_section_rows().row_count(), 6);
     assert_eq!(window.get_dashboard_header_tokens(), "—");
     assert_eq!(window.get_dashboard_header_cost(), "—");
@@ -213,6 +232,24 @@ fn assert_compiled_dashboard_renders_real_bounded_models_and_switches_layout_in_
     assert!(window.get_dashboard_visible());
     assert_eq!(component_address, shell.window() as *const _);
     assert_eq!(window.get_dashboard_quota_rows().row_count(), 1);
+
+    window.invoke_select_route(SharedString::from("history"));
+    assert!(window.get_history_visible());
+    assert!(!window.get_dashboard_visible());
+    assert_eq!(window.get_active_route_state(), "ready");
+    assert_eq!(window.get_history_state(), "ready");
+    assert_eq!(window.get_history_range_label(), "2026-06-17 – 2026-07-16");
+    assert_eq!(window.get_history_time_zone_label(), "UTC");
+    assert_eq!(window.get_history_evidence_label(), "Fresh · Authoritative");
+    assert_eq!(window.get_history_total_tokens(), "140");
+    assert_eq!(window.get_history_cost(), "$0.010000");
+    assert_eq!(window.get_history_events(), "1 event");
+    let history = window.get_history_day_rows();
+    assert_eq!(history.row_count(), 30);
+    let newest = history.row_data(0).expect("newest history day");
+    assert_eq!(newest.date_label, "2026-07-16");
+    assert_eq!(newest.total_label, "140");
+    assert_eq!(newest.cost_label, "$0.010000");
 
     drop(shell);
     let scale_directory = tempfile::TempDir::new().expect("scale directory");

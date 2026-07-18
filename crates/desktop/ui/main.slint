@@ -1,12 +1,13 @@
 import {
     RouteRow, DashboardSectionRow, DashboardQuotaRow, DashboardBenefitRow,
     DashboardTrendPoint, DashboardSessionRow, DashboardActivityRow, DashboardModelRow,
-    RestorePointRow
+    HistoryDayRow, RestorePointRow
 } from "models.slint";
 import { UiTokens } from "tokens.slint";
 import { RouteNavItem } from "components/route-nav-item.slint";
 import { RouteState } from "components/route-state.slint";
 import { DashboardView } from "views/dashboard-view.slint";
+import { HistoryView } from "views/history-view.slint";
 import { DataHealthView } from "views/data-health-view.slint";
 import { SettingsView } from "views/settings-view.slint";
 
@@ -34,7 +35,21 @@ export component MainWindow inherits Window {
     in property <string> dashboard-code-net;
     in property <string> dashboard-code-efficiency;
     in property <string> dashboard-code-evidence;
+    in property <[HistoryDayRow]> history-day-rows;
+    in property <string> history-state;
+    in property <string> history-reasons;
+    in property <string> history-range-label;
+    in property <string> history-time-zone-label;
+    in property <string> history-evidence-label;
+    in property <string> history-input-tokens;
+    in property <string> history-cached-tokens;
+    in property <string> history-output-tokens;
+    in property <string> history-reasoning-tokens;
+    in property <string> history-total-tokens;
+    in property <string> history-cost;
+    in property <string> history-events;
     out property <bool> dashboard-visible: root.active-route-key == "dashboard";
+    out property <bool> history-visible: root.active-route-key == "history";
     out property <bool> data-health-visible: root.active-route-key == "data_health";
     out property <bool> settings-visible: root.active-route-key == "settings";
     out property <string> dashboard-layout-mode: root.width < 1010px ? "narrow" : "wide";
@@ -173,6 +188,24 @@ export component MainWindow inherits Window {
                     code-evidence: root.dashboard-code-evidence;
                 }
 
+                if root.history-visible: HistoryView {
+                    width: parent.width;
+                    height: parent.height;
+                    rows: root.history-day-rows;
+                    state: root.history-state;
+                    reasons: root.history-reasons;
+                    range-label: root.history-range-label;
+                    time-zone-label: root.history-time-zone-label;
+                    evidence-label: root.history-evidence-label;
+                    input-tokens: root.history-input-tokens;
+                    cached-tokens: root.history-cached-tokens;
+                    output-tokens: root.history-output-tokens;
+                    reasoning-tokens: root.history-reasoning-tokens;
+                    total-tokens: root.history-total-tokens;
+                    cost: root.history-cost;
+                    events: root.history-events;
+                }
+
                 if root.data-health-visible: DataHealthView {
                     width: parent.width;
                     height: parent.height;
@@ -234,7 +267,7 @@ export component MainWindow inherits Window {
                     update-backup-policy(enabled, quiet, interval, budget) => { root.update-backup-policy(enabled, quiet, interval, budget); }
                 }
 
-                if !root.dashboard-visible && !root.data-health-visible && !root.settings-visible: RouteState {
+                if !root.dashboard-visible && !root.history-visible && !root.data-health-visible && !root.settings-visible: RouteState {
                     x: UiTokens.space;
                     y: UiTokens.space;
                     width: parent.width - 2 * UiTokens.space;
