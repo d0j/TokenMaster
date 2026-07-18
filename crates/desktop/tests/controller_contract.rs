@@ -88,9 +88,13 @@ impl DesktopQuerySource for UnavailableSource {
 
     fn usage_analytics(
         &mut self,
-        _request: UsageAnalyticsRequest,
+        request: UsageAnalyticsRequest,
     ) -> Result<QueryEnvelope<UsageAnalytics>, QueryError> {
-        self.record("analytics");
+        match request.range().stable_code() {
+            "today" => self.record("analytics_today"),
+            "recent_days" => self.record("analytics_recent"),
+            other => panic!("unexpected analytics range: {other}"),
+        }
         Err(query_failure())
     }
 
@@ -170,7 +174,8 @@ fn controller_contract_is_typed_bounded_and_deterministic() {
         *calls.lock().expect("call log"),
         [
             "status",
-            "analytics",
+            "analytics_today",
+            "analytics_recent",
             "quota",
             "benefit",
             "git",
@@ -186,6 +191,7 @@ fn controller_contract_is_typed_bounded_and_deterministic() {
     for section in [
         snapshot.data_status().kind(),
         snapshot.analytics().kind(),
+        snapshot.history().kind(),
         snapshot.quota().kind(),
         snapshot.benefit().kind(),
         snapshot.git().kind(),
@@ -204,6 +210,7 @@ fn controller_contract_is_typed_bounded_and_deterministic() {
     );
     for generation in [
         snapshot.analytics().attempt_generation(),
+        snapshot.history().attempt_generation(),
         snapshot.quota().attempt_generation(),
         snapshot.benefit().attempt_generation(),
         snapshot.git().attempt_generation(),
@@ -614,6 +621,7 @@ fn real_empty_archive_publishes_truth_and_keeps_one_section_failure_local() {
 
     assert_eq!(snapshot.data_status().kind(), ProductSectionKind::Ready);
     assert_eq!(snapshot.analytics().kind(), ProductSectionKind::Unavailable);
+    assert_eq!(snapshot.history().kind(), ProductSectionKind::Unavailable);
     assert_eq!(snapshot.quota().kind(), ProductSectionKind::Ready);
     assert_eq!(snapshot.benefit().kind(), ProductSectionKind::Ready);
     assert_eq!(snapshot.git().kind(), ProductSectionKind::Ready);

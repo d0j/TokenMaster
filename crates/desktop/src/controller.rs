@@ -27,6 +27,7 @@ use tokenmaster_query::{
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DesktopQueryPlan {
     analytics: UsageAnalyticsRequest,
+    history: UsageAnalyticsRequest,
     git: GitOutputRequest,
     activity: LatestActivityRequest,
     sessions: UsageSessionPageRequest,
@@ -34,6 +35,7 @@ pub struct DesktopQueryPlan {
 
 impl DesktopQueryPlan {
     pub const MAX_SERIES_POINTS: usize = 240;
+    pub const HISTORY_DAYS: u16 = 30;
     pub const MAX_DASHBOARD_ROWS: usize = 12;
     pub const MAX_REPOSITORIES: usize = 32;
 
@@ -53,6 +55,15 @@ impl DesktopQueryPlan {
             ],
         )
         .map_err(map_query_error)?;
+        let history = UsageAnalyticsRequest::new(
+            UsageRange::recent_days(Self::HISTORY_DAYS).map_err(map_query_error)?,
+            UsageTimeZone::system(),
+            WeekStart::Monday,
+            UsageSeriesSelection::Daily,
+            Vec::new(),
+            Vec::new(),
+        )
+        .map_err(map_query_error)?;
         let git = GitOutputRequest::new(
             UsageRange::today(),
             WeekStart::Monday,
@@ -64,6 +75,7 @@ impl DesktopQueryPlan {
             UsageSessionPageRequest::first(page_size, Vec::new()).map_err(map_query_error)?;
         Ok(Self {
             analytics,
+            history,
             git,
             activity: LatestActivityRequest::first(page_size),
             sessions,
@@ -641,6 +653,17 @@ fn execute_attempt<S: DesktopQuerySource>(
     let result = match source.usage_analytics(plan.analytics.clone()) {
         Ok(value) => reducer.publish_analytics(attempt, value),
         Err(error) => reducer.fail_analytics(attempt, error.code()),
+    };
+    if result.is_err() {
+        return RefreshOutcome::Failed;
+    }
+    if let Some(outcome) = stop_outcome(permit, clock) {
+        return outcome;
+    }
+
+    let result = match source.usage_analytics(plan.history.clone()) {
+        Ok(value) => reducer.publish_history(attempt, value),
+        Err(error) => reducer.fail_history(attempt, error.code()),
     };
     if result.is_err() {
         return RefreshOutcome::Failed;
