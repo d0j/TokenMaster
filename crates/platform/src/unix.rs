@@ -2,6 +2,26 @@ use std::fs::File;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
+pub(super) fn available_space(path: &Path) -> Result<u64, DurableFileError> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+
+    let path = CString::new(path.as_os_str().as_bytes())
+        .map_err(|_| DurableFileError::UnsupportedLocation)?;
+    let mut facts = core::mem::MaybeUninit::<libc::statvfs>::uninit();
+    // SAFETY: `path` is NUL-terminated and `facts` points to writable storage
+    // initialized by a successful `statvfs` call.
+    if unsafe { libc::statvfs(path.as_ptr(), facts.as_mut_ptr()) } != 0 {
+        return Err(DurableFileError::Unavailable);
+    }
+    // SAFETY: the successful call above initialized the complete structure.
+    let facts = unsafe { facts.assume_init() };
+    facts
+        .f_bavail
+        .checked_mul(facts.f_frsize)
+        .ok_or(DurableFileError::CapacityExceeded)
+}
+
 use sha2::{Digest, Sha256};
 
 use super::{DurableFileError, PhysicalFileIdentity, PhysicalIdentityError, from_digest};

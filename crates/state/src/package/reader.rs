@@ -6,7 +6,8 @@ use crate::{PortableSettingsCandidate, StateError};
 
 use super::capability::{
     BackupStagedFile, DurableFileReader, DurableReaderAdapter, DurableStagedFile,
-    DurableWriterAdapter, map_backup_directory_error, map_durable_error, resolve_codec_error,
+    DurableWriterAdapter, RecoveryStagedArchive, RecoveryWriterAdapter, map_archive_recovery_error,
+    map_backup_directory_error, map_durable_error, resolve_codec_error,
 };
 use super::encryption::AuthenticatedBackupPayload;
 use super::header::{HEADER_BYTES, Header, PackageKind};
@@ -37,6 +38,16 @@ impl ConfigPackage {
 }
 
 impl BackupPackage {
+    /// Fully verifies a backup from a controlled reader without retaining its
+    /// expanded database. Used to reconstruct journaled portable settings.
+    pub fn inspect(source: &mut DurableFileReader) -> Result<VerifiedBackupPackage, StateError> {
+        let mut source_adapter = DurableReaderAdapter::new(source);
+        let mut sink = io::sink();
+        let result = read_package(&mut source_adapter, PackageKind::Backup, &mut sink)
+            .and_then(verified_backup_from_parsed);
+        resolve_codec_error(result, &[source_adapter.failure()])
+    }
+
     /// Verifies a backup and seals its database only after the complete package passes.
     pub fn read(
         source: &mut DurableFileReader,
@@ -57,6 +68,46 @@ impl BackupPackage {
         let result = read_package(&mut source_adapter, PackageKind::Backup, &mut sink)
             .and_then(verified_backup_from_parsed);
         resolve_codec_error(result, &[source_adapter.failure()])
+    }
+
+    /// Verifies a backup and publishes its exact database only into the sealed
+    /// platform recovery staging namespace.
+    pub fn read_for_recovery(
+        source: &mut DurableFileReader,
+        database_sink: &mut RecoveryStagedArchive,
+    ) -> Result<VerifiedBackupPackage, StateError> {
+        let mut source_adapter = DurableReaderAdapter::new(source);
+        let result = (|| {
+            let (result, failure) = {
+                let mut sink_adapter = RecoveryWriterAdapter::new(database_sink);
+                let result =
+                    read_package(&mut source_adapter, PackageKind::Backup, &mut sink_adapter);
+                (result, sink_adapter.failure())
+            };
+            let parsed = match result {
+                Ok(parsed) => parsed,
+                Err(error) => {
+                    return Err(failure
+                        .map(map_archive_recovery_error)
+                        .or_else(|| source_adapter.failure().map(map_durable_error))
+                        .unwrap_or(error));
+                }
+            };
+            let database = parsed.database.ok_or_else(StateError::internal_invariant)?;
+            database_sink
+                .seal(database.expanded_len, database.expanded_sha256)
+                .map_err(map_archive_recovery_error)?;
+            verified_backup_from_parsed(parsed)
+        })();
+        match result {
+            Ok(verified) => Ok(verified),
+            Err(error) => {
+                database_sink
+                    .discard()
+                    .map_err(|_| StateError::recovery_required())?;
+                Err(error)
+            }
+        }
     }
 }
 

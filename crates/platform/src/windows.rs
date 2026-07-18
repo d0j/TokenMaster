@@ -76,6 +76,19 @@ pub(super) fn move_file_write_through(
     .map_err(|_| DurableFileError::Unavailable)
 }
 
+pub(super) fn available_space(path: &Path) -> Result<u64, DurableFileError> {
+    use windows::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+    use windows::core::PCWSTR;
+
+    let path = wide_path(path)?;
+    let mut available = 0_u64;
+    // SAFETY: `path` is a retained NUL-terminated UTF-16 string and the output
+    // pointer refers to a live `u64` for the duration of the call.
+    unsafe { GetDiskFreeSpaceExW(PCWSTR(path.as_ptr()), Some(&mut available), None, None) }
+        .map_err(|_| DurableFileError::Unavailable)?;
+    Ok(available)
+}
+
 pub(super) fn replace_file_write_through(
     target: &Path,
     source: &Path,

@@ -471,14 +471,46 @@ regression and fix. Post-fix rereview reports Critical 0, Important 0, Minor 0 a
 locked workspace test/doctest suite in 507.6 seconds. The one live-auth Codex transport
 test remains explicitly ignored without its external authenticated environment.
 
-The immediate next slice is Task 10 durable restore journal/quarantine. Then continue
-Tasks 11-18 in order: startup recovery and
+Task 10 is implemented in the working tree. Platform owns one fixed recovery scope
+bound to the physical archive lock file, fixed main/WAL/SHM, a globally three-artifact-bounded
+staging namespace, and three never-auto-deleted quarantine sets. Store owns the
+path-free recovery copy and complete SQLite/schema/FK/semantic verifier. State owns
+the six-phase A/B journal, typed manual/automatic modes, fixed prior-artifact facts,
+prepared portable-settings target, promotion/rollback sequencing, and no filesystem
+or SQL authority. Absent or completed-journal startup discards only exact recognized abandoned
+staging; unknown entries fail closed and remain.
+The physical guard is authorized before any store-owned or platform-owned cleanup.
+The shared platform/store staging cap is three live artifacts, and free-space
+admission requires `max(2B, B+A) + 8 MiB`, where `B` is the selected database length
+and `A` is the observed active-main length. Active facts are rechecked after preflight.
+
+The process-death fixture now covers every durable journal phase, store-verifier file
+creation, first prepared-journal slot publication, and the three critical pre-journal
+mutation boundaries: sidecars moved, main promoted, and settings committed.
+It closed a real restart gap where `ReplaceFileW` had already consumed the sealed stage
+while the journal remained `sidecars_quarantined`; resume proves the fully verified
+active candidate and advances idempotently. Candidate digest drift, active identity
+drift, fixed-slot package identity across catalog rebuild, settings publication
+ambiguity, post-replacement validation failure, physical wrong lease, missing-main
+recovery, repeated journal generations, automatic data-only, dual-invalid journal, staging/quarantine
+caps, and unknown-entry preservation have focused contracts. Strict platform/store/
+state Clippy, the full reliable-state authority audit, and 52/52 Pester mutations pass.
+Final independent rereview reports Critical 0, Important 0, Minor 0 and `Ready`.
+The final baseline passes clean-root in 14.899 seconds, formatting in 1.396 seconds,
+strict locked workspace Clippy in 9.169 seconds, and the complete locked workspace
+test/doctest suite in 545.3 seconds. The reliable-state audit and 52/52 mutations pass;
+the changed platform boundary also passes an MSVC target check. Task 10 is accepted as
+developer evidence; application recovery, product acceptance, packaging, signing, and
+release remain unclaimed.
+
+The immediate next slice after Task 10 acceptance is Task 11 startup recovery. Then continue
+Tasks 12-18 in order: application recovery and
 integration, application restart/safe mode, Data & Recovery UI, then adversarial and
 resource closure. Keep the fixed archive path and writer sidecar; never copy only the
 live main file or treat busy/disk/access/schema-newer as corruption authority. Keep
 automatic recovery data only; manual full restore must explicitly choose data only or
 data plus portable settings, and device-local settings never move between machines.
-Task 10 must preserve the fixed Task 9 runtime/reader boundary and must not relax Tasks
+Task 11 must preserve the fixed Task 9/10 runtime/reader/recovery boundary and must not relax Tasks
 6-9 into path, generic-stream, generic age-extraction, or batch-deletion authority.
 
 After P3-D.0, continue P3-D supporting data-bearing routes using bounded keyset
@@ -487,11 +519,13 @@ notifications, settings/help, command palette, tray, and compact lifecycle. P3-D
 presentation, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.
-The current post-P3-D.0-Task-9 focused evidence includes the Task 5 store contracts,
+The current post-P3-D.0-Task-10 focused evidence includes the Task 5 store contracts,
 5 package contracts, 10 package adversarial contracts, 17 durable-file contracts,
 7 grouped encryption contracts, 6 catalog contracts, 2 retention contracts, 5 backup-
 directory contracts, 17 maintenance contracts, the Windows maintenance resource gate,
-strict platform/state Clippy, the reliable-state workspace audit, 47 authority mutations,
+13 archive-recovery contracts, 4 store recovery-verifier contracts, 6 recovery-journal
+contracts, 18 restore/crash contracts plus 2 capacity unit contracts, strict platform/store/state Clippy, the
+reliable-state workspace audit, 52 authority mutations,
 and exact Zstd/age feature-tree verification.
 The prior Task 7 component baseline passed on its unchanged source tree: clean-root
 15.9 seconds, formatting 1.4 seconds, strict locked full-workspace Clippy 35.6

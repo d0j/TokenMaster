@@ -199,6 +199,34 @@ where
         self.save_with_policy(value, &mut NoopRecordSaveHook, true)
     }
 
+    pub(crate) fn save_explicit_with_hook(
+        &self,
+        value: &T,
+        hook: &mut impl RecordSaveHook,
+    ) -> Result<RecordSaveReceipt, StateError> {
+        self.save_with_policy(value, hook, true)
+    }
+
+    pub(crate) fn has_any_artifact(&self) -> Result<bool, StateError> {
+        for slot in &self.slots {
+            match slot.read_bounded(
+                self.max_payload_bytes
+                    .checked_add(RECORD_OVERHEAD_BYTES)
+                    .ok_or_else(StateError::capacity_exceeded)?,
+            ) {
+                Ok(Some(_))
+                | Err(
+                    DurableFileError::CapacityExceeded
+                    | DurableFileError::Integrity
+                    | DurableFileError::UnexpectedType,
+                ) => return Ok(true),
+                Ok(None) => {}
+                Err(error) => return Err(map_durable_error(error)),
+            }
+        }
+        Ok(false)
+    }
+
     pub(crate) fn save_with_hook(
         &self,
         value: &T,

@@ -150,8 +150,10 @@ tokenmaster-state = { path = "../state" }
         $result.approved_std_io_import_count | Should -Be 5
         $result.approved_maintenance_std_import_count | Should -Be 4
         $result.approved_store_candidate_import_count | Should -Be 1
+        $result.approved_recovery_store_import_count | Should -Be 1
         $result.approved_maintenance_store_control_import_count | Should -Be 1
-        $result.approved_platform_import_count | Should -Be 6
+        $result.approved_platform_import_count | Should -Be 8
+        $result.validated_directory_capability_use_count | Should -Be 6
         $result.forbidden_authority_count | Should -Be 0
     }
 
@@ -332,6 +334,51 @@ tokenmaster-state = { path = "../state" }
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-STATE-STORE-AUTHORITY*"
+    }
+
+    It "rejects a recovery platform capability reexport" {
+        $fixture = New-StateAuditFixture -Name "recovery-platform-reexport"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\lib.rs") `
+            -Value 'pub use tokenmaster_platform::ArchiveRecoveryScope;'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-RECOVERY-AUTHORITY*"
+    }
+
+    It "rejects a second sealed recovery capability use" {
+        $fixture = New-StateAuditFixture -Name "second-recovery-capability"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\recovery\restore.rs") `
+            -Value 'pub fn leak_recovery_stage(stage: RecoveryStagedArchive) { let _ = stage; }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-RECOVERY-AUTHORITY*"
+    }
+
+    It "rejects a second recovery store-control escape" {
+        $fixture = New-StateAuditFixture -Name "second-recovery-store-control"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\recovery\restore.rs") `
+            -Value 'pub fn leak_recovery_control(control: BackupControl) { let _ = control; }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-STORE-AUTHORITY*"
+    }
+
+    It "rejects recovery verifier authority outside its exact owner" {
+        $fixture = New-StateAuditFixture -Name "recovery-store-wrong-owner"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\lib.rs") `
+            -Value 'use tokenmaster_store::verify_recovery_archive_with_observer;'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-RECOVERY-AUTHORITY*"
+    }
+
+    It "rejects arbitrary path authority inside recovery" {
+        $fixture = New-StateAuditFixture -Name "recovery-path-authority"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\recovery\restore.rs") `
+            -Value 'fn forbidden_recovery_path(_: &std::path::PathBuf) {}'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-FORBIDDEN-AUTHORITY*"
     }
 
     It "rejects std io authority through the approved alias" {

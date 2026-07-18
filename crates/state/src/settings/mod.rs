@@ -7,8 +7,10 @@ pub use preview::{
     PortableSettingsCandidate, PortableSettingsDigest, PortableSettingsTarget,
     SettingsChangeCategory, SettingsImportPreview,
 };
+pub(crate) use store::SettingsRestoreBoundary;
 pub use store::{
-    SettingsCommitReceipt, SettingsHealthCode, SettingsLoad, SettingsLoadOutcome, SettingsStore,
+    PreparedSettingsRestore, SettingsCommitReceipt, SettingsHealthCode, SettingsLoad,
+    SettingsLoadOutcome, SettingsStore,
 };
 pub use value::{
     BACKUP_INTERVAL_DEFAULT_SECONDS, BACKUP_INTERVAL_MAX_SECONDS, BACKUP_INTERVAL_MIN_SECONDS,

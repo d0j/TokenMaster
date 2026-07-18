@@ -1,7 +1,7 @@
 use std::ffi::OsString;
 use std::fmt;
-use std::fs::{File, OpenOptions};
-use std::io::{ErrorKind, Read};
+use std::fs::{self, File, OpenOptions};
+use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -13,7 +13,10 @@ use rusqlite::config::DbConfig;
 use rusqlite::limits::Limit;
 use rusqlite::{Connection, ErrorCode, OpenFlags};
 use sha2::{Digest, Sha256};
-use tokenmaster_platform::{MAX_DURABLE_FILE_BYTES, PhysicalFileIdentity, ValidatedLocalDirectory};
+use tokenmaster_platform::{
+    DurableFileError, DurableFileReader, MAX_DURABLE_FILE_BYTES, MAX_RECOVERY_STAGING_ARTIFACTS,
+    PhysicalFileIdentity, ValidatedLocalDirectory,
+};
 
 use crate::usage::migration::{
     validate_archive_version, validate_current_indexes, validate_current_schema_only,
@@ -91,7 +94,7 @@ impl BackupStaging {
             return Err(StoreError::new(StoreErrorCode::BackupIo));
         }
         let mut removed = 0_u64;
-        for kind in ["snapshot", "compact"] {
+        for kind in ["snapshot", "compact", "recovery"] {
             for attempt in 0..SNAPSHOT_ATTEMPTS {
                 let path = self
                     .directory
@@ -103,6 +106,27 @@ impl BackupStaging {
         }
         self.cleanup_failures.store(0, Ordering::Release);
         Ok(removed)
+    }
+
+    fn require_recovery_artifact_capacity(&self) -> Result<(), StoreError> {
+        let revalidated = ValidatedLocalDirectory::new(&self.directory)
+            .map_err(|_| StoreError::new(StoreErrorCode::BackupIo))?;
+        if revalidated.as_path() != self.directory {
+            return Err(StoreError::new(StoreErrorCode::BackupIo));
+        }
+        let mut count = 0_usize;
+        for entry in
+            fs::read_dir(&self.directory).map_err(|_| StoreError::new(StoreErrorCode::BackupIo))?
+        {
+            entry.map_err(|_| StoreError::new(StoreErrorCode::BackupIo))?;
+            count = count
+                .checked_add(1)
+                .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?;
+            if count >= MAX_RECOVERY_STAGING_ARTIFACTS {
+                return Err(StoreError::new(StoreErrorCode::CapacityExceeded));
+            }
+        }
+        Ok(())
     }
 }
 
@@ -428,6 +452,67 @@ impl fmt::Debug for VerifiedBackupCandidate {
     }
 }
 
+/// Complete path-free SQLite verification proof for a recovery input.
+pub struct VerifiedRecoveryArchive {
+    candidate: VerifiedBackupCandidate,
+}
+
+impl VerifiedRecoveryArchive {
+    #[must_use]
+    pub const fn schema_version(&self) -> u32 {
+        self.candidate.schema_version()
+    }
+
+    #[must_use]
+    pub const fn len(&self) -> u64 {
+        self.candidate.len()
+    }
+
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.candidate.is_empty()
+    }
+
+    #[must_use]
+    pub const fn sha256(&self) -> &[u8; 32] {
+        &self.candidate.identity.sha256
+    }
+
+    #[must_use]
+    pub const fn integrity_verified(&self) -> bool {
+        self.candidate.integrity_verified()
+    }
+
+    #[must_use]
+    pub const fn foreign_keys_verified(&self) -> bool {
+        self.candidate.foreign_keys_verified()
+    }
+
+    #[must_use]
+    pub const fn schema_verified(&self) -> bool {
+        self.candidate.schema_verified()
+    }
+
+    #[must_use]
+    pub const fn semantics_verified(&self) -> bool {
+        self.candidate.semantics_verified()
+    }
+}
+
+impl fmt::Debug for VerifiedRecoveryArchive {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("VerifiedRecoveryArchive([redacted])")
+    }
+}
+
+/// Bounded crash-test observation with no path or mutation authority.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[doc(hidden)]
+pub enum RecoveryVerificationBoundary {
+    CandidateCreated,
+    CandidateSynced,
+}
+
 /// Bounded stream capability for one unchanged verified SQLite candidate.
 ///
 /// This type exposes neither a path nor generic `Read` authority. Its final proof
@@ -536,6 +621,95 @@ pub fn create_online_snapshot(
     control: &BackupControl,
 ) -> Result<BackupCandidate, StoreError> {
     create_online_snapshot_with_step_hook(source, staging, control, || Ok(()))
+}
+
+/// Copies one bounded path-free archive stream into the store-owned candidate
+/// namespace and applies the complete standalone SQLite verifier.
+pub fn verify_recovery_archive(
+    source: DurableFileReader,
+    staging: &BackupStaging,
+    control: &BackupControl,
+) -> Result<VerifiedRecoveryArchive, StoreError> {
+    verify_recovery_archive_with_observer(source, staging, control, |_| {})
+}
+
+#[doc(hidden)]
+pub fn verify_recovery_archive_with_observer<F>(
+    mut source: DurableFileReader,
+    staging: &BackupStaging,
+    control: &BackupControl,
+    mut observer: F,
+) -> Result<VerifiedRecoveryArchive, StoreError>
+where
+    F: FnMut(RecoveryVerificationBoundary),
+{
+    control.check()?;
+    if source.is_empty() || source.len() > MAX_DURABLE_FILE_BYTES {
+        return Err(StoreError::new(StoreErrorCode::CapacityExceeded));
+    }
+    staging.require_recovery_artifact_capacity()?;
+    let expected_len = source.len();
+    let candidate = create_candidate(staging, "recovery")?;
+    observer(RecoveryVerificationBoundary::CandidateCreated);
+    let path = candidate.path()?.to_path_buf();
+    let result = (|| {
+        let mut destination = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(&path)
+            .map_err(|_| StoreError::new(StoreErrorCode::BackupIo))?;
+        let mut copied = 0_u64;
+        let mut buffer = [0_u8; IDENTITY_HASH_BUFFER_BYTES];
+        loop {
+            control.check()?;
+            let count = source
+                .read_chunk(&mut buffer)
+                .map_err(map_recovery_reader_error)?;
+            if count == 0 {
+                break;
+            }
+            copied = copied
+                .checked_add(
+                    u64::try_from(count)
+                        .map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))?,
+                )
+                .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?;
+            if copied > expected_len {
+                return Err(StoreError::new(StoreErrorCode::StaleBackupCandidate));
+            }
+            destination
+                .write_all(&buffer[..count])
+                .map_err(|_| StoreError::new(StoreErrorCode::BackupIo))?;
+        }
+        if copied != expected_len {
+            return Err(StoreError::new(StoreErrorCode::StaleBackupCandidate));
+        }
+        destination
+            .sync_all()
+            .map_err(|_| StoreError::new(StoreErrorCode::BackupIo))?;
+        observer(RecoveryVerificationBoundary::CandidateSynced);
+        drop(destination);
+        control.check()?;
+        verify_backup_candidate(candidate, control)
+    })();
+    result.map(|candidate| VerifiedRecoveryArchive { candidate })
+}
+
+const fn map_recovery_reader_error(error: DurableFileError) -> StoreError {
+    match error {
+        DurableFileError::CapacityExceeded => StoreError::new(StoreErrorCode::CapacityExceeded),
+        DurableFileError::Integrity | DurableFileError::InvalidState => {
+            StoreError::new(StoreErrorCode::StaleBackupCandidate)
+        }
+        DurableFileError::InvalidName
+        | DurableFileError::UnsupportedLocation
+        | DurableFileError::CollisionLimit
+        | DurableFileError::TargetExists
+        | DurableFileError::TargetMissing
+        | DurableFileError::UnexpectedType
+        | DurableFileError::Unavailable
+        | DurableFileError::RecoveryRequired => StoreError::new(StoreErrorCode::BackupIo),
+    }
 }
 
 fn create_online_snapshot_with_step_hook<F>(

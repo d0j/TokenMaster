@@ -124,8 +124,9 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   its library-only state/authority foundation, controlled durable files, crate-private
   redundant records, typed settings, verified SQLite snapshot primitives, and fixed
   typed package import/export, optional manual age protection, sealed backup catalog,
-  deterministic bounded retention, and capacity-one maintenance are complete; staged
-  recovery/quarantine is next, then safe mode and Data & Recovery controls. Full history,
+  deterministic bounded retention, capacity-one maintenance, and sealed journaled
+  recovery/quarantine are complete; startup recovery is next, then safe mode and Data
+  & Recovery controls. Full history,
   sessions, models, projects, activity, remaining health/notifications/settings/help,
   command palette, tray, and compact widget then remain P3-D-P3-E.
 - **P4 — presentation:** modular skins/layouts/density/scheme/locale, en/ru/pseudo,
@@ -161,8 +162,8 @@ health through lossy completion hints. P3-C is now complete: explicit all-curren
 quota/benefit overview reads feed one
 identity-free six-section projection and responsive compiled Slint Dashboard with
 32/32/240/12/8/12 presentation caps, real unknown/degraded states, and route-only
-navigation without model/window reconstruction. P3-D.0 Reliable State Tasks 1-9 are
-complete and Task 10 is next, then the remaining P3-D supporting data views.
+navigation without model/window reconstruction. P3-D.0 Reliable State Tasks 1-10 are
+complete and Task 11 is next, then the remaining P3-D supporting data views.
 
 P3-D.0 Reliable State is approved under
 `docs/superpowers/specs/2026-07-17-tokenmaster-reliable-state-design.md` with the
@@ -174,7 +175,7 @@ settings/run/recovery records, 15-point/2-GiB default retention, three-set quara
 six-state Windows replacement/rollback, automatic corruption-only data-only recovery,
 manual data-only or data-plus-portable-settings restore, safe mode, and off-UI resource
 gates. The contour is in progress and precedes the remaining P3-D views so Settings
-and future migrations do not ship before their durability contract. Tasks 1-9
+and future migrations do not ship before their durability contract. Tasks 1-10
 implement the library-only state boundary plus bounded verified platform publication
 and replacement, the strict six-child A/B envelope, and typed schema-v1 settings with
 portable/device-local separation, safe fallback/defaults, bounded preview, and an
@@ -184,8 +185,14 @@ manual protection with fixed scrypt and zeroizing passphrase boundaries, plus th
 sealed 32-slot directory, disposable proof-bound catalog, and 15-point/byte-bounded
 one-file retention, plus the one-worker/one-scheduler maintenance runtime, linked
 SQLite cancellation, root-preserving mandatory retries, and the sealed store-reader
-package bridge. Recovery remains pending. Task 10 adds the durable restore journal and
-quarantine without introducing path, generic stream, or batch-deletion authority.
+package bridge, plus the physical-lock-bound platform recovery scope, complete path-free
+store revalidation with internal corruption proof, repeatable six-phase redundant
+journal, prepared settings publication, three-set quarantine, rollback, verifier/
+journal/mutation-boundary process-death resume, and three-artifact absent/completed-
+journal staging cleanup with physical authorization before cleanup and
+`max(2B, B+A) + 8 MiB` actual-free-space preflight. Task 11 startup recovery
+remains next; Task 10 adds no
+path, generic stream, SQL, or batch-deletion authority.
 
 P2-A query foundation is approved under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-query-foundation.md`. It first freezes

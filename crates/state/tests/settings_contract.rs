@@ -354,6 +354,89 @@ fn import_preview_is_bounded_typed_stale_safe_and_idempotent() {
 }
 
 #[test]
+fn prepared_restore_records_the_exact_target_before_preserving_device_state_once() {
+    let (_root, directory) = fixture();
+    let store = SettingsStore::new(&directory).expect("settings store");
+    store
+        .save(&changed_value(
+            DeviceRoute::Settings,
+            BACKUP_RETENTION_DEFAULT_BYTES,
+        ))
+        .expect("current settings");
+    let candidate = PortableSettingsCandidate::new(
+        changed_value(DeviceRoute::History, BACKUP_RETENTION_MIN_BYTES)
+            .portable()
+            .clone(),
+    )
+    .expect("restore candidate");
+
+    let prepared = store
+        .prepare_restore(&candidate)
+        .expect("prepared settings restore");
+    assert_eq!(prepared.target().generation(), 2);
+    assert_eq!(prepared.target().digest(), candidate.digest());
+    assert_eq!(store.load().expect("unchanged load").generation(), Some(1));
+    assert_eq!(
+        format!("{prepared:?}"),
+        "PreparedSettingsRestore([redacted])"
+    );
+
+    let committed = store
+        .commit_prepared_restore(&prepared)
+        .expect("prepared settings commit");
+    assert_eq!(committed.target(), prepared.target());
+    assert_eq!(
+        store
+            .load()
+            .expect("restored settings")
+            .value()
+            .device()
+            .last_route(),
+        DeviceRoute::Settings
+    );
+    let repeated = store
+        .commit_prepared_restore(&prepared)
+        .expect("idempotent post-crash commit");
+    assert_eq!(repeated.target(), prepared.target());
+    assert_eq!(store.load().expect("same generation").generation(), Some(2));
+}
+
+#[test]
+fn prepared_restore_rejects_a_conflicting_settings_generation() {
+    let (_root, directory) = fixture();
+    let store = SettingsStore::new(&directory).expect("settings store");
+    store
+        .save(&SettingsValue::safe_defaults())
+        .expect("initial settings");
+    let candidate = PortableSettingsCandidate::new(
+        changed_value(DeviceRoute::History, BACKUP_RETENTION_MIN_BYTES)
+            .portable()
+            .clone(),
+    )
+    .expect("restore candidate");
+    let prepared = store.prepare_restore(&candidate).expect("prepared restore");
+    store
+        .save(&changed_value(
+            DeviceRoute::Settings,
+            BACKUP_RETENTION_DEFAULT_BYTES,
+        ))
+        .expect("conflicting settings save");
+
+    assert_eq!(
+        store
+            .commit_prepared_restore(&prepared)
+            .expect_err("conflicting generation")
+            .code(),
+        StateErrorCode::Integrity
+    );
+    assert!(
+        !store
+            .verify_target(prepared.target())
+            .expect("target absent")
+    );
+}
+
+#[test]
 fn unsupported_or_malformed_import_never_writes_slots() {
     let (root, directory) = fixture();
     let store = SettingsStore::new(&directory).expect("settings store");

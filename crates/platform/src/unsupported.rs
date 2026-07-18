@@ -1,6 +1,10 @@
 use std::fs::File;
 use std::path::Path;
 
+pub(super) fn available_space(_path: &Path) -> Result<u64, DurableFileError> {
+    Err(DurableFileError::Unavailable)
+}
+
 use super::{DurableFileError, PhysicalFileIdentity, PhysicalIdentityError};
 
 pub(super) fn platform_identity(

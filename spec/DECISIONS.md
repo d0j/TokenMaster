@@ -1283,3 +1283,54 @@ and data-loss behavior harder to prove. Treating retry as a new periodic request
 also break mandatory migration/restore semantics. The capacity-one native design keeps
 latency, memory, cancellation, and guarded mutation receipts deterministic without
 coupling state to Slint or application lifetime.
+
+## ADR-056 — Restore crosses sealed platform, store, and state capabilities
+
+Decision: durable restore is not a state-only filesystem feature. Platform owns one
+fixed `ArchiveRecoveryScope` bound to the exact data root, active
+`tokenmaster.sqlite3`, staging child, quarantine child, and writer-lease identity.
+The lease guard carries a private scope proof, so a guard for another archive cannot
+authorize mutation. Platform alone derives opaque operation IDs, reserves at most
+three create-new quarantine sets, observes the fixed main/WAL/SHM set, performs
+write-through moves, `ReplaceFileW`/same-volume promotion, and rollback, and rejects
+links, reparse points, unexpected entries, or mixed artifact identities. It accepts no
+caller-provided path or filename and never automatically removes quarantine evidence.
+The recovery staging namespace is separately capped at three exact operation-derived
+reservation/candidate/stage artifacts; only an exact absent or completed journal authorizes their bounded
+cleanup, while unexpected evidence is preserved and blocks.
+The matching physical guard is checked before either store or platform cleanup. Both
+allocators enforce the same ceiling. Admission observes active length `A` and selected
+database length `B`, requires `max(2B, B+A) + 8 MiB` actual free space, releases the
+candidate-verifier proof before corruption verification, and rejects active-fact drift
+before the journal exists.
+
+Package expansion produces a platform-owned `RecoveryStagedArchive`, not a generic
+path. Store validates a path-free bounded reader by copying it into the existing
+store-owned candidate namespace, then applies the complete SQLite/schema/foreign-key/
+semantic verifier. The resulting proof contains only schema, length, and digest.
+Platform promotion rechecks that proof against the still-sealed original stage. The
+new active archive is reopened through the same path-free reader-to-store verifier,
+so neither state nor a future UI/plugin receives a path, SQL connection, or generic
+filesystem authority.
+
+State owns the six-state redundant journal and orchestration only. Its payload also
+records the fixed-set presence/digest facts needed to distinguish absent, moved,
+replaced, rolled-back, and ambiguous artifacts. Settings restore first prepares an
+exact next-generation/digest target, then publishes or verifies that target
+idempotently. A conflict, invalid dual journal, wrong lease, stale catalog/candidate/
+active identity, or artifact state that cannot prove exactly one forward or rollback
+step enters safe mode with every artifact preserved.
+
+Resume treats sidecar movement, main promotion, and settings publication as explicit
+mutation-before-journal crash windows. In particular, if native promotion already
+consumed the staged candidate while the journal still records
+`sidecars_quarantined`, platform/state must fully verify the exact active candidate and
+complete the same promotion step; absence of the staging name alone is never proof.
+
+Rationale: the previous state-only Task 10 file plan could neither pass a verified
+SQLite candidate into platform replacement without exposing its path nor prove that
+an arbitrary lease guard protected the active archive. A platform-to-store dependency
+would create a cycle, while a raw-path bridge would erase the reliable-state authority
+boundary. A bounded reader copy costs one recovery-only sequential pass but keeps the
+dependency graph acyclic, retained memory constant, and validation/promotion identity
+explicit and independently testable.

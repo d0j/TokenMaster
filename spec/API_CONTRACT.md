@@ -615,13 +615,13 @@ Every successful publication is reread and returns a `PortableSettingsTarget` wi
 nonzero generation and portable SHA-256 digest. Reconstruction rejects generation
 zero; verification compares both generation and a freshly recomputed typed digest.
 Task 4 alone does not claim catalog, retention, maintenance, bootstrap, or restore.
-Tasks 8-9 implement the catalog/retention and maintenance subsets below; bootstrap
-and restore remain future fixed APIs.
+Tasks 8-10 implement the catalog/retention, maintenance, and sealed restore subsets
+below; bootstrap remains a future fixed API.
 
-The implemented Task 5/9 store subset exposes only `BackupSource::new`,
+The implemented Task 5/9/10 store subset exposes only `BackupSource::new`,
 `BackupStaging::new`, `BackupControl::{new,is_cancelled}`, `create_online_snapshot`,
 `inspect_archive_version`, `verify_backup_candidate`, and
-`create_compact_snapshot`, plus explicit candidate discard and fixed-name abandoned-
+`create_compact_snapshot`, `verify_recovery_archive`, plus explicit candidate discard and fixed-name abandoned-
 candidate recovery. The source always names the implemented archive; staging chooses
 only fixed create-new children. A verified candidate is an owning capability bound to
 schema version, defensive runtime policy, physical file identity, exact length, and
@@ -733,6 +733,33 @@ and selected settings target are reread and verified. A settings-publish failure
 roll the database back while retaining the prior settings generation; a crash after
 durable settings publication resumes by exact generation/digest rather than publishing
 a second generation.
+
+Implemented Task 10 exposes `ArchiveRecoveryScope` only over the exact active archive,
+matching `ExclusiveFileLeaseGuard`, fixed reliable-state staging, and fixed quarantine.
+It accepts no path or name. Opaque operation IDs reserve their namespace with a
+create-new marker and derive all children; staging retains at most three exact recovery
+artifacts and may be discarded only after journal absence or completion,
+while quarantine retains at most three complete sets and is never auto-deleted.
+Existing-main promotion uses `ReplaceFileW`; missing damaged main uses a write-through
+same-volume move. Every promotion and rollback rechecks fixed main/WAL/SHM identities.
+
+`RecoveryCoordinator::{restore_selected,restore_definitively_corrupt_selected,resume}`
+accepts only a generation-bound catalog selection, typed mode/proof, exact archive/store
+capabilities, and the matching lease guard. `restore_selected` requires an opaque
+published pre-restore maintenance completion; the corruption-only entry point derives
+its own authority by running the complete verifier and accepts no caller assertion.
+Package expansion ends in a sealed `RecoveryStagedArchive`; store performs
+the complete SQLite verifier on both candidate and reopened active main. State persists
+only the six exact phases and path-free package/candidate/prior-artifact/settings facts.
+Resume proves both normal phase boundaries and the cases where sidecar movement, main
+promotion, or settings commit completed before journal advance. The hidden test observer
+reports only typed recovery boundaries and grants no file, SQL, or mutation authority.
+Before staging, recovery observes active-main length `A` and checks actual available
+bytes for `max(2B, B+A) + 8 MiB`, where `B` is the selected database length. Platform
+and store both enforce the shared three-artifact staging cap, and the physical guard
+is authorized before either cleanup path. The journal persists the fixed physical backup slot,
+package length, and package digest; process-local catalog generations are never durable
+resume authority.
 
 ## Provider plugin ABI
 

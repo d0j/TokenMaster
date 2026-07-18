@@ -6,6 +6,44 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.0 Task 10 durable restore through a sealed three-layer boundary.
+  Platform binds the exact archive lease to fixed main/WAL/SHM, recovery staging, and
+  three never-auto-deleted quarantine sets; store copies a path-free reader into its
+  bounded namespace and applies the complete SQLite/schema/FK/semantic verifier; state
+  owns only typed orchestration and the redundant six-phase journal.
+- Added restart-idempotent old-or-new replacement and rollback, including explicit
+  process-death coverage after sidecar quarantine, main promotion, and portable-
+  settings commit but before the corresponding journal advance. Manual data-only,
+  manual data-plus-portable-settings, and corruption-only automatic data-only restore
+  preserve device-local settings; portable settings commit by an exact prepared
+  generation/digest and cannot publish a duplicate generation after restart.
+- Bounded the complete recovery staging namespace to three exact artifacts across
+  both platform and store allocators. The actual-free-space preflight covers the
+  larger of candidate expansion plus candidate verification (`2B`) and candidate
+  expansion plus active-corruption verification (`B+A`), plus an 8 MiB reserve.
+  Recognized abandoned staging is discarded only when an absent or completed journal
+  proves that no restore is pending. Unknown names, links/reparse
+  points, multiple links, invalid dual journals, stale package/candidate/active facts,
+  wrong leases, and ambiguous forward/rollback state fail closed with evidence kept.
+  Focused platform/store/journal/restore contracts, strict Clippy, the reliable-state
+  audit, and 52/52 authority mutations pass; safe-mode/app composition and UI remain
+  later Tasks 11-13.
+- Closed independent review findings: recovery now binds the lease to the physical
+  lock file, reserves operation IDs with create-new markers, persists the fixed backup
+  slot rather than a process-local catalog generation, permits later independent
+  journal generations, proves corruption internally, rolls forward an already-
+  published settings target, and classifies native replacement failures only from
+  exact old/new namespace facts. Kill tests cover store-verifier files, first journal
+  publication, settings publication, and every durable recovery phase.
+- Recovery now revalidates the physical writer guard before any store or platform
+  staging cleanup. Wrong-archive authority preserves all pre-journal evidence, and a
+  live peak contract proves both verifier windows contain exactly three artifacts.
+  Final independent rereview reports Critical 0, Important 0, Minor 0 and `Ready`.
+  The final Task 10 baseline passes clean-root in 14.899 seconds, formatting in 1.396
+  seconds, strict locked workspace Clippy in 9.169 seconds, and the complete locked
+  workspace test/doctest suite in 545.3 seconds. The reliable-state audit and 52/52
+  mutations pass, and the changed platform boundary passes an MSVC target check.
+
 - Implemented P3-D.0 Task 9 capacity-one backup maintenance. The native runtime owns
   exactly one worker and one scheduler/shared timer, one active request, one urgency-
   merged follow-up, one latest completion, and one latest mandatory-guard completion.

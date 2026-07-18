@@ -178,6 +178,10 @@ impl DurableFileTarget {
             read_failed: false,
         }))
     }
+
+    pub(crate) fn exact_path(&self) -> &Path {
+        &self.path
+    }
 }
 
 impl fmt::Debug for DurableFileTarget {
@@ -367,6 +371,10 @@ impl DurableStagedFile {
         })
     }
 
+    pub(crate) const fn sealed_receipt(&self) -> Option<DurableFileReceipt> {
+        self.receipt
+    }
+
     /// Publishes a sealed source only when the exact target is absent.
     pub fn publish_new(
         &mut self,
@@ -533,6 +541,10 @@ impl fmt::Debug for DurableFileReceipt {
 }
 
 impl DurableFileReceipt {
+    pub(crate) const fn from_expected(len: u64, sha256: [u8; 32]) -> Self {
+        Self { len, sha256 }
+    }
+
     #[must_use]
     pub const fn len(self) -> u64 {
         self.len
@@ -671,7 +683,7 @@ fn verify_file(
     Ok(receipt)
 }
 
-fn inspect_file(path: &Path) -> Result<DurableFileReceipt, DurableFileError> {
+pub(crate) fn inspect_file(path: &Path) -> Result<DurableFileReceipt, DurableFileError> {
     if existing_kind(path)? != ExistingKind::Regular {
         return Err(DurableFileError::TargetMissing);
     }

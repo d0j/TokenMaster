@@ -618,17 +618,36 @@ cargo +1.97.0 test -p tokenmaster-state --test maintenance_resource_contract --l
 
 ## Task 10 — Implement the durable restore journal and quarantine
 
+**Implementation status (2026-07-18):** implemented with focused recovery, crash,
+authority, and strict-Clippy evidence. Final independent review is Critical 0,
+Important 0, Minor 0 and `Ready`. The final clean-root, formatting, strict locked
+workspace Clippy, complete locked workspace test/doctest, reliable-state audit, 52/52
+mutation, and changed-platform MSVC target gates pass. Task 10 is accepted as a
+developer library milestone; product release remains unclaimed.
+
 **Files:**
 
+- Create: `crates/platform/src/archive_recovery.rs`
+- Create: `crates/platform/tests/archive_recovery_contract.rs`
+- Modify: `crates/platform/src/lease.rs`
+- Modify: `crates/platform/src/durable_file.rs`
+- Modify: `crates/platform/src/lib.rs`
+- Create: `crates/store/tests/recovery_verification_contract.rs`
+- Modify: `crates/store/src/backup.rs`
+- Modify: `crates/store/src/lib.rs`
 - Create: `crates/state/src/recovery/mod.rs`
 - Create: `crates/state/src/recovery/journal.rs`
-- Create: `crates/state/src/recovery/quarantine.rs`
 - Create: `crates/state/src/recovery/restore.rs`
 - Create: `crates/state/tests/recovery_journal_contract.rs`
 - Create: `crates/state/tests/restore_contract.rs`
 - Create: `crates/state/tests/support/recovery_crash_fixture.rs`
 - Modify: `crates/state/Cargo.toml`
 - Modify: `crates/state/src/lib.rs`
+- Modify: `crates/state/src/package/capability.rs`
+- Modify: `crates/state/src/package/reader.rs`
+- Modify: `crates/state/src/settings/store.rs`
+- Modify: `scripts/audit-reliable-state.ps1`
+- Modify: `scripts/tests/audit-reliable-state.Tests.ps1`
 
 ### Red
 
@@ -658,29 +677,65 @@ Add failure-injection and child-process tests for every phase:
     generation remains selected;
 18. a crash after durable settings publication but before journal advance detecting
     the exact target generation/digest and completing without a duplicate generation.
+19. crashes after sidecar quarantine or atomic main promotion but before journal
+    advance resuming from the exact already-completed mutation;
+20. abandoned pre-journal recovery stages bounded globally, removed only on exact
+    journal absence/completion, and unexpected staging evidence preserved;
+21. store-verifier and first-journal-slot process death, repeated independent restore
+    generations, fixed backup-slot resume after catalog rebuild, and settings-record
+    publication ambiguity;
+22. physical lock-file substitution, post-reservation directory collision, missing-
+    main recovery from a verified backup, healthy-main corruption rejection, native
+    replacement ambiguity, and rollback continuation from staged intermediate facts.
 
 ### Green
 
-1. Implement exact states `prepared`, `sidecars_quarantined`, `main_replaced`,
+1. Bind `ExclusiveFileLeaseGuard` privately to the exact active archive scope and
+   physical locked sidecar identity; a guard from another or namespace-substituted
+   archive must fail before observation or mutation.
+2. Add one sealed platform recovery scope that owns only the fixed active main/WAL/
+   SHM, staging, and quarantine namespaces. It generates checked opaque operation IDs,
+   uses create-new reservation, exposes path-free observations/readers/stages, rejects
+   links and unexpected entries, and retains at most three never-auto-deleted sets.
+3. Add a store-owned recovery verifier that copies a bounded platform reader into the
+   existing controlled candidate namespace and applies complete SQLite, schema,
+   foreign-key, count/generation, and semantic checks. Its public proof contains only
+   schema version, length, and SHA-256.
+4. Require promotion and active reopen to match the exact sealed-stage/store proof;
+   no raw path, generic `Read`, SQL connection, or caller-selected child crosses into
+   state.
+5. Implement exact states `prepared`, `sidecars_quarantined`, `main_replaced`,
    `reopened_verified`, `settings_published`, and `complete` in the redundant record
    store. A data-only restore records an explicit settings no-op before entering
    `settings_published`.
-2. Derive all controlled names from one bounded opaque operation ID generated with
+6. Record fixed main/WAL/SHM presence, lengths, and digests needed to prove an
+   idempotent forward or rollback step without recording a path.
+7. Derive all controlled names from one bounded opaque operation ID generated with
    checked time/process/counter material and `create_new` collision retry; do not
    accept names from a package or UI.
-3. Require the caller to present an already-held `ExclusiveFileLeaseGuard` for the
+8. Require the caller to present an already-held `ExclusiveFileLeaseGuard` for the
    fixed active archive before mutation.
-4. Keep recovery code independent of runtime/UI packages.
-5. Record the selected settings mode and optional staged settings target generation/
+9. Add prepared settings publication: compute and journal the exact next generation
+   and portable digest before mutation, then publish or verify that same target
+   idempotently without changing device-local state.
+10. Keep recovery code independent of runtime/UI packages.
+11. Record the selected settings mode and optional staged settings target generation/
    digest in the path-free journal. Conflicting settings state fails to safe mode.
-6. Reinvoke the exact integration-test executable for crash-phase fixtures; do not add
-   a `tokenmaster-state` binary target or an auto-discovered `src/bin` surface.
+12. Reinvoke the exact integration-test executable for crash-phase fixtures; do not add
+    a `tokenmaster-state` binary target or an auto-discovered `src/bin` surface.
+13. Cap the complete recovery-staging namespace at three exact artifacts, preflight
+    actual free space for `max(2B, B+A) + 8 MiB`, enforce the same cap in platform and
+    store, authorize the physical guard before any cleanup, remove only
+    recognized abandoned stages after journal absence/completion, and resume an already-promoted
+    candidate without allocating another inert stage.
 
 ### Verify
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-state --test recovery_journal_contract --locked
 cargo +1.97.0 test -p tokenmaster-state --test restore_contract --locked
+cargo +1.97.0 test -p tokenmaster-platform --test archive_recovery_contract --locked
+cargo +1.97.0 test -p tokenmaster-store --test recovery_verification_contract --locked
 ```
 
 **Commit:** `feat(state): restore through durable journal`

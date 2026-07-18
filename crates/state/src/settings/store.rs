@@ -10,8 +10,28 @@ use super::preview::{
 use super::value::SettingsValue;
 use crate::StateError;
 use crate::record::{
-    MAX_RECORD_PAYLOAD_BYTES, RecordKind, RecordLoad, RecordRedundancy, RedundantRecordStore,
+    MAX_RECORD_PAYLOAD_BYTES, RecordKind, RecordLoad, RecordRedundancy, RecordSaveBoundary,
+    RecordSaveHook, RedundantRecordStore,
 };
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum SettingsRestoreBoundary {
+    RecordPublishedBeforeReread,
+}
+
+struct SettingsRestoreHook<'a, F>(&'a mut F);
+
+impl<F> RecordSaveHook for SettingsRestoreHook<'_, F>
+where
+    F: FnMut(SettingsRestoreBoundary) -> Result<(), StateError>,
+{
+    fn hit(&mut self, boundary: RecordSaveBoundary) -> Result<(), StateError> {
+        if boundary == RecordSaveBoundary::AfterPublication {
+            (self.0)(SettingsRestoreBoundary::RecordPublishedBeforeReread)?;
+        }
+        Ok(())
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SettingsLoadOutcome {
@@ -84,6 +104,26 @@ impl fmt::Debug for SettingsLoad {
 pub struct SettingsCommitReceipt {
     generation: u64,
     portable_digest: PortableSettingsDigest,
+}
+
+pub struct PreparedSettingsRestore {
+    base_generation: Option<u64>,
+    base_record_digest: Option<[u8; 32]>,
+    candidate: PortableSettingsCandidate,
+    target: PortableSettingsTarget,
+}
+
+impl PreparedSettingsRestore {
+    #[must_use]
+    pub const fn target(&self) -> PortableSettingsTarget {
+        self.target
+    }
+}
+
+impl fmt::Debug for PreparedSettingsRestore {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("PreparedSettingsRestore([redacted])")
+    }
 }
 
 impl SettingsCommitReceipt {
@@ -215,6 +255,84 @@ impl SettingsStore {
 
     pub fn full_backup_candidate(&self) -> Result<PortableSettingsCandidate, StateError> {
         PortableSettingsCandidate::new(self.load()?.value.portable().clone())
+    }
+
+    pub fn prepare_restore(
+        &self,
+        candidate: &PortableSettingsCandidate,
+    ) -> Result<PreparedSettingsRestore, StateError> {
+        let current = self.load()?;
+        let target_generation =
+            if current.generation.is_some() && current.value.portable() == candidate.portable() {
+                current
+                    .generation
+                    .ok_or_else(StateError::internal_invariant)?
+            } else {
+                current
+                    .generation
+                    .unwrap_or(0)
+                    .checked_add(1)
+                    .ok_or_else(StateError::capacity_exceeded)?
+            };
+        Ok(PreparedSettingsRestore {
+            base_generation: current.generation,
+            base_record_digest: current.record_digest,
+            candidate: candidate.clone(),
+            target: PortableSettingsTarget::new(target_generation, candidate.digest()),
+        })
+    }
+
+    pub fn commit_prepared_restore(
+        &self,
+        prepared: &PreparedSettingsRestore,
+    ) -> Result<SettingsCommitReceipt, StateError> {
+        self.commit_prepared_restore_with_observer(prepared, |_| Ok(()))
+    }
+
+    pub(crate) fn commit_prepared_restore_with_observer<F>(
+        &self,
+        prepared: &PreparedSettingsRestore,
+        mut observer: F,
+    ) -> Result<SettingsCommitReceipt, StateError>
+    where
+        F: FnMut(SettingsRestoreBoundary) -> Result<(), StateError>,
+    {
+        if self.verify_target(prepared.target)? {
+            return Ok(SettingsCommitReceipt {
+                generation: prepared.target.generation(),
+                portable_digest: prepared.target.digest(),
+            });
+        }
+        let current = self.load()?;
+        if current.generation != prepared.base_generation
+            || current.record_digest != prepared.base_record_digest
+        {
+            return Err(StateError::integrity());
+        }
+        let value = SettingsValue::new(
+            prepared.candidate.portable().clone(),
+            current.value.device().clone(),
+        );
+        let mut hook = SettingsRestoreHook(&mut observer);
+        let result = self
+            .records
+            .save_explicit_with_hook(&value, &mut hook)
+            .map(|receipt| SettingsCommitReceipt {
+                generation: receipt.generation(),
+                portable_digest: prepared.candidate.digest(),
+            });
+        match result {
+            Ok(receipt) if receipt.target() == prepared.target => Ok(receipt),
+            Ok(_) => Err(StateError::recovery_required()),
+            Err(error) => match self.verify_target(prepared.target) {
+                Ok(true) => Ok(SettingsCommitReceipt {
+                    generation: prepared.target.generation(),
+                    portable_digest: prepared.target.digest(),
+                }),
+                Ok(false) => Err(error),
+                Err(_) => Err(StateError::recovery_required()),
+            },
+        }
     }
 
     pub fn verify_target(&self, target: PortableSettingsTarget) -> Result<bool, StateError> {

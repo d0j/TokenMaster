@@ -829,6 +829,49 @@ an unresolved guard, and only the separately retained matching final completion 
 authorize its mutation. Empty first install and an already quarantined definitively
 corrupt source are explicit typed bypasses, not inferred success.
 
+Implemented Task 10 preserves the dependency and authority boundary. Platform alone
+owns paths, exact main/WAL/SHM names, operation-derived staging/quarantine names,
+native replacement/move, and rollback. Store alone owns the recovery copy and complete
+defensive SQLite verifier. State receives only sealed readers/stages, fixed artifact
+facts, catalog selections, verification proofs, and the matching lease guard; it has
+no `std::fs`, path, SQL, shell, network, UI, or generic stream authority. The source
+audit permits exact recovery imports only in their owning modules and its 52 mutation
+cases reject recovery reexports, duplicate stage/control use, verifier use outside the
+coordinator, and arbitrary recovery paths.
+
+Recovery staging recognizes only operation-derived reservation/candidate/durable-stage
+names, rejects links/reparse points/multiple links/unexpected entries, and has a global
+three-artifact cap. It is deleted only after a valid `Absent` or `Complete` journal
+result proves there is no pending restore; any unrecognized evidence is retained.
+Actual available space must cover `max(2B, B+A) + 8 MiB` before staging, where `B` is
+the selected database length and `A` is the observed active-main length. Platform and
+store both reject a fourth live staging artifact. The exact physical guard is
+authorized before store verifier cleanup or platform staging cleanup, so a wrong guard
+cannot erase pre-journal evidence. Quarantine accepts at
+most three exact operation directories, never auto-deletes them, and validates every
+child before forward or rollback work. Candidate and active verification use fixed
+64 KiB streaming buffers plus store-owned bounded SQLite limits; no database-sized
+buffer or history is retained in state.
+
+The six-phase journal is durable before each next mutation. Resume also handles the
+three mutation-before-journal windows explicitly: sidecars already moved, candidate
+already atomically promoted, and portable settings already committed. The promoted
+case reopens and fully verifies the active main when the sealed staging name has been
+consumed; it never reconstructs publication authority from journal state alone.
+Invalid dual slots, wrong lease, stale package/candidate/active identity, or ambiguous
+artifact combinations preserve evidence and require safe mode. Process-death tests
+prove complete old-or-new main bytes and exactly-once settings generation across all
+of these boundaries.
+
+The writer guard reopens the current sidecar namespace and compares its physical file
+identity to the held locked handle before every recovery action. Corruption authority
+is not publicly constructible: state runs the complete store verifier over the exact
+active identity, accepts only its structural/schema/FK/count/generation/semantic
+corruption classes, and treats busy, I/O, cancellation, schema-newer, and policy
+failure as non-corruption. Native replacement errors restore WAL/SHM only when exact
+old/new/staged/quarantined facts prove replacement never began; ambiguous facts require
+safe mode without further movement.
+
 The live archive keeps one fixed identity and writer sidecar. Whole-file restore MUST
 hold that guard, close every SQLite owner, preserve current main/WAL/SHM in quarantine,
 and publish only a complete reverified candidate through a redundant idempotent

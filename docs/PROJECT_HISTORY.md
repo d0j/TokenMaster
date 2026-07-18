@@ -2708,3 +2708,77 @@ live-auth Codex transport test remains explicitly environment-gated and ignored.
 Task 10 durable restore journal/quarantine is next; startup recovery, application
 composition, safe mode, UI, acceptance, packaging, signing, and release remain
 unclaimed.
+
+## 2026-07-18 — P3-D.0 Task 10 durable restore and quarantine
+
+Implemented restore as an acyclic sealed platform/store/state composition rather than
+a state-owned filesystem shortcut. `ArchiveRecoveryScope` is bound to the exact
+writer-lease archive and owns only fixed main/WAL/SHM, staging, and quarantine names.
+It generates opaque operation IDs, rejects wrong leases, links/reparse points,
+multiple links and unexpected entries, retains at most three complete quarantine
+sets, and uses `ReplaceFileW` for an existing main or write-through same-volume move
+for a missing damaged main. Rollback preserves the failed main and restores exact old
+main/WAL/SHM facts. Unjournaled staging is globally capped at three exact artifacts,
+preflights actual free space for `max(2B, B+A) + 8 MiB`, and
+is discarded only after an absent or completed journal; unknown evidence is retained
+and blocks.
+
+Package expansion now ends in a platform-owned sealed recovery candidate. Store copies
+its bounded path-free reader into the fixed recovery candidate namespace and applies
+the complete defensive SQLite, integrity, foreign-key, exact-schema/index, retained-
+count/generation, and semantic verifier. Promotion rechecks length/SHA-256 against the
+same sealed stage, and the active main is reopened through the same store verifier.
+No path, SQL connection, generic stream, or caller-selected name crosses state.
+
+State persists exactly `prepared`, `sidecars_quarantined`, `main_replaced`,
+`reopened_verified`, `settings_published`, and `complete` in the existing recovery A/B
+slots. The journal records opaque package/candidate/operation identities, fixed prior
+main/WAL/SHM facts, mode, attempt, and an optional prepared settings generation/digest.
+Automatic recovery is always corruption-only data-only with two attempts; manual
+restore is data-only or data-plus-portable-settings. Device-local settings never move.
+Settings publication is idempotent and a restart after durable commit but before
+journal advance verifies the exact target instead of creating another generation.
+
+Crash fixtures reinvoke the exact integration-test executable and force process death
+at all six durable phases plus the pre-journal sidecar, main-promotion, and settings-
+commit boundaries. A review found and the tests closed a real gap where `ReplaceFileW`
+had consumed the staged candidate while journal still said `sidecars_quarantined`;
+resume now proves either the unchanged stage or the already-promoted fully verified
+active main and advances idempotently. Focused recovery tests, strict Clippy, the
+workspace reliable-state audit, and 52/52 authority mutations pass. Tasks 11-18,
+safe-mode/application/UI integration, acceptance, packaging, signing, and release
+remain unclaimed.
+
+Independent review then found nine boundary defects/evidence gaps. The corrected
+implementation cleans store-owned verifier remnants before platform staging, allows a
+completed journal to start the next operation generation, persists the fixed physical
+backup slot, rereads settings after publication ambiguity, treats a verified backup as
+prior-install evidence for a missing main, and binds recovery authority to the physical
+locked sidecar. A caller can no longer assert corruption: the coordinator itself runs
+the complete store verifier and rejects busy/I/O/schema-newer as corruption authority.
+Create-new reservation markers close the operation-directory race; native replacement
+errors restore sidecars only when exact facts prove replacement never began, and an
+actual-free-space preflight replaces the former large theoretical staging allowance.
+New regressions cover repeated restore generations, catalog rebuild/resume, settings
+post-publication errors and kills, store-verifier kills before journal, first journal-
+slot death, missing-main recovery, healthy-main rejection, lock-file substitution,
+reservation collision, rollback continuation, and ambiguous replacement facts.
+
+A second independent review found two remaining pre-journal containment defects. A
+wrong archive guard could reach store-owned cleanup before platform rejected it, and
+the first verified candidate could remain live while corruption verification created
+a fourth staging artifact. Recovery now authorizes the physical guard before either
+cleanup path, drops the first verifier proof before corruption verification, and
+enforces the same three-entry cap inside the store allocator. Disk admission observes
+the active main and requires `max(2B, B+A) + 8 MiB`; an identity change after that
+observation fails before corruption authority or journal publication. Focused tests
+prove wrong-guard evidence preservation, exact three-artifact peaks at both verifier
+boundaries, cap rejection, capacity arithmetic/overflow, and the full 18-case restore
+contract.
+Final independent rereview reports Critical 0, Important 0, Minor 0 and `Ready`.
+The final Task 10 baseline passes clean-root in 14.899 seconds, formatting in 1.396
+seconds, strict locked workspace Clippy in 9.169 seconds, and the complete locked
+workspace test/doctest suite in 545.3 seconds. The reliable-state audit, 52/52
+authority mutations, and the changed platform MSVC target check also pass. This
+accepts the library milestone only; startup/application/UI recovery and release gates
+remain later tasks.

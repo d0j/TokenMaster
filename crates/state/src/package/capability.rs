@@ -1,8 +1,12 @@
 use core::cell::Cell;
 use std::io::{self, Read, Write};
 
-use tokenmaster_platform::{BackupDirectoryError, DurableFileError, MAX_DURABLE_WRITE_CHUNK_BYTES};
-pub(crate) use tokenmaster_platform::{BackupStagedFile, DurableFileReader, DurableStagedFile};
+use tokenmaster_platform::{
+    ArchiveRecoveryError, BackupDirectoryError, DurableFileError, MAX_DURABLE_WRITE_CHUNK_BYTES,
+};
+pub(crate) use tokenmaster_platform::{
+    BackupStagedFile, DurableFileReader, DurableStagedFile, RecoveryStagedArchive,
+};
 
 use crate::StateError;
 
@@ -115,6 +119,41 @@ impl Write for DurableWriterAdapter<'_> {
     }
 }
 
+pub(crate) struct RecoveryWriterAdapter<'a> {
+    destination: &'a mut RecoveryStagedArchive,
+    failure: Option<ArchiveRecoveryError>,
+}
+
+impl<'a> RecoveryWriterAdapter<'a> {
+    pub(crate) fn new(destination: &'a mut RecoveryStagedArchive) -> Self {
+        Self {
+            destination,
+            failure: None,
+        }
+    }
+
+    pub(crate) const fn failure(&self) -> Option<ArchiveRecoveryError> {
+        self.failure
+    }
+}
+
+impl Write for RecoveryWriterAdapter<'_> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let count = bytes.len().min(MAX_DURABLE_WRITE_CHUNK_BYTES);
+        match self.destination.write_chunk(&bytes[..count]) {
+            Ok(()) => Ok(count),
+            Err(error) => {
+                self.failure = Some(error);
+                Err(recovery_io_error(error))
+            }
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
 pub(crate) struct BackupWriterAdapter<'a> {
     destination: &'a mut BackupStagedFile,
     failure: Option<BackupDirectoryError>,
@@ -183,6 +222,25 @@ pub(crate) const fn map_backup_directory_error(error: BackupDirectoryError) -> S
     }
 }
 
+pub(crate) const fn map_archive_recovery_error(error: ArchiveRecoveryError) -> StateError {
+    match error {
+        ArchiveRecoveryError::CapacityExceeded | ArchiveRecoveryError::CollisionLimit => {
+            StateError::capacity_exceeded()
+        }
+        ArchiveRecoveryError::DiskCapacity => {
+            StateError::from_code(crate::StateErrorCode::DiskCapacity)
+        }
+        ArchiveRecoveryError::ArtifactMismatch | ArchiveRecoveryError::UnexpectedArtifact => {
+            StateError::integrity()
+        }
+        ArchiveRecoveryError::RecoveryRequired => StateError::recovery_required(),
+        ArchiveRecoveryError::InvalidState => StateError::internal_invariant(),
+        ArchiveRecoveryError::UnsupportedLocation
+        | ArchiveRecoveryError::WrongLease
+        | ArchiveRecoveryError::Unavailable => StateError::unavailable(),
+    }
+}
+
 pub(crate) fn resolve_codec_error<T>(
     result: Result<T, StateError>,
     failures: &[Option<DurableFileError>],
@@ -244,6 +302,23 @@ fn backup_io_error(error: BackupDirectoryError) -> io::Error {
         BackupDirectoryError::Unavailable | BackupDirectoryError::RecoveryRequired => {
             io::ErrorKind::Other
         }
+    };
+    kind.into()
+}
+
+fn recovery_io_error(error: ArchiveRecoveryError) -> io::Error {
+    let kind = match error {
+        ArchiveRecoveryError::CapacityExceeded | ArchiveRecoveryError::CollisionLimit => {
+            io::ErrorKind::OutOfMemory
+        }
+        ArchiveRecoveryError::ArtifactMismatch
+        | ArchiveRecoveryError::UnexpectedArtifact
+        | ArchiveRecoveryError::InvalidState
+        | ArchiveRecoveryError::UnsupportedLocation
+        | ArchiveRecoveryError::WrongLease => io::ErrorKind::InvalidData,
+        ArchiveRecoveryError::DiskCapacity
+        | ArchiveRecoveryError::Unavailable
+        | ArchiveRecoveryError::RecoveryRequired => io::ErrorKind::Other,
     };
     kind.into()
 }

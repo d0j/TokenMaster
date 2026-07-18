@@ -4,6 +4,7 @@
 use std::fmt;
 use std::fs::File;
 
+mod archive_recovery;
 mod backup_directory;
 mod durable_file;
 mod lease;
@@ -17,6 +18,11 @@ mod unsupported;
 #[cfg(windows)]
 mod windows;
 
+pub use archive_recovery::{
+    ArchiveFileObservation, ArchiveRecoveryError, ArchiveRecoveryScope, ArchiveSetExpectation,
+    ArchiveSetObservation, MAX_QUARANTINE_SETS, MAX_RECOVERY_STAGING_ARTIFACTS, RecoveryMainMode,
+    RecoveryOperation, RecoveryOperationId, RecoveryStagedArchive,
+};
 pub use backup_directory::{
     BackupDirectory, BackupDirectoryEntry, BackupDirectoryError, BackupDirectoryGeneration,
     BackupDirectorySnapshot, BackupStagedFile, MAX_BACKUP_DIRECTORY_FILES,

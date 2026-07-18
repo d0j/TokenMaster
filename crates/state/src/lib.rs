@@ -15,6 +15,7 @@ mod package;
 mod record;
 #[cfg(test)]
 mod record_contract_tests;
+mod recovery;
 mod retention;
 mod settings;
 
@@ -40,6 +41,12 @@ pub use package::{
     MIN_BACKUP_PASSPHRASE_SCALARS, PACKAGE_DECODER_WINDOW_BYTES, PACKAGE_IO_BUFFER_BYTES,
     PackageReceipt, ProtectedPackageReceipt, VerifiedBackupPackage, VerifiedConfigPackage,
 };
+pub use recovery::{
+    RecoveryArchiveFacts, RecoveryBackupIdentity, RecoveryBoundary, RecoveryCandidateIdentity,
+    RecoveryCoordinator, RecoveryFileFact, RecoveryJournal, RecoveryJournalLoad,
+    RecoveryJournalStore, RecoveryPhase, RecoveryReceipt, RecoverySettingsMode,
+    RecoverySettingsTarget, RestoreMode, RestoreSafety,
+};
 pub use retention::{
     MAX_RETAINED_VERIFIED_POINTS, RETENTION_DAILY_POINTS, RETENTION_NEWEST_POINTS,
     RETENTION_WEEKLY_POINTS, RetentionAdmission, RetentionCycle, RetentionPolicy,
@@ -49,9 +56,9 @@ pub use settings::{
     BACKUP_QUIET_DEFAULT_SECONDS, BACKUP_QUIET_MAX_SECONDS, BACKUP_QUIET_MIN_SECONDS,
     BACKUP_RETENTION_DEFAULT_BYTES, BACKUP_RETENTION_MAX_BYTES, BACKUP_RETENTION_MIN_BYTES,
     BackupPolicy, DeviceRoute, DeviceSettings, PortableSettings, PortableSettingsCandidate,
-    PortableSettingsDigest, PortableSettingsTarget, ReminderPolicy, SettingsChangeCategory,
-    SettingsCommitReceipt, SettingsHealthCode, SettingsImportPreview, SettingsLoad,
-    SettingsLoadOutcome, SettingsStore, SettingsValue,
+    PortableSettingsDigest, PortableSettingsTarget, PreparedSettingsRestore, ReminderPolicy,
+    SettingsChangeCategory, SettingsCommitReceipt, SettingsHealthCode, SettingsImportPreview,
+    SettingsLoad, SettingsLoadOutcome, SettingsStore, SettingsValue,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

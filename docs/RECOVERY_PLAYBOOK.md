@@ -220,25 +220,41 @@
 
 ## Whole-file/configuration recovery status
 
-P3-D.0 Tasks 1-4 now provide the state authority boundary, low-level controlled
-durable file publication/replacement, a crate-private strict A/B record core, and the
-public fixed-purpose typed settings store. It preserves a valid-envelope newer schema
-as `UnsupportedVersion`, loads safe defaults without rewriting two invalid slots, and
-allows only explicit typed publication. It does not yet provide whole-file backup,
-container import/export, quarantine workflow, recovery
-journal state machine, automatic restore, or safe mode. The generic record core is not
-an operator command and must not be used to infer ownership when both slots conflict
-or are invalid. Until the plan at
-`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md` is complete, do not
-copy only `tokenmaster.sqlite3` while the application may be running, delete or move a
-WAL/SHM/writer-lock file, replace the archive from an unverified copy, run ad hoc SQL,
-or treat SQLite `.recover` output as authoritative.
+P3-D.0 Tasks 1-10 now implement typed settings, verified Online Backup candidates,
+strict `.tmconfig`/`.tmbackup`, sealed catalog/retention, capacity-one maintenance,
+and the library-level durable restore journal/quarantine path. Task 11 startup
+classification, Task 12 application stop/restart and safe mode, and Task 13 Data &
+Recovery UI are not implemented. Therefore the Task 10 library API is development
+infrastructure, not an operator command or proof that the current desktop automatically
+recovers a real installation.
 
-For a current whole-file corruption incident, stop TokenMaster normally if possible,
-preserve the complete data directory as an operator-owned copy, and reproduce only
-against a synthetic/copy fixture. The future design will automate verified Online
-Backup, complete-set quarantine, and journaled replacement; this paragraph is not a
-claim that those commands exist today.
+When application integration lands, recovery must follow this exact order:
+
+1. Stop/join all runtime and SQLite owners, then acquire the matching archive writer
+   lease before observing main/WAL/SHM, cleaning verifier/platform staging, or reading
+   the recovery journal. A wrong physical guard must leave every artifact unchanged.
+2. `Invalid` dual journal slots or unexpected staging/quarantine artifacts enter safe
+   mode with every artifact preserved. `Absent` or `Complete` journal may remove only exact bounded
+   unpublished recovery staging; it never removes quarantine evidence.
+3. Resume a pending journal before any ordinary SQLite open. Reverify the selected
+   package, candidate or already-promoted active main, and every persisted fixed-file
+   fact. Never infer success merely from a phase label or missing staging name.
+4. Automatic restore is permitted only after TokenMaster's own complete verifier proves
+   definitive corruption, always data-only,
+   and at most twice. Busy, access, disk-full, transient I/O, unsupported location, or
+   newer schema are not corruption authority. Manual full restore must explicitly
+   choose data-only or data-plus-portable-settings; device-local settings never move.
+5. Before writing a recovery candidate, let `B` be the selected database length and
+   `A` the observed active-main length; require `max(2B, B+A) + 8 MiB` of actual free
+   staging space and recheck the active observation before publication. Do not delete
+   the journal or any quarantine set after `complete`. Later retention/
+   operator policy must own evidence disposal explicitly; Task 10 never auto-deletes it.
+
+For a current real incident, stop TokenMaster normally if possible, preserve the
+complete data directory as an operator-owned copy, and reproduce only against a
+synthetic/copy fixture. Until Tasks 11-13 expose the typed flow, do not copy only
+`tokenmaster.sqlite3`, move WAL/SHM/writer-lock files, call internal restore APIs from
+an ad hoc helper, run arbitrary SQL, or treat SQLite `.recover` output as authoritative.
 
 Generated `target/`, `reports/`, and `dist/` content is disposable developer output.
 Do not use it as a release claim. M0 acceptance requires the exact external receipts

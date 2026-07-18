@@ -383,9 +383,43 @@ count, and one state:
 
 `prepared -> sidecars_quarantined -> main_replaced -> reopened_verified -> settings_published -> complete`
 
-Every transition writes and verifies the inactive journal slot before filesystem
-mutation. Transitions are idempotent and infer completion only from expected fixed
-file names plus recorded digests. The journal contains no arbitrary path.
+The payload additionally records fixed pre-restore main/WAL/SHM presence plus bounded
+length/digest facts and the separately verified promoted-candidate length/digest.
+These are not paths and cannot select a different child. Platform derives the expected
+quarantine/promoted locations from the opaque operation ID, so those facts are
+sufficient to distinguish absence, a completed move or promotion, a stale candidate,
+and a mixed or ambiguous rollback after a crash.
+
+Every filesystem mutation requires its preceding journal phase to be durably written
+and reread; the completed-mutation phase advances only afterward. Transitions are
+idempotent and infer completion only from expected fixed file names plus recorded
+digests. Resume explicitly handles a crash after sidecars move, main promotion, or
+settings commit but before that phase advance. The journal contains no arbitrary path.
+
+### 11.2.1 Restore authority boundary
+
+Restore crosses three sealed owners. Platform binds the fixed active archive,
+staging, quarantine, and writer lease into one recovery scope; generates operation
+names internally; and performs all native file mutation. Store consumes only bounded
+path-free readers, copies them into its controlled candidate namespace, and returns a
+path-free complete SQLite verification proof. State compares the proof with the
+sealed stage receipt and owns only orchestration plus the redundant journal. The same
+reader-to-store validation is repeated from the promoted active archive before any
+settings publication. No state, UI, connector, or plugin API receives a path, file
+name, SQL connection, or generic filesystem capability.
+
+The fixed recovery staging namespace recognizes only operation-derived candidate and
+durable-stage names and retains at most three artifacts globally. When the redundant
+journal is exactly absent, those unpublished artifacts are abandoned and may be
+discarded before a new restore; unexpected names/types or links remain preserved and
+block. A resumed operation does not create another inert stage, so repeated crashes
+cannot consume a per-target collision series.
+The physical writer guard is revalidated before either store-owned verifier cleanup or
+platform-owned staging cleanup. Platform and store each enforce the three-artifact
+ceiling. For selected database length `B` and observed active-main length `A`, staging
+admission requires `max(2B, B+A) + 8 MiB` actual free space; candidate verification is
+released before corruption verification, and active-fact drift aborts before journal
+publication.
 
 ### 11.3 File promotion
 

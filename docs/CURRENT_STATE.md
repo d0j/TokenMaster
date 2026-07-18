@@ -995,7 +995,7 @@ platform for durable same-volume replacement and sealed file selection, state fo
 settings/packages/retention/recovery, and app for runtime shutdown/restart and safe
 mode. Product/Desktop receive copied bounded health and typed intents only.
 
-The planned v1 contract uses redundant settings/run/recovery records, strict
+The v1 contract uses redundant settings/run/recovery records, strict
 `.tmconfig`/`.tmbackup` packages, streaming Zstandard levels 6/12/19 with an 8 MiB
 window, optional bounded age passphrase protection for manual exports, default
 four-newest/seven-daily/four-weekly retention under 15 points and 2 GiB, a maximum
@@ -1007,18 +1007,32 @@ transient-I/O, unsupported-location, and schema-too-new results preserve current
 truth. No valid backup leads to explicit quarantine and authoritative-source rebuild,
 never fabricated zero or automatic corrupt-row salvage.
 
-Only Tasks 1-9 are implemented. No restore journal, safe mode, Data & Recovery UI, or
-new acceptance evidence exists yet. Task 10 durable restore journal and quarantine is
-the immediate next slice. Application composition of the complete snapshot -> verify
+Tasks 1-10 are implemented. Task 10 adds the physically lease-bound platform recovery
+scope, path-free store verification, repeatable six-phase redundant journal, three-set
+quarantine, old-or-new promotion/rollback, prepared settings target, manual and
+corruption-only automatic modes, restart at pre-journal mutation boundaries, and
+three-artifact absent/completed-journal staging cleanup with actual-free-space
+preflight. Both platform and store enforce the shared cap; the peak is the larger of
+`2B` and `B+A`, plus an 8 MiB reserve, and the physical lease is authorized before
+any verifier/platform cleanup. Corruption authority is internal verifier evidence, never a caller
+assertion; a verified backup remains prior-install evidence when main is missing.
+Final independent Task 10 rereview reports Critical 0, Important 0, Minor 0 and
+`Ready`. The final baseline passes clean-root in 14.899 seconds, formatting in 1.396
+seconds, strict locked workspace Clippy in 9.169 seconds, and the complete locked
+workspace test/doctest suite in 545.3 seconds; the reliable-state audit, 52/52
+mutations, and the changed platform MSVC target check also pass. Task 10 is accepted
+as developer evidence, not as product release or M0 acceptance.
+No safe mode, Data & Recovery UI, or new
+acceptance evidence exists yet. Application composition of the complete snapshot -> verify
 -> package -> verify -> publish -> retain operation remains Task 12 and must use the
 fixed Task 9 runtime/reader boundaries.
 
 ## Next implementation slice
 
-Execute P3-D.0 Task 10 from
-`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: implement the durable
-six-state restore journal, bounded quarantine, rollback, and crash-resume path before
-any SQLite open.
+Execute P3-D.0 Task 11 from
+`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: integrate startup
+run-state classification and automatic corruption-only recovery before any ordinary
+SQLite open, then Task 12 application restart/safe-mode composition.
 
 P2-D quota history core is complete under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: Tasks 1-8 cover
@@ -1035,7 +1049,7 @@ immutable read snapshots, and publication through the existing Codex runtime wit
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
 workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, P3-B.2, P3-B.3, and P3-C are
-complete; P3-D.0 Reliable State is active with Tasks 1-9 complete and Task 10 next, followed
+complete; P3-D.0 Reliable State is active with Tasks 1-10 complete and Task 11 next, followed
 by the remaining P3-D supporting data-bearing routes. Activation
 remains a later independently authorized capability. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.

@@ -3,7 +3,7 @@ use core::fmt;
 use sha2::{Digest, Sha256};
 use tokenmaster_platform::{
     BackupDirectory, BackupDirectoryEntry, BackupDirectoryError, BackupDirectoryGeneration,
-    MAX_DURABLE_FILE_BYTES,
+    DurableFileReader, MAX_DURABLE_FILE_BYTES,
 };
 
 use crate::package::{CATALOG_HEADER_BYTES, CatalogPackageHeader, decode_catalog_header};
@@ -282,6 +282,83 @@ impl BackupCatalog {
             && point.purpose == Some(header.metadata.purpose())
             && point.database_schema_version == Some(header.database_schema_version)
             && point.compression == Some(header.compression))
+    }
+
+    pub(crate) fn open_verified_selection(
+        &self,
+        directory: &BackupDirectory,
+        selection: CatalogSelection,
+    ) -> Result<DurableFileReader, StateError> {
+        let point = self.selected_point(selection)?;
+        if point.health != CatalogHealth::Verified
+            || !self.matches_directory(directory)?
+            || !self.revalidate_point(directory, selection)?
+        {
+            return Err(StateError::integrity());
+        }
+        directory
+            .open_reader(&point.entry, MAX_DURABLE_FILE_BYTES)
+            .map_err(map_directory_error)
+    }
+
+    pub(crate) fn open_recovery_selection(
+        &self,
+        directory: &BackupDirectory,
+        selection: CatalogSelection,
+    ) -> Result<DurableFileReader, StateError> {
+        let point = self.selected_point(selection)?;
+        if point.health == CatalogHealth::Corrupt
+            || !self.matches_directory(directory)?
+            || !self.revalidate_point(directory, selection)?
+        {
+            return Err(StateError::integrity());
+        }
+        directory
+            .open_reader(&point.entry, MAX_DURABLE_FILE_BYTES)
+            .map_err(map_directory_error)
+    }
+
+    pub(crate) fn selected_package_identity(
+        &self,
+        selection: CatalogSelection,
+    ) -> Result<(u8, u64, [u8; 32]), StateError> {
+        let point = self.selected_point(selection)?;
+        if point.health != CatalogHealth::Verified {
+            return Err(StateError::integrity());
+        }
+        Ok((
+            point.entry.ordinal(),
+            point.entry.len(),
+            point.observed_file_sha256,
+        ))
+    }
+
+    pub(crate) fn selection_for_package_identity(
+        &self,
+        backup_slot: u8,
+        package_len: u64,
+        package_sha256: [u8; 32],
+    ) -> Result<CatalogSelection, StateError> {
+        let mut matches = self.points.iter().filter(|point| {
+            point.entry.ordinal() == backup_slot
+                && point.entry.len() == package_len
+                && point.observed_file_sha256 == package_sha256
+        });
+        let point = matches.next().ok_or_else(StateError::integrity)?;
+        if matches.next().is_some() || point.health == CatalogHealth::Corrupt {
+            return Err(StateError::integrity());
+        }
+        Ok(point.selection)
+    }
+
+    fn selected_point(&self, selection: CatalogSelection) -> Result<&CatalogPoint, StateError> {
+        if selection.generation != self.generation {
+            return Err(StateError::invalid_input());
+        }
+        self.points
+            .get(usize::from(selection.ordinal))
+            .filter(|point| point.selection == selection)
+            .ok_or_else(StateError::invalid_input)
     }
 
     pub(crate) fn revalidate_all_verified(

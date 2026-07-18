@@ -745,13 +745,29 @@ destination failure discards and poisons the unpublished package stage.
 Quarantine retains at most three complete main/WAL/SHM sets and never deletes them
 automatically.
 
+Recovery staging is a distinct fixed namespace. It recognizes only opaque
+`restore-<operation>.sqlite3` candidates and their platform-generated durable-stage
+children plus a zero-byte create-new reservation, retains at most three artifacts
+globally, and never derives a name from package or UI data. When and only when the
+redundant journal is absent or complete, startup/resume may
+discard these unpublished artifacts. Unknown names/types, links/reparse points, and
+multiple links remain preserved and block cleanup.
+Platform and store independently enforce the shared three-artifact ceiling before
+creating a recovery child. With selected database length `B` and observed active-main
+length `A`, admission requires actual free space of `max(2B, B+A) + 8 MiB`; the first
+store verifier is released before active-corruption verification, and the active facts
+must still match the preflight observation before journal publication.
+
 Recovery journals the exact states `prepared`, `sidecars_quarantined`,
 `main_replaced`, `reopened_verified`, `settings_published`, and `complete`. It stores
-only a checked operation generation, bounded opaque operation/candidate identity,
-optional portable-settings target generation/digest, data-only or data-plus-portable-
-settings mode, reason, attempt, and state. A data-only restore journals an explicit
-settings no-op. It never stores or accepts an arbitrary path. Every transition is
-idempotent; uncertainty preserves all artifacts and enters safe mode.
+only a checked operation generation, fixed backup slot plus bounded opaque package/operation/candidate
+identity, exact prior main/WAL/SHM presence/length/SHA-256 facts, optional portable-
+settings target generation/digest, data-only/data-plus-portable-settings/automatic-
+data-only mode, attempt, and state. A data-only restore journals an explicit settings
+no-op. Automatic mode is corruption-only and limited to two attempts. It never stores
+or accepts an arbitrary path. Every transition is idempotent, including completed
+sidecar/main/settings mutations before journal advance; uncertainty preserves all
+artifacts and enters safe mode.
 
 ### P3-C bounded Dashboard projection
 
