@@ -1,7 +1,10 @@
 use std::{
     fmt,
     path::Path,
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{
+        Arc, Mutex, MutexGuard,
+        atomic::{AtomicU64, Ordering},
+    },
     time::Instant,
 };
 
@@ -13,15 +16,16 @@ use tokenmaster_engine::{
 use tokenmaster_product::{
     ProductAttemptGeneration, ProductGitRuntimeHealth, ProductQuotaRuntimeHealth, ProductReducer,
     ProductReminderRuntimeHealth, ProductRuntimeGeneration, ProductRuntimeObservationError,
-    ProductSnapshot, ProductUsageRuntimeHealth,
+    ProductSessionDetailSelection, ProductSessionDetailSelectionGeneration, ProductSnapshot,
+    ProductUsageRuntimeHealth,
 };
 use tokenmaster_query::{
     BenefitOverviewEnvelope, BenefitOverviewRequest, BenefitOverviewSnapshot, GitEnvelope,
     GitOutputRequest, GitOutputSnapshot, LatestActivityPage, LatestActivityRequest, PageSize,
     ProductDataStatusEnvelope, QueryClock, QueryEnvelope, QueryError, QueryErrorCode, QueryService,
     QuotaCurrentSnapshot, QuotaEnvelope, SystemQueryClock, UsageAnalytics, UsageAnalyticsRequest,
-    UsageBreakdownKind, UsageRange, UsageSeriesSelection, UsageSessionPage,
-    UsageSessionPageRequest, UsageTimeZone, WeekStart,
+    UsageBreakdownKind, UsageRange, UsageSeriesSelection, UsageSessionDetailResult,
+    UsageSessionKey, UsageSessionPage, UsageSessionPageRequest, UsageTimeZone, WeekStart,
 };
 
 use crate::presentation::DesktopSnapshotEpoch;
@@ -117,6 +121,11 @@ pub trait DesktopQuerySource: Send + 'static {
         &mut self,
         request: UsageSessionPageRequest,
     ) -> Result<QueryEnvelope<UsageSessionPage>, QueryError>;
+
+    fn usage_session_detail(
+        &mut self,
+        key: UsageSessionKey,
+    ) -> Result<QueryEnvelope<UsageSessionDetailResult>, QueryError>;
 }
 
 impl<C> DesktopQuerySource for QueryService<C>
@@ -164,6 +173,13 @@ where
         request: UsageSessionPageRequest,
     ) -> Result<QueryEnvelope<UsageSessionPage>, QueryError> {
         QueryService::usage_sessions(self, request)
+    }
+
+    fn usage_session_detail(
+        &mut self,
+        key: UsageSessionKey,
+    ) -> Result<QueryEnvelope<UsageSessionDetailResult>, QueryError> {
+        QueryService::usage_session_detail(self, key)
     }
 }
 
@@ -239,6 +255,43 @@ pub enum DesktopRefreshAdmission {
     DeadlineExceeded {
         receipt: DesktopRefreshReceipt,
     },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DesktopSessionDetailIntent {
+    snapshot_epoch: DesktopSnapshotEpoch,
+    product_generation: tokenmaster_product::ProductGeneration,
+    selection: ProductSessionDetailSelection,
+}
+
+impl DesktopSessionDetailIntent {
+    #[must_use]
+    pub const fn new(
+        snapshot_epoch: DesktopSnapshotEpoch,
+        product_generation: tokenmaster_product::ProductGeneration,
+        selection: ProductSessionDetailSelection,
+    ) -> Self {
+        Self {
+            snapshot_epoch,
+            product_generation,
+            selection,
+        }
+    }
+
+    #[must_use]
+    pub const fn snapshot_epoch(self) -> DesktopSnapshotEpoch {
+        self.snapshot_epoch
+    }
+
+    #[must_use]
+    pub const fn product_generation(self) -> tokenmaster_product::ProductGeneration {
+        self.product_generation
+    }
+
+    #[must_use]
+    pub const fn selection(self) -> ProductSessionDetailSelection {
+        self.selection
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -324,6 +377,7 @@ pub enum DesktopControllerErrorCode {
     InvalidPlan,
     VersionMismatch,
     CorruptArchive,
+    StaleSelection,
     Internal,
 }
 
@@ -340,6 +394,7 @@ impl DesktopControllerErrorCode {
             Self::InvalidPlan => "invalid_plan",
             Self::VersionMismatch => "version_mismatch",
             Self::CorruptArchive => "corrupt_archive",
+            Self::StaleSelection => "stale_selection",
             Self::Internal => "internal",
         }
     }
@@ -397,6 +452,7 @@ impl Clock for DesktopMonotonicClock {
 type LatestSnapshot = Arc<Mutex<Option<Arc<ProductSnapshot>>>>;
 type SnapshotNotifier = Arc<Mutex<Option<Arc<dyn DesktopSnapshotNotifier>>>>;
 type RuntimeObservationSlot = Arc<Mutex<RuntimeObservationState>>;
+type DesktopWorkSlot = Arc<Mutex<DesktopWorkState>>;
 
 #[derive(Clone)]
 struct DesktopPublication {
@@ -409,6 +465,33 @@ struct DesktopPublication {
 struct RuntimeObservationState {
     latest_generation: Option<ProductRuntimeGeneration>,
     pending: Option<DesktopRuntimeObservation>,
+}
+
+#[derive(Default)]
+struct DesktopWorkState {
+    refresh_attempt: Option<u64>,
+    latest_selection_generation: Option<ProductSessionDetailSelectionGeneration>,
+    pending_selection: Option<PendingDesktopSessionDetail>,
+}
+
+#[derive(Clone, Copy)]
+struct DesktopWorkBatch {
+    refresh: bool,
+    selection: Option<DesktopSessionDetailIntent>,
+}
+
+#[derive(Clone, Copy)]
+struct PendingDesktopSessionDetail {
+    attempt: u64,
+    intent: DesktopSessionDetailIntent,
+}
+
+struct DesktopExecutionContext<'a> {
+    plan: &'a DesktopQueryPlan,
+    clock: &'a dyn Clock,
+    publication: &'a DesktopPublication,
+    snapshot_epoch: &'a AtomicU64,
+    work: &'a DesktopWorkSlot,
 }
 
 pub trait DesktopSnapshotNotifier: Send + Sync + 'static {
@@ -450,7 +533,8 @@ pub struct DesktopController {
     clock: Arc<dyn Clock>,
     worker: RefreshWorker,
     publication: DesktopPublication,
-    snapshot_epoch: Option<DesktopSnapshotEpoch>,
+    snapshot_epoch: Arc<AtomicU64>,
+    work: DesktopWorkSlot,
 }
 
 impl DesktopController {
@@ -488,24 +572,29 @@ impl DesktopController {
             runtime_observation,
         };
         let worker_publication = publication.clone();
+        let snapshot_epoch = Arc::new(AtomicU64::new(0));
+        let work = Arc::new(Mutex::new(DesktopWorkState::default()));
+        let worker_snapshot_epoch = Arc::clone(&snapshot_epoch);
+        let worker_work = Arc::clone(&work);
         let execute_clock = clock.clone();
         let mut reducer = ProductReducer::new();
         let worker = RefreshWorker::spawn(worker_clock, move |permit| {
-            execute_attempt(
-                &mut source,
-                &plan,
-                &mut reducer,
-                permit,
-                execute_clock.as_ref(),
-                &worker_publication,
-            )
+            let context = DesktopExecutionContext {
+                plan: &plan,
+                clock: execute_clock.as_ref(),
+                publication: &worker_publication,
+                snapshot_epoch: &worker_snapshot_epoch,
+                work: &worker_work,
+            };
+            execute_work(&mut source, &mut reducer, permit, &context)
         })
         .map_err(map_worker_error)?;
         Ok(Self {
             clock,
             worker,
             publication,
-            snapshot_epoch: None,
+            snapshot_epoch,
+            work,
         })
     }
 
@@ -527,7 +616,7 @@ impl DesktopController {
                 ));
             }
         }
-        if self.snapshot_epoch.is_some()
+        if self.snapshot_epoch.load(Ordering::Acquire) != 0
             || worker.active_request_id().is_some()
             || worker.pending_count() != 0
         {
@@ -535,16 +624,56 @@ impl DesktopController {
                 DesktopControllerErrorCode::Busy,
             ));
         }
-        self.snapshot_epoch = Some(epoch);
-        Ok(())
+        self.snapshot_epoch
+            .compare_exchange(0, epoch.get(), Ordering::AcqRel, Ordering::Acquire)
+            .map(|_| ())
+            .map_err(|_| DesktopControllerError::new(DesktopControllerErrorCode::Busy))
     }
 
     #[must_use]
-    pub const fn snapshot_epoch(&self) -> Option<DesktopSnapshotEpoch> {
-        self.snapshot_epoch
+    pub fn snapshot_epoch(&self) -> Option<DesktopSnapshotEpoch> {
+        DesktopSnapshotEpoch::new(self.snapshot_epoch.load(Ordering::Acquire))
     }
 
     pub fn refresh(
+        &self,
+        urgency: DesktopRefreshUrgency,
+    ) -> Result<DesktopRefreshAdmission, DesktopControllerError> {
+        let mut work = lock_work(&self.work)?;
+        let admission = self.submit(urgency)?;
+        if let Some(attempt) = scheduled_work_attempt(admission)? {
+            work.refresh_attempt = Some(attempt);
+        }
+        Ok(admission)
+    }
+
+    pub fn request_session_detail(
+        &self,
+        intent: DesktopSessionDetailIntent,
+    ) -> Result<DesktopRefreshAdmission, DesktopControllerError> {
+        if self.snapshot_epoch() != Some(intent.snapshot_epoch()) {
+            return Err(DesktopControllerError::new(
+                DesktopControllerErrorCode::StaleSelection,
+            ));
+        }
+        let mut work = lock_work(&self.work)?;
+        if work
+            .latest_selection_generation
+            .is_some_and(|current| intent.selection().generation() <= current)
+        {
+            return Err(DesktopControllerError::new(
+                DesktopControllerErrorCode::StaleSelection,
+            ));
+        }
+        let admission = self.submit(DesktopRefreshUrgency::Interactive)?;
+        if let Some(attempt) = scheduled_work_attempt(admission)? {
+            work.latest_selection_generation = Some(intent.selection().generation());
+            work.pending_selection = Some(PendingDesktopSessionDetail { attempt, intent });
+        }
+        Ok(admission)
+    }
+
+    fn submit(
         &self,
         urgency: DesktopRefreshUrgency,
     ) -> Result<DesktopRefreshAdmission, DesktopControllerError> {
@@ -656,7 +785,99 @@ impl DesktopController {
     }
 }
 
-fn execute_attempt<S: DesktopQuerySource>(
+fn execute_work<S: DesktopQuerySource>(
+    source: &mut S,
+    reducer: &mut ProductReducer,
+    permit: &RefreshPermit,
+    context: &DesktopExecutionContext<'_>,
+) -> RefreshOutcome {
+    let batch = match lock_work(context.work) {
+        Ok(mut state) => take_work_batch(&mut state, permit.id().get()),
+        Err(_) => return RefreshOutcome::Failed,
+    };
+
+    if let Some(selection) = batch.selection {
+        let outcome = execute_session_detail(source, reducer, permit, context, selection);
+        if outcome != RefreshOutcome::Completed {
+            return outcome;
+        }
+    }
+    if batch.refresh {
+        execute_refresh(
+            source,
+            context.plan,
+            reducer,
+            permit,
+            context.clock,
+            context.publication,
+        )
+    } else {
+        RefreshOutcome::Completed
+    }
+}
+
+fn execute_session_detail<S: DesktopQuerySource>(
+    source: &mut S,
+    reducer: &mut ProductReducer,
+    permit: &RefreshPermit,
+    context: &DesktopExecutionContext<'_>,
+    intent: DesktopSessionDetailIntent,
+) -> RefreshOutcome {
+    let Some(attempt) = ProductAttemptGeneration::new(permit.id().get()) else {
+        return RefreshOutcome::Failed;
+    };
+    if let Some(outcome) = stop_outcome(permit, context.clock) {
+        return outcome;
+    }
+    if context.snapshot_epoch.load(Ordering::Acquire) != intent.snapshot_epoch().get() {
+        return RefreshOutcome::Completed;
+    }
+
+    let current = reducer.snapshot();
+    if current.generation() != intent.product_generation() {
+        return RefreshOutcome::Completed;
+    }
+    let key = current
+        .sessions()
+        .payload()
+        .and_then(|sessions| {
+            sessions
+                .payload()
+                .sessions()
+                .get(usize::from(intent.selection().row_ordinal()))
+        })
+        .map(|summary| summary.key().clone());
+    drop(current);
+
+    let result = match key {
+        Some(key) => source
+            .usage_session_detail(key)
+            .map_err(|error| error.code()),
+        None => Err(QueryErrorCode::InvalidValue),
+    };
+    if let Some(outcome) = stop_outcome(permit, context.clock) {
+        return outcome;
+    }
+
+    let latest = match lock_work(context.work) {
+        Ok(state) => state.latest_selection_generation == Some(intent.selection().generation()),
+        Err(_) => return RefreshOutcome::Failed,
+    };
+    if !latest {
+        return RefreshOutcome::Completed;
+    }
+
+    let reduced = match result {
+        Ok(value) => reducer.publish_session_detail(attempt, intent.selection(), value),
+        Err(code) => reducer.fail_session_detail(attempt, intent.selection(), code),
+    };
+    if reduced.is_err() {
+        return RefreshOutcome::Failed;
+    }
+    publish_snapshot(reducer.snapshot(), context.publication)
+}
+
+fn execute_refresh<S: DesktopQuerySource>(
     source: &mut S,
     plan: &DesktopQueryPlan,
     reducer: &mut ProductReducer,
@@ -769,12 +990,19 @@ fn execute_attempt<S: DesktopQuerySource>(
         return outcome;
     }
 
+    publish_snapshot(reducer.snapshot(), publication)
+}
+
+fn publish_snapshot(
+    snapshot: Arc<ProductSnapshot>,
+    publication: &DesktopPublication,
+) -> RefreshOutcome {
     let notifier = match lock_notifier(&publication.notifier) {
         Ok(notifier) => notifier.clone(),
         Err(_) => return RefreshOutcome::Failed,
     };
     match lock_latest(&publication.latest) {
-        Ok(mut slot) => *slot = Some(reducer.snapshot()),
+        Ok(mut slot) => *slot = Some(snapshot),
         Err(_) => return RefreshOutcome::Failed,
     }
     if let Some(notifier) = notifier {
@@ -854,6 +1082,53 @@ fn lock_runtime_observation(
     observation
         .lock()
         .map_err(|_| DesktopControllerError::new(DesktopControllerErrorCode::Internal))
+}
+
+fn lock_work(
+    work: &DesktopWorkSlot,
+) -> Result<MutexGuard<'_, DesktopWorkState>, DesktopControllerError> {
+    work.lock()
+        .map_err(|_| DesktopControllerError::new(DesktopControllerErrorCode::Internal))
+}
+
+fn scheduled_work_attempt(
+    admission: DesktopRefreshAdmission,
+) -> Result<Option<u64>, DesktopControllerError> {
+    match admission {
+        DesktopRefreshAdmission::Started { attempt } => Ok(Some(attempt.get())),
+        DesktopRefreshAdmission::Coalesced { receipt, .. } => {
+            receipt.get().checked_add(1).map(Some).ok_or_else(|| {
+                DesktopControllerError::new(DesktopControllerErrorCode::CapacityExceeded)
+            })
+        }
+        DesktopRefreshAdmission::DeadlineExceeded { .. } => Ok(None),
+    }
+}
+
+fn take_work_batch(state: &mut DesktopWorkState, attempt: u64) -> DesktopWorkBatch {
+    let refresh = match state.refresh_attempt {
+        Some(expected) if expected == attempt => {
+            state.refresh_attempt = None;
+            true
+        }
+        Some(expected) if expected < attempt => {
+            state.refresh_attempt = None;
+            false
+        }
+        Some(_) | None => false,
+    };
+    let selection = match state.pending_selection {
+        Some(pending) if pending.attempt == attempt => {
+            state.pending_selection = None;
+            Some(pending.intent)
+        }
+        Some(pending) if pending.attempt < attempt => {
+            state.pending_selection = None;
+            None
+        }
+        Some(_) | None => None,
+    };
+    DesktopWorkBatch { refresh, selection }
 }
 
 fn map_admission(value: RefreshAdmission) -> DesktopRefreshAdmission {
@@ -956,6 +1231,45 @@ mod tests {
         }
     }
 
+    #[test]
+    fn work_batch_is_exactly_bound_to_its_scheduled_attempt() {
+        let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+        let selection = ProductSessionDetailSelection::new(
+            ProductSessionDetailSelectionGeneration::new(1).expect("selection generation"),
+            0,
+        );
+        let intent = DesktopSessionDetailIntent::new(
+            epoch,
+            tokenmaster_product::ProductGeneration::INITIAL,
+            selection,
+        );
+        let mut state = DesktopWorkState {
+            refresh_attempt: Some(2),
+            latest_selection_generation: Some(selection.generation()),
+            pending_selection: Some(PendingDesktopSessionDetail { attempt: 2, intent }),
+        };
+
+        let early = take_work_batch(&mut state, 1);
+        assert!(!early.refresh);
+        assert!(early.selection.is_none());
+        assert_eq!(state.refresh_attempt, Some(2));
+        assert!(state.pending_selection.is_some());
+
+        let exact = take_work_batch(&mut state, 2);
+        assert!(exact.refresh);
+        assert_eq!(exact.selection, Some(intent));
+        assert_eq!(state.refresh_attempt, None);
+        assert!(state.pending_selection.is_none());
+
+        state.refresh_attempt = Some(2);
+        state.pending_selection = Some(PendingDesktopSessionDetail { attempt: 2, intent });
+        let stale = take_work_batch(&mut state, 3);
+        assert!(!stale.refresh);
+        assert!(stale.selection.is_none());
+        assert_eq!(state.refresh_attempt, None);
+        assert!(state.pending_selection.is_none());
+    }
+
     struct DeadlineSource {
         clock: Arc<ManualClock>,
     }
@@ -1003,6 +1317,13 @@ mod tests {
             _request: UsageSessionPageRequest,
         ) -> Result<QueryEnvelope<UsageSessionPage>, QueryError> {
             unreachable!("deadline stops before sessions")
+        }
+
+        fn usage_session_detail(
+            &mut self,
+            _key: UsageSessionKey,
+        ) -> Result<QueryEnvelope<UsageSessionDetailResult>, QueryError> {
+            unreachable!("deadline stops before session detail")
         }
     }
 

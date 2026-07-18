@@ -41,5 +41,6 @@ pub use controller::{
     DesktopAttempt, DesktopController, DesktopControllerError, DesktopControllerErrorCode,
     DesktopQueryPlan, DesktopQuerySource, DesktopRefreshAdmission, DesktopRefreshCompletion,
     DesktopRefreshOutcome, DesktopRefreshReceipt, DesktopRefreshUrgency, DesktopRuntimeObservation,
-    DesktopRuntimeObservationOutcome, DesktopSnapshotNotifier, DesktopSnapshotReceiver,
+    DesktopRuntimeObservationOutcome, DesktopSessionDetailIntent, DesktopSnapshotNotifier,
+    DesktopSnapshotReceiver,
 };

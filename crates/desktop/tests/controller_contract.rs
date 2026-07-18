@@ -22,8 +22,8 @@ use tokenmaster_query::{
     BenefitOverviewEnvelope, BenefitOverviewRequest, BenefitOverviewSnapshot, GitEnvelope,
     GitOutputRequest, GitOutputSnapshot, LatestActivityPage, LatestActivityRequest, PageSize,
     ProductDataStatusEnvelope, QueryEnvelope, QueryError, QueryService, QuotaCurrentSnapshot,
-    QuotaEnvelope, SystemQueryClock, UsageAnalytics, UsageAnalyticsRequest, UsageSessionPage,
-    UsageSessionPageRequest,
+    QuotaEnvelope, SystemQueryClock, UsageAnalytics, UsageAnalyticsRequest,
+    UsageSessionDetailResult, UsageSessionKey, UsageSessionPage, UsageSessionPageRequest,
 };
 use tokenmaster_store::UsageStore;
 
@@ -65,6 +65,13 @@ macro_rules! delegate_unavailable_methods {
             &mut self,
             _request: UsageSessionPageRequest,
         ) -> Result<QueryEnvelope<UsageSessionPage>, QueryError> {
+            Err(query_failure())
+        }
+
+        fn usage_session_detail(
+            &mut self,
+            _key: UsageSessionKey,
+        ) -> Result<QueryEnvelope<UsageSessionDetailResult>, QueryError> {
             Err(query_failure())
         }
     };
@@ -140,6 +147,14 @@ impl DesktopQuerySource for UnavailableSource {
             DesktopQueryPlan::MAX_SESSION_ROWS
         );
         self.record("sessions");
+        Err(query_failure())
+    }
+
+    fn usage_session_detail(
+        &mut self,
+        _key: UsageSessionKey,
+    ) -> Result<QueryEnvelope<UsageSessionDetailResult>, QueryError> {
+        self.record("session_detail");
         Err(query_failure())
     }
 }
@@ -765,6 +780,13 @@ impl DesktopQuerySource for AnalyticsFaultSource {
         request: UsageSessionPageRequest,
     ) -> Result<QueryEnvelope<UsageSessionPage>, QueryError> {
         self.inner.usage_sessions(request)
+    }
+
+    fn usage_session_detail(
+        &mut self,
+        key: UsageSessionKey,
+    ) -> Result<QueryEnvelope<UsageSessionDetailResult>, QueryError> {
+        self.inner.usage_session_detail(key)
     }
 }
 
