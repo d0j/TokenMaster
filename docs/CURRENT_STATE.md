@@ -1036,10 +1036,11 @@ and no usable backup preserve the active/corrupt set.
 
 The same recovered candidate may fail two launches; a third enters safe mode. A clean
 run accepts the recovery generation so a completed historical journal neither creates
-a false crash loop nor blocks a later independent recovery. `LiveRuntime` now adopts
-the already-held platform guard through a typed guarded start path, while legacy starts
-retain their behavior. A runtime integration contract proves first-install bootstrap,
-guard handoff, live archive creation/use, joined shutdown, and only then clean
+a false crash loop nor blocks a later independent recovery. `LiveRuntime` now consumes
+the already-held platform guard through archive open and startup recovery, then releases
+that startup guard; later mutations acquire the same fixed lease per operation. Legacy
+starts retain their behavior. A runtime integration contract proves first-install
+bootstrap, continuous guarded startup, live archive creation/use, joined shutdown, and only then clean
 publication. Zero-length WAL/SHM facts are valid and identity-bound; zero-length main
 is rejected. Focused platform 13/13, writer-lease 9/9, store startup 5/5, state restore
 20/20, bootstrap 12/12, automatic recovery 7/7, and full runtime tests pass; strict

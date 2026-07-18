@@ -195,7 +195,8 @@ journal staging cleanup with physical authorization before cleanup and
 root-bound A/B run state, unclean-before-open publication, read-only normal/quick
 diagnosis, cold-journal-first resume, newest-first reverified automatic data-only
 recovery, a two-unclean-launch candidate bound, first-install/damaged-missing
-classification, and continuous guard handoff into the live runtime. Task 12 remains
+classification, and continuous guard handoff into live-runtime archive open/startup
+recovery before later per-operation lease acquisition. Task 12 remains
 next for application-owned migration safety points, provider-backed no-backup rebuild,
 safe mode, service restart, and final clean-after-join publication. These slices add no
 path, generic stream, SQL, or batch-deletion authority.

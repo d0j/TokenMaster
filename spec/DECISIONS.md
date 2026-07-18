@@ -1340,7 +1340,9 @@ explicit and independently testable.
 Decision: startup reliability has two explicit owners. State owns fixed A/B run
 markers, pre-open read-only diagnosis, journal resume, newest-first fully reverified
 backup selection, and corruption-only automatic data-only restore. Runtime accepts the
-already-held platform writer guard and retains it, eliminating an unlock/relock race.
+already-held platform writer guard, retains it through archive open and startup
+recovery, then releases it; later writes reacquire the same fixed lease per operation.
+This eliminates the pre-open unlock/relock race without claiming a lifetime lock.
 The application owns migration safety backups, provider-backed reconstruction when no
 backup is usable, creation and teardown of every live/query/controller/maintenance
 owner, and final clean publication.

@@ -512,8 +512,10 @@ evidence is preserved, zero-length WAL/SHM facts remain exact, no usable backup 
 `RecoveryRequired`, and the same recovered candidate enters safe mode on its third
 unclean launch. Store startup inspection never creates or migrates an archive.
 
-`LiveRuntime::{start_guarded,start_notified_guarded}` adopts the bootstrap guard without
-an unlock race; legacy starts remain wrappers. The retained `RunSession` can publish
+`LiveRuntime::{start_guarded,start_notified_guarded}` consumes the bootstrap guard and
+keeps it through archive open/startup recovery without an unlock race, then releases
+that startup guard; later mutations use the same fixed lease per operation. Legacy
+starts remain wrappers. The retained `RunSession` can publish
 clean only after explicit launch authorization and exact generation/digest reread. The
 integration contract hands a first-install guard into a real live runtime, joins it,
 then marks clean. Focused platform/store/state/runtime contracts, strict workspace

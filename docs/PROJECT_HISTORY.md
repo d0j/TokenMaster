@@ -2802,10 +2802,11 @@ two unclean launches are allowed and the third enters safe mode. Later clean acc
 prevents a completed historical journal from creating a false retry loop or blocking a
 new independent recovery generation.
 
-The runtime now adopts an already-held platform guard through guarded start APIs, while
-legacy constructors retain their behavior. An integration contract carries a
-first-install bootstrap guard through real live archive creation and joined shutdown,
-then publishes clean through the retained generation/digest-bound `RunSession`. Root
+The runtime now consumes an already-held platform guard through archive open and startup
+recovery, then releases that startup guard; later mutations reacquire the same fixed
+lease per operation. Legacy constructors retain their behavior. An integration contract
+separately proves guarded first-install startup, joined shutdown, and only then clean
+publication through the retained generation/digest-bound `RunSession`. Root
 capabilities are reauthorized before every recovery/bootstrap operation, unknown
 pre-journal staging is preserved, and exact zero-length WAL/SHM facts are supported
 without accepting an empty main.

@@ -777,9 +777,11 @@ selection is newest-first with complete package revalidation and automatic data-
 mode. Non-corruption failures, newer schema, no usable backup, or ambiguous artifacts
 do not mutate the active archive.
 
-`LiveRuntime::{start_guarded,start_notified_guarded}` adopts the already-held platform
-guard into `RuntimeWriterLease`; there is no unlock/relock window. Existing start APIs
-remain wrappers that acquire their own guard. The application must retain the
+`LiveRuntime::{start_guarded,start_notified_guarded}` consumes the already-held platform
+guard and keeps it continuously through `UsageStore::open` and startup recovery; only
+then is that startup guard released. There is no unlock/relock window before those
+operations, while later runtime mutations acquire the same fixed lease per operation.
+Existing start APIs remain wrappers that acquire their own startup guard. The application must retain the
 `RunSession`, authorize a healthy launch only after the owned bundle is viable, and
 publish clean only after every archive, controller, maintenance, and runtime owner has
 joined. Task 12 owns that complete application sequence, migration safety points, and

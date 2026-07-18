@@ -17,9 +17,10 @@ All notable changes are recorded here.
   two-unclean-launch bound before safe mode. No valid backup and every non-corruption
   result preserve existing evidence. Zero-length SQLite WAL/SHM sidecars are retained
   as valid exact facts while a zero-length main remains invalid.
-- Added root/capability rebinding before mutation and continuous writer-guard adoption
-  by `LiveRuntime`. A real integration contract carries one first-install guard through
-  live archive startup and joined shutdown before clean publication; legacy runtime
+- Added root/capability rebinding before mutation and continuous startup-guard handoff
+  into `LiveRuntime`. A real integration contract carries one first-install guard
+  through archive open/startup recovery, then separately proves joined shutdown before
+  clean publication; legacy runtime
   starts retain their behavior. Focused platform/store/state/runtime contracts and the
   strict locked workspace Clippy, reliable-state audit, and 55/55 authority mutations
   pass; the complete locked workspace test/doctest suite passes in 571.4 seconds.

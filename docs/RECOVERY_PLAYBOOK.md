@@ -253,8 +253,9 @@ The implemented bootstrap and later application integration follow this exact or
 6. Before ordinary startup, inspect prior run state, publish/reread the next `unclean`
    generation, resume any pending journal, and use normal read-only inspection only for
    an exactly clean prior run. Every other prior condition adds `quick_check(100)`.
-   Keep the same writer guard through live-runtime ownership and publish clean only
-   after every application owner joins.
+   Keep the same writer guard through live-runtime archive open and startup recovery,
+   then release it; later mutations reacquire the same fixed lease per operation.
+   Publish clean only after every application owner joins.
 7. If no backup is usable, preserve the corrupt set and return recovery-required. Task
    12 alone may create a fresh archive through normal store code and repopulate only
    reconstructible data from authoritative local providers. Never do this in state or

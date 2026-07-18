@@ -799,8 +799,9 @@ Add tests for:
    returns `Healthy`, `RebuildRequired`, or `SafeMode` plus fixed receipts.
 2. Add a guarded LiveRuntime start path accepting the already-held platform guard.
    It constructs the existing `RuntimeWriterLease` for later operations, performs
-   existing staging recovery, and retains the same guard until runtime shutdown.
-   Preserve existing start constructors as wrappers.
+   archive open and existing startup recovery under the same guard, then releases that
+   startup guard. Later writes reacquire the same fixed lease per operation. Preserve
+   existing start constructors as wrappers.
 3. Keep schema-too-new intact and report upgrade required.
 4. Distinguish first install from missing damaged state using bounded validated
    TokenMaster-owned durable artifacts, never the absence of the main file alone.
