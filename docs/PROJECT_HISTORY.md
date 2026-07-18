@@ -2608,5 +2608,60 @@ failure body; the exact target then passed 11 consecutive runs and the complete
 workspace rerun passed without an intervening source edit. This remains recorded as a
 transient test event rather than hidden or claimed as a product regression.
 
-Retention, maintenance, recovery, safe mode, UI integration, M0 acceptance, packaging,
-signing, and release remain unimplemented; Task 8 bounded catalog/retention is next.
+Maintenance, recovery, safe mode, UI integration, M0 acceptance, packaging, signing,
+and release remain unimplemented; Task 8 bounded catalog/retention followed.
+
+## 2026-07-18 — P3-D.0 Task 8 sealed catalog and protected retention
+
+Added the platform-owned canonical local `backups` directory with exactly 32 private
+`point-00.tmbackup` through `point-31.tmbackup` slots. Public directory entries bind
+scope, ordinal, length, and physical identity without exposing names or paths. Scans
+reject unexpected names/types, symlinks, reparse points, hard links, duplicate
+physical identities, over-capacity, and exact controlled stage/tombstone remnants.
+Stages remain unpublished and expose only bounded write/seal/discard plus a path-free
+reader after seal; only the owning directory publishes. Deletion is a write-through
+rename to an exact tombstone followed by removal, so before-move interruption leaves
+the point unchanged and post-move uncertainty is explicit recovery state.
+
+Added a disposable process-local `BackupCatalog`. Rebuild streams every complete file
+with one 64 KiB buffer, validates the fixed header/manifest, records the complete-file
+SHA-256 privately, rejects duplicate content, and reports cold rows as `HeaderValid`
+or `Corrupt`, never verified. A prior verified state carries only across unchanged
+physical token, length, full SHA-256, and typed metadata; explicit current package
+proof must bind the exact catalog generation/ordinal. Public points expose only UTC
+time, size, purpose, schema/compression, health, and checked selection.
+
+Closed a production-composition gap found by independent review. The final chain is
+typed package write into the sealed unpublished slot, complete package parsing through
+its path-free reader, pure no-delete retention admission, directory publication with
+seal recheck, catalog rebuild/proof bind, and exact confirmation. This avoids both raw
+stage escape and publish-before-verification. Mixed source/destination failures retain
+the existing source-first precedence and discarded-stage reuse is an internal
+invariant rather than transient I/O.
+
+Retention now protects the admitted candidate, newest two verified points, and newest
+pre-migration point until later verified post-migration evidence, then applies shared
+four-newest, seven distinct UTC-day, and four distinct ISO-week tiers under the
+15-point cap. The compressed-byte budget defaults to 2 GiB and accepts only 256 MiB
+through 64 GiB. Unchecked/corrupt bytes count but are never deletion-eligible.
+Admission requires a free slot and deletes nothing; confirmation requires exactly one
+new verified candidate and preservation of all prior package identities.
+
+Independent review also found that checking only the candidate and selected target
+could still plan from another stale protected point. The final deletion path therefore
+fully rehashes every current `Verified` fact before planning, rechecks the exact target
+and directory generation, deletes at most one oldest unprotected file, and requires a
+catalog rebuild/replan. Regressions prove same-length corruption of the candidate,
+target, or a different protected point causes zero deletion and correct tier promotion
+after rebuild.
+
+Focused evidence passes four catalog contracts, two retention contracts, five
+backup-directory contracts, the injected deletion-boundary unit, mixed-error unit,
+strict source authority audit, and 42/42 mutation cases. The independent third review
+closed both Important code findings and the Minor error-semantics finding; its only
+later documentation wording Minor was corrected. Task 9 capacity-one maintenance is
+next; recovery, safe mode, UI, acceptance, packaging, signing, and release remain
+unclaimed. The final review is Critical 0, Important 0, Minor 0 and `Ready: Yes`.
+The unchanged Rust source passes clean-root in 17.4 seconds, formatting in 1.3
+seconds, strict locked full-workspace Clippy in 13.3 seconds, and the complete locked
+workspace test/doctest gate in 566.3 seconds total.

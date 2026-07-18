@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
+mod catalog;
 mod error;
 mod package;
 #[cfg_attr(
@@ -13,8 +14,12 @@ mod package;
 mod record;
 #[cfg(test)]
 mod record_contract_tests;
+mod retention;
 mod settings;
 
+pub use catalog::{
+    BackupCatalog, CatalogGeneration, CatalogHealth, CatalogPoint, CatalogSelection,
+};
 pub use error::{StateError, StateErrorCode};
 pub use package::{
     AGE_SCRYPT_LOG_N, BackupCompression, BackupEncryptionContext, BackupMetadata, BackupPackage,
@@ -23,6 +28,10 @@ pub use package::{
     MAX_PACKAGE_MANIFEST_BYTES, MAX_PACKAGE_TOTAL_EXPANDED_BYTES, MAX_SETTINGS_PACKAGE_BYTES,
     MIN_BACKUP_PASSPHRASE_SCALARS, PACKAGE_DECODER_WINDOW_BYTES, PACKAGE_IO_BUFFER_BYTES,
     PackageReceipt, ProtectedPackageReceipt, VerifiedBackupPackage, VerifiedConfigPackage,
+};
+pub use retention::{
+    MAX_RETAINED_VERIFIED_POINTS, RETENTION_DAILY_POINTS, RETENTION_NEWEST_POINTS,
+    RETENTION_WEEKLY_POINTS, RetentionAdmission, RetentionCycle, RetentionPolicy,
 };
 pub use settings::{
     BACKUP_INTERVAL_DEFAULT_SECONDS, BACKUP_INTERVAL_MAX_SECONDS, BACKUP_INTERVAL_MIN_SECONDS,

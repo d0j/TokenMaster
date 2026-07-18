@@ -422,16 +422,38 @@ uncertainty becomes `RecoveryRequired`. Seven grouped encryption contracts, stri
 state Clippy, the workspace authority audit, exact age feature inspection, and 37/37
 Pester mutations pass.
 
-The immediate next slice is Task 8 bounded catalog and retention. Then continue Tasks
-9-18 in order: maintenance, journaled recovery and startup
+Task 8 is complete in the working tree. `tokenmaster-platform` owns one canonical
+local `backups` child with exactly 32 opaque private slots, sealed stage/read/publish
+capabilities, link/reparse/hardlink/duplicate-identity rejection, and write-through
+tombstone deletion. `tokenmaster-state` owns a disposable bounded catalog with
+`Corrupt`/`HeaderValid`/`Verified` truth and checked generation/ordinal selections.
+Paths, names, physical identities, and hashes remain private.
+
+The production candidate path is exact: typed package write into an unpublished slot,
+full parse/verification through its sealed path-free reader, no-delete retention
+preflight, directory-only publication with seal recheck, catalog rebuild and proof
+bind, then exact confirmation. Retention protects candidate/newest-two/pre-migration
+truth and applies four-newest/seven-UTC-day/four-ISO-week tiers under the shared
+15-point and 256 MiB-through-64 GiB byte cap. Before every one-file deletion it fully
+rehashes all current `Verified` points, rechecks the target and directory generation,
+then requires rebuild/replan. Same-length corruption anywhere in the verified fact set
+blocks deletion. Focused catalog 4/4, retention 2/2, platform directory 5/5, mixed-
+error unit, source audit, and 42/42 Pester mutations pass.
+Independent third review reports Critical 0, Important 0, Minor 0 and `Ready: Yes`.
+The final Task 8 workspace baseline passes clean-root in 17.4 seconds, formatting in
+1.3 seconds, strict locked full-workspace Clippy in 13.3 seconds, and the complete
+locked workspace test/doctest suite in 566.3 seconds total.
+
+The immediate next slice is Task 9 capacity-one backup maintenance. Then continue
+Tasks 10-18 in order: journaled recovery and startup
 integration, application restart/safe mode, Data & Recovery UI, then adversarial and
 resource closure. Keep the fixed archive path and writer sidecar; never copy only the
 live main file or treat busy/disk/access/schema-newer as corruption authority. Keep
 automatic recovery data only; manual full restore must explicitly choose data only or
 data plus portable settings, and device-local settings never move between machines.
-Task 8 must introduce the sealed platform backup-directory capability; Task 9
-must introduce store-owned verified-candidate streaming/state interop. Neither may
-relax Tasks 6-7 into path, generic-stream, or generic age-extraction authority.
+Task 9 must compose store-owned verified-candidate streaming with the sealed stage and
+must not relax Tasks 6-8 into path, generic-stream, generic age-extraction, or batch-
+deletion authority.
 
 After P3-D.0, continue P3-D supporting data-bearing routes using bounded keyset
 intents and the same controller/snapshot boundary. P3-E then closes remaining
@@ -439,11 +461,12 @@ notifications, settings/help, command palette, tray, and compact lifecycle. P3-D
 presentation, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.
-The current post-P3-D.0-Task-7 focused evidence includes the Task 5 store contracts,
+The current post-P3-D.0-Task-8 focused evidence includes the Task 5 store contracts,
 5 package contracts, 10 package adversarial contracts, 17 durable-file contracts,
-7 grouped encryption contracts, strict platform/state Clippy, the reliable-state
-workspace audit, 37 authority mutations, and exact Zstd/age feature-tree verification.
-The final Task 7 component baseline passes on the unchanged source tree: clean-root
+7 grouped encryption contracts, 4 catalog contracts, 2 retention contracts, 5 backup-
+directory contracts, strict platform/state Clippy, the reliable-state workspace audit,
+42 authority mutations, and exact Zstd/age feature-tree verification.
+The prior Task 7 component baseline passed on its unchanged source tree: clean-root
 15.9 seconds, formatting 1.4 seconds, strict locked full-workspace Clippy 35.6
 seconds, and the complete locked workspace test/doctest suite 491.2 seconds (544.1
 seconds combined). One initial full-suite attempt stopped in the existing

@@ -1197,6 +1197,29 @@ already verified package proof preserves cryptographic interoperability without
 adding custom crypto, filesystem authority, password persistence, or unattended
 recovery credentials.
 
+The implemented catalog/retention layer uses one sealed platform-owned `backups`
+directory with 32 fixed private slots. State receives opaque physical entry tokens,
+bounded readers/stages, and checked generation/ordinal selections, never paths or
+filenames. A candidate is written, fully parsed while still sealed and unpublished,
+admitted without deletion, published by the owning directory, rebound to the exact
+catalog proof, and only then may retention act. Cold header validity is distinct from
+full verification.
+
+Retention protects the candidate, newest two verified points, and the latest
+pre-migration point until verified post-migration evidence exists, then applies shared
+four-newest/seven-UTC-day/four-ISO-week tiers under a 15-point and checked byte cap.
+Before each one-file deletion it fully revalidates every current verified fact and the
+exact target. Deletion is a write-through rename to an exact private tombstone followed
+by removal; interruption is explicit recovery state and every successful deletion
+requires catalog rebuild/replan.
+
+Rationale: deriving selection from filenames, trusting a disposable cache, publishing
+before verification, or batch-deleting from stale facts would make corrupt/stale
+evidence authoritative. The fixed namespace, sealed prepublication proof, complete
+current-fact revalidation, and deterministic one-delete prefix keep memory bounded and
+make crash/data-loss behavior reviewable without introducing generic filesystem
+authority.
+
 Restore stops every archive owner, holds the stable writer lease, journals each idempotent
 phase, quarantines WAL/SHM, atomically replaces the main file while preserving the old
 main, reverifies the new active database, and reconstructs one application bundle.

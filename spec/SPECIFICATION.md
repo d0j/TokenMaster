@@ -141,6 +141,15 @@ SHM set, and use a durable idempotent journal. Interrupted restore MUST resume b
 any SQLite open. Busy, access-denied, disk-full, transient-I/O, unsupported-location,
 and schema-too-new failures MUST NOT authorize replacement.
 
+The automatic-backup namespace MUST contain at most 32 fixed private slots and MUST
+reject unexpected names, links, reparse points, hard links, and ambiguous physical
+identities. Its catalog MUST be disposable and rebuildable from bounded package
+headers without treating header validity as complete verification. Retention MUST
+perform a no-delete admission before publication, then fully revalidate the complete
+current verified set and the exact selected old point before deleting at most one
+verified unprotected file. Every deletion MUST be followed by a catalog rebuild and
+replan; corrupt, unchecked, or stale points MUST NOT become deletion authority.
+
 Disabling scheduled periodic backup MUST NOT disable mandatory pre-migration,
 pre-restore, or pre-destructive-maintenance safety points for a healthy non-empty
 archive. If such a point cannot be created and reverified, its mutation MUST be

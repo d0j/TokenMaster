@@ -926,6 +926,36 @@ unchanged-source component baseline passes clean-root, formatting, strict locked
 full-workspace Clippy, and the complete locked workspace test/doctest suite in 544.1
 seconds combined.
 
+Task 8 now adds the sealed automatic-backup directory, disposable catalog, and
+deterministic protected retention. `tokenmaster-platform` owns the canonical local
+`backups` child and exactly 32 private slots. Enumeration rejects unexpected names/
+types, symlinks, reparse points, hard links, duplicate physical identities, stale
+tokens, and crash remnants. Stages expose bounded write/seal/discard plus a path-free
+reader only after seal; only the owning directory can publish. Deletion uses a
+write-through exact tombstone: a before-move interruption leaves the point unchanged,
+while every post-move or uncertain boundary becomes `RecoveryRequired`.
+
+`BackupPackage` now composes directly with the sealed exact-slot stage. The production
+sequence is write, fully parse/verify the still-unpublished stage, no-delete retention
+admission, publish with seal recheck, catalog rebuild/bind, and exact confirmation.
+Cold catalog rebuild streams all complete bytes but reports only `HeaderValid` or
+`Corrupt`; `Verified` requires exact current package proof. Warm proof carries only
+across unchanged physical identity, length, complete-file SHA-256, and typed metadata.
+
+Retention protects the candidate, newest two verified points, and the newest
+pre-migration point until later verified post-migration evidence, then applies the
+shared four-newest/seven-UTC-day/four-ISO-week tiers under 15 points and the checked
+256 MiB-through-64 GiB byte budget. Admission deletes nothing. Each deletion first
+rehashes the complete current verified set, rechecks the exact target and directory
+generation, removes at most one oldest unprotected verified file, and requires rebuild/
+replan. Same-length corruption of the candidate, target, or another protected point
+preserves all files. Focused catalog 4/4, retention 2/2, platform directory 5/5,
+mixed-error unit, source authority audit, and 42/42 Pester mutations pass.
+Independent third review reports Critical 0, Important 0, Minor 0 and `Ready: Yes`.
+The final Task 8 workspace baseline passes clean-root (17.4 seconds), formatting (1.3
+seconds), strict locked full-workspace Clippy (13.3 seconds), and the complete locked
+workspace test/doctest suite (566.3 seconds total).
+
 Remaining ownership is: store for SQLite Online Backup and candidate verification,
 platform for durable same-volume replacement and sealed file selection, state for
 settings/packages/retention/recovery, and app for runtime shutdown/restart and safe
@@ -943,18 +973,18 @@ transient-I/O, unsupported-location, and schema-too-new results preserve current
 truth. No valid backup leads to explicit quarantine and authoritative-source rebuild,
 never fabricated zero or automatic corrupt-row salvage.
 
-Only Tasks 1-7 are implemented. No retention worker, restore, safe mode, Data &
-Recovery UI, or new acceptance evidence exists yet. Task 8 bounded catalog/retention
-is the immediate next slice and first adds the planned sealed
-platform backup-directory capability; Task 9 adds store-owned verified-candidate
-reader/state interop rather than introducing path or generic-stream access.
+Only Tasks 1-8 are implemented. No maintenance worker, restore, safe mode, Data &
+Recovery UI, or new acceptance evidence exists yet. Task 9 capacity-one backup
+maintenance runtime is the immediate next slice and must compose the existing store-
+owned verified candidate, sealed stage verification, admission, publication, and
+one-delete/rebuild cycle without introducing path or generic-stream access.
 
 ## Next implementation slice
 
-Execute P3-D.0 Task 8 from
-`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: add the sealed
-platform backup-directory capability, self-describing bounded catalog, and
-deterministic protected retention without exposing paths or generic streams.
+Execute P3-D.0 Task 9 from
+`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: build the capacity-
+one maintenance runtime over the completed snapshot/package/catalog/retention
+capabilities while preserving off-UI bounded work and exact proof identities.
 
 P2-D quota history core is complete under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: Tasks 1-8 cover
@@ -971,7 +1001,7 @@ immutable read snapshots, and publication through the existing Codex runtime wit
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
 workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, P3-B.2, P3-B.3, and P3-C are
-complete; P3-D.0 Reliable State is active with Tasks 1-7 complete and Task 8 next, followed
+complete; P3-D.0 Reliable State is active with Tasks 1-8 complete and Task 9 next, followed
 by the remaining P3-D supporting data-bearing routes. Activation
 remains a later independently authorized capability. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.

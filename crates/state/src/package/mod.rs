@@ -9,6 +9,47 @@ mod manifest;
 mod reader;
 mod writer;
 
+pub(crate) const CATALOG_HEADER_BYTES: usize = header::HEADER_BYTES + manifest::MANIFEST_BYTES;
+
+pub(crate) struct CatalogPackageHeader {
+    pub(crate) database_schema_version: u16,
+    pub(crate) compression: BackupCompression,
+    pub(crate) metadata: BackupMetadata,
+}
+
+pub(crate) fn decode_catalog_header(
+    bytes: &[u8; CATALOG_HEADER_BYTES],
+) -> Result<CatalogPackageHeader, crate::StateError> {
+    let header_bytes = bytes[..header::HEADER_BYTES]
+        .try_into()
+        .map_err(|_| crate::StateError::integrity())?;
+    let header = header::Header::decode(header_bytes)?;
+    if header.kind != header::PackageKind::Backup
+        || usize::try_from(header.manifest_len)
+            .map_err(|_| crate::StateError::capacity_exceeded())?
+            != manifest::MANIFEST_BYTES
+    {
+        return Err(crate::StateError::integrity());
+    }
+    let manifest_bytes = bytes[header::HEADER_BYTES..]
+        .try_into()
+        .map_err(|_| crate::StateError::integrity())?;
+    let manifest = manifest::Manifest::decode(manifest_bytes)?;
+    if manifest.kind != header.kind || manifest.entry_count != header.entry_count {
+        return Err(crate::StateError::integrity());
+    }
+    Ok(CatalogPackageHeader {
+        database_schema_version: manifest.database_schema_version,
+        compression: manifest.compression,
+        metadata: BackupMetadata::new(
+            manifest.created_at_utc_ms,
+            manifest
+                .backup_purpose
+                .ok_or_else(crate::StateError::integrity)?,
+        )?,
+    })
+}
+
 pub const MAX_PACKAGE_ENTRIES: usize = 8;
 pub const MAX_PACKAGE_MANIFEST_BYTES: usize = 64 * 1024;
 pub const MAX_SETTINGS_PACKAGE_BYTES: u64 = 1024 * 1024;

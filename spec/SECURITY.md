@@ -756,6 +756,34 @@ receipts, errors, `Debug`, health, arguments, and environment. Automatic backups
 explicitly rejected by the encryption API and remain recoverable without stored
 credentials.
 
+Implemented Task 8 confines automatic packages to the canonical local `backups`
+directory and 32 exact private slot names. The platform rejects unexpected children,
+non-files, symlinks/reparse points, hard links, duplicate physical identities, and
+stale directory/entry capabilities. Publication is available only through the owning
+`BackupDirectory`; an unpublished `BackupStagedFile` exposes no raw file, path, rename,
+or independent publication method. It can open only a path-free reader after seal so
+the typed package parser can verify the exact unpublished candidate. Deletion first
+performs a write-through rename to one exact private tombstone; an interrupted move is
+explicit `RecoveryRequired` rather than an inferred successful delete.
+
+Catalog header validity is not verification authority. Cold rebuild hashes every
+complete file but marks it only `HeaderValid` or `Corrupt`; current full package proof
+is required for `Verified`, and duplicate complete-file hashes fail integrity. A
+retention preflight deletes nothing and consumes the proof from the exact sealed stage.
+After publication, every prior package must still be present and the candidate proof
+must rebind exactly. Immediately before each delete, the complete current verified set
+and selected target are fully rehashed and their typed headers rechecked, followed by
+a current physical directory-generation check. A same-length in-place corruption of
+the candidate, target, or another protected point therefore preserves all files and
+returns `RecoveryRequired`; unchecked/corrupt points are never deletion-eligible.
+
+The state authority audit allows only one named typed `BackupPackage` writer and one
+verifier over the sealed backup stage, rejects duplicate/raw backup-token methods, and
+forbids direct state filesystem enumeration. This does not extend the threat model to
+malicious code running under the same user token: a hostile same-user process can
+still race after a completed validation. Cross-user/local-ACL containment and
+evidence-preserving crash behavior are the implemented claims.
+
 The current exact-child read checks the pathname type before opening and validates the
 opened regular-file length, but does not claim hostile same-user no-follow/open-handle
 identity resistance against replacement in that narrow interval. The documented

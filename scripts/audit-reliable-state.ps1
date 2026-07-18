@@ -125,9 +125,11 @@ $approvedStdIoPattern = '(?m)^\s*use\s+std\s*::\s*io\s*::\s*\{\s*self\s*,\s*Writ
 $approvedPackageReaderIoPattern = '(?m)^\s*use\s+std\s*::\s*io\s*::\s*\{\s*self\s*,\s*BufRead\s*,\s*Read\s*,\s*Write\s*,?\s*\}\s*;\s*$'
 $approvedPackageWriterIoPattern = '(?m)^\s*use\s+std\s*::\s*io\s*::\s*\{\s*self\s*,\s*Read\s*,\s*Write\s*,?\s*\}\s*;\s*$'
 $approvedPlatformPattern = '(?ms)^\s*use\s+tokenmaster_platform\s*::\s*\{\s*DurableFileError\s*,\s*DurableFileTarget\s*,\s*DurableStagedFile\s*,\s*MAX_DURABLE_WRITE_CHUNK_BYTES\s*,\s*ValidatedLocalDirectory\s*,?\s*\}\s*;\s*$'
-$approvedPackageCapabilityExportPattern = '(?m)^\s*pub\(crate\)\s+use\s+tokenmaster_platform\s*::\s*\{\s*DurableFileReader\s*,\s*DurableStagedFile\s*,?\s*\}\s*;\s*$'
-$approvedPackageCapabilityImportPattern = '(?m)^\s*use\s+tokenmaster_platform\s*::\s*\{\s*DurableFileError\s*,\s*MAX_DURABLE_WRITE_CHUNK_BYTES\s*,?\s*\}\s*;\s*$'
+$approvedPackageCapabilityExportPattern = '(?m)^\s*pub\(crate\)\s+use\s+tokenmaster_platform\s*::\s*\{\s*BackupStagedFile\s*,\s*DurableFileReader\s*,\s*DurableStagedFile\s*,?\s*\}\s*;\s*$'
+$approvedPackageCapabilityImportPattern = '(?ms)^\s*use\s+tokenmaster_platform\s*::\s*\{\s*BackupDirectoryError\s*,\s*DurableFileError\s*,\s*MAX_DURABLE_WRITE_CHUNK_BYTES\s*,?\s*\}\s*;\s*$'
 $approvedSettingsPlatformPattern = '(?m)^\s*use\s+tokenmaster_platform\s*::\s*ValidatedLocalDirectory\s*;\s*$'
+$approvedCatalogPlatformPattern = '(?ms)^\s*use\s+tokenmaster_platform\s*::\s*\{\s*BackupDirectory\s*,\s*BackupDirectoryEntry\s*,\s*BackupDirectoryError\s*,\s*BackupDirectoryGeneration\s*,\s*MAX_DURABLE_FILE_BYTES\s*,?\s*\}\s*;\s*$'
+$approvedRetentionPlatformPattern = '(?m)^\s*use\s+tokenmaster_platform\s*::\s*\{\s*BackupDirectory\s*,\s*BackupDirectoryError\s*,\s*MAX_BACKUP_DIRECTORY_FILES\s*,?\s*\}\s*;\s*$'
 $approvedStdIoImports = @([regex]::Matches($productionText, $approvedStdIoPattern))
 $approvedPackageReaderIoImports = @(
     [regex]::Matches($productionText, $approvedPackageReaderIoPattern)
@@ -145,13 +147,21 @@ $approvedPackageCapabilityImports = @(
 $approvedSettingsPlatformImports = @(
     [regex]::Matches($productionText, $approvedSettingsPlatformPattern)
 )
+$approvedCatalogPlatformImports = @(
+    [regex]::Matches($productionText, $approvedCatalogPlatformPattern)
+)
+$approvedRetentionPlatformImports = @(
+    [regex]::Matches($productionText, $approvedRetentionPlatformPattern)
+)
 if ($approvedStdIoImports.Count -ne 1 -or
     $approvedPackageReaderIoImports.Count -ne 1 -or
     $approvedPackageWriterIoImports.Count -ne 3 -or
     $approvedPlatformImports.Count -ne 1 -or
     $approvedPackageCapabilityExports.Count -ne 1 -or
     $approvedPackageCapabilityImports.Count -ne 1 -or
-    $approvedSettingsPlatformImports.Count -ne 1) {
+    $approvedSettingsPlatformImports.Count -ne 1 -or
+    $approvedCatalogPlatformImports.Count -ne 1 -or
+    $approvedRetentionPlatformImports.Count -ne 1) {
     throw 'TM-STATE-APPROVED-IO: exact bounded record/package capability imports must match the fixed allowlist'
 }
 $validatedDirectoryUses = @(
@@ -193,6 +203,8 @@ $authorityText = [regex]::Replace($authorityText, $approvedPlatformPattern, '')
 $authorityText = [regex]::Replace($authorityText, $approvedPackageCapabilityExportPattern, '')
 $authorityText = [regex]::Replace($authorityText, $approvedPackageCapabilityImportPattern, '')
 $authorityText = [regex]::Replace($authorityText, $approvedSettingsPlatformPattern, '')
+$authorityText = [regex]::Replace($authorityText, $approvedCatalogPlatformPattern, '')
+$authorityText = [regex]::Replace($authorityText, $approvedRetentionPlatformPattern, '')
 
 $publicPathPattern = '(?s)\bpub(?:\([^)]*\))?\s+(?:(?:const|async|unsafe)\s+)*fn\s+\w+[^;{]*(?:std::path::)?(?:Path|PathBuf)\b[^;{]*[;{]'
 if ($productionText -match $publicPathPattern) {
@@ -205,6 +217,34 @@ if ($productionText -match $publicStreamAuthorityPattern) {
 $publicRecordAuthorityPattern = '(?m)^\s*pub\s+(?:use\s+record\b|mod\s+record\b|struct\s+RedundantRecordStore\b)'
 if ($productionText -match $publicRecordAuthorityPattern) {
     throw 'TM-STATE-RECORD-VISIBILITY: generic record filesystem authority must remain crate-private'
+}
+$approvedBackupStageWriterPattern = '(?s)\bpub\s+fn\s+write_to_backup_stage\s*\(.*?\bdestination\s*:\s*&mut\s+BackupStagedFile\s*,?\s*\)\s*->\s*Result\s*<\s*PackageReceipt\s*,\s*StateError\s*>\s*\{'
+$approvedBackupStageWriters = @(
+    [regex]::Matches($productionText, $approvedBackupStageWriterPattern)
+)
+if ($approvedBackupStageWriters.Count -ne 1) {
+    throw 'TM-STATE-BACKUP-DIRECTORY-AUTHORITY: exactly one typed backup-stage writer is allowed'
+}
+$approvedBackupStageVerifierPattern = '(?s)\bpub\s+fn\s+verify_backup_stage\s*\(\s*source\s*:\s*&BackupStagedFile\s*,?\s*\)\s*->\s*Result\s*<\s*VerifiedBackupPackage\s*,\s*StateError\s*>\s*\{'
+$approvedBackupStageVerifiers = @(
+    [regex]::Matches($productionText, $approvedBackupStageVerifierPattern)
+)
+if ($approvedBackupStageVerifiers.Count -ne 1) {
+    throw 'TM-STATE-BACKUP-DIRECTORY-AUTHORITY: exactly one typed backup-stage verifier is allowed'
+}
+$backupAuthorityText = [regex]::Replace(
+    $productionText,
+    $approvedBackupStageWriterPattern,
+    'pub fn write_to_backup_stage() {'
+)
+$backupAuthorityText = [regex]::Replace(
+    $backupAuthorityText,
+    $approvedBackupStageVerifierPattern,
+    'pub fn verify_backup_stage() {'
+)
+$publicBackupDirectoryAuthorityPattern = '(?s)\bpub\s+(?:(?:const|async|unsafe)\s+)*fn\s+\w+[^;{]*\b(?:BackupDirectoryEntry|BackupDirectoryGeneration|BackupStagedFile)\b[^;{]*[;{]'
+if ($backupAuthorityText -match $publicBackupDirectoryAuthorityPattern) {
+    throw 'TM-STATE-BACKUP-DIRECTORY-AUTHORITY: raw platform backup tokens must remain inside typed catalog and retention operations'
 }
 $forbiddenAuthorityPattern = '(?s)https?://|\bstd\b|\btokenmaster_platform\b|\bmacro_rules\s*!|\b(?:Command|TcpStream|TcpListener|UdpSocket)\b|\b(?:slint|rusqlite|tokio|reqwest|ureq|webbrowser|headless_chrome|zip|tar)::|\b(?:SELECT|INSERT|UPDATE|DELETE\s+FROM|PRAGMA)\b|\b(?:include|include_str|include_bytes)!\s*\(|#\s*\[\s*path\s*=|powershell(?:\.exe)?|cmd(?:\.exe)?|bash(?:\.exe)?|\bsh\s+-c\b|\bAuthorization\b|\bBearer\s'
 if ($authorityText -cmatch $forbiddenAuthorityPattern) {
@@ -226,7 +266,7 @@ if ($SourceOnly) {
         direct_production_dependency_count = $directProductionDependencies.Count
         rust_source_file_count = $rustFiles.Count
         approved_std_io_import_count = $approvedStdIoImports.Count + $approvedPackageReaderIoImports.Count + $approvedPackageWriterIoImports.Count
-        approved_platform_import_count = $approvedPlatformImports.Count + $approvedPackageCapabilityExports.Count + $approvedPackageCapabilityImports.Count + $approvedSettingsPlatformImports.Count
+        approved_platform_import_count = $approvedPlatformImports.Count + $approvedPackageCapabilityExports.Count + $approvedPackageCapabilityImports.Count + $approvedSettingsPlatformImports.Count + $approvedCatalogPlatformImports.Count + $approvedRetentionPlatformImports.Count
         validated_directory_capability_use_count = $validatedDirectoryUses.Count
         forbidden_authority_count = 0
         arbitrary_path_constructor_count = 0
@@ -314,7 +354,7 @@ if ($featureTreeText -match '(?i)\bage feature "(?:armor|async|cli-common|plugin
     direct_production_dependency_count = $metadataDependencies.Count
     rust_source_file_count = $rustFiles.Count
     approved_std_io_import_count = $approvedStdIoImports.Count + $approvedPackageReaderIoImports.Count + $approvedPackageWriterIoImports.Count
-    approved_platform_import_count = $approvedPlatformImports.Count + $approvedPackageCapabilityExports.Count + $approvedPackageCapabilityImports.Count + $approvedSettingsPlatformImports.Count
+    approved_platform_import_count = $approvedPlatformImports.Count + $approvedPackageCapabilityExports.Count + $approvedPackageCapabilityImports.Count + $approvedSettingsPlatformImports.Count + $approvedCatalogPlatformImports.Count + $approvedRetentionPlatformImports.Count
     validated_directory_capability_use_count = $validatedDirectoryUses.Count
     forbidden_authority_count = 0
     arbitrary_path_constructor_count = 0

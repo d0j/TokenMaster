@@ -5,8 +5,8 @@ use sha2::{Digest, Sha256};
 use crate::{PortableSettingsCandidate, StateError};
 
 use super::capability::{
-    DurableFileReader, DurableReaderAdapter, DurableStagedFile, DurableWriterAdapter,
-    map_durable_error, resolve_codec_error,
+    BackupStagedFile, DurableFileReader, DurableReaderAdapter, DurableStagedFile,
+    DurableWriterAdapter, map_backup_directory_error, map_durable_error, resolve_codec_error,
 };
 use super::encryption::AuthenticatedBackupPayload;
 use super::header::{HEADER_BYTES, Header, PackageKind};
@@ -46,6 +46,18 @@ impl BackupPackage {
         let result = read_backup_stream(&mut source_adapter, database_sink);
         resolve_codec_error(result, &[source_adapter.failure()])
     }
+
+    /// Fully verifies one sealed unpublished exact-slot package without publishing it.
+    pub fn verify_backup_stage(
+        source: &BackupStagedFile,
+    ) -> Result<VerifiedBackupPackage, StateError> {
+        let mut reader = source.open_reader().map_err(map_backup_directory_error)?;
+        let mut source_adapter = DurableReaderAdapter::new(&mut reader);
+        let mut sink = io::sink();
+        let result = read_package(&mut source_adapter, PackageKind::Backup, &mut sink)
+            .and_then(verified_backup_from_parsed);
+        resolve_codec_error(result, &[source_adapter.failure()])
+    }
 }
 
 pub(super) fn read_authenticated_backup(
@@ -70,21 +82,7 @@ fn read_backup_stream<R: Read>(
         database_sink
             .seal(database.expanded_len, database.expanded_sha256)
             .map_err(map_durable_error)?;
-        Ok(VerifiedBackupPackage {
-            settings: parsed.settings,
-            receipt: parsed.receipt,
-            database_schema_version: parsed.manifest.database_schema_version,
-            database_len: database.expanded_len,
-            database_sha256: database.expanded_sha256,
-            compression: parsed.manifest.compression,
-            metadata: BackupMetadata::new(
-                parsed.manifest.created_at_utc_ms,
-                parsed
-                    .manifest
-                    .backup_purpose
-                    .ok_or_else(StateError::internal_invariant)?,
-            )?,
-        })
+        verified_backup_from_parsed(parsed)
     })();
     match result {
         Ok(verified) => Ok(verified),
@@ -95,6 +93,25 @@ fn read_backup_stream<R: Read>(
             Err(error)
         }
     }
+}
+
+fn verified_backup_from_parsed(parsed: ParsedPackage) -> Result<VerifiedBackupPackage, StateError> {
+    let database = parsed.database.ok_or_else(StateError::internal_invariant)?;
+    Ok(VerifiedBackupPackage {
+        settings: parsed.settings,
+        receipt: parsed.receipt,
+        database_schema_version: parsed.manifest.database_schema_version,
+        database_len: database.expanded_len,
+        database_sha256: database.expanded_sha256,
+        compression: parsed.manifest.compression,
+        metadata: BackupMetadata::new(
+            parsed.manifest.created_at_utc_ms,
+            parsed
+                .manifest
+                .backup_purpose
+                .ok_or_else(StateError::internal_invariant)?,
+        )?,
+    })
 }
 
 struct ParsedPackage {

@@ -4,6 +4,7 @@
 use std::fmt;
 use std::fs::File;
 
+mod backup_directory;
 mod durable_file;
 mod lease;
 mod local_directory;
@@ -16,6 +17,10 @@ mod unsupported;
 #[cfg(windows)]
 mod windows;
 
+pub use backup_directory::{
+    BackupDirectory, BackupDirectoryEntry, BackupDirectoryError, BackupDirectoryGeneration,
+    BackupDirectorySnapshot, BackupStagedFile, MAX_BACKUP_DIRECTORY_FILES,
+};
 pub use durable_file::{
     DURABLE_STAGE_ATTEMPTS, DurableFileError, DurableFileReader, DurableFileReceipt,
     DurableFileTarget, DurableStagedFile, MAX_DURABLE_FILE_BYTES, MAX_DURABLE_WRITE_CHUNK_BYTES,

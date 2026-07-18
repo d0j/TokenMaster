@@ -6,6 +6,27 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.0 Task 8 sealed backup catalog and bounded retention. Platform owns
+  the canonical local `backups` directory, exactly 32 private package slots, opaque
+  physical entry/generation tokens, bounded staging/read/publication, link/reparse/
+  hardlink/duplicate-identity rejection, and write-through one-file tombstone deletion.
+- Added the exact production proof chain: typed package write into a sealed unpublished
+  slot, full path-free package verification, no-delete retention admission, directory-
+  owned publication with seal recheck, catalog rebuild/bind, and exact confirmation.
+  Cold catalog rows remain `HeaderValid`/`Corrupt`; only current complete proof becomes
+  `Verified`.
+- Added deterministic protected retention under 32 files, 15 verified points, and the
+  checked 256 MiB-through-64 GiB byte range: candidate/newest-two/pre-migration
+  protection plus shared four-newest/seven-UTC-day/four-ISO-week tiers. Every deletion
+  revalidates the complete current verified set and exact target, deletes at most one
+  oldest unprotected point, then requires rebuild/replan. Same-length corruption of
+  candidate, target, or another protected point preserves all files.
+- Added four catalog, two retention, five backup-directory, deletion-boundary, mixed-
+  failure precedence, stage cleanup/poison, namespace/privacy, and stale-proof
+  regressions. The reliable-state source audit passes and its mutation suite is now
+  42/42, including exact typed stage writer/verifier allowlists and sealed stage-method
+  enforcement. Independent third review is Critical 0, Important 0, Minor 0,
+  `Ready: Yes`; the complete locked workspace baseline passes in 566.3 seconds.
 - Implemented P3-D.0 Task 7 optional manual age v1 backup protection. Pinned
   `age = 0.12.1` with default features disabled and no CLI/plugin/SSH/armor/async/
   unstable/web feature. Manual export uses the standard scrypt recipient with fixed

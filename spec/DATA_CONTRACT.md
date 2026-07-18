@@ -662,10 +662,11 @@ content-size flags, expanded length/SHA-256, and window log 23. Dictionary IDs,
 reserved bits, concatenated frames, missing frame ends, trailing bytes, a frame
 content-size mismatch, windows above 8 MiB, expanded output above the independent
 counter, suffix-length mismatch, unknown values, overflow, and any digest mismatch
-fail closed. Codec input/output is only `DurableFileReader`/`DurableStagedFile`; no
-public generic extractor exists. A codec or final-seal failure irreversibly discards
-and poisons the output stage, so later write, seal, or publication cannot recover
-partial bytes as truth.
+fail closed. Codec input is only `DurableFileReader`; output is either
+`DurableStagedFile` or the sealed exact-slot `BackupStagedFile` used by the typed
+backup writer. No public generic extractor exists. A codec or final-seal failure
+irreversibly discards and poisons the output stage, so later write, seal, or
+publication cannot recover partial bytes as truth.
 
 The wire format contains no filenames, paths, links, permissions, devices,
 credentials, prompts, responses, reasoning, commands, output, source content, or raw
@@ -676,13 +677,41 @@ accepted value at 16 before derivation. Passphrase bytes never enter package met
 receipts, stable errors, `Debug`, process arguments, environment, settings, or health.
 Automatic recovery packages remain unencrypted and store no decryption secret.
 
-Automatic retention considers at most 32 controlled package files and keeps at most
-15 verified restore points under a default 2 GiB compressed-byte budget configurable
-only from 256 MiB through 64 GiB: four newest, seven daily, and four weekly
-representatives. The newest two verified points and the last pre-migration point are
-protected. A package catalog is disposable and reconstructible from self-describing
-headers. Quarantine retains at most three complete main/WAL/SHM sets and never deletes
-them automatically.
+Implemented Task 8 automatic retention owns exactly 32 private package slots,
+`point-00.tmbackup` through `point-31.tmbackup`, below the fixed `backups` child. Slot
+names never encode time, purpose, profile, identity, or user data. A platform entry
+binds directory scope, ordinal, observed length, and physical identity; the complete
+scan generation hashes only those bounded physical facts. Unexpected names/types,
+links/reparse points, hard links, duplicate physical identities, and controlled
+stage/deletion remnants fail closed.
+
+`BackupCatalog` is process-local and disposable. Rebuild streams every complete file
+with one 64 KiB buffer, retains only fixed header/manifest metadata plus complete-file
+SHA-256, and rejects duplicate file content. Cold rows are `header_valid` or
+`corrupt`, never `verified`. Prior `verified` state carries forward only when slot
+physical identity, length, complete-file SHA-256, and typed metadata are unchanged;
+an explicit current `VerifiedBackupPackage` proof must match all of them before bind.
+Public catalog values expose only checked catalog generation, bounded ordinal, UTC
+time, compressed size, purpose, schema/compression, and health.
+
+Retention keeps at most 15 verified restore points under a default 2 GiB compressed-
+byte budget configurable only from 256 MiB through 64 GiB. Protection is selected
+first: the admitted candidate, newest two verified points, and newest pre-migration
+point until a later verified post-migration point exists. The remaining deterministic
+UTC tiers are four newest, at most seven distinct calendar-day representatives, and at
+most four distinct ISO-week representatives, all under the shared 15-point cap.
+Unchecked/corrupt bytes count against the budget but are never deletion-eligible.
+
+Admission is a pure no-delete check over one fully verified unpublished candidate and
+requires a free slot. The candidate stage is fully parsed through a sealed path-free
+reader before admission. Only after exact publication, catalog-generation increment,
+candidate bind, and preservation of every prior package may a retention cycle select
+one oldest verified unprotected point. Immediately before deletion it streams and
+rechecks the complete current verified set, rechecks the exact deletion target and
+directory generation, then uses a write-through same-volume tombstone and removes at
+most that one file. The caller must rebuild and replan before another deletion.
+Quarantine retains at most three complete main/WAL/SHM sets and never deletes them
+automatically.
 
 Recovery journals the exact states `prepared`, `sidecars_quarantined`,
 `main_replaced`, `reopened_verified`, `settings_published`, and `complete`. It stores

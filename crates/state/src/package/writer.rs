@@ -5,8 +5,9 @@ use sha2::{Digest, Sha256};
 use crate::{PortableSettingsCandidate, StateError};
 
 use super::capability::{
-    DurableFileReader, DurableReaderAdapter, DurableStagedFile, DurableWriterAdapter,
-    map_durable_error, resolve_codec_error,
+    BackupStagedFile, BackupWriterAdapter, DurableFileReader, DurableReaderAdapter,
+    DurableStagedFile, DurableWriterAdapter, map_backup_directory_error, map_durable_error,
+    resolve_backup_codec_error, resolve_codec_error,
 };
 use super::header::{Header, PackageKind};
 use super::manifest::{
@@ -124,11 +125,73 @@ impl BackupPackage {
         })();
         discard_failed_stage(result, destination)
     }
+
+    /// Writes and seals a typed package in one exact backup-directory stage.
+    ///
+    /// Publication remains exclusively controlled by `BackupDirectory::publish`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn write_to_backup_stage(
+        settings: &PortableSettingsCandidate,
+        database: &mut DurableFileReader,
+        database_len: u64,
+        database_sha256: [u8; 32],
+        database_schema_version: u16,
+        compression: BackupCompression,
+        metadata: BackupMetadata,
+        destination: &mut BackupStagedFile,
+    ) -> Result<PackageReceipt, StateError> {
+        let result = (|| {
+            if database.len() != database_len {
+                return Err(StateError::integrity());
+            }
+            let (result, database_failure, destination_failure) = {
+                let mut database_adapter = DurableReaderAdapter::new(database);
+                let mut destination_adapter = BackupWriterAdapter::new(destination);
+                let result = write_backup_stream(
+                    settings,
+                    &mut database_adapter,
+                    database_len,
+                    database_sha256,
+                    database_schema_version,
+                    compression,
+                    metadata,
+                    &mut destination_adapter,
+                );
+                (
+                    result,
+                    database_adapter.failure(),
+                    destination_adapter.failure(),
+                )
+            };
+            let receipt =
+                resolve_backup_codec_error(result, database_failure, destination_failure)?;
+            destination
+                .seal(receipt.package_len(), *receipt.file_sha256())
+                .map_err(map_backup_directory_error)?;
+            Ok(receipt)
+        })();
+        discard_failed_backup_stage(result, destination)
+    }
 }
 
 fn discard_failed_stage<T>(
     result: Result<T, StateError>,
     destination: &mut DurableStagedFile,
+) -> Result<T, StateError> {
+    match result {
+        Ok(value) => Ok(value),
+        Err(error) => {
+            destination
+                .discard()
+                .map_err(|_| StateError::recovery_required())?;
+            Err(error)
+        }
+    }
+}
+
+fn discard_failed_backup_stage<T>(
+    result: Result<T, StateError>,
+    destination: &mut BackupStagedFile,
 ) -> Result<T, StateError> {
     match result {
         Ok(value) => Ok(value),

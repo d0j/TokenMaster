@@ -151,6 +151,15 @@ pub fn backup_bytes_with(
     compression: BackupCompression,
     purpose: BackupPurpose,
 ) -> (Vec<u8>, PackageReceipt) {
+    backup_bytes_at(database, compression, purpose, 1_721_234_567_890)
+}
+
+pub fn backup_bytes_at(
+    database: &[u8],
+    compression: BackupCompression,
+    purpose: BackupPurpose,
+    created_at_utc_ms: i64,
+) -> (Vec<u8>, PackageReceipt) {
     let root = ControlledRoot::new();
     let database_target = root.publish_bytes("snapshot.sqlite3", database);
     let mut database_reader = root.open(&database_target);
@@ -162,7 +171,7 @@ pub fn backup_bytes_with(
         digest(database),
         13,
         compression,
-        BackupMetadata::new(1_721_234_567_890, purpose).expect("backup metadata"),
+        BackupMetadata::new(created_at_utc_ms, purpose).expect("backup metadata"),
         &mut package_stage,
     )
     .expect("write backup package");

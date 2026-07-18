@@ -6,8 +6,9 @@ use std::path::Path;
 use sha2::{Digest, Sha256};
 use windows::Win32::Foundation::{ERROR_UNABLE_TO_MOVE_REPLACEMENT_2, HANDLE};
 use windows::Win32::Storage::FileSystem::{
-    FILE_ID_INFO, FileIdInfo, GetFileInformationByHandleEx, MOVEFILE_REPLACE_EXISTING,
-    MOVEFILE_WRITE_THROUGH, MoveFileExW, REPLACE_FILE_FLAGS, ReplaceFileW,
+    FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo, FileStandardInfo, GetFileInformationByHandleEx,
+    MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW, REPLACE_FILE_FLAGS,
+    ReplaceFileW,
 };
 use windows::core::{HRESULT, PCWSTR};
 
@@ -37,6 +38,25 @@ pub(super) fn platform_identity(
     hasher.update(info.VolumeSerialNumber.to_le_bytes());
     hasher.update(info.FileId.Identifier);
     Ok(from_digest(hasher.finalize()))
+}
+
+pub(super) fn platform_link_count(file: &File) -> Result<u32, PhysicalIdentityError> {
+    let mut info = FILE_STANDARD_INFO::default();
+    let size = u32::try_from(size_of::<FILE_STANDARD_INFO>())
+        .map_err(|_| PhysicalIdentityError::QueryFailed)?;
+
+    // SAFETY: `file` remains open for the call, `info` is a correctly sized writable
+    // FILE_STANDARD_INFO buffer, and `size` is the exact size of that buffer.
+    unsafe {
+        GetFileInformationByHandleEx(
+            HANDLE(file.as_raw_handle()),
+            FileStandardInfo,
+            std::ptr::addr_of_mut!(info).cast(),
+            size,
+        )
+    }
+    .map_err(|_| PhysicalIdentityError::QueryFailed)?;
+    Ok(info.NumberOfLinks)
 }
 
 pub(super) fn move_file_write_through(

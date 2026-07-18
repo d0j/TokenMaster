@@ -135,7 +135,7 @@ tokenmaster-state = { path = "../state" }
         $result.binary_target_count | Should -Be 0
         $result.direct_production_dependency_count | Should -Be 7
         $result.approved_std_io_import_count | Should -Be 5
-        $result.approved_platform_import_count | Should -Be 4
+        $result.approved_platform_import_count | Should -Be 6
         $result.forbidden_authority_count | Should -Be 0
     }
 
@@ -318,6 +318,61 @@ tokenmaster-state = { path = "../state" }
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-STATE-VALIDATED-DIRECTORY*"
+    }
+
+    It "rejects direct filesystem enumeration from the typed backup catalog" {
+        $fixture = New-StateAuditFixture -Name "catalog-filesystem-bypass"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\catalog.rs") `
+            -Value 'fn forbidden_scan() { let _ = std::fs::read_dir("."); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-FORBIDDEN-AUTHORITY*"
+    }
+
+    It "rejects raw platform backup tokens in public state methods" {
+        $fixture = New-StateAuditFixture -Name "public-backup-token"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\catalog.rs") `
+            -Value 'pub fn leak_backup_token(entry: BackupDirectoryEntry) { let _ = entry; }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-BACKUP-DIRECTORY-AUTHORITY*"
+    }
+
+    It "rejects a second public backup-stage writer escape" {
+        $fixture = New-StateAuditFixture -Name "second-public-backup-stage-writer"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\package\writer.rs") `
+            -Value 'pub fn write_to_backup_stage(destination: &mut BackupStagedFile) -> Result<PackageReceipt, StateError> { Err(StateError::unavailable()) }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-BACKUP-DIRECTORY-AUTHORITY*"
+    }
+
+    It "rejects a second public backup-stage verifier escape" {
+        $fixture = New-StateAuditFixture -Name "second-public-backup-stage-verifier"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\package\reader.rs") `
+            -Value 'pub fn verify_backup_stage(source: &BackupStagedFile) -> Result<VerifiedBackupPackage, StateError> { let _ = source; Err(StateError::unavailable()) }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-BACKUP-DIRECTORY-AUTHORITY*"
+    }
+
+    It "keeps backup staging publication sealed behind BackupDirectory" {
+        $source = [System.IO.File]::ReadAllText(
+            (Join-Path $RepositoryRoot "crates\platform\src\backup_directory.rs")
+        )
+        $block = [regex]::Match(
+            $source,
+            '(?s)impl\s+BackupStagedFile\s*\{(?<body>.*?)\n\}\s*\n\s*impl\s+fmt::Debug'
+        )
+        $block.Success | Should -BeTrue
+        $methods = @(
+            [regex]::Matches(
+                $block.Groups['body'].Value,
+                '\bpub\s+(?:const\s+)?fn\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)'
+            ) | ForEach-Object { $_.Groups['name'].Value } | Sort-Object
+        )
+        $methods | Should -Be @('discard', 'open_reader', 'seal', 'write_chunk', 'written_len')
+        @([regex]::Matches($source, '\bpub\s+fn\s+publish\s*\(')).Count | Should -Be 1
     }
 
     It "rejects public generic record authority" {

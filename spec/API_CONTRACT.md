@@ -614,8 +614,9 @@ and does not publish a new generation when the portable value is already current
 Every successful publication is reread and returns a `PortableSettingsTarget` with a
 nonzero generation and portable SHA-256 digest. Reconstruction rejects generation
 zero; verification compares both generation and a freshly recomputed typed digest.
-Catalog, retention, maintenance, bootstrap, and restore members remain future fixed
-APIs and are not claimed by Task 4.
+Task 4 alone does not claim catalog, retention, maintenance, bootstrap, or restore.
+Task 8 implements the catalog/retention subset below; maintenance, bootstrap, and
+restore remain future fixed APIs.
 
 The implemented Task 5 store subset exposes only `BackupSource::new`,
 `BackupStaging::new`, `BackupControl::new`, `create_online_snapshot`,
@@ -627,14 +628,16 @@ schema version, defensive runtime policy, physical file identity, exact length, 
 SHA-256. Every consumer revalidates that identity before and after use. None of these
 APIs accepts caller SQL, a filename, an output path, or a SQLite connection.
 
-The implemented Task 6 state subset exposes typed `ConfigPackage::{write,read}` and
-`BackupPackage::{write,read}`, `BackupMetadata`, the three fixed compression profiles,
+The implemented Task 6/8 state subset exposes typed `ConfigPackage::{write,read}` and
+`BackupPackage::{write,write_to_backup_stage,verify_backup_stage,read}`,
+`BackupMetadata`, the three fixed compression profiles,
 the five fixed backup purposes, verified package values, and path-private receipts.
-Public codec methods accept only a platform-owned `DurableFileReader` and
-`DurableStagedFile`; raw generic `Read`/`Write` helpers remain private and the
-authority audit rejects any future public generic stream surface. Config write emits
-portable settings only. Backup write requires a declared length/SHA-256 from an
-already verified standalone database source and independently recounts/rehashes it.
+Public codec methods accept only a platform-owned `DurableFileReader`,
+`DurableStagedFile`, or sealed exact-slot `BackupStagedFile`; raw generic `Read`/`Write`
+helpers remain private and the authority audit permits exactly the named typed writer
+and verifier. Config write emits portable settings only. Backup write requires a
+declared length/SHA-256 from an already verified standalone database source and
+independently recounts/rehashes it.
 Config read returns owned verified portable settings. Backup read streams the database
 into an unpublished stage and seals it only after the complete outer footer, every
 descriptor/entry digest, and settings decode pass. Any codec or seal error poisons and
@@ -657,6 +660,25 @@ wrong password, malformed/non-scrypt header, authentication failure, truncation,
 trailing bytes, source substitution, output failure, or final seal failure discards
 and poisons the output before return. Neither operation accepts a path, generic
 stream, command, environment variable, recovery password, or arbitrary recipient.
+
+The implemented Task 8 platform subset exposes `BackupDirectory::{open_or_create,
+scan,create_staged,publish,open_reader,delete}` over one fixed `backups` child and 32
+fixed private slots. `BackupStagedFile` exposes only bounded write length, chunk write,
+seal, sealed path-free read, and discard; publication remains solely on its owning
+`BackupDirectory`. Directory snapshots and entries are opaque path-free generation/
+ordinal capabilities.
+
+The Task 8 state subset exposes `BackupCatalog::{rebuild,bind_verified}`,
+`RetentionPolicy`, `RetentionAdmission::{preflight,confirm_published}`, and
+`RetentionCycle::{next_deletion,delete_next}`. Catalog selection is only checked
+catalog generation plus bounded ordinal. Cold rebuild never returns verified health;
+`BackupPackage::verify_backup_stage` must fully parse the same sealed unpublished
+stage before admission, and exact proof is rebound after publication. Confirmation
+requires exactly one added verified candidate and every prior file preserved. A cycle
+returns or deletes at most one exact verified unprotected point, after full current-
+verified-set and target content revalidation plus directory-generation confirmation;
+another deletion requires rebuild and replan. No public state value returns a path,
+filename, physical identity, or digest.
 
 The SQLite-specific snapshot and candidate verifier are store-owned fixed APIs.
 The platform package owns durable same-volume replacement and native file selection.

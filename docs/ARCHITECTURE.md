@@ -169,19 +169,24 @@ requires an opaque verified backup proof, rechecks exact source length/SHA-256 d
 encryption, fixes scrypt work at 16 and import maximum at 16, owns zeroizing redacted
 passphrases, parses authenticated plaintext through the private typed backup reader,
 and poisons failed ciphertext/database stages. Automatic backups remain
-unencrypted. Later state tasks add typed run/recovery stores, bounded retention, and
-one capacity-one maintenance worker.
+unencrypted. Task 8 adds one sealed platform-owned `backups` directory with 32 fixed
+private slots, a disposable self-describing catalog, and deterministic protected
+retention. Candidate bytes are fully parsed while sealed and unpublished before
+no-delete admission; after exact publication/bind, each deletion revalidates the full
+current verified set plus exact target and removes only one write-through tombstoned
+file before rebuild/replan. Later state tasks add typed run/recovery stores and one
+capacity-one maintenance worker.
 `tokenmaster-platform` owns durable replacement and will later own sealed file dialogs.
 `tokenmaster-app` will stop every archive user, hold the existing writer
 lease, quarantine main/WAL/SHM, resume a redundant six-state restore journal before
 SQLite open, commit the selected data-only or data-plus-portable-settings mode, and
 reconstruct one application bundle or safe mode. Automatic recovery remains data only.
 Product/Desktop receive bounded health and intents only. The contour is in progress;
-Tasks 1-7 now provide persistent typed settings, verified standalone SQLite candidates,
-fixed packages, and verified-source-bound optional manual encryption; they add no
-catalog/maintenance runtime, restore,
-safe-mode, or release claim. Task 8/9 must use the planned sealed backup-directory and
-verified-candidate reader capabilities rather than paths or generic streams.
+Tasks 1-8 now provide persistent typed settings, verified standalone SQLite candidates,
+fixed packages, verified-source-bound optional manual encryption, and a sealed bounded
+catalog/retention core; they add no maintenance runtime, restore, safe-mode, or release
+claim. Task 9 must compose the existing sealed backup-directory and verified-candidate
+capabilities rather than paths or generic streams.
 
 The built-in live quota source is separate from the JSONL usage reader. Composition
 supplies one already resolved absolute native Codex executable to

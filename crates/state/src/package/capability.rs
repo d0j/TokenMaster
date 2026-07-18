@@ -1,8 +1,8 @@
 use core::cell::Cell;
 use std::io::{self, Read, Write};
 
-use tokenmaster_platform::{DurableFileError, MAX_DURABLE_WRITE_CHUNK_BYTES};
-pub(crate) use tokenmaster_platform::{DurableFileReader, DurableStagedFile};
+use tokenmaster_platform::{BackupDirectoryError, DurableFileError, MAX_DURABLE_WRITE_CHUNK_BYTES};
+pub(crate) use tokenmaster_platform::{BackupStagedFile, DurableFileReader, DurableStagedFile};
 
 use crate::StateError;
 
@@ -115,6 +115,41 @@ impl Write for DurableWriterAdapter<'_> {
     }
 }
 
+pub(crate) struct BackupWriterAdapter<'a> {
+    destination: &'a mut BackupStagedFile,
+    failure: Option<BackupDirectoryError>,
+}
+
+impl<'a> BackupWriterAdapter<'a> {
+    pub(crate) fn new(destination: &'a mut BackupStagedFile) -> Self {
+        Self {
+            destination,
+            failure: None,
+        }
+    }
+
+    pub(crate) const fn failure(&self) -> Option<BackupDirectoryError> {
+        self.failure
+    }
+}
+
+impl Write for BackupWriterAdapter<'_> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let count = bytes.len().min(MAX_DURABLE_WRITE_CHUNK_BYTES);
+        match self.destination.write_chunk(&bytes[..count]) {
+            Ok(()) => Ok(count),
+            Err(error) => {
+                self.failure = Some(error);
+                Err(backup_io_error(error))
+            }
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
 pub(crate) const fn map_durable_error(error: DurableFileError) -> StateError {
     match error {
         DurableFileError::CapacityExceeded | DurableFileError::CollisionLimit => {
@@ -133,6 +168,21 @@ pub(crate) const fn map_durable_error(error: DurableFileError) -> StateError {
     }
 }
 
+pub(crate) const fn map_backup_directory_error(error: BackupDirectoryError) -> StateError {
+    match error {
+        BackupDirectoryError::UnexpectedEntry
+        | BackupDirectoryError::UnexpectedType
+        | BackupDirectoryError::LinkedEntry
+        | BackupDirectoryError::AmbiguousIdentity => StateError::integrity(),
+        BackupDirectoryError::CapacityExceeded => StateError::capacity_exceeded(),
+        BackupDirectoryError::RecoveryRequired => StateError::recovery_required(),
+        BackupDirectoryError::InvalidState => StateError::internal_invariant(),
+        BackupDirectoryError::UnsupportedLocation
+        | BackupDirectoryError::StaleEntry
+        | BackupDirectoryError::Unavailable => StateError::unavailable(),
+    }
+}
+
 pub(crate) fn resolve_codec_error<T>(
     result: Result<T, StateError>,
     failures: &[Option<DurableFileError>],
@@ -145,6 +195,20 @@ pub(crate) fn resolve_codec_error<T>(
             .next()
             .copied()
             .map(map_durable_error)
+            .unwrap_or(codec_error)),
+    }
+}
+
+pub(crate) fn resolve_backup_codec_error<T>(
+    result: Result<T, StateError>,
+    database_failure: Option<DurableFileError>,
+    destination_failure: Option<BackupDirectoryError>,
+) -> Result<T, StateError> {
+    match result {
+        Ok(receipt) => Ok(receipt),
+        Err(codec_error) => Err(database_failure
+            .map(map_durable_error)
+            .or_else(|| destination_failure.map(map_backup_directory_error))
             .unwrap_or(codec_error)),
     }
 }
@@ -165,4 +229,47 @@ fn io_error(error: DurableFileError) -> io::Error {
         | DurableFileError::RecoveryRequired => io::ErrorKind::Other,
     };
     kind.into()
+}
+
+fn backup_io_error(error: BackupDirectoryError) -> io::Error {
+    let kind = match error {
+        BackupDirectoryError::CapacityExceeded => io::ErrorKind::OutOfMemory,
+        BackupDirectoryError::UnexpectedEntry
+        | BackupDirectoryError::UnexpectedType
+        | BackupDirectoryError::LinkedEntry
+        | BackupDirectoryError::AmbiguousIdentity
+        | BackupDirectoryError::UnsupportedLocation
+        | BackupDirectoryError::StaleEntry
+        | BackupDirectoryError::InvalidState => io::ErrorKind::InvalidData,
+        BackupDirectoryError::Unavailable | BackupDirectoryError::RecoveryRequired => {
+            io::ErrorKind::Other
+        }
+    };
+    kind.into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        BackupDirectoryError, DurableFileError, map_backup_directory_error,
+        resolve_backup_codec_error,
+    };
+    use crate::{StateError, StateErrorCode};
+
+    #[test]
+    fn mixed_backup_failure_precedence_matches_durable_package_writes() {
+        let error = match resolve_backup_codec_error::<()>(
+            Err(StateError::unavailable()),
+            Some(DurableFileError::Integrity),
+            Some(BackupDirectoryError::CapacityExceeded),
+        ) {
+            Ok(()) => panic!("mixed failure must fail"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code(), StateErrorCode::Integrity);
+        assert_eq!(
+            map_backup_directory_error(BackupDirectoryError::InvalidState).code(),
+            StateErrorCode::InternalInvariant
+        );
+    }
 }

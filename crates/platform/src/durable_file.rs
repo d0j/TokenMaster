@@ -346,6 +346,27 @@ impl DurableStagedFile {
         Ok(receipt)
     }
 
+    pub(crate) fn open_sealed_reader(&self) -> Result<DurableFileReader, DurableFileError> {
+        if self.file.is_some() || self.write_failed {
+            return Err(DurableFileError::InvalidState);
+        }
+        let receipt = self.receipt.ok_or(DurableFileError::InvalidState)?;
+        let path = self.path.as_deref().ok_or(DurableFileError::InvalidState)?;
+        verify_file(path, receipt.len, receipt.sha256)?;
+        let file = File::open(path).map_err(|_| DurableFileError::Unavailable)?;
+        let metadata = file.metadata().map_err(|_| DurableFileError::Unavailable)?;
+        if !metadata.is_file() || metadata.len() != receipt.len {
+            return Err(DurableFileError::Integrity);
+        }
+        Ok(DurableFileReader {
+            file,
+            expected_len: receipt.len,
+            consumed: 0,
+            finished: false,
+            read_failed: false,
+        })
+    }
+
     /// Publishes a sealed source only when the exact target is absent.
     pub fn publish_new(
         &mut self,

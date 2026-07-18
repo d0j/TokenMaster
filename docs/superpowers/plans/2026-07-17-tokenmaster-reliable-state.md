@@ -460,8 +460,16 @@ cargo +1.97.0 tree -p tokenmaster-state -e features
 - Create: `crates/state/tests/retention_contract.rs`
 - Create: `crates/platform/src/backup_directory.rs`
 - Create: `crates/platform/tests/backup_directory_contract.rs`
+- Modify: `crates/platform/src/durable_file.rs`
 - Modify: `crates/platform/src/lib.rs`
+- Modify: `crates/platform/src/windows.rs`
 - Modify: `crates/state/src/lib.rs`
+- Modify: `crates/state/src/package/capability.rs`
+- Modify: `crates/state/src/package/mod.rs`
+- Modify: `crates/state/src/package/reader.rs`
+- Modify: `crates/state/src/package/writer.rs`
+- Modify: `scripts/audit-reliable-state.ps1`
+- Modify: `scripts/tests/audit-reliable-state.Tests.ps1`
 
 ### Red
 
@@ -484,7 +492,14 @@ Add tests for:
     TokenMaster package children, rejecting links/reparse points/unexpected names and
     types, and permitting only bounded reader/create-stage/publish/delete operations;
 12. state catalog/retention code having no direct directory enumeration, path, or
-    generic filesystem authority.
+    generic filesystem authority;
+13. the production sequence writing a typed package, fully verifying that exact
+    sealed unpublished stage, completing no-delete admission, publishing, binding,
+    and confirming the same proof;
+14. same-length corruption of the candidate, selected deletion target, or any other
+    current verified/protected point blocking all deletion until rebuild/replan;
+15. mixed source/destination failure precedence and discarded-stage error
+    classification matching the existing durable package contract.
 
 ### Green
 
@@ -497,6 +512,31 @@ Add tests for:
    child tokens, never names or paths. It owns bounded enumeration and exact deletion;
    state receives only `DurableFileReader`, staged publication, length, time/type, and
    ordinal facts needed by the typed package/catalog contract.
+5. Use exactly 32 private slot children (`point-00.tmbackup` through
+   `point-31.tmbackup`). Names never encode time, purpose, profile, identity, or user
+   data and never cross the platform boundary. A token is bound to its directory,
+   slot, physical identity, and observed length; open/delete revalidate that binding.
+6. Distinguish `header_valid` from `verified`. Cold cache rebuild validates the exact
+   fixed header/manifest without inventing a prior full-package/SQLite proof. Only a
+   point bound to current full verification evidence is known-good or deletion-
+   eligible; corrupt/unavailable/unchecked points are preserved for later maintenance.
+7. Define retention in UTC. Select protected points first, then four newest distinct
+   points, then the newest remaining point per distinct UTC calendar day, then the
+   newest remaining point per distinct ISO-8601 UTC week. Daily/weekly tiers add at
+   most seven/four distinct points and stop at the shared fifteen-point cap; a pinned
+   pre-migration point consumes one of those fifteen slots.
+8. Split retention into a no-delete preflight over the proposed verified candidate and
+   a post-publication pass. Capacity failure before publication deletes nothing. After
+   publication, recompute the exact catalog generation and expose only the next
+   oldest unprotected deletion; after every deletion rebuild/replan, so interruption
+   is equivalent to applying a deterministic prefix and never creates a batch gap.
+9. Keep `BackupStagedFile` sealed: it exposes only bounded write/seal/discard and a
+   path-free reader after seal. `BackupPackage::verify_backup_stage` fully parses the
+   same unpublished bytes before admission; `BackupDirectory::publish` rechecks the
+   stage seal before moving it into the exact slot.
+10. Before planning any deletion, stream and revalidate every point currently marked
+    `Verified`; then revalidate the exact selected target again immediately before the
+    physical deletion. Any changed proof returns `RecoveryRequired` without deleting.
 
 ### Verify
 
