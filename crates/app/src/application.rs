@@ -3,6 +3,7 @@ use std::sync::{
     Arc, Mutex, Weak,
     atomic::{AtomicBool, AtomicU64, Ordering},
 };
+use std::time::Duration;
 
 use slint::ComponentHandle;
 use tokenmaster_codex::{CodexRootInput, ConfiguredCodexRoot, build_discovery_request};
@@ -20,10 +21,16 @@ use tokenmaster_runtime::{
     BenefitReminderRuntime, BenefitReminderRuntimeConfig, CodexQuotaRuntime,
     CodexQuotaRuntimeConfig, LiveRuntime, RuntimeErrorCode,
 };
+use tokenmaster_state::{
+    BackupMaintenanceRuntime, BootstrapOutcome, MaintenanceOutcome, MaintenancePurpose,
+    MaintenanceSourceState,
+};
 
+use crate::state::{ApplicationPreflight, ApplicationStateOwner};
 use crate::{ApplicationEnvironment, DataRoot};
 
 type SharedBundle = Arc<Mutex<Option<ApplicationBundle>>>;
+const MANDATORY_BACKUP_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 pub fn run() -> Result<(), ApplicationError> {
     select_production_renderer().map_err(|_| ApplicationError::ui_unavailable())?;
@@ -36,72 +43,78 @@ pub fn run() -> Result<(), ApplicationError> {
 
 struct Application {
     shell: DesktopShell,
-    _bridge: DesktopSnapshotBridge,
+    _bridge: Option<DesktopSnapshotBridge>,
     bundle: SharedBundle,
+    _state: ApplicationStateOwner,
+    preflight: ApplicationPreflight,
+    live_started: bool,
     shutdown: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ApplicationStartBoundary {
+    PreMigrationBackupPublished,
+    BeforePostMigrationBackup,
 }
 
 impl Application {
     fn start(environment: &ApplicationEnvironment) -> Result<Self, ApplicationError> {
+        Self::start_with_observer(environment, |_| Ok(()))
+    }
+
+    fn start_with_observer<F>(
+        environment: &ApplicationEnvironment,
+        mut observer: F,
+    ) -> Result<Self, ApplicationError>
+    where
+        F: FnMut(ApplicationStartBoundary) -> Result<(), ApplicationError>,
+    {
         let data_root = DataRoot::resolve(environment).map_err(|_| ApplicationError::data())?;
-        let codex_home = environment
-            .codex_home()
-            .map(|value| value.to_str().ok_or_else(ApplicationError::discovery))
-            .transpose()?;
-        let configured: [ConfiguredCodexRoot; 0] = [];
-        let discovery = build_discovery_request(CodexRootInput {
-            user_profile: environment.user_profile(),
-            codex_home,
-            configured: &configured,
-        })
-        .map_err(|_| ApplicationError::discovery())?;
-
-        let bundle = Arc::new(Mutex::new(None));
-        let notifier = Arc::new(ApplicationRuntimeNotifier::new(Arc::downgrade(&bundle)));
-        let notifier_port: Arc<dyn WorkerCompletionNotifier> = notifier.clone();
-        let live =
-            LiveRuntime::start_notified(data_root.archive_path(), discovery, notifier_port.clone())
-                .map_err(|_| ApplicationError::live_runtime())?;
-        let archive_path = data_root.archive_path().to_path_buf();
-        let quota =
-            OptionalRuntime::start(CodexQuotaRuntimeConfig::new(archive_path.clone()).and_then(
-                |config| CodexQuotaRuntime::start_notified(config, notifier_port.clone()),
-            ));
-        let reminder = OptionalRuntime::start(
-            BenefitReminderRuntimeConfig::new(archive_path.clone()).and_then(|config| {
-                BenefitReminderRuntime::start_notified(config, notifier_port.clone())
-            }),
-        );
-        let mut controller = DesktopController::open(
-            &archive_path,
-            DesktopQueryPlan::overview().map_err(|_| ApplicationError::controller())?,
-        )
-        .map_err(|_| ApplicationError::controller())?;
-
+        let state = ApplicationStateOwner::open(&data_root)?;
+        let mut preflight = state.prepare(&data_root)?;
         let initial = ProductReducer::new().snapshot();
         let shell = DesktopShell::new(&initial).map_err(|_| ApplicationError::ui_unavailable())?;
-        let bridge = shell.snapshot_bridge(controller.snapshot_receiver());
-        controller
-            .attach_snapshot_notifier(bridge.notifier())
-            .map_err(|_| ApplicationError::controller())?;
-
-        {
-            let mut slot = bundle.lock().map_err(|_| ApplicationError::internal())?;
-            *slot = Some(ApplicationBundle {
-                live,
-                quota,
-                reminder,
-                controller,
-            });
-        }
-        notifier
-            .publish()
-            .map_err(|_| ApplicationError::controller())?;
+        let bundle = Arc::new(Mutex::new(None));
+        let outcome = preflight.report().outcome();
+        let may_start_live = matches!(
+            outcome,
+            BootstrapOutcome::Healthy
+                | BootstrapOutcome::FirstInstall
+                | BootstrapOutcome::MigrationRequired
+        );
+        let (live_started, bridge) = if may_start_live {
+            match start_live_bundle(
+                environment,
+                &data_root,
+                &state,
+                &mut preflight,
+                &shell,
+                &bundle,
+                outcome,
+                &mut observer,
+            ) {
+                Ok(bridge) => {
+                    preflight.session_mut().authorize_healthy_launch();
+                    (true, Some(bridge))
+                }
+                Err(_) => {
+                    preflight.release_startup_guard();
+                    discard_bundle(&bundle)?;
+                    (false, None)
+                }
+            }
+        } else {
+            preflight.release_startup_guard();
+            (false, None)
+        };
 
         Ok(Self {
             shell,
             _bridge: bridge,
             bundle,
+            _state: state,
+            preflight,
+            live_started,
             shutdown: false,
         })
     }
@@ -124,10 +137,164 @@ impl Application {
             .lock()
             .map_err(|_| ApplicationError::internal())?
             .take();
-        match bundle {
+        let result = match bundle {
             Some(mut bundle) => bundle.shutdown(),
             None => Ok(()),
+        };
+        if result.is_ok() && self.live_started {
+            self.preflight
+                .session_mut()
+                .mark_clean()
+                .map_err(|_| ApplicationError::state())?;
         }
+        result
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn start_live_bundle(
+    environment: &ApplicationEnvironment,
+    data_root: &DataRoot,
+    state: &ApplicationStateOwner,
+    preflight: &mut ApplicationPreflight,
+    shell: &DesktopShell,
+    bundle: &SharedBundle,
+    outcome: BootstrapOutcome,
+    observer: &mut dyn FnMut(ApplicationStartBoundary) -> Result<(), ApplicationError>,
+) -> Result<DesktopSnapshotBridge, ApplicationError> {
+    let codex_home = environment
+        .codex_home()
+        .map(|value| value.to_str().ok_or_else(ApplicationError::discovery))
+        .transpose()?;
+    let configured: [ConfiguredCodexRoot; 0] = [];
+    let discovery = build_discovery_request(CodexRootInput {
+        user_profile: environment.user_profile(),
+        codex_home,
+        configured: &configured,
+    })
+    .map_err(|_| ApplicationError::discovery())?;
+    let notifier = Arc::new(ApplicationRuntimeNotifier::new(Arc::downgrade(bundle)));
+    let notifier_port: Arc<dyn WorkerCompletionNotifier> = notifier.clone();
+    let mut pending_migration = preflight.report().prior_run().pending_migration();
+    if let Some(pending) = pending_migration {
+        state.validate_pending_migration(pending)?;
+        if !matches!(
+            outcome,
+            BootstrapOutcome::Healthy | BootstrapOutcome::MigrationRequired
+        ) {
+            return Err(ApplicationError::state());
+        }
+    }
+    let mut maintenance =
+        if outcome == BootstrapOutcome::MigrationRequired || pending_migration.is_some() {
+            let runtime =
+                state.start_maintenance(data_root, MaintenanceSourceState::HealthyUnpublished)?;
+            Some(runtime)
+        } else {
+            None
+        };
+    if outcome == BootstrapOutcome::MigrationRequired {
+        let runtime = maintenance
+            .as_ref()
+            .ok_or_else(ApplicationError::internal)?;
+        wait_for_mandatory_backup(runtime, MaintenancePurpose::PreMigration)?;
+        let (from_schema_version, to_schema_version) = state.migration_versions(data_root)?;
+        let pending = preflight
+            .session_mut()
+            .require_post_migration(from_schema_version, to_schema_version)
+            .map_err(|_| ApplicationError::state())?;
+        pending_migration = Some(pending);
+        observer(ApplicationStartBoundary::PreMigrationBackupPublished)?;
+    }
+    let startup_guard = preflight.take_startup_guard()?;
+    let live = LiveRuntime::start_notified_guarded(
+        data_root.archive_path(),
+        discovery,
+        startup_guard,
+        notifier_port.clone(),
+    )
+    .map_err(|_| ApplicationError::live_runtime())?;
+    if let Some(pending) = pending_migration {
+        observer(ApplicationStartBoundary::BeforePostMigrationBackup)?;
+        let runtime = maintenance
+            .as_ref()
+            .ok_or_else(ApplicationError::internal)?;
+        wait_for_mandatory_backup(runtime, MaintenancePurpose::PostMigration)?;
+        preflight
+            .session_mut()
+            .complete_post_migration(pending)
+            .map_err(|_| ApplicationError::state())?;
+    }
+    let archive_path = data_root.archive_path().to_path_buf();
+    let quota = OptionalRuntime::start(
+        CodexQuotaRuntimeConfig::new(archive_path.clone())
+            .and_then(|config| CodexQuotaRuntime::start_notified(config, notifier_port.clone())),
+    );
+    let reminder = OptionalRuntime::start(
+        BenefitReminderRuntimeConfig::new(archive_path.clone()).and_then(|config| {
+            BenefitReminderRuntime::start_notified(config, notifier_port.clone())
+        }),
+    );
+    let maintenance_source = match outcome {
+        BootstrapOutcome::Healthy => MaintenanceSourceState::Healthy,
+        BootstrapOutcome::FirstInstall => MaintenanceSourceState::HealthyUnpublished,
+        BootstrapOutcome::MigrationRequired => MaintenanceSourceState::Healthy,
+        _ => return Err(ApplicationError::internal()),
+    };
+    let maintenance = match maintenance.take() {
+        Some(maintenance) => maintenance,
+        None => state.start_maintenance(data_root, maintenance_source)?,
+    };
+    let mut controller = DesktopController::open(
+        &archive_path,
+        DesktopQueryPlan::overview().map_err(|_| ApplicationError::controller())?,
+    )
+    .map_err(|_| ApplicationError::controller())?;
+    let live_bridge = shell.snapshot_bridge(controller.snapshot_receiver());
+    controller
+        .attach_snapshot_notifier(live_bridge.notifier())
+        .map_err(|_| ApplicationError::controller())?;
+
+    {
+        let mut slot = bundle.lock().map_err(|_| ApplicationError::internal())?;
+        *slot = Some(ApplicationBundle {
+            live,
+            quota,
+            reminder,
+            controller,
+            maintenance,
+        });
+    }
+    notifier
+        .publish()
+        .map_err(|_| ApplicationError::controller())?;
+    Ok(live_bridge)
+}
+
+fn discard_bundle(bundle: &SharedBundle) -> Result<(), ApplicationError> {
+    let owned = bundle
+        .lock()
+        .map_err(|_| ApplicationError::internal())?
+        .take();
+    match owned {
+        Some(mut owned) => owned.shutdown(),
+        None => Ok(()),
+    }
+}
+
+fn wait_for_mandatory_backup(
+    maintenance: &BackupMaintenanceRuntime,
+    purpose: MaintenancePurpose,
+) -> Result<(), ApplicationError> {
+    let completion = maintenance
+        .submit_and_wait(purpose, MANDATORY_BACKUP_TIMEOUT)
+        .map_err(|_| ApplicationError::state())?;
+    match completion.outcome() {
+        MaintenanceOutcome::Published => Ok(()),
+        MaintenanceOutcome::RetryScheduled
+        | MaintenanceOutcome::SourceSuspect
+        | MaintenanceOutcome::Cancelled
+        | MaintenanceOutcome::Failed => Err(ApplicationError::state()),
     }
 }
 
@@ -142,6 +309,7 @@ struct ApplicationBundle {
     quota: OptionalRuntime<CodexQuotaRuntime>,
     reminder: OptionalRuntime<BenefitReminderRuntime>,
     controller: DesktopController,
+    maintenance: BackupMaintenanceRuntime,
 }
 
 impl ApplicationBundle {
@@ -183,6 +351,9 @@ impl ApplicationBundle {
 
     fn shutdown(&mut self) -> Result<(), ApplicationError> {
         let mut first = None;
+        if self.maintenance.pause().is_err() {
+            first = Some(ApplicationError::shutdown());
+        }
         remember_failure(&mut first, self.live.pause().map(|_| ()));
         if let Some(quota) = self.quota.owner_mut() {
             remember_failure(&mut first, quota.pause().map(|_| ()));
@@ -191,6 +362,9 @@ impl ApplicationBundle {
             remember_failure(&mut first, reminder.pause().map(|_| ()));
         }
         if self.controller.shutdown().is_err() && first.is_none() {
+            first = Some(ApplicationError::shutdown());
+        }
+        if self.maintenance.shutdown().is_err() && first.is_none() {
             first = Some(ApplicationError::shutdown());
         }
         if let Some(reminder) = self.reminder.owner_mut() {
@@ -307,6 +481,7 @@ pub enum ApplicationErrorCode {
     DataUnavailable,
     DiscoveryUnavailable,
     LiveRuntimeUnavailable,
+    StateUnavailable,
     ControllerUnavailable,
     UiUnavailable,
     EventLoopUnavailable,
@@ -322,6 +497,7 @@ impl ApplicationErrorCode {
             Self::DataUnavailable => "data_unavailable",
             Self::DiscoveryUnavailable => "discovery_unavailable",
             Self::LiveRuntimeUnavailable => "live_runtime_unavailable",
+            Self::StateUnavailable => "state_unavailable",
             Self::ControllerUnavailable => "controller_unavailable",
             Self::UiUnavailable => "ui_unavailable",
             Self::EventLoopUnavailable => "event_loop_unavailable",
@@ -353,6 +529,12 @@ impl ApplicationError {
     const fn live_runtime() -> Self {
         Self {
             code: ApplicationErrorCode::LiveRuntimeUnavailable,
+        }
+    }
+
+    pub(crate) const fn state() -> Self {
+        Self {
+            code: ApplicationErrorCode::StateUnavailable,
         }
     }
 

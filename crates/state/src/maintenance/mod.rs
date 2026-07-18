@@ -4,6 +4,7 @@ mod worker;
 
 use core::fmt;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use crate::{BackupPolicy, StateError};
 
@@ -86,6 +87,22 @@ impl BackupMaintenanceRuntime {
 
     pub fn submit(&self, purpose: MaintenancePurpose) -> MaintenanceAdmission {
         self.worker.submit(purpose)
+    }
+
+    pub fn wait_for_completion(
+        &self,
+        root_request_id: MaintenanceRequestId,
+        timeout: Duration,
+    ) -> Result<Option<MaintenanceCompletion>, StateError> {
+        self.worker.wait_for_completion(root_request_id, timeout)
+    }
+
+    pub fn submit_and_wait(
+        &self,
+        purpose: MaintenancePurpose,
+        timeout: Duration,
+    ) -> Result<MaintenanceCompletion, StateError> {
+        self.worker.submit_and_wait(purpose, timeout)
     }
 
     pub fn record_durable_change(&self) -> Result<(), StateError> {

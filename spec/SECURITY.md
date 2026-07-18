@@ -911,6 +911,30 @@ accepted only after a later clean shutdown, and repeated unclean launches are bo
 Application code may mark clean only after all owners join; the state layer cannot
 infer that lifecycle from a successful SQLite check.
 
+Implemented Task 12A keeps the reliable-state owner and the only backup maintenance
+runtime in `tokenmaster-app`. Safe mode constructs no archive, query, controller,
+quota, reminder, or maintenance owner. The backup operation accepts only sealed
+root-bound capabilities and typed values; it exposes no path, SQL connection, raw
+reader, platform publication token, or caller-selected filename. Catalog publication
+is bound internally to a completely verified package rather than to opaque platform
+authority crossing the application boundary. Cold catalog verification runs only in
+the backup worker, verifies at most the fixed directory bound, and carries proofs only
+for unchanged package identities. A malformed package is marked corrupt; I/O or
+directory ambiguity fails the operation instead of fabricating a proof or deleting it.
+
+Migration is fail-closed. A verified pre-migration package must exist before any
+writable old-schema open, and a verified post-migration package must exist before the
+new bundle is published. Run-state schema v2 records the exact source/target pair after
+the pre point and before writable open. Failure before writable open preserves the old
+archive; failure after a committed migration preserves the migrated archive plus the
+pending post obligation. Either path retains the pinned pre point, the unclean run, and
+safe mode. Restart must complete and durably clear the post obligation before live or
+clean publication. The live-source
+snapshot precheck may accept SQLite schema-format byte zero only while a regular WAL
+exists; every copied candidate and published package still passes the strict standalone
+format-four header plus complete database verifier. Task 12B restore/restart and
+no-backup reconstruction remain outside this implemented boundary.
+
 Optional manual password protection uses the implemented standard age v1 stream with
 fixed bounded scrypt work and never stores the passphrase. New passphrases are
 confirmed, contain 12 through 128 Unicode scalar values, and are not trimmed or

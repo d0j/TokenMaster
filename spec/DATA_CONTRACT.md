@@ -769,8 +769,10 @@ or accepts an arbitrary path. Every transition is idempotent, including complete
 sidecar/main/settings mutations before journal advance; uncertainty preserves all
 artifacts and enters safe mode.
 
-Implemented Task 11A run state uses only `run-a.tms` and `run-b.tms` with strict schema
-version 1. A launch first inspects the prior highest valid record as `clean`, `unclean`,
+Implemented Task 11A run state uses only `run-a.tms` and `run-b.tms`. Task 12A advances
+the strict current schema to version 2 while accepting schema-v1 records as an exact
+legacy subset with no migration obligation. A launch first inspects the prior highest
+valid record as `clean`, `unclean`,
 `missing`, or `invalid`, then durably publishes and rereads a new `unclean` generation
 before catalog, package, or SQLite access. Only an exactly clean prior generation may
 use normal startup inspection; every other condition adds bounded `quick_check(100)`.
@@ -779,11 +781,36 @@ and digest, so a changed record cannot be accepted. Clean publication is separat
 authorized and occurs only after application-owned work has joined.
 
 One run record may retain only the current recovery operation generation, exact
-candidate identity, and a saturating launch count. The same recovered candidate may be
+candidate identity, a saturating launch count, and at most one path-free pending
+migration source/target schema pair. The pair is published only after the verified pre
+point and before writable migration, is preserved by every new unclean generation, and
+is cleared only after the verified post point. A clean record cannot retain it. The same recovered candidate may be
 launched twice after unclean exits; the third attempt enters safe mode. A later clean
 run accepts that operation generation, while a historical completed journal cannot
 start a false retry loop or block a later independent recovery generation. No run
 record stores a path, timestamp history, process identity, error text, or usage data.
+
+Implemented Task 12A composes one application-owned backup operation over the existing
+fixed records and slots. A published point is admitted only after online snapshot,
+strict candidate verification, typed package write, complete package verification,
+sealed publication, exact verified-package catalog binding, and bounded retention.
+Retention deletes at most one admitted victim per iteration and never exposes a slot
+or path outside the sealed owners. The operation retains one catalog projection. Its
+first worker execution completely verifies every header-valid package in the bounded
+directory; each rebuild carries verification only for unchanged length/digest/metadata
+identity. Package corruption becomes explicit catalog corruption, while transient or
+ambiguous directory failure aborts the pass. This prevents proof loss from turning
+retention into unbounded file accumulation after restart.
+
+For an exact supported legacy archive, `PreMigration` and `PostMigration` are distinct
+mandatory package purposes and receipts. The pre point records the old schema and stays
+pinned until the post point is verified. Periodic policy does not alter this rule. A
+failure before writable migration retains the old archive; a later failure retains the
+migrated archive with the durable pending-post pair. Both publish no live bundle, and
+restart completes the post point before clearing the pair. Task 12B must add
+command/restart receipts and the explicit authoritative-
+source reconstruction result; it may not encode fabricated zeros for domains that
+cannot be reconstructed.
 
 ### P3-C bounded Dashboard projection
 

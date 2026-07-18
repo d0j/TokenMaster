@@ -340,6 +340,12 @@ not open a writable archive.
 Only after all runtimes, controller, backup worker, and settings writes have stopped
 cleanly does shutdown publish `clean`.
 
+Run-state schema v2 accepts schema v1 as a strict legacy subset and adds at most one
+path-free pending migration source/target schema pair. The application publishes it
+after the verified pre-migration point and before writable migration, preserves it
+across every unclean restart, and clears it only after a verified post-migration point.
+An already-current archive with a pending pair cannot publish live or clean first.
+
 Startup policy is:
 
 - clean prior run: validate file identity, SQLite header/open, exact schema, and

@@ -8,7 +8,8 @@ use tokenmaster_platform::{
 
 use crate::package::{CATALOG_HEADER_BYTES, CatalogPackageHeader, decode_catalog_header};
 use crate::{
-    BackupCompression, BackupPurpose, PACKAGE_IO_BUFFER_BYTES, StateError, VerifiedBackupPackage,
+    BackupCompression, BackupPackage, BackupPurpose, PACKAGE_IO_BUFFER_BYTES, StateError,
+    StateErrorCode, VerifiedBackupPackage,
 };
 
 /// Checked process-local identity for one immutable catalog projection.
@@ -216,6 +217,54 @@ impl BackupCatalog {
         &self.points
     }
 
+    /// Fully verifies every header-valid package in one unchanged controlled directory.
+    /// Corrupt package bytes remain visible as corrupt catalog points; transient or
+    /// ambiguous directory failures stop the pass without fabricating verification.
+    pub fn verify_all_packages(
+        &mut self,
+        directory: &BackupDirectory,
+    ) -> Result<usize, StateError> {
+        if !self.matches_directory(directory)? {
+            return Err(StateError::recovery_required());
+        }
+        let selections = self
+            .points
+            .iter()
+            .filter(|point| point.health == CatalogHealth::HeaderValid)
+            .map(|point| point.selection)
+            .collect::<Vec<_>>();
+        for selection in selections {
+            let result = (|| {
+                let mut reader = self.open_recovery_selection(directory, selection)?;
+                let verified = BackupPackage::inspect(&mut reader)?;
+                self.bind_verified(selection, &verified)
+            })();
+            if let Err(error) = result {
+                if matches!(
+                    error.code(),
+                    StateErrorCode::InvalidInput
+                        | StateErrorCode::UnsupportedVersion
+                        | StateErrorCode::CapacityExceeded
+                        | StateErrorCode::Integrity
+                ) {
+                    let point = self
+                        .points
+                        .get_mut(usize::from(selection.ordinal))
+                        .filter(|point| point.selection == selection)
+                        .ok_or_else(StateError::internal_invariant)?;
+                    point.health = CatalogHealth::Corrupt;
+                    continue;
+                }
+                return Err(error);
+            }
+        }
+        Ok(self
+            .points
+            .iter()
+            .filter(|point| point.health == CatalogHealth::Verified)
+            .count())
+    }
+
     /// Binds one exact current full-package proof without exposing its digest.
     pub fn bind_verified(
         &mut self,
@@ -244,6 +293,33 @@ impl BackupCatalog {
         }
         point.health = CatalogHealth::Verified;
         Ok(())
+    }
+
+    /// Binds the one exact newly published point to its full package proof.
+    pub fn bind_published(
+        &mut self,
+        verified: &VerifiedBackupPackage,
+    ) -> Result<CatalogSelection, StateError> {
+        let metadata = verified.metadata();
+        let receipt = verified.receipt();
+        let mut matches = self
+            .points
+            .iter()
+            .filter(|point| {
+                point.entry.len() == receipt.package_len()
+                    && point.observed_file_sha256 == *receipt.file_sha256()
+                    && point.created_at_utc_ms == Some(metadata.created_at_utc_ms())
+                    && point.purpose == Some(metadata.purpose())
+                    && point.database_schema_version == Some(verified.database_schema_version())
+                    && point.compression == Some(verified.compression())
+            })
+            .map(|point| point.selection);
+        let selection = matches.next().ok_or_else(StateError::integrity)?;
+        if matches.next().is_some() {
+            return Err(StateError::integrity());
+        }
+        self.bind_verified(selection, verified)?;
+        Ok(selection)
     }
 
     pub(crate) const fn directory_identity(&self) -> CatalogDirectoryIdentity {

@@ -117,6 +117,38 @@ fn stale_session_cannot_mark_a_newer_startup_clean() {
 }
 
 #[test]
+fn pending_post_migration_is_durable_and_blocks_clean_until_completed() {
+    let fixture = Fixture::new();
+    let store = fixture.store();
+    let mut first = store.begin().expect("migration startup");
+    let pending = first
+        .require_post_migration(12, 13)
+        .expect("persist pending migration");
+    assert_eq!(pending.from_schema_version(), 12);
+    assert_eq!(pending.to_schema_version(), 13);
+    drop(first);
+
+    let inspection = store.inspect().expect("pending inspection");
+    assert_eq!(inspection.pending_migration(), Some(pending));
+    let mut restarted = store.begin().expect("restart with pending migration");
+    assert_eq!(restarted.prior().pending_migration(), Some(pending));
+    restarted.authorize_healthy_launch();
+    assert!(restarted.mark_clean().is_err());
+
+    restarted
+        .complete_post_migration(pending)
+        .expect("complete exact pending migration");
+    restarted.mark_clean().expect("clean only after post point");
+    assert_eq!(
+        store
+            .inspect()
+            .expect("completed inspection")
+            .pending_migration(),
+        None
+    );
+}
+
+#[test]
 fn run_session_owns_its_fixed_record_capability_through_joined_shutdown() {
     let fixture = Fixture::new();
     let mut session = {

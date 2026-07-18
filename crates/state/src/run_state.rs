@@ -9,7 +9,8 @@ use crate::record::{
 };
 use crate::{RecoveryCandidateIdentity, StateError};
 
-const RUN_STATE_SCHEMA_VERSION: u16 = 1;
+const LEGACY_RUN_STATE_SCHEMA_VERSION: u16 = 1;
+const RUN_STATE_SCHEMA_VERSION: u16 = 2;
 const MAX_RECOVERY_LAUNCHES: u8 = 2;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -25,6 +26,56 @@ struct RecoveryLaunchState {
     operation_generation: u64,
     candidate: RecoveryCandidateIdentity,
     launches: u8,
+}
+
+/// Durable path-free obligation created after a verified pre-migration point and
+/// cleared only after the matching post-migration point is fully published.
+#[derive(Clone, Copy, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PendingMigration {
+    from_schema_version: u16,
+    to_schema_version: u16,
+}
+
+impl PendingMigration {
+    fn new(from_schema_version: u16, to_schema_version: u16) -> Result<Self, StateError> {
+        let value = Self {
+            from_schema_version,
+            to_schema_version,
+        };
+        value.validate()?;
+        Ok(value)
+    }
+
+    fn validate(self) -> Result<(), StateError> {
+        if self.from_schema_version == 0
+            || self.to_schema_version == 0
+            || self.from_schema_version >= self.to_schema_version
+        {
+            return Err(StateError::invalid_input());
+        }
+        Ok(())
+    }
+
+    #[must_use]
+    pub const fn from_schema_version(self) -> u16 {
+        self.from_schema_version
+    }
+
+    #[must_use]
+    pub const fn to_schema_version(self) -> u16 {
+        self.to_schema_version
+    }
+}
+
+impl fmt::Debug for PendingMigration {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PendingMigration")
+            .field("from_schema_version", &self.from_schema_version)
+            .field("to_schema_version", &self.to_schema_version)
+            .finish()
+    }
 }
 
 impl RecoveryLaunchState {
@@ -57,18 +108,22 @@ struct RunStateValue {
     phase: RunPhase,
     last_recovery_generation: Option<u64>,
     recovery: Option<RecoveryLaunchState>,
+    #[serde(default)]
+    pending_migration: Option<PendingMigration>,
 }
 
 impl RunStateValue {
     const fn unclean(
         last_recovery_generation: Option<u64>,
         recovery: Option<RecoveryLaunchState>,
+        pending_migration: Option<PendingMigration>,
     ) -> Self {
         Self {
             schema_version: RUN_STATE_SCHEMA_VERSION,
             phase: RunPhase::Unclean,
             last_recovery_generation,
             recovery,
+            pending_migration,
         }
     }
 
@@ -78,12 +133,18 @@ impl RunStateValue {
             phase: RunPhase::Clean,
             last_recovery_generation,
             recovery: None,
+            pending_migration: None,
         }
     }
 
     fn validate(self) -> Result<(), StateError> {
-        if self.schema_version != RUN_STATE_SCHEMA_VERSION
+        if !matches!(
+            self.schema_version,
+            LEGACY_RUN_STATE_SCHEMA_VERSION | RUN_STATE_SCHEMA_VERSION
+        ) || (self.schema_version == LEGACY_RUN_STATE_SCHEMA_VERSION
+            && self.pending_migration.is_some())
             || (self.phase == RunPhase::Clean && self.recovery.is_some())
+            || (self.phase == RunPhase::Clean && self.pending_migration.is_some())
             || self.last_recovery_generation == Some(0)
         {
             return Err(StateError::invalid_input());
@@ -97,6 +158,9 @@ impl RunStateValue {
                 return Err(StateError::invalid_input());
             }
         }
+        if let Some(pending_migration) = self.pending_migration {
+            pending_migration.validate()?;
+        }
         Ok(())
     }
 }
@@ -104,7 +168,10 @@ impl RunStateValue {
 impl RecordValue for RunStateValue {
     fn decode_json(bytes: &[u8]) -> Result<Self, RecordValueError> {
         let value: Self = serde_json::from_slice(bytes).map_err(|_| RecordValueError::Invalid)?;
-        if value.schema_version != RUN_STATE_SCHEMA_VERSION {
+        if !matches!(
+            value.schema_version,
+            LEGACY_RUN_STATE_SCHEMA_VERSION | RUN_STATE_SCHEMA_VERSION
+        ) {
             return Err(RecordValueError::UnsupportedVersion);
         }
         value.validate().map_err(|_| RecordValueError::Invalid)?;
@@ -125,6 +192,7 @@ pub struct RunStateInspection {
     condition: PriorRunCondition,
     recovery_launches: Option<u8>,
     last_recovery_generation: Option<u64>,
+    pending_migration: Option<PendingMigration>,
 }
 
 impl RunStateInspection {
@@ -146,6 +214,11 @@ impl RunStateInspection {
     #[must_use]
     pub const fn last_recovery_generation(self) -> Option<u64> {
         self.last_recovery_generation
+    }
+
+    #[must_use]
+    pub const fn pending_migration(self) -> Option<PendingMigration> {
+        self.pending_migration
     }
 }
 
@@ -200,9 +273,12 @@ impl RunStateStore {
                 .then_some(value.recovery)
                 .flatten()
         });
-        let receipt = self
-            .records
-            .save_explicit(&RunStateValue::unclean(last_recovery_generation, recovery))?;
+        let pending_migration = prior.value.and_then(|value| value.pending_migration);
+        let receipt = self.records.save_explicit(&RunStateValue::unclean(
+            last_recovery_generation,
+            recovery,
+            pending_migration,
+        ))?;
         Ok(RunSession {
             store: self.clone(),
             prior: prior.inspection,
@@ -210,6 +286,7 @@ impl RunStateStore {
             payload_sha256: receipt.payload_sha256(),
             recovery,
             last_recovery_generation,
+            pending_migration,
             launch_authorized: false,
         })
     }
@@ -234,6 +311,7 @@ impl RunStateStore {
                         condition,
                         recovery_launches: value.recovery.map(|recovery| recovery.launches),
                         last_recovery_generation: value.last_recovery_generation,
+                        pending_migration: value.pending_migration,
                     },
                     generation: Some(generation),
                     payload_sha256: Some(payload_sha256),
@@ -251,6 +329,7 @@ impl RunStateStore {
                         condition,
                         recovery_launches: None,
                         last_recovery_generation: None,
+                        pending_migration: None,
                     },
                     generation: None,
                     payload_sha256: None,
@@ -274,6 +353,7 @@ pub struct RunSession {
     payload_sha256: [u8; 32],
     recovery: Option<RecoveryLaunchState>,
     last_recovery_generation: Option<u64>,
+    pending_migration: Option<PendingMigration>,
     launch_authorized: bool,
 }
 
@@ -292,6 +372,39 @@ impl RunSession {
     /// Clean publication remains a separate post-join action.
     pub fn authorize_healthy_launch(&mut self) {
         self.launch_authorized = true;
+    }
+
+    pub fn require_post_migration(
+        &mut self,
+        from_schema_version: u16,
+        to_schema_version: u16,
+    ) -> Result<PendingMigration, StateError> {
+        let pending = PendingMigration::new(from_schema_version, to_schema_version)?;
+        if self
+            .pending_migration
+            .is_some_and(|current| current != pending)
+        {
+            return Err(StateError::integrity());
+        }
+        if self.pending_migration.is_none() {
+            self.publish(RunStateValue::unclean(
+                self.last_recovery_generation,
+                self.recovery,
+                Some(pending),
+            ))?;
+        }
+        Ok(pending)
+    }
+
+    pub fn complete_post_migration(&mut self, pending: PendingMigration) -> Result<(), StateError> {
+        if self.pending_migration != Some(pending) {
+            return Err(StateError::integrity());
+        }
+        self.publish(RunStateValue::unclean(
+            self.last_recovery_generation,
+            self.recovery,
+            None,
+        ))
     }
 
     pub fn start_recovered_candidate(
@@ -342,7 +455,7 @@ impl RunSession {
     }
 
     pub fn mark_clean(&mut self) -> Result<(), StateError> {
-        if !self.launch_authorized {
+        if !self.launch_authorized || self.pending_migration.is_some() {
             return Err(StateError::invalid_input());
         }
         let accepted = self
@@ -371,6 +484,7 @@ impl RunSession {
         self.publish(RunStateValue::unclean(
             self.last_recovery_generation,
             Some(recovery),
+            self.pending_migration,
         ))?;
         self.launch_authorized = true;
         Ok(RecoveryLaunchDecision::Start { launch })
@@ -389,6 +503,7 @@ impl RunSession {
         self.payload_sha256 = receipt.payload_sha256();
         self.recovery = value.recovery;
         self.last_recovery_generation = value.last_recovery_generation;
+        self.pending_migration = value.pending_migration;
         Ok(())
     }
 }
@@ -403,7 +518,35 @@ impl fmt::Debug for RunSession {
                 "recovery_launches",
                 &self.recovery.map(|recovery| recovery.launches),
             )
+            .field("pending_migration", &self.pending_migration)
             .field("launch_authorized", &self.launch_authorized)
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_v1_run_value_decodes_without_a_migration_obligation() {
+        let value = match RunStateValue::decode_json(
+            br#"{"schema_version":1,"phase":"clean","last_recovery_generation":null,"recovery":null}"#,
+        ) {
+            Ok(value) => value,
+            Err(_) => panic!("legacy run state must decode"),
+        };
+        assert_eq!(value.schema_version, LEGACY_RUN_STATE_SCHEMA_VERSION);
+        assert_eq!(value.pending_migration, None);
+    }
+
+    #[test]
+    fn legacy_v1_cannot_smuggle_a_v2_migration_obligation() {
+        assert!(
+            RunStateValue::decode_json(
+                br#"{"schema_version":1,"phase":"unclean","last_recovery_generation":null,"recovery":null,"pending_migration":{"from_schema_version":12,"to_schema_version":13}}"#,
+            )
+            .is_err()
+        );
     }
 }

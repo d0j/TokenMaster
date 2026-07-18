@@ -820,6 +820,12 @@ cargo +1.97.0 test -p tokenmaster-runtime --locked
 
 ## Task 12 — Integrate application-owned recovery, migration, and service restart
 
+**Status:** In progress. Task 12A implements items 1-4, 10, and 14-17 plus the concrete
+application backup operation. Task 12B retains items 5-9 and 11-13: typed commands,
+restore/restart, command coalescing/privacy, obsolete-bundle suppression, settings
+restart, and authoritative no-backup reconstruction. This status is implementation
+truth, not release acceptance.
+
 **Files:**
 
 - Create: `crates/app/src/state.rs`
@@ -862,6 +868,8 @@ Add composition tests for:
     one verified post-migration point after success;
 15. migration failure preserving the old archive and its pinned pre-migration point;
 16. periodic-backup disablement unable to suppress either migration safety point.
+17. failure after migration commit but before post-migration publication retaining a
+    durable pending-post obligation, with restart completing it before live or clean.
 
 ### Green
 
@@ -881,6 +889,9 @@ Add composition tests for:
 7. Gate every migration with the Task 9 mandatory-maintenance receipt, keep the
    pre-migration point pinned until a verified post-migration point exists, and enter
    safe mode on any ambiguous failure.
+8. Persist the exact pending source/target schema pair before writable migration and
+   clear it only after the verified post point; use one atomic exact-root maintenance
+   submit/wait so another completion cannot overwrite the awaited receipt.
 
 ### Verify
 

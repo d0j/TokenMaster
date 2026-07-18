@@ -1050,19 +1050,51 @@ complete locked workspace test/doctest suite passes in 571.4 seconds. The change
 platform capability also passes the explicit `x86_64-pc-windows-msvc`
 warnings-as-errors target check.
 
-No application-owned safe-mode window, migration safety backup, provider-backed fresh
-reconstruction, Data & Recovery UI, or new release acceptance evidence exists yet.
-The complete snapshot -> verify -> package -> publish -> retain operation and final
-clean-after-all-owners-join rule remain Task 12 and must use the fixed Task 9/10/11A
-capabilities.
+Task 12A is implemented in the working tree. `ApplicationStateOwner` runs Task 11A
+preflight before live/query/controller construction, and safe mode retains the Slint
+shell without any archive/runtime/query/maintenance owner. A healthy bundle owns one
+capacity-one maintenance runtime whose concrete operation performs SQLite Online
+Backup, full candidate verification, typed package staging and verification, sealed
+publication, verified-package catalog binding, and bounded one-at-a-time retention.
+Cold catalog verification runs on the worker; unchanged package proofs survive rebuilds
+and the final projection remains owned by the operation. Terminal receipts use one
+deadline-bounded condition-variable wait; no polling thread or UI timer was added.
+
+Supported legacy startup now publishes a verified pre-migration package before writable
+open/migration, then records one path-free pending source/target pair in redundant
+run-state schema v2. A verified post-migration package clears that pair before exposing
+the bundle. Both points remain mandatory when periodic backup is disabled. Failure
+before writable open leaves the old schema intact; failure after migration leaves the
+migrated archive and pending obligation in safe mode. Restart completes the post point
+before live, and `clean` rejects a pending pair. First-install live WAL
+snapshots are supported without weakening standalone package validation: only a live
+source with a regular WAL may have schema-format byte zero; copied candidates still
+require format four and the complete verifier. Healthy shutdown pauses and joins
+maintenance, then controller/quota/reminder/live owners, and only then publishes clean.
+
+Task 12B remains open for typed import/export/backup/verify/restore/rebuild/cancel
+commands, controlled service restart and obsolete-notifier rejection, and authoritative
+Codex reconstruction when no backup is usable. Data & Recovery UI and new release
+acceptance evidence also do not exist yet.
+
+Task 12A focused store backup 8/8 and adversarial 10/10, catalog 6/6, maintenance
+19/19, state bootstrap 13/13, app 6 unit plus 7 integration, application authority
+17/17, and reliable-state authority 55/55 contracts pass. The app lifecycle contract
+also executes 19 real sequential manual backups and proves the retained catalog remains
+within the default 15-point bound. The required clean-root, formatting, strict locked
+workspace Clippy, and complete locked workspace test/doctest gate passes in 617.2
+seconds; the one live-auth Codex transport test remains intentionally environment-
+gated. The release application composition audit also passes with one production binary,
+one state/maintenance/live/quota/reminder/controller/bridge owner, both migration gates,
+zero polling/arbitrary-root/forbidden-string surface, and one release artifact.
 
 ## Next implementation slice
 
-Execute P3-D.0 Task 12 from
+Complete P3-D.0 Task 12B from
 `docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: compose the reliable
-state tree, Task 11A bootstrap, maintenance, live/query/controller owners, mandatory
-pre/post-migration safety points, authoritative no-backup reconstruction, service
-restart, safe mode, and final clean publication under one application lifecycle.
+state command coordinator, restore/restart lifecycle, obsolete-bundle suppression, and
+authoritative no-backup reconstruction over the Task 12A owner, maintenance, migration,
+safe-mode, and clean-publication boundary.
 
 P2-D quota history core is complete under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: Tasks 1-8 cover
@@ -1079,8 +1111,8 @@ immutable read snapshots, and publication through the existing Codex runtime wit
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
 workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, P3-B.2, P3-B.3, and P3-C are
-complete; P3-D.0 Reliable State is active with Tasks 1-11A complete and Task 12 next, followed
-by the remaining P3-D supporting data-bearing routes. Activation
+complete; P3-D.0 Reliable State is active with Tasks 1-11A and Task 12A implemented,
+followed by Task 12B and the remaining P3-D supporting data-bearing routes. Activation
 remains a later independently authorized capability. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.
 

@@ -23,10 +23,111 @@ Describe "TokenMaster application composition audit" {
     It "rejects a second live runtime owner" {
         $fixture = New-AppAuditFixture -Name "duplicate-live"
         Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\application.rs") `
-            -Value 'fn duplicate_live() { let _ = LiveRuntime::start_notified('
+            -Value 'fn duplicate_live() { let _ = LiveRuntime::start_notified_guarded('
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-APP-LIVE-OWNER*"
+    }
+
+    It "rejects an unguarded live runtime owner" {
+        $fixture = New-AppAuditFixture -Name "unguarded-live"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'LiveRuntime::start_notified_guarded(',
+            'LiveRuntime::start_notified('
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-UNGUARDED-LIVE*"
+    }
+
+    It "rejects a second reliable state owner" {
+        $fixture = New-AppAuditFixture -Name "duplicate-state-owner"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\application.rs") `
+            -Value 'fn duplicate_state_owner() { let _ = ApplicationStateOwner::open('
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-STATE-OWNER*"
+    }
+
+    It "rejects a second application preflight" {
+        $fixture = New-AppAuditFixture -Name "duplicate-preflight"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\application.rs") `
+            -Value 'fn duplicate_preflight() { let _ = owner.prepare(&data_root); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-PREFLIGHT*"
+    }
+
+    It "rejects a second backup maintenance runtime owner" {
+        $fixture = New-AppAuditFixture -Name "duplicate-maintenance-owner"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\state.rs") `
+            -Value 'fn duplicate_maintenance() { let _ = BackupMaintenanceRuntime::spawn('
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-MAINTENANCE-OWNER*"
+    }
+
+    It "rejects migration safety-point drift" {
+        $fixture = New-AppAuditFixture -Name "migration-gate-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'MaintenancePurpose::PostMigration',
+            'MaintenancePurpose::Manual'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-POST-MIGRATION*"
+    }
+
+    It "rejects removal of the durable pending migration transition" {
+        $fixture = New-AppAuditFixture -Name "pending-migration-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '.require_post_migration(',
+            '.forget_post_migration('
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-MIGRATION-PENDING*"
+    }
+
+    It "rejects removal of the completed migration transition" {
+        $fixture = New-AppAuditFixture -Name "complete-migration-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '.complete_post_migration(',
+            '.leave_post_migration_pending('
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-MIGRATION-COMPLETE*"
+    }
+
+    It "rejects splitting mandatory submission from its exact-root wait" {
+        $fixture = New-AppAuditFixture -Name "atomic-wait-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '.submit_and_wait(',
+            '.submit_then_poll('
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-ATOMIC-MAINTENANCE-WAIT*"
+    }
+
+    It "rejects a second clean-state transition" {
+        $fixture = New-AppAuditFixture -Name "duplicate-clean"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\application.rs") `
+            -Value 'fn duplicate_clean() { let _ = session.mark_clean(); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-CLEAN-STATE*"
     }
 
     It "rejects polling threads and timers" {

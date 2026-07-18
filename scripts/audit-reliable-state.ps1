@@ -164,8 +164,8 @@ $approvedBootstrapStorePattern = '(?ms)^\s*use\s+tokenmaster_store\s*::\s*\{\s*B
 $approvedMaintenanceStoreControlPattern = '(?m)^use tokenmaster_store::BackupControl;\r?$'
 $approvedMaintenanceCoordinatorStdPattern = '(?m)^use std::sync::Arc;\r?\nuse std::sync::atomic::\{AtomicBool, AtomicU8, Ordering\};\r?\nuse std::time::Duration;\r?$'
 $approvedMaintenanceSchedulerStdPattern = '(?m)^use std::sync::mpsc::\{Receiver, RecvTimeoutError, SyncSender, TrySendError, sync_channel\};\r?\nuse std::sync::\{Arc, Mutex\};\r?\nuse std::thread::\{Builder, JoinHandle\};\r?\nuse std::time::\{Duration, Instant\};\r?$'
-$approvedMaintenanceWorkerStdPattern = '(?m)^use std::panic::\{AssertUnwindSafe, catch_unwind, set_hook, take_hook\};\r?\nuse std::sync::mpsc::\{Receiver, SyncSender, TrySendError, sync_channel\};\r?\nuse std::sync::\{Arc, Mutex, Once\};\r?\nuse std::thread::\{Builder, JoinHandle\};\r?$'
-$approvedMaintenanceOwnerStdPattern = '(?m)^mod coordinator;\r?\nmod scheduler;\r?\nmod worker;\r?\n\r?\nuse core::fmt;\r?\nuse std::sync::\{Arc, Mutex\};\r?$'
+$approvedMaintenanceWorkerStdPattern = '(?m)^use std::panic::\{AssertUnwindSafe, catch_unwind, set_hook, take_hook\};\r?\nuse std::sync::mpsc::\{Receiver, SyncSender, TrySendError, sync_channel\};\r?\nuse std::sync::\{Arc, Condvar, Mutex, Once\};\r?\nuse std::thread::\{Builder, JoinHandle\};\r?\nuse std::time::\{Duration, Instant\};\r?$'
+$approvedMaintenanceOwnerStdPattern = '(?m)^mod coordinator;\r?\nmod scheduler;\r?\nmod worker;\r?\n\r?\nuse core::fmt;\r?\nuse std::sync::\{Arc, Mutex\};\r?\nuse std::time::Duration;\r?$'
 $approvedStdIoImports = @([regex]::Matches($productionText, $approvedStdIoPattern))
 $approvedPackageReaderIoImports = @(
     [regex]::Matches($productionText, $approvedPackageReaderIoPattern)

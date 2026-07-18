@@ -96,10 +96,10 @@ fn typed_package_writer_composes_with_backup_directory_and_catalog_verification(
     let mut published =
         BackupCatalog::rebuild(&directory, Some(&catalog)).expect("published catalog rebuild");
     assert_eq!(published.points().len(), 1);
-    let selection = published.points()[0].selection();
-    published
-        .bind_verified(selection, &verified)
-        .expect("bind exact verification proof");
+    let selection = published
+        .bind_published(&verified)
+        .expect("bind exact published package verification proof");
+    assert_eq!(selection, published.points()[0].selection());
     assert_eq!(published.points()[0].health(), CatalogHealth::Verified);
     let cycle = admission
         .confirm_published(&published, selection)
@@ -108,6 +108,15 @@ fn typed_package_writer_composes_with_backup_directory_and_catalog_verification(
         cycle.next_deletion(&published).expect("retention plan"),
         None
     );
+
+    let mut cold = BackupCatalog::rebuild(&directory, None).expect("cold catalog rebuild");
+    assert_eq!(cold.points()[0].health(), CatalogHealth::HeaderValid);
+    assert_eq!(
+        cold.verify_all_packages(&directory)
+            .expect("cold package verification"),
+        1
+    );
+    assert_eq!(cold.points()[0].health(), CatalogHealth::Verified);
 }
 
 #[test]

@@ -17,6 +17,36 @@ use tokenmaster_store::{
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
 #[test]
+fn fresh_live_wal_archive_is_snapshot_safe_before_first_checkpoint() -> TestResult {
+    let root = tempdir()?;
+    let archive = root.path().join("tokenmaster.sqlite3");
+    let _live_store = UsageStore::open(&archive)?;
+    let header = fs::read(&archive)?;
+    assert_eq!(
+        u32::from_be_bytes(header[44..48].try_into()?),
+        0,
+        "fixture must retain its fresh schema in WAL"
+    );
+    let staging_path = root.path().join("staging");
+    fs::create_dir(&staging_path)?;
+    let data_root = ValidatedLocalDirectory::new(root.path())?;
+    let staging_root = ValidatedLocalDirectory::new(&staging_path)?;
+    let source = BackupSource::new(&data_root)?;
+    let staging = BackupStaging::new(&staging_root)?;
+    let control = BackupControl::new(Arc::new(AtomicBool::new(false)), Duration::from_secs(5))?;
+
+    let candidate = create_online_snapshot(&source, &staging, &control)?;
+    let verified = verify_backup_candidate(candidate, &control)?;
+
+    assert!(verified.integrity_verified());
+    assert_eq!(
+        verified.schema_version(),
+        tokenmaster_store::USAGE_SCHEMA_VERSION as u32
+    );
+    Ok(())
+}
+
+#[test]
 fn online_snapshot_includes_committed_wal_state_that_main_file_copy_misses() -> TestResult {
     let root = tempdir()?;
     let archive = root.path().join("tokenmaster.sqlite3");

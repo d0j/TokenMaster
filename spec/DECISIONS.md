@@ -1274,8 +1274,8 @@ The store owns the only path-free reader over a verified SQLite candidate. State
 the only explicit bridge from that reader into a sealed unpublished backup stage. It
 streams with fixed buffers and revalidates physical identity, exact length, and full
 SHA-256 before and after consumption; any changed source or output error poisons the
-stage. Application composition in Task 12 will supply the owned snapshot -> verify ->
-package -> verify -> publish -> retain operation through this fixed runtime boundary.
+stage. Implemented Task 12A supplies the owned snapshot -> verify -> package -> verify
+-> publish -> retain operation through this fixed runtime boundary.
 
 Rationale: an unbounded executor queue, timer per request, async runtime, or generic
 path/`Read` bridge would increase retained memory and authority while making shutdown
@@ -1361,3 +1361,38 @@ and shutdown claims unverifiable. Conversely, deferring run publication and diag
 to the UI/application would permit writable SQLite access before durable crash truth.
 The split keeps the pre-open boundary small and auditable while making Task 12 prove
 the larger lifecycle end to end.
+
+## ADR-058 — Compose backup and migration safety under one application owner
+
+Decision: `tokenmaster-app` owns one `ApplicationStateOwner` before every live owner
+and one capacity-one backup maintenance runtime inside a healthy bundle. The concrete
+backup operation follows only sealed store/state/platform capabilities through online
+snapshot, full verification, typed package creation and re-verification, publication,
+verified-package catalog binding, and bounded retention. The operation owns one catalog
+projection: its first worker execution fully verifies the bounded cold directory, and
+later rebuilds carry proofs only for unchanged identities. This keeps retention active
+across restart without putting package decompression on the UI/startup thread. A condition variable exposes
+one deadline-bounded terminal receipt without adding polling, a UI timer, or another
+thread. Mandatory application waits atomically reserve one exact maintenance root
+before the worker is woken. While reserved, later submissions are rejected busy, so a
+newer completion cannot overwrite the receipt before its waiter observes it.
+
+An exact supported legacy archive remains read-only until a verified pre-migration
+point exists. Run-state schema v2 then durably records the exact source/target schema
+pair before writable open. Writable open and migration consume the same held startup
+guard, and the bundle remains unpublished until a verified post-migration point exists
+and clears that pair. If migration committed but post publication did not, the next
+startup recognizes the already-current archive plus pending pair and completes the post
+point before live publication. Periodic disablement cannot suppress either point. A
+failure at any boundary discards partial owners, preserves the unclean launch and
+durable old-or-migrated evidence, and leaves the existing safe-mode window as the sole
+application surface. Clean is published only after every
+bundle owner, including maintenance, has joined.
+
+Rationale: placing migration backup policy in store/state would grant those layers
+application lifetime authority, while constructing maintenance after live publication
+would expose an unprotected migration window. A generic executor or polling waiter
+would also enlarge retained state and latency variance. One application owner preserves
+dependency direction, deterministic shutdown, constant-state scheduling, and the exact
+pre/post safety invariant. Typed restore/restart commands and provider-backed no-backup
+reconstruction remain a separate Task 12B milestone.

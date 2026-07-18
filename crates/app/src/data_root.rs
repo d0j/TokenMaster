@@ -10,6 +10,7 @@ const PORTABLE_MARKER: &str = "tokenmaster.portable";
 const PORTABLE_DATA_DIRECTORY: &str = "data";
 const INSTALLED_DATA_DIRECTORY: &str = "TokenMaster";
 const ARCHIVE_FILE_NAME: &str = "tokenmaster.sqlite3";
+const RELIABLE_STATE_DIRECTORY: &str = "reliable-state";
 
 #[derive(Clone, Eq, PartialEq)]
 pub struct ApplicationEnvironment {
@@ -77,6 +78,7 @@ pub enum DataMode {
 pub struct DataRoot {
     mode: DataMode,
     directory: ValidatedLocalDirectory,
+    reliable_state: ValidatedLocalDirectory,
     archive_path: PathBuf,
 }
 
@@ -107,10 +109,15 @@ impl DataRoot {
         create_exact_child(&child_path)?;
         let directory = ValidatedLocalDirectory::new(&child_path)
             .map_err(|_| DataRootError::unsupported_data_location())?;
+        let reliable_state_path = directory.as_path().join(RELIABLE_STATE_DIRECTORY);
+        create_exact_child(&reliable_state_path)?;
+        let reliable_state = ValidatedLocalDirectory::new(&reliable_state_path)
+            .map_err(|_| DataRootError::data_directory_unavailable())?;
         let archive_path = directory.as_path().join(ARCHIVE_FILE_NAME);
         Ok(Self {
             mode,
             directory,
+            reliable_state,
             archive_path,
         })
     }
@@ -129,6 +136,14 @@ impl DataRoot {
     pub fn archive_path(&self) -> &Path {
         &self.archive_path
     }
+
+    pub(crate) const fn validated_directory(&self) -> &ValidatedLocalDirectory {
+        &self.directory
+    }
+
+    pub(crate) const fn reliable_state(&self) -> &ValidatedLocalDirectory {
+        &self.reliable_state
+    }
 }
 
 impl fmt::Debug for DataRoot {
@@ -137,6 +152,7 @@ impl fmt::Debug for DataRoot {
             .debug_struct("DataRoot")
             .field("mode", &self.mode)
             .field("directory", &"[redacted]")
+            .field("reliable_state", &"[redacted]")
             .field("archive_path", &"[redacted]")
             .finish()
     }

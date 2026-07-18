@@ -773,7 +773,7 @@ where
 {
     control.check()?;
     require_regular_file(&source.path)?;
-    validate_sqlite_header(&source.path)?;
+    validate_live_sqlite_header(&source.path)?;
     let source_connection = Connection::open_with_flags(
         &source.path,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -1157,22 +1157,38 @@ fn open_candidate(path: &Path) -> Result<Connection, StoreError> {
 }
 
 fn validate_sqlite_header(path: &Path) -> Result<(), StoreError> {
+    validate_sqlite_header_with_schema(path, false).map(|_| ())
+}
+
+fn validate_live_sqlite_header(path: &Path) -> Result<(), StoreError> {
+    let schema_format = validate_sqlite_header_with_schema(path, true)?;
+    if schema_format == 0 {
+        require_regular_file(&suffixed_path(path, "-wal"))?;
+    }
+    Ok(())
+}
+
+fn validate_sqlite_header_with_schema(
+    path: &Path,
+    allow_wal_schema: bool,
+) -> Result<u32, StoreError> {
     let metadata =
         std::fs::metadata(path).map_err(|_| StoreError::new(StoreErrorCode::BackupIo))?;
     let mut file = File::open(path).map_err(|_| StoreError::new(StoreErrorCode::BackupIo))?;
     let mut header = [0_u8; SQLITE_HEADER_BYTES];
     file.read_exact(&mut header)
         .map_err(|_| StoreError::new(StoreErrorCode::BackupHeaderCorrupt))?;
+    let schema_format = u32::from_be_bytes(
+        header[44..48]
+            .try_into()
+            .map_err(|_| StoreError::new(StoreErrorCode::BackupHeaderCorrupt))?,
+    );
     if &header[..SQLITE_MAGIC.len()] != SQLITE_MAGIC
         || !matches!(header[18], 1 | 2)
         || !matches!(header[19], 1 | 2)
         || header[20] != 0
         || header[21..24] != [64, 32, 32]
-        || u32::from_be_bytes(
-            header[44..48]
-                .try_into()
-                .map_err(|_| StoreError::new(StoreErrorCode::BackupHeaderCorrupt))?,
-        ) != 4
+        || !(schema_format == 4 || (allow_wal_schema && schema_format == 0))
     {
         return Err(StoreError::new(StoreErrorCode::BackupHeaderCorrupt));
     }
@@ -1189,7 +1205,7 @@ fn validate_sqlite_header(path: &Path) -> Result<(), StoreError> {
     {
         return Err(StoreError::new(StoreErrorCode::BackupHeaderCorrupt));
     }
-    Ok(())
+    Ok(schema_format)
 }
 
 fn verify_integrity(connection: &Connection) -> Result<(), StoreError> {

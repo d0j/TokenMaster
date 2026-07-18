@@ -162,8 +162,9 @@ health through lossy completion hints. P3-C is now complete: explicit all-curren
 quota/benefit overview reads feed one
 identity-free six-section projection and responsive compiled Slint Dashboard with
 32/32/240/12/8/12 presentation caps, real unknown/degraded states, and route-only
-navigation without model/window reconstruction. P3-D.0 Reliable State Tasks 1-11A are
-complete and Task 12 application composition is next, then the remaining P3-D
+navigation without model/window reconstruction. P3-D.0 Reliable State Tasks 1-11A and
+Task 12A application backup/migration composition are implemented; Task 12B command,
+restart, and no-backup reconstruction is next, then the remaining P3-D
 supporting data views.
 
 P3-D.0 Reliable State is approved under
@@ -196,9 +197,13 @@ root-bound A/B run state, unclean-before-open publication, read-only normal/quic
 diagnosis, cold-journal-first resume, newest-first reverified automatic data-only
 recovery, a two-unclean-launch candidate bound, first-install/damaged-missing
 classification, and continuous guard handoff into live-runtime archive open/startup
-recovery before later per-operation lease acquisition. Task 12 remains
-next for application-owned migration safety points, provider-backed no-backup rebuild,
-safe mode, service restart, and final clean-after-join publication. These slices add no
+recovery before later per-operation lease acquisition. Task 12A additionally composes
+one app state owner before live work, one real capacity-one snapshot-to-retention backup
+runtime, safe-shell isolation, mandatory verified pre/post-migration points even when
+periodic work is disabled, redundant pending-post restart completion, atomic exact-root
+receipt waiting, partial-owner discard, and final clean-after-join
+publication. Task 12B remains next for typed commands, restore/service restart,
+obsolete-bundle suppression, and provider-backed no-backup rebuild. These slices add no
 path, generic stream, SQL, or batch-deletion authority.
 
 P2-A query foundation is approved under

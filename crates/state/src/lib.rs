@@ -55,7 +55,8 @@ pub use retention::{
     RETENTION_WEEKLY_POINTS, RetentionAdmission, RetentionCycle, RetentionPolicy,
 };
 pub use run_state::{
-    PriorRunCondition, RecoveryLaunchDecision, RunSession, RunStateInspection, RunStateStore,
+    PendingMigration, PriorRunCondition, RecoveryLaunchDecision, RunSession, RunStateInspection,
+    RunStateStore,
 };
 pub use settings::{
     BACKUP_INTERVAL_DEFAULT_SECONDS, BACKUP_INTERVAL_MAX_SECONDS, BACKUP_INTERVAL_MIN_SECONDS,

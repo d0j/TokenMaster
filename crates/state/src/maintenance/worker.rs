@@ -2,14 +2,16 @@ use core::cell::Cell;
 use core::fmt;
 use std::panic::{AssertUnwindSafe, catch_unwind, set_hook, take_hook};
 use std::sync::mpsc::{Receiver, SyncSender, TrySendError, sync_channel};
-use std::sync::{Arc, Mutex, Once};
+use std::sync::{Arc, Condvar, Mutex, Once};
 use std::thread::{Builder, JoinHandle};
+use std::time::{Duration, Instant};
 
 use crate::{StateError, StateErrorCode};
 
 use super::{
     MaintenanceAdmission, MaintenanceCompletion, MaintenanceCoordinator, MaintenanceExecution,
-    MaintenancePermit, MaintenancePurpose, MaintenanceRejection, MaintenanceSourceState,
+    MaintenanceOutcome, MaintenancePermit, MaintenancePurpose, MaintenanceRejection,
+    MaintenanceRequestId, MaintenanceSourceState,
 };
 
 thread_local! {
@@ -98,6 +100,7 @@ struct WorkerState {
     phase: MaintenanceWorkerPhase,
     latest_completion: Option<MaintenanceCompletion>,
     latest_guard_completion: Option<MaintenanceCompletion>,
+    waited_root: Option<MaintenanceRequestId>,
     successful_count: u64,
     failure_count: u64,
     published_bytes: u64,
@@ -106,11 +109,24 @@ struct WorkerState {
 #[derive(Clone)]
 pub(crate) struct MaintenanceSubmitter {
     state: Arc<Mutex<WorkerState>>,
+    completion: Arc<Condvar>,
     wake_sender: SyncSender<WorkerWake>,
 }
 
 impl MaintenanceSubmitter {
     pub(crate) fn submit(&self, purpose: MaintenancePurpose) -> MaintenanceAdmission {
+        self.submit_inner(purpose, false)
+    }
+
+    fn submit_waited(&self, purpose: MaintenancePurpose) -> MaintenanceAdmission {
+        self.submit_inner(purpose, true)
+    }
+
+    fn submit_inner(
+        &self,
+        purpose: MaintenancePurpose,
+        reserve_waiter: bool,
+    ) -> MaintenanceAdmission {
         let admission = {
             let Ok(mut state) = self.state.lock() else {
                 return MaintenanceAdmission::Rejected(MaintenanceRejection::Closed);
@@ -118,9 +134,15 @@ impl MaintenanceSubmitter {
             if state.phase != MaintenanceWorkerPhase::Running {
                 return MaintenanceAdmission::Rejected(MaintenanceRejection::Closed);
             }
+            if state.waited_root.is_some() {
+                return MaintenanceAdmission::Rejected(MaintenanceRejection::Busy);
+            }
             let admission = state.coordinator.submit(purpose);
             if let MaintenanceAdmission::Started(permit) = &admission {
                 state.pending_start = Some(permit.clone());
+                if reserve_waiter {
+                    state.waited_root = Some(permit.root_request_id());
+                }
             }
             admission
         };
@@ -131,6 +153,7 @@ impl MaintenanceSubmitter {
                     if let Ok(mut state) = self.state.lock() {
                         state.phase = MaintenanceWorkerPhase::Faulted;
                     }
+                    self.completion.notify_all();
                     return MaintenanceAdmission::Rejected(MaintenanceRejection::Closed);
                 }
             }
@@ -160,27 +183,110 @@ impl MaintenanceWorker {
             phase: MaintenanceWorkerPhase::Running,
             latest_completion: None,
             latest_guard_completion: None,
+            waited_root: None,
             successful_count: 0,
             failure_count: 0,
             published_bytes: 0,
         }));
         let (wake_sender, wake_receiver) = sync_channel(1);
         let thread_state = Arc::clone(&state);
+        let completion = Arc::new(Condvar::new());
+        let thread_completion = Arc::clone(&completion);
         let thread = Builder::new()
             .name(String::from("tokenmaster-backup-worker"))
             .spawn(move || {
                 REDACT_MAINTENANCE_PANIC.with(|redact| redact.set(true));
-                run_worker(thread_state, wake_receiver, execute);
+                run_worker(thread_state, thread_completion, wake_receiver, execute);
             })
             .map_err(|_| StateError::unavailable())?;
         Ok(Self {
-            submitter: MaintenanceSubmitter { state, wake_sender },
+            submitter: MaintenanceSubmitter {
+                state,
+                completion,
+                wake_sender,
+            },
             thread: Some(thread),
         })
     }
 
     pub fn submit(&self, purpose: MaintenancePurpose) -> MaintenanceAdmission {
         self.submitter.submit(purpose)
+    }
+
+    pub fn wait_for_completion(
+        &self,
+        root_request_id: MaintenanceRequestId,
+        timeout: Duration,
+    ) -> Result<Option<MaintenanceCompletion>, StateError> {
+        if timeout.is_zero() {
+            return Err(StateError::invalid_input());
+        }
+        let deadline = Instant::now()
+            .checked_add(timeout)
+            .ok_or_else(StateError::invalid_input)?;
+        let mut state = self
+            .submitter
+            .state
+            .lock()
+            .map_err(|_| StateError::internal_invariant())?;
+        loop {
+            if let Some(completion) = state.latest_completion.filter(|completion| {
+                completion.root_request_id() == root_request_id
+                    && completion.outcome() != MaintenanceOutcome::RetryScheduled
+            }) {
+                if state.waited_root == Some(root_request_id) {
+                    state.waited_root = None;
+                }
+                return Ok(Some(completion));
+            }
+            if state.phase == MaintenanceWorkerPhase::Faulted {
+                if state.waited_root == Some(root_request_id) {
+                    state.waited_root = None;
+                }
+                return Err(StateError::internal_invariant());
+            }
+            if state.phase == MaintenanceWorkerPhase::Stopped {
+                if state.waited_root == Some(root_request_id) {
+                    state.waited_root = None;
+                }
+                return Ok(None);
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                if state.waited_root == Some(root_request_id) {
+                    state.waited_root = None;
+                }
+                return Ok(None);
+            }
+            let (next, wait) = self
+                .submitter
+                .completion
+                .wait_timeout(state, remaining)
+                .map_err(|_| StateError::internal_invariant())?;
+            state = next;
+            if wait.timed_out() {
+                if state.waited_root == Some(root_request_id) {
+                    state.waited_root = None;
+                }
+                return Ok(None);
+            }
+        }
+    }
+
+    pub fn submit_and_wait(
+        &self,
+        purpose: MaintenancePurpose,
+        timeout: Duration,
+    ) -> Result<MaintenanceCompletion, StateError> {
+        let root_request_id = match self.submitter.submit_waited(purpose) {
+            MaintenanceAdmission::Started(permit) => permit.root_request_id(),
+            MaintenanceAdmission::BypassedEmptyInstallation
+            | MaintenanceAdmission::BypassedCorruptQuarantine
+            | MaintenanceAdmission::Coalesced { .. }
+            | MaintenanceAdmission::Rejected(_) => return Err(StateError::unavailable()),
+        };
+        self.wait_for_completion(root_request_id, timeout)?
+            .ok_or_else(StateError::unavailable)
     }
 
     #[must_use]
@@ -318,6 +424,7 @@ impl Drop for MaintenanceWorker {
 
 fn run_worker<F>(
     state: Arc<Mutex<WorkerState>>,
+    completion_signal: Arc<Condvar>,
     wake_receiver: Receiver<WorkerWake>,
     mut execute: F,
 ) where
@@ -327,7 +434,10 @@ fn run_worker<F>(
         let mut next = match take_next(&state) {
             NextWork::Execute(permit) => Some(permit),
             NextWork::Wait => continue,
-            NextWork::Stop => return,
+            NextWork::Stop => {
+                completion_signal.notify_all();
+                return;
+            }
         };
         while let Some(permit) = next.take() {
             let stopping = state.lock().map_or(true, |worker| {
@@ -348,6 +458,7 @@ fn run_worker<F>(
                 Ok(transition) => transition,
                 Err(_) => {
                     worker.phase = MaintenanceWorkerPhase::Faulted;
+                    completion_signal.notify_all();
                     return;
                 }
             };
@@ -355,6 +466,7 @@ fn run_worker<F>(
             if completion.outcome() == super::MaintenanceOutcome::Published {
                 let Some(successful_count) = worker.successful_count.checked_add(1) else {
                     worker.phase = MaintenanceWorkerPhase::Faulted;
+                    completion_signal.notify_all();
                     return;
                 };
                 let Some(published_bytes) = worker
@@ -362,6 +474,7 @@ fn run_worker<F>(
                     .checked_add(completion.published_bytes())
                 else {
                     worker.phase = MaintenanceWorkerPhase::Faulted;
+                    completion_signal.notify_all();
                     return;
                 };
                 worker.successful_count = successful_count;
@@ -369,6 +482,7 @@ fn run_worker<F>(
             } else {
                 let Some(failure_count) = worker.failure_count.checked_add(1) else {
                     worker.phase = MaintenanceWorkerPhase::Faulted;
+                    completion_signal.notify_all();
                     return;
                 };
                 worker.failure_count = failure_count;
@@ -377,9 +491,11 @@ fn run_worker<F>(
             if completion.purpose().blocks_mutation() {
                 worker.latest_guard_completion = Some(completion);
             }
+            completion_signal.notify_all();
             if worker.phase == MaintenanceWorkerPhase::Stopping {
                 worker.pending_start = None;
                 worker.phase = MaintenanceWorkerPhase::Stopped;
+                completion_signal.notify_all();
                 return;
             }
             if let Some(follow_up) = transition.follow_up().cloned() {
@@ -398,6 +514,7 @@ fn run_worker<F>(
         && worker.phase != MaintenanceWorkerPhase::Faulted
     {
         worker.phase = MaintenanceWorkerPhase::Stopped;
+        completion_signal.notify_all();
     }
 }
 

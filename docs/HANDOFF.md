@@ -526,11 +526,45 @@ sidecar persisted-facts regression. The complete locked workspace test/doctest s
 passes in 571.4 seconds, and the changed platform capability passes an explicit
 `x86_64-pc-windows-msvc` warnings-as-errors target check.
 
-The immediate next slice is Task 12 application recovery, migration, and service
-composition. It owns mandatory verified pre/post-migration points, provider-backed
-fresh reconstruction when no backup is usable, all runtime/query/controller/
-maintenance teardown and restart, safe mode, and final clean publication only after
-every owner joins. Then continue Tasks 13-18 in order: health/product projection, Data
+Task 12A is implemented in the current working tree. The application creates the exact
+`reliable-state` child, prepares one state owner before live construction, and leaves a
+safe shell with zero archive/query/runtime/maintenance owners on preflight or bundle
+failure. A healthy bundle owns one capacity-one backup runtime. Its concrete operation
+runs online snapshot, complete candidate verification, typed package write and verify,
+sealed publication, verified-package catalog binding, and bounded retention. The app
+verifies a cold bounded catalog only on the worker, carries unchanged package proofs
+across rebuilds, and retains the final projection. The app
+atomically reserves and waits for one exact terminal mandatory receipt with one
+condition variable and a fixed deadline; later submissions cannot overwrite it.
+
+Legacy migration cannot open writable until a verified `PreMigration` package exists,
+then redundant run-state schema v2 records one pending source/target pair. The bundle
+cannot publish until a verified `PostMigration` package clears it. Periodic disablement
+suppresses neither point. A pre-open failure preserves the old schema; a post-commit
+failure preserves the migrated archive plus pending pair in safe mode. Restart must
+complete the post point before live, and clean rejects the pending pair. The first fresh
+live-WAL backup regression is closed:
+only a live source accompanied by a regular WAL may expose SQLite header schema-format
+zero, while every copied/published candidate remains strict format four and fully
+verified. Clean publication follows maintenance/controller/quota/reminder/live joins.
+
+Focused store backup 8/8 and adversarial 10/10, catalog 6/6, maintenance 19/19, state
+bootstrap 13/13, app 6 unit plus 7 integration, application authority 17/17, and
+reliable-state authority 55/55 contracts pass. The app lifecycle test includes 19 real
+sequential manual backups and proves the retained catalog remains at or below the
+default 15-point bound. The required clean-root, formatting,
+strict locked workspace
+Clippy, and complete locked workspace test/doctest gate passes in 617.2 seconds; the
+one live-auth Codex transport test remains intentionally environment-gated. The release
+application audit passes with exactly one production binary and owner of every declared
+runtime, both migration gates, zero polling/arbitrary-root/forbidden-string surface,
+and one release artifact. This is developer evidence, not product/release acceptance.
+
+The immediate next slice is Task 12B command and restart composition. It owns typed
+config export/import, backup/verify, data-only and confirmed portable-settings restore,
+rebuild/retry/cancel, capacity-one command admission, complete bundle teardown/restart,
+obsolete notifier suppression, and provider-backed fresh reconstruction when no backup
+is usable. Then continue Tasks 13-18 in order: health/product projection, Data
 & Recovery UI, adversarial/resource/release closure. Keep the fixed archive path and
 writer sidecar; never copy only the live main file or treat busy/disk/access/schema-
 newer as corruption authority. Keep automatic recovery data only; device-local settings
@@ -543,7 +577,7 @@ notifications, settings/help, command palette, tray, and compact lifecycle. P3-D
 presentation, CLI/MCP, activation, M0
 acceptance, packaging, signing, and release remain unclaimed. Inventory/reminder read
 must not imply activation authority.
-The current post-P3-D.0-Task-10 focused evidence includes the Task 5 store contracts,
+The prior post-P3-D.0-Task-10 focused evidence includes the Task 5 store contracts,
 5 package contracts, 10 package adversarial contracts, 17 durable-file contracts,
 7 grouped encryption contracts, 6 catalog contracts, 2 retention contracts, 5 backup-
 directory contracts, 17 maintenance contracts, the Windows maintenance resource gate,

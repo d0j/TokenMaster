@@ -37,8 +37,8 @@ $rustFiles = @(
     Get-ChildItem -LiteralPath $appSource -Recurse -File -Filter '*.rs' |
         Where-Object { $_.Name -notlike '*_tests.rs' }
 )
-if ($rustFiles.Count -ne 4) {
-    throw 'TM-APP-FILE-COUNT: application composition must contain exactly four Rust files'
+if ($rustFiles.Count -ne 5) {
+    throw 'TM-APP-FILE-COUNT: application composition must contain exactly five Rust files'
 }
 $productionText = ($rustFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
@@ -46,8 +46,21 @@ $productionText = ($rustFiles | ForEach-Object {
 $applicationText = [System.IO.File]::ReadAllText((Join-Path $appSource 'application.rs'))
 $dataRootText = [System.IO.File]::ReadAllText((Join-Path $appSource 'data_root.rs'))
 
+if ($productionText -match 'LiveRuntime::start_notified\(') {
+    throw 'TM-APP-UNGUARDED-LIVE: live runtime must consume the startup lease guard'
+}
+
 foreach ($contract in @(
-    @{ Name = 'TM-APP-LIVE-OWNER'; Pattern = 'LiveRuntime::start_notified\('; Count = 1 },
+    @{ Name = 'TM-APP-STATE-OWNER'; Pattern = 'ApplicationStateOwner::open\('; Count = 1 },
+    @{ Name = 'TM-APP-PREFLIGHT'; Pattern = '\.prepare\(&data_root\)'; Count = 1 },
+    @{ Name = 'TM-APP-LIVE-OWNER'; Pattern = 'LiveRuntime::start_notified_guarded\('; Count = 1 },
+    @{ Name = 'TM-APP-MAINTENANCE-OWNER'; Pattern = 'BackupMaintenanceRuntime::spawn\('; Count = 1 },
+    @{ Name = 'TM-APP-PRE-MIGRATION'; Pattern = 'MaintenancePurpose::PreMigration'; Count = 1 },
+    @{ Name = 'TM-APP-POST-MIGRATION'; Pattern = 'MaintenancePurpose::PostMigration'; Count = 1 },
+    @{ Name = 'TM-APP-MIGRATION-PENDING'; Pattern = '\.require_post_migration\('; Count = 1 },
+    @{ Name = 'TM-APP-MIGRATION-COMPLETE'; Pattern = '\.complete_post_migration\('; Count = 1 },
+    @{ Name = 'TM-APP-ATOMIC-MAINTENANCE-WAIT'; Pattern = '\.submit_and_wait\('; Count = 1 },
+    @{ Name = 'TM-APP-CLEAN-STATE'; Pattern = '\.mark_clean\(\)'; Count = 1 },
     @{ Name = 'TM-APP-QUOTA-OWNER'; Pattern = 'CodexQuotaRuntime::start_notified\('; Count = 1 },
     @{ Name = 'TM-APP-REMINDER-OWNER'; Pattern = 'BenefitReminderRuntime::start_notified\('; Count = 1 },
     @{ Name = 'TM-APP-CONTROLLER'; Pattern = 'DesktopController::open\('; Count = 1 },
@@ -100,7 +113,16 @@ if ($SourceOnly) {
         scope = 'source-only'
         rust_source_file_count = $rustFiles.Count
         production_binary_owner_count = 1
+        application_state_owner_count = 1
+        application_preflight_count = 1
         live_runtime_owner_count = 1
+        maintenance_runtime_owner_count = 1
+        pre_migration_gate_count = 1
+        post_migration_gate_count = 1
+        pending_migration_transition_count = 1
+        completed_migration_transition_count = 1
+        atomic_maintenance_wait_count = 1
+        clean_state_transition_count = 1
         quota_runtime_owner_count = 1
         reminder_runtime_owner_count = 1
         desktop_controller_count = 1
@@ -128,7 +150,8 @@ $directProductionDependencies = @(
 )
 $expectedDependencies = @(
     'slint', 'tokenmaster-codex', 'tokenmaster-desktop', 'tokenmaster-engine',
-    'tokenmaster-platform', 'tokenmaster-product', 'tokenmaster-runtime'
+    'tokenmaster-platform', 'tokenmaster-product', 'tokenmaster-runtime',
+    'tokenmaster-state', 'tokenmaster-store'
 )
 if ($directProductionDependencies.Count -ne $expectedDependencies.Count -or
     @($expectedDependencies | Where-Object { $_ -notin $directProductionDependencies }).Count -ne 0) {
@@ -188,7 +211,16 @@ foreach ($needle in @(
     direct_production_dependencies = $directProductionDependencies
     rust_source_file_count = $rustFiles.Count
     production_binary_owner_count = 1
+    application_state_owner_count = 1
+    application_preflight_count = 1
     live_runtime_owner_count = 1
+    maintenance_runtime_owner_count = 1
+    pre_migration_gate_count = 1
+    post_migration_gate_count = 1
+    pending_migration_transition_count = 1
+    completed_migration_transition_count = 1
+    atomic_maintenance_wait_count = 1
+    clean_state_transition_count = 1
     quota_runtime_owner_count = 1
     reminder_runtime_owner_count = 1
     desktop_controller_count = 1

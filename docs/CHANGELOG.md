@@ -6,6 +6,26 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.0 Task 12A application reliability composition. One state owner runs
+  before live/query/controller construction; safe mode owns no archive user; a healthy
+  bundle owns one capacity-one maintenance runtime and a complete online-snapshot ->
+  verify -> typed-package -> verify -> publish -> catalog-bind -> retain operation.
+- Added mandatory verified pre/post-migration safety points that remain active when
+  periodic backup is disabled. Redundant run-state schema v2 accepts legacy v1, records
+  a pending source/target pair before writable migration, survives a committed-
+  migration/post-backup failure, and forces restart to complete the post point before
+  live or clean. Pre-open failure still preserves the old archive and pinned package.
+- Added atomic deadline-bounded exact-root maintenance receipt waiting without polling or a new
+  thread, exact verified-package catalog binding without leaking a platform token, and
+  first-install WAL snapshot support while standalone candidates remain strict and
+  completely verified. Cold catalog verification stays on the worker, verified proofs
+  survive unchanged rebuilds, and 19 real sequential backups remain within the default
+  15-point retention bound. Typed restore/restart/rebuild commands remain Task 12B.
+- Verified Task 12A with focused store/state/app contracts, 17/17 application and 55/55
+  reliable-state authority mutations, the complete clean-root/format/strict-Clippy/
+  workspace-test gate, and the release application composition audit. This does not
+  claim product acceptance or release readiness.
+
 - Implemented P3-D.0 Task 11A pre-open state bootstrap. Strict A/B run records publish
   and reread `unclean` before catalog, package, or SQLite access; an exactly clean prior
   run uses bounded normal read-only inspection, while unclean/missing/invalid state adds

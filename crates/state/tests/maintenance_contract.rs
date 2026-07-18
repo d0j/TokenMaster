@@ -571,6 +571,75 @@ fn healthy_restart_seeds_periodic_schedule_from_prior_publication_truth() {
 }
 
 #[test]
+fn runtime_waits_for_one_terminal_root_completion_without_polling() {
+    let clock: Arc<dyn MaintenanceClock> = Arc::new(ManualClock::new(0));
+    let mut runtime = BackupMaintenanceRuntime::spawn(
+        clock,
+        default_policy(),
+        MaintenanceSourceState::HealthyUnpublished,
+        |permit| {
+            permit.begin_publication().expect("publication boundary");
+            MaintenanceExecution::Published { bytes: 512 }
+        },
+    )
+    .expect("spawn maintenance runtime");
+    let root = match runtime.submit(MaintenancePurpose::Manual) {
+        MaintenanceAdmission::Started(permit) => permit.root_request_id(),
+        other => panic!("manual request must start: {other:?}"),
+    };
+
+    let completion = runtime
+        .wait_for_completion(root, Duration::from_secs(5))
+        .expect("bounded completion wait")
+        .expect("terminal completion");
+
+    assert_eq!(completion.root_request_id(), root);
+    assert_eq!(completion.outcome(), MaintenanceOutcome::Published);
+    assert_eq!(completion.published_bytes(), 512);
+    runtime.shutdown().expect("shutdown runtime");
+}
+
+#[test]
+fn atomic_submit_and_wait_reserves_the_exact_root_until_terminal_receipt() {
+    let clock: Arc<dyn MaintenanceClock> = Arc::new(ManualClock::new(0));
+    let (started_sender, started_receiver) = sync_channel(1);
+    let (release_sender, release_receiver) = sync_channel(1);
+    let mut runtime = BackupMaintenanceRuntime::spawn(
+        clock,
+        default_policy(),
+        MaintenanceSourceState::HealthyUnpublished,
+        move |permit| {
+            started_sender.send(()).expect("started signal");
+            release_receiver.recv().expect("release signal");
+            permit.begin_publication().expect("publication boundary");
+            MaintenanceExecution::Published { bytes: 1024 }
+        },
+    )
+    .expect("spawn maintenance runtime");
+
+    std::thread::scope(|scope| {
+        let waiter = scope.spawn(|| {
+            runtime
+                .submit_and_wait(MaintenancePurpose::PostMigration, Duration::from_secs(5))
+                .expect("atomic terminal wait")
+        });
+        started_receiver
+            .recv_timeout(Duration::from_secs(1))
+            .expect("operation started");
+        assert_eq!(
+            runtime.submit(MaintenancePurpose::Manual),
+            MaintenanceAdmission::Rejected(MaintenanceRejection::Busy)
+        );
+        release_sender.send(()).expect("release operation");
+        let completion = waiter.join().expect("waiter thread");
+        assert_eq!(completion.purpose(), MaintenancePurpose::PostMigration);
+        assert_eq!(completion.outcome(), MaintenanceOutcome::Published);
+        assert_eq!(completion.published_bytes(), 1024);
+    });
+    runtime.shutdown().expect("shutdown runtime");
+}
+
+#[test]
 fn maintenance_source_has_two_fixed_threads_no_ui_async_or_trigger_queue() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let maintenance_root = root.join("src").join("maintenance");

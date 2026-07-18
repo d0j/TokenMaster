@@ -11,6 +11,45 @@ fn environment(
     ApplicationEnvironment::new(executable, local_app_data, None, None::<OsString>)
 }
 
+#[test]
+fn resolved_root_creates_one_exact_reliable_state_child() {
+    let temporary = tempfile::tempdir().expect("temporary root");
+    let executable = executable(temporary.path());
+    let root = DataRoot::resolve(&environment(
+        executable,
+        Some(temporary.path().to_path_buf()),
+    ))
+    .expect("installed data root");
+    let reliable_state = root.directory().join("reliable-state");
+
+    let metadata = std::fs::symlink_metadata(&reliable_state).expect("reliable-state metadata");
+    assert!(metadata.is_dir());
+    assert!(!metadata.file_type().is_symlink());
+    assert!(!format!("{root:?}").contains(&reliable_state.display().to_string()));
+}
+
+#[test]
+fn non_directory_reliable_state_child_fails_without_replacement() {
+    let temporary = tempfile::tempdir().expect("temporary root");
+    let executable = executable(temporary.path());
+    let application_root = temporary.path().join("TokenMaster");
+    std::fs::create_dir(&application_root).expect("application root");
+    let reliable_state = application_root.join("reliable-state");
+    std::fs::write(&reliable_state, b"evidence").expect("blocking evidence");
+
+    let error = DataRoot::resolve(&environment(
+        executable,
+        Some(temporary.path().to_path_buf()),
+    ))
+    .expect_err("file cannot become the reliable-state directory");
+
+    assert_eq!(error.code(), DataRootErrorCode::DataDirectoryUnavailable);
+    assert_eq!(
+        std::fs::read(reliable_state).expect("evidence preserved"),
+        b"evidence"
+    );
+}
+
 fn executable(directory: &std::path::Path) -> std::path::PathBuf {
     let path = directory.join("TokenMaster.exe");
     fs::write(&path, b"test executable").expect("test executable");

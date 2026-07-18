@@ -6079,6 +6079,7 @@ dependencies = [
 name = "tokenmaster-app"
 version = "0.1.0"
 dependencies = [
+ "rusqlite",
  "slint",
  "tempfile",
  "tokenmaster-codex",
@@ -6087,6 +6088,8 @@ dependencies = [
  "tokenmaster-platform",
  "tokenmaster-product",
  "tokenmaster-runtime",
+ "tokenmaster-state",
+ "tokenmaster-store",
 ]
 
 [[package]]

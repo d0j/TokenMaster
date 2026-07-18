@@ -2822,3 +2822,46 @@ The changed platform capability also passes an explicit `x86_64-pc-windows-msvc`
 warnings-as-errors target check. Task 12 owns migration safety points,
 authoritative no-backup reconstruction, all-owner restart/safe mode, and final clean
 publication; those claims remain open.
+
+## 2026-07-18 — P3-D.0 Task 12A application backup and migration lifecycle
+
+Added the application-owned reliable-state boundary. `ApplicationStateOwner` prepares
+startup before live/query/controller construction, and failure leaves the existing
+Slint shell in safe mode without an archive, runtime, query, or maintenance owner. A
+healthy bundle owns exactly one capacity-one maintenance runtime and one concrete
+backup operation: SQLite Online Backup, full candidate verification, typed package
+staging and re-verification, sealed publication, exact verified-package catalog
+binding, and bounded one-at-a-time retention. Terminal mandatory receipts use a single
+deadline-bounded condition variable, not polling or another worker. Submission and wait
+atomically reserve the exact root, so a newer completion cannot overwrite its receipt.
+Cold catalog verification runs on the worker, unchanged package proofs survive every
+rebuild, and the operation retains the final projection for the next backup cycle.
+
+Supported legacy startup now requires one completely verified pre-migration package
+before any writable old-schema open. Redundant run-state schema v2, with strict legacy-
+v1 acceptance, then records the pending source/target pair. One verified post-migration
+package clears it before the bundle becomes live. Disabling periodic backups suppresses
+neither safety point. Failure before writable open preserves the old archive; failure
+after migration commit preserves the migrated archive and pending obligation in safe
+mode. Restart completes the post point before live, and clean rejects a pending pair.
+Healthy shutdown pauses and joins
+maintenance, then controller/quota/reminder/live owners, and only then marks the exact
+run generation clean.
+
+A real first-install backup exposed a SQLite WAL detail: before the first checkpoint,
+the main header may report schema-format byte zero while the schema is committed in the
+WAL. The live-source precheck now accepts that form only with a regular WAL present;
+every snapshot candidate and package still requires strict format four and the complete
+database verifier. Task 12B command/restart and no-backup reconstruction, Tasks 13-18,
+product acceptance, packaging, signing, and release remain unclaimed.
+
+Focused store backup 8/8 and adversarial 10/10, catalog 6/6, maintenance 19/19, state
+bootstrap 13/13, app 6 unit plus 7 integration, application authority 17/17, and
+reliable-state authority 55/55 contracts pass. The app lifecycle test executes 19 real
+sequential backups and keeps the retained catalog within the default 15-point bound.
+The mandatory clean-root, formatting, strict locked workspace
+Clippy, and complete locked workspace test/doctest gate exits zero in 617.2 seconds;
+the one live-auth Codex transport test remains intentionally environment-gated. A
+release application composition audit also proves one production binary/artifact, one
+owner for every declared state/runtime component, both migration gates, and zero
+polling, arbitrary-root, renderer-fallback, probe, or forbidden-binary-string surface.

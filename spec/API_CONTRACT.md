@@ -784,8 +784,34 @@ operations, while later runtime mutations acquire the same fixed lease per opera
 Existing start APIs remain wrappers that acquire their own startup guard. The application must retain the
 `RunSession`, authorize a healthy launch only after the owned bundle is viable, and
 publish clean only after every archive, controller, maintenance, and runtime owner has
-joined. Task 12 owns that complete application sequence, migration safety points, and
-authoritative no-backup reconstruction.
+joined.
+
+Implemented Task 12A composes that startup boundary in `tokenmaster-app`. One
+`ApplicationStateOwner` prepares state before any live/query/controller owner, and a
+safe-mode shell owns no archive user. A healthy bundle owns exactly one capacity-one
+backup maintenance runtime. Its application-owned operation performs SQLite Online
+Backup, complete candidate verification, typed package staging and verification,
+sealed publication, catalog proof binding, and one-at-a-time retention. On its worker
+thread, the first operation fully verifies the bounded cold catalog; later operations
+carry proofs only for unchanged package identities and retain one current projection.
+Terminal maintenance receipts are submitted and awaited atomically through one bounded
+condition-variable wait. While that exact root is awaited, a later request is rejected
+busy and cannot overwrite its receipt; no polling thread or UI timer is added.
+The older split submit/read-wait API remains suitable only for advisory observation;
+mandatory application operations must use the atomic submit-and-wait form.
+
+A supported old schema remains read-only until a verified `PreMigration` point is
+published. Before writable open, run-state schema v2 durably records the exact bounded
+source/target schema pair as a pending post-migration obligation. The same held startup
+guard then enters writable open/migration, and the bundle is not exposed until a
+verified `PostMigration` point exists and clears that exact obligation. A restart with
+an already-current archive and a pending obligation repeats the post point before live
+publication. Periodic backup disablement does not suppress either point. Any startup or
+migration ambiguity retains the unclean run and the safe-mode shell. Clean publication
+occurs only after the
+maintenance runtime, controller, quota/reminder runtimes, and live runtime join.
+Task 12B still owns typed restore/import/export/rebuild commands, controlled service
+restart, obsolete-bundle suppression, and authoritative no-backup reconstruction.
 
 ## Provider plugin ABI
 
