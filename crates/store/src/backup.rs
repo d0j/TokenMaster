@@ -82,6 +82,19 @@ impl BackupStaging {
         })
     }
 
+    pub fn authorize_directory(
+        &self,
+        directory: &ValidatedLocalDirectory,
+    ) -> Result<(), StoreError> {
+        let revalidated = ValidatedLocalDirectory::new(&self.directory)
+            .map_err(|_| StoreError::new(StoreErrorCode::BackupIo))?;
+        if revalidated == *directory && self.directory == directory.as_path() {
+            Ok(())
+        } else {
+            Err(StoreError::new(StoreErrorCode::InvalidValue))
+        }
+    }
+
     #[must_use]
     pub fn cleanup_failure_count(&self) -> u64 {
         self.cleanup_failures.load(Ordering::Acquire)
@@ -238,6 +251,43 @@ pub enum ArchiveVersionStatus {
     SupportedLegacy,
     Current,
     Newer,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StartupValidationMode {
+    Normal,
+    Quick,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StartupArchiveStatus {
+    Missing,
+    SupportedLegacy,
+    Current,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StartupArchiveInspection {
+    status: StartupArchiveStatus,
+    schema_version: Option<u32>,
+    quick_check_performed: bool,
+}
+
+impl StartupArchiveInspection {
+    #[must_use]
+    pub const fn status(self) -> StartupArchiveStatus {
+        self.status
+    }
+
+    #[must_use]
+    pub const fn schema_version(self) -> Option<u32> {
+        self.schema_version
+    }
+
+    #[must_use]
+    pub const fn quick_check_performed(self) -> bool {
+        self.quick_check_performed
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -780,6 +830,55 @@ pub fn inspect_archive_version(
     inspect_connection_version(&connection)
 }
 
+/// Performs a bounded read-only startup inspection of the one fixed usage archive.
+/// Missing state is reported without creating an empty database.
+pub fn inspect_startup_archive(
+    data_root: &ValidatedLocalDirectory,
+    mode: StartupValidationMode,
+) -> Result<StartupArchiveInspection, StoreError> {
+    let path = data_root.as_path().join(ARCHIVE_FILE_NAME);
+    match fs::symlink_metadata(&path) {
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            return Ok(StartupArchiveInspection {
+                status: StartupArchiveStatus::Missing,
+                schema_version: None,
+                quick_check_performed: false,
+            });
+        }
+        Err(_) => return Err(StoreError::new(StoreErrorCode::BackupIo)),
+        Ok(_) => {}
+    }
+    validate_sqlite_header(&path)?;
+    let connection = open_candidate(&path)?;
+    let _policy = apply_and_capture_verify_policy(&connection)?;
+    require_expected_sqlite(&connection)?;
+    let inspection = inspect_connection_version(&connection)?;
+    if inspection.status == ArchiveVersionStatus::Newer {
+        return Err(StoreError::new(StoreErrorCode::SchemaTooNew));
+    }
+    if mode == StartupValidationMode::Quick {
+        verify_quick_check(&connection)?;
+    }
+    verify_foreign_keys(&connection)?;
+    let status = if inspection.status == ArchiveVersionStatus::Current {
+        validate_current_indexes(&connection).map_err(map_index_validation_error)?;
+        validate_current_schema_only(&connection).map_err(map_validation_error)?;
+        verify_current_counts(&connection)?;
+        verify_current_generations(&connection)?;
+        validate_current_semantics(&connection).map_err(map_semantic_validation_error)?;
+        StartupArchiveStatus::Current
+    } else {
+        validate_archive_version(&connection, i64::from(inspection.version))
+            .map_err(map_validation_error)?;
+        StartupArchiveStatus::SupportedLegacy
+    };
+    Ok(StartupArchiveInspection {
+        status,
+        schema_version: Some(inspection.version),
+        quick_check_performed: mode == StartupValidationMode::Quick,
+    })
+}
+
 pub fn verify_backup_candidate(
     candidate: BackupCandidate,
     control: &BackupControl,
@@ -1096,6 +1195,34 @@ fn validate_sqlite_header(path: &Path) -> Result<(), StoreError> {
 fn verify_integrity(connection: &Connection) -> Result<(), StoreError> {
     let mut statement = connection
         .prepare("PRAGMA integrity_check(100)")
+        .map_err(map_integrity_error)?;
+    let mut rows = statement.query([]).map_err(map_integrity_error)?;
+    let mut count = 0_usize;
+    let mut only_ok = true;
+    let mut index_failure = false;
+    while let Some(row) = rows.next().map_err(map_integrity_error)? {
+        count = count.saturating_add(1);
+        if count > MAX_INTEGRITY_ROWS {
+            return Err(StoreError::new(StoreErrorCode::BackupPageCorrupt));
+        }
+        let message: String = row.get(0).map_err(map_integrity_error)?;
+        if message != "ok" {
+            only_ok = false;
+            index_failure |= message.to_ascii_lowercase().contains("index");
+        }
+    }
+    if count == 1 && only_ok {
+        Ok(())
+    } else if index_failure {
+        Err(StoreError::new(StoreErrorCode::BackupIndexCorrupt))
+    } else {
+        Err(StoreError::new(StoreErrorCode::BackupPageCorrupt))
+    }
+}
+
+fn verify_quick_check(connection: &Connection) -> Result<(), StoreError> {
+    let mut statement = connection
+        .prepare("PRAGMA quick_check(100)")
         .map_err(map_integrity_error)?;
     let mut rows = statement.query([]).map_err(map_integrity_error)?;
     let mut count = 0_usize;

@@ -196,6 +196,18 @@ impl SettingsStore {
         })
     }
 
+    pub fn has_any_artifact(&self) -> Result<bool, StateError> {
+        self.records.has_any_artifact()
+    }
+
+    pub(crate) fn authorize_directory(
+        &self,
+        directory: &ValidatedLocalDirectory,
+    ) -> Result<(), StateError> {
+        self.records
+            .authorize_directory(directory, RecordKind::Settings)
+    }
+
     pub fn save(&self, value: &SettingsValue) -> Result<SettingsCommitReceipt, StateError> {
         let candidate = PortableSettingsCandidate::new(value.portable().clone())?;
         let receipt = self.records.save_explicit(value)?;

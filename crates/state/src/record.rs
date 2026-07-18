@@ -135,6 +135,16 @@ pub(crate) struct RedundantRecordStore<T> {
     value: PhantomData<fn() -> T>,
 }
 
+impl<T> Clone for RedundantRecordStore<T> {
+    fn clone(&self) -> Self {
+        Self {
+            slots: self.slots.clone(),
+            max_payload_bytes: self.max_payload_bytes,
+            value: PhantomData,
+        }
+    }
+}
+
 impl<T> RedundantRecordStore<T> {
     pub(crate) fn new(
         directory: &ValidatedLocalDirectory,
@@ -169,6 +179,19 @@ impl<T> RedundantRecordStore<T> {
             max_payload_bytes,
             value: PhantomData,
         })
+    }
+
+    pub(crate) fn authorize_directory(
+        &self,
+        directory: &ValidatedLocalDirectory,
+        kind: RecordKind,
+    ) -> Result<(), StateError> {
+        let expected = Self::new(directory, kind, self.max_payload_bytes)?;
+        if self.slots == expected.slots {
+            Ok(())
+        } else {
+            Err(StateError::invalid_input())
+        }
     }
 }
 

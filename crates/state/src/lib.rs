@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
+mod bootstrap;
 mod catalog;
 mod error;
 mod maintenance;
@@ -17,8 +18,10 @@ mod record;
 mod record_contract_tests;
 mod recovery;
 mod retention;
+mod run_state;
 mod settings;
 
+pub use bootstrap::{BootstrapOutcome, BootstrapReport, PreparedBootstrap, StateBootstrap};
 pub use catalog::{
     BackupCatalog, CatalogGeneration, CatalogHealth, CatalogPoint, CatalogSelection,
 };
@@ -50,6 +53,9 @@ pub use recovery::{
 pub use retention::{
     MAX_RETAINED_VERIFIED_POINTS, RETENTION_DAILY_POINTS, RETENTION_NEWEST_POINTS,
     RETENTION_WEEKLY_POINTS, RetentionAdmission, RetentionCycle, RetentionPolicy,
+};
+pub use run_state::{
+    PriorRunCondition, RecoveryLaunchDecision, RunSession, RunStateInspection, RunStateStore,
 };
 pub use settings::{
     BACKUP_INTERVAL_DEFAULT_SECONDS, BACKUP_INTERVAL_MAX_SECONDS, BACKUP_INTERVAL_MIN_SECONDS,

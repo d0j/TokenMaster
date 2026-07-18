@@ -6272,6 +6272,7 @@ dependencies = [
  "tokenmaster-git",
  "tokenmaster-platform",
  "tokenmaster-provider",
+ "tokenmaster-state",
  "tokenmaster-store",
  "windows",
 ]

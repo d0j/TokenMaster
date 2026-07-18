@@ -44,6 +44,7 @@ pub struct ArchiveRecoveryScope {
     active_main: PathBuf,
     active_wal: PathBuf,
     active_shm: PathBuf,
+    reliable_state: ValidatedLocalDirectory,
     staging: ValidatedLocalDirectory,
     quarantine: ValidatedLocalDirectory,
     scope: [u8; 32],
@@ -68,6 +69,7 @@ impl ArchiveRecoveryScope {
             active_main,
             active_wal,
             active_shm,
+            reliable_state: reliable_state.clone(),
             staging,
             quarantine,
             scope,
@@ -93,6 +95,38 @@ impl ArchiveRecoveryScope {
     ) -> Result<(), ArchiveRecoveryError> {
         self.require_guard(guard)?;
         self.revalidate()
+    }
+
+    pub fn authorize_data_root(
+        &self,
+        data_root: &ValidatedLocalDirectory,
+        guard: &ExclusiveFileLeaseGuard,
+    ) -> Result<(), ArchiveRecoveryError> {
+        self.require_guard(guard)?;
+        self.revalidate()?;
+        if data_root.as_path().join(ACTIVE_MAIN) != self.active_main {
+            return Err(ArchiveRecoveryError::UnsupportedLocation);
+        }
+        Ok(())
+    }
+
+    pub fn reliable_state_root(&self) -> Result<ValidatedLocalDirectory, ArchiveRecoveryError> {
+        self.revalidate()?;
+        Ok(self.reliable_state.clone())
+    }
+
+    pub fn staging_root(&self) -> Result<ValidatedLocalDirectory, ArchiveRecoveryError> {
+        self.revalidate()?;
+        Ok(self.staging.clone())
+    }
+
+    pub fn has_recovery_evidence(
+        &self,
+        guard: &ExclusiveFileLeaseGuard,
+    ) -> Result<bool, ArchiveRecoveryError> {
+        self.require_guard(guard)?;
+        self.revalidate()?;
+        Ok(self.has_any_staging_evidence()? || self.scan_quarantine()? != 0)
     }
 
     pub fn require_available_staging_bytes(
@@ -599,6 +633,22 @@ impl ArchiveRecoveryScope {
         Ok(count)
     }
 
+    fn has_any_staging_evidence(&self) -> Result<bool, ArchiveRecoveryError> {
+        let mut count = 0_usize;
+        for entry in
+            fs::read_dir(self.staging.as_path()).map_err(|_| ArchiveRecoveryError::Unavailable)?
+        {
+            entry.map_err(|_| ArchiveRecoveryError::Unavailable)?;
+            count = count
+                .checked_add(1)
+                .ok_or(ArchiveRecoveryError::CapacityExceeded)?;
+            if count > MAX_RECOVERY_STAGING_ARTIFACTS {
+                return Err(ArchiveRecoveryError::CapacityExceeded);
+            }
+        }
+        Ok(count != 0)
+    }
+
     fn require_guard(&self, guard: &ExclusiveFileLeaseGuard) -> Result<(), ArchiveRecoveryError> {
         match guard.authorizes_archive(&self.active_main) {
             Ok(true) => Ok(()),
@@ -681,11 +731,18 @@ impl ArchiveRecoveryScope {
     }
 
     fn revalidate(&self) -> Result<(), ArchiveRecoveryError> {
+        let reliable_state = ValidatedLocalDirectory::new(self.reliable_state.as_path())
+            .map_err(map_directory_error)?;
         let staging =
             ValidatedLocalDirectory::new(self.staging.as_path()).map_err(map_directory_error)?;
         let quarantine =
             ValidatedLocalDirectory::new(self.quarantine.as_path()).map_err(map_directory_error)?;
-        if staging == self.staging && quarantine == self.quarantine {
+        if reliable_state == self.reliable_state
+            && staging == self.staging
+            && quarantine == self.quarantine
+            && staging.as_path() == reliable_state.as_path().join(STAGING)
+            && quarantine.as_path() == reliable_state.as_path().join(QUARANTINE)
+        {
             Ok(())
         } else {
             Err(ArchiveRecoveryError::UnsupportedLocation)
@@ -987,8 +1044,8 @@ impl ArchiveSetExpectation {
     ) -> Result<Self, ArchiveRecoveryError> {
         Ok(Self {
             main: expected_optional(main)?,
-            wal: expected_optional(wal)?,
-            shm: expected_optional(shm)?,
+            wal: expected_optional_sidecar(wal)?,
+            shm: expected_optional_sidecar(shm)?,
         })
     }
 
@@ -1259,6 +1316,20 @@ fn expected_optional(
 ) -> Result<Option<DurableFileReceipt>, ArchiveRecoveryError> {
     value
         .map(|(len, sha256)| expected_receipt(len, sha256))
+        .transpose()
+}
+
+fn expected_optional_sidecar(
+    value: Option<(u64, [u8; 32])>,
+) -> Result<Option<DurableFileReceipt>, ArchiveRecoveryError> {
+    value
+        .map(|(len, sha256)| {
+            if sha256 == [0_u8; 32] {
+                Err(ArchiveRecoveryError::ArtifactMismatch)
+            } else {
+                Ok(DurableFileReceipt::from_expected(len, sha256))
+            }
+        })
         .transpose()
 }
 

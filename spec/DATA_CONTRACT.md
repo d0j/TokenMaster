@@ -769,6 +769,22 @@ or accepts an arbitrary path. Every transition is idempotent, including complete
 sidecar/main/settings mutations before journal advance; uncertainty preserves all
 artifacts and enters safe mode.
 
+Implemented Task 11A run state uses only `run-a.tms` and `run-b.tms` with strict schema
+version 1. A launch first inspects the prior highest valid record as `clean`, `unclean`,
+`missing`, or `invalid`, then durably publishes and rereads a new `unclean` generation
+before catalog, package, or SQLite access. Only an exactly clean prior generation may
+use normal startup inspection; every other condition adds bounded `quick_check(100)`.
+The retained `RunSession` binds its clean publication to the exact unclean generation
+and digest, so a changed record cannot be accepted. Clean publication is separately
+authorized and occurs only after application-owned work has joined.
+
+One run record may retain only the current recovery operation generation, exact
+candidate identity, and a saturating launch count. The same recovered candidate may be
+launched twice after unclean exits; the third attempt enters safe mode. A later clean
+run accepts that operation generation, while a historical completed journal cannot
+start a false retry loop or block a later independent recovery generation. No run
+record stores a path, timestamp history, process identity, error text, or usage data.
+
 ### P3-C bounded Dashboard projection
 
 The read-only quota overview discovers at most 32 current window keys in one deferred

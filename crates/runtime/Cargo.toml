@@ -18,6 +18,7 @@ tokenmaster-store = { path = "../store" }
 
 [dev-dependencies]
 tempfile.workspace = true
+tokenmaster-state = { path = "../state" }
 
 [target.'cfg(windows)'.dev-dependencies]
 windows.workspace = true

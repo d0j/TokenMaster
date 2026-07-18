@@ -40,7 +40,7 @@ pub struct RecoveryFileFact {
 
 impl RecoveryFileFact {
     pub fn from_persisted(len: u64, sha256: [u8; 32]) -> Result<Self, StateError> {
-        if len == 0 || sha256 == [0_u8; 32] {
+        if sha256 == [0_u8; 32] {
             return Err(StateError::invalid_input());
         }
         Ok(Self { len, sha256 })
@@ -96,6 +96,9 @@ impl RecoveryArchiveFacts {
         wal: Option<(u64, [u8; 32])>,
         shm: Option<(u64, [u8; 32])>,
     ) -> Result<Self, StateError> {
+        if main.is_some_and(|(len, _)| len == 0) {
+            return Err(StateError::invalid_input());
+        }
         Ok(Self {
             main: decode_file_fact(main)?,
             wal: decode_file_fact(wal)?,
@@ -133,6 +136,9 @@ impl RecoveryArchiveFacts {
     }
 
     fn validate(self) -> Result<(), StateError> {
+        if self.main.is_some_and(RecoveryFileFact::is_empty) {
+            return Err(StateError::invalid_input());
+        }
         for fact in [self.main, self.wal, self.shm].into_iter().flatten() {
             RecoveryFileFact::from_persisted(fact.len, fact.sha256)?;
         }
@@ -516,6 +522,14 @@ impl RecoveryJournalStore {
             }
             RecordLoad::NoValidRecord => Ok(RecoveryJournalLoad::Absent),
         }
+    }
+
+    pub(crate) fn authorize_directory(
+        &self,
+        directory: &ValidatedLocalDirectory,
+    ) -> Result<(), StateError> {
+        self.records
+            .authorize_directory(directory, RecordKind::RecoveryJournal)
     }
 
     pub fn begin(&self, prepared: &RecoveryJournal) -> Result<(), StateError> {

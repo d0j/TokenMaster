@@ -1007,7 +1007,7 @@ transient-I/O, unsupported-location, and schema-too-new results preserve current
 truth. No valid backup leads to explicit quarantine and authoritative-source rebuild,
 never fabricated zero or automatic corrupt-row salvage.
 
-Tasks 1-10 are implemented. Task 10 adds the physically lease-bound platform recovery
+Tasks 1-11A are implemented. Task 10 adds the physically lease-bound platform recovery
 scope, path-free store verification, repeatable six-phase redundant journal, three-set
 quarantine, old-or-new promotion/rollback, prepared settings target, manual and
 corruption-only automatic modes, restart at pre-journal mutation boundaries, and
@@ -1022,17 +1022,46 @@ seconds, strict locked workspace Clippy in 9.169 seconds, and the complete locke
 workspace test/doctest suite in 545.3 seconds; the reliable-state audit, 52/52
 mutations, and the changed platform MSVC target check also pass. Task 10 is accepted
 as developer evidence, not as product release or M0 acceptance.
-No safe mode, Data & Recovery UI, or new
-acceptance evidence exists yet. Application composition of the complete snapshot -> verify
--> package -> verify -> publish -> retain operation remains Task 12 and must use the
-fixed Task 9 runtime/reader boundaries.
+
+Task 11A adds strict `run-a.tms`/`run-b.tms` launch truth and `StateBootstrap` before
+ordinary SQLite open. Bootstrap validates that every data/reliable-state capability is
+bound to one root, observes prior artifacts, durably publishes and rereads `unclean`,
+resumes a pending journal, and performs read-only startup inspection. Only an exactly
+clean prior run skips `quick_check(100)`; missing, invalid, and unclean prior state add
+it. Supported legacy and newer schemas return migration/upgrade-required without
+mutation. Definitive corruption or a missing main with prior backup evidence selects
+newest-first and fully reverifies each candidate; corrupt newer points are skipped and
+automatic restore is always data-only. Busy/access/disk/cancel/transient/policy results
+and no usable backup preserve the active/corrupt set.
+
+The same recovered candidate may fail two launches; a third enters safe mode. A clean
+run accepts the recovery generation so a completed historical journal neither creates
+a false crash loop nor blocks a later independent recovery. `LiveRuntime` now adopts
+the already-held platform guard through a typed guarded start path, while legacy starts
+retain their behavior. A runtime integration contract proves first-install bootstrap,
+guard handoff, live archive creation/use, joined shutdown, and only then clean
+publication. Zero-length WAL/SHM facts are valid and identity-bound; zero-length main
+is rejected. Focused platform 13/13, writer-lease 9/9, store startup 5/5, state restore
+20/20, bootstrap 12/12, automatic recovery 7/7, and full runtime tests pass; strict
+locked workspace Clippy, the reliable-state workspace audit, and 55/55 authority
+mutations also pass after independent review caught two redundant attributes. The
+complete locked workspace test/doctest suite passes in 571.4 seconds. The changed
+platform capability also passes the explicit `x86_64-pc-windows-msvc`
+warnings-as-errors target check.
+
+No application-owned safe-mode window, migration safety backup, provider-backed fresh
+reconstruction, Data & Recovery UI, or new release acceptance evidence exists yet.
+The complete snapshot -> verify -> package -> publish -> retain operation and final
+clean-after-all-owners-join rule remain Task 12 and must use the fixed Task 9/10/11A
+capabilities.
 
 ## Next implementation slice
 
-Execute P3-D.0 Task 11 from
-`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: integrate startup
-run-state classification and automatic corruption-only recovery before any ordinary
-SQLite open, then Task 12 application restart/safe-mode composition.
+Execute P3-D.0 Task 12 from
+`docs/superpowers/plans/2026-07-17-tokenmaster-reliable-state.md`: compose the reliable
+state tree, Task 11A bootstrap, maintenance, live/query/controller owners, mandatory
+pre/post-migration safety points, authoritative no-backup reconstruction, service
+restart, safe mode, and final clean publication under one application lifecycle.
 
 P2-D quota history core is complete under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: Tasks 1-8 cover
@@ -1049,7 +1078,7 @@ immutable read snapshots, and publication through the existing Codex runtime wit
 separate domain health, plus the store-owned due transaction and one-timer durable
 in-app event runtime, authority audit, complete project-truth closure, and full
 workspace quality gate. P2-E, P2-F, P3-A, P3-B.1, P3-B.2, P3-B.3, and P3-C are
-complete; P3-D.0 Reliable State is active with Tasks 1-10 complete and Task 11 next, followed
+complete; P3-D.0 Reliable State is active with Tasks 1-11A complete and Task 12 next, followed
 by the remaining P3-D supporting data-bearing routes. Activation
 remains a later independently authorized capability. No quota value may be inferred
 from local token/cost facts and no browser/private-endpoint authority may be added.

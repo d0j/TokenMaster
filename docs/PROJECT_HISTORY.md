@@ -2782,3 +2782,42 @@ workspace test/doctest suite in 545.3 seconds. The reliable-state audit, 52/52
 authority mutations, and the changed platform MSVC target check also pass. This
 accepts the library milestone only; startup/application/UI recovery and release gates
 remain later tasks.
+
+## 2026-07-18 — P3-D.0 Task 11A pre-open bootstrap and guard handoff
+
+Added strict typed run-state A/B records and `StateBootstrap`. Startup validates that
+all data/reliable-state capabilities share one root, observes prior owned evidence,
+then durably publishes and rereads `unclean` before catalog, package, or SQLite access.
+A prior clean run uses bounded normal read-only inspection; unclean, missing, or invalid
+truth adds `quick_check(100)`. The store inspector never creates or migrates an archive:
+legacy returns migration-required, newer returns upgrade-required, and non-corruption
+failures preserve the active set.
+
+Bootstrap resumes any pending recovery journal before ordinary inspection. Definitive
+corruption or missing-main damage with prior backup evidence selects candidates newest
+first, fully reverifies every package, skips corrupt newer points, and automatically
+restores data only. No usable point returns recovery-required with the corrupt set
+preserved. A recovered candidate is tied to its operation generation and exact identity;
+two unclean launches are allowed and the third enters safe mode. Later clean acceptance
+prevents a completed historical journal from creating a false retry loop or blocking a
+new independent recovery generation.
+
+The runtime now adopts an already-held platform guard through guarded start APIs, while
+legacy constructors retain their behavior. An integration contract carries a
+first-install bootstrap guard through real live archive creation and joined shutdown,
+then publishes clean through the retained generation/digest-bound `RunSession`. Root
+capabilities are reauthorized before every recovery/bootstrap operation, unknown
+pre-journal staging is preserved, and exact zero-length WAL/SHM facts are supported
+without accepting an empty main.
+
+Focused platform archive-recovery 13/13, writer-lease 9/9, store startup 5/5, state
+bootstrap 12/12, automatic recovery 7/7, restore 20/20, and the complete runtime suite
+pass. Independent rereview found one remaining strict-Clippy blocker: redundant
+`must_use` attributes on `Result` constructors. They were removed, the exact locked
+workspace Clippy gate, reliable-state audit, and 55/55 authority mutations pass, and a
+direct persisted-facts regression now proves empty WAL/SHM acceptance versus empty-main
+rejection. The complete locked workspace test/doctest suite passes in 571.4 seconds.
+The changed platform capability also passes an explicit `x86_64-pc-windows-msvc`
+warnings-as-errors target check. Task 12 owns migration safety points,
+authoritative no-backup reconstruction, all-owner restart/safe mode, and final clean
+publication; those claims remain open.

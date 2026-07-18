@@ -894,6 +894,23 @@ transient I/O, unsupported media, provider unavailability, and newer schema are 
 corruption authority. SQLite `.recover`, main-only copies, ad hoc row edits, lock-file
 deletion, arbitrary extraction, and automatic quarantine deletion are forbidden.
 
+Implemented Task 11A validates every data-root, reliable-state, backup, staging,
+journal, settings, and run-state capability against one physical root before any
+startup mutation. Cross-root composition fails without publishing the unclean marker
+or cleaning evidence. A bounded presence-only staging probe is permitted before that
+marker solely to distinguish prior owned artifacts; after publication, store removes
+only its exact verifier names and platform performs the strict typed namespace scan.
+Unknown staging names, links, or types remain preserved and force safe mode.
+
+Startup inspection is read-only and never migrates. Missing does not create a file;
+supported old schema returns migration-required; newer schema returns upgrade-required;
+busy, access, disk, cancellation, transient I/O, unsupported location, and policy
+failure never become corruption authority. Zero-length WAL/SHM sidecars remain exact
+valid artifact facts, while a zero-length main is invalid. A recovered archive is
+accepted only after a later clean shutdown, and repeated unclean launches are bounded.
+Application code may mark clean only after all owners join; the state layer cannot
+infer that lifecycle from a successful SQLite check.
+
 Optional manual password protection uses the implemented standard age v1 stream with
 fixed bounded scrypt work and never stores the passphrase. New passphrases are
 confirmed, contain 12 through 128 Unicode scalar values, and are not trimmed or

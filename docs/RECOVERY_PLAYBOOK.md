@@ -220,15 +220,16 @@
 
 ## Whole-file/configuration recovery status
 
-P3-D.0 Tasks 1-10 now implement typed settings, verified Online Backup candidates,
+P3-D.0 Tasks 1-11A now implement typed settings, verified Online Backup candidates,
 strict `.tmconfig`/`.tmbackup`, sealed catalog/retention, capacity-one maintenance,
-and the library-level durable restore journal/quarantine path. Task 11 startup
-classification, Task 12 application stop/restart and safe mode, and Task 13 Data &
-Recovery UI are not implemented. Therefore the Task 10 library API is development
-infrastructure, not an operator command or proof that the current desktop automatically
-recovers a real installation.
+the durable restore journal/quarantine path, A/B run truth, read-only pre-open diagnosis,
+cold journal resume, and verified-backup automatic recovery. Task 12 application
+stop/restart, migration safety points, no-backup authoritative reconstruction, and safe
+mode plus the later Data & Recovery UI are not implemented. Therefore Tasks 10-11A are
+development infrastructure, not an operator command or proof that the current desktop
+fully recovers a real installation.
 
-When application integration lands, recovery must follow this exact order:
+The implemented bootstrap and later application integration follow this exact order:
 
 1. Stop/join all runtime and SQLite owners, then acquire the matching archive writer
    lease before observing main/WAL/SHM, cleaning verifier/platform staging, or reading
@@ -249,11 +250,20 @@ When application integration lands, recovery must follow this exact order:
    staging space and recheck the active observation before publication. Do not delete
    the journal or any quarantine set after `complete`. Later retention/
    operator policy must own evidence disposal explicitly; Task 10 never auto-deletes it.
+6. Before ordinary startup, inspect prior run state, publish/reread the next `unclean`
+   generation, resume any pending journal, and use normal read-only inspection only for
+   an exactly clean prior run. Every other prior condition adds `quick_check(100)`.
+   Keep the same writer guard through live-runtime ownership and publish clean only
+   after every application owner joins.
+7. If no backup is usable, preserve the corrupt set and return recovery-required. Task
+   12 alone may create a fresh archive through normal store code and repopulate only
+   reconstructible data from authoritative local providers. Never do this in state or
+   silently replace damage with an empty database.
 
 For a current real incident, stop TokenMaster normally if possible, preserve the
 complete data directory as an operator-owned copy, and reproduce only against a
-synthetic/copy fixture. Until Tasks 11-13 expose the typed flow, do not copy only
-`tokenmaster.sqlite3`, move WAL/SHM/writer-lock files, call internal restore APIs from
+synthetic/copy fixture. Until Task 12 and the Data & Recovery UI expose the typed flow,
+do not copy only `tokenmaster.sqlite3`, move WAL/SHM/writer-lock files, call internal restore APIs from
 an ad hoc helper, run arbitrary SQL, or treat SQLite `.recover` output as authoritative.
 
 Generated `target/`, `reports/`, and `dist/` content is disposable developer output.

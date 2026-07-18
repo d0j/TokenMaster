@@ -761,6 +761,30 @@ is authorized before either cleanup path. The journal persists the fixed physica
 package length, and package digest; process-local catalog generations are never durable
 resume authority.
 
+Implemented Task 11A adds `StateBootstrap::prepare` over one validated data root, the
+same-root reliable-state capabilities, a held matching `ExclusiveFileLeaseGuard`, and
+bounded backup control. Construction and every prepare call reauthorize the exact
+data/reliable roots before mutation. It returns only a `PreparedBootstrap` containing
+a path-free `BootstrapReport` and retained `RunSession`; outcomes are `Healthy`,
+`FirstInstall`, `MigrationRequired`, `UpgradeRequired`, `RecoveryRequired`,
+`Unavailable`, or `SafeMode`.
+
+Bootstrap resumes a pending recovery before ordinary archive inspection. It opens the
+fixed SQLite archive read-only, uses normal validation only after an exactly clean run,
+adds bounded quick-check validation otherwise, and automatically restores only from
+definitive corruption or missing-main damage with prior backup evidence. Candidate
+selection is newest-first with complete package revalidation and automatic data-only
+mode. Non-corruption failures, newer schema, no usable backup, or ambiguous artifacts
+do not mutate the active archive.
+
+`LiveRuntime::{start_guarded,start_notified_guarded}` adopts the already-held platform
+guard into `RuntimeWriterLease`; there is no unlock/relock window. Existing start APIs
+remain wrappers that acquire their own guard. The application must retain the
+`RunSession`, authorize a healthy launch only after the owned bundle is viable, and
+publish clean only after every archive, controller, maintenance, and runtime owner has
+joined. Task 12 owns that complete application sequence, migration safety points, and
+authoritative no-backup reconstruction.
+
 ## Provider plugin ABI
 
 The future external-provider ABI is `tokenmaster:provider@1` expressed in WIT and

@@ -151,9 +151,10 @@ tokenmaster-state = { path = "../state" }
         $result.approved_maintenance_std_import_count | Should -Be 4
         $result.approved_store_candidate_import_count | Should -Be 1
         $result.approved_recovery_store_import_count | Should -Be 1
+        $result.approved_bootstrap_store_import_count | Should -Be 1
         $result.approved_maintenance_store_control_import_count | Should -Be 1
-        $result.approved_platform_import_count | Should -Be 8
-        $result.validated_directory_capability_use_count | Should -Be 6
+        $result.approved_platform_import_count | Should -Be 10
+        $result.validated_directory_capability_use_count | Should -Be 17
         $result.forbidden_authority_count | Should -Be 0
     }
 
@@ -406,6 +407,33 @@ tokenmaster-state = { path = "../state" }
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-STATE-VALIDATED-DIRECTORY*"
+    }
+
+    It "rejects path disclosure through the approved bootstrap directory capability" {
+        $fixture = New-StateAuditFixture -Name "bootstrap-directory-path-disclosure"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\bootstrap.rs") `
+            -Value 'pub fn reveal_bootstrap_root(directory: &ValidatedLocalDirectory) -> Option<&str> { directory . as_path ( ) . to_str ( ) }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-VALIDATED-DIRECTORY*"
+    }
+
+    It "rejects a second startup archive inspector authority" {
+        $fixture = New-StateAuditFixture -Name "second-startup-inspector"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\bootstrap.rs") `
+            -Value 'fn duplicate_startup_inspector() { let _ = inspect_startup_archive; }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-BOOTSTRAP-AUTHORITY*"
+    }
+
+    It "rejects a second bootstrap staging capability escape" {
+        $fixture = New-StateAuditFixture -Name "second-bootstrap-staging"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\bootstrap.rs") `
+            -Value 'pub fn leak_bootstrap_staging(staging: BackupStaging) { let _ = staging; }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-RECOVERY-AUTHORITY*"
     }
 
     It "rejects direct filesystem enumeration from the typed backup catalog" {

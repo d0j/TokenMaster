@@ -162,8 +162,9 @@ health through lossy completion hints. P3-C is now complete: explicit all-curren
 quota/benefit overview reads feed one
 identity-free six-section projection and responsive compiled Slint Dashboard with
 32/32/240/12/8/12 presentation caps, real unknown/degraded states, and route-only
-navigation without model/window reconstruction. P3-D.0 Reliable State Tasks 1-10 are
-complete and Task 11 is next, then the remaining P3-D supporting data views.
+navigation without model/window reconstruction. P3-D.0 Reliable State Tasks 1-11A are
+complete and Task 12 application composition is next, then the remaining P3-D
+supporting data views.
 
 P3-D.0 Reliable State is approved under
 `docs/superpowers/specs/2026-07-17-tokenmaster-reliable-state-design.md` with the
@@ -175,7 +176,7 @@ settings/run/recovery records, 15-point/2-GiB default retention, three-set quara
 six-state Windows replacement/rollback, automatic corruption-only data-only recovery,
 manual data-only or data-plus-portable-settings restore, safe mode, and off-UI resource
 gates. The contour is in progress and precedes the remaining P3-D views so Settings
-and future migrations do not ship before their durability contract. Tasks 1-10
+and future migrations do not ship before their durability contract. Tasks 1-11A
 implement the library-only state boundary plus bounded verified platform publication
 and replacement, the strict six-child A/B envelope, and typed schema-v1 settings with
 portable/device-local separation, safe fallback/defaults, bounded preview, and an
@@ -190,8 +191,13 @@ store revalidation with internal corruption proof, repeatable six-phase redundan
 journal, prepared settings publication, three-set quarantine, rollback, verifier/
 journal/mutation-boundary process-death resume, and three-artifact absent/completed-
 journal staging cleanup with physical authorization before cleanup and
-`max(2B, B+A) + 8 MiB` actual-free-space preflight. Task 11 startup recovery
-remains next; Task 10 adds no
+`max(2B, B+A) + 8 MiB` actual-free-space preflight. Task 11A additionally implements
+root-bound A/B run state, unclean-before-open publication, read-only normal/quick
+diagnosis, cold-journal-first resume, newest-first reverified automatic data-only
+recovery, a two-unclean-launch candidate bound, first-install/damaged-missing
+classification, and continuous guard handoff into the live runtime. Task 12 remains
+next for application-owned migration safety points, provider-backed no-backup rebuild,
+safe mode, service restart, and final clean-after-join publication. These slices add no
 path, generic stream, SQL, or batch-deletion authority.
 
 P2-A query foundation is approved under

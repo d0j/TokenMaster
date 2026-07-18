@@ -742,7 +742,18 @@ cargo +1.97.0 test -p tokenmaster-store --test recovery_verification_contract --
 
 ---
 
-## Task 11 — Add run markers, startup diagnosis, and automatic recovery
+## Task 11A — Add run markers, startup diagnosis, and verified-backup recovery
+
+**Implementation status (2026-07-18):** complete for the state/store/runtime boundary.
+The delivered slice publishes the unclean marker before archive access, performs
+read-only normal/quick diagnosis, resumes a journal before ordinary SQLite open,
+reverifies backups newest-first, limits one recovered candidate to two failed launches,
+distinguishes first install from missing damaged state, and hands one continuously held
+writer guard into `LiveRuntime`. The original items for no-backup reconstruction and
+pre/post-migration safety points require the application-owned maintenance/provider
+lifecycle and are explicitly reassigned to Task 12 below. Until Task 12 lands, no valid
+backup returns `RecoveryRequired` with the corrupt set preserved; it never fabricates
+empty truth.
 
 **Files:**
 
@@ -771,18 +782,15 @@ Add tests for:
 6. no automatic restore for busy, permission, disk full, unsupported location,
    transient I/O, or schema-too-new;
 7. same restored candidate failing two launches and then entering safe mode;
-8. no valid backup producing a verified fresh archive plus explicit rebuild-required
-   receipt while retaining the corrupt set;
-9. pre-migration backup before `UsageStore::open` can mutate an old schema and a
-   verified post-migration point after success;
-10. migration failure preserving old archive and pinned backup;
-11. one continuously held writer guard across state preflight and live runtime startup,
-    with no unlock race;
-12. legacy `LiveRuntime::start` callers retaining behavior;
-13. no main plus no prior durable artifacts using normal first-install schema creation;
-14. no main plus prior run/settings/backup/recovery artifacts classifying damage and
+8. no valid backup returning `RecoveryRequired` without mutating or discarding the
+   corrupt set;
+9. one continuously held writer guard across state preflight and live runtime startup,
+   with no unlock race;
+10. legacy `LiveRuntime::start` callers retaining behavior;
+11. no main plus no prior durable artifacts using normal first-install schema creation;
+12. no main plus prior run/settings/backup/recovery artifacts classifying damage and
     using recovery rather than silently creating empty truth;
-15. periodic-backup disablement leaving every mandatory safety point active.
+13. periodic-backup disablement leaving every mandatory safety point active.
 
 ### Green
 
@@ -791,12 +799,10 @@ Add tests for:
    returns `Healthy`, `RebuildRequired`, or `SafeMode` plus fixed receipts.
 2. Add a guarded LiveRuntime start path accepting the already-held platform guard.
    It constructs the existing `RuntimeWriterLease` for later operations, performs
-   existing staging recovery, then releases the startup guard. Preserve existing start
-   constructors as wrappers.
+   existing staging recovery, and retains the same guard until runtime shutdown.
+   Preserve existing start constructors as wrappers.
 3. Keep schema-too-new intact and report upgrade required.
-4. For no-backup corruption, create a new valid schema through normal store code and
-   let the existing full Codex bootstrap repopulate reconstructible usage.
-5. Distinguish first install from missing damaged state using bounded validated
+4. Distinguish first install from missing damaged state using bounded validated
    TokenMaster-owned durable artifacts, never the absence of the main file alone.
 
 ### Verify
@@ -811,7 +817,7 @@ cargo +1.97.0 test -p tokenmaster-runtime --locked
 
 ---
 
-## Task 12 — Integrate application-owned maintenance and service restart
+## Task 12 — Integrate application-owned recovery, migration, and service restart
 
 **Files:**
 
@@ -847,7 +853,14 @@ Add composition tests for:
    settings;
 10. clean run marker only after backup worker, controller, and all runtimes join;
 11. 10,000 UI command hints retaining one operation/follow-up;
-12. all errors and observations path/private-data free.
+12. all errors and observations path/private-data free;
+13. no usable backup preserving the corrupt set while normal store code creates one
+    fresh schema and the authoritative Codex bootstrap repopulates only reconstructible
+    usage, with unavailable non-reconstructible domains reported explicitly;
+14. a mandatory verified pre-migration backup before any writable old-schema open and
+    one verified post-migration point after success;
+15. migration failure preserving the old archive and its pinned pre-migration point;
+16. periodic-backup disablement unable to suppress either migration safety point.
 
 ### Green
 
@@ -862,6 +875,11 @@ Add composition tests for:
 5. Force automatic recovery to data-only regardless of package contents. Manual full
    restore must carry its confirmed settings mode into the journal; device-local
    settings are never a restore input.
+6. Route no-backup reconstruction through the ordinary guarded store/runtime/provider
+   composition; never add corrupt-row salvage or a state-layer provider dependency.
+7. Gate every migration with the Task 9 mandatory-maintenance receipt, keep the
+   pre-migration point pinned until a verified post-migration point exists, and enter
+   safe mode on any ambiguous failure.
 
 ### Verify
 

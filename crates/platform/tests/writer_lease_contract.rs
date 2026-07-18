@@ -99,6 +99,32 @@ fn canonical_parent_aliases_resolve_to_one_lock_identity() {
 }
 
 #[test]
+fn an_existing_guard_authorizes_only_its_exact_archive_lease() {
+    let (root, archive) = fixture();
+    let other = root.path().join("other.sqlite3");
+    std::fs::write(&other, []).expect("create other archive fixture");
+    let lease = ExclusiveFileLease::for_archive(&archive).expect("archive lease");
+    let alias = ExclusiveFileLease::for_archive(
+        &archive
+            .parent()
+            .expect("archive parent")
+            .join(".")
+            .join(archive.file_name().expect("archive name")),
+    )
+    .expect("alias lease");
+    let other_lease = ExclusiveFileLease::for_archive(&other).expect("other lease");
+    let guard = lease.try_acquire().expect("archive guard");
+
+    alias.authorize_guard(&guard).expect("same canonical lease");
+    assert_eq!(
+        other_lease
+            .authorize_guard(&guard)
+            .expect_err("other archive must be rejected"),
+        ExclusiveFileLeaseError::InvalidSidecar
+    );
+}
+
+#[test]
 fn child_normal_exit_and_forced_termination_release_the_os_lock() {
     let (_root, archive) = fixture();
     let lease = ExclusiveFileLease::for_archive(&archive).expect("parent lease");

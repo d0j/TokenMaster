@@ -133,6 +133,12 @@ $packageCapabilityText = [System.IO.File]::ReadAllText(
 $settingsStoreText = [System.IO.File]::ReadAllText(
     (Join-Path $stateSource 'settings\store.rs')
 )
+$runStateText = [System.IO.File]::ReadAllText(
+    (Join-Path $stateSource 'run_state.rs')
+)
+$bootstrapText = [System.IO.File]::ReadAllText(
+    (Join-Path $stateSource 'bootstrap.rs')
+)
 $recoveryJournalText = [System.IO.File]::ReadAllText(
     (Join-Path $stateSource 'recovery\journal.rs')
 )
@@ -150,9 +156,11 @@ $approvedSettingsPlatformPattern = '(?m)^\s*use\s+tokenmaster_platform\s*::\s*Va
 $approvedCatalogPlatformPattern = '(?ms)^\s*use\s+tokenmaster_platform\s*::\s*\{\s*BackupDirectory\s*,\s*BackupDirectoryEntry\s*,\s*BackupDirectoryError\s*,\s*BackupDirectoryGeneration\s*,\s*DurableFileReader\s*,\s*MAX_DURABLE_FILE_BYTES\s*,?\s*\}\s*;\s*$'
 $approvedRetentionPlatformPattern = '(?m)^\s*use\s+tokenmaster_platform\s*::\s*\{\s*BackupDirectory\s*,\s*BackupDirectoryError\s*,\s*MAX_BACKUP_DIRECTORY_FILES\s*,?\s*\}\s*;\s*$'
 $approvedRecoveryJournalPlatformPattern = '(?ms)^\s*use\s+tokenmaster_platform\s*::\s*\{\s*ArchiveRecoveryError\s*,\s*ArchiveSetExpectation\s*,\s*ArchiveSetObservation\s*,\s*RecoveryOperationId\s*,\s*ValidatedLocalDirectory\s*,?\s*\}\s*;\s*$'
-$approvedRecoveryPlatformPattern = '(?ms)^\s*use\s+tokenmaster_platform\s*::\s*\{\s*ArchiveRecoveryError\s*,\s*ArchiveRecoveryScope\s*,\s*ArchiveSetObservation\s*,\s*BackupDirectory\s*,\s*DurableFileReader\s*,\s*ExclusiveFileLeaseGuard\s*,\s*RecoveryMainMode\s*,\s*RecoveryOperation\s*,\s*RecoveryStagedArchive\s*,?\s*\}\s*;\s*$'
+$approvedRecoveryPlatformPattern = '(?ms)^\s*use\s+tokenmaster_platform\s*::\s*\{\s*ArchiveRecoveryError\s*,\s*ArchiveRecoveryScope\s*,\s*ArchiveSetObservation\s*,\s*BackupDirectory\s*,\s*BackupDirectoryError\s*,\s*DurableFileReader\s*,\s*ExclusiveFileLeaseGuard\s*,\s*RecoveryMainMode\s*,\s*RecoveryOperation\s*,\s*RecoveryStagedArchive\s*,\s*ValidatedLocalDirectory\s*,?\s*\}\s*;\s*$'
+$approvedBootstrapPlatformPattern = '(?ms)^\s*use\s+tokenmaster_platform\s*::\s*\{\s*ArchiveRecoveryError\s*,\s*ArchiveRecoveryScope\s*,\s*BackupDirectory\s*,\s*BackupDirectoryError\s*,\s*ExclusiveFileLeaseGuard\s*,\s*ValidatedLocalDirectory\s*,?\s*\}\s*;\s*$'
 $approvedStoreCandidatePattern = '(?m)^\s*use\s+tokenmaster_store\s*::\s*\{\s*StoreErrorCode\s*,\s*VerifiedBackupCandidateReader\s*,?\s*\}\s*;\s*$'
 $approvedRecoveryStorePattern = '(?ms)^\s*use\s+tokenmaster_store\s*::\s*\{\s*BackupControl\s*,\s*BackupStaging\s*,\s*RecoveryVerificationBoundary\s*,\s*StoreErrorCode\s*,\s*VerifiedRecoveryArchive\s*,\s*verify_recovery_archive_with_observer\s*,?\s*\}\s*;\s*$'
+$approvedBootstrapStorePattern = '(?ms)^\s*use\s+tokenmaster_store\s*::\s*\{\s*BackupControl\s*,\s*BackupStaging\s*,\s*StartupArchiveStatus\s*,\s*StartupValidationMode\s*,\s*StoreErrorCode\s*,\s*inspect_startup_archive\s*,?\s*\}\s*;\s*$'
 $approvedMaintenanceStoreControlPattern = '(?m)^use tokenmaster_store::BackupControl;\r?$'
 $approvedMaintenanceCoordinatorStdPattern = '(?m)^use std::sync::Arc;\r?\nuse std::sync::atomic::\{AtomicBool, AtomicU8, Ordering\};\r?\nuse std::time::Duration;\r?$'
 $approvedMaintenanceSchedulerStdPattern = '(?m)^use std::sync::mpsc::\{Receiver, RecvTimeoutError, SyncSender, TrySendError, sync_channel\};\r?\nuse std::sync::\{Arc, Mutex\};\r?\nuse std::thread::\{Builder, JoinHandle\};\r?\nuse std::time::\{Duration, Instant\};\r?$'
@@ -173,7 +181,10 @@ $approvedPackageCapabilityImports = @(
     [regex]::Matches($productionText, $approvedPackageCapabilityImportPattern)
 )
 $approvedSettingsPlatformImports = @(
-    [regex]::Matches($productionText, $approvedSettingsPlatformPattern)
+    [regex]::Matches($settingsStoreText, $approvedSettingsPlatformPattern)
+)
+$approvedRunStatePlatformImports = @(
+    [regex]::Matches($runStateText, $approvedSettingsPlatformPattern)
 )
 $approvedCatalogPlatformImports = @(
     [regex]::Matches($productionText, $approvedCatalogPlatformPattern)
@@ -187,11 +198,17 @@ $approvedRecoveryJournalPlatformImports = @(
 $approvedRecoveryPlatformImports = @(
     [regex]::Matches($productionText, $approvedRecoveryPlatformPattern)
 )
+$approvedBootstrapPlatformImports = @(
+    [regex]::Matches($bootstrapText, $approvedBootstrapPlatformPattern)
+)
 $approvedStoreCandidateImports = @(
     [regex]::Matches($productionText, $approvedStoreCandidatePattern)
 )
 $approvedRecoveryStoreImports = @(
     [regex]::Matches($productionText, $approvedRecoveryStorePattern)
+)
+$approvedBootstrapStoreImports = @(
+    [regex]::Matches($bootstrapText, $approvedBootstrapStorePattern)
 )
 $ownedPackageCapabilityExports = @(
     [regex]::Matches($packageCapabilityText, $approvedPackageCapabilityExportPattern)
@@ -232,15 +249,18 @@ if ($approvedStdIoImports.Count -ne 1 -or
     $ownedPackageCapabilityExports.Count -ne 1 -or
     $ownedPackageCapabilityImports.Count -ne 1 -or
     $approvedSettingsPlatformImports.Count -ne 1 -or
+    $approvedRunStatePlatformImports.Count -ne 1 -or
     $approvedCatalogPlatformImports.Count -ne 1 -or
     $approvedRetentionPlatformImports.Count -ne 1 -or
     $approvedRecoveryJournalPlatformImports.Count -ne 1 -or
     $approvedRecoveryPlatformImports.Count -ne 1 -or
+    $approvedBootstrapPlatformImports.Count -ne 1 -or
     $ownedRecoveryJournalPlatformImports.Count -ne 1 -or
     $ownedRecoveryPlatformImports.Count -ne 1 -or
     $approvedStoreCandidateImports.Count -ne 1 -or
     $approvedRecoveryStoreImports.Count -ne 1 -or
     $ownedRecoveryStoreImports.Count -ne 1 -or
+    $approvedBootstrapStoreImports.Count -ne 1 -or
     $approvedMaintenanceStoreControlImports.Count -ne 1 -or
     $approvedMaintenanceCoordinatorStdImports.Count -ne 1 -or
     $approvedMaintenanceSchedulerStdImports.Count -ne 1 -or
@@ -252,16 +272,16 @@ $backupControlUses = @([regex]::Matches($productionText, '\bBackupControl\b'))
 $verifiedCandidateReaderUses = @(
     [regex]::Matches($productionText, '\bVerifiedBackupCandidateReader\b')
 )
-if ($backupControlUses.Count -ne 15 -or $verifiedCandidateReaderUses.Count -ne 4) {
+if ($backupControlUses.Count -ne 18 -or $verifiedCandidateReaderUses.Count -ne 4) {
     throw 'TM-STATE-STORE-AUTHORITY: exact store capability use count drifted'
 }
 $sealedRecoveryCapabilityCounts = [ordered]@{
-    BackupStaging = 3
+    BackupStaging = 6
     RecoveryVerificationBoundary = 3
     VerifiedRecoveryArchive = 4
     verify_recovery_archive_with_observer = 3
-    ArchiveRecoveryScope = 3
-    ExclusiveFileLeaseGuard = 10
+    ArchiveRecoveryScope = 6
+    ExclusiveFileLeaseGuard = 13
     RecoveryOperation = 2
     RecoveryStagedArchive = 8
     ArchiveSetExpectation = 3
@@ -274,6 +294,17 @@ foreach ($capability in $sealedRecoveryCapabilityCounts.Keys) {
         throw 'TM-STATE-RECOVERY-AUTHORITY: exact sealed recovery capability use count drifted'
     }
 }
+$startupCapabilityCounts = [ordered]@{
+    inspect_startup_archive = 4
+    StartupArchiveStatus = 6
+    StartupValidationMode = 3
+}
+foreach ($capability in $startupCapabilityCounts.Keys) {
+    $actual = @([regex]::Matches($productionText, "\b$capability\b")).Count
+    if ($actual -ne $startupCapabilityCounts[$capability]) {
+        throw 'TM-STATE-BOOTSTRAP-AUTHORITY: exact read-only startup capability use count drifted'
+    }
+}
 $validatedDirectoryUses = @(
     [regex]::Matches($productionText, '\bValidatedLocalDirectory\b')
 )
@@ -281,6 +312,8 @@ $settingsConstructorPattern = '(?s)pub\s+fn\s+new\s*\(\s*directory\s*:\s*&Valida
 $settingsConstructors = @([regex]::Matches($settingsStoreText, $settingsConstructorPattern))
 $journalConstructorPattern = '(?s)pub\s+fn\s+new\s*\(\s*directory\s*:\s*&ValidatedLocalDirectory\s*\)\s*->\s*Result\s*<\s*Self\s*,\s*StateError\s*>'
 $journalConstructors = @([regex]::Matches($recoveryJournalText, $journalConstructorPattern))
+$runStateConstructorPattern = '(?s)pub\s+fn\s+new\s*\(\s*directory\s*:\s*&ValidatedLocalDirectory\s*\)\s*->\s*Result\s*<\s*Self\s*,\s*StateError\s*>'
+$runStateConstructors = @([regex]::Matches($runStateText, $runStateConstructorPattern))
 $approvedIoMembers = @('Error', 'ErrorKind', 'Result', 'sink')
 $ioMemberUses = @([regex]::Matches($productionText, '\bio::(?<member>[A-Za-z_][A-Za-z0-9_]*)'))
 $unapprovedIoMembers = @(
@@ -319,8 +352,10 @@ $authorityText = [regex]::Replace($authorityText, $approvedCatalogPlatformPatter
 $authorityText = [regex]::Replace($authorityText, $approvedRetentionPlatformPattern, '')
 $authorityText = [regex]::Replace($authorityText, $approvedRecoveryJournalPlatformPattern, '')
 $authorityText = [regex]::Replace($authorityText, $approvedRecoveryPlatformPattern, '')
+$authorityText = [regex]::Replace($authorityText, $approvedBootstrapPlatformPattern, '')
 $authorityText = [regex]::Replace($authorityText, $approvedStoreCandidatePattern, '')
 $authorityText = [regex]::Replace($authorityText, $approvedRecoveryStorePattern, '')
+$authorityText = [regex]::Replace($authorityText, $approvedBootstrapStorePattern, '')
 $authorityText = [regex]::Replace($authorityText, $approvedMaintenanceStoreControlPattern, '')
 $authorityText = [regex]::Replace($authorityText, $approvedMaintenanceCoordinatorStdPattern, '')
 $authorityText = [regex]::Replace($authorityText, $approvedMaintenanceSchedulerStdPattern, '')
@@ -399,11 +434,12 @@ $forbiddenAuthorityPattern = '(?s)https?://|\bstd\b|\btokenmaster_platform\b|\bt
 if ($authorityText -cmatch $forbiddenAuthorityPattern) {
     throw 'TM-STATE-FORBIDDEN-AUTHORITY: state source contains standard-library/platform/macro/filesystem/network/shell/process/SQL/UI/archive/external-source authority'
 }
-if ($validatedDirectoryUses.Count -ne 6 -or
+if ($validatedDirectoryUses.Count -ne 17 -or
     $settingsConstructors.Count -ne 1 -or
     $journalConstructors.Count -ne 1 -or
+    $runStateConstructors.Count -ne 1 -or
     $productionText -cmatch '\.\s*as_path\s*\(') {
-    throw 'TM-STATE-VALIDATED-DIRECTORY: directory capability is limited to fixed settings and recovery-journal constructors'
+    throw 'TM-STATE-VALIDATED-DIRECTORY: directory capability is limited to fixed record, settings, run, journal, recovery, and bootstrap bindings'
 }
 
 if ($SourceOnly) {
@@ -419,8 +455,9 @@ if ($SourceOnly) {
         approved_maintenance_std_import_count = $approvedMaintenanceCoordinatorStdImports.Count + $approvedMaintenanceSchedulerStdImports.Count + $approvedMaintenanceWorkerStdImports.Count + $approvedMaintenanceOwnerStdImports.Count
         approved_store_candidate_import_count = $approvedStoreCandidateImports.Count
         approved_recovery_store_import_count = $approvedRecoveryStoreImports.Count
+        approved_bootstrap_store_import_count = $approvedBootstrapStoreImports.Count
         approved_maintenance_store_control_import_count = $approvedMaintenanceStoreControlImports.Count
-        approved_platform_import_count = $approvedPlatformImports.Count + $approvedPackageCapabilityExports.Count + $approvedPackageCapabilityImports.Count + $approvedSettingsPlatformImports.Count + $approvedCatalogPlatformImports.Count + $approvedRetentionPlatformImports.Count + $approvedRecoveryJournalPlatformImports.Count + $approvedRecoveryPlatformImports.Count
+        approved_platform_import_count = $approvedPlatformImports.Count + $approvedPackageCapabilityExports.Count + $approvedPackageCapabilityImports.Count + $approvedSettingsPlatformImports.Count + $approvedRunStatePlatformImports.Count + $approvedCatalogPlatformImports.Count + $approvedRetentionPlatformImports.Count + $approvedRecoveryJournalPlatformImports.Count + $approvedRecoveryPlatformImports.Count + $approvedBootstrapPlatformImports.Count
         validated_directory_capability_use_count = $validatedDirectoryUses.Count
         forbidden_authority_count = 0
         arbitrary_path_constructor_count = 0
@@ -511,8 +548,9 @@ if ($featureTreeText -match '(?i)\bage feature "(?:armor|async|cli-common|plugin
     approved_maintenance_std_import_count = $approvedMaintenanceCoordinatorStdImports.Count + $approvedMaintenanceSchedulerStdImports.Count + $approvedMaintenanceWorkerStdImports.Count + $approvedMaintenanceOwnerStdImports.Count
     approved_store_candidate_import_count = $approvedStoreCandidateImports.Count
     approved_recovery_store_import_count = $approvedRecoveryStoreImports.Count
+    approved_bootstrap_store_import_count = $approvedBootstrapStoreImports.Count
     approved_maintenance_store_control_import_count = $approvedMaintenanceStoreControlImports.Count
-    approved_platform_import_count = $approvedPlatformImports.Count + $approvedPackageCapabilityExports.Count + $approvedPackageCapabilityImports.Count + $approvedSettingsPlatformImports.Count + $approvedCatalogPlatformImports.Count + $approvedRetentionPlatformImports.Count + $approvedRecoveryJournalPlatformImports.Count + $approvedRecoveryPlatformImports.Count
+    approved_platform_import_count = $approvedPlatformImports.Count + $approvedPackageCapabilityExports.Count + $approvedPackageCapabilityImports.Count + $approvedSettingsPlatformImports.Count + $approvedRunStatePlatformImports.Count + $approvedCatalogPlatformImports.Count + $approvedRetentionPlatformImports.Count + $approvedRecoveryJournalPlatformImports.Count + $approvedRecoveryPlatformImports.Count + $approvedBootstrapPlatformImports.Count
     validated_directory_capability_use_count = $validatedDirectoryUses.Count
     forbidden_authority_count = 0
     arbitrary_path_constructor_count = 0

@@ -1334,3 +1334,28 @@ would create a cycle, while a raw-path bridge would erase the reliable-state aut
 boundary. A bounded reader copy costs one recovery-only sequential pass but keeps the
 dependency graph acyclic, retained memory constant, and validation/promotion identity
 explicit and independently testable.
+
+## ADR-057 — Split startup diagnosis from application-owned reconstruction
+
+Decision: startup reliability has two explicit owners. State owns fixed A/B run
+markers, pre-open read-only diagnosis, journal resume, newest-first fully reverified
+backup selection, and corruption-only automatic data-only restore. Runtime accepts the
+already-held platform writer guard and retains it, eliminating an unlock/relock race.
+The application owns migration safety backups, provider-backed reconstruction when no
+backup is usable, creation and teardown of every live/query/controller/maintenance
+owner, and final clean publication.
+
+State publishes and rereads `unclean` before catalog, package, or SQLite access. An
+exactly clean prior run uses bounded normal inspection; unclean, missing, or invalid
+state adds `quick_check(100)`. Startup never uses full integrity scan and never migrates
+through the read-only inspector. A pending journal is resumed first. Definitive
+corruption may select the newest completely revalidated backup and skip a corrupt newer
+point; non-corruption failures preserve the active set. Two unclean launches of the
+same recovered candidate are allowed, and the third enters safe mode.
+
+Rationale: state has neither provider authority nor ownership of application threads,
+so letting it create a replacement archive or mark a run clean would make data-loss
+and shutdown claims unverifiable. Conversely, deferring run publication and diagnosis
+to the UI/application would permit writable SQLite access before durable crash truth.
+The split keeps the pre-open boundary small and auditable while making Task 12 prove
+the larger lifecycle end to end.

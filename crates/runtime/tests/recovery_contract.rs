@@ -9,6 +9,7 @@ use tokenmaster_engine::{
     ReplayCleanup, ReplayContinuation, ScopeIdentity, ScopeManifest, SourceIdentity, WriterLease,
     WriterLeaseGuard,
 };
+use tokenmaster_platform::ExclusiveFileLease;
 use tokenmaster_provider::DiscoveryRequest;
 use tokenmaster_runtime::{
     CodexAdapter, LiveRuntime, RuntimeErrorCode, RuntimeWriterLease, StagingRecoveryOutcome,
@@ -252,6 +253,39 @@ fn startup_lease_contention_prevents_store_open_and_retries_after_release() {
     let mut runtime = LiveRuntime::start(&archive_path, request(source_root.path()))
         .expect("start after lease release");
     runtime.shutdown().expect("shutdown after retry");
+}
+
+#[test]
+fn guarded_start_adopts_the_already_held_writer_guard_without_reacquiring() {
+    let source_root = TempDir::new().expect("source root");
+    let archive_root = TempDir::new().expect("archive root");
+    let archive_path = archive_root.path().join("usage.sqlite3");
+    let guard = ExclusiveFileLease::for_archive(&archive_path)
+        .expect("platform lease")
+        .try_acquire()
+        .expect("startup guard");
+
+    let mut runtime = LiveRuntime::start_guarded(&archive_path, request(source_root.path()), guard)
+        .expect("guarded start");
+    assert!(archive_path.exists());
+    runtime.shutdown().expect("guarded shutdown");
+}
+
+#[test]
+fn guarded_start_rejects_a_guard_for_another_archive_before_store_open() {
+    let source_root = TempDir::new().expect("source root");
+    let archive_root = TempDir::new().expect("archive root");
+    let target = archive_root.path().join("usage.sqlite3");
+    let other = archive_root.path().join("other.sqlite3");
+    let guard = ExclusiveFileLease::for_archive(&other)
+        .expect("other platform lease")
+        .try_acquire()
+        .expect("other startup guard");
+
+    let error = LiveRuntime::start_guarded(&target, request(source_root.path()), guard)
+        .expect_err("wrong guard");
+    assert_eq!(error.code(), RuntimeErrorCode::StoreUnavailable);
+    assert!(!target.exists());
 }
 
 #[test]

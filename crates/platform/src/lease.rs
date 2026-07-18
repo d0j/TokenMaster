@@ -77,6 +77,38 @@ impl ExclusiveFileLease {
             archive_scope: self.archive_scope,
         })
     }
+
+    /// Revalidates that an already-held guard owns this exact archive lease.
+    ///
+    /// This permits a bootstrap owner to hand the same continuously held OS lock to
+    /// a downstream runtime without releasing and reacquiring the sidecar.
+    pub fn authorize_guard(
+        &self,
+        guard: &ExclusiveFileLeaseGuard,
+    ) -> Result<(), ExclusiveFileLeaseError> {
+        if guard.archive_scope != self.archive_scope || guard.sidecar != self.sidecar {
+            return Err(ExclusiveFileLeaseError::InvalidSidecar);
+        }
+        reject_existing_link(&self.sidecar)?;
+        let current = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&self.sidecar)
+            .map_err(|_| ExclusiveFileLeaseError::Unavailable)?;
+        let metadata = current
+            .metadata()
+            .map_err(|_| ExclusiveFileLeaseError::Unavailable)?;
+        if !metadata.is_file() || metadata.len() != 0 {
+            return Err(ExclusiveFileLeaseError::InvalidSidecar);
+        }
+        let current_identity =
+            PhysicalFileIdentity::from_file(&current).map_err(map_identity_error)?;
+        if current_identity == guard.sidecar_identity {
+            Ok(())
+        } else {
+            Err(ExclusiveFileLeaseError::InvalidSidecar)
+        }
+    }
 }
 
 impl fmt::Debug for ExclusiveFileLease {

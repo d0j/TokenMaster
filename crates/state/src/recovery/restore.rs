@@ -2,8 +2,8 @@ use core::fmt;
 
 use tokenmaster_platform::{
     ArchiveRecoveryError, ArchiveRecoveryScope, ArchiveSetObservation, BackupDirectory,
-    DurableFileReader, ExclusiveFileLeaseGuard, RecoveryMainMode, RecoveryOperation,
-    RecoveryStagedArchive,
+    BackupDirectoryError, DurableFileReader, ExclusiveFileLeaseGuard, RecoveryMainMode,
+    RecoveryOperation, RecoveryStagedArchive, ValidatedLocalDirectory,
 };
 use tokenmaster_store::{
     BackupControl, BackupStaging, RecoveryVerificationBoundary, StoreErrorCode,
@@ -72,11 +72,17 @@ pub enum RecoveryBoundary {
 
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct RecoveryReceipt {
+    operation_generation: u64,
     candidate: RecoveryCandidateIdentity,
     settings_mode: RecoverySettingsMode,
 }
 
 impl RecoveryReceipt {
+    #[must_use]
+    pub const fn operation_generation(self) -> u64 {
+        self.operation_generation
+    }
+
     #[must_use]
     pub const fn candidate(self) -> RecoveryCandidateIdentity {
         self.candidate
@@ -100,22 +106,30 @@ pub struct RecoveryCoordinator<'a> {
     verification_staging: &'a BackupStaging,
     journal: &'a RecoveryJournalStore,
     settings: &'a SettingsStore,
+    reliable_state: ValidatedLocalDirectory,
 }
 
 impl<'a> RecoveryCoordinator<'a> {
-    #[must_use]
-    pub const fn new(
+    pub fn new(
         scope: &'a ArchiveRecoveryScope,
         verification_staging: &'a BackupStaging,
         journal: &'a RecoveryJournalStore,
         settings: &'a SettingsStore,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, StateError> {
+        let reliable_state = scope.reliable_state_root().map_err(map_platform_error)?;
+        let staging = scope.staging_root().map_err(map_platform_error)?;
+        verification_staging
+            .authorize_directory(&staging)
+            .map_err(|error| map_store_error(error.code()))?;
+        journal.authorize_directory(&reliable_state)?;
+        settings.authorize_directory(&reliable_state)?;
+        Ok(Self {
             scope,
             verification_staging,
             journal,
             settings,
-        }
+            reliable_state,
+        })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -236,6 +250,7 @@ impl<'a> RecoveryCoordinator<'a> {
         self.scope
             .authorize_guard(guard)
             .map_err(map_platform_error)?;
+        self.authorize_backup_directory(directory)?;
         let operation_generation = self.journal.next_operation_generation()?;
         self.recover_verifier_staging()?;
         self.scope
@@ -353,6 +368,7 @@ impl<'a> RecoveryCoordinator<'a> {
         self.scope
             .authorize_guard(guard)
             .map_err(map_platform_error)?;
+        self.authorize_backup_directory(directory)?;
         self.recover_verifier_staging()?;
         let journal = match self.journal.load()? {
             RecoveryJournalLoad::Absent => {
@@ -379,14 +395,6 @@ impl<'a> RecoveryCoordinator<'a> {
             backup.package_len(),
             *backup.package_sha256(),
         )?;
-        let (backup_slot, package_len, package_sha256) =
-            catalog.selected_package_identity(selection)?;
-        if backup_slot != backup.backup_slot()
-            || package_len != backup.package_len()
-            || package_sha256 != *backup.package_sha256()
-        {
-            return Err(StateError::recovery_required());
-        }
         let mut package_reader = catalog.open_recovery_selection(directory, selection)?;
         let package = BackupPackage::inspect(&mut package_reader)?;
         require_package_identity(&package, backup)?;
@@ -666,6 +674,12 @@ impl<'a> RecoveryCoordinator<'a> {
             .map_err(|error| map_store_error(error.code()))
     }
 
+    fn authorize_backup_directory(&self, directory: &BackupDirectory) -> Result<(), StateError> {
+        directory
+            .authorize_parent(&self.reliable_state)
+            .map_err(map_backup_directory_error)
+    }
+
     fn require_definitive_corruption(
         &self,
         observation: ArchiveSetObservation,
@@ -830,6 +844,7 @@ fn recovery_candidate_identity(
 
 fn receipt_from_journal(journal: &RecoveryJournal) -> RecoveryReceipt {
     RecoveryReceipt {
+        operation_generation: journal.operation_generation(),
         candidate: journal.candidate(),
         settings_mode: journal.settings_mode(),
     }
@@ -899,6 +914,22 @@ const fn map_store_error(code: StoreErrorCode) -> StateError {
         | StoreErrorCode::StaleScan
         | StoreErrorCode::PendingScan
         | StoreErrorCode::ArchiveModeMismatch => StateError::internal_invariant(),
+    }
+}
+
+const fn map_backup_directory_error(error: BackupDirectoryError) -> StateError {
+    match error {
+        BackupDirectoryError::CapacityExceeded => StateError::capacity_exceeded(),
+        BackupDirectoryError::UnexpectedEntry
+        | BackupDirectoryError::UnexpectedType
+        | BackupDirectoryError::LinkedEntry
+        | BackupDirectoryError::AmbiguousIdentity
+        | BackupDirectoryError::StaleEntry => StateError::integrity(),
+        BackupDirectoryError::RecoveryRequired => StateError::recovery_required(),
+        BackupDirectoryError::InvalidState => StateError::internal_invariant(),
+        BackupDirectoryError::UnsupportedLocation | BackupDirectoryError::Unavailable => {
+            StateError::unavailable()
+        }
     }
 }
 

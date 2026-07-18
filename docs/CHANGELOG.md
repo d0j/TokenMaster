@@ -6,6 +6,29 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.0 Task 11A pre-open state bootstrap. Strict A/B run records publish
+  and reread `unclean` before catalog, package, or SQLite access; an exactly clean prior
+  run uses bounded normal read-only inspection, while unclean/missing/invalid state adds
+  `quick_check(100)`. Pending recovery resumes first, supported legacy/newer schemas do
+  not migrate, and first install is distinguished from a missing damaged main by
+  bounded owned evidence.
+- Added newest-first fully reverified corruption-only automatic data-only recovery,
+  corrupt-newer candidate skipping, exact recovery-generation acceptance, and a
+  two-unclean-launch bound before safe mode. No valid backup and every non-corruption
+  result preserve existing evidence. Zero-length SQLite WAL/SHM sidecars are retained
+  as valid exact facts while a zero-length main remains invalid.
+- Added root/capability rebinding before mutation and continuous writer-guard adoption
+  by `LiveRuntime`. A real integration contract carries one first-install guard through
+  live archive startup and joined shutdown before clean publication; legacy runtime
+  starts retain their behavior. Focused platform/store/state/runtime contracts and the
+  strict locked workspace Clippy, reliable-state audit, and 55/55 authority mutations
+  pass; the complete locked workspace test/doctest suite passes in 571.4 seconds.
+  The changed platform capability passes the explicit `x86_64-pc-windows-msvc`
+  warnings-as-errors target check.
+  Application-owned migration points,
+  no-backup authoritative reconstruction, safe mode, and final all-owner lifecycle are
+  explicitly Task 12.
+
 - Implemented P3-D.0 Task 10 durable restore through a sealed three-layer boundary.
   Platform binds the exact archive lease to fixed main/WAL/SHM, recovery staging, and
   three never-auto-deleted quarantine sets; store copies a path-free reader into its

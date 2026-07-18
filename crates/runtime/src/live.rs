@@ -10,6 +10,7 @@ use tokenmaster_engine::{
     RefreshPermit, RefreshUrgency, RefreshWorker, WorkerCompletion, WorkerCompletionNotifier,
     WorkerError, WorkerErrorCode, WorkerPhase, WriterLease, WriterLeaseGuard,
 };
+use tokenmaster_platform::ExclusiveFileLeaseGuard;
 use tokenmaster_platform::PowerLifecycleEvent;
 use tokenmaster_provider::DiscoveryRequest;
 use tokenmaster_store::{ArchiveMode, ArchivePublicationQuality, ScanOutcome, UsageStore};
@@ -53,14 +54,56 @@ impl LiveRuntime {
         Self::start_with_notifier(archive_path, request, Some(notifier))
     }
 
+    /// Starts with the exact platform writer guard already held by state bootstrap.
+    pub fn start_guarded(
+        archive_path: &Path,
+        request: DiscoveryRequest,
+        startup_guard: ExclusiveFileLeaseGuard,
+    ) -> Result<Self, RuntimeError> {
+        Self::start_guarded_with_notifier(archive_path, request, startup_guard, None)
+    }
+
+    /// Starts with an existing bootstrap guard and completion notifier.
+    pub fn start_notified_guarded(
+        archive_path: &Path,
+        request: DiscoveryRequest,
+        startup_guard: ExclusiveFileLeaseGuard,
+        notifier: Arc<dyn WorkerCompletionNotifier>,
+    ) -> Result<Self, RuntimeError> {
+        Self::start_guarded_with_notifier(archive_path, request, startup_guard, Some(notifier))
+    }
+
     fn start_with_notifier(
         archive_path: &Path,
         request: DiscoveryRequest,
         notifier: Option<Arc<dyn WorkerCompletionNotifier>>,
     ) -> Result<Self, RuntimeError> {
+        let lease = crate::RuntimeWriterLease::new(archive_path)?;
+        let startup_guard = lease.try_acquire_startup().map_err(startup_port_error)?;
+        Self::start_with_lease_and_guard(archive_path, request, lease, startup_guard, notifier)
+    }
+
+    fn start_guarded_with_notifier(
+        archive_path: &Path,
+        request: DiscoveryRequest,
+        startup_guard: ExclusiveFileLeaseGuard,
+        notifier: Option<Arc<dyn WorkerCompletionNotifier>>,
+    ) -> Result<Self, RuntimeError> {
+        let lease = crate::RuntimeWriterLease::new(archive_path)?;
+        lease
+            .authorize_startup_guard(&startup_guard)
+            .map_err(startup_port_error)?;
+        Self::start_with_lease_and_guard(archive_path, request, lease, startup_guard, notifier)
+    }
+
+    fn start_with_lease_and_guard(
+        archive_path: &Path,
+        request: DiscoveryRequest,
+        lease: crate::RuntimeWriterLease,
+        startup_guard: ExclusiveFileLeaseGuard,
+        notifier: Option<Arc<dyn WorkerCompletionNotifier>>,
+    ) -> Result<Self, RuntimeError> {
         let clock: Arc<dyn Clock> = SystemClock::shared();
-        let mut lease = crate::RuntimeWriterLease::new(archive_path)?;
-        let startup_guard = lease.try_acquire().map_err(startup_port_error)?;
         let store = UsageStore::open(archive_path)
             .map_err(|_| RuntimeError::new(RuntimeErrorCode::StoreUnavailable))?;
         let mut archive = StoreArchive::new(store);

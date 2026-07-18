@@ -13,9 +13,9 @@ use tokenmaster_state::{
     BACKUP_INTERVAL_DEFAULT_SECONDS, BACKUP_QUIET_DEFAULT_SECONDS, BACKUP_RETENTION_DEFAULT_BYTES,
     BACKUP_RETENTION_MIN_BYTES, BackupCatalog, BackupCompression, BackupMetadata, BackupPackage,
     BackupPolicy, BackupPurpose, CatalogSelection, DeviceRoute, DeviceSettings, PortableSettings,
-    PortableSettingsCandidate, RecoveryBoundary, RecoveryCoordinator, RecoveryJournalLoad,
-    RecoveryJournalStore, RecoveryPhase, ReminderPolicy, RestoreMode, SettingsStore, SettingsValue,
-    StateErrorCode,
+    PortableSettingsCandidate, RecoveryArchiveFacts, RecoveryBoundary, RecoveryCoordinator,
+    RecoveryJournalLoad, RecoveryJournalStore, RecoveryPhase, ReminderPolicy, RestoreMode,
+    SettingsStore, SettingsValue, StateErrorCode,
 };
 use tokenmaster_store::{
     BackupControl, BackupSource, BackupStaging, UsageStore, create_online_snapshot,
@@ -24,6 +24,31 @@ use tokenmaster_store::{
 
 #[path = "support/recovery_crash_fixture.rs"]
 mod recovery_crash_fixture;
+
+#[test]
+fn persisted_archive_facts_accept_empty_sidecars_but_reject_empty_main() {
+    let digest = [7_u8; 32];
+    let facts = RecoveryArchiveFacts::from_persisted(
+        Some((16, digest)),
+        Some((0, digest)),
+        Some((0, digest)),
+    )
+    .expect("empty WAL and SHM are valid persisted facts");
+
+    assert_eq!(facts.main().expect("main fact").len(), 16);
+    assert_eq!(facts.wal().expect("WAL fact").len(), 0);
+    assert_eq!(facts.shm().expect("SHM fact").len(), 0);
+    let platform = facts.to_platform().expect("platform expectation");
+    assert_eq!(platform.wal().expect("platform WAL").len(), 0);
+    assert_eq!(platform.shm().expect("platform SHM").len(), 0);
+
+    assert_eq!(
+        RecoveryArchiveFacts::from_persisted(Some((0, digest)), None, None)
+            .expect_err("empty main is not a valid SQLite archive set")
+            .code(),
+        StateErrorCode::InvalidInput
+    );
+}
 
 struct Fixture {
     _root: Option<TempDir>,
@@ -148,6 +173,7 @@ impl Fixture {
             &self.journal,
             &self.settings,
         )
+        .expect("bound recovery capabilities")
     }
 }
 
@@ -782,6 +808,34 @@ fn wrong_guard_cannot_delete_any_prejournal_recovery_evidence() {
 }
 
 #[test]
+fn recovery_coordinator_rejects_cross_root_components_and_backup_directory() {
+    let left = Fixture::new();
+    let right = Fixture::new();
+    assert!(
+        RecoveryCoordinator::new(
+            &left.scope,
+            &right.verification_staging,
+            &right.journal,
+            &right.settings,
+        )
+        .is_err()
+    );
+
+    let before =
+        fs::read(left.data.as_path().join("tokenmaster.sqlite3")).expect("left active before");
+    let guard = left.guard();
+    let error = left
+        .coordinator()
+        .resume(&right.backups, &right.catalog, &guard, &left.control)
+        .expect_err("cross-root backup directory");
+    assert_eq!(error.code(), StateErrorCode::Unavailable);
+    assert_eq!(
+        fs::read(left.data.as_path().join("tokenmaster.sqlite3")).expect("left active after"),
+        before
+    );
+}
+
+#[test]
 fn recovery_never_exceeds_three_live_staging_artifacts() {
     let fixture = Fixture::new();
     let guard = fixture.guard();
@@ -902,9 +956,11 @@ fn forced_termination_after_every_durable_phase_resumes_to_one_complete_generati
             "forced termination at {phase} left mixed main bytes"
         );
         let guard = fixture.guard();
+        let cold_catalog =
+            BackupCatalog::rebuild(&fixture.backups, None).expect("cold startup catalog");
         let receipt = fixture
             .coordinator()
-            .resume(&fixture.backups, &fixture.catalog, &guard, &fixture.control)
+            .resume(&fixture.backups, &cold_catalog, &guard, &fixture.control)
             .unwrap_or_else(|error| panic!("resume after forced termination at {phase}: {error:?}"))
             .expect("pending or complete recovery receipt");
         assert_eq!(

@@ -26,6 +26,17 @@ impl RuntimeWriterLease {
         })?;
         Ok(Self { inner })
     }
+
+    pub(crate) fn try_acquire_startup(&self) -> Result<ExclusiveFileLeaseGuard, PortError> {
+        self.inner.try_acquire().map_err(lease_port_error)
+    }
+
+    pub(crate) fn authorize_startup_guard(
+        &self,
+        guard: &ExclusiveFileLeaseGuard,
+    ) -> Result<(), PortError> {
+        self.inner.authorize_guard(guard).map_err(lease_port_error)
+    }
 }
 
 impl fmt::Debug for RuntimeWriterLease {

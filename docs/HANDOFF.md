@@ -503,15 +503,37 @@ the changed platform boundary also passes an MSVC target check. Task 10 is accep
 developer evidence; application recovery, product acceptance, packaging, signing, and
 release remain unclaimed.
 
-The immediate next slice after Task 10 acceptance is Task 11 startup recovery. Then continue
-Tasks 12-18 in order: application recovery and
-integration, application restart/safe mode, Data & Recovery UI, then adversarial and
-resource closure. Keep the fixed archive path and writer sidecar; never copy only the
-live main file or treat busy/disk/access/schema-newer as corruption authority. Keep
-automatic recovery data only; manual full restore must explicitly choose data only or
-data plus portable settings, and device-local settings never move between machines.
-Task 11 must preserve the fixed Task 9/10 runtime/reader/recovery boundary and must not relax Tasks
-6-9 into path, generic-stream, generic age-extraction, or batch-deletion authority.
+Task 11A is now implemented in the working tree. State publishes/rereads one new
+unclean A/B run generation before catalog/package/SQLite access, performs read-only
+normal or `quick_check(100)` startup diagnosis, resumes a cold journal first, and
+selects only newest-first fully reverified backups for corruption-only automatic
+data-only recovery. Cross-root capabilities fail before mutation, unknown staging
+evidence is preserved, zero-length WAL/SHM facts remain exact, no usable backup returns
+`RecoveryRequired`, and the same recovered candidate enters safe mode on its third
+unclean launch. Store startup inspection never creates or migrates an archive.
+
+`LiveRuntime::{start_guarded,start_notified_guarded}` adopts the bootstrap guard without
+an unlock race; legacy starts remain wrappers. The retained `RunSession` can publish
+clean only after explicit launch authorization and exact generation/digest reread. The
+integration contract hands a first-install guard into a real live runtime, joins it,
+then marks clean. Focused platform/store/state/runtime contracts, strict workspace
+Clippy, the reliable-state audit, and 55/55 authority mutations pass. Independent
+rereview's only remaining Important finding was the exact
+Clippy failure, now removed and covered by the required gate plus a direct empty-
+sidecar persisted-facts regression. The complete locked workspace test/doctest suite
+passes in 571.4 seconds, and the changed platform capability passes an explicit
+`x86_64-pc-windows-msvc` warnings-as-errors target check.
+
+The immediate next slice is Task 12 application recovery, migration, and service
+composition. It owns mandatory verified pre/post-migration points, provider-backed
+fresh reconstruction when no backup is usable, all runtime/query/controller/
+maintenance teardown and restart, safe mode, and final clean publication only after
+every owner joins. Then continue Tasks 13-18 in order: health/product projection, Data
+& Recovery UI, adversarial/resource/release closure. Keep the fixed archive path and
+writer sidecar; never copy only the live main file or treat busy/disk/access/schema-
+newer as corruption authority. Keep automatic recovery data only; device-local settings
+never move. Do not relax Tasks 6-11A into path, generic-stream, generic age-extraction,
+or batch-deletion authority.
 
 After P3-D.0, continue P3-D supporting data-bearing routes using bounded keyset
 intents and the same controller/snapshot boundary. P3-E then closes remaining

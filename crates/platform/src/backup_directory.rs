@@ -54,6 +54,22 @@ impl BackupDirectory {
         Ok(Self { directory, scope })
     }
 
+    pub fn authorize_parent(
+        &self,
+        parent: &ValidatedLocalDirectory,
+    ) -> Result<(), BackupDirectoryError> {
+        self.revalidate_directory()?;
+        let current_parent = ValidatedLocalDirectory::new(parent.as_path())
+            .map_err(|_| BackupDirectoryError::UnsupportedLocation)?;
+        if current_parent == *parent
+            && self.directory.as_path() == parent.as_path().join(BACKUP_DIRECTORY_NAME)
+        {
+            Ok(())
+        } else {
+            Err(BackupDirectoryError::UnsupportedLocation)
+        }
+    }
+
     /// Enumerates the complete exact namespace into at most 32 opaque entries.
     pub fn scan(&self) -> Result<BackupDirectorySnapshot, BackupDirectoryError> {
         self.revalidate_directory()?;
