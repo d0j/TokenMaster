@@ -39,6 +39,15 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   one application path, a 30-day maximum, and zero polling/private-ID/direct-authority
   surfaces. Strict workspace Clippy and the complete locked test/doctest suite pass;
   the full suite completed in 710.7 seconds.
+- P3-D.2a bounded Sessions list: the existing desktop query plan requests one all-time
+  newest-first page capped at 64 while Dashboard keeps its 12-row summary. A separate
+  identity-free projection and responsive Slint route render last activity, duration,
+  events, every token bucket, total, cost, freshness/quality, and explicit `has_more`.
+  Opaque keys/cursors never enter Slint; route switching adds no query, model rebuild,
+  timer, worker, cache, or archive handle. Focused desktop/controller/UI contracts and
+  the 33/33 mutation audit plus release audit/build pass. The complete post-slice
+  locked workspace test/doctest suite and strict warnings-as-errors Clippy pass; the
+  full suite completed in 725.2 seconds.
 - M1 usage foundation: bounded provider roots, path-private source discovery,
   reparse-safe streaming enumeration, typed bounded JSONL parser, cumulative token
   state, physical/logical source identity, byte framing, revalidation, strict SQLite
@@ -1283,13 +1292,15 @@ release target passes independently.
 
 ## Next implementation slice
 
-P3-D.0 Reliable State and P3-D.1 History are complete. Continue P3-D with Sessions and
-exact session detail over the existing keyset query contracts, then Models, Projects,
-Activity, and supporting notification/help routes. Interactive History ranges remain
-a bounded follow-up over the same replace-only product section. P3-E then owns command
-palette, tray, compact widget, and remaining shell lifecycle. Interactive Windows, P4
-presentation, P5 CLI/MCP, activation, M0, packaging, signing, soak, and product release
-remain unclaimed.
+P3-D.0 Reliable State, P3-D.1 History, and P3-D.2a bounded Sessions list are complete.
+Continue with P3-D.2b exact session detail: bind visible ordinal and viewed product
+generation, resolve the opaque key only inside the controller, coalesce work on the
+existing query worker, and reject stale selection/results. Then implement Models,
+Projects, Activity, and supporting notification/help routes. Interactive History ranges
+remain a bounded follow-up over the same replace-only product section. P3-E then owns
+command palette, tray, compact widget, and remaining shell lifecycle. Interactive
+Windows, P4 presentation, P5 CLI/MCP, activation, M0, packaging, signing, soak, and
+product release remain unclaimed.
 
 P2-D quota history core is complete under
 `docs/superpowers/plans/2026-07-16-tokenmaster-p2-quota-core.md`: Tasks 1-8 cover

@@ -393,6 +393,21 @@ initial construction or an accepted newer product generation. The History route
 callback remains route-only and cannot query, allocate a prior-range cache, create a
 timer/worker, or recreate `MainWindow`.
 
+`DesktopQueryPlan` also owns one all-time `usage_sessions` request with page size 64.
+It executes sequentially on the same capacity-one query worker; Dashboard copies only
+its first 12 summaries while the independent product Sessions section retains the
+bounded page and `has_more`. Sessions failure remains section-local and complete-attempt
+cancellation/deadline rules are unchanged.
+
+`DesktopSessionsProjection::from_snapshot` is the sole product-to-Sessions mapping. It
+copies at most 64 identity-free summary rows and explicit continuation availability.
+`apply_projection` replaces the single Sessions Slint model only during initial window
+construction or an accepted newer product generation. Route selection is presentation-
+only and cannot rebuild the list, issue a detail query, create a timer/worker, or
+recreate `MainWindow`. P3-D.2b will add exact detail through controller-resolved ordinal
+selection bound to the viewed product generation; it will not expose the opaque query
+key or accept a late result for another generation/selection.
+
 `CodexAppServerCommand` accepts one already resolved absolute native executable path.
 The path must name a regular non-reparse file; Windows additionally requires an
 `.exe`. It is canonicalized but has no public getter and its `Debug` output is

@@ -1630,3 +1630,25 @@ the state machine before one real supporting route proves the complete vertical 
 One fixed bounded request validates query, reducer, controller, projection, and UI
 contracts while preserving constant frontend memory and a direct upgrade path to
 bounded range controls.
+
+## ADR-066 — Split the Sessions list from exact detail selection
+
+Decision: P3-D.2a publishes one all-time newest-first page of at most 64 session
+summaries through the existing product snapshot and capacity-one desktop query worker.
+Dashboard copies its existing first 12 summaries; the Sessions route owns a separate
+identity-free projection, one Slint model, explicit `has_more`, responsive aggregate
+columns, and no query behavior on route selection. Opaque session keys and cursors do
+not cross the controller boundary.
+
+Exact detail is P3-D.2b rather than a UI callback over the current page. It will add a
+checked `DesktopSessionSelectionGeneration`; Slint will submit only a visible ordinal
+plus the viewed product generation, the controller will resolve that pair to its opaque
+dataset-bound key, and only the latest matching selection/result may publish. It will
+reuse the existing worker with one latest/coalesced request and one replace-only detail
+section, not create a per-selection thread, queue, cache, or database owner.
+
+Rationale: the bounded page is independently useful and proves the complete list path.
+Bolting detail onto row callbacks would either expose private query identity to Slint or
+allow rapid selection and dataset refresh to publish stale detail for the wrong row.
+The split delivers visible value now while making the concurrency and privacy boundary
+explicit before detail authority exists.

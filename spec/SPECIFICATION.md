@@ -55,6 +55,15 @@ complete zero usage. Future range controls MUST replace this bounded request thr
 the same snapshot section; they MUST NOT query on route selection or retain prior
 ranges in the frontend.
 
+The default Sessions route MUST show the newest all-time session page with at most 64
+rows and explicit continuation availability. Each row MUST preserve first/last time,
+event count, every available token bucket, total tokens, cost, freshness, and quality;
+the UI MUST NOT claim that the first page is the complete archive when more rows exist.
+Opaque query keys and cursors MUST remain behind the desktop controller boundary. Exact
+session detail is a separate generation-bound follow-up: a selection MUST resolve
+against the viewed product generation and MUST NOT publish a late result for another
+selection or dataset.
+
 All data-bearing routes MUST derive from one bounded immutable product snapshot. The
 snapshot MUST distinguish refresh-attempt order from durable source revisions, retain
 the last compatible successful section when a later refresh fails, reject an older
@@ -283,6 +292,12 @@ layout shows input, cached, output, reasoning, total, cost, and event evidence; 
 narrow layout may reduce visible columns but MUST retain the same owned bounded model
 and accessible row meaning.
 
+Sessions MUST render one bounded newest-first list with explicit page completeness.
+The wide layout shows last activity, duration, events, input, cached, output,
+reasoning, total, and cost; the narrow layout may reduce visible columns but MUST
+retain the same model and accessible row meaning. No display row may expose a provider,
+profile, source, workspace, project, private session key, or continuation cursor.
+
 ### TM-UI-002 — Reactive presentation boundary
 
 Skin, layout, locale, selection, and range changes MUST update bounded presentation
@@ -315,6 +330,9 @@ rebuild Dashboard models, recreate the window, query SQLite, or schedule backgro
 work. The production Dashboard MUST contain no idle animation or presentation timer.
 The current History projection MUST retain at most 30 daily rows in one model and no
 prior range, query service, timer, worker, or archive handle.
+The current Sessions projection MUST retain at most 64 summary rows in one model and no
+opaque key, cursor, prior page, query service, timer, worker, or archive handle. Its
+route-only selection MUST NOT rebuild the model or issue a detail query.
 
 ## Performance requirements
 

@@ -6,6 +6,21 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.2a as the bounded Sessions list. The existing desktop worker now
+  requests one all-time newest-first page capped at 64; Dashboard retains its first 12
+  rows while the independent product section preserves explicit `has_more`.
+- Added one identity-free Sessions projection and responsive compiled Slint route with
+  last activity, duration, events, input/cached/output/reasoning/total tokens, cost,
+  freshness/quality, and accessible wide/narrow row meaning. Opaque keys/cursors remain
+  controller-owned; route switching adds no query, rebuild, timer, worker, cache, or
+  archive handle. Generation-bound exact detail remains P3-D.2b.
+- Expanded the production desktop audit to 33 mutation contracts and exact Sessions
+  bounds/model/application receipts. Focused controller/projection/package/UI tests and
+  the release audit/build pass with 10 Rust/16 Slint files, one worker/slot, a 64-row
+  Sessions cap, and zero polling/private-ID/direct-authority surfaces. Clean-root,
+  formatting, strict warnings-as-errors workspace Clippy, and the complete locked
+  workspace test/doctest suite pass; the full suite completed in 725.2 seconds.
+
 - Implemented P3-D.1 as the first complete supporting data route. Query now resolves
   an exact bounded `recent_days(30)` range in the selected IANA timezone, including
   DST-correct civil-day partitions and the existing 400-day hard ceiling.

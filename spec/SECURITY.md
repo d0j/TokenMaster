@@ -183,6 +183,16 @@ reasoning content, command, or credential. Route selection remains presentation-
 the existing query worker performs the fixed bounded request during refresh and owns
 no History cache or snapshot history.
 
+P3-D.2a adds one independent owned Sessions projection and one 64-row Slint model. It
+contains only UTC instants, aggregate event/token/cost values, freshness, quality,
+stable reasons, and one continuation-availability fact. It contains no provider,
+profile, source, account, workspace, project, session identity, opaque key/cursor,
+absolute path, SQL, prompt, response, reasoning content, command, or credential. The
+existing query worker performs the bounded page request during refresh; route selection
+remains presentation-only and owns no page/detail cache. Exact detail cannot be added
+without controller-side generation/selection matching and must keep all opaque query
+identity outside Slint.
+
 Providers emit bounded observation/session-relation drafts only. They cannot create
 event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or
 canonical events. Those values are created only by TokenMaster accounting code. Store

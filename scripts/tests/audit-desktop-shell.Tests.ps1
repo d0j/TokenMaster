@@ -169,6 +169,32 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-HISTORY-BOUND*"
     }
 
+    It "rejects sessions presentation-bound drift" {
+        $fixture = New-DesktopAuditFixture -Name "sessions-bound"
+        $path = Join-Path $fixture "crates\desktop\src\sessions.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'pub const MAX_SESSION_ROWS: usize = 64;',
+            'pub const MAX_SESSION_ROWS: usize = 640;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-BOUND*"
+    }
+
+    It "rejects sessions request-bound drift" {
+        $fixture = New-DesktopAuditFixture -Name "sessions-request-bound"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'pub const MAX_SESSION_ROWS: usize = 64;',
+            'pub const MAX_SESSION_ROWS: usize = 640;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-REQUEST*"
+    }
+
     It "rejects restore-point presentation-bound drift" {
         $fixture = New-DesktopAuditFixture -Name "restore-bound"
         $path = Join-Path $fixture "crates\desktop\src\reliable_state.rs"
@@ -256,6 +282,19 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-HISTORY-REBUILD*"
     }
 
+    It "rejects sessions model rebuilding from route selection" {
+        $fixture = New-DesktopAuditFixture -Name "route-sessions-rebuild"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'apply_route_projection(&window, state.projection());',
+            "apply_route_projection(&window, state.projection());`r`n            apply_sessions_projection(&window, state.projection().sessions());"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-REBUILD*"
+    }
+
     It "rejects a second event-loop scheduling site" {
         $fixture = New-DesktopAuditFixture -Name "bridge-event"
         Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\bridge.rs") `
@@ -331,17 +370,20 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-CONTROLLER-SLOT*"
     }
 
-    It "accepts the library-only bounded dashboard and history desktop boundary" {
+    It "accepts the library-only bounded dashboard history and sessions desktop boundary" {
         $fixture = New-DesktopAuditFixture -Name "library-boundary"
 
         $receipt = & $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json
-        $receipt.rust_source_file_count | Should -Be 9
-        $receipt.slint_source_file_count | Should -Be 15
+        $receipt.rust_source_file_count | Should -Be 10
+        $receipt.slint_source_file_count | Should -Be 16
         $receipt.dashboard_section_count | Should -Be 6
         $receipt.dashboard_model_replacement_count | Should -Be 7
         $receipt.history_day_maximum | Should -Be 30
         $receipt.history_model_replacement_count | Should -Be 1
         $receipt.history_projection_application_count | Should -Be 1
+        $receipt.session_row_maximum | Should -Be 64
+        $receipt.sessions_model_replacement_count | Should -Be 1
+        $receipt.sessions_projection_application_count | Should -Be 1
         $receipt.restore_point_maximum | Should -Be 15
         $receipt.restore_model_replacement_count | Should -Be 1
         $receipt.secret_model_count | Should -Be 0

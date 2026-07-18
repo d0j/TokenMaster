@@ -718,9 +718,27 @@ strict workspace Clippy, the 30/30 desktop mutation audit, release desktop audit
 and the complete locked workspace test/doctest suite pass; the full suite completed in
 710.7 seconds.
 
-The immediate next implementation slice is Sessions plus exact session detail over the
-existing dataset-bound keyset APIs, then Models, Projects, and Activity. Interactive
-History range selection remains a later bounded replacement of the same product section.
+P3-D.2a Sessions list is complete under
+`docs/superpowers/specs/2026-07-19-tokenmaster-sessions-route-design.md` and
+`docs/superpowers/plans/2026-07-19-tokenmaster-sessions-route.md`. The existing query
+worker now requests one newest-first all-time page capped at 64; Dashboard keeps its
+12-row summary while the independent product/Desktop/Slint section publishes full
+aggregate timestamp/event/token/cost facts and explicit `has_more`. Opaque keys and
+cursors never enter the frontend. Route selection remains query-free and adds no model
+rebuild, timer, worker, cache, archive handle, or dependency. Focused controller,
+projection, package, and real UI contracts pass. The expanded 33/33 mutation audit and
+release desktop audit/build pass with exact 10 Rust/16 Slint files, one worker/slot,
+one Sessions model/application path, a 64-row maximum, and zero polling/private-ID/
+direct-authority surfaces. Clean-root, formatting, strict warnings-as-errors workspace
+Clippy, and the complete locked workspace test/doctest suite pass; the full suite
+completed in 725.2 seconds.
+
+The immediate next implementation slice is P3-D.2b exact session detail over the
+existing dataset-bound keyset APIs. Bind visible ordinal to the viewed product generation,
+resolve the opaque key only inside the controller, coalesce latest selection work on the
+existing worker, and reject stale selection/results. Then continue Models, Projects,
+and Activity. Interactive History range selection remains a later bounded replacement
+of the same product section.
 Keep the fixed archive path and writer sidecar; never copy only the live main file or
 treat busy/disk/access/schema-newer as corruption authority. Keep automatic recovery
 data only; device-local settings never move. Do not relax the state boundary into path,
@@ -841,6 +859,7 @@ Invoke-Pester -Path scripts\tests\audit-desktop-shell.Tests.ps1,scripts\tests\au
 cargo +1.97.0 test -p tokenmaster-desktop --test dashboard_projection_contract --locked
 cargo +1.97.0 test -p tokenmaster-query --test recent_history_contract --locked
 cargo +1.97.0 test -p tokenmaster-desktop --test history_projection_contract --locked
+cargo +1.97.0 test -p tokenmaster-desktop --test sessions_projection_contract --locked
 cargo +1.97.0 test -p tokenmaster-desktop --test ui_contract --locked
 cargo +1.97.0 test -p tokenmaster-desktop --test bridge_event_loop_contract --locked
 cargo +1.97.0 test -p tokenmaster-desktop --locked

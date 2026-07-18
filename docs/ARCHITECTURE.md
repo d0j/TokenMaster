@@ -144,6 +144,15 @@ pure in-place presentation update; there is no History timer, worker, cache, pri
 range, database handle, or private row identity. Future bounded range controls replace
 this section rather than adding query ownership to Slint.
 
+P3-D.2a adds an independent Sessions page without widening frontend authority. The same
+query plan requests at most 64 all-time newest-first session summaries and publishes
+`has_more`; Dashboard still copies only its first 12 rows. `DesktopSessionsProjection`
+removes the opaque dataset-bound keys and copies aggregate timestamps, event/token/cost
+facts, evidence, and page completeness into one responsive Slint model. Route selection
+does not query or rebuild that model. P3-D.2b will resolve a visible ordinal plus viewed
+product generation back to the controller-owned opaque key, coalesce exact-detail work
+on the existing worker, and publish only the latest matching selection generation.
+
 The active P3-D.0 contour adds reliable state without changing the current live archive
 identity. Task 1 establishes library-only `tokenmaster-state` with stable path-private
 errors, checked byte/item limits, exact dependencies, and a deterministic authority

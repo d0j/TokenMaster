@@ -3196,3 +3196,29 @@ formatting, strict warnings-as-errors workspace Clippy, and the complete locked 
 test/doctest suite pass in 710.7 seconds. Interactive arbitrary ranges, Sessions/detail,
 remaining supporting routes, P4 presentation, release evidence, packaging, signing, and
 product release remain open.
+
+## 2026-07-19 — P3-D.2a bounded Sessions list
+
+The Sessions milestone was split after reviewing the existing dataset-bound page/detail
+contracts. The first slice delivers the independently useful list; exact detail remains
+separate because a row callback alone cannot safely match rapid selection against a
+newer product/dataset generation without either exposing the opaque session key to Slint
+or risking stale detail. ADR-066 records the follow-up generation/ordinal boundary.
+
+The existing desktop plan now requests one all-time newest-first session page capped at
+64 on the same capacity-one query worker. Dashboard continues to copy its first 12 rows.
+The independent product and Desktop Sessions projections retain explicit `has_more` and
+only aggregate first/last UTC instants, event count, input/cached/output/reasoning/total
+tokens, cost, freshness, quality, and stable reasons. One responsive Slint model renders
+wide and narrow layouts without keys, cursors, paths, IDs, detail cache, route-time
+query, model rebuild, timer, worker, archive handle, or new dependency.
+
+TDD first proved the missing 64-row controller request and independent projection/UI
+contracts. Focused controller, projection, desktop package, and real Slint UI tests pass.
+The desktop audit now contains 33 mutation cases and the release receipt pins 10 Rust/
+16 Slint files, one worker/slot, a 64-row Sessions maximum, one model/application path,
+and zero polling/private-ID/direct-authority surfaces. Clean-root, formatting, strict
+warnings-as-errors workspace Clippy, and the complete locked workspace test/doctest
+suite pass; the full suite completed in 725.2 seconds. P3-D.2b exact generation-bound
+detail, later-page navigation, remaining routes, presentation, automation, acceptance,
+packaging, signing, and product release remain open.

@@ -40,8 +40,8 @@ if ($productionManifestText -match '\btokenmaster-(store|provider|runtime|codex|
 $rustFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.rs')
 $uiFiles = @(Get-ChildItem -LiteralPath $uiRoot -Recurse -File -Filter '*.slint')
 $productionFiles = @($rustFiles + $uiFiles)
-if ($rustFiles.Count -ne 9 -or $uiFiles.Count -ne 15) {
-    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain nine Rust and fifteen Slint files'
+if ($rustFiles.Count -ne 10 -or $uiFiles.Count -ne 16) {
+    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain ten Rust and sixteen Slint files'
 }
 $uiText = ($uiFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
@@ -204,6 +204,27 @@ $historyModelReplacementCount = [regex]::Matches(
 if ($historyModelReplacementCount -ne 1) {
     throw 'TM-DESKTOP-HISTORY-MODEL: history must have one bounded model replacement site'
 }
+$sessionsPath = Join-Path $sourceRoot 'sessions.rs'
+$sessionsText = [System.IO.File]::ReadAllText($sessionsPath)
+if ($sessionsText -notmatch 'pub const MAX_SESSION_ROWS: usize = 64;' -or
+    $sessionsText -notmatch '\.take\(MAX_SESSION_ROWS\)') {
+    throw 'TM-DESKTOP-SESSIONS-BOUND: sessions projection must retain at most sixty-four rows'
+}
+if ($controllerText -notmatch 'pub const MAX_SESSION_ROWS: usize = 64;' -or
+    $controllerText -notmatch 'PageSize::new\(Self::MAX_SESSION_ROWS\)') {
+    throw 'TM-DESKTOP-SESSIONS-REQUEST: sessions query must remain one bounded first page'
+}
+$sessionsProjectionCallCount = [regex]::Matches($uiRustText, 'apply_sessions_projection\(').Count
+if ($sessionsProjectionCallCount -ne 2) {
+    throw 'TM-DESKTOP-SESSIONS-REBUILD: sessions models must not rebuild during route-only selection'
+}
+$sessionsModelReplacementCount = [regex]::Matches(
+    $uiRustText,
+    'set_session_list_rows\(model\(rows\)\)'
+).Count
+if ($sessionsModelReplacementCount -ne 1) {
+    throw 'TM-DESKTOP-SESSIONS-MODEL: sessions must have one bounded model replacement site'
+}
 $reliableStatePath = Join-Path $sourceRoot 'reliable_state.rs'
 $reliableStateText = [System.IO.File]::ReadAllText($reliableStatePath)
 if ($reliableStateText -notmatch 'pub const MAX_DESKTOP_RESTORE_POINTS: usize = 15;' -or
@@ -328,6 +349,10 @@ if ($SourceOnly) {
         history_model_replacement_count = $historyModelReplacementCount
         history_projection_application_count = $historyProjectionCallCount - 1
         history_polling_surface_count = 0
+        session_row_maximum = 64
+        sessions_model_replacement_count = $sessionsModelReplacementCount
+        sessions_projection_application_count = $sessionsProjectionCallCount - 1
+        sessions_polling_surface_count = 0
         restore_point_maximum = 15
         restore_model_replacement_count = $restoreModelReplacementCount
         secret_model_count = 0
@@ -405,6 +430,10 @@ if ($LASTEXITCODE -ne 0) {
     history_model_replacement_count = $historyModelReplacementCount
     history_projection_application_count = $historyProjectionCallCount - 1
     history_polling_surface_count = 0
+    session_row_maximum = 64
+    sessions_model_replacement_count = $sessionsModelReplacementCount
+    sessions_projection_application_count = $sessionsProjectionCallCount - 1
+    sessions_polling_surface_count = 0
     restore_point_maximum = 15
     restore_model_replacement_count = $restoreModelReplacementCount
     secret_model_count = 0

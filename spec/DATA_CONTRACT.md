@@ -936,6 +936,22 @@ overview and exact range/timezone/evidence facts, and owns no query service, cur
 archive handle, prior range, or row identity. Missing token components remain typed
 unavailable/partial and cost preserves complete/partial/unavailable/legitimate-zero.
 
+### P3-D.2a bounded Sessions projection
+
+`DesktopQueryPlan` requests one all-time newest-first session page capped at 64 rows.
+The product snapshot owns that page independently from the 12-row Dashboard summary.
+Compatible failure may retain only its own last-good page as degraded; dataset-identity
+change invalidates it. `has_more` remains explicit, including when exactly 64 rows are
+published, so the frontend cannot mistake the bounded page for archive completeness.
+
+`DesktopSessionsProjection` copies at most 64 rows and only aggregate presentation
+facts: first/last UTC instant, event count, optional input/cached/output/reasoning/total
+tokens, cost, freshness, quality, stable reasons, and continuation availability. It
+owns no provider/profile/source/workspace/project/session identity, opaque key, cursor,
+query service, archive handle, prior page, or detail cache. The raw dataset-bound key
+remains inside query/product/controller state for the later generation-bound exact
+detail path and never crosses into Slint.
+
 Only explicit provider ancestry identifies a parent. A strong signature covers the
 normalized model, emitted delta, and provider cumulative snapshot. A weak signature
 covers model and delta only and cannot suppress a pre-divergence event by itself.
