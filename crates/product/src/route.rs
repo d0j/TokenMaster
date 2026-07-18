@@ -206,6 +206,7 @@ pub(crate) fn derive_routes(snapshot: &ProductSnapshot) -> [ProductRouteStatus; 
     };
     let usage_runtime_ready = !snapshot.runtime.usage_is_degraded();
     let usage_ready = snapshot.analytics.kind() == ProductSectionKind::Ready && usage_runtime_ready;
+    let history_ready = snapshot.history.kind() == ProductSectionKind::Ready && usage_runtime_ready;
     let activity_ready =
         snapshot.activity.kind() == ProductSectionKind::Ready && usage_runtime_ready;
     let sessions_ready =
@@ -245,6 +246,14 @@ pub(crate) fn derive_routes(snapshot: &ProductSnapshot) -> [ProductRouteStatus; 
         usage = usage.with(reason);
     }
 
+    let mut history = common;
+    if !history_ready {
+        history = history.with(ProductRouteReason::UsageUnavailable);
+    }
+    if let Some(reason) = aggregate_reason {
+        history = history.with(reason);
+    }
+
     let mut sessions = common;
     if !sessions_ready {
         sessions = sessions.with(ProductRouteReason::SessionsUnavailable);
@@ -275,7 +284,7 @@ pub(crate) fn derive_routes(snapshot: &ProductSnapshot) -> [ProductRouteStatus; 
 
     [
         status_for(ProductRoute::Dashboard, dashboard),
-        aggregate_status_for(ProductRoute::History, usage),
+        aggregate_status_for(ProductRoute::History, history),
         aggregate_status_for(ProductRoute::Sessions, sessions),
         aggregate_status_for(ProductRoute::Models, usage),
         aggregate_status_for(ProductRoute::Projects, projects),

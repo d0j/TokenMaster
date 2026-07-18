@@ -33,6 +33,7 @@ pub struct ProductSnapshot {
     pub(crate) generation: ProductGeneration,
     pub(crate) data_status: ProductSection<ProductDataStatusEnvelope>,
     pub(crate) analytics: ProductSection<QueryEnvelope<UsageAnalytics>>,
+    pub(crate) history: ProductSection<QueryEnvelope<UsageAnalytics>>,
     pub(crate) quota: ProductSection<QuotaEnvelope<QuotaCurrentSnapshot>>,
     pub(crate) benefit: ProductSection<BenefitOverviewEnvelope<BenefitOverviewSnapshot>>,
     pub(crate) git: ProductSection<GitEnvelope<GitOutputSnapshot>>,
@@ -49,6 +50,7 @@ impl ProductSnapshot {
             generation: ProductGeneration::INITIAL,
             data_status: ProductSection::waiting(),
             analytics: ProductSection::waiting(),
+            history: ProductSection::waiting(),
             quota: ProductSection::waiting(),
             benefit: ProductSection::waiting(),
             git: ProductSection::waiting(),
@@ -73,6 +75,11 @@ impl ProductSnapshot {
     #[must_use]
     pub const fn analytics(&self) -> &ProductSection<QueryEnvelope<UsageAnalytics>> {
         &self.analytics
+    }
+
+    #[must_use]
+    pub const fn history(&self) -> &ProductSection<QueryEnvelope<UsageAnalytics>> {
+        &self.history
     }
 
     #[must_use]

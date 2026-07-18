@@ -11,7 +11,8 @@ use tokenmaster_product::{
 use tokenmaster_query::{
     BenefitOverviewRequest, DatasetIdentity, LatestActivityPage, PublicationGeneration, QueryClock,
     QueryEnvelope, QueryError, QueryFreshness, QueryHeader, QueryHeaderParts, QueryQuality,
-    QueryService, QueryTimeSample, SnapshotGeneration,
+    QueryService, QueryTimeSample, SnapshotGeneration, UsageAnalyticsRequest, UsageRange,
+    UsageSeriesSelection, UsageTimeZone, WeekStart,
 };
 use tokenmaster_store::UsageStore;
 
@@ -26,6 +27,70 @@ impl QueryClock for FixedClock {
 
 fn attempt(value: u64) -> ProductAttemptGeneration {
     ProductAttemptGeneration::new(value).expect("non-zero attempt")
+}
+
+#[test]
+fn history_route_depends_on_its_own_recent_analytics_section() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("history-route.sqlite3");
+    drop(UsageStore::open(&path).expect("create archive"));
+    let mut service = QueryService::open(&path, FixedClock).expect("query service");
+    let request = |range| {
+        UsageAnalyticsRequest::new(
+            range,
+            UsageTimeZone::iana("UTC").expect("UTC"),
+            WeekStart::Monday,
+            UsageSeriesSelection::Daily,
+            Vec::new(),
+            Vec::new(),
+        )
+        .expect("analytics request")
+    };
+    let status = service.product_data_status().expect("status");
+    let today = service
+        .usage_analytics(request(UsageRange::today()))
+        .expect("today analytics");
+    let recent = service
+        .usage_analytics(request(UsageRange::recent_days(30).expect("recent range")))
+        .expect("recent analytics");
+    let mut reducer = ProductReducer::new();
+
+    reducer
+        .publish_data_status(attempt(1), status)
+        .expect("publish status");
+    reducer
+        .publish_analytics(attempt(1), today)
+        .expect("publish dashboard analytics");
+    assert_eq!(
+        reducer.snapshot().route(ProductRoute::Dashboard).state(),
+        ProductRouteState::Degraded
+    );
+    assert_eq!(
+        reducer.snapshot().route(ProductRoute::History).state(),
+        ProductRouteState::Degraded
+    );
+    assert!(
+        reducer
+            .snapshot()
+            .route(ProductRoute::History)
+            .reasons()
+            .contains(ProductRouteReason::UsageUnavailable)
+    );
+
+    reducer
+        .publish_history(attempt(1), recent)
+        .expect("publish history");
+    assert_eq!(
+        reducer.snapshot().route(ProductRoute::History).state(),
+        ProductRouteState::Ready
+    );
+    assert!(
+        !reducer
+            .snapshot()
+            .route(ProductRoute::History)
+            .reasons()
+            .contains(ProductRouteReason::UsageUnavailable)
+    );
 }
 
 fn activity(generation: u64, identity: DatasetIdentity) -> QueryEnvelope<LatestActivityPage> {

@@ -58,8 +58,11 @@ fn publish_ready_usage(reducer: &mut ProductReducer, path: &std::path::Path) {
         )
         .expect("analytics");
     reducer
-        .publish_analytics(attempt(1), analytics)
+        .publish_analytics(attempt(1), analytics.clone())
         .expect("publish analytics");
+    reducer
+        .publish_history(attempt(1), analytics)
+        .expect("publish history");
 }
 
 #[test]

@@ -26,6 +26,85 @@ fn attempt(value: u64) -> ProductAttemptGeneration {
     ProductAttemptGeneration::new(value).expect("non-zero attempt")
 }
 
+fn analytics_request(range: UsageRange) -> UsageAnalyticsRequest {
+    UsageAnalyticsRequest::new(
+        range,
+        UsageTimeZone::iana("UTC").expect("UTC"),
+        WeekStart::Monday,
+        UsageSeriesSelection::Daily,
+        Vec::new(),
+        Vec::new(),
+    )
+    .expect("analytics request")
+}
+
+#[test]
+fn history_is_independent_and_retains_only_compatible_recent_truth() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("product-history.sqlite3");
+    drop(UsageStore::open(&path).expect("create archive"));
+    let mut service = QueryService::open(&path, FixedClock).expect("query service");
+    let status = service.product_data_status().expect("status");
+    let today = service
+        .usage_analytics(analytics_request(UsageRange::today()))
+        .expect("today analytics");
+    let recent = service
+        .usage_analytics(analytics_request(
+            UsageRange::recent_days(30).expect("recent range"),
+        ))
+        .expect("recent analytics");
+
+    let mut reducer = ProductReducer::new();
+    assert_eq!(
+        reducer.snapshot().history().kind(),
+        ProductSectionKind::Waiting
+    );
+    reducer
+        .publish_data_status(attempt(1), status)
+        .expect("publish status");
+    reducer
+        .publish_analytics(attempt(1), today)
+        .expect("publish dashboard analytics");
+    assert_eq!(
+        reducer.snapshot().history().kind(),
+        ProductSectionKind::Waiting
+    );
+
+    assert_eq!(
+        reducer
+            .publish_history(attempt(1), recent.clone())
+            .expect("publish history"),
+        ProductPublishOutcome::Accepted
+    );
+    let ready = reducer.snapshot();
+    assert_eq!(ready.analytics().kind(), ProductSectionKind::Ready);
+    assert_eq!(ready.history().kind(), ProductSectionKind::Ready);
+
+    reducer
+        .fail_history(attempt(2), QueryErrorCode::DeadlineExceeded)
+        .expect("fail newer history refresh");
+    let retained = reducer.snapshot();
+    assert_eq!(retained.analytics().kind(), ProductSectionKind::Ready);
+    assert_eq!(retained.history().kind(), ProductSectionKind::Unavailable);
+    assert!(retained.history().retains_payload());
+    assert_eq!(
+        reducer
+            .publish_history(attempt(1), recent.clone())
+            .expect("reject older history"),
+        ProductPublishOutcome::RejectedOlder
+    );
+    assert_eq!(
+        reducer
+            .publish_history(attempt(3), recent)
+            .expect("recover history"),
+        ProductPublishOutcome::Accepted
+    );
+    assert_eq!(
+        reducer.snapshot().history().kind(),
+        ProductSectionKind::Ready
+    );
+}
+
 #[test]
 fn reducer_accepts_only_newer_sections_and_keeps_faults_independent() {
     let directory = TempDir::new().expect("temporary directory");

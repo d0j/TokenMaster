@@ -201,6 +201,13 @@ impl ProductReducer {
         QueryEnvelope<UsageAnalytics>,
         usage_compatible
     );
+    section_methods!(
+        publish_history,
+        fail_history,
+        history,
+        QueryEnvelope<UsageAnalytics>,
+        usage_compatible
+    );
 
     runtime_methods!(
         publish_usage_runtime,
@@ -372,6 +379,7 @@ fn invalidate_incompatible_sections(
     let git_revision = status.payload().git().revision();
 
     invalidate_usage(&mut snapshot.analytics, status_attempt, usage_identity);
+    invalidate_usage(&mut snapshot.history, status_attempt, usage_identity);
     invalidate_usage(&mut snapshot.activity, status_attempt, usage_identity);
     invalidate_usage(&mut snapshot.sessions, status_attempt, usage_identity);
     invalidate_usage(&mut snapshot.session_detail, status_attempt, usage_identity);
