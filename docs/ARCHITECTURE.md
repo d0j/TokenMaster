@@ -7,6 +7,9 @@ worker applies a visibly acknowledged Pending projection before saving an update
 policy, then projects generation `N` to global reminder profile revision `N + 1`;
 startup, explicit Save, and confirmed config import share that synchronizer. Rapid
 policy submissions retain one active operation and one latest-wins pending payload.
+If startup cannot open or commit the current archive, the desired policy stays visibly
+retryable as Pending while the optional reminder runtime independently reports
+StoreUnavailable; runtime health never replaces portable desired state.
 The store validates every returned aggregate before commit, changes only the global
 profile and inherited due rows, and preserves scope overrides, deliveries,
 acknowledgements, and provider evidence. Synchronized rebuild work is bounded by 32

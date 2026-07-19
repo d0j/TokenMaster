@@ -9,11 +9,13 @@ All notable changes are recorded here.
 - Implemented generation-bound global reminder settings synchronization. Portable
   settings remain desired-state authority; startup, explicit Save, and confirmed import
   share a Pending-first retryable synchronizer, while global edits preserve scope
-  overrides, deliveries, acknowledgements, and provider evidence.
+  overrides, deliveries, acknowledgements, and provider evidence. Startup archive
+  contention now keeps the exact durable policy Pending and retryable while optional
+  runtime health independently reports StoreUnavailable.
 - Added the fixed responsive Settings editor: enable/disable, five recommended leads,
   and up to eight normalized custom leads with checked conversion, dirty-draft
   retention, accessible labels, and no UI runtime/store/timer/polling/queue authority.
-  Computed application/Desktop/benefit receipts and 193 Pester mutation tests pass.
+  Computed application/Desktop/benefit receipts and 194 Pester mutation tests pass.
   Per-scope editing, snooze, quiet hours, OS/tray delivery, usage alerts, activation,
   P4/P5/P6, M0 acceptance, package/signing/soak, and release remain incomplete.
 

@@ -1836,7 +1836,9 @@ The existing single operation worker publishes Pending, durably saves a changed 
 and then uses one synchronizer to map generation `N` to global profile revision `N +
 1`. Startup, restored/reconstructed/migrated paths, explicit Save, and confirmed
 config import reuse that synchronizer. A failed archive projection never rolls back a
-durable desired state and remains visibly retryable as Pending.
+durable desired state and remains visibly retryable as Pending. At startup, optional
+reminder runtime health may independently report StoreUnavailable, but it cannot
+replace the exact enabled/leads desired-state projection with Unavailable.
 
 The store replaces only the global profile in one immediate transaction, rebuilding
 inherited due rows while preserving scope overrides, deliveries, acknowledgements, and

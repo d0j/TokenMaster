@@ -12,7 +12,9 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   authority; generation `N` maps to global profile revision `N + 1` for first-install,
   current, migrated, reconstructed, restored, explicit Save, and confirmed config
   import paths. Pending precedes durable mutation and remains retryable when archive
-  synchronization is Busy/unavailable. The fixed responsive editor supports enable/
+  synchronization is Busy/unavailable. Startup reports optional reminder runtime
+  StoreUnavailable separately without erasing the exact enabled/leads Pending
+  projection or changing settings bytes. The fixed responsive editor supports enable/
   disable, five recommended leads, and up to eight normalized custom leads while global
   edits preserve scope overrides, deliveries, acknowledgements, and provider evidence.
   Per-scope editing, snooze, quiet hours, OS/tray delivery, usage alerts, activation,

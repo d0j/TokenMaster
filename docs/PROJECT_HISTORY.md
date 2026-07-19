@@ -10,13 +10,16 @@ recommended and eight normalized custom leads. This is developer closure only: p
 editing, snooze, quiet hours, OS/tray delivery, usage alerts, activation, P4/P5/P6, M0,
 package/signing/soak, and release are not accepted.
 
-Independent final review found and closed four acceptance blockers before this slice
-was accepted: same-command coalescing could discard a newer settings payload; Pending
+Independent review passes found and closed five acceptance blockers: same-command
+coalescing could discard a newer settings payload; Pending
 was scheduled but not visibly acknowledged before settings mutation; aggregate due
 count conversion could fail after SQLite commit; and current planning text still
-pointed back to the completed slice. The repaired path keeps one latest-wins pending
-payload, waits for bounded visible Pending acknowledgement, validates aggregate results
-before commit, and covers 65,536 overridden-scope due rows across retry and reopen.
+pointed back to the completed slice. A final rereview also found startup archive
+contention overwriting retryable Pending with an incompatible Unavailable projection.
+The repaired path keeps one latest-wins pending payload, waits for bounded visible
+Pending acknowledgement, validates aggregate results before commit, covers 65,536
+overridden-scope due rows across retry and reopen, and separates optional runtime
+StoreUnavailable health from the exact durable Pending policy.
 
 ## 2026-07-14 — clean TokenMaster foundation
 

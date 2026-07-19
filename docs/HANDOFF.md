@@ -881,7 +881,9 @@ No M0, interactive Windows, soak, package, signing, or release acceptance is cla
 Notification settings synchronization and editing for the existing bounded default/
 custom reminder profile is implemented for the global profile. The operation worker
 keeps one active plus one latest-wins pending policy payload, and visible Pending is
-acknowledged before a durable settings mutation. Per-scope editing, snooze, quiet
+acknowledged before a durable settings mutation. Startup archive contention leaves the
+exact durable policy visibly Pending and retryable; only optional runtime health becomes
+StoreUnavailable, and settings bytes remain unchanged. Per-scope editing, snooze, quiet
 hours, OS/tray delivery, usage alerts, and activation remain separate unfinished
 capabilities.
 Reuse the immutable snapshot/controller boundary; do not turn route selection into

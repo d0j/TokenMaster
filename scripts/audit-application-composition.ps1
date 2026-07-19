@@ -215,7 +215,7 @@ if ([string]::IsNullOrWhiteSpace($reminderUpdateFunction) -or $pendingIndex -lt 
 }
 $reminderSynchronizeFunction = [regex]::Match(
     $stateText,
-    '(?s)pub\(crate\) fn synchronize_reminder_profile\(.*?\r?\n    \}\r?\n\r?\n    pub\(crate\) fn mark_reminder_unavailable'
+    '(?s)pub\(crate\) fn synchronize_reminder_profile\(.*?\r?\n    \}\r?\n\r?\n    fn reminder_sync_state'
 ).Value
 $syncPendingIndex = $reminderSynchronizeFunction.IndexOf('store(REMINDER_SYNC_PENDING, Ordering::Release)', [System.StringComparison]::Ordinal)
 $syncStoreIndex = $reminderSynchronizeFunction.IndexOf('.set_benefit_reminder_global_profile(&profile)', [System.StringComparison]::Ordinal)
@@ -269,11 +269,22 @@ $reminderImportBindingCount = [regex]::Matches(
 ).Count
 $reminderStartupBindingCount = [regex]::Matches(
     $applicationText,
-    '(?s)let reminder = match state\.synchronize_reminder_profile\(data_root\) \{\s*Ok\(_\) => OptionalReminderRuntime::start\(.*?BenefitReminderRuntime::start_notified'
+    '(?s)let reminder = start_optional_reminder_runtime\(\s*data_root,\s*state,\s*archive_path\.clone\(\),\s*started\.notifier_port\.clone\(\),\s*\);'
 ).Count
 if ($reminderImportBindingCount -ne 1 -or $reminderStartupBindingCount -ne 1) {
     throw 'TM-APP-REMINDER-IMPORT-BINDING: startup and confirmed config import must share the sole reminder synchronizer'
 }
+$reminderStartupFunction = [regex]::Match(
+    $applicationText,
+    '(?s)fn start_optional_reminder_runtime\(.*?\r?\n\}\r?\n\r?\nfn begin_bundle_generation'
+).Value
+if ([string]::IsNullOrWhiteSpace($reminderStartupFunction) -or
+    [regex]::Matches($reminderStartupFunction, 'state\.synchronize_reminder_profile\(data_root\)').Count -ne 1 -or
+    [regex]::Matches($reminderStartupFunction, 'Err\(_\) => OptionalReminderRuntime::failed\(RuntimeErrorCode::StoreUnavailable\)').Count -ne 1 -or
+    $reminderStartupFunction -match 'mark_reminder_unavailable|REMINDER_SYNC_UNAVAILABLE') {
+    throw 'TM-APP-REMINDER-STARTUP-PENDING: startup store unavailability must retain the durable desired policy as retryable Pending'
+}
+$reminderStartupPendingBindingCount = 1
 if ($notificationText -notmatch 'const NOTIFICATION_ACK_RETRY: Duration = Duration::from_secs\(60\);' -or
     $notificationText -notmatch 'Err\(error\) if error\.retryable\(\)' -or
     $notificationText -notmatch 'matches!\(self, Self::Busy \| Self::StoreUnavailable\)') {
@@ -441,6 +452,7 @@ if ($SourceOnly) {
         reminder_visible_pending_binding_count = $reminderVisiblePendingBindingCount
         reminder_import_binding_count = $reminderImportBindingCount
         reminder_startup_binding_count = $reminderStartupBindingCount
+        reminder_startup_pending_binding_count = $reminderStartupPendingBindingCount
         desktop_controller_count = 1
         session_detail_router_count = 1
         session_detail_current_bundle_binding_count = 1
@@ -574,6 +586,7 @@ foreach ($needle in @(
     reminder_visible_pending_binding_count = $reminderVisiblePendingBindingCount
     reminder_import_binding_count = $reminderImportBindingCount
     reminder_startup_binding_count = $reminderStartupBindingCount
+    reminder_startup_pending_binding_count = $reminderStartupPendingBindingCount
     desktop_controller_count = 1
     session_detail_router_count = 1
     session_detail_current_bundle_binding_count = 1

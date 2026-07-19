@@ -8,13 +8,15 @@ discovery, and dedicated quota refresh/store publication are also implemented.
 Global reminder settings synchronization is developer-closed: mutation-resistant
 application/Desktop receipts guard the sealed worker payload, settings-first
 generation-bound global projection, fixed eight-row editor, dirty draft, accessibility,
-and no new owner surfaces. This does not claim per-scope editing, snooze, quiet hours,
-OS/tray delivery, usage alerts, activation, P4/P5/P6, M0, package/signing/soak, or
-release acceptance.
+startup contention retention of retryable Pending with independent optional-runtime
+health, and no new owner surfaces. This does not claim per-scope editing, snooze, quiet
+hours, OS/tray delivery, usage alerts, activation, P4/P5/P6, M0, package/signing/soak,
+or release acceptance.
 Typed banked-reset domain/core/Codex normalization, strict schema-v12 store
 foundation, immutable FEFO current/revision-bound history queries, and combined Codex
 runtime publication with separate quota/benefit truth are implemented. Reminder
-runtime, UI, automation, and activation remain later.
+runtime and in-app presentation are implemented; OS delivery, automation, and
+activation remain later.
 Date: 2026-07-16.
 
 ## 1. Executive decision

@@ -888,6 +888,19 @@ Describe "TokenMaster application composition audit" {
             Should -Throw "*TM-APP-REMINDER-IMPORT-BINDING*"
     }
 
+    It "rejects overwriting retryable Pending after startup reminder contention" {
+        $fixture = New-AppAuditFixture -Name "reminder-startup-pending-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'Err(_) => OptionalReminderRuntime::failed(RuntimeErrorCode::StoreUnavailable),',
+            'Err(_) => { state.mark_reminder_unavailable(); OptionalReminderRuntime::failed(RuntimeErrorCode::StoreUnavailable) },'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-REMINDER-STARTUP-PENDING*"
+    }
+
     It "reports the bounded notification composition receipt" {
         $fixture = New-AppAuditFixture -Name "notification-receipt"
         $receipt = & $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json
@@ -900,5 +913,6 @@ Describe "TokenMaster application composition audit" {
         $receipt.notification_confirmed_release_count | Should -Be 1
         $receipt.notification_bounded_repump_count | Should -Be 1
         $receipt.notification_runtime_panic_rollback_count | Should -Be 1
+        $receipt.reminder_startup_pending_binding_count | Should -Be 1
     }
 }
