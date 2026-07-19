@@ -158,14 +158,18 @@ if (
 $commandPalettePath = Join-Path $uiRoot 'components\command-palette.slint'
 $commandPaletteText = [System.IO.File]::ReadAllText($commandPalettePath)
 $mainUiTextForPalette = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'main.slint'))
-if ($uiRustText -notmatch 'const MAX_COMMAND_PALETTE_QUERY_SCALARS: usize = 64;' -or
+$commandPaletteQueryCap = [int]([regex]::Match($uiRustText, 'MAX_COMMAND_PALETTE_QUERY_SCALARS: usize = (\d+);').Groups[1].Value)
+$commandPaletteModelCount = [regex]::Matches($mainUiTextForPalette, 'in property <\[RouteRow\]> command-palette-rows;').Count
+$commandPaletteShortcutCount = [regex]::Matches($mainUiTextForPalette, 'keys: @keys\(Control \+ K\);').Count
+$commandPaletteDefaultActionCount = [regex]::Matches($commandPaletteText, 'accessible-action-default').Count
+if ($commandPaletteQueryCap -ne 64 -or
     $uiRustText -notmatch 'value\s*\.chars\(\)\s*\.take\(MAX_COMMAND_PALETTE_QUERY_SCALARS\)' -or
     $uiRustText -notmatch 'window\.set_command_palette_rows\(model\(rows\)\)' -or
-    $mainUiTextForPalette -notmatch 'in property <\[RouteRow\]> command-palette-rows;' -or
+    $commandPaletteModelCount -ne 1 -or
     [regex]::Matches($mainUiTextForPalette, 'command-palette-rows').Count -ne 2) {
     throw 'TM-DESKTOP-COMMAND-PALETTE-BOUND: command palette must retain one replace-only filtered route model and a 64-scalar query'
 }
-if ($mainUiTextForPalette -notmatch 'keys: @keys\(Control \+ K\);' -or
+if ($commandPaletteShortcutCount -ne 1 -or
     $mainUiTextForPalette -notmatch 'Open route palette' -or
     $commandPaletteText -notmatch 'Key\.Escape' -or
     $commandPaletteText -notmatch 'Key\.UpArrow' -or
@@ -173,10 +177,15 @@ if ($mainUiTextForPalette -notmatch 'keys: @keys\(Control \+ K\);' -or
     $commandPaletteText -notmatch 'Key\.Return') {
     throw 'TM-DESKTOP-COMMAND-PALETTE-SHORTCUT: command palette must expose the exact Ctrl+K shortcut and bounded keyboard routing'
 }
-if ($commandPaletteText -notmatch 'accessible-action-default' -or
+if ($commandPaletteDefaultActionCount -ne 1 -or
     $commandPaletteText -notmatch 'No matching routes' -or
     $commandPaletteText -match '(?i)\btext\s*:\s*"(?:backup|restore|import|export|rebuild|activation)') {
     throw 'TM-DESKTOP-COMMAND-PALETTE-ROUTE-ONLY: command palette must remain accessible, explicit on no match, and route-only'
+}
+if ($mainUiTextForPalette -notmatch '(?s)shell-focus := FocusScope \{.*?RoutePalette \{' -or
+    $mainUiTextForPalette -notmatch '(?s)if root\.in-app-notification-visible: InAppNotificationPanel \{.*?\}\s*\}\s*RoutePalette \{' -or
+    $commandPaletteText -notmatch '(?s)palette-focus := FocusScope \{.*?search-focus := FocusScope \{.*?search := LineEdit') {
+    throw 'TM-DESKTOP-COMMAND-PALETTE-OVERLAY: palette overlay and focus scopes must be top-level and ancestral'
 }
 if ($commandPaletteText -match '(?i)\b(?:Timer|thread|spawn|cache|history|worker)\b' -or
     $uiRustText -match 'CommandPalette(?:Worker|Owner|Cache|History)') {
@@ -1064,10 +1073,10 @@ if ($SourceOnly) {
         fixed_route_count = 11
         rust_source_file_count = $rustFiles.Count
         slint_source_file_count = $uiFiles.Count
-        command_palette_query_scalar_maximum = 64
-        command_palette_model_count = 1
-        command_palette_shortcut_count = 1
-        command_palette_accessible_default_action_count = 1
+        command_palette_query_scalar_maximum = $commandPaletteQueryCap
+        command_palette_model_count = $commandPaletteModelCount
+        command_palette_shortcut_count = $commandPaletteShortcutCount
+        command_palette_accessible_default_action_count = $commandPaletteDefaultActionCount
         command_palette_route_only = $true
         command_palette_owner_count = 0
         controller_worker_count = $workerConstructionCount
@@ -1197,10 +1206,10 @@ if ($LASTEXITCODE -ne 0) {
     direct_production_dependencies = $directProductionDependencies
     rust_source_file_count = $rustFiles.Count
     slint_source_file_count = $uiFiles.Count
-    command_palette_query_scalar_maximum = 64
-    command_palette_model_count = 1
-    command_palette_shortcut_count = 1
-    command_palette_accessible_default_action_count = 1
+    command_palette_query_scalar_maximum = $commandPaletteQueryCap
+    command_palette_model_count = $commandPaletteModelCount
+    command_palette_shortcut_count = $commandPaletteShortcutCount
+    command_palette_accessible_default_action_count = $commandPaletteDefaultActionCount
     command_palette_route_only = $true
     command_palette_owner_count = 0
     fixed_route_count = 11

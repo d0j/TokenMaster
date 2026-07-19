@@ -374,6 +374,13 @@ fn assert_compiled_command_palette_is_bounded_and_routes_through_desktop_state(
     assert!(!window.get_command_palette_visible());
 
     window.invoke_open_command_palette();
+    dispatch_text(window, "help");
+    assert_eq!(window.get_command_palette_query(), "help");
+    assert_eq!(window.get_command_palette_rows().row_count(), 1);
+    dispatch_key(window, Key::Escape);
+    assert!(!window.get_command_palette_visible());
+
+    window.invoke_open_command_palette();
 
     window.invoke_command_palette_query_edited(SharedString::from("hElP"));
     assert_eq!(window.get_command_palette_rows().row_count(), 1);
@@ -999,6 +1006,15 @@ fn dispatch_key(window: &tokenmaster_desktop::MainWindow, key: Key) {
     window
         .window()
         .dispatch_event(WindowEvent::KeyReleased { text: key.into() });
+}
+
+fn dispatch_text(window: &tokenmaster_desktop::MainWindow, text: &str) {
+    window.window().dispatch_event(WindowEvent::KeyPressed {
+        text: SharedString::from(text),
+    });
+    window.window().dispatch_event(WindowEvent::KeyReleased {
+        text: SharedString::from(text),
+    });
 }
 
 fn assert_compiled_dashboard_renders_real_bounded_models_and_switches_layout_in_place() {

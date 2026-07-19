@@ -236,18 +236,22 @@ export component MainWindow inherits Window {
     min-width: 560px;
     min-height: 480px;
     background: UiTokens.background;
-    forward-focus: shell-shortcuts;
+    forward-focus: shell-focus;
 
-    shell-shortcuts := FocusScope {
-        x: 0px;
-        y: 0px;
-        width: 0px;
-        height: 0px;
+    shell-focus := FocusScope {
+        width: parent.width;
+        height: parent.height;
         KeyBinding {
             keys: @keys(Control + K);
             activated => { root.open-command-palette(); }
         }
-    }
+        capture-key-pressed(event) => {
+            if (event.modifiers.control && event.text == "k") {
+                root.open-command-palette();
+                return accept;
+            }
+            return reject;
+        }
 
     VerticalLayout {
         Rectangle {
@@ -286,20 +290,7 @@ export component MainWindow inherits Window {
         }
     }
 
-    RoutePalette {
-        width: parent.width;
-        height: parent.height;
-        palette-open: root.command-palette-visible;
-        rows: root.command-palette-rows;
-        query: root.command-palette-query;
-        selected-ordinal: root.command-palette-selected-ordinal;
-        query-edited(query) => { root.command-palette-query-edited(query); }
-        dismiss => { root.dismiss-command-palette(); }
-        move-selection(delta) => { root.move-command-palette-selection(delta); }
-        activate-selection => { root.activate-command-palette-selection(); }
-        activate-route(key) => { root.activate-command-palette-route(key); }
     }
-}
 
         HorizontalLayout {
             spacing: 0px;
@@ -574,5 +565,20 @@ export component MainWindow inherits Window {
         rows: root.in-app-notification-rows;
         count-label: root.in-app-notification-count-label;
         dismiss => { root.dismiss-in-app-notifications(); }
+    }
+
+    RoutePalette {
+        width: parent.width;
+        height: parent.height;
+        palette-open: root.command-palette-visible;
+        rows: root.command-palette-rows;
+        query: root.command-palette-query;
+        selected-ordinal: root.command-palette-selected-ordinal;
+        query-edited(query) => { root.command-palette-query-edited(query); }
+        dismiss => { root.dismiss-command-palette(); }
+        move-selection(delta) => { root.move-command-palette-selection(delta); }
+        activate-selection => { root.activate-command-palette-selection(); }
+        activate-route(key) => { root.activate-command-palette-route(key); }
+    }
     }
 }

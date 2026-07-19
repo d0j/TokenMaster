@@ -24,62 +24,68 @@ export component RoutePalette inherits Rectangle {
         }
     }
 
-    dismiss-touch := TouchArea {
-        clicked => { root.dismiss(); }
-    }
-
-    palette-card := Rectangle {
-        x: (parent.width - self.width) / 2;
-        y: 80px;
-        width: parent.width < 600px ? parent.width - 2 * UiTokens.space : 520px;
-        height: 390px;
-        background: UiTokens.surface;
-        border-color: UiTokens.border;
-        border-width: 1px;
-        border-radius: UiTokens.radius;
-
-        VerticalLayout {
-            padding: UiTokens.space;
-            spacing: UiTokens.space-sm;
-            Text { text: "Go to route"; color: UiTokens.text-primary; font-size: 16px; font-weight: 700; }
-            search := LineEdit {
-                text <=> root.query;
-                placeholder-text: "Filter routes";
-                accessible-label: "Filter routes";
-                changed text => { root.query-edited(self.text); }
-            }
-            if root.rows.length == 0: Text {
-                text: "No matching routes";
-                color: UiTokens.text-secondary;
-                accessible-label: "No matching routes";
-            }
-            for route[index] in root.rows: Rectangle {
-                height: 32px;
-                background: route.selected ? UiTokens.accent-subtle : transparent;
-                border-color: route.selected ? UiTokens.accent : transparent;
-                border-width: route.selected ? 1px : 0px;
-                border-radius: UiTokens.radius-sm;
-                accessible-role: button;
-                accessible-label: route.label + ", " + route.state;
-                accessible-action-default => { root.activate-route(route.key); }
-                HorizontalLayout {
-                    padding-left: UiTokens.space-sm;
-                    padding-right: UiTokens.space-sm;
-                    Text { text: route.label; color: UiTokens.text-primary; horizontal-stretch: 1; vertical-alignment: center; }
-                    Text { text: route.state; color: UiTokens.text-secondary; vertical-alignment: center; }
-                }
-                TouchArea { clicked => { root.activate-route(route.key); } }
-            }
-            Rectangle { vertical-stretch: 1; background: transparent; }
-            Text { text: "Up/Down to select · Enter to open · Escape to dismiss"; color: UiTokens.text-secondary; font-size: 11px; }
-        }
-    }
-
     palette-focus := FocusScope {
-        x: 0px;
-        y: 0px;
-        width: 0px;
-        height: 0px;
+        width: parent.width;
+        height: parent.height;
+        forward-focus: search-focus;
+
+        dismiss-touch := TouchArea {
+            clicked => { root.dismiss(); }
+        }
+
+        palette-card := Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: 60px;
+            width: parent.width < 600px ? parent.width - 2 * UiTokens.space : 520px;
+            height: min(520px, parent.height - 120px);
+            background: UiTokens.surface;
+            border-color: UiTokens.border;
+            border-width: 1px;
+            border-radius: UiTokens.radius;
+
+            VerticalLayout {
+                padding: UiTokens.space;
+                spacing: UiTokens.space-sm;
+                Text { text: "Go to route"; color: UiTokens.text-primary; font-size: 16px; font-weight: 700; }
+                search-focus := FocusScope {
+                    height: 32px;
+                    forward-focus: search;
+                    search := LineEdit {
+                        width: parent.width;
+                        height: parent.height;
+                        text <=> root.query;
+                        placeholder-text: "Filter routes";
+                        accessible-label: "Filter routes";
+                        changed text => { root.query-edited(self.text); }
+                    }
+                }
+                if root.rows.length == 0: Text {
+                    text: "No matching routes";
+                    color: UiTokens.text-secondary;
+                    accessible-label: "No matching routes";
+                }
+                for route[index] in root.rows: Rectangle {
+                    height: 32px;
+                    background: route.selected ? UiTokens.accent-subtle : transparent;
+                    border-color: route.selected ? UiTokens.accent : transparent;
+                    border-width: route.selected ? 1px : 0px;
+                    border-radius: UiTokens.radius-sm;
+                    accessible-role: button;
+                    accessible-label: route.label + ", " + route.state;
+                    accessible-action-default => { root.activate-route(route.key); }
+                    HorizontalLayout {
+                        padding-left: UiTokens.space-sm;
+                        padding-right: UiTokens.space-sm;
+                        Text { text: route.label; color: UiTokens.text-primary; horizontal-stretch: 1; vertical-alignment: center; }
+                        Text { text: route.state; color: UiTokens.text-secondary; vertical-alignment: center; }
+                    }
+                    TouchArea { clicked => { root.activate-route(route.key); } }
+                }
+                Rectangle { vertical-stretch: 1; background: transparent; }
+                Text { text: "Up/Down to select · Enter to open · Escape to dismiss"; color: UiTokens.text-secondary; font-size: 11px; }
+            }
+        }
+
         capture-key-pressed(event) => {
             if (!root.palette-open) { return reject; }
             if (event.text == Key.Escape) {

@@ -420,13 +420,19 @@ impl DesktopShell {
         &self,
         snapshot: &ProductSnapshot,
     ) -> Result<DesktopApplyOutcome, DesktopUiError> {
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| DesktopUiError::state_unavailable())?;
-        let outcome = state.apply_snapshot(snapshot);
-        if outcome == DesktopApplyOutcome::Accepted {
-            apply_projection(&self.window, state.projection());
+        let (outcome, projection) = {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| DesktopUiError::state_unavailable())?;
+            let outcome = state.apply_snapshot(snapshot);
+            let projection =
+                (outcome == DesktopApplyOutcome::Accepted).then(|| state.projection().clone());
+            (outcome, projection)
+        };
+        if let Some(projection) = projection {
+            apply_projection(&self.window, &projection);
+            refresh_command_palette_if_open(&self.window, &projection);
         }
         Ok(outcome)
     }
@@ -436,13 +442,19 @@ impl DesktopShell {
         epoch: DesktopSnapshotEpoch,
         snapshot: &ProductSnapshot,
     ) -> Result<DesktopApplyOutcome, DesktopUiError> {
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| DesktopUiError::state_unavailable())?;
-        let outcome = state.apply_snapshot_for_epoch(epoch, snapshot);
-        if outcome == DesktopApplyOutcome::Accepted {
-            apply_projection(&self.window, state.projection());
+        let (outcome, projection) = {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| DesktopUiError::state_unavailable())?;
+            let outcome = state.apply_snapshot_for_epoch(epoch, snapshot);
+            let projection =
+                (outcome == DesktopApplyOutcome::Accepted).then(|| state.projection().clone());
+            (outcome, projection)
+        };
+        if let Some(projection) = projection {
+            apply_projection(&self.window, &projection);
+            refresh_command_palette_if_open(&self.window, &projection);
         }
         Ok(outcome)
     }
@@ -818,11 +830,11 @@ fn wire_command_palette(window: &MainWindow, state: SharedDesktopState) {
         let Some(window) = weak.upgrade() else {
             return;
         };
-        let Ok(state) = open_state.lock() else {
+        let Ok(projection) = open_state.lock().map(|state| state.projection().clone()) else {
             return;
         };
         window.set_command_palette_visible(true);
-        apply_command_palette_rows(&window, state.projection(), "", None);
+        apply_command_palette_rows(&window, &projection, "", None);
     });
 
     let weak = window.as_weak();
@@ -838,11 +850,11 @@ fn wire_command_palette(window: &MainWindow, state: SharedDesktopState) {
         let Some(window) = weak.upgrade() else {
             return;
         };
-        let Ok(state) = query_state.lock() else {
+        let Ok(projection) = query_state.lock().map(|state| state.projection().clone()) else {
             return;
         };
         let query = truncate_command_palette_query(query.as_str());
-        apply_command_palette_rows(&window, state.projection(), &query, None);
+        apply_command_palette_rows(&window, &projection, &query, None);
     });
 
     let weak = window.as_weak();
@@ -952,14 +964,30 @@ fn move_command_palette_selection(window: &MainWindow, delta: i32) {
     window.set_command_palette_rows(model(rows));
 }
 
-fn activate_command_palette_route(window: &MainWindow, state: &SharedDesktopState, key: &str) {
-    let Ok(mut state) = state.lock() else {
+fn refresh_command_palette_if_open(window: &MainWindow, projection: &DesktopProjection) {
+    if !window.get_command_palette_visible() {
         return;
-    };
-    if state.select_stable_key(key).is_ok() {
-        apply_route_projection(window, state.projection());
-        dismiss_command_palette(window);
     }
+    let selected_key = usize::try_from(window.get_command_palette_selected_ordinal())
+        .ok()
+        .and_then(|index| window.get_command_palette_rows().row_data(index))
+        .map(|row| row.key.to_string());
+    let query = window.get_command_palette_query();
+    apply_command_palette_rows(window, projection, query.as_str(), selected_key.as_deref());
+}
+
+fn activate_command_palette_route(window: &MainWindow, state: &SharedDesktopState, key: &str) {
+    let projection = {
+        let Ok(mut state) = state.lock() else {
+            return;
+        };
+        if state.select_stable_key(key).is_err() {
+            return;
+        }
+        state.projection().clone()
+    };
+    apply_route_projection(window, &projection);
+    dismiss_command_palette(window);
 }
 
 fn dismiss_command_palette(window: &MainWindow) {

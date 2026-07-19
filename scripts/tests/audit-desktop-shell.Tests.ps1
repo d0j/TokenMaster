@@ -1224,6 +1224,19 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-COMMAND-PALETTE-ROUTE-ONLY*"
     }
 
+    It "rejects nesting the command palette before the notification layer" {
+        $fixture = New-DesktopAuditFixture -Name "command-palette-overlay-order"
+        $path = Join-Path $fixture "crates\desktop\ui\main.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'if root.in-app-notification-visible: InAppNotificationPanel {',
+            'RoutePalette { }`r`n    if root.in-app-notification-visible: InAppNotificationPanel {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-COMMAND-PALETTE-OVERLAY*"
+    }
+
     It "accepts the bounded dashboard History Sessions Models Projects Activity Notifications and Help About desktop boundary" {
         $fixture = New-DesktopAuditFixture -Name "library-boundary"
 
