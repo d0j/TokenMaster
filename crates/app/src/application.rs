@@ -45,6 +45,7 @@ use crate::command::{
     ApplicationCommandAdmission, ApplicationCommandExecution, ApplicationCommandFailure,
     ApplicationCommandPermit, ApplicationOperationPayload, ApplicationOperationRequest,
 };
+use crate::notification::{ReminderPresentationCoordinator, RuntimeReminderPresentationPort};
 use crate::operation::{
     ApplicationOperationSubmitter, ApplicationOperationWorker, ApplicationOperationWorkerPhase,
 };
@@ -992,7 +993,7 @@ fn finish_live_bundle(
         OptionalRuntime::start(CodexQuotaRuntimeConfig::new(archive_path.clone()).and_then(
             |config| CodexQuotaRuntime::start_notified(config, started.notifier_port.clone()),
         ));
-    let reminder = OptionalRuntime::start(
+    let reminder = OptionalReminderRuntime::start(
         BenefitReminderRuntimeConfig::new(archive_path.clone()).and_then(|config| {
             BenefitReminderRuntime::start_notified(config, started.notifier_port.clone())
         }),
@@ -1015,6 +1016,19 @@ fn finish_live_bundle(
     controller
         .attach_snapshot_notifier(live_bridge.notifier())
         .map_err(|_| ApplicationError::controller())?;
+    let notification_presentation = match reminder.owner() {
+        Some(runtime) => {
+            let presenter = bridge_factory
+                .in_app_notification_bridge()
+                .map_err(|_| ApplicationError::controller())?;
+            let port = Arc::new(RuntimeReminderPresentationPort::new(Arc::clone(runtime)));
+            Some(
+                ReminderPresentationCoordinator::start(port, Arc::new(presenter))
+                    .map_err(|_| ApplicationError::controller())?,
+            )
+        }
+        None => None,
+    };
 
     {
         let mut slot = bundle.lock().map_err(|_| ApplicationError::internal())?;
@@ -1025,6 +1039,7 @@ fn finish_live_bundle(
             live: started.live,
             quota,
             reminder,
+            notification_presentation,
             controller,
             maintenance,
             #[cfg(test)]
@@ -1662,7 +1677,8 @@ impl Drop for Application {
 struct ApplicationBundle {
     live: LiveRuntime,
     quota: OptionalRuntime<CodexQuotaRuntime>,
-    reminder: OptionalRuntime<BenefitReminderRuntime>,
+    reminder: OptionalReminderRuntime,
+    notification_presentation: Option<ReminderPresentationCoordinator>,
     controller: DesktopController,
     maintenance: BackupMaintenanceRuntime,
     #[cfg(test)]
@@ -1703,20 +1719,32 @@ impl ApplicationBundle {
         self.controller
             .refresh(DesktopRefreshUrgency::Hint)
             .map_err(|_| ApplicationError::controller())?;
+        if let Some(presentation) = self.notification_presentation.as_ref() {
+            let _ = presentation.pump();
+        }
         Ok(())
     }
 
     fn shutdown(&mut self) -> Result<(), ApplicationError> {
         let mut first = None;
-        if self.maintenance.pause().is_err() {
+        if let Some(mut presentation) = self.notification_presentation.take()
+            && presentation.shutdown().is_err()
+        {
+            first = Some(ApplicationError::shutdown());
+        }
+        if self.maintenance.pause().is_err() && first.is_none() {
             first = Some(ApplicationError::shutdown());
         }
         remember_failure(&mut first, self.live.pause().map(|_| ()));
         if let Some(quota) = self.quota.owner_mut() {
             remember_failure(&mut first, quota.pause().map(|_| ()));
         }
-        if let Some(reminder) = self.reminder.owner_mut() {
-            remember_failure(&mut first, reminder.pause().map(|_| ()));
+        if let Some(reminder) = self.reminder.owner() {
+            match reminder.lock() {
+                Ok(mut reminder) => remember_failure(&mut first, reminder.pause().map(|_| ())),
+                Err(_) if first.is_none() => first = Some(ApplicationError::shutdown()),
+                Err(_) => {}
+            }
         }
         if self.controller.shutdown().is_err() && first.is_none() {
             first = Some(ApplicationError::shutdown());
@@ -1724,8 +1752,12 @@ impl ApplicationBundle {
         if self.maintenance.shutdown().is_err() && first.is_none() {
             first = Some(ApplicationError::shutdown());
         }
-        if let Some(reminder) = self.reminder.owner_mut() {
-            remember_failure(&mut first, reminder.shutdown().map(|_| ()));
+        if let Some(reminder) = self.reminder.owner() {
+            match reminder.lock() {
+                Ok(mut reminder) => remember_failure(&mut first, reminder.shutdown().map(|_| ())),
+                Err(_) if first.is_none() => first = Some(ApplicationError::shutdown()),
+                Err(_) => {}
+            }
         }
         if let Some(quota) = self.quota.owner_mut() {
             remember_failure(&mut first, quota.shutdown().map(|_| ()));
@@ -1747,6 +1779,44 @@ fn remember_failure<T>(
 struct OptionalRuntime<T> {
     owner: Option<T>,
     failure: Option<RuntimeErrorCode>,
+}
+
+struct OptionalReminderRuntime {
+    owner: Option<Arc<Mutex<BenefitReminderRuntime>>>,
+    failure: Option<RuntimeErrorCode>,
+}
+
+impl OptionalReminderRuntime {
+    fn start(result: Result<BenefitReminderRuntime, tokenmaster_runtime::RuntimeError>) -> Self {
+        match result {
+            Ok(owner) => Self {
+                owner: Some(Arc::new(Mutex::new(owner))),
+                failure: None,
+            },
+            Err(error) => Self {
+                owner: None,
+                failure: Some(error.code()),
+            },
+        }
+    }
+
+    fn snapshot<H>(
+        &self,
+        capture: impl FnOnce(&BenefitReminderRuntime) -> Result<H, RuntimeErrorCode>,
+    ) -> Result<H, ProductRuntimeObservationError> {
+        match (&self.owner, self.failure) {
+            (Some(owner), _) => owner
+                .lock()
+                .map_err(|_| ProductRuntimeObservationError::Internal)
+                .and_then(|owner| capture(&owner).map_err(ProductRuntimeObservationError::from)),
+            (None, Some(error)) => Err(ProductRuntimeObservationError::from(error)),
+            (None, None) => Err(ProductRuntimeObservationError::Internal),
+        }
+    }
+
+    const fn owner(&self) -> Option<&Arc<Mutex<BenefitReminderRuntime>>> {
+        self.owner.as_ref()
+    }
 }
 
 impl<T> OptionalRuntime<T> {

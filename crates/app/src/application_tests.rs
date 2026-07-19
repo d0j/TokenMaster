@@ -529,10 +529,11 @@ fn real_bundle_joins_live_health_and_independent_optional_failures_then_shuts_do
             owner: None,
             failure: Some(RuntimeErrorCode::ProviderUnavailable),
         },
-        reminder: OptionalRuntime {
+        reminder: OptionalReminderRuntime {
             owner: None,
             failure: Some(RuntimeErrorCode::StoreUnavailable),
         },
+        notification_presentation: None,
         controller,
         maintenance,
         notifier: Arc::new(ApplicationRuntimeNotifier::new(Weak::new(), 1)),

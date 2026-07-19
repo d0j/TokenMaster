@@ -6087,6 +6087,7 @@ dependencies = [
  "tempfile",
  "tokenmaster-codex",
  "tokenmaster-desktop",
+ "tokenmaster-domain",
  "tokenmaster-engine",
  "tokenmaster-platform",
  "tokenmaster-product",

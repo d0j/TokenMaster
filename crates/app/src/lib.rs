@@ -6,8 +6,14 @@
 mod application;
 mod command;
 mod data_root;
+mod notification;
 mod operation;
 mod state;
+
+#[cfg(test)]
+#[path = "notification_tests.rs"]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod notification_tests;
 
 pub use application::{ApplicationError, ApplicationErrorCode, run};
 
