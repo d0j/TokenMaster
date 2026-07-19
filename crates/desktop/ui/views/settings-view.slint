@@ -30,6 +30,9 @@ export component SettingsView inherits Rectangle {
     in property <bool> high-contrast;
     in property <bool> reduced-motion;
     out property <string> settings-layout-mode: root.width < 760px ? "narrow" : "wide";
+    out property <length> reminder-card-bottom: reminder-card.y + reminder-card.height;
+    out property <length> backup-card-top: backup-card.y;
+    out property <length> config-card-top: config-card.y;
 
     callback export-config();
     callback import-config();
@@ -46,7 +49,7 @@ export component SettingsView inherits Rectangle {
     accessible-role: groupbox;
     accessible-label: "TokenMaster settings";
 
-    ScrollView {
+    settings-scroll := ScrollView {
         viewport := VerticalLayout {
         padding: UiTokens.space;
         spacing: UiTokens.space;
@@ -54,14 +57,13 @@ export component SettingsView inherits Rectangle {
         Text { text: "Settings"; color: UiTokens.text-primary; font-size: 24px; font-weight: 700; }
         Text { text: "Settings health: " + root.settings-health; color: UiTokens.text-secondary; }
 
-        Rectangle {
-            height: root.settings-layout-mode == "narrow" ? 690px : 470px;
+        reminder-card := Rectangle {
             background: UiTokens.surface;
             border-color: UiTokens.border;
             border-width: root.high-contrast ? 2px : 1px;
             border-radius: UiTokens.radius;
 
-            VerticalLayout {
+            reminder-content := VerticalLayout {
                 padding: UiTokens.space;
                 spacing: UiTokens.space-sm;
                 Text { text: "Expiry reminders"; color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
@@ -79,9 +81,9 @@ export component SettingsView inherits Rectangle {
                 Text { text: "Custom lead times"; color: UiTokens.text-secondary; }
                 for row[index] in root.reminder-custom-lead-rows: HorizontalLayout {
                     spacing: UiTokens.space-sm;
-                    row-enabled := CheckBox { text: "Custom lead"; checked: row.enabled; accessible-label: "Enable custom reminder lead"; toggled => { root.reminder-custom-lead-edited(index, self.checked, value.value, unit.current-index); } }
-                    value := SpinBox { minimum: 1; maximum: 2147483647; value: row.value; accessible-label: "Custom reminder lead value"; edited(v) => { root.reminder-custom-lead-edited(index, row-enabled.checked, v, unit.current-index); } }
-                    unit := ComboBox { model: ["seconds", "minutes", "hours", "days"]; current-index: row.unit-index; accessible-label: "Custom reminder lead unit"; selected(_) => { root.reminder-custom-lead-edited(index, row-enabled.checked, value.value, self.current-index); } }
+                    row-enabled := CheckBox { text: "Custom lead"; checked: row.enabled; accessible-label: "Enable custom reminder lead row " + (index + 1); toggled => { root.reminder-custom-lead-edited(index, self.checked, value.value, unit.current-index); } }
+                    value := SpinBox { minimum: 1; maximum: 2147483647; value: row.value; accessible-label: "Custom reminder lead value row " + (index + 1); edited(v) => { root.reminder-custom-lead-edited(index, row-enabled.checked, v, unit.current-index); } }
+                    unit := ComboBox { model: ["seconds", "minutes", "hours", "days"]; current-index: row.unit-index; accessible-label: "Custom reminder lead unit row " + (index + 1); selected(_) => { root.reminder-custom-lead-edited(index, row-enabled.checked, value.value, self.current-index); } }
                 }
                 HorizontalLayout {
                     spacing: UiTokens.space-sm;
@@ -92,7 +94,7 @@ export component SettingsView inherits Rectangle {
             }
         }
 
-        Rectangle {
+        backup-card := Rectangle {
             height: 214px;
             background: UiTokens.surface;
             border-color: UiTokens.border;
@@ -121,7 +123,7 @@ export component SettingsView inherits Rectangle {
             }
         }
 
-        Rectangle {
+        config-card := Rectangle {
             height: root.config-import-preview-visible ? 182px : 118px;
             background: UiTokens.surface;
             border-color: UiTokens.border;

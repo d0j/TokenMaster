@@ -863,8 +863,16 @@ fn apply_reliable_state_projection(
         policy.retention_budget_bytes() / 1_048_576,
     ));
 
+    let reminder = projection.reminder_policy();
+    window.set_reminder_sync_state(
+        match reminder.sync_state() {
+            crate::DesktopReminderSyncState::Pending => "Pending",
+            crate::DesktopReminderSyncState::Synchronized => "Synchronized",
+            crate::DesktopReminderSyncState::Unavailable => "Unavailable",
+        }
+        .into(),
+    );
     if !window.get_reminder_dirty() {
-        let reminder = projection.reminder_policy();
         window.set_reminder_enabled(reminder.enabled());
         let leads = reminder.lead_seconds();
         window.set_reminder_preset_seven_days(leads.contains(&604_800));
@@ -878,14 +886,6 @@ fn apply_reliable_state_projection(
             .filter(|lead| ![604_800, 86_400, 43_200, 21_600, 3_600].contains(lead))
             .collect::<Vec<_>>();
         window.set_reminder_custom_lead_rows(reminder_custom_rows(&custom));
-        window.set_reminder_sync_state(
-            match reminder.sync_state() {
-                crate::DesktopReminderSyncState::Pending => "Pending",
-                crate::DesktopReminderSyncState::Synchronized => "Synchronized",
-                crate::DesktopReminderSyncState::Unavailable => "Unavailable",
-            }
-            .into(),
-        );
         window.set_reminder_feedback("Ready to edit reminder profile".into());
     }
 

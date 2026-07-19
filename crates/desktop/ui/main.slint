@@ -146,6 +146,9 @@ export component MainWindow inherits Window {
     out property <string> projects-layout-mode: root.width < 800px ? "narrow" : "wide";
     out property <string> activity-layout-mode: root.width < 800px ? "narrow" : "wide";
     out property <string> settings-layout-mode: settings-view.settings-layout-mode;
+    out property <length> settings-reminder-card-bottom: settings-view.reminder-card-bottom;
+    out property <length> settings-backup-card-top: settings-view.backup-card-top;
+    out property <length> settings-config-card-top: settings-view.config-card-top;
     out property <string> notifications-layout-mode: root.width < 800px ? "narrow" : "wide";
     out property <string> help-about-layout-mode: help-view.layout-mode;
     out property <int> help-about-section-count: help-view.section-count;

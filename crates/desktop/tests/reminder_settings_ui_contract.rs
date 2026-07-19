@@ -3,7 +3,7 @@ use std::{
     rc::Rc,
 };
 
-use i_slint_backend_testing::{AccessibleRole, ElementQuery};
+use i_slint_backend_testing::{AccessibleRole, ElementHandle, ElementQuery};
 use slint::{ComponentHandle, Model, SharedString};
 use tokenmaster_desktop::{
     DesktopBackupPolicy, DesktopIntent, DesktopIntentAdmission, DesktopIntentSink,
@@ -34,8 +34,14 @@ impl DesktopIntentSink for RecordingSink {
 }
 
 fn reliable_state(leads: &[u32]) -> DesktopReliableStateProjection {
-    let reminder = DesktopReminderPolicy::new(true, leads, DesktopReminderSyncState::Synchronized)
-        .expect("reminder policy");
+    reliable_state_with_sync(leads, DesktopReminderSyncState::Synchronized)
+}
+
+fn reliable_state_with_sync(
+    leads: &[u32],
+    sync_state: DesktopReminderSyncState,
+) -> DesktopReliableStateProjection {
+    let reminder = DesktopReminderPolicy::new(true, leads, sync_state).expect("reminder policy");
     DesktopReliableStateProjection::from_input(DesktopReliableStateInput::new(
         1,
         DesktopReliableStateSummary::new_with_reminder_policy(
@@ -116,7 +122,7 @@ fn reliable_reminder_policy_projects_into_the_bounded_editor() {
     window.invoke_save_reminder_policy();
     assert_eq!(sink.intents.borrow().len(), 2);
     window.invoke_reset_reminder_recommended();
-    for (index, value) in (2..=5).enumerate() {
+    for (index, value) in [61, 62, 63, 64].into_iter().enumerate() {
         window.invoke_reminder_custom_lead_edited(index as i32, true, value, 0);
     }
     window.invoke_save_reminder_policy();
@@ -143,35 +149,76 @@ fn reliable_reminder_policy_projects_into_the_bounded_editor() {
     }
 
     sink.admission.set(DesktopIntentAdmission::Rejected);
+    let reset_before = sink.intents.borrow().len();
     window.invoke_reset_reminder_recommended();
-    let draft = window
-        .get_reminder_custom_lead_rows()
-        .row_data(0)
-        .expect("reset row");
+    assert_eq!(sink.intents.borrow().len(), reset_before);
+    assert!(window.get_reminder_dirty());
+    assert!(window.get_reminder_enabled());
+    assert!(window.get_reminder_preset_seven_days());
+    assert!(window.get_reminder_preset_twenty_four_hours());
+    assert!(window.get_reminder_preset_twelve_hours());
+    assert!(window.get_reminder_preset_six_hours());
+    assert!(window.get_reminder_preset_one_hour());
+    let draft_rows = (0..window.get_reminder_custom_lead_rows().row_count())
+        .map(|index| {
+            window
+                .get_reminder_custom_lead_rows()
+                .row_data(index)
+                .expect("reset row")
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        draft_rows
+            .iter()
+            .all(|row| !row.enabled && row.value == 1 && row.unit_index == 0)
+    );
+    let draft_enabled = window.get_reminder_enabled();
+    let draft_seven_days = window.get_reminder_preset_seven_days();
     window.invoke_save_reminder_policy();
     assert!(window.get_reminder_dirty());
     assert_eq!(window.get_reminder_feedback(), "Reminder service is busy");
+    assert_eq!(window.get_reminder_enabled(), draft_enabled);
+    assert_eq!(window.get_reminder_preset_seven_days(), draft_seven_days);
     assert_eq!(
-        window
-            .get_reminder_custom_lead_rows()
-            .row_data(0)
-            .expect("retained row"),
-        draft
+        (0..window.get_reminder_custom_lead_rows().row_count())
+            .map(|index| window
+                .get_reminder_custom_lead_rows()
+                .row_data(index)
+                .expect("retained row"))
+            .collect::<Vec<_>>(),
+        draft_rows
     );
 
-    let replacement = reliable_state(&[3_600]);
     shell
-        .apply_reliable_state(replacement)
+        .apply_reliable_state(reliable_state_with_sync(
+            &[3_600],
+            DesktopReminderSyncState::Pending,
+        ))
         .expect("publish while dirty");
     assert!(window.get_reminder_preset_seven_days());
+    assert_eq!(window.get_reminder_sync_state(), "Pending");
+    shell
+        .apply_reliable_state(DesktopReliableStateProjection::unavailable())
+        .expect("unavailable projection while dirty");
+    assert!(window.get_reminder_preset_seven_days());
+    assert_eq!(window.get_reminder_sync_state(), "Unavailable");
     sink.admission.set(DesktopIntentAdmission::Queued);
+    let queued_before = sink.intents.borrow().len();
     window.invoke_save_reminder_policy();
+    assert_eq!(sink.intents.borrow().len(), queued_before + 1);
     assert!(!window.get_reminder_dirty());
     shell
         .apply_reliable_state(reliable_state(&[3_600]))
         .expect("publish after acceptance");
     assert!(window.get_reminder_preset_one_hour());
     assert!(!window.get_reminder_preset_seven_days());
+
+    sink.admission.set(DesktopIntentAdmission::Coalesced);
+    window.invoke_reset_reminder_recommended();
+    let coalesced_before = sink.intents.borrow().len();
+    window.invoke_save_reminder_policy();
+    assert_eq!(sink.intents.borrow().len(), coalesced_before + 1);
+    assert!(!window.get_reminder_dirty());
 
     window.invoke_select_route(SharedString::from("settings"));
     window.window().set_size(slint::PhysicalSize::new(700, 900));
@@ -187,14 +234,66 @@ fn reliable_reminder_policy_projects_into_the_bounded_editor() {
         .into_iter()
         .filter_map(|element| element.accessible_label())
         .collect::<Vec<_>>();
+    let mut unique_labels = labels.clone();
+    unique_labels.sort();
+    unique_labels.dedup();
     for label in [
         "Enable expiry reminders",
         "Save reminder profile",
         "Reset reminder profile to recommended",
     ] {
         assert!(
-            labels.iter().any(|candidate| candidate.contains(label)),
+            unique_labels
+                .iter()
+                .any(|candidate| candidate.contains(label)),
             "missing label: {label}"
+        );
+    }
+    for (label, expected) in [
+        ("Enable expiry reminders", 1),
+        ("Reminder lead time", 5),
+        ("Enable custom reminder lead row", 8),
+        ("Custom reminder lead value row", 8),
+        ("Custom reminder lead unit row", 8),
+        ("Save reminder profile", 1),
+        ("Reset reminder profile to recommended", 1),
+        ("Reminder editor feedback", 1),
+        ("Reminder synchronization state", 1),
+    ] {
+        assert_eq!(
+            unique_labels
+                .iter()
+                .filter(|candidate| candidate.contains(label))
+                .count(),
+            expected,
+            "accessible label count for {label}"
+        );
+    }
+    for index in 1..=8 {
+        for label in [
+            format!("Enable custom reminder lead row {index}"),
+            format!("Custom reminder lead value row {index}"),
+            format!("Custom reminder lead unit row {index}"),
+        ] {
+            assert!(
+                unique_labels.iter().any(|candidate| candidate == &label),
+                "missing label: {label}"
+            );
+        }
+    }
+    for label in unique_labels.iter().filter(|label| {
+        label.contains("expiry reminders")
+            || label.contains("Reminder lead time")
+            || label.contains("custom reminder lead")
+            || label.contains("Save reminder profile")
+            || label.contains("Reset reminder profile")
+            || label.contains("Reminder editor feedback")
+            || label.contains("Reminder synchronization state")
+    }) {
+        assert!(
+            ElementHandle::find_by_accessible_label(window, label)
+                .any(|element| element.accessible_role().is_some()),
+            "accessible role missing: {label}"
         );
     }
     assert!(
@@ -203,4 +302,54 @@ fn reliable_reminder_policy_projects_into_the_bounded_editor() {
             .find_all()
             .is_empty()
     );
+    for width in [700, 1120] {
+        window
+            .window()
+            .set_size(slint::PhysicalSize::new(width, 900));
+        let reminder_card =
+            ElementHandle::find_by_element_id(window, "SettingsView::reminder-card")
+                .next()
+                .expect("reminder card");
+        let card_position = reminder_card.absolute_position();
+        let card_size = reminder_card.size();
+        assert!(
+            card_size.width > 0.0 && card_size.height > 0.0,
+            "reminder card has bounds"
+        );
+        for label in unique_labels
+            .iter()
+            .filter(|label| label.contains("reminder") || label.contains("Reminder"))
+        {
+            let control = ElementHandle::find_by_accessible_label(window, label)
+                .next()
+                .expect("reminder control");
+            let position = control.absolute_position();
+            let size = control.size();
+            assert!(
+                size.width > 0.0 && size.height > 0.0,
+                "positive bounds: {label}"
+            );
+            assert!(
+                position.x >= card_position.x && position.y >= card_position.y,
+                "inside card start: {label}"
+            );
+            assert!(
+                position.x + size.width <= card_position.x + card_size.width,
+                "inside card width: {label}"
+            );
+            assert!(
+                position.y + size.height <= card_position.y + card_size.height,
+                "inside card height: {label}"
+            );
+        }
+        let reminder_bottom = window.get_settings_reminder_card_bottom();
+        assert!(
+            window.get_settings_backup_card_top() >= reminder_bottom,
+            "backup card begins after reminder card at width {width}"
+        );
+        assert!(
+            window.get_settings_config_card_top() >= reminder_bottom,
+            "config card begins after reminder card at width {width}"
+        );
+    }
 }
