@@ -814,7 +814,32 @@ Critical/Important/Minor 0/0/0. Clean-root, formatting, strict warnings-as-error
 workspace Clippy, release composition, and the complete locked workspace test/doctest
 baseline pass in 1,035 seconds. P3-D.5 is closed; no release acceptance is inferred.
 
-The immediate next implementation slice is Notifications, followed by Help/About.
+P3-D.6 Notifications is implemented under
+`docs/superpowers/specs/2026-07-19-tokenmaster-notifications-route-design.md` and
+`docs/superpowers/plans/2026-07-19-tokenmaster-notifications-route.md`. It consumes
+the sole existing all-current benefit overview and adds no query, worker, timer, queue,
+cache, connection, or delivery lease. Desktop retains 32 effective-profile rows, 256
+separate current lots, and eight leads/profile; typed expiry precision, inherited/
+override policy, disabled/in-app-only coverage, evidence, warnings, due time, and
+truncation remain explicit. One scope and one lot model render responsive wide/narrow
+and accessible views, switch in place, and expose no provider/account/workspace/scope/
+lot/delivery identity, path, content, receipt, credential, or activation authority.
+Focused projection/UI/full Desktop tests, strict package Clippy, source audit, and
+82/82 mutation cases pass. Navigation performs zero reminder take/ack/release.
+The initial independent review's three Important and one Minor findings are closed:
+exact/bounded UTC keeps milliseconds, waiting is not unavailable, every forbidden
+owner/control has a mutation, wide rows show completeness, and replacement evidence
+starts populated. Re-review returned READY with Critical/Important/Minor 0/0/0.
+Clean-root, formatting, strict warnings-as-errors workspace Clippy, release composition,
+and the complete locked workspace test/doctest gate pass in 1,216.4 seconds overall
+(25.8/1.7/76.0 seconds for clean-root/fmt/Clippy). P3-D.6 is closed without inferring
+product release acceptance.
+
+The immediate next implementation slice is Help/About, followed by a separate app-owned
+notification presentation/settings contour. That bridge must acknowledge a leased
+batch only after successful UI presentation and release it on failure/cancellation;
+settings synchronization/editing, snooze, quiet hours, OS delivery, usage alerts, and
+activation remain unfinished.
 Reuse the immutable snapshot/controller boundary; do not turn route selection into
 query authority. Later-page Sessions navigation and interactive History range
 selection remain bounded replacements of their existing product sections.

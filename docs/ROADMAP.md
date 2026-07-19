@@ -152,9 +152,16 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   extra query/worker/timer/cache/private identity. Focused/full Desktop, strict package
   Clippy, release/source audit, and 67 mutation cases pass. Independent review's two
   Important empty/evidence-state intersections are fixed and re-review is 0/0/0; the
-  complete locked workspace gate passes in 1,035 seconds. P3-D.5 is closed. Full rhythm
-  aggregation, later-page navigation, remaining notifications/help, interactive History
-  ranges, command palette, tray, and compact widget remain P3-D-P3-E.
+  complete locked workspace gate passes in 1,035 seconds. P3-D.5 is closed. P3-D.6
+  adds the responsive read-only Notifications expiry center over the existing benefit
+  overview: 32 effective profile rows, 256 separate current lots, eight leads/profile,
+  five expiry precisions, explicit evidence/coverage/warnings/truncation, and zero new
+  query/runtime/delivery authority. Focused/full Desktop, strict package Clippy, source
+  audit, and 82 mutation cases pass. Independent re-review is 0/0/0 and the complete
+  locked workspace gate passes in 1,216.4 seconds. P3-D.6 is closed; Help/About is next.
+  Full rhythm aggregation,
+  notification presentation receipts/settings, later-page navigation, interactive
+  History ranges, command palette, tray, and compact widget remain P3-D-P3-E.
 - **P4 — presentation:** modular skins/layouts/density/scheme/locale, en/ru/pseudo,
   accessibility, DPI, reduced motion, and visible-paint/resource gates.
 - **P5 — automation:** strict bounded JSON CLI and a separate stdio MCP process for
@@ -196,13 +203,14 @@ generation-safe current-bundle restart foundation and Task 12B.2a identity-pinne
   Settings UI plus no-backup reconstruction, and Task 16 adversarial/privacy/
   compatibility closure, Task 17 resource/performance evidence, and Task 18
   documentation/acceptance closure are implemented. P3-D.1 History, complete P3-D.2
-  bounded Sessions list/detail, P3-D.3 Models, P3-D.4 Projects, and P3-D.5 Recent
-  activity are implemented over
+  bounded Sessions list/detail, P3-D.3 Models, P3-D.4 Projects, P3-D.5 Recent
+  activity, and P3-D.6 Notifications are implemented over
   the same immutable snapshot/controller boundary with no new worker/timer/cache.
   Models and Projects share one recent-usage query; Projects reuses one existing Git
-  query and keeps its UTC window separate; Activity reuses one existing latest page.
-  Notifications is next after Activity closeout.
-  Later-page Sessions navigation
+  query and keeps its UTC window separate; Activity reuses one existing latest page;
+  Notifications reuses one existing all-current benefit overview and does not
+  acknowledge delivery. Help/About is next, followed by the separate app-owned
+  notification presentation/settings contour. Later-page Sessions navigation
   remains a separate bounded replacement of the same list section.
 
 P3-D.0 Reliable State is approved under

@@ -1041,6 +1041,25 @@ does not depend on aggregate readiness, so aggregate rebuild cannot hide its lat
 page. Hourly/day-of-week rhythm data is not derivable from this projection and remains
 a separate future aggregate contract.
 
+### P3-D.6 bounded Notifications projection
+
+`DesktopNotificationsProjection` consumes only the already-published all-current
+benefit overview. It adds no query result, product section, runtime owner, timer, or
+delivery lease. It retains at most 32 identity-free effective reminder-profile rows,
+256 separate current-lot rows, and eight lead times per profile. Profile rows preserve
+inventory/profile revisions, freshness bounds, completeness, nearest expiry/due,
+inherited/override source, disabled/in-app-only coverage, quality, and bounded warning
+codes. Lot rows preserve provider-neutral kind, positive quantity, state, label key,
+optional grant time, evidence source/confidence/detail, and one typed expiry value.
+
+`DesktopBenefitExpiry` preserves `ExactUtc`, `BoundedUtc`, `ProviderLocal`,
+`ProviderDate`, and `Unknown` without converting approximate provider truth into an
+exact instant. Only presentation ordinals associate lots with scope rows. Provider,
+account, workspace, scope, lot, delivery, and window identities; paths, credentials,
+content, receipt state, and activation authority do not cross Desktop/Slint. One
+accepted product generation replaces one scope model and one lot model. Navigation
+does not query, rebuild, take, acknowledge, release, or schedule reminder work.
+
 Only explicit provider ancestry identifies a parent. A strong signature covers the
 normalized model, emitted delta, and provider cumulative snapshot. A weak signature
 covers model and delta only and cannot suppress a pre-divergence event by itself.

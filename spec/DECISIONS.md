@@ -1760,3 +1760,24 @@ Rationale: the latest page is already captured for Dashboard and is immediately 
 so another query or owner would add latency and memory without new truth. Treating a
 small event sample as a rhythm chart would create false parity. This slice delivers
 responsive drill-out value now while preserving the exact future aggregate boundary.
+
+## ADR-071 — Separate the read-only expiry center from notification delivery receipts
+
+Decision: P3-D.6 renders the existing all-current benefit overview as one bounded
+Notifications route. Desktop retains at most 32 identity-free effective-profile rows,
+256 separate current-lot rows, and eight leads per profile. It preserves every expiry
+precision and evidence/policy distinction. One accepted product generation replaces
+one scope model and one lot model; route selection changes visibility only.
+
+The projection and navigation do not call reminder `take`, `acknowledge`, or `release`.
+A future visible-delivery bridge remains application-owned: it leases a bounded batch,
+applies every row on the UI event loop, acknowledges only after successful presentation,
+and releases on failed, cancelled, or closed-window presentation. Settings editing,
+snooze, quiet hours, OS/tray delivery, usage alerts, and activation remain independent
+capability slices.
+
+Rationale: acknowledging during query, projection, or navigation would claim delivery
+before the user could see it and could permanently suppress an expiry warning. Exposing
+the reminder runtime to Slint would also widen frontend authority. The split delivers
+instant inventory/profile visibility now while preserving crash-safe retry semantics,
+constant frontend memory, and a narrow future command boundary.

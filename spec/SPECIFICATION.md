@@ -333,6 +333,17 @@ response, command, credential, or query authority. This recent-event page MUST N
 labelled as a rhythm, heatmap, hourly, or day-of-week aggregate; that capability needs
 a separate bounded timezone/DST-aware query contract.
 
+Notifications MUST render the already-published all-current benefit overview as a
+bounded expiry-safety center. It MUST preserve separate current lots, exact/bounded/
+provider-local/provider-date/unknown expiry precision, effective inherited or override
+profiles, disabled or in-app-only coverage, freshness, quality, warnings, and explicit
+truncation. The frontend MUST retain at most 32 profile rows, 256 lot rows, and eight
+lead times per profile. Provider/account/workspace/scope/lot/delivery identity and
+activation authority MUST remain behind the query/runtime boundary. Merely selecting
+or rendering this route MUST NOT take, acknowledge, release, schedule, or otherwise
+mutate a reminder delivery. Visible delivery requires a separate app-owned presentation
+receipt that acknowledges only after successful presentation and releases on failure.
+
 ### TM-UI-002 — Reactive presentation boundary
 
 Skin, layout, locale, selection, and range changes MUST update bounded presentation

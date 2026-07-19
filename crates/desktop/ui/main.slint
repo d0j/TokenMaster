@@ -1,7 +1,7 @@
 import {
     RouteRow, DashboardSectionRow, DashboardQuotaRow, DashboardBenefitRow,
     DashboardTrendPoint, DashboardSessionRow, DashboardActivityRow, DashboardModelRow,
-    HistoryDayRow, ModelUsageRow, ProjectUsageRow, RecentActivityRow, SessionListRow, SessionDetailBreakdownRow, RestorePointRow
+    HistoryDayRow, ModelUsageRow, ProjectUsageRow, RecentActivityRow, ReminderScopeRow, BenefitLotRow, SessionListRow, SessionDetailBreakdownRow, RestorePointRow
 } from "models.slint";
 import { UiTokens } from "tokens.slint";
 import { RouteNavItem } from "components/route-nav-item.slint";
@@ -11,6 +11,7 @@ import { HistoryView } from "views/history-view.slint";
 import { ModelsView } from "views/models-view.slint";
 import { ProjectsView } from "views/projects-view.slint";
 import { ActivityView } from "views/activity-view.slint";
+import { NotificationsView } from "views/notifications-view.slint";
 import { SessionsView } from "views/sessions-view.slint";
 import { DataHealthView } from "views/data-health-view.slint";
 import { SettingsView } from "views/settings-view.slint";
@@ -93,6 +94,13 @@ export component MainWindow inherits Window {
     in property <string> activity-loaded-label;
     in property <string> activity-page-status-label;
     in property <bool> activity-page-available;
+    in property <[ReminderScopeRow]> reminder-scope-rows;
+    in property <[BenefitLotRow]> benefit-lot-rows;
+    in property <string> notifications-state;
+    in property <string> notifications-reasons;
+    in property <string> notifications-evidence-label;
+    in property <string> notifications-loaded-label;
+    in property <string> notifications-completeness-label;
     in property <[SessionListRow]> session-list-rows;
     in property <string> sessions-state;
     in property <string> sessions-reasons;
@@ -125,6 +133,7 @@ export component MainWindow inherits Window {
     out property <bool> models-visible: root.active-route-key == "models";
     out property <bool> projects-visible: root.active-route-key == "projects";
     out property <bool> activity-visible: root.active-route-key == "activity";
+    out property <bool> notifications-visible: root.active-route-key == "notifications";
     out property <bool> data-health-visible: root.active-route-key == "data_health";
     out property <bool> settings-visible: root.active-route-key == "settings";
     out property <string> dashboard-layout-mode: root.width < 1010px ? "narrow" : "wide";
@@ -132,6 +141,7 @@ export component MainWindow inherits Window {
     out property <string> models-layout-mode: root.width < 800px ? "narrow" : "wide";
     out property <string> projects-layout-mode: root.width < 800px ? "narrow" : "wide";
     out property <string> activity-layout-mode: root.width < 800px ? "narrow" : "wide";
+    out property <string> notifications-layout-mode: root.width < 800px ? "narrow" : "wide";
     in property <string> reliable-state-generation;
     in property <string> reliable-state-health;
     in property <bool> reliable-state-safe-mode;
@@ -374,6 +384,18 @@ export component MainWindow inherits Window {
                     page-available: root.activity-page-available;
                 }
 
+                if root.notifications-visible: NotificationsView {
+                    width: parent.width;
+                    height: parent.height;
+                    scope-rows: root.reminder-scope-rows;
+                    lot-rows: root.benefit-lot-rows;
+                    state: root.notifications-state;
+                    reasons: root.notifications-reasons;
+                    evidence-label: root.notifications-evidence-label;
+                    loaded-label: root.notifications-loaded-label;
+                    completeness-label: root.notifications-completeness-label;
+                }
+
                 if root.data-health-visible: DataHealthView {
                     width: parent.width;
                     height: parent.height;
@@ -435,7 +457,7 @@ export component MainWindow inherits Window {
                     update-backup-policy(enabled, quiet, interval, budget) => { root.update-backup-policy(enabled, quiet, interval, budget); }
                 }
 
-                if !root.dashboard-visible && !root.history-visible && !root.sessions-visible && !root.models-visible && !root.projects-visible && !root.activity-visible && !root.data-health-visible && !root.settings-visible: RouteState {
+                if !root.dashboard-visible && !root.history-visible && !root.sessions-visible && !root.models-visible && !root.projects-visible && !root.activity-visible && !root.notifications-visible && !root.data-health-visible && !root.settings-visible: RouteState {
                     x: UiTokens.space;
                     y: UiTokens.space;
                     width: parent.width - 2 * UiTokens.space;

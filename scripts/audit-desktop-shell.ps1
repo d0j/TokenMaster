@@ -40,8 +40,8 @@ if ($productionManifestText -match '\btokenmaster-(store|provider|runtime|codex|
 $rustFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.rs')
 $uiFiles = @(Get-ChildItem -LiteralPath $uiRoot -Recurse -File -Filter '*.slint')
 $productionFiles = @($rustFiles + $uiFiles)
-if ($rustFiles.Count -ne 13 -or $uiFiles.Count -ne 19) {
-    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain thirteen Rust and nineteen Slint files'
+if ($rustFiles.Count -ne 14 -or $uiFiles.Count -ne 20) {
+    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain fourteen Rust and twenty Slint files'
 }
 $uiText = ($uiFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
@@ -391,6 +391,128 @@ if ($activityProjectionText -match '\.(?:scope|provider|profile|account|session|
 if ($activityViewBoundary -match '(?i)\b(?:rhythm|heatmap|day-of-week|hourly)\b') {
     throw 'TM-DESKTOP-ACTIVITY-RHYTHM: Recent activity must not claim an unimplemented rhythm or heatmap aggregate'
 }
+$notificationsProjectionPath = Join-Path $sourceRoot 'notifications.rs'
+$notificationsProjectionText = [System.IO.File]::ReadAllText($notificationsProjectionPath)
+$notificationBounds = [ordered]@{
+    MAX_NOTIFICATION_SCOPES = 32
+    MAX_NOTIFICATION_LOTS = 256
+    MAX_NOTIFICATION_LEADS = 8
+}
+foreach ($bound in $notificationBounds.GetEnumerator()) {
+    $pattern = "pub const $([regex]::Escape($bound.Key)): usize = $($bound.Value);"
+    if ($notificationsProjectionText -notmatch $pattern) {
+        throw "TM-DESKTOP-NOTIFICATIONS-BOUND: $($bound.Key) drifted"
+    }
+}
+foreach ($requiredBoundUse in @(
+    '\.take\(MAX_NOTIFICATION_SCOPES\)',
+    '\.take\(MAX_NOTIFICATION_LEADS\)',
+    'lots\.len\(\) == MAX_NOTIFICATION_LOTS'
+)) {
+    if ($notificationsProjectionText -notmatch $requiredBoundUse) {
+        throw "TM-DESKTOP-NOTIFICATIONS-BOUND: missing bounded projection $requiredBoundUse"
+    }
+}
+$benefitQueryCallCount = [regex]::Matches($controllerText, 'source\.benefit_overview\(').Count
+if ($benefitQueryCallCount -ne 1 -or
+    $controllerText -notmatch 'source\.benefit_overview\(BenefitOverviewRequest::new\(\)\)') {
+    throw 'TM-DESKTOP-NOTIFICATIONS-REQUEST: Notifications must reuse one bounded all-current benefit overview'
+}
+$notificationsProjectionCallCount = [regex]::Matches(
+    $uiRustText,
+    'apply_notifications_projection\('
+).Count
+if ($notificationsProjectionCallCount -ne 2) {
+    throw 'TM-DESKTOP-NOTIFICATIONS-REBUILD: Notifications models must not rebuild during route-only selection'
+}
+$notificationScopeModelReplacementCount = [regex]::Matches(
+    $uiRustText,
+    'set_reminder_scope_rows\(model\(scope_rows\)\)'
+).Count
+$notificationLotModelReplacementCount = [regex]::Matches(
+    $uiRustText,
+    'set_benefit_lot_rows\(model\(lot_rows\)\)'
+).Count
+if ($notificationScopeModelReplacementCount -ne 1 -or
+    $notificationLotModelReplacementCount -ne 1) {
+    throw 'TM-DESKTOP-NOTIFICATIONS-MODEL: Notifications must have one replacement site for each bounded model'
+}
+$notificationsViewText = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'views\notifications-view.slint'))
+$notificationsViewBoundary = $mainUiText + "`n" + $notificationsViewText + "`n" +
+    $uiRustText + "`n" + $notificationsProjectionText
+foreach ($requiredPattern in @(
+    'if root\.notifications-visible: NotificationsView',
+    '!root\.notifications-visible',
+    'out property <bool> narrow:',
+    'if root\.narrow:',
+    'if !root\.narrow:',
+    'Expiry reminders',
+    'effective in-app coverage',
+    'scope\.coverage-label',
+    'scope\.source-label',
+    'scope\.leads-label',
+    'scope\.next-due-label',
+    'scope\.nearest-expiry-label',
+    'scope\.evidence-label',
+    'scope\.warning-label',
+    'lot\.kind-label',
+    'lot\.quantity-label',
+    'lot\.state-label',
+    'lot\.expiry-label',
+    'lot\.evidence-label',
+    'accessible-label:.*lot\.kind-label.*lot\.quantity-label.*lot\.state-label.*lot\.expiry-label.*lot\.evidence-label'
+)) {
+    if ($notificationsViewBoundary -cnotmatch $requiredPattern) {
+        throw "TM-DESKTOP-NOTIFICATIONS-VIEW: missing responsive Notifications contract $requiredPattern"
+    }
+}
+foreach ($expiryVariant in @('ExactUtc', 'BoundedUtc', 'ProviderLocal', 'ProviderDate', 'Unknown')) {
+    if ($uiRustText -notmatch "DesktopBenefitExpiry::$expiryVariant") {
+        throw "TM-DESKTOP-NOTIFICATIONS-VIEW: missing expiry presentation $expiryVariant"
+    }
+}
+$notificationsPublicText = @(
+    [regex]::Match($notificationsProjectionText, '(?s)pub enum DesktopBenefitExpiry\s*\{.*?\r?\n\}').Value
+    [regex]::Match($notificationsProjectionText, '(?s)pub struct DesktopReminderScopeRow\s*\{.*?\r?\n\}').Value
+    [regex]::Match($notificationsProjectionText, '(?s)pub struct DesktopBenefitLotRow\s*\{.*?\r?\n\}').Value
+    [regex]::Match($notificationsProjectionText, '(?s)pub struct DesktopNotificationsProjection\s*\{.*?\r?\n\}').Value
+) -join "`n"
+if ($notificationsPublicText -match '(?i)\b(?:provider|account|workspace|delivery|lot|scope|window|target|cursor|archive|credential|activation)[_-]?id\b|\b(?:absolute_)?path\b') {
+    throw 'TM-DESKTOP-NOTIFICATIONS-IDENTITY: private identity or authority crossed the Notifications projection boundary'
+}
+$notificationsAdapterText = [regex]::Match(
+    $uiRustText,
+    '(?s)fn apply_notifications_projection\(.*?\r?\n\}\r?\n\r?\nfn notification_coverage_label'
+).Value
+if ([string]::IsNullOrWhiteSpace($notificationsAdapterText)) {
+    throw 'TM-DESKTOP-NOTIFICATIONS-AUTHORITY: Notifications adapter boundary is absent'
+}
+$notificationsAuthorityBoundary = $notificationsProjectionText + "`n" +
+    $notificationsViewText + "`n" + $notificationsAdapterText
+$notificationsDeliveryPattern = '\b(?:take_notifications|acknowledge_notifications|release_notifications|BenefitReminderRuntime)\b'
+$notificationsPollingPattern = '(?i)\b(?:poll_notifications|poll_reminders|Timer)\b'
+$notificationsOwnerControlPattern = '(?i)\b(?:QueryService|UsageReadStore|UsageStore|Connection|rusqlite|VecDeque|HashMap|BTreeMap|LinkedList|sync_channel|notification_cache)\b|std::thread|thread::spawn|\bchannel\s*\(|callback\s+(?:activate|acknowledge|release|deliver|schedule)[A-Za-z0-9_-]*'
+$notificationsDeliveryAuthorityCount = [regex]::Matches(
+    $notificationsAuthorityBoundary,
+    $notificationsDeliveryPattern
+).Count
+$notificationsPollingSurfaceCount = [regex]::Matches(
+    $notificationsAuthorityBoundary,
+    $notificationsPollingPattern
+).Count
+$notificationsOwnerControlCount = [regex]::Matches(
+    $notificationsAuthorityBoundary,
+    $notificationsOwnerControlPattern
+).Count
+if ($notificationsProjectionText -match '\.(?:opaque_id|target|delivery_id|lot_id|scope_id|account_id|workspace_id)\(' -or
+    $notificationsDeliveryAuthorityCount -ne 0 -or
+    $notificationsPollingSurfaceCount -ne 0 -or
+    $notificationsOwnerControlCount -ne 0) {
+    throw 'TM-DESKTOP-NOTIFICATIONS-AUTHORITY: Notifications route must remain read-only and delivery-receipt free'
+}
+if ($notificationsViewText -cnotmatch 'Text \{ text: scope\.completeness-label \+ " · " \+ scope\.evidence-label;[^\r\n]*visible: !root\.narrow;') {
+    throw 'TM-DESKTOP-NOTIFICATIONS-VIEW: wide Notifications rows must preserve visible per-scope completeness'
+}
 $sessionsPath = Join-Path $sourceRoot 'sessions.rs'
 $sessionsText = [System.IO.File]::ReadAllText($sessionsPath)
 if ($sessionsText -notmatch 'pub const MAX_SESSION_ROWS: usize = 64;' -or
@@ -595,6 +717,16 @@ if ($SourceOnly) {
         activity_projection_application_count = $activityProjectionCallCount - 1
         activity_query_call_count = $activityQueryCallCount
         activity_polling_surface_count = 0
+        notification_scope_maximum = $notificationBounds.MAX_NOTIFICATION_SCOPES
+        notification_lot_maximum = $notificationBounds.MAX_NOTIFICATION_LOTS
+        notification_lead_maximum = $notificationBounds.MAX_NOTIFICATION_LEADS
+        notification_scope_model_replacement_count = $notificationScopeModelReplacementCount
+        notification_lot_model_replacement_count = $notificationLotModelReplacementCount
+        notifications_projection_application_count = $notificationsProjectionCallCount - 1
+        benefit_query_call_count = $benefitQueryCallCount
+        notifications_delivery_authority_count = $notificationsDeliveryAuthorityCount
+        notifications_owner_control_count = $notificationsOwnerControlCount
+        notifications_polling_surface_count = $notificationsPollingSurfaceCount
         session_row_maximum = 64
         session_detail_model_row_maximum = 32
         session_detail_project_row_maximum = 32
@@ -694,6 +826,16 @@ if ($LASTEXITCODE -ne 0) {
     activity_projection_application_count = $activityProjectionCallCount - 1
     activity_query_call_count = $activityQueryCallCount
     activity_polling_surface_count = 0
+    notification_scope_maximum = $notificationBounds.MAX_NOTIFICATION_SCOPES
+    notification_lot_maximum = $notificationBounds.MAX_NOTIFICATION_LOTS
+    notification_lead_maximum = $notificationBounds.MAX_NOTIFICATION_LEADS
+    notification_scope_model_replacement_count = $notificationScopeModelReplacementCount
+    notification_lot_model_replacement_count = $notificationLotModelReplacementCount
+    notifications_projection_application_count = $notificationsProjectionCallCount - 1
+    benefit_query_call_count = $benefitQueryCallCount
+    notifications_delivery_authority_count = $notificationsDeliveryAuthorityCount
+    notifications_owner_control_count = $notificationsOwnerControlCount
+    notifications_polling_surface_count = $notificationsPollingSurfaceCount
     session_row_maximum = 64
     session_detail_model_row_maximum = 32
     session_detail_project_row_maximum = 32

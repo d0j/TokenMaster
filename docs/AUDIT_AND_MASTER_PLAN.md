@@ -293,8 +293,14 @@ and non-reconstructible domains unavailable. Restore confirmation remains bound 
 exact reviewed generation/ordinal and queued operation state changes at actual worker
 execution. Tasks 16-18 fault, resource-return/UI-latency, documentation, and P3-D.0
 acceptance closure are complete. P3-D.1 History, P3-D.2 Sessions list/detail, P3-D.3
-Models, P3-D.4 Projects, and P3-D.5 Recent activity now extend the same bounded
-snapshot/controller boundary; Notifications and Help/About are the next route slices.
+Models, P3-D.4 Projects, P3-D.5 Recent activity, and the read-only P3-D.6 Notifications
+expiry center now extend the same bounded snapshot/controller boundary. Notifications
+reuses the existing benefit overview with 32 profile/256 lot/eight-lead caps and zero
+delivery acknowledgement or new runtime owner. Help/About is the next route slice;
+app-owned notification presentation receipts/settings remain a separate contour.
+P3-D.6 independent re-review is Critical/Important/Minor 0/0/0; its 82 mutation audit,
+release composition, strict workspace Clippy, and complete locked workspace test/
+doctest gate pass in one 1,216.4-second baseline.
 
 The final planning pass fixes a six-state database/settings transaction, explicit
 manual data-only or data-plus-portable-settings choice, data-only automatic recovery,

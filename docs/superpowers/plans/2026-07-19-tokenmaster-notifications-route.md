@@ -51,14 +51,14 @@ packages, PowerShell contract audits.
   truncation.
 
 **Acceptance:**
-- [ ] Start with compile-failing public API and initial-state tests.
-- [ ] Add ready, authoritative-empty, retained failure, unavailable, partial evidence,
+- [x] Start with compile-failing public API and initial-state tests.
+- [x] Add ready, authoritative-empty, retained failure, unavailable, partial evidence,
   warning, and frontend-cap fixtures.
-- [ ] Prove 32/256/8 caps, query order, distinct lots, exact kinds/states/quantities,
+- [x] Prove 32/256/8 caps, query order, distinct lots, exact kinds/states/quantities,
   effective coverage/source, and every expiry precision.
-- [ ] Prove private/opaque identities and delivery/activation authority are absent.
-- [ ] Prove 10,000 snapshot replacements release old arrays.
-- [ ] Add the projection to `DesktopProjection` and run focused tests green.
+- [x] Prove private/opaque identities and delivery/activation authority are absent.
+- [x] Prove 10,000 snapshot replacements release old arrays.
+- [x] Add the projection to `DesktopProjection` and run focused tests green.
 
 ### Task 2: Mount the responsive Slint Notifications view
 
@@ -70,16 +70,16 @@ packages, PowerShell contract audits.
 - Modify: `crates/desktop/tests/ui_contract.rs`
 
 **Acceptance:**
-- [ ] First add a failing compiled UI test for visibility, counts, coverage/source,
+- [x] First add a failing compiled UI test for visibility, counts, coverage/source,
   leads, next due/expiry, separate lot rows, expiry precision, evidence, and accessibility.
-- [ ] Add one `notifications-visible` mount with one scope and one lot model.
-- [ ] Wide and narrow layouts preserve complete meaning from the same bounded models.
-- [ ] Waiting/unavailable/degraded/empty/ready/truncated states remain explicit.
-- [ ] Accessible labels retain scope association, benefit kind/quantity/state, expiry,
+- [x] Add one `notifications-visible` mount with one scope and one lot model.
+- [x] Wide and narrow layouts preserve complete meaning from the same bounded models.
+- [x] Waiting/unavailable/degraded/empty/ready/truncated states remain explicit.
+- [x] Accessible labels retain scope association, benefit kind/quantity/state, expiry,
   and evidence without color-only meaning.
-- [ ] Route-only selection performs no model application, query/runtime call, ack,
+- [x] Route-only selection performs no model application, query/runtime call, ack,
   scheduling, or window recreation.
-- [ ] Run the complete Desktop package tests green.
+- [x] Run the complete Desktop package tests green.
 
 ### Task 3: Extend deterministic architecture and privacy audits
 
@@ -88,12 +88,12 @@ packages, PowerShell contract audits.
 - Modify: `scripts/tests/audit-desktop-shell.Tests.ps1`
 
 **Acceptance:**
-- [ ] Update exact production file counts and mutations for 32/256/8 caps, existing
+- [x] Update exact production file counts and mutations for 32/256/8 caps, existing
   overview reuse, two models/application sites, real mount, complete wide/narrow/
   accessibility meaning, and route-only behavior.
-- [ ] Assert zero new query/worker/timer/queue/cache/connection/polling and zero delivery
+- [x] Assert zero new query/worker/timer/queue/cache/connection/polling and zero delivery
   take/ack/release, runtime/store/query authority, private IDs, or activation controls.
-- [ ] Run source/release audits and all Desktop audit Pester tests green.
+- [x] Run source/release audits and all Desktop audit Pester tests green.
 
 ### Task 4: Synchronize durable project truth
 
@@ -112,21 +112,21 @@ packages, PowerShell contract audits.
 - Modify: `docs/PROJECT_HISTORY.md`
 
 **Acceptance:**
-- [ ] Record the exact expiry-center boundary, caps, privacy, expiry precision,
+- [x] Record the exact expiry-center boundary, caps, privacy, expiry precision,
   effective-profile truth, no-delivery-ack rule, and performance budget.
-- [ ] Keep GUI presentation receipts, settings synchronization/editing, snooze/quiet
+- [x] Keep GUI presentation receipts, settings synchronization/editing, snooze/quiet
   hours, OS delivery, usage alerts, activation, Help/P3-E, P4/P5, M0, packaging,
   signing, and release incomplete.
-- [ ] Do not store a current commit hash in tracked documents.
+- [x] Do not store a current commit hash in tracked documents.
 
 ### Task 5: Independent review and closeout
 
-- [ ] Run focused Desktop/audit tests first.
-- [ ] Run `git diff --check`.
-- [ ] Run clean-root, Rust formatting, warnings-as-errors workspace Clippy, and locked
+- [x] Run focused Desktop/audit tests first.
+- [x] Run `git diff --check`.
+- [x] Run clean-root, Rust formatting, warnings-as-errors workspace Clippy, and locked
   workspace tests exactly as required by `AGENTS.md`.
-- [ ] Request one independent read-only high-rigor correctness/security/performance
+- [x] Request one independent read-only high-rigor correctness/security/performance
   review and resolve every Critical/Important issue.
-- [ ] Audit and stop task-owned agents, tests, diagnostics, and temporary processes.
-- [ ] Stage only this slice and create English conventional commits.
-- [ ] Do not push, merge, package, sign, or claim release acceptance without authority.
+- [x] Audit and stop task-owned agents, tests, diagnostics, and temporary processes.
+- [x] Stage only this slice and create English conventional commits.
+- [x] Do not push, merge, package, sign, or claim release acceptance without authority.

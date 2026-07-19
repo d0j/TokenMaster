@@ -7,6 +7,7 @@ pub mod activity;
 pub mod dashboard;
 pub mod history;
 pub mod models;
+pub mod notifications;
 pub mod presentation;
 pub mod projects;
 pub mod reliable_state;
@@ -29,6 +30,7 @@ pub use activity::*;
 pub use dashboard::*;
 pub use history::*;
 pub use models::*;
+pub use notifications::*;
 pub use presentation::{
     DesktopApplyOutcome, DesktopRouteKey, DesktopSessionSelectionError, DesktopSnapshotEpoch,
     DesktopState,

@@ -3392,3 +3392,54 @@ warnings-as-errors workspace Clippy, release composition, and the complete locke
 workspace test/doctest gate pass; the full baseline completed in 1,035 seconds.
 P3-D.5 is closed. Notifications/Help, full rhythm aggregation, later pagination/ranges,
 presentation, automation, packaging, signing, M0, and release remain open.
+
+## 2026-07-19 — P3-D.6 bounded Notifications expiry-safety route
+
+The Notifications slice began with a boundary audit of the already-implemented benefit
+inventory/query/reminder stack. The all-current benefit overview already carried
+separate current lots, effective profile inheritance/override, coverage, due time,
+expiry precision, freshness, quality, and warnings. The durable reminder runtime also
+had crash-safe leased take/release/ack behavior, but the application had no event-loop
+presentation receipt. ADR-071 therefore separates a useful read-only expiry center
+from visible delivery: route projection/navigation cannot lease or acknowledge an
+event, while a later app-owned bridge must acknowledge only after successful visible
+presentation and release every failed/cancelled batch.
+
+TDD added `DesktopNotificationsProjection` over the existing benefit snapshot. It
+retains at most 32 identity-free effective profile rows, 256 separate current-lot rows,
+and eight leads per profile. Exact UTC, bounded UTC, provider-local, provider-date, and
+unknown expiry remain distinct; exact/bounded UTC UI labels preserve milliseconds.
+Policy source/coverage, revisions, completeness, evidence, warning codes, nearest
+expiry/due, provider-neutral lot kind/quantity/state/label, optional grant time, and
+evidence source/confidence/detail remain explicit. Provider/account/workspace/scope/
+lot/delivery/window IDs, target, path, content, credential, receipt, and activation
+authority remain outside Desktop/Slint. Ten thousand populated snapshot replacements
+release both old arrays.
+
+The compiled Slint route mounts one responsive expiry header, one effective-profile
+model, and one separate-lot model. Waiting, unavailable, retained/degraded, empty,
+warning, and truncated states remain distinct. Wide and narrow profiles both show
+completeness plus evidence; rows expose complete accessible policy/expiry/evidence
+meaning. One accepted product generation replaces each model once, and route-only
+selection changes visibility without querying, rebuilding, polling, scheduling, or
+mutating reminder state.
+
+The deterministic source audit reports 14 Rust plus 20 Slint production files, one
+existing benefit query, one Notifications projection application, one replacement site
+per bounded model, and computed zero delivery authority, owner/control, and polling
+counts. Its 82 mutation cases reject cap drift, duplicate query/model/application,
+missing route/precision/responsive meaning, private identity, delivery authority,
+query/database ownership, worker/thread, queue/cache, timer/polling, activation
+callback, and missing wide completeness. Focused projection 7/7, exact-time unit,
+compiled UI, complete Desktop package, strict Desktop Clippy, and source audit pass.
+The first independent review found three Important and one Minor closure gaps: exact/
+bounded UTC presentation lost seconds/milliseconds, waiting resembled unavailable,
+owner/control receipts were under-proved, and wide profiles omitted completeness. Red/
+green fixes close all four and strengthen the resource proof with populated old arrays.
+Re-review returned Critical/Important/Minor 0/0/0 and READY. Clean-root, formatting,
+strict warnings-as-errors workspace Clippy, release composition, and the complete
+locked workspace test/doctest gate pass in 1,216.4 seconds overall
+(25.8/1.7/76.0 seconds for clean-root/fmt/Clippy). P3-D.6 is closed.
+Help/About, app-owned presentation receipts, settings synchronization/editing, snooze,
+quiet hours, OS delivery, usage alerts, activation, presentation/automation/release
+work, packaging, signing, M0, and release acceptance remain open.

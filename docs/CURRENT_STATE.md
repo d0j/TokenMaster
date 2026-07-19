@@ -120,6 +120,24 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   formatting, strict warnings-as-errors workspace Clippy, release composition, and the
   complete locked workspace test/doctest gate pass; the full baseline completed in
   1,035 seconds. P3-D.5 is closed; no release acceptance is inferred.
+- P3-D.6 bounded Notifications route: one read-only projection consumes the existing
+  all-current benefit overview and adds no query or runtime owner. It retains at most
+  32 effective reminder-profile rows, 256 separate current-lot rows, and eight leads
+  per profile while preserving exact/bounded/provider-local/provider-date/unknown
+  expiry, inherited/override source, disabled/in-app-only coverage, evidence, warnings,
+  due time, and explicit truncation. One scope and one lot Slint model render responsive
+  wide/narrow and accessible expiry-safety views; navigation performs no query, model
+  rebuild, notification take/ack/release, settings mutation, or activation. Focused
+  projection/UI/full Desktop tests, strict Desktop Clippy, source audit, and 82/82
+  mutation contracts pass. App-owned presentation receipts, settings synchronization/
+  editing, snooze, quiet hours, OS delivery, usage alerts, and activation remain
+  separate unfinished capabilities. Independent re-review returned READY with Critical/
+  Important/Minor 0/0/0 after lossless millisecond UTC, waiting-state, audit-authority,
+  wide-completeness, and populated-replacement findings were closed. Clean-root,
+  formatting, strict warnings-as-errors workspace Clippy, release composition, and the
+  complete locked workspace test/doctest gate pass in 1,216.4 seconds overall
+  (25.8/1.7/76.0 seconds for clean-root/fmt/Clippy). P3-D.6 is closed; no release
+  acceptance is inferred.
 - M1 usage foundation: bounded provider roots, path-private source discovery,
   reparse-safe streaming enumeration, typed bounded JSONL parser, cumulative token
   state, physical/logical source identity, byte framing, revalidation, strict SQLite
@@ -1365,9 +1383,10 @@ release target passes independently.
 ## Next implementation slice
 
 P3-D.0 Reliable State, P3-D.1 History, P3-D.2 bounded Sessions list/detail, P3-D.3
-Models, P3-D.4 Projects, and the bounded P3-D.5 Recent activity route are implemented.
-Continue with the Notifications route contract, then Help/About. Later-page Sessions
-navigation and interactive History ranges remain bounded
+Models, P3-D.4 Projects, P3-D.5 Recent activity, and the bounded read-only P3-D.6
+Notifications route are implemented. Continue with Help/About, then close the separate
+app-owned notification presentation/settings contour without widening Slint authority.
+Later-page Sessions navigation and interactive History ranges remain bounded
 replacements of their existing sections rather than new frontend query owners.
 P3-E then owns
 command palette, tray, compact widget, and remaining shell lifecycle. Interactive

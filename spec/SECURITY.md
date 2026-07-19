@@ -234,6 +234,17 @@ and authority remain outside Desktop/Slint. Activity route selection adds no que
 callback, worker, timer, queue, cache, connection, or retained row identity. The UI
 does not claim rhythm/heatmap semantics without a separate bounded aggregate.
 
+P3-D.6 adds one bounded Notifications projection over the existing all-current benefit
+overview. It exposes only presentation ordinals, provider-neutral lot facts, typed
+expiry precision, effective profile source/coverage/leads, bounded revisions and time
+facts, freshness, quality, warnings, and truncation. Provider/account/workspace/scope/
+lot/delivery/window IDs, target descriptors, paths, content, commands, credentials,
+SQL, receipts, activation capability, and runtime owners remain outside Desktop/Slint.
+Route projection and navigation have zero reminder take/acknowledge/release or settings
+mutation authority. A later presentation bridge must be app-owned and may acknowledge
+only after successful visible application; every failed/cancelled presentation must
+release its lease for retry.
+
 Providers emit bounded observation/session-relation drafts only. They cannot create
 event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or
 canonical events. Those values are created only by TokenMaster accounting code. Store

@@ -431,6 +431,18 @@ initial construction or an accepted newer product generation. Route selection ca
 query, rebuild the model, retain prior pages, create selection/filter/detail/export
 state, add a timer/worker/cache/connection, or recreate `MainWindow`.
 
+`DesktopNotificationsProjection::from_snapshot` is the sole product-to-Notifications
+mapping. It reads the existing benefit overview once and copies at most 32 effective
+profile rows, 256 separate current-lot rows, and eight leads per profile. Typed expiry
+precision, evidence, policy source/coverage, warnings, freshness, quality, and explicit
+frontend truncation remain intact. One scope model and one lot model are replaced only
+during initial construction or an accepted newer product generation. Route selection
+cannot query, rebuild either model, take/acknowledge/release a leased reminder batch,
+schedule a notification, mutate settings, activate a benefit, create a timer/worker/
+cache/connection, or recreate `MainWindow`. A future delivery bridge must remain
+application-owned, acknowledge only after successful UI presentation, and release the
+lease on any failed or cancelled presentation.
+
 `DesktopQueryPlan` also owns one all-time `usage_sessions` request with page size 64.
 It executes sequentially on the same capacity-one query worker; Dashboard copies only
 its first 12 summaries while the independent product Sessions section retains the

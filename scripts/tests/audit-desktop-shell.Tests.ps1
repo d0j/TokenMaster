@@ -461,6 +461,164 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-ACTIVITY-RHYTHM*"
     }
 
+    It "rejects Notifications presentation-bound drift" {
+        $fixture = New-DesktopAuditFixture -Name "notifications-bound"
+        $path = Join-Path $fixture "crates\desktop\src\notifications.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'pub const MAX_NOTIFICATION_LOTS: usize = 256;',
+            'pub const MAX_NOTIFICATION_LOTS: usize = 2560;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-NOTIFICATIONS-BOUND*"
+    }
+
+    It "rejects a second Notifications benefit query" {
+        $fixture = New-DesktopAuditFixture -Name "notifications-second-query"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\controller.rs") `
+            -Value 'fn duplicate_benefit_query() { source.benefit_overview(BenefitOverviewRequest::new()); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-NOTIFICATIONS-REQUEST*"
+    }
+
+    It "rejects removing the Notifications route mount" {
+        $fixture = New-DesktopAuditFixture -Name "notifications-mount"
+        $path = Join-Path $fixture "crates\desktop\ui\main.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'if root.notifications-visible: NotificationsView',
+            'if root.notifications-visible: RemovedNotificationsView'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-NOTIFICATIONS-VIEW*"
+    }
+
+    It "rejects hiding expiry precision from Notifications rows" {
+        $fixture = New-DesktopAuditFixture -Name "notifications-expiry"
+        $path = Join-Path $fixture "crates\desktop\ui\views\notifications-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'lot.expiry-label',
+            '"expiry hidden"'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-NOTIFICATIONS-VIEW*"
+    }
+
+    It "rejects collapsing uncertain Notifications expiry variants" {
+        $fixture = New-DesktopAuditFixture -Name "notifications-expiry-precision"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'DesktopBenefitExpiry::ProviderLocal',
+            'DesktopBenefitExpiry::Unknown'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-NOTIFICATIONS-VIEW*"
+    }
+
+    It "rejects private delivery identity from the Notifications projection" {
+        $fixture = New-DesktopAuditFixture -Name "notifications-private-identity"
+        $path = Join-Path $fixture "crates\desktop\src\notifications.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'scope_ordinal: u8,',
+            "scope_ordinal: u8,`r`n    delivery_id: Arc<str>,"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-NOTIFICATIONS-IDENTITY*"
+    }
+
+    It "rejects direct reminder delivery authority from Notifications" {
+        $fixture = New-DesktopAuditFixture -Name "notifications-delivery-authority"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\notifications.rs") `
+            -Value 'fn false_delivery(runtime: &BenefitReminderRuntime) { let _ = runtime.acknowledge_notifications(); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-NOTIFICATIONS-AUTHORITY*"
+    }
+
+    It "rejects a Notifications query or database owner" {
+        $fixture = New-DesktopAuditFixture -Name "notifications-query-owner"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\notifications.rs") -Value 'fn false_query() { let _ = QueryService::open("private.sqlite3", FixedClock); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-NOTIFICATIONS-AUTHORITY*"
+    }
+
+    It "rejects a Notifications worker or thread owner" {
+        $fixture = New-DesktopAuditFixture -Name "notifications-thread-owner"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\notifications.rs") -Value 'fn false_worker() { let _ = std::thread::spawn(|| {}); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-NOTIFICATIONS-AUTHORITY*"
+    }
+
+    It "rejects a Notifications queue or cache" {
+        $fixture = New-DesktopAuditFixture -Name "notifications-queue-owner"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\notifications.rs") -Value 'struct FalseNotificationQueue { pending: VecDeque<String>, notification_cache: HashMap<String, String> }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-NOTIFICATIONS-AUTHORITY*"
+    }
+
+    It "rejects Notifications polling or a timer" {
+        $fixture = New-DesktopAuditFixture -Name "notifications-polling-owner"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\notifications.rs") -Value 'fn poll_notifications() { let _ = Timer::default(); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-NOTIFICATIONS-AUTHORITY*"
+    }
+
+    It "rejects a Notifications activation callback" {
+        $fixture = New-DesktopAuditFixture -Name "notifications-activation-control"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\views\notifications-view.slint") -Value 'export component FalseActivation { callback activate-benefit(); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-NOTIFICATIONS-AUTHORITY*"
+    }
+
+    It "rejects omitting profile completeness from the wide Notifications layout" {
+        $fixture = New-DesktopAuditFixture -Name "notifications-wide-completeness"
+        $path = Join-Path $fixture "crates\desktop\ui\views\notifications-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'Text { text: scope.completeness-label + " · " + scope.evidence-label; color: UiTokens.text-secondary; font-size: 10px; width: root.narrow ? 0px : 184px; visible: !root.narrow;',
+            'Text { text: "Completeness hidden · " + scope.evidence-label; color: UiTokens.text-secondary; font-size: 10px; width: root.narrow ? 0px : 184px; visible: !root.narrow;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-NOTIFICATIONS-VIEW*"
+    }
+
+    It "rejects a second Notifications model replacement site" {
+        $fixture = New-DesktopAuditFixture -Name "notifications-second-model"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\ui.rs") `
+            -Value 'fn duplicate_notification_model() { window.set_benefit_lot_rows(model(lot_rows)); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-NOTIFICATIONS-MODEL*"
+    }
+
+    It "rejects rebuilding Notifications rows from route selection" {
+        $fixture = New-DesktopAuditFixture -Name "notifications-route-rebuild"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'apply_route_projection(&window, state.projection());',
+            "apply_route_projection(&window, state.projection());`r`n            apply_notifications_projection(&window, state.projection().notifications());"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-NOTIFICATIONS-REBUILD*"
+    }
+
     It "rejects sessions presentation-bound drift" {
         $fixture = New-DesktopAuditFixture -Name "sessions-bound"
         $path = Join-Path $fixture "crates\desktop\src\sessions.rs"
@@ -777,12 +935,12 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-CONTROLLER-SLOT*"
     }
 
-    It "accepts the bounded dashboard History Sessions Models Projects and Activity desktop boundary" {
+    It "accepts the bounded dashboard History Sessions Models Projects Activity and Notifications desktop boundary" {
         $fixture = New-DesktopAuditFixture -Name "library-boundary"
 
         $receipt = & $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json
-        $receipt.rust_source_file_count | Should -Be 13
-        $receipt.slint_source_file_count | Should -Be 19
+        $receipt.rust_source_file_count | Should -Be 14
+        $receipt.slint_source_file_count | Should -Be 20
         $receipt.dashboard_section_count | Should -Be 6
         $receipt.dashboard_model_replacement_count | Should -Be 7
         $receipt.history_day_maximum | Should -Be 30
@@ -801,6 +959,16 @@ Describe "TokenMaster production desktop audit" {
         $receipt.activity_projection_application_count | Should -Be 1
         $receipt.activity_query_call_count | Should -Be 1
         $receipt.activity_polling_surface_count | Should -Be 0
+        $receipt.notification_scope_maximum | Should -Be 32
+        $receipt.notification_lot_maximum | Should -Be 256
+        $receipt.notification_lead_maximum | Should -Be 8
+        $receipt.notification_scope_model_replacement_count | Should -Be 1
+        $receipt.notification_lot_model_replacement_count | Should -Be 1
+        $receipt.notifications_projection_application_count | Should -Be 1
+        $receipt.benefit_query_call_count | Should -Be 1
+        $receipt.notifications_delivery_authority_count | Should -Be 0
+        $receipt.notifications_owner_control_count | Should -Be 0
+        $receipt.notifications_polling_surface_count | Should -Be 0
         $receipt.session_row_maximum | Should -Be 64
         $receipt.session_detail_model_row_maximum | Should -Be 32
         $receipt.session_detail_project_row_maximum | Should -Be 32

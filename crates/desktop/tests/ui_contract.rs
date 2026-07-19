@@ -272,6 +272,13 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
         window.get_activity_page_status_label(),
         "Page status unavailable"
     );
+    assert_eq!(window.get_reminder_scope_rows().row_count(), 0);
+    assert_eq!(window.get_benefit_lot_rows().row_count(), 0);
+    assert_eq!(window.get_notifications_loaded_label(), "Waiting");
+    assert_eq!(
+        window.get_notifications_completeness_label(),
+        "Waiting for benefit inventory"
+    );
     assert_eq!(window.get_dashboard_section_rows().row_count(), 6);
     assert_eq!(window.get_dashboard_header_tokens(), "—");
     assert_eq!(window.get_dashboard_header_cost(), "—");
@@ -328,7 +335,95 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert_compiled_models_render_partial_cost_evidence();
     assert_compiled_projects_keep_recent_usage_and_today_code_separate_in_place();
     assert_compiled_activity_renders_bounded_safe_events_in_place();
+    assert_compiled_notifications_render_expiry_truth_in_place();
     assert_compiled_session_selection_is_immediate_correlated_and_bounded_in_place();
+}
+
+fn assert_compiled_notifications_render_expiry_truth_in_place() {
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory.path().join("ui-notifications.sqlite3");
+    let reducer = ready_reducer(&path, 0);
+    let snapshot = reducer.snapshot();
+    let shell = DesktopShell::new(&snapshot).expect("desktop shell");
+    let window = shell.window();
+    let component_address = window as *const _;
+
+    window.invoke_select_route(SharedString::from("notifications"));
+    assert!(window.get_notifications_visible());
+    assert!(!window.get_dashboard_visible());
+    assert!(!window.get_activity_visible());
+    assert_eq!(window.get_notifications_state(), "degraded");
+    assert_eq!(
+        window.get_notifications_evidence_label(),
+        "Fresh · Authoritative"
+    );
+    assert_eq!(
+        window.get_notifications_loaded_label(),
+        "1 reminder profile · 4 current benefits"
+    );
+    assert_eq!(
+        window.get_notifications_completeness_label(),
+        "Current inventory · warnings present"
+    );
+
+    let scopes = window.get_reminder_scope_rows();
+    assert_eq!(scopes.row_count(), 1);
+    let scope = scopes.row_data(0).expect("reminder scope");
+    assert_eq!(scope.scope_label, "Scope 1");
+    assert_eq!(scope.lot_count_label, "4 benefits");
+    assert_eq!(scope.coverage_label, "In-app only");
+    assert_eq!(scope.source_label, "Inherited");
+    assert_eq!(scope.leads_label, "7d · 24h · 12h · 6h · 1h");
+    assert_eq!(scope.completeness_label, "Complete");
+    assert!(scope.nearest_expiry_label.contains("UTC"));
+    assert_eq!(scope.evidence_label, "Fresh · Authoritative");
+    assert!(scope.warning_label.contains("Unknown expiry"));
+
+    let lots = window.get_benefit_lot_rows();
+    assert_eq!(lots.row_count(), 4);
+    let expired = lots.row_data(0).expect("expired lot");
+    assert_eq!(expired.scope_label, "Scope 1");
+    assert_eq!(expired.kind_label, "Banked rate limit reset");
+    assert_eq!(expired.quantity_label, "7");
+    assert_eq!(expired.state_label, "Expired");
+    assert_eq!(expired.expiry_label, "Expired 2026-07-16 11:59:59.999 UTC");
+    assert_eq!(
+        expired.evidence_label,
+        "Provider official · High · Provider detail"
+    );
+    let unknown = lots.row_data(2).expect("unknown-expiry lot");
+    assert_eq!(unknown.kind_label, "Usage credit");
+    assert_eq!(unknown.expiry_label, "Expiry unknown");
+
+    window.window().set_size(slint::PhysicalSize::new(700, 720));
+    assert_eq!(window.get_notifications_layout_mode(), "narrow");
+    window
+        .window()
+        .set_size(slint::PhysicalSize::new(1120, 720));
+    assert_eq!(window.get_notifications_layout_mode(), "wide");
+
+    window.show().expect("show notifications window");
+    let accessible_rows = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::ListItem)
+        .match_predicate(|element| {
+            element.accessible_label().is_some_and(|label| {
+                label.contains("Scope 1")
+                    && label.contains("Banked rate limit reset")
+                    && label.contains("quantity 7")
+                    && label.contains("Expired")
+                    && label.contains("Provider official")
+            })
+        })
+        .find_all();
+    assert_eq!(accessible_rows.len(), 1);
+
+    window.invoke_select_route(SharedString::from("dashboard"));
+    assert!(!window.get_notifications_visible());
+    window.invoke_select_route(SharedString::from("notifications"));
+    assert!(window.get_notifications_visible());
+    assert_eq!(component_address, shell.window() as *const _);
+    assert_eq!(window.get_reminder_scope_rows().row_count(), 1);
+    assert_eq!(window.get_benefit_lot_rows().row_count(), 4);
 }
 
 fn assert_compiled_activity_renders_bounded_safe_events_in_place() {

@@ -13,18 +13,18 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use tokenmaster_product::ProductSnapshot;
 
 use crate::{
-    DashboardActivityRow, DashboardBenefitRow, DashboardModelRow, DashboardQuotaRow,
+    BenefitLotRow, DashboardActivityRow, DashboardBenefitRow, DashboardModelRow, DashboardQuotaRow,
     DashboardSectionRow, DashboardSessionRow, DashboardTrendPoint, DesktopActivityKey,
-    DesktopActivityProjection, DesktopCostComposition, DesktopCostValue,
+    DesktopActivityProjection, DesktopBenefitExpiry, DesktopCostComposition, DesktopCostValue,
     DesktopDashboardProjection, DesktopDashboardSectionKey, DesktopFreshness,
     DesktopHistoryProjection, DesktopIntent, DesktopIntentSink, DesktopModelsProjection,
-    DesktopOperationSnapshot, DesktopProjectsProjection, DesktopQuality,
-    DesktopReliableStateProjection, DesktopSessionDetailIntentAdmission,
+    DesktopNotificationsProjection, DesktopOperationSnapshot, DesktopProjectsProjection,
+    DesktopQuality, DesktopReliableStateProjection, DesktopSessionDetailIntentAdmission,
     DesktopSessionDetailIntentSink, DesktopSessionsProjection, DesktopSnapshotBridge,
     DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue, DesktopValueAvailability,
-    HistoryDayRow, MainWindow, ModelUsageRow, ProjectUsageRow, RecentActivityRow, RestorePointRow,
-    RouteRow, SessionDetailBreakdownRow, SessionListRow, UnavailableDesktopIntentSink,
-    UnavailableDesktopSessionDetailIntentSink,
+    HistoryDayRow, MainWindow, ModelUsageRow, ProjectUsageRow, RecentActivityRow, ReminderScopeRow,
+    RestorePointRow, RouteRow, SessionDetailBreakdownRow, SessionListRow,
+    UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
 };
 
@@ -528,6 +528,7 @@ pub(crate) fn apply_projection(window: &MainWindow, projection: &DesktopProjecti
     apply_models_projection(window, projection.models());
     apply_projects_projection(window, projection.projects());
     apply_activity_route_projection(window, projection.activity());
+    apply_notifications_projection(window, projection.notifications());
     apply_sessions_projection(window, projection.sessions());
 }
 
@@ -1209,6 +1210,214 @@ fn apply_activity_route_projection(window: &MainWindow, activity: &DesktopActivi
     window.set_recent_activity_rows(model(rows));
 }
 
+fn apply_notifications_projection(
+    window: &MainWindow,
+    notifications: &DesktopNotificationsProjection,
+) {
+    window.set_notifications_state(notifications.state().stable_code().into());
+    window.set_notifications_reasons(join_reasons(notifications.reason_codes().iter()).into());
+    window.set_notifications_evidence_label(
+        format_evidence(notifications.freshness(), notifications.quality()).into(),
+    );
+    let state = notifications.state().stable_code();
+    window.set_notifications_loaded_label(
+        if state == "waiting" {
+            "Waiting".to_owned()
+        } else if state == "unavailable" {
+            "Unavailable".to_owned()
+        } else {
+            format!(
+                "{} · {}",
+                format_counted(
+                    notifications.scopes().len() as u64,
+                    "reminder profile",
+                    "reminder profiles",
+                ),
+                format_counted(
+                    notifications.lots().len() as u64,
+                    "current benefit",
+                    "current benefits",
+                ),
+            )
+        }
+        .into(),
+    );
+    window.set_notifications_completeness_label(
+        if state == "waiting" {
+            "Waiting for benefit inventory"
+        } else if state == "unavailable" {
+            "Inventory unavailable"
+        } else if notifications.scopes_truncated() || notifications.lots_truncated() {
+            "Bounded inventory · more data omitted"
+        } else if !notifications.reason_codes().is_empty() {
+            "Current inventory · warnings present"
+        } else if notifications.lots().is_empty() {
+            "No current benefits"
+        } else {
+            "Current inventory complete"
+        }
+        .into(),
+    );
+
+    let scope_rows = notifications
+        .scopes()
+        .iter()
+        .map(|scope| ReminderScopeRow {
+            scope_label: format!("Scope {}", scope.ordinal()).into(),
+            lot_count_label: format_counted(
+                u64::from(scope.current_lot_count()),
+                "benefit",
+                "benefits",
+            )
+            .into(),
+            coverage_label: notification_coverage_label(scope.reminder_coverage()).into(),
+            source_label: humanize_code(scope.profile_source()).into(),
+            leads_label: format_reminder_leads(scope.lead_seconds()).into(),
+            next_due_label: scope
+                .nearest_due_at_ms()
+                .map_or_else(
+                    || "Next reminder unavailable".to_owned(),
+                    |value| format!("Next reminder {}", format_timestamp_ms(value)),
+                )
+                .into(),
+            nearest_expiry_label: scope
+                .nearest_expiry_at_ms()
+                .map_or_else(
+                    || "Nearest expiry unavailable".to_owned(),
+                    |value| format!("Nearest expiry {}", format_timestamp_ms(value)),
+                )
+                .into(),
+            evidence_label: format_evidence(Some(scope.freshness()), Some(scope.quality())).into(),
+            warning_label: join_humanized_codes(scope.warning_codes().iter()).into(),
+            completeness_label: humanize_code(scope.completeness()).into(),
+        })
+        .collect::<Vec<_>>();
+    window.set_reminder_scope_rows(model(scope_rows));
+
+    let lot_rows = notifications
+        .lots()
+        .iter()
+        .map(|lot| BenefitLotRow {
+            scope_label: format!("Scope {}", lot.scope_ordinal()).into(),
+            benefit_label: humanize_key(lot.label_key()).into(),
+            kind_label: humanize_code(lot.kind()).into(),
+            quantity_label: format_integer(lot.quantity()).into(),
+            state_label: humanize_code(lot.state()).into(),
+            expiry_label: format_benefit_expiry(lot.expiry(), lot.state()).into(),
+            granted_label: lot
+                .granted_at_ms()
+                .map_or_else(
+                    || "Grant time unavailable".to_owned(),
+                    |value| format!("Granted {}", format_timestamp_ms(value)),
+                )
+                .into(),
+            evidence_label: format!(
+                "{} · {} · {}",
+                humanize_code(lot.evidence_source()),
+                humanize_code(lot.confidence()),
+                humanize_code(lot.detail_kind()),
+            )
+            .into(),
+        })
+        .collect::<Vec<_>>();
+    window.set_benefit_lot_rows(model(lot_rows));
+}
+
+fn notification_coverage_label(value: &str) -> &'static str {
+    match value {
+        "in_app_only" => "In-app only",
+        "disabled" => "Disabled",
+        _ => "Unavailable",
+    }
+}
+
+fn format_reminder_leads(values: &[u32]) -> String {
+    if values.is_empty() {
+        return "Disabled".to_owned();
+    }
+    values
+        .iter()
+        .map(|seconds| format_reminder_lead(*seconds))
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
+
+fn format_reminder_lead(seconds: u32) -> String {
+    const DAY: u32 = 86_400;
+    const HOUR: u32 = 3_600;
+    const MINUTE: u32 = 60;
+    if seconds >= 2 * DAY && seconds.is_multiple_of(DAY) {
+        format!("{}d", seconds / DAY)
+    } else if seconds.is_multiple_of(HOUR) {
+        format!("{}h", seconds / HOUR)
+    } else if seconds.is_multiple_of(MINUTE) {
+        format!("{}m", seconds / MINUTE)
+    } else {
+        format!("{seconds}s")
+    }
+}
+
+fn join_humanized_codes<'a>(codes: impl Iterator<Item = &'a str>) -> String {
+    codes.map(humanize_code).collect::<Vec<_>>().join(" · ")
+}
+
+fn humanize_code(value: &str) -> String {
+    let mut result = value.replace(['_', '-'], " ");
+    if let Some(first) = result.get_mut(0..1) {
+        first.make_ascii_uppercase();
+    }
+    result
+}
+
+fn format_benefit_expiry(expiry: &DesktopBenefitExpiry, state: &str) -> String {
+    let prefix = if state == "expired" {
+        "Expired"
+    } else {
+        "Expires"
+    };
+    match expiry {
+        DesktopBenefitExpiry::ExactUtc { at_ms } => {
+            format!("{prefix} {}", format_precise_timestamp_ms(*at_ms))
+        }
+        DesktopBenefitExpiry::BoundedUtc {
+            earliest_at_ms,
+            latest_at_ms,
+        } => format!(
+            "{prefix} between {} and {}",
+            format_precise_timestamp_ms(*earliest_at_ms),
+            format_precise_timestamp_ms(*latest_at_ms),
+        ),
+        DesktopBenefitExpiry::ProviderLocal {
+            year,
+            month,
+            day,
+            hour,
+            minute,
+            second,
+            millisecond,
+            time_zone,
+        } => format!(
+            "{prefix} {:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03} {} (provider local)",
+            year, month, day, hour, minute, second, millisecond, time_zone,
+        ),
+        DesktopBenefitExpiry::ProviderDate {
+            year,
+            month,
+            day,
+            time_zone,
+        } => format!(
+            "{prefix} {:04}-{:02}-{:02}{} (provider date)",
+            year,
+            month,
+            day,
+            time_zone
+                .as_deref()
+                .map_or_else(String::new, |zone| format!(" {zone}")),
+        ),
+        DesktopBenefitExpiry::Unknown => "Expiry unknown".to_owned(),
+    }
+}
+
 fn apply_sessions_projection(window: &MainWindow, sessions: &DesktopSessionsProjection) {
     window.set_sessions_state(sessions.state().stable_code().into());
     window.set_sessions_reasons(join_reasons(sessions.reason_codes().iter()).into());
@@ -1801,6 +2010,13 @@ fn format_timestamp_ms(value: i64) -> String {
     )
 }
 
+fn format_precise_timestamp_ms(value: i64) -> String {
+    DateTime::<Utc>::from_timestamp_millis(value).map_or_else(
+        || "at an unknown time".to_owned(),
+        |value| value.format("%Y-%m-%d %H:%M:%S%.3f UTC").to_string(),
+    )
+}
+
 fn format_timestamp_seconds(value: i64) -> String {
     DateTime::<Utc>::from_timestamp(value, 0).map_or_else(
         || "unknown".to_owned(),
@@ -1832,7 +2048,31 @@ fn format_timestamp_utc(seconds: i64, nanos: u32) -> String {
 
 #[cfg(test)]
 mod duration_tests {
-    use super::{format_session_duration, format_timestamp_utc};
+    use super::{format_benefit_expiry, format_session_duration, format_timestamp_utc};
+    use crate::DesktopBenefitExpiry;
+
+    #[test]
+    fn notification_expiry_preserves_exact_millisecond_endpoints() {
+        assert_eq!(
+            format_benefit_expiry(
+                &DesktopBenefitExpiry::ExactUtc {
+                    at_ms: 1_784_203_200_001,
+                },
+                "available",
+            ),
+            "Expires 2026-07-16 12:00:00.001 UTC"
+        );
+        assert_eq!(
+            format_benefit_expiry(
+                &DesktopBenefitExpiry::BoundedUtc {
+                    earliest_at_ms: 1_784_203_200_001,
+                    latest_at_ms: 1_784_203_200_002,
+                },
+                "available",
+            ),
+            "Expires between 2026-07-16 12:00:00.001 UTC and 2026-07-16 12:00:00.002 UTC"
+        );
+    }
 
     #[test]
     fn activity_timestamp_preserves_fractional_utc_truth() {

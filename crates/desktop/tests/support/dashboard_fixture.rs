@@ -8,11 +8,13 @@ use tokenmaster_domain::{
     BenefitInventoryCompleteness, BenefitInventoryObservation, BenefitInventoryObservationParts,
     BenefitKind, BenefitLabelKey, BenefitLotId, BenefitLotObservation, BenefitLotObservationParts,
     BenefitObservationId, BenefitScope, BenefitState, BenefitTarget, GitActivityAssociationId,
-    GitOutputQuality, GitRepositoryId, ProjectAlias, QuotaAccountId, QuotaConfidence,
-    QuotaEvidenceSource, QuotaObservationId, QuotaPresentationDirection, QuotaProviderEpochId,
-    QuotaRatio, QuotaResetEvidence, QuotaSample, QuotaSampleParts, QuotaSampleQuality, QuotaScope,
-    QuotaUnitId, QuotaUnits, QuotaWindowDefinition, QuotaWindowDefinitionParts, QuotaWindowId,
-    QuotaWindowKey, QuotaWindowSemantics, UsageProviderId,
+    GitOutputQuality, GitRepositoryId, NotificationChannel, ProjectAlias, QuotaAccountId,
+    QuotaConfidence, QuotaEvidenceSource, QuotaObservationId, QuotaPresentationDirection,
+    QuotaProviderEpochId, QuotaRatio, QuotaResetEvidence, QuotaSample, QuotaSampleParts,
+    QuotaSampleQuality, QuotaScope, QuotaUnitId, QuotaUnits, QuotaWindowDefinition,
+    QuotaWindowDefinitionParts, QuotaWindowId, QuotaWindowKey, QuotaWindowSemantics,
+    ReminderLeadTime, ReminderProfile, ReminderProfileParts, ReminderProfileRevision,
+    UsageProviderId,
 };
 use tokenmaster_git::{
     GitAuthorFingerprint, GitCommitAccumulator, GitCommitFingerprint, GitMailmapFingerprint,
@@ -540,6 +542,61 @@ fn benefit_lot(
         label_key: BenefitLabelKey::new("benefit.codex.inventory").expect("label"),
     })
     .expect("benefit lot")
+}
+
+pub fn notification_benefit_lot(
+    id: u8,
+    kind: BenefitKind,
+    quantity: u64,
+    state: BenefitState,
+    expiry: BenefitExpiry,
+) -> BenefitLotObservation {
+    benefit_lot(id, kind, quantity, state, expiry)
+}
+
+pub fn publish_notification_benefit_scope(
+    path: &Path,
+    scope_seed: u8,
+    completeness: BenefitInventoryCompleteness,
+    lots: Vec<BenefitLotObservation>,
+    lead_seconds: Option<&[u32]>,
+) {
+    let scope = BenefitScope::new(
+        UsageProviderId::new(format!("codex-{scope_seed:02}"))
+            .expect("notification fixture provider"),
+        QuotaAccountId::new(format!("notification-private-account-{scope_seed:02}"))
+            .expect("notification fixture account"),
+        None,
+    );
+    let observation = BenefitInventoryObservation::new(BenefitInventoryObservationParts {
+        scope: scope.clone(),
+        observation_id: BenefitObservationId::from_bytes([scope_seed; 32]),
+        observed_at_ms: WALL_TIME_MS - 1_000,
+        fresh_until_ms: WALL_TIME_MS + 60_000,
+        stale_after_ms: WALL_TIME_MS + 120_000,
+        completeness,
+        lots,
+    })
+    .expect("notification benefit observation");
+    let mut store = UsageStore::open(path).expect("open notification fixture archive");
+    store
+        .apply_benefit_observation(&observation)
+        .expect("publish notification benefit scope");
+    if let Some(lead_seconds) = lead_seconds {
+        let profile = ReminderProfile::new(ReminderProfileParts {
+            revision: ReminderProfileRevision::new(u64::from(scope_seed) + 1)
+                .expect("notification profile revision"),
+            lead_times: lead_seconds
+                .iter()
+                .map(|seconds| ReminderLeadTime::new(*seconds).expect("notification lead"))
+                .collect(),
+            channels: vec![NotificationChannel::InApp],
+        })
+        .expect("notification profile");
+        store
+            .set_benefit_reminder_override(&scope, Some(&profile))
+            .expect("apply notification reminder override");
+    }
 }
 
 fn seed_benefits(path: &Path) {

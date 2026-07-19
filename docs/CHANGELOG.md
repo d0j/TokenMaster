@@ -6,6 +6,27 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.6 as a responsive read-only Notifications expiry-safety center over
+  the existing all-current benefit overview. It retains at most 32 effective reminder
+  profiles, 256 separate current lots, and eight leads/profile while preserving exact/
+  bounded/provider-local/provider-date/unknown expiry, inherited/override source,
+  disabled/in-app-only coverage, evidence, warnings, due time, and truncation.
+- Added one scope and one lot Slint model with complete wide/narrow/accessibility truth,
+  explicit waiting/unavailable/retained/degraded/empty states, and millisecond-preserving
+  exact/bounded UTC presentation. Navigation remains query- and rebuild-free.
+- Kept delivery authority out of the route: no reminder take/ack/release, settings
+  mutation, timer, worker, queue, cache, connection, polling, or activation callback
+  was added. The source audit computes zero owner/control receipts and 82/82 mutation
+  contracts cover the boundary. App-owned presentation receipts, settings editing,
+  snooze/quiet hours, OS delivery, usage alerts, and activation remain future slices.
+- Closed the initial review's three Important and one Minor findings with lossless
+  millisecond UTC formatting, explicit waiting truth, complete owner/control mutations,
+  visible wide completeness, and a populated replacement plateau. Re-review returned
+  Critical/Important/Minor 0/0/0. Clean-root, formatting, strict workspace Clippy,
+  release composition, and the complete locked workspace test/doctest gate pass; the
+  uninterrupted baseline completed in 1,216.4 seconds. P3-D.6 is closed without
+  claiming packaging, M0, or release acceptance.
+
 - Implemented P3-D.5 as a responsive bounded Recent activity route over the existing
   `LatestActivityRequest::first(12)` product page. No query, worker, timer, queue,
   cache, connection, callback, schema, dependency, or route-time model rebuild was
