@@ -1555,6 +1555,99 @@ mod tests {
         )?)
     }
 
+    #[derive(Debug, Eq, PartialEq)]
+    struct GlobalProfileRollbackSnapshot {
+        state: Vec<i64>,
+        profile: Vec<(i64, i64, i64)>,
+        thresholds: Vec<i64>,
+        due: Vec<ReminderRow>,
+        deliveries: Vec<ReminderRow>,
+        acknowledgements: Vec<(Vec<u8>, i64)>,
+    }
+
+    type ReminderRow = (Vec<u8>, Vec<u8>, Vec<u8>, i64, i64, String, i64, i64, i64);
+
+    fn global_profile_rollback_snapshot(
+        store: &UsageStore,
+    ) -> TestResult<GlobalProfileRollbackSnapshot> {
+        let profile = store
+            .connection
+            .prepare(
+                "SELECT revision, channel_in_app, channel_os_scheduled
+                 FROM benefit_reminder_profile
+                 WHERE profile_kind = 'global' AND length(profile_scope_id) = 0",
+            )?
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        let thresholds = store
+            .connection
+            .prepare(
+                "SELECT threshold_seconds FROM benefit_reminder_threshold
+                 WHERE profile_kind = 'global' AND length(profile_scope_id) = 0
+                 ORDER BY threshold_seconds",
+            )?
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        let due = store
+            .connection
+            .prepare(
+                "SELECT delivery_id, scope_id, lot_id, lot_revision, threshold_seconds,
+                        channel, due_at_ms, expiry_at_ms, profile_revision
+                 FROM benefit_reminder_due ORDER BY delivery_id",
+            )?
+            .query_map([], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        let deliveries = store
+            .connection
+            .prepare(
+                "SELECT delivery_id, scope_id, lot_id, lot_revision, threshold_seconds,
+                        channel, due_at_ms, expiry_at_ms, delivered_at_ms
+                 FROM benefit_reminder_delivery ORDER BY delivery_id",
+            )?
+            .query_map([], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        let acknowledgements = store
+            .connection
+            .prepare(
+                "SELECT delivery_id, acknowledged_at_ms
+                 FROM benefit_reminder_ack ORDER BY delivery_id",
+            )?
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(GlobalProfileRollbackSnapshot {
+            state: snapshot(store)?,
+            profile,
+            thresholds,
+            due,
+            deliveries,
+            acknowledgements,
+        })
+    }
+
     #[test]
     fn every_benefit_write_fault_rolls_back_history_current_due_and_revision() -> TestResult {
         for fault in [
@@ -1591,19 +1684,30 @@ mod tests {
             1,
             OBSERVED_AT_MS + 10 * 24 * 60 * 60 * 1_000,
         )?)?;
-        let deliveries = store.process_due_in_app_benefit_reminders(OBSERVED_AT_MS, 1)?;
-        store.acknowledge_benefit_reminders(deliveries.deliveries(), OBSERVED_AT_MS + 1)?;
-        let before = snapshot(&store)?;
+        let delivered_at_ms = OBSERVED_AT_MS + 3 * 24 * 60 * 60 * 1_000 + 1;
+        let deliveries = store.process_due_in_app_benefit_reminders(delivered_at_ms, 1)?;
+        assert!(!deliveries.deliveries().is_empty(), "real delivery");
+        store.acknowledge_benefit_reminders(deliveries.deliveries(), delivered_at_ms + 1)?;
+        let before = global_profile_rollback_snapshot(&store)?;
+        assert!(!before.due.is_empty(), "inherited due remains");
+        assert!(!before.deliveries.is_empty(), "delivery snapshot");
+        assert!(
+            !before.acknowledgements.is_empty(),
+            "acknowledgement snapshot"
+        );
         let profile = ReminderProfile::new(ReminderProfileParts {
             revision: ReminderProfileRevision::new(2)?,
             lead_times: vec![ReminderLeadTime::new(21_600)?],
             channels: vec![NotificationChannel::InApp],
         })?;
-        let error = store
+        let error = match store
             .set_benefit_reminder_global_profile_inner(&profile, BenefitWriteFault::BeforeCommit)
-            .expect_err("injected profile fault");
+        {
+            Ok(_) => return Err("faulted global profile unexpectedly committed".into()),
+            Err(error) => error,
+        };
         assert_eq!(error.code(), StoreErrorCode::Database);
-        assert_eq!(snapshot(&store)?, before);
+        assert_eq!(global_profile_rollback_snapshot(&store)?, before);
         Ok(())
     }
 }

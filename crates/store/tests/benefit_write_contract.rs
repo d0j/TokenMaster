@@ -122,6 +122,124 @@ fn global_profile_state(connection: &Connection) -> (i64, i64, i64, i64) {
         .expect("global profile state")
 }
 
+#[derive(Debug, Eq, PartialEq)]
+struct OverrideRowsSnapshot {
+    profiles: Vec<(Vec<u8>, i64, i64, i64)>,
+    thresholds: Vec<(Vec<u8>, i64)>,
+    due: Vec<ReminderRow>,
+    deliveries: Vec<ReminderRow>,
+    acknowledgements: Vec<(Vec<u8>, i64)>,
+}
+
+type ReminderRow = (Vec<u8>, Vec<u8>, Vec<u8>, i64, i64, String, i64, i64, i64);
+
+fn override_rows_snapshot(connection: &Connection) -> OverrideRowsSnapshot {
+    let profiles = connection
+        .prepare(
+            "SELECT profile_scope_id, revision, channel_in_app, channel_os_scheduled
+             FROM benefit_reminder_profile
+             WHERE profile_kind = 'scope'
+             ORDER BY profile_scope_id",
+        )
+        .expect("override profiles")
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
+        .expect("map override profiles")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect override profiles");
+    let thresholds = connection
+        .prepare(
+            "SELECT profile_scope_id, threshold_seconds
+             FROM benefit_reminder_threshold
+             WHERE profile_kind = 'scope'
+             ORDER BY profile_scope_id, threshold_seconds",
+        )
+        .expect("override thresholds")
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .expect("map override thresholds")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect override thresholds");
+    let due = connection
+        .prepare(
+            "SELECT due.delivery_id, due.scope_id, due.lot_id, due.lot_revision,
+                    due.threshold_seconds, due.channel, due.due_at_ms, due.expiry_at_ms,
+                    due.profile_revision
+             FROM benefit_reminder_due AS due
+             JOIN benefit_reminder_profile AS profile
+               ON profile.profile_kind = 'scope' AND profile.profile_scope_id = due.scope_id
+             ORDER BY due.delivery_id",
+        )
+        .expect("override due")
+        .query_map([], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+                row.get(7)?,
+                row.get(8)?,
+            ))
+        })
+        .expect("map override due")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect override due");
+    let deliveries = connection
+        .prepare(
+            "SELECT delivery.delivery_id, delivery.scope_id, delivery.lot_id,
+                    delivery.lot_revision, delivery.threshold_seconds, delivery.channel,
+                    delivery.due_at_ms, delivery.expiry_at_ms, delivery.delivered_at_ms
+             FROM benefit_reminder_delivery AS delivery
+             JOIN benefit_reminder_profile AS profile
+               ON profile.profile_kind = 'scope'
+              AND profile.profile_scope_id = delivery.scope_id
+             ORDER BY delivery.delivery_id",
+        )
+        .expect("override deliveries")
+        .query_map([], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+                row.get(7)?,
+                row.get(8)?,
+            ))
+        })
+        .expect("map override deliveries")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect override deliveries");
+    let acknowledgements = connection
+        .prepare(
+            "SELECT acknowledgement.delivery_id, acknowledgement.acknowledged_at_ms
+             FROM benefit_reminder_ack AS acknowledgement
+             JOIN benefit_reminder_delivery AS delivery
+               ON delivery.delivery_id = acknowledgement.delivery_id
+             JOIN benefit_reminder_profile AS profile
+               ON profile.profile_kind = 'scope'
+              AND profile.profile_scope_id = delivery.scope_id
+             ORDER BY acknowledgement.delivery_id",
+        )
+        .expect("override acknowledgements")
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .expect("map override acknowledgements")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect override acknowledgements");
+    OverrideRowsSnapshot {
+        profiles,
+        thresholds,
+        due,
+        deliveries,
+        acknowledgements,
+    }
+}
+
 #[test]
 fn changed_duplicate_freshness_missing_and_restart_are_transactional() {
     let directory = TempDir::new().expect("temporary directory");
@@ -542,37 +660,12 @@ fn global_profile_ignores_overridden_scope_and_lot_capacity() {
     drop(store);
 
     let connection = Connection::open(&path).expect("inspect before");
-    let before = connection
-        .query_row(
-            "SELECT
-               (SELECT count(*) FROM benefit_reminder_profile WHERE profile_kind = 'scope'),
-               (SELECT count(*) FROM benefit_reminder_due AS due
-                  WHERE EXISTS(SELECT 1 FROM benefit_reminder_profile AS profile
-                               WHERE profile.profile_kind = 'scope'
-                                 AND profile.profile_scope_id = due.scope_id)),
-               (SELECT count(*) FROM benefit_reminder_delivery AS delivery
-                  WHERE EXISTS(SELECT 1 FROM benefit_reminder_profile AS profile
-                               WHERE profile.profile_kind = 'scope'
-                                 AND profile.profile_scope_id = delivery.scope_id)),
-               (SELECT count(*) FROM benefit_reminder_ack AS acknowledgement
-                  JOIN benefit_reminder_delivery AS delivery
-                    ON delivery.delivery_id = acknowledgement.delivery_id
-                  WHERE EXISTS(SELECT 1 FROM benefit_reminder_profile AS profile
-                               WHERE profile.profile_kind = 'scope'
-                                 AND profile.profile_scope_id = delivery.scope_id))",
-            [],
-            |row| {
-                Ok((
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, i64>(1)?,
-                    row.get::<_, i64>(2)?,
-                    row.get::<_, i64>(3)?,
-                ))
-            },
-        )
-        .expect("override state");
-    assert!(before.2 > 0, "override delivery preserved");
-    assert!(before.3 > 0, "override acknowledgement preserved");
+    let before = override_rows_snapshot(&connection);
+    assert!(!before.deliveries.is_empty(), "override delivery preserved");
+    assert!(
+        !before.acknowledgements.is_empty(),
+        "override acknowledgement preserved"
+    );
     drop(connection);
 
     let mut store = UsageStore::open(&path).expect("reopen");
@@ -583,35 +676,7 @@ fn global_profile_ignores_overridden_scope_and_lot_capacity() {
     drop(store);
 
     let connection = Connection::open(&path).expect("inspect after");
-    let after = connection
-        .query_row(
-            "SELECT
-               (SELECT count(*) FROM benefit_reminder_profile WHERE profile_kind = 'scope'),
-               (SELECT count(*) FROM benefit_reminder_due AS due
-                  WHERE EXISTS(SELECT 1 FROM benefit_reminder_profile AS profile
-                               WHERE profile.profile_kind = 'scope'
-                                 AND profile.profile_scope_id = due.scope_id)),
-               (SELECT count(*) FROM benefit_reminder_delivery AS delivery
-                  WHERE EXISTS(SELECT 1 FROM benefit_reminder_profile AS profile
-                               WHERE profile.profile_kind = 'scope'
-                                 AND profile.profile_scope_id = delivery.scope_id)),
-               (SELECT count(*) FROM benefit_reminder_ack AS acknowledgement
-                  JOIN benefit_reminder_delivery AS delivery
-                    ON delivery.delivery_id = acknowledgement.delivery_id
-                  WHERE EXISTS(SELECT 1 FROM benefit_reminder_profile AS profile
-                               WHERE profile.profile_kind = 'scope'
-                                 AND profile.profile_scope_id = delivery.scope_id))",
-            [],
-            |row| {
-                Ok((
-                    row.get::<_, i64>(0)?,
-                    row.get::<_, i64>(1)?,
-                    row.get::<_, i64>(2)?,
-                    row.get::<_, i64>(3)?,
-                ))
-            },
-        )
-        .expect("override state");
+    let after = override_rows_snapshot(&connection);
     assert_eq!(after, before);
 }
 
