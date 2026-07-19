@@ -4,7 +4,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use i_slint_backend_testing::{AccessibleRole, ElementQuery};
 use slint::{
-    ComponentHandle, Model, SharedString,
+    ComponentHandle, Model, ModelRc, SharedString, VecModel,
     platform::{Key, PointerEventButton, WindowEvent},
 };
 use tokenmaster_desktop::{
@@ -252,6 +252,7 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert!(!window.get_projects_visible());
     assert!(!window.get_activity_visible());
     assert!(!window.get_help_about_visible());
+    assert!(!window.get_compact_widget_visible());
     assert_eq!(window.get_history_day_rows().row_count(), 0);
     assert_eq!(window.get_history_total_tokens(), "—");
     assert_eq!(window.get_session_list_rows().row_count(), 0);
@@ -342,6 +343,7 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert_compiled_help_about_is_static_truthful_and_responsive();
     assert_compiled_session_selection_is_immediate_correlated_and_bounded_in_place();
     assert_open_command_palette_refreshes_from_accepted_snapshot();
+    assert_compiled_compact_widget_reuses_quota_snapshot_and_restores_window();
 }
 
 fn assert_compiled_command_palette_is_bounded_and_routes_through_desktop_state(
@@ -479,6 +481,124 @@ fn assert_open_command_palette_refreshes_from_accepted_snapshot() {
     assert_eq!(refreshed.key, "data_health");
     assert_eq!(refreshed.state, "degraded");
     assert!(refreshed.selected);
+}
+
+fn assert_compiled_compact_widget_reuses_quota_snapshot_and_restores_window() {
+    let unavailable_reducer = ProductReducer::new();
+    let unavailable_shell =
+        DesktopShell::new(&unavailable_reducer.snapshot()).expect("unavailable compact shell");
+    let unavailable_window = unavailable_shell.window();
+    unavailable_window
+        .show()
+        .expect("show unavailable compact window");
+    unavailable_window
+        .window()
+        .set_size(slint::PhysicalSize::new(1_000, 700));
+    unavailable_window.invoke_select_route(SharedString::from("compact_widget"));
+    assert!(unavailable_window.get_compact_widget_visible());
+    assert_eq!(unavailable_window.get_active_route_state(), "unavailable");
+    assert_eq!(unavailable_window.get_compact_widget_quota_count(), 0);
+    let unavailable_message = ElementQuery::from_root(unavailable_window)
+        .match_predicate(|element| {
+            element
+                .accessible_label()
+                .is_some_and(|label| label == "Quota evidence unavailable")
+        })
+        .find_all();
+    assert_eq!(unavailable_message.len(), 1);
+
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory.path().join("ui-compact-widget.sqlite3");
+    let reducer = ready_reducer(&path, 31);
+    let shell = DesktopShell::new(&reducer.snapshot()).expect("compact shell");
+    let window = shell.window();
+    let component_address = window as *const _;
+    window.show().expect("show compact window");
+    window
+        .window()
+        .set_size(slint::PhysicalSize::new(1_000, 700));
+
+    window.invoke_select_route(SharedString::from("compact_widget"));
+    assert_eq!(window as *const _, component_address);
+    assert!(window.get_compact_widget_visible());
+    assert!(!window.get_dashboard_visible());
+    assert_eq!(window.get_active_route_state(), "ready");
+    assert_eq!(window.get_dashboard_quota_rows().row_count(), 32);
+    assert_eq!(window.get_compact_widget_quota_count(), 32);
+    assert_eq!(window.window().size(), slint::PhysicalSize::new(420, 560));
+    assert_eq!(window.get_compact_widget_layout_mode(), "wide");
+
+    let compact_rows = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::Groupbox)
+        .match_predicate(|element| {
+            element
+                .accessible_label()
+                .is_some_and(|label| label.starts_with("Compact quota window "))
+        })
+        .find_all();
+    assert!(!compact_rows.is_empty());
+    assert!(compact_rows.len() <= 32);
+
+    let original_quotas = window.get_dashboard_quota_rows().iter().collect::<Vec<_>>();
+    let mut unknown_ratio = original_quotas[0].clone();
+    unknown_ratio.ratio_known = false;
+    unknown_ratio.usage_label = SharedString::from("Usage unavailable");
+    window.set_dashboard_quota_rows(ModelRc::new(VecModel::from(vec![unknown_ratio])));
+    assert_eq!(window.get_compact_widget_quota_count(), 1);
+    let unknown_ratio_messages = ElementQuery::from_root(window)
+        .match_predicate(|element| {
+            element
+                .accessible_label()
+                .is_some_and(|label| label == "Usage ratio unavailable")
+        })
+        .find_all();
+    assert_eq!(unknown_ratio_messages.len(), 1);
+    window.set_dashboard_quota_rows(ModelRc::new(VecModel::from(original_quotas)));
+    assert_eq!(window.get_compact_widget_quota_count(), 32);
+
+    window.window().set_size(slint::PhysicalSize::new(360, 480));
+    assert_eq!(window.get_compact_widget_layout_mode(), "narrow");
+    let return_buttons = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::Button)
+        .match_predicate(|element| {
+            element
+                .accessible_label()
+                .is_some_and(|label| label == "Return to Dashboard")
+        })
+        .find_all();
+    assert_eq!(return_buttons.len(), 1);
+    return_buttons[0].invoke_accessible_default_action();
+    assert!(window.get_dashboard_visible());
+    assert!(!window.get_compact_widget_visible());
+    assert_eq!(window.window().size(), slint::PhysicalSize::new(1_000, 700));
+
+    window.invoke_select_route(SharedString::from("compact_widget"));
+    dispatch_key(window, Key::Return);
+    assert!(window.get_dashboard_visible());
+    assert_eq!(window.window().size(), slint::PhysicalSize::new(1_000, 700));
+
+    window.invoke_select_route(SharedString::from("compact_widget"));
+    let return_buttons = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::Button)
+        .match_predicate(|element| {
+            element
+                .accessible_label()
+                .is_some_and(|label| label == "Return to Dashboard")
+        })
+        .find_all();
+    assert_eq!(return_buttons.len(), 1);
+    return_buttons[0].mock_single_click(PointerEventButton::Left);
+    assert!(window.get_dashboard_visible());
+
+    for _ in 0..10_000 {
+        window.invoke_select_route(SharedString::from("compact_widget"));
+        window.invoke_select_route(SharedString::from("dashboard"));
+    }
+    assert_eq!(window as *const _, component_address);
+    assert!(window.get_dashboard_visible());
+    assert_eq!(window.get_dashboard_quota_rows().row_count(), 32);
+    assert_eq!(window.get_compact_widget_quota_count(), 32);
+    assert_eq!(window.window().size(), slint::PhysicalSize::new(1_000, 700));
 }
 
 fn assert_compiled_help_about_is_static_truthful_and_responsive() {

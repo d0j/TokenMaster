@@ -443,8 +443,8 @@ Describe "TokenMaster production desktop audit" {
         $fixture = New-DesktopAuditFixture -Name "activity-route-rebuild"
         $path = Join-Path $fixture "crates\desktop\src\ui.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            'apply_route_projection(&window, state.projection());',
-            "apply_route_projection(&window, state.projection());`r`n            apply_activity_route_projection(&window, state.projection().activity());"
+            'apply_route_projection(window, projection);',
+            "apply_route_projection(window, projection);`r`n    apply_activity_route_projection(window, projection.activity());"
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -610,8 +610,8 @@ Describe "TokenMaster production desktop audit" {
         $fixture = New-DesktopAuditFixture -Name "notifications-route-rebuild"
         $path = Join-Path $fixture "crates\desktop\src\ui.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            'apply_route_projection(&window, state.projection());',
-            "apply_route_projection(&window, state.projection());`r`n            apply_notifications_projection(&window, state.projection().notifications());"
+            'apply_route_projection(window, projection);',
+            "apply_route_projection(window, projection);`r`n    apply_notifications_projection(window, projection.notifications());"
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -1053,8 +1053,8 @@ Describe "TokenMaster production desktop audit" {
         $fixture = New-DesktopAuditFixture -Name "route-dashboard-rebuild"
         $path = Join-Path $fixture "crates\desktop\src\ui.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            'apply_route_projection(&window, state.projection());',
-            "apply_route_projection(&window, state.projection());`r`n            apply_dashboard_projection(&window, state.projection().dashboard());"
+            'apply_route_projection(window, projection);',
+            "apply_route_projection(window, projection);`r`n    apply_dashboard_projection(window, projection.dashboard());"
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -1066,8 +1066,8 @@ Describe "TokenMaster production desktop audit" {
         $fixture = New-DesktopAuditFixture -Name "route-history-rebuild"
         $path = Join-Path $fixture "crates\desktop\src\ui.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            'apply_route_projection(&window, state.projection());',
-            "apply_route_projection(&window, state.projection());`r`n            apply_history_projection(&window, state.projection().history());"
+            'apply_route_projection(window, projection);',
+            "apply_route_projection(window, projection);`r`n    apply_history_projection(window, projection.history());"
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -1079,8 +1079,8 @@ Describe "TokenMaster production desktop audit" {
         $fixture = New-DesktopAuditFixture -Name "route-models-rebuild"
         $path = Join-Path $fixture "crates\desktop\src\ui.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            'apply_route_projection(&window, state.projection());',
-            "apply_route_projection(&window, state.projection());`r`n            apply_models_projection(&window, state.projection().models());"
+            'apply_route_projection(window, projection);',
+            "apply_route_projection(window, projection);`r`n    apply_models_projection(window, projection.models());"
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -1092,8 +1092,8 @@ Describe "TokenMaster production desktop audit" {
         $fixture = New-DesktopAuditFixture -Name "route-projects-rebuild"
         $path = Join-Path $fixture "crates\desktop\src\ui.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            'apply_route_projection(&window, state.projection());',
-            "apply_route_projection(&window, state.projection());`r`n            apply_projects_projection(&window, state.projection().projects());"
+            'apply_route_projection(window, projection);',
+            "apply_route_projection(window, projection);`r`n    apply_projects_projection(window, projection.projects());"
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -1105,8 +1105,8 @@ Describe "TokenMaster production desktop audit" {
         $fixture = New-DesktopAuditFixture -Name "route-sessions-rebuild"
         $path = Join-Path $fixture "crates\desktop\src\ui.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            'apply_route_projection(&window, state.projection());',
-            "apply_route_projection(&window, state.projection());`r`n            apply_sessions_projection(&window, state.projection().sessions());"
+            'apply_route_projection(window, projection);',
+            "apply_route_projection(window, projection);`r`n    apply_sessions_projection(window, projection.sessions());"
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -1357,18 +1357,105 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-COMMAND-PALETTE-OVERLAY*"
     }
 
+    It "rejects a second compact quota model" {
+        $fixture = New-DesktopAuditFixture -Name "compact-second-quota-model"
+        $path = Join-Path $fixture "crates\desktop\ui\main.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'in property <[DashboardQuotaRow]> dashboard-quota-rows;',
+            "in property <[DashboardQuotaRow]> dashboard-quota-rows;`n    in property <[DashboardQuotaRow]> compact-quota-rows;"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-COMPACT-QUOTA*"
+    }
+
+    It "rejects fixed weekly compact quota assumptions" {
+        $fixture = New-DesktopAuditFixture -Name "compact-fixed-weekly"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\views\compact-widget-view.slint") `
+            -Value 'Text { text: "Weekly quota"; }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*QUOTA*"
+    }
+
+    It "rejects hiding an unknown compact quota ratio" {
+        $fixture = New-DesktopAuditFixture -Name "compact-unknown-ratio"
+        $path = Join-Path $fixture "crates\desktop\ui\views\compact-widget-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'Usage ratio unavailable',
+            '0% used'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-COMPACT-QUOTA*"
+    }
+
+    It "rejects rewiring compact return away from Dashboard" {
+        $fixture = New-DesktopAuditFixture -Name "compact-return-route"
+        $path = Join-Path $fixture "crates\desktop\ui\main.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'return-dashboard => { root.select-route("dashboard"); }',
+            'return-dashboard => { root.select-route("settings"); }'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-COMPACT-ROUTE*"
+    }
+
+    It "rejects conditionally reconstructing the compact view" {
+        $fixture = New-DesktopAuditFixture -Name "compact-conditional-view"
+        $path = Join-Path $fixture "crates\desktop\ui\main.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'compact-view := CompactWidgetView {',
+            'if root.compact-widget-visible: CompactWidgetView {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-COMPACT-ROUTE*"
+    }
+
+    It "rejects removing the compact restore-size slot" {
+        $fixture = New-DesktopAuditFixture -Name "compact-geometry-slot"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'normal_size: Option<slint::PhysicalSize>',
+            'discarded_size: Option<slint::PhysicalSize>'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-COMPACT-GEOMETRY*"
+    }
+
+    It "rejects adding a compact runtime owner" {
+        $fixture = New-DesktopAuditFixture -Name "compact-runtime-owner"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\ui.rs") `
+            -Value 'struct CompactWidgetWorker;'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-COMPACT-NO-OWNER*"
+    }
+
     It "accepts the bounded dashboard History Sessions Models Projects Activity Notifications and Help About desktop boundary" {
         $fixture = New-DesktopAuditFixture -Name "library-boundary"
 
         $receipt = & $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json
         $receipt.rust_source_file_count | Should -Be 15
-        $receipt.slint_source_file_count | Should -Be 23
+        $receipt.slint_source_file_count | Should -Be 24
         $receipt.command_palette_query_scalar_maximum | Should -Be 64
         $receipt.command_palette_model_count | Should -Be 1
         $receipt.command_palette_shortcut_count | Should -Be 1
         $receipt.command_palette_accessible_default_action_count | Should -Be 1
         $receipt.command_palette_route_only | Should -BeTrue
         $receipt.command_palette_owner_count | Should -Be 0
+        $receipt.compact_widget_quota_row_maximum | Should -Be 32
+        $receipt.compact_widget_quota_model_count | Should -Be 1
+        $receipt.compact_widget_geometry_slot_count | Should -Be 1
+        $receipt.compact_widget_owner_count | Should -Be 0
         $receipt.dashboard_section_count | Should -Be 6
         $receipt.dashboard_model_replacement_count | Should -Be 7
         $receipt.history_day_maximum | Should -Be 30

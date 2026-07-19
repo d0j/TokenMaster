@@ -40,8 +40,8 @@ if ($productionManifestText -match '\btokenmaster-(store|provider|runtime|codex|
 $rustFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.rs')
 $uiFiles = @(Get-ChildItem -LiteralPath $uiRoot -Recurse -File -Filter '*.slint')
 $productionFiles = @($rustFiles + $uiFiles)
-if ($rustFiles.Count -ne 15 -or $uiFiles.Count -ne 23) {
-    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain fifteen Rust and twenty-three Slint files'
+if ($rustFiles.Count -ne 15 -or $uiFiles.Count -ne 24) {
+    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain fifteen Rust and twenty-four Slint files'
 }
 $uiText = ($uiFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
@@ -389,6 +389,55 @@ foreach ($requiredBoundUse in @(
 $dashboardProjectionCallCount = [regex]::Matches($uiRustText, 'apply_dashboard_projection\(').Count
 if ($dashboardProjectionCallCount -ne 2) {
     throw 'TM-DESKTOP-DASHBOARD-REBUILD: dashboard models must not rebuild during route-only selection'
+}
+$compactWidgetPath = Join-Path $uiRoot 'views\compact-widget-view.slint'
+$compactWidgetText = [System.IO.File]::ReadAllText($compactWidgetPath)
+$compactWidgetQuotaPropertyCount = [regex]::Matches(
+    $mainUiTextForPalette,
+    'in property <\[DashboardQuotaRow\]> [a-z][a-z0-9-]*;'
+).Count
+$compactWidgetQuotaBindingCount = [regex]::Matches(
+    $mainUiTextForPalette,
+    'quotas:\s*root\.dashboard-quota-rows;'
+).Count
+$compactWidgetGeometrySlotCount = [regex]::Matches(
+    $uiRustText,
+    'normal_size:\s*Option<slint::PhysicalSize>'
+).Count
+$compactWidgetOwnerCount = [regex]::Matches(
+    $compactWidgetText,
+    '(?i)\b(?:Timer|thread|spawn|cache|history|worker|query|snapshot|controller)\b'
+).Count + [regex]::Matches(
+    $uiRustText,
+    'CompactWidget(?:Worker|Query|Cache|Snapshot|Controller)'
+).Count
+if ($compactWidgetQuotaPropertyCount -ne 1 -or
+    $compactWidgetQuotaBindingCount -ne 2 -or
+    $compactWidgetText -notmatch 'in property <\[DashboardQuotaRow\]> quotas;' -or
+    $compactWidgetText -notmatch 'for quota in root\.quotas:\s*CompactQuotaRow' -or
+    $compactWidgetText -notmatch 'if !root\.quota\.ratio-known:\s*Text' -or
+    $compactWidgetText -notmatch 'Usage ratio unavailable' -or
+    $compactWidgetText -match '(?i)\b(?:5\s*-?\s*hour|five\s*-?\s*hour|weekly)\b') {
+    throw 'TM-DESKTOP-COMPACT-QUOTA: compact mode must reuse all bounded dynamic quota rows and keep unknown ratio explicit'
+}
+if ($mainUiTextForPalette -notmatch 'compact-view := CompactWidgetView' -or
+    $mainUiTextForPalette -match '(?s)if\s+[^:]+:\s*CompactWidgetView' -or
+    $mainUiTextForPalette -notmatch 'visible:\s*!root\.compact-widget-visible;' -or
+    $mainUiTextForPalette -notmatch 'return-dashboard\s*=>\s*\{\s*root\.select-route\("dashboard"\);\s*\}' -or
+    $compactWidgetText -notmatch 'accessible-label:\s*"Return to Dashboard";' -or
+    $compactWidgetText -notmatch 'forward-focus:\s*return-button;') {
+    throw 'TM-DESKTOP-COMPACT-ROUTE: compact mode must remain one always-mounted same-window route with an accessible Dashboard return'
+}
+if ($compactWidgetGeometrySlotCount -ne 1 -or
+    $uiRustText -notmatch 'const COMPACT_WINDOW_WIDTH: f32 = 420\.0;' -or
+    $uiRustText -notmatch 'const COMPACT_WINDOW_HEIGHT: f32 = 560\.0;' -or
+    $uiRustText -notmatch 'slint::LogicalSize::new\(' -or
+    $uiRustText -notmatch 'mode\.normal_size = Some' -or
+    $uiRustText -notmatch 'mode\.normal_size\s*\.take\(\)') {
+    throw 'TM-DESKTOP-COMPACT-GEOMETRY: compact mode must use one logical-size transition and one bounded restore slot'
+}
+if ($compactWidgetOwnerCount -ne 0) {
+    throw 'TM-DESKTOP-COMPACT-NO-OWNER: compact mode must add no query snapshot worker timer cache or controller owner'
 }
 $historyPath = Join-Path $sourceRoot 'history.rs'
 $historyText = [System.IO.File]::ReadAllText($historyPath)
@@ -1148,6 +1197,10 @@ if ($SourceOnly) {
         command_palette_accessible_default_action_count = $commandPaletteDefaultActionCount
         command_palette_route_only = $commandPaletteRouteOnly
         command_palette_owner_count = $commandPaletteOwnerCount
+        compact_widget_quota_row_maximum = $dashboardBounds.MAX_DASHBOARD_QUOTA_ROWS
+        compact_widget_quota_model_count = $compactWidgetQuotaPropertyCount
+        compact_widget_geometry_slot_count = $compactWidgetGeometrySlotCount
+        compact_widget_owner_count = $compactWidgetOwnerCount
         controller_worker_count = $workerConstructionCount
         retained_snapshot_slot_count = $snapshotSlotCount
         event_loop_schedule_site_count = $eventScheduleCount
@@ -1281,6 +1334,10 @@ if ($LASTEXITCODE -ne 0) {
     command_palette_accessible_default_action_count = $commandPaletteDefaultActionCount
     command_palette_route_only = $commandPaletteRouteOnly
     command_palette_owner_count = $commandPaletteOwnerCount
+    compact_widget_quota_row_maximum = $dashboardBounds.MAX_DASHBOARD_QUOTA_ROWS
+    compact_widget_quota_model_count = $compactWidgetQuotaPropertyCount
+    compact_widget_geometry_slot_count = $compactWidgetGeometrySlotCount
+    compact_widget_owner_count = $compactWidgetOwnerCount
     fixed_route_count = 11
     maximum_route_reason_count = 11
     retained_route_model_count = 1

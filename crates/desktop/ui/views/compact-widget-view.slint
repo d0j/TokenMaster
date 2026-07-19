@@ -1,0 +1,142 @@
+import { DashboardQuotaRow } from "../models.slint";
+import { UiTokens } from "../tokens.slint";
+import { SectionState } from "../components/section-state.slint";
+import { Button, ScrollView } from "std-widgets.slint";
+
+component CompactQuotaRow inherits Rectangle {
+    in property <DashboardQuotaRow> quota;
+
+    min-height: root.quota.ratio-known ? 112px : 126px;
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius;
+    accessible-role: groupbox;
+    accessible-label: "Compact quota window " + root.quota.label + " " + root.quota.usage-label + " " + root.quota.reset-label + " " + root.quota.evidence-label;
+
+    VerticalLayout {
+        padding: UiTokens.space-sm;
+        spacing: UiTokens.space-xs;
+        HorizontalLayout {
+            spacing: UiTokens.space-sm;
+            Text {
+                text: root.quota.label;
+                color: UiTokens.text-primary;
+                font-size: 13px;
+                font-weight: 700;
+                horizontal-stretch: 1;
+                overflow: elide;
+            }
+            Text {
+                text: root.quota.usage-label;
+                color: UiTokens.text-secondary;
+                font-size: 11px;
+            }
+        }
+        if root.quota.ratio-known: Rectangle {
+            height: 8px;
+            background: UiTokens.surface-raised;
+            border-radius: 4px;
+            Rectangle {
+                width: max(0px, min(parent.width, root.quota.used-ratio * parent.width));
+                background: UiTokens.accent;
+                border-radius: 4px;
+            }
+        }
+        if !root.quota.ratio-known: Text {
+            text: "Usage ratio unavailable";
+            color: UiTokens.unavailable;
+            font-size: 11px;
+            accessible-label: "Usage ratio unavailable";
+        }
+        HorizontalLayout {
+            spacing: UiTokens.space-sm;
+            Text {
+                text: root.quota.units-label == "" ? root.quota.remaining-label : root.quota.units-label;
+                color: UiTokens.text-secondary;
+                font-size: 11px;
+                horizontal-stretch: 1;
+                overflow: elide;
+            }
+            Text {
+                text: root.quota.reset-label;
+                color: UiTokens.text-secondary;
+                font-size: 11px;
+                overflow: elide;
+            }
+        }
+        Text {
+            text: root.quota.evidence-label;
+            color: UiTokens.text-secondary;
+            font-size: 10px;
+            overflow: elide;
+        }
+    }
+}
+
+export component CompactWidgetView inherits Rectangle {
+    in property <[DashboardQuotaRow]> quotas;
+    in property <string> state;
+    in property <string> reasons;
+    callback return-dashboard();
+    out property <int> quota-count: root.quotas.length;
+    out property <string> layout-mode: root.width < 400px ? "narrow" : "wide";
+
+    background: UiTokens.background;
+    accessible-role: region;
+    accessible-label: "Compact quota";
+
+    changed visible => {
+        if (root.visible) {
+            compact-focus.focus();
+        }
+    }
+
+    compact-focus := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        forward-focus: return-button;
+
+        VerticalLayout {
+            padding: UiTokens.space;
+            spacing: UiTokens.space-sm;
+            HorizontalLayout {
+                spacing: UiTokens.space-sm;
+                VerticalLayout {
+                    spacing: UiTokens.space-xs;
+                    horizontal-stretch: 1;
+                    Text { text: "TokenMaster"; color: UiTokens.text-primary; font-size: 18px; font-weight: 800; }
+                    Text { text: "Current quota"; color: UiTokens.text-secondary; font-size: 11px; }
+                }
+                SectionState { state: root.state; reasons: root.reasons; }
+            }
+            return-button := Button {
+                text: "Return to Dashboard";
+                accessible-label: "Return to Dashboard";
+                clicked => { root.return-dashboard(); }
+            }
+            if root.quotas.length == 0: Rectangle {
+                min-height: 96px;
+                background: UiTokens.surface;
+                border-color: UiTokens.border;
+                border-width: 1px;
+                border-radius: UiTokens.radius;
+                Text {
+                    text: root.state == "waiting" ? "Waiting for quota evidence" : "Quota evidence unavailable";
+                    color: UiTokens.text-secondary;
+                    accessible-label: root.state == "waiting" ? "Waiting for quota evidence" : "Quota evidence unavailable";
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            if root.quotas.length > 0: ScrollView {
+                viewport-width: self.width;
+                VerticalLayout {
+                    width: parent.width;
+                    spacing: UiTokens.space-sm;
+                    for quota in root.quotas: CompactQuotaRow { quota: quota; }
+                }
+            }
+        }
+    }
+}

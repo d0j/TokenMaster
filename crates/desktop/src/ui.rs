@@ -45,6 +45,18 @@ pub(crate) type SharedDesktopState = Arc<Mutex<DesktopState>>;
 type SharedReliableState = Arc<Mutex<DesktopReliableStateProjection>>;
 const VISIBLE_REMINDER_PUBLICATION_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_COMMAND_PALETTE_QUERY_SCALARS: usize = 64;
+const COMPACT_WINDOW_WIDTH: f32 = 420.0;
+const COMPACT_WINDOW_HEIGHT: f32 = 560.0;
+const NORMAL_WINDOW_WIDTH: u32 = 1_120;
+const NORMAL_WINDOW_HEIGHT: u32 = 720;
+
+#[derive(Default)]
+struct CompactWindowMode {
+    active: bool,
+    normal_size: Option<slint::PhysicalSize>,
+}
+
+type SharedCompactWindowMode = Rc<RefCell<CompactWindowMode>>;
 
 struct ReliableStateDelivery {
     id: u64,
@@ -397,8 +409,9 @@ impl DesktopShell {
         apply_reliable_state_projection(&window, &reliable_state);
         let state = Arc::new(Mutex::new(initial_state));
         let reliable_state = Arc::new(Mutex::new(reliable_state));
-        wire_route_selection(&window, state.clone());
-        wire_command_palette(&window, state.clone());
+        let compact_window_mode = Rc::new(RefCell::new(CompactWindowMode::default()));
+        wire_route_selection(&window, state.clone(), compact_window_mode.clone());
+        wire_command_palette(&window, state.clone(), compact_window_mode);
         wire_reliable_state_intents(&window, reliable_state.clone(), intent_sink);
         wire_session_detail_intents(&window, state.clone(), session_sink);
         wire_in_app_notification_dismissal(&window);
@@ -808,22 +821,34 @@ fn reminder_custom_rows(leads: &[u32]) -> ModelRc<ReminderCustomLeadRow> {
     model(rows)
 }
 
-fn wire_route_selection(window: &MainWindow, state: SharedDesktopState) {
+fn wire_route_selection(
+    window: &MainWindow,
+    state: SharedDesktopState,
+    compact_window_mode: SharedCompactWindowMode,
+) {
     let weak = window.as_weak();
     window.on_select_route(move |key| {
         let Some(window) = weak.upgrade() else {
             return;
         };
-        let Ok(mut state) = state.lock() else {
-            return;
+        let projection = {
+            let Ok(mut state) = state.lock() else {
+                return;
+            };
+            if state.select_stable_key(key.as_str()).is_err() {
+                return;
+            }
+            state.projection().clone()
         };
-        if state.select_stable_key(key.as_str()).is_ok() {
-            apply_route_projection(&window, state.projection());
-        }
+        apply_selected_route(&window, &projection, &compact_window_mode);
     });
 }
 
-fn wire_command_palette(window: &MainWindow, state: SharedDesktopState) {
+fn wire_command_palette(
+    window: &MainWindow,
+    state: SharedDesktopState,
+    compact_window_mode: SharedCompactWindowMode,
+) {
     let weak = window.as_weak();
     let open_state = state.clone();
     window.on_open_command_palette(move || {
@@ -867,6 +892,7 @@ fn wire_command_palette(window: &MainWindow, state: SharedDesktopState) {
 
     let weak = window.as_weak();
     let activate_state = state.clone();
+    let activate_compact_window_mode = compact_window_mode.clone();
     window.on_activate_command_palette_selection(move || {
         let Some(window) = weak.upgrade() else {
             return;
@@ -878,7 +904,12 @@ fn wire_command_palette(window: &MainWindow, state: SharedDesktopState) {
         let Some(row) = window.get_command_palette_rows().row_data(selected) else {
             return;
         };
-        activate_command_palette_route(&window, &activate_state, row.key.as_str());
+        activate_command_palette_route(
+            &window,
+            &activate_state,
+            &activate_compact_window_mode,
+            row.key.as_str(),
+        );
     });
 
     let weak = window.as_weak();
@@ -886,7 +917,7 @@ fn wire_command_palette(window: &MainWindow, state: SharedDesktopState) {
         let Some(window) = weak.upgrade() else {
             return;
         };
-        activate_command_palette_route(&window, &state, key.as_str());
+        activate_command_palette_route(&window, &state, &compact_window_mode, key.as_str());
     });
 }
 
@@ -976,7 +1007,12 @@ fn refresh_command_palette_if_open(window: &MainWindow, projection: &DesktopProj
     apply_command_palette_rows(window, projection, query.as_str(), selected_key.as_deref());
 }
 
-fn activate_command_palette_route(window: &MainWindow, state: &SharedDesktopState, key: &str) {
+fn activate_command_palette_route(
+    window: &MainWindow,
+    state: &SharedDesktopState,
+    compact_window_mode: &SharedCompactWindowMode,
+    key: &str,
+) {
     let projection = {
         let Ok(mut state) = state.lock() else {
             return;
@@ -986,8 +1022,54 @@ fn activate_command_palette_route(window: &MainWindow, state: &SharedDesktopStat
         }
         state.projection().clone()
     };
-    apply_route_projection(window, &projection);
+    apply_selected_route(window, &projection, compact_window_mode);
     dismiss_command_palette(window);
+}
+
+fn apply_selected_route(
+    window: &MainWindow,
+    projection: &DesktopProjection,
+    compact_window_mode: &SharedCompactWindowMode,
+) {
+    apply_route_projection(window, projection);
+    update_compact_window_mode(window, projection.selected(), compact_window_mode);
+}
+
+fn update_compact_window_mode(
+    window: &MainWindow,
+    selected: DesktopRouteKey,
+    compact_window_mode: &SharedCompactWindowMode,
+) {
+    let target_size = {
+        let mut mode = compact_window_mode.borrow_mut();
+        if selected == DesktopRouteKey::CompactWidget {
+            if mode.active {
+                None
+            } else {
+                let current = window.window().size();
+                mode.normal_size = Some(if current.width >= 560 && current.height >= 480 {
+                    current
+                } else {
+                    slint::PhysicalSize::new(NORMAL_WINDOW_WIDTH, NORMAL_WINDOW_HEIGHT)
+                });
+                mode.active = true;
+                Some(
+                    slint::LogicalSize::new(COMPACT_WINDOW_WIDTH, COMPACT_WINDOW_HEIGHT)
+                        .to_physical(window.window().scale_factor()),
+                )
+            }
+        } else if mode.active {
+            mode.active = false;
+            Some(mode.normal_size.take().unwrap_or_else(|| {
+                slint::PhysicalSize::new(NORMAL_WINDOW_WIDTH, NORMAL_WINDOW_HEIGHT)
+            }))
+        } else {
+            None
+        }
+    };
+    if let Some(size) = target_size {
+        window.window().set_size(size);
+    }
 }
 
 fn dismiss_command_palette(window: &MainWindow) {

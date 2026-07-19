@@ -15,6 +15,7 @@ import { ProjectsView } from "views/projects-view.slint";
 import { ActivityView } from "views/activity-view.slint";
 import { NotificationsView } from "views/notifications-view.slint";
 import { HelpAboutView } from "views/help-about-view.slint";
+import { CompactWidgetView } from "views/compact-widget-view.slint";
 import { SessionsView } from "views/sessions-view.slint";
 import { DataHealthView } from "views/data-health-view.slint";
 import { SettingsView, ReminderCustomLeadRow } from "views/settings-view.slint";
@@ -142,6 +143,7 @@ export component MainWindow inherits Window {
     out property <bool> data-health-visible: root.active-route-key == "data_health";
     out property <bool> settings-visible: root.active-route-key == "settings";
     out property <bool> help-about-visible: root.active-route-key == "help_about";
+    out property <bool> compact-widget-visible: root.active-route-key == "compact_widget";
     out property <string> dashboard-layout-mode: root.width < 1010px ? "narrow" : "wide";
     out property <string> sessions-layout-mode: root.width < 1010px ? "narrow" : "wide";
     out property <string> models-layout-mode: root.width < 800px ? "narrow" : "wide";
@@ -154,6 +156,8 @@ export component MainWindow inherits Window {
     out property <string> notifications-layout-mode: root.width < 800px ? "narrow" : "wide";
     out property <string> help-about-layout-mode: help-view.layout-mode;
     out property <int> help-about-section-count: help-view.section-count;
+    out property <int> compact-widget-quota-count: compact-view.quota-count;
+    out property <string> compact-widget-layout-mode: compact-view.layout-mode;
     in property <string> reliable-state-generation;
     in property <string> reliable-state-health;
     in property <bool> reliable-state-safe-mode;
@@ -231,10 +235,10 @@ export component MainWindow inherits Window {
     callback dismiss-in-app-notifications();
 
     title: "TokenMaster";
-    preferred-width: 1120px;
-    preferred-height: 720px;
-    min-width: 560px;
-    min-height: 480px;
+    preferred-width: root.compact-widget-visible ? 420px : 1120px;
+    preferred-height: root.compact-widget-visible ? 560px : 720px;
+    min-width: root.compact-widget-visible ? 360px : 560px;
+    min-height: root.compact-widget-visible ? 320px : 480px;
     background: UiTokens.background;
     forward-focus: shell-focus;
 
@@ -254,6 +258,7 @@ export component MainWindow inherits Window {
         }
 
     VerticalLayout {
+        visible: !root.compact-widget-visible;
         Rectangle {
             height: 58px;
             background: UiTokens.surface;
@@ -555,6 +560,16 @@ export component MainWindow inherits Window {
                 }
             }
         }
+    }
+
+    compact-view := CompactWidgetView {
+        width: parent.width;
+        height: parent.height;
+        visible: root.compact-widget-visible;
+        quotas: root.dashboard-quota-rows;
+        state: root.active-route-state;
+        reasons: root.active-route-reasons;
+        return-dashboard => { root.select-route("dashboard"); }
     }
 
     if root.in-app-notification-visible: InAppNotificationPanel {
