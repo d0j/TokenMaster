@@ -1071,17 +1071,12 @@ fn finish_live_bundle(
         OptionalRuntime::start(CodexQuotaRuntimeConfig::new(archive_path.clone()).and_then(
             |config| CodexQuotaRuntime::start_notified(config, started.notifier_port.clone()),
         ));
-    let reminder = match state.synchronize_reminder_profile(data_root) {
-        Ok(_) => OptionalReminderRuntime::start(
-            BenefitReminderRuntimeConfig::new(archive_path.clone()).and_then(|config| {
-                BenefitReminderRuntime::start_notified(config, started.notifier_port.clone())
-            }),
-        ),
-        Err(_) => {
-            state.mark_reminder_unavailable();
-            OptionalReminderRuntime::failed(RuntimeErrorCode::StoreUnavailable)
-        }
-    };
+    let reminder = start_optional_reminder_runtime(
+        data_root,
+        state,
+        archive_path.clone(),
+        started.notifier_port.clone(),
+    );
     let maintenance = match maintenance {
         Some(maintenance) => maintenance,
         None => state.start_maintenance(data_root, maintenance_source)?,
@@ -1139,6 +1134,21 @@ fn finish_live_bundle(
         .publish()
         .map_err(|_| ApplicationError::controller())?;
     Ok(live_bridge)
+}
+
+fn start_optional_reminder_runtime(
+    data_root: &DataRoot,
+    state: &ApplicationStateOwner,
+    archive_path: std::path::PathBuf,
+    notifier_port: Arc<dyn WorkerCompletionNotifier>,
+) -> OptionalReminderRuntime {
+    match state.synchronize_reminder_profile(data_root) {
+        Ok(_) => OptionalReminderRuntime::start(
+            BenefitReminderRuntimeConfig::new(archive_path)
+                .and_then(|config| BenefitReminderRuntime::start_notified(config, notifier_port)),
+        ),
+        Err(_) => OptionalReminderRuntime::failed(RuntimeErrorCode::StoreUnavailable),
+    }
 }
 
 fn begin_bundle_generation(bundle: &SharedBundle) -> Result<u64, ApplicationError> {

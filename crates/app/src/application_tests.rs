@@ -550,6 +550,72 @@ fn reminder_policy_sync_failure_keeps_the_durable_save_and_returns_success() {
     assert_eq!(projection.reminder_policy().lead_seconds(), &[21_600]);
 }
 
+#[test]
+fn startup_busy_reminder_store_keeps_the_durable_policy_pending_and_retryable() {
+    let temporary = TempDir::new().expect("temporary directory");
+    let environment = application_environment(&temporary);
+    let root = DataRoot::resolve(&environment).expect("data root");
+    let state = ApplicationStateOwner::open(&root).expect("state owner");
+    let mut coordinator = ApplicationCommandCoordinator::new();
+    let ApplicationCommandAdmission::Started(permit) =
+        coordinator.submit(ApplicationCommand::UpdateReminderPolicy)
+    else {
+        panic!("reminder permit");
+    };
+    state
+        .update_reminder_policy(
+            &permit,
+            ReminderPolicy::new(true, &[21_600, 3_600]).expect("reminder policy"),
+            || Ok(()),
+        )
+        .expect("durable reminder save");
+    let before = SettingsStore::new(root.reliable_state())
+        .expect("settings store")
+        .load()
+        .expect("settings before startup");
+    drop(UsageStore::open(root.archive_path()).expect("current archive"));
+    let writer = Connection::open(root.archive_path()).expect("archive writer");
+    writer
+        .execute_batch("BEGIN IMMEDIATE")
+        .expect("archive write contention");
+
+    let notifier_port: Arc<dyn WorkerCompletionNotifier> =
+        Arc::new(ApplicationRuntimeNotifier::new(Weak::new(), 1));
+    let reminder = start_optional_reminder_runtime(
+        &root,
+        &state,
+        root.archive_path().to_path_buf(),
+        notifier_port,
+    );
+    assert!(reminder.owner().is_none());
+    assert_eq!(reminder.failure, Some(RuntimeErrorCode::StoreUnavailable));
+    let projection = state
+        .reliable_state_projection_for_outcome(BootstrapOutcome::Healthy, None)
+        .expect("pending reliable projection");
+    assert!(projection.reminder_policy().enabled());
+    assert_eq!(
+        projection.reminder_policy().lead_seconds(),
+        &[21_600, 3_600]
+    );
+    assert_eq!(
+        projection.reminder_policy().sync_state(),
+        tokenmaster_desktop::DesktopReminderSyncState::Pending
+    );
+    let after = SettingsStore::new(root.reliable_state())
+        .expect("settings store")
+        .load()
+        .expect("settings after startup");
+    assert_eq!(after.generation(), before.generation());
+    assert_eq!(after.value(), before.value());
+
+    writer
+        .execute_batch("ROLLBACK")
+        .expect("release archive writer");
+    state
+        .synchronize_reminder_profile(&root)
+        .expect("pending profile remains retryable after contention");
+}
+
 fn assert_no_backup_rebuild_preserves_corrupt_truth_and_completes_authoritative_reconciliation() {
     let temporary = TempDir::new().expect("rebuild temporary directory");
     let environment = application_environment(&temporary);

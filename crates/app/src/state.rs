@@ -49,7 +49,6 @@ use crate::{ApplicationError, DataRoot};
 const STARTUP_RECOVERY_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const REMINDER_SYNC_PENDING: u8 = 0;
 const REMINDER_SYNC_SYNCHRONIZED: u8 = 1;
-const REMINDER_SYNC_UNAVAILABLE: u8 = 2;
 
 pub(crate) struct ApplicationStateOwner {
     scope: ArchiveRecoveryScope,
@@ -631,16 +630,10 @@ impl ApplicationStateOwner {
         Ok(profile)
     }
 
-    pub(crate) fn mark_reminder_unavailable(&self) {
-        self.reminder_sync_state
-            .store(REMINDER_SYNC_UNAVAILABLE, Ordering::Release);
-    }
-
     fn reminder_sync_state(&self) -> Result<DesktopReminderSyncState, ApplicationError> {
         match self.reminder_sync_state.load(Ordering::Acquire) {
             REMINDER_SYNC_PENDING => Ok(DesktopReminderSyncState::Pending),
             REMINDER_SYNC_SYNCHRONIZED => Ok(DesktopReminderSyncState::Synchronized),
-            REMINDER_SYNC_UNAVAILABLE => Ok(DesktopReminderSyncState::Unavailable),
             _ => Err(ApplicationError::state()),
         }
     }
