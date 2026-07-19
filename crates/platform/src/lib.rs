@@ -7,6 +7,7 @@ use std::fs::File;
 mod archive_recovery;
 mod backup_directory;
 mod current_session;
+mod current_user_startup;
 mod durable_file;
 mod file_dialog;
 mod lease;
@@ -34,6 +35,10 @@ pub use current_session::{
     CurrentSessionError, CurrentSessionIntegration, CurrentSessionIntegrationSnapshot,
     CurrentSessionPrimary, CurrentSessionSecondaryReceipt, CurrentSessionThreadHealth,
     GlobalHotkeyHealth,
+};
+pub use current_user_startup::{
+    CurrentUserStartup, CurrentUserStartupAction, CurrentUserStartupError,
+    CurrentUserStartupSnapshot, CurrentUserStartupStatus,
 };
 pub use durable_file::{
     DURABLE_STAGE_ATTEMPTS, DurableFileError, DurableFileReader, DurableFileReceipt,
