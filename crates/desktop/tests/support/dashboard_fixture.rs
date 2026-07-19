@@ -96,6 +96,62 @@ pub fn add_distinct_usage_rows(path: &Path, additional: u16) {
     transaction.commit().expect("commit usage scale fixture");
 }
 
+pub fn add_distinct_project_usage_rows(path: &Path, additional: u16) {
+    let mut connection = Connection::open(path).expect("project scale connection");
+    connection
+        .pragma_update(None, "foreign_keys", "ON")
+        .expect("foreign keys");
+    let transaction = connection.transaction().expect("project scale transaction");
+    for index in 0..additional {
+        let seed = index.checked_add(400).expect("bounded project seed");
+        let mut fingerprint = [0_u8; 32];
+        fingerprint[..2].copy_from_slice(&seed.to_le_bytes());
+        transaction
+            .execute(
+                "INSERT INTO usage_event(
+                   fingerprint, event_id, selected_file_key, selected_generation,
+                   selected_source_offset, projection_revision_id, origin_revision_id,
+                   retained, provider_id, profile_id, session_id, source_id,
+                   timestamp_seconds, timestamp_nanos, model, input_tokens,
+                   cached_tokens, output_tokens, reasoning_tokens, total_tokens,
+                   reported_cost_usd_micros, fallback_model, service_tier, long_context,
+                   project_alias, activity_read, activity_edit_write, activity_search,
+                   activity_git, activity_build_test, activity_web, activity_subagents,
+                   activity_terminal
+                 ) VALUES (
+                   ?1, ?2, ?3, 0, ?4, 0, 0, 0, 'codex', 'default', ?5,
+                   'dashboard-private-source', ?6, 0, 'gpt-5.6', 1, 0, 1, 0, 2,
+                   1, 0, 'standard', 'no', ?7, 0, 0, 0, 0, 0, 0, 0, 0
+                 )",
+                params![
+                    fingerprint.as_slice(),
+                    format!("dashboard-private-project-event-{index:03}"),
+                    [7_u8; 32].as_slice(),
+                    i64::from(index) + 300,
+                    format!("dashboard-private-project-session-{index:03}"),
+                    DAY_START_SECONDS + 8_000 + i64::from(index),
+                    format!("project-{index:03}"),
+                ],
+            )
+            .expect("project scale row");
+    }
+    transaction.commit().expect("commit project scale fixture");
+}
+
+pub fn make_usage_unassociated(path: &Path) {
+    let connection = Connection::open(path).expect("unassociated usage connection");
+    connection
+        .execute("UPDATE usage_event SET project_alias = NULL", [])
+        .expect("clear project associations");
+}
+
+pub fn set_usage_project_alias(path: &Path, alias: &str) {
+    let connection = Connection::open(path).expect("project alias connection");
+    connection
+        .execute("UPDATE usage_event SET project_alias = ?1", params![alias])
+        .expect("replace project association");
+}
+
 pub fn make_partial_model_usage(path: &Path) {
     let mut connection = Connection::open(path).expect("partial model connection");
     connection
@@ -220,6 +276,29 @@ pub fn add_second_git_project(path: &Path) {
         )
         .expect("second project usage");
     publish_git_projection(path, 10, 11, "second-project", 100, 10);
+}
+
+pub fn add_same_project_git_repository(path: &Path) {
+    publish_git_projection(path, 12, 13, "tokenmaster", 100, 10);
+}
+
+pub fn add_same_project_git_repositories(path: &Path, additional: u8) {
+    for index in 0..additional {
+        let repository_seed = index.checked_add(20).expect("bounded repository seed");
+        let association_seed = index.checked_add(80).expect("bounded association seed");
+        publish_git_projection(
+            path,
+            repository_seed,
+            association_seed,
+            "tokenmaster",
+            100,
+            10,
+        );
+    }
+}
+
+pub fn add_git_only_project(path: &Path) {
+    publish_git_projection(path, 70, 71, "git-only-project", 300, 30);
 }
 
 fn seed_usage(path: &Path) {

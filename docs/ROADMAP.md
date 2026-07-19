@@ -141,9 +141,13 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   32-model+32-project bounds, and no exposed opaque key. P3-D.3 Models is implemented
   as a 64-row responsive projection over the same recent-30-day History envelope with
   complete token mix/cost/events, typed cost mode/composition, visible partial-cost
-  provenance, and explicit truncation, without a third query. Its focused/full-workspace
-  gates and independent review pass. Later-page navigation, projects,
-  activity, remaining notifications/help, interactive History ranges, command
+  provenance, and explicit truncation, without a third query. P3-D.4 Projects is
+  implemented as a 32-row usage-centric projection enriched by exact-alias UTC-today
+  Git facts, with separate evidence windows, checked multi-repository sums, and one-
+  count project cost. Focused/full Desktop tests, strict package Clippy, and 57 mutation
+  audits pass; independent re-review returned 0/0/0 and the complete locked workspace
+  gate passed. P3-D.4 is closed. Later-page navigation, Activity, remaining
+  notifications/help, interactive History ranges, command
   palette, tray, and compact widget remain P3-D-P3-E.
 - **P4 — presentation:** modular skins/layouts/density/scheme/locale, en/ru/pseudo,
   accessibility, DPI, reduced motion, and visible-paint/resource gates.
@@ -186,9 +190,10 @@ generation-safe current-bundle restart foundation and Task 12B.2a identity-pinne
   Settings UI plus no-backup reconstruction, and Task 16 adversarial/privacy/
   compatibility closure, Task 17 resource/performance evidence, and Task 18
   documentation/acceptance closure are implemented. P3-D.1 History, complete P3-D.2
-  bounded Sessions list/detail, and P3-D.3 Models are implemented over the same immutable
-  snapshot/controller boundary with no new worker/timer/cache. Models and future Projects
-  share one recent-usage query; Projects and Activity are next.
+  bounded Sessions list/detail, P3-D.3 Models, and P3-D.4 Projects are implemented over
+  the same immutable snapshot/controller boundary with no new worker/timer/cache.
+  Models and Projects share one recent-usage query; Projects reuses one existing Git
+  query and keeps its UTC window separate. Activity is next after Projects closeout.
   Later-page Sessions navigation
   remains a separate bounded replacement of the same list section.
 

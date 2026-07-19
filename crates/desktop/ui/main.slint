@@ -1,7 +1,7 @@
 import {
     RouteRow, DashboardSectionRow, DashboardQuotaRow, DashboardBenefitRow,
     DashboardTrendPoint, DashboardSessionRow, DashboardActivityRow, DashboardModelRow,
-    HistoryDayRow, ModelUsageRow, SessionListRow, SessionDetailBreakdownRow, RestorePointRow
+    HistoryDayRow, ModelUsageRow, ProjectUsageRow, SessionListRow, SessionDetailBreakdownRow, RestorePointRow
 } from "models.slint";
 import { UiTokens } from "tokens.slint";
 import { RouteNavItem } from "components/route-nav-item.slint";
@@ -9,6 +9,7 @@ import { RouteState } from "components/route-state.slint";
 import { DashboardView } from "views/dashboard-view.slint";
 import { HistoryView } from "views/history-view.slint";
 import { ModelsView } from "views/models-view.slint";
+import { ProjectsView } from "views/projects-view.slint";
 import { SessionsView } from "views/sessions-view.slint";
 import { DataHealthView } from "views/data-health-view.slint";
 import { SettingsView } from "views/settings-view.slint";
@@ -64,6 +65,25 @@ export component MainWindow inherits Window {
     in property <string> models-events;
     in property <string> models-loaded-label;
     in property <string> models-completeness-label;
+    in property <[ProjectUsageRow]> project-usage-rows;
+    in property <string> projects-state;
+    in property <string> projects-reasons;
+    in property <string> projects-usage-range-label;
+    in property <string> projects-usage-time-zone-label;
+    in property <string> projects-usage-evidence-label;
+    in property <string> projects-code-range-label;
+    in property <string> projects-code-time-zone-label;
+    in property <string> projects-code-evidence-label;
+    in property <string> projects-total-tokens;
+    in property <string> projects-total-availability;
+    in property <string> projects-cost;
+    in property <string> projects-cost-availability;
+    in property <string> projects-cost-evidence-label;
+    in property <string> projects-events;
+    in property <string> projects-loaded-label;
+    in property <string> projects-completeness-label;
+    in property <string> projects-code-coverage-label;
+    in property <string> projects-code-completeness-label;
     in property <[SessionListRow]> session-list-rows;
     in property <string> sessions-state;
     in property <string> sessions-reasons;
@@ -94,11 +114,13 @@ export component MainWindow inherits Window {
     out property <bool> history-visible: root.active-route-key == "history";
     out property <bool> sessions-visible: root.active-route-key == "sessions";
     out property <bool> models-visible: root.active-route-key == "models";
+    out property <bool> projects-visible: root.active-route-key == "projects";
     out property <bool> data-health-visible: root.active-route-key == "data_health";
     out property <bool> settings-visible: root.active-route-key == "settings";
     out property <string> dashboard-layout-mode: root.width < 1010px ? "narrow" : "wide";
     out property <string> sessions-layout-mode: root.width < 1010px ? "narrow" : "wide";
     out property <string> models-layout-mode: root.width < 800px ? "narrow" : "wide";
+    out property <string> projects-layout-mode: root.width < 800px ? "narrow" : "wide";
     in property <string> reliable-state-generation;
     in property <string> reliable-state-health;
     in property <bool> reliable-state-safe-mode;
@@ -304,6 +326,30 @@ export component MainWindow inherits Window {
                     completeness-label: root.models-completeness-label;
                 }
 
+                if root.projects-visible: ProjectsView {
+                    width: parent.width;
+                    height: parent.height;
+                    rows: root.project-usage-rows;
+                    state: root.projects-state;
+                    reasons: root.projects-reasons;
+                    usage-range-label: root.projects-usage-range-label;
+                    usage-time-zone-label: root.projects-usage-time-zone-label;
+                    usage-evidence-label: root.projects-usage-evidence-label;
+                    code-range-label: root.projects-code-range-label;
+                    code-time-zone-label: root.projects-code-time-zone-label;
+                    code-evidence-label: root.projects-code-evidence-label;
+                    total-tokens: root.projects-total-tokens;
+                    total-availability: root.projects-total-availability;
+                    cost: root.projects-cost;
+                    cost-availability: root.projects-cost-availability;
+                    cost-evidence-label: root.projects-cost-evidence-label;
+                    events: root.projects-events;
+                    loaded-label: root.projects-loaded-label;
+                    completeness-label: root.projects-completeness-label;
+                    code-coverage-label: root.projects-code-coverage-label;
+                    code-completeness-label: root.projects-code-completeness-label;
+                }
+
                 if root.data-health-visible: DataHealthView {
                     width: parent.width;
                     height: parent.height;
@@ -365,7 +411,7 @@ export component MainWindow inherits Window {
                     update-backup-policy(enabled, quiet, interval, budget) => { root.update-backup-policy(enabled, quiet, interval, budget); }
                 }
 
-                if !root.dashboard-visible && !root.history-visible && !root.sessions-visible && !root.models-visible && !root.data-health-visible && !root.settings-visible: RouteState {
+                if !root.dashboard-visible && !root.history-visible && !root.sessions-visible && !root.models-visible && !root.projects-visible && !root.data-health-visible && !root.settings-visible: RouteState {
                     x: UiTokens.space;
                     y: UiTokens.space;
                     width: parent.width - 2 * UiTokens.space;

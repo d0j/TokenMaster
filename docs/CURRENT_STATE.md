@@ -70,7 +70,7 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   Codex contract remains explicitly ignored; M0 and product-release gates are separate.
 - P3-D.3 bounded Models route: the fixed recent-30-day History request now captures
   Model and Project breakdowns in one immutable envelope, so History, Models, and the
-  next Projects route share exact range/timezone/freshness without a third analytics
+  Projects route share exact range/timezone/freshness without a third analytics
   query. One identity-free projection retains at most 64 canonical model rows with
   input/cached/output/reasoning/total tokens, typed cost availability/mode/composition,
   events, relative distribution, and explicit backend/frontend truncation. The responsive
@@ -83,6 +83,25 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   0/0/0 after partial-cost/provenance and acceptance-matrix findings were closed. The
   clean-root, formatting, strict warnings-as-errors workspace Clippy, and complete
   locked workspace test/doctest baseline pass; the full suite completed in 790 seconds.
+- P3-D.4 bounded Projects route: one usage-centric projection consumes the already
+  prefetched recent-30-day Project breakdown and the existing UTC-today Git envelope,
+  with no query or runtime owner added. It retains at most 32 safe alias/`Unassociated`
+  rows, full token/cost/event truth, and optional exact-alias commits/added/removed/net/
+  efficiency. Recent usage and Today code ranges/timezones/evidence stay visibly and
+  accessibly separate. Same-alias repositories use checked sums and count project cost
+  once; unassociated and Git-only aliases never become false joins/zero-usage rows.
+  The responsive compiled Slint view switches in place and replaces one bounded model
+  only for an accepted generation. Focused projection/UI/full Desktop tests, strict
+  Desktop Clippy, 57/57 mutation audits, source authority/privacy checks, 256+lookahead
+  Project and 32-store/16-query Git truncation fixtures, retained failure, partial cost,
+  mismatched identity/cost, zero divisor, checked overflow, and 10,000-replacement
+  release tests pass. Git-unavailable and not-linked rows expose no fabricated
+  repository/code zeroes, including through wide/narrow accessibility. Independent
+  re-review returned READY with Critical/Important/Minor 0/0/0. Clean-root, formatting,
+  strict warnings-as-errors workspace Clippy, release composition, and the complete
+  locked workspace test/doctest suite pass; the full suite completed in 807 seconds
+  with serialized Windows GNU linking. P3-D.4 is closed; no release acceptance is
+  inferred.
 - M1 usage foundation: bounded provider roots, path-private source discovery,
   reparse-safe streaming enumeration, typed bounded JSONL parser, cumulative token
   state, physical/logical source identity, byte framing, revalidation, strict SQLite
@@ -1327,10 +1346,8 @@ release target passes independently.
 
 ## Next implementation slice
 
-P3-D.0 Reliable State, P3-D.1 History, P3-D.2 bounded Sessions list/detail, and the
-P3-D.3 Models route are complete through independent review and full workspace
-verification, including ready-empty, partial token/cost, cost provenance, and
-mismatched-identity gates. Continue with Projects, then Activity.
+P3-D.0 Reliable State, P3-D.1 History, P3-D.2 bounded Sessions list/detail, P3-D.3
+Models, and P3-D.4 Projects are closed. Continue with the bounded Activity route.
 Later-page Sessions navigation and interactive History ranges remain bounded
 replacements of their existing sections rather than new frontend query owners.
 Supporting notification/help routes remain after those data views. P3-E then owns

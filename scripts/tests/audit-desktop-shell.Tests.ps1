@@ -230,6 +230,119 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-MODELS-VIEW*"
     }
 
+    It "rejects Projects presentation-bound drift" {
+        $fixture = New-DesktopAuditFixture -Name "projects-bound"
+        $path = Join-Path $fixture "crates\desktop\src\projects.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'pub const MAX_PROJECT_ROWS: usize = 32;',
+            'pub const MAX_PROJECT_ROWS: usize = 320;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PROJECTS-BOUND*"
+    }
+
+    It "rejects a second or non-today Projects Git query" {
+        $fixture = New-DesktopAuditFixture -Name "projects-git-request"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\controller.rs") `
+            -Value 'fn second_projects_git_query() { let _ = source.git_output('
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PROJECTS-REQUEST*"
+    }
+
+    It "rejects fuzzy project-to-Git alias matching" {
+        $fixture = New-DesktopAuditFixture -Name "projects-fuzzy-join"
+        $path = Join-Path $fixture "crates\desktop\src\projects.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'alias.as_str() == project',
+            'alias.as_str().contains(project)'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PROJECTS-JOIN*"
+    }
+
+    It "rejects multiplying project cost by same-alias repository count" {
+        $fixture = New-DesktopAuditFixture -Name "projects-cost-multiply"
+        $path = Join-Path $fixture "crates\desktop\src\projects.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'self.cost = Some(cost);',
+            'self.cost = self.cost.and_then(|current| current.checked_add(cost));'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PROJECTS-EFFICIENCY*"
+    }
+
+    It "rejects merging or hiding Projects usage and code ranges" {
+        $fixture = New-DesktopAuditFixture -Name "projects-two-ranges"
+        $path = Join-Path $fixture "crates\desktop\ui\views\projects-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'Today code',
+            'Combined range'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PROJECTS-VIEW*"
+    }
+
+    It "rejects loss of complete responsive Projects Git evidence" {
+        $fixture = New-DesktopAuditFixture -Name "projects-view"
+        $path = Join-Path $fixture "crates\desktop\ui\views\projects-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'project.removed-label',
+            '"removed hidden"'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PROJECTS-VIEW*"
+    }
+
+    It "rejects hiding Projects code availability and efficiency reasons" {
+        $fixture = New-DesktopAuditFixture -Name "projects-status-reason"
+        $path = Join-Path $fixture "crates\desktop\ui\views\projects-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'project.code-status-label',
+            '"status hidden"'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PROJECTS-VIEW*"
+    }
+
+    It "rejects fabricating zero repositories for an unlinked Projects row" {
+        $fixture = New-DesktopAuditFixture -Name "projects-not-linked"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '"repository_not_linked" => "Not linked".to_owned(),',
+            '"repository_not_linked" => "0 repositories".to_owned(),'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PROJECTS-VIEW*"
+    }
+
+    It "rejects private identity fields from the Projects projection" {
+        $fixture = New-DesktopAuditFixture -Name "projects-private-identity"
+        $path = Join-Path $fixture "crates\desktop\src\projects.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'project: Arc<str>,',
+            "project: Arc<str>,`r`n    repository_id: Arc<str>,"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PROJECTS-IDENTITY*"
+    }
+
     It "rejects sessions presentation-bound drift" {
         $fixture = New-DesktopAuditFixture -Name "sessions-bound"
         $path = Join-Path $fixture "crates\desktop\src\sessions.rs"
@@ -445,6 +558,19 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-MODELS-REBUILD*"
     }
 
+    It "rejects Projects rebuilding from route selection" {
+        $fixture = New-DesktopAuditFixture -Name "route-projects-rebuild"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'apply_route_projection(&window, state.projection());',
+            "apply_route_projection(&window, state.projection());`r`n            apply_projects_projection(&window, state.projection().projects());"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PROJECTS-REBUILD*"
+    }
+
     It "rejects sessions model rebuilding from route selection" {
         $fixture = New-DesktopAuditFixture -Name "route-sessions-rebuild"
         $path = Join-Path $fixture "crates\desktop\src\ui.rs"
@@ -533,12 +659,12 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-CONTROLLER-SLOT*"
     }
 
-    It "accepts the library-only bounded dashboard history sessions and Models desktop boundary" {
+    It "accepts the bounded dashboard History Sessions Models and Projects desktop boundary" {
         $fixture = New-DesktopAuditFixture -Name "library-boundary"
 
         $receipt = & $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json
-        $receipt.rust_source_file_count | Should -Be 11
-        $receipt.slint_source_file_count | Should -Be 17
+        $receipt.rust_source_file_count | Should -Be 12
+        $receipt.slint_source_file_count | Should -Be 18
         $receipt.dashboard_section_count | Should -Be 6
         $receipt.dashboard_model_replacement_count | Should -Be 7
         $receipt.history_day_maximum | Should -Be 30
@@ -548,6 +674,10 @@ Describe "TokenMaster production desktop audit" {
         $receipt.models_model_replacement_count | Should -Be 1
         $receipt.models_projection_application_count | Should -Be 1
         $receipt.analytics_query_call_count | Should -Be 2
+        $receipt.project_row_maximum | Should -Be 32
+        $receipt.projects_model_replacement_count | Should -Be 1
+        $receipt.projects_projection_application_count | Should -Be 1
+        $receipt.git_query_call_count | Should -Be 1
         $receipt.session_row_maximum | Should -Be 64
         $receipt.session_detail_model_row_maximum | Should -Be 32
         $receipt.session_detail_project_row_maximum | Should -Be 32

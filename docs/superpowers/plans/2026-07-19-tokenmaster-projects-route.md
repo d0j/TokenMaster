@@ -46,15 +46,15 @@ packages, PowerShell contract audits.
   overview, bounded rows/truncation, plus separate Git range/evidence/coverage.
 
 **Acceptance:**
-- [ ] Start with compile-failing tests for initial truth and the public API.
-- [ ] Add ready, empty, partial, retained-failure, unassociated, unmatched,
+- [x] Start with compile-failing tests for initial truth and the public API.
+- [x] Add ready, empty, partial, retained-failure, unassociated, unmatched,
   mismatched-identity, and 32-row cap fixtures.
-- [ ] Prove recent usage range/timezone and Git UTC-today range remain separate.
-- [ ] Prove exact alias matching, stable backend order, and no Git-only rows.
-- [ ] Prove same-alias multi-repository checked sums and project cost is counted once.
-- [ ] Prove backend Project and Git lookahead truncation remain explicit.
-- [ ] Prove 10,000 snapshot replacements release the old Projects row list.
-- [ ] Add the projection to `DesktopProjection` and run focused tests green.
+- [x] Prove recent usage range/timezone and Git UTC-today range remain separate.
+- [x] Prove exact alias matching, stable backend order, and no Git-only rows.
+- [x] Prove same-alias multi-repository checked sums and project cost is counted once.
+- [x] Prove backend Project and Git lookahead truncation remain explicit.
+- [x] Prove 10,000 snapshot replacements release the old Projects row list.
+- [x] Add the projection to `DesktopProjection` and run focused tests green.
 
 ### Task 2: Mount the real responsive Slint Projects view
 
@@ -66,17 +66,17 @@ packages, PowerShell contract audits.
 - Modify: `crates/desktop/tests/ui_contract.rs`
 
 **Acceptance:**
-- [ ] First add a failing compiled UI test for Projects visibility, real safe aliases,
+- [x] First add a failing compiled UI test for Projects visibility, real safe aliases,
   recent usage labels, separate UTC-today Git labels, token/cost evidence, and one
   window/model identity.
-- [ ] Add `ProjectUsageRow`, Projects properties, and one `projects-visible` branch.
-- [ ] Wide and narrow layouts preserve full recent token mix and today code meaning
+- [x] Add `ProjectUsageRow`, Projects properties, and one `projects-visible` branch.
+- [x] Wide and narrow layouts preserve full recent token mix and today code meaning
   from the same bounded model.
-- [ ] Empty/unavailable/degraded/partial/unmatched/truncated states remain explicit.
-- [ ] Full accessible labels name `Recent usage` and `Today code` separately.
-- [ ] Route-only selection does not invoke `apply_projects_projection`, replace its
+- [x] Empty/unavailable/degraded/partial/unmatched/truncated states remain explicit.
+- [x] Full accessible labels name `Recent usage` and `Today code` separately.
+- [x] Route-only selection does not invoke `apply_projects_projection`, replace its
   model, query, create a window, or schedule work.
-- [ ] Run the complete desktop package tests green.
+- [x] Run the complete desktop package tests green.
 
 ### Task 3: Extend deterministic architecture and privacy audits
 
@@ -86,13 +86,13 @@ packages, PowerShell contract audits.
 - Modify another existing audit only if its current ownership is the exact fit.
 
 **Acceptance:**
-- [ ] Add mutation tests for the 32-row cap, one mapping/application site, real view
+- [x] Add mutation tests for the 32-row cap, one mapping/application site, real view
   mount, two explicit time windows, exact alias-only join, and forbidden fields.
-- [ ] Assert no extra analytics/Git query, worker, timer, cache, connection, or route
+- [x] Assert no extra analytics/Git query, worker, timer, cache, connection, or route
   callback is introduced.
-- [ ] Assert the Slint view has wide/narrow branches, all token components, and all
+- [x] Assert the Slint view has wide/narrow branches, all token components, and all
   checked Git metrics.
-- [ ] Run audit Pester tests and the production desktop audit green.
+- [x] Run audit Pester tests and the production desktop source audit green.
 
 ### Task 4: Synchronize durable project truth
 
@@ -111,20 +111,20 @@ packages, PowerShell contract audits.
 - Modify: `docs/PROJECT_HISTORY.md`
 
 **Acceptance:**
-- [ ] Record the exact two-window decision, bounds, alias join, privacy surface, and
+- [x] Record the exact two-window decision, bounds, alias join, privacy surface, and
   Projects delivery evidence.
-- [ ] Keep interactive ranges, aliases, project detail, Activity, P4/P5, parity, M0,
+- [x] Keep interactive ranges, aliases, project detail, Activity, P4/P5, parity, M0,
   packaging, signing, and release incomplete.
-- [ ] Do not store a current commit hash in tracked documents.
+- [x] Do not store a current commit hash in tracked documents.
 
 ### Task 5: Independent review and closeout
 
-- [ ] Run focused product/desktop/audit tests first.
-- [ ] Run `git diff --check` and clean-root.
-- [ ] Run Rust formatting, warnings-as-errors workspace Clippy, and locked workspace
+- [x] Run focused desktop/audit tests first.
+- [x] Run `git diff --check`.
+- [x] Run Rust formatting, warnings-as-errors workspace Clippy, and locked workspace
   tests exactly as required by `AGENTS.md`.
-- [ ] Request one independent read-only high-rigor correctness/security/performance
+- [x] Request one independent read-only high-rigor correctness/security/performance
   review and resolve every Critical/Important issue.
-- [ ] Audit and stop task-owned agents, tests, diagnostics, and temporary processes.
-- [ ] Stage only this slice and create an English conventional commit.
-- [ ] Do not push, merge, package, sign, or claim release acceptance without authority.
+- [x] Audit and stop task-owned agents, tests, diagnostics, and temporary processes.
+- [x] Stage only this slice and create an English conventional commit.
+- [x] Do not push, merge, package, sign, or claim release acceptance without authority.

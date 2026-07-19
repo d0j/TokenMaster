@@ -17,12 +17,13 @@ use crate::{
     DashboardSectionRow, DashboardSessionRow, DashboardTrendPoint, DesktopActivityKey,
     DesktopCostComposition, DesktopCostValue, DesktopDashboardProjection,
     DesktopDashboardSectionKey, DesktopFreshness, DesktopHistoryProjection, DesktopIntent,
-    DesktopIntentSink, DesktopModelsProjection, DesktopOperationSnapshot, DesktopQuality,
-    DesktopReliableStateProjection, DesktopSessionDetailIntentAdmission,
-    DesktopSessionDetailIntentSink, DesktopSessionsProjection, DesktopSnapshotBridge,
-    DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue, DesktopValueAvailability,
-    HistoryDayRow, MainWindow, ModelUsageRow, RestorePointRow, RouteRow, SessionDetailBreakdownRow,
-    SessionListRow, UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
+    DesktopIntentSink, DesktopModelsProjection, DesktopOperationSnapshot,
+    DesktopProjectsProjection, DesktopQuality, DesktopReliableStateProjection,
+    DesktopSessionDetailIntentAdmission, DesktopSessionDetailIntentSink, DesktopSessionsProjection,
+    DesktopSnapshotBridge, DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue,
+    DesktopValueAvailability, HistoryDayRow, MainWindow, ModelUsageRow, ProjectUsageRow,
+    RestorePointRow, RouteRow, SessionDetailBreakdownRow, SessionListRow,
+    UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
 };
 
@@ -524,6 +525,7 @@ pub(crate) fn apply_projection(window: &MainWindow, projection: &DesktopProjecti
     apply_dashboard_projection(window, projection.dashboard());
     apply_history_projection(window, projection.history());
     apply_models_projection(window, projection.models());
+    apply_projects_projection(window, projection.projects());
     apply_sessions_projection(window, projection.sessions());
 }
 
@@ -957,6 +959,196 @@ fn format_models_range(models: &DesktopModelsProjection) -> String {
             )
         },
     )
+}
+
+fn apply_projects_projection(window: &MainWindow, projects: &DesktopProjectsProjection) {
+    window.set_projects_state(projects.state().stable_code().into());
+    window.set_projects_reasons(join_reasons(projects.reason_codes().iter()).into());
+    window.set_projects_usage_range_label(format_optional_range(projects.usage_range()).into());
+    window.set_projects_usage_time_zone_label(
+        projects
+            .usage_time_zone_id()
+            .unwrap_or("Unavailable")
+            .into(),
+    );
+    window.set_projects_usage_evidence_label(
+        format_evidence(projects.usage_freshness(), projects.usage_quality()).into(),
+    );
+    window.set_projects_code_range_label(format_optional_range(projects.code_range()).into());
+    window.set_projects_code_time_zone_label(
+        projects.code_time_zone_id().unwrap_or("Unavailable").into(),
+    );
+    window.set_projects_code_evidence_label(
+        format_evidence(projects.code_freshness(), projects.code_quality()).into(),
+    );
+    window.set_projects_total_tokens(format_tokens(projects.total_tokens()).into());
+    window.set_projects_total_availability(
+        availability_code(projects.total_tokens().availability()).into(),
+    );
+    window.set_projects_cost(format_cost(projects.cost()).into());
+    window.set_projects_cost_availability(availability_code(projects.cost().availability()).into());
+    window.set_projects_cost_evidence_label(format_cost_evidence(projects.cost()).into());
+    window.set_projects_events(format_optional_events(projects.event_count()).into());
+    window.set_projects_loaded_label(
+        projects
+            .event_count()
+            .map_or_else(
+                || "Unavailable".to_owned(),
+                |_| {
+                    format_counted(
+                        projects.rows().len() as u64,
+                        "project loaded",
+                        "projects loaded",
+                    )
+                },
+            )
+            .into(),
+    );
+    window.set_projects_completeness_label(
+        if projects.event_count().is_none() {
+            "Completeness unavailable"
+        } else if projects.usage_truncated() {
+            "More projects available"
+        } else {
+            "Complete range"
+        }
+        .into(),
+    );
+    window.set_projects_code_coverage_label(
+        projects
+            .loaded_repository_count()
+            .map_or_else(
+                || "Repositories unavailable".to_owned(),
+                |count| {
+                    format_counted(u64::from(count), "repository loaded", "repositories loaded")
+                },
+            )
+            .into(),
+    );
+    window.set_projects_code_completeness_label(
+        if projects.loaded_repository_count().is_none() {
+            "Code completeness unavailable"
+        } else if projects.code_truncated() || !projects.code_complete() {
+            "Incomplete code range"
+        } else {
+            "Complete code range"
+        }
+        .into(),
+    );
+
+    let rows = projects
+        .rows()
+        .iter()
+        .map(|row| ProjectUsageRow {
+            project_label: row.project().into(),
+            unassociated: row.unassociated(),
+            event_label: format_integer(row.event_count()).into(),
+            input_availability: availability_code(row.input().availability()).into(),
+            input_label: format_tokens(row.input()).into(),
+            cached_availability: availability_code(row.cached().availability()).into(),
+            cached_label: format_tokens(row.cached()).into(),
+            output_availability: availability_code(row.output().availability()).into(),
+            output_label: format_tokens(row.output()).into(),
+            reasoning_availability: availability_code(row.reasoning().availability()).into(),
+            reasoning_label: format_tokens(row.reasoning()).into(),
+            total_availability: availability_code(row.total_tokens().availability()).into(),
+            total_label: format_tokens(row.total_tokens()).into(),
+            cost_availability: availability_code(row.cost().availability()).into(),
+            cost_label: format_cost(row.cost()).into(),
+            cost_evidence_label: format_cost_evidence(row.cost()).into(),
+            token_ratio: ratio(row.total_tokens().known_sum(), projects.token_maximum()),
+            code_available: row.code_available(),
+            code_complete: row.code_complete(),
+            code_status_label: format_project_code_status(row).into(),
+            repository_label: format_project_repository_label(row).into(),
+            commits_label: format_optional_integer(row.commits()).into(),
+            added_label: format_optional_prefixed(row.added_lines(), "+").into(),
+            removed_label: format_optional_prefixed(row.removed_lines(), "-").into(),
+            net_label: row
+                .net_lines()
+                .map_or_else(|| "—".to_owned(), format_signed)
+                .into(),
+            efficiency_label: row
+                .cost_per_100_added_lines_micros()
+                .map_or_else(
+                    || "—".to_owned(),
+                    |value| {
+                        format!(
+                            "{} / 100 added product-code lines",
+                            format_usd_micros(value)
+                        )
+                    },
+                )
+                .into(),
+            efficiency_reason_label: row
+                .efficiency_unavailable_reason()
+                .map_or_else(String::new, humanize_key)
+                .into(),
+            code_evidence_label: format_evidence(row.code_freshness(), row.code_quality()).into(),
+        })
+        .collect::<Vec<_>>();
+    window.set_project_usage_rows(model(rows));
+}
+
+fn format_optional_range(range: Option<crate::DesktopHistoryRange>) -> String {
+    range.map_or_else(
+        || "Range unavailable".to_owned(),
+        |(start, end)| {
+            format!(
+                "{} – before {}",
+                format_date(start.0, start.1, start.2),
+                format_date(end.0, end.1, end.2)
+            )
+        },
+    )
+}
+
+fn format_optional_integer(value: Option<u64>) -> String {
+    value.map_or_else(|| "—".to_owned(), format_integer)
+}
+
+fn format_optional_prefixed(value: Option<u64>, prefix: &str) -> String {
+    value.map_or_else(
+        || "—".to_owned(),
+        |value| format!("{prefix}{}", format_integer(value)),
+    )
+}
+
+fn format_project_code_status(row: &crate::DesktopProjectUsageRow) -> String {
+    if row.code_available() {
+        if row.code_complete() {
+            "Complete code".to_owned()
+        } else {
+            "Incomplete code".to_owned()
+        }
+    } else {
+        row.efficiency_unavailable_reason()
+            .map_or_else(|| "Code unavailable".to_owned(), format_project_reason)
+    }
+}
+
+fn format_project_repository_label(row: &crate::DesktopProjectUsageRow) -> String {
+    if row.code_available() {
+        format_counted(
+            u64::from(row.repository_count()),
+            "repository",
+            "repositories",
+        )
+    } else {
+        row.efficiency_unavailable_reason().map_or_else(
+            || "Repositories unavailable".to_owned(),
+            format_project_reason,
+        )
+    }
+}
+
+fn format_project_reason(reason: &str) -> String {
+    match reason {
+        "git_unavailable" => "Git unavailable".to_owned(),
+        "repository_not_linked" => "Not linked".to_owned(),
+        "unassociated_project" => "Unassociated project".to_owned(),
+        _ => humanize_key(reason),
+    }
 }
 
 fn apply_sessions_projection(window: &MainWindow, sessions: &DesktopSessionsProjection) {

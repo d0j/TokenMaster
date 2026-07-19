@@ -96,14 +96,14 @@ pub struct DesktopSectionReasonCodes {
 }
 
 impl DesktopSectionReasonCodes {
-    const fn empty() -> Self {
+    pub(crate) const fn empty() -> Self {
         Self {
             values: [None; MAX_SECTION_REASONS],
             len: 0,
         }
     }
 
-    fn push(&mut self, value: &'static str) {
+    pub(crate) fn push(&mut self, value: &'static str) {
         if self.iter().any(|current| current == value) || self.len() >= MAX_SECTION_REASONS {
             return;
         }
@@ -111,7 +111,7 @@ impl DesktopSectionReasonCodes {
         self.len = self.len.saturating_add(1);
     }
 
-    fn extend(&mut self, other: Self) {
+    pub(crate) fn extend(&mut self, other: Self) {
         for value in other.iter() {
             self.push(value);
         }
@@ -1400,7 +1400,7 @@ fn section_for_key(
     section
 }
 
-fn combine_sections(
+pub(crate) fn combine_sections(
     key: DesktopDashboardSectionKey,
     left: DesktopDashboardSectionProjection,
     right: DesktopDashboardSectionProjection,
@@ -1496,7 +1496,7 @@ pub(crate) const fn map_quality(value: QueryQuality) -> DesktopQuality {
     }
 }
 
-const fn map_git_quality(value: GitOutputQuality) -> QueryQuality {
+pub(crate) const fn map_git_quality(value: GitOutputQuality) -> QueryQuality {
     match value {
         GitOutputQuality::Complete => QueryQuality::Authoritative,
         GitOutputQuality::Partial => QueryQuality::Partial,
@@ -1504,7 +1504,7 @@ const fn map_git_quality(value: GitOutputQuality) -> QueryQuality {
     }
 }
 
-const fn worst_freshness(left: QueryFreshness, right: QueryFreshness) -> QueryFreshness {
+pub(crate) const fn worst_freshness(left: QueryFreshness, right: QueryFreshness) -> QueryFreshness {
     match (left, right) {
         (QueryFreshness::Unavailable, _) | (_, QueryFreshness::Unavailable) => {
             QueryFreshness::Unavailable
@@ -1515,7 +1515,10 @@ const fn worst_freshness(left: QueryFreshness, right: QueryFreshness) -> QueryFr
     }
 }
 
-const fn worst_git_quality(left: GitOutputQuality, right: GitOutputQuality) -> GitOutputQuality {
+pub(crate) const fn worst_git_quality(
+    left: GitOutputQuality,
+    right: GitOutputQuality,
+) -> GitOutputQuality {
     match (left, right) {
         (GitOutputQuality::Unavailable, _) | (_, GitOutputQuality::Unavailable) => {
             GitOutputQuality::Unavailable

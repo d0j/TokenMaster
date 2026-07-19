@@ -7,7 +7,7 @@ use tokenmaster_product::{
 
 use crate::{
     DesktopDashboardProjection, DesktopHistoryProjection, DesktopModelsProjection,
-    DesktopSessionDetailIntent, DesktopSessionsProjection,
+    DesktopProjectsProjection, DesktopSessionDetailIntent, DesktopSessionsProjection,
 };
 
 pub const DESKTOP_ROUTE_COUNT: usize = ProductRoute::ALL.len();
@@ -226,6 +226,7 @@ pub struct DesktopProjection {
     dashboard: DesktopDashboardProjection,
     history: DesktopHistoryProjection,
     models: DesktopModelsProjection,
+    projects: DesktopProjectsProjection,
     sessions: DesktopSessionsProjection,
 }
 
@@ -249,6 +250,7 @@ impl DesktopProjection {
             dashboard: DesktopDashboardProjection::from_snapshot(snapshot),
             history: DesktopHistoryProjection::from_snapshot(snapshot),
             models: DesktopModelsProjection::from_snapshot(snapshot),
+            projects: DesktopProjectsProjection::from_snapshot(snapshot),
             sessions: DesktopSessionsProjection::from_snapshot_with_selection(
                 snapshot,
                 active_session_detail,
@@ -289,6 +291,11 @@ impl DesktopProjection {
     #[must_use]
     pub const fn models(&self) -> &DesktopModelsProjection {
         &self.models
+    }
+
+    #[must_use]
+    pub const fn projects(&self) -> &DesktopProjectsProjection {
+        &self.projects
     }
 
     #[must_use]

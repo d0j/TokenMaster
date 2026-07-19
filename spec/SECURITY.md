@@ -214,6 +214,17 @@ response, reasoning content, command, credential, pricing internals, filesystem,
 network, process, browser, or query authority. Model labels are data, not executable
 skin/plugin/config inputs. Route selection remains presentation-only.
 
+P3-D.4 adds one 32-row Projects projection over the existing recent-usage and Git
+envelopes. It exposes safe bounded project aliases or fixed `Unassociated`, aggregate
+usage values, and optional checked UTC-today Git facts. Exact alias equality is the
+only join; basename/path/fuzzy/case-folded guesses are forbidden. Repository ID,
+association ID, dataset identity, provider/profile/account/source/session identity,
+paths, Git object/author/ref/file data, keys/cursors, prompts, responses, reasoning
+content, commands, credentials, SQL, and authority remain outside Desktop/Slint.
+Dataset identity may be compared transiently only to validate same-alias efficiency.
+The recent local-civil usage range and UTC code range remain visibly separate, so
+neither evidence stream can launder the other's period or completeness.
+
 Providers emit bounded observation/session-relation drafts only. They cannot create
 event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or
 canonical events. Those values are created only by TokenMaster accounting code. Store

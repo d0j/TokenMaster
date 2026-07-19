@@ -774,10 +774,30 @@ with Critical/Important/Minor 0/0/0. Clean-root, formatting, strict warnings-as-
 workspace Clippy, and the complete locked workspace test/doctest baseline pass; the
 full suite completed in 790 seconds. P3-D.3 is closed; no release acceptance is inferred.
 
-The immediate next implementation slice is Projects, then
-Activity. Projects must consume the already captured Project breakdown instead of
-adding an analytics query. Reuse the immutable snapshot/controller boundary; do not
-turn route selection into query authority. Later-page Sessions navigation and interactive
+P3-D.4 Projects is implemented under
+`docs/superpowers/specs/2026-07-19-tokenmaster-projects-route-design.md` and
+`docs/superpowers/plans/2026-07-19-tokenmaster-projects-route.md`. It consumes the
+already captured recent Project breakdown and existing UTC-today Git envelope without
+adding a query. Desktop retains at most 32 usage-centric rows and matches only exact
+safe aliases across at most 32 repositories. `Unassociated` never matches, Git-only
+aliases are not fabricated as zero usage, checked sums cannot wrap, and same-alias
+combined efficiency counts one project cost. The compiled wide/narrow view labels
+Recent usage and Today code ranges/evidence separately, preserves all token/cost/Git
+meaning accessibly, and switches without model/window reconstruction. Focused/full
+Desktop tests, strict package Clippy, source/release audits, and 57/57 mutation cases
+pass. Partial cost independently degrades the route; Git-unavailable rows do not
+fabricate zero repositories/code, and unit contracts fail closed on identity/cost
+mismatch, zero divisors, and every checked aggregation/ratio overflow. Independent
+re-review returned READY with Critical/Important/Minor 0/0/0 after the wide product-
+code denominator and not-linked wide/narrow/accessibility regression were closed.
+Clean-root, formatting, strict warnings-as-errors workspace Clippy, release composition,
+and the complete locked workspace test/doctest suite pass; the full suite completed in
+807 seconds with `CARGO_BUILD_JOBS=1` after an isolated concurrent MinGW linker exit
+with blank stderr reproduced successfully as a single target. P3-D.4 is closed.
+
+The immediate next implementation slice is Activity. Reuse the
+immutable snapshot/controller boundary; do not turn route selection into query
+authority. Later-page Sessions navigation and interactive
 History range selection remain bounded replacements of their existing product sections.
 Keep the fixed archive path and writer sidecar; never copy only the live main file or
 treat busy/disk/access/schema-newer as corruption authority. Keep automatic recovery

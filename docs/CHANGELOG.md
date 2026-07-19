@@ -6,9 +6,27 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.4 Projects as one responsive usage-centric route over the already
+  captured recent-30-day Project breakdown and existing UTC-today Git envelope. The
+  UI labels both periods independently and adds no analytics/Git query or runtime owner.
+- Added one bounded 32-row Projects projection with safe aliases/`Unassociated`, full
+  token mix, typed cost provenance, relative usage, and optional exact-alias commits,
+  added/removed/net, and efficiency. Same-alias repository sums are checked and project
+  usage cost is counted once; unmatched, partial, retained-failure, and truncation truth
+  remain explicit.
+- Added the compiled wide/narrow Projects view with complete accessible Recent usage
+  and Today code row meaning, explicit unavailable/not-linked code truth, and in-place
+  route switching. Expanded the production Desktop audit to 57 mutation contracts
+  covering caps, exact-only joins, dual ranges, cost-once aggregation, visible status/
+  reasons, privacy, one model/application site, and zero route-time work.
+- Closed P3-D.4 after independent re-review returned Critical/Important/Minor 0/0/0,
+  clean-root/format/full warnings-as-errors Clippy passed, and the complete locked
+  workspace test/doctest suite passed in 807 seconds with serialized Windows GNU
+  linking. Packaging, signing, M0, and product release acceptance remain separate.
+
 - Implemented P3-D.3 Models as a real recent-30-day route. The existing History
   analytics request now captures Model and Project breakdowns, so History, Models, and
-  the next Projects view share one dataset/range/timezone/evidence envelope and the
+  the Projects view share one dataset/range/timezone/evidence envelope and the
   controller still performs exactly two analytics calls per refresh.
 - Added one bounded 64-row Models projection and responsive compiled Slint view with
   canonical model keys, events, input/cached/output/reasoning/total tokens, typed cost

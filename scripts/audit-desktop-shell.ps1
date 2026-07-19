@@ -40,8 +40,8 @@ if ($productionManifestText -match '\btokenmaster-(store|provider|runtime|codex|
 $rustFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.rs')
 $uiFiles = @(Get-ChildItem -LiteralPath $uiRoot -Recurse -File -Filter '*.slint')
 $productionFiles = @($rustFiles + $uiFiles)
-if ($rustFiles.Count -ne 11 -or $uiFiles.Count -ne 17) {
-    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain eleven Rust and seventeen Slint files'
+if ($rustFiles.Count -ne 12 -or $uiFiles.Count -ne 18) {
+    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain twelve Rust and eighteen Slint files'
 }
 $uiText = ($uiFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
@@ -254,6 +254,81 @@ foreach ($requiredPattern in $requiredModelsViewPatterns) {
         throw "TM-DESKTOP-MODELS-VIEW: missing responsive Models contract $requiredPattern"
     }
 }
+$projectsProjectionPath = Join-Path $sourceRoot 'projects.rs'
+$projectsProjectionText = [System.IO.File]::ReadAllText($projectsProjectionPath)
+if ($projectsProjectionText -notmatch 'pub const MAX_PROJECT_ROWS: usize = 32;' -or
+    $projectsProjectionText -notmatch '\.take\(MAX_PROJECT_ROWS\)' -or
+    $projectsProjectionText -notmatch 'breakdown\.truncated\(\) \|\| breakdown\.items\(\)\.len\(\) > MAX_PROJECT_ROWS') {
+    throw 'TM-DESKTOP-PROJECTS-BOUND: Projects projection must preserve backend truncation and retain at most thirty-two rows'
+}
+$gitQueryCallCount = [regex]::Matches($controllerText, 'source\.git_output\(').Count
+$todayGitRequestPattern = '(?s)let git = GitOutputRequest::new\(\s*UsageRange::today\(\),\s*WeekStart::Monday,\s*Vec::new\(\),\s*Self::MAX_REPOSITORIES,\s*\)'
+if ($gitQueryCallCount -ne 1 -or $controllerText -notmatch $todayGitRequestPattern) {
+    throw 'TM-DESKTOP-PROJECTS-REQUEST: Projects must reuse one bounded UTC-today Git request'
+}
+if ($projectsProjectionText -notmatch 'alias\.as_str\(\) == project' -or
+    $projectsProjectionText -match '(?i)contains\(project\)|starts_with\(project\)|ends_with\(project\)|to_lowercase\(\)') {
+    throw 'TM-DESKTOP-PROJECTS-JOIN: Projects must join Git only by an exact safe alias'
+}
+if ($projectsProjectionText -notmatch 'self\.cost = Some\(cost\)' -or
+    $projectsProjectionText -match 'self\.cost\s*=\s*self\.cost.*checked_add|efficiency_cost\.checked_add|efficiency_usage\.checked_add') {
+    throw 'TM-DESKTOP-PROJECTS-EFFICIENCY: same-alias repositories must count one project cost exactly once'
+}
+$projectsProjectionCallCount = [regex]::Matches($uiRustText, 'apply_projects_projection\(').Count
+if ($projectsProjectionCallCount -ne 2) {
+    throw 'TM-DESKTOP-PROJECTS-REBUILD: Projects rows must not rebuild during route-only selection'
+}
+$projectsModelReplacementCount = [regex]::Matches(
+    $uiRustText,
+    'set_project_usage_rows\(model\(rows\)\)'
+).Count
+if ($projectsModelReplacementCount -ne 1) {
+    throw 'TM-DESKTOP-PROJECTS-MODEL: Projects must have one bounded model replacement site'
+}
+$projectsViewText = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'views\projects-view.slint'))
+$projectsViewBoundary = $mainUiText + "`n" + $projectsViewText + "`n" + $uiRustText
+foreach ($requiredPattern in @(
+    'if root\.projects-visible: ProjectsView',
+    '!root\.projects-visible',
+    'out property <bool> narrow:',
+    'if root\.narrow:',
+    'if !root\.narrow:',
+    'Recent usage',
+    'Today code',
+    'usage-range-label',
+    'code-range-label',
+    'project\.input-label',
+    'project\.cached-label',
+    'project\.output-label',
+    'project\.reasoning-label',
+    'project\.total-label',
+    'project\.cost-label',
+    'project\.cost-evidence-label',
+    'project\.commits-label',
+    'project\.added-label',
+    'project\.removed-label',
+    'project\.net-label',
+    'project\.efficiency-label',
+    'project\.code-status-label',
+    'project\.efficiency-reason-label',
+    'project\.code-evidence-label',
+    '"repository_not_linked" => "Not linked"',
+    'Cost / 100 added product-code lines',
+    'added product-code lines',
+    'Text \{ text: "Relative";',
+    'accessible-label:.*project\.code-status-label.*project\.efficiency-reason-label'
+)) {
+    if ($projectsViewBoundary -cnotmatch $requiredPattern) {
+        throw "TM-DESKTOP-PROJECTS-VIEW: missing responsive Projects contract $requiredPattern"
+    }
+}
+$projectPublicText = @(
+    [regex]::Match($projectsProjectionText, '(?s)pub struct DesktopProjectUsageRow\s*\{.*?\r?\n\}').Value
+    [regex]::Match($projectsProjectionText, '(?s)pub struct DesktopProjectsProjection\s*\{.*?\r?\n\}').Value
+) -join "`n"
+if ($projectPublicText -match '(?i)\b(?:repository|association|dataset|provider|profile|account|session|source|event)[_-]?id\b|\b(?:absolute_)?path\b|\bkey\b|\bcursor\b') {
+    throw 'TM-DESKTOP-PROJECTS-IDENTITY: private identity or path crossed the Projects projection boundary'
+}
 $sessionsPath = Join-Path $sourceRoot 'sessions.rs'
 $sessionsText = [System.IO.File]::ReadAllText($sessionsPath)
 if ($sessionsText -notmatch 'pub const MAX_SESSION_ROWS: usize = 64;' -or
@@ -448,6 +523,11 @@ if ($SourceOnly) {
         models_projection_application_count = $modelsProjectionCallCount - 1
         analytics_query_call_count = $analyticsQueryCallCount
         models_polling_surface_count = 0
+        project_row_maximum = 32
+        projects_model_replacement_count = $projectsModelReplacementCount
+        projects_projection_application_count = $projectsProjectionCallCount - 1
+        git_query_call_count = $gitQueryCallCount
+        projects_polling_surface_count = 0
         session_row_maximum = 64
         session_detail_model_row_maximum = 32
         session_detail_project_row_maximum = 32
@@ -537,6 +617,11 @@ if ($LASTEXITCODE -ne 0) {
     models_projection_application_count = $modelsProjectionCallCount - 1
     analytics_query_call_count = $analyticsQueryCallCount
     models_polling_surface_count = 0
+    project_row_maximum = 32
+    projects_model_replacement_count = $projectsModelReplacementCount
+    projects_projection_application_count = $projectsProjectionCallCount - 1
+    git_query_call_count = $gitQueryCallCount
+    projects_polling_surface_count = 0
     session_row_maximum = 64
     session_detail_model_row_maximum = 32
     session_detail_project_row_maximum = 32

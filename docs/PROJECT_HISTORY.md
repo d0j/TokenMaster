@@ -3311,3 +3311,41 @@ Critical/Important/Minor 0/0/0. Clean-root, formatting, strict warnings-as-error
 workspace Clippy, and the complete locked workspace test/doctest baseline pass; the
 full suite completed in 790 seconds. P3-D.3 is closed. Projects, Activity, interactive
 ranges, presentation, automation, packaging, signing, and release remain open.
+
+## 2026-07-19 — P3-D.4 bounded Projects route
+
+The Projects slice began by resolving an evidence-window conflict rather than hiding
+it in presentation. Recent usage already covered 30 local civil days, while the one
+existing Git request intentionally covered UTC today for Dashboard. Replacing that
+request would mislabel Dashboard; adding another Git query would add work and mutable
+range ownership. ADR-069 therefore keeps both immutable envelopes and requires visibly
+separate `Recent usage` and `Today code` ranges, timezones, evidence, and completeness.
+
+TDD added `DesktopProjectsProjection` with at most 32 usage-centric rows over the
+existing 256+lookahead Project breakdown. Only safe `ProjectAlias` or explicit
+`Unassociated` crosses the projection. Named rows match at most 32 Git repositories by
+exact alias equality; unassociated usage never matches and Git-only aliases never
+become fabricated zero-usage rows. Rows preserve input/cached/output/reasoning/total,
+events, typed cost provenance, relative usage, and optional commits/added/removed/net/
+efficiency. Multiple same-alias repositories use checked sums. Compatible product-code
+lines are summed but one project usage cost is used once, preventing repository-count
+cost multiplication. Mismatch, absence, partial evidence, retained failure, overflow,
+and query/frontend truncation remain explicit.
+
+The compiled Slint route uses one bounded model for wide and narrow layouts. Its
+accessible labels name both periods and retain every usage and code fact. Route-only
+switching neither queries nor rebuilds the model/window. Tests cover ready, empty,
+partial cost, unassociated, unmatched, Git-only, retained Git failure, same-alias
+aggregation, 256-item backend lookahead, 32-store/16-query Git lookahead, mismatched
+identity/cost, zero divisor, checked line/ratio/totals overflow, privacy, Git-unavailable
+non-zero fabrication, and 10,000 projection replacements. The complete Desktop package,
+strict package Clippy, source/release audits, and 57/57 mutation audit pass. Independent
+review first found four Important and one Minor truth/evidence gaps; red/green fixes made
+partial cost independently degrade, removed fabricated Git zeroes, exposed completeness/
+reasons without color dependence, labelled product-code efficiency exactly, separated
+non-UTC usage from UTC Git, and proved mismatch/zero/overflow/not-linked fail-closed
+paths. Final re-review returned Critical/Important/Minor 0/0/0. Clean-root, formatting,
+strict warnings-as-errors workspace Clippy, and the complete locked workspace test/
+doctest suite pass; the full suite completed in 807 seconds with serialized Windows GNU
+linking after one isolated concurrent blank-stderr MinGW linker exit. P3-D.4 is closed;
+Activity and later interactive/detail/presentation/automation/release work remain open.

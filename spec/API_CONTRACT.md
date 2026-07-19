@@ -405,6 +405,21 @@ product generation. Models route selection is presentation-only and cannot issue
 query, rebuild the model, add mutable range/filter/sort state, create a timer/worker/
 cache, or recreate `MainWindow`.
 
+`DesktopProjectsProjection::from_snapshot` is the sole product-to-Projects mapping.
+It reads the same recent-usage section plus the existing UTC-today Git section, copies
+at most 32 usage-centric Project rows, and performs at most 1,024 exact safe-alias
+comparisons per accepted product generation. It never queries. `Unassociated` never
+matches Git and Git-only aliases do not become zero-usage rows. Same-alias repository
+commits/lines use checked sums; combined efficiency validates identical transient
+usage identity/cost and counts project cost once.
+
+The projection exposes separate recent-usage and UTC-today code ranges, timezones,
+evidence, completeness, and truncation. `apply_projection` replaces the single
+Projects Slint model only during initial construction or an accepted newer product
+generation. Projects route selection is presentation-only and cannot issue analytics
+or Git work, rebuild the model, add mutable range/filter/sort state, create a timer/
+worker/cache/connection, or recreate `MainWindow`.
+
 `DesktopQueryPlan` also owns one all-time `usage_sessions` request with page size 64.
 It executes sequentially on the same capacity-one query worker; Dashboard copies only
 its first 12 summaries while the independent product Sessions section retains the

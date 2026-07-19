@@ -974,7 +974,7 @@ never enter the projection or Slint model.
 
 The existing recent-30-day History request also requests Model and Project breakdowns.
 It remains one query and one compatible product section: History consumes the daily
-series, Models consumes the Model breakdown, and the future Projects route consumes the
+series, Models consumes the Model breakdown, and Projects consumes the
 prefetched Project breakdown. The query/store boundary retains at most 256 Model and
 256 Project items plus explicit lookahead-derived truncation in the one current
 immutable snapshot. No prior recent-usage envelope is cached.
@@ -991,6 +991,35 @@ not an empty exact range. The projection also copies only the shared overview,
 half-open range, timezone, freshness, and quality; it owns no provider/profile/source/
 account/workspace/project/session identity, key, cursor, path, filter, sort state,
 query service, archive handle, runtime owner, or prior model.
+
+### P3-D.4 bounded Projects projection
+
+`DesktopProjectsProjection` consumes the existing recent-usage Project breakdown and
+the existing Git output envelope; it adds no product section or query result. It
+accepts only `UsageBreakdownIdentity::Project(ProjectAlias)` and
+`UsageBreakdownIdentity::UnassociatedProject`, preserves backend ordering, and copies
+at most 32 rows from the 256+lookahead Project boundary. Each row contains only a safe
+alias or fixed `Unassociated` label, event count, typed input/cached/output/reasoning/
+total values, typed cost availability/mode/composition, and optional aggregated Git
+facts. Mismatched identities are ignored; missing Project breakdown and backend/
+desktop truncation remain explicit.
+
+Recent usage keeps its half-open local civil range, timezone, freshness, and quality.
+Code output independently keeps its half-open UTC-today range, repository count,
+freshness, quality, completeness, and lookahead truncation. These fields cannot be
+collapsed into one range. A named row scans at most 32 loaded Git repositories and
+matches only exact safe aliases. `Unassociated` and Git-only aliases never join.
+
+Matched commits, added, and removed lines use checked sums. Same-alias project
+efficiency is available only when every repository value is available with the same
+transient dataset identity and usage cost. Product-code additions are summed and
+project usage cost is used once for
+`round_half_up(cost_micros * 100 / added_lines)`. Dataset identity is comparison-only
+and never enters Desktop or Slint. Overflow disables affected code evidence and
+degrades the projection without hiding usage. Public/Slint values contain no
+repository/association/dataset ID, path, provider/profile/account/source/session
+identity, key/cursor, content, or authority. One accepted generation replaces one
+bounded row model; prior projections are not cached.
 
 Only explicit provider ancestry identifies a parent. A strong signature covers the
 normalized model, emitted delta, and provider cumulative snapshot. A weak signature

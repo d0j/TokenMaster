@@ -22,6 +22,7 @@ use tokenmaster_query::{
 
 use support::dashboard_fixture::{
     FixedClock, add_distinct_usage_rows, add_quota_windows, make_partial_model_usage, range, seed,
+    set_usage_project_alias,
 };
 
 struct RejectingIntentSink;
@@ -153,6 +154,72 @@ fn partial_models_reducer(path: &std::path::Path) -> ProductReducer {
     reducer
 }
 
+fn projects_without_git_reducer(path: &std::path::Path) -> ProductReducer {
+    seed(path);
+    let mut service = QueryService::open(path, FixedClock).expect("query service");
+    let status = service.product_data_status().expect("status");
+    let history = service
+        .usage_analytics(
+            UsageAnalyticsRequest::new(
+                UsageRange::recent_days(30).expect("recent history range"),
+                UsageTimeZone::iana("Asia/Jerusalem").expect("fixture timezone"),
+                WeekStart::Monday,
+                UsageSeriesSelection::Daily,
+                Vec::new(),
+                vec![UsageBreakdownKind::Project],
+            )
+            .expect("history request"),
+        )
+        .expect("history");
+    let attempt = ProductAttemptGeneration::new(1).expect("attempt");
+    let mut reducer = ProductReducer::new();
+    reducer
+        .publish_data_status(attempt, status)
+        .expect("publish status");
+    reducer
+        .publish_history(attempt, history)
+        .expect("publish history");
+    reducer
+        .fail_git(attempt, QueryErrorCode::DeadlineExceeded)
+        .expect("fail Git");
+    reducer
+}
+
+fn projects_without_linked_repository_reducer(path: &std::path::Path) -> ProductReducer {
+    seed(path);
+    set_usage_project_alias(path, "usage-only-project");
+    let mut service = QueryService::open(path, FixedClock).expect("query service");
+    let status = service.product_data_status().expect("status");
+    let history = service
+        .usage_analytics(
+            UsageAnalyticsRequest::new(
+                UsageRange::recent_days(30).expect("recent history range"),
+                UsageTimeZone::iana("Asia/Jerusalem").expect("fixture timezone"),
+                WeekStart::Monday,
+                UsageSeriesSelection::Daily,
+                Vec::new(),
+                vec![UsageBreakdownKind::Project],
+            )
+            .expect("history request"),
+        )
+        .expect("history");
+    let git = service
+        .git_output(
+            GitOutputRequest::new(range(), WeekStart::Monday, Vec::new(), 32).expect("Git request"),
+        )
+        .expect("Git output");
+    let attempt = ProductAttemptGeneration::new(1).expect("attempt");
+    let mut reducer = ProductReducer::new();
+    reducer
+        .publish_data_status(attempt, status)
+        .expect("publish status");
+    reducer
+        .publish_history(attempt, history)
+        .expect("publish history");
+    reducer.publish_git(attempt, git).expect("publish Git");
+    reducer
+}
+
 #[test]
 fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     i_slint_backend_testing::init_no_event_loop();
@@ -174,6 +241,7 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert!(!window.get_history_visible());
     assert!(!window.get_sessions_visible());
     assert!(!window.get_models_visible());
+    assert!(!window.get_projects_visible());
     assert_eq!(window.get_history_day_rows().row_count(), 0);
     assert_eq!(window.get_history_total_tokens(), "—");
     assert_eq!(window.get_session_list_rows().row_count(), 0);
@@ -184,6 +252,10 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert_eq!(window.get_models_cost_availability(), "unavailable");
     assert_eq!(window.get_models_cost_evidence_label(), "Unavailable");
     assert_eq!(window.get_models_loaded_label(), "Unavailable");
+    assert_eq!(window.get_projects_total_tokens(), "—");
+    assert_eq!(window.get_projects_usage_range_label(), "Range unavailable");
+    assert_eq!(window.get_projects_code_range_label(), "Range unavailable");
+    assert_eq!(window.get_project_usage_rows().row_count(), 0);
     assert_eq!(window.get_dashboard_section_rows().row_count(), 6);
     assert_eq!(window.get_dashboard_header_tokens(), "—");
     assert_eq!(window.get_dashboard_header_cost(), "—");
@@ -238,7 +310,185 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert_compiled_sessions_render_one_bounded_page_without_recreating_the_window();
     assert_compiled_models_render_complete_bounded_mix_without_recreating_the_window();
     assert_compiled_models_render_partial_cost_evidence();
+    assert_compiled_projects_keep_recent_usage_and_today_code_separate_in_place();
     assert_compiled_session_selection_is_immediate_correlated_and_bounded_in_place();
+}
+
+fn assert_compiled_projects_keep_recent_usage_and_today_code_separate_in_place() {
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory.path().join("ui-projects.sqlite3");
+    let reducer = ready_reducer(&path, 0);
+    let snapshot = reducer.snapshot();
+    let shell = DesktopShell::new(&snapshot).expect("desktop shell");
+    let window = shell.window();
+    let component_address = window as *const _;
+
+    window.invoke_select_route(SharedString::from("projects"));
+    assert!(window.get_projects_visible());
+    assert!(!window.get_dashboard_visible());
+    assert!(!window.get_history_visible());
+    assert!(!window.get_sessions_visible());
+    assert!(!window.get_models_visible());
+    assert_eq!(window.get_active_route_state(), "ready");
+    assert_eq!(window.get_projects_state(), "ready");
+    assert_eq!(
+        window.get_projects_usage_range_label(),
+        "2026-06-17 – before 2026-07-17"
+    );
+    assert_eq!(window.get_projects_usage_time_zone_label(), "UTC");
+    assert_eq!(
+        window.get_projects_usage_evidence_label(),
+        "Fresh · Authoritative"
+    );
+    assert_eq!(
+        window.get_projects_code_range_label(),
+        "2026-07-16 – before 2026-07-17"
+    );
+    assert_eq!(window.get_projects_code_time_zone_label(), "UTC");
+    assert_eq!(
+        window.get_projects_code_evidence_label(),
+        "Fresh · Authoritative"
+    );
+    assert_eq!(window.get_projects_total_tokens(), "140");
+    assert_eq!(window.get_projects_total_availability(), "known");
+    assert_eq!(window.get_projects_cost(), "$0.010000");
+    assert_eq!(window.get_projects_cost_availability(), "complete");
+    assert_eq!(
+        window.get_projects_cost_evidence_label(),
+        "Complete · reported"
+    );
+    assert_eq!(window.get_projects_events(), "1 event");
+    assert_eq!(window.get_projects_loaded_label(), "1 project loaded");
+    assert_eq!(window.get_projects_completeness_label(), "Complete range");
+    assert_eq!(
+        window.get_projects_code_coverage_label(),
+        "1 repository loaded"
+    );
+    assert_eq!(
+        window.get_projects_code_completeness_label(),
+        "Complete code range"
+    );
+
+    let rows = window.get_project_usage_rows();
+    assert_eq!(rows.row_count(), 1);
+    let row = rows.row_data(0).expect("project row");
+    assert_eq!(row.project_label, "tokenmaster");
+    assert!(!row.unassociated);
+    assert_eq!(row.event_label, "1");
+    assert_eq!(row.input_label, "100");
+    assert_eq!(row.cached_label, "20");
+    assert_eq!(row.output_label, "30");
+    assert_eq!(row.reasoning_label, "10");
+    assert_eq!(row.total_label, "140");
+    assert_eq!(row.cost_label, "$0.010000");
+    assert_eq!(row.cost_evidence_label, "Complete · reported");
+    assert_eq!(row.token_ratio, 1.0);
+    assert!(row.code_available);
+    assert!(row.code_complete);
+    assert_eq!(row.repository_label, "1 repository");
+    assert_eq!(row.commits_label, "1");
+    assert_eq!(row.added_label, "+200");
+    assert_eq!(row.removed_label, "-20");
+    assert_eq!(row.net_label, "+180");
+    assert_eq!(
+        row.efficiency_label,
+        "$0.005000 / 100 added product-code lines"
+    );
+    assert_eq!(row.code_status_label, "Complete code");
+    assert_eq!(row.code_evidence_label, "Fresh · Authoritative");
+
+    window.window().set_size(slint::PhysicalSize::new(700, 720));
+    assert_eq!(window.get_projects_layout_mode(), "narrow");
+    window
+        .window()
+        .set_size(slint::PhysicalSize::new(1120, 720));
+    assert_eq!(window.get_projects_layout_mode(), "wide");
+
+    window.show().expect("show projects window");
+    let accessible_rows = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::ListItem)
+        .match_predicate(|element| {
+            element.accessible_label().is_some_and(|label| {
+                label.contains("Recent usage tokenmaster")
+                    && label.contains("Today code Complete code 1 repository")
+                    && label.contains("+200")
+                    && label.contains("-20")
+            })
+        })
+        .find_all();
+    assert_eq!(accessible_rows.len(), 1);
+
+    window.invoke_select_route(SharedString::from("dashboard"));
+    assert!(!window.get_projects_visible());
+    window.invoke_select_route(SharedString::from("projects"));
+    assert!(window.get_projects_visible());
+    assert_eq!(component_address, shell.window() as *const _);
+    assert_eq!(window.get_project_usage_rows().row_count(), 1);
+
+    drop(shell);
+    let unavailable_directory = tempfile::TempDir::new().expect("unavailable directory");
+    let unavailable_path = unavailable_directory
+        .path()
+        .join("ui-projects-git-unavailable.sqlite3");
+    let unavailable_reducer = projects_without_git_reducer(&unavailable_path);
+    let unavailable_shell =
+        DesktopShell::new(&unavailable_reducer.snapshot()).expect("unavailable shell");
+    let unavailable_window = unavailable_shell.window();
+    unavailable_window.invoke_select_route(SharedString::from("projects"));
+    let unavailable_row = unavailable_window
+        .get_project_usage_rows()
+        .row_data(0)
+        .expect("usage row without Git");
+    assert_eq!(unavailable_row.repository_label, "Git unavailable");
+    assert_eq!(unavailable_row.code_status_label, "Git unavailable");
+    assert_eq!(unavailable_row.commits_label, "—");
+    unavailable_window
+        .show()
+        .expect("show unavailable projects");
+    let unavailable_accessible_rows = ElementQuery::from_root(unavailable_window)
+        .match_accessible_role(AccessibleRole::ListItem)
+        .match_predicate(|element| {
+            element.accessible_label().is_some_and(|label| {
+                label.contains("Today code Git unavailable") && !label.contains("0 repositories")
+            })
+        })
+        .find_all();
+    assert_eq!(unavailable_accessible_rows.len(), 1);
+
+    drop(unavailable_shell);
+    let not_linked_directory = tempfile::TempDir::new().expect("not-linked directory");
+    let not_linked_path = not_linked_directory
+        .path()
+        .join("ui-projects-not-linked.sqlite3");
+    let not_linked_reducer = projects_without_linked_repository_reducer(&not_linked_path);
+    let not_linked_shell =
+        DesktopShell::new(&not_linked_reducer.snapshot()).expect("not-linked shell");
+    let not_linked_window = not_linked_shell.window();
+    not_linked_window.invoke_select_route(SharedString::from("projects"));
+    let not_linked_row = not_linked_window
+        .get_project_usage_rows()
+        .row_data(0)
+        .expect("usage row without linked repository");
+    assert_eq!(not_linked_row.project_label, "usage-only-project");
+    assert_eq!(not_linked_row.repository_label, "Not linked");
+    assert_eq!(not_linked_row.code_status_label, "Not linked");
+    assert_eq!(not_linked_row.commits_label, "—");
+    not_linked_window.show().expect("show not-linked projects");
+    for (width, layout) in [(700, "narrow"), (1120, "wide")] {
+        not_linked_window
+            .window()
+            .set_size(slint::PhysicalSize::new(width, 720));
+        assert_eq!(not_linked_window.get_projects_layout_mode(), layout);
+        let rows = ElementQuery::from_root(not_linked_window)
+            .match_accessible_role(AccessibleRole::ListItem)
+            .match_predicate(|element| {
+                element.accessible_label().is_some_and(|label| {
+                    label.contains("Today code Not linked") && !label.contains("0 repositories")
+                })
+            })
+            .find_all();
+        assert_eq!(rows.len(), 1);
+    }
 }
 
 fn assert_compiled_session_selection_is_immediate_correlated_and_bounded_in_place() {

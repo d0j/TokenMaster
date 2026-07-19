@@ -7,6 +7,7 @@ pub mod dashboard;
 pub mod history;
 pub mod models;
 pub mod presentation;
+pub mod projects;
 pub mod reliable_state;
 pub mod sessions;
 pub mod shell;
@@ -30,6 +31,7 @@ pub use presentation::{
     DesktopApplyOutcome, DesktopRouteKey, DesktopSessionSelectionError, DesktopSnapshotEpoch,
     DesktopState,
 };
+pub use projects::*;
 pub use reliable_state::*;
 pub use sessions::*;
 pub use shell::select_production_renderer;

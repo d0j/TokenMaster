@@ -1685,7 +1685,7 @@ replacement fail closed with constant frontend memory and no stale-row disclosur
 
 Decision: P3-D.3 adds Model and Project breakdowns to the existing fixed recent-30-day
 History analytics request. History continues to consume its daily series; Models reads
-the Model breakdown; the next Projects route will read the already captured Project
+the Model breakdown; P3-D.4 Projects reads the already captured Project
 breakdown. There remains exactly one today Dashboard query and one recent-usage query
 per refresh on the existing capacity-one worker. No Models product section, third
 query, cache, timer, connection, thread, or route-time work is added.
@@ -1706,3 +1706,31 @@ Renaming the current product `history` field would add mechanical API churn with
 changing ownership. The selected shared immutable envelope gives History, Models, and
 Projects coherent range/timezone/evidence, constant frontend memory, instant route
 switching, and one future replacement point for bounded interactive range controls.
+
+## ADR-069 — Render Projects as bounded recent usage plus separately labelled UTC-today code
+
+Decision: P3-D.4 consumes the prefetched Project breakdown from ADR-068 and the
+existing today Git envelope. It adds no query, product section, worker, timer, cache,
+connection, dependency, or route-time work. Desktop keeps at most 32 usage-centric
+rows, matches named aliases to at most 32 loaded Git repositories by exact safe
+`ProjectAlias`, and never matches `Unassociated` or appends Git-only aliases.
+
+The evidence windows remain independent: recent usage is the fixed 30-day local civil
+range, while code output is the existing exact UTC-today range. Both ranges,
+timezones, quality, freshness, and completeness render explicitly. Usage controls
+ordering, tokens, cost, events, and relative distribution; Git controls commits/
+added/removed/net and efficiency. The frontend never combines or relabels the periods.
+
+Same-alias repository facts use checked sums. Project-level efficiency is recomputed
+only when every repository carries compatible available evidence with one identical
+transient usage dataset identity and cost; product-code additions are summed and the
+project cost is counted once. Any mismatch/absence/overflow disables efficiency or
+the affected code facts without hiding independent usage. Private IDs, paths, content,
+and authority cannot cross Desktop or Slint.
+
+Rationale: a usage-only Projects table would make Git-dependent route readiness
+incoherent, changing the Dashboard Git request to 30 days would mislabel Dashboard,
+and a second Git query would add work/state before interactive range ownership exists.
+The selected two-window presentation provides material project value now while
+preserving truthful boundaries and a clean future upgrade to generation-fenced shared
+range controls.

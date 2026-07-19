@@ -96,6 +96,37 @@ export struct ModelUsageRow {
     token-ratio: float,
 }
 
+export struct ProjectUsageRow {
+    project-label: string,
+    unassociated: bool,
+    event-label: string,
+    input-availability: string,
+    input-label: string,
+    cached-availability: string,
+    cached-label: string,
+    output-availability: string,
+    output-label: string,
+    reasoning-availability: string,
+    reasoning-label: string,
+    total-availability: string,
+    total-label: string,
+    cost-availability: string,
+    cost-label: string,
+    cost-evidence-label: string,
+    token-ratio: float,
+    code-available: bool,
+    code-complete: bool,
+    code-status-label: string,
+    repository-label: string,
+    commits-label: string,
+    added-label: string,
+    removed-label: string,
+    net-label: string,
+    efficiency-label: string,
+    efficiency-reason-label: string,
+    code-evidence-label: string,
+}
+
 export struct HistoryDayRow {
     date-label: string,
     event-label: string,

@@ -311,6 +311,18 @@ model and accessible row meaning. Backend or presentation truncation MUST be vis
 No Models row may expose provider, profile, source, account, workspace, project,
 session, opaque key/cursor, path, content, command, credential, or query authority.
 
+Projects MUST render the Project breakdown from that same recent-30-day analytics
+envelope and MAY enrich named rows only with exact safe-alias matches from the existing
+Git envelope. `Unassociated` usage never matches Git, and Git-only aliases MUST NOT be
+fabricated as zero-usage rows. Recent usage range/timezone/evidence and UTC-today Git
+range/evidence MUST remain separately labelled; the UI MUST NOT combine or relabel
+them as one period. Rows retain events, every token component, total, typed cost and
+provenance, relative usage, and optional commits/added/removed/net/efficiency. Backend,
+frontend, and repository truncation plus unmatched/partial/unavailable state MUST
+remain visible. No Projects row may expose repository/association/dataset/private IDs,
+provider/profile/account/source/session identity, path, key/cursor, content, command,
+credential, or query authority.
+
 ### TM-UI-002 — Reactive presentation boundary
 
 Skin, layout, locale, selection, and range changes MUST update bounded presentation
@@ -345,11 +357,17 @@ The current History projection MUST retain at most 30 daily rows in one model an
 prior range, query service, timer, worker, or archive handle.
 The current Models projection MUST retain at most 64 model rows in one model and no
 prior range, filter, sort state, query service, timer, worker, archive handle, or
-private identity. History, Models, and the future Projects projection MUST share one
+private identity. History, Models, and Projects MUST share one
 bounded recent-usage envelope rather than duplicate equivalent analytics queries.
 Model token and cost availability MUST remain typed through Slint. Cost mode and
 calculated/reported/mixed composition MUST remain typed through Desktop, while the
 visible and accessible UI MUST distinguish partial cost and actual composition.
+The current Projects projection MUST retain at most 32 usage-centric rows and inspect
+at most 32 existing Git repository projections per row. It owns no prior range,
+filter/sort state, query service, timer, worker, archive handle, or private identity.
+Named aliases match Git only by exact bounded `ProjectAlias`. Same-alias repository
+metrics use checked sums; project usage cost is counted once when recomputing combined
+efficiency. Route-only selection MUST NOT rebuild the Projects model or issue work.
 The current Sessions projection MUST retain at most 64 summary rows in one model and no
 opaque key, cursor, prior page, query service, timer, worker, or archive handle. Its
 route-only selection MUST NOT rebuild the model or issue a detail query.
