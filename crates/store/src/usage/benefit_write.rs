@@ -209,10 +209,11 @@ impl UsageStore {
                 .last_published_at_ms
                 .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?,
         )?;
+        let pending_due_count = output_u64(next_due_count)?;
         transaction.commit()?;
         Ok(BenefitProfileApplyResult::new(
             next_global_revision,
-            output_u64(next_due_count)?,
+            pending_due_count,
         ))
     }
 
@@ -295,10 +296,11 @@ impl UsageStore {
                 .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?,
         )?;
         benefit_write_fault(fault, BenefitWriteFault::BeforeCommit)?;
+        let pending_due_count = output_u64(next_global_due_count)?;
         transaction.commit()?;
         Ok(BenefitProfileApplyResult::new(
             next_global_revision,
-            output_u64(next_global_due_count)?,
+            pending_due_count,
         ))
     }
 }
@@ -1725,5 +1727,42 @@ mod tests {
         assert_eq!(error.code(), StoreErrorCode::Database);
         assert_eq!(global_profile_rollback_snapshot(&store)?, before);
         Ok(())
+    }
+
+    #[test]
+    fn profile_result_count_conversion_precedes_the_final_commit() {
+        let source = include_str!("benefit_write.rs");
+        let Some((_, override_after_start)) =
+            source.split_once("pub fn set_benefit_reminder_override")
+        else {
+            panic!("override mutator source");
+        };
+        let Some((override_mutator, _)) =
+            override_after_start.split_once("pub fn set_benefit_reminder_global_profile")
+        else {
+            panic!("override mutator end source");
+        };
+        let Some((_, global_after_start)) =
+            source.split_once("fn set_benefit_reminder_global_profile_inner")
+        else {
+            panic!("global mutator source");
+        };
+        let Some((global_mutator, _)) =
+            global_after_start.split_once("\n}\n\n#[derive(Clone, Copy, Eq, PartialEq)]")
+        else {
+            panic!("global mutator end source");
+        };
+        for mutator in [override_mutator, global_mutator] {
+            let Some(conversion) = mutator.rfind("output_u64") else {
+                panic!("result conversion");
+            };
+            let Some(commit) = mutator.rfind("transaction.commit()?") else {
+                panic!("final commit");
+            };
+            assert!(
+                conversion < commit,
+                "result conversion must precede final commit"
+            );
+        }
     }
 }

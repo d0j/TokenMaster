@@ -122,6 +122,19 @@ fn global_profile_state(connection: &Connection) -> (i64, i64, i64, i64) {
         .expect("global profile state")
 }
 
+fn benefit_and_global_profile_revisions(connection: &Connection) -> (i64, i64) {
+    connection
+        .query_row(
+            "SELECT
+               (SELECT revision FROM benefit_state WHERE singleton_id = 1),
+               (SELECT revision FROM benefit_reminder_profile
+                 WHERE profile_kind = 'global' AND length(profile_scope_id) = 0)",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("benefit and global profile revisions")
+}
+
 #[derive(Debug, Eq, PartialEq)]
 struct OverrideRowsSnapshot {
     profiles: Vec<(Vec<u8>, i64, i64, i64)>,
@@ -729,11 +742,20 @@ fn global_profile_returns_large_overridden_due_aggregate_across_retry_and_reopen
         global_profile_state(&Connection::open(&path).expect("inspect global profile")),
         (3, 1, overflow_due_count as i64, 0)
     );
+    let durable_revisions = benefit_and_global_profile_revisions(
+        &Connection::open(&path).expect("inspect durable revisions"),
+    );
 
     let retried = store
         .set_benefit_reminder_global_profile(&global_profile)
         .expect("idempotent retry");
     assert_eq!(retried.pending_due_count(), overflow_due_count);
+    assert_eq!(
+        benefit_and_global_profile_revisions(
+            &Connection::open(&path).expect("inspect retried revisions"),
+        ),
+        durable_revisions
+    );
     drop(store);
 
     let mut reopened = UsageStore::open(&path).expect("reopen");
@@ -741,6 +763,12 @@ fn global_profile_returns_large_overridden_due_aggregate_across_retry_and_reopen
         .set_benefit_reminder_global_profile(&global_profile)
         .expect("idempotent retry after reopen");
     assert_eq!(retried_after_reopen.pending_due_count(), overflow_due_count);
+    assert_eq!(
+        benefit_and_global_profile_revisions(
+            &Connection::open(&path).expect("inspect reopened retry revisions"),
+        ),
+        durable_revisions
+    );
     drop(reopened);
 
     assert_eq!(
