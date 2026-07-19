@@ -9,12 +9,47 @@ use tokenmaster_desktop::{
     DesktopBackupPolicy, DesktopIntent, DesktopIntentAdmission, DesktopIntentSink,
     DesktopReliableStateHealth, DesktopReliableStateInput, DesktopReliableStateProjection,
     DesktopReliableStateSummary, DesktopReminderPolicy, DesktopReminderSyncState, DesktopShell,
+    MainWindow, ReminderCustomLeadRow,
 };
 use tokenmaster_product::ProductReducer;
 
 struct RecordingSink {
     intents: RefCell<Vec<DesktopIntent>>,
     admission: Cell<DesktopIntentAdmission>,
+}
+
+#[derive(Debug, PartialEq)]
+struct ReminderDraftSnapshot {
+    enabled: bool,
+    presets: [bool; 5],
+    rows: Vec<ReminderCustomLeadRow>,
+}
+
+fn draft_snapshot(window: &MainWindow) -> ReminderDraftSnapshot {
+    let rows = window.get_reminder_custom_lead_rows();
+    ReminderDraftSnapshot {
+        enabled: window.get_reminder_enabled(),
+        presets: [
+            window.get_reminder_preset_seven_days(),
+            window.get_reminder_preset_twenty_four_hours(),
+            window.get_reminder_preset_twelve_hours(),
+            window.get_reminder_preset_six_hours(),
+            window.get_reminder_preset_one_hour(),
+        ],
+        rows: (0..rows.row_count())
+            .map(|index| rows.row_data(index).expect("draft row"))
+            .collect(),
+    }
+}
+
+fn assert_exact_accessible_role(window: &MainWindow, label: &str, role: AccessibleRole) {
+    assert_eq!(
+        ElementHandle::find_by_accessible_label(window, label)
+            .filter(|element| element.accessible_role() == Some(role))
+            .count(),
+        1,
+        "exact accessible role for {label}"
+    );
 }
 
 impl Default for RecordingSink {
@@ -172,22 +207,13 @@ fn reliable_reminder_policy_projects_into_the_bounded_editor() {
             .iter()
             .all(|row| !row.enabled && row.value == 1 && row.unit_index == 0)
     );
-    let draft_enabled = window.get_reminder_enabled();
-    let draft_seven_days = window.get_reminder_preset_seven_days();
+    window.invoke_reminder_preset_edited(0, false);
+    window.invoke_reminder_custom_lead_edited(0, true, 17, 2);
+    let draft = draft_snapshot(window);
     window.invoke_save_reminder_policy();
     assert!(window.get_reminder_dirty());
     assert_eq!(window.get_reminder_feedback(), "Reminder service is busy");
-    assert_eq!(window.get_reminder_enabled(), draft_enabled);
-    assert_eq!(window.get_reminder_preset_seven_days(), draft_seven_days);
-    assert_eq!(
-        (0..window.get_reminder_custom_lead_rows().row_count())
-            .map(|index| window
-                .get_reminder_custom_lead_rows()
-                .row_data(index)
-                .expect("retained row"))
-            .collect::<Vec<_>>(),
-        draft_rows
-    );
+    assert_eq!(draft_snapshot(window), draft);
 
     shell
         .apply_reliable_state(reliable_state_with_sync(
@@ -195,12 +221,12 @@ fn reliable_reminder_policy_projects_into_the_bounded_editor() {
             DesktopReminderSyncState::Pending,
         ))
         .expect("publish while dirty");
-    assert!(window.get_reminder_preset_seven_days());
+    assert_eq!(draft_snapshot(window), draft);
     assert_eq!(window.get_reminder_sync_state(), "Pending");
     shell
         .apply_reliable_state(DesktopReliableStateProjection::unavailable())
         .expect("unavailable projection while dirty");
-    assert!(window.get_reminder_preset_seven_days());
+    assert_eq!(draft_snapshot(window), draft);
     assert_eq!(window.get_reminder_sync_state(), "Unavailable");
     sink.admission.set(DesktopIntentAdmission::Queued);
     let queued_before = sink.intents.borrow().len();
@@ -281,6 +307,55 @@ fn reliable_reminder_policy_projects_into_the_bounded_editor() {
             );
         }
     }
+    assert_exact_accessible_role(window, "Enable expiry reminders", AccessibleRole::Checkbox);
+    for label in [
+        "Reminder lead time 7 days",
+        "Reminder lead time 24 hours",
+        "Reminder lead time 12 hours",
+        "Reminder lead time 6 hours",
+        "Reminder lead time 1 hour",
+    ] {
+        assert_exact_accessible_role(window, label, AccessibleRole::Checkbox);
+    }
+    for index in 1..=8 {
+        assert_exact_accessible_role(
+            window,
+            &format!("Enable custom reminder lead row {index}"),
+            AccessibleRole::Checkbox,
+        );
+        assert_exact_accessible_role(
+            window,
+            &format!("Custom reminder lead value row {index}"),
+            AccessibleRole::Spinbox,
+        );
+        assert_exact_accessible_role(
+            window,
+            &format!("Custom reminder lead unit row {index}"),
+            AccessibleRole::Combobox,
+        );
+    }
+    assert_exact_accessible_role(window, "Save reminder profile", AccessibleRole::Button);
+    assert_exact_accessible_role(
+        window,
+        "Reset reminder profile to recommended",
+        AccessibleRole::Button,
+    );
+    assert_exact_accessible_role(
+        window,
+        &format!(
+            "Reminder editor feedback {}",
+            window.get_reminder_feedback()
+        ),
+        AccessibleRole::Text,
+    );
+    assert_exact_accessible_role(
+        window,
+        &format!(
+            "Reminder synchronization state {}",
+            window.get_reminder_sync_state()
+        ),
+        AccessibleRole::Text,
+    );
     for label in unique_labels.iter().filter(|label| {
         label.contains("expiry reminders")
             || label.contains("Reminder lead time")
@@ -315,6 +390,12 @@ fn reliable_reminder_policy_projects_into_the_bounded_editor() {
         assert!(
             card_size.width > 0.0 && card_size.height > 0.0,
             "reminder card has bounds"
+        );
+        assert!(
+            card_position.x >= 0.0 && card_position.x + card_size.width <= width as f32,
+            "reminder card fits width {width}: x={} width={}",
+            card_position.x,
+            card_size.width
         );
         for label in unique_labels
             .iter()

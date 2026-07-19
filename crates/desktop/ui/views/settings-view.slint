@@ -50,6 +50,8 @@ export component SettingsView inherits Rectangle {
     accessible-label: "TokenMaster settings";
 
     settings-scroll := ScrollView {
+        width: root.width;
+        height: root.height;
         viewport := VerticalLayout {
         padding: UiTokens.space;
         spacing: UiTokens.space;
@@ -95,7 +97,7 @@ export component SettingsView inherits Rectangle {
         }
 
         backup-card := Rectangle {
-            height: 214px;
+            height: root.settings-layout-mode == "narrow" ? 330px : 214px;
             background: UiTokens.surface;
             border-color: UiTokens.border;
             border-width: root.high-contrast ? 2px : 1px;
@@ -106,19 +108,22 @@ export component SettingsView inherits Rectangle {
                 spacing: UiTokens.space-sm;
                 Text { text: "Automatic backup policy"; color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
                 enabled := CheckBox { text: "Enable periodic backups"; checked: root.periodic-enabled; accessible-label: "Enable periodic backups"; }
-                HorizontalLayout {
+                if root.settings-layout-mode == "wide": HorizontalLayout {
                     spacing: UiTokens.space-sm;
                     Text { text: "Quiet seconds"; color: UiTokens.text-secondary; vertical-alignment: center; }
-                    quiet := SpinBox { minimum: 300; maximum: 3600; value: root.quiet-seconds; accessible-label: "Backup quiet period in seconds"; }
+                    wide-quiet := SpinBox { minimum: 300; maximum: 3600; value: root.quiet-seconds; accessible-label: "Backup quiet period in seconds"; }
                     Text { text: "Interval seconds"; color: UiTokens.text-secondary; vertical-alignment: center; }
-                    interval := SpinBox { minimum: 21600; maximum: 604800; value: root.interval-seconds; accessible-label: "Backup interval in seconds"; }
+                    wide-interval := SpinBox { minimum: 21600; maximum: 604800; value: root.interval-seconds; accessible-label: "Backup interval in seconds"; }
                     Text { text: "Budget MiB"; color: UiTokens.text-secondary; vertical-alignment: center; }
-                    budget := SpinBox { minimum: 256; maximum: 65536; value: root.retention-budget-mib; accessible-label: "Backup retention budget in mebibytes"; }
+                    wide-budget := SpinBox { minimum: 256; maximum: 65536; value: root.retention-budget-mib; accessible-label: "Backup retention budget in mebibytes"; }
+                    Button { text: "Save backup policy"; accessible-label: "Save automatic backup policy"; clicked => { root.update-backup-policy(enabled.checked, wide-quiet.value, wide-interval.value, wide-budget.value); } }
                 }
-                Button {
-                    text: "Save backup policy";
-                    accessible-label: "Save automatic backup policy";
-                    clicked => { root.update-backup-policy(enabled.checked, quiet.value, interval.value, budget.value); }
+                if root.settings-layout-mode == "narrow": VerticalLayout {
+                    spacing: UiTokens.space-sm;
+                    HorizontalLayout { Text { text: "Quiet seconds"; color: UiTokens.text-secondary; vertical-alignment: center; } narrow-quiet := SpinBox { minimum: 300; maximum: 3600; value: root.quiet-seconds; accessible-label: "Backup quiet period in seconds"; } }
+                    HorizontalLayout { Text { text: "Interval seconds"; color: UiTokens.text-secondary; vertical-alignment: center; } narrow-interval := SpinBox { minimum: 21600; maximum: 604800; value: root.interval-seconds; accessible-label: "Backup interval in seconds"; } }
+                    HorizontalLayout { Text { text: "Budget MiB"; color: UiTokens.text-secondary; vertical-alignment: center; } narrow-budget := SpinBox { minimum: 256; maximum: 65536; value: root.retention-budget-mib; accessible-label: "Backup retention budget in mebibytes"; } }
+                    Button { text: "Save backup policy"; accessible-label: "Save automatic backup policy"; clicked => { root.update-backup-policy(enabled.checked, narrow-quiet.value, narrow-interval.value, narrow-budget.value); } }
                 }
             }
         }
