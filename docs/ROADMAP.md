@@ -163,8 +163,12 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   package version once, and mounts one standard pinned Slint attribution widget with
   zero model/query/runtime/callback/polling or TokenMaster URL authority. Its compiled
   UI, source/release audits, 104 mutation cases, independent 0/0/0 review, and exact
-  clean-root/fmt/strict workspace Clippy/locked test-doctest baseline pass. Full rhythm aggregation,
-  notification presentation receipts/settings, later-page navigation, interactive
+  clean-root/fmt/strict workspace Clippy/locked test-doctest baseline pass. The separate
+  app-owned in-app presenter now adds one 256-row transient model, visible-before-ack
+  receipt, one off-UI receipt worker, 60-second Busy/StoreUnavailable acknowledgement
+  retry, same-worker failed-presentation re-pump, terminal-ack release without
+  re-presentation, panic-safe confirmed release, and joined
+  lifecycle. Full rhythm aggregation, notification settings, later-page navigation, interactive
   History ranges, command palette, tray, and compact widget remain P3-D-P3-E.
 - **P4 — presentation:** modular skins/layouts/density/scheme/locale, en/ru/pseudo,
   accessibility, DPI, reduced motion, and visible-paint/resource gates. Help/About
@@ -218,7 +222,7 @@ generation-safe current-bundle restart foundation and Task 12B.2a identity-pinne
   acknowledge delivery. P3-D.7 Help/About is also implemented as six static responsive
   sections with one compile-time version, one standard pinned Slint attribution widget,
   and zero projection/model/query/runtime/callback/polling authority. The separate app-
-  owned notification presentation/settings contour is next. Later-page Sessions navigation
+  owned notification presentation contour is complete; settings synchronization/editing is next. Later-page Sessions navigation
   remains a separate bounded replacement of the same list section.
 
 P3-D.0 Reliable State is approved under
@@ -332,8 +336,8 @@ surfaces, batched indexed reads, current/legacy million-event scale, resource pl
   backpressure, fault isolation, and resource/authority gates. Task 8 closes
   dependency/language/privacy authority,
   project truth, and the complete workspace quality gate. P2-E Git output and P2-F
-  joined product status are complete. P3 visible notification delivery and later
-  independently authorized activation remain.
+  joined product status and P3 visible in-app expiry delivery are complete. Notification
+  settings, OS/tray delivery, and later independently authorized activation remain.
 No frontend/database coupling or view-time full event grouping is accepted.
 
 Approved P2 quota gate: provider-defined current windows plus immutable full-reset

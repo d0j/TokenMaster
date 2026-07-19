@@ -129,15 +129,29 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   wide/narrow and accessible expiry-safety views; navigation performs no query, model
   rebuild, notification take/ack/release, settings mutation, or activation. Focused
   projection/UI/full Desktop tests, strict Desktop Clippy, source audit, and 82/82
-  mutation contracts pass. App-owned presentation receipts, settings synchronization/
-  editing, snooze, quiet hours, OS delivery, usage alerts, and activation remain
-  separate unfinished capabilities. Independent re-review returned READY with Critical/
+  mutation contracts pass. App-owned presentation receipts are implemented separately;
+  settings synchronization/editing, snooze, quiet hours, OS delivery, usage alerts,
+  and activation remain unfinished capabilities. Independent re-review returned READY with Critical/
   Important/Minor 0/0/0 after lossless millisecond UTC, waiting-state, audit-authority,
   wide-completeness, and populated-replacement findings were closed. Clean-root,
   formatting, strict warnings-as-errors workspace Clippy, release composition, and the
   complete locked workspace test/doctest gate pass in 1,216.4 seconds overall
   (25.8/1.7/76.0 seconds for clean-root/fmt/Clippy). P3-D.6 is closed; no release
   acceptance is inferred.
+- App-owned in-app expiry presentation: one runtime adapter leases and immediately
+  maps at most 256 rows into an identity-free Desktop batch. One checked weak-window
+  event applies a single transient model/count/visible state before `Presented`; one
+  condition-variable worker acknowledges off the UI thread, retries acknowledgement
+  only for Busy/StoreUnavailable after 60 seconds, and re-pumps a released failed
+  presentation without an unrelated completion. A terminal acknowledgement error is
+  released without automatic re-presentation. Runtime panic rolls acknowledgement back to a
+  releasable lease; `Err`/`false` release retains local backpressure, and Desktop becomes
+  ready before invoking the receipt. Focused Desktop/app/reminder-runtime tests, source
+  receipts, and the combined 177/177 Desktop/application mutation suite pass. Settings synchronization/editing,
+  snooze, quiet hours, OS/tray delivery, usage alerts, and activation remain open.
+  The exact clean-root/fmt/workspace-Clippy/workspace-test developer baseline also
+  passes; this is not M0, interactive Windows, soak, package, signing, or release
+  acceptance.
 - M1 usage foundation: bounded provider roots, path-private source discovery,
   reparse-safe streaming enumeration, typed bounded JSONL parser, cumulative token
   state, physical/logical source identity, byte framing, revalidation, strict SQLite
@@ -1402,7 +1416,8 @@ notices/SBOM/MSVC/package/signing/public-download/release evidence remains P6.
 P3-D.0 Reliable State, P3-D.1 History, P3-D.2 bounded Sessions list/detail, P3-D.3
 Models, P3-D.4 Projects, P3-D.5 Recent activity, and the bounded read-only P3-D.6
 Notifications route plus P3-D.7 Help/About are implemented. Continue with the separate
-app-owned notification presentation/settings contour without widening Slint authority.
+notification settings synchronization/editing contour without widening Slint or route
+authority; the app-owned visible presentation/receipt bridge is implemented.
 Later-page Sessions navigation and interactive History ranges remain bounded
 replacements of their existing sections rather than new frontend query owners.
 P3-E then owns

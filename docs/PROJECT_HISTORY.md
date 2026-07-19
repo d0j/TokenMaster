@@ -3490,3 +3490,34 @@ review returned 0/0/0. The subsequent uninterrupted `TM-CLEAN-PASS`, formatting,
 strict workspace Clippy, and complete locked workspace test/doctest baseline passes in
 879.3 seconds. P3-D.7 is closed as a developer slice; P4/P5/P6, M0, packaging, signing,
 and product-release acceptance remain unclaimed.
+
+## 2026-07-19 — app-owned visible expiry presentation
+
+ADR-073 closes the false-delivery gap between the durable reminder lease and Slint.
+Desktop now accepts only a provider-neutral batch capped at 256 rows, schedules one
+independently checked weak-window event, replaces one transient model/count/visible
+state, and emits `Presented` only after verifying the applied row count. It owns no
+runtime, store, delivery identity, timer, polling loop, queue, or auto-dismiss authority.
+
+The application now wraps the optional reminder runtime in one shared locked owner and
+creates one presentation port plus one condition-variable receipt worker when that
+runtime starts. The worker retains no batch, acknowledges outside the UI thread,
+retries acknowledgement only for Busy and StoreUnavailable after exactly 60 seconds,
+and re-pumps a confirmed released failed presentation on that same worker. A terminal
+acknowledgement error releases without automatic re-presentation. Deterministic RED
+tests found and closed release and wake races: local backpressure remains set after
+`Err` or `false`, and a concurrent external retry wakes receipt processing immediately.
+Runtime acknowledgement panics are redacted and restore `Acknowledging` to `Leased`;
+the narrow release fallback can recover outer-mutex poison. Desktop clears its busy bit
+before calling the receipt and accessibility includes both visible labels.
+
+Desktop tests, app tests including a real SQLite reminder lease/ack path, the reminder
+runtime replay suite, computed source receipts, and 177/177
+Desktop/application mutation cases pass. Settings editing, snooze, quiet hours,
+OS/tray delivery, usage alerts, activation, P4/P5/P6, M0, packaging, signing, soak, and
+release acceptance remain unclaimed.
+
+Repeated independent lifecycle review closed at Critical 0, Important 0, Minor 0. The
+exact clean-root, formatting, workspace Clippy with warnings denied, and complete
+workspace-test developer baseline also passed. These checks do not substitute for M0,
+interactive Windows, soak, package, signing, or release acceptance.

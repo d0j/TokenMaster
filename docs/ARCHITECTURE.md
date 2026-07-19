@@ -314,8 +314,19 @@ prevent per-lot timers, callback retention, overwrite, and unbounded growth.
 `take_notifications` leases without claiming display; release retries a failed
 presentation, and an explicit post-presentation acknowledgement inserts a separate
 immutable row. Startup, resume/hibernation recovery, profile/inventory changes, and
-clock-change hints reconcile through the same path. P3 still owns actual rendering;
-OS/tray delivery and activation are separate future capabilities.
+clock-change hints reconcile through the same path. The P3 app-owned presenter now
+maps one leased batch into at most 256 identity-free Desktop rows, applies one transient
+Slint model through an independently checked weak-window epoch, and emits `Presented`
+only after visible row-count verification. One condition-variable receipt worker
+acknowledges off the UI thread and retries acknowledgement only for Busy/StoreUnavailable
+at 60 seconds. A failed presentation is released and re-pumped on the same bounded
+worker; a terminal acknowledgement error is released without automatic re-presentation. Desktop
+clears bridge-busy state before invoking a receipt. Runtime acknowledgement panics are
+redacted and roll `Acknowledging` back to `Leased`; app release clears local
+backpressure only after a confirmed runtime transition, recovers the outer mutex poison
+for this narrow release path, and joins before reminder shutdown.
+OS/tray delivery, settings editing, snooze, quiet hours, and activation remain future
+capabilities.
 
 The watcher is never source authority. Its callback discards `notify` event/error paths
 before touching shared state; one atomic aggregate retains only dirty/force/urgency,

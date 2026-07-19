@@ -40,8 +40,8 @@ if ($productionManifestText -match '\btokenmaster-(store|provider|runtime|codex|
 $rustFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.rs')
 $uiFiles = @(Get-ChildItem -LiteralPath $uiRoot -Recurse -File -Filter '*.slint')
 $productionFiles = @($rustFiles + $uiFiles)
-if ($rustFiles.Count -ne 14 -or $uiFiles.Count -ne 21) {
-    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain fourteen Rust and twenty-one Slint files'
+if ($rustFiles.Count -ne 15 -or $uiFiles.Count -ne 22) {
+    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain fifteen Rust and twenty-two Slint files'
 }
 $uiText = ($uiFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
@@ -144,6 +144,96 @@ if (
     $uiText -match '(?i)(?:\bTimer\s*\{|\banimate\s+[A-Za-z_-]+\b|\banimation-[A-Za-z_-]+\b)'
 ) {
     throw 'TM-DESKTOP-UI-POLLING: UI must remain timer animation and polling free'
+}
+
+$inAppNotificationPath = Join-Path $sourceRoot 'in_app_notification.rs'
+$inAppNotificationText = [System.IO.File]::ReadAllText($inAppNotificationPath)
+$inAppPanelText = [System.IO.File]::ReadAllText(
+    (Join-Path $uiRoot 'components\in-app-notification-panel.slint')
+)
+$mainUiTextForInApp = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'main.slint'))
+if ($inAppNotificationText -notmatch 'pub const MAX_DESKTOP_IN_APP_NOTIFICATIONS: usize = 256;' -or
+    $inAppNotificationText -notmatch 'rows\.len\(\) > MAX_DESKTOP_IN_APP_NOTIFICATIONS' -or
+    $inAppNotificationText -notmatch 'if rows\.is_empty\(\)') {
+    throw 'TM-DESKTOP-IN-APP-BOUND: presentation must retain exactly one to 256 rows'
+}
+$inAppModelCount = [regex]::Matches(
+    $mainUiTextForInApp,
+    'property\s*<\[InAppNotificationRow\]>\s+in-app-notification-[A-Za-z0-9_-]+'
+).Count
+if ($inAppModelCount -ne 1 -or
+    [regex]::Matches($uiRustText, 'set_in_app_notification_rows\(model\(rows\)\)').Count -ne 1) {
+    throw 'TM-DESKTOP-IN-APP-MODEL: presentation must own one transient notification model'
+}
+$applyFunction = [regex]::Match(
+    $uiRustText,
+    '(?s)pub\(crate\) fn apply_in_app_notification_batch\(.*?\r?\n\}\r?\n\r?\nfn notification_coverage_label'
+).Value
+$rowsIndex = $applyFunction.IndexOf(
+    'window.set_in_app_notification_rows(model(rows));',
+    [System.StringComparison]::Ordinal
+)
+$countIndex = $applyFunction.IndexOf(
+    'window.set_in_app_notification_count_label(count_label.into());',
+    [System.StringComparison]::Ordinal
+)
+$visibleIndex = $applyFunction.IndexOf(
+    'window.set_in_app_notification_visible(true);',
+    [System.StringComparison]::Ordinal
+)
+$verifiedIndex = $applyFunction.IndexOf(
+    'window.get_in_app_notification_visible()',
+    [System.StringComparison]::Ordinal
+)
+if ([string]::IsNullOrWhiteSpace($applyFunction) -or $rowsIndex -lt 0 -or
+    $countIndex -le $rowsIndex -or $visibleIndex -le $countIndex -or
+    $verifiedIndex -le $visibleIndex) {
+    throw 'TM-DESKTOP-IN-APP-APPLY: model count and visibility must be applied and verified in order'
+}
+$successfulApplyCount = [regex]::Matches(
+    $inAppNotificationText,
+    '(?s)if apply_in_app_notification_batch\(&window, batch\) \{\s*NotificationDeliveryOutcome::Presented'
+).Count
+$runNotificationFunction = [regex]::Match(
+    $inAppNotificationText,
+    '(?s)fn run\(.*?\r?\n    \}\r?\n\r?\n    fn record_schedule_error'
+).Value
+$readyBeforeReceiptCount = [regex]::Matches(
+    $runNotificationFunction,
+    '(?s)let presented = match self\.delivery\.deliver\(&batch\).*?self\.scheduled\.store\(false, Ordering::Release\);\s*if presented \{\s*receipt\.presented\(\);\s*\} else \{\s*receipt\.failed\(\);'
+).Count
+$failedDeliveryCount = [regex]::Matches(
+    $runNotificationFunction,
+    '(?s)NotificationDeliveryOutcome::(?:Stale|WindowClosed|StateUnavailable) => \{.*?false\s*\}'
+).Count
+if ($successfulApplyCount -ne 1 -or $readyBeforeReceiptCount -ne 1 -or
+    $failedDeliveryCount -ne 3 -or
+    [regex]::Matches($inAppNotificationText, 'receipt\.presented\(\);').Count -ne 1 -or
+    [regex]::Matches($inAppNotificationText, 'receipt\.failed\(\);').Count -ne 2) {
+    throw 'TM-DESKTOP-IN-APP-RECEIPT: visible apply and bridge readiness must precede Presented while every callback failure fails'
+}
+if ($applyFunction -notmatch '\{benefit_label\}\. \{kind_label\}, quantity \{quantity_label\}') {
+    throw 'TM-DESKTOP-IN-APP-ACCESSIBILITY: accessible rows must include the visible benefit and kind labels'
+}
+$inAppEpochGuardCount = 0
+if ($inAppNotificationText -match 'self\.epochs\.active\.load\(Ordering::Acquire\) != self\.epoch' -and
+    $inAppNotificationText -match 'let epoch = epochs\.activate\(\)\?;' -and
+    $inAppNotificationText -match 'self\.epochs\.deactivate\(self\.epoch\);') {
+    $inAppEpochGuardCount = 1
+}
+if ($inAppEpochGuardCount -ne 1) {
+    throw 'TM-DESKTOP-IN-APP-EPOCH: presentation must use one checked independently invalidated epoch'
+}
+$inAppPublicValue = [regex]::Match(
+    $inAppNotificationText,
+    '(?s)pub struct DesktopInAppNotification\s*\{.*?\r?\n\}'
+).Value
+if ($inAppPublicValue -match '(?i)\b(?:delivery|provider|account|workspace|scope|lot|window|target|receipt|activation)[_-]?id\b|\b(?:absolute_)?path\b') {
+    throw 'TM-DESKTOP-IN-APP-IDENTITY: presentation value must not expose private identity or paths'
+}
+if ($inAppNotificationText -match '\b(?:VecDeque|sync_channel|std::thread|thread::spawn|thread::sleep|slint::Timer)\b' -or
+    $inAppPanelText -match '(?i)(?:\bTimer\s*\{|\banimate\s+[A-Za-z_-]+\b|animation-[A-Za-z_-]+|auto[-_]?hide)') {
+    throw 'TM-DESKTOP-IN-APP-OWNER: presentation must not add a queue timer worker polling or auto-hide owner'
 }
 $fixedUpstreamAttribution = 'WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies.'
 $legacyProductBoundary = $uiAdapterText.Replace($fixedUpstreamAttribution, '')
@@ -862,6 +952,12 @@ if ($SourceOnly) {
         notifications_delivery_authority_count = $notificationsDeliveryAuthorityCount
         notifications_owner_control_count = $notificationsOwnerControlCount
         notifications_polling_surface_count = $notificationsPollingSurfaceCount
+        in_app_notification_row_maximum = 256
+        in_app_notification_model_count = $inAppModelCount
+        in_app_notification_presented_after_apply_count = $successfulApplyCount
+        in_app_notification_ready_before_receipt_count = $readyBeforeReceiptCount
+        in_app_notification_accessible_label_count = 1
+        in_app_notification_epoch_guard_count = $inAppEpochGuardCount
         help_about_section_count = $helpAboutRenderedSectionCount
         help_about_version_setter_count = $helpAboutVersionSetterCount
         help_about_slint_attribution_count = $helpAboutAttributionCount
@@ -977,6 +1073,12 @@ if ($LASTEXITCODE -ne 0) {
     notifications_delivery_authority_count = $notificationsDeliveryAuthorityCount
     notifications_owner_control_count = $notificationsOwnerControlCount
     notifications_polling_surface_count = $notificationsPollingSurfaceCount
+    in_app_notification_row_maximum = 256
+    in_app_notification_model_count = $inAppModelCount
+    in_app_notification_presented_after_apply_count = $successfulApplyCount
+    in_app_notification_ready_before_receipt_count = $readyBeforeReceiptCount
+    in_app_notification_accessible_label_count = 1
+    in_app_notification_epoch_guard_count = $inAppEpochGuardCount
     help_about_section_count = $helpAboutRenderedSectionCount
     help_about_version_setter_count = $helpAboutVersionSetterCount
     help_about_slint_attribution_count = $helpAboutAttributionCount

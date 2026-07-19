@@ -29,9 +29,16 @@ dynamic quota and full-reset history, expiring reset-benefit inventory with dura
 reminder events, bounded Git output analytics, and one exact joined product status.
 The constant-state product reducer retains one current snapshot, rejects stale async
 work, copies only bounded runtime health, and derives fixed route readiness without
-giving UI code SQLite or runtime ownership. P3 complete desktop UI is next; visible
-notifications, automation, interactive acceptance, packaging, signing, and release
-evidence remain.
+giving UI code SQLite or runtime ownership. P3 now includes the responsive Dashboard,
+History, Sessions/detail, Models, Projects, Recent activity, Notifications expiry
+center, Settings/Data Health foundation, and Help/About. Expiry reminders use a
+separate app-owned bridge: a bounded notification becomes visible before durable
+acknowledgement; confirmed release after a failed presentation preserves replay, and
+the same single worker retries presentation without waiting for unrelated product
+activity. A terminal acknowledgement error releases without an automatic presentation
+loop. Notification
+settings editing, OS/tray delivery, remaining shell work, P4 presentation/localization,
+automation, interactive acceptance, packaging, signing, and release evidence remain.
 
 ## Build and verify
 

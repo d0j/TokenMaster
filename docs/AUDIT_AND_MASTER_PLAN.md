@@ -299,8 +299,14 @@ reuses the existing benefit overview with 32 profile/256 lot/eight-lead caps and
 delivery acknowledgement or new runtime owner. P3-D.7 Help/About now closes its P3-D
 archive-independent route placeholder with six static accessible sections, one compile-
 time version setter, one standard pinned Slint attribution widget, and zero model/query/
-runtime/callback/polling owner. App-owned notification presentation receipts/settings
-remain the next separate contour.
+runtime/callback/polling owner. The separate app-owned in-app presentation contour is
+now implemented with a 256-row cap, one checked weak-window epoch, one transient model,
+visible-before-ack receipt ordering, one condition-variable worker, exact 60-second
+Busy/StoreUnavailable acknowledgement retry, same-worker failed-presentation re-pump,
+terminal-acknowledgement release without re-presentation, panic-safe runtime rollback,
+confirmed failure/shutdown release, and release-before-
+local-clear backpressure. Notification settings synchronization/editing remain next; snooze, quiet
+hours, OS/tray delivery, usage alerts, and activation remain later independent slices.
 P3-D.6 independent re-review is Critical/Important/Minor 0/0/0; its 82 mutation audit,
 release composition, strict workspace Clippy, and complete locked workspace test/
 doctest gate pass in one 1,216.4-second baseline.

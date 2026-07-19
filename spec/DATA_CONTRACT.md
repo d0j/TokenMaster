@@ -588,10 +588,17 @@ capacity-one coalesced request, one latest count-only snapshot, and at most one 
 delivery batch of 256 items. No per-scope or per-lot timer, thread, channel, callback,
 or retained source/provider payload exists. Notification backpressure stops later
 queue mutation until the batch is acknowledged. A failed presentation can release the
-lease; process failure before acknowledgement replays it. This foundation publishes
-typed in-app events but does not claim that the unfinished P3 UI rendered them; OS
-delivery, snooze, quiet hours, activation intents, and activation receipts remain
-absent.
+lease and the same app worker re-pumps it after a bounded wait; a terminal acknowledgement
+error releases without automatic re-presentation, while process failure before
+acknowledgement replays the lease on restart. A panic during runtime acknowledgement restores
+`Acknowledging` to `Leased`, and local presentation backpressure is cleared only after
+runtime release returns `true`. The implemented app-owned
+presentation adapter immediately drops the runtime batch after mapping at most 256
+rows into provider-neutral Desktop values. Slint retains one transient model only;
+delivery IDs, account/scope/lot identity, paths, provider payloads, and durable receipts
+never cross that boundary. Durable acknowledgement starts only after the event-loop
+callback has replaced the model, count label, and visible state. OS delivery, snooze,
+quiet hours, activation intents, and activation receipts remain absent.
 
 ## TM-DATA-011 — Reliable-state records and packages
 

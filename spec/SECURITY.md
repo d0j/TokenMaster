@@ -241,9 +241,17 @@ facts, freshness, quality, warnings, and truncation. Provider/account/workspace/
 lot/delivery/window IDs, target descriptors, paths, content, commands, credentials,
 SQL, receipts, activation capability, and runtime owners remain outside Desktop/Slint.
 Route projection and navigation have zero reminder take/acknowledge/release or settings
-mutation authority. A later presentation bridge must be app-owned and may acknowledge
-only after successful visible application; every failed/cancelled presentation must
-release its lease for retry.
+mutation authority. The separate implemented presentation bridge is app-owned and
+acknowledges only after successful visible application. Desktop receives only bounded
+provider-neutral display facts and a one-shot receipt; it receives no runtime/store,
+delivery ID, path, provider payload, SQL, activation, or settings authority. Failed,
+cancelled, stale, closed-window, terminal, and shutdown presentation paths release the
+lease. Runtime panic payloads are suppressed and the lease transition is rolled back;
+only the narrow fallback release recovers outer runtime-mutex poison. A false or failed
+release retains local backpressure. Its one worker is condition-variable driven,
+re-pumps a released failed presentation without an unrelated completion, releases a
+terminal acknowledgement error without automatic re-presentation, retains no batch, and never blocks the UI
+thread. Desktop clears its bridge-busy flag before receipt invocation.
 
 P3-D.7 Help/About adds only fixed compiled English fallback text, the compile-time
 Cargo package version, responsive geometry, and exactly one pinned standard

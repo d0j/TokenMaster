@@ -13,13 +13,15 @@ $appManifest = Join-Path $appRoot 'Cargo.toml'
 $appSource = Join-Path $appRoot 'src'
 $recoveryAdversarial = Join-Path $appRoot 'tests\recovery_adversarial_contract.rs'
 $desktopManifest = Join-Path $root 'crates\desktop\Cargo.toml'
+$reminderRuntimePath = Join-Path $root 'crates\runtime\src\reminder\runtime.rs'
 
 foreach ($required in @(
     $rootManifest,
     $appManifest,
     $appSource,
     $recoveryAdversarial,
-    $desktopManifest
+    $desktopManifest,
+    $reminderRuntimePath
 )) {
     if (-not (Test-Path -LiteralPath $required)) {
         throw "TM-APP-MISSING-BOUNDARY: $([System.IO.Path]::GetFileName($required))"
@@ -58,14 +60,17 @@ $rustFiles = @(
     Get-ChildItem -LiteralPath $appSource -Recurse -File -Filter '*.rs' |
         Where-Object { $_.Name -notlike '*_tests.rs' }
 )
-if ($rustFiles.Count -ne 7) {
-    throw 'TM-APP-FILE-COUNT: application composition must contain exactly seven Rust files'
+if ($rustFiles.Count -ne 8) {
+    throw 'TM-APP-FILE-COUNT: application composition must contain exactly eight Rust files'
 }
 $productionText = ($rustFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
 }) -join "`n"
 $applicationText = [System.IO.File]::ReadAllText((Join-Path $appSource 'application.rs'))
 $dataRootText = [System.IO.File]::ReadAllText((Join-Path $appSource 'data_root.rs'))
+$notificationText = [System.IO.File]::ReadAllText((Join-Path $appSource 'notification.rs'))
+$operationText = [System.IO.File]::ReadAllText((Join-Path $appSource 'operation.rs'))
+$reminderRuntimeText = [System.IO.File]::ReadAllText($reminderRuntimePath)
 
 if ($productionText -match 'LiveRuntime::start_notified\(') {
     throw 'TM-APP-UNGUARDED-LIVE: live runtime must consume the startup lease guard'
@@ -80,7 +85,6 @@ foreach ($contract in @(
     @{ Name = 'TM-APP-OPERATION-WORKER'; Pattern = 'ApplicationOperationWorker::spawn_with_payload\('; Count = 1 },
     @{ Name = 'TM-APP-OPERATION-THREAD'; Pattern = '"tokenmaster-operation-worker"'; Count = 1 },
     @{ Name = 'TM-APP-OPERATION-WAKE'; Pattern = 'sync_channel\(1\)'; Count = 1 },
-    @{ Name = 'TM-APP-OPERATION-SPAWN'; Pattern = 'Builder::new\(\)'; Count = 1 },
     @{ Name = 'TM-APP-OPERATION-ACTUAL-START'; Pattern = 'ApplicationOperationWorker::spawn_with_payload\(move \|permit, payload\| \{\s*let _ = command_notifier\s*\.publish_operation\(Some\(application_operation_running\(permit\.command\(\)\)\)\)'; Count = 1 },
     @{ Name = 'TM-APP-BACKUP-COMMAND'; Pattern = 'ApplicationCommand::Backup,\s*ApplicationOperationPayload::Empty\)\s*=>\s*\{\s*execute_manual_backup_command\('; Count = 1 },
     @{ Name = 'TM-APP-OPERATION-JOIN'; Pattern = 'self\.commands\.shutdown\(\)'; Count = 1 },
@@ -126,6 +130,9 @@ foreach ($contract in @(
     @{ Name = 'TM-APP-CLEAN-STATE'; Pattern = '\.mark_clean\(\)'; Count = 1 },
     @{ Name = 'TM-APP-QUOTA-OWNER'; Pattern = 'CodexQuotaRuntime::start_notified\('; Count = 1 },
     @{ Name = 'TM-APP-REMINDER-OWNER'; Pattern = 'BenefitReminderRuntime::start_notified\('; Count = 1 },
+    @{ Name = 'TM-APP-NOTIFICATION-COORDINATOR'; Pattern = 'ReminderPresentationCoordinator::start\('; Count = 1 },
+    @{ Name = 'TM-APP-NOTIFICATION-PORT'; Pattern = 'RuntimeReminderPresentationPort::new\('; Count = 1 },
+    @{ Name = 'TM-APP-NOTIFICATION-PUMP'; Pattern = 'presentation\.pump\(\)'; Count = 1 },
     @{ Name = 'TM-APP-CONTROLLER'; Pattern = 'DesktopController::open\('; Count = 1 },
     @{ Name = 'TM-APP-SESSION-DETAIL-ROUTER'; Pattern = 'DesktopSessionDetailIntentRouter::new\('; Count = 1 },
     @{ Name = 'TM-APP-SESSION-DETAIL-SHELL'; Pattern = 'DesktopShell::new_with_reliable_state_and_session_sink\('; Count = 1 },
@@ -161,6 +168,109 @@ if ([regex]::Matches($applicationText, 'slot\.generation != self\.bundle_generat
 }
 if ($applicationText -match '\b(slint::Timer|std::thread|thread::spawn|thread::sleep)\b') {
     throw 'TM-APP-POLLING: application composition must not add a timer or polling thread'
+}
+$notificationWorkerCount = [regex]::Matches($notificationText, 'thread::Builder::new\(\)').Count
+if ($notificationWorkerCount -ne 1 -or
+    [regex]::Matches($notificationText, '"tokenmaster-notification-receipt"').Count -ne 1 -or
+    $notificationText -match '\b(?:thread::spawn|thread::sleep|slint::Timer|VecDeque|sync_channel)\b') {
+    throw 'TM-APP-NOTIFICATION-WORKER: notifications must own one named condition-variable receipt worker'
+}
+$operationWorkerBuilderCount = [regex]::Matches(
+    $operationText,
+    '(?:thread::)?Builder::new\(\)'
+).Count
+if ($operationWorkerBuilderCount -ne 1) {
+    throw "TM-APP-OPERATION-SPAWN: expected 1, observed $operationWorkerBuilderCount"
+}
+if ($notificationText -notmatch 'const NOTIFICATION_ACK_RETRY: Duration = Duration::from_secs\(60\);' -or
+    $notificationText -notmatch 'Err\(error\) if error\.retryable\(\)' -or
+    $notificationText -notmatch 'matches!\(self, Self::Busy \| Self::StoreUnavailable\)') {
+    throw 'TM-APP-NOTIFICATION-RETRY: only Busy and StoreUnavailable may retry after exactly 60 seconds'
+}
+if ([regex]::Matches($productionText, '\.acknowledge_notifications\(\)').Count -ne 1 -or
+    [regex]::Matches($notificationText, '\.acknowledge_notifications\(\)').Count -ne 1) {
+    throw 'TM-APP-NOTIFICATION-ACK-AUTHORITY: only the dedicated presentation port may acknowledge reminders'
+}
+$acknowledgeWorkerFunction = [regex]::Match(
+    $notificationText,
+    '(?s)fn acknowledge_presented\(.*?\r?\n\}\r?\n\r?\nfn is_stopping'
+).Value
+if ([string]::IsNullOrWhiteSpace($acknowledgeWorkerFunction) -or
+    $acknowledgeWorkerFunction -notmatch 'Err\(_\) => \{\s*let _ = release_with_retry\(signal, port, retry\);' -or
+    $acknowledgeWorkerFunction -match 'release_then_retry_presentation') {
+    throw 'TM-APP-NOTIFICATION-TERMINAL-ACK: terminal acknowledgement failure must release without re-presentation'
+}
+if ($notificationText -notmatch 'ReceiptAction::Failed => \{\s*release_then_retry_presentation\(' -or
+    $notificationText -notmatch 'Err\(_\) => \{\s*let _ = release_with_retry\(signal, port, retry\);' -or
+    $notificationText -notmatch 'let released = release_in_flight\(&self\.signal, self\.port\.as_ref\(\)\)') {
+    throw 'TM-APP-NOTIFICATION-RELEASE: callback terminal and shutdown paths must release an outstanding lease'
+}
+$releaseFunction = [regex]::Match(
+    $notificationText,
+    '(?s)fn release_in_flight\(.*?\r?\n\}'
+).Value
+$runtimeReleaseIndex = $releaseFunction.IndexOf('if !port.release()?', [System.StringComparison]::Ordinal)
+$localClearIndex = $releaseFunction.IndexOf('signal.clear_in_flight();', [System.StringComparison]::Ordinal)
+if ([string]::IsNullOrWhiteSpace($releaseFunction) -or $runtimeReleaseIndex -lt 0 -or
+    $localClearIndex -le $runtimeReleaseIndex -or
+    $releaseFunction -notmatch 'if !port\.release\(\)\? \{\s*return Err\(PresentationFailure::Internal\);\s*\}') {
+    throw 'TM-APP-NOTIFICATION-RELEASE-ORDER: local backpressure must remain until runtime release completes'
+}
+$retryPresentationFunction = [regex]::Match(
+    $notificationText,
+    '(?s)fn release_then_retry_presentation\(.*?\r?\n\}'
+).Value
+if ([string]::IsNullOrWhiteSpace($retryPresentationFunction) -or
+    $retryPresentationFunction -notmatch 'wait_for_presentation_retry_or_action\(signal, retry\)' -or
+    $retryPresentationFunction -notmatch 'pump_presentation\(signal, port, presenter\.as_ref\(\)\)') {
+    throw 'TM-APP-NOTIFICATION-REPUMP: a released presentation must retry on the existing bounded worker'
+}
+$publishRuntime = [regex]::Match(
+    $applicationText,
+    '(?s)fn publish_runtime\(.*?\r?\n    \}\r?\n\r?\n    fn shutdown'
+).Value
+$presentationPumpIndex = $publishRuntime.IndexOf('presentation.pump()', [System.StringComparison]::Ordinal)
+$controllerObservationIndex = $publishRuntime.IndexOf('.observe_runtime(observation)', [System.StringComparison]::Ordinal)
+if ([string]::IsNullOrWhiteSpace($publishRuntime) -or $presentationPumpIndex -lt 0 -or
+    $controllerObservationIndex -le $presentationPumpIndex) {
+    throw 'TM-APP-NOTIFICATION-PUMP-ORDER: presentation must not depend on controller publication success'
+}
+$runtimeAcknowledge = [regex]::Match(
+    $reminderRuntimeText,
+    '(?s)fn acknowledge_notifications_with<.*?\r?\n    \}\r?\n\r?\n    pub fn release_notifications'
+).Value
+$runtimeBeginIndex = $runtimeAcknowledge.IndexOf('.begin_acknowledgement()', [System.StringComparison]::Ordinal)
+$runtimeCatchIndex = $runtimeAcknowledge.IndexOf('std::panic::catch_unwind', [System.StringComparison]::Ordinal)
+$runtimeFinishIndex = $runtimeAcknowledge.IndexOf('.finish_acknowledgement(committed)', [System.StringComparison]::Ordinal)
+if ([string]::IsNullOrWhiteSpace($runtimeAcknowledge) -or $runtimeBeginIndex -lt 0 -or
+    $runtimeCatchIndex -le $runtimeBeginIndex -or $runtimeFinishIndex -le $runtimeCatchIndex -or
+    $runtimeAcknowledge -notmatch 'let committed = acknowledgement\.is_ok\(\);' -or
+    $reminderRuntimeText -notmatch 'REDACT_REMINDER_RUNTIME_PANIC') {
+    throw 'TM-APP-NOTIFICATION-PANIC-ROLLBACK: acknowledgement panic must restore the leased batch without exposing its payload'
+}
+if ($notificationText -notmatch '\.unwrap_or_else\(std::sync::PoisonError::into_inner\)\s*\.release_notifications\(\)') {
+    throw 'TM-APP-NOTIFICATION-POISON-RELEASE: fallback release must recover only the outer runtime mutex'
+}
+if ($notificationText -notmatch 'struct ReceiptWorkerState \{\s*action: Option<ReceiptAction>,\s*stopping: bool,' -or
+    $notificationText -notmatch 'in_flight: AtomicBool' -or
+    [regex]::Matches($notificationText, 'compare_exchange\(false, true, Ordering::AcqRel, Ordering::Acquire\)').Count -lt 2 -or
+    $notificationText -notmatch 'completed: AtomicBool') {
+    throw 'TM-APP-NOTIFICATION-CAPACITY: presentation must keep one lease action and one one-shot receipt'
+}
+$bundleShutdown = [regex]::Match(
+    $applicationText,
+    '(?s)impl ApplicationBundle \{.*?fn shutdown\(&mut self\).*?\r?\n\}\r?\n\r?\nfn remember_failure'
+).Value
+$presentationShutdownIndex = $bundleShutdown.IndexOf(
+    'self.notification_presentation.take()',
+    [System.StringComparison]::Ordinal
+)
+$reminderPauseIndex = $bundleShutdown.IndexOf('reminder.pause()', [System.StringComparison]::Ordinal)
+$reminderShutdownIndex = $bundleShutdown.IndexOf('reminder.shutdown()', [System.StringComparison]::Ordinal)
+if ([string]::IsNullOrWhiteSpace($bundleShutdown) -or $presentationShutdownIndex -lt 0 -or
+    $reminderPauseIndex -le $presentationShutdownIndex -or
+    $reminderShutdownIndex -le $presentationShutdownIndex) {
+    throw 'TM-APP-NOTIFICATION-SHUTDOWN-ORDER: notification bridge and worker must close before reminder lifecycle shutdown'
 }
 if ($productionText -match '\bstd::env::(args|args_os|current_dir|set_current_dir)\b') {
     throw 'TM-APP-ARBITRARY-ROOT: command-line or working-directory data roots are forbidden'
@@ -225,6 +335,13 @@ if ($SourceOnly) {
         clean_state_transition_count = 1
         quota_runtime_owner_count = 1
         reminder_runtime_owner_count = 1
+        notification_receipt_worker_count = $notificationWorkerCount
+        notification_ack_retry_seconds = 60
+        notification_presentation_coordinator_count = 1
+        notification_runtime_ack_authority_count = 1
+        notification_confirmed_release_count = 1
+        notification_bounded_repump_count = 1
+        notification_runtime_panic_rollback_count = 1
         desktop_controller_count = 1
         session_detail_router_count = 1
         session_detail_current_bundle_binding_count = 1
@@ -253,7 +370,7 @@ $directProductionDependencies = @(
         Sort-Object -Unique
 )
 $expectedDependencies = @(
-    'slint', 'tokenmaster-codex', 'tokenmaster-desktop', 'tokenmaster-engine',
+    'slint', 'tokenmaster-codex', 'tokenmaster-desktop', 'tokenmaster-domain', 'tokenmaster-engine',
     'tokenmaster-platform', 'tokenmaster-product', 'tokenmaster-runtime',
     'tokenmaster-state', 'tokenmaster-store'
 )
@@ -297,7 +414,7 @@ $artifactText = [System.Text.Encoding]::ASCII.GetString(
     [System.IO.File]::ReadAllBytes($artifact)
 )
 foreach ($needle in @(
-    'seed_probe_models', 'TokenMaster M0', 'demo-session-', 'WhereMyTokens',
+    'seed_probe_models', 'TokenMaster M0', 'demo-session-', 'WhereMyTokensGo',
     'PRIVATE_GIT_RUNTIME_REPOSITORY', 'PRIVATE_SESSION_NAME.jsonl',
     'PIPELINE_PRIVATE_SENTINEL_91A7', 'PRIVATE_PARENT_MARKER',
     'Private@Example.com', 'credit_private_76e5', 'C:\private\codex-home',
@@ -344,6 +461,13 @@ foreach ($needle in @(
     clean_state_transition_count = 1
     quota_runtime_owner_count = 1
     reminder_runtime_owner_count = 1
+    notification_receipt_worker_count = $notificationWorkerCount
+    notification_ack_retry_seconds = 60
+    notification_presentation_coordinator_count = 1
+    notification_runtime_ack_authority_count = 1
+    notification_confirmed_release_count = 1
+    notification_bounded_repump_count = 1
+    notification_runtime_panic_rollback_count = 1
     desktop_controller_count = 1
     session_detail_router_count = 1
     session_detail_current_bundle_binding_count = 1

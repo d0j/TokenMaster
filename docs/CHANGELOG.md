@@ -6,6 +6,30 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented the app-owned in-app expiry presentation contour. One leased reminder
+  batch maps into at most 256 provider-neutral, identity-free Desktop rows; one checked
+  weak-window Slint callback replaces the transient model/count/visible state before
+  emitting the one-shot `Presented` receipt. Dismissal clears the model without a timer,
+  animation, polling loop, or automatic acknowledgement.
+- Added one condition-variable receipt worker outside the UI thread. It acknowledges
+  only after visible application and retries acknowledgement only for Busy/
+  StoreUnavailable after exactly 60 seconds. Confirmed release after failed presentation
+  re-pumps on that same worker; terminal acknowledgement error releases without
+  automatic re-presentation. `Err`/`false` release keeps local backpressure, while an immediate
+  external re-presentation wakes receipt handling without waiting for the retry. Ten
+  thousand pumps still coalesce behind one take/presentation.
+- Added panic-safe real runtime/SQLite acknowledgement: a panic is redacted and rolls
+  `Acknowledging` back to `Leased`, while the narrow fallback release can recover outer
+  runtime-mutex poison. Desktop now clears bridge-busy state before invoking the receipt
+  and announces both visible benefit and kind labels. Focused lifecycle/UI tests,
+  computed Desktop/application/benefit source receipts, ADR-073, and strengthened
+  mutations pass; the combined Desktop/application audit is 177/177.
+  Repeated independent lifecycle review closed at Critical 0 / Important 0 / Minor 0,
+  and the exact clean-root/fmt/workspace-Clippy/workspace-test developer baseline passed.
+  This evidence does not claim M0, soak, package, signing, or release acceptance.
+  Settings synchronization/editing, snooze, quiet hours, OS/tray delivery, usage alerts,
+  activation, M0, packaging, signing, and release acceptance remain separate.
+
 - Implemented P3-D.7 as an archive-independent responsive Help/About route with six
   fixed accessible sections for navigation, source/evidence truth, privacy, recovery,
   current automation availability, and licenses. It reflows without a list model and
@@ -36,8 +60,9 @@ All notable changes are recorded here.
 - Kept delivery authority out of the route: no reminder take/ack/release, settings
   mutation, timer, worker, queue, cache, connection, polling, or activation callback
   was added. The source audit computes zero owner/control receipts and 82/82 mutation
-  contracts cover the boundary. App-owned presentation receipts, settings editing,
-  snooze/quiet hours, OS delivery, usage alerts, and activation remain future slices.
+  contracts cover the boundary. App-owned presentation receipts are now implemented by
+  the separate contour above; settings editing, snooze/quiet hours, OS delivery, usage
+  alerts, and activation remain future slices.
 - Closed the initial review's three Important and one Minor findings with lossless
   millisecond UTC formatting, explicit waiting truth, complete owner/control mutations,
   visible wide completeness, and a populated replacement plateau. Re-review returned

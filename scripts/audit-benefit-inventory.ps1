@@ -152,11 +152,34 @@ foreach ($pattern in @(
     'release_presentation',
     'PowerLifecycleEvent::Suspend',
     'PowerLifecycleEvent::Resume',
-    'REDACT_REMINDER_SCHEDULER_PANIC'
+    'REDACT_REMINDER_RUNTIME_PANIC'
 )) {
     if ($runtimeText -notmatch $pattern) {
         throw "reminder runtime is missing required lifecycle behavior: $pattern"
     }
+}
+$acknowledgeFunction = [regex]::Match(
+    $runtimeText,
+    '(?s)fn acknowledge_notifications_with<.*?\r?\n    \}\r?\n\r?\n    pub fn release_notifications'
+).Value
+$beginAcknowledgementIndex = $acknowledgeFunction.IndexOf(
+    '.begin_acknowledgement()',
+    [System.StringComparison]::Ordinal
+)
+$catchAcknowledgementIndex = $acknowledgeFunction.IndexOf(
+    'std::panic::catch_unwind',
+    [System.StringComparison]::Ordinal
+)
+$finishAcknowledgementIndex = $acknowledgeFunction.IndexOf(
+    '.finish_acknowledgement(committed)',
+    [System.StringComparison]::Ordinal
+)
+if ([string]::IsNullOrWhiteSpace($acknowledgeFunction) -or
+    $beginAcknowledgementIndex -lt 0 -or
+    $catchAcknowledgementIndex -le $beginAcknowledgementIndex -or
+    $finishAcknowledgementIndex -le $catchAcknowledgementIndex -or
+    $acknowledgeFunction -notmatch 'let committed = acknowledgement\.is_ok\(\);') {
+    throw 'reminder acknowledgement panic does not restore the leased notification batch'
 }
 if ($runtimeText -match 'LiveRuntime|CodexQuotaRuntime|CodexAdapter|refresh_incremental') {
     throw 'reminder runtime is coupled to usage or quota execution'

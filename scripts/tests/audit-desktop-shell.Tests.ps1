@@ -1193,8 +1193,8 @@ Describe "TokenMaster production desktop audit" {
         $fixture = New-DesktopAuditFixture -Name "library-boundary"
 
         $receipt = & $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json
-        $receipt.rust_source_file_count | Should -Be 14
-        $receipt.slint_source_file_count | Should -Be 21
+        $receipt.rust_source_file_count | Should -Be 15
+        $receipt.slint_source_file_count | Should -Be 22
         $receipt.dashboard_section_count | Should -Be 6
         $receipt.dashboard_model_replacement_count | Should -Be 7
         $receipt.history_day_maximum | Should -Be 30
@@ -1241,5 +1241,111 @@ Describe "TokenMaster production desktop audit" {
         $receipt.event_loop_schedule_site_count | Should -Be 2
         $receipt.bridge_event_loop_schedule_site_count | Should -Be 1
         $receipt.reliable_event_loop_schedule_site_count | Should -Be 1
+        $receipt.in_app_notification_row_maximum | Should -Be 256
+        $receipt.in_app_notification_model_count | Should -Be 1
+        $receipt.in_app_notification_presented_after_apply_count | Should -Be 1
+        $receipt.in_app_notification_ready_before_receipt_count | Should -Be 1
+        $receipt.in_app_notification_accessible_label_count | Should -Be 1
+        $receipt.in_app_notification_epoch_guard_count | Should -Be 1
+    }
+
+    It "rejects widening the transient in-app notification batch" {
+        $fixture = New-DesktopAuditFixture -Name "in-app-cap-drift"
+        $path = Join-Path $fixture "crates\desktop\src\in_app_notification.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'MAX_DESKTOP_IN_APP_NOTIFICATIONS: usize = 256',
+            'MAX_DESKTOP_IN_APP_NOTIFICATIONS: usize = 257'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-IN-APP-BOUND*"
+    }
+
+    It "rejects a presentation receipt that no longer follows visible application" {
+        $fixture = New-DesktopAuditFixture -Name "in-app-receipt-order-drift"
+        $path = Join-Path $fixture "crates\desktop\src\in_app_notification.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'receipt.presented();',
+            'receipt.failed();'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-IN-APP-RECEIPT*"
+    }
+
+    It "rejects keeping the bridge busy while invoking the receipt" {
+        $fixture = New-DesktopAuditFixture -Name "in-app-ready-order-drift"
+        $path = Join-Path $fixture "crates\desktop\src\in_app_notification.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'self.scheduled.store(false, Ordering::Release);',
+            'let _ = self.scheduled.load(Ordering::Acquire);'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-IN-APP-RECEIPT*"
+    }
+
+    It "rejects omitting the visible benefit label from accessibility text" {
+        $fixture = New-DesktopAuditFixture -Name "in-app-accessible-label-drift"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '{benefit_label}. {kind_label}, quantity {quantity_label}',
+            '{kind_label}, quantity {quantity_label}'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-IN-APP-ACCESSIBILITY*"
+    }
+
+    It "rejects removing the checked notification epoch invalidation" {
+        $fixture = New-DesktopAuditFixture -Name "in-app-epoch-drift"
+        $path = Join-Path $fixture "crates\desktop\src\in_app_notification.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'self.epochs.deactivate(self.epoch);',
+            'let _ = self.epoch;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-IN-APP-EPOCH*"
+    }
+
+    It "rejects a second transient notification model" {
+        $fixture = New-DesktopAuditFixture -Name "in-app-second-model"
+        $path = Join-Path $fixture "crates\desktop\ui\main.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'in property <[InAppNotificationRow]> in-app-notification-rows;',
+            "in property <[InAppNotificationRow]> in-app-notification-rows;`r`n    in property <[InAppNotificationRow]> in-app-notification-queue;"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-IN-APP-MODEL*"
+    }
+
+    It "rejects private delivery identity in the presentation value" {
+        $fixture = New-DesktopAuditFixture -Name "in-app-private-identity"
+        $path = Join-Path $fixture "crates\desktop\src\in_app_notification.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'pub struct DesktopInAppNotification {',
+            "pub struct DesktopInAppNotification {`r`n    delivery_id: String,"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-IN-APP-IDENTITY*"
+    }
+
+    It "rejects timers or automatic dismissal in the transient panel" {
+        $fixture = New-DesktopAuditFixture -Name "in-app-timer"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\components\in-app-notification-panel.slint") `
+            -Value 'component FalseAutoHide { Timer { interval: 1s; } }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-UI-POLLING*"
     }
 }

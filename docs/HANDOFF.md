@@ -854,11 +854,24 @@ return tolerance, passes in three independent processes, and has a separate 0/0/
 review. P4 locale/presentation, P5 CLI/MCP, and P6 notices/SBOM/MSVC/package/signing/
 public-download/release evidence remain unfinished.
 
-The immediate next implementation slice is the separate app-owned notification
-presentation/settings contour. That bridge must acknowledge a leased
-batch only after successful UI presentation and release it on failure/cancellation;
-settings synchronization/editing, snooze, quiet hours, OS delivery, usage alerts, and
-activation remain unfinished.
+The separate app-owned in-app notification presentation bridge is implemented under
+`docs/superpowers/specs/2026-07-19-tokenmaster-in-app-notification-presentation-design.md`
+and `docs/superpowers/plans/2026-07-19-tokenmaster-in-app-notification-presentation.md`.
+It maps one leased batch into at most 256 identity-free Desktop rows, applies one
+transient model through a checked weak-window epoch, and emits `Presented` only after
+visible row-count verification. One condition-variable app worker acknowledges off the
+UI thread and retries acknowledgement only for Busy/StoreUnavailable after exactly 60
+seconds. It re-pumps a confirmed released failed presentation without waiting for
+unrelated runtime activity, while a terminal acknowledgement error releases without
+automatic re-presentation. Panic-safe runtime rollback, outer-mutex release recovery, `Err`/`false`
+backpressure, and Desktop-ready-before-receipt ordering are executable contracts. The
+focused Desktop/app/runtime tests and 177/177 combined audit mutations pass.
+The exact clean-root/fmt/workspace-Clippy/workspace-test developer baseline also passes.
+No M0, interactive Windows, soak, package, signing, or release acceptance is claimed.
+
+The immediate next implementation slice is notification settings synchronization and
+editing for the existing bounded default/custom reminder profile. Snooze, quiet hours,
+OS/tray delivery, usage alerts, and activation remain separate unfinished capabilities.
 Reuse the immutable snapshot/controller boundary; do not turn route selection into
 query authority. Later-page Sessions navigation and interactive History range
 selection remain bounded replacements of their existing product sections.

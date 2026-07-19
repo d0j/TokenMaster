@@ -343,6 +343,17 @@ activation authority MUST remain behind the query/runtime boundary. Merely selec
 or rendering this route MUST NOT take, acknowledge, release, schedule, or otherwise
 mutate a reminder delivery. Visible delivery requires a separate app-owned presentation
 receipt that acknowledges only after successful presentation and releases on failure.
+The implemented in-app presenter MUST retain exactly one leased batch of 1 through 256
+identity-free rows, schedule one weak-window checked-epoch callback, and make the panel
+visible before emitting `Presented`. One app-owned receipt worker MUST perform durable
+acknowledgement outside the UI thread. Only `Busy` and `StoreUnavailable` may retry,
+after exactly 60 seconds, as acknowledgement failures. A successfully released failed
+presentation MUST be re-pumped by the same bounded worker without requiring unrelated
+runtime activity. A non-retryable acknowledgement error MUST release the lease without
+automatic re-presentation. Runtime panic MUST restore a releasable lease; `Err` or `false`
+release MUST retain local backpressure. Scheduling, callback, stale-epoch, closed-window,
+terminal, and shutdown paths MUST release the lease. UI code MUST own no acknowledgement, timer,
+polling loop, auto-dismiss, runtime, store, or private delivery identity.
 
 Help/About MUST remain ready without an archive or live runtime. It MUST present one
 responsive fixed six-section guide covering navigation, data-source truth, privacy,

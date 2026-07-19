@@ -632,9 +632,24 @@ delivery counts, aggregate pending/retained counts, elapsed time, and last-succe
 time. It contains no archive path, provider/account/workspace/lot/delivery identity,
 provider payload, credential, email, or inner SQLite/OS error. The returned delivery
 batch contains only provider-neutral kind, quantity, localization key, lead time,
-channel, due/expiry time, and committed delivery time. P3 still owns actual visible
-in-app presentation; OS/tray scheduling, snooze, quiet hours, and activation remain
-unimplemented.
+channel, due/expiry time, and committed delivery time.
+
+`RuntimeReminderPresentationPort` is the sole app adapter for reminder presentation.
+It maps only `InApp` batches into `DesktopInAppNotificationBatch`, releases a lease if
+mapping fails, and exposes only stable failure classes. `DesktopInAppNotificationBridge`
+accepts one batch and one one-shot receipt, uses an independent checked epoch plus weak
+window, and reports `Presented` only after the event-loop callback has applied and
+verified the complete visible model. `ReminderPresentationCoordinator` coalesces
+10,000 pumps behind one local in-flight bit and owns one condition-variable worker.
+That worker retries acknowledgement only for `Busy` or `StoreUnavailable` after the
+fixed 60-second interval. Confirmed release after failed presentation schedules a re-pump
+on the same worker and a newer receipt wakes that wait immediately. A terminal
+acknowledgement error releases without automatic re-presentation. Every other presentation
+failure and shutdown releases the lease before clearing local
+backpressure; `Err` and `false` do not clear it. Runtime acknowledgement catches and
+redacts panics, restores the batch to `Leased`, and the adapter may recover only outer-
+mutex poison to execute fallback release. OS/tray scheduling, snooze,
+quiet hours, settings editing, and activation remain unimplemented.
 
 `UsageReadStore::capture_quota_windows` accepts zero through 32 unique exact window
 keys and a deadline no greater than two seconds. It returns the independent quota

@@ -66,7 +66,7 @@ PowerShell/Pester deterministic source audits.
 - Extends `DesktopBridgeFactory::in_app_notification_bridge()` with independent checked
   epochs; it does not reuse product-snapshot generation semantics.
 
-- [ ] **Step 1: Write RED value and bridge tests**
+- [x] **Step 1: Write RED value and bridge tests**
 
 Add tests that compile against the wished-for public API and assert exact bounds,
 event ordering, one in-flight presentation, stale/closed failure, and count-only Debug:
@@ -97,7 +97,7 @@ The test matrix must include empty/256/257 rows, zero quantity, invalid localiza
 key, invalid time ordering, schedule rejection, bridge drop before callback, stale
 epoch, closed window, duplicate `present`, and 10,000 rejected/coalesced attempts.
 
-- [ ] **Step 2: Run RED and record the intended failure**
+- [x] **Step 2: Run RED and record the intended failure**
 
 Run:
 
@@ -107,7 +107,7 @@ cargo +1.97.0 test -p tokenmaster-desktop in_app_notification --locked
 
 Expected: compilation fails because the new Desktop notification API does not exist.
 
-- [ ] **Step 3: Implement the bounded Desktop API and bridge**
+- [x] **Step 3: Implement the bounded Desktop API and bridge**
 
 Use these exact public shapes:
 
@@ -145,7 +145,7 @@ Share the already proved `EventScheduler`/`SlintEventScheduler` machinery from
 `bridge.rs` through `pub(crate)` visibility. Do not add another event-loop abstraction,
 thread, timer, or queue.
 
-- [ ] **Step 4: Add the transient compiled Slint panel**
+- [x] **Step 4: Add the transient compiled Slint panel**
 
 Add exactly one model struct:
 
@@ -167,7 +167,7 @@ It has no `Timer`, animation, auto-hide, callback except dismissal, or route mut
 `DesktopShell` dismissal replaces the model with an empty `VecModel` and sets visibility
 false.
 
-- [ ] **Step 5: Run GREEN Desktop tests and strict package checks**
+- [x] **Step 5: Run GREEN Desktop tests and strict package checks**
 
 Run:
 
@@ -180,7 +180,7 @@ $env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy -p tokenmaster-desktop --all-t
 
 Expected: all selected tests pass and Clippy emits zero warnings.
 
-- [ ] **Step 6: Commit the independently reviewable Desktop layer**
+- [x] **Step 6: Commit the independently reviewable Desktop layer**
 
 ```powershell
 git add -- crates/desktop/src/in_app_notification.rs crates/desktop/src/bridge.rs crates/desktop/src/lib.rs crates/desktop/src/ui.rs crates/desktop/ui/components/in-app-notification-panel.slint crates/desktop/ui/models.slint crates/desktop/ui/main.slint crates/desktop/tests/in_app_notification_ui_contract.rs crates/desktop/tests/ui_contract.rs
@@ -210,7 +210,7 @@ git commit -m "feat(desktop): add in-app notification presenter"
 - Refactors only the optional reminder owner to `Arc<Mutex<BenefitReminderRuntime>>`;
   quota/live runtime ownership remains unchanged.
 
-- [ ] **Step 1: Write RED coordinator/worker tests with deterministic fakes**
+- [x] **Step 1: Write RED coordinator/worker tests with deterministic fakes**
 
 Use a fake port and fake presenter, not a mocked database implementation. The port
 models the externally observable lease protocol:
@@ -248,7 +248,7 @@ Also cover schedule failure/callback failure release, Busy then success retry, i
 failure release, one-shot contradictory receipt, 10,000 pump calls with one take, and
 shutdown during scheduled/leased/retry states.
 
-- [ ] **Step 2: Run RED and record the intended failure**
+- [x] **Step 2: Run RED and record the intended failure**
 
 Run:
 
@@ -258,7 +258,7 @@ cargo +1.97.0 test -p tokenmaster-app notification --lib --locked
 
 Expected: compilation fails because the app notification coordinator is absent.
 
-- [ ] **Step 3: Implement the capacity-one receipt worker**
+- [x] **Step 3: Implement the capacity-one receipt worker**
 
 Use one mutex/condition-variable state, one worker, and an injected retry duration for
 tests. Production uses the exact constant:
@@ -281,7 +281,7 @@ The worker never retains a batch. It retries only Busy/StoreUnavailable, release
 failed presentation or terminal failure, and wakes immediately on shutdown. A receipt
 has an `AtomicBool` one-shot guard.
 
-- [ ] **Step 4: Implement the real reminder adapter and mapping**
+- [x] **Step 4: Implement the real reminder adapter and mapping**
 
 Add the direct `tokenmaster-domain` app dependency and exact kind/channel mapping:
 
@@ -302,11 +302,13 @@ let kind = match delivery.kind() {
 The adapter drops the returned runtime batch immediately after building one bounded
 Desktop batch. It maps only stable error codes and exposes no path or inner error.
 
-- [ ] **Step 5: Integrate the coordinator into application bundle lifecycle**
+- [x] **Step 5: Integrate the coordinator into application bundle lifecycle**
 
 Create the Desktop notification bridge and coordinator only when reminder runtime
-starts. After each existing runtime-health publication, call `pump`; ordinary completion
-hints are safe because the runtime lease makes duplicates no-ops. Shutdown order is:
+starts. Before fallible controller publication, call `pump`; ordinary completion hints
+are safe because the runtime lease makes duplicates no-ops. A released failed presentation
+is re-pumped by the existing receipt worker, not by a second timer/thread. A terminal
+acknowledgement error releases without automatic re-presentation. Shutdown order is:
 
 1. invalidate/close Desktop notification bridge;
 2. stop and join receipt worker, releasing outstanding lease;
@@ -315,7 +317,7 @@ hints are safe because the runtime lease makes duplicates no-ops. Shutdown order
 
 No bundle mutex may be held across worker join or event-loop execution.
 
-- [ ] **Step 6: Run GREEN app tests and real integration**
+- [x] **Step 6: Run GREEN app tests and real integration**
 
 Run:
 
@@ -329,7 +331,7 @@ $env:RUSTFLAGS='-Dwarnings'; cargo +1.97.0 clippy -p tokenmaster-app --all-targe
 Expected: presentation tests pass, the existing runtime replay/ack/release suite remains
 green, and no warning is emitted.
 
-- [ ] **Step 7: Commit the application composition layer**
+- [x] **Step 7: Commit the application composition layer**
 
 ```powershell
 git add -- crates/app/Cargo.toml crates/app/src/lib.rs crates/app/src/notification.rs crates/app/src/notification_tests.rs crates/app/src/application.rs crates/app/src/application_tests.rs Cargo.lock
@@ -369,7 +371,7 @@ git commit -m "feat(app): acknowledge visible expiry notifications"
   and zero Desktop runtime/store/SQL/polling authority.
 - Produces ADR-073 with the selected app-owned receipt-worker decision.
 
-- [ ] **Step 1: Write RED source-audit mutations**
+- [x] **Step 1: Write RED source-audit mutations**
 
 Mutate each required anchor independently and require audit failure:
 
@@ -377,6 +379,12 @@ Mutate each required anchor independently and require audit failure:
 - add a second model or receipt worker;
 - move `presented()` before model/visibility application;
 - remove schedule/callback/shutdown release;
+- accept `Err`/`false` release or clear local backpressure first;
+- remove panic rollback/outer-mutex fallback release;
+- remove same-worker re-pump or immediate receipt wake;
+- re-present a terminal acknowledgement error;
+- invoke a receipt before clearing Desktop bridge-busy state;
+- omit the visible benefit label from accessibility text;
 - change retry from 60 seconds;
 - remove epoch invalidation;
 - add Desktop runtime/store dependency/import;
@@ -384,7 +392,7 @@ Mutate each required anchor independently and require audit failure:
 - expose delivery/private identity;
 - acknowledge on route selection or product projection.
 
-- [ ] **Step 2: Run RED audits**
+- [x] **Step 2: Run RED audits**
 
 Run:
 
@@ -394,7 +402,7 @@ Invoke-Pester -Path scripts\tests\audit-desktop-shell.Tests.ps1,scripts\tests\au
 
 Expected: new mutation cases fail until production audits enforce their anchors.
 
-- [ ] **Step 3: Implement computed audits and run GREEN**
+- [x] **Step 3: Implement computed audits and run GREEN**
 
 The audit output must compute counts rather than merely grep for a comment. Run:
 
@@ -406,14 +414,14 @@ Invoke-Pester -Path scripts\tests\audit-desktop-shell.Tests.ps1,scripts\tests\au
 
 Expected: both audits and every mutation pass, with no `testResults.xml` retained.
 
-- [ ] **Step 4: Synchronize normative and operational documents**
+- [x] **Step 4: Synchronize normative and operational documents**
 
 Record visible in-app expiry presentation and post-apply durable acknowledgement as
 implemented. Keep settings editing, snooze, quiet hours, OS/tray delivery, usage alerts,
 activation, P4/P5/P6, M0, package/signing/soak/release explicitly incomplete. Do not
 write the current commit hash into tracked documents.
 
-- [ ] **Step 5: Run focused composition and independent critical review**
+- [x] **Step 5: Run focused composition and independent critical review**
 
 Run:
 
@@ -430,7 +438,10 @@ false-ack/crash/retry semantics, stale callback, shutdown/resource return, priva
 accessibility, and audit sufficiency. Fix every Critical/Important finding under a new
 RED test and re-run the reviewer.
 
-- [ ] **Step 6: Run the exact repository baseline**
+Result: the repeated read-only Sol High review is READY with Critical 0, Important 0,
+and Minor 0 after the terminal-acknowledgement RED regression and mutation passed.
+
+- [x] **Step 6: Run the exact repository baseline**
 
 ```powershell
 pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
@@ -442,13 +453,21 @@ cargo +1.97.0 test --workspace --locked
 Expected: every command exits zero. This proves developer closure only, not M0,
 interactive Windows, soak, package, signing, or release acceptance.
 
-- [ ] **Step 7: Commit synchronized evidence and verify clean state**
+Result: the exact sequence passed in 1014.4 seconds, including `TM-CLEAN-PASS`,
+workspace Clippy with warnings denied, and every workspace test. This remains developer
+evidence only.
+
+- [x] **Step 7: Commit synchronized evidence and verify clean state**
 
 ```powershell
-git add -- scripts/audit-desktop-shell.ps1 scripts/tests/audit-desktop-shell.Tests.ps1 scripts/audit-application-composition.ps1 scripts/tests/audit-application-composition.Tests.ps1 spec/SPECIFICATION.md spec/DATA_CONTRACT.md spec/API_CONTRACT.md spec/SECURITY.md spec/TRACEABILITY.md spec/DECISIONS.md docs/ARCHITECTURE.md docs/FEATURE_PARITY.md docs/CURRENT_STATE.md docs/HANDOFF.md docs/ROADMAP.md docs/CHANGELOG.md docs/PROJECT_HISTORY.md docs/AUDIT_AND_MASTER_PLAN.md docs/superpowers/plans/2026-07-19-tokenmaster-in-app-notification-presentation.md
+git add -- <explicit lifecycle code and test paths>
+git diff --cached --check
+git commit -m "fix(app): harden notification receipt lifecycle"
+git add -- <explicit audit, specification, and documentation paths>
 git diff --cached --check
 git commit -m "docs: close in-app notification presentation"
 git status --short
 ```
 
-Expected: commit succeeds and final status is empty.
+Result: lifecycle implementation/tests and synchronized evidence are recorded as two
+reviewable commits; final status is empty.

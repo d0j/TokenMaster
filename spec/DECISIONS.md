@@ -1803,3 +1803,28 @@ safe-mode states while retaining constant memory and zero refresh latency. A dyn
 diagnostics or release-status screen would duplicate authoritative owners and invite
 false claims. The standard widget satisfies the chosen attribution surface without
 inventing a TokenMaster-controlled browser or URL API.
+
+## ADR-073 — Acknowledge expiry reminders only after app-owned visible presentation
+
+Decision: Desktop owns a present-only batch capped at 256 rows, one independent checked
+epoch, one weak-window event callback, and one transient Slint model. It emits the
+one-shot `Presented` receipt only after replacing the complete model and count label,
+setting the panel visible, and verifying the applied row count. Desktop never receives
+the reminder runtime, store, delivery IDs, paths, provider payload, or acknowledgement
+authority.
+
+The application owns the runtime adapter and one condition-variable receipt worker.
+The worker retains no batch, acknowledges outside the UI thread, retries only `Busy`
+and `StoreUnavailable` acknowledgement failures after exactly 60 seconds. A confirmed
+release after failed presentation schedules re-pump on the same worker; a newer receipt
+interrupts that wait. A terminal acknowledgement error releases without automatic
+re-presentation. Runtime acknowledgement catches and redacts panic, restores `Acknowledging`
+to `Leased`, and the app's narrow fallback release may recover outer-mutex poison.
+`Err` or `false` release retains local backpressure. Desktop clears bridge-busy state
+before receipt invocation, and the worker joins before reminder pause/shutdown. Settings,
+snooze, quiet hours, OS/tray delivery, usage alerts, and activation stay separate.
+
+Rationale: event-loop scheduling is not evidence that the user-visible model exists.
+Separating the present-only bridge from durable authority prevents false delivery,
+keeps UI latency and memory constant, preserves crash replay, and avoids exposing
+runtime locks or private delivery identity to Slint.

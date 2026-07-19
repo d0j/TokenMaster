@@ -16,6 +16,8 @@ Describe "TokenMaster application composition audit" {
                 -Destination $crateParent -Recurse
             Copy-Item -LiteralPath (Join-Path $RepositoryRoot "crates\desktop") `
                 -Destination $crateParent -Recurse
+            Copy-Item -LiteralPath (Join-Path $RepositoryRoot "crates\runtime") `
+                -Destination $crateParent -Recurse
             return $fixture
         }
     }
@@ -630,5 +632,182 @@ Describe "TokenMaster application composition audit" {
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-APP-RECOVERY-ADVERSARIAL*"
+    }
+
+    It "rejects notification acknowledgement retry drift" {
+        $fixture = New-AppAuditFixture -Name "notification-retry-drift"
+        $path = Join-Path $fixture "crates\app\src\notification.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'NOTIFICATION_ACK_RETRY: Duration = Duration::from_secs(60)',
+            'NOTIFICATION_ACK_RETRY: Duration = Duration::from_secs(30)'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-NOTIFICATION-RETRY*"
+    }
+
+    It "rejects a second notification receipt worker" {
+        $fixture = New-AppAuditFixture -Name "notification-second-worker"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\notification.rs") `
+            -Value 'fn duplicate_receipt_worker() { let _ = thread::Builder::new(); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-NOTIFICATION-WORKER*"
+    }
+
+    It "rejects clearing local backpressure before runtime release" {
+        $fixture = New-AppAuditFixture -Name "notification-release-order"
+        $path = Join-Path $fixture "crates\app\src\notification.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'if !port.release()? {',
+            "signal.clear_in_flight();`r`n    if !port.release()? {"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-NOTIFICATION-RELEASE-ORDER*"
+    }
+
+    It "rejects removing terminal presentation failure release" {
+        $fixture = New-AppAuditFixture -Name "notification-terminal-release"
+        $path = Join-Path $fixture "crates\app\src\notification.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'ReceiptAction::Failed => {',
+            'ReceiptAction::Failed => acknowledge_presented {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-NOTIFICATION-RELEASE*"
+    }
+
+    It "rejects treating a false runtime release as confirmed" {
+        $fixture = New-AppAuditFixture -Name "notification-false-release"
+        $path = Join-Path $fixture "crates\app\src\notification.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'if !port.release()? {',
+            'if false {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-NOTIFICATION-RELEASE-ORDER*"
+    }
+
+    It "rejects removing the bounded presentation re-pump" {
+        $fixture = New-AppAuditFixture -Name "notification-repump"
+        $path = Join-Path $fixture "crates\app\src\notification.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'let _ = pump_presentation(signal, port, presenter.as_ref());',
+            'let _ = presenter;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-NOTIFICATION-REPUMP*"
+    }
+
+    It "rejects retrying terminal acknowledgement through re-presentation" {
+        $fixture = New-AppAuditFixture -Name "notification-terminal-ack-repump"
+        $path = Join-Path $fixture "crates\app\src\notification.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'let _ = release_with_retry(signal, port, retry);',
+            'release_then_retry_presentation(signal, port, presenter, retry);'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-NOTIFICATION-TERMINAL-ACK*"
+    }
+
+    It "rejects making initial notification presentation depend on controller success" {
+        $fixture = New-AppAuditFixture -Name "notification-pump-order"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path)
+        $pump = @'
+        if let Some(presentation) = self.notification_presentation.as_ref() {
+            let _ = presentation.pump();
+        }
+'@
+        $text = $text.Replace($pump, '')
+        $refresh = @'
+        self.controller
+            .refresh(DesktopRefreshUrgency::Hint)
+            .map_err(|_| ApplicationError::controller())?;
+'@
+        $text = $text.Replace($refresh, $refresh + $pump)
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-NOTIFICATION-PUMP-ORDER*"
+    }
+
+    It "rejects removing runtime acknowledgement panic rollback" {
+        $fixture = New-AppAuditFixture -Name "notification-panic-rollback"
+        $path = Join-Path $fixture "crates\runtime\src\reminder\runtime.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'std::panic::catch_unwind',
+            'removed_panic_boundary'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-NOTIFICATION-PANIC-ROLLBACK*"
+    }
+
+    It "rejects removing outer runtime mutex poison release recovery" {
+        $fixture = New-AppAuditFixture -Name "notification-poison-release"
+        $path = Join-Path $fixture "crates\app\src\notification.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '.unwrap_or_else(std::sync::PoisonError::into_inner)',
+            '.map_err(|_| PresentationFailure::Internal)?'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-NOTIFICATION-POISON-RELEASE*"
+    }
+
+    It "rejects acknowledging reminders outside the dedicated presentation port" {
+        $fixture = New-AppAuditFixture -Name "notification-ack-authority"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\application.rs") `
+            -Value 'fn false_route_ack(runtime: &BenefitReminderRuntime) { let _ = runtime.acknowledge_notifications(); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-NOTIFICATION-ACK-AUTHORITY*"
+    }
+
+    It "rejects joining the notification worker after reminder shutdown" {
+        $fixture = New-AppAuditFixture -Name "notification-shutdown-order"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path)
+        $presentation = 'if let Some(mut presentation) = self.notification_presentation.take()'
+        $start = $text.IndexOf($presentation, [System.StringComparison]::Ordinal)
+        $start | Should -BeGreaterOrEqual 0
+        $end = $text.IndexOf('        if self.maintenance.pause()', $start, [System.StringComparison]::Ordinal)
+        $block = $text.Substring($start, $end - $start)
+        $text = $text.Remove($start, $end - $start)
+        $shutdown = 'remember_failure(&mut first, reminder.shutdown().map(|_| ())),'
+        $insert = $text.IndexOf($shutdown, [System.StringComparison]::Ordinal)
+        $text = $text.Insert($insert + $shutdown.Length, "`r`n        $block")
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-NOTIFICATION-SHUTDOWN-ORDER*"
+    }
+
+    It "reports the bounded notification composition receipt" {
+        $fixture = New-AppAuditFixture -Name "notification-receipt"
+        $receipt = & $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json
+
+        $receipt.rust_source_file_count | Should -Be 8
+        $receipt.notification_receipt_worker_count | Should -Be 1
+        $receipt.notification_ack_retry_seconds | Should -Be 60
+        $receipt.notification_presentation_coordinator_count | Should -Be 1
+        $receipt.notification_runtime_ack_authority_count | Should -Be 1
+        $receipt.notification_confirmed_release_count | Should -Be 1
+        $receipt.notification_bounded_repump_count | Should -Be 1
+        $receipt.notification_runtime_panic_rollback_count | Should -Be 1
     }
 }
