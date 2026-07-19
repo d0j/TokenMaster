@@ -1050,6 +1050,20 @@ arrays, durations, bounded scalar measurements, limits, and individual gate resu
 It contains no raw path, filename, settings value, database row, provider payload,
 prompt, response, command observed from a user session, or general extraction handle.
 
+### P3-E.1 route command palette API
+
+Desktop exposes only typed presentation callbacks to open/dismiss the palette, replace
+its bounded filter, move the current ordinal, and activate one existing stable route
+key. Ctrl+K and the visible header control call the same open callback; Escape,
+Up/Down, Enter, pointer click, and accessibility default action call the same bounded
+dismiss/move/route-selection callbacks. Successful activation uses the existing
+`DesktopState::select_stable_key` path and then dismisses the transient model.
+
+This API cannot execute arbitrary commands, SQL, shell, HTTP, filesystem, provider,
+backup, restore, reminder, activation, or native lifecycle work. Snapshot application
+clones the bounded projection while holding Desktop state, releases the mutex, and only
+then updates Slint properties and refreshes an open palette.
+
 ## Provider plugin ABI
 
 The future external-provider ABI is `tokenmaster:provider@1` expressed in WIT and

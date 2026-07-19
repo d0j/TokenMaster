@@ -1202,3 +1202,14 @@ same window and must return to that original baseline rather than receiving a se
 tolerance. The clean P3-D.0 receipt rejects dirty/mismatched identity and excludes all
 private content. This rail grants no release authority and does not weaken the separate
 interactive, soak, packaging, signing, or Unix portability gates.
+
+P3-E.1 deliberately names a route palette rather than a general command palette. Its
+activation set is exactly the existing fixed 11 stable routes. User input is capped at
+64 Unicode scalar values and is used only for in-memory case-insensitive matching
+against fixed route keys/labels; it never reaches SQL, shell, HTTP, filesystem,
+provider, backup/restore, reminder activation, native handles, or logs. The transient
+model carries no path, credential, content, private identity, raw error, or provider
+payload and is cleared on dismissal. Source mutations reject cap/model/shortcut/
+accessibility/overlay/route-only drift and any timer, query, worker, cache, or mutation
+authority. This is developer evidence only; interactive keyboard/screen-reader and
+release security acceptance remain P4/P6 gates.

@@ -1078,6 +1078,21 @@ content, receipt state, and activation authority do not cross Desktop/Slint. One
 accepted product generation replaces one scope model and one lot model. Navigation
 does not query, rebuild, take, acknowledge, release, or schedule reminder work.
 
+### P3-E.1 bounded route command palette
+
+The command palette is a transient view of the existing fixed 11-route Desktop
+projection, not a command registry or a second product snapshot. Its user filter is
+truncated to at most 64 Unicode scalar values before normalization. One replace-only
+Slint model retains at most 11 `RouteRow` values containing only the existing stable
+route key, label key, English fallback label, state, reason string, and selected flag.
+
+Opening replaces the model from the current projection. An accepted newer snapshot
+refreshes an already open palette while preserving the bounded query and the selected
+stable key when it still matches. Dismissal clears the query, selection, and result
+model. No prior filter/model history, query service, archive handle, timer, worker,
+cache, provider/account/source identity, path, content, credential, or mutation payload
+is retained.
+
 Only explicit provider ancestry identifies a parent. A strong signature covers the
 normalized model, emitted delta, and provider cumulative snapshot. A weak signature
 covers model and delta only and cannot suppress a pre-divergence event by itself.

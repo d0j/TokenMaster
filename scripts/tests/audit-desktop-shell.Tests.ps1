@@ -1228,6 +1228,58 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-COMMAND-PALETTE-SHORTCUT*"
     }
 
+    It "rejects rewiring command palette open callbacks" {
+        $fixture = New-DesktopAuditFixture -Name "command-palette-open-action"
+        $path = Join-Path $fixture "crates\desktop\ui\main.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'root.open-command-palette();',
+            'root.dismiss-command-palette();'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-COMMAND-PALETTE-SHORTCUT*"
+    }
+
+    It "rejects rewiring command palette Escape" {
+        $fixture = New-DesktopAuditFixture -Name "command-palette-escape-action"
+        $path = Join-Path $fixture "crates\desktop\ui\components\command-palette.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'root.dismiss();',
+            'root.move-selection(1);'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-COMMAND-PALETTE-SHORTCUT*"
+    }
+
+    It "rejects rewiring command palette Up" {
+        $fixture = New-DesktopAuditFixture -Name "command-palette-up-action"
+        $path = Join-Path $fixture "crates\desktop\ui\components\command-palette.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'root.move-selection(-1);',
+            'root.move-selection(1);'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-COMMAND-PALETTE-SHORTCUT*"
+    }
+
+    It "rejects rewiring command palette Down" {
+        $fixture = New-DesktopAuditFixture -Name "command-palette-down-action"
+        $path = Join-Path $fixture "crates\desktop\ui\components\command-palette.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'root.move-selection(1);',
+            'root.move-selection(-1);'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-COMMAND-PALETTE-SHORTCUT*"
+    }
+
     It "rejects command palette mutation actions" {
         $fixture = New-DesktopAuditFixture -Name "command-palette-mutation"
         Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\components\command-palette.slint") `
@@ -1237,17 +1289,43 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-COMMAND-PALETTE-ROUTE-ONLY*"
     }
 
-    It "rejects removing the command palette accessible default action" {
+    It "rejects rewiring the command palette accessible default action" {
         $fixture = New-DesktopAuditFixture -Name "command-palette-accessible-action"
         $path = Join-Path $fixture "crates\desktop\ui\components\command-palette.slint"
         $text = [System.IO.File]::ReadAllText($path).Replace(
             'accessible-action-default => { root.activate-route(route.key); }',
-            'accessible-action-decrement => { root.activate-route(route.key); }'
+            'accessible-action-default => { root.dismiss(); }'
         )
         [System.IO.File]::WriteAllText($path, $text)
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-COMMAND-PALETTE-ROUTE-ONLY*"
+    }
+
+    It "rejects rewiring command palette pointer activation" {
+        $fixture = New-DesktopAuditFixture -Name "command-palette-pointer-action"
+        $path = Join-Path $fixture "crates\desktop\ui\components\command-palette.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'TouchArea { clicked => { root.activate-route(route.key); } }',
+            'TouchArea { clicked => { root.dismiss(); } }'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-COMMAND-PALETTE-ROUTE-ONLY*"
+    }
+
+    It "rejects rewiring command palette Enter activation" {
+        $fixture = New-DesktopAuditFixture -Name "command-palette-enter-action"
+        $path = Join-Path $fixture "crates\desktop\ui\components\command-palette.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'root.activate-selection();',
+            'root.dismiss();'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-COMMAND-PALETTE-SHORTCUT*"
     }
 
     It "rejects removing the command palette ancestor focus scope" {

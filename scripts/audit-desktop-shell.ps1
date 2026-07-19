@@ -160,8 +160,83 @@ $commandPaletteText = [System.IO.File]::ReadAllText($commandPalettePath)
 $mainUiTextForPalette = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'main.slint'))
 $commandPaletteQueryCap = [int]([regex]::Match($uiRustText, 'MAX_COMMAND_PALETTE_QUERY_SCALARS: usize = (\d+);').Groups[1].Value)
 $commandPaletteModelCount = [regex]::Matches($mainUiTextForPalette, 'in property <\[RouteRow\]> command-palette-rows;').Count
-$commandPaletteShortcutCount = [regex]::Matches($mainUiTextForPalette, 'keys: @keys\(Control \+ K\);').Count
-$commandPaletteDefaultActionCount = [regex]::Matches($commandPaletteText, 'accessible-action-default').Count
+$commandPaletteShortcutCount = [regex]::Matches(
+    $mainUiTextForPalette,
+    'KeyBinding\s*\{\s*keys:\s*@keys\(Control \+ K\);\s*activated\s*=>\s*\{\s*root\.open-command-palette\(\);\s*\}\s*\}'
+).Count
+$commandPaletteCaptureShortcutCount = [regex]::Matches(
+    $mainUiTextForPalette,
+    'if\s*\(event\.modifiers\.control\s*&&\s*event\.text\s*==\s*"k"\)\s*\{\s*root\.open-command-palette\(\);\s*return accept;\s*\}'
+).Count
+$commandPaletteHeaderOpenCount = [regex]::Matches(
+    $mainUiTextForPalette,
+    '(?s)Button\s*\{\s*text:\s*"Go to route";\s*accessible-label:\s*"Open route palette";\s*clicked\s*=>\s*\{\s*root\.open-command-palette\(\);\s*\}\s*\}'
+).Count
+$commandPaletteEscapeDismissCount = [regex]::Matches(
+    $commandPaletteText,
+    'if\s*\(event\.text\s*==\s*Key\.Escape\)\s*\{\s*root\.dismiss\(\);\s*return accept;\s*\}'
+).Count
+$commandPaletteUpMoveCount = [regex]::Matches(
+    $commandPaletteText,
+    'if\s*\(event\.text\s*==\s*Key\.UpArrow\)\s*\{\s*root\.move-selection\(-1\);\s*return accept;\s*\}'
+).Count
+$commandPaletteDownMoveCount = [regex]::Matches(
+    $commandPaletteText,
+    'if\s*\(event\.text\s*==\s*Key\.DownArrow\)\s*\{\s*root\.move-selection\(1\);\s*return accept;\s*\}'
+).Count
+$commandPaletteDefaultActionCount = [regex]::Matches(
+    $commandPaletteText,
+    'accessible-action-default\s*=>\s*\{\s*root\.activate-route\(route\.key\);\s*\}'
+).Count
+$commandPalettePointerRouteActionCount = [regex]::Matches(
+    $commandPaletteText,
+    'TouchArea\s*\{\s*clicked\s*=>\s*\{\s*root\.activate-route\(route\.key\);\s*\}\s*\}'
+).Count
+$commandPaletteEnterRouteActionCount = [regex]::Matches(
+    $commandPaletteText,
+    'if\s*\(event\.text\s*==\s*Key\.Return\)\s*\{\s*root\.activate-selection\(\);\s*return accept;\s*\}'
+).Count
+$commandPaletteMainSelectionBindingCount = [regex]::Matches(
+    $mainUiTextForPalette,
+    'activate-selection\s*=>\s*\{\s*root\.activate-command-palette-selection\(\);\s*\}'
+).Count
+$commandPaletteMainRouteBindingCount = [regex]::Matches(
+    $mainUiTextForPalette,
+    'activate-route\(key\)\s*=>\s*\{\s*root\.activate-command-palette-route\(key\);\s*\}'
+).Count
+$commandPaletteStableSelectionCount = [regex]::Matches(
+    $uiRustText,
+    'state\.select_stable_key\(key\)\.is_err\(\)'
+).Count
+$commandPaletteForbiddenMutationLabelCount = [regex]::Matches(
+    $commandPaletteText,
+    '(?i)\btext\s*:\s*"(?:backup|restore|import|export|rebuild|activation)'
+).Count
+$commandPaletteOwnerCount = [regex]::Matches(
+    $commandPaletteText,
+    '(?i)\b(?:Timer|thread|spawn|cache|history|worker)\b'
+).Count + [regex]::Matches(
+    $uiRustText,
+    'CommandPalette(?:Worker|Owner|Cache|History)'
+).Count
+$commandPaletteRouteOnly = (
+    $commandPaletteDefaultActionCount -eq 1 -and
+    $commandPalettePointerRouteActionCount -eq 1 -and
+    $commandPaletteEnterRouteActionCount -eq 1 -and
+    $commandPaletteMainSelectionBindingCount -eq 1 -and
+    $commandPaletteMainRouteBindingCount -eq 1 -and
+    $commandPaletteStableSelectionCount -eq 1 -and
+    $commandPaletteForbiddenMutationLabelCount -eq 0
+)
+$commandPaletteShortcutNavigation = (
+    $commandPaletteShortcutCount -eq 1 -and
+    $commandPaletteCaptureShortcutCount -eq 1 -and
+    $commandPaletteHeaderOpenCount -eq 1 -and
+    $commandPaletteEscapeDismissCount -eq 1 -and
+    $commandPaletteUpMoveCount -eq 1 -and
+    $commandPaletteDownMoveCount -eq 1 -and
+    $commandPaletteEnterRouteActionCount -eq 1
+)
 if ($commandPaletteQueryCap -ne 64 -or
     $uiRustText -notmatch 'value\s*\.chars\(\)\s*\.take\(MAX_COMMAND_PALETTE_QUERY_SCALARS\)' -or
     $uiRustText -notmatch 'window\.set_command_palette_rows\(model\(rows\)\)' -or
@@ -169,17 +244,12 @@ if ($commandPaletteQueryCap -ne 64 -or
     [regex]::Matches($mainUiTextForPalette, 'command-palette-rows').Count -ne 2) {
     throw 'TM-DESKTOP-COMMAND-PALETTE-BOUND: command palette must retain one replace-only filtered route model and a 64-scalar query'
 }
-if ($commandPaletteShortcutCount -ne 1 -or
-    $mainUiTextForPalette -notmatch 'Open route palette' -or
-    $commandPaletteText -notmatch 'Key\.Escape' -or
-    $commandPaletteText -notmatch 'Key\.UpArrow' -or
-    $commandPaletteText -notmatch 'Key\.DownArrow' -or
-    $commandPaletteText -notmatch 'Key\.Return') {
+if (-not $commandPaletteShortcutNavigation) {
     throw 'TM-DESKTOP-COMMAND-PALETTE-SHORTCUT: command palette must expose the exact Ctrl+K shortcut and bounded keyboard routing'
 }
-if ($commandPaletteDefaultActionCount -ne 1 -or
+if (-not $commandPaletteRouteOnly -or
     $commandPaletteText -notmatch 'No matching routes' -or
-    $commandPaletteText -match '(?i)\btext\s*:\s*"(?:backup|restore|import|export|rebuild|activation)') {
+    $commandPaletteText -notmatch 'accessible-label:\s*route\.label \+ ", " \+ route\.state') {
     throw 'TM-DESKTOP-COMMAND-PALETTE-ROUTE-ONLY: command palette must remain accessible, explicit on no match, and route-only'
 }
 if ($mainUiTextForPalette -notmatch '(?s)shell-focus := FocusScope \{.*?RoutePalette \{' -or
@@ -187,8 +257,7 @@ if ($mainUiTextForPalette -notmatch '(?s)shell-focus := FocusScope \{.*?RoutePal
     $commandPaletteText -notmatch '(?s)palette-focus := FocusScope \{.*?search-focus := FocusScope \{.*?search := LineEdit') {
     throw 'TM-DESKTOP-COMMAND-PALETTE-OVERLAY: palette overlay and focus scopes must be top-level and ancestral'
 }
-if ($commandPaletteText -match '(?i)\b(?:Timer|thread|spawn|cache|history|worker)\b' -or
-    $uiRustText -match 'CommandPalette(?:Worker|Owner|Cache|History)') {
+if ($commandPaletteOwnerCount -ne 0) {
     throw 'TM-DESKTOP-COMMAND-PALETTE-NO-OWNER: command palette must not add a timer, worker, query, cache, or owner'
 }
 
@@ -1077,8 +1146,8 @@ if ($SourceOnly) {
         command_palette_model_count = $commandPaletteModelCount
         command_palette_shortcut_count = $commandPaletteShortcutCount
         command_palette_accessible_default_action_count = $commandPaletteDefaultActionCount
-        command_palette_route_only = $true
-        command_palette_owner_count = 0
+        command_palette_route_only = $commandPaletteRouteOnly
+        command_palette_owner_count = $commandPaletteOwnerCount
         controller_worker_count = $workerConstructionCount
         retained_snapshot_slot_count = $snapshotSlotCount
         event_loop_schedule_site_count = $eventScheduleCount
@@ -1210,8 +1279,8 @@ if ($LASTEXITCODE -ne 0) {
     command_palette_model_count = $commandPaletteModelCount
     command_palette_shortcut_count = $commandPaletteShortcutCount
     command_palette_accessible_default_action_count = $commandPaletteDefaultActionCount
-    command_palette_route_only = $true
-    command_palette_owner_count = 0
+    command_palette_route_only = $commandPaletteRouteOnly
+    command_palette_owner_count = $commandPaletteOwnerCount
     fixed_route_count = 11
     maximum_route_reason_count = 11
     retained_route_model_count = 1

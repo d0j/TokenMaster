@@ -3542,3 +3542,32 @@ Repeated independent lifecycle review closed at Critical 0, Important 0, Minor 0
 exact clean-root, formatting, workspace Clippy with warnings denied, and complete
 workspace-test developer baseline also passed. These checks do not substitute for M0,
 interactive Windows, soak, package, signing, or release acceptance.
+
+## 2026-07-19 — P3-E.1 bounded route command palette
+
+P3-E began with a route-only command palette inside the sole production `MainWindow`.
+The first implementation exposed the right fixed 11-route model but placed the overlay
+under a 58-pixel header scope, focused a zero-size sibling rather than the search field,
+could miss Ctrl+K after child focus, retained stale rows while open, and relied on
+self-reported audit receipt values. Review rejected that state before closure.
+
+The corrected layout makes one ancestor shell focus scope cover the whole window and
+mounts the palette as the final full-window child above notifications. Opening forwards
+focus to the real `LineEdit`; Escape, wrapped Up/Down, Enter, pointer click, and
+accessibility default action share the existing route-selection path. The filter is
+truncated to 64 Unicode scalar values and one replace-only model retains at most 11
+rows. Snapshot application and route activation clone the bounded projection under the
+Desktop mutex, release it before Slint setters, and refresh an open palette while
+preserving its query and matching stable selection.
+
+Compiled coverage exercises immediate focused typing, keyboard navigation, pointer and
+accessibility activation, no-match state, a 10,000-scalar Unicode input, and a live
+ready-to-degraded snapshot refresh while the palette remains open. Computed source
+receipts and 134 mutation cases reject query/model/shortcut/accessibility/overlay/
+route-only drift plus timer/query/worker/cache/authority expansion. The release Desktop
+audit, full Desktop package, strict Desktop Clippy, clean-root, formatting, strict
+workspace Clippy, and complete locked workspace test/doctest gate pass; the full suite
+completed in 879.2 seconds. Final independent rereview returned Critical 0, Important
+0, Minor 0, and Ready. This closes P3-E.1 only. Compact content, production tray,
+hotkey, single-instance activation, startup integration, P4/P5/P6, M0, packaging,
+signing, soak, and release remain open.

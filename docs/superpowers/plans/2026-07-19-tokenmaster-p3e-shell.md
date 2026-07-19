@@ -13,6 +13,11 @@ Design: `docs/superpowers/specs/2026-07-19-tokenmaster-p3e-shell-design.md`
 
 ## Task 1 — implement the bounded route command palette
 
+Status: complete as developer evidence. Focused/release Desktop gates, 134 mutation
+cases, clean-root, formatting, strict full-workspace Clippy, and the complete locked
+workspace test/doctest gate pass. This status does not close Tasks 2-6 or any release
+gate.
+
 **Files:**
 
 - Create `crates/desktop/ui/components/command-palette.slint`.

@@ -18,6 +18,15 @@ eight normalized custom rows. Do not claim per-scope editing, snooze, quiet hour
 OS/tray delivery, usage alerts, activation, P4/P5/P6, M0, package/signing/soak, or
 release acceptance.
 
+P3-E.1 is developer-closed. The sole production `MainWindow` now exposes one bounded
+route-only command palette over the existing 11-row immutable route projection. The
+query cap is 64 Unicode scalar values, the result model is replace-only and capped at
+11, accepted snapshots refresh an open palette, and UI setters run after releasing the
+Desktop state mutex. Compiled keyboard/text/pointer/accessibility/snapshot tests,
+release audit, 134 audit mutations, clean-root, fmt, strict workspace Clippy, and the
+complete locked workspace suite pass. This does not claim compact content, production
+tray/hotkey/single-instance/startup, P4/P5/P6, M0, package/signing/soak, or release.
+
 P0-A and the incorporated P0-B Codex-lineage surface are complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`. The P0-C pure
 classifier is complete under
@@ -894,9 +903,10 @@ treat busy/disk/access/schema-newer as corruption authority. Keep automatic reco
 data only; device-local settings never move. Do not relax the state boundary into path,
 generic-stream, generic age-extraction, or batch-deletion authority.
 
-The immediate next implementation slice is P3-E command palette, tray, compact
-lifecycle, and remaining shell work. Later-page Sessions navigation and interactive
-History ranges remain bounded replacements of existing sections. P3-E, P4
+The immediate next implementation slice is P3-E.2 compact content in the existing
+window, followed by the production tray lifecycle, current-session activation/global
+hotkey, and opt-in current-user startup. Later-page Sessions navigation and interactive
+History ranges remain bounded replacements of existing sections. Remaining P3-E, P4
 presentation, CLI/MCP, activation, M0 acceptance,
 packaging, signing, and release remain unclaimed. Inventory/reminder read must not
 imply activation authority.

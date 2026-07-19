@@ -20,6 +20,20 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   Per-scope editing, snooze, quiet hours, OS/tray delivery, usage alerts, activation,
   P4/P5/P6, M0 acceptance, package/signing/soak, and release remain incomplete.
 
+- P3-E.1 bounded route command palette: the production `MainWindow` owns one final
+  full-window overlay over the existing immutable 11-route projection. Ctrl+K and the
+  visible header action open it; focused text entry, Escape, wrapped Up/Down, Enter,
+  pointer activation, and accessibility default action reuse the existing route
+  selection callbacks. The query is truncated to 64 Unicode scalar values, the one
+  replace-only result model never exceeds 11 rows, and an accepted snapshot refreshes
+  an open palette without retaining prior models or holding the Desktop mutex through
+  Slint setters. Runtime UI tests include 10,000-scalar input, pointer/accessibility,
+  and open-snapshot refresh; the release desktop audit and 134 mutation cases pass.
+  Clean-root, formatting, strict workspace Clippy, and the complete locked workspace
+  test/doctest gate pass; the latter completed in 879.2 seconds. Compact content,
+  production tray/hotkey/single-instance/startup, P4/P5/P6, M0, packaging, signing,
+  soak, and release remain incomplete.
+
 - M0 native architecture proof: one process, software-rendered Slint UI, tray
   lifecycle, three layouts, three skins, English/Russian/pseudo localization,
   bounded chart/session models, and explicit resource-gate contracts.
@@ -1429,8 +1443,9 @@ notices/SBOM/MSVC/package/signing/public-download/release evidence remains P6.
 P3-D.0 Reliable State, P3-D.1 History, P3-D.2 bounded Sessions list/detail, P3-D.3
 Models, P3-D.4 Projects, P3-D.5 Recent activity, and the bounded read-only P3-D.6
 Notifications route plus P3-D.7 Help/About, the app-owned visible presentation/receipt
-bridge, and global reminder settings synchronization/editor are implemented. Continue
-with P3-E command palette, tray, compact widget, and remaining shell lifecycle.
+bridge, global reminder settings synchronization/editor, and P3-E.1 route command
+palette are implemented. Continue with P3-E.2 compact content, then production tray,
+hotkey, single-instance/startup, and remaining shell lifecycle.
 Later-page Sessions navigation and interactive History ranges remain bounded
 replacements of their existing sections rather than new frontend query owners. Interactive
 Windows, P4 presentation, P5 CLI/MCP, activation, M0, packaging, signing, soak, and

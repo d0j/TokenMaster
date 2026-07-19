@@ -1879,3 +1879,19 @@ scheduling a UI callback is not proof that Pending became visible. A bounded lat
 wins slot and visible acknowledgement close both races while preserving constant memory
 and single-worker ordering. Pre-commit validation keeps an error return from
 contradicting already committed archive state.
+
+## ADR-076 — Keep the command palette route-only and inside the sole window
+
+Decision: P3-E.1 adds one final full-window overlay to the existing production
+`MainWindow`. It projects only the fixed 11 `RouteRow` values, owns one query capped at
+64 Unicode scalar values and one replace-only result model, and routes every activation
+through the existing `DesktopState` stable-key selection. It adds no second window,
+snapshot, controller, query, timer, worker, cache, general command registry, or native
+authority. Accepted snapshots refresh the open overlay after releasing the Desktop
+state mutex.
+
+Rationale: a generic action palette would become a new mutation/security boundary and
+could duplicate application authority. Reusing the immutable route projection keeps
+latency and retained memory bounded while giving keyboard, pointer, and accessibility
+users one consistent navigation surface. Compact content and native lifecycle remain
+separate P3-E decisions.

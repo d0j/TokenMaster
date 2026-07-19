@@ -6,6 +6,17 @@ All notable changes are recorded here.
 
 ### Added
 
+- Added the P3-E.1 bounded route command palette as the final full-window layer of the
+  sole production `MainWindow`. It reuses the fixed immutable 11-route projection,
+  limits the query to 64 Unicode scalar values, keeps one replace-only result model,
+  refreshes safely on accepted snapshots, and adds no query service, timer, worker,
+  cache, mutation command, or native authority. Ctrl+K/header opening, focused text,
+  Escape/Up/Down/Enter, pointer activation, accessibility default action, 10,000-scalar
+  input, and live snapshot refresh have executable/source-audit coverage. The release
+  Desktop audit, 134 mutation cases, clean-root, fmt, strict workspace Clippy, and the
+  complete locked workspace test/doctest gate pass. Compact content and the remaining
+  production shell/native lifecycle are still open.
+
 - Implemented generation-bound global reminder settings synchronization. Portable
   settings remain desired-state authority; startup, explicit Save, and confirmed import
   share a Pending-first retryable synchronizer, while global edits preserve scope
