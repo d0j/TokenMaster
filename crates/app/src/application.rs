@@ -642,6 +642,7 @@ impl DesktopIntentSink for ApplicationDesktopIntentSink {
                     retention_budget_mib,
                 ),
             )),
+            DesktopIntent::UpdateReminderPolicy(_) => DesktopIntentAdmission::Rejected,
             DesktopIntent::RebuildData => self.submit_plain(ApplicationCommand::Rebuild),
         }
     }
