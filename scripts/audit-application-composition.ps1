@@ -14,6 +14,7 @@ $appSource = Join-Path $appRoot 'src'
 $recoveryAdversarial = Join-Path $appRoot 'tests\recovery_adversarial_contract.rs'
 $desktopManifest = Join-Path $root 'crates\desktop\Cargo.toml'
 $reminderRuntimePath = Join-Path $root 'crates\runtime\src\reminder\runtime.rs'
+$currentSessionPath = Join-Path $root 'crates\platform\src\current_session.rs'
 
 foreach ($required in @(
     $rootManifest,
@@ -21,7 +22,8 @@ foreach ($required in @(
     $appSource,
     $recoveryAdversarial,
     $desktopManifest,
-    $reminderRuntimePath
+    $reminderRuntimePath,
+    $currentSessionPath
 )) {
     if (-not (Test-Path -LiteralPath $required)) {
         throw "TM-APP-MISSING-BOUNDARY: $([System.IO.Path]::GetFileName($required))"
@@ -73,6 +75,87 @@ $operationText = [System.IO.File]::ReadAllText((Join-Path $appSource 'operation.
 $commandText = [System.IO.File]::ReadAllText((Join-Path $appSource 'command.rs'))
 $stateText = [System.IO.File]::ReadAllText((Join-Path $appSource 'state.rs'))
 $reminderRuntimeText = [System.IO.File]::ReadAllText($reminderRuntimePath)
+$currentSessionText = [System.IO.File]::ReadAllText($currentSessionPath)
+
+$currentSessionClaimCount = [regex]::Matches(
+    $applicationText,
+    'CurrentSessionIntegration::claim\(\)'
+).Count
+$currentSessionOwnerCount = [regex]::Matches(
+    $applicationText,
+    'current_session:\s*Option<CurrentSessionPrimary>'
+).Count
+$currentSessionThreadCount = [regex]::Matches(
+    $currentSessionText,
+    '"tokenmaster-session-integration"'
+).Count
+$currentSessionEventCount = [regex]::Matches(
+    $currentSessionText,
+    'Local\\\\TokenMaster\.CurrentSession\.Activation\.v1'
+).Count
+$currentSessionHotkeyCount = [regex]::Matches(
+    $currentSessionText,
+    'HOTKEY_ID:\s*i32\s*=\s*0x544D;[\s\S]{0,512}?MOD_CONTROL\s*\|\s*MOD_ALT\s*\|\s*MOD_NOREPEAT[\s\S]{0,256}?VIRTUAL_KEY_T:\s*u32\s*=\s*0x54;'
+).Count
+$currentSessionPollingSurfaceCount = [regex]::Matches(
+    $currentSessionText,
+    '(?i)\b(?:thread::sleep|Timer|interval|TcpListener|TcpStream|UdpSocket|NamedPipe)\b'
+).Count
+$currentSessionBridgeCount = [regex]::Matches(
+    $applicationText,
+    'struct ApplicationSessionActivationBridge\s*\{'
+).Count
+$currentSessionPendingBitCount = [regex]::Matches(
+    $applicationText,
+    'self\.pending\.swap\(true, Ordering::AcqRel\)'
+).Count
+$currentSessionScheduledBitCount = [regex]::Matches(
+    $applicationText,
+    'self\.scheduled\.swap\(true, Ordering::AcqRel\)'
+).Count
+$currentSessionScheduledTaskCount = [regex]::Matches(
+    $applicationText,
+    '\.schedule\(Box::new\(move \|\| bridge\.run_scheduled\(\)\)\)'
+).Count
+
+$runFunction = [regex]::Match(
+    $applicationText,
+    '(?s)pub fn run\(\).*?\r?\n\}\r?\n\r?\nstruct Application'
+).Value
+$claimIndex = $runFunction.IndexOf('CurrentSessionIntegration::claim()', [System.StringComparison]::Ordinal)
+$rendererIndex = $runFunction.IndexOf('select_production_renderer()', [System.StringComparison]::Ordinal)
+$environmentIndex = $runFunction.IndexOf('ApplicationEnvironment::capture()', [System.StringComparison]::Ordinal)
+$applicationStartIndex = $runFunction.IndexOf('Application::start', [System.StringComparison]::Ordinal)
+if ([string]::IsNullOrWhiteSpace($runFunction) -or $currentSessionClaimCount -ne 1 -or
+    $claimIndex -lt 0 -or $rendererIndex -le $claimIndex -or
+    $environmentIndex -le $claimIndex -or $applicationStartIndex -le $claimIndex -or
+    $runFunction -notmatch 'CurrentSessionClaim::Secondary\(_\)\s*=>\s*Ok\(\(\)\)') {
+    throw 'TM-APP-CURRENT-SESSION-EARLY: secondary activation must exit before renderer data and application startup'
+}
+if ($runFunction -notmatch 'CurrentSessionIntegration::claim\(\)\s*\.map_err\(\|_\| ApplicationError::current_session_unavailable\(\)\)\?' -or
+    [regex]::Matches($applicationText, 'Self::CurrentSessionUnavailable\s*=>\s*"current_session_unavailable"').Count -ne 1) {
+    throw 'TM-APP-CURRENT-SESSION-ERROR: claim and signal failures must expose only the stable current_session_unavailable code'
+}
+if ($currentSessionOwnerCount -ne 1 -or $currentSessionThreadCount -ne 1 -or
+    $currentSessionEventCount -ne 1 -or $currentSessionPollingSurfaceCount -ne 0 -or
+    $currentSessionText -notmatch 'CreateEventExW\(' -or
+    $currentSessionText -notmatch 'ERROR_ALREADY_EXISTS' -or
+    $currentSessionText -notmatch 'SetEvent\(' -or
+    $currentSessionText -notmatch 'MsgWaitForMultipleObjectsEx\(') {
+    throw 'TM-APP-CURRENT-SESSION-OWNER: integration must use one fixed capacity-one event and one message-driven owner'
+}
+if ($currentSessionHotkeyCount -ne 1 -or
+    $currentSessionText -notmatch 'RegisterHotKey\(' -or
+    $currentSessionText -notmatch 'UnregisterHotKey\(' -or
+    $currentSessionText -notmatch 'ERROR_HOTKEY_ALREADY_REGISTERED') {
+    throw 'TM-APP-CURRENT-SESSION-HOTKEY: fixed Ctrl+Alt+T registration and conflict health drifted'
+}
+if ($currentSessionBridgeCount -ne 1 -or $currentSessionPendingBitCount -ne 1 -or
+    $currentSessionScheduledBitCount -ne 1 -or $currentSessionScheduledTaskCount -ne 1 -or
+    $applicationText -notmatch 'self_weak:\s*Weak<Self>' -or
+    $applicationText -notmatch 'Arc::new_cyclic\(') {
+    throw 'TM-APP-CURRENT-SESSION-CAPACITY: activation must retain one pending bit one scheduled task and only a weak self reference'
+}
 
 if ($productionText -match 'LiveRuntime::start_notified\(') {
     throw 'TM-APP-UNGUARDED-LIVE: live runtime must consume the startup lease guard'
@@ -386,6 +469,24 @@ $bundleShutdown = [regex]::Match(
     $applicationText,
     '(?s)impl ApplicationBundle \{.*?fn shutdown\(&mut self\).*?\r?\n\}\r?\n\r?\nfn remember_failure'
 ).Value
+$applicationShutdown = [regex]::Match(
+    $applicationText,
+    '(?s)fn shutdown\(&mut self\) -> Result<\(\), ApplicationError> \{.*?\r?\n    \}\r?\n\}'
+).Value
+$currentSessionShutdownMatch = [regex]::Match(
+    $applicationShutdown,
+    'current_session\s*\.\s*shutdown\(\)'
+)
+$currentSessionShutdownIndex = if ($currentSessionShutdownMatch.Success) {
+    $currentSessionShutdownMatch.Index
+} else {
+    -1
+}
+$cleanStateIndex = $applicationShutdown.IndexOf('.mark_clean()', [System.StringComparison]::Ordinal)
+if ([string]::IsNullOrWhiteSpace($applicationShutdown) -or
+    $currentSessionShutdownIndex -lt 0 -or $cleanStateIndex -le $currentSessionShutdownIndex) {
+    throw 'TM-APP-CURRENT-SESSION-SHUTDOWN: integration thread must join before clean publication'
+}
 $presentationShutdownIndex = $bundleShutdown.IndexOf(
     'self.notification_presentation.take()',
     [System.StringComparison]::Ordinal
@@ -483,6 +584,16 @@ if ($SourceOnly) {
         lifecycle_intent_count = 5
         lifecycle_window_owner_count = 1
         lifecycle_polling_surface_count = 0
+        current_session_claim_count = $currentSessionClaimCount
+        current_session_owner_count = $currentSessionOwnerCount
+        current_session_thread_count = $currentSessionThreadCount
+        current_session_event_count = $currentSessionEventCount
+        current_session_hotkey_count = $currentSessionHotkeyCount
+        current_session_polling_surface_count = $currentSessionPollingSurfaceCount
+        current_session_bridge_count = $currentSessionBridgeCount
+        current_session_pending_bit_count = $currentSessionPendingBitCount
+        current_session_scheduled_bit_count = $currentSessionScheduledBitCount
+        current_session_scheduled_task_count = $currentSessionScheduledTaskCount
         desktop_bridge_count = 1
         application_polling_surface_count = 0
         arbitrary_root_surface_count = 0
@@ -621,6 +732,16 @@ foreach ($needle in @(
     lifecycle_intent_count = 5
     lifecycle_window_owner_count = 1
     lifecycle_polling_surface_count = 0
+    current_session_claim_count = $currentSessionClaimCount
+    current_session_owner_count = $currentSessionOwnerCount
+    current_session_thread_count = $currentSessionThreadCount
+    current_session_event_count = $currentSessionEventCount
+    current_session_hotkey_count = $currentSessionHotkeyCount
+    current_session_polling_surface_count = $currentSessionPollingSurfaceCount
+    current_session_bridge_count = $currentSessionBridgeCount
+    current_session_pending_bit_count = $currentSessionPendingBitCount
+    current_session_scheduled_bit_count = $currentSessionScheduledBitCount
+    current_session_scheduled_task_count = $currentSessionScheduledTaskCount
     desktop_bridge_count = 1
     application_polling_surface_count = 0
     arbitrary_root_surface_count = 0

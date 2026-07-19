@@ -6,6 +6,7 @@ use std::fs::File;
 
 mod archive_recovery;
 mod backup_directory;
+mod current_session;
 mod durable_file;
 mod file_dialog;
 mod lease;
@@ -27,6 +28,12 @@ pub use archive_recovery::{
 pub use backup_directory::{
     BackupDirectory, BackupDirectoryEntry, BackupDirectoryError, BackupDirectoryGeneration,
     BackupDirectorySnapshot, BackupStagedFile, MAX_BACKUP_DIRECTORY_FILES,
+};
+pub use current_session::{
+    CurrentSessionActivationAdmission, CurrentSessionActivationSink, CurrentSessionClaim,
+    CurrentSessionError, CurrentSessionIntegration, CurrentSessionIntegrationSnapshot,
+    CurrentSessionPrimary, CurrentSessionSecondaryReceipt, CurrentSessionThreadHealth,
+    GlobalHotkeyHealth,
 };
 pub use durable_file::{
     DURABLE_STAGE_ATTEMPTS, DurableFileError, DurableFileReader, DurableFileReceipt,

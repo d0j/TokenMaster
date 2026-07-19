@@ -24,8 +24,9 @@ use tokenmaster_engine::{
     RefreshOutcome, RefreshUrgency, WorkerCompletion, WorkerCompletionNotifier,
 };
 use tokenmaster_platform::{
-    ExclusiveFileLeaseGuard, FileDialogFileType, FileDialogResult, FileDialogSelector,
-    NativeFileDialog,
+    CurrentSessionActivationAdmission, CurrentSessionActivationSink, CurrentSessionClaim,
+    CurrentSessionIntegration, CurrentSessionPrimary, ExclusiveFileLeaseGuard, FileDialogFileType,
+    FileDialogResult, FileDialogSelector, NativeFileDialog,
 };
 use tokenmaster_product::{
     ProductGitRuntimeHealth, ProductQuotaRuntimeHealth, ProductReducer,
@@ -96,12 +97,21 @@ impl ApplicationBundleSlot {
 }
 
 pub fn run() -> Result<(), ApplicationError> {
-    select_production_renderer().map_err(|_| ApplicationError::ui_unavailable())?;
-    let environment = ApplicationEnvironment::capture().map_err(|_| ApplicationError::data())?;
-    let mut application = Application::start(&environment)?;
-    let event_result = application.run_event_loop();
-    let shutdown_result = application.shutdown();
-    event_result.and(shutdown_result)
+    let claim = CurrentSessionIntegration::claim()
+        .map_err(|_| ApplicationError::current_session_unavailable())?;
+    match claim {
+        CurrentSessionClaim::Secondary(_) => Ok(()),
+        CurrentSessionClaim::Primary(current_session) => {
+            select_production_renderer().map_err(|_| ApplicationError::ui_unavailable())?;
+            let environment =
+                ApplicationEnvironment::capture().map_err(|_| ApplicationError::data())?;
+            let mut application =
+                Application::start_with_current_session(&environment, current_session)?;
+            let event_result = application.run_event_loop();
+            let shutdown_result = application.shutdown();
+            event_result.and(shutdown_result)
+        }
+    }
 }
 
 struct Application {
@@ -126,6 +136,8 @@ struct Application {
     state: Arc<ApplicationStateOwner>,
     preflight: Arc<Mutex<ApplicationPreflight>>,
     live_started: Arc<AtomicBool>,
+    current_session: Option<CurrentSessionPrimary>,
+    current_session_activation: Option<Arc<ApplicationSessionActivationBridge>>,
     shutdown: bool,
 }
 
@@ -137,13 +149,37 @@ enum ApplicationStartBoundary {
 }
 
 impl Application {
+    #[cfg(test)]
     fn start(environment: &ApplicationEnvironment) -> Result<Self, ApplicationError> {
         Self::start_with_observer(environment, |_| Ok(()))
     }
 
+    fn start_with_current_session(
+        environment: &ApplicationEnvironment,
+        current_session: CurrentSessionPrimary,
+    ) -> Result<Self, ApplicationError> {
+        Self::start_with_observer_and_current_session(
+            environment,
+            |_| Ok(()),
+            Some(current_session),
+        )
+    }
+
+    #[cfg(test)]
     fn start_with_observer<F>(
         environment: &ApplicationEnvironment,
+        observer: F,
+    ) -> Result<Self, ApplicationError>
+    where
+        F: FnMut(ApplicationStartBoundary) -> Result<(), ApplicationError>,
+    {
+        Self::start_with_observer_and_current_session(environment, observer, None)
+    }
+
+    fn start_with_observer_and_current_session<F>(
+        environment: &ApplicationEnvironment,
         mut observer: F,
+        mut session_owner: Option<CurrentSessionPrimary>,
     ) -> Result<Self, ApplicationError>
     where
         F: FnMut(ApplicationStartBoundary) -> Result<(), ApplicationError>,
@@ -278,6 +314,21 @@ impl Application {
             )))
             .map_err(|_| ApplicationError::internal())?;
 
+        let current_session_activation = if let Some(owner) = session_owner.as_mut() {
+            let activation = ApplicationSessionActivationBridge::new(
+                Arc::new(SlintApplicationEventScheduler),
+                Arc::new(SlintApplicationSessionActivationDelivery::new(
+                    shell.window().as_weak(),
+                )),
+            );
+            owner
+                .start(activation.clone())
+                .map_err(|_| ApplicationError::internal())?;
+            Some(activation)
+        } else {
+            None
+        };
+
         let application = Self {
             environment: environment.clone(),
             data_root,
@@ -292,6 +343,8 @@ impl Application {
             state,
             preflight,
             live_started,
+            current_session: session_owner,
+            current_session_activation,
             shutdown: false,
         };
         application.publish_live_reliable_projection();
@@ -304,6 +357,9 @@ impl Application {
             .show()
             .map_err(|_| ApplicationError::ui_unavailable())?;
         let _ = self.shell.show_lifecycle_surface();
+        if let Some(activation) = self.current_session_activation.as_ref() {
+            activation.flush();
+        }
         slint::run_event_loop_until_quit().map_err(|_| ApplicationError::event_loop())
     }
 
@@ -492,6 +548,15 @@ impl Application {
             return Ok(());
         }
         self.shutdown = true;
+        if let Some(activation) = self.current_session_activation.as_ref() {
+            activation.close();
+        }
+        let current_session_result = match self.current_session.as_mut() {
+            Some(current_session) => current_session
+                .shutdown()
+                .map_err(|_| ApplicationError::shutdown()),
+            None => Ok(()),
+        };
         let command_result = match self.commands.shutdown() {
             Ok(ApplicationOperationWorkerPhase::Stopped) => Ok(()),
             Ok(
@@ -516,7 +581,9 @@ impl Application {
             Some(mut bundle) => bundle.shutdown(),
             None => Ok(()),
         };
-        let result = command_result.and(bundle_result);
+        let result = current_session_result
+            .and(command_result)
+            .and(bundle_result);
         if result.is_ok() && self.live_started.load(Ordering::Acquire) {
             self.preflight
                 .lock()
@@ -526,6 +593,10 @@ impl Application {
                 .map_err(|_| ApplicationError::state())?;
         }
         self.live_started.store(false, Ordering::Release);
+        if result.is_ok() {
+            self.current_session.take();
+            self.current_session_activation.take();
+        }
         result
     }
 }
@@ -537,6 +608,228 @@ struct ApplicationDesktopIntentSink {
 
 struct ApplicationDesktopLifecycleSink {
     window: slint::Weak<MainWindow>,
+}
+
+type ApplicationEventTask = Box<dyn FnOnce() + Send + 'static>;
+
+trait ApplicationEventScheduler: Send + Sync + 'static {
+    fn schedule(&self, task: ApplicationEventTask) -> Result<(), ApplicationEventScheduleError>;
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ApplicationEventScheduleError {
+    Unavailable,
+    Terminated,
+    Internal,
+}
+
+struct SlintApplicationEventScheduler;
+
+impl ApplicationEventScheduler for SlintApplicationEventScheduler {
+    fn schedule(&self, task: ApplicationEventTask) -> Result<(), ApplicationEventScheduleError> {
+        slint::invoke_from_event_loop(task).map_err(|error| match error {
+            slint::EventLoopError::NoEventLoopProvider => {
+                ApplicationEventScheduleError::Unavailable
+            }
+            slint::EventLoopError::EventLoopTerminated => ApplicationEventScheduleError::Terminated,
+            _ => ApplicationEventScheduleError::Internal,
+        })
+    }
+}
+
+trait ApplicationSessionActivationDelivery: Send + Sync + 'static {
+    fn deliver(&self) -> CurrentSessionActivationAdmission;
+}
+
+struct SlintApplicationSessionActivationDelivery {
+    window: slint::Weak<MainWindow>,
+}
+
+impl SlintApplicationSessionActivationDelivery {
+    const fn new(window: slint::Weak<MainWindow>) -> Self {
+        Self { window }
+    }
+}
+
+impl ApplicationSessionActivationDelivery for SlintApplicationSessionActivationDelivery {
+    fn deliver(&self) -> CurrentSessionActivationAdmission {
+        let Some(window) = self.window.upgrade() else {
+            return CurrentSessionActivationAdmission::Rejected;
+        };
+        match ApplicationDesktopLifecycleSink::show_and_activate(&window) {
+            DesktopLifecycleIntentAdmission::Accepted => {
+                CurrentSessionActivationAdmission::Accepted
+            }
+            DesktopLifecycleIntentAdmission::Rejected => {
+                CurrentSessionActivationAdmission::Rejected
+            }
+        }
+    }
+}
+
+struct ApplicationSessionActivationBridge {
+    self_weak: Weak<Self>,
+    scheduler: Arc<dyn ApplicationEventScheduler>,
+    delivery: Arc<dyn ApplicationSessionActivationDelivery>,
+    pending: AtomicBool,
+    scheduled: AtomicBool,
+    closed: AtomicBool,
+    received_count: AtomicU64,
+    coalesced_count: AtomicU64,
+    delivered_count: AtomicU64,
+    rejected_count: AtomicU64,
+    scheduling_failure_count: AtomicU64,
+    panicked_count: AtomicU64,
+    overflowed: AtomicBool,
+}
+
+impl ApplicationSessionActivationBridge {
+    fn new(
+        scheduler: Arc<dyn ApplicationEventScheduler>,
+        delivery: Arc<dyn ApplicationSessionActivationDelivery>,
+    ) -> Arc<Self> {
+        Arc::new_cyclic(|self_weak| Self {
+            self_weak: self_weak.clone(),
+            scheduler,
+            delivery,
+            pending: AtomicBool::new(false),
+            scheduled: AtomicBool::new(false),
+            closed: AtomicBool::new(false),
+            received_count: AtomicU64::new(0),
+            coalesced_count: AtomicU64::new(0),
+            delivered_count: AtomicU64::new(0),
+            rejected_count: AtomicU64::new(0),
+            scheduling_failure_count: AtomicU64::new(0),
+            panicked_count: AtomicU64::new(0),
+            overflowed: AtomicBool::new(false),
+        })
+    }
+
+    fn request(self: &Arc<Self>) -> CurrentSessionActivationAdmission {
+        if self.closed.load(Ordering::Acquire) {
+            return CurrentSessionActivationAdmission::Rejected;
+        }
+        self.increment(&self.received_count);
+        if self.pending.swap(true, Ordering::AcqRel) {
+            self.increment(&self.coalesced_count);
+        }
+        self.schedule_pending()
+    }
+
+    fn schedule_pending(self: &Arc<Self>) -> CurrentSessionActivationAdmission {
+        if self.closed.load(Ordering::Acquire) {
+            self.pending.store(false, Ordering::Release);
+            return CurrentSessionActivationAdmission::Rejected;
+        }
+        if !self.pending.load(Ordering::Acquire) || self.scheduled.swap(true, Ordering::AcqRel) {
+            return CurrentSessionActivationAdmission::Accepted;
+        }
+
+        let bridge = Arc::clone(self);
+        match self
+            .scheduler
+            .schedule(Box::new(move || bridge.run_scheduled()))
+        {
+            Ok(()) => CurrentSessionActivationAdmission::Accepted,
+            Err(error) => {
+                self.increment(&self.scheduling_failure_count);
+                self.scheduled.store(false, Ordering::Release);
+                if error == ApplicationEventScheduleError::Terminated {
+                    self.closed.store(true, Ordering::Release);
+                    self.pending.store(false, Ordering::Release);
+                }
+                CurrentSessionActivationAdmission::Rejected
+            }
+        }
+    }
+
+    fn run_scheduled(self: &Arc<Self>) {
+        if self.closed.load(Ordering::Acquire) {
+            self.pending.store(false, Ordering::Release);
+            self.scheduled.store(false, Ordering::Release);
+            return;
+        }
+
+        if self.pending.swap(false, Ordering::AcqRel) {
+            match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.delivery.deliver()))
+            {
+                Ok(CurrentSessionActivationAdmission::Accepted) => {
+                    self.increment(&self.delivered_count);
+                }
+                Ok(CurrentSessionActivationAdmission::Rejected) => {
+                    self.increment(&self.rejected_count);
+                }
+                Err(_) => {
+                    self.increment(&self.panicked_count);
+                }
+            }
+        }
+
+        self.scheduled.store(false, Ordering::Release);
+        if self.pending.load(Ordering::Acquire) && !self.closed.load(Ordering::Acquire) {
+            let _ = self.schedule_pending();
+        }
+    }
+
+    fn flush(self: &Arc<Self>) {
+        let _ = self.schedule_pending();
+    }
+
+    fn close(&self) {
+        self.closed.store(true, Ordering::Release);
+        self.pending.store(false, Ordering::Release);
+    }
+
+    fn increment(&self, counter: &AtomicU64) {
+        if counter
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |value| {
+                value.checked_add(1)
+            })
+            .is_err()
+        {
+            self.overflowed.store(true, Ordering::Release);
+        }
+    }
+
+    #[cfg(test)]
+    fn snapshot(&self) -> ApplicationSessionActivationSnapshot {
+        ApplicationSessionActivationSnapshot {
+            pending: self.pending.load(Ordering::Acquire),
+            scheduled: self.scheduled.load(Ordering::Acquire),
+            closed: self.closed.load(Ordering::Acquire),
+            received_count: self.received_count.load(Ordering::Acquire),
+            coalesced_count: self.coalesced_count.load(Ordering::Acquire),
+            delivered_count: self.delivered_count.load(Ordering::Acquire),
+            rejected_count: self.rejected_count.load(Ordering::Acquire),
+            scheduling_failure_count: self.scheduling_failure_count.load(Ordering::Acquire),
+            panicked_count: self.panicked_count.load(Ordering::Acquire),
+            overflowed: self.overflowed.load(Ordering::Acquire),
+        }
+    }
+}
+
+impl CurrentSessionActivationSink for ApplicationSessionActivationBridge {
+    fn request_activation(&self) -> CurrentSessionActivationAdmission {
+        let Some(bridge) = self.self_weak.upgrade() else {
+            return CurrentSessionActivationAdmission::Rejected;
+        };
+        bridge.request()
+    }
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ApplicationSessionActivationSnapshot {
+    pending: bool,
+    scheduled: bool,
+    closed: bool,
+    received_count: u64,
+    coalesced_count: u64,
+    delivered_count: u64,
+    rejected_count: u64,
+    scheduling_failure_count: u64,
+    panicked_count: u64,
+    overflowed: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1845,7 +2138,8 @@ fn execute_state_command<T>(result: Result<T, ApplicationError>) -> ApplicationC
             ApplicationErrorCode::InvalidLifecycle => ApplicationCommandFailure::InvalidSelection,
             ApplicationErrorCode::GenerationOverflow => ApplicationCommandFailure::CapacityExceeded,
             ApplicationErrorCode::Internal => ApplicationCommandFailure::Internal,
-            ApplicationErrorCode::DataUnavailable
+            ApplicationErrorCode::CurrentSessionUnavailable
+            | ApplicationErrorCode::DataUnavailable
             | ApplicationErrorCode::DiscoveryUnavailable
             | ApplicationErrorCode::LiveRuntimeUnavailable
             | ApplicationErrorCode::StateUnavailable
@@ -2187,6 +2481,7 @@ impl WorkerCompletionNotifier for ApplicationRuntimeNotifier {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ApplicationErrorCode {
+    CurrentSessionUnavailable,
     DataUnavailable,
     DiscoveryUnavailable,
     LiveRuntimeUnavailable,
@@ -2204,6 +2499,7 @@ impl ApplicationErrorCode {
     #[must_use]
     pub const fn stable_code(self) -> &'static str {
         match self {
+            Self::CurrentSessionUnavailable => "current_session_unavailable",
             Self::DataUnavailable => "data_unavailable",
             Self::DiscoveryUnavailable => "discovery_unavailable",
             Self::LiveRuntimeUnavailable => "live_runtime_unavailable",
@@ -2225,6 +2521,12 @@ pub struct ApplicationError {
 }
 
 impl ApplicationError {
+    const fn current_session_unavailable() -> Self {
+        Self {
+            code: ApplicationErrorCode::CurrentSessionUnavailable,
+        }
+    }
+
     const fn data() -> Self {
         Self {
             code: ApplicationErrorCode::DataUnavailable,

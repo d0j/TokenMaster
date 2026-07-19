@@ -18,6 +18,8 @@ Describe "TokenMaster application composition audit" {
                 -Destination $crateParent -Recurse
             Copy-Item -LiteralPath (Join-Path $RepositoryRoot "crates\runtime") `
                 -Destination $crateParent -Recurse
+            Copy-Item -LiteralPath (Join-Path $RepositoryRoot "crates\platform") `
+                -Destination $crateParent -Recurse
             return $fixture
         }
     }
@@ -131,6 +133,99 @@ Describe "TokenMaster application composition audit" {
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-APP-LIFECYCLE-FOCUS*"
+    }
+
+    It "rejects removing the early current-session claim" {
+        $fixture = New-AppAuditFixture -Name "current-session-early"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'CurrentSessionIntegration::claim()',
+            'claim_after_application_start()'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-CURRENT-SESSION-EARLY*"
+    }
+
+    It "rejects replacing the stable current-session failure" {
+        $fixture = New-AppAuditFixture -Name "current-session-error"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'ApplicationError::current_session_unavailable()',
+            'ApplicationError::internal()'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-CURRENT-SESSION-ERROR*"
+    }
+
+    It "rejects current-session activation identifier drift" {
+        $fixture = New-AppAuditFixture -Name "current-session-identifier"
+        $path = Join-Path $fixture "crates\platform\src\current_session.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'Local\\TokenMaster.CurrentSession.Activation.v1',
+            'Global\\TokenMaster.CurrentSession.Activation.v1'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-CURRENT-SESSION-OWNER*"
+    }
+
+    It "rejects current-session hotkey drift" {
+        $fixture = New-AppAuditFixture -Name "current-session-hotkey"
+        $path = Join-Path $fixture "crates\platform\src\current_session.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'const VIRTUAL_KEY_T: u32 = 0x54;',
+            'const VIRTUAL_KEY_T: u32 = 0x44;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-CURRENT-SESSION-HOTKEY*"
+    }
+
+    It "rejects dropping current-session join before clean publication" {
+        $fixture = New-AppAuditFixture -Name "current-session-shutdown"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [regex]::Replace(
+            [System.IO.File]::ReadAllText($path),
+            'current_session\s*\.\s*shutdown\(\)',
+            'current_session.detach()',
+            1
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-CURRENT-SESSION-SHUTDOWN*"
+    }
+
+    It "rejects unbounded current-session pending activation drift" {
+        $fixture = New-AppAuditFixture -Name "current-session-pending-capacity"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'self.pending.swap(true, Ordering::AcqRel)',
+            'self.pending.swap(false, Ordering::AcqRel)'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-CURRENT-SESSION-CAPACITY*"
+    }
+
+    It "rejects a strong current-session activation ownership cycle" {
+        $fixture = New-AppAuditFixture -Name "current-session-strong-cycle"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'self_weak: Weak<Self>',
+            'self_strong: Arc<Self>'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-CURRENT-SESSION-CAPACITY*"
     }
 
     It "rejects a second live runtime owner" {
@@ -970,5 +1065,15 @@ Describe "TokenMaster application composition audit" {
         $receipt.lifecycle_intent_count | Should -Be 5
         $receipt.lifecycle_window_owner_count | Should -Be 1
         $receipt.lifecycle_polling_surface_count | Should -Be 0
+        $receipt.current_session_claim_count | Should -Be 1
+        $receipt.current_session_owner_count | Should -Be 1
+        $receipt.current_session_thread_count | Should -Be 1
+        $receipt.current_session_event_count | Should -Be 1
+        $receipt.current_session_hotkey_count | Should -Be 1
+        $receipt.current_session_polling_surface_count | Should -Be 0
+        $receipt.current_session_bridge_count | Should -Be 1
+        $receipt.current_session_pending_bit_count | Should -Be 1
+        $receipt.current_session_scheduled_bit_count | Should -Be 1
+        $receipt.current_session_scheduled_task_count | Should -Be 1
     }
 }

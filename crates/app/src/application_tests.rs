@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
@@ -201,6 +202,157 @@ fn desktop_lifecycle_effects_are_exact_and_route_only_to_existing_views() {
             ApplicationDesktopLifecycleEffect::Quit,
         ]
     );
+}
+
+#[test]
+fn current_session_failure_code_is_stable_and_path_free() {
+    let error = ApplicationError::current_session_unavailable();
+    assert_eq!(
+        error.code(),
+        ApplicationErrorCode::CurrentSessionUnavailable
+    );
+    assert_eq!(error.to_string(), "current_session_unavailable");
+}
+
+struct ManualApplicationEventScheduler {
+    tasks: Mutex<VecDeque<ApplicationEventTask>>,
+    unavailable: AtomicBool,
+}
+
+impl ManualApplicationEventScheduler {
+    fn new(unavailable: bool) -> Self {
+        Self {
+            tasks: Mutex::new(VecDeque::new()),
+            unavailable: AtomicBool::new(unavailable),
+        }
+    }
+
+    fn set_unavailable(&self, unavailable: bool) {
+        self.unavailable.store(unavailable, Ordering::Release);
+    }
+
+    fn len(&self) -> usize {
+        self.tasks.lock().expect("scheduled tasks").len()
+    }
+
+    fn run_one(&self) {
+        let task = self
+            .tasks
+            .lock()
+            .expect("scheduled tasks")
+            .pop_front()
+            .expect("one scheduled task");
+        task();
+    }
+}
+
+impl ApplicationEventScheduler for ManualApplicationEventScheduler {
+    fn schedule(&self, task: ApplicationEventTask) -> Result<(), ApplicationEventScheduleError> {
+        if self.unavailable.load(Ordering::Acquire) {
+            return Err(ApplicationEventScheduleError::Unavailable);
+        }
+        self.tasks.lock().expect("scheduled tasks").push_back(task);
+        Ok(())
+    }
+}
+
+struct CountingApplicationSessionActivationDelivery {
+    delivered: AtomicU64,
+    panic: AtomicBool,
+}
+
+impl CountingApplicationSessionActivationDelivery {
+    const fn new() -> Self {
+        Self {
+            delivered: AtomicU64::new(0),
+            panic: AtomicBool::new(false),
+        }
+    }
+}
+
+impl ApplicationSessionActivationDelivery for CountingApplicationSessionActivationDelivery {
+    fn deliver(&self) -> CurrentSessionActivationAdmission {
+        assert!(!self.panic.load(Ordering::Acquire), "delivery panic");
+        self.delivered.fetch_add(1, Ordering::AcqRel);
+        CurrentSessionActivationAdmission::Accepted
+    }
+}
+
+#[test]
+fn current_session_burst_retains_one_pending_activation_and_one_scheduled_task() {
+    let scheduler = Arc::new(ManualApplicationEventScheduler::new(false));
+    let delivery = Arc::new(CountingApplicationSessionActivationDelivery::new());
+    let bridge = ApplicationSessionActivationBridge::new(scheduler.clone(), delivery.clone());
+
+    for _ in 0..10_000 {
+        assert_eq!(
+            bridge.request(),
+            CurrentSessionActivationAdmission::Accepted
+        );
+    }
+
+    assert_eq!(scheduler.len(), 1);
+    assert_eq!(
+        bridge.snapshot(),
+        ApplicationSessionActivationSnapshot {
+            pending: true,
+            scheduled: true,
+            closed: false,
+            received_count: 10_000,
+            coalesced_count: 9_999,
+            delivered_count: 0,
+            rejected_count: 0,
+            scheduling_failure_count: 0,
+            panicked_count: 0,
+            overflowed: false,
+        }
+    );
+
+    scheduler.run_one();
+    assert_eq!(scheduler.len(), 0);
+    assert_eq!(delivery.delivered.load(Ordering::Acquire), 1);
+    let complete = bridge.snapshot();
+    assert!(!complete.pending);
+    assert!(!complete.scheduled);
+    assert_eq!(complete.delivered_count, 1);
+}
+
+#[test]
+fn current_session_startup_race_retries_and_contains_delivery_panic() {
+    let scheduler = Arc::new(ManualApplicationEventScheduler::new(true));
+    let delivery = Arc::new(CountingApplicationSessionActivationDelivery::new());
+    let bridge = ApplicationSessionActivationBridge::new(scheduler.clone(), delivery.clone());
+
+    assert_eq!(
+        bridge.request(),
+        CurrentSessionActivationAdmission::Rejected
+    );
+    let unavailable = bridge.snapshot();
+    assert!(unavailable.pending);
+    assert!(!unavailable.scheduled);
+    assert_eq!(unavailable.scheduling_failure_count, 1);
+
+    scheduler.set_unavailable(false);
+    bridge.flush();
+    assert_eq!(scheduler.len(), 1);
+    scheduler.run_one();
+    assert_eq!(delivery.delivered.load(Ordering::Acquire), 1);
+
+    delivery.panic.store(true, Ordering::Release);
+    assert_eq!(
+        bridge.request(),
+        CurrentSessionActivationAdmission::Accepted
+    );
+    scheduler.run_one();
+    assert_eq!(bridge.snapshot().panicked_count, 1);
+
+    bridge.close();
+    assert_eq!(
+        bridge.request(),
+        CurrentSessionActivationAdmission::Rejected
+    );
+    assert!(bridge.snapshot().closed);
+    assert_eq!(scheduler.len(), 0);
 }
 
 fn portable_with_reminder_policy(
