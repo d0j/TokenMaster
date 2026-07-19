@@ -24,8 +24,9 @@ use crate::{
     DesktopSessionDetailIntentSink, DesktopSessionsProjection, DesktopSnapshotBridge,
     DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue, DesktopValueAvailability,
     HistoryDayRow, InAppNotificationRow, MainWindow, ModelUsageRow, ProjectUsageRow,
-    RecentActivityRow, ReminderScopeRow, RestorePointRow, RouteRow, SessionDetailBreakdownRow,
-    SessionListRow, UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
+    RecentActivityRow, ReminderCustomLeadRow, ReminderScopeRow, RestorePointRow, RouteRow,
+    SessionDetailBreakdownRow, SessionListRow, UnavailableDesktopIntentSink,
+    UnavailableDesktopSessionDetailIntentSink,
     in_app_notification::NotificationEpochState,
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
 };
@@ -485,6 +486,7 @@ fn wire_reliable_state_intents(
     window.on_cancel_operation(move || {
         let _ = sink.submit(DesktopIntent::CancelOperation);
     });
+    let sink = intent_sink.clone();
     window.on_update_backup_policy(move |enabled, quiet, interval, budget| {
         let (Ok(quiet_seconds), Ok(interval_seconds), Ok(retention_budget_mib)) = (
             u32::try_from(quiet),
@@ -493,13 +495,176 @@ fn wire_reliable_state_intents(
         ) else {
             return;
         };
-        let _ = intent_sink.submit(DesktopIntent::UpdateBackupPolicy {
+        let _ = sink.submit(DesktopIntent::UpdateBackupPolicy {
             periodic_enabled: enabled,
             quiet_seconds,
             interval_seconds,
             retention_budget_mib,
         });
     });
+    wire_reminder_policy_editor(window, intent_sink);
+}
+
+fn wire_reminder_policy_editor(window: &MainWindow, intent_sink: Rc<dyn DesktopIntentSink>) {
+    let weak = window.as_weak();
+    window.on_reminder_enabled_edited(move |enabled| {
+        if let Some(window) = weak.upgrade() {
+            window.set_reminder_enabled(enabled);
+            mark_reminder_draft_dirty(&window);
+        }
+    });
+    let weak = window.as_weak();
+    window.on_reminder_preset_edited(move |index, enabled| {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        match index {
+            0 => window.set_reminder_preset_seven_days(enabled),
+            1 => window.set_reminder_preset_twenty_four_hours(enabled),
+            2 => window.set_reminder_preset_twelve_hours(enabled),
+            3 => window.set_reminder_preset_six_hours(enabled),
+            4 => window.set_reminder_preset_one_hour(enabled),
+            _ => return,
+        }
+        mark_reminder_draft_dirty(&window);
+    });
+    let weak = window.as_weak();
+    window.on_reminder_custom_lead_edited(move |index, enabled, value, unit_index| {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        let Ok(index) = usize::try_from(index) else {
+            return;
+        };
+        let rows = window.get_reminder_custom_lead_rows();
+        if index >= rows.row_count() {
+            return;
+        }
+        rows.set_row_data(
+            index,
+            ReminderCustomLeadRow {
+                enabled,
+                value,
+                unit_index,
+            },
+        );
+        mark_reminder_draft_dirty(&window);
+    });
+    let weak = window.as_weak();
+    window.on_reset_reminder_recommended(move || {
+        if let Some(window) = weak.upgrade() {
+            apply_recommended_reminder_draft(&window);
+        }
+    });
+    let weak = window.as_weak();
+    window.on_save_reminder_policy(move || {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        let Some(intent) = reminder_policy_intent(&window) else {
+            window.set_reminder_feedback("Reminder profile is invalid".into());
+            return;
+        };
+        match intent_sink.submit(intent) {
+            crate::DesktopIntentAdmission::Rejected => {
+                window.set_reminder_feedback("Reminder service is busy".into())
+            }
+            crate::DesktopIntentAdmission::Started
+            | crate::DesktopIntentAdmission::Queued
+            | crate::DesktopIntentAdmission::Coalesced => {
+                window.set_reminder_dirty(false);
+                window.set_reminder_feedback("Reminder profile submitted".into());
+            }
+        }
+    });
+}
+
+fn mark_reminder_draft_dirty(window: &MainWindow) {
+    window.set_reminder_dirty(true);
+    window.set_reminder_feedback("Reminder draft changed".into());
+}
+
+fn apply_recommended_reminder_draft(window: &MainWindow) {
+    window.set_reminder_enabled(true);
+    window.set_reminder_preset_seven_days(true);
+    window.set_reminder_preset_twenty_four_hours(true);
+    window.set_reminder_preset_twelve_hours(true);
+    window.set_reminder_preset_six_hours(true);
+    window.set_reminder_preset_one_hour(true);
+    window.set_reminder_custom_lead_rows(reminder_custom_rows(&[]));
+    window.set_reminder_dirty(true);
+    window.set_reminder_feedback("Recommended reminder draft ready".into());
+}
+
+fn reminder_policy_intent(window: &MainWindow) -> Option<DesktopIntent> {
+    const PRESETS: [u32; 5] = [604_800, 86_400, 43_200, 21_600, 3_600];
+    let preset_enabled = [
+        window.get_reminder_preset_seven_days(),
+        window.get_reminder_preset_twenty_four_hours(),
+        window.get_reminder_preset_twelve_hours(),
+        window.get_reminder_preset_six_hours(),
+        window.get_reminder_preset_one_hour(),
+    ];
+    let mut leads = PRESETS
+        .into_iter()
+        .zip(preset_enabled)
+        .filter_map(|(lead, enabled)| enabled.then_some(lead))
+        .collect::<Vec<_>>();
+    let rows = window.get_reminder_custom_lead_rows();
+    if rows.row_count() != 8 {
+        return None;
+    }
+    for index in 0..rows.row_count() {
+        let row = rows.row_data(index)?;
+        if !row.enabled {
+            continue;
+        }
+        let unit = match row.unit_index {
+            0 => 1_u32,
+            1 => 60,
+            2 => 3_600,
+            3 => 86_400,
+            _ => return None,
+        };
+        let value = u32::try_from(row.value).ok()?;
+        let lead = value.checked_mul(unit)?;
+        leads.push(lead);
+    }
+    leads.sort_unstable_by(|left, right| right.cmp(left));
+    leads.dedup();
+    if leads.len() > 8 {
+        return None;
+    }
+    DesktopIntent::update_reminder_policy(window.get_reminder_enabled(), &leads).ok()
+}
+
+fn reminder_custom_rows(leads: &[u32]) -> ModelRc<ReminderCustomLeadRow> {
+    let mut rows = Vec::with_capacity(8);
+    for lead in leads.iter().copied().take(8) {
+        let (value, unit_index) = if lead.is_multiple_of(86_400) {
+            (lead / 86_400, 3)
+        } else if lead.is_multiple_of(3_600) {
+            (lead / 3_600, 2)
+        } else if lead.is_multiple_of(60) {
+            (lead / 60, 1)
+        } else {
+            (lead, 0)
+        };
+        rows.push(ReminderCustomLeadRow {
+            enabled: true,
+            value: saturating_i32(u64::from(value)),
+            unit_index,
+        });
+    }
+    rows.resize(
+        8,
+        ReminderCustomLeadRow {
+            enabled: false,
+            value: 1,
+            unit_index: 0,
+        },
+    );
+    model(rows)
 }
 
 fn wire_route_selection(window: &MainWindow, state: SharedDesktopState) {
@@ -697,6 +862,32 @@ fn apply_reliable_state_projection(
     window.set_backup_retention_budget_mib(saturating_i32(
         policy.retention_budget_bytes() / 1_048_576,
     ));
+
+    if !window.get_reminder_dirty() {
+        let reminder = projection.reminder_policy();
+        window.set_reminder_enabled(reminder.enabled());
+        let leads = reminder.lead_seconds();
+        window.set_reminder_preset_seven_days(leads.contains(&604_800));
+        window.set_reminder_preset_twenty_four_hours(leads.contains(&86_400));
+        window.set_reminder_preset_twelve_hours(leads.contains(&43_200));
+        window.set_reminder_preset_six_hours(leads.contains(&21_600));
+        window.set_reminder_preset_one_hour(leads.contains(&3_600));
+        let custom = leads
+            .iter()
+            .copied()
+            .filter(|lead| ![604_800, 86_400, 43_200, 21_600, 3_600].contains(lead))
+            .collect::<Vec<_>>();
+        window.set_reminder_custom_lead_rows(reminder_custom_rows(&custom));
+        window.set_reminder_sync_state(
+            match reminder.sync_state() {
+                crate::DesktopReminderSyncState::Pending => "Pending",
+                crate::DesktopReminderSyncState::Synchronized => "Synchronized",
+                crate::DesktopReminderSyncState::Unavailable => "Unavailable",
+            }
+            .into(),
+        );
+        window.set_reminder_feedback("Ready to edit reminder profile".into());
+    }
 
     let rows = projection
         .restore_points()

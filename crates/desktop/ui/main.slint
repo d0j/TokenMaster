@@ -16,7 +16,7 @@ import { NotificationsView } from "views/notifications-view.slint";
 import { HelpAboutView } from "views/help-about-view.slint";
 import { SessionsView } from "views/sessions-view.slint";
 import { DataHealthView } from "views/data-health-view.slint";
-import { SettingsView } from "views/settings-view.slint";
+import { SettingsView, ReminderCustomLeadRow } from "views/settings-view.slint";
 
 export component MainWindow inherits Window {
     in property <[RouteRow]> route-rows;
@@ -145,6 +145,7 @@ export component MainWindow inherits Window {
     out property <string> models-layout-mode: root.width < 800px ? "narrow" : "wide";
     out property <string> projects-layout-mode: root.width < 800px ? "narrow" : "wide";
     out property <string> activity-layout-mode: root.width < 800px ? "narrow" : "wide";
+    out property <string> settings-layout-mode: settings-view.settings-layout-mode;
     out property <string> notifications-layout-mode: root.width < 800px ? "narrow" : "wide";
     out property <string> help-about-layout-mode: help-view.layout-mode;
     out property <int> help-about-section-count: help-view.section-count;
@@ -176,6 +177,16 @@ export component MainWindow inherits Window {
     in property <int> backup-quiet-seconds;
     in property <int> backup-interval-seconds;
     in property <int> backup-retention-budget-mib;
+    in-out property <bool> reminder-enabled: false;
+    in-out property <bool> reminder-preset-seven-days: false;
+    in-out property <bool> reminder-preset-twenty-four-hours: false;
+    in-out property <bool> reminder-preset-twelve-hours: false;
+    in-out property <bool> reminder-preset-six-hours: false;
+    in-out property <bool> reminder-preset-one-hour: false;
+    in-out property <[ReminderCustomLeadRow]> reminder-custom-lead-rows;
+    in-out property <bool> reminder-dirty: false;
+    in-out property <string> reminder-feedback: "Ready to edit reminder profile";
+    in property <string> reminder-sync-state;
     in property <bool> high-contrast: false;
     in property <bool> reduced-motion: false;
     in property <[InAppNotificationRow]> in-app-notification-rows;
@@ -197,6 +208,11 @@ export component MainWindow inherits Window {
     callback retry-operation();
     callback cancel-operation();
     callback update-backup-policy(bool, int, int, int);
+    callback reminder-enabled-edited(bool);
+    callback reminder-preset-edited(int, bool);
+    callback reminder-custom-lead-edited(int, bool, int, int);
+    callback save-reminder-policy();
+    callback reset-reminder-recommended();
     callback dismiss-in-app-notifications();
 
     title: "TokenMaster";
@@ -446,13 +462,23 @@ export component MainWindow inherits Window {
                     cancel-operation => { root.cancel-operation(); }
                 }
 
-                if root.settings-visible: SettingsView {
+                settings-view := SettingsView {
                     width: parent.width;
                     height: parent.height;
                     periodic-enabled: root.backup-periodic-enabled;
                     quiet-seconds: root.backup-quiet-seconds;
                     interval-seconds: root.backup-interval-seconds;
                     retention-budget-mib: root.backup-retention-budget-mib;
+                    reminder-enabled: root.reminder-enabled;
+                    reminder-preset-seven-days: root.reminder-preset-seven-days;
+                    reminder-preset-twenty-four-hours: root.reminder-preset-twenty-four-hours;
+                    reminder-preset-twelve-hours: root.reminder-preset-twelve-hours;
+                    reminder-preset-six-hours: root.reminder-preset-six-hours;
+                    reminder-preset-one-hour: root.reminder-preset-one-hour;
+                    reminder-custom-lead-rows: root.reminder-custom-lead-rows;
+                    reminder-dirty: root.reminder-dirty;
+                    reminder-feedback: root.reminder-feedback;
+                    reminder-sync-state: root.reminder-sync-state;
                     settings-health: root.settings-health;
                     config-import-preview-visible: root.config-import-preview-visible;
                     config-import-created-label: root.config-import-created-label;
@@ -465,6 +491,12 @@ export component MainWindow inherits Window {
                     confirm-config-import => { root.confirm-config-import(); }
                     cancel-config-import => { root.cancel-config-import(); }
                     update-backup-policy(enabled, quiet, interval, budget) => { root.update-backup-policy(enabled, quiet, interval, budget); }
+                    reminder-enabled-edited(enabled) => { root.reminder-enabled-edited(enabled); }
+                    reminder-preset-edited(index, enabled) => { root.reminder-preset-edited(index, enabled); }
+                    reminder-custom-lead-edited(index, enabled, value, unit-index) => { root.reminder-custom-lead-edited(index, enabled, value, unit-index); }
+                    save-reminder-policy => { root.save-reminder-policy(); }
+                    reset-reminder-recommended => { root.reset-reminder-recommended(); }
+                    visible: root.settings-visible;
                 }
 
                 help-view := HelpAboutView {

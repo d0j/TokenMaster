@@ -1,11 +1,27 @@
-import { Button, CheckBox, SpinBox } from "std-widgets.slint";
+import { Button, CheckBox, ComboBox, ScrollView, SpinBox } from "std-widgets.slint";
 import { UiTokens } from "../tokens.slint";
+
+export struct ReminderCustomLeadRow {
+    enabled: bool,
+    value: int,
+    unit-index: int,
+}
 
 export component SettingsView inherits Rectangle {
     in property <bool> periodic-enabled;
     in property <int> quiet-seconds;
     in property <int> interval-seconds;
     in property <int> retention-budget-mib;
+    in property <bool> reminder-enabled;
+    in property <bool> reminder-preset-seven-days;
+    in property <bool> reminder-preset-twenty-four-hours;
+    in property <bool> reminder-preset-twelve-hours;
+    in property <bool> reminder-preset-six-hours;
+    in property <bool> reminder-preset-one-hour;
+    in property <[ReminderCustomLeadRow]> reminder-custom-lead-rows;
+    in property <bool> reminder-dirty;
+    in property <string> reminder-feedback;
+    in property <string> reminder-sync-state;
     in property <string> settings-health;
     in property <bool> config-import-preview-visible;
     in property <string> config-import-created-label;
@@ -20,17 +36,61 @@ export component SettingsView inherits Rectangle {
     callback confirm-config-import();
     callback cancel-config-import();
     callback update-backup-policy(bool, int, int, int);
+    callback reminder-enabled-edited(bool);
+    callback reminder-preset-edited(int, bool);
+    callback reminder-custom-lead-edited(int, bool, int, int);
+    callback save-reminder-policy();
+    callback reset-reminder-recommended();
 
     background: UiTokens.background;
     accessible-role: groupbox;
     accessible-label: "TokenMaster settings";
 
-    VerticalLayout {
+    ScrollView {
+        viewport := VerticalLayout {
         padding: UiTokens.space;
         spacing: UiTokens.space;
 
         Text { text: "Settings"; color: UiTokens.text-primary; font-size: 24px; font-weight: 700; }
         Text { text: "Settings health: " + root.settings-health; color: UiTokens.text-secondary; }
+
+        Rectangle {
+            height: root.settings-layout-mode == "narrow" ? 690px : 470px;
+            background: UiTokens.surface;
+            border-color: UiTokens.border;
+            border-width: root.high-contrast ? 2px : 1px;
+            border-radius: UiTokens.radius;
+
+            VerticalLayout {
+                padding: UiTokens.space;
+                spacing: UiTokens.space-sm;
+                Text { text: "Expiry reminders"; color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
+                Text { text: "Sync state: " + root.reminder-sync-state; color: UiTokens.text-secondary; accessible-label: "Reminder synchronization state " + root.reminder-sync-state; }
+                reminder-enabled-control := CheckBox { text: "Enable expiry reminders"; checked: root.reminder-enabled; accessible-label: "Enable expiry reminders"; toggled => { root.reminder-enabled-edited(self.checked); } }
+                Text { text: "Recommended lead times"; color: UiTokens.text-secondary; }
+                presets := VerticalLayout {
+                    spacing: 2px;
+                    CheckBox { text: "7 days"; checked: root.reminder-preset-seven-days; accessible-label: "Reminder lead time 7 days"; toggled => { root.reminder-preset-edited(0, self.checked); } }
+                    CheckBox { text: "24 hours"; checked: root.reminder-preset-twenty-four-hours; accessible-label: "Reminder lead time 24 hours"; toggled => { root.reminder-preset-edited(1, self.checked); } }
+                    CheckBox { text: "12 hours"; checked: root.reminder-preset-twelve-hours; accessible-label: "Reminder lead time 12 hours"; toggled => { root.reminder-preset-edited(2, self.checked); } }
+                    CheckBox { text: "6 hours"; checked: root.reminder-preset-six-hours; accessible-label: "Reminder lead time 6 hours"; toggled => { root.reminder-preset-edited(3, self.checked); } }
+                    CheckBox { text: "1 hour"; checked: root.reminder-preset-one-hour; accessible-label: "Reminder lead time 1 hour"; toggled => { root.reminder-preset-edited(4, self.checked); } }
+                }
+                Text { text: "Custom lead times"; color: UiTokens.text-secondary; }
+                for row[index] in root.reminder-custom-lead-rows: HorizontalLayout {
+                    spacing: UiTokens.space-sm;
+                    row-enabled := CheckBox { text: "Custom lead"; checked: row.enabled; accessible-label: "Enable custom reminder lead"; toggled => { root.reminder-custom-lead-edited(index, self.checked, value.value, unit.current-index); } }
+                    value := SpinBox { minimum: 1; maximum: 2147483647; value: row.value; accessible-label: "Custom reminder lead value"; edited(v) => { root.reminder-custom-lead-edited(index, row-enabled.checked, v, unit.current-index); } }
+                    unit := ComboBox { model: ["seconds", "minutes", "hours", "days"]; current-index: row.unit-index; accessible-label: "Custom reminder lead unit"; selected(_) => { root.reminder-custom-lead-edited(index, row-enabled.checked, value.value, self.current-index); } }
+                }
+                HorizontalLayout {
+                    spacing: UiTokens.space-sm;
+                    Button { text: "Save reminder profile"; accessible-label: "Save reminder profile"; clicked => { root.save-reminder-policy(); } }
+                    Button { text: "Reset to recommended"; accessible-label: "Reset reminder profile to recommended"; clicked => { root.reset-reminder-recommended(); } }
+                }
+                Text { text: root.reminder-feedback; color: UiTokens.text-secondary; accessible-label: "Reminder editor feedback " + root.reminder-feedback; }
+            }
+        }
 
         Rectangle {
             height: 214px;
@@ -91,5 +151,6 @@ export component SettingsView inherits Rectangle {
         }
         Text { text: root.reduced-motion ? "Reduced motion enabled" : "Reduced motion ready"; color: UiTokens.text-secondary; font-size: 12px; }
         Rectangle { vertical-stretch: 1; background: transparent; }
+        }
     }
 }
