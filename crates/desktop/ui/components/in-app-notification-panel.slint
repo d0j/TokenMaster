@@ -1,0 +1,115 @@
+import { InAppNotificationRow } from "../models.slint";
+import { UiTokens } from "../tokens.slint";
+import { Button, ScrollView } from "std-widgets.slint";
+
+export component InAppNotificationPanel inherits Rectangle {
+    in property <[InAppNotificationRow]> rows;
+    in property <string> count-label;
+    callback dismiss();
+
+    background: UiTokens.surface;
+    border-color: UiTokens.accent;
+    border-width: 2px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: groupbox;
+    accessible-label: "Expiry notifications. " + root.count-label + ". Open Notifications for current inventory and reminder policy.";
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: UiTokens.space-sm;
+
+        HorizontalLayout {
+            height: 34px;
+            spacing: UiTokens.space-sm;
+            VerticalLayout {
+                spacing: UiTokens.space-xs;
+                horizontal-stretch: 1;
+                Text {
+                    text: "Expiry reminder";
+                    color: UiTokens.text-primary;
+                    font-size: 17px;
+                    font-weight: 800;
+                }
+                Text {
+                    text: root.count-label;
+                    color: UiTokens.accent;
+                    font-size: 11px;
+                    font-weight: 700;
+                }
+            }
+            Button {
+                text: "Dismiss";
+                accessible-label: "Dismiss expiry notifications";
+                clicked => { root.dismiss(); }
+            }
+        }
+
+        Text {
+            height: 32px;
+            text: "These reminders were applied in TokenMaster. Open Notifications for the complete current inventory.";
+            color: UiTokens.text-secondary;
+            font-size: 11px;
+            wrap: word-wrap;
+        }
+
+        ScrollView {
+            vertical-stretch: 1;
+            viewport-width: self.width;
+
+            VerticalLayout {
+                width: parent.width;
+                spacing: UiTokens.space-sm;
+
+                for notification[i] in root.rows: Rectangle {
+                    height: 96px;
+                    background: mod(i, 2) == 0 ? UiTokens.surface-subtle : UiTokens.background;
+                    border-color: UiTokens.border;
+                    border-width: 1px;
+                    border-radius: UiTokens.radius-sm;
+                    accessible-role: list-item;
+                    accessible-label: notification.accessible-label;
+
+                    VerticalLayout {
+                        padding: UiTokens.space-sm;
+                        spacing: UiTokens.space-xs;
+                        HorizontalLayout {
+                            spacing: UiTokens.space-sm;
+                            Text {
+                                text: notification.kind-label;
+                                color: UiTokens.text-primary;
+                                font-size: 12px;
+                                font-weight: 750;
+                                horizontal-stretch: 1;
+                                overflow: elide;
+                            }
+                            Text {
+                                text: "Qty " + notification.quantity-label;
+                                color: UiTokens.accent;
+                                font-size: 11px;
+                                font-weight: 700;
+                            }
+                        }
+                        Text {
+                            text: notification.expiry-label + " · " + notification.lead-label;
+                            color: UiTokens.text-primary;
+                            font-size: 11px;
+                            overflow: elide;
+                        }
+                        Text {
+                            text: notification.due-label + " · " + notification.delivered-label;
+                            color: UiTokens.text-secondary;
+                            font-size: 10px;
+                            overflow: elide;
+                        }
+                        Text {
+                            text: notification.benefit-label;
+                            color: UiTokens.text-secondary;
+                            font-size: 10px;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

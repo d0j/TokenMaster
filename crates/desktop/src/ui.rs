@@ -9,7 +9,7 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use tokenmaster_product::ProductSnapshot;
 
 use crate::{
@@ -17,14 +17,16 @@ use crate::{
     DashboardSectionRow, DashboardSessionRow, DashboardTrendPoint, DesktopActivityKey,
     DesktopActivityProjection, DesktopBenefitExpiry, DesktopCostComposition, DesktopCostValue,
     DesktopDashboardProjection, DesktopDashboardSectionKey, DesktopFreshness,
-    DesktopHistoryProjection, DesktopIntent, DesktopIntentSink, DesktopModelsProjection,
-    DesktopNotificationsProjection, DesktopOperationSnapshot, DesktopProjectsProjection,
-    DesktopQuality, DesktopReliableStateProjection, DesktopSessionDetailIntentAdmission,
+    DesktopHistoryProjection, DesktopInAppNotificationBatch, DesktopInAppNotificationBridge,
+    DesktopIntent, DesktopIntentSink, DesktopModelsProjection, DesktopNotificationsProjection,
+    DesktopOperationSnapshot, DesktopProjectsProjection, DesktopQuality,
+    DesktopReliableStateProjection, DesktopSessionDetailIntentAdmission,
     DesktopSessionDetailIntentSink, DesktopSessionsProjection, DesktopSnapshotBridge,
     DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue, DesktopValueAvailability,
-    HistoryDayRow, MainWindow, ModelUsageRow, ProjectUsageRow, RecentActivityRow, ReminderScopeRow,
-    RestorePointRow, RouteRow, SessionDetailBreakdownRow, SessionListRow,
-    UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
+    HistoryDayRow, InAppNotificationRow, MainWindow, ModelUsageRow, ProjectUsageRow,
+    RecentActivityRow, ReminderScopeRow, RestorePointRow, RouteRow, SessionDetailBreakdownRow,
+    SessionListRow, UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
+    in_app_notification::NotificationEpochState,
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
 };
 
@@ -33,6 +35,7 @@ pub struct DesktopShell {
     state: SharedDesktopState,
     reliable_state: SharedReliableState,
     snapshot_epochs: Arc<AtomicU64>,
+    notification_epochs: Arc<NotificationEpochState>,
 }
 
 pub(crate) type SharedDesktopState = Arc<Mutex<DesktopState>>;
@@ -48,6 +51,7 @@ pub struct DesktopBridgeFactory {
     window: slint::Weak<MainWindow>,
     state: SharedDesktopState,
     snapshot_epochs: Arc<AtomicU64>,
+    notification_epochs: Arc<NotificationEpochState>,
 }
 
 impl DesktopBridgeFactory {
@@ -73,6 +77,16 @@ impl DesktopBridgeFactory {
             Arc::clone(&self.state),
             receiver,
         ))
+    }
+
+    pub fn in_app_notification_bridge(
+        &self,
+    ) -> Result<DesktopInAppNotificationBridge, DesktopUiError> {
+        DesktopInAppNotificationBridge::new(
+            Arc::clone(&self.notification_epochs),
+            self.window.clone(),
+        )
+        .map_err(|_| DesktopUiError::state_unavailable())
     }
 }
 
@@ -258,11 +272,13 @@ impl DesktopShell {
         wire_route_selection(&window, state.clone());
         wire_reliable_state_intents(&window, reliable_state.clone(), intent_sink);
         wire_session_detail_intents(&window, state.clone(), session_sink);
+        wire_in_app_notification_dismissal(&window);
         Ok(Self {
             window,
             state,
             reliable_state,
             snapshot_epochs: Arc::new(AtomicU64::new(1)),
+            notification_epochs: Arc::new(NotificationEpochState::new()),
         })
     }
 
@@ -345,8 +361,20 @@ impl DesktopShell {
             window: self.window.as_weak(),
             state: self.state_handle(),
             snapshot_epochs: Arc::clone(&self.snapshot_epochs),
+            notification_epochs: Arc::clone(&self.notification_epochs),
         }
     }
+}
+
+fn wire_in_app_notification_dismissal(window: &MainWindow) {
+    let weak = window.as_weak();
+    window.on_dismiss_in_app_notifications(move || {
+        if let Some(window) = weak.upgrade() {
+            window.set_in_app_notification_visible(false);
+            window.set_in_app_notification_count_label(SharedString::default());
+            window.set_in_app_notification_rows(model(Vec::new()));
+        }
+    });
 }
 
 fn wire_reliable_state_intents(
@@ -1322,6 +1350,59 @@ fn apply_notifications_projection(
         })
         .collect::<Vec<_>>();
     window.set_benefit_lot_rows(model(lot_rows));
+}
+
+pub(crate) fn apply_in_app_notification_batch(
+    window: &MainWindow,
+    batch: &DesktopInAppNotificationBatch,
+) -> bool {
+    let rows = batch
+        .rows()
+        .iter()
+        .map(|notification| {
+            let benefit_label = notification.kind().display_label();
+            let quantity_label = format_integer(notification.quantity());
+            let lead_label = format!(
+                "Reminder due {} before expiry",
+                format_reminder_lead(notification.lead_seconds())
+            );
+            let due_label = format!(
+                "Due {}",
+                format_precise_timestamp_ms(notification.due_at_ms())
+            );
+            let expiry_label = format!(
+                "Expires {}",
+                format_precise_timestamp_ms(notification.expiry_at_ms())
+            );
+            let delivered_label = format!(
+                "Queued {}",
+                format_precise_timestamp_ms(notification.delivered_at_ms())
+            );
+            let accessible_label = format!(
+                "{benefit_label}, quantity {quantity_label}. {lead_label}. {due_label}. {expiry_label}. {delivered_label}."
+            );
+            InAppNotificationRow {
+                benefit_label: humanize_key(notification.label_key()).into(),
+                kind_label: benefit_label.into(),
+                quantity_label: quantity_label.into(),
+                lead_label: lead_label.into(),
+                due_label: due_label.into(),
+                expiry_label: expiry_label.into(),
+                delivered_label: delivered_label.into(),
+                accessible_label: accessible_label.into(),
+            }
+        })
+        .collect::<Vec<_>>();
+    let count_label = if batch.len() == 1 {
+        "1 expiry reminder".to_owned()
+    } else {
+        format!("{} expiry reminders", batch.len())
+    };
+    window.set_in_app_notification_rows(model(rows));
+    window.set_in_app_notification_count_label(count_label.into());
+    window.set_in_app_notification_visible(true);
+    window.get_in_app_notification_visible()
+        && window.get_in_app_notification_rows().row_count() == batch.len()
 }
 
 fn notification_coverage_label(value: &str) -> &'static str {

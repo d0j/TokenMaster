@@ -12,20 +12,20 @@ use crate::{
     ui::{SharedDesktopState, apply_projection},
 };
 
-type EventTask = Box<dyn FnOnce() + Send + 'static>;
+pub(crate) type EventTask = Box<dyn FnOnce() + Send + 'static>;
 
-trait EventScheduler: Send + Sync + 'static {
+pub(crate) trait EventScheduler: Send + Sync + 'static {
     fn schedule(&self, task: EventTask) -> Result<(), ScheduleError>;
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum ScheduleError {
+pub(crate) enum ScheduleError {
     Unavailable,
     Terminated,
     Internal,
 }
 
-struct SlintEventScheduler;
+pub(crate) struct SlintEventScheduler;
 
 impl EventScheduler for SlintEventScheduler {
     fn schedule(&self, task: EventTask) -> Result<(), ScheduleError> {
@@ -458,7 +458,7 @@ impl Drop for DesktopSnapshotBridge {
     }
 }
 
-fn saturating_increment(value: &AtomicU64) {
+pub(crate) fn saturating_increment(value: &AtomicU64) {
     let _ = value.fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
         Some(current.saturating_add(1))
     });

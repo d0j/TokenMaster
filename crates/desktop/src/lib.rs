@@ -6,6 +6,7 @@
 pub mod activity;
 pub mod dashboard;
 pub mod history;
+pub mod in_app_notification;
 pub mod models;
 pub mod notifications;
 pub mod presentation;
@@ -29,6 +30,7 @@ mod ui;
 pub use activity::*;
 pub use dashboard::*;
 pub use history::*;
+pub use in_app_notification::*;
 pub use models::*;
 pub use notifications::*;
 pub use presentation::{

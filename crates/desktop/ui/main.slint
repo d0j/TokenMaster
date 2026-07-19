@@ -1,11 +1,12 @@
 import {
     RouteRow, DashboardSectionRow, DashboardQuotaRow, DashboardBenefitRow,
     DashboardTrendPoint, DashboardSessionRow, DashboardActivityRow, DashboardModelRow,
-    HistoryDayRow, ModelUsageRow, ProjectUsageRow, RecentActivityRow, ReminderScopeRow, BenefitLotRow, SessionListRow, SessionDetailBreakdownRow, RestorePointRow
+    HistoryDayRow, ModelUsageRow, ProjectUsageRow, RecentActivityRow, ReminderScopeRow, BenefitLotRow, SessionListRow, SessionDetailBreakdownRow, RestorePointRow, InAppNotificationRow
 } from "models.slint";
 import { UiTokens } from "tokens.slint";
 import { RouteNavItem } from "components/route-nav-item.slint";
 import { RouteState } from "components/route-state.slint";
+import { InAppNotificationPanel } from "components/in-app-notification-panel.slint";
 import { DashboardView } from "views/dashboard-view.slint";
 import { HistoryView } from "views/history-view.slint";
 import { ModelsView } from "views/models-view.slint";
@@ -177,6 +178,9 @@ export component MainWindow inherits Window {
     in property <int> backup-retention-budget-mib;
     in property <bool> high-contrast: false;
     in property <bool> reduced-motion: false;
+    in property <[InAppNotificationRow]> in-app-notification-rows;
+    in-out property <bool> in-app-notification-visible: false;
+    in-out property <string> in-app-notification-count-label;
     callback select-route(string);
     callback select-session(int);
     callback export-config();
@@ -193,6 +197,7 @@ export component MainWindow inherits Window {
     callback retry-operation();
     callback cancel-operation();
     callback update-backup-policy(bool, int, int, int);
+    callback dismiss-in-app-notifications();
 
     title: "TokenMaster";
     preferred-width: 1120px;
@@ -481,5 +486,15 @@ export component MainWindow inherits Window {
                 }
             }
         }
+    }
+
+    if root.in-app-notification-visible: InAppNotificationPanel {
+        x: parent.width - self.width - UiTokens.space;
+        y: 58px + UiTokens.space;
+        width: min(440px, parent.width - 2 * UiTokens.space);
+        height: min(460px, parent.height - 58px - 2 * UiTokens.space);
+        rows: root.in-app-notification-rows;
+        count-label: root.in-app-notification-count-label;
+        dismiss => { root.dismiss-in-app-notifications(); }
     }
 }
