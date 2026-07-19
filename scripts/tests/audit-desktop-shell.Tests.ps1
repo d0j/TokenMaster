@@ -1202,6 +1202,19 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-COMMAND-PALETTE-BOUND*"
     }
 
+    It "rejects a second command palette route model" {
+        $fixture = New-DesktopAuditFixture -Name "command-palette-second-model"
+        $path = Join-Path $fixture "crates\desktop\ui\main.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'in property <[RouteRow]> command-palette-rows;',
+            "in property <[RouteRow]> command-palette-rows;`n    in property <[RouteRow]> command-palette-rows;"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-COMMAND-PALETTE-BOUND*"
+    }
+
     It "rejects removing the exact command palette shortcut" {
         $fixture = New-DesktopAuditFixture -Name "command-palette-shortcut"
         $path = Join-Path $fixture "crates\desktop\ui\main.slint"
@@ -1224,12 +1237,41 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-COMMAND-PALETTE-ROUTE-ONLY*"
     }
 
-    It "rejects nesting the command palette before the notification layer" {
-        $fixture = New-DesktopAuditFixture -Name "command-palette-overlay-order"
+    It "rejects removing the command palette accessible default action" {
+        $fixture = New-DesktopAuditFixture -Name "command-palette-accessible-action"
+        $path = Join-Path $fixture "crates\desktop\ui\components\command-palette.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'accessible-action-default => { root.activate-route(route.key); }',
+            'accessible-action-decrement => { root.activate-route(route.key); }'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-COMMAND-PALETTE-ROUTE-ONLY*"
+    }
+
+    It "rejects removing the command palette ancestor focus scope" {
+        $fixture = New-DesktopAuditFixture -Name "command-palette-overlay-ancestor"
         $path = Join-Path $fixture "crates\desktop\ui\main.slint"
         $text = [System.IO.File]::ReadAllText($path).Replace(
             'shell-focus := FocusScope {',
             'shell-focus := Rectangle {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-COMMAND-PALETTE-OVERLAY*"
+    }
+
+    It "rejects moving the command palette before the notification layer" {
+        $fixture = New-DesktopAuditFixture -Name "command-palette-overlay-order"
+        $path = Join-Path $fixture "crates\desktop\ui\main.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '    RoutePalette {',
+            '    MovedPalette {'
+        ).Replace(
+            '    if root.in-app-notification-visible: InAppNotificationPanel {',
+            "    RoutePalette { }`n    if root.in-app-notification-visible: InAppNotificationPanel {"
         )
         [System.IO.File]::WriteAllText($path, $text)
 

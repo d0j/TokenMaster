@@ -341,11 +341,16 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert_compiled_notifications_render_expiry_truth_in_place();
     assert_compiled_help_about_is_static_truthful_and_responsive();
     assert_compiled_session_selection_is_immediate_correlated_and_bounded_in_place();
+    assert_open_command_palette_refreshes_from_accepted_snapshot();
 }
 
 fn assert_compiled_command_palette_is_bounded_and_routes_through_desktop_state(
     window: &tokenmaster_desktop::MainWindow,
 ) {
+    window.show().expect("show command palette window");
+    window
+        .window()
+        .set_size(slint::PhysicalSize::new(1120, 720));
     assert!(!window.get_command_palette_visible());
     assert_eq!(window.get_command_palette_rows().row_count(), 0);
 
@@ -377,8 +382,18 @@ fn assert_compiled_command_palette_is_bounded_and_routes_through_desktop_state(
     dispatch_text(window, "help");
     assert_eq!(window.get_command_palette_query(), "help");
     assert_eq!(window.get_command_palette_rows().row_count(), 1);
-    dispatch_key(window, Key::Escape);
+    let accessible_routes = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::Button)
+        .match_predicate(|element| {
+            element
+                .accessible_label()
+                .is_some_and(|label| label == "Help / About, ready")
+        })
+        .find_all();
+    assert_eq!(accessible_routes.len(), 1);
+    accessible_routes[0].invoke_accessible_default_action();
     assert!(!window.get_command_palette_visible());
+    assert_eq!(window.get_active_route_key(), "help_about");
 
     window.invoke_open_command_palette();
 
@@ -394,7 +409,23 @@ fn assert_compiled_command_palette_is_bounded_and_routes_through_desktop_state(
         "help_about"
     );
 
-    window.invoke_command_palette_query_edited(SharedString::from("x".repeat(65)));
+    window.invoke_command_palette_query_edited(SharedString::from("settings"));
+    let pointer_routes = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::Button)
+        .match_predicate(|element| {
+            element
+                .accessible_label()
+                .is_some_and(|label| label == "Settings, ready")
+        })
+        .find_all();
+    assert_eq!(pointer_routes.len(), 1);
+    pointer_routes[0].mock_single_click(PointerEventButton::Left);
+    assert!(!window.get_command_palette_visible());
+    assert_eq!(window.get_active_route_key(), "settings");
+
+    window.invoke_open_command_palette();
+
+    window.invoke_command_palette_query_edited(SharedString::from("🙂".repeat(10_000)));
     assert_eq!(window.get_command_palette_query().chars().count(), 64);
     assert_eq!(window.get_command_palette_rows().row_count(), 0);
     assert_eq!(window.get_command_palette_selected_ordinal(), -1);
@@ -404,6 +435,50 @@ fn assert_compiled_command_palette_is_bounded_and_routes_through_desktop_state(
     assert!(!window.get_command_palette_visible());
     assert_eq!(window.get_active_route_key(), "data_health");
     assert_eq!(window.get_active_route_state(), "unavailable");
+}
+
+fn assert_open_command_palette_refreshes_from_accepted_snapshot() {
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory.path().join("ui-command-palette-refresh.sqlite3");
+    let mut reducer = ready_reducer(&path, 0);
+    let shell = DesktopShell::new(&reducer.snapshot()).expect("desktop shell");
+    let window = shell.window();
+
+    window.invoke_open_command_palette();
+    window.invoke_command_palette_query_edited(SharedString::from("data health"));
+    assert_eq!(window.get_command_palette_rows().row_count(), 1);
+    assert_eq!(
+        window
+            .get_command_palette_rows()
+            .row_data(0)
+            .expect("ready data-health route")
+            .state,
+        "ready"
+    );
+
+    reducer
+        .fail_data_status(
+            ProductAttemptGeneration::new(2).expect("attempt"),
+            QueryErrorCode::DeadlineExceeded,
+        )
+        .expect("fail data-status refresh");
+    assert_eq!(
+        shell
+            .apply_snapshot(&reducer.snapshot())
+            .expect("apply refreshed snapshot"),
+        DesktopApplyOutcome::Accepted
+    );
+
+    assert!(window.get_command_palette_visible());
+    assert_eq!(window.get_command_palette_query(), "data health");
+    assert_eq!(window.get_command_palette_rows().row_count(), 1);
+    let refreshed = window
+        .get_command_palette_rows()
+        .row_data(0)
+        .expect("refreshed data-health route");
+    assert_eq!(refreshed.key, "data_health");
+    assert_eq!(refreshed.state, "degraded");
+    assert!(refreshed.selected);
 }
 
 fn assert_compiled_help_about_is_static_truthful_and_responsive() {
