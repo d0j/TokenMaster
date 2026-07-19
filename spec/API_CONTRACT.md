@@ -420,6 +420,17 @@ generation. Projects route selection is presentation-only and cannot issue analy
 or Git work, rebuild the model, add mutable range/filter/sort state, create a timer/
 worker/cache/connection, or recreate `MainWindow`.
 
+`DesktopActivityProjection::from_snapshot` is the sole product-to-Activity mapping.
+It reads the already-published latest Activity page, copies at most 12 newest-first
+rows containing UTC timestamp, canonical model, and typed input/cached/output/reasoning/
+total tokens, and preserves optional `has_more`, freshness, quality, reasons, and
+explicit truncation. It exposes no opaque row identity or provenance. The existing
+`LatestActivityRequest::first(12)` remains the only Activity request and runs on the
+same capacity-one refresh worker. One Activity Slint model is replaced only during
+initial construction or an accepted newer product generation. Route selection cannot
+query, rebuild the model, retain prior pages, create selection/filter/detail/export
+state, add a timer/worker/cache/connection, or recreate `MainWindow`.
+
 `DesktopQueryPlan` also owns one all-time `usage_sessions` request with page size 64.
 It executes sequentially on the same capacity-one query worker; Dashboard copies only
 its first 12 summaries while the independent product Sessions section retains the

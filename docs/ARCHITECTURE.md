@@ -149,10 +149,20 @@ adding per-route analytics work. `DesktopModelsProjection` consumes the shared e
 and copies at most 64 canonical model rows with complete typed token/cost/event evidence.
 Cost availability, selection mode, and actual composition remain typed, with partial
 and calculated/reported/mixed evidence explicit at the Slint boundary.
-History keeps only its 30 daily rows and future Projects will consume the prefetched
-Project breakdown. Backend and frontend truncation remain explicit. One Slint model is
+History keeps only its 30 daily rows and Projects consumes the prefetched Project
+breakdown. Backend and frontend truncation remain explicit. One Slint model is
 replaced only on accepted publication, so Models navigation is instant and adds no
 worker, query, timer, cache, connection, prior dataset, or private identity.
+
+P3-D.4 projects the shared Project breakdown together with the independently labelled
+UTC-today Git envelope into at most 32 usage-centric rows. Exact safe-alias equality is
+the only join; checked same-alias Git sums count project usage cost once. P3-D.5 then
+projects the existing latest Activity page into at most 12 newest-first rows containing
+only UTC timestamp, canonical model, and five typed token facts. Both routes replace
+one model only on accepted publication and add no query, worker, timer, cache, or
+route-time work. Recent activity remains independent during aggregate rebuild. It is
+not a rhythm/heatmap substitute; that requires a future bounded timezone/DST-aware
+aggregate.
 
 P3-D.2a adds an independent Sessions page without widening frontend authority. The same
 query plan requests at most 64 all-time newest-first session summaries and publishes

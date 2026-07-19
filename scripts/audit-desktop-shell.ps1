@@ -40,8 +40,8 @@ if ($productionManifestText -match '\btokenmaster-(store|provider|runtime|codex|
 $rustFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.rs')
 $uiFiles = @(Get-ChildItem -LiteralPath $uiRoot -Recurse -File -Filter '*.slint')
 $productionFiles = @($rustFiles + $uiFiles)
-if ($rustFiles.Count -ne 12 -or $uiFiles.Count -ne 18) {
-    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain twelve Rust and eighteen Slint files'
+if ($rustFiles.Count -ne 13 -or $uiFiles.Count -ne 19) {
+    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain thirteen Rust and nineteen Slint files'
 }
 $uiText = ($uiFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
@@ -329,6 +329,68 @@ $projectPublicText = @(
 if ($projectPublicText -match '(?i)\b(?:repository|association|dataset|provider|profile|account|session|source|event)[_-]?id\b|\b(?:absolute_)?path\b|\bkey\b|\bcursor\b') {
     throw 'TM-DESKTOP-PROJECTS-IDENTITY: private identity or path crossed the Projects projection boundary'
 }
+$activityProjectionPath = Join-Path $sourceRoot 'activity.rs'
+$activityProjectionText = [System.IO.File]::ReadAllText($activityProjectionPath)
+if ($activityProjectionText -notmatch 'pub const MAX_ACTIVITY_ROWS: usize = 12;' -or
+    $activityProjectionText -notmatch '\.take\(MAX_ACTIVITY_ROWS\)' -or
+    $activityProjectionText -notmatch 'page\.has_more\(\) \|\| truncated') {
+    throw 'TM-DESKTOP-ACTIVITY-BOUND: Activity projection must preserve page incompleteness and retain at most twelve rows'
+}
+$activityQueryCallCount = [regex]::Matches($controllerText, 'source\.latest_activity\(').Count
+if ($activityQueryCallCount -ne 1 -or
+    $controllerText -notmatch 'pub const MAX_DASHBOARD_ROWS: usize = 12;' -or
+    $controllerText -notmatch 'activity: LatestActivityRequest::first\(overview_page_size\)') {
+    throw 'TM-DESKTOP-ACTIVITY-REQUEST: Activity must reuse one bounded first-page request on the existing worker'
+}
+$activityProjectionCallCount = [regex]::Matches($uiRustText, 'apply_activity_route_projection\(').Count
+if ($activityProjectionCallCount -ne 2) {
+    throw 'TM-DESKTOP-ACTIVITY-REBUILD: Activity rows must not rebuild during route-only selection'
+}
+$activityModelReplacementCount = [regex]::Matches(
+    $uiRustText,
+    'set_recent_activity_rows\(model\(rows\)\)'
+).Count
+if ($activityModelReplacementCount -ne 1) {
+    throw 'TM-DESKTOP-ACTIVITY-MODEL: Activity must have one bounded model replacement site'
+}
+$activityViewText = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'views\activity-view.slint'))
+$activityViewBoundary = $mainUiText + "`n" + $activityViewText + "`n" + $uiRustText
+foreach ($requiredPattern in @(
+    'if root\.activity-visible: ActivityView',
+    '!root\.activity-visible',
+    'out property <bool> narrow:',
+    'if root\.narrow:',
+    'if !root\.narrow:',
+    'Recent activity',
+    'UTC timestamps',
+    'More activity available',
+    'set_activity_page_available\(activity\.has_more\(\)\.is_some\(\)\)',
+    'No activity events in the available page',
+    'format_timestamp_utc\(row\.timestamp_seconds\(\), row\.timestamp_nanos\(\)\)',
+    'item\.input-label',
+    'item\.cached-label',
+    'item\.output-label',
+    'item\.reasoning-label',
+    'item\.total-label',
+    'accessible-label:.*item\.input-label.*item\.cached-label.*item\.output-label.*item\.reasoning-label.*item\.total-label'
+)) {
+    if ($activityViewBoundary -cnotmatch $requiredPattern) {
+        throw "TM-DESKTOP-ACTIVITY-VIEW: missing responsive Activity contract $requiredPattern"
+    }
+}
+$activityPublicText = @(
+    [regex]::Match($activityProjectionText, '(?s)pub struct DesktopRecentActivityRow\s*\{.*?\r?\n\}').Value
+    [regex]::Match($activityProjectionText, '(?s)pub struct DesktopActivityProjection\s*\{.*?\r?\n\}').Value
+) -join "`n"
+if ($activityPublicText -match '(?i)\b(?:scope|provider|profile|account|session|source|event|cursor|fingerprint|dataset|project|path|key|id)(?:[_-]?id)?\b\s*:') {
+    throw 'TM-DESKTOP-ACTIVITY-IDENTITY: private identity or provenance crossed the Activity projection boundary'
+}
+if ($activityProjectionText -match '\.(?:scope|provider|profile|account|session|source|event_id|cursor|fingerprint|dataset|project|path|key|id)\(\)') {
+    throw 'TM-DESKTOP-ACTIVITY-IDENTITY: Activity projection must not read private identity or provenance fields'
+}
+if ($activityViewBoundary -match '(?i)\b(?:rhythm|heatmap|day-of-week|hourly)\b') {
+    throw 'TM-DESKTOP-ACTIVITY-RHYTHM: Recent activity must not claim an unimplemented rhythm or heatmap aggregate'
+}
 $sessionsPath = Join-Path $sourceRoot 'sessions.rs'
 $sessionsText = [System.IO.File]::ReadAllText($sessionsPath)
 if ($sessionsText -notmatch 'pub const MAX_SESSION_ROWS: usize = 64;' -or
@@ -528,6 +590,11 @@ if ($SourceOnly) {
         projects_projection_application_count = $projectsProjectionCallCount - 1
         git_query_call_count = $gitQueryCallCount
         projects_polling_surface_count = 0
+        activity_row_maximum = 12
+        activity_model_replacement_count = $activityModelReplacementCount
+        activity_projection_application_count = $activityProjectionCallCount - 1
+        activity_query_call_count = $activityQueryCallCount
+        activity_polling_surface_count = 0
         session_row_maximum = 64
         session_detail_model_row_maximum = 32
         session_detail_project_row_maximum = 32
@@ -622,6 +689,11 @@ if ($LASTEXITCODE -ne 0) {
     projects_projection_application_count = $projectsProjectionCallCount - 1
     git_query_call_count = $gitQueryCallCount
     projects_polling_surface_count = 0
+    activity_row_maximum = 12
+    activity_model_replacement_count = $activityModelReplacementCount
+    activity_projection_application_count = $activityProjectionCallCount - 1
+    activity_query_call_count = $activityQueryCallCount
+    activity_polling_surface_count = 0
     session_row_maximum = 64
     session_detail_model_row_maximum = 32
     session_detail_project_row_maximum = 32

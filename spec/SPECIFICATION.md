@@ -323,6 +323,16 @@ remain visible. No Projects row may expose repository/association/dataset/privat
 provider/profile/account/source/session identity, path, key/cursor, content, command,
 credential, or query authority.
 
+Activity MUST render one bounded newest-first page from the already-published latest
+activity envelope. Each row contains only an exact UTC timestamp, canonical model key,
+and typed input, cached, output, reasoning, and total token facts. Page completeness,
+freshness, quality, empty, retained-failure, unavailable, and truncation truth MUST
+remain explicit. No Activity row may expose scope, provider/profile/account, source,
+session/project, event/dataset identity, key/cursor/fingerprint, path, content, prompt,
+response, command, credential, or query authority. This recent-event page MUST NOT be
+labelled as a rhythm, heatmap, hourly, or day-of-week aggregate; that capability needs
+a separate bounded timezone/DST-aware query contract.
+
 ### TM-UI-002 — Reactive presentation boundary
 
 Skin, layout, locale, selection, and range changes MUST update bounded presentation
@@ -368,6 +378,11 @@ filter/sort state, query service, timer, worker, archive handle, or private iden
 Named aliases match Git only by exact bounded `ProjectAlias`. Same-alias repository
 metrics use checked sums; project usage cost is counted once when recomputing combined
 efficiency. Route-only selection MUST NOT rebuild the Projects model or issue work.
+The current Activity projection MUST retain at most 12 newest-first rows in one model
+and no prior page, query service, timer, worker, archive handle, private identity, or
+raw event. It MUST reuse the existing first-page request and remain available while
+aggregate-dependent routes rebuild. Route-only selection MUST NOT rebuild the Activity
+model or issue work.
 The current Sessions projection MUST retain at most 64 summary rows in one model and no
 opaque key, cursor, prior page, query service, timer, worker, or archive handle. Its
 route-only selection MUST NOT rebuild the model or issue a detail query.

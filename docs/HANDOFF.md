@@ -795,17 +795,36 @@ and the complete locked workspace test/doctest suite pass; the full suite comple
 807 seconds with `CARGO_BUILD_JOBS=1` after an isolated concurrent MinGW linker exit
 with blank stderr reproduced successfully as a single target. P3-D.4 is closed.
 
-The immediate next implementation slice is Activity. Reuse the
-immutable snapshot/controller boundary; do not turn route selection into query
-authority. Later-page Sessions navigation and interactive
-History range selection remain bounded replacements of their existing product sections.
+P3-D.5 Recent activity is implemented under
+`docs/superpowers/specs/2026-07-19-tokenmaster-activity-route-design.md` and
+`docs/superpowers/plans/2026-07-19-tokenmaster-activity-route.md`. It reuses the sole
+existing `LatestActivityRequest::first(12)` and current capacity-one worker. Desktop
+retains one 12-row newest-first model with UTC timestamp, canonical model, five typed
+token facts, evidence, and optional `has_more`; Slint preserves that truth in wide,
+narrow, and accessible rows. Route switching performs no query/model/window rebuild.
+The projection excludes private identity/provenance/content/authority and remains
+available during aggregate rebuild. Focused 9/9 projection, compiled UI, complete
+Desktop package, strict package Clippy, source/release audits, and 67/67 mutation cases
+pass. It is Recent activity only; full WMT rhythm/time distribution still requires a
+separate bounded timezone/DST-aware aggregate. Independent review found two Important
+empty/evidence-state intersections; red/green fixes degrade partial empty pages,
+preserve exact fractional UTC timestamps, and distinguish retained empty pages from
+unavailable evidence through one safe boolean. Re-review returned READY with
+Critical/Important/Minor 0/0/0. Clean-root, formatting, strict warnings-as-errors
+workspace Clippy, release composition, and the complete locked workspace test/doctest
+baseline pass in 1,035 seconds. P3-D.5 is closed; no release acceptance is inferred.
+
+The immediate next implementation slice is Notifications, followed by Help/About.
+Reuse the immutable snapshot/controller boundary; do not turn route selection into
+query authority. Later-page Sessions navigation and interactive History range
+selection remain bounded replacements of their existing product sections.
 Keep the fixed archive path and writer sidecar; never copy only the live main file or
 treat busy/disk/access/schema-newer as corruption authority. Keep automatic recovery
 data only; device-local settings never move. Do not relax the state boundary into path,
 generic-stream, generic age-extraction, or batch-deletion authority.
 
-P3-E then closes remaining notifications, settings/help, command palette, tray, and
-compact lifecycle. P3-D-P3-E, P4 presentation, CLI/MCP, activation, M0 acceptance,
+P3-E then closes command palette, tray, compact lifecycle, and remaining shell work.
+P3-D-P3-E, P4 presentation, CLI/MCP, activation, M0 acceptance,
 packaging, signing, and release remain unclaimed. Inventory/reminder read must not
 imply activation authority.
 The prior post-P3-D.0-Task-10 focused evidence includes the Task 5 store contracts,

@@ -6,6 +6,28 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.5 as a responsive bounded Recent activity route over the existing
+  `LatestActivityRequest::first(12)` product page. No query, worker, timer, queue,
+  cache, connection, callback, schema, dependency, or route-time model rebuild was
+  added; Activity remains available during aggregate rebuild.
+- Added one newest-first 12-row projection and Slint model containing only UTC
+  timestamp, canonical model, typed input/cached/output/reasoning/total tokens,
+  freshness/quality, optional `has_more`, and explicit empty/unavailable/retained-
+  failure/backend/frontend truncation truth. Private identity, provenance, content,
+  paths, cursor/fingerprint, and authority remain outside Desktop/Slint.
+- Added a compiled wide/narrow Recent activity view with complete accessible row
+  meaning and in-place route switching. Focused 9/9 projection, compiled UI, full
+  Desktop package, strict Desktop Clippy, source/release audits, and 67/67 mutation
+  cases pass. The route intentionally does not claim WMT rhythm/heatmap parity; the
+  bounded timezone/DST-aware aggregate remains future work.
+- Closed two independent-review Important findings with explicit empty-page evidence
+  degradation and a safe `page-available` presentation fact, so a retained empty page
+  cannot render as unavailable. Exact fractional UTC timestamps are preserved and
+  invalid nanoseconds fail closed. Re-review returned Critical/Important/Minor 0/0/0;
+  clean-root, formatting, strict workspace Clippy, release composition, and the complete
+  locked workspace test/doctest baseline pass in 1,035 seconds. P3-D.5 is closed;
+  packaging, signing, M0, and release acceptance remain separate.
+
 - Implemented P3-D.4 Projects as one responsive usage-centric route over the already
   captured recent-30-day Project breakdown and existing UTC-today Git envelope. The
   UI labels both periods independently and adds no analytics/Git query or runtime owner.

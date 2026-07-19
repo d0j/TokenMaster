@@ -225,6 +225,15 @@ Dataset identity may be compared transiently only to validate same-alias efficie
 The recent local-civil usage range and UTC code range remain visibly separate, so
 neither evidence stream can launder the other's period or completeness.
 
+P3-D.5 adds one 12-row Recent activity projection over the existing latest-page
+envelope. It exposes only UTC timestamp, canonical model key, typed aggregate token
+components, evidence, and page completeness. Scope, provider/profile/account,
+event/dataset/source/session/project identity, cursor/fingerprint/key, paths, content,
+prompts, responses, reasoning content, commands, credentials, SQL, raw-event export,
+and authority remain outside Desktop/Slint. Activity route selection adds no query,
+callback, worker, timer, queue, cache, connection, or retained row identity. The UI
+does not claim rhythm/heatmap semantics without a separate bounded aggregate.
+
 Providers emit bounded observation/session-relation drafts only. They cannot create
 event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or
 canonical events. Those values are created only by TokenMaster accounting code. Store

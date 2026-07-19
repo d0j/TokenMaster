@@ -47,14 +47,14 @@ packages, PowerShell contract audits.
   one `Arc` row list.
 
 **Acceptance:**
-- [ ] Start with compile-failing tests for initial truth and the public API.
-- [ ] Add ready, authoritative-empty, degraded-retained, unavailable, partial evidence,
+- [x] Start with compile-failing tests for initial truth and the public API.
+- [x] Add ready, authoritative-empty, degraded-retained, unavailable, partial evidence,
   `has_more`, and frontend-cap fixtures.
-- [ ] Prove newest-first order and exact five-component token availability/zero truth.
-- [ ] Prove scope/event/cursor/fingerprint/private identity never enters the projection.
-- [ ] Prove aggregate rebuild does not disable Activity route truth.
-- [ ] Prove 10,000 snapshot replacements release the old row list.
-- [ ] Add the projection to `DesktopProjection` and run focused tests green.
+- [x] Prove newest-first order and exact five-component token availability/zero truth.
+- [x] Prove scope/event/cursor/fingerprint/private identity never enters the projection.
+- [x] Prove aggregate rebuild does not disable Activity route truth.
+- [x] Prove 10,000 snapshot replacements release the old row list.
+- [x] Add the projection to `DesktopProjection` and run focused tests green.
 
 ### Task 2: Mount the real responsive Slint Recent activity view
 
@@ -66,15 +66,15 @@ packages, PowerShell contract audits.
 - Modify: `crates/desktop/tests/ui_contract.rs`
 
 **Acceptance:**
-- [ ] First add a failing compiled UI test for visibility, UTC timestamp, canonical
+- [x] First add a failing compiled UI test for visibility, UTC timestamp, canonical
   model, all token facts, page status, evidence, and one window/model identity.
-- [ ] Add `RecentActivityRow`, Activity properties, and one `activity-visible` branch.
-- [ ] Wide and narrow layouts preserve all five token facts from the same bounded model.
-- [ ] Waiting/unavailable/degraded/empty/ready/incomplete-page states remain explicit.
-- [ ] Full accessible labels retain UTC time, model, and every token component.
-- [ ] Route-only selection does not apply/rebuild the Activity model, query, recreate
+- [x] Add `RecentActivityRow`, Activity properties, and one `activity-visible` branch.
+- [x] Wide and narrow layouts preserve all five token facts from the same bounded model.
+- [x] Waiting/unavailable/degraded/empty/ready/incomplete-page states remain explicit.
+- [x] Full accessible labels retain UTC time, model, and every token component.
+- [x] Route-only selection does not apply/rebuild the Activity model, query, recreate
   the window, or schedule work.
-- [ ] Run the complete Desktop package tests green.
+- [x] Run the complete Desktop package tests green.
 
 ### Task 3: Extend deterministic architecture and privacy audits
 
@@ -83,12 +83,12 @@ packages, PowerShell contract audits.
 - Modify: `scripts/tests/audit-desktop-shell.Tests.ps1`
 
 **Acceptance:**
-- [ ] Update exact production file counts and add mutations for the 12-row cap, exact
+- [x] Update exact production file counts and add mutations for the 12-row cap, exact
   existing request, one model/application site, real mount, UTC context, full token
   mix, accessibility, route-only behavior, and forbidden fields.
-- [ ] Assert no second Activity query, worker, timer, queue, cache, connection, callback,
+- [x] Assert no second Activity query, worker, timer, queue, cache, connection, callback,
   cursor, raw-event export, or rhythm claim is introduced.
-- [ ] Run source/release audits and all Desktop audit Pester tests green.
+- [x] Run source/release audits and all Desktop audit Pester tests green.
 
 ### Task 4: Synchronize durable project truth
 
@@ -107,20 +107,20 @@ packages, PowerShell contract audits.
 - Modify: `docs/PROJECT_HISTORY.md`
 
 **Acceptance:**
-- [ ] Record the exact Recent activity boundary, 12-row cap, privacy surface, page
+- [x] Record the exact Recent activity boundary, 12-row cap, privacy surface, page
   completeness, aggregate-rebuild readiness, and delivery evidence.
-- [ ] Keep full rhythm aggregation, pagination, Activity detail/filter/export,
+- [x] Keep full rhythm aggregation, pagination, Activity detail/filter/export,
   Notifications/Help/P3-E, P4/P5, M0, packaging, signing, and release incomplete.
-- [ ] Do not store a current commit hash in tracked documents.
+- [x] Do not store a current commit hash in tracked documents.
 
 ### Task 5: Independent review and closeout
 
-- [ ] Run focused Desktop/audit tests first.
-- [ ] Run `git diff --check`.
-- [ ] Run clean-root, Rust formatting, warnings-as-errors workspace Clippy, and locked
+- [x] Run focused Desktop/audit tests first.
+- [x] Run `git diff --check`.
+- [x] Run clean-root, Rust formatting, warnings-as-errors workspace Clippy, and locked
   workspace tests exactly as required by `AGENTS.md`.
-- [ ] Request one independent read-only high-rigor correctness/security/performance
+- [x] Request one independent read-only high-rigor correctness/security/performance
   review and resolve every Critical/Important issue.
-- [ ] Audit and stop task-owned agents, tests, diagnostics, and temporary processes.
-- [ ] Stage only this slice and create an English conventional commit.
-- [ ] Do not push, merge, package, sign, or claim release acceptance without authority.
+- [x] Audit and stop task-owned agents, tests, diagnostics, and temporary processes.
+- [x] Stage only this slice and create an English conventional commit.
+- [x] Do not push, merge, package, sign, or claim release acceptance without authority.

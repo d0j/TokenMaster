@@ -3,6 +3,7 @@
 #![forbid(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 
+pub mod activity;
 pub mod dashboard;
 pub mod history;
 pub mod models;
@@ -24,6 +25,7 @@ pub use generated_ui::*;
 
 mod ui;
 
+pub use activity::*;
 pub use dashboard::*;
 pub use history::*;
 pub use models::*;

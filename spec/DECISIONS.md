@@ -1734,3 +1734,29 @@ and a second Git query would add work/state before interactive range ownership e
 The selected two-window presentation provides material project value now while
 preserving truthful boundaries and a clean future upgrade to generation-fenced shared
 range controls.
+
+## ADR-070 — Ship Recent activity from the existing bounded latest page
+
+Decision: P3-D.5 renders the already-prefetched `LatestActivityPage` as one
+newest-first Recent activity route. Desktop retains at most 12 rows with UTC timestamp,
+canonical model key, typed input/cached/output/reasoning/total tokens, evidence, and
+optional page incompleteness. The existing `LatestActivityRequest::first(12)` remains
+the only Activity query and uses the current capacity-one refresh worker. Activity
+stays available during aggregate rebuild because its product section is independent.
+
+One accepted product generation replaces one `Arc` row list and one Slint model.
+Route selection changes only visibility and cannot query, rebuild, select a row,
+paginate, filter, export, retain prior pages, or create a timer, worker, queue, cache,
+connection, callback, or raw-event surface. Scope, provider/profile/account,
+event/dataset/source/session/project identity, cursor/fingerprint/key, paths, content,
+prompts, responses, commands, credentials, and authority never cross Desktop/Slint.
+
+The route is deliberately named Recent activity, not rhythm or heatmap. A truthful WMT
+time-distribution counterpart requires a separate bounded hourly/day-of-week aggregate
+with explicit timezone and DST semantics; deriving it from a 12-item page would be
+incomplete and misleading.
+
+Rationale: the latest page is already captured for Dashboard and is immediately useful,
+so another query or owner would add latency and memory without new truth. Treating a
+small event sample as a rhythm chart would create false parity. This slice delivers
+responsive drill-out value now while preserving the exact future aggregate boundary.

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tokenmaster_domain::{BenefitKind, BenefitState, GitOutputQuality};
+use tokenmaster_domain::{BenefitKind, BenefitState, GitOutputQuality, TokenCount};
 use tokenmaster_product::{ProductSection, ProductSectionKind, ProductSnapshot};
 use tokenmaster_query::{
     AggregateTokenValue, BenefitReminderCoverage, CostAvailability, CostComposition, CostMode,
@@ -1327,6 +1327,18 @@ pub(crate) fn map_tokens(value: AggregateTokenValue, event_count: u64) -> Deskto
             known_count,
             event_count,
         },
+    }
+}
+
+pub(crate) const fn map_token_count(value: TokenCount) -> DesktopTokenValue {
+    match value {
+        TokenCount::Available(value) => DesktopTokenValue {
+            availability: DesktopValueAvailability::Known,
+            known_sum: Some(value),
+            known_count: 1,
+            event_count: 1,
+        },
+        TokenCount::Unavailable => DesktopTokenValue::UNAVAILABLE,
     }
 }
 

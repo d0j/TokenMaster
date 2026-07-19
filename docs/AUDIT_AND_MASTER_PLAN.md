@@ -291,8 +291,10 @@ corrupt set, and completes mandatory authoritative-source reconciliation before 
 publication, including restart/retry after promotion, while reporting unknown metrics
 and non-reconstructible domains unavailable. Restore confirmation remains bound to its
 exact reviewed generation/ordinal and queued operation state changes at actual worker
-execution. Tasks 16-18 fault,
-resource-return/UI-latency, documentation, and P3-D.0 acceptance closure are next.
+execution. Tasks 16-18 fault, resource-return/UI-latency, documentation, and P3-D.0
+acceptance closure are complete. P3-D.1 History, P3-D.2 Sessions list/detail, P3-D.3
+Models, P3-D.4 Projects, and P3-D.5 Recent activity now extend the same bounded
+snapshot/controller boundary; Notifications and Help/About are the next route slices.
 
 The final planning pass fixes a six-state database/settings transaction, explicit
 manual data-only or data-plus-portable-settings choice, data-only automatic recovery,

@@ -15,15 +15,16 @@ use tokenmaster_product::ProductSnapshot;
 use crate::{
     DashboardActivityRow, DashboardBenefitRow, DashboardModelRow, DashboardQuotaRow,
     DashboardSectionRow, DashboardSessionRow, DashboardTrendPoint, DesktopActivityKey,
-    DesktopCostComposition, DesktopCostValue, DesktopDashboardProjection,
-    DesktopDashboardSectionKey, DesktopFreshness, DesktopHistoryProjection, DesktopIntent,
-    DesktopIntentSink, DesktopModelsProjection, DesktopOperationSnapshot,
-    DesktopProjectsProjection, DesktopQuality, DesktopReliableStateProjection,
-    DesktopSessionDetailIntentAdmission, DesktopSessionDetailIntentSink, DesktopSessionsProjection,
-    DesktopSnapshotBridge, DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue,
-    DesktopValueAvailability, HistoryDayRow, MainWindow, ModelUsageRow, ProjectUsageRow,
-    RestorePointRow, RouteRow, SessionDetailBreakdownRow, SessionListRow,
-    UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
+    DesktopActivityProjection, DesktopCostComposition, DesktopCostValue,
+    DesktopDashboardProjection, DesktopDashboardSectionKey, DesktopFreshness,
+    DesktopHistoryProjection, DesktopIntent, DesktopIntentSink, DesktopModelsProjection,
+    DesktopOperationSnapshot, DesktopProjectsProjection, DesktopQuality,
+    DesktopReliableStateProjection, DesktopSessionDetailIntentAdmission,
+    DesktopSessionDetailIntentSink, DesktopSessionsProjection, DesktopSnapshotBridge,
+    DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue, DesktopValueAvailability,
+    HistoryDayRow, MainWindow, ModelUsageRow, ProjectUsageRow, RecentActivityRow, RestorePointRow,
+    RouteRow, SessionDetailBreakdownRow, SessionListRow, UnavailableDesktopIntentSink,
+    UnavailableDesktopSessionDetailIntentSink,
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
 };
 
@@ -526,6 +527,7 @@ pub(crate) fn apply_projection(window: &MainWindow, projection: &DesktopProjecti
     apply_history_projection(window, projection.history());
     apply_models_projection(window, projection.models());
     apply_projects_projection(window, projection.projects());
+    apply_activity_route_projection(window, projection.activity());
     apply_sessions_projection(window, projection.sessions());
 }
 
@@ -1151,6 +1153,62 @@ fn format_project_reason(reason: &str) -> String {
     }
 }
 
+fn apply_activity_route_projection(window: &MainWindow, activity: &DesktopActivityProjection) {
+    window.set_activity_state(activity.state().stable_code().into());
+    window.set_activity_reasons(join_reasons(activity.reason_codes().iter()).into());
+    window.set_activity_context_label("UTC timestamps".into());
+    window.set_activity_page_available(activity.has_more().is_some());
+    window.set_activity_evidence_label(
+        format_evidence(activity.freshness(), activity.quality()).into(),
+    );
+    window.set_activity_loaded_label(
+        activity
+            .has_more()
+            .map_or_else(
+                || "Unavailable".to_owned(),
+                |_| {
+                    format_counted(
+                        activity.rows().len() as u64,
+                        "event loaded",
+                        "events loaded",
+                    )
+                },
+            )
+            .into(),
+    );
+    window.set_activity_page_status_label(
+        activity
+            .has_more()
+            .map_or("Page status unavailable", |has_more| {
+                if has_more {
+                    "More activity available"
+                } else {
+                    "First page complete"
+                }
+            })
+            .into(),
+    );
+    let rows = activity
+        .rows()
+        .iter()
+        .map(|row| RecentActivityRow {
+            time_label: format_timestamp_utc(row.timestamp_seconds(), row.timestamp_nanos()).into(),
+            model_label: row.model().into(),
+            input_availability: availability_code(row.input().availability()).into(),
+            input_label: format_tokens(row.input()).into(),
+            cached_availability: availability_code(row.cached().availability()).into(),
+            cached_label: format_tokens(row.cached()).into(),
+            output_availability: availability_code(row.output().availability()).into(),
+            output_label: format_tokens(row.output()).into(),
+            reasoning_availability: availability_code(row.reasoning().availability()).into(),
+            reasoning_label: format_tokens(row.reasoning()).into(),
+            total_availability: availability_code(row.total_tokens().availability()).into(),
+            total_label: format_tokens(row.total_tokens()).into(),
+        })
+        .collect::<Vec<_>>();
+    window.set_recent_activity_rows(model(rows));
+}
+
 fn apply_sessions_projection(window: &MainWindow, sessions: &DesktopSessionsProjection) {
     window.set_sessions_state(sessions.state().stable_code().into());
     window.set_sessions_reasons(join_reasons(sessions.reason_codes().iter()).into());
@@ -1757,9 +1815,40 @@ fn format_timestamp_seconds_utc(value: i64) -> String {
     )
 }
 
+fn format_timestamp_utc(seconds: i64, nanos: u32) -> String {
+    DateTime::<Utc>::from_timestamp(seconds, nanos).map_or_else(
+        || "Unavailable".to_owned(),
+        |value| {
+            let base = value.format("%Y-%m-%d %H:%M:%S");
+            if nanos == 0 {
+                format!("{base} UTC")
+            } else {
+                let fraction = format!("{nanos:09}");
+                format!("{base}.{} UTC", fraction.trim_end_matches('0'))
+            }
+        },
+    )
+}
+
 #[cfg(test)]
 mod duration_tests {
-    use super::format_session_duration;
+    use super::{format_session_duration, format_timestamp_utc};
+
+    #[test]
+    fn activity_timestamp_preserves_fractional_utc_truth() {
+        assert_eq!(
+            format_timestamp_utc(1_784_163_600, 123_450_000),
+            "2026-07-16 01:00:00.12345 UTC"
+        );
+        assert_eq!(
+            format_timestamp_utc(1_784_163_600, 0),
+            "2026-07-16 01:00:00 UTC"
+        );
+        assert_eq!(
+            format_timestamp_utc(1_784_163_600, 1_000_000_000),
+            "Unavailable"
+        );
+    }
 
     #[test]
     fn duration_borrows_nanoseconds_across_the_second_boundary() {

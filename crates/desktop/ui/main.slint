@@ -1,7 +1,7 @@
 import {
     RouteRow, DashboardSectionRow, DashboardQuotaRow, DashboardBenefitRow,
     DashboardTrendPoint, DashboardSessionRow, DashboardActivityRow, DashboardModelRow,
-    HistoryDayRow, ModelUsageRow, ProjectUsageRow, SessionListRow, SessionDetailBreakdownRow, RestorePointRow
+    HistoryDayRow, ModelUsageRow, ProjectUsageRow, RecentActivityRow, SessionListRow, SessionDetailBreakdownRow, RestorePointRow
 } from "models.slint";
 import { UiTokens } from "tokens.slint";
 import { RouteNavItem } from "components/route-nav-item.slint";
@@ -10,6 +10,7 @@ import { DashboardView } from "views/dashboard-view.slint";
 import { HistoryView } from "views/history-view.slint";
 import { ModelsView } from "views/models-view.slint";
 import { ProjectsView } from "views/projects-view.slint";
+import { ActivityView } from "views/activity-view.slint";
 import { SessionsView } from "views/sessions-view.slint";
 import { DataHealthView } from "views/data-health-view.slint";
 import { SettingsView } from "views/settings-view.slint";
@@ -84,6 +85,14 @@ export component MainWindow inherits Window {
     in property <string> projects-completeness-label;
     in property <string> projects-code-coverage-label;
     in property <string> projects-code-completeness-label;
+    in property <[RecentActivityRow]> recent-activity-rows;
+    in property <string> activity-state;
+    in property <string> activity-reasons;
+    in property <string> activity-context-label;
+    in property <string> activity-evidence-label;
+    in property <string> activity-loaded-label;
+    in property <string> activity-page-status-label;
+    in property <bool> activity-page-available;
     in property <[SessionListRow]> session-list-rows;
     in property <string> sessions-state;
     in property <string> sessions-reasons;
@@ -115,12 +124,14 @@ export component MainWindow inherits Window {
     out property <bool> sessions-visible: root.active-route-key == "sessions";
     out property <bool> models-visible: root.active-route-key == "models";
     out property <bool> projects-visible: root.active-route-key == "projects";
+    out property <bool> activity-visible: root.active-route-key == "activity";
     out property <bool> data-health-visible: root.active-route-key == "data_health";
     out property <bool> settings-visible: root.active-route-key == "settings";
     out property <string> dashboard-layout-mode: root.width < 1010px ? "narrow" : "wide";
     out property <string> sessions-layout-mode: root.width < 1010px ? "narrow" : "wide";
     out property <string> models-layout-mode: root.width < 800px ? "narrow" : "wide";
     out property <string> projects-layout-mode: root.width < 800px ? "narrow" : "wide";
+    out property <string> activity-layout-mode: root.width < 800px ? "narrow" : "wide";
     in property <string> reliable-state-generation;
     in property <string> reliable-state-health;
     in property <bool> reliable-state-safe-mode;
@@ -350,6 +361,19 @@ export component MainWindow inherits Window {
                     code-completeness-label: root.projects-code-completeness-label;
                 }
 
+                if root.activity-visible: ActivityView {
+                    width: parent.width;
+                    height: parent.height;
+                    rows: root.recent-activity-rows;
+                    state: root.activity-state;
+                    reasons: root.activity-reasons;
+                    context-label: root.activity-context-label;
+                    evidence-label: root.activity-evidence-label;
+                    loaded-label: root.activity-loaded-label;
+                    page-status-label: root.activity-page-status-label;
+                    page-available: root.activity-page-available;
+                }
+
                 if root.data-health-visible: DataHealthView {
                     width: parent.width;
                     height: parent.height;
@@ -411,7 +435,7 @@ export component MainWindow inherits Window {
                     update-backup-policy(enabled, quiet, interval, budget) => { root.update-backup-policy(enabled, quiet, interval, budget); }
                 }
 
-                if !root.dashboard-visible && !root.history-visible && !root.sessions-visible && !root.models-visible && !root.projects-visible && !root.data-health-visible && !root.settings-visible: RouteState {
+                if !root.dashboard-visible && !root.history-visible && !root.sessions-visible && !root.models-visible && !root.projects-visible && !root.activity-visible && !root.data-health-visible && !root.settings-visible: RouteState {
                     x: UiTokens.space;
                     y: UiTokens.space;
                     width: parent.width - 2 * UiTokens.space;

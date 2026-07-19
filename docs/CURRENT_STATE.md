@@ -102,6 +102,24 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   locked workspace test/doctest suite pass; the full suite completed in 807 seconds
   with serialized Windows GNU linking. P3-D.4 is closed; no release acceptance is
   inferred.
+- P3-D.5 bounded Recent activity route: one projection consumes the existing
+  `LatestActivityRequest::first(12)` product page and adds no query or runtime owner.
+  It retains at most 12 newest-first UTC timestamp/canonical-model rows with typed
+  input/cached/output/reasoning/total tokens, freshness/quality, optional `has_more`,
+  and explicit empty/unavailable/retained-failure/backend/frontend truncation truth.
+  Scope, event/dataset/provider/profile/source/session/project identity, cursor/
+  fingerprint/key, paths, content, and authority do not cross Desktop/Slint. The
+  responsive wide/narrow compiled view preserves the full accessible row meaning,
+  switches in place, and remains available during aggregate rebuild. Focused 9/9
+  projection, compiled UI, full Desktop package, strict Desktop Clippy, source/release
+  audits, and 67/67 mutation cases pass. The route does not claim rhythm/heatmap
+  parity; a bounded timezone/DST-aware aggregate remains future work. Independent
+  review found two Important empty/evidence-state intersections; red/green fixes now
+  degrade partial empty pages and distinguish retained empty pages from unavailable
+  evidence. Re-review returned READY with Critical/Important/Minor 0/0/0. Clean-root,
+  formatting, strict warnings-as-errors workspace Clippy, release composition, and the
+  complete locked workspace test/doctest gate pass; the full baseline completed in
+  1,035 seconds. P3-D.5 is closed; no release acceptance is inferred.
 - M1 usage foundation: bounded provider roots, path-private source discovery,
   reparse-safe streaming enumeration, typed bounded JSONL parser, cumulative token
   state, physical/logical source identity, byte framing, revalidation, strict SQLite
@@ -1347,10 +1365,11 @@ release target passes independently.
 ## Next implementation slice
 
 P3-D.0 Reliable State, P3-D.1 History, P3-D.2 bounded Sessions list/detail, P3-D.3
-Models, and P3-D.4 Projects are closed. Continue with the bounded Activity route.
-Later-page Sessions navigation and interactive History ranges remain bounded
+Models, P3-D.4 Projects, and the bounded P3-D.5 Recent activity route are implemented.
+Continue with the Notifications route contract, then Help/About. Later-page Sessions
+navigation and interactive History ranges remain bounded
 replacements of their existing sections rather than new frontend query owners.
-Supporting notification/help routes remain after those data views. P3-E then owns
+P3-E then owns
 command palette, tray, compact widget, and remaining shell lifecycle. Interactive
 Windows, P4 presentation, P5 CLI/MCP, activation, M0, packaging, signing, soak, and
 product release remain unclaimed.

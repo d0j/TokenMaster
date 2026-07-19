@@ -15,14 +15,14 @@ use tokenmaster_desktop::{
 };
 use tokenmaster_product::{ProductAttemptGeneration, ProductReducer};
 use tokenmaster_query::{
-    BenefitOverviewRequest, GitOutputRequest, PageSize, QueryErrorCode, QueryService,
-    UsageAnalyticsRequest, UsageBreakdownKind, UsageRange, UsageSeriesSelection,
+    BenefitOverviewRequest, GitOutputRequest, LatestActivityRequest, PageSize, QueryErrorCode,
+    QueryService, UsageAnalyticsRequest, UsageBreakdownKind, UsageRange, UsageSeriesSelection,
     UsageSessionPageRequest, UsageTimeZone, WeekStart,
 };
 
 use support::dashboard_fixture::{
-    FixedClock, add_distinct_usage_rows, add_quota_windows, make_partial_model_usage, range, seed,
-    set_usage_project_alias,
+    FixedClock, add_distinct_usage_rows, add_quota_windows, clear_usage_rows,
+    make_partial_model_usage, range, seed, set_usage_project_alias,
 };
 
 struct RejectingIntentSink;
@@ -94,6 +94,11 @@ fn ready_reducer_with_usage(
             GitOutputRequest::new(range(), WeekStart::Monday, Vec::new(), 32).expect("Git request"),
         )
         .expect("Git output");
+    let activity = service
+        .latest_activity(LatestActivityRequest::first(
+            PageSize::new(12).expect("activity page size"),
+        ))
+        .expect("activity");
     let sessions = service
         .usage_sessions(
             UsageSessionPageRequest::first(PageSize::new(64).expect("page size"), Vec::new())
@@ -119,6 +124,9 @@ fn ready_reducer_with_usage(
         .publish_benefit(attempt, benefits)
         .expect("publish benefits");
     reducer.publish_git(attempt, git).expect("publish Git");
+    reducer
+        .publish_activity(attempt, activity)
+        .expect("publish activity");
     reducer
         .publish_sessions(attempt, sessions)
         .expect("publish sessions");
@@ -242,6 +250,7 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert!(!window.get_sessions_visible());
     assert!(!window.get_models_visible());
     assert!(!window.get_projects_visible());
+    assert!(!window.get_activity_visible());
     assert_eq!(window.get_history_day_rows().row_count(), 0);
     assert_eq!(window.get_history_total_tokens(), "—");
     assert_eq!(window.get_session_list_rows().row_count(), 0);
@@ -256,6 +265,13 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert_eq!(window.get_projects_usage_range_label(), "Range unavailable");
     assert_eq!(window.get_projects_code_range_label(), "Range unavailable");
     assert_eq!(window.get_project_usage_rows().row_count(), 0);
+    assert_eq!(window.get_recent_activity_rows().row_count(), 0);
+    assert!(!window.get_activity_page_available());
+    assert_eq!(window.get_activity_loaded_label(), "Unavailable");
+    assert_eq!(
+        window.get_activity_page_status_label(),
+        "Page status unavailable"
+    );
     assert_eq!(window.get_dashboard_section_rows().row_count(), 6);
     assert_eq!(window.get_dashboard_header_tokens(), "—");
     assert_eq!(window.get_dashboard_header_cost(), "—");
@@ -311,7 +327,144 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert_compiled_models_render_complete_bounded_mix_without_recreating_the_window();
     assert_compiled_models_render_partial_cost_evidence();
     assert_compiled_projects_keep_recent_usage_and_today_code_separate_in_place();
+    assert_compiled_activity_renders_bounded_safe_events_in_place();
     assert_compiled_session_selection_is_immediate_correlated_and_bounded_in_place();
+}
+
+fn assert_compiled_activity_renders_bounded_safe_events_in_place() {
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory.path().join("ui-activity.sqlite3");
+    let reducer = ready_reducer(&path, 0);
+    let snapshot = reducer.snapshot();
+    let shell = DesktopShell::new(&snapshot).expect("desktop shell");
+    let window = shell.window();
+    let component_address = window as *const _;
+
+    window.invoke_select_route(SharedString::from("activity"));
+    assert!(window.get_activity_visible());
+    assert!(!window.get_dashboard_visible());
+    assert!(!window.get_history_visible());
+    assert!(!window.get_sessions_visible());
+    assert!(!window.get_models_visible());
+    assert!(!window.get_projects_visible());
+    assert_eq!(window.get_active_route_state(), "ready");
+    assert_eq!(window.get_activity_state(), "ready");
+    assert_eq!(window.get_activity_context_label(), "UTC timestamps");
+    assert_eq!(
+        window.get_activity_evidence_label(),
+        "Fresh · Authoritative"
+    );
+    assert_eq!(window.get_activity_loaded_label(), "1 event loaded");
+    assert!(window.get_activity_page_available());
+    assert_eq!(
+        window.get_activity_page_status_label(),
+        "First page complete"
+    );
+
+    let rows = window.get_recent_activity_rows();
+    assert_eq!(rows.row_count(), 1);
+    let row = rows.row_data(0).expect("recent activity row");
+    assert_eq!(row.time_label, "2026-07-16 01:00:00 UTC");
+    assert_eq!(row.model_label, "gpt-5.6");
+    assert_eq!(row.input_label, "100");
+    assert_eq!(row.cached_label, "20");
+    assert_eq!(row.output_label, "30");
+    assert_eq!(row.reasoning_label, "10");
+    assert_eq!(row.total_label, "140");
+
+    window.window().set_size(slint::PhysicalSize::new(700, 720));
+    assert_eq!(window.get_activity_layout_mode(), "narrow");
+    window
+        .window()
+        .set_size(slint::PhysicalSize::new(1120, 720));
+    assert_eq!(window.get_activity_layout_mode(), "wide");
+
+    window.show().expect("show activity window");
+    let accessible_rows = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::ListItem)
+        .match_predicate(|element| {
+            element.accessible_label().is_some_and(|label| {
+                label.contains("2026-07-16 01:00:00 UTC")
+                    && label.contains("model gpt-5.6")
+                    && label.contains("input 100")
+                    && label.contains("cached 20")
+                    && label.contains("output 30")
+                    && label.contains("reasoning 10")
+                    && label.contains("total 140")
+            })
+        })
+        .find_all();
+    assert_eq!(accessible_rows.len(), 1);
+
+    window.invoke_select_route(SharedString::from("dashboard"));
+    assert!(!window.get_activity_visible());
+    window.invoke_select_route(SharedString::from("activity"));
+    assert!(window.get_activity_visible());
+    assert_eq!(component_address, shell.window() as *const _);
+    assert_eq!(window.get_recent_activity_rows().row_count(), 1);
+
+    drop(shell);
+    let scale_directory = tempfile::TempDir::new().expect("scale directory");
+    let scale_path = scale_directory.path().join("ui-activity-scale.sqlite3");
+    let scale_reducer = ready_reducer_with_usage(&scale_path, 0, 64);
+    let scale_shell = DesktopShell::new(&scale_reducer.snapshot()).expect("scale shell");
+    let scale_window = scale_shell.window();
+    scale_window.invoke_select_route(SharedString::from("activity"));
+    assert_eq!(scale_window.get_recent_activity_rows().row_count(), 12);
+    assert_eq!(scale_window.get_activity_loaded_label(), "12 events loaded");
+    assert_eq!(
+        scale_window.get_activity_page_status_label(),
+        "More activity available"
+    );
+
+    drop(scale_shell);
+    let retained_directory = tempfile::TempDir::new().expect("retained directory");
+    let retained_path = retained_directory
+        .path()
+        .join("ui-activity-retained-empty.sqlite3");
+    seed(&retained_path);
+    clear_usage_rows(&retained_path);
+    let mut service = QueryService::open(&retained_path, FixedClock).expect("query service");
+    let page = service
+        .latest_activity(LatestActivityRequest::first(
+            PageSize::new(12).expect("activity page size"),
+        ))
+        .expect("empty activity");
+    let mut reducer = ProductReducer::new();
+    reducer
+        .publish_activity(ProductAttemptGeneration::new(1).expect("attempt"), page)
+        .expect("publish empty activity");
+    reducer
+        .fail_activity(
+            ProductAttemptGeneration::new(2).expect("attempt"),
+            QueryErrorCode::DeadlineExceeded,
+        )
+        .expect("retain empty activity");
+    let retained_shell = DesktopShell::new(&reducer.snapshot()).expect("retained shell");
+    let retained_window = retained_shell.window();
+    retained_window.invoke_select_route(SharedString::from("activity"));
+    assert_eq!(retained_window.get_activity_state(), "degraded");
+    assert!(retained_window.get_activity_page_available());
+    assert_eq!(
+        retained_window.get_activity_loaded_label(),
+        "0 events loaded"
+    );
+    assert_eq!(
+        retained_window.get_activity_page_status_label(),
+        "First page complete"
+    );
+    retained_window
+        .show()
+        .expect("show retained activity window");
+    let retained_empty_table = ElementQuery::from_root(retained_window)
+        .match_accessible_role(AccessibleRole::Table)
+        .match_predicate(|element| {
+            element
+                .accessible_label()
+                .is_some_and(|label| label.contains("No activity events in the available page"))
+        })
+        .find_all();
+    assert_eq!(retained_empty_table.len(), 1);
 }
 
 fn assert_compiled_projects_keep_recent_usage_and_today_code_separate_in_place() {

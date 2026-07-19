@@ -1021,6 +1021,26 @@ repository/association/dataset ID, path, provider/profile/account/source/session
 identity, key/cursor, content, or authority. One accepted generation replaces one
 bounded row model; prior projections are not cached.
 
+### P3-D.5 bounded Recent activity projection
+
+`DesktopActivityProjection` consumes only the existing product Activity envelope
+created by `LatestActivityRequest::first(12)`; it adds no query result, product section,
+or data owner. It preserves envelope freshness/quality and page `has_more`, retains the
+first 12 newest-first items, and marks presentation truncation explicitly. Missing
+payload keeps freshness, quality, and page completeness unavailable rather than
+inventing an empty complete page. An authoritative empty payload remains distinct.
+
+Each `DesktopRecentActivityRow` copies only timestamp seconds/nanoseconds, canonical
+model key, and typed input/cached/output/reasoning/total token values. The projection
+does not read or retain scope, provider/profile/account, event ID, cursor, fingerprint,
+dataset/source/session/project identity, path, content, prompt, response, command, or
+credential. One accepted immutable product generation replaces the single `Arc` row
+list and Slint model; no previous page, row identity, selection, filter, cache, query
+service, runtime owner, connection, timer, or worker is retained. The Activity section
+does not depend on aggregate readiness, so aggregate rebuild cannot hide its latest
+page. Hourly/day-of-week rhythm data is not derivable from this projection and remains
+a separate future aggregate contract.
+
 Only explicit provider ancestry identifies a parent. A strong signature covers the
 normalized model, emitted delta, and provider cumulative snapshot. A weak signature
 covers model and delta only and cannot suppress a pre-divergence event by itself.

@@ -343,6 +343,124 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-PROJECTS-IDENTITY*"
     }
 
+    It "rejects Activity presentation-bound drift" {
+        $fixture = New-DesktopAuditFixture -Name "activity-bound"
+        $path = Join-Path $fixture "crates\desktop\src\activity.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'pub const MAX_ACTIVITY_ROWS: usize = 12;',
+            'pub const MAX_ACTIVITY_ROWS: usize = 120;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-ACTIVITY-BOUND*"
+    }
+
+    It "rejects a second Activity query" {
+        $fixture = New-DesktopAuditFixture -Name "activity-second-query"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\controller.rs") `
+            -Value 'fn duplicate_activity_query() { source.latest_activity(plan.activity); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-ACTIVITY-REQUEST*"
+    }
+
+    It "rejects removing the Activity route mount" {
+        $fixture = New-DesktopAuditFixture -Name "activity-mount"
+        $path = Join-Path $fixture "crates\desktop\ui\main.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'if root.activity-visible: ActivityView',
+            'if root.activity-visible: RemovedActivityView'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-ACTIVITY-VIEW*"
+    }
+
+    It "rejects hiding reasoning from Activity rows" {
+        $fixture = New-DesktopAuditFixture -Name "activity-reasoning"
+        $path = Join-Path $fixture "crates\desktop\ui\views\activity-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'item.reasoning-label',
+            '"reasoning hidden"'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-ACTIVITY-VIEW*"
+    }
+
+    It "rejects discarding fractional Activity timestamps" {
+        $fixture = New-DesktopAuditFixture -Name "activity-fractional-time"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'row.timestamp_nanos()',
+            '0'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-ACTIVITY-VIEW*"
+    }
+
+    It "rejects hiding a retained empty Activity page" {
+        $fixture = New-DesktopAuditFixture -Name "activity-retained-empty"
+        $path = Join-Path $fixture "crates\desktop\ui\views\activity-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'No activity events in the available page',
+            'Recent activity evidence unavailable'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-ACTIVITY-VIEW*"
+    }
+
+    It "rejects private identity fields from the Activity projection" {
+        $fixture = New-DesktopAuditFixture -Name "activity-private-identity"
+        $path = Join-Path $fixture "crates\desktop\src\activity.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'model: Arc<str>,',
+            "model: Arc<str>,`r`n    event_id: Arc<str>,"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-ACTIVITY-IDENTITY*"
+    }
+
+    It "rejects a second Activity model replacement site" {
+        $fixture = New-DesktopAuditFixture -Name "activity-second-model"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\ui.rs") `
+            -Value 'fn duplicate_activity_model() { window.set_recent_activity_rows(model(rows)); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-ACTIVITY-MODEL*"
+    }
+
+    It "rejects rebuilding Activity rows from route selection" {
+        $fixture = New-DesktopAuditFixture -Name "activity-route-rebuild"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'apply_route_projection(&window, state.projection());',
+            "apply_route_projection(&window, state.projection());`r`n            apply_activity_route_projection(&window, state.projection().activity());"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-ACTIVITY-REBUILD*"
+    }
+
+    It "rejects presenting Recent activity as a rhythm heatmap" {
+        $fixture = New-DesktopAuditFixture -Name "activity-false-rhythm"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\views\activity-view.slint") `
+            -Value '// activity rhythm heatmap'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-ACTIVITY-RHYTHM*"
+    }
+
     It "rejects sessions presentation-bound drift" {
         $fixture = New-DesktopAuditFixture -Name "sessions-bound"
         $path = Join-Path $fixture "crates\desktop\src\sessions.rs"
@@ -659,12 +777,12 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-CONTROLLER-SLOT*"
     }
 
-    It "accepts the bounded dashboard History Sessions Models and Projects desktop boundary" {
+    It "accepts the bounded dashboard History Sessions Models Projects and Activity desktop boundary" {
         $fixture = New-DesktopAuditFixture -Name "library-boundary"
 
         $receipt = & $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json
-        $receipt.rust_source_file_count | Should -Be 12
-        $receipt.slint_source_file_count | Should -Be 18
+        $receipt.rust_source_file_count | Should -Be 13
+        $receipt.slint_source_file_count | Should -Be 19
         $receipt.dashboard_section_count | Should -Be 6
         $receipt.dashboard_model_replacement_count | Should -Be 7
         $receipt.history_day_maximum | Should -Be 30
@@ -678,6 +796,11 @@ Describe "TokenMaster production desktop audit" {
         $receipt.projects_model_replacement_count | Should -Be 1
         $receipt.projects_projection_application_count | Should -Be 1
         $receipt.git_query_call_count | Should -Be 1
+        $receipt.activity_row_maximum | Should -Be 12
+        $receipt.activity_model_replacement_count | Should -Be 1
+        $receipt.activity_projection_application_count | Should -Be 1
+        $receipt.activity_query_call_count | Should -Be 1
+        $receipt.activity_polling_surface_count | Should -Be 0
         $receipt.session_row_maximum | Should -Be 64
         $receipt.session_detail_model_row_maximum | Should -Be 32
         $receipt.session_detail_project_row_maximum | Should -Be 32

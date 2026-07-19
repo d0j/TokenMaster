@@ -235,6 +235,10 @@ fn aggregate_rebuild_is_visible_only_on_routes_that_depend_on_aggregates() {
             .reasons()
             .contains(ProductRouteReason::AggregateRebuilding)
     );
+    assert_ne!(
+        snapshot.route(ProductRoute::Activity).state(),
+        ProductRouteState::Unavailable
+    );
     assert!(
         !snapshot
             .route(ProductRoute::Activity)

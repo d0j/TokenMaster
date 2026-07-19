@@ -1,0 +1,161 @@
+import { RecentActivityRow } from "../models.slint";
+import { UiTokens } from "../tokens.slint";
+import { SectionState } from "../components/section-state.slint";
+import { ScrollView } from "std-widgets.slint";
+
+component ActivityHeaderCard inherits Rectangle {
+    in property <string> state;
+    in property <string> reasons;
+    in property <string> context-label;
+    in property <string> evidence-label;
+    in property <string> loaded-label;
+    in property <string> page-status-label;
+    in property <bool> narrow;
+
+    min-height: root.narrow ? 132px : 112px;
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: region;
+    accessible-label: "Recent activity " + root.context-label + " " + root.loaded-label + " " + root.page-status-label + " " + root.evidence-label;
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: UiTokens.space-sm;
+        HorizontalLayout {
+            spacing: UiTokens.space-sm;
+            VerticalLayout {
+                spacing: UiTokens.space-xs;
+                horizontal-stretch: 1;
+                Text { text: "Recent activity"; color: UiTokens.text-primary; font-size: 19px; font-weight: 800; }
+                Text { text: "Newest archive events · " + root.context-label; color: UiTokens.text-secondary; font-size: 11px; overflow: elide; }
+            }
+            SectionState { state: root.state; reasons: root.reasons; }
+        }
+        if root.narrow: VerticalLayout {
+            spacing: UiTokens.space-xs;
+            Text { text: root.loaded-label + " · " + root.page-status-label; color: UiTokens.accent; font-size: 11px; overflow: elide; }
+            Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: 11px; }
+        }
+        if !root.narrow: HorizontalLayout {
+            spacing: UiTokens.space;
+            Text { text: root.loaded-label; color: UiTokens.text-primary; font-size: 12px; font-weight: 700; }
+            Text { text: root.page-status-label; color: UiTokens.accent; font-size: 12px; horizontal-stretch: 1; }
+            Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: 11px; }
+        }
+    }
+}
+
+component ActivityTableCard inherits Rectangle {
+    in property <[RecentActivityRow]> rows;
+    in property <bool> narrow;
+    in property <string> state;
+    in property <bool> page-available;
+    out property <string> empty-message: !root.page-available
+        ? (root.state == "waiting" ? "Waiting for recent activity evidence" : "Recent activity evidence unavailable")
+        : (root.state == "ready" ? "No activity events in the archive" : "No activity events in the available page");
+
+    min-height: max(108px, 70px + root.rows.length * (root.narrow ? 64px : 42px));
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: table;
+    accessible-label: "Newest bounded activity events with UTC timestamps" + (root.rows.length == 0 ? " " + root.empty-message : "");
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: 0px;
+        Text { text: "Latest events"; color: UiTokens.text-primary; font-size: 15px; font-weight: 750; height: 32px; }
+        if root.rows.length == 0: Text {
+            text: root.empty-message;
+            color: UiTokens.text-secondary;
+            font-size: 12px;
+            height: 34px;
+        }
+        if !root.narrow && root.rows.length > 0: HorizontalLayout {
+            height: 28px;
+            spacing: UiTokens.space-sm;
+            Text { text: "UTC time"; color: UiTokens.text-secondary; font-size: 10px; width: 205px; }
+            Text { text: "Model"; color: UiTokens.text-secondary; font-size: 10px; width: 150px; }
+            Text { text: "Input"; color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: "Cached"; color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: "Output"; color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: "Reasoning"; color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: "Total"; color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
+        }
+        for item[i] in root.rows: Rectangle {
+            height: root.narrow ? 64px : 42px;
+            background: mod(i, 2) == 0 ? UiTokens.surface-subtle : transparent;
+            border-radius: UiTokens.radius-sm;
+            accessible-role: list-item;
+            accessible-label: item.time-label + " model " + item.model-label + " input " + item.input-label + " cached " + item.cached-label + " output " + item.output-label + " reasoning " + item.reasoning-label + " total " + item.total-label;
+            if root.narrow: VerticalLayout {
+                padding-left: UiTokens.space-sm;
+                padding-right: UiTokens.space-sm;
+                padding-top: UiTokens.space-xs;
+                padding-bottom: UiTokens.space-xs;
+                spacing: UiTokens.space-xs;
+                HorizontalLayout {
+                    spacing: UiTokens.space-sm;
+                    Text { text: item.time-label; color: UiTokens.text-primary; font-size: 11px; width: 205px; overflow: elide; }
+                    Text { text: item.model-label; color: UiTokens.text-primary; font-size: 11px; font-weight: 700; horizontal-stretch: 1; overflow: elide; }
+                    Text { text: item.total-label; color: item.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; width: 72px; horizontal-alignment: right; }
+                }
+                Text {
+                    text: "In " + item.input-label + " · Cache " + item.cached-label + " · Out " + item.output-label + " · Reason " + item.reasoning-label;
+                    color: UiTokens.text-secondary;
+                    font-size: 10px;
+                    overflow: elide;
+                }
+            }
+            if !root.narrow: HorizontalLayout {
+                padding-left: UiTokens.space-sm;
+                padding-right: UiTokens.space-sm;
+                spacing: UiTokens.space-sm;
+                Text { text: item.time-label; color: UiTokens.text-primary; font-size: 11px; width: 205px; overflow: elide; }
+                Text { text: item.model-label; color: UiTokens.text-primary; font-size: 11px; font-weight: 650; width: 150px; overflow: elide; }
+                Text { text: item.input-label; color: item.input-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: item.cached-label; color: item.cached-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: item.output-label; color: item.output-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: item.reasoning-label; color: item.reasoning-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; horizontal-alignment: right; }
+                Text { text: item.total-label; color: item.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; font-weight: 700; horizontal-stretch: 1; horizontal-alignment: right; }
+            }
+        }
+    }
+}
+
+export component ActivityView inherits Rectangle {
+    in property <[RecentActivityRow]> rows;
+    in property <string> state;
+    in property <string> reasons;
+    in property <string> context-label;
+    in property <string> evidence-label;
+    in property <string> loaded-label;
+    in property <string> page-status-label;
+    in property <bool> page-available;
+    out property <bool> narrow: root.width < 800px;
+    out property <string> layout-mode: root.narrow ? "narrow" : "wide";
+
+    background: UiTokens.background;
+
+    ScrollView {
+        viewport-width: self.width;
+        VerticalLayout {
+            width: parent.width;
+            padding: UiTokens.space;
+            spacing: UiTokens.space;
+            ActivityHeaderCard {
+                state: root.state;
+                reasons: root.reasons;
+                context-label: root.context-label;
+                evidence-label: root.evidence-label;
+                loaded-label: root.loaded-label;
+                page-status-label: root.page-status-label;
+                narrow: root.narrow;
+            }
+            ActivityTableCard { rows: root.rows; narrow: root.narrow; state: root.state; page-available: root.page-available; }
+        }
+    }
+}

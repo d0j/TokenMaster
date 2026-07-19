@@ -3349,3 +3349,46 @@ strict warnings-as-errors workspace Clippy, and the complete locked workspace te
 doctest suite pass; the full suite completed in 807 seconds with serialized Windows GNU
 linking after one isolated concurrent blank-stderr MinGW linker exit. P3-D.4 is closed;
 Activity and later interactive/detail/presentation/automation/release work remain open.
+
+## 2026-07-19 — P3-D.5 bounded Recent activity route
+
+The Activity slice began by separating two capabilities that the reference UI presents
+together: a useful latest-event list and a true time-distribution/rhythm aggregate.
+TokenMaster already prefetched one `LatestActivityRequest::first(12)` for Dashboard,
+but had no bounded hourly/day-of-week dataset. ADR-070 therefore reuses the existing
+page for a truthfully named Recent activity route and leaves rhythm/heatmap work behind
+a future timezone/DST-aware aggregate contract. No sample-derived parity claim was made.
+
+TDD added `DesktopActivityProjection` with at most 12 newest-first rows. Each row copies
+only timestamp seconds/nanoseconds, canonical model, and typed input/cached/output/
+reasoning/total tokens. Freshness, quality, optional `has_more`, authoritative empty,
+unavailable, retained failure, backend lookahead, and frontend truncation remain
+distinct. Scope, provider/profile/account, event/dataset/source/session/project
+identity, cursor/fingerprint/key, paths, content, prompts, responses, commands,
+credentials, and authority never enter the projection. Ten thousand replacements
+release the old row list, and aggregate rebuild leaves the Activity route ready.
+
+The compiled Slint route mounts one responsive header/table and one replace-only model.
+Wide and narrow layouts retain every token component and the same full accessible row
+meaning; the UI labels UTC context and incomplete-page truth explicitly. Switching
+routes changes visibility only. Focused projection tests pass 9/9, the real headless UI
+contract passes, the complete Desktop package and strict package Clippy pass, and the
+source/release audit reports 13 Rust plus 19 Slint production files, one worker, one
+snapshot slot, one Activity query/application/model site, and zero polling. The audit's
+67 mutation cases cover caps, exact fractional UTC formatting, duplicate query/model/
+application sites, responsive mount/token/accessibility semantics, private identity,
+and false rhythm claims.
+
+Independent review found two Important state intersections hidden between otherwise
+passing cases. An empty partial/stale page skipped evidence degradation because the
+shared helper was told that zero rows meant no payload. A retained authoritative-empty
+page then rendered `Recent activity evidence unavailable` despite still owning a
+complete empty page. Red/green contracts now treat an empty envelope as available
+evidence, degrade its non-authoritative header truth, and pass one safe
+`page-available` boolean so retained empty and unavailable remain distinct. The same
+closeout preserves exact fractional UTC nanoseconds and fails closed on invalid values.
+Re-review returned Critical/Important/Minor 0/0/0. Clean-root, formatting, strict
+warnings-as-errors workspace Clippy, release composition, and the complete locked
+workspace test/doctest gate pass; the full baseline completed in 1,035 seconds.
+P3-D.5 is closed. Notifications/Help, full rhythm aggregation, later pagination/ranges,
+presentation, automation, packaging, signing, M0, and release remain open.
