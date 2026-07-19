@@ -40,8 +40,8 @@ if ($productionManifestText -match '\btokenmaster-(store|provider|runtime|codex|
 $rustFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.rs')
 $uiFiles = @(Get-ChildItem -LiteralPath $uiRoot -Recurse -File -Filter '*.slint')
 $productionFiles = @($rustFiles + $uiFiles)
-if ($rustFiles.Count -ne 15 -or $uiFiles.Count -ne 22) {
-    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain fifteen Rust and twenty-two Slint files'
+if ($rustFiles.Count -ne 15 -or $uiFiles.Count -ne 23) {
+    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain fifteen Rust and twenty-three Slint files'
 }
 $uiText = ($uiFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
@@ -153,6 +153,34 @@ if (
     $uiText -match '(?i)(?:\bTimer\s*\{|\banimate\s+[A-Za-z_-]+\b|\banimation-[A-Za-z_-]+\b)'
 ) {
     throw 'TM-DESKTOP-UI-POLLING: UI must remain timer animation and polling free'
+}
+
+$commandPalettePath = Join-Path $uiRoot 'components\command-palette.slint'
+$commandPaletteText = [System.IO.File]::ReadAllText($commandPalettePath)
+$mainUiTextForPalette = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'main.slint'))
+if ($uiRustText -notmatch 'const MAX_COMMAND_PALETTE_QUERY_SCALARS: usize = 64;' -or
+    $uiRustText -notmatch 'value\s*\.chars\(\)\s*\.take\(MAX_COMMAND_PALETTE_QUERY_SCALARS\)' -or
+    $uiRustText -notmatch 'window\.set_command_palette_rows\(model\(rows\)\)' -or
+    $mainUiTextForPalette -notmatch 'in property <\[RouteRow\]> command-palette-rows;' -or
+    [regex]::Matches($mainUiTextForPalette, 'command-palette-rows').Count -ne 2) {
+    throw 'TM-DESKTOP-COMMAND-PALETTE-BOUND: command palette must retain one replace-only filtered route model and a 64-scalar query'
+}
+if ($mainUiTextForPalette -notmatch 'keys: @keys\(Control \+ K\);' -or
+    $mainUiTextForPalette -notmatch 'Open route palette' -or
+    $commandPaletteText -notmatch 'Key\.Escape' -or
+    $commandPaletteText -notmatch 'Key\.UpArrow' -or
+    $commandPaletteText -notmatch 'Key\.DownArrow' -or
+    $commandPaletteText -notmatch 'Key\.Return') {
+    throw 'TM-DESKTOP-COMMAND-PALETTE-SHORTCUT: command palette must expose the exact Ctrl+K shortcut and bounded keyboard routing'
+}
+if ($commandPaletteText -notmatch 'accessible-action-default' -or
+    $commandPaletteText -notmatch 'No matching routes' -or
+    $commandPaletteText -match '(?i)\btext\s*:\s*"(?:backup|restore|import|export|rebuild|activation)') {
+    throw 'TM-DESKTOP-COMMAND-PALETTE-ROUTE-ONLY: command palette must remain accessible, explicit on no match, and route-only'
+}
+if ($commandPaletteText -match '(?i)\b(?:Timer|thread|spawn|cache|history|worker)\b' -or
+    $uiRustText -match 'CommandPalette(?:Worker|Owner|Cache|History)') {
+    throw 'TM-DESKTOP-COMMAND-PALETTE-NO-OWNER: command palette must not add a timer, worker, query, cache, or owner'
 }
 
 $inAppNotificationPath = Join-Path $sourceRoot 'in_app_notification.rs'
@@ -1036,6 +1064,12 @@ if ($SourceOnly) {
         fixed_route_count = 11
         rust_source_file_count = $rustFiles.Count
         slint_source_file_count = $uiFiles.Count
+        command_palette_query_scalar_maximum = 64
+        command_palette_model_count = 1
+        command_palette_shortcut_count = 1
+        command_palette_accessible_default_action_count = 1
+        command_palette_route_only = $true
+        command_palette_owner_count = 0
         controller_worker_count = $workerConstructionCount
         retained_snapshot_slot_count = $snapshotSlotCount
         event_loop_schedule_site_count = $eventScheduleCount
@@ -1163,6 +1197,12 @@ if ($LASTEXITCODE -ne 0) {
     direct_production_dependencies = $directProductionDependencies
     rust_source_file_count = $rustFiles.Count
     slint_source_file_count = $uiFiles.Count
+    command_palette_query_scalar_maximum = 64
+    command_palette_model_count = 1
+    command_palette_shortcut_count = 1
+    command_palette_accessible_default_action_count = 1
+    command_palette_route_only = $true
+    command_palette_owner_count = 0
     fixed_route_count = 11
     maximum_route_reason_count = 11
     retained_route_model_count = 1

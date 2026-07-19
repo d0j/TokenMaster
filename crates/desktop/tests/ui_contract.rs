@@ -290,6 +290,8 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert_eq!(window.get_dashboard_activity_rows().row_count(), 8);
     assert_eq!(window.get_dashboard_model_rows().row_count(), 0);
 
+    assert_compiled_command_palette_is_bounded_and_routes_through_desktop_state(window);
+
     window.invoke_select_route(SharedString::from("settings"));
     assert_eq!(window.get_active_route_key(), "settings");
     assert_eq!(window.get_active_route_state(), "ready");
@@ -339,6 +341,62 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert_compiled_notifications_render_expiry_truth_in_place();
     assert_compiled_help_about_is_static_truthful_and_responsive();
     assert_compiled_session_selection_is_immediate_correlated_and_bounded_in_place();
+}
+
+fn assert_compiled_command_palette_is_bounded_and_routes_through_desktop_state(
+    window: &tokenmaster_desktop::MainWindow,
+) {
+    assert!(!window.get_command_palette_visible());
+    assert_eq!(window.get_command_palette_rows().row_count(), 0);
+
+    window.invoke_open_command_palette();
+    assert!(window.get_command_palette_visible());
+    assert_eq!(window.get_command_palette_query(), "");
+    assert_eq!(window.get_command_palette_rows().row_count(), 11);
+    assert_eq!(window.get_command_palette_selected_ordinal(), 0);
+    assert_eq!(
+        window
+            .get_command_palette_rows()
+            .iter()
+            .filter(|row| row.selected)
+            .count(),
+        1
+    );
+
+    dispatch_key(window, Key::DownArrow);
+    assert_eq!(window.get_command_palette_selected_ordinal(), 1);
+    dispatch_key(window, Key::Return);
+    assert!(!window.get_command_palette_visible());
+    assert_eq!(window.get_active_route_key(), "history");
+
+    window.invoke_open_command_palette();
+    dispatch_key(window, Key::Escape);
+    assert!(!window.get_command_palette_visible());
+
+    window.invoke_open_command_palette();
+
+    window.invoke_command_palette_query_edited(SharedString::from("hElP"));
+    assert_eq!(window.get_command_palette_rows().row_count(), 1);
+    assert_eq!(window.get_command_palette_selected_ordinal(), 0);
+    assert_eq!(
+        window
+            .get_command_palette_rows()
+            .row_data(0)
+            .expect("filtered route")
+            .key,
+        "help_about"
+    );
+
+    window.invoke_command_palette_query_edited(SharedString::from("x".repeat(65)));
+    assert_eq!(window.get_command_palette_query().chars().count(), 64);
+    assert_eq!(window.get_command_palette_rows().row_count(), 0);
+    assert_eq!(window.get_command_palette_selected_ordinal(), -1);
+
+    window.invoke_command_palette_query_edited(SharedString::from("data health"));
+    window.invoke_activate_command_palette_selection();
+    assert!(!window.get_command_palette_visible());
+    assert_eq!(window.get_active_route_key(), "data_health");
+    assert_eq!(window.get_active_route_state(), "unavailable");
 }
 
 fn assert_compiled_help_about_is_static_truthful_and_responsive() {

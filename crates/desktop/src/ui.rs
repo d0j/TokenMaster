@@ -44,6 +44,7 @@ pub struct DesktopShell {
 pub(crate) type SharedDesktopState = Arc<Mutex<DesktopState>>;
 type SharedReliableState = Arc<Mutex<DesktopReliableStateProjection>>;
 const VISIBLE_REMINDER_PUBLICATION_TIMEOUT: Duration = Duration::from_secs(5);
+const MAX_COMMAND_PALETTE_QUERY_SCALARS: usize = 64;
 
 struct ReliableStateDelivery {
     id: u64,
@@ -397,6 +398,7 @@ impl DesktopShell {
         let state = Arc::new(Mutex::new(initial_state));
         let reliable_state = Arc::new(Mutex::new(reliable_state));
         wire_route_selection(&window, state.clone());
+        wire_command_palette(&window, state.clone());
         wire_reliable_state_intents(&window, reliable_state.clone(), intent_sink);
         wire_session_detail_intents(&window, state.clone(), session_sink);
         wire_in_app_notification_dismissal(&window);
@@ -807,6 +809,164 @@ fn wire_route_selection(window: &MainWindow, state: SharedDesktopState) {
             apply_route_projection(&window, state.projection());
         }
     });
+}
+
+fn wire_command_palette(window: &MainWindow, state: SharedDesktopState) {
+    let weak = window.as_weak();
+    let open_state = state.clone();
+    window.on_open_command_palette(move || {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        let Ok(state) = open_state.lock() else {
+            return;
+        };
+        window.set_command_palette_visible(true);
+        apply_command_palette_rows(&window, state.projection(), "", None);
+    });
+
+    let weak = window.as_weak();
+    window.on_dismiss_command_palette(move || {
+        if let Some(window) = weak.upgrade() {
+            dismiss_command_palette(&window);
+        }
+    });
+
+    let weak = window.as_weak();
+    let query_state = state.clone();
+    window.on_command_palette_query_edited(move |query| {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        let Ok(state) = query_state.lock() else {
+            return;
+        };
+        let query = truncate_command_palette_query(query.as_str());
+        apply_command_palette_rows(&window, state.projection(), &query, None);
+    });
+
+    let weak = window.as_weak();
+    window.on_move_command_palette_selection(move |delta| {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        move_command_palette_selection(&window, delta);
+    });
+
+    let weak = window.as_weak();
+    let activate_state = state.clone();
+    window.on_activate_command_palette_selection(move || {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        let selected = window.get_command_palette_selected_ordinal();
+        let Ok(selected) = usize::try_from(selected) else {
+            return;
+        };
+        let Some(row) = window.get_command_palette_rows().row_data(selected) else {
+            return;
+        };
+        activate_command_palette_route(&window, &activate_state, row.key.as_str());
+    });
+
+    let weak = window.as_weak();
+    window.on_activate_command_palette_route(move |key| {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        activate_command_palette_route(&window, &state, key.as_str());
+    });
+}
+
+fn truncate_command_palette_query(value: &str) -> String {
+    value
+        .chars()
+        .take(MAX_COMMAND_PALETTE_QUERY_SCALARS)
+        .collect()
+}
+
+fn apply_command_palette_rows(
+    window: &MainWindow,
+    projection: &DesktopProjection,
+    query: &str,
+    selected_key: Option<&str>,
+) {
+    let query = truncate_command_palette_query(query);
+    let normalized_query = query.to_lowercase();
+    let mut rows = projection
+        .routes()
+        .iter()
+        .filter(|route| {
+            normalized_query.is_empty()
+                || route
+                    .key()
+                    .stable_key()
+                    .to_lowercase()
+                    .contains(&normalized_query)
+                || route
+                    .key()
+                    .english_label()
+                    .to_lowercase()
+                    .contains(&normalized_query)
+        })
+        .map(|route| RouteRow {
+            key: route.key().stable_key().into(),
+            label_key: route.key().label_key().into(),
+            label: route.key().english_label().into(),
+            state: route.state().stable_code().into(),
+            reasons: join_reasons(route.reason_codes().iter()).into(),
+            selected: false,
+        })
+        .collect::<Vec<_>>();
+    let selected = selected_key
+        .and_then(|key| rows.iter().position(|row| row.key.as_str() == key))
+        .unwrap_or(0);
+    if let Some(row) = rows.get_mut(selected) {
+        row.selected = true;
+    }
+    window.set_command_palette_query(query.into());
+    window.set_command_palette_selected_ordinal(if rows.is_empty() {
+        -1
+    } else {
+        saturating_i32(selected as u64)
+    });
+    window.set_command_palette_rows(model(rows));
+}
+
+fn move_command_palette_selection(window: &MainWindow, delta: i32) {
+    let mut rows = window.get_command_palette_rows().iter().collect::<Vec<_>>();
+    let Ok(len) = i32::try_from(rows.len()) else {
+        return;
+    };
+    if len == 0 {
+        return;
+    }
+    let current = window
+        .get_command_palette_selected_ordinal()
+        .clamp(0, len - 1);
+    let selected = (current + delta).rem_euclid(len);
+    for (index, row) in rows.iter_mut().enumerate() {
+        row.selected = index == selected as usize;
+    }
+    window.set_command_palette_selected_ordinal(selected);
+    window.set_command_palette_rows(model(rows));
+}
+
+fn activate_command_palette_route(window: &MainWindow, state: &SharedDesktopState, key: &str) {
+    let Ok(mut state) = state.lock() else {
+        return;
+    };
+    if state.select_stable_key(key).is_ok() {
+        apply_route_projection(window, state.projection());
+        dismiss_command_palette(window);
+    }
+}
+
+fn dismiss_command_palette(window: &MainWindow) {
+    window.set_command_palette_visible(false);
+    window.set_command_palette_query("".into());
+    window.set_command_palette_selected_ordinal(-1);
+    window.set_command_palette_rows(model(Vec::new()));
 }
 
 fn wire_session_detail_intents(

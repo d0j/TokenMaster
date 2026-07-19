@@ -1189,12 +1189,53 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-CONTROLLER-SLOT*"
     }
 
+    It "rejects widening the command palette query cap" {
+        $fixture = New-DesktopAuditFixture -Name "command-palette-cap"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'MAX_COMMAND_PALETTE_QUERY_SCALARS: usize = 64',
+            'MAX_COMMAND_PALETTE_QUERY_SCALARS: usize = 65'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-COMMAND-PALETTE-BOUND*"
+    }
+
+    It "rejects removing the exact command palette shortcut" {
+        $fixture = New-DesktopAuditFixture -Name "command-palette-shortcut"
+        $path = Join-Path $fixture "crates\desktop\ui\main.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'keys: @keys(Control + K);',
+            'keys: @keys(Control + P);'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-COMMAND-PALETTE-SHORTCUT*"
+    }
+
+    It "rejects command palette mutation actions" {
+        $fixture = New-DesktopAuditFixture -Name "command-palette-mutation"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\components\command-palette.slint") `
+            -Value 'Button { text: "Backup"; }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-COMMAND-PALETTE-ROUTE-ONLY*"
+    }
+
     It "accepts the bounded dashboard History Sessions Models Projects Activity Notifications and Help About desktop boundary" {
         $fixture = New-DesktopAuditFixture -Name "library-boundary"
 
         $receipt = & $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json
         $receipt.rust_source_file_count | Should -Be 15
-        $receipt.slint_source_file_count | Should -Be 22
+        $receipt.slint_source_file_count | Should -Be 23
+        $receipt.command_palette_query_scalar_maximum | Should -Be 64
+        $receipt.command_palette_model_count | Should -Be 1
+        $receipt.command_palette_shortcut_count | Should -Be 1
+        $receipt.command_palette_accessible_default_action_count | Should -Be 1
+        $receipt.command_palette_route_only | Should -BeTrue
+        $receipt.command_palette_owner_count | Should -Be 0
         $receipt.dashboard_section_count | Should -Be 6
         $receipt.dashboard_model_replacement_count | Should -Be 7
         $receipt.history_day_maximum | Should -Be 30

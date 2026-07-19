@@ -7,6 +7,7 @@ import { UiTokens } from "tokens.slint";
 import { RouteNavItem } from "components/route-nav-item.slint";
 import { RouteState } from "components/route-state.slint";
 import { InAppNotificationPanel } from "components/in-app-notification-panel.slint";
+import { RoutePalette } from "components/command-palette.slint";
 import { DashboardView } from "views/dashboard-view.slint";
 import { HistoryView } from "views/history-view.slint";
 import { ModelsView } from "views/models-view.slint";
@@ -17,6 +18,7 @@ import { HelpAboutView } from "views/help-about-view.slint";
 import { SessionsView } from "views/sessions-view.slint";
 import { DataHealthView } from "views/data-health-view.slint";
 import { SettingsView, ReminderCustomLeadRow } from "views/settings-view.slint";
+import { Button } from "std-widgets.slint";
 
 export component MainWindow inherits Window {
     in property <[RouteRow]> route-rows;
@@ -195,7 +197,17 @@ export component MainWindow inherits Window {
     in property <[InAppNotificationRow]> in-app-notification-rows;
     in-out property <bool> in-app-notification-visible: false;
     in-out property <string> in-app-notification-count-label;
+    in-out property <bool> command-palette-visible: false;
+    in-out property <string> command-palette-query;
+    in property <[RouteRow]> command-palette-rows;
+    in property <int> command-palette-selected-ordinal: -1;
     callback select-route(string);
+    callback open-command-palette();
+    callback dismiss-command-palette();
+    callback command-palette-query-edited(string);
+    callback move-command-palette-selection(int);
+    callback activate-command-palette-selection();
+    callback activate-command-palette-route(string);
     callback select-session(int);
     callback export-config();
     callback import-config();
@@ -224,6 +236,18 @@ export component MainWindow inherits Window {
     min-width: 560px;
     min-height: 480px;
     background: UiTokens.background;
+    forward-focus: shell-shortcuts;
+
+    shell-shortcuts := FocusScope {
+        x: 0px;
+        y: 0px;
+        width: 0px;
+        height: 0px;
+        KeyBinding {
+            keys: @keys(Control + K);
+            activated => { root.open-command-palette(); }
+        }
+    }
 
     VerticalLayout {
         Rectangle {
@@ -250,13 +274,32 @@ export component MainWindow inherits Window {
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                 }
+                Button {
+                    text: "Go to route";
+                    accessible-label: "Open route palette";
+                    clicked => { root.open-command-palette(); }
+                }
                 Text {
                     text: root.active-route-state;
                     color: root.active-route-state == "ready" ? UiTokens.ready : root.active-route-state == "degraded" ? UiTokens.degraded : root.active-route-state == "waiting" ? UiTokens.waiting : UiTokens.unavailable;
                     vertical-alignment: center;
-                }
-            }
         }
+    }
+
+    RoutePalette {
+        width: parent.width;
+        height: parent.height;
+        palette-open: root.command-palette-visible;
+        rows: root.command-palette-rows;
+        query: root.command-palette-query;
+        selected-ordinal: root.command-palette-selected-ordinal;
+        query-edited(query) => { root.command-palette-query-edited(query); }
+        dismiss => { root.dismiss-command-palette(); }
+        move-selection(delta) => { root.move-command-palette-selection(delta); }
+        activate-selection => { root.activate-command-palette-selection(); }
+        activate-route(key) => { root.activate-command-palette-route(key); }
+    }
+}
 
         HorizontalLayout {
             spacing: 0px;
