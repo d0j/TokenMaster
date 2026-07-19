@@ -756,8 +756,27 @@ test/doctest baseline passed in 820.7 seconds overall (18.845, 1.611, and 22.080
 for the first three stages). The credential-dependent live Codex contract remains
 explicitly ignored. This is P3-D.2b closure, not M0/package/signing/release acceptance.
 
-The immediate next implementation slice is the bounded Models route, then Projects and
-Activity. Reuse the immutable snapshot/controller boundary and existing worker; do not
+P3-D.3 Models is implemented under
+`docs/superpowers/specs/2026-07-19-tokenmaster-models-route-design.md` and
+`docs/superpowers/plans/2026-07-19-tokenmaster-models-route.md`. The existing fixed
+recent-30-day History request now also captures exactly Model and Project breakdowns;
+the controller still performs only the today and recent analytics calls on its one
+capacity-one worker. Models readiness follows that shared recent section rather than
+the today-only Dashboard payload. Desktop retains at most 64 canonical model rows and
+one Slint model with exact range/timezone/evidence, event count, input/cached/output/
+reasoning/total tokens, typed cost, relative distribution, and explicit backend or
+frontend truncation. Desktop preserves cost availability, selection mode, and actual
+calculated/reported/mixed composition; wide and narrow Slint layouts render partial
+and composition evidence visibly and in the accessible row meaning.
+Route-only switching neither queries nor rebuilds the model. Focused product/Desktop
+tests and 47/47 Desktop mutation audits pass. Independent re-review returned READY
+with Critical/Important/Minor 0/0/0. Clean-root, formatting, strict warnings-as-errors
+workspace Clippy, and the complete locked workspace test/doctest baseline pass; the
+full suite completed in 790 seconds. P3-D.3 is closed; no release acceptance is inferred.
+
+The immediate next implementation slice is Projects, then
+Activity. Projects must consume the already captured Project breakdown instead of
+adding an analytics query. Reuse the immutable snapshot/controller boundary; do not
 turn route selection into query authority. Later-page Sessions navigation and interactive
 History range selection remain bounded replacements of their existing product sections.
 Keep the fixed archive path and writer sidecar; never copy only the live main file or

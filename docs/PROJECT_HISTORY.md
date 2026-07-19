@@ -3270,3 +3270,44 @@ strict workspace Clippy, and complete locked workspace test/doctest baseline pas
 820.7 seconds overall (18.845, 1.611, and 22.080 seconds for the first three stages). One
 credential-dependent live Codex contract remains explicitly ignored. No M0, package,
 signing, or product-release acceptance is inferred.
+
+## 2026-07-19 — P3-D.3 bounded Models route
+
+The Models slice began by auditing query duplication rather than enlarging the existing
+Dashboard card. Dashboard already held a today-only top-12 Model breakdown while
+History held the exact recent 30-day series without breakdowns. A separate Models query
+would have repeated the same aggregate and pricing work and created another range state.
+ADR-068 therefore adds Model and Project breakdowns to the existing recent request.
+The controller still performs exactly two analytics calls: today and recent 30 days.
+History consumes the series, Models consumes Model, and Projects can consume the already
+captured Project breakdown.
+
+TDD first proved that Models incorrectly followed today analytics and that the recent
+request lacked breakdowns. The product route now follows recent-section readiness.
+`DesktopModelsProjection` retains at most 64 canonical model rows from the query's
+256+lookahead boundary, preserves input/cached/output/reasoning/total, event, cost,
+range/timezone/freshness/quality truth, and surfaces both backend and desktop truncation.
+Missing breakdown, retained failure, empty, partial, and unavailable states remain
+typed. Provider/profile/source/account/workspace/project/session identity, keys,
+cursors, paths, content, and authority do not cross the projection.
+
+The first independent review found that the numeric cost label hid partial availability
+and actual provenance, and that ready-empty/partial/mismatched-identity acceptance was
+under-tested. TDD fixtures now cover all three. `DesktopCostValue` retains availability,
+selection mode, and actual calculated/reported/mixed composition; the compiled Slint
+header and rows render partial/composition evidence visibly and in accessible labels.
+The relative-to-largest bar is now named `Relative`, not the mathematically incorrect
+`Share`.
+
+The compiled Slint route replaces the placeholder with one responsive header and ranked
+table. Wide and narrow layouts use the same model and accessible row meaning; narrow
+rows retain all token components rather than showing only totals. In-place route
+switching neither rebuilds the model nor recreates the window. Focused product/Desktop
+and real headless Slint tests pass, including 257-model backend lookahead and a 64-row UI
+fixture. The production audit now passes 47 mutation cases covering the shared request,
+no third query, exact cap/truncation, one mapping/application site, complete responsive
+token mix, privacy, and zero route-time work. Independent re-review returned READY with
+Critical/Important/Minor 0/0/0. Clean-root, formatting, strict warnings-as-errors
+workspace Clippy, and the complete locked workspace test/doctest baseline pass; the
+full suite completed in 790 seconds. P3-D.3 is closed. Projects, Activity, interactive
+ranges, presentation, automation, packaging, signing, and release remain open.

@@ -204,6 +204,16 @@ most 32 model and 32 path-free project-alias rows; no provider/profile/source/se
 cursor, absolute path, prompt, response, reasoning content, command, credential, SQL,
 filesystem, network, process, or browser authority crosses the frontend boundary.
 
+P3-D.3 adds one owned Models projection and one 64-row Slint model over the existing
+recent-usage envelope. It exposes only canonical bounded model keys, aggregate event/
+token/cost values, non-secret cost availability/mode/composition, the half-open civil
+range, timezone, freshness, quality, stable
+reasons, and truncation. It contains no provider, profile, source, account, workspace,
+project, session, event identity, opaque key/cursor, absolute path, SQL, prompt,
+response, reasoning content, command, credential, pricing internals, filesystem,
+network, process, browser, or query authority. Model labels are data, not executable
+skin/plugin/config inputs. Route selection remains presentation-only.
+
 Providers emit bounded observation/session-relation drafts only. They cannot create
 event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or
 canonical events. Those values are created only by TokenMaster accounting code. Store

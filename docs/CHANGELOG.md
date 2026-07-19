@@ -6,6 +6,23 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.3 Models as a real recent-30-day route. The existing History
+  analytics request now captures Model and Project breakdowns, so History, Models, and
+  the next Projects view share one dataset/range/timezone/evidence envelope and the
+  controller still performs exactly two analytics calls per refresh.
+- Added one bounded 64-row Models projection and responsive compiled Slint view with
+  canonical model keys, events, input/cached/output/reasoning/total tokens, typed cost
+  availability/mode/composition, visible and accessible partial-cost provenance,
+  relative distribution, exact evidence, and explicit backend/frontend truncation.
+  Route switching remains query- and rebuild-free.
+- Expanded the production Desktop audit to 47 mutation contracts and exact Models
+  request/bound/model/application/view receipts. Focused product/Desktop/UI/resource
+  tests pass with one worker/snapshot slot, zero new query/thread/timer/queue/cache/
+  connection/dependency, and no private identity or authority crossing the frontend.
+- Closed P3-D.3 after independent review returned Critical/Important/Minor 0/0/0 and
+  clean-root, formatting, strict workspace Clippy, and the complete locked workspace
+  test/doctest baseline passed; the full suite completed in 790 seconds.
+
 - Implemented P3-D.2b exact Sessions detail with checked backend epochs and independent
   viewed-product/selection generations. Slint submits only a visible ordinal; the current
   app bundle routes one typed intent to the existing capacity-one worker, which resolves

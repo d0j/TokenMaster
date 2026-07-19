@@ -1,13 +1,14 @@
 import {
     RouteRow, DashboardSectionRow, DashboardQuotaRow, DashboardBenefitRow,
     DashboardTrendPoint, DashboardSessionRow, DashboardActivityRow, DashboardModelRow,
-    HistoryDayRow, SessionListRow, SessionDetailBreakdownRow, RestorePointRow
+    HistoryDayRow, ModelUsageRow, SessionListRow, SessionDetailBreakdownRow, RestorePointRow
 } from "models.slint";
 import { UiTokens } from "tokens.slint";
 import { RouteNavItem } from "components/route-nav-item.slint";
 import { RouteState } from "components/route-state.slint";
 import { DashboardView } from "views/dashboard-view.slint";
 import { HistoryView } from "views/history-view.slint";
+import { ModelsView } from "views/models-view.slint";
 import { SessionsView } from "views/sessions-view.slint";
 import { DataHealthView } from "views/data-health-view.slint";
 import { SettingsView } from "views/settings-view.slint";
@@ -49,6 +50,20 @@ export component MainWindow inherits Window {
     in property <string> history-total-tokens;
     in property <string> history-cost;
     in property <string> history-events;
+    in property <[ModelUsageRow]> model-usage-rows;
+    in property <string> models-state;
+    in property <string> models-reasons;
+    in property <string> models-range-label;
+    in property <string> models-time-zone-label;
+    in property <string> models-evidence-label;
+    in property <string> models-total-tokens;
+    in property <string> models-total-availability;
+    in property <string> models-cost;
+    in property <string> models-cost-availability;
+    in property <string> models-cost-evidence-label;
+    in property <string> models-events;
+    in property <string> models-loaded-label;
+    in property <string> models-completeness-label;
     in property <[SessionListRow]> session-list-rows;
     in property <string> sessions-state;
     in property <string> sessions-reasons;
@@ -78,10 +93,12 @@ export component MainWindow inherits Window {
     out property <bool> dashboard-visible: root.active-route-key == "dashboard";
     out property <bool> history-visible: root.active-route-key == "history";
     out property <bool> sessions-visible: root.active-route-key == "sessions";
+    out property <bool> models-visible: root.active-route-key == "models";
     out property <bool> data-health-visible: root.active-route-key == "data_health";
     out property <bool> settings-visible: root.active-route-key == "settings";
     out property <string> dashboard-layout-mode: root.width < 1010px ? "narrow" : "wide";
     out property <string> sessions-layout-mode: root.width < 1010px ? "narrow" : "wide";
+    out property <string> models-layout-mode: root.width < 800px ? "narrow" : "wide";
     in property <string> reliable-state-generation;
     in property <string> reliable-state-health;
     in property <bool> reliable-state-safe-mode;
@@ -268,6 +285,25 @@ export component MainWindow inherits Window {
                     select-row(index) => { root.select-session(index); }
                 }
 
+                if root.models-visible: ModelsView {
+                    width: parent.width;
+                    height: parent.height;
+                    rows: root.model-usage-rows;
+                    state: root.models-state;
+                    reasons: root.models-reasons;
+                    range-label: root.models-range-label;
+                    time-zone-label: root.models-time-zone-label;
+                    evidence-label: root.models-evidence-label;
+                    total-tokens: root.models-total-tokens;
+                    total-availability: root.models-total-availability;
+                    cost: root.models-cost;
+                    cost-availability: root.models-cost-availability;
+                    cost-evidence-label: root.models-cost-evidence-label;
+                    events: root.models-events;
+                    loaded-label: root.models-loaded-label;
+                    completeness-label: root.models-completeness-label;
+                }
+
                 if root.data-health-visible: DataHealthView {
                     width: parent.width;
                     height: parent.height;
@@ -329,7 +365,7 @@ export component MainWindow inherits Window {
                     update-backup-policy(enabled, quiet, interval, budget) => { root.update-backup-policy(enabled, quiet, interval, budget); }
                 }
 
-                if !root.dashboard-visible && !root.history-visible && !root.sessions-visible && !root.data-health-visible && !root.settings-visible: RouteState {
+                if !root.dashboard-visible && !root.history-visible && !root.sessions-visible && !root.models-visible && !root.data-health-visible && !root.settings-visible: RouteState {
                     x: UiTokens.space;
                     y: UiTokens.space;
                     width: parent.width - 2 * UiTokens.space;

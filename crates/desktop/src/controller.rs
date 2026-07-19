@@ -70,7 +70,7 @@ impl DesktopQueryPlan {
             WeekStart::Monday,
             UsageSeriesSelection::Daily,
             Vec::new(),
-            Vec::new(),
+            vec![UsageBreakdownKind::Model, UsageBreakdownKind::Project],
         )
         .map_err(map_query_error)?;
         let git = GitOutputRequest::new(

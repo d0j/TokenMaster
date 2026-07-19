@@ -22,7 +22,7 @@ use tokenmaster_query::{
     BenefitOverviewEnvelope, BenefitOverviewRequest, BenefitOverviewSnapshot, GitEnvelope,
     GitOutputRequest, GitOutputSnapshot, LatestActivityPage, LatestActivityRequest, PageSize,
     ProductDataStatusEnvelope, QueryEnvelope, QueryError, QueryService, QuotaCurrentSnapshot,
-    QuotaEnvelope, SystemQueryClock, UsageAnalytics, UsageAnalyticsRequest,
+    QuotaEnvelope, SystemQueryClock, UsageAnalytics, UsageAnalyticsRequest, UsageBreakdownKind,
     UsageSessionDetailResult, UsageSessionKey, UsageSessionPage, UsageSessionPageRequest,
 };
 use tokenmaster_store::UsageStore;
@@ -98,8 +98,25 @@ impl DesktopQuerySource for UnavailableSource {
         request: UsageAnalyticsRequest,
     ) -> Result<QueryEnvelope<UsageAnalytics>, QueryError> {
         match request.range().stable_code() {
-            "today" => self.record("analytics_today"),
-            "recent_days" => self.record("analytics_recent"),
+            "today" => {
+                assert_eq!(
+                    request.breakdowns(),
+                    [
+                        UsageBreakdownKind::Model,
+                        UsageBreakdownKind::Project,
+                        UsageBreakdownKind::Provider,
+                        UsageBreakdownKind::Profile,
+                    ]
+                );
+                self.record("analytics_today");
+            }
+            "recent_days" => {
+                assert_eq!(
+                    request.breakdowns(),
+                    [UsageBreakdownKind::Model, UsageBreakdownKind::Project]
+                );
+                self.record("analytics_recent");
+            }
             other => panic!("unexpected analytics range: {other}"),
         }
         Err(query_failure())

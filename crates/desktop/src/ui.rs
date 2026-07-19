@@ -15,12 +15,13 @@ use tokenmaster_product::ProductSnapshot;
 use crate::{
     DashboardActivityRow, DashboardBenefitRow, DashboardModelRow, DashboardQuotaRow,
     DashboardSectionRow, DashboardSessionRow, DashboardTrendPoint, DesktopActivityKey,
-    DesktopCostValue, DesktopDashboardProjection, DesktopDashboardSectionKey, DesktopFreshness,
-    DesktopHistoryProjection, DesktopIntent, DesktopIntentSink, DesktopOperationSnapshot,
-    DesktopQuality, DesktopReliableStateProjection, DesktopSessionDetailIntentAdmission,
+    DesktopCostComposition, DesktopCostValue, DesktopDashboardProjection,
+    DesktopDashboardSectionKey, DesktopFreshness, DesktopHistoryProjection, DesktopIntent,
+    DesktopIntentSink, DesktopModelsProjection, DesktopOperationSnapshot, DesktopQuality,
+    DesktopReliableStateProjection, DesktopSessionDetailIntentAdmission,
     DesktopSessionDetailIntentSink, DesktopSessionsProjection, DesktopSnapshotBridge,
     DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue, DesktopValueAvailability,
-    HistoryDayRow, MainWindow, RestorePointRow, RouteRow, SessionDetailBreakdownRow,
+    HistoryDayRow, MainWindow, ModelUsageRow, RestorePointRow, RouteRow, SessionDetailBreakdownRow,
     SessionListRow, UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
 };
@@ -522,6 +523,7 @@ pub(crate) fn apply_projection(window: &MainWindow, projection: &DesktopProjecti
     apply_route_projection(window, projection);
     apply_dashboard_projection(window, projection.dashboard());
     apply_history_projection(window, projection.history());
+    apply_models_projection(window, projection.models());
     apply_sessions_projection(window, projection.sessions());
 }
 
@@ -883,6 +885,78 @@ fn format_history_range(history: &DesktopHistoryProjection) -> String {
 
 fn format_date(year: i16, month: u8, day: u8) -> String {
     format!("{year:04}-{month:02}-{day:02}")
+}
+
+fn apply_models_projection(window: &MainWindow, models: &DesktopModelsProjection) {
+    window.set_models_state(models.state().stable_code().into());
+    window.set_models_reasons(join_reasons(models.reason_codes().iter()).into());
+    window.set_models_range_label(format_models_range(models).into());
+    window.set_models_time_zone_label(models.time_zone_id().unwrap_or("Unavailable").into());
+    window.set_models_evidence_label(format_evidence(models.freshness(), models.quality()).into());
+    window.set_models_total_tokens(format_tokens(models.total_tokens()).into());
+    window.set_models_total_availability(
+        availability_code(models.total_tokens().availability()).into(),
+    );
+    window.set_models_cost(format_cost(models.cost()).into());
+    window.set_models_cost_availability(availability_code(models.cost().availability()).into());
+    window.set_models_cost_evidence_label(format_cost_evidence(models.cost()).into());
+    window.set_models_events(format_optional_events(models.event_count()).into());
+    window.set_models_loaded_label(
+        models
+            .event_count()
+            .map_or_else(
+                || "Unavailable".to_owned(),
+                |_| format_counted(models.rows().len() as u64, "model loaded", "models loaded"),
+            )
+            .into(),
+    );
+    window.set_models_completeness_label(
+        if models.event_count().is_none() {
+            "Completeness unavailable"
+        } else if models.truncated() {
+            "More models available"
+        } else {
+            "Complete range"
+        }
+        .into(),
+    );
+
+    let rows = models
+        .rows()
+        .iter()
+        .map(|row| ModelUsageRow {
+            model_label: row.model().into(),
+            event_label: format_integer(row.event_count()).into(),
+            input_availability: availability_code(row.input().availability()).into(),
+            input_label: format_tokens(row.input()).into(),
+            cached_availability: availability_code(row.cached().availability()).into(),
+            cached_label: format_tokens(row.cached()).into(),
+            output_availability: availability_code(row.output().availability()).into(),
+            output_label: format_tokens(row.output()).into(),
+            reasoning_availability: availability_code(row.reasoning().availability()).into(),
+            reasoning_label: format_tokens(row.reasoning()).into(),
+            total_availability: availability_code(row.total_tokens().availability()).into(),
+            total_label: format_tokens(row.total_tokens()).into(),
+            cost_availability: availability_code(row.cost().availability()).into(),
+            cost_label: format_cost(row.cost()).into(),
+            cost_evidence_label: format_cost_evidence(row.cost()).into(),
+            token_ratio: ratio(row.total_tokens().known_sum(), models.token_maximum()),
+        })
+        .collect::<Vec<_>>();
+    window.set_model_usage_rows(model(rows));
+}
+
+fn format_models_range(models: &DesktopModelsProjection) -> String {
+    models.range().map_or_else(
+        || "Range unavailable".to_owned(),
+        |(start, end)| {
+            format!(
+                "{} – before {}",
+                format_date(start.0, start.1, start.2),
+                format_date(end.0, end.1, end.2)
+            )
+        },
+    )
 }
 
 fn apply_sessions_projection(window: &MainWindow, sessions: &DesktopSessionsProjection) {
@@ -1290,6 +1364,26 @@ fn format_cost(value: DesktopCostValue) -> String {
     value
         .micros()
         .map_or_else(|| "—".to_owned(), format_usd_micros)
+}
+
+fn format_cost_evidence(value: DesktopCostValue) -> String {
+    let availability = match value.availability() {
+        DesktopValueAvailability::Unavailable => "Unavailable",
+        DesktopValueAvailability::Known => "Known",
+        DesktopValueAvailability::Partial => "Partial",
+        DesktopValueAvailability::Complete => "Complete",
+        DesktopValueAvailability::LegitimateZero => "Zero",
+    };
+    let provenance = match value.composition() {
+        None | Some(DesktopCostComposition::None) => None,
+        Some(DesktopCostComposition::Calculated) => Some("calculated"),
+        Some(DesktopCostComposition::Reported) => Some("reported"),
+        Some(DesktopCostComposition::Mixed) => Some("mixed"),
+    };
+    provenance.map_or_else(
+        || availability.to_owned(),
+        |provenance| format!("{availability} · {provenance}"),
+    )
 }
 
 fn format_optional_events(value: Option<u64>) -> String {

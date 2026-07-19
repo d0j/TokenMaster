@@ -303,6 +303,14 @@ reasoning, total, and cost; the narrow layout may reduce visible columns but MUS
 retain the same model and accessible row meaning. No display row may expose a provider,
 profile, source, workspace, project, private session key, or continuation cursor.
 
+Models MUST render the Model breakdown from the same exact recent-30-day analytics
+envelope as History. The wide layout shows canonical model key, events, input, cached,
+output, reasoning, total, cost, and relative total-token distribution. The narrow
+layout MAY rearrange those facts but MUST keep every component in the same owned row
+model and accessible row meaning. Backend or presentation truncation MUST be visible.
+No Models row may expose provider, profile, source, account, workspace, project,
+session, opaque key/cursor, path, content, command, credential, or query authority.
+
 ### TM-UI-002 — Reactive presentation boundary
 
 Skin, layout, locale, selection, and range changes MUST update bounded presentation
@@ -335,6 +343,13 @@ rebuild Dashboard models, recreate the window, query SQLite, or schedule backgro
 work. The production Dashboard MUST contain no idle animation or presentation timer.
 The current History projection MUST retain at most 30 daily rows in one model and no
 prior range, query service, timer, worker, or archive handle.
+The current Models projection MUST retain at most 64 model rows in one model and no
+prior range, filter, sort state, query service, timer, worker, archive handle, or
+private identity. History, Models, and the future Projects projection MUST share one
+bounded recent-usage envelope rather than duplicate equivalent analytics queries.
+Model token and cost availability MUST remain typed through Slint. Cost mode and
+calculated/reported/mixed composition MUST remain typed through Desktop, while the
+visible and accessible UI MUST distinguish partial cost and actual composition.
 The current Sessions projection MUST retain at most 64 summary rows in one model and no
 opaque key, cursor, prior page, query service, timer, worker, or archive handle. Its
 route-only selection MUST NOT rebuild the model or issue a detail query.

@@ -970,6 +970,28 @@ Query or projection omission sets explicit truncation. Provider/profile/source/s
 keys, cursors, raw paths, prompts, responses, reasoning content, commands, and credentials
 never enter the projection or Slint model.
 
+### P3-D.3 bounded Models projection
+
+The existing recent-30-day History request also requests Model and Project breakdowns.
+It remains one query and one compatible product section: History consumes the daily
+series, Models consumes the Model breakdown, and the future Projects route consumes the
+prefetched Project breakdown. The query/store boundary retains at most 256 Model and
+256 Project items plus explicit lookahead-derived truncation in the one current
+immutable snapshot. No prior recent-usage envelope is cached.
+
+`DesktopModelsProjection` accepts only `UsageBreakdownIdentity::Model`, preserves the
+query's total-token/event/stable-key order, and copies at most 64 rows. Each row contains
+only the canonical bounded model key, event count, typed input/cached/output/reasoning/
+total values, and typed cost availability, selection mode, and calculated/reported/
+mixed composition. Slint receives availability plus a visible/accessibility-safe
+composition label; it never converts partial cost into complete cost. Backend
+truncation or discarding rows beyond 64 produces
+one explicit `models_truncated` reason. A missing Model breakdown is degraded truth,
+not an empty exact range. The projection also copies only the shared overview,
+half-open range, timezone, freshness, and quality; it owns no provider/profile/source/
+account/workspace/project/session identity, key, cursor, path, filter, sort state,
+query service, archive handle, runtime owner, or prior model.
+
 Only explicit provider ancestry identifies a parent. A strong signature covers the
 normalized model, emitted delta, and provider cumulative snapshot. A weak signature
 covers model and delta only and cannot suppress a pre-divergence event by itself.

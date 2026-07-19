@@ -169,6 +169,67 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-HISTORY-BOUND*"
     }
 
+    It "rejects Models presentation-bound drift" {
+        $fixture = New-DesktopAuditFixture -Name "models-bound"
+        $path = Join-Path $fixture "crates\desktop\src\models.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'pub const MAX_MODEL_ROWS: usize = 64;',
+            'pub const MAX_MODEL_ROWS: usize = 640;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-MODELS-BOUND*"
+    }
+
+    It "rejects a separate or incomplete Models analytics request" {
+        $fixture = New-DesktopAuditFixture -Name "models-request"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'vec![UsageBreakdownKind::Model, UsageBreakdownKind::Project],',
+            'vec![UsageBreakdownKind::Model],'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-MODELS-REQUEST*"
+    }
+
+    It "rejects a third analytics query for Models" {
+        $fixture = New-DesktopAuditFixture -Name "models-third-query"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\controller.rs") `
+            -Value 'fn third_models_query() { let _ = source.usage_analytics('
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-MODELS-REQUEST*"
+    }
+
+    It "rejects loss of a complete responsive Models token mix" {
+        $fixture = New-DesktopAuditFixture -Name "models-view"
+        $path = Join-Path $fixture "crates\desktop\ui\views\models-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'model.reasoning-label',
+            '"reasoning hidden"'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-MODELS-VIEW*"
+    }
+
+    It "rejects loss of Models cost availability and provenance" {
+        $fixture = New-DesktopAuditFixture -Name "models-cost-evidence"
+        $path = Join-Path $fixture "crates\desktop\ui\views\models-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'model.cost-evidence-label',
+            '"cost evidence hidden"'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-MODELS-VIEW*"
+    }
+
     It "rejects sessions presentation-bound drift" {
         $fixture = New-DesktopAuditFixture -Name "sessions-bound"
         $path = Join-Path $fixture "crates\desktop\src\sessions.rs"
@@ -371,6 +432,19 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-HISTORY-REBUILD*"
     }
 
+    It "rejects Models rebuilding from route selection" {
+        $fixture = New-DesktopAuditFixture -Name "route-models-rebuild"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'apply_route_projection(&window, state.projection());',
+            "apply_route_projection(&window, state.projection());`r`n            apply_models_projection(&window, state.projection().models());"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-MODELS-REBUILD*"
+    }
+
     It "rejects sessions model rebuilding from route selection" {
         $fixture = New-DesktopAuditFixture -Name "route-sessions-rebuild"
         $path = Join-Path $fixture "crates\desktop\src\ui.rs"
@@ -459,17 +533,21 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-CONTROLLER-SLOT*"
     }
 
-    It "accepts the library-only bounded dashboard history and sessions desktop boundary" {
+    It "accepts the library-only bounded dashboard history sessions and Models desktop boundary" {
         $fixture = New-DesktopAuditFixture -Name "library-boundary"
 
         $receipt = & $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json
-        $receipt.rust_source_file_count | Should -Be 10
-        $receipt.slint_source_file_count | Should -Be 16
+        $receipt.rust_source_file_count | Should -Be 11
+        $receipt.slint_source_file_count | Should -Be 17
         $receipt.dashboard_section_count | Should -Be 6
         $receipt.dashboard_model_replacement_count | Should -Be 7
         $receipt.history_day_maximum | Should -Be 30
         $receipt.history_model_replacement_count | Should -Be 1
         $receipt.history_projection_application_count | Should -Be 1
+        $receipt.model_row_maximum | Should -Be 64
+        $receipt.models_model_replacement_count | Should -Be 1
+        $receipt.models_projection_application_count | Should -Be 1
+        $receipt.analytics_query_call_count | Should -Be 2
         $receipt.session_row_maximum | Should -Be 64
         $receipt.session_detail_model_row_maximum | Should -Be 32
         $receipt.session_detail_project_row_maximum | Should -Be 32

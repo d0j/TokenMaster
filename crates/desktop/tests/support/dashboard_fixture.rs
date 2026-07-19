@@ -54,7 +54,7 @@ pub fn seed(path: &Path) {
     seed_benefits(path);
 }
 
-pub fn add_distinct_usage_rows(path: &Path, additional: u8) {
+pub fn add_distinct_usage_rows(path: &Path, additional: u16) {
     let mut connection = Connection::open(path).expect("usage scale connection");
     connection
         .pragma_update(None, "foreign_keys", "ON")
@@ -62,6 +62,8 @@ pub fn add_distinct_usage_rows(path: &Path, additional: u8) {
     let transaction = connection.transaction().expect("usage scale transaction");
     for index in 0..additional {
         let seed = index.checked_add(20).expect("bounded fixture seed");
+        let mut fingerprint = [0_u8; 32];
+        fingerprint[..2].copy_from_slice(&seed.to_le_bytes());
         transaction
             .execute(
                 "INSERT INTO usage_event(
@@ -80,18 +82,68 @@ pub fn add_distinct_usage_rows(path: &Path, additional: u8) {
                    'standard', 'no', 'tokenmaster', 0, 0, 0, 0, 0, 0, 0, 0
                  )",
                 params![
-                    [seed; 32].as_slice(),
-                    format!("dashboard-private-event-{index:02}"),
+                    fingerprint.as_slice(),
+                    format!("dashboard-private-event-{index:03}"),
                     [7_u8; 32].as_slice(),
                     i64::from(index) + 2,
-                    format!("dashboard-private-session-{index:02}"),
+                    format!("dashboard-private-session-{index:03}"),
                     DAY_START_SECONDS + 4_000 + i64::from(index),
-                    format!("model-{index:02}"),
+                    format!("model-{index:03}"),
                 ],
             )
             .expect("usage scale row");
     }
     transaction.commit().expect("commit usage scale fixture");
+}
+
+pub fn make_partial_model_usage(path: &Path) {
+    let mut connection = Connection::open(path).expect("partial model connection");
+    connection
+        .pragma_update(None, "foreign_keys", "ON")
+        .expect("foreign keys");
+    let transaction = connection.transaction().expect("partial model transaction");
+    transaction
+        .execute(
+            "UPDATE usage_event
+             SET model = 'fixture-unpriced-model', input_tokens = NULL
+             WHERE event_id = 'dashboard-private-event'",
+            [],
+        )
+        .expect("make primary model evidence partial");
+    transaction
+        .execute(
+            "INSERT INTO usage_event(
+               fingerprint, event_id, selected_file_key, selected_generation,
+               selected_source_offset, projection_revision_id, origin_revision_id,
+               retained, provider_id, profile_id, session_id, source_id,
+               timestamp_seconds, timestamp_nanos, model, input_tokens,
+               cached_tokens, output_tokens, reasoning_tokens, total_tokens,
+               reported_cost_usd_micros, fallback_model, service_tier, long_context,
+               project_alias, activity_read, activity_edit_write, activity_search,
+               activity_git, activity_build_test, activity_web, activity_subagents,
+               activity_terminal
+             ) VALUES (
+               ?1, 'dashboard-private-partial-event', ?2, 0, 2, 0, 0, 0,
+               'codex', 'default', 'dashboard-private-partial-session',
+               'dashboard-private-source', ?3, 0, 'fixture-unpriced-model',
+               50, 5, 10, NULL, 65, NULL, 0, 'standard', 'no', 'tokenmaster',
+               0, 0, 0, 0, 0, 0, 0, 0
+             )",
+            params![
+                [41_u8; 32].as_slice(),
+                [7_u8; 32].as_slice(),
+                DAY_START_SECONDS + 3_601,
+            ],
+        )
+        .expect("add unpriced model evidence");
+    transaction.commit().expect("commit partial model fixture");
+}
+
+pub fn clear_usage_rows(path: &Path) {
+    let connection = Connection::open(path).expect("empty usage connection");
+    connection
+        .execute("DELETE FROM usage_event", [])
+        .expect("clear usage rows");
 }
 
 pub fn add_session_breakdown_rows(path: &Path, additional: u8) {

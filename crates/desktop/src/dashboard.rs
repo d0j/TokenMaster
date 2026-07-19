@@ -3,9 +3,10 @@ use std::sync::Arc;
 use tokenmaster_domain::{BenefitKind, BenefitState, GitOutputQuality};
 use tokenmaster_product::{ProductSection, ProductSectionKind, ProductSnapshot};
 use tokenmaster_query::{
-    AggregateTokenValue, BenefitReminderCoverage, CostAvailability, CostResult, GitEfficiency,
-    QueryFreshness, QueryQuality, QuotaConfidence, QuotaPresentation, QuotaTransitionKind,
-    QuotaWindowSemantics, UsageBreakdownIdentity, UsageBreakdownKind, UsageMetrics,
+    AggregateTokenValue, BenefitReminderCoverage, CostAvailability, CostComposition, CostMode,
+    CostResult, GitEfficiency, QueryFreshness, QueryQuality, QuotaConfidence, QuotaPresentation,
+    QuotaTransitionKind, QuotaWindowSemantics, UsageBreakdownIdentity, UsageBreakdownKind,
+    UsageMetrics,
 };
 
 pub const DESKTOP_DASHBOARD_SECTION_COUNT: usize = 6;
@@ -208,11 +209,28 @@ impl DesktopTokenValue {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopCostMode {
+    Auto,
+    Calculated,
+    Reported,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopCostComposition {
+    None,
+    Calculated,
+    Reported,
+    Mixed,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DesktopCostValue {
     availability: DesktopValueAvailability,
     micros: Option<u64>,
     total_events: u64,
     priced_events: Option<u64>,
+    mode: Option<DesktopCostMode>,
+    composition: Option<DesktopCostComposition>,
 }
 
 impl DesktopCostValue {
@@ -221,6 +239,8 @@ impl DesktopCostValue {
         micros: None,
         total_events: 0,
         priced_events: None,
+        mode: None,
+        composition: None,
     };
 
     #[must_use]
@@ -241,6 +261,16 @@ impl DesktopCostValue {
     #[must_use]
     pub const fn priced_events(self) -> Option<u64> {
         self.priced_events
+    }
+
+    #[must_use]
+    pub const fn mode(self) -> Option<DesktopCostMode> {
+        self.mode
+    }
+
+    #[must_use]
+    pub const fn composition(self) -> Option<DesktopCostComposition> {
+        self.composition
     }
 }
 
@@ -1325,6 +1355,17 @@ pub(crate) fn map_cost(value: &CostResult) -> DesktopCostValue {
         },
         total_events: counters.total_events,
         priced_events,
+        mode: counters_valid.then(|| match value.mode() {
+            CostMode::Auto => DesktopCostMode::Auto,
+            CostMode::Calculated => DesktopCostMode::Calculated,
+            CostMode::Reported => DesktopCostMode::Reported,
+        }),
+        composition: counters_valid.then(|| match value.composition() {
+            CostComposition::None => DesktopCostComposition::None,
+            CostComposition::Calculated => DesktopCostComposition::Calculated,
+            CostComposition::Reported => DesktopCostComposition::Reported,
+            CostComposition::Mixed => DesktopCostComposition::Mixed,
+        }),
     }
 }
 

@@ -5,6 +5,7 @@
 
 pub mod dashboard;
 pub mod history;
+pub mod models;
 pub mod presentation;
 pub mod reliable_state;
 pub mod sessions;
@@ -24,6 +25,7 @@ mod ui;
 
 pub use dashboard::*;
 pub use history::*;
+pub use models::*;
 pub use presentation::{
     DesktopApplyOutcome, DesktopRouteKey, DesktopSessionSelectionError, DesktopSnapshotEpoch,
     DesktopState,

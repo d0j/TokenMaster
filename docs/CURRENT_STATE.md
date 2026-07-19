@@ -68,6 +68,21 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   Clippy/complete locked test-doctest baseline passed in 820.7 seconds overall (18.845,
   1.611, and 22.080 seconds for the first three stages). The credential-dependent live
   Codex contract remains explicitly ignored; M0 and product-release gates are separate.
+- P3-D.3 bounded Models route: the fixed recent-30-day History request now captures
+  Model and Project breakdowns in one immutable envelope, so History, Models, and the
+  next Projects route share exact range/timezone/freshness without a third analytics
+  query. One identity-free projection retains at most 64 canonical model rows with
+  input/cached/output/reasoning/total tokens, typed cost availability/mode/composition,
+  events, relative distribution, and explicit backend/frontend truncation. The responsive
+  compiled Slint view keeps every component in wide and narrow layouts, visibly and
+  accessibly distinguishes partial plus calculated/reported/mixed cost evidence, and
+  switches in place without rebuilding the
+  model or adding a worker, timer, queue, cache, connection, dependency, private ID, or
+  authority. Focused product/Desktop tests and all 47 production Desktop mutation
+  audits pass. Independent re-review returned READY with Critical/Important/Minor
+  0/0/0 after partial-cost/provenance and acceptance-matrix findings were closed. The
+  clean-root, formatting, strict warnings-as-errors workspace Clippy, and complete
+  locked workspace test/doctest baseline pass; the full suite completed in 790 seconds.
 - M1 usage foundation: bounded provider roots, path-private source discovery,
   reparse-safe streaming enumeration, typed bounded JSONL parser, cumulative token
   state, physical/logical source identity, byte framing, revalidation, strict SQLite
@@ -1312,9 +1327,11 @@ release target passes independently.
 
 ## Next implementation slice
 
-P3-D.0 Reliable State, P3-D.1 History, and P3-D.2 bounded Sessions list/detail are
-complete. Continue with the independently useful Models route, then Projects and
-Activity. Later-page Sessions navigation and interactive History ranges remain bounded
+P3-D.0 Reliable State, P3-D.1 History, P3-D.2 bounded Sessions list/detail, and the
+P3-D.3 Models route are complete through independent review and full workspace
+verification, including ready-empty, partial token/cost, cost provenance, and
+mismatched-identity gates. Continue with Projects, then Activity.
+Later-page Sessions navigation and interactive History ranges remain bounded
 replacements of their existing sections rather than new frontend query owners.
 Supporting notification/help routes remain after those data views. P3-E then owns
 command palette, tray, compact widget, and remaining shell lifecycle. Interactive

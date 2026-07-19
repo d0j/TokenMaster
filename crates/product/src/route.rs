@@ -238,20 +238,12 @@ pub(crate) fn derive_routes(snapshot: &ProductSnapshot) -> [ProductRouteStatus; 
         dashboard = dashboard.with(ProductRouteReason::GitUnavailable);
     }
 
-    let mut usage = common;
-    if !usage_ready {
-        usage = usage.with(ProductRouteReason::UsageUnavailable);
-    }
-    if let Some(reason) = aggregate_reason {
-        usage = usage.with(reason);
-    }
-
-    let mut history = common;
+    let mut recent_usage = common;
     if !history_ready {
-        history = history.with(ProductRouteReason::UsageUnavailable);
+        recent_usage = recent_usage.with(ProductRouteReason::UsageUnavailable);
     }
     if let Some(reason) = aggregate_reason {
-        history = history.with(reason);
+        recent_usage = recent_usage.with(reason);
     }
 
     let mut sessions = common;
@@ -262,7 +254,7 @@ pub(crate) fn derive_routes(snapshot: &ProductSnapshot) -> [ProductRouteStatus; 
         sessions = sessions.with(reason);
     }
 
-    let mut projects = usage;
+    let mut projects = recent_usage;
     if !git_ready {
         projects = projects.with(ProductRouteReason::GitUnavailable);
     }
@@ -284,9 +276,9 @@ pub(crate) fn derive_routes(snapshot: &ProductSnapshot) -> [ProductRouteStatus; 
 
     [
         status_for(ProductRoute::Dashboard, dashboard),
-        aggregate_status_for(ProductRoute::History, history),
+        aggregate_status_for(ProductRoute::History, recent_usage),
         aggregate_status_for(ProductRoute::Sessions, sessions),
-        aggregate_status_for(ProductRoute::Models, usage),
+        aggregate_status_for(ProductRoute::Models, recent_usage),
         aggregate_status_for(ProductRoute::Projects, projects),
         status_for(ProductRoute::Activity, activity),
         status_for(ProductRoute::DataHealth, common),

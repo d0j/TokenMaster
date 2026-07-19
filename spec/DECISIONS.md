@@ -1613,7 +1613,7 @@ it can never accept M0, packaging, signing, soak, or a product release.
 
 Decision: P3-D.1 introduces a separate product History analytics section rather than
 reusing the today-only Dashboard payload. Its initial request is the exact latest 30
-civil days in the positively identified system timezone, daily series, no breakdowns,
+civil days in the positively identified system timezone, daily series, initially no breakdowns,
 with the existing 400-day query maximum as the future range ceiling. The request runs
 sequentially on the existing capacity-one desktop query worker and publishes/fails
 independently. Cancellation and deadline preserve complete-attempt publication.
@@ -1630,6 +1630,9 @@ the state machine before one real supporting route proves the complete vertical 
 One fixed bounded request validates query, reducer, controller, projection, and UI
 contracts while preserving constant frontend memory and a direct upgrade path to
 bounded range controls.
+
+Evolution: ADR-068 later adds bounded Model and Project breakdowns to this same request
+without changing its History range/series semantics or adding an analytics call.
 
 ## ADR-066 — Split the Sessions list from exact detail selection
 
@@ -1677,3 +1680,29 @@ opaque UI key would widen the privacy/authority boundary. A per-click worker or 
 would add shutdown/order/memory growth. The three-axis value plus latest-only slot makes
 rapid clicks, concurrent refresh, cancellation, failure, dataset drift, and backend
 replacement fail closed with constant frontend memory and no stale-row disclosure.
+
+## ADR-068 — Share one bounded recent-usage envelope across History, Models, and Projects
+
+Decision: P3-D.3 adds Model and Project breakdowns to the existing fixed recent-30-day
+History analytics request. History continues to consume its daily series; Models reads
+the Model breakdown; the next Projects route will read the already captured Project
+breakdown. There remains exactly one today Dashboard query and one recent-usage query
+per refresh on the existing capacity-one worker. No Models product section, third
+query, cache, timer, connection, thread, or route-time work is added.
+
+The query boundary caps each breakdown at 256 items plus lookahead and explicit
+truncation. Desktop copies at most 64 canonical model rows with complete typed input,
+cached, output, reasoning, total, event, and cost evidence. Cost availability, selection
+mode, and actual calculated/reported/mixed composition remain typed in Desktop; Slint
+renders availability and actual composition visibly and accessibly, so partial cost
+cannot resemble complete cost. One Slint model is replaced
+only for an accepted product generation. Backend and desktop truncation are visible;
+wide and narrow layouts retain the same row meaning. Provider/profile/source/account/
+workspace/project/session identities and every opaque authority remain outside Models.
+
+Rationale: reusing Dashboard would mislabel today as recent exploration, while a new
+30-day Models query would duplicate aggregate/price work and let view ranges drift.
+Renaming the current product `history` field would add mechanical API churn without
+changing ownership. The selected shared immutable envelope gives History, Models, and
+Projects coherent range/timezone/evidence, constant frontend memory, instant route
+switching, and one future replacement point for bounded interactive range controls.

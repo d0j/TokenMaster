@@ -35,14 +35,14 @@ packages, PowerShell contract audits.
 - Modify: `crates/product/tests/route_contract.rs`
 
 **Acceptance:**
-- [ ] Write failing tests proving the refresh still makes exactly `today` then
+- [x] Write failing tests proving the refresh still makes exactly `today` then
   `recent_days`, and the latter requests exactly Model and Project breakdowns.
-- [ ] Write a failing route test proving Models follows recent usage while Dashboard
+- [x] Write a failing route test proving Models follows recent usage while Dashboard
   continues to follow today analytics.
-- [ ] Add the two breakdown kinds to the existing History request only.
-- [ ] Derive Models readiness from `history_ready`; derive Projects from
+- [x] Add the two breakdown kinds to the existing History request only.
+- [x] Derive Models readiness from `history_ready`; derive Projects from
   `history_ready + git_ready` without changing other route semantics.
-- [ ] Run controller and product route tests with `--locked` and record green output.
+- [x] Run controller and product route tests with `--locked` and record green output.
 
 ### Task 2: Add a bounded Models desktop projection
 
@@ -61,13 +61,13 @@ packages, PowerShell contract audits.
   shared overview, rows, token maximum, and truncation.
 
 **Acceptance:**
-- [ ] Start with compile-failing tests for initial unavailable truth and public API.
-- [ ] Add deterministic ready/empty/partial/truncated/mismatched-identity fixtures.
-- [ ] Prove stable backend order is retained and more than 64 rows cannot cross the
+- [x] Start with compile-failing tests for initial unavailable truth and public API.
+- [x] Add deterministic ready/empty/partial/truncated/mismatched-identity fixtures.
+- [x] Prove stable backend order is retained and more than 64 rows cannot cross the
   desktop boundary.
-- [ ] Prove backend truncation and desktop truncation are both visible.
-- [ ] Prove no provider/profile/source/session/project/path/key/cursor field exists.
-- [ ] Add the projection to `DesktopProjection` and run focused tests green.
+- [x] Prove backend truncation and desktop truncation are both visible.
+- [x] Prove no provider/profile/source/session/project/path/key/cursor field exists.
+- [x] Add the projection to `DesktopProjection` and run focused tests green.
 
 ### Task 3: Mount the real responsive Slint Models view
 
@@ -79,15 +79,15 @@ packages, PowerShell contract audits.
 - Modify: `crates/desktop/tests/ui_contract.rs`
 
 **Acceptance:**
-- [ ] First add a failing compiled UI test for Models visibility, real fixture labels,
+- [x] First add a failing compiled UI test for Models visibility, real fixture labels,
   all token components, range/timezone/evidence, completeness, and one window identity.
-- [ ] Add `ModelUsageRow`, Models properties, and one `models-visible` branch.
-- [ ] Wide layout shows all columns; narrow layout keeps all component meaning in one
+- [x] Add `ModelUsageRow`, Models properties, and one `models-visible` branch.
+- [x] Wide layout shows all columns; narrow layout keeps all component meaning in one
   owned row model and provides an accessible full-row label.
-- [ ] Empty/unavailable/degraded/partial/truncated states remain explicit.
-- [ ] Route-only selection does not invoke `apply_models_projection`, replace its model,
+- [x] Empty/unavailable/degraded/partial/truncated states remain explicit.
+- [x] Route-only selection does not invoke `apply_models_projection`, replace its model,
   query, create a window, or schedule work.
-- [ ] Run the complete desktop package tests green.
+- [x] Run the complete desktop package tests green.
 
 ### Task 4: Add deterministic architecture/privacy audits
 
@@ -97,11 +97,11 @@ packages, PowerShell contract audits.
 - Modify additional existing audit only if its current ownership is the exact fit.
 
 **Acceptance:**
-- [ ] Add mutation tests for the Models cap, single mapping/application site, real view
+- [x] Add mutation tests for the Models cap, single mapping/application site, real view
   mount, route-only behavior, shared-query breakdowns, and forbidden frontend fields.
-- [ ] Assert no third analytics request/section/worker/timer/cache is introduced.
-- [ ] Assert the Slint view has wide/narrow branches and every token component.
-- [ ] Run audit Pester tests and the production desktop audit green.
+- [x] Assert no third analytics request/section/worker/timer/cache is introduced.
+- [x] Assert the Slint view has wide/narrow branches and every token component.
+- [x] Run audit Pester tests and the production desktop audit green.
 
 ### Task 5: Synchronize durable project truth
 
@@ -120,20 +120,20 @@ packages, PowerShell contract audits.
 - Modify: `docs/PROJECT_HISTORY.md`
 
 **Acceptance:**
-- [ ] Record the shared recent-usage decision, exact bounds, privacy surface, and
+- [x] Record the shared recent-usage decision, exact bounds, privacy surface, and
   Models delivery evidence.
-- [ ] Keep interactive ranges, aliases, filters, Projects, Activity, P4/P5, parity,
+- [x] Keep interactive ranges, aliases, filters, Projects, Activity, P4/P5, parity,
   M0, packaging, signing, and release incomplete.
-- [ ] Do not store a current commit hash in tracked documents.
+- [x] Do not store a current commit hash in tracked documents.
 
 ### Task 6: Independent review and closeout
 
-- [ ] Run focused product/desktop/audit tests first.
-- [ ] Run `git diff --check` and clean-root.
-- [ ] Run Rust formatting, warnings-as-errors workspace Clippy, and locked workspace
+- [x] Run focused product/desktop/audit tests first.
+- [x] Run `git diff --check` and clean-root.
+- [x] Run Rust formatting, warnings-as-errors workspace Clippy, and locked workspace
   tests exactly as required by `AGENTS.md`.
-- [ ] Request one independent read-only high-rigor correctness/security/performance
+- [x] Request one independent read-only high-rigor correctness/security/performance
   review and resolve every Critical/Important issue.
-- [ ] Audit and stop task-owned agents, tests, diagnostics, and temporary processes.
-- [ ] Stage only this slice and create an English conventional commit.
+- [x] Audit and stop task-owned agents, tests, diagnostics, and temporary processes.
+- [x] Stage only this slice and create an English conventional commit.
 - [ ] Do not push, merge, package, sign, or claim release acceptance without authority.

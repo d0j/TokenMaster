@@ -76,6 +76,17 @@ fn history_route_depends_on_its_own_recent_analytics_section() {
             .reasons()
             .contains(ProductRouteReason::UsageUnavailable)
     );
+    assert_eq!(
+        reducer.snapshot().route(ProductRoute::Models).state(),
+        ProductRouteState::Degraded
+    );
+    assert!(
+        reducer
+            .snapshot()
+            .route(ProductRoute::Models)
+            .reasons()
+            .contains(ProductRouteReason::UsageUnavailable)
+    );
 
     reducer
         .publish_history(attempt(1), recent)
@@ -88,6 +99,17 @@ fn history_route_depends_on_its_own_recent_analytics_section() {
         !reducer
             .snapshot()
             .route(ProductRoute::History)
+            .reasons()
+            .contains(ProductRouteReason::UsageUnavailable)
+    );
+    assert_eq!(
+        reducer.snapshot().route(ProductRoute::Models).state(),
+        ProductRouteState::Ready
+    );
+    assert!(
+        !reducer
+            .snapshot()
+            .route(ProductRoute::Models)
             .reasons()
             .contains(ProductRouteReason::UsageUnavailable)
     );

@@ -40,8 +40,8 @@ if ($productionManifestText -match '\btokenmaster-(store|provider|runtime|codex|
 $rustFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.rs')
 $uiFiles = @(Get-ChildItem -LiteralPath $uiRoot -Recurse -File -Filter '*.slint')
 $productionFiles = @($rustFiles + $uiFiles)
-if ($rustFiles.Count -ne 10 -or $uiFiles.Count -ne 16) {
-    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain ten Rust and sixteen Slint files'
+if ($rustFiles.Count -ne 11 -or $uiFiles.Count -ne 17) {
+    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain eleven Rust and seventeen Slint files'
 }
 $uiText = ($uiFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
@@ -203,6 +203,56 @@ $historyModelReplacementCount = [regex]::Matches(
 ).Count
 if ($historyModelReplacementCount -ne 1) {
     throw 'TM-DESKTOP-HISTORY-MODEL: history must have one bounded model replacement site'
+}
+$modelsProjectionPath = Join-Path $sourceRoot 'models.rs'
+$modelsProjectionText = [System.IO.File]::ReadAllText($modelsProjectionPath)
+if ($modelsProjectionText -notmatch 'pub const MAX_MODEL_ROWS: usize = 64;' -or
+    $modelsProjectionText -notmatch '\.take\(MAX_MODEL_ROWS\)' -or
+    $modelsProjectionText -notmatch 'breakdown\.truncated\(\) \|\| breakdown\.items\(\)\.len\(\) > MAX_MODEL_ROWS') {
+    throw 'TM-DESKTOP-MODELS-BOUND: Models projection must preserve backend truncation and retain at most sixty-four rows'
+}
+$analyticsQueryCallCount = [regex]::Matches($controllerText, 'source\.usage_analytics\(').Count
+$recentModelsRequestPattern = '(?s)let history = UsageAnalyticsRequest::new\(\s*UsageRange::recent_days\(Self::HISTORY_DAYS\).*?UsageSeriesSelection::Daily,\s*Vec::new\(\),\s*vec!\[\s*UsageBreakdownKind::Model,\s*UsageBreakdownKind::Project,?\s*\],\s*\)'
+if ($analyticsQueryCallCount -ne 2 -or $controllerText -notmatch $recentModelsRequestPattern) {
+    throw 'TM-DESKTOP-MODELS-REQUEST: Models and Projects must share the one fixed recent analytics request without a third query'
+}
+$modelsProjectionCallCount = [regex]::Matches($uiRustText, 'apply_models_projection\(').Count
+if ($modelsProjectionCallCount -ne 2) {
+    throw 'TM-DESKTOP-MODELS-REBUILD: Models rows must not rebuild during route-only selection'
+}
+$modelsModelReplacementCount = [regex]::Matches(
+    $uiRustText,
+    'set_model_usage_rows\(model\(rows\)\)'
+).Count
+if ($modelsModelReplacementCount -ne 1) {
+    throw 'TM-DESKTOP-MODELS-MODEL: Models must have one bounded model replacement site'
+}
+$mainUiText = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'main.slint'))
+$modelsViewText = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'views\models-view.slint'))
+$requiredModelsViewPatterns = @(
+    'if root\.models-visible: ModelsView',
+    '!root\.models-visible',
+    'out property <bool> narrow:',
+    'if root\.narrow:',
+    'if !root\.narrow:',
+    'model\.input-label',
+    'model\.cached-label',
+    'model\.output-label',
+    'model\.reasoning-label',
+    'model\.total-label',
+    'model\.cost-label',
+    'model\.cost-evidence-label',
+    'model\.event-label',
+    'root\.total-availability',
+    'root\.cost-availability',
+    'Text \{ text: "Relative";',
+    'accessible-label:'
+)
+foreach ($requiredPattern in $requiredModelsViewPatterns) {
+    $viewBoundary = $mainUiText + "`n" + $modelsViewText
+    if ($viewBoundary -notmatch $requiredPattern) {
+        throw "TM-DESKTOP-MODELS-VIEW: missing responsive Models contract $requiredPattern"
+    }
 }
 $sessionsPath = Join-Path $sourceRoot 'sessions.rs'
 $sessionsText = [System.IO.File]::ReadAllText($sessionsPath)
@@ -393,6 +443,11 @@ if ($SourceOnly) {
         history_model_replacement_count = $historyModelReplacementCount
         history_projection_application_count = $historyProjectionCallCount - 1
         history_polling_surface_count = 0
+        model_row_maximum = 64
+        models_model_replacement_count = $modelsModelReplacementCount
+        models_projection_application_count = $modelsProjectionCallCount - 1
+        analytics_query_call_count = $analyticsQueryCallCount
+        models_polling_surface_count = 0
         session_row_maximum = 64
         session_detail_model_row_maximum = 32
         session_detail_project_row_maximum = 32
@@ -477,6 +532,11 @@ if ($LASTEXITCODE -ne 0) {
     history_model_replacement_count = $historyModelReplacementCount
     history_projection_application_count = $historyProjectionCallCount - 1
     history_polling_surface_count = 0
+    model_row_maximum = 64
+    models_model_replacement_count = $modelsModelReplacementCount
+    models_projection_application_count = $modelsProjectionCallCount - 1
+    analytics_query_call_count = $analyticsQueryCallCount
+    models_polling_surface_count = 0
     session_row_maximum = 64
     session_detail_model_row_maximum = 32
     session_detail_project_row_maximum = 32

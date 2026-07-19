@@ -144,6 +144,16 @@ pure in-place presentation update; there is no History timer, worker, cache, pri
 range, database handle, or private row identity. Future bounded range controls replace
 this section rather than adding query ownership to Slint.
 
+P3-D.3 enriches that one request with capped Model and Project breakdowns rather than
+adding per-route analytics work. `DesktopModelsProjection` consumes the shared envelope
+and copies at most 64 canonical model rows with complete typed token/cost/event evidence.
+Cost availability, selection mode, and actual composition remain typed, with partial
+and calculated/reported/mixed evidence explicit at the Slint boundary.
+History keeps only its 30 daily rows and future Projects will consume the prefetched
+Project breakdown. Backend and frontend truncation remain explicit. One Slint model is
+replaced only on accepted publication, so Models navigation is instant and adds no
+worker, query, timer, cache, connection, prior dataset, or private identity.
+
 P3-D.2a adds an independent Sessions page without widening frontend authority. The same
 query plan requests at most 64 all-time newest-first session summaries and publishes
 `has_more`; Dashboard still copies only its first 12 rows. `DesktopSessionsProjection`

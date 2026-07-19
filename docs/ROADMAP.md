@@ -138,8 +138,12 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   explicit `has_more`, a responsive full token/cost table, and no exposed query identity.
   P3-D.2b exact detail is complete with backend/product/selection generation binding,
   latest-only existing-worker work, synchronous selection/loading, exact summary/evidence,
-  32-model+32-project bounds, and no exposed opaque key. Later-page navigation, models,
-  projects, activity, remaining notifications/help, interactive History ranges, command
+  32-model+32-project bounds, and no exposed opaque key. P3-D.3 Models is implemented
+  as a 64-row responsive projection over the same recent-30-day History envelope with
+  complete token mix/cost/events, typed cost mode/composition, visible partial-cost
+  provenance, and explicit truncation, without a third query. Its focused/full-workspace
+  gates and independent review pass. Later-page navigation, projects,
+  activity, remaining notifications/help, interactive History ranges, command
   palette, tray, and compact widget remain P3-D-P3-E.
 - **P4 — presentation:** modular skins/layouts/density/scheme/locale, en/ru/pseudo,
   accessibility, DPI, reduced motion, and visible-paint/resource gates.
@@ -181,10 +185,11 @@ generation-safe current-bundle restart foundation and Task 12B.2a identity-pinne
   bindings, Task 14 sealed native file-dialog backend, and Task 15 bounded Data Health/
   Settings UI plus no-backup reconstruction, and Task 16 adversarial/privacy/
   compatibility closure, Task 17 resource/performance evidence, and Task 18
-  documentation/acceptance closure are implemented. P3-D.1 History and complete P3-D.2
-  bounded Sessions list/detail are implemented over the same immutable snapshot/controller
-  boundary with no new worker/timer/cache. Models is the next independently useful P3-D
-  supporting-data slice, followed by Projects and Activity; later-page Sessions navigation
+  documentation/acceptance closure are implemented. P3-D.1 History, complete P3-D.2
+  bounded Sessions list/detail, and P3-D.3 Models are implemented over the same immutable
+  snapshot/controller boundary with no new worker/timer/cache. Models and future Projects
+  share one recent-usage query; Projects and Activity are next.
+  Later-page Sessions navigation
   remains a separate bounded replacement of the same list section.
 
 P3-D.0 Reliable State is approved under

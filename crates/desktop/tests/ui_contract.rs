@@ -21,7 +21,7 @@ use tokenmaster_query::{
 };
 
 use support::dashboard_fixture::{
-    FixedClock, add_distinct_usage_rows, add_quota_windows, range, seed,
+    FixedClock, add_distinct_usage_rows, add_quota_windows, make_partial_model_usage, range, seed,
 };
 
 struct RejectingIntentSink;
@@ -51,7 +51,7 @@ fn ready_reducer(path: &std::path::Path, additional_quota_windows: u8) -> Produc
 fn ready_reducer_with_usage(
     path: &std::path::Path,
     additional_quota_windows: u8,
-    additional_usage_rows: u8,
+    additional_usage_rows: u16,
 ) -> ProductReducer {
     seed(path);
     add_quota_windows(path, additional_quota_windows);
@@ -79,7 +79,7 @@ fn ready_reducer_with_usage(
                 WeekStart::Monday,
                 UsageSeriesSelection::Daily,
                 Vec::new(),
-                Vec::new(),
+                vec![UsageBreakdownKind::Model, UsageBreakdownKind::Project],
             )
             .expect("history request"),
         )
@@ -124,6 +124,35 @@ fn ready_reducer_with_usage(
     reducer
 }
 
+fn partial_models_reducer(path: &std::path::Path) -> ProductReducer {
+    seed(path);
+    make_partial_model_usage(path);
+    let mut service = QueryService::open(path, FixedClock).expect("query service");
+    let status = service.product_data_status().expect("status");
+    let history = service
+        .usage_analytics(
+            UsageAnalyticsRequest::new(
+                UsageRange::recent_days(30).expect("recent history range"),
+                UsageTimeZone::iana("UTC").expect("UTC"),
+                WeekStart::Monday,
+                UsageSeriesSelection::Daily,
+                Vec::new(),
+                vec![UsageBreakdownKind::Model],
+            )
+            .expect("history request"),
+        )
+        .expect("history");
+    let attempt = ProductAttemptGeneration::new(1).expect("attempt");
+    let mut reducer = ProductReducer::new();
+    reducer
+        .publish_data_status(attempt, status)
+        .expect("publish status");
+    reducer
+        .publish_history(attempt, history)
+        .expect("publish history");
+    reducer
+}
+
 #[test]
 fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     i_slint_backend_testing::init_no_event_loop();
@@ -144,10 +173,17 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert!(window.get_dashboard_visible());
     assert!(!window.get_history_visible());
     assert!(!window.get_sessions_visible());
+    assert!(!window.get_models_visible());
     assert_eq!(window.get_history_day_rows().row_count(), 0);
     assert_eq!(window.get_history_total_tokens(), "—");
     assert_eq!(window.get_session_list_rows().row_count(), 0);
     assert_eq!(window.get_sessions_loaded_label(), "Unavailable");
+    assert_eq!(window.get_model_usage_rows().row_count(), 0);
+    assert_eq!(window.get_models_total_tokens(), "—");
+    assert_eq!(window.get_models_total_availability(), "unavailable");
+    assert_eq!(window.get_models_cost_availability(), "unavailable");
+    assert_eq!(window.get_models_cost_evidence_label(), "Unavailable");
+    assert_eq!(window.get_models_loaded_label(), "Unavailable");
     assert_eq!(window.get_dashboard_section_rows().row_count(), 6);
     assert_eq!(window.get_dashboard_header_tokens(), "—");
     assert_eq!(window.get_dashboard_header_cost(), "—");
@@ -200,6 +236,8 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
 
     assert_compiled_dashboard_renders_real_bounded_models_and_switches_layout_in_place();
     assert_compiled_sessions_render_one_bounded_page_without_recreating_the_window();
+    assert_compiled_models_render_complete_bounded_mix_without_recreating_the_window();
+    assert_compiled_models_render_partial_cost_evidence();
     assert_compiled_session_selection_is_immediate_correlated_and_bounded_in_place();
 }
 
@@ -430,6 +468,114 @@ fn assert_compiled_dashboard_renders_real_bounded_models_and_switches_layout_in_
         .map(|quota| quota.label_key.to_string())
         .collect::<std::collections::BTreeSet<_>>();
     assert_eq!(label_keys.len(), 32);
+}
+
+fn assert_compiled_models_render_complete_bounded_mix_without_recreating_the_window() {
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory.path().join("ui-models.sqlite3");
+    let reducer = ready_reducer_with_usage(&path, 0, 64);
+    let snapshot = reducer.snapshot();
+    let shell = DesktopShell::new(&snapshot).expect("desktop shell");
+    let window = shell.window();
+    let component_address = window as *const _;
+
+    window.invoke_select_route(SharedString::from("models"));
+    assert!(window.get_models_visible());
+    assert!(!window.get_dashboard_visible());
+    assert!(!window.get_history_visible());
+    assert!(!window.get_sessions_visible());
+    assert_eq!(window.get_active_route_state(), "ready");
+    assert_eq!(window.get_models_state(), "degraded");
+    assert_eq!(
+        window.get_models_range_label(),
+        "2026-06-17 – before 2026-07-17"
+    );
+    assert_eq!(window.get_models_time_zone_label(), "UTC");
+    assert_eq!(window.get_models_evidence_label(), "Fresh · Authoritative");
+    assert_eq!(window.get_models_total_tokens(), "268");
+    assert_eq!(window.get_models_total_availability(), "known");
+    assert_eq!(window.get_models_cost(), "$0.010064");
+    assert_eq!(window.get_models_cost_availability(), "complete");
+    assert_eq!(
+        window.get_models_cost_evidence_label(),
+        "Complete · reported"
+    );
+    assert_eq!(window.get_models_events(), "65 events");
+    assert_eq!(window.get_models_loaded_label(), "64 models loaded");
+    assert_eq!(
+        window.get_models_completeness_label(),
+        "More models available"
+    );
+
+    let rows = window.get_model_usage_rows();
+    assert_eq!(rows.row_count(), 64);
+    let primary = rows.row_data(0).expect("primary model");
+    assert_eq!(primary.model_label, "gpt-5.6");
+    assert_eq!(primary.event_label, "1");
+    assert_eq!(primary.input_label, "100");
+    assert_eq!(primary.cached_label, "20");
+    assert_eq!(primary.output_label, "30");
+    assert_eq!(primary.reasoning_label, "10");
+    assert_eq!(primary.total_label, "140");
+    assert_eq!(primary.cost_label, "$0.010000");
+    assert_eq!(primary.cost_availability, "complete");
+    assert_eq!(primary.cost_evidence_label, "Complete · reported");
+    assert_eq!(primary.token_ratio, 1.0);
+
+    window.window().set_size(slint::PhysicalSize::new(700, 720));
+    assert_eq!(window.get_models_layout_mode(), "narrow");
+    window
+        .window()
+        .set_size(slint::PhysicalSize::new(1120, 720));
+    assert_eq!(window.get_models_layout_mode(), "wide");
+
+    window.invoke_select_route(SharedString::from("dashboard"));
+    assert!(!window.get_models_visible());
+    window.invoke_select_route(SharedString::from("models"));
+    assert!(window.get_models_visible());
+    assert_eq!(component_address, shell.window() as *const _);
+    assert_eq!(window.get_model_usage_rows().row_count(), 64);
+}
+
+fn assert_compiled_models_render_partial_cost_evidence() {
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory.path().join("ui-models-partial.sqlite3");
+    let reducer = partial_models_reducer(&path);
+    let snapshot = reducer.snapshot();
+    let shell = DesktopShell::new(&snapshot).expect("desktop shell");
+    let window = shell.window();
+
+    window.invoke_select_route(SharedString::from("models"));
+    assert_eq!(window.get_models_state(), "ready");
+    assert_eq!(window.get_models_total_tokens(), "205");
+    assert_eq!(window.get_models_total_availability(), "known");
+    assert_eq!(window.get_models_cost(), "$0.010000");
+    assert_eq!(window.get_models_cost_availability(), "partial");
+    assert_eq!(
+        window.get_models_cost_evidence_label(),
+        "Partial · reported"
+    );
+
+    let rows = window.get_model_usage_rows();
+    assert_eq!(rows.row_count(), 1);
+    let row = rows.row_data(0).expect("partial model");
+    assert_eq!(row.model_label, "fixture-unpriced-model");
+    assert_eq!(row.input_availability, "partial");
+    assert_eq!(row.input_label, "50 (1/2)");
+    assert_eq!(row.cost_availability, "partial");
+    assert_eq!(row.cost_label, "$0.010000");
+    assert_eq!(row.cost_evidence_label, "Partial · reported");
+
+    window.show().expect("show partial models window");
+    let accessible_rows = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::ListItem)
+        .match_predicate(|element| {
+            element
+                .accessible_label()
+                .is_some_and(|label| label.contains("cost $0.010000 Partial · reported"))
+        })
+        .find_all();
+    assert_eq!(accessible_rows.len(), 1);
 }
 
 fn assert_compiled_sessions_render_one_bounded_page_without_recreating_the_window() {

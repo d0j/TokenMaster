@@ -381,8 +381,9 @@ invoke the query facade, create a timer, or recreate `MainWindow`.
 
 `UsageRange::recent_days(day_count)` is the bounded default-history request and rejects
 zero or more than 400 days. `DesktopQueryPlan` owns one fixed 30-day daily History
-request alongside the today-only Dashboard request. Both execute sequentially on the
-existing capacity-one query worker; History success/failure publishes only the
+request with exactly Model and Project breakdowns alongside the today-only Dashboard
+request. Both execute sequentially on the existing capacity-one query worker; no third
+Models or Projects analytics request exists. History success/failure publishes only the
 independent product History section, and cancellation or deadline still discards the
 entire unpublished attempt.
 
@@ -392,6 +393,17 @@ newest-first. `apply_projection` replaces the single History Slint model only on
 initial construction or an accepted newer product generation. The History route
 callback remains route-only and cannot query, allocate a prior-range cache, create a
 timer/worker, or recreate `MainWindow`.
+
+`DesktopModelsProjection::from_snapshot` is the sole product-to-Models mapping and
+reads that same recent-usage section. It copies the shared overview/range/timezone/
+evidence and at most 64 canonical model rows with all typed token components, events,
+and cost availability/mode/composition. Slint preserves token/cost availability and
+renders actual cost composition as calculated, reported, or mixed in visible and
+accessible labels. Backend or desktop truncation remains explicit. `apply_projection` replaces
+the single Models Slint model only during initial construction or an accepted newer
+product generation. Models route selection is presentation-only and cannot issue a
+query, rebuild the model, add mutable range/filter/sort state, create a timer/worker/
+cache, or recreate `MainWindow`.
 
 `DesktopQueryPlan` also owns one all-time `usage_sessions` request with page size 64.
 It executes sequentially on the same capacity-one query worker; Dashboard copies only
