@@ -82,7 +82,10 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   growth to one under concurrent harness noise, and independent Critical/Important/
   Minor 0/0/0 review pass. Live two-process arbitration, occupied hotkey,
   foreground policy, cross-token ACL, sleep/resume, and real RegisterHotKey resource
-  return remain interactive evidence. Current-user startup is the next P3-E slice;
+  return remain interactive evidence. After the validator correction, the exact clean-
+  root/fmt/strict-workspace-Clippy/full locked test-doctest chain passed in 1,001.5
+  seconds total; application and Desktop release audits passed in 187.3 and 150.6
+  seconds. Current-user startup is the next P3-E slice;
   P4/P5/P6, M0, packaging, signing, soak, and release remain incomplete.
 
 - M0 native architecture proof: one process, software-rendered Slint UI, tray

@@ -66,8 +66,10 @@ cycles with handle growth bounded to eight and thread/USER/GDI growth to one und
 concurrent harness noise pass. Independent Critical/Important/Minor 0/0/0 review found
 no product-code issue. Do not infer live
 two-process, occupied-hotkey, foreground-policy, cross-token ACL, sleep/resume, or real
-RegisterHotKey resource evidence. Current-user startup and remaining P3-E/P4/P5/P6,
-M0, packaging, signing, soak, and release remain open.
+RegisterHotKey resource evidence. The corrected clean-root/fmt/strict workspace Clippy/
+full locked test-doctest chain passed in 1,001.5 seconds total; application and Desktop
+release audits passed in 187.3 and 150.6 seconds. Current-user startup and remaining
+P3-E/P4/P5/P6, M0, packaging, signing, soak, and release remain open.
 
 P0-A and the incorporated P0-B Codex-lineage surface are complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`. The P0-C pure

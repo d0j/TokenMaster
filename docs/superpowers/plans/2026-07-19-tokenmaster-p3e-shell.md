@@ -92,9 +92,10 @@ Status: complete as developer evidence. The production entry claims the exact fi
 event before renderer/data work, secondary activation signals and exits, one joined
 message-driven owner registers fixed `Ctrl+Alt+T`, and one pending bit plus one Slint
 task bounds delivery to the existing window. Focused platform/app tests, 84 mutation
-cases, strict focused Clippy, a 4,096-cycle fixed resource envelope, and independent 0/0/0
-review pass. Live two-process/focus/conflict/ACL/sleep/real-hotkey-resource behavior
-remains Task 6/P6 interactive evidence.
+cases, strict focused Clippy, a 4,096-cycle fixed resource envelope, independent 0/0/0
+product review, the corrected full baseline, and both release composition audits pass.
+Live two-process/focus/conflict/ACL/sleep/real-hotkey-resource behavior remains Task 6/
+P6 interactive evidence.
 
 Use the exact auto-reset event `Local\TokenMaster.CurrentSession.Activation.v1`, fixed
 hotkey ID `0x544D`, and fixed `Ctrl+Alt+T` chord with `MOD_NOREPEAT`. Add one Platform

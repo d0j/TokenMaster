@@ -3671,5 +3671,10 @@ cycle test passed immediately. A focused re-review then correctly rejected the p
 4,096 cycles and states only its measured bounds: handle growth at most eight and
 thread/USER/GDI growth at most one. It rejects growth above eight handles across the
 complete run; rarer growth within that fixed envelope is not excluded. The complete
-baseline must be rerun after this validator correction before final developer closure
-is claimed.
+baseline was rerun after this validator correction and passed: clean-root, formatting,
+strict full-workspace Clippy, and the complete locked workspace test/doctest chain
+returned exit zero in 1,001.5 seconds total. The application release audit then passed
+in 187.3 seconds with one current-session claim/owner/thread/event/hotkey and zero
+polling or forbidden binary strings; the Desktop release audit passed in 150.6 seconds
+without expanding the five tray intents. These are developer receipts, not interactive,
+package, signing, soak, or release acceptance.

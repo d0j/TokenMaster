@@ -17,7 +17,9 @@ All notable changes are recorded here.
   capacity. Across 4,096 test-owner cycles, handle growth is bounded to eight and
   thread/USER/GDI growth to one under concurrent harness noise.
   Focused platform/app tests, strict focused Clippy, 84 application-audit mutations,
-  and independent Critical/Important/Minor 0/0/0 review pass. Live two-process,
+  independent Critical/Important/Minor 0/0/0 product review, the corrected 1,001.5-
+  second full baseline, and 187.3/150.6-second application/Desktop release audits pass.
+  Live two-process,
   occupied-hotkey, foreground-policy, cross-token ACL, sleep/resume, and real hotkey
   resource acceptance remain interactive. Current-user startup, P4/P5/P6, M0,
   packaging, signing, soak, and release are not claimed.
