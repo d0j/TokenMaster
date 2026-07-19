@@ -757,10 +757,25 @@ pub enum DesktopIntent {
         interval_seconds: u32,
         retention_budget_mib: u32,
     },
-    UpdateReminderPolicy {
-        enabled: bool,
-        lead_seconds: Box<[u32]>,
-    },
+    UpdateReminderPolicy(DesktopReminderPolicyUpdate),
+}
+
+#[derive(Eq, PartialEq)]
+pub struct DesktopReminderPolicyUpdate {
+    enabled: bool,
+    lead_seconds: Box<[u32]>,
+}
+
+impl DesktopReminderPolicyUpdate {
+    #[must_use]
+    pub const fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    #[must_use]
+    pub fn lead_seconds(&self) -> &[u32] {
+        &self.lead_seconds
+    }
 }
 
 impl DesktopIntent {
@@ -787,10 +802,10 @@ impl DesktopIntent {
             DesktopReminderPolicy::new(enabled, lead_seconds, DesktopReminderSyncState::Pending)
                 .ok_or(DesktopIntentValidationError)?;
 
-        Ok(Self::UpdateReminderPolicy {
+        Ok(Self::UpdateReminderPolicy(DesktopReminderPolicyUpdate {
             enabled,
             lead_seconds: policy.lead_seconds().into(),
-        })
+        }))
     }
 }
 
@@ -862,7 +877,7 @@ impl fmt::Debug for DesktopIntent {
                 .field("interval_seconds", interval_seconds)
                 .field("retention_budget_mib", retention_budget_mib)
                 .finish(),
-            Self::UpdateReminderPolicy { .. } => {
+            Self::UpdateReminderPolicy(_) => {
                 formatter.write_str("DesktopIntent::UpdateReminderPolicy([redacted])")
             }
         }

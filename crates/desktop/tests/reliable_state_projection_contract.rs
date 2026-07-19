@@ -124,6 +124,68 @@ fn unavailable_projection_has_no_fabricated_times_counts_or_restore_points() {
 }
 
 #[test]
+fn explicit_reminder_policy_round_trips_through_reliable_state_projection() {
+    let reminder_policy = DesktopReminderPolicy::new(
+        true,
+        &[10_800, 604_800],
+        DesktopReminderSyncState::Synchronized,
+    )
+    .expect("policy");
+    let summary = DesktopReliableStateSummary::new_with_reminder_policy(
+        DesktopReliableStateHealth::Healthy,
+        false,
+        "healthy",
+        DesktopBackupPolicy::disabled(),
+        reminder_policy,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    );
+    let projection = DesktopReliableStateProjection::from_input(DesktopReliableStateInput::new(
+        8,
+        summary,
+        Vec::new(),
+    ));
+
+    assert_eq!(projection.reminder_policy(), reminder_policy);
+}
+
+#[test]
+fn legacy_reliable_state_summary_uses_unavailable_reminder_fallback() {
+    let summary = DesktopReliableStateSummary::new(
+        DesktopReliableStateHealth::Healthy,
+        false,
+        "healthy",
+        DesktopBackupPolicy::disabled(),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    );
+    let projection = DesktopReliableStateProjection::from_input(DesktopReliableStateInput::new(
+        8,
+        summary,
+        Vec::new(),
+    ));
+
+    assert_eq!(
+        projection.reminder_policy(),
+        DesktopReminderPolicy::unavailable()
+    );
+}
+
+#[test]
 fn reminder_policy_normalizes_descending_and_remains_copyable() {
     let policy = DesktopReminderPolicy::new(
         true,
@@ -181,5 +243,10 @@ fn reminder_policy_intent_validates_before_retaining_and_redacts_debug() {
     );
 
     let intent = DesktopIntent::update_reminder_policy(true, &[10_800]).expect("intent");
+    let DesktopIntent::UpdateReminderPolicy(update) = &intent else {
+        panic!("reminder policy intent");
+    };
+    assert!(update.enabled());
+    assert_eq!(update.lead_seconds(), &[10_800]);
     assert!(!format!("{intent:?}").contains("10800"));
 }
