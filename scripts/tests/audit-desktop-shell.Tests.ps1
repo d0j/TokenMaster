@@ -1228,8 +1228,8 @@ Describe "TokenMaster production desktop audit" {
         $fixture = New-DesktopAuditFixture -Name "command-palette-overlay-order"
         $path = Join-Path $fixture "crates\desktop\ui\main.slint"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            'if root.in-app-notification-visible: InAppNotificationPanel {',
-            'RoutePalette { }`r`n    if root.in-app-notification-visible: InAppNotificationPanel {'
+            'shell-focus := FocusScope {',
+            'shell-focus := Rectangle {'
         )
         [System.IO.File]::WriteAllText($path, $text)
 
