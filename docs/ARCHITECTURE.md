@@ -41,6 +41,34 @@ worker joins and the sole clean-run transition. Actual Explorer restart, Windows
 foreground policy, sleep/resume, and repeated resource return remain interactive
 acceptance gates.
 
+## Current-user startup boundary
+
+P3-E.5 keeps Windows current-user startup outside reliable product settings. The sole
+device-local truth is the fixed `TokenMaster` `REG_SZ` value under
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`; no second desired-state bit is
+serialized, exported, backed up, or restored. Inspection accepts only one quoted
+drive-letter path without arguments and caps the full command at 260 UTF-16 code units
+excluding NUL. UNC, device/verbatim, mapped-remote, and unknown-volume paths fail before
+filesystem I/O. Any alternate same-basename local path is StaleRelocation without being
+opened. Only the exact current ordinary non-reparse local path is reopened for physical
+identity proof.
+The already bounded command is constructed with the capability, before Disabled can be
+published. Current-file verification uses a final-component no-follow handle, validates
+kind/identity, and derives the canonical bounded command path from that handle's
+resolved local DOS path. Launch spelling/short-name differences are not compared as
+identity. Reparse ancestry is checked before open; the
+repository threat model's excluded malicious same-user concurrent namespace race is
+recorded as residual rather than silently claimed impossible.
+
+Enable, RepairStale, and Disable are synchronous UI-owner operations over this one
+fixed value. Enable never repairs stale state implicitly. Repair is explicit. Disable
+may remove only verified or recognizable stale ownership, never Conflict. Every write
+or delete is followed by an exact reread and fails closed on mismatch. Registry access
+denial is distinct from unavailable executable/filesystem state. Public application and
+Desktop surfaces receive only typed path-free status/action values. There is no HKLM,
+caller-selected key/value/command, shell, process, elevation, task/service, retry,
+timer, polling, worker, queue, or retained cache.
+
 ```text
 Codex JSONL sources
   -> bounded native watcher paths reduced immediately to one pathless hint aggregate

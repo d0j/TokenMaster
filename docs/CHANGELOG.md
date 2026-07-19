@@ -6,6 +6,23 @@ All notable changes are recorded here.
 
 ### Added
 
+- Added P3-E.5 explicit current-user startup without introducing a second preference
+  store. One fixed `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` `TokenMaster`
+  `REG_SZ` value is the sole device-local truth. The platform writes only the exact
+  quoted current executable path without arguments, rejects non-file/reparse identity,
+  verifies physical identity and exact post-mutation readback, and makes stale repair
+  explicit. A foreign/conflicting value is never overwritten or deleted. Startup
+  inspection is read-only and non-fatal; Settings exposes six path-free statuses and
+  three explicit actions. No startup value/path is copied into reliable settings,
+  config, backup, logs, or Desktop models, and no shell, process, elevation, machine
+  hive, timer, retry, polling, worker, or queue authority was added. Focused platform,
+  application, compiled UI, source-audit, and mutation contracts pass without changing
+  the real registry; focused platform 9+2, UI 2, app 1, portable-settings 12, all 20
+  audit mutations, strict focused Clippy, and independent Critical/Important/Minor
+  0/0/0 Ready review pass. Live sign-in, relocation, denied-ACL, and resource-return proof
+  remains interactive; P3-E closure, P4/P5/P6, M0, package/signing/soak, and release
+  are not claimed.
+
 - Added P3-E.4 current-session single-instance activation and the fixed global
   `Ctrl+Alt+T` shortcut. The sole production entry claims one non-inheritable auto-reset
   `Local\TokenMaster.CurrentSession.Activation.v1` event before renderer/data startup;
@@ -21,8 +38,8 @@ All notable changes are recorded here.
   second full baseline, and 187.3/150.6-second application/Desktop release audits pass.
   Live two-process,
   occupied-hotkey, foreground-policy, cross-token ACL, sleep/resume, and real hotkey
-  resource acceptance remain interactive. Current-user startup, P4/P5/P6, M0,
-  packaging, signing, soak, and release are not claimed.
+  resource acceptance remain interactive. P3-E.5 current-user startup is recorded
+  above; P4/P5/P6, M0, packaging, signing, soak, and release are not claimed.
 
 - Added the P3-E.3 production tray lifecycle around the sole production window: one
   pinned TokenMaster SVG design, one isolated Windows tray owner, five typed actions

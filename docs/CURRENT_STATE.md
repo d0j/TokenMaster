@@ -85,8 +85,27 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   return remain interactive evidence. After the validator correction, the exact clean-
   root/fmt/strict-workspace-Clippy/full locked test-doctest chain passed in 1,001.5
   seconds total; application and Desktop release audits passed in 187.3 and 150.6
-  seconds. Current-user startup is the next P3-E slice;
-  P4/P5/P6, M0, packaging, signing, soak, and release remain incomplete.
+  seconds. P4/P5/P6, M0, packaging, signing, soak, and release remain incomplete.
+
+- P3-E.5 explicit current-user startup: the fixed
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` `TokenMaster` `REG_SZ` value is
+  the sole device-local truth. The platform accepts only the quoted current executable
+  path with no arguments, caps it at 260 UTF-16 units, rejects UNC/device/remote paths
+  before file I/O, verifies the exact current local file identity, and distinguishes
+  Disabled, EnabledVerified, StaleRelocation, Conflict,
+  AccessDenied, and Unavailable. Enable, explicit stale Repair, and Disable perform one
+  synchronous bounded mutation followed by exact readback; Conflict is never replaced
+  or deleted. Startup inspection is read-only and non-fatal. Settings exposes only
+  path-free explicit actions/status, while `.tmconfig`, `.tmbackup`, reliable settings,
+  logs, and Desktop projection contain no startup path or desired-state copy. Windows
+  parser/state-machine, application intent, compiled UI, source-audit, and mutation
+  contracts pass without changing the real user registry. Focused evidence is nine
+  platform unit tests, two platform API tests, two compiled UI tests, one application
+  test, 12 unchanged portable-settings tests, 20 audit mutations, strict focused
+  Clippy, and independent Critical/Important/Minor 0/0/0 Ready review. Live enable/relocation/
+  disable, denied-ACL, sign-in launch, and repeated resource-return evidence remain
+  interactive P3-E closure gates; P4/P5/P6, M0, packaging, signing, soak, and release
+  remain incomplete.
 
 - M0 native architecture proof: one process, software-rendered Slint UI, tray
   lifecycle, three layouts, three skins, English/Russian/pseudo localization,
@@ -1498,9 +1517,9 @@ P3-D.0 Reliable State, P3-D.1 History, P3-D.2 bounded Sessions list/detail, P3-D
 Models, P3-D.4 Projects, P3-D.5 Recent activity, and the bounded read-only P3-D.6
 Notifications route plus P3-D.7 Help/About, the app-owned visible presentation/receipt
 bridge, global reminder settings synchronization/editor, P3-E.1 route command palette,
-P3-E.2 compact quota mode, P3-E.3 production tray lifecycle, and P3-E.4 current-session
-single-instance activation/global hotkey are implemented. Continue with opt-in
-current-user startup and remaining shell closure.
+P3-E.2 compact quota mode, P3-E.3 production tray lifecycle, P3-E.4 current-session
+single-instance activation/global hotkey, and P3-E.5 explicit current-user startup are
+implemented. Continue with interactive/resource shell closure.
 Later-page Sessions navigation and interactive History ranges remain bounded
 replacements of their existing sections rather than new frontend query owners. Interactive
 Windows, P4 presentation, P5 CLI/MCP, activation, M0, packaging, signing, soak, and

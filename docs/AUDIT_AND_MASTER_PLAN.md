@@ -319,8 +319,10 @@ implemented with one latest-wins pending payload and visible Pending before dura
 settings mutation. P3-E.1 palette, P3-E.2 compact mode, P3-E.3 production tray/close
 lifecycle, and P3-E.4 current-session activation/global hotkey are developer-closed.
 P3-E.4 claims one fixed event before data startup, uses one joined native owner and one
-pending activation/UI task, and adds no payload, queue, timer, or polling retry. Opt-in
-current-user startup is next, followed by interactive/resource shell closure.
+pending activation/UI task, and adds no payload, queue, timer, or polling retry. P3-E.5
+adds one fixed current-user Run value with exact executable identity/readback, explicit
+stale repair/removal, path-free UI state, and config/backup exclusion. Interactive/
+resource shell closure is next.
 Per-scope editing, snooze, quiet hours, reminder OS/tray delivery, usage alerts, and
 activation remain later independent slices.
 P3-D.6 independent re-review is Critical/Important/Minor 0/0/0; its 82 mutation audit,

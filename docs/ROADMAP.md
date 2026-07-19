@@ -22,7 +22,11 @@ Windows handle owner on the existing UI thread. P3-E.4 current-session activatio
 developer-complete with one early auto-reset event claim, one joined hotkey/message
 owner, one pending bit, and one scheduled UI task. It fails closed before data startup,
 coalesces 10,000 requests, and joins before clean publication without a payload, queue,
-timer, or polling loop. Opt-in current-user startup is the next P3-E slice.
+timer, or polling loop. P3-E.5 current-user startup is developer-implemented with one
+fixed HKCU Run value as the sole truth, exact executable identity/readback, explicit
+stale repair/removal, path-free UI state, and no portable setting or shell/elevation
+authority. Interactive sign-in/relocation/ACL/resource proof is the next P3-E closure
+slice.
 
 M0 probe evidence implements: Rust/Slint/SQLite baseline, tray lifecycle, layouts, skins,
 English/Russian localization, accessibility-aware presentation contracts, resource
@@ -193,8 +197,8 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   lifecycle. Global notification settings synchronization/editing is complete. Full
   rhythm aggregation, later-page navigation, and interactive History ranges remain
   P3-D. P3-E.1 command palette, P3-E.2 compact quota mode, P3-E.3 production tray
-  lifecycle, and P3-E.4 hotkey/single-instance activation are complete; startup and
-  interactive shell closure stay open.
+  lifecycle, P3-E.4 hotkey/single-instance activation, and P3-E.5 current-user startup
+  are complete as developer implementation; interactive shell closure stays open.
 - **P4 — presentation:** modular skins/layouts/density/scheme/locale, en/ru/pseudo,
   accessibility, DPI, reduced motion, and visible-paint/resource gates. Help/About
   full screen-reader acceptance must replace verbose region-plus-child duplicate
@@ -249,8 +253,9 @@ generation-safe current-bundle restart foundation and Task 12B.2a identity-pinne
   and zero projection/model/query/runtime/callback/polling authority. The separate app-
   owned notification presentation contour and global settings synchronization/editor
   are complete. P3-E.1 command palette, P3-E.2 compact quota mode, P3-E.3 production
-  tray lifecycle, and P3-E.4 hotkey/single-instance activation are complete. Opt-in
-  current-user startup is next; later-page Sessions
+  tray lifecycle, P3-E.4 hotkey/single-instance activation, and P3-E.5 current-user
+  startup are complete as developer implementation. Interactive/resource shell closure
+  is next; later-page Sessions
   navigation remains a separate bounded replacement of the same list section.
 
 P3-D.0 Reliable State is approved under

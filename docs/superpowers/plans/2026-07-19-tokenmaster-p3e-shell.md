@@ -115,6 +115,10 @@ renderer/data/runtime work and the existing five tray intents do not expand.
 
 ## Task 5 — add opt-in current-user startup
 
+Status: implemented; focused platform/app/compiled-UI and source/mutation contracts
+pass without mutating the real current-user registry, and independent review is
+Critical/Important/Minor 0/0/0 Ready. Interactive proof remains Task 6.
+
 Implement the approved design in
 `docs/superpowers/specs/2026-07-19-tokenmaster-current-user-startup-design.md`.
 Use the fixed current-user Run value as the sole device-local source of truth rather

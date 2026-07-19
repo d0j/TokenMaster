@@ -18,15 +18,30 @@ service, installer, or elevation surface, and never accepts a caller-selected hi
 subkey, value name, command, argument, or executable path.
 
 The adapter derives the path only from the running process, requires an absolute
-ordinary non-reparse file, opens it, and obtains its path-private physical identity.
+ordinary non-reparse file on a fixed, removable, or RAM local drive, opens it, and
+obtains its path-private physical identity. UNC, device/verbatim, mapped-remote, and
+unknown-volume paths are rejected before filesystem access. A same-basename alternate
+local path is stale without being opened; only the exact current path is reopened for
+identity proof.
 The stored command has one exact form: the quoted current executable path with no
-arguments. A successful enable or repair is not published until an immediate readback
+arguments, capped at the Windows Run contract's 260 UTF-16 code units excluding the
+terminating NUL. A successful enable or repair is not published until an immediate readback
 parses that exact form, reopens the target, and proves the same physical identity. A
 successful disable is not published until readback proves the fixed value absent.
 
 Registry data, executable paths, file identities, and raw operating-system errors do
 not cross the platform boundary, appear in `Debug`, UI models, logs, receipts, config,
 or backup metadata.
+
+Capability construction builds and retains the already bounded command before
+inspection can publish Disabled. If the current path cannot fit, inspection is
+`Unavailable`; the UI never advertises an Enable action known to be impossible. File
+verification uses a no-follow final-component handle and validates kind and identity
+from that same handle. Its bounded resolved local DOS path becomes the canonical
+capability path and the Run command source, so short-name/launch-spelling differences
+cannot cause a false outage. Reparse ancestry is checked before open. A malicious same-user concurrent
+namespace swap between those operations remains outside the repository threat model;
+a persistent remote/device resolution still fails closed.
 
 ## State model
 
@@ -35,8 +50,8 @@ The path-free public observation is exactly one of:
 - `Disabled`: the fixed value is absent;
 - `EnabledVerified`: the value has the exact command shape and targets the running
   executable identity;
-- `StaleRelocation`: the exact single-path shape names the same executable basename,
-  but the target is absent or has a different physical identity;
+- `StaleRelocation`: the exact local single-path shape names the same executable
+  basename at a path other than the verified current executable;
 - `Conflict`: the fixed value has a foreign type, malformed/argument-bearing command,
   or different executable basename;
 - `AccessDenied`: the current-user value cannot be inspected or mutated because access
@@ -95,7 +110,8 @@ state by construction and retain their current tests.
 ## Proof obligations
 
 1. Pure state-machine tests cover all observations/actions, idempotence, stale repair,
-   conflict non-mutation, access denial, failed readback, and bounded command parsing.
+   conflict non-mutation, access denial, failed readback, exact 260/261-unit command
+   parsing boundaries, and UNC/device/remote-drive rejection before path I/O.
 2. Windows source/mutation audit proves one fixed HKCU Run key/value, `REG_SZ`, no HKLM,
    shell/process/elevation, arbitrary registry input, retry, timer, polling, or path
    projection.
@@ -105,4 +121,3 @@ state by construction and retain their current tests.
    export/import/restore.
 5. Interactive acceptance later proves real enable/readback/launch/disable, relocation,
    denied ACL behavior, and resource return on the exact packaged executable.
-

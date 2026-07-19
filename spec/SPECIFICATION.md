@@ -271,6 +271,21 @@ without hiding or stopping the main application. Secondary and hotkey activation
 reuse Show/restore/focus, retain at most one pending bit and one scheduled UI task, and
 MUST join/unregister before clean-run publication.
 
+Current-user startup MUST be explicit, device-local, and non-fatal. The sole source of
+truth MUST be the fixed `REG_SZ` value `TokenMaster` under
+`HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`; it MUST NOT add a
+portable or reliable-state desired flag. Inspection MUST be read-only. Enable, stale-
+relocation repair, and disable/removal MUST be separate typed actions, and conflict
+MUST never be overwritten. A successful enable/repair MUST reread the exact quoted,
+argument-free current executable command, enforce the Windows Run limit of 260 UTF-16
+code units excluding the terminating NUL, and prove the running file's physical
+identity; disable MUST reread absence. Access denial, malformed/foreign values,
+unverified executable state, and unsupported platforms MUST degrade only this control
+through path-free status. UNC, device/verbatim, mapped-remote, and unknown-volume paths
+MUST be rejected before filesystem access; an alternate same-basename local path MUST
+be reported stale without opening it. No HKLM, shell, process, elevation, service, scheduled task,
+retry, timer, polling loop, retained path, or arbitrary registry input is permitted.
+
 ### TM-FUNC-006 — Safe local interfaces
 
 Future CLI and MCP surfaces MUST read the same indexed state as the UI, return strict

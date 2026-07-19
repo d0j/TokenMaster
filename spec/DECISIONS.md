@@ -1976,3 +1976,30 @@ secondary-signal failure fails closed as `current_session_unavailable`; unregist
 join failure prevents clean-run publication. Configurable hotkeys, current-user startup,
 interactive conflict/secondary/focus/ACL/sleep/resource acceptance, M0, package,
 signing, soak, and release remain later work.
+
+## ADR-080 — Keep current-user Run registration as the sole startup truth
+
+Status: implemented as P3-E.5 developer evidence. Packaged sign-in launch, relocation,
+denied ACL, and resource-return behavior remain interactive acceptance.
+
+Decision: use only the fixed `TokenMaster` `REG_SZ` below
+`HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`. Do not add a
+second startup flag to reliable settings. Read-only inspection yields Disabled,
+EnabledVerified, StaleRelocation, Conflict, AccessDenied, or Unavailable. Enable,
+explicit stale repair, and disable/removal are the only mutations. A conflict is never
+overwritten; enabled and disabled success require immediate exact readback. The stored
+command is the quoted current executable path without arguments, capped at 260 UTF-16
+code units excluding its terminating NUL, and enabled readback
+must reopen the same physical file identity.
+Only ordinary drive-letter paths on fixed, removable, or RAM local volumes are
+eligible. UNC/device/remote paths fail before file I/O, and a same-basename alternate
+local path is stale without being opened.
+
+Rationale: duplicating the preference between A/B settings and the Windows Run value
+would create an impossible cross-store atomic commit and ambiguous recovery. Treating
+the OS value as the sole device-local truth makes observed state honest and excludes it
+from config/backup by construction. Explicit stale repair prevents a moved copy from
+silently replacing a same-named entry, while fixed HKCU-only authority preserves
+portable use without elevation, installer, process, shell, task, service, polling, or
+retained-path machinery. Bounded synchronous calls keep the UI path immediate and add
+no long-lived memory or thread owner.

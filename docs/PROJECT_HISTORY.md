@@ -3678,3 +3678,50 @@ in 187.3 seconds with one current-session claim/owner/thread/event/hotkey and ze
 polling or forbidden binary strings; the Desktop release audit passed in 150.6 seconds
 without expanding the five tray intents. These are developer receipts, not interactive,
 package, signing, soak, or release acceptance.
+
+## 2026-07-19 — P3-E.5 explicit current-user startup
+
+Current-user startup is now one narrow Windows platform capability rather than a
+second reliable setting. The fixed `TokenMaster` `REG_SZ` under the current user's Run
+key is the only device-local truth. Inspection derives a six-state path-free result:
+Disabled, EnabledVerified, StaleRelocation, Conflict, AccessDenied, or Unavailable.
+The command is exactly one quoted absolute current-executable path without arguments
+and is capped at the Windows Run limit of 260 UTF-16 code units excluding NUL.
+
+Independent security review rejected two earlier boundaries before closure. The first
+allowed 32 KiB even though Windows Run accepts only 260 characters. The second parsed
+any absolute Windows path and could open a registry-controlled UNC/device destination,
+causing outbound SMB/device I/O before the event loop. The corrected adapter accepts
+only ordinary drive-letter paths on fixed, removable, or RAM local volumes. UNC,
+device/verbatim, mapped-remote, and unknown volumes fail before filesystem I/O. A
+same-basename alternate local path is stale without being opened; only a registry
+command matching the canonical current path can reach no-follow identity reverification.
+The bounded command is built during capability construction, preventing an impossible
+over-limit Enable action. Final file verification now uses the existing no-follow open,
+derives kind and identity from that same handle, and uses its bounded resolved local DOS
+path as the canonical capability/Run command path. This avoids false failure for short
+8.3 or launch-spelling differences. Reparse ancestry is checked first. A malicious
+same-user concurrent namespace swap remains explicitly outside the threat model; a
+persistent swap is rejected by the final handle-path proof. Malformed REG_SZ data,
+including absent/embedded NUL, wrong type/size, or `ERROR_MORE_DATA`, is Conflict rather
+than being misreported as a platform outage.
+
+The state machine exposes only Enable, RepairStale, and Disable. Enable is idempotent
+for a verified entry and refuses stale state. Repair is the only overwrite of a
+recognizable stale entry. Disable removes only verified or recognizable stale
+TokenMaster ownership. Conflict is never overwritten or deleted. Each mutation is
+followed by an exact reread, and any mismatch fails closed. Registry access denial is
+kept distinct from executable/filesystem unavailability. The app performs one nonfatal
+read-only inspection during construction and maps explicit Settings actions through a
+typed port; the Desktop never receives a path, command, registry error, or identity.
+
+No startup field was added to reliable settings, `.tmconfig`, `.tmbackup`, logs, or UI
+models. No HKLM, arbitrary registry surface, shell, process, elevation, service/task,
+timer, retry, polling, worker, queue, or cache was introduced. Fake-backend mutation
+tests, Windows command/parser/drive/state-machine tests, app intent tests, compiled
+Settings UI tests, and the dedicated source/mutation audit pass without changing the
+real user registry. The final focused receipt is platform 9+2, compiled UI 2,
+application 1, portable settings 12, audit mutations 20, strict focused Clippy, and
+independent Critical/Important/Minor 0/0/0 Ready review. Live enable/relocation/disable, sign-in launch, access-denied ACL,
+and repeated resource return remain Task 6 interactive gates. P4/P5/P6, M0, package,
+signing, soak, and release remain open.

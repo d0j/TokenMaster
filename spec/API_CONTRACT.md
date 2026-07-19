@@ -1103,6 +1103,34 @@ startup path performs one explicit flush. Delivery upgrades only the existing we
 `MainWindow`, then unminimizes, shows, raises, and requests foreground focus. It never
 opens SQLite, queries product data, creates a second window, or changes route state.
 
+### P3-E.5 current-user startup API
+
+`tokenmaster-platform` exposes one zero-sized fixed-purpose boundary with read-only
+`inspect` and exactly three actions: `Enable`, `RepairStale`, and `Disable`. Its public
+snapshot contains only `Disabled`, `EnabledVerified`, `StaleRelocation`, `Conflict`,
+`AccessDenied`, or `Unavailable`; errors are stable and path-free. Callers cannot pass
+a hive, key, value name, command, argument, executable path, or retry policy.
+
+The Windows adapter derives and verifies only the running executable, caps the complete
+quoted command at 260 UTF-16 code units excluding the terminating NUL, reads/writes the
+fixed HKCU Run value, and accepts success only after immediate exact readback and
+physical-file-identity proof. Enable rejects stale state until explicit repair;
+disable may remove verified or recognizable stale TokenMaster state but never a
+conflict. UNC/device and remote-volume commands are rejected before file I/O; a
+same-basename alternate local path is stale without being opened. Non-Windows builds
+inspect as `Unavailable` and reject mutation.
+The native capability builds and retains the bounded command during construction, so
+an over-limit current executable is `Unavailable` before Enable is exposed. Executable
+verification opens the final component no-follow, validates kind and identity from the
+same handle, and derives the canonical bounded Run command path from that handle's
+resolved local DOS path. Launch spelling, short-name, or casing form is not authority.
+
+Desktop maps this boundary to one path-free status presenter and three typed Settings
+intents. Registry calls are bounded synchronous UI-owner operations with no worker,
+queue, cache, timer, or polling owner. Failure updates only the startup card and never
+stops product, archive, current-session, or shutdown owners. Portable config and backup
+APIs remain unchanged and cannot contain this OS-owned state.
+
 ## Provider plugin ABI
 
 The future external-provider ABI is `tokenmaster:provider@1` expressed in WIT and

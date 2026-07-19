@@ -1107,3 +1107,16 @@ If a child's ordinal is beyond the observed tail of a parent that has not been p
 complete, the child remains `pending`. Only a complete fixed manifest and exact
 full-prefix source proof may make that missing-parent work actionable and prove that
 the child outgrew its parent before final seal.
+
+### P3-E.5 device-local startup state
+
+Current-user startup has no archive, SQLite, settings-record, `.tmconfig`, `.tmbackup`,
+checkpoint, cache, or migration representation. The Windows current-user Run value is
+the sole durable state. Only its six-value path-free observation crosses Platform into
+Application/Desktop; registry bytes, command text, executable paths, raw file identity,
+and native errors never do. Inspection retains no prior observation. Each explicit
+mutation retains only call-local UTF-16 capped at the 260-unit Windows Run command
+contract plus its terminating NUL and file handles until one readback
+completes, then releases them.
+Registry-provided UNC/device/remote paths never become filesystem inputs. An alternate
+same-basename local path is classified from bounded command metadata without opening it.

@@ -68,8 +68,25 @@ no product-code issue. Do not infer live
 two-process, occupied-hotkey, foreground-policy, cross-token ACL, sleep/resume, or real
 RegisterHotKey resource evidence. The corrected clean-root/fmt/strict workspace Clippy/
 full locked test-doctest chain passed in 1,001.5 seconds total; application and Desktop
-release audits passed in 187.3 and 150.6 seconds. Current-user startup and remaining
-P3-E/P4/P5/P6, M0, packaging, signing, soak, and release remain open.
+release audits passed in 187.3 and 150.6 seconds. Remaining P3-E/P4/P5/P6, M0,
+packaging, signing, soak, and release remain open.
+
+P3-E.5 is implemented as a narrow platform capability. The exact current-user Run
+value `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` / `TokenMaster` is the
+sole device-local truth; no reliable-settings/config/backup flag shadows it. Only an
+exact quoted current executable path without arguments can be written, capped at 260
+UTF-16 units. The current executable must be an ordinary non-reparse local file. UNC,
+device, and remote commands are rejected before file I/O; any alternate same-basename
+local path is stale without being opened. Enable refuses stale state;
+Repair is explicit; Disable removes only a verified or recognizable stale TokenMaster
+entry; Conflict is never overwritten or deleted. Every mutation rereads exact state.
+Inspection is read-only/non-fatal and the UI receives only six path-free statuses plus
+three explicit intents. Focused platform/app/compiled-UI and source/mutation contracts
+pass without mutating the real registry: platform 9+2, compiled UI 2, application 1,
+portable settings 12, audit mutations 20, strict focused Clippy, and independent
+Critical/Important/Minor 0/0/0 Ready review. Live sign-in, relocation, denied ACL,
+enable/disable, and repeated handle/resource return remain interactive gates; this is
+not P3-E, M0, package, signing, soak, or release acceptance.
 
 P0-A and the incorporated P0-B Codex-lineage surface are complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`. The P0-C pure
@@ -947,8 +964,8 @@ treat busy/disk/access/schema-newer as corruption authority. Keep automatic reco
 data only; device-local settings never move. Do not relax the state boundary into path,
 generic-stream, generic age-extraction, or batch-deletion authority.
 
-The immediate next implementation slice is opt-in current-user startup, followed by
-P3-E resource/interactive closure. Later-page
+The immediate next implementation slice is P3-E resource/interactive closure.
+Later-page
 Sessions navigation and interactive
 History ranges remain bounded replacements of existing sections. Remaining P3-E, P4
 presentation, CLI/MCP, activation, M0 acceptance,

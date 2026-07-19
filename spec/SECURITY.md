@@ -1269,3 +1269,34 @@ window, snapshot, query, timer, worker, queue, cache, or controller. Unknown rat
 remain explicit and fixed five-hour/weekly assumptions are rejected. This does not
 authorize tray, startup, hotkey, single-instance, close interception, or release
 behavior.
+
+P3-E.5 confines startup mutation to one fixed value below the current-user Run key.
+The adapter has no HKLM, caller-selected registry, shell, subprocess, elevation,
+service, task-scheduler, network, SQLite, settings, config, backup, retry, timer, or
+polling authority. It derives only the running executable, rejects reparse/non-file or
+command state beyond the Windows Run limit of 260 UTF-16 code units excluding NUL,
+writes one quoted argument-free `REG_SZ`, and requires exact
+readback plus physical-file identity before publishing enabled. An alternate local
+same-name executable path is visible stale relocation and requires an explicit repair;
+malformed, foreign-type, or foreign-name state is a conflict that is never overwritten
+or deleted. UNC, device/verbatim, mapped-remote, and unknown-volume paths fail closed
+before file I/O. A same-basename alternate local path is stale without being opened;
+only the exact current local path may be reopened for identity proof. Only an explicit
+disable may remove verified or recognizable stale state.
+
+Current-file verification uses one final-component no-follow handle and derives file
+kind, canonical local DOS path, and physical identity from that handle. That resolved
+path, not the launch spelling, becomes the bounded Run command source. Ancestors are
+checked for reparse points before open.
+The documented threat model excludes malicious same-user concurrent namespace swaps;
+a persistent swap still fails the final handle-path check, while interactive packaging
+must retain the normal user-only installation ACL boundary.
+
+Registry bytes, paths, raw identity, and native errors remain call-local and cannot
+enter Debug, Desktop, config, backup, diagnostics, or release receipts. Registry access
+denial is a stable non-fatal state; missing/embedded-NUL, wrong-type/size, and
+`ERROR_MORE_DATA` string states are Conflict, while other unprovable file/registry conditions fail
+closed as unavailable. The source/mutation audit fixes the exact HKCU key/value/API
+counts, three typed intents, four accessible actions, and zero portable startup fields.
+Real ACL denial, relocation, sign-in launch, and handle return remain interactive P6
+evidence rather than source-test claims.
