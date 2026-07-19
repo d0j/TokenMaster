@@ -478,6 +478,144 @@ fn global_profile_rejects_scope_and_total_lot_lookahead_before_mutation() {
 }
 
 #[test]
+fn global_profile_ignores_overridden_scope_and_lot_capacity() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("benefit-global-profile-overrides.sqlite3");
+    let inherited_scope = scope_with_account("acct_inherited");
+    let expiry =
+        BenefitExpiry::exact_utc(OBSERVED_AT_MS + 10 * 24 * 60 * 60 * 1_000).expect("expiry");
+    let lots: Vec<BenefitLotObservation> = (0..64_u8)
+        .map(|id| lot(id, BenefitState::Available, expiry.clone()))
+        .collect();
+    let mut store = UsageStore::open(&path).expect("store");
+    store
+        .apply_benefit_observation(&observation_for(
+            inherited_scope,
+            1,
+            OBSERVED_AT_MS,
+            vec![lot(127, BenefitState::Available, expiry)],
+        ))
+        .expect("inherited observation");
+    for index in 0..33_u8 {
+        let scope = scope_with_account(&format!("acct_override_{index}"));
+        let current_lots = if index < 5 { lots.clone() } else { Vec::new() };
+        store
+            .apply_benefit_observation(&observation_for(
+                scope.clone(),
+                index.saturating_add(2),
+                OBSERVED_AT_MS + i64::from(index) + 1,
+                current_lots,
+            ))
+            .expect("override observation");
+        store
+            .set_benefit_reminder_override(&scope, Some(&profile(1, &[21_600], true)))
+            .expect("scope override");
+    }
+    let delivery_at_ms = OBSERVED_AT_MS + 10 * 24 * 60 * 60 * 1_000 - 21_600 * 1_000 + 1;
+    let mut found_override_delivery = false;
+    for offset in 0..400_i64 {
+        let deliveries = store
+            .process_due_in_app_benefit_reminders(delivery_at_ms + offset, 1)
+            .expect("delivery");
+        store
+            .acknowledge_benefit_reminders(deliveries.deliveries(), delivery_at_ms + offset + 1)
+            .expect("acknowledgement");
+        let connection = Connection::open(&path).expect("inspect delivery");
+        let override_deliveries: i64 = connection
+            .query_row(
+                "SELECT count(*) FROM benefit_reminder_delivery AS delivery
+                 WHERE EXISTS(SELECT 1 FROM benefit_reminder_profile AS profile
+                              WHERE profile.profile_kind = 'scope'
+                                AND profile.profile_scope_id = delivery.scope_id)",
+                [],
+                |row| row.get(0),
+            )
+            .expect("override delivery count");
+        if override_deliveries > 0 {
+            found_override_delivery = true;
+            break;
+        }
+    }
+    assert!(found_override_delivery, "override delivery was not reached");
+    drop(store);
+
+    let connection = Connection::open(&path).expect("inspect before");
+    let before = connection
+        .query_row(
+            "SELECT
+               (SELECT count(*) FROM benefit_reminder_profile WHERE profile_kind = 'scope'),
+               (SELECT count(*) FROM benefit_reminder_due AS due
+                  WHERE EXISTS(SELECT 1 FROM benefit_reminder_profile AS profile
+                               WHERE profile.profile_kind = 'scope'
+                                 AND profile.profile_scope_id = due.scope_id)),
+               (SELECT count(*) FROM benefit_reminder_delivery AS delivery
+                  WHERE EXISTS(SELECT 1 FROM benefit_reminder_profile AS profile
+                               WHERE profile.profile_kind = 'scope'
+                                 AND profile.profile_scope_id = delivery.scope_id)),
+               (SELECT count(*) FROM benefit_reminder_ack AS acknowledgement
+                  JOIN benefit_reminder_delivery AS delivery
+                    ON delivery.delivery_id = acknowledgement.delivery_id
+                  WHERE EXISTS(SELECT 1 FROM benefit_reminder_profile AS profile
+                               WHERE profile.profile_kind = 'scope'
+                                 AND profile.profile_scope_id = delivery.scope_id))",
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, i64>(3)?,
+                ))
+            },
+        )
+        .expect("override state");
+    assert!(before.2 > 0, "override delivery preserved");
+    assert!(before.3 > 0, "override acknowledgement preserved");
+    drop(connection);
+
+    let mut store = UsageStore::open(&path).expect("reopen");
+    let applied = store
+        .set_benefit_reminder_global_profile(&profile(2, &[21_600], true))
+        .expect("global profile despite overridden capacity");
+    assert!(applied.pending_due_count() > 0);
+    drop(store);
+
+    let connection = Connection::open(&path).expect("inspect after");
+    let after = connection
+        .query_row(
+            "SELECT
+               (SELECT count(*) FROM benefit_reminder_profile WHERE profile_kind = 'scope'),
+               (SELECT count(*) FROM benefit_reminder_due AS due
+                  WHERE EXISTS(SELECT 1 FROM benefit_reminder_profile AS profile
+                               WHERE profile.profile_kind = 'scope'
+                                 AND profile.profile_scope_id = due.scope_id)),
+               (SELECT count(*) FROM benefit_reminder_delivery AS delivery
+                  WHERE EXISTS(SELECT 1 FROM benefit_reminder_profile AS profile
+                               WHERE profile.profile_kind = 'scope'
+                                 AND profile.profile_scope_id = delivery.scope_id)),
+               (SELECT count(*) FROM benefit_reminder_ack AS acknowledgement
+                  JOIN benefit_reminder_delivery AS delivery
+                    ON delivery.delivery_id = acknowledgement.delivery_id
+                  WHERE EXISTS(SELECT 1 FROM benefit_reminder_profile AS profile
+                               WHERE profile.profile_kind = 'scope'
+                                 AND profile.profile_scope_id = delivery.scope_id))",
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, i64>(3)?,
+                ))
+            },
+        )
+        .expect("override state");
+    assert_eq!(after, before);
+}
+
+#[test]
 fn terminal_retirement_and_later_reappearance_keep_monotonic_lot_revision() {
     let directory = TempDir::new().expect("temporary directory");
     let path = directory

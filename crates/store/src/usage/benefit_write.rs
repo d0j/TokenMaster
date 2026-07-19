@@ -250,11 +250,7 @@ impl UsageStore {
             [],
         )?;
         insert_global_profile(&transaction, profile)?;
-        benefit_write_fault(fault, BenefitWriteFault::AfterProfile)?;
         for scope in scopes {
-            if scope.has_override {
-                continue;
-            }
             let prior_due_count = count_scope_rows(
                 &transaction,
                 "benefit_reminder_due",
@@ -286,6 +282,7 @@ impl UsageStore {
                 .last_published_at_ms
                 .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?,
         )?;
+        benefit_write_fault(fault, BenefitWriteFault::BeforeCommit)?;
         transaction.commit()?;
         Ok(BenefitProfileApplyResult::new(
             next_global_revision,
@@ -301,7 +298,7 @@ enum BenefitWriteFault {
     AfterCurrent,
     AfterDue,
     AfterRevision,
-    AfterProfile,
+    BeforeCommit,
 }
 
 fn benefit_write_fault(
@@ -329,7 +326,6 @@ struct GlobalProfileScope {
     scope_id: tokenmaster_benefits::BenefitScopeId,
     scope: BenefitScope,
     lots: Box<[BenefitCurrentLot]>,
-    has_override: bool,
 }
 
 fn current_profile_result(
@@ -357,11 +353,13 @@ fn load_benefit_scopes_for_global_profile(
         .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?;
     let limit = input_i64(lookahead)?;
     let mut statement = transaction.prepare(
-        "SELECT scope_id, provider_id, account_id, workspace_id, current_lot_count,
-                EXISTS(SELECT 1 FROM benefit_reminder_profile AS profile
-                       WHERE profile.profile_kind = 'scope'
-                         AND profile.profile_scope_id = benefit_scope.scope_id)
+        "SELECT scope_id, provider_id, account_id, workspace_id, current_lot_count
          FROM benefit_scope
+         WHERE NOT EXISTS(
+           SELECT 1 FROM benefit_reminder_profile AS profile
+           WHERE profile.profile_kind = 'scope'
+             AND profile.profile_scope_id = benefit_scope.scope_id
+         )
          ORDER BY scope_id
          LIMIT ?1",
     )?;
@@ -373,7 +371,6 @@ fn load_benefit_scopes_for_global_profile(
                 row.get::<_, String>(2)?,
                 row.get::<_, Option<String>>(3)?,
                 row.get::<_, i64>(4)?,
-                row.get::<_, bool>(5)?,
             ))
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -385,7 +382,7 @@ fn load_benefit_scopes_for_global_profile(
     }
     let mut scopes = Vec::with_capacity(rows.len());
     let mut total_lots = 0_usize;
-    for (stored_id, provider, account, workspace, current_lot_count, has_override) in rows {
+    for (stored_id, provider, account, workspace, current_lot_count) in rows {
         let stored_id = fixed_32(stored_id)?;
         let scope = BenefitScope::new(
             UsageProviderId::new(provider).map_err(|_| invalid_stored())?,
@@ -420,7 +417,6 @@ fn load_benefit_scopes_for_global_profile(
             scope_id,
             scope,
             lots: state.lots().to_vec().into_boxed_slice(),
-            has_override,
         });
     }
     Ok(scopes)
@@ -1549,11 +1545,13 @@ mod tests {
                  WHERE profile_kind = 'global' AND length(profile_scope_id) = 0),
                (SELECT count(*) FROM benefit_reminder_threshold
                  WHERE profile_kind = 'global' AND length(profile_scope_id) = 0),
+               (SELECT count(*) FROM benefit_reminder_delivery),
+               (SELECT count(*) FROM benefit_reminder_ack),
                (SELECT revision FROM quota_state WHERE singleton_id = 1),
                (SELECT dataset_generation FROM usage_archive_state WHERE singleton_id = 1),
                (SELECT count(*) FROM usage_event)",
             [],
-            |row| (0..13).map(|index| row.get(index)).collect(),
+            |row| (0..15).map(|index| row.get(index)).collect(),
         )?)
     }
 
@@ -1586,13 +1584,15 @@ mod tests {
     }
 
     #[test]
-    fn global_profile_fault_rolls_back_profile_thresholds_due_and_revision() -> TestResult {
+    fn global_profile_late_fault_rolls_back_profile_due_delivery_ack_and_revision() -> TestResult {
         let mut store = UsageStore::in_memory()?;
         store.apply_benefit_observation(&observation(
             1,
             1,
             OBSERVED_AT_MS + 10 * 24 * 60 * 60 * 1_000,
         )?)?;
+        let deliveries = store.process_due_in_app_benefit_reminders(OBSERVED_AT_MS, 1)?;
+        store.acknowledge_benefit_reminders(deliveries.deliveries(), OBSERVED_AT_MS + 1)?;
         let before = snapshot(&store)?;
         let profile = ReminderProfile::new(ReminderProfileParts {
             revision: ReminderProfileRevision::new(2)?,
@@ -1600,7 +1600,7 @@ mod tests {
             channels: vec![NotificationChannel::InApp],
         })?;
         let error = store
-            .set_benefit_reminder_global_profile_inner(&profile, BenefitWriteFault::AfterProfile)
+            .set_benefit_reminder_global_profile_inner(&profile, BenefitWriteFault::BeforeCommit)
             .expect_err("injected profile fault");
         assert_eq!(error.code(), StoreErrorCode::Database);
         assert_eq!(snapshot(&store)?, before);
