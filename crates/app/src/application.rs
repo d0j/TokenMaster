@@ -1713,15 +1713,15 @@ impl ApplicationBundle {
                 .map_err(|error| error.code())
         });
         let observation = DesktopRuntimeObservation::new(generation, usage, quota, reminder, git);
+        if let Some(presentation) = self.notification_presentation.as_ref() {
+            let _ = presentation.pump();
+        }
         self.controller
             .observe_runtime(observation)
             .map_err(|_| ApplicationError::controller())?;
         self.controller
             .refresh(DesktopRefreshUrgency::Hint)
             .map_err(|_| ApplicationError::controller())?;
-        if let Some(presentation) = self.notification_presentation.as_ref() {
-            let _ = presentation.pump();
-        }
         Ok(())
     }
 

@@ -208,6 +208,7 @@ fn real_event_loop_applies_every_row_before_presentation_receipt_and_dismisses()
         .get_in_app_notification_rows()
         .row_data(0)
         .expect("first visible notification");
+    assert!(first.accessible_label.contains("Banked Reset"));
     assert!(first.accessible_label.contains("Banked rate-limit reset"));
     assert!(first.accessible_label.contains("Expires"));
 

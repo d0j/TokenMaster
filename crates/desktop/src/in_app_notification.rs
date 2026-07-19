@@ -537,30 +537,35 @@ impl NotificationBridgeInner {
     ) {
         if self.phase() != DesktopNotificationBridgePhase::Running {
             saturating_increment(&self.failed_count);
-            receipt.failed();
             self.scheduled.store(false, Ordering::Release);
+            receipt.failed();
             return;
         }
-        match self.delivery.deliver(&batch) {
+        let presented = match self.delivery.deliver(&batch) {
             NotificationDeliveryOutcome::Presented => {
                 self.last_failure.store(0, Ordering::Release);
                 saturating_increment(&self.presented_count);
-                receipt.presented();
+                true
             }
             NotificationDeliveryOutcome::Stale => {
                 self.fail(DesktopNotificationBridgeFailureCode::StaleEpoch, false);
-                receipt.failed();
+                false
             }
             NotificationDeliveryOutcome::WindowClosed => {
                 self.fail(DesktopNotificationBridgeFailureCode::WindowClosed, true);
-                receipt.failed();
+                false
             }
             NotificationDeliveryOutcome::StateUnavailable => {
                 self.fail(DesktopNotificationBridgeFailureCode::StateUnavailable, true);
-                receipt.failed();
+                false
             }
-        }
+        };
         self.scheduled.store(false, Ordering::Release);
+        if presented {
+            receipt.presented();
+        } else {
+            receipt.failed();
+        }
     }
 
     fn record_schedule_error(&self, error: ScheduleError) {

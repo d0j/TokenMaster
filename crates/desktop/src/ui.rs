@@ -1360,7 +1360,8 @@ pub(crate) fn apply_in_app_notification_batch(
         .rows()
         .iter()
         .map(|notification| {
-            let benefit_label = notification.kind().display_label();
+            let benefit_label = humanize_key(notification.label_key());
+            let kind_label = notification.kind().display_label();
             let quantity_label = format_integer(notification.quantity());
             let lead_label = format!(
                 "Reminder due {} before expiry",
@@ -1379,11 +1380,11 @@ pub(crate) fn apply_in_app_notification_batch(
                 format_precise_timestamp_ms(notification.delivered_at_ms())
             );
             let accessible_label = format!(
-                "{benefit_label}, quantity {quantity_label}. {lead_label}. {due_label}. {expiry_label}. {delivered_label}."
+                "{benefit_label}. {kind_label}, quantity {quantity_label}. {lead_label}. {due_label}. {expiry_label}. {delivered_label}."
             );
             InAppNotificationRow {
-                benefit_label: humanize_key(notification.label_key()).into(),
-                kind_label: benefit_label.into(),
+                benefit_label: benefit_label.into(),
+                kind_label: kind_label.into(),
                 quantity_label: quantity_label.into(),
                 lead_label: lead_label.into(),
                 due_label: due_label.into(),

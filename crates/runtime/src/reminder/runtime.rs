@@ -24,10 +24,10 @@ use crate::{RuntimeError, RuntimeErrorCode, SystemClock};
 const ACCELERATED_RETRY_MILLIS: i64 = 60_000;
 
 thread_local! {
-    static REDACT_REMINDER_SCHEDULER_PANIC: Cell<bool> = const { Cell::new(false) };
+    static REDACT_REMINDER_RUNTIME_PANIC: Cell<bool> = const { Cell::new(false) };
 }
 
-static INSTALL_REMINDER_SCHEDULER_PANIC_REDACTION: Once = Once::new();
+static INSTALL_REMINDER_RUNTIME_PANIC_REDACTION: Once = Once::new();
 
 struct ReminderScheduleState {
     phase: BenefitReminderSchedulePhase,
@@ -233,13 +233,13 @@ impl ReminderScheduler {
     where
         F: FnMut(RefreshUrgency) -> Result<bool, ()> + Send + 'static,
     {
-        install_reminder_scheduler_panic_redaction();
+        install_reminder_runtime_panic_redaction();
         let thread_control = Arc::clone(&control);
         let recovery = Arc::clone(&control);
         let thread = Builder::new()
             .name(String::from("tokenmaster-reminder-scheduler"))
             .spawn(move || {
-                REDACT_REMINDER_SCHEDULER_PANIC.with(|redact| redact.set(true));
+                REDACT_REMINDER_RUNTIME_PANIC.with(|redact| redact.set(true));
                 if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     run_scheduler(thread_control, clock, submit);
                 }))
@@ -535,6 +535,18 @@ impl BenefitReminderRuntime {
     }
 
     pub fn acknowledge_notifications(&self) -> Result<bool, RuntimeError> {
+        self.acknowledge_notifications_with(|batch| {
+            self.acknowledger
+                .lock()
+                .map_err(|_| RuntimeError::new(RuntimeErrorCode::Internal))?
+                .acknowledge(batch)
+        })
+    }
+
+    fn acknowledge_notifications_with<F>(&self, acknowledge: F) -> Result<bool, RuntimeError>
+    where
+        F: FnOnce(&[BenefitReminderDelivery]) -> Result<(), RuntimeError>,
+    {
         if self.phase != BenefitReminderRuntimePhase::Running {
             return Err(RuntimeError::new(match self.phase {
                 BenefitReminderRuntimePhase::Faulted => RuntimeErrorCode::Faulted,
@@ -551,11 +563,13 @@ impl BenefitReminderRuntime {
         else {
             return Ok(false);
         };
-        let acknowledgement = self
-            .acknowledger
-            .lock()
-            .map_err(|_| RuntimeError::new(RuntimeErrorCode::Internal))?
-            .acknowledge(&batch);
+        let previous_redaction = REDACT_REMINDER_RUNTIME_PANIC.with(|redact| redact.replace(true));
+        let acknowledgement =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| acknowledge(&batch)));
+        REDACT_REMINDER_RUNTIME_PANIC.with(|redact| redact.set(previous_redaction));
+        let acknowledgement = acknowledgement
+            .map_err(|_| RuntimeError::new(RuntimeErrorCode::Internal))
+            .and_then(std::convert::identity);
         let committed = acknowledgement.is_ok();
         self.notifications
             .finish_acknowledgement(committed)
@@ -733,11 +747,11 @@ fn runtime_worker_error(error: WorkerError) -> RuntimeError {
     RuntimeError::new(code)
 }
 
-fn install_reminder_scheduler_panic_redaction() {
-    INSTALL_REMINDER_SCHEDULER_PANIC_REDACTION.call_once(|| {
+fn install_reminder_runtime_panic_redaction() {
+    INSTALL_REMINDER_RUNTIME_PANIC_REDACTION.call_once(|| {
         let previous = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |information| {
-            let redact = REDACT_REMINDER_SCHEDULER_PANIC
+            let redact = REDACT_REMINDER_RUNTIME_PANIC
                 .try_with(Cell::get)
                 .unwrap_or(false);
             if !redact {
@@ -757,9 +771,18 @@ mod tests {
         atomic::{AtomicI64, Ordering},
         mpsc::{Receiver, RecvTimeoutError, channel},
     };
-    use std::time::Duration;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+    use tempfile::TempDir;
+    use tokenmaster_domain::{
+        BenefitConfidence, BenefitDetailKind, BenefitEvidenceSource, BenefitExpiry,
+        BenefitInventoryCompleteness, BenefitInventoryObservation,
+        BenefitInventoryObservationParts, BenefitKind, BenefitLabelKey, BenefitLotId,
+        BenefitLotObservation, BenefitLotObservationParts, BenefitObservationId, BenefitScope,
+        BenefitState, BenefitTarget, QuotaAccountId, UsageProviderId,
+    };
     use tokenmaster_engine::RefreshUrgency;
+    use tokenmaster_store::UsageStore;
 
     use super::*;
 
@@ -791,6 +814,106 @@ mod tests {
             receiver.recv_timeout(Duration::from_millis(40)),
             Err(RecvTimeoutError::Timeout)
         );
+    }
+
+    fn seed_due_reminder(path: &std::path::Path) {
+        let now_ms = i64::try_from(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time")
+                .as_millis(),
+        )
+        .expect("wall clock");
+        let expiry_at_ms = now_ms + 30 * 60 * 1_000;
+        let lot = BenefitLotObservation::new(BenefitLotObservationParts {
+            lot_id: BenefitLotId::from_bytes([7; 32]),
+            kind: BenefitKind::BankedRateLimitReset,
+            quantity: 1,
+            state: BenefitState::Available,
+            target: BenefitTarget::Provider,
+            granted_at_ms: Some(now_ms - 1_000),
+            expiry: BenefitExpiry::exact_utc(expiry_at_ms).expect("expiry"),
+            source: BenefitEvidenceSource::ProviderOfficial,
+            confidence: BenefitConfidence::High,
+            detail_kind: BenefitDetailKind::ProviderDetail,
+            label_key: BenefitLabelKey::new("benefit.codex.banked_reset").expect("label"),
+        })
+        .expect("lot");
+        let observation = BenefitInventoryObservation::new(BenefitInventoryObservationParts {
+            scope: BenefitScope::new(
+                UsageProviderId::new("codex").expect("provider"),
+                QuotaAccountId::new("acct_private").expect("account"),
+                None,
+            ),
+            observation_id: BenefitObservationId::from_bytes([1; 32]),
+            observed_at_ms: now_ms,
+            fresh_until_ms: now_ms + 1_000,
+            stale_after_ms: now_ms + 2_000,
+            completeness: BenefitInventoryCompleteness::Complete,
+            lots: vec![lot],
+        })
+        .expect("observation");
+        UsageStore::open(path)
+            .expect("store")
+            .apply_benefit_observation(&observation)
+            .expect("seed benefit");
+    }
+
+    fn wait_for_runtime_completion(runtime: &BenefitReminderRuntime) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            if runtime.try_completion().expect("completion").is_some() {
+                return;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "reminder completion timed out"
+            );
+            std::thread::yield_now();
+        }
+    }
+
+    #[test]
+    fn acknowledgement_panic_restores_the_batch_to_a_releasable_lease() {
+        let directory = TempDir::new().expect("temporary directory");
+        let path = directory.path().join("panic-safe-ack.sqlite3");
+        seed_due_reminder(&path);
+        let mut runtime =
+            BenefitReminderRuntime::start(BenefitReminderRuntimeConfig::new(path).expect("config"))
+                .expect("runtime");
+        wait_for_runtime_completion(&runtime);
+        assert_eq!(
+            runtime
+                .take_notifications()
+                .expect("take")
+                .expect("delivery")
+                .len(),
+            1
+        );
+
+        let error = runtime
+            .acknowledge_notifications_with(|_| -> Result<(), RuntimeError> {
+                panic!("synthetic acknowledgement panic")
+            })
+            .expect_err("panic must become a stable runtime error");
+        assert_eq!(error.code(), RuntimeErrorCode::Internal);
+        assert!(
+            runtime
+                .release_notifications()
+                .expect("release restored lease")
+        );
+        assert_eq!(
+            runtime
+                .take_notifications()
+                .expect("retake")
+                .expect("restored delivery")
+                .len(),
+            1
+        );
+        runtime
+            .release_notifications()
+            .expect("release before stop");
+        runtime.shutdown().expect("shutdown");
     }
 
     #[test]

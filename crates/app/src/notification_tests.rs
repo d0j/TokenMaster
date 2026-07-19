@@ -44,8 +44,10 @@ fn one_batch() -> DesktopInAppNotificationBatch {
 }
 
 struct FakePortState {
-    batch: Option<DesktopInAppNotificationBatch>,
+    ready: Option<DesktopInAppNotificationBatch>,
+    leased: Option<DesktopInAppNotificationBatch>,
     acknowledgements: VecDeque<Result<bool, PresentationFailure>>,
+    releases: VecDeque<Result<bool, PresentationFailure>>,
     take_count: usize,
     acknowledge_count: usize,
     release_count: usize,
@@ -59,6 +61,35 @@ struct BlockingReleasePort {
     inner: FakePort,
     release_started: AtomicUsize,
     release_allowed: AtomicUsize,
+}
+
+struct PanickingAcknowledgePort {
+    inner: FakePort,
+    acknowledge_started: AtomicUsize,
+}
+
+impl PanickingAcknowledgePort {
+    fn new() -> Self {
+        Self {
+            inner: FakePort::with_one_batch(),
+            acknowledge_started: AtomicUsize::new(0),
+        }
+    }
+}
+
+impl ReminderPresentationPort for PanickingAcknowledgePort {
+    fn take(&self) -> Result<Option<DesktopInAppNotificationBatch>, PresentationFailure> {
+        self.inner.take()
+    }
+
+    fn acknowledge(&self) -> Result<bool, PresentationFailure> {
+        self.acknowledge_started.store(1, Ordering::Release);
+        panic!("synthetic receipt worker panic");
+    }
+
+    fn release(&self) -> Result<bool, PresentationFailure> {
+        self.inner.release()
+    }
 }
 
 impl BlockingReleasePort {
@@ -93,8 +124,10 @@ impl FakePort {
     fn with_one_batch() -> Self {
         Self {
             state: Mutex::new(FakePortState {
-                batch: Some(one_batch()),
+                ready: Some(one_batch()),
+                leased: None,
                 acknowledgements: VecDeque::from([Ok(true)]),
+                releases: VecDeque::new(),
                 take_count: 0,
                 acknowledge_count: 0,
                 release_count: 0,
@@ -108,6 +141,14 @@ impl FakePort {
         let port = Self::with_one_batch();
         port.state.lock().expect("fake port state").acknowledgements =
             acknowledgements.into_iter().collect();
+        port
+    }
+
+    fn with_releases(
+        releases: impl IntoIterator<Item = Result<bool, PresentationFailure>>,
+    ) -> Self {
+        let port = Self::with_one_batch();
+        port.state.lock().expect("fake port state").releases = releases.into_iter().collect();
         port
     }
 
@@ -128,7 +169,12 @@ impl ReminderPresentationPort for FakePort {
             .lock()
             .map_err(|_| PresentationFailure::Internal)?;
         state.take_count += 1;
-        Ok(state.batch.take())
+        if state.leased.is_some() {
+            return Ok(None);
+        }
+        let batch = state.ready.take();
+        state.leased.clone_from(&batch);
+        Ok(batch)
     }
 
     fn acknowledge(&self) -> Result<bool, PresentationFailure> {
@@ -137,7 +183,11 @@ impl ReminderPresentationPort for FakePort {
             .lock()
             .map_err(|_| PresentationFailure::Internal)?;
         state.acknowledge_count += 1;
-        state.acknowledgements.pop_front().unwrap_or(Ok(true))
+        let result = state.acknowledgements.pop_front().unwrap_or(Ok(true));
+        if result == Ok(true) {
+            state.leased = None;
+        }
+        result
     }
 
     fn release(&self) -> Result<bool, PresentationFailure> {
@@ -146,7 +196,11 @@ impl ReminderPresentationPort for FakePort {
             .lock()
             .map_err(|_| PresentationFailure::Internal)?;
         state.release_count += 1;
-        Ok(true)
+        let result = state.releases.pop_front().unwrap_or(Ok(true));
+        if result == Ok(true) {
+            state.ready = state.leased.take();
+        }
+        result
     }
 }
 
@@ -205,6 +259,17 @@ fn wait_until(mut predicate: impl FnMut() -> bool) {
     let deadline = Instant::now() + Duration::from_secs(2);
     while !predicate() {
         assert!(Instant::now() < deadline, "condition timed out");
+        std::thread::yield_now();
+    }
+}
+
+fn assert_stays(duration: Duration, mut predicate: impl FnMut() -> bool) {
+    let deadline = Instant::now() + duration;
+    while Instant::now() < deadline {
+        assert!(
+            predicate(),
+            "condition changed before the stability deadline"
+        );
         std::thread::yield_now();
     }
 }
@@ -295,6 +360,51 @@ fn real_reminder_port_maps_and_acknowledges_only_the_leased_batch() {
 }
 
 #[test]
+fn real_reminder_port_can_release_a_lease_after_outer_mutex_poison() {
+    let temporary = TempDir::new().expect("temporary directory");
+    let path = temporary.path().join("notification-poison.sqlite3");
+    seed_real_reminder(&path);
+    let runtime = Arc::new(Mutex::new(
+        BenefitReminderRuntime::start(
+            BenefitReminderRuntimeConfig::new(path).expect("runtime config"),
+        )
+        .expect("reminder runtime"),
+    ));
+    wait_until(|| {
+        runtime
+            .lock()
+            .expect("runtime")
+            .try_completion()
+            .expect("completion")
+            .is_some()
+    });
+    let port = RuntimeReminderPresentationPort::new(Arc::clone(&runtime));
+    assert!(port.take().expect("take").is_some());
+
+    let poisoned_runtime = Arc::clone(&runtime);
+    assert!(
+        std::thread::spawn(move || {
+            let _guard = poisoned_runtime.lock().expect("runtime lock");
+            panic!("synthetic outer runtime mutex poison");
+        })
+        .join()
+        .is_err()
+    );
+
+    assert!(port.release().expect("poison recovery release"));
+    drop(port);
+    assert_eq!(
+        runtime
+            .lock()
+            .unwrap_err()
+            .into_inner()
+            .shutdown()
+            .expect("shutdown"),
+        BenefitReminderRuntimePhase::Stopped
+    );
+}
+
+#[test]
 fn visible_receipt_precedes_acknowledgement() {
     let port = Arc::new(FakePort::with_one_batch());
     let presenter = Arc::new(FakePresenter::default());
@@ -345,6 +455,48 @@ fn scheduling_and_callback_failures_release_the_lease() {
 }
 
 #[test]
+fn released_presentation_failure_retries_without_an_unrelated_completion() {
+    let port = Arc::new(FakePort::with_one_batch());
+    let presenter = Arc::new(FakePresenter::default());
+    let mut coordinator = ReminderPresentationCoordinator::start_for_test(
+        port.clone(),
+        presenter.clone(),
+        Duration::from_millis(5),
+    )
+    .expect("coordinator");
+
+    assert!(coordinator.pump().expect("initial presentation"));
+    presenter.complete_failed();
+    wait_until(|| presenter.present_count.load(Ordering::Acquire) == 2);
+    assert_eq!(port.counts(), (2, 0, 1));
+
+    presenter.complete_presented();
+    wait_until(|| port.counts().1 == 1);
+    coordinator.shutdown().expect("shutdown");
+}
+
+#[test]
+fn externally_represented_retry_wakes_the_receipt_worker_immediately() {
+    let port = Arc::new(FakePort::with_one_batch());
+    let presenter = Arc::new(FakePresenter::default());
+    let mut coordinator = ReminderPresentationCoordinator::start_for_test(
+        port.clone(),
+        presenter.clone(),
+        Duration::from_secs(5),
+    )
+    .expect("coordinator");
+
+    assert!(coordinator.pump().expect("initial presentation"));
+    presenter.complete_failed();
+    wait_until(|| port.counts().2 == 1);
+    assert!(coordinator.pump().expect("external presentation retry"));
+    presenter.complete_presented();
+    wait_until(|| port.counts().1 == 1);
+
+    coordinator.shutdown().expect("shutdown");
+}
+
+#[test]
 fn retryable_acknowledgement_retries_and_terminal_failure_releases() {
     let retry_port = Arc::new(FakePort::with_acknowledgements([
         Err(PresentationFailure::Busy),
@@ -378,6 +530,9 @@ fn retryable_acknowledgement_retries_and_terminal_failure_releases() {
     terminal_presenter.complete_presented();
     wait_until(|| terminal_port.counts().2 == 1);
     assert_eq!(terminal_port.counts(), (1, 1, 1));
+    assert_stays(Duration::from_millis(25), || {
+        terminal_presenter.present_count.load(Ordering::Acquire) == 1
+    });
     terminal.shutdown().expect("terminal shutdown");
 }
 
@@ -459,4 +614,72 @@ fn release_keeps_local_backpressure_until_the_runtime_lease_is_ready() {
     assert!(!pump_during_release);
     assert_eq!(takes_during_release, 1);
     coordinator.shutdown().expect("shutdown");
+}
+
+#[test]
+fn failed_release_keeps_local_backpressure_until_shutdown_recovers_the_lease() {
+    let port = Arc::new(FakePort::with_releases([
+        Err(PresentationFailure::Internal),
+        Ok(true),
+    ]));
+    let presenter = Arc::new(FakePresenter::default());
+    let mut coordinator = ReminderPresentationCoordinator::start_for_test(
+        port.clone(),
+        presenter.clone(),
+        Duration::from_millis(5),
+    )
+    .expect("coordinator");
+
+    assert!(coordinator.pump().expect("scheduled"));
+    presenter.complete_failed();
+    wait_until(|| port.counts().2 == 1);
+    assert!(!coordinator.pump().expect("backpressure remains"));
+    assert_eq!(port.counts(), (1, 0, 1));
+
+    coordinator.shutdown().expect("shutdown release retry");
+    assert_eq!(port.counts(), (1, 0, 2));
+}
+
+#[test]
+fn false_release_keeps_local_backpressure_until_shutdown_recovers_the_lease() {
+    let port = Arc::new(FakePort::with_releases([Ok(false), Ok(true)]));
+    let presenter = Arc::new(FakePresenter::default());
+    let mut coordinator = ReminderPresentationCoordinator::start_for_test(
+        port.clone(),
+        presenter.clone(),
+        Duration::from_millis(5),
+    )
+    .expect("coordinator");
+
+    assert!(coordinator.pump().expect("scheduled"));
+    presenter.complete_failed();
+    wait_until(|| port.counts().2 == 1);
+    assert!(!coordinator.pump().expect("backpressure remains"));
+    assert_eq!(port.counts(), (1, 0, 1));
+
+    coordinator.shutdown().expect("shutdown release retry");
+    assert_eq!(port.counts(), (1, 0, 2));
+}
+
+#[test]
+fn worker_panic_reports_failure_and_still_releases_the_lease() {
+    let port = Arc::new(PanickingAcknowledgePort::new());
+    let presenter = Arc::new(FakePresenter::default());
+    let mut coordinator = ReminderPresentationCoordinator::start_for_test(
+        port.clone(),
+        presenter.clone(),
+        Duration::from_millis(5),
+    )
+    .expect("coordinator");
+    assert!(coordinator.pump().expect("scheduled"));
+    presenter.complete_presented();
+    wait_until(|| port.acknowledge_started.load(Ordering::Acquire) == 1);
+
+    assert_eq!(
+        coordinator
+            .shutdown()
+            .expect_err("worker panic must surface"),
+        PresentationFailure::Internal
+    );
+    assert_eq!(port.inner.counts(), (1, 0, 1));
 }

@@ -116,7 +116,7 @@ impl ReminderPresentationPort for RuntimeReminderPresentationPort {
     fn release(&self) -> Result<bool, PresentationFailure> {
         self.runtime
             .lock()
-            .map_err(|_| PresentationFailure::Internal)?
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .release_notifications()
             .map_err(|error| map_runtime_failure(error.code()))
     }
@@ -246,7 +246,7 @@ impl DesktopNotificationPresentationReceipt for CoordinatorReceipt {
 
 pub(crate) struct ReminderPresentationCoordinator {
     port: Arc<dyn ReminderPresentationPort>,
-    presenter: Option<Arc<dyn NotificationPresenter>>,
+    presenter: Arc<Mutex<Option<Arc<dyn NotificationPresenter>>>>,
     signal: Arc<ReceiptWorkerSignal>,
     worker: Option<JoinHandle<()>>,
 }
@@ -274,68 +274,49 @@ impl ReminderPresentationCoordinator {
         retry: Duration,
     ) -> Result<Self, PresentationFailure> {
         let signal = Arc::new(ReceiptWorkerSignal::new());
+        let presenter = Arc::new(Mutex::new(Some(presenter)));
         let worker_signal = Arc::clone(&signal);
         let worker_port = Arc::clone(&port);
+        let worker_presenter = Arc::clone(&presenter);
         let worker = thread::Builder::new()
             .name(String::from(NOTIFICATION_RECEIPT_WORKER_NAME))
-            .spawn(move || run_receipt_worker(worker_signal, worker_port, retry))
+            .spawn(move || {
+                run_receipt_worker(worker_signal, worker_port, worker_presenter, retry);
+            })
             .map_err(|_| PresentationFailure::Internal)?;
         Ok(Self {
             port,
-            presenter: Some(presenter),
+            presenter,
             signal,
             worker: Some(worker),
         })
     }
 
     pub(crate) fn pump(&self) -> Result<bool, PresentationFailure> {
-        let Some(presenter) = self.presenter.as_ref() else {
-            return Err(PresentationFailure::Closed);
-        };
-        if self
-            .signal
-            .in_flight
-            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-            .is_err()
-        {
-            return Ok(false);
-        }
-        let batch = match self.port.take() {
-            Ok(Some(batch)) => batch,
-            Ok(None) => {
-                self.signal.clear_in_flight();
-                return Ok(false);
-            }
-            Err(error) => {
-                self.signal.clear_in_flight();
-                return Err(error);
-            }
-        };
-        let receipt = Arc::new(CoordinatorReceipt::new(Arc::clone(&self.signal)));
-        match presenter.present(batch, receipt.clone()) {
-            Ok(()) => Ok(true),
-            Err(error) => {
-                receipt.failed();
-                Err(error)
-            }
-        }
+        let presenter = current_presenter(&self.presenter)?;
+        pump_presentation(&self.signal, self.port.as_ref(), presenter.as_ref())
     }
 
     pub(crate) fn shutdown(&mut self) -> Result<(), PresentationFailure> {
-        self.presenter.take();
+        let presenter_closed = match self.presenter.lock() {
+            Ok(mut presenter) => {
+                presenter.take();
+                Ok(())
+            }
+            Err(poisoned) => {
+                poisoned.into_inner().take();
+                Err(PresentationFailure::Internal)
+            }
+        };
         self.signal.stop();
         let joined = self
             .worker
             .take()
-            .map(|worker| worker.join().map_err(|_| PresentationFailure::Internal))
-            .transpose()?;
-        if joined.is_none() {
-            return Ok(());
-        }
-        if self.signal.in_flight.swap(false, Ordering::AcqRel) {
-            self.port.release().map(|_| ())?;
-        }
-        Ok(())
+            .map(thread::JoinHandle::join)
+            .transpose()
+            .map_err(|_| PresentationFailure::Internal);
+        let released = release_in_flight(&self.signal, self.port.as_ref()).map(|_| ());
+        presenter_closed.and(joined).and(released)
     }
 }
 
@@ -345,19 +326,75 @@ impl Drop for ReminderPresentationCoordinator {
     }
 }
 
+fn current_presenter(
+    presenter: &Mutex<Option<Arc<dyn NotificationPresenter>>>,
+) -> Result<Arc<dyn NotificationPresenter>, PresentationFailure> {
+    presenter
+        .lock()
+        .map_err(|_| PresentationFailure::Internal)?
+        .as_ref()
+        .cloned()
+        .ok_or(PresentationFailure::Closed)
+}
+
+fn pump_presentation(
+    signal: &Arc<ReceiptWorkerSignal>,
+    port: &dyn ReminderPresentationPort,
+    presenter: &dyn NotificationPresenter,
+) -> Result<bool, PresentationFailure> {
+    if is_stopping(signal) {
+        return Err(PresentationFailure::Closed);
+    }
+    if signal
+        .in_flight
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return Ok(false);
+    }
+    let batch = match port.take() {
+        Ok(Some(batch)) => batch,
+        Ok(None) => {
+            signal.clear_in_flight();
+            return Ok(false);
+        }
+        Err(error) => {
+            signal.clear_in_flight();
+            return Err(error);
+        }
+    };
+    if is_stopping(signal) {
+        release_in_flight(signal, port)?;
+        return Err(PresentationFailure::Closed);
+    }
+    let receipt = Arc::new(CoordinatorReceipt::new(Arc::clone(signal)));
+    match presenter.present(batch, receipt.clone()) {
+        Ok(()) => Ok(true),
+        Err(error) => {
+            receipt.failed();
+            Err(error)
+        }
+    }
+}
+
 fn run_receipt_worker(
     signal: Arc<ReceiptWorkerSignal>,
     port: Arc<dyn ReminderPresentationPort>,
+    presenter: Arc<Mutex<Option<Arc<dyn NotificationPresenter>>>>,
     retry: Duration,
 ) {
     loop {
         let Some(action) = wait_for_action(&signal) else {
-            release_in_flight(&signal, port.as_ref());
+            let _ = release_in_flight(&signal, port.as_ref());
             return;
         };
         match action {
-            ReceiptAction::Failed => release_in_flight(&signal, port.as_ref()),
-            ReceiptAction::Presented => acknowledge_presented(&signal, port.as_ref(), retry),
+            ReceiptAction::Failed => {
+                release_then_retry_presentation(&signal, port.as_ref(), &presenter, retry)
+            }
+            ReceiptAction::Presented => {
+                acknowledge_presented(&signal, port.as_ref(), retry);
+            }
         }
     }
 }
@@ -375,13 +412,13 @@ fn wait_for_action(signal: &ReceiptWorkerSignal) -> Option<ReceiptAction> {
 }
 
 fn acknowledge_presented(
-    signal: &ReceiptWorkerSignal,
+    signal: &Arc<ReceiptWorkerSignal>,
     port: &dyn ReminderPresentationPort,
     retry: Duration,
 ) {
     loop {
         if is_stopping(signal) {
-            release_in_flight(signal, port);
+            let _ = release_in_flight(signal, port);
             return;
         }
         match port.acknowledge() {
@@ -391,12 +428,12 @@ fn acknowledge_presented(
             }
             Err(error) if error.retryable() => {
                 if wait_for_retry_or_stop(signal, retry) {
-                    release_in_flight(signal, port);
+                    let _ = release_in_flight(signal, port);
                     return;
                 }
             }
             Err(_) => {
-                release_in_flight(signal, port);
+                let _ = release_with_retry(signal, port, retry);
                 return;
             }
         }
@@ -420,9 +457,67 @@ fn wait_for_retry_or_stop(signal: &ReceiptWorkerSignal, retry: Duration) -> bool
         .map_or(true, |(state, _timeout)| state.stopping)
 }
 
-fn release_in_flight(signal: &ReceiptWorkerSignal, port: &dyn ReminderPresentationPort) {
-    if signal.in_flight.load(Ordering::Acquire) {
-        let _ = port.release();
-        signal.clear_in_flight();
+fn wait_for_presentation_retry_or_action(signal: &ReceiptWorkerSignal, retry: Duration) -> bool {
+    let Ok(state) = signal.state.lock() else {
+        return true;
+    };
+    if state.stopping || state.action.is_some() {
+        return true;
     }
+    signal
+        .wake
+        .wait_timeout_while(state, retry, |state| {
+            !state.stopping && state.action.is_none()
+        })
+        .map_or(true, |(state, timeout)| {
+            state.stopping || state.action.is_some() || !timeout.timed_out()
+        })
+}
+
+fn release_then_retry_presentation(
+    signal: &Arc<ReceiptWorkerSignal>,
+    port: &dyn ReminderPresentationPort,
+    presenter: &Mutex<Option<Arc<dyn NotificationPresenter>>>,
+    retry: Duration,
+) {
+    let released = release_with_retry(signal, port, retry);
+    if !released || wait_for_presentation_retry_or_action(signal, retry) {
+        return;
+    }
+    let Ok(presenter) = current_presenter(presenter) else {
+        return;
+    };
+    let _ = pump_presentation(signal, port, presenter.as_ref());
+}
+
+fn release_with_retry(
+    signal: &ReceiptWorkerSignal,
+    port: &dyn ReminderPresentationPort,
+    retry: Duration,
+) -> bool {
+    loop {
+        match release_in_flight(signal, port) {
+            Ok(released) => return released,
+            Err(error) if error.retryable() => {
+                if wait_for_retry_or_stop(signal, retry) {
+                    return false;
+                }
+            }
+            Err(_) => return false,
+        }
+    }
+}
+
+fn release_in_flight(
+    signal: &ReceiptWorkerSignal,
+    port: &dyn ReminderPresentationPort,
+) -> Result<bool, PresentationFailure> {
+    if !signal.in_flight.load(Ordering::Acquire) {
+        return Ok(false);
+    }
+    if !port.release()? {
+        return Err(PresentationFailure::Internal);
+    }
+    signal.clear_in_flight();
+    Ok(true)
 }
