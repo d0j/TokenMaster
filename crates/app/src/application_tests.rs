@@ -4,14 +4,18 @@ use std::time::{Duration, Instant};
 use rusqlite::Connection;
 use tempfile::TempDir;
 use tokenmaster_engine::RefreshOutcome;
-use tokenmaster_platform::BackupDirectory;
+use tokenmaster_platform::{
+    BackupDirectory, ControlledFileDialog, DurableFileTarget, FileDialogFileType, FileDialogResult,
+    FileDialogSelector, ValidatedLocalDirectory,
+};
 use tokenmaster_product::{
     ProductReducer, ProductSectionKind, ProductSessionDetailSelection,
     ProductSessionDetailSelectionGeneration,
 };
 use tokenmaster_state::{
     BackupCatalog, BackupMaintenanceRuntime, BackupPolicy, BackupPurpose, BootstrapOutcome,
-    MaintenanceExecution, MaintenanceSourceState, PortableSettings, PriorRunCondition, RestoreMode,
+    ConfigPackage, MAX_CONFIG_PACKAGE_BYTES, MaintenanceExecution, MaintenanceSourceState,
+    PortableSettings, PortableSettingsCandidate, PriorRunCondition, ReminderPolicy, RestoreMode,
     RunStateStore, SettingsStore, SettingsValue, SystemMaintenanceClock,
 };
 use tokenmaster_store::{USAGE_SCHEMA_VERSION, UsageStore};
@@ -96,6 +100,276 @@ fn wait_for_application_completion(application: &Application) -> ApplicationComm
         assert!(Instant::now() < deadline, "application operation timed out");
         std::thread::yield_now();
     }
+}
+
+fn wait_for_initial_live_refresh(application: &Application) {
+    let bundle = application.bundle.lock().expect("live bundle");
+    bundle
+        .as_ref()
+        .expect("live application bundle")
+        .live
+        .wait_for_completion(Duration::from_secs(30))
+        .expect("initial live refresh")
+        .expect("initial live refresh completion");
+}
+
+fn write_reminder_config_package(
+    directory: &std::path::Path,
+    portable: PortableSettingsCandidate,
+) -> tokenmaster_platform::SelectedInputFile {
+    std::fs::create_dir(directory).expect("config package directory");
+    let directory = ValidatedLocalDirectory::new(directory).expect("validated package directory");
+    let target =
+        DurableFileTarget::exact_child(&directory, "reminders.tmconfig").expect("config target");
+    let mut staged = target
+        .create_staged(MAX_CONFIG_PACKAGE_BYTES)
+        .expect("config package stage");
+    ConfigPackage::write(&portable, 1_721_234_567_890, &mut staged).expect("config package");
+    staged.publish_new(&target).expect("publish config package");
+    let dialog = ControlledFileDialog::selected(&directory, "reminders.tmconfig")
+        .expect("config input dialog");
+    let FileDialogResult::Selected(input) =
+        dialog.select_input(FileDialogFileType::Config, MAX_CONFIG_PACKAGE_BYTES)
+    else {
+        panic!("config input selection");
+    };
+    input
+}
+
+fn global_reminder_profile(archive: &std::path::Path) -> (i64, i64, i64, Vec<i64>) {
+    let connection = Connection::open(archive).expect("current archive");
+    let profile = connection
+        .query_row(
+            "SELECT revision, channel_in_app, channel_os_scheduled
+             FROM benefit_reminder_profile
+             WHERE profile_kind = 'global' AND length(profile_scope_id) = 0",
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            },
+        )
+        .expect("global reminder profile");
+    let leads = connection
+        .prepare(
+            "SELECT threshold_seconds FROM benefit_reminder_threshold
+             WHERE profile_kind = 'global' AND length(profile_scope_id) = 0
+             ORDER BY threshold_seconds DESC",
+        )
+        .expect("threshold query")
+        .query_map([], |row| row.get::<_, i64>(0))
+        .expect("threshold rows")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("threshold values");
+    (profile.0, profile.1, profile.2, leads)
+}
+
+fn portable_with_reminder_policy(
+    settings: &SettingsValue,
+    leads: &[u32],
+) -> PortableSettingsCandidate {
+    let reminders = ReminderPolicy::new(true, leads).expect("reminder policy");
+    PortableSettingsCandidate::new(PortableSettings::new(
+        reminders,
+        settings.portable().backup().clone(),
+    ))
+    .expect("portable settings candidate")
+}
+
+fn assert_reminder_policy_config_import_worker_sync_lifecycle(
+    application: &mut Application,
+    temporary: &TempDir,
+) {
+    wait_for_initial_live_refresh(application);
+    let root = &application.data_root;
+    let success = &*application;
+    let success_root = root;
+    let success_before = SettingsStore::new(root.reliable_state())
+        .expect("success settings store")
+        .load()
+        .expect("success settings before import");
+    let success_portable = portable_with_reminder_policy(success_before.value(), &[21_600, 3_600]);
+    let success_input = write_reminder_config_package(
+        &temporary.path().join("success-config"),
+        success_portable.clone(),
+    );
+    let ApplicationCommandAdmission::Started(success_preview) =
+        success.commands.submitter().submit_request(
+            crate::command::ApplicationOperationRequest::import_config(success_input),
+        )
+    else {
+        panic!("success config preview must start");
+    };
+    let success_preview_completion = wait_for_application_completion(success);
+    assert_eq!(
+        success_preview_completion.request_id(),
+        success_preview.id()
+    );
+    assert_eq!(
+        success_preview_completion.outcome(),
+        ApplicationCommandOutcome::Succeeded
+    );
+    let success_preview = success
+        .state
+        .reliable_state_projection_for_outcome(BootstrapOutcome::Healthy, None)
+        .expect("success preview projection")
+        .config_import_preview()
+        .expect("staged config preview");
+    assert_eq!(success_preview.changed_category_count(), 1);
+
+    let success_counters = {
+        let bundle = success.bundle.lock().expect("success bundle");
+        Arc::clone(
+            &bundle
+                .as_ref()
+                .expect("success live bundle")
+                .reminder_sync_counters,
+        )
+    };
+    let ApplicationCommandAdmission::Started(success_confirm) = success
+        .commands
+        .submit(ApplicationCommand::ConfirmConfigImport)
+    else {
+        panic!("success config confirmation must start");
+    };
+    let success_completion = wait_for_application_completion(success);
+    assert_eq!(success_completion.request_id(), success_confirm.id());
+    assert_eq!(
+        success_completion.outcome(),
+        ApplicationCommandOutcome::Succeeded
+    );
+    let success_settings = SettingsStore::new(success_root.reliable_state())
+        .expect("success settings store")
+        .load()
+        .expect("success imported settings");
+    assert_eq!(
+        PortableSettingsCandidate::new(success_settings.value().portable().clone())
+            .expect("success portable settings"),
+        success_portable
+    );
+    let expected_success_revision = i64::try_from(
+        success_settings
+            .generation()
+            .expect("success settings generation"),
+    )
+    .expect("success revision range")
+        + 1;
+    assert_eq!(
+        global_reminder_profile(success_root.archive_path()),
+        (expected_success_revision, 1, 0, vec![21_600, 3_600])
+    );
+    assert_eq!(
+        success
+            .state
+            .reliable_state_projection_for_outcome(BootstrapOutcome::Healthy, None)
+            .expect("success reliable projection")
+            .reminder_policy()
+            .sync_state(),
+        tokenmaster_desktop::DesktopReminderSyncState::Synchronized
+    );
+    assert_eq!(success_counters.profile_hints.load(Ordering::Acquire), 1);
+    assert_eq!(
+        success_counters
+            .controller_refreshes
+            .load(Ordering::Acquire),
+        1
+    );
+    success_counters.profile_hints.store(0, Ordering::Release);
+    success_counters
+        .controller_refreshes
+        .store(0, Ordering::Release);
+
+    let failure = &*application;
+    let failure_temporary = temporary;
+    let failure_root = root;
+    let failure_before = SettingsStore::new(failure_root.reliable_state())
+        .expect("failure settings store")
+        .load()
+        .expect("failure settings before import");
+    let failure_portable = portable_with_reminder_policy(failure_before.value(), &[10_800]);
+    let failure_input = write_reminder_config_package(
+        &failure_temporary.path().join("failure-config"),
+        failure_portable.clone(),
+    );
+    let ApplicationCommandAdmission::Started(failure_preview) =
+        failure.commands.submitter().submit_request(
+            crate::command::ApplicationOperationRequest::import_config(failure_input),
+        )
+    else {
+        panic!("failure config preview must start");
+    };
+    let failure_preview_completion = wait_for_application_completion(failure);
+    assert_eq!(
+        failure_preview_completion.request_id(),
+        failure_preview.id()
+    );
+    assert_eq!(
+        failure_preview_completion.outcome(),
+        ApplicationCommandOutcome::Succeeded
+    );
+    let failure_counters = {
+        let bundle = failure.bundle.lock().expect("failure bundle");
+        Arc::clone(
+            &bundle
+                .as_ref()
+                .expect("failure live bundle")
+                .reminder_sync_counters,
+        )
+    };
+    let profile_before_failure = global_reminder_profile(failure_root.archive_path());
+    let writer = Connection::open(failure_root.archive_path()).expect("failure archive writer");
+    writer
+        .execute_batch("BEGIN IMMEDIATE")
+        .expect("failure archive write contention");
+
+    let ApplicationCommandAdmission::Started(failure_confirm) = failure
+        .commands
+        .submit(ApplicationCommand::ConfirmConfigImport)
+    else {
+        panic!("failure config confirmation must start");
+    };
+    let failure_completion = wait_for_application_completion(failure);
+    assert_eq!(failure_completion.request_id(), failure_confirm.id());
+    assert_eq!(
+        failure_completion.outcome(),
+        ApplicationCommandOutcome::Succeeded
+    );
+    writer
+        .execute_batch("ROLLBACK")
+        .expect("release failure writer");
+
+    let failure_settings = SettingsStore::new(failure_root.reliable_state())
+        .expect("failure settings store")
+        .load()
+        .expect("failure imported settings");
+    assert_eq!(
+        PortableSettingsCandidate::new(failure_settings.value().portable().clone())
+            .expect("failure portable settings"),
+        failure_portable
+    );
+    assert_eq!(
+        failure
+            .state
+            .reliable_state_projection_for_outcome(BootstrapOutcome::Healthy, None)
+            .expect("failure reliable projection")
+            .reminder_policy()
+            .sync_state(),
+        tokenmaster_desktop::DesktopReminderSyncState::Pending
+    );
+    assert_eq!(
+        global_reminder_profile(failure_root.archive_path()),
+        profile_before_failure
+    );
+    assert_eq!(failure_counters.profile_hints.load(Ordering::Acquire), 0);
+    assert_eq!(
+        failure_counters
+            .controller_refreshes
+            .load(Ordering::Acquire),
+        0
+    );
 }
 
 #[test]
@@ -612,6 +886,7 @@ fn real_bundle_joins_live_health_and_independent_optional_failures_then_shuts_do
         controller,
         refresh_ingress,
         maintenance,
+        reminder_sync_counters: Arc::new(ReminderSyncCounters::default()),
         notifier: Arc::new(ApplicationRuntimeNotifier::new(Weak::new(), 1)),
     };
 
@@ -684,6 +959,7 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
 
     let root = DataRoot::resolve(&environment).expect("data root");
     assert!(root.archive_path().exists());
+    assert_reminder_policy_config_import_worker_sync_lifecycle(&mut application, &temporary);
     let crate::command::ApplicationCommandAdmission::Started(manual) = application
         .commands
         .submit(crate::command::ApplicationCommand::Backup)

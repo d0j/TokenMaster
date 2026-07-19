@@ -270,6 +270,18 @@ impl UsageStore {
             next_global_due_count =
                 checked_replace_count(next_global_due_count, prior_due_count, next_due_count)?;
         }
+        if global.revision.get() == 0 {
+            if global.current_lot_count != 0
+                || global.retained_change_count != 0
+                || next_global_due_count != 0
+                || global.retained_delivery_count != 0
+            {
+                return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+            }
+            benefit_write_fault(fault, BenefitWriteFault::BeforeCommit)?;
+            transaction.commit()?;
+            return Ok(BenefitProfileApplyResult::new(global.revision, 0));
+        }
         let next_global_revision = global.revision.next()?;
         update_global_state(
             &transaction,

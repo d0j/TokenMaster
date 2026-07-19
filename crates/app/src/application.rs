@@ -1091,6 +1091,8 @@ fn finish_live_bundle(
             refresh_ingress,
             maintenance,
             #[cfg(test)]
+            reminder_sync_counters: Arc::new(ReminderSyncCounters::default()),
+            #[cfg(test)]
             notifier: Arc::clone(&started.notifier),
         });
     }
@@ -1310,16 +1312,28 @@ fn synchronize_reminder_policy_after_settings(
             bundle.refresh_ingress.clone(),
         )
     };
+    #[cfg(test)]
+    let counters = {
+        let slot = bundle.lock().map_err(|_| ApplicationError::internal())?;
+        let Some(bundle) = slot.as_ref() else {
+            return Ok(());
+        };
+        Arc::clone(&bundle.reminder_sync_counters)
+    };
     if let Some(reminder) = reminder {
         reminder
             .lock()
             .map_err(|_| ApplicationError::internal())?
             .notify_profile_changed()
             .map_err(|_| ApplicationError::state())?;
+        #[cfg(test)]
+        counters.profile_hints.fetch_add(1, Ordering::AcqRel);
     }
     ingress
         .refresh(DesktopRefreshUrgency::Hint)
         .map_err(|_| ApplicationError::controller())?;
+    #[cfg(test)]
+    counters.controller_refreshes.fetch_add(1, Ordering::AcqRel);
     Ok(())
 }
 
@@ -1780,7 +1794,16 @@ struct ApplicationBundle {
     refresh_ingress: DesktopRefreshIngress,
     maintenance: BackupMaintenanceRuntime,
     #[cfg(test)]
+    reminder_sync_counters: Arc<ReminderSyncCounters>,
+    #[cfg(test)]
     notifier: Arc<ApplicationRuntimeNotifier>,
+}
+
+#[cfg(test)]
+#[derive(Default)]
+struct ReminderSyncCounters {
+    profile_hints: AtomicU64,
+    controller_refreshes: AtomicU64,
 }
 
 impl ApplicationBundle {

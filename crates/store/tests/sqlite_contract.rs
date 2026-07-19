@@ -7,7 +7,9 @@ use tokenmaster_domain::{
     QuotaAccountId, ReminderLeadTime, ReminderProfile, ReminderProfileParts,
     ReminderProfileRevision, UsageProviderId,
 };
-use tokenmaster_store::{EXPECTED_SQLITE_VERSION, JournalMode, ProbeStore, UsageStore};
+use tokenmaster_store::{
+    EXPECTED_SQLITE_VERSION, JournalMode, ProbeStore, UsageReadStore, UsageStore,
+};
 
 fn seed_current_benefit_archive(path: &std::path::Path) {
     let now = 1_721_234_567_890;
@@ -143,16 +145,96 @@ fn open_current_validates_runtime_policy_and_retains_the_connection_for_profile_
         .expect("global profile transaction");
     drop(store);
 
-    let revision = Connection::open(&path)
+    let profile = Connection::open(&path)
         .expect("current archive")
         .query_row(
-            "SELECT revision FROM benefit_reminder_profile
+            "SELECT revision, channel_in_app, channel_os_scheduled
+             FROM benefit_reminder_profile
              WHERE profile_kind = 'global' AND length(profile_scope_id) = 0",
             [],
-            |row| row.get::<_, i64>(0),
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            },
         )
-        .expect("global profile revision");
-    assert_eq!(revision, 2);
+        .expect("global profile");
+    assert_eq!(profile, (2, 1, 0));
+}
+
+#[test]
+fn open_current_updates_reminder_profile_for_unpublished_live_wal_archive() {
+    let directory = tempfile::tempdir().expect("temp directory");
+    let path = directory.path().join("live-current.sqlite3");
+    drop(UsageStore::open(&path).expect("create current archive"));
+
+    let live = UsageReadStore::open(&path).expect("live archive connection");
+    assert_eq!(
+        live.runtime_policy()
+            .expect("live runtime policy")
+            .journal_mode(),
+        JournalMode::Wal
+    );
+
+    let mut store = UsageStore::open_current(&path).expect("reopen live current archive");
+    store
+        .set_benefit_reminder_global_profile(&reminder_profile())
+        .expect("live reminder profile transaction");
+    drop(store);
+    drop(live);
+
+    let profile = Connection::open(&path)
+        .expect("current archive")
+        .query_row(
+            "SELECT revision, channel_in_app, channel_os_scheduled
+             FROM benefit_reminder_profile
+             WHERE profile_kind = 'global' AND length(profile_scope_id) = 0",
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            },
+        )
+        .expect("global profile");
+    assert_eq!(profile, (2, 1, 0));
+    let leads = Connection::open(&path)
+        .expect("current archive")
+        .prepare(
+            "SELECT threshold_seconds FROM benefit_reminder_threshold
+             WHERE profile_kind = 'global' AND length(profile_scope_id) = 0",
+        )
+        .expect("threshold query")
+        .query_map([], |row| row.get::<_, i64>(0))
+        .expect("threshold rows")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("threshold values");
+    assert_eq!(leads, vec![21_600]);
+    let unpublished_state = Connection::open(&path)
+        .expect("current archive")
+        .query_row(
+            "SELECT revision, last_published_at_ms FROM benefit_state WHERE singleton_id = 1",
+            [],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Option<i64>>(1)?)),
+        )
+        .expect("unpublished global state");
+    assert_eq!(unpublished_state, (0, None));
+
+    seed_current_benefit_archive(&path);
+    let published_state = Connection::open(&path)
+        .expect("current archive")
+        .query_row(
+            "SELECT revision, last_published_at_ms FROM benefit_state WHERE singleton_id = 1",
+            [],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Option<i64>>(1)?)),
+        )
+        .expect("published global state");
+    assert_eq!(published_state.0, 1);
+    assert!(published_state.1.is_some_and(|timestamp| timestamp > 0));
 }
 
 #[test]
