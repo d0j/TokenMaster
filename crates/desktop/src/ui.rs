@@ -20,7 +20,7 @@ use crate::{
     DesktopHistoryProjection, DesktopInAppNotificationBatch, DesktopInAppNotificationBridge,
     DesktopIntent, DesktopIntentSink, DesktopModelsProjection, DesktopNotificationsProjection,
     DesktopOperationSnapshot, DesktopProjectsProjection, DesktopQuality,
-    DesktopReliableStateProjection, DesktopSessionDetailIntentAdmission,
+    DesktopReliableStateProjection, DesktopReminderPolicy, DesktopSessionDetailIntentAdmission,
     DesktopSessionDetailIntentSink, DesktopSessionsProjection, DesktopSnapshotBridge,
     DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue, DesktopValueAvailability,
     HistoryDayRow, InAppNotificationRow, MainWindow, ModelUsageRow, ProjectUsageRow,
@@ -139,6 +139,64 @@ impl DesktopReliableStateNotifier {
             .clone()
             .with_operation(operation);
         self.publish(projection)
+    }
+
+    pub fn publish_pending_reminder_policy(
+        &self,
+        reminder_policy: DesktopReminderPolicy,
+        operation: DesktopOperationSnapshot,
+    ) -> Result<(), DesktopUiError> {
+        let latest = self
+            .inner
+            .latest
+            .lock()
+            .map_err(|_| DesktopUiError::state_unavailable())?
+            .clone();
+        let projection = match latest {
+            Some(projection) => projection,
+            None => self
+                .inner
+                .state
+                .lock()
+                .map_err(|_| DesktopUiError::state_unavailable())?
+                .clone(),
+        }
+        .with_reminder_policy(reminder_policy)
+        .with_operation(Some(operation));
+        self.publish(projection)
+    }
+
+    pub fn publish_pending_reminder_operation(
+        &self,
+        operation: DesktopOperationSnapshot,
+    ) -> Result<(), DesktopUiError> {
+        let latest = self
+            .inner
+            .latest
+            .lock()
+            .map_err(|_| DesktopUiError::state_unavailable())?
+            .clone();
+        let projection = match latest {
+            Some(projection) => projection,
+            None => self
+                .inner
+                .state
+                .lock()
+                .map_err(|_| DesktopUiError::state_unavailable())?
+                .clone(),
+        };
+        let current = projection.reminder_policy();
+        let pending = DesktopReminderPolicy::new(
+            current.enabled(),
+            current.lead_seconds(),
+            crate::DesktopReminderSyncState::Pending,
+        )
+        .ok_or_else(DesktopUiError::state_unavailable)?;
+        self.publish(
+            projection
+                .with_reminder_policy(pending)
+                .with_operation(Some(operation)),
+        )
     }
 }
 

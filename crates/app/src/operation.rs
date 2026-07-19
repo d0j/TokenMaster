@@ -159,7 +159,21 @@ impl ApplicationOperationSubmitter {
             if state.phase != ApplicationOperationWorkerPhase::Running {
                 return ApplicationCommandAdmission::Rejected(ApplicationCommandRejection::Closed);
             }
-            let admission = state.coordinator.submit(command);
+            let replaceable = matches!(
+                (&payload, command),
+                (
+                    ApplicationOperationPayload::BackupPolicy(_),
+                    ApplicationCommand::UpdateBackupPolicy
+                ) | (
+                    ApplicationOperationPayload::ReminderPolicy(_),
+                    ApplicationCommand::UpdateReminderPolicy
+                )
+            );
+            let admission = if replaceable {
+                state.coordinator.submit_replaceable(command)
+            } else {
+                state.coordinator.submit(command)
+            };
             match &admission {
                 ApplicationCommandAdmission::Started(permit) => {
                     state.pending_start = Some(ApplicationOperationTask {
@@ -173,8 +187,27 @@ impl ApplicationOperationSubmitter {
                         payload,
                     });
                 }
+                ApplicationCommandAdmission::Coalesced { request_id, .. } if replaceable => {
+                    let Some(pending) = state.pending_follow_up.as_mut() else {
+                        return ApplicationCommandAdmission::Rejected(
+                            ApplicationCommandRejection::Closed,
+                        );
+                    };
+                    if pending.request_id != *request_id {
+                        return ApplicationCommandAdmission::Rejected(
+                            ApplicationCommandRejection::Closed,
+                        );
+                    }
+                    pending.payload = payload;
+                }
                 ApplicationCommandAdmission::Coalesced { .. }
-                | ApplicationCommandAdmission::Rejected(_) => {}
+                    if matches!(payload, ApplicationOperationPayload::Empty) => {}
+                ApplicationCommandAdmission::Coalesced { .. } => {
+                    return ApplicationCommandAdmission::Rejected(
+                        ApplicationCommandRejection::Busy,
+                    );
+                }
+                ApplicationCommandAdmission::Rejected(_) => {}
             }
             admission
         };

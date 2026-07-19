@@ -591,6 +591,49 @@ impl ApplicationCommandCoordinator {
         }
     }
 
+    pub(crate) fn submit_replaceable(
+        &mut self,
+        command: ApplicationCommand,
+    ) -> ApplicationCommandAdmission {
+        if self.closed || self.admission_paused {
+            return ApplicationCommandAdmission::Rejected(ApplicationCommandRejection::Closed);
+        }
+        if let Some(active) = self.active.as_ref() {
+            if active.permit.command().is_exclusive() {
+                return ApplicationCommandAdmission::Rejected(ApplicationCommandRejection::Busy);
+            }
+            if active.permit.command() == command {
+                if let Some(pending) = active.pending {
+                    return if pending.command == command {
+                        ApplicationCommandAdmission::Coalesced {
+                            request_id: pending.id,
+                            active_request_id: active.permit.id(),
+                        }
+                    } else {
+                        ApplicationCommandAdmission::Rejected(ApplicationCommandRejection::Busy)
+                    };
+                }
+                let Some(id) = self.allocate_request_id() else {
+                    return ApplicationCommandAdmission::Rejected(
+                        ApplicationCommandRejection::CapacityExceeded,
+                    );
+                };
+                let Some(active) = self.active.as_mut() else {
+                    return ApplicationCommandAdmission::Rejected(
+                        ApplicationCommandRejection::Closed,
+                    );
+                };
+                let active_request_id = active.permit.id();
+                active.pending = Some(PendingCommand { id, command });
+                return ApplicationCommandAdmission::Queued {
+                    request_id: id,
+                    active_request_id,
+                };
+            }
+        }
+        self.submit(command)
+    }
+
     pub(crate) fn retry_last(&mut self) -> ApplicationCommandAdmission {
         let Some(command) = self.last_retryable else {
             return ApplicationCommandAdmission::Rejected(

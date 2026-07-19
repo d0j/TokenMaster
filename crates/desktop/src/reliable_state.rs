@@ -715,6 +715,16 @@ impl DesktopReliableStateProjection {
     pub fn set_operation(&mut self, operation: Option<DesktopOperationSnapshot>) {
         self.summary.operation = operation;
     }
+
+    pub fn set_reminder_policy(&mut self, reminder_policy: DesktopReminderPolicy) {
+        self.summary.reminder_policy = reminder_policy;
+    }
+
+    #[must_use]
+    pub fn with_reminder_policy(mut self, reminder_policy: DesktopReminderPolicy) -> Self {
+        self.set_reminder_policy(reminder_policy);
+        self
+    }
 }
 
 impl fmt::Debug for DesktopReliableStateProjection {

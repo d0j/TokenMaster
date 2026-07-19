@@ -449,3 +449,77 @@ fn cloned_submitter_moves_one_sealed_output_to_the_single_worker_without_disclos
         ApplicationOperationWorkerPhase::Stopped
     );
 }
+
+#[test]
+fn reminder_policy_follow_up_replaces_only_the_pending_payload_with_the_latest_save() {
+    let (started_tx, started_rx) = channel();
+    let (release_tx, release_rx) = channel();
+    let executed = Arc::new(Mutex::new(Vec::new()));
+    let execution_log = Arc::clone(&executed);
+    let mut worker = ApplicationOperationWorker::spawn_with_payload(move |permit, payload| {
+        let ApplicationOperationPayload::ReminderPolicy(update) = payload else {
+            panic!("reminder payload");
+        };
+        let lead = update.lead_seconds()[0];
+        execution_log.lock().expect("execution log").push(lead);
+        started_tx
+            .send((permit.id(), lead))
+            .expect("started signal");
+        if lead == 21_600 {
+            receive(&release_rx);
+        }
+        ApplicationCommandExecution::Succeeded
+    })
+    .expect("worker");
+    let submitter = worker.submitter();
+
+    let ApplicationCommandAdmission::Started(first) =
+        submitter.submit_request(ApplicationOperationRequest::update_reminder_policy(
+            crate::command::ApplicationReminderPolicyUpdate::new(true, &[21_600])
+                .expect("first policy"),
+        ))
+    else {
+        panic!("first reminder save must start");
+    };
+    assert_eq!(receive(&started_rx), (first.id(), 21_600));
+
+    let ApplicationCommandAdmission::Queued {
+        request_id: pending,
+        active_request_id,
+    } = submitter.submit_request(ApplicationOperationRequest::update_reminder_policy(
+        crate::command::ApplicationReminderPolicyUpdate::new(true, &[10_800])
+            .expect("middle policy"),
+    ))
+    else {
+        panic!("middle reminder save must queue");
+    };
+    assert_eq!(active_request_id, first.id());
+    assert_eq!(
+        submitter.submit_request(ApplicationOperationRequest::update_reminder_policy(
+            crate::command::ApplicationReminderPolicyUpdate::new(true, &[3_600])
+                .expect("latest policy"),
+        )),
+        ApplicationCommandAdmission::Coalesced {
+            request_id: pending,
+            active_request_id: first.id(),
+        }
+    );
+    assert_eq!(worker.snapshot().expect("snapshot").active_count(), 1);
+    assert_eq!(worker.snapshot().expect("snapshot").pending_count(), 1);
+
+    release_tx.send(()).expect("release first save");
+    assert_eq!(receive(&started_rx), (pending, 3_600));
+    wait_until(|| {
+        worker
+            .snapshot()
+            .is_ok_and(|snapshot| snapshot.active_count() == 0)
+    });
+    assert_eq!(
+        *executed.lock().expect("execution log"),
+        vec![21_600, 3_600]
+    );
+    assert_eq!(
+        worker.shutdown().expect("worker shutdown"),
+        ApplicationOperationWorkerPhase::Stopped
+    );
+}

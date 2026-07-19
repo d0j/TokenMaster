@@ -513,7 +513,7 @@ fn reminder_policy_sync_failure_keeps_the_durable_save_and_returns_success() {
     let update = crate::command::ApplicationReminderPolicyUpdate::from_desktop(update)
         .expect("application reminder update");
     state
-        .update_reminder_policy(&permit, update.into_policy(), || {})
+        .update_reminder_policy(&permit, update.into_policy(), || Ok(()))
         .expect("durable reminder save");
     let bundle: SharedBundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
     synchronize_reminder_policy_after_settings(&state, &root, &bundle)

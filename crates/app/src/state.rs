@@ -571,7 +571,7 @@ impl ApplicationStateOwner {
         &self,
         permit: &ApplicationCommandPermit,
         policy: tokenmaster_state::ReminderPolicy,
-        mut on_irreversible: impl FnMut(),
+        mut on_irreversible: impl FnMut() -> Result<(), ApplicationError>,
     ) -> Result<(), ApplicationError> {
         if permit.command() != ApplicationCommand::UpdateReminderPolicy || permit.is_cancelled() {
             return Err(ApplicationError::invalid_lifecycle());
@@ -584,7 +584,7 @@ impl ApplicationStateOwner {
             return Ok(());
         }
         let value = SettingsValue::new(
-            PortableSettings::new(policy, current.value().portable().backup().clone()),
+            PortableSettings::new(policy.clone(), current.value().portable().backup().clone()),
             current.value().device().clone(),
         );
         if permit.is_cancelled() {
@@ -593,9 +593,14 @@ impl ApplicationStateOwner {
         permit
             .begin_irreversible()
             .map_err(|_| ApplicationError::invalid_lifecycle())?;
-        self.reminder_sync_state
-            .store(REMINDER_SYNC_PENDING, Ordering::Release);
-        on_irreversible();
+        let previous_sync_state = self
+            .reminder_sync_state
+            .swap(REMINDER_SYNC_PENDING, Ordering::AcqRel);
+        if on_irreversible().is_err() {
+            self.reminder_sync_state
+                .store(previous_sync_state, Ordering::Release);
+            return Err(ApplicationError::state());
+        }
         self.settings
             .save(&value)
             .map_err(|_| ApplicationError::state())?;
@@ -713,7 +718,7 @@ impl ApplicationStateOwner {
     pub(crate) fn commit_pending_config_import(
         &self,
         permit: &ApplicationCommandPermit,
-        mut on_irreversible: impl FnMut(),
+        mut on_irreversible: impl FnMut() -> Result<(), ApplicationError>,
     ) -> Result<SettingsCommitReceipt, ApplicationError> {
         if permit.command() != ApplicationCommand::ConfirmConfigImport || permit.is_cancelled() {
             return Err(ApplicationError::invalid_lifecycle());
@@ -734,7 +739,21 @@ impl ApplicationStateOwner {
             }
             return Err(ApplicationError::invalid_lifecycle());
         }
-        on_irreversible();
+        let previous_sync_state = self
+            .reminder_sync_state
+            .swap(REMINDER_SYNC_PENDING, Ordering::AcqRel);
+        if on_irreversible().is_err() {
+            self.reminder_sync_state
+                .store(previous_sync_state, Ordering::Release);
+            let mut pending = self
+                .pending_config_import
+                .lock()
+                .map_err(|_| ApplicationError::state())?;
+            if pending.is_none() {
+                *pending = Some(preview);
+            }
+            return Err(ApplicationError::state());
+        }
         self.settings
             .commit_import(&preview.settings)
             .map_err(|_| ApplicationError::state())

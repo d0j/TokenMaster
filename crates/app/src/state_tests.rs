@@ -231,7 +231,10 @@ fn reminder_explicit_save_reuses_generation_for_an_identical_retry() {
         .update_reminder_policy(
             &command_permit(ApplicationCommand::UpdateReminderPolicy),
             reminder_policy_update(true, &[21_600, 3_600]),
-            || irreversible_calls += 1,
+            || {
+                irreversible_calls += 1;
+                Ok(())
+            },
         )
         .expect("first reminder save");
     let first_generation = SettingsStore::new(root.reliable_state())
@@ -245,7 +248,10 @@ fn reminder_explicit_save_reuses_generation_for_an_identical_retry() {
         .update_reminder_policy(
             &command_permit(ApplicationCommand::UpdateReminderPolicy),
             reminder_policy_update(true, &[3_600, 21_600]),
-            || irreversible_calls += 1,
+            || {
+                irreversible_calls += 1;
+                Ok(())
+            },
         )
         .expect("identical reminder retry");
 
@@ -298,7 +304,7 @@ fn reminder_synchronization_projects_settings_generation_to_exact_sqlite_profile
         .update_reminder_policy(
             &command_permit(ApplicationCommand::UpdateReminderPolicy),
             reminder_policy_update(true, &[21_600, 3_600]),
-            || {},
+            || Ok(()),
         )
         .expect("reminder save");
     seed_real_reminder_archive(root.archive_path());
@@ -372,7 +378,7 @@ fn reminder_disabled_policy_synchronizes_without_channels_or_leads() {
         .update_reminder_policy(
             &command_permit(ApplicationCommand::UpdateReminderPolicy),
             reminder_policy_update(false, &[]),
-            || {},
+            || Ok(()),
         )
         .expect("disabled reminder save");
     seed_real_reminder_archive(root.archive_path());
@@ -402,7 +408,7 @@ fn reminder_failed_archive_sync_preserves_durable_settings_and_projects_pending(
         .update_reminder_policy(
             &command_permit(ApplicationCommand::UpdateReminderPolicy),
             reminder_policy_update(true, &[21_600]),
-            || {},
+            || Ok(()),
         )
         .expect("reminder save");
     fs::create_dir(root.archive_path()).expect("unusable archive path");
@@ -442,7 +448,7 @@ fn reminder_changed_save_failure_after_synchronization_reopens_as_pending() {
         .update_reminder_policy(
             &command_permit(ApplicationCommand::UpdateReminderPolicy),
             reminder_policy_update(true, &[21_600]),
-            || {},
+            || Ok(()),
         )
         .expect("initial reminder save");
     owner
@@ -462,7 +468,10 @@ fn reminder_changed_save_failure_after_synchronization_reopens_as_pending() {
         .update_reminder_policy(
             &command_permit(ApplicationCommand::UpdateReminderPolicy),
             reminder_policy_update(true, &[10_800]),
-            || fs::create_dir(&blocked_slot).expect("block next redundant slot"),
+            || {
+                fs::create_dir(&blocked_slot).expect("block next redundant slot");
+                Ok(())
+            },
         )
         .expect_err("blocked changed save");
 
@@ -498,7 +507,7 @@ fn reminder_missing_archive_is_not_created_or_synchronized() {
         .update_reminder_policy(
             &command_permit(ApplicationCommand::UpdateReminderPolicy),
             reminder_policy_update(true, &[21_600]),
-            || {},
+            || Ok(()),
         )
         .expect("reminder save");
 
@@ -529,7 +538,7 @@ fn reminder_supported_legacy_archive_is_not_migrated_or_synchronized() {
         .update_reminder_policy(
             &command_permit(ApplicationCommand::UpdateReminderPolicy),
             reminder_policy_update(true, &[21_600]),
-            || {},
+            || Ok(()),
         )
         .expect("reminder save");
     let before = fs::read(root.archive_path()).expect("legacy archive bytes");
@@ -564,7 +573,7 @@ fn reminder_current_archive_write_contention_preserves_profile_and_projects_pend
         .update_reminder_policy(
             &command_permit(ApplicationCommand::UpdateReminderPolicy),
             reminder_policy_update(true, &[21_600]),
-            || {},
+            || Ok(()),
         )
         .expect("reminder save");
     let before_profile = Connection::open(root.archive_path())
@@ -820,7 +829,7 @@ fn pending_config_import_is_projected_cancelled_or_committed_without_paths() {
     let committed = owner
         .commit_pending_config_import(
             &command_permit(ApplicationCommand::ConfirmConfigImport),
-            || {},
+            || Ok(()),
         )
         .expect("commit pending import");
     assert_eq!(committed.portable_digest(), changed.digest());

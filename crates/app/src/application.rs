@@ -13,10 +13,10 @@ use tokenmaster_desktop::{
     DesktopIntentRouter, DesktopIntentSink, DesktopOperationKind, DesktopOperationPhase,
     DesktopOperationSnapshot, DesktopQueryPlan, DesktopRefreshAdmission, DesktopRefreshIngress,
     DesktopRefreshUrgency, DesktopReliableStateNotifier, DesktopReliableStateProjection,
-    DesktopRestoreSelection, DesktopRuntimeObservation, DesktopSessionDetailIntent,
-    DesktopSessionDetailIntentAdmission, DesktopSessionDetailIntentRouter,
-    DesktopSessionDetailIntentSink, DesktopShell, DesktopSnapshotBridge,
-    select_production_renderer,
+    DesktopReminderPolicy, DesktopReminderSyncState, DesktopRestoreSelection,
+    DesktopRuntimeObservation, DesktopSessionDetailIntent, DesktopSessionDetailIntentAdmission,
+    DesktopSessionDetailIntentRouter, DesktopSessionDetailIntentSink, DesktopShell,
+    DesktopSnapshotBridge, select_production_renderer,
 };
 use tokenmaster_engine::{
     RefreshOutcome, RefreshUrgency, WorkerCompletion, WorkerCompletionNotifier,
@@ -37,7 +37,7 @@ use tokenmaster_runtime::{
 use tokenmaster_state::{
     BackupMaintenanceRuntime, BackupPassphrase, BootstrapOutcome, MAX_CONFIG_PACKAGE_BYTES,
     MaintenanceCompletion, MaintenanceOutcome, MaintenancePurpose, MaintenanceSourceState,
-    RestoreMode, RestoreSafety, StateErrorCode,
+    ReminderPolicy, RestoreMode, RestoreSafety, StateErrorCode,
 };
 use tokenmaster_store::BackupControl;
 
@@ -738,6 +738,44 @@ fn publish_atomic_operation(
     )));
 }
 
+fn publish_pending_reminder_policy(
+    reliable_state: &DesktopReliableStateNotifier,
+    command: ApplicationCommand,
+    policy: &ReminderPolicy,
+) -> Result<(), ApplicationError> {
+    let policy = DesktopReminderPolicy::new(
+        policy.enabled(),
+        policy.lead_seconds(),
+        DesktopReminderSyncState::Pending,
+    )
+    .ok_or_else(ApplicationError::state)?;
+    reliable_state
+        .publish_pending_reminder_policy(
+            policy,
+            DesktopOperationSnapshot::new(
+                application_operation_kind(command),
+                DesktopOperationPhase::AtomicPromotion,
+                false,
+                None,
+            ),
+        )
+        .map_err(|_| ApplicationError::state())
+}
+
+fn publish_pending_reminder_operation(
+    reliable_state: &DesktopReliableStateNotifier,
+    command: ApplicationCommand,
+) -> Result<(), ApplicationError> {
+    reliable_state
+        .publish_pending_reminder_operation(DesktopOperationSnapshot::new(
+            application_operation_kind(command),
+            DesktopOperationPhase::AtomicPromotion,
+            false,
+            None,
+        ))
+        .map_err(|_| ApplicationError::state())
+}
+
 fn application_operation_completion(
     command: ApplicationCommand,
     execution: ApplicationCommandExecution,
@@ -1192,7 +1230,7 @@ fn execute_application_operation(
         }
         (ApplicationCommand::ConfirmConfigImport, ApplicationOperationPayload::Empty) => {
             match state.commit_pending_config_import(permit, || {
-                publish_atomic_operation(reliable_state, permit.command());
+                publish_pending_reminder_operation(reliable_state, permit.command())
             }) {
                 Ok(_) => execute_state_command(synchronize_reminder_policy_after_settings(
                     state, data_root, bundle,
@@ -1220,8 +1258,10 @@ fn execute_application_operation(
             ApplicationCommand::UpdateReminderPolicy,
             ApplicationOperationPayload::ReminderPolicy(update),
         ) => {
-            match state.update_reminder_policy(permit, update.into_policy(), || {
-                publish_atomic_operation(reliable_state, permit.command());
+            let policy = update.into_policy();
+            let pending_policy = policy.clone();
+            match state.update_reminder_policy(permit, policy, || {
+                publish_pending_reminder_policy(reliable_state, permit.command(), &pending_policy)
             }) {
                 Ok(()) => execute_state_command(synchronize_reminder_policy_after_settings(
                     state, data_root, bundle,
