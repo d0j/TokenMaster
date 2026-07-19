@@ -1918,29 +1918,31 @@ immediate and constant-bounded while preserving provider-defined windows and mis
 data truth. Exact restoration keeps compact presentation reversible without letting
 window geometry enter the product snapshot.
 
-## ADR-078 — Use one Slint tray and keep lifecycle authority in the application
+## ADR-078 — Isolate one checked Windows tray owner and keep lifecycle authority in the application
 
-Decision: P3-E.3 adds one production `SystemTrayIcon` component and one fixed
-TokenMaster icon asset to Desktop. The component emits only Show, Hide, OpenCompact,
-OpenDashboard, and Quit through a single-install `Rc` router with one optional sink
-slot and no event queue. Desktop intercepts close as HideWindow only in the
-tray-enabled production composition. The application retains a weak reference to the
-sole `MainWindow`, maps both route actions to existing stable routes, restores the same
-window before showing, and treats Quit only as an event-loop return request. The
-existing shutdown sequence remains the sole worker-join and clean-run authority.
+Decision: P3-E.3 adds one TokenMaster-owned Windows tray adapter and one fixed icon
+asset. It emits only Show, Hide, OpenCompact, OpenDashboard, and Quit through the
+single-install `Rc` router with no event queue. One hidden top-level tool window owns
+the icon and fixed menu on the Slint/winit UI thread. An atomic reservation rejects a
+second owner. The production Desktop dependency no longer enables Slint
+`system-tray`; that feature is scoped only to the separate M0 probe.
 
-The application shows the main window before best-effort tray presentation. Slint
-1.17.1 exposes no native tray-availability receipt on Windows; its backend acquires
-event-loop keepalive only after native tray creation and re-adds the icon from the
-event-driven `TaskbarCreated` path. TokenMaster does not fabricate availability,
-poll, retry, or add a duplicate Win32 tray owner. Unit-test composition omits the
-native tray under `cfg(test)` to avoid winit event-loop recreation across parallel
-workers; source mutation gates require the release composition to use the tray-enabled
-constructor.
+The application shows the main window before deferred tray installation and runs the
+event loop until explicit Quit. Explorer `TaskbarCreated` triggers one checked re-add.
+If re-add fails, availability becomes Unavailable and Show is submitted immediately;
+close-to-tray is then disabled and a close request quits instead of hiding. Show and
+route actions unminimize, show, raise, and request foreground focus for the same raw
+native window. Quit remains only an event-loop return request, so the established
+joined shutdown is still the sole clean-run authority.
 
-Rationale: a second Win32 owner would duplicate lifecycle, Explorer recovery, handle
-cleanup, and failure semantics while increasing memory and leak risk. Typed in-process
-intents preserve the presentation/application boundary and keep shutdown ordering
-unchanged. Explorer restart, foreground focus, missing-tray close behavior, and
-resource return still require interactive Windows acceptance; this decision does not
-claim hotkey, single-instance/startup, M0, package, signing, soak, or release.
+Rationale: independent review proved that Slint 1.17.1 creates its callback window as
+`HWND_MESSAGE`, while Explorer broadcasts only to top-level windows, and that the
+backend discards the re-add result. Keeping it could strand a permanently invisible
+process. A pinned upstream upgrade does not fix the current implementation. Replacing,
+rather than duplicating, that owner gives TokenMaster explicit availability and
+failure semantics without a thread, timer, polling retry, or queue. The confined
+Win32 adapter is the only `unsafe` boundary: it boxes, installs, and exact-readback
+verifies its raw callback pointer before registering the icon or publishing Available,
+then clears that pointer before destroying handles. Interactive Explorer restart, Windows foreground policy,
+sleep/resume, and resource return still require acceptance; hotkey,
+single-instance/startup, M0, package, signing, soak, and release are not claimed.

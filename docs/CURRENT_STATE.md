@@ -50,19 +50,19 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   interactive Windows/DPI/screen-reader acceptance, P4/P5/P6, M0, packaging, signing,
   soak, and release remain incomplete.
 
-- P3-E.3 production tray lifecycle: the release composition now constructs exactly
-  one Slint `SystemTrayIcon` beside the sole `MainWindow`. Icon click and the fixed menu
-  emit only Show, Hide, OpenCompact, OpenDashboard, and Quit through one single-install,
-  queue-free router. The app retains a weak window handle, restores/unminimizes the
-  same window, selects only the existing Dashboard/Compact routes, and lets Quit return
-  through the established joined shutdown before the sole clean mark. The visible
-  window is shown before optional tray presentation, close interception hides the
-  window, and the pinned Slint Windows backend supplies event-driven Explorer
-  re-registration without a TokenMaster retry timer or native owner. Desktop/app
-  release audits, 224 combined mutations, strict package Clippy, and full Desktop/app
-  tests pass. Global hotkey, single-instance activation, startup, actual Explorer/
-  focus behavior, interactive Windows/DPI/screen-reader/resource acceptance, P4/P5/P6,
-  M0, packaging, signing, soak, and release remain incomplete.
+- P3-E.3 production tray lifecycle: the release composition constructs exactly one
+  isolated Windows tray owner after showing the sole `MainWindow`. Icon click and the
+  fixed menu emit only Show, Hide, OpenCompact, OpenDashboard, and Quit through one
+  single-install queue-free router. Explorer recovery uses a hidden top-level tool
+  window and checks re-registration: failure marks the tray unavailable, shows the
+  main window, and changes close from hide to explicit quit. Show/route actions
+  unminimize, show, raise, and request foreground focus for the same window; Quit still
+  returns through joined shutdown before the sole clean mark. Slint `system-tray` is
+  absent from production Desktop and remains only in the separate M0 probe. Desktop/
+  app release audits, 226 combined mutation cases, strict package Clippy, and full
+  Desktop/app tests pass. Global hotkey, single-instance activation, startup, actual
+  Explorer/focus behavior, interactive Windows/DPI/screen-reader/resource acceptance,
+  P4/P5/P6, M0, packaging, signing, soak, and release remain incomplete.
 
 - M0 native architecture proof: one process, software-rendered Slint UI, tray
   lifecycle, three layouts, three skins, English/Russian/pseudo localization,

@@ -73,17 +73,18 @@ keyboard/accessibility, 10,000 switches, and no retained-resource growth.
 
 ## Task 3 — compose the production tray lifecycle
 
-Status: complete as developer evidence. One tray component and asset, five typed
-lifecycle intents, one queue-free single-install router, same-window Dashboard/Compact
-actions, visible-first optional tray presentation, close interception, and joined Quit
-pass focused/full Desktop and app tests, strict package Clippy, 224 combined mutation
-cases, and both release audits. Pinned Slint source covers event-driven Explorer
-re-registration; live Explorer/focus/fallback/resource acceptance remains Task 6/P6.
+Status: complete as developer evidence. One isolated native tray owner and asset, five
+typed lifecycle intents, one queue-free single-install router, same-window Dashboard/
+Compact actions, visible-first deferred installation, availability-aware close, and
+joined Quit pass focused/full Desktop and app tests, strict package Clippy, 226
+combined mutation cases, and both release audits. Checked Explorer re-registration,
+fail-visible fallback, and explicit foreground activation are implemented; live
+Explorer/focus/sleep/resource acceptance remains Task 6/P6.
 
-Add one production tray component and typed lifecycle intents. App owns show/hide/
-mode/quit consequences and joined shutdown. Cover close-to-tray only when available,
-visible fallback without tray, exact quit ordering, Explorer re-registration, and
-capacity-one lifecycle coalescing. Keep M0 imports/dependencies forbidden.
+Add one production tray owner and typed lifecycle intents. App owns show/hide/mode/
+quit consequences and joined shutdown. Cover close-to-tray only when available,
+visible fallback without tray, exact quit ordering, checked Explorer re-registration,
+and capacity-one lifecycle coalescing. Keep M0 imports/dependencies forbidden.
 
 ## Task 4 — add current-session activation and hotkey
 

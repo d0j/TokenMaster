@@ -7,17 +7,19 @@ All notable changes are recorded here.
 ### Added
 
 - Added the P3-E.3 production tray lifecycle around the sole production window: one
-  pinned TokenMaster SVG, one Slint tray component, five typed actions (Show, Hide,
-  OpenCompact, OpenDashboard, Quit), one queue-free single-install router, and one
-  weak-window application sink. Close hides the window; route actions reuse the
-  existing Dashboard/Compact state; Quit returns through joined shutdown before the
-  sole clean mark. The main window is shown before best-effort tray presentation, and
-  no TokenMaster thread, timer, retry queue, cache, snapshot, controller, store,
-  provider, or native-handle owner was added. Desktop/application release audits, 224
-  combined audit mutations, strict package Clippy, and full package tests pass.
-  Explorer/focus/close fallback and resource return remain interactive evidence;
-  hotkey, single-instance/startup, P4/P5/P6, M0, packaging, signing, soak, and release
-  are not claimed.
+  pinned TokenMaster SVG design, one isolated Windows tray owner, five typed actions
+  (Show, Hide, OpenCompact, OpenDashboard, Quit), one queue-free single-install router,
+  and one weak-window application sink. The hidden owner is a top-level tool window so
+  it receives Explorer recreation; checked re-add failure shows the main window and
+  switches close from hide to quit. Show/route actions restore, raise, and request
+  foreground focus; explicit Quit returns through joined shutdown before the sole
+  clean mark. Production Desktop no longer enables Slint `system-tray`. No new thread,
+  timer, polling retry, queue, cache, snapshot, controller, store, or provider owner
+  was added. Native callback state is exact-readback verified before icon registration
+  or Available publication. Desktop/application release audits, 226 combined audit mutations, strict
+  package Clippy, and full package tests pass. Live Explorer/focus/sleep/resource
+  return remains interactive evidence; hotkey, single-instance/startup, P4/P5/P6, M0,
+  packaging, signing, soak, and release are not claimed.
 
 - Added the P3-E.1 bounded route command palette as the final full-window layer of the
   sole production `MainWindow`. It reuses the fixed immutable 11-route projection,

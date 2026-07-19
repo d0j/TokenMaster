@@ -21,17 +21,25 @@ usage alerts, activation, P4/P5/P6, M0, package/signing/soak, and release are op
 
 ## Production tray lifecycle
 
-P3-E.3 composes one Slint `SystemTrayIcon` with the sole production `MainWindow`.
-Desktop maps the fixed menu and icon click to five typed intents through one
-single-install, queue-free router. The application retains a weak window handle and
-executes show/hide, exact Dashboard/Compact selection, and event-loop quit on the UI
-thread. The main window is shown before the optional tray surface; close interception
-returns `HideWindow`, while the pinned Slint backend keeps the loop alive only after a
-native tray handle exists. Its event-driven `TaskbarCreated` handling is source-level
-upstream evidence; actual Explorer recovery and foreground behavior remain interactive
-acceptance. Event-loop return still flows through the existing worker joins and sole
-clean-run transition. No new thread, timer, queue, snapshot, query, runtime, store,
-provider, or native-handle owner is introduced in TokenMaster.
+P3-E.3 composes one TokenMaster-owned Windows tray adapter with the sole production
+`MainWindow`. Slint 1.17.1's message-only tray window cannot receive Explorer's
+top-level `TaskbarCreated` broadcast, so the production Desktop feature graph excludes
+Slint `system-tray`; it remains only in the separate historical M0 probe. The adapter
+uses one never-shown `WS_POPUP | WS_EX_TOOLWINDOW` owner on the existing UI thread,
+one icon, one menu, and an atomic single-owner reservation. It creates no worker,
+timer, polling loop, retry queue, snapshot, query, runtime, store, or provider owner.
+
+The main window is shown before deferred tray installation. Icon/menu events map to
+five typed intents through the existing queue-free router. `TaskbarCreated` performs
+one immediate checked `NIM_ADD`: success restores Available; failure marks
+Unavailable and submits Show. Close hides only while Available; otherwise it requests
+quit, so no live invisible process can be stranded. Production uses
+`run_event_loop_until_quit` so an available hidden tray remains alive until explicit
+Quit. Show and route actions unminimize, show, raise, and request foreground focus via
+the current Slint raw window handle. Event-loop return still flows through existing
+worker joins and the sole clean-run transition. Actual Explorer restart, Windows
+foreground policy, sleep/resume, and repeated resource return remain interactive
+acceptance gates.
 
 ```text
 Codex JSONL sources

@@ -17,9 +17,11 @@ activation, and refreshes safely while open. P3-E.2 compact content is also comp
 developer evidence: the same window reuses all current bounded quota rows, explicit
 unknown/unavailable truth, one reversible geometry slot, and one accessible Dashboard
 return without another query/snapshot/owner. P3-E.3 production tray/close lifecycle is
-also developer-complete with one five-intent queue-free router and no TokenMaster
-native/timer/worker owner. Current-session single-instance activation/global hotkey is
-next; current-user startup remains the following P3-E slice.
+also developer-complete with one five-intent queue-free router and one isolated checked
+Windows handle owner on the existing UI thread. It has no tray timer, worker, polling
+retry, or queue and fails back to a visible window plus quit-on-close. Current-session
+single-instance activation/global hotkey is next; current-user startup remains the
+following P3-E slice.
 
 M0 probe evidence implements: Rust/Slint/SQLite baseline, tray lifecycle, layouts, skins,
 English/Russian localization, accessibility-aware presentation contracts, resource

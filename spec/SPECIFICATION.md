@@ -19,12 +19,15 @@ P4/P5/P6, M0 acceptance, package/signing/soak, and release remain incomplete.
 
 P3-E.2 compact quota mode and P3-E.3 production tray lifecycle are implemented as
 developer evidence around the sole production window. Compact reuses the current
-bounded quota projection and one reversible geometry slot. One Slint tray component
-emits only Show, Hide, OpenCompact, OpenDashboard, and Quit; the application owns
-their consequences, and Quit returns to the existing joined shutdown/clean-mark path.
-Neither slice adds query, snapshot, worker, timer, cache, data, or provider authority.
-Global hotkey, single-instance activation, current-user startup, and interactive
-Windows/Explorer/DPI/screen-reader/resource acceptance remain incomplete.
+bounded quota projection and one reversible geometry slot. One isolated Windows tray
+adapter emits only Show, Hide, OpenCompact, OpenDashboard, and Quit; the application
+owns their consequences, and Quit returns to the existing joined shutdown/clean-mark
+path. The adapter uses one hidden top-level tool window so Explorer broadcasts reach
+it, checks every re-registration result, makes the main window visible on failure,
+and permits close-to-tray only while the icon is available. Neither slice adds query,
+snapshot, worker, timer, cache, data, or provider authority. Global hotkey,
+single-instance activation, current-user startup, and interactive Windows/Explorer/
+DPI/screen-reader/resource acceptance remain incomplete.
 
 ## Product goal
 

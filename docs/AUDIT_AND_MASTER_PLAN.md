@@ -317,9 +317,11 @@ confirmed failure/shutdown release, and release-before-
 local-clear backpressure. Global notification settings synchronization/editing is
 implemented with one latest-wins pending payload and visible Pending before durable
 settings mutation. P3-E.1 palette, P3-E.2 compact mode, and P3-E.3 production tray/
-close lifecycle are developer-closed; current-session activation/global hotkey and
-current-user startup are next. Per-scope editing, snooze, quiet hours, reminder OS/tray
-delivery, usage alerts, and activation remain later independent slices.
+close lifecycle are developer-closed. P3-E.3 now uses one checked top-level Windows
+tray owner with fail-visible/quit-on-close recovery and no timer, polling retry, or
+worker. Current-session activation/global hotkey and current-user startup are next.
+Per-scope editing, snooze, quiet hours, reminder OS/tray delivery, usage alerts, and
+activation remain later independent slices.
 P3-D.6 independent re-review is Critical/Important/Minor 0/0/0; its 82 mutation audit,
 release composition, strict workspace Clippy, and complete locked workspace test/
 doctest gate pass in one 1,216.4-second baseline.

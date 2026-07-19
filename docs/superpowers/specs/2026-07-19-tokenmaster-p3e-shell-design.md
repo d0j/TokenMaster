@@ -25,7 +25,9 @@ for package, signing, installation, and release evidence.
   typed intents. It never opens SQLite, provider input, arbitrary files, registry
   paths, processes, sockets, or credentials.
 - The application owns runtime start/shutdown ordering and composes optional native
-  integration. Platform owns Win32 handles, registration, waiting, and cleanup.
+  integration. The isolated Desktop adapter owns only presentation-local tray/focus
+  handles on the existing UI thread; broader platform, registry, power, and file-dialog
+  authority remains outside Desktop.
 - There is one production Slint window, one current product snapshot, one route model,
   one controller worker, and no route-specific scanner, timer, cache, or query owner.
 - Compact mode is a presentation mode of the existing window, not a second retained
@@ -71,33 +73,33 @@ remain unchanged. Compact close behavior follows the tray capability rule below.
 
 ## P3-E.3 — tray lifecycle
 
-Status: implemented as developer evidence. One production Slint tray component, five
-typed intents, one queue-free router, same-window route/show/hide handling, visible-
-first optional presentation, close interception, and joined Quit pass focused,
-mutation, package, and release-composition gates. The pinned Slint 1.17.1 Windows
-backend creates its keepalive only after native tray creation and handles
-`TaskbarCreated` event-driven; its public API exposes no separate availability receipt.
-TokenMaster therefore does not invent one or add a duplicate Win32 tray owner. Actual
-Explorer recovery, foreground focus, and tray-unavailable close behavior remain final
+Status: implemented as developer evidence. One isolated Windows tray owner, five typed
+intents, one queue-free router, same-window route/show/hide handling, visible-first
+deferred installation, availability-aware close interception, and joined Quit pass
+focused, mutation, package, and release-composition gates. Independent review proved
+the pinned Slint 1.17.1 message-only owner cannot receive Explorer's top-level
+`TaskbarCreated` broadcast and ignores re-add failure. Production Desktop therefore
+does not enable Slint `system-tray`; one TokenMaster top-level tool window replaces it.
+Actual Explorer recovery, foreground policy, and resource behavior remain final
 interactive acceptance evidence.
 
-The production Desktop package may declare one Slint `SystemTrayIcon`, but it exposes
-only `Show`, `Hide`, `OpenCompact`, `OpenDashboard`, and `Quit` typed lifecycle intents.
-It owns no application runtime and cannot mark the reliable run clean.
+The production adapter exposes only `Show`, `Hide`, `OpenCompact`, `OpenDashboard`,
+and `Quit` typed lifecycle intents. It owns one hidden native window, icon, and menu on
+the existing UI thread, but no application runtime and no clean-run authority.
 
 The application consumes these intents on the UI thread. Show restores and focuses the
 existing window; Hide hides it; OpenCompact/OpenDashboard select the exact mode/route
 before showing; Quit requests the Slint loop to return. Application shutdown then
 closes admission, joins all owned workers, and only after successful joins publishes a
-clean run. Close interception returns HideWindow in the tray-enabled production
-composition. The pinned backend keeps the loop alive only after its native tray handle
-exists; without that keepalive, close lets the loop return instead of retaining an
-undiscoverable process.
+clean run. Production uses the until-Quit event-loop mode. Close returns HideWindow
+only while the tray is Available; otherwise it requests Quit and hides during teardown
+instead of retaining an undiscoverable process.
 
-Tray creation failure degrades to the visible main window: the app shows it before the
-best-effort tray show. Failure does not fail data collection, create a retry timer, or
-spin. Explorer recreation remains the pinned backend's event-driven re-add rather than
-a second TokenMaster owner.
+Tray creation failure degrades to the already-visible main window. Explorer recreation
+performs one immediate checked re-add; failure marks availability Unavailable, submits
+Show, and disables hide-on-close. Neither path fails data collection, creates a retry
+timer, polls, or spins. Show and route actions restore, raise, and request foreground
+focus through the current native main-window handle.
 
 ## P3-E.4 — single instance and global hotkey
 

@@ -40,16 +40,17 @@ seconds. That receipt did not claim native lifecycle; P3-E.3 tray status is reco
 below. Do not claim hotkey, single-instance/startup, interactive Windows/DPI/screen-
 reader, P4/P5/P6, M0, package/signing/soak, or release acceptance.
 
-P3-E.3 is developer-closed. Production owns one Slint tray component and one fixed
-TokenMaster SVG asset. Its icon/menu emit exactly five typed, path-free lifecycle
-intents through one single-install router with no queue. The app maps them to the same
-weakly held window, the existing Dashboard/Compact routes, or event-loop quit; normal
-joined shutdown remains the only clean-mark path. Window show precedes best-effort tray
-show, and no TokenMaster timer/thread/native owner was added. Desktop/application
-release audits, 224 combined mutation cases, strict package Clippy, and full package
-tests pass. Pinned Slint source supplies event-driven `TaskbarCreated` re-add, but
-actual Explorer restart, foreground focus, close/fallback behavior, and resource return
-remain interactive gates. Do not claim hotkey, single-instance/startup, P4/P5/P6, M0,
+P3-E.3 is developer-closed. Production owns one isolated Windows tray adapter and one
+fixed TokenMaster SVG design asset; Slint `system-tray` is excluded from Desktop. Its
+icon/menu emit five typed path-free lifecycle intents through one single-install
+router with no queue. A hidden top-level tool window receives Explorer recreation,
+checks `NIM_ADD`, and on failure marks the tray unavailable, shows the main window,
+and forces quit-on-close instead of hiding. Show/route actions explicitly restore,
+raise, and request focus for the same weakly held window. Quit returns through normal
+joined shutdown, the only clean-mark path. Desktop/application release audits, 226
+combined mutation cases, strict package Clippy, and full package tests pass. Actual
+Explorer restart, foreground policy, sleep/resume, and resource return remain
+interactive gates. Do not claim hotkey, single-instance/startup, P4/P5/P6, M0,
 package/signing/soak, or release acceptance.
 
 P0-A and the incorporated P0-B Codex-lineage surface are complete under

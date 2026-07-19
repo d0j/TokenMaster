@@ -17,17 +17,24 @@ remain unavailable.
 
 ## Production tray authority boundary
 
-Desktop owns one Slint `SystemTrayIcon`, the fixed TokenMaster icon/menu, close-to-tray
-presentation interception, and a queue-free router for exactly five typed lifecycle
-intents. It owns no runtime, store, query, provider, platform handle, thread, timer,
-queue, clean-run transition, or arbitrary command surface. The application retains
-only a weak window handle in the lifecycle sink, shows the main window before the
-optional tray surface, and maps the two route intents to the existing `dashboard` and
-`compact_widget` views. Quit only requests event-loop return; the established joined
-shutdown remains the sole clean-mark authority. Native creation failure therefore
-cannot turn data authority into tray authority or justify a permanently invisible
-process. Explorer restart and foreground/focus behavior remain interactive release
-evidence, not facts inferred from source tests.
+Desktop owns exactly one isolated Windows tray adapter, the fixed TokenMaster
+icon/menu, close-to-tray presentation interception, and a queue-free router for five
+typed lifecycle intents. The adapter owns one hidden top-level tool window, icon, and
+menu on the existing UI thread; an atomic reservation rejects a second owner. It has
+no runtime, store, query, provider, new thread, timer, queue, clean-run transition, or
+arbitrary command surface. All Win32 `unsafe` code is confined to
+`crates/desktop/src/native_tray.rs`; its raw callback pointer is installed, read, and
+cleared on the same UI thread before native destruction.
+
+The application retains only a weak main-window handle, shows the main window before
+installing the optional tray, and maps the two route intents to the existing
+`dashboard` and `compact_widget` views. Explorer `TaskbarCreated` re-registration is
+checked. Failure marks tray availability false and shows the main window; close then
+requests event-loop quit instead of hiding. Show and route actions restore, raise, and
+request foreground focus for the same native window. The established joined shutdown
+remains the sole clean-mark authority. Interactive Explorer restart, Windows focus
+policy, sleep/resume, and resource-return behavior remain release evidence rather
+than facts inferred from source tests.
 
 ## TM-SEC-001 — Local-first operation
 

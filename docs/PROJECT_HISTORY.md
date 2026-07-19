@@ -3599,23 +3599,28 @@ also pass; the full suite completed in 753.4 seconds.
 
 ## 2026-07-19 — P3-E.3 production tray lifecycle
 
-Production now composes one Slint tray beside the sole `MainWindow`, using the fixed
-TokenMaster SVG asset. Desktop gained five path-free lifecycle intents, one queue-free
-single-install router, callback wiring for icon/menu actions, and close interception.
-The application gained a weak-window sink for show/hide, exact Dashboard/Compact route
-selection, and event-loop Quit; the existing post-loop shutdown still joins owned
-workers before the sole clean mark. The window is shown before best-effort tray show,
-and no TokenMaster native-handle owner, retry timer, thread, queue, snapshot, query,
-cache, controller, runtime, store, or provider authority was added.
+The first implementation composed one Slint `SystemTrayIcon` beside the sole
+`MainWindow`. Independent critical review then proved two release blockers: its
+`HWND_MESSAGE` callback window cannot receive Explorer's top-level `TaskbarCreated`
+broadcast and it discarded re-add failure, while show on an already-visible winit
+window did not request foreground focus. The developer-closed claim was suspended
+until both root causes were replaced.
 
-Focused RED/GREEN contracts cover exact intent order and application effect mapping.
-An initial standalone tray component test exposed winit event-loop recreation across
-the full parallel package suite; the final test reuses the single existing shell
-component, while app unit composition omits only the native tray under `cfg(test)` and
-release source audits require the tray-enabled constructor. Full Desktop and app tests,
-strict package Clippy, both release audits, and 224 combined PowerShell mutation tests
-pass. The release audit reports one tray component, five intents, one router slot, one
-close handler, zero tray owners, and the pinned icon hash. Interactive Explorer
-restart, foreground focus, tray-unavailable close behavior, and resource return remain
-open with hotkey, single-instance/startup, P4/P5/P6, M0, packaging, signing, soak, and
-release.
+Production now excludes Slint `system-tray` from Desktop and composes one isolated
+Windows adapter after showing the sole window. Its never-shown top-level tool window,
+icon, and menu stay on the existing UI thread behind an atomic single-owner guard. It
+maps five path-free intents through the existing queue-free router, checks Explorer
+re-add, marks failure Unavailable, submits Show, and changes close from hide to Quit.
+Show and route actions restore, raise, and request foreground focus for the current raw
+main-window handle. The until-Quit event loop retains hidden tray operation; the
+existing post-loop shutdown still joins owned workers before the sole clean mark. No
+tray thread, timer, polling retry, queue, snapshot, query, cache, controller, runtime,
+store, or provider authority was added.
+
+Focused RED/GREEN contracts cover availability close effects, exact five-command
+mapping, bounded generated icon pixels, and application effect mapping. Full Desktop
+and app tests, strict package Clippy, both release audits, and 226 combined PowerShell
+mutation cases pass. The release audit reports one native owner, five intents, one
+router slot, one close handler, and the pinned icon hash. Interactive Explorer restart,
+foreground policy, sleep/resume, and resource return remain open with hotkey,
+single-instance/startup, P4/P5/P6, M0, packaging, signing, soak, and release.

@@ -17,7 +17,10 @@ path-free in-process intents: Show, Hide, OpenCompact, OpenDashboard, and Quit. 
 queue-free single-install router forwards them to the application on the UI thread.
 No arbitrary route, command, payload, path, provider operation, or clean-run mutation
 is accepted. Test composition may omit the native tray, but the production binary may
-not silently select that test-only path.
+not silently select that test-only path. Tray availability is internal fail-safe
+state: only Available authorizes hide-on-close; Unavailable forces visible fallback
+and quit-on-close. Explorer recovery emits no public API event and creates no polling
+or retry surface.
 
 Future interfaces are versioned, local-only, and bounded. Until implementation,
 unlisted API, CLI, and MCP behaviors do not exist.
