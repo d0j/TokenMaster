@@ -102,6 +102,28 @@ fn wait_for_application_completion(application: &Application) -> ApplicationComm
     }
 }
 
+fn wait_for_application_completion_with_visible_pending(
+    application: &Application,
+) -> ApplicationCommandCompletion {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        slint::invoke_from_event_loop(|| {
+            let _ = slint::quit_event_loop();
+        })
+        .expect("schedule desktop event-loop pump");
+        slint::run_event_loop_until_quit().expect("desktop event-loop pump");
+        if let Some(completion) = application
+            .commands
+            .try_completion()
+            .expect("operation completion")
+        {
+            return completion;
+        }
+        assert!(Instant::now() < deadline, "application operation timed out");
+        std::thread::yield_now();
+    }
+}
+
 fn wait_for_initial_live_refresh(application: &Application) {
     let bundle = application.bundle.lock().expect("live bundle");
     bundle
@@ -235,7 +257,7 @@ fn assert_reminder_policy_config_import_worker_sync_lifecycle(
     else {
         panic!("success config confirmation must start");
     };
-    let success_completion = wait_for_application_completion(success);
+    let success_completion = wait_for_application_completion_with_visible_pending(success);
     assert_eq!(success_completion.request_id(), success_confirm.id());
     assert_eq!(
         success_completion.outcome(),
@@ -331,7 +353,7 @@ fn assert_reminder_policy_config_import_worker_sync_lifecycle(
     else {
         panic!("failure config confirmation must start");
     };
-    let failure_completion = wait_for_application_completion(failure);
+    let failure_completion = wait_for_application_completion_with_visible_pending(failure);
     assert_eq!(failure_completion.request_id(), failure_confirm.id());
     assert_eq!(
         failure_completion.outcome(),

@@ -5,7 +5,9 @@ use std::{
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, AtomicU64, Ordering},
+        mpsc::{SyncSender, sync_channel},
     },
+    time::Duration,
 };
 
 use chrono::{DateTime, Utc};
@@ -41,6 +43,13 @@ pub struct DesktopShell {
 
 pub(crate) type SharedDesktopState = Arc<Mutex<DesktopState>>;
 type SharedReliableState = Arc<Mutex<DesktopReliableStateProjection>>;
+const VISIBLE_REMINDER_PUBLICATION_TIMEOUT: Duration = Duration::from_secs(5);
+
+struct ReliableStateDelivery {
+    id: u64,
+    projection: DesktopReliableStateProjection,
+    acknowledgement: Option<SyncSender<Result<(), DesktopUiError>>>,
+}
 
 #[derive(Clone)]
 pub struct DesktopReliableStateNotifier {
@@ -94,7 +103,8 @@ impl DesktopBridgeFactory {
 struct ReliableStateNotifierInner {
     window: slint::Weak<MainWindow>,
     state: SharedReliableState,
-    latest: Mutex<Option<DesktopReliableStateProjection>>,
+    latest: Mutex<Option<ReliableStateDelivery>>,
+    next_delivery_id: AtomicU64,
     scheduled: AtomicBool,
     closed: AtomicBool,
 }
@@ -104,15 +114,61 @@ impl DesktopReliableStateNotifier {
         &self,
         projection: DesktopReliableStateProjection,
     ) -> Result<(), DesktopUiError> {
+        self.publish_delivery(projection, None)
+    }
+
+    fn publish_delivery(
+        &self,
+        projection: DesktopReliableStateProjection,
+        acknowledgement: Option<SyncSender<Result<(), DesktopUiError>>>,
+    ) -> Result<(), DesktopUiError> {
         if self.inner.closed.load(Ordering::Acquire) {
             return Err(DesktopUiError::state_unavailable());
         }
-        *self
+        let id = self
+            .inner
+            .next_delivery_id
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                current.checked_add(1)
+            })
+            .map_err(|_| DesktopUiError::state_unavailable())?;
+        let displaced = self
             .inner
             .latest
             .lock()
-            .map_err(|_| DesktopUiError::state_unavailable())? = Some(projection);
-        self.inner.request_delivery()
+            .map_err(|_| DesktopUiError::state_unavailable())?
+            .replace(ReliableStateDelivery {
+                id,
+                projection,
+                acknowledgement,
+            });
+        if let Some(acknowledgement) = displaced.and_then(|delivery| delivery.acknowledgement) {
+            let _ = acknowledgement.send(Err(DesktopUiError::state_unavailable()));
+        }
+        if let Err(error) = self.inner.request_delivery() {
+            let failed = self
+                .inner
+                .latest
+                .lock()
+                .map_err(|_| DesktopUiError::state_unavailable())?
+                .take_if(|delivery| delivery.id == id);
+            if let Some(acknowledgement) = failed.and_then(|delivery| delivery.acknowledgement) {
+                let _ = acknowledgement.send(Err(error));
+            }
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    fn publish_visible_reminder_projection(
+        &self,
+        projection: DesktopReliableStateProjection,
+    ) -> Result<(), DesktopUiError> {
+        let (sender, receiver) = sync_channel(1);
+        self.publish_delivery(projection, Some(sender))?;
+        receiver
+            .recv_timeout(VISIBLE_REMINDER_PUBLICATION_TIMEOUT)
+            .map_err(|_| DesktopUiError::state_unavailable())?
     }
 
     pub fn publish_operation(
@@ -125,8 +181,11 @@ impl DesktopReliableStateNotifier {
                 .latest
                 .lock()
                 .map_err(|_| DesktopUiError::state_unavailable())?;
-            if let Some(projection) = latest.as_mut() {
-                projection.set_operation(operation);
+            if let Some(delivery) = latest.as_mut() {
+                if delivery.acknowledgement.is_some() {
+                    return Err(DesktopUiError::state_unavailable());
+                }
+                delivery.projection.set_operation(operation);
                 drop(latest);
                 return self.inner.request_delivery();
             }
@@ -151,7 +210,8 @@ impl DesktopReliableStateNotifier {
             .latest
             .lock()
             .map_err(|_| DesktopUiError::state_unavailable())?
-            .clone();
+            .as_ref()
+            .map(|delivery| delivery.projection.clone());
         let projection = match latest {
             Some(projection) => projection,
             None => self
@@ -163,7 +223,7 @@ impl DesktopReliableStateNotifier {
         }
         .with_reminder_policy(reminder_policy)
         .with_operation(Some(operation));
-        self.publish(projection)
+        self.publish_visible_reminder_projection(projection)
     }
 
     pub fn publish_pending_reminder_operation(
@@ -175,7 +235,8 @@ impl DesktopReliableStateNotifier {
             .latest
             .lock()
             .map_err(|_| DesktopUiError::state_unavailable())?
-            .clone();
+            .as_ref()
+            .map(|delivery| delivery.projection.clone());
         let projection = match latest {
             Some(projection) => projection,
             None => self
@@ -192,7 +253,7 @@ impl DesktopReliableStateNotifier {
             crate::DesktopReminderSyncState::Pending,
         )
         .ok_or_else(DesktopUiError::state_unavailable)?;
-        self.publish(
+        self.publish_visible_reminder_projection(
             projection
                 .with_reminder_policy(pending)
                 .with_operation(Some(operation)),
@@ -214,18 +275,25 @@ impl ReliableStateNotifierInner {
     }
 
     fn deliver_latest(self: &Arc<Self>) {
-        let projection = self.latest.lock().ok().and_then(|mut latest| latest.take());
-        let delivered = projection.is_none_or(|projection| {
+        let delivery = self.latest.lock().ok().and_then(|mut latest| latest.take());
+        let delivered = delivery.as_ref().is_none_or(|delivery| {
             let Some(window) = self.window.upgrade() else {
                 return false;
             };
             let Ok(mut state) = self.state.lock() else {
                 return false;
             };
-            apply_reliable_state_projection(&window, &projection);
-            *state = projection;
+            apply_reliable_state_projection(&window, &delivery.projection);
+            *state = delivery.projection.clone();
             true
         });
+        if let Some(acknowledgement) = delivery.and_then(|delivery| delivery.acknowledgement) {
+            let _ = acknowledgement.send(if delivered {
+                Ok(())
+            } else {
+                Err(DesktopUiError::state_unavailable())
+            });
+        }
         if !delivered {
             self.closed.store(true, Ordering::Release);
         }
@@ -401,6 +469,7 @@ impl DesktopShell {
                 window: self.window.as_weak(),
                 state: Arc::clone(&self.reliable_state),
                 latest: Mutex::new(None),
+                next_delivery_id: AtomicU64::new(1),
                 scheduled: AtomicBool::new(false),
                 closed: AtomicBool::new(false),
             }),
@@ -2380,8 +2449,19 @@ fn format_timestamp_utc(seconds: i64, nanos: u32) -> String {
 
 #[cfg(test)]
 mod duration_tests {
-    use super::{format_benefit_expiry, format_session_duration, format_timestamp_utc};
-    use crate::DesktopBenefitExpiry;
+    use std::sync::mpsc::sync_channel;
+    use std::thread;
+    use std::time::{Duration, Instant};
+
+    use super::{
+        DesktopReliableStateProjection, DesktopShell, format_benefit_expiry,
+        format_session_duration, format_timestamp_utc,
+    };
+    use crate::{
+        DesktopBenefitExpiry, DesktopOperationKind, DesktopOperationPhase,
+        DesktopOperationSnapshot, DesktopReminderPolicy, DesktopReminderSyncState,
+    };
+    use tokenmaster_product::ProductReducer;
 
     #[test]
     fn notification_expiry_preserves_exact_millisecond_endpoints() {
@@ -2440,5 +2520,113 @@ mod duration_tests {
             format_session_duration(11, 100_000_000, 10, 900_000_000),
             "Unavailable"
         );
+    }
+
+    fn assert_pending_reminder_publication_waits_for_visible_atomic_projection(
+        shell: &DesktopShell,
+        publish_pending: impl FnOnce(super::DesktopReliableStateNotifier) -> Result<(), String>
+        + Send
+        + 'static,
+        expected_kind: &str,
+    ) -> Result<(), String> {
+        let window = shell.window();
+        let notifier = shell.reliable_state_notifier();
+        let coalescer = notifier.clone();
+        let inner = std::sync::Arc::clone(&notifier.inner);
+        let (completed_sender, completed_receiver) = sync_channel(1);
+        let publisher = thread::spawn(move || -> Result<(), String> {
+            let result = publish_pending(notifier);
+            let _ = completed_sender.send(result);
+            Ok(())
+        });
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while inner
+            .latest
+            .lock()
+            .map_err(|_| String::from("pending delivery"))?
+            .is_none()
+        {
+            assert!(
+                Instant::now() < deadline,
+                "pending projection was not queued"
+            );
+            thread::yield_now();
+        }
+        assert!(
+            completed_receiver
+                .recv_timeout(Duration::from_millis(25))
+                .is_err(),
+            "publication returned before the visible projection"
+        );
+        assert!(
+            coalescer
+                .publish_operation(Some(DesktopOperationSnapshot::new(
+                    DesktopOperationKind::Backup,
+                    DesktopOperationPhase::AtomicPromotion,
+                    false,
+                    None,
+                )))
+                .is_err(),
+            "queued pending projection must not be coalesced with a different operation"
+        );
+
+        inner.deliver_latest();
+        completed_receiver
+            .recv_timeout(Duration::from_secs(5))
+            .map_err(|_| String::from("publication acknowledgement"))?
+            .map_err(|_| String::from("visible pending publication"))?;
+        publisher
+            .join()
+            .map_err(|_| String::from("publisher thread"))??;
+        assert_eq!(window.get_reminder_sync_state(), "Pending");
+        assert_eq!(window.get_reliable_operation_kind(), expected_kind);
+        assert_eq!(window.get_reliable_operation_phase(), "atomic_promotion");
+        Ok(())
+    }
+
+    #[test]
+    fn pending_reminder_publications_wait_for_the_visible_atomic_projection() -> Result<(), String>
+    {
+        let shell = DesktopShell::new_with_reliable_state_unbound(
+            &ProductReducer::new().snapshot(),
+            DesktopReliableStateProjection::unavailable(),
+        )
+        .map_err(|_| String::from("desktop shell"))?;
+        assert_pending_reminder_publication_waits_for_visible_atomic_projection(
+            &shell,
+            |notifier| {
+                notifier
+                    .publish_pending_reminder_policy(
+                        DesktopReminderPolicy::new(
+                            true,
+                            &[21_600],
+                            DesktopReminderSyncState::Pending,
+                        )
+                        .ok_or_else(|| String::from("pending reminder policy"))?,
+                        DesktopOperationSnapshot::new(
+                            DesktopOperationKind::UpdatePolicy,
+                            DesktopOperationPhase::AtomicPromotion,
+                            false,
+                            None,
+                        ),
+                    )
+                    .map_err(|_| String::from("pending reminder publication"))
+            },
+            "update_policy",
+        )?;
+        assert_pending_reminder_publication_waits_for_visible_atomic_projection(
+            &shell,
+            |notifier| {
+                notifier
+                    .publish_pending_reminder_operation(DesktopOperationSnapshot::new(
+                        DesktopOperationKind::ImportConfig,
+                        DesktopOperationPhase::AtomicPromotion,
+                        false,
+                        None,
+                    ))
+                    .map_err(|_| String::from("pending config import publication"))
+            },
+            "import_config",
+        )
     }
 }

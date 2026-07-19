@@ -30,7 +30,7 @@ use crate::command::{
     ApplicationCommandCoordinator,
 };
 use crate::state::ApplicationStateOwner;
-use crate::{ApplicationEnvironment, ApplicationErrorCode, DataRoot};
+use crate::{ApplicationEnvironment, ApplicationError, ApplicationErrorCode, DataRoot};
 
 fn fixture() -> (TempDir, DataRoot) {
     let temporary = tempfile::tempdir().expect("temporary application root");
@@ -261,6 +261,92 @@ fn reminder_explicit_save_reuses_generation_for_an_identical_retry() {
         .expect("saved settings");
     assert_eq!(persisted.generation(), Some(first_generation));
     assert_eq!(irreversible_calls, 1);
+}
+
+#[test]
+fn reminder_save_marks_pending_before_the_settings_generation_changes_and_reverts_on_failed_publication()
+ {
+    let (_temporary, root) = fixture();
+    let owner = ApplicationStateOwner::open(&root).expect("state owner");
+    owner
+        .update_reminder_policy(
+            &command_permit(ApplicationCommand::UpdateReminderPolicy),
+            reminder_policy_update(true, &[21_600]),
+            || Ok(()),
+        )
+        .expect("initial reminder save");
+    seed_real_reminder_archive(root.archive_path());
+    owner
+        .synchronize_reminder_profile(&root)
+        .expect("initial reminder synchronization");
+    let store = SettingsStore::new(root.reliable_state()).expect("settings store");
+    let before = store.load().expect("settings before changed save");
+    let before_generation = before.generation();
+    let before_leads = before
+        .value()
+        .portable()
+        .reminders()
+        .lead_seconds()
+        .to_vec();
+    let mut observed_pending_before_save = false;
+
+    owner
+        .update_reminder_policy(
+            &command_permit(ApplicationCommand::UpdateReminderPolicy),
+            reminder_policy_update(true, &[10_800]),
+            || {
+                let projection = owner
+                    .reliable_state_projection_for_outcome(BootstrapOutcome::FirstInstall, None)
+                    .expect("pending projection before save");
+                assert_eq!(
+                    projection.reminder_policy().sync_state(),
+                    DesktopReminderSyncState::Pending
+                );
+                let persisted = store.load().expect("settings before irreversible save");
+                assert_eq!(persisted.generation(), before_generation);
+                assert_eq!(
+                    persisted.value().portable().reminders().lead_seconds(),
+                    before_leads
+                );
+                observed_pending_before_save = true;
+                Ok(())
+            },
+        )
+        .expect("changed reminder save");
+    assert!(observed_pending_before_save);
+    let after = store.load().expect("settings after changed save");
+    assert_ne!(after.generation(), before_generation);
+    assert_eq!(
+        after.value().portable().reminders().lead_seconds(),
+        &[10_800]
+    );
+    owner
+        .synchronize_reminder_profile(&root)
+        .expect("changed reminder synchronization");
+
+    let failed_before = store.load().expect("settings before failed publication");
+    let error = owner
+        .update_reminder_policy(
+            &command_permit(ApplicationCommand::UpdateReminderPolicy),
+            reminder_policy_update(true, &[3_600]),
+            || Err(ApplicationError::state()),
+        )
+        .expect_err("failed publication must stop the settings save");
+    assert_eq!(error.code(), ApplicationErrorCode::StateUnavailable);
+    let failed_after = store.load().expect("settings after failed publication");
+    assert_eq!(failed_after.generation(), failed_before.generation());
+    assert_eq!(
+        failed_after.value().portable().reminders(),
+        failed_before.value().portable().reminders()
+    );
+    assert_eq!(
+        owner
+            .reliable_state_projection_for_outcome(BootstrapOutcome::FirstInstall, None)
+            .expect("restored projection")
+            .reminder_policy()
+            .sync_state(),
+        DesktopReminderSyncState::Synchronized
+    );
 }
 
 #[test]
@@ -826,12 +912,40 @@ fn pending_config_import_is_projected_cancelled_or_committed_without_paths() {
             select_input(),
         )
         .expect("restage pending import");
+    let before_generation = before.generation();
+    let before_digest = PortableSettingsCandidate::new(before.value().portable().clone())
+        .expect("before candidate")
+        .digest();
+    let mut observed_pending_before_commit = false;
     let committed = owner
         .commit_pending_config_import(
             &command_permit(ApplicationCommand::ConfirmConfigImport),
-            || Ok(()),
+            || {
+                let projection = owner
+                    .reliable_state_projection(preflight.report())
+                    .expect("pending projection before import commit");
+                assert_eq!(
+                    projection.reminder_policy().sync_state(),
+                    DesktopReminderSyncState::Pending
+                );
+                assert!(projection.config_import_preview().is_some());
+                let persisted = SettingsStore::new(root.reliable_state())
+                    .expect("settings store")
+                    .load()
+                    .expect("settings before irreversible import");
+                assert_eq!(persisted.generation(), before_generation);
+                assert_eq!(
+                    PortableSettingsCandidate::new(persisted.value().portable().clone())
+                        .expect("persisted candidate")
+                        .digest(),
+                    before_digest
+                );
+                observed_pending_before_commit = true;
+                Ok(())
+            },
         )
         .expect("commit pending import");
+    assert!(observed_pending_before_commit);
     assert_eq!(committed.portable_digest(), changed.digest());
     let after = SettingsStore::new(root.reliable_state())
         .expect("settings store")
@@ -851,6 +965,42 @@ fn pending_config_import_is_projected_cancelled_or_committed_without_paths() {
             .config_import_preview()
             .is_none()
     );
+
+    owner
+        .stage_config_import_preview(
+            &command_permit(ApplicationCommand::ImportConfig),
+            select_input(),
+        )
+        .expect("stage import for failed publication");
+    let failure_before = SettingsStore::new(root.reliable_state())
+        .expect("settings store")
+        .load()
+        .expect("settings before failed import publication");
+    let error = owner
+        .commit_pending_config_import(
+            &command_permit(ApplicationCommand::ConfirmConfigImport),
+            || Err(ApplicationError::state()),
+        )
+        .expect_err("failed publication must preserve pending import");
+    assert_eq!(error.code(), ApplicationErrorCode::StateUnavailable);
+    let failure_after = SettingsStore::new(root.reliable_state())
+        .expect("settings store")
+        .load()
+        .expect("settings after failed import publication");
+    assert_eq!(failure_after.generation(), failure_before.generation());
+    assert!(
+        owner
+            .reliable_state_projection(preflight.report())
+            .expect("failed pending import projection")
+            .config_import_preview()
+            .is_some()
+    );
+    owner
+        .commit_pending_config_import(
+            &command_permit(ApplicationCommand::ConfirmConfigImport),
+            || Ok(()),
+        )
+        .expect("preserved pending import remains confirmable");
 }
 
 #[test]

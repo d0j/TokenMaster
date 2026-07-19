@@ -742,18 +742,29 @@ impl ApplicationStateOwner {
         let previous_sync_state = self
             .reminder_sync_state
             .swap(REMINDER_SYNC_PENDING, Ordering::AcqRel);
-        if on_irreversible().is_err() {
-            self.reminder_sync_state
-                .store(previous_sync_state, Ordering::Release);
+        {
             let mut pending = self
                 .pending_config_import
                 .lock()
                 .map_err(|_| ApplicationError::state())?;
-            if pending.is_none() {
-                *pending = Some(preview);
+            if pending.is_some() {
+                self.reminder_sync_state
+                    .store(previous_sync_state, Ordering::Release);
+                return Err(ApplicationError::state());
             }
+            *pending = Some(preview);
+        }
+        if on_irreversible().is_err() {
+            self.reminder_sync_state
+                .store(previous_sync_state, Ordering::Release);
             return Err(ApplicationError::state());
         }
+        let preview = self
+            .pending_config_import
+            .lock()
+            .map_err(|_| ApplicationError::state())?
+            .take()
+            .ok_or_else(ApplicationError::state)?;
         self.settings
             .commit_import(&preview.settings)
             .map_err(|_| ApplicationError::state())
