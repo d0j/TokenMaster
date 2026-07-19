@@ -1,12 +1,20 @@
 use std::fmt;
-use std::sync::{Arc, Mutex, atomic::AtomicBool};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, AtomicU8, Ordering},
+};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tokenmaster_desktop::{
     DesktopBackupHealth, DesktopBackupPolicy, DesktopConfigImportPreview, DesktopOperationSnapshot,
     DesktopRecoveryReceipt, DesktopReliableStateHealth, DesktopReliableStateInput,
-    DesktopReliableStateProjection, DesktopReliableStateSummary, DesktopRestorePointInput,
+    DesktopReliableStateProjection, DesktopReliableStateSummary, DesktopReminderPolicy,
+    DesktopReminderPolicyUpdate, DesktopReminderSyncState, DesktopRestorePointInput,
     DesktopRestoreSelection,
+};
+use tokenmaster_domain::{
+    NotificationChannel, ReminderLeadTime, ReminderProfile, ReminderProfileParts,
+    ReminderProfileRevision,
 };
 use tokenmaster_platform::{
     ArchiveRecoveryScope, BackupDirectory, BackupDirectoryError, ExclusiveFileLease,
@@ -29,8 +37,8 @@ use tokenmaster_state::{
 use tokenmaster_state::SettingsChangeCategory;
 use tokenmaster_store::{
     BackupControl, BackupSource, BackupStaging, StartupArchiveStatus, StartupValidationMode,
-    StoreErrorCode, USAGE_SCHEMA_VERSION, create_compact_snapshot, create_online_snapshot,
-    inspect_startup_archive, verify_backup_candidate,
+    StoreErrorCode, USAGE_SCHEMA_VERSION, UsageStore, create_compact_snapshot,
+    create_online_snapshot, inspect_startup_archive, verify_backup_candidate,
 };
 
 use crate::command::{
@@ -40,6 +48,9 @@ use crate::command::{
 use crate::{ApplicationError, DataRoot};
 
 const STARTUP_RECOVERY_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+const REMINDER_SYNC_PENDING: u8 = 0;
+const REMINDER_SYNC_SYNCHRONIZED: u8 = 1;
+const REMINDER_SYNC_UNAVAILABLE: u8 = 2;
 
 pub(crate) struct ApplicationStateOwner {
     scope: ArchiveRecoveryScope,
@@ -51,6 +62,7 @@ pub(crate) struct ApplicationStateOwner {
     catalog: Arc<Mutex<Option<Arc<BackupCatalog>>>>,
     restore_pin: Arc<Mutex<Option<CatalogSelectionBinding>>>,
     pending_config_import: Mutex<Option<ApplicationConfigImportPreview>>,
+    reminder_sync_state: AtomicU8,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -145,6 +157,7 @@ impl ApplicationStateOwner {
             catalog: Arc::new(Mutex::new(None)),
             restore_pin: Arc::new(Mutex::new(None)),
             pending_config_import: Mutex::new(None),
+            reminder_sync_state: AtomicU8::new(REMINDER_SYNC_PENDING),
         })
     }
 
@@ -209,6 +222,13 @@ impl ApplicationStateOwner {
             .load()
             .map_err(|_| ApplicationError::state())?;
         let policy = settings.value().portable().backup();
+        let reminders = settings.value().portable().reminders();
+        let reminder_policy = DesktopReminderPolicy::new(
+            reminders.enabled(),
+            reminders.lead_seconds(),
+            self.reminder_sync_state()?,
+        )
+        .ok_or_else(ApplicationError::state)?;
         let previous = self
             .catalog
             .lock()
@@ -249,7 +269,7 @@ impl ApplicationStateOwner {
             RecoveryJournalLoad::Invalid => return Err(ApplicationError::state()),
         };
         let health = reliable_health(outcome, corrupt_count != 0, settings.health_code());
-        let summary = DesktopReliableStateSummary::new(
+        let summary = DesktopReliableStateSummary::new_with_reminder_policy(
             health,
             matches!(
                 outcome,
@@ -262,6 +282,7 @@ impl ApplicationStateOwner {
                 policy.interval_seconds(),
                 policy.retention_budget_bytes(),
             ),
+            reminder_policy,
             latest_success,
             catalog
                 .points()
@@ -545,6 +566,91 @@ impl ApplicationStateOwner {
             .save(&value)
             .map_err(|_| ApplicationError::state())?;
         Ok(policy)
+    }
+
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Task 4 wires reminder settings updates into application routing"
+        )
+    )]
+    pub(crate) fn update_reminder_policy(
+        &self,
+        permit: &ApplicationCommandPermit,
+        update: DesktopReminderPolicyUpdate,
+        mut on_irreversible: impl FnMut(),
+    ) -> Result<(), ApplicationError> {
+        if permit.command() != ApplicationCommand::UpdateBackupPolicy || permit.is_cancelled() {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        let policy =
+            tokenmaster_state::ReminderPolicy::new(update.enabled(), update.lead_seconds())
+                .map_err(|_| ApplicationError::state())?;
+        let current = self
+            .settings
+            .load()
+            .map_err(|_| ApplicationError::state())?;
+        if current.value().portable().reminders() == &policy {
+            return Ok(());
+        }
+        let value = SettingsValue::new(
+            PortableSettings::new(policy, current.value().portable().backup().clone()),
+            current.value().device().clone(),
+        );
+        if permit.is_cancelled() {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        permit
+            .begin_irreversible()
+            .map_err(|_| ApplicationError::invalid_lifecycle())?;
+        on_irreversible();
+        self.settings
+            .save(&value)
+            .map_err(|_| ApplicationError::state())?;
+        self.reminder_sync_state
+            .store(REMINDER_SYNC_PENDING, Ordering::Release);
+        Ok(())
+    }
+
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Task 4 wires reminder synchronization into application startup"
+        )
+    )]
+    pub(crate) fn synchronize_reminder_profile(
+        &self,
+        root: &DataRoot,
+    ) -> Result<ReminderProfile, ApplicationError> {
+        self.reminder_sync_state
+            .store(REMINDER_SYNC_PENDING, Ordering::Release);
+        let settings = self
+            .settings
+            .load()
+            .map_err(|_| ApplicationError::state())?;
+        let profile = reminder_profile_from_settings(
+            settings.generation(),
+            settings.value().portable().reminders(),
+        )?;
+        let mut store =
+            UsageStore::open(root.archive_path()).map_err(|_| ApplicationError::state())?;
+        store
+            .set_benefit_reminder_global_profile(&profile)
+            .map_err(|_| ApplicationError::state())?;
+        self.reminder_sync_state
+            .store(REMINDER_SYNC_SYNCHRONIZED, Ordering::Release);
+        Ok(profile)
+    }
+
+    fn reminder_sync_state(&self) -> Result<DesktopReminderSyncState, ApplicationError> {
+        match self.reminder_sync_state.load(Ordering::Acquire) {
+            REMINDER_SYNC_PENDING => Ok(DesktopReminderSyncState::Pending),
+            REMINDER_SYNC_SYNCHRONIZED => Ok(DesktopReminderSyncState::Synchronized),
+            REMINDER_SYNC_UNAVAILABLE => Ok(DesktopReminderSyncState::Unavailable),
+            _ => Err(ApplicationError::state()),
+        }
     }
 
     pub(crate) fn preview_config_import(
@@ -968,6 +1074,42 @@ impl ApplicationStateOwner {
         }
         Ok(())
     }
+}
+
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Task 4 wires reminder synchronization into application startup"
+    )
+)]
+fn reminder_profile_from_settings(
+    generation: Option<u64>,
+    policy: &tokenmaster_state::ReminderPolicy,
+) -> Result<ReminderProfile, ApplicationError> {
+    let revision = generation
+        .unwrap_or(0)
+        .checked_add(1)
+        .filter(|value| *value <= i64::MAX as u64)
+        .ok_or_else(ApplicationError::state)?;
+    let lead_times = policy
+        .lead_seconds()
+        .iter()
+        .copied()
+        .map(ReminderLeadTime::new)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| ApplicationError::state())?;
+    let channels = policy
+        .enabled()
+        .then_some(NotificationChannel::InApp)
+        .into_iter()
+        .collect();
+    ReminderProfile::new(ReminderProfileParts {
+        revision: ReminderProfileRevision::new(revision).map_err(|_| ApplicationError::state())?,
+        lead_times,
+        channels,
+    })
+    .map_err(|_| ApplicationError::state())
 }
 
 impl fmt::Debug for ApplicationStateOwner {

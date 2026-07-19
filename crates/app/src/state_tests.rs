@@ -1,8 +1,16 @@
 use std::ffi::OsString;
 use std::fs;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use tempfile::TempDir;
-use tokenmaster_desktop::DesktopReliableStateHealth;
+use tokenmaster_desktop::{DesktopIntent, DesktopReliableStateHealth, DesktopReminderSyncState};
+use tokenmaster_domain::{
+    BenefitConfidence, BenefitDetailKind, BenefitEvidenceSource, BenefitExpiry,
+    BenefitInventoryCompleteness, BenefitInventoryObservation, BenefitInventoryObservationParts,
+    BenefitKind, BenefitLabelKey, BenefitLotId, BenefitLotObservation, BenefitLotObservationParts,
+    BenefitObservationId, BenefitScope, BenefitState, BenefitTarget, QuotaAccountId,
+    UsageProviderId,
+};
 use tokenmaster_platform::{
     ControlledFileDialog, DurableFileTarget, ExclusiveFileLease, ExclusiveFileLeaseError,
     FileDialogFileType, FileDialogResult, FileDialogSelector, MAX_DURABLE_FILE_BYTES,
@@ -21,7 +29,7 @@ use crate::command::{
     ApplicationCommandCoordinator,
 };
 use crate::state::ApplicationStateOwner;
-use crate::{ApplicationEnvironment, DataRoot};
+use crate::{ApplicationEnvironment, ApplicationErrorCode, DataRoot};
 
 fn fixture() -> (TempDir, DataRoot) {
     let temporary = tempfile::tempdir().expect("temporary application root");
@@ -123,6 +131,273 @@ fn changed_portable_settings() -> PortableSettingsCandidate {
     .expect("backup policy");
     PortableSettingsCandidate::new(PortableSettings::new(reminders, backup))
         .expect("portable candidate")
+}
+
+fn reminder_policy_update(
+    enabled: bool,
+    lead_seconds: &[u32],
+) -> tokenmaster_desktop::DesktopReminderPolicyUpdate {
+    let DesktopIntent::UpdateReminderPolicy(update) =
+        DesktopIntent::update_reminder_policy(enabled, lead_seconds).expect("desktop update")
+    else {
+        panic!("reminder policy intent");
+    };
+    update
+}
+
+fn seed_real_reminder_archive(path: &std::path::Path) {
+    let now = i64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_millis(),
+    )
+    .expect("wall clock");
+    let scope = BenefitScope::new(
+        UsageProviderId::new("codex").expect("provider"),
+        QuotaAccountId::new("private-account").expect("account"),
+        None,
+    );
+    let lot = BenefitLotObservation::new(BenefitLotObservationParts {
+        lot_id: BenefitLotId::from_bytes([7; 32]),
+        kind: BenefitKind::BankedRateLimitReset,
+        quantity: 2,
+        state: BenefitState::Available,
+        target: BenefitTarget::Provider,
+        granted_at_ms: Some(now - 1_000),
+        expiry: BenefitExpiry::exact_utc(now + 30 * 60 * 1_000).expect("expiry"),
+        source: BenefitEvidenceSource::ProviderOfficial,
+        confidence: BenefitConfidence::High,
+        detail_kind: BenefitDetailKind::ProviderDetail,
+        label_key: BenefitLabelKey::new("benefit.codex.banked_reset").expect("label"),
+    })
+    .expect("lot");
+    let observation = BenefitInventoryObservation::new(BenefitInventoryObservationParts {
+        scope,
+        observation_id: BenefitObservationId::from_bytes([1; 32]),
+        observed_at_ms: now,
+        fresh_until_ms: now + 1_000,
+        stale_after_ms: now + 2_000,
+        completeness: BenefitInventoryCompleteness::Complete,
+        lots: vec![lot],
+    })
+    .expect("observation");
+    UsageStore::open(path)
+        .expect("store")
+        .apply_benefit_observation(&observation)
+        .expect("seed benefit");
+}
+
+#[test]
+fn reminder_explicit_save_reuses_generation_for_an_identical_retry() {
+    let (_temporary, root) = fixture();
+    let owner = ApplicationStateOwner::open(&root).expect("state owner");
+    let mut irreversible_calls = 0;
+
+    owner
+        .update_reminder_policy(
+            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            reminder_policy_update(true, &[21_600, 3_600]),
+            || irreversible_calls += 1,
+        )
+        .expect("first reminder save");
+    let first_generation = SettingsStore::new(root.reliable_state())
+        .expect("settings store")
+        .load()
+        .expect("saved settings")
+        .generation()
+        .expect("explicit generation");
+
+    owner
+        .update_reminder_policy(
+            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            reminder_policy_update(true, &[3_600, 21_600]),
+            || irreversible_calls += 1,
+        )
+        .expect("identical reminder retry");
+
+    let persisted = SettingsStore::new(root.reliable_state())
+        .expect("settings store")
+        .load()
+        .expect("saved settings");
+    assert_eq!(persisted.generation(), Some(first_generation));
+    assert_eq!(irreversible_calls, 1);
+}
+
+#[test]
+fn reminder_defaults_without_a_record_project_pending_and_synchronize_at_revision_one() {
+    let (_temporary, root) = fixture();
+    let owner = ApplicationStateOwner::open(&root).expect("state owner");
+
+    let before = owner
+        .reliable_state_projection_for_outcome(BootstrapOutcome::FirstInstall, None)
+        .expect("pending reliable projection");
+    assert_eq!(
+        before.reminder_policy().sync_state(),
+        DesktopReminderSyncState::Pending
+    );
+    assert!(before.reminder_policy().enabled());
+    assert_eq!(
+        before.reminder_policy().lead_seconds(),
+        &[604_800, 86_400, 43_200, 21_600, 3_600]
+    );
+
+    seed_real_reminder_archive(root.archive_path());
+    let profile = owner
+        .synchronize_reminder_profile(&root)
+        .expect("default reminder synchronization");
+    assert_eq!(profile.revision().get(), 1);
+    assert_eq!(
+        profile
+            .lead_times()
+            .iter()
+            .map(|lead| lead.seconds())
+            .collect::<Vec<_>>(),
+        vec![604_800, 86_400, 43_200, 21_600, 3_600]
+    );
+}
+
+#[test]
+fn reminder_synchronization_projects_settings_generation_to_exact_sqlite_profile() {
+    let (_temporary, root) = fixture();
+    let owner = ApplicationStateOwner::open(&root).expect("state owner");
+    owner
+        .update_reminder_policy(
+            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            reminder_policy_update(true, &[21_600, 3_600]),
+            || {},
+        )
+        .expect("reminder save");
+    seed_real_reminder_archive(root.archive_path());
+
+    let profile = owner
+        .synchronize_reminder_profile(&root)
+        .expect("reminder synchronization");
+    assert_eq!(profile.revision().get(), 2);
+    assert_eq!(
+        profile
+            .lead_times()
+            .iter()
+            .map(|lead| lead.seconds())
+            .collect::<Vec<_>>(),
+        vec![21_600, 3_600]
+    );
+    assert_eq!(
+        profile.channels(),
+        &[tokenmaster_domain::NotificationChannel::InApp]
+    );
+
+    let connection = rusqlite::Connection::open(root.archive_path()).expect("sqlite archive");
+    let global = connection
+        .query_row(
+            "SELECT revision, channel_in_app, channel_os_scheduled
+             FROM benefit_reminder_profile
+             WHERE profile_kind = 'global' AND length(profile_scope_id) = 0",
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            },
+        )
+        .expect("global reminder profile");
+    let leads = connection
+        .prepare(
+            "SELECT threshold_seconds FROM benefit_reminder_threshold
+             WHERE profile_kind = 'global' AND length(profile_scope_id) = 0
+             ORDER BY threshold_seconds DESC",
+        )
+        .expect("threshold query")
+        .query_map([], |row| row.get::<_, i64>(0))
+        .expect("threshold rows")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("threshold values");
+    assert_eq!(global, (2, 1, 0));
+    assert_eq!(leads, vec![21_600, 3_600]);
+
+    let projection = owner
+        .reliable_state_projection_for_outcome(BootstrapOutcome::FirstInstall, None)
+        .expect("reliable projection");
+    assert_eq!(
+        projection.reminder_policy().sync_state(),
+        DesktopReminderSyncState::Synchronized
+    );
+    assert!(projection.reminder_policy().enabled());
+    assert_eq!(
+        projection.reminder_policy().lead_seconds(),
+        &[21_600, 3_600]
+    );
+}
+
+#[test]
+fn reminder_disabled_policy_synchronizes_without_channels_or_leads() {
+    let (_temporary, root) = fixture();
+    let owner = ApplicationStateOwner::open(&root).expect("state owner");
+    owner
+        .update_reminder_policy(
+            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            reminder_policy_update(false, &[]),
+            || {},
+        )
+        .expect("disabled reminder save");
+    seed_real_reminder_archive(root.archive_path());
+
+    let profile = owner
+        .synchronize_reminder_profile(&root)
+        .expect("disabled synchronization");
+    assert!(profile.channels().is_empty());
+    assert!(profile.lead_times().is_empty());
+
+    let projection = owner
+        .reliable_state_projection_for_outcome(BootstrapOutcome::FirstInstall, None)
+        .expect("reliable projection");
+    assert!(!projection.reminder_policy().enabled());
+    assert!(projection.reminder_policy().lead_seconds().is_empty());
+    assert_eq!(
+        projection.reminder_policy().sync_state(),
+        DesktopReminderSyncState::Synchronized
+    );
+}
+
+#[test]
+fn reminder_failed_archive_sync_preserves_durable_settings_and_projects_pending() {
+    let (_temporary, root) = fixture();
+    let owner = ApplicationStateOwner::open(&root).expect("state owner");
+    owner
+        .update_reminder_policy(
+            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            reminder_policy_update(true, &[21_600]),
+            || {},
+        )
+        .expect("reminder save");
+    fs::create_dir(root.archive_path()).expect("unusable archive path");
+
+    let error = owner
+        .synchronize_reminder_profile(&root)
+        .expect_err("archive synchronization must fail");
+    assert_eq!(error.code(), ApplicationErrorCode::StateUnavailable);
+    assert_eq!(error.to_string(), "state_unavailable");
+
+    let persisted = SettingsStore::new(root.reliable_state())
+        .expect("settings store")
+        .load()
+        .expect("durable settings");
+    assert!(persisted.value().portable().reminders().enabled());
+    assert_eq!(
+        persisted.value().portable().reminders().lead_seconds(),
+        &[21_600]
+    );
+    let projection = owner
+        .reliable_state_projection_for_outcome(BootstrapOutcome::FirstInstall, None)
+        .expect("reliable projection");
+    assert_eq!(
+        projection.reminder_policy().sync_state(),
+        DesktopReminderSyncState::Pending
+    );
+    assert!(projection.reminder_policy().enabled());
+    assert_eq!(projection.reminder_policy().lead_seconds(), &[21_600]);
 }
 
 #[test]
