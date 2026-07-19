@@ -1,7 +1,8 @@
 use tokenmaster_desktop::{
-    DesktopBackupHealth, DesktopBackupPolicy, DesktopOperationKind, DesktopOperationPhase,
-    DesktopOperationSnapshot, DesktopRecoveryReceipt, DesktopReliableStateHealth,
-    DesktopReliableStateInput, DesktopReliableStateProjection, DesktopReliableStateSummary,
+    DesktopBackupHealth, DesktopBackupPolicy, DesktopIntent, DesktopOperationKind,
+    DesktopOperationPhase, DesktopOperationSnapshot, DesktopRecoveryReceipt,
+    DesktopReliableStateHealth, DesktopReliableStateInput, DesktopReliableStateProjection,
+    DesktopReliableStateSummary, DesktopReminderPolicy, DesktopReminderSyncState,
     DesktopRestorePointInput, DesktopRestoreSelection, MAX_DESKTOP_RESTORE_POINTS,
 };
 
@@ -120,4 +121,65 @@ fn unavailable_projection_has_no_fabricated_times_counts_or_restore_points() {
     assert_eq!(projection.recovery_receipt(), None);
     assert_eq!(projection.operation(), None);
     assert!(projection.restore_points().is_empty());
+}
+
+#[test]
+fn reminder_policy_normalizes_descending_and_remains_copyable() {
+    let policy = DesktopReminderPolicy::new(
+        true,
+        &[10_800, 60, 604_800, 31_536_000],
+        DesktopReminderSyncState::Synchronized,
+    )
+    .expect("policy");
+    let copied = policy;
+
+    assert_eq!(copied.lead_seconds(), &[31_536_000, 604_800, 10_800, 60]);
+    assert!(copied.enabled());
+    assert_eq!(copied.sync_state(), DesktopReminderSyncState::Synchronized);
+}
+
+#[test]
+fn reminder_policy_rejects_invalid_enabled_and_disabled_leads() {
+    assert!(DesktopReminderPolicy::new(true, &[], DesktopReminderSyncState::Pending).is_none());
+    assert!(DesktopReminderPolicy::new(false, &[60], DesktopReminderSyncState::Pending).is_none());
+    assert!(
+        DesktopReminderPolicy::new(true, &[60, 60], DesktopReminderSyncState::Pending).is_none()
+    );
+    assert!(DesktopReminderPolicy::new(true, &[59], DesktopReminderSyncState::Pending).is_none());
+    assert!(
+        DesktopReminderPolicy::new(true, &[31_536_001], DesktopReminderSyncState::Pending,)
+            .is_none()
+    );
+    assert!(
+        DesktopReminderPolicy::new(
+            true,
+            &[60, 61, 62, 63, 64, 65, 66, 67, 68],
+            DesktopReminderSyncState::Pending,
+        )
+        .is_none()
+    );
+}
+
+#[test]
+fn unavailable_reminder_policy_is_disabled_and_bounded() {
+    let policy = DesktopReminderPolicy::unavailable();
+
+    assert!(!policy.enabled());
+    assert!(policy.lead_seconds().is_empty());
+    assert_eq!(policy.sync_state(), DesktopReminderSyncState::Unavailable);
+}
+
+#[test]
+fn reminder_policy_intent_validates_before_retaining_and_redacts_debug() {
+    assert!(DesktopIntent::update_reminder_policy(true, &[]).is_err());
+    assert!(DesktopIntent::update_reminder_policy(false, &[60]).is_err());
+    assert!(DesktopIntent::update_reminder_policy(true, &[60, 60]).is_err());
+    assert!(DesktopIntent::update_reminder_policy(true, &[59]).is_err());
+    assert!(DesktopIntent::update_reminder_policy(true, &[31_536_001]).is_err());
+    assert!(
+        DesktopIntent::update_reminder_policy(true, &[60, 61, 62, 63, 64, 65, 66, 67, 68]).is_err()
+    );
+
+    let intent = DesktopIntent::update_reminder_policy(true, &[10_800]).expect("intent");
+    assert!(!format!("{intent:?}").contains("10800"));
 }

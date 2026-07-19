@@ -5,6 +5,9 @@ use std::rc::Rc;
 pub const MAX_DESKTOP_RESTORE_POINTS: usize = 15;
 pub const MIN_BACKUP_PASSPHRASE_SCALARS: usize = 12;
 pub const MAX_BACKUP_PASSPHRASE_SCALARS: usize = 128;
+pub const MAX_DESKTOP_REMINDER_LEADS: usize = 8;
+pub const MIN_DESKTOP_REMINDER_LEAD_SECONDS: u32 = 60;
+pub const MAX_DESKTOP_REMINDER_LEAD_SECONDS: u32 = 31_536_000;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DesktopReliableStateHealth {
@@ -141,6 +144,83 @@ impl DesktopBackupPolicy {
     #[must_use]
     pub const fn retention_budget_bytes(self) -> u64 {
         self.retention_budget_bytes
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopReminderSyncState {
+    Pending,
+    Synchronized,
+    Unavailable,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DesktopReminderPolicy {
+    enabled: bool,
+    lead_seconds: [u32; MAX_DESKTOP_REMINDER_LEADS],
+    lead_count: u8,
+    sync_state: DesktopReminderSyncState,
+}
+
+impl DesktopReminderPolicy {
+    #[must_use]
+    pub fn new(
+        enabled: bool,
+        lead_seconds: &[u32],
+        sync_state: DesktopReminderSyncState,
+    ) -> Option<Self> {
+        if lead_seconds.len() > MAX_DESKTOP_REMINDER_LEADS
+            || (enabled && lead_seconds.is_empty())
+            || (!enabled && !lead_seconds.is_empty())
+            || (matches!(sync_state, DesktopReminderSyncState::Unavailable)
+                && (enabled || !lead_seconds.is_empty()))
+        {
+            return None;
+        }
+
+        let mut normalized = [0; MAX_DESKTOP_REMINDER_LEADS];
+        for (index, lead) in lead_seconds.iter().copied().enumerate() {
+            if !(MIN_DESKTOP_REMINDER_LEAD_SECONDS..=MAX_DESKTOP_REMINDER_LEAD_SECONDS)
+                .contains(&lead)
+                || normalized[..index].contains(&lead)
+            {
+                return None;
+            }
+            normalized[index] = lead;
+        }
+        normalized[..lead_seconds.len()].sort_unstable_by(|left, right| right.cmp(left));
+
+        Some(Self {
+            enabled,
+            lead_seconds: normalized,
+            lead_count: lead_seconds.len() as u8,
+            sync_state,
+        })
+    }
+
+    #[must_use]
+    pub const fn unavailable() -> Self {
+        Self {
+            enabled: false,
+            lead_seconds: [0; MAX_DESKTOP_REMINDER_LEADS],
+            lead_count: 0,
+            sync_state: DesktopReminderSyncState::Unavailable,
+        }
+    }
+
+    #[must_use]
+    pub const fn enabled(self) -> bool {
+        self.enabled
+    }
+
+    #[must_use]
+    pub fn lead_seconds(&self) -> &[u32] {
+        &self.lead_seconds[..usize::from(self.lead_count)]
+    }
+
+    #[must_use]
+    pub const fn sync_state(self) -> DesktopReminderSyncState {
+        self.sync_state
     }
 }
 
@@ -389,6 +469,7 @@ pub struct DesktopReliableStateSummary {
     safe_mode: bool,
     settings_health_code: &'static str,
     policy: DesktopBackupPolicy,
+    reminder_policy: DesktopReminderPolicy,
     latest_success_at_utc_ms: Option<i64>,
     latest_attempt_at_utc_ms: Option<i64>,
     successful_count: Option<u64>,
@@ -418,11 +499,48 @@ impl DesktopReliableStateSummary {
         operation: Option<DesktopOperationSnapshot>,
         config_import_preview: Option<DesktopConfigImportPreview>,
     ) -> Self {
+        Self::new_with_reminder_policy(
+            health,
+            safe_mode,
+            settings_health_code,
+            policy,
+            DesktopReminderPolicy::unavailable(),
+            latest_success_at_utc_ms,
+            latest_attempt_at_utc_ms,
+            successful_count,
+            failure_count,
+            published_bytes,
+            latest_failure_code,
+            recovery_receipt,
+            operation,
+            config_import_preview,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[must_use]
+    pub const fn new_with_reminder_policy(
+        health: DesktopReliableStateHealth,
+        safe_mode: bool,
+        settings_health_code: &'static str,
+        policy: DesktopBackupPolicy,
+        reminder_policy: DesktopReminderPolicy,
+        latest_success_at_utc_ms: Option<i64>,
+        latest_attempt_at_utc_ms: Option<i64>,
+        successful_count: Option<u64>,
+        failure_count: Option<u64>,
+        published_bytes: Option<u64>,
+        latest_failure_code: Option<&'static str>,
+        recovery_receipt: Option<DesktopRecoveryReceipt>,
+        operation: Option<DesktopOperationSnapshot>,
+        config_import_preview: Option<DesktopConfigImportPreview>,
+    ) -> Self {
         Self {
             health,
             safe_mode,
             settings_health_code,
             policy,
+            reminder_policy,
             latest_success_at_utc_ms,
             latest_attempt_at_utc_ms,
             successful_count,
@@ -524,6 +642,11 @@ impl DesktopReliableStateProjection {
     #[must_use]
     pub const fn policy(&self) -> DesktopBackupPolicy {
         self.summary.policy
+    }
+
+    #[must_use]
+    pub const fn reminder_policy(&self) -> DesktopReminderPolicy {
+        self.summary.reminder_policy
     }
 
     #[must_use]
@@ -634,6 +757,10 @@ pub enum DesktopIntent {
         interval_seconds: u32,
         retention_budget_mib: u32,
     },
+    UpdateReminderPolicy {
+        enabled: bool,
+        lead_seconds: Box<[u32]>,
+    },
 }
 
 impl DesktopIntent {
@@ -649,6 +776,20 @@ impl DesktopIntent {
         }
         Ok(Self::BackupEncrypted {
             passphrase: DesktopPassphrase(passphrase.to_owned()),
+        })
+    }
+
+    pub fn update_reminder_policy(
+        enabled: bool,
+        lead_seconds: &[u32],
+    ) -> Result<Self, DesktopIntentValidationError> {
+        let policy =
+            DesktopReminderPolicy::new(enabled, lead_seconds, DesktopReminderSyncState::Pending)
+                .ok_or(DesktopIntentValidationError)?;
+
+        Ok(Self::UpdateReminderPolicy {
+            enabled,
+            lead_seconds: policy.lead_seconds().into(),
         })
     }
 }
@@ -721,6 +862,9 @@ impl fmt::Debug for DesktopIntent {
                 .field("interval_seconds", interval_seconds)
                 .field("retention_budget_mib", retention_budget_mib)
                 .finish(),
+            Self::UpdateReminderPolicy { .. } => {
+                formatter.write_str("DesktopIntent::UpdateReminderPolicy([redacted])")
+            }
         }
     }
 }
