@@ -2,6 +2,7 @@ use std::ffi::OsString;
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use rusqlite::Connection;
 use tempfile::TempDir;
 use tokenmaster_desktop::{DesktopIntent, DesktopReliableStateHealth, DesktopReminderSyncState};
 use tokenmaster_domain::{
@@ -186,6 +187,46 @@ fn seed_real_reminder_archive(path: &std::path::Path) {
         .expect("store")
         .apply_benefit_observation(&observation)
         .expect("seed benefit");
+}
+
+fn create_exact_v12_archive(path: &std::path::Path) {
+    drop(UsageStore::open(path).expect("create current archive"));
+    let connection = Connection::open(path).expect("open exact-v12 fixture");
+    connection
+        .execute_batch(
+            "DROP TRIGGER IF EXISTS git_category_no_update;
+             DROP TRIGGER IF EXISTS git_day_no_update;
+             DROP TRIGGER IF EXISTS git_day_category_no_update;
+             DROP TRIGGER IF EXISTS git_installation_state_no_delete;
+             DROP TRIGGER IF EXISTS git_warning_no_update;
+             DROP INDEX IF EXISTS git_association_repository_activity;
+             DROP INDEX IF EXISTS git_day_repository_range;
+             DROP INDEX IF EXISTS git_day_category_repository_range;
+             DROP INDEX IF EXISTS git_repository_observed;
+             DROP TABLE IF EXISTS git_warning;
+             DROP TABLE IF EXISTS git_category_aggregate;
+             DROP TABLE IF EXISTS git_day_aggregate;
+             DROP TABLE IF EXISTS git_day_category_aggregate;
+             DROP TABLE IF EXISTS git_activity_association;
+             DROP TABLE IF EXISTS git_repository;
+             DROP TABLE IF EXISTS git_installation_state;",
+        )
+        .expect("strip v13 Git schema");
+    connection
+        .pragma_update(None, "user_version", 12_i64)
+        .expect("publish exact v12 version");
+}
+
+fn persisted_reminder_leads(root: &DataRoot) -> Vec<u32> {
+    SettingsStore::new(root.reliable_state())
+        .expect("settings store")
+        .load()
+        .expect("persisted settings")
+        .value()
+        .portable()
+        .reminders()
+        .lead_seconds()
+        .to_vec()
 }
 
 #[test]
@@ -398,6 +439,194 @@ fn reminder_failed_archive_sync_preserves_durable_settings_and_projects_pending(
     );
     assert!(projection.reminder_policy().enabled());
     assert_eq!(projection.reminder_policy().lead_seconds(), &[21_600]);
+}
+
+#[test]
+fn reminder_changed_save_failure_after_synchronization_reopens_as_pending() {
+    let (_temporary, root) = fixture();
+    let owner = ApplicationStateOwner::open(&root).expect("state owner");
+    seed_real_reminder_archive(root.archive_path());
+    owner
+        .update_reminder_policy(
+            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            reminder_policy_update(true, &[21_600]),
+            || {},
+        )
+        .expect("initial reminder save");
+    owner
+        .synchronize_reminder_profile(&root)
+        .expect("initial synchronization");
+    assert_eq!(
+        owner
+            .reliable_state_projection_for_outcome(BootstrapOutcome::FirstInstall, None)
+            .expect("synchronized projection")
+            .reminder_policy()
+            .sync_state(),
+        DesktopReminderSyncState::Synchronized
+    );
+
+    let blocked_slot = root.reliable_state().as_path().join("settings-b.tms");
+    owner
+        .update_reminder_policy(
+            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            reminder_policy_update(true, &[10_800]),
+            || fs::create_dir(&blocked_slot).expect("block next redundant slot"),
+        )
+        .expect_err("blocked changed save");
+
+    fs::remove_dir(&blocked_slot).expect("remove test fault");
+    let projection = owner
+        .reliable_state_projection_for_outcome(BootstrapOutcome::FirstInstall, None)
+        .expect("failed-save projection");
+    assert_eq!(
+        projection.reminder_policy().sync_state(),
+        DesktopReminderSyncState::Pending
+    );
+    assert_eq!(projection.reminder_policy().lead_seconds(), &[21_600]);
+
+    let reopened = ApplicationStateOwner::open(&root).expect("reopen state owner");
+    let reopened_projection = reopened
+        .reliable_state_projection_for_outcome(BootstrapOutcome::FirstInstall, None)
+        .expect("reopened projection");
+    assert_eq!(
+        reopened_projection.reminder_policy().sync_state(),
+        DesktopReminderSyncState::Pending
+    );
+    assert_eq!(
+        reopened_projection.reminder_policy().lead_seconds(),
+        &[21_600]
+    );
+}
+
+#[test]
+fn reminder_missing_archive_is_not_created_or_synchronized() {
+    let (_temporary, root) = fixture();
+    let owner = ApplicationStateOwner::open(&root).expect("state owner");
+    owner
+        .update_reminder_policy(
+            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            reminder_policy_update(true, &[21_600]),
+            || {},
+        )
+        .expect("reminder save");
+
+    owner
+        .synchronize_reminder_profile(&root)
+        .expect_err("missing archive must be unavailable");
+
+    assert!(!root.archive_path().exists());
+    assert!(!root.archive_path().with_extension("sqlite3-wal").exists());
+    assert!(!root.archive_path().with_extension("sqlite3-shm").exists());
+    assert_eq!(persisted_reminder_leads(&root), vec![21_600]);
+    assert_eq!(
+        owner
+            .reliable_state_projection_for_outcome(BootstrapOutcome::FirstInstall, None)
+            .expect("pending projection")
+            .reminder_policy()
+            .sync_state(),
+        DesktopReminderSyncState::Pending
+    );
+}
+
+#[test]
+fn reminder_supported_legacy_archive_is_not_migrated_or_synchronized() {
+    let (_temporary, root) = fixture();
+    create_exact_v12_archive(root.archive_path());
+    let owner = ApplicationStateOwner::open(&root).expect("state owner");
+    owner
+        .update_reminder_policy(
+            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            reminder_policy_update(true, &[21_600]),
+            || {},
+        )
+        .expect("reminder save");
+    let before = fs::read(root.archive_path()).expect("legacy archive bytes");
+    let before_version = Connection::open(root.archive_path())
+        .expect("legacy archive")
+        .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
+        .expect("legacy schema version");
+
+    owner
+        .synchronize_reminder_profile(&root)
+        .expect_err("legacy archive must be unavailable");
+
+    assert_eq!(
+        fs::read(root.archive_path()).expect("legacy archive bytes"),
+        before
+    );
+    let after_version = Connection::open(root.archive_path())
+        .expect("legacy archive")
+        .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
+        .expect("legacy schema version");
+    assert_eq!(before_version, 12);
+    assert_eq!(after_version, before_version);
+    assert_eq!(persisted_reminder_leads(&root), vec![21_600]);
+}
+
+#[test]
+fn reminder_current_archive_write_contention_preserves_profile_and_projects_pending() {
+    let (_temporary, root) = fixture();
+    seed_real_reminder_archive(root.archive_path());
+    let owner = ApplicationStateOwner::open(&root).expect("state owner");
+    owner
+        .update_reminder_policy(
+            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            reminder_policy_update(true, &[21_600]),
+            || {},
+        )
+        .expect("reminder save");
+    let before_profile = Connection::open(root.archive_path())
+        .expect("current archive")
+        .query_row(
+            "SELECT revision, channel_in_app, channel_os_scheduled
+             FROM benefit_reminder_profile
+             WHERE profile_kind = 'global' AND length(profile_scope_id) = 0",
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            },
+        )
+        .expect("global profile");
+    let writer = Connection::open(root.archive_path()).expect("writer connection");
+    writer
+        .execute_batch("BEGIN IMMEDIATE")
+        .expect("writer transaction");
+
+    owner
+        .synchronize_reminder_profile(&root)
+        .expect_err("contended write must fail");
+
+    let during_profile = Connection::open(root.archive_path())
+        .expect("current archive")
+        .query_row(
+            "SELECT revision, channel_in_app, channel_os_scheduled
+             FROM benefit_reminder_profile
+             WHERE profile_kind = 'global' AND length(profile_scope_id) = 0",
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            },
+        )
+        .expect("unchanged global profile");
+    assert_eq!(during_profile, before_profile);
+    assert_eq!(persisted_reminder_leads(&root), vec![21_600]);
+    assert_eq!(
+        owner
+            .reliable_state_projection_for_outcome(BootstrapOutcome::FirstInstall, None)
+            .expect("pending projection")
+            .reminder_policy()
+            .sync_state(),
+        DesktopReminderSyncState::Pending
+    );
+    writer.execute_batch("ROLLBACK").expect("release writer");
 }
 
 #[test]

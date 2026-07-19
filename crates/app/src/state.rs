@@ -604,12 +604,12 @@ impl ApplicationStateOwner {
         permit
             .begin_irreversible()
             .map_err(|_| ApplicationError::invalid_lifecycle())?;
+        self.reminder_sync_state
+            .store(REMINDER_SYNC_PENDING, Ordering::Release);
         on_irreversible();
         self.settings
             .save(&value)
             .map_err(|_| ApplicationError::state())?;
-        self.reminder_sync_state
-            .store(REMINDER_SYNC_PENDING, Ordering::Release);
         Ok(())
     }
 
@@ -626,6 +626,12 @@ impl ApplicationStateOwner {
     ) -> Result<ReminderProfile, ApplicationError> {
         self.reminder_sync_state
             .store(REMINDER_SYNC_PENDING, Ordering::Release);
+        let inspection =
+            inspect_startup_archive(root.validated_directory(), StartupValidationMode::Normal)
+                .map_err(|_| ApplicationError::state())?;
+        if inspection.status() != StartupArchiveStatus::Current {
+            return Err(ApplicationError::state());
+        }
         let settings = self
             .settings
             .load()
