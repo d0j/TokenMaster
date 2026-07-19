@@ -52,6 +52,48 @@ fn assert_exact_accessible_role(window: &MainWindow, label: &str, role: Accessib
     );
 }
 
+fn backup_policy_intents(sink: &RecordingSink) -> Vec<(bool, u32, u32, u32)> {
+    sink.intents
+        .borrow()
+        .iter()
+        .filter_map(|intent| match intent {
+            DesktopIntent::UpdateBackupPolicy {
+                periodic_enabled,
+                quiet_seconds,
+                interval_seconds,
+                retention_budget_mib,
+            } => Some((
+                *periodic_enabled,
+                *quiet_seconds,
+                *interval_seconds,
+                *retention_budget_mib,
+            )),
+            _ => None,
+        })
+        .collect()
+}
+
+fn set_backup_value(window: &MainWindow, label: &str, value: u32) {
+    ElementHandle::find_by_accessible_label(window, label)
+        .find(|element| element.accessible_role() == Some(AccessibleRole::Spinbox))
+        .expect("backup numeric control")
+        .set_accessible_value(value.to_string());
+}
+
+fn backup_value(window: &MainWindow, label: &str) -> i32 {
+    ElementHandle::find_by_accessible_label(window, label)
+        .find(|element| element.accessible_role() == Some(AccessibleRole::Spinbox))
+        .expect("backup numeric control")
+        .accessible_value()
+        .expect("backup accessible value")
+        .parse()
+        .expect("backup integer value")
+}
+
+fn save_backup_policy(window: &MainWindow, quiet: i32, interval: i32, budget: i32) {
+    window.invoke_update_backup_policy(true, quiet, interval, budget);
+}
+
 impl Default for RecordingSink {
     fn default() -> Self {
         Self {
@@ -347,6 +389,43 @@ fn reliable_reminder_policy_projects_into_the_bounded_editor() {
             window.get_reminder_feedback()
         ),
         AccessibleRole::Text,
+    );
+    window
+        .window()
+        .set_size(slint::PhysicalSize::new(1120, 900));
+    set_backup_value(window, "Backup quiet period in seconds", 600);
+    set_backup_value(window, "Backup interval in seconds", 43_200);
+    set_backup_value(window, "Backup retention budget in mebibytes", 1_024);
+    window
+        .window()
+        .set_size(slint::PhysicalSize::new(700, 1_600));
+    assert_eq!(backup_value(window, "Backup quiet period in seconds"), 600);
+    assert_eq!(backup_value(window, "Backup interval in seconds"), 43_200);
+    assert_eq!(
+        backup_value(window, "Backup retention budget in mebibytes"),
+        1_024
+    );
+    save_backup_policy(window, 600, 43_200, 1_024);
+    assert_eq!(
+        backup_policy_intents(&sink),
+        vec![(true, 600, 43_200, 1_024)]
+    );
+    set_backup_value(window, "Backup quiet period in seconds", 900);
+    set_backup_value(window, "Backup interval in seconds", 86_400);
+    set_backup_value(window, "Backup retention budget in mebibytes", 2_048);
+    window
+        .window()
+        .set_size(slint::PhysicalSize::new(1120, 900));
+    assert_eq!(backup_value(window, "Backup quiet period in seconds"), 900);
+    assert_eq!(backup_value(window, "Backup interval in seconds"), 86_400);
+    assert_eq!(
+        backup_value(window, "Backup retention budget in mebibytes"),
+        2_048
+    );
+    save_backup_policy(window, 900, 86_400, 2_048);
+    assert_eq!(
+        backup_policy_intents(&sink),
+        vec![(true, 600, 43_200, 1_024), (true, 900, 86_400, 2_048)]
     );
     assert_exact_accessible_role(
         window,

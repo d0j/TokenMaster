@@ -108,23 +108,16 @@ export component SettingsView inherits Rectangle {
                 spacing: UiTokens.space-sm;
                 Text { text: "Automatic backup policy"; color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
                 enabled := CheckBox { text: "Enable periodic backups"; checked: root.periodic-enabled; accessible-label: "Enable periodic backups"; }
-                if root.settings-layout-mode == "wide": HorizontalLayout {
+                GridLayout {
                     spacing: UiTokens.space-sm;
-                    Text { text: "Quiet seconds"; color: UiTokens.text-secondary; vertical-alignment: center; }
-                    wide-quiet := SpinBox { minimum: 300; maximum: 3600; value: root.quiet-seconds; accessible-label: "Backup quiet period in seconds"; }
-                    Text { text: "Interval seconds"; color: UiTokens.text-secondary; vertical-alignment: center; }
-                    wide-interval := SpinBox { minimum: 21600; maximum: 604800; value: root.interval-seconds; accessible-label: "Backup interval in seconds"; }
-                    Text { text: "Budget MiB"; color: UiTokens.text-secondary; vertical-alignment: center; }
-                    wide-budget := SpinBox { minimum: 256; maximum: 65536; value: root.retention-budget-mib; accessible-label: "Backup retention budget in mebibytes"; }
-                    Button { text: "Save backup policy"; accessible-label: "Save automatic backup policy"; clicked => { root.update-backup-policy(enabled.checked, wide-quiet.value, wide-interval.value, wide-budget.value); } }
+                    Text { row: 0; col: 0; text: "Quiet seconds"; color: UiTokens.text-secondary; vertical-alignment: center; }
+                    quiet := SpinBox { row: 0; col: 1; minimum: 300; maximum: 3600; value: root.quiet-seconds; accessible-label: "Backup quiet period in seconds"; }
+                    Text { row: root.settings-layout-mode == "wide" ? 0 : 1; col: root.settings-layout-mode == "wide" ? 2 : 0; text: "Interval seconds"; color: UiTokens.text-secondary; vertical-alignment: center; }
+                    interval := SpinBox { row: root.settings-layout-mode == "wide" ? 0 : 1; col: root.settings-layout-mode == "wide" ? 3 : 1; minimum: 21600; maximum: 604800; value: root.interval-seconds; accessible-label: "Backup interval in seconds"; }
+                    Text { row: root.settings-layout-mode == "wide" ? 0 : 2; col: root.settings-layout-mode == "wide" ? 4 : 0; text: "Budget MiB"; color: UiTokens.text-secondary; vertical-alignment: center; }
+                    budget := SpinBox { row: root.settings-layout-mode == "wide" ? 0 : 2; col: root.settings-layout-mode == "wide" ? 5 : 1; minimum: 256; maximum: 65536; value: root.retention-budget-mib; accessible-label: "Backup retention budget in mebibytes"; }
                 }
-                if root.settings-layout-mode == "narrow": VerticalLayout {
-                    spacing: UiTokens.space-sm;
-                    HorizontalLayout { Text { text: "Quiet seconds"; color: UiTokens.text-secondary; vertical-alignment: center; } narrow-quiet := SpinBox { minimum: 300; maximum: 3600; value: root.quiet-seconds; accessible-label: "Backup quiet period in seconds"; } }
-                    HorizontalLayout { Text { text: "Interval seconds"; color: UiTokens.text-secondary; vertical-alignment: center; } narrow-interval := SpinBox { minimum: 21600; maximum: 604800; value: root.interval-seconds; accessible-label: "Backup interval in seconds"; } }
-                    HorizontalLayout { Text { text: "Budget MiB"; color: UiTokens.text-secondary; vertical-alignment: center; } narrow-budget := SpinBox { minimum: 256; maximum: 65536; value: root.retention-budget-mib; accessible-label: "Backup retention budget in mebibytes"; } }
-                    Button { text: "Save backup policy"; accessible-label: "Save automatic backup policy"; clicked => { root.update-backup-policy(enabled.checked, narrow-quiet.value, narrow-interval.value, narrow-budget.value); } }
-                }
+                Button { text: "Save backup policy"; accessible-label: "Save automatic backup policy"; clicked => { root.update-backup-policy(enabled.checked, quiet.value, interval.value, budget.value); } }
             }
         }
 
