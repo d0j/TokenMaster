@@ -120,6 +120,19 @@ Describe "TokenMaster application composition audit" {
             Should -Throw "*TM-APP-LIFECYCLE-SURFACE*"
     }
 
+    It "rejects showing a tray route without foreground activation" {
+        $fixture = New-AppAuditFixture -Name "lifecycle-focus"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'tokenmaster_desktop::activate_window(window.window())',
+            'Ok(())'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-LIFECYCLE-FOCUS*"
+    }
+
     It "rejects a second live runtime owner" {
         $fixture = New-AppAuditFixture -Name "duplicate-live"
         Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\application.rs") `

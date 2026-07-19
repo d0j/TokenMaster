@@ -30,6 +30,28 @@ pub enum DesktopLifecycleIntentAdmission {
     Rejected,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopTrayAvailability {
+    Available,
+    Unavailable,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopCloseEffect {
+    HideToTray,
+    Quit,
+}
+
+impl DesktopTrayAvailability {
+    #[must_use]
+    pub const fn close_effect(self) -> DesktopCloseEffect {
+        match self {
+            Self::Available => DesktopCloseEffect::HideToTray,
+            Self::Unavailable => DesktopCloseEffect::Quit,
+        }
+    }
+}
+
 pub trait DesktopLifecycleIntentSink {
     fn submit(&self, intent: DesktopLifecycleIntent) -> DesktopLifecycleIntentAdmission;
 }
@@ -84,4 +106,25 @@ pub fn select_production_renderer() -> anyhow::Result<()> {
         .select()
         .context("select production software renderer")?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DesktopCloseEffect, DesktopTrayAvailability};
+
+    #[test]
+    fn available_tray_hides_the_window_on_close() {
+        assert_eq!(
+            DesktopTrayAvailability::Available.close_effect(),
+            DesktopCloseEffect::HideToTray
+        );
+    }
+
+    #[test]
+    fn unavailable_tray_quits_instead_of_stranding_a_hidden_process() {
+        assert_eq!(
+            DesktopTrayAvailability::Unavailable.close_effect(),
+            DesktopCloseEffect::Quit
+        );
+    }
 }

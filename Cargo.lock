@@ -5571,6 +5571,7 @@ dependencies = [
  "num-traits",
  "once_cell",
  "pin-weak",
+ "raw-window-handle",
  "slint-macros",
  "unicode-segmentation",
  "vtable",
@@ -6128,6 +6129,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "i-slint-backend-testing",
+ "raw-window-handle",
  "rusqlite",
  "slint",
  "slint-build",
@@ -6138,6 +6140,7 @@ dependencies = [
  "tokenmaster-product",
  "tokenmaster-query",
  "tokenmaster-store",
+ "windows",
 ]
 
 [[package]]

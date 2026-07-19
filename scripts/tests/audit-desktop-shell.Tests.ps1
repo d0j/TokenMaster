@@ -1440,10 +1440,10 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-COMPACT-NO-OWNER*"
     }
 
-    It "rejects a second production tray component" {
+    It "rejects a second production tray owner" {
         $fixture = New-DesktopAuditFixture -Name "tray-second-component"
-        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\tray.slint") `
-            -Value 'export component DuplicateTray inherits SystemTrayIcon { }'
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\native_tray.rs") `
+            -Value 'fn duplicate_owner() { let _ = CreateWindowExW(); }'
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-TRAY-SURFACE*"
@@ -1451,23 +1451,23 @@ Describe "TokenMaster production desktop audit" {
 
     It "rejects removing a typed tray action" {
         $fixture = New-DesktopAuditFixture -Name "tray-missing-action"
-        $path = Join-Path $fixture "crates\desktop\ui\tray.slint"
+        $path = Join-Path $fixture "crates\desktop\src\native_tray.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            'callback open-compact-requested();',
-            'callback open-compact-disabled();'
+            'COMMAND_COMPACT => Some(DesktopLifecycleIntent::OpenCompact),',
+            'COMMAND_COMPACT => None,'
         )
         [System.IO.File]::WriteAllText($path, $text)
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
-            Should -Throw "*TM-DESKTOP-TRAY-SURFACE*"
+            Should -Throw "*TM-DESKTOP-TRAY-INTENT*"
     }
 
     It "rejects rewiring a tray click away from Show" {
         $fixture = New-DesktopAuditFixture -Name "tray-click-drift"
-        $path = Join-Path $fixture "crates\desktop\ui\tray.slint"
+        $path = Join-Path $fixture "crates\desktop\src\native_tray.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            'clicked => { root.show-requested(); }',
-            'clicked => { root.hide-requested(); }'
+            'inner.submit(DesktopLifecycleIntent::Show);',
+            'inner.submit(DesktopLifecycleIntent::Hide);'
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -1490,19 +1490,32 @@ Describe "TokenMaster production desktop audit" {
 
     It "rejects adding a tray runtime owner" {
         $fixture = New-DesktopAuditFixture -Name "tray-runtime-owner"
-        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\ui.rs") `
-            -Value 'struct TrayRuntime;'
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\native_tray.rs") `
+            -Value 'fn tray_poll() { Timer::default(); }'
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-TRAY-LIFECYCLE*"
+    }
+
+    It "rejects an unverified native tray callback binding" {
+        $fixture = New-DesktopAuditFixture -Name "tray-callback-binding-drift"
+        $path = Join-Path $fixture "crates\desktop\src\native_tray.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'let installed = unsafe { GetWindowLongPtrW(inner.hwnd, GWLP_USERDATA) };',
+            'let installed = callback_state as isize;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-TRAY-RECOVERY*"
     }
 
     It "rejects removing close-to-tray interception" {
         $fixture = New-DesktopAuditFixture -Name "tray-close-drift"
         $path = Join-Path $fixture "crates\desktop\src\ui.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            'on_close_requested(|| slint::CloseRequestResponse::HideWindow)',
-            'on_close_requested(|| slint::CloseRequestResponse::KeepWindowShown)'
+            'DesktopCloseEffect::Quit => {',
+            'DesktopCloseEffect::HideToTray => {'
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -1523,8 +1536,8 @@ Describe "TokenMaster production desktop audit" {
         $fixture = New-DesktopAuditFixture -Name "library-boundary"
 
         $receipt = & $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json
-        $receipt.rust_source_file_count | Should -Be 15
-        $receipt.slint_source_file_count | Should -Be 25
+        $receipt.rust_source_file_count | Should -Be 16
+        $receipt.slint_source_file_count | Should -Be 24
         $receipt.command_palette_query_scalar_maximum | Should -Be 64
         $receipt.command_palette_model_count | Should -Be 1
         $receipt.command_palette_shortcut_count | Should -Be 1
@@ -1539,7 +1552,12 @@ Describe "TokenMaster production desktop audit" {
         $receipt.tray_intent_count | Should -Be 5
         $receipt.tray_router_slot_count | Should -Be 1
         $receipt.tray_close_handler_count | Should -Be 1
-        $receipt.tray_owner_count | Should -Be 0
+        $receipt.tray_owner_count | Should -Be 1
+        $receipt.tray_explorer_recovery_count | Should -Be 1
+        $receipt.tray_readd_check_count | Should -Be 1
+        $receipt.tray_callback_binding_count | Should -Be 1
+        $receipt.tray_focus_count | Should -Be 1
+        $receipt.tray_polling_surface_count | Should -Be 0
         $receipt.tray_icon_sha256 | Should -Be '1782E746EFBB423DF3252FD76B9E9E7135416DA966DF0C5652588AC29C0A6246'
         $receipt.dashboard_section_count | Should -Be 6
         $receipt.dashboard_model_replacement_count | Should -Be 7

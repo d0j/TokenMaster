@@ -304,7 +304,7 @@ impl Application {
             .show()
             .map_err(|_| ApplicationError::ui_unavailable())?;
         let _ = self.shell.show_lifecycle_surface();
-        slint::run_event_loop().map_err(|_| ApplicationError::event_loop())
+        slint::run_event_loop_until_quit().map_err(|_| ApplicationError::event_loop())
     }
 
     #[cfg_attr(
@@ -573,11 +573,18 @@ impl ApplicationDesktopLifecycleSink {
             return DesktopLifecycleIntentAdmission::Rejected;
         };
         window.invoke_select_route(route.into());
+        Self::show_and_activate(&window)
+    }
+
+    fn show_and_activate(window: &MainWindow) -> DesktopLifecycleIntentAdmission {
         window.window().set_minimized(false);
-        match window.show() {
-            Ok(()) => DesktopLifecycleIntentAdmission::Accepted,
-            Err(_) => DesktopLifecycleIntentAdmission::Rejected,
+        if window.show().is_err() {
+            return DesktopLifecycleIntentAdmission::Rejected;
         }
+        tokenmaster_desktop::activate_window(window.window())
+            .map_or(DesktopLifecycleIntentAdmission::Rejected, |()| {
+                DesktopLifecycleIntentAdmission::Accepted
+            })
     }
 }
 
@@ -588,11 +595,7 @@ impl DesktopLifecycleIntentSink for ApplicationDesktopLifecycleSink {
                 let Some(window) = self.window.upgrade() else {
                     return DesktopLifecycleIntentAdmission::Rejected;
                 };
-                window.window().set_minimized(false);
-                match window.show() {
-                    Ok(()) => DesktopLifecycleIntentAdmission::Accepted,
-                    Err(_) => DesktopLifecycleIntentAdmission::Rejected,
-                }
+                Self::show_and_activate(&window)
             }
             ApplicationDesktopLifecycleEffect::Hide => {
                 let Some(window) = self.window.upgrade() else {

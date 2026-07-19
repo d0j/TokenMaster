@@ -40,8 +40,8 @@ if ($productionManifestText -match '\btokenmaster-(store|provider|runtime|codex|
 $rustFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.rs')
 $uiFiles = @(Get-ChildItem -LiteralPath $uiRoot -Recurse -File -Filter '*.slint')
 $productionFiles = @($rustFiles + $uiFiles)
-if ($rustFiles.Count -ne 15 -or $uiFiles.Count -ne 25) {
-    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain fifteen Rust and twenty-five Slint files'
+if ($rustFiles.Count -ne 16 -or $uiFiles.Count -ne 24) {
+    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain sixteen Rust and twenty-four Slint files'
 }
 $uiText = ($uiFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
@@ -439,23 +439,23 @@ if ($compactWidgetGeometrySlotCount -ne 1 -or
 if ($compactWidgetOwnerCount -ne 0) {
     throw 'TM-DESKTOP-COMPACT-NO-OWNER: compact mode must add no query snapshot worker timer cache or controller owner'
 }
-$trayPath = Join-Path $uiRoot 'tray.slint'
 $trayAssetPath = Join-Path $uiRoot 'assets\tokenmaster-tray-color-32.svg'
 $shellPath = Join-Path $sourceRoot 'shell.rs'
-foreach ($requiredTrayFile in @($trayPath, $trayAssetPath, $shellPath)) {
+$nativeTrayPath = Join-Path $sourceRoot 'native_tray.rs'
+foreach ($requiredTrayFile in @($trayAssetPath, $shellPath, $nativeTrayPath)) {
     if (-not (Test-Path -LiteralPath $requiredTrayFile)) {
         throw 'TM-DESKTOP-TRAY-BOUNDARY: production tray files are incomplete'
     }
 }
-$trayText = [System.IO.File]::ReadAllText($trayPath)
+$legacyTrayPath = Join-Path $uiRoot 'tray.slint'
+if (Test-Path -LiteralPath $legacyTrayPath) {
+    throw 'TM-DESKTOP-TRAY-SURFACE: Slint SystemTrayIcon must not own the production tray'
+}
+$nativeTrayText = [System.IO.File]::ReadAllText($nativeTrayPath)
 $shellText = [System.IO.File]::ReadAllText($shellPath)
 $trayComponentCount = [regex]::Matches(
-    $trayText,
-    'inherits SystemTrayIcon'
-).Count
-$trayCallbackCount = [regex]::Matches(
-    $trayText,
-    'callback (?:show|hide|open-compact|open-dashboard|quit)-requested\(\);'
+    $nativeTrayText,
+    'CreateWindowExW\('
 ).Count
 $trayIntentCount = [regex]::Matches(
     $shellText,
@@ -467,30 +467,59 @@ $trayRouterSlotCount = [regex]::Matches(
 ).Count
 $trayCloseHandlerCount = [regex]::Matches(
     $uiRustProductionText,
-    'on_close_requested\(\|\| slint::CloseRequestResponse::HideWindow\)'
+    'on_close_requested\(move \|\|'
 ).Count
 $trayOwnerCount = [regex]::Matches(
-    $trayText,
-    '(?i)\b(?:Timer|thread|spawn|cache|history|worker|query|snapshot|controller|runtime|store)\b'
-).Count + [regex]::Matches(
-    $productionText,
-    'Tray(?:Worker|Query|Cache|Snapshot|Controller|Runtime|Store)'
+    $nativeTrayText,
+    'static OWNER_ACTIVE: AtomicBool'
+).Count
+$trayPollingSurfaceCount = [regex]::Matches(
+    $nativeTrayText,
+    '(?i)\b(?:Timer|sleep|interval|poll|thread::spawn)\b'
+).Count
+$trayExplorerRecoveryCount = [regex]::Matches(
+    $nativeTrayText,
+    'RegisterWindowMessageW\(w!\("TaskbarCreated"\)\)'
+).Count
+$trayReAddCheckCount = [regex]::Matches(
+    $nativeTrayText,
+    'let restored = unsafe \{ Shell_NotifyIconW\(NIM_ADD, &data\) \}\.as_bool\(\);'
+).Count
+$trayCallbackBindingCount = [regex]::Matches(
+    $nativeTrayText,
+    'let installed = unsafe \{ GetWindowLongPtrW\(inner\.hwnd, GWLP_USERDATA\) \};[\s\S]{0,256}?if installed != callback_state as isize'
+).Count
+$trayCallbackBindingOrderCount = [regex]::Matches(
+    $nativeTrayText,
+    'SetWindowLongPtrW\([\s\S]{0,384}?let installed = unsafe \{ GetWindowLongPtrW\(inner\.hwnd, GWLP_USERDATA\) \};[\s\S]{0,768}?Shell_NotifyIconW\(NIM_ADD, &data\)'
+).Count
+$trayFocusCount = [regex]::Matches(
+    $nativeTrayText,
+    'SetForegroundWindow\(hwnd\)\.as_bool\(\)'
 ).Count
 $trayIconHash = (Get-FileHash -LiteralPath $trayAssetPath -Algorithm SHA256).Hash
-if ($trayComponentCount -ne 1 -or $trayCallbackCount -ne 5 -or
-    $trayText -notmatch 'export component TokenMasterTray inherits SystemTrayIcon' -or
-    [regex]::Matches($trayText, 'clicked\s*=>\s*\{\s*root\.show-requested\(\);\s*\}').Count -ne 1 -or
-    [regex]::Matches($trayText, 'activated\s*=>\s*\{\s*root\.(?:show|hide|open-compact|open-dashboard|quit)-requested\(\);\s*\}').Count -ne 5) {
-    throw 'TM-DESKTOP-TRAY-SURFACE: tray must expose one icon with five typed menu intents and click-to-show'
+if ($trayComponentCount -ne 1 -or $nativeTrayText -match '\bHWND_MESSAGE\b' -or
+    $nativeTrayText -notmatch 'WS_EX_TOOLWINDOW' -or $nativeTrayText -notmatch 'WS_POPUP' -or
+    [regex]::Matches($nativeTrayText, 'event == WM_LBUTTONUP[\s\S]{0,128}?DesktopLifecycleIntent::Show').Count -ne 1) {
+    throw 'TM-DESKTOP-TRAY-SURFACE: one hidden top-level native tray owner with click-to-show is required'
 }
 if ($trayIntentCount -ne 5 -or $trayRouterSlotCount -ne 1 -or
-    [regex]::Matches($uiRustProductionText, 'submit\(DesktopLifecycleIntent::(?:Show|Hide|OpenCompact|OpenDashboard|Quit)\)').Count -ne 5) {
+    [regex]::Matches($nativeTrayText, 'COMMAND_(?:SHOW|DASHBOARD|COMPACT|HIDE|QUIT) => Some\(DesktopLifecycleIntent::').Count -ne 5) {
     throw 'TM-DESKTOP-TRAY-INTENT: tray must use one queue-free router slot and exactly five typed lifecycle intents'
 }
-if ([regex]::Matches($uiRustProductionText, 'tray:\s*Option<TokenMasterTray>').Count -ne 1 -or
-    [regex]::Matches($uiRustProductionText, 'TokenMasterTray::new\(\)\?').Count -ne 1 -or
-    $trayCloseHandlerCount -ne 1 -or $trayOwnerCount -ne 0) {
-    throw 'TM-DESKTOP-TRAY-LIFECYCLE: tray must remain one optional component with close-to-tray and no new owner'
+if ([regex]::Matches($uiRustProductionText, 'tray:\s*RefCell<Option<DesktopNativeTrayOwner>>').Count -ne 1 -or
+    [regex]::Matches($uiRustProductionText, 'DesktopNativeTrayOwner::new\(').Count -ne 1 -or
+    $trayCloseHandlerCount -ne 1 -or $trayOwnerCount -ne 1 -or $trayPollingSurfaceCount -ne 0 -or
+    $uiRustProductionText -notmatch 'DesktopTrayAvailability::Unavailable' -or
+    $uiRustProductionText -notmatch 'DesktopCloseEffect::Quit[\s\S]{0,128}?slint::quit_event_loop\(\)') {
+    throw 'TM-DESKTOP-TRAY-LIFECYCLE: tray must remain one deferred owner with fail-safe close and no polling'
+}
+if ($trayExplorerRecoveryCount -ne 1 -or $trayReAddCheckCount -ne 1 -or
+    $trayCallbackBindingCount -ne 1 -or $trayCallbackBindingOrderCount -ne 1 -or
+    $nativeTrayText -notmatch 'inner\.set_available\(restored\);' -or
+    $nativeTrayText -notmatch 'if !available \{[\s\S]{0,128}?DesktopLifecycleIntent::Show' -or
+    $trayFocusCount -ne 1) {
+    throw 'TM-DESKTOP-TRAY-RECOVERY: Explorer recreation failure must be checked and surface the focused main window'
 }
 if ($trayIconHash -ne '1782E746EFBB423DF3252FD76B9E9E7135416DA966DF0C5652588AC29C0A6246') {
     throw 'TM-DESKTOP-TRAY-ASSET: production tray icon hash drifted'
@@ -1262,6 +1291,11 @@ if ($SourceOnly) {
         tray_router_slot_count = $trayRouterSlotCount
         tray_close_handler_count = $trayCloseHandlerCount
         tray_owner_count = $trayOwnerCount
+        tray_explorer_recovery_count = $trayExplorerRecoveryCount
+        tray_readd_check_count = $trayReAddCheckCount
+        tray_callback_binding_count = $trayCallbackBindingCount
+        tray_focus_count = $trayFocusCount
+        tray_polling_surface_count = $trayPollingSurfaceCount
         tray_icon_sha256 = $trayIconHash
         controller_worker_count = $workerConstructionCount
         retained_snapshot_slot_count = $snapshotSlotCount
@@ -1355,7 +1389,7 @@ $directProductionDependencies = @(
 )
 $expectedDependencies = @(
     'anyhow', 'chrono', 'slint', 'tokenmaster-domain', 'tokenmaster-engine',
-    'tokenmaster-product', 'tokenmaster-query'
+    'tokenmaster-product', 'tokenmaster-query', 'raw-window-handle', 'windows'
 )
 if (
     $directProductionDependencies.Count -ne $expectedDependencies.Count -or
@@ -1405,6 +1439,11 @@ if ($LASTEXITCODE -ne 0) {
     tray_router_slot_count = $trayRouterSlotCount
     tray_close_handler_count = $trayCloseHandlerCount
     tray_owner_count = $trayOwnerCount
+    tray_explorer_recovery_count = $trayExplorerRecoveryCount
+    tray_readd_check_count = $trayReAddCheckCount
+    tray_callback_binding_count = $trayCallbackBindingCount
+    tray_focus_count = $trayFocusCount
+    tray_polling_surface_count = $trayPollingSurfaceCount
     tray_icon_sha256 = $trayIconHash
     fixed_route_count = 11
     maximum_route_reason_count = 11

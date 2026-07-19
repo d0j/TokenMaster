@@ -149,10 +149,11 @@ foreach ($contract in @(
     @{ Name = 'TM-APP-LIFECYCLE-IMPL'; Pattern = 'impl DesktopLifecycleIntentSink for ApplicationDesktopLifecycleSink'; Count = 1 },
     @{ Name = 'TM-APP-LIFECYCLE-COMPACT'; Pattern = 'DesktopLifecycleIntent::OpenCompact => Self::OpenRoute\("compact_widget"\)'; Count = 1 },
     @{ Name = 'TM-APP-LIFECYCLE-DASHBOARD'; Pattern = 'DesktopLifecycleIntent::OpenDashboard => Self::OpenRoute\("dashboard"\)'; Count = 1 },
+    @{ Name = 'TM-APP-LIFECYCLE-FOCUS'; Pattern = 'tokenmaster_desktop::activate_window\(window\.window\(\)\)'; Count = 1 },
     @{ Name = 'TM-APP-LIFECYCLE-QUIT'; Pattern = 'ApplicationDesktopLifecycleEffect::Quit => \{[\s\S]{0,256}?slint::quit_event_loop\(\)'; Count = 1 },
     @{ Name = 'TM-APP-LIFECYCLE-SURFACE'; Pattern = 'let _ = self\.shell\.show_lifecycle_surface\(\);'; Count = 1 },
     @{ Name = 'TM-APP-BRIDGE'; Pattern = '\.snapshot_bridge\('; Count = 1 },
-    @{ Name = 'TM-APP-EVENT-LOOP'; Pattern = 'slint::run_event_loop\('; Count = 1 },
+    @{ Name = 'TM-APP-EVENT-LOOP'; Pattern = 'slint::run_event_loop_until_quit\('; Count = 1 },
     @{ Name = 'TM-APP-PORTABLE-MARKER'; Pattern = '"tokenmaster\.portable"'; Count = 1 },
     @{ Name = 'TM-APP-ARCHIVE-NAME'; Pattern = '"tokenmaster\.sqlite3"'; Count = 1 }
 )) {
@@ -176,7 +177,7 @@ $eventLoopFunction = [regex]::Match(
 ).Value
 $visibleIndex = $eventLoopFunction.IndexOf('.window()', [System.StringComparison]::Ordinal)
 $trayIndex = $eventLoopFunction.IndexOf('show_lifecycle_surface()', [System.StringComparison]::Ordinal)
-$loopIndex = $eventLoopFunction.IndexOf('slint::run_event_loop()', [System.StringComparison]::Ordinal)
+$loopIndex = $eventLoopFunction.IndexOf('slint::run_event_loop_until_quit()', [System.StringComparison]::Ordinal)
 if ([string]::IsNullOrWhiteSpace($eventLoopFunction) -or $visibleIndex -lt 0 -or
     $trayIndex -le $visibleIndex -or $loopIndex -le $trayIndex) {
     throw 'TM-APP-LIFECYCLE-VISIBLE-FALLBACK: visible window must precede optional tray show and the event loop'

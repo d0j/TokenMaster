@@ -8,6 +8,7 @@ pub mod dashboard;
 pub mod history;
 pub mod in_app_notification;
 pub mod models;
+mod native_tray;
 pub mod notifications;
 pub mod presentation;
 pub mod projects;
@@ -25,6 +26,8 @@ mod generated_ui {
 
 pub use generated_ui::*;
 
+pub use native_tray::{DesktopWindowActivationError, activate_window};
+
 mod ui;
 
 pub use activity::*;
@@ -41,8 +44,9 @@ pub use projects::*;
 pub use reliable_state::*;
 pub use sessions::*;
 pub use shell::{
-    DesktopLifecycleIntent, DesktopLifecycleIntentAdmission, DesktopLifecycleIntentRouter,
-    DesktopLifecycleIntentRouterError, DesktopLifecycleIntentSink, select_production_renderer,
+    DesktopCloseEffect, DesktopLifecycleIntent, DesktopLifecycleIntentAdmission,
+    DesktopLifecycleIntentRouter, DesktopLifecycleIntentRouterError, DesktopLifecycleIntentSink,
+    DesktopTrayAvailability, select_production_renderer,
 };
 pub use ui::{
     DesktopBridgeFactory, DesktopReliableStateNotifier, DesktopShell, DesktopUiError,
