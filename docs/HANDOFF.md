@@ -61,8 +61,10 @@ native thread owns the unnamed shutdown event and fixed `Ctrl+Alt+T` registratio
 Secondary and hotkey requests use the existing Show/restore/focus path through one
 pending bit and one scheduled Slint task; 10,000 requests retain constant capacity and
 panics are contained. Shutdown joins/unregisters before clean publication. Focused
-tests, strict focused Clippy, 84 application audit mutations, 256 test-owner resource
-cycles, and independent Critical/Important/Minor 0/0/0 review pass. Do not infer live
+tests, strict focused Clippy, 84 application audit mutations, and 4,096 test-owner
+cycles with handle growth bounded to eight and thread/USER/GDI growth to one under
+concurrent harness noise pass. Independent Critical/Important/Minor 0/0/0 review found
+no product-code issue. Do not infer live
 two-process, occupied-hotkey, foreground-policy, cross-token ACL, sleep/resume, or real
 RegisterHotKey resource evidence. Current-user startup and remaining P3-E/P4/P5/P6,
 M0, packaging, signing, soak, and release remain open.

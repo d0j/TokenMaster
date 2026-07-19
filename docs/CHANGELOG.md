@@ -14,7 +14,8 @@ All notable changes are recorded here.
   message-driven thread and one unnamed shutdown event. Both sources reuse the existing
   Show/restore/focus path through one pending bit and one scheduled Slint task, with
   startup retry retention and panic containment. Ten thousand requests remain constant-
-  capacity; 256 test-owner cycles return handles, threads, USER, and GDI resources.
+  capacity. Across 4,096 test-owner cycles, handle growth is bounded to eight and
+  thread/USER/GDI growth to one under concurrent harness noise.
   Focused platform/app tests, strict focused Clippy, 84 application-audit mutations,
   and independent Critical/Important/Minor 0/0/0 review pass. Live two-process,
   occupied-hotkey, foreground-policy, cross-token ACL, sleep/resume, and real hotkey

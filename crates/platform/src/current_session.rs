@@ -661,12 +661,15 @@ mod imp {
         fn repeated_owner_cycles_return_native_resources() {
             exercise_joined_owner_cycle();
             let before = resource_counts();
-            for _ in 0..256 {
+            for _ in 0..4_096 {
                 exercise_joined_owner_cycle();
             }
             let after = resource_counts();
+            // The library test harness runs unrelated tests in this process in parallel.
+            // A fixed eight-handle envelope absorbs their startup/teardown overlap. The
+            // gate rejects growth above eight handles across the complete 4,096 cycles.
             assert!(
-                after.handles <= before.handles.saturating_add(2),
+                after.handles <= before.handles.saturating_add(8),
                 "current-session handles grew: before={before:?}, after={after:?}"
             );
             assert!(

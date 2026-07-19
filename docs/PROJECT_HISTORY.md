@@ -3655,9 +3655,21 @@ Focused platform and complete app-package tests pass, including stable failure-c
 startup retry, panic containment, and 10,000-request contracts. Eighty-four computed
 application-composition mutation cases pin early claim, exact event/hotkey, capacity,
 weak ownership, stable error, and shutdown ordering. Strict focused Clippy passes.
-Two hundred fifty-six test-owner cycles return handles, threads, USER, and GDI objects
-with real hotkey registration intentionally disabled. Independent high-risk review
-returned Critical 0, Important 0, Minor 0, Ready. Live two-process arbitration,
+Four thousand ninety-six test-owner cycles bound handle growth to eight and thread/
+USER/GDI growth to one under concurrent harness noise, with real hotkey registration
+intentionally disabled. Independent product-code review returned Critical 0, Important
+0, Minor 0, Ready. Live two-process arbitration,
 occupied-hotkey behavior, foreground policy, cross-token default-DACL behavior,
 sleep/resume, and real RegisterHotKey resource return remain interactive gates.
 Current-user startup, P4/P5/P6, M0, packaging, signing, soak, and release remain open.
+
+The first complete workspace baseline exposed a validator-only concurrency flaw: the
+process-wide resource sample overlapped other parallel platform unit tests and observed
+four additional handles while two unrelated threads exited. The exact isolated 256-
+cycle test passed immediately. A focused re-review then correctly rejected the phrase
+"no linear growth" as stronger than a fixed-size test. The corrected contract executes
+4,096 cycles and states only its measured bounds: handle growth at most eight and
+thread/USER/GDI growth at most one. It rejects growth above eight handles across the
+complete run; rarer growth within that fixed envelope is not excluded. The complete
+baseline must be rerun after this validator correction before final developer closure
+is claimed.

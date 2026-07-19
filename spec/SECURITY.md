@@ -53,8 +53,9 @@ pending bit and one Slint task; native dispatch catches sink panic. Synchronous
 unregister/join precedes the sole clean-run transition.
 
 Focused contracts prove early branching, the exact fixed identifiers, checked counters,
-panic containment, 10,000-signal application coalescing, and 256 test-owner cycles that
-return handles, threads, USER, and GDI objects with real hotkey registration disabled.
+panic containment, 10,000-signal application coalescing, and 4,096 test-owner cycles.
+Across that run handle growth is bounded to eight and thread/USER/GDI growth to one
+under concurrent harness noise, with real hotkey registration disabled.
 Actual two-process arbitration, foreground policy, occupied-hotkey behavior, default-
 DACL access between live tokens/sessions, sleep/resume, and RegisterHotKey resource
 return remain interactive release evidence.

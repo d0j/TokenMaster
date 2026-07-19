@@ -78,8 +78,9 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   failure retains one startup-flushable bit, and delivery/native sink panic is
   contained. Shutdown closes admission and joins/unregisters before the clean mark.
   Focused platform/app tests, 84 application-audit mutations, strict focused Clippy,
-  256 test-owner handle/thread/USER/GDI return cycles, and independent Critical/
-  Important/Minor 0/0/0 review pass. Live two-process arbitration, occupied hotkey,
+  4,096 test-owner cycles with handle growth bounded to eight and thread/USER/GDI
+  growth to one under concurrent harness noise, and independent Critical/Important/
+  Minor 0/0/0 review pass. Live two-process arbitration, occupied hotkey,
   foreground policy, cross-token ACL, sleep/resume, and real RegisterHotKey resource
   return remain interactive evidence. Current-user startup is the next P3-E slice;
   P4/P5/P6, M0, packaging, signing, soak, and release remain incomplete.
