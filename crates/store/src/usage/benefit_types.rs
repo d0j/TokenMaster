@@ -94,13 +94,13 @@ impl BenefitApplyResult {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct BenefitProfileApplyResult {
     benefit_revision: BenefitInventoryRevision,
-    pending_due_count: u16,
+    pending_due_count: u64,
 }
 
 impl BenefitProfileApplyResult {
     pub(super) const fn new(
         benefit_revision: BenefitInventoryRevision,
-        pending_due_count: u16,
+        pending_due_count: u64,
     ) -> Self {
         Self {
             benefit_revision,
@@ -114,7 +114,7 @@ impl BenefitProfileApplyResult {
     }
 
     #[must_use]
-    pub const fn pending_due_count(self) -> u16 {
+    pub const fn pending_due_count(self) -> u64 {
         self.pending_due_count
     }
 }

@@ -212,7 +212,7 @@ impl UsageStore {
         transaction.commit()?;
         Ok(BenefitProfileApplyResult::new(
             next_global_revision,
-            output_u16(next_due_count)?,
+            output_u64(next_due_count)?,
         ))
     }
 
@@ -298,7 +298,7 @@ impl UsageStore {
         transaction.commit()?;
         Ok(BenefitProfileApplyResult::new(
             next_global_revision,
-            output_u16(next_global_due_count)?,
+            output_u64(next_global_due_count)?,
         ))
     }
 }
@@ -353,7 +353,7 @@ fn current_profile_result(
     }
     Ok(BenefitProfileApplyResult::new(
         global.revision,
-        output_u16(pending_due_count)?,
+        output_u64(pending_due_count)?,
     ))
 }
 
@@ -1337,6 +1337,10 @@ fn input_u8(value: i64) -> Result<u8, StoreError> {
 
 fn output_u16(value: i64) -> Result<u16, StoreError> {
     u16::try_from(value).map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))
+}
+
+fn output_u64(value: i64) -> Result<u64, StoreError> {
+    u64::try_from(value).map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))
 }
 
 pub(super) fn map_core_error(error: BenefitCoreError) -> StoreError {

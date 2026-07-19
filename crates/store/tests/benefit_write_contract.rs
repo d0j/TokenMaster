@@ -681,6 +681,75 @@ fn global_profile_ignores_overridden_scope_and_lot_capacity() {
 }
 
 #[test]
+fn global_profile_returns_large_overridden_due_aggregate_across_retry_and_reopen() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("benefit-global-profile-large-overridden-due.sqlite3");
+    let overflow_due_count = u64::from(u16::MAX) + 1;
+    let override_profile = profile(
+        1,
+        &[604_800, 86_400, 43_200, 21_600, 10_800, 3_600, 1_800, 900],
+        true,
+    );
+    let expiry =
+        BenefitExpiry::exact_utc(OBSERVED_AT_MS + 10 * 24 * 60 * 60 * 1_000).expect("expiry");
+    let lots: Vec<BenefitLotObservation> = (0..64_u8)
+        .map(|id| lot(id, BenefitState::Available, expiry.clone()))
+        .collect();
+    let mut store = UsageStore::open(&path).expect("store");
+    store
+        .set_benefit_reminder_global_profile(&profile(2, &[], false))
+        .expect("disable global profile before overridden scopes");
+    for index in 0..128_u8 {
+        let scope = scope_with_account(&format!("acct_overflow_{index}"));
+        store
+            .apply_benefit_observation(&observation_for(
+                scope.clone(),
+                index,
+                OBSERVED_AT_MS + i64::from(index),
+                lots.clone(),
+            ))
+            .expect("overridden observation");
+        store
+            .set_benefit_reminder_override(&scope, Some(&override_profile))
+            .expect("overridden profile");
+    }
+    assert_eq!(
+        global_profile_state(&Connection::open(&path).expect("inspect overridden aggregate")),
+        (2, 0, overflow_due_count as i64, 0)
+    );
+
+    let global_profile = profile(3, &[21_600], true);
+    let applied = store
+        .set_benefit_reminder_global_profile(&global_profile)
+        .expect("large global due aggregate is returned without a post-commit error");
+    assert_eq!(applied.pending_due_count(), overflow_due_count);
+    assert_eq!(
+        global_profile_state(&Connection::open(&path).expect("inspect global profile")),
+        (3, 1, overflow_due_count as i64, 0)
+    );
+
+    let retried = store
+        .set_benefit_reminder_global_profile(&global_profile)
+        .expect("idempotent retry");
+    assert_eq!(retried.pending_due_count(), overflow_due_count);
+    drop(store);
+
+    let mut reopened = UsageStore::open(&path).expect("reopen");
+    let retried_after_reopen = reopened
+        .set_benefit_reminder_global_profile(&global_profile)
+        .expect("idempotent retry after reopen");
+    assert_eq!(retried_after_reopen.pending_due_count(), overflow_due_count);
+    drop(reopened);
+
+    assert_eq!(
+        global_profile_state(&Connection::open(&path).expect("inspect reopened profile")),
+        (3, 1, overflow_due_count as i64, 0)
+    );
+}
+
+#[test]
 fn terminal_retirement_and_later_reappearance_keep_monotonic_lot_revision() {
     let directory = TempDir::new().expect("temporary directory");
     let path = directory
