@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use tokenmaster_desktop::DesktopReminderPolicyUpdate;
 use tokenmaster_platform::{SelectedInputFile, SelectedOutputFile};
-use tokenmaster_state::BackupPassphrase;
+use tokenmaster_state::{BackupPassphrase, ReminderPolicy};
 
 const COMMAND_RUNNING: u8 = 0;
 const COMMAND_CANCELLED: u8 = 1;
@@ -134,18 +134,14 @@ impl fmt::Debug for ApplicationBackupPolicyUpdate {
 
 #[derive(Eq, PartialEq)]
 pub(crate) struct ApplicationReminderPolicyUpdate {
-    enabled: bool,
-    lead_seconds: Box<[u32]>,
+    policy: ReminderPolicy,
 }
 
 impl ApplicationReminderPolicyUpdate {
     pub(crate) fn new(enabled: bool, lead_seconds: &[u32]) -> Option<Self> {
-        tokenmaster_state::ReminderPolicy::new(enabled, lead_seconds)
+        ReminderPolicy::new(enabled, lead_seconds)
             .ok()
-            .map(|_| Self {
-                enabled,
-                lead_seconds: lead_seconds.into(),
-            })
+            .map(|policy| Self { policy })
     }
 
     pub(crate) fn from_desktop(update: DesktopReminderPolicyUpdate) -> Option<Self> {
@@ -153,11 +149,15 @@ impl ApplicationReminderPolicyUpdate {
     }
 
     pub(crate) const fn enabled(&self) -> bool {
-        self.enabled
+        self.policy.enabled()
     }
 
     pub(crate) fn lead_seconds(&self) -> &[u32] {
-        &self.lead_seconds
+        self.policy.lead_seconds()
+    }
+
+    pub(crate) fn into_policy(self) -> ReminderPolicy {
+        self.policy
     }
 }
 

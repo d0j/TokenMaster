@@ -139,6 +139,54 @@ fn completion_wait_is_bounded_and_returns_the_exact_published_receipt() {
 }
 
 #[test]
+fn cloned_submitter_keeps_one_worker_capacity_and_closes_after_shutdown() {
+    let clock = Arc::new(TestClock::default());
+    let (entered_tx, entered_rx) = sync_channel(1);
+    let (release_tx, release_rx) = sync_channel(1);
+    let mut worker = RefreshWorker::spawn(clock, move |permit| {
+        entered_tx.send(permit.id()).expect("active task");
+        release_rx.recv().expect("release task");
+        RefreshOutcome::Completed
+    })
+    .expect("worker");
+    let first = worker.submitter();
+    let second = first.clone();
+    assert!(matches!(
+        first
+            .submit(RefreshUrgency::Hint, None)
+            .expect("first submit"),
+        RefreshAdmission::Started(_)
+    ));
+    let _ = entered_rx
+        .recv_timeout(Duration::from_secs(2))
+        .expect("active task");
+    assert!(matches!(
+        second
+            .submit(RefreshUrgency::Hint, None)
+            .expect("coalesced submit"),
+        RefreshAdmission::Coalesced { .. }
+    ));
+    release_tx.send(()).expect("release task");
+    let _ = entered_rx
+        .recv_timeout(Duration::from_secs(2))
+        .expect("follow-up task");
+    release_tx.send(()).expect("release follow-up");
+    wait_until(|| {
+        worker
+            .snapshot()
+            .is_ok_and(|snapshot| snapshot.active_request_id().is_none())
+    });
+    assert_eq!(worker.shutdown().expect("shutdown"), WorkerPhase::Stopped);
+    assert_eq!(
+        first
+            .submit(RefreshUrgency::Hint, None)
+            .expect_err("closed submit")
+            .code(),
+        WorkerErrorCode::Closed
+    );
+}
+
+#[test]
 fn ten_thousand_hints_use_one_follow_up_and_latest_only_result_slot() {
     let clock = Arc::new(TestClock::default());
     let calls = Arc::new(AtomicU64::new(0));

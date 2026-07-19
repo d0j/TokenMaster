@@ -193,6 +193,13 @@ pub struct RefreshWorker {
     thread: Option<JoinHandle<()>>,
 }
 
+#[derive(Clone)]
+pub struct RefreshSubmitter {
+    clock: Arc<dyn Clock>,
+    state: Arc<Mutex<WorkerState>>,
+    wake_sender: SyncSender<Wake>,
+}
+
 impl RefreshWorker {
     pub fn spawn<F>(clock: Arc<dyn Clock>, execute: F) -> Result<Self, WorkerError>
     where
@@ -270,33 +277,16 @@ impl RefreshWorker {
         urgency: RefreshUrgency,
         deadline: Option<RefreshDeadline>,
     ) -> Result<RefreshAdmission, WorkerError> {
-        ensure_admission_phase(lock_state(&self.state)?.phase)?;
-        let now = self.clock.now();
-        let admission = {
-            let mut state = lock_state(&self.state)?;
-            ensure_admission_phase(state.phase)?;
-            let admission = state
-                .coordinator
-                .submit(urgency, deadline, now)
-                .map_err(map_engine_error)?;
-            if let RefreshAdmission::Started(permit) = &admission {
-                if state.pending_start.is_some() {
-                    return Err(WorkerError::new(WorkerErrorCode::Internal));
-                }
-                state.pending_start = Some(permit.clone());
-            }
-            admission
-        };
+        self.submitter().submit(urgency, deadline)
+    }
 
-        if matches!(admission, RefreshAdmission::Started(_)) {
-            match self.wake_sender.try_send(Wake::Work) {
-                Ok(()) | Err(TrySendError::Full(_)) => {}
-                Err(TrySendError::Disconnected(_)) => {
-                    return Err(WorkerError::new(WorkerErrorCode::Closed));
-                }
-            }
+    #[must_use]
+    pub fn submitter(&self) -> RefreshSubmitter {
+        RefreshSubmitter {
+            clock: Arc::clone(&self.clock),
+            state: Arc::clone(&self.state),
+            wake_sender: self.wake_sender.clone(),
         }
-        Ok(admission)
     }
 
     pub fn cancel(&self, request_id: RefreshRequestId) -> Result<(), WorkerError> {
@@ -371,6 +361,42 @@ impl RefreshWorker {
             state.phase = WorkerPhase::Stopped;
         }
         Ok(state.phase)
+    }
+}
+
+impl RefreshSubmitter {
+    pub fn submit(
+        &self,
+        urgency: RefreshUrgency,
+        deadline: Option<RefreshDeadline>,
+    ) -> Result<RefreshAdmission, WorkerError> {
+        ensure_admission_phase(lock_state(&self.state)?.phase)?;
+        let now = self.clock.now();
+        let admission = {
+            let mut state = lock_state(&self.state)?;
+            ensure_admission_phase(state.phase)?;
+            let admission = state
+                .coordinator
+                .submit(urgency, deadline, now)
+                .map_err(map_engine_error)?;
+            if let RefreshAdmission::Started(permit) = &admission {
+                if state.pending_start.is_some() {
+                    return Err(WorkerError::new(WorkerErrorCode::Internal));
+                }
+                state.pending_start = Some(permit.clone());
+            }
+            admission
+        };
+
+        if matches!(admission, RefreshAdmission::Started(_)) {
+            match self.wake_sender.try_send(Wake::Work) {
+                Ok(()) | Err(TrySendError::Full(_)) => {}
+                Err(TrySendError::Disconnected(_)) => {
+                    return Err(WorkerError::new(WorkerErrorCode::Closed));
+                }
+            }
+        }
+        Ok(admission)
     }
 }
 

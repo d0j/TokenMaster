@@ -9,8 +9,7 @@ use tokenmaster_desktop::{
     DesktopBackupHealth, DesktopBackupPolicy, DesktopConfigImportPreview, DesktopOperationSnapshot,
     DesktopRecoveryReceipt, DesktopReliableStateHealth, DesktopReliableStateInput,
     DesktopReliableStateProjection, DesktopReliableStateSummary, DesktopReminderPolicy,
-    DesktopReminderPolicyUpdate, DesktopReminderSyncState, DesktopRestorePointInput,
-    DesktopRestoreSelection,
+    DesktopReminderSyncState, DesktopRestorePointInput, DesktopRestoreSelection,
 };
 use tokenmaster_domain::{
     NotificationChannel, ReminderLeadTime, ReminderProfile, ReminderProfileParts,
@@ -571,15 +570,12 @@ impl ApplicationStateOwner {
     pub(crate) fn update_reminder_policy(
         &self,
         permit: &ApplicationCommandPermit,
-        update: DesktopReminderPolicyUpdate,
+        policy: tokenmaster_state::ReminderPolicy,
         mut on_irreversible: impl FnMut(),
     ) -> Result<(), ApplicationError> {
         if permit.command() != ApplicationCommand::UpdateReminderPolicy || permit.is_cancelled() {
             return Err(ApplicationError::invalid_lifecycle());
         }
-        let policy =
-            tokenmaster_state::ReminderPolicy::new(update.enabled(), update.lead_seconds())
-                .map_err(|_| ApplicationError::state())?;
         let current = self
             .settings
             .load()

@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::Connection;
 use tempfile::TempDir;
-use tokenmaster_desktop::{DesktopIntent, DesktopReliableStateHealth, DesktopReminderSyncState};
+use tokenmaster_desktop::{DesktopReliableStateHealth, DesktopReminderSyncState};
 use tokenmaster_domain::{
     BenefitConfidence, BenefitDetailKind, BenefitEvidenceSource, BenefitExpiry,
     BenefitInventoryCompleteness, BenefitInventoryObservation, BenefitInventoryObservationParts,
@@ -134,16 +134,8 @@ fn changed_portable_settings() -> PortableSettingsCandidate {
         .expect("portable candidate")
 }
 
-fn reminder_policy_update(
-    enabled: bool,
-    lead_seconds: &[u32],
-) -> tokenmaster_desktop::DesktopReminderPolicyUpdate {
-    let DesktopIntent::UpdateReminderPolicy(update) =
-        DesktopIntent::update_reminder_policy(enabled, lead_seconds).expect("desktop update")
-    else {
-        panic!("reminder policy intent");
-    };
-    update
+fn reminder_policy_update(enabled: bool, lead_seconds: &[u32]) -> ReminderPolicy {
+    ReminderPolicy::new(enabled, lead_seconds).expect("reminder policy")
 }
 
 fn seed_real_reminder_archive(path: &std::path::Path) {

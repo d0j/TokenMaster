@@ -236,8 +236,10 @@ fn reminder_policy_sync_failure_keeps_the_durable_save_and_returns_success() {
     else {
         panic!("reminder intent");
     };
+    let update = crate::command::ApplicationReminderPolicyUpdate::from_desktop(update)
+        .expect("application reminder update");
     state
-        .update_reminder_policy(&permit, update, || {})
+        .update_reminder_policy(&permit, update.into_policy(), || {})
         .expect("durable reminder save");
     let bundle: SharedBundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
     synchronize_reminder_policy_after_settings(&state, &root, &bundle)
@@ -585,6 +587,7 @@ fn real_bundle_joins_live_health_and_independent_optional_failures_then_shuts_do
     let controller =
         DesktopController::open(&archive, DesktopQueryPlan::overview().expect("query plan"))
             .expect("desktop controller");
+    let refresh_ingress = controller.refresh_ingress();
     let maintenance = BackupMaintenanceRuntime::spawn(
         Arc::new(SystemMaintenanceClock::new()),
         SettingsValue::safe_defaults().portable().backup().clone(),
@@ -607,6 +610,7 @@ fn real_bundle_joins_live_health_and_independent_optional_failures_then_shuts_do
         },
         notification_presentation: None,
         controller,
+        refresh_ingress,
         maintenance,
         notifier: Arc::new(ApplicationRuntimeNotifier::new(Weak::new(), 1)),
     };
@@ -651,6 +655,32 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     let temporary = TempDir::new().expect("temporary directory");
     let environment = application_environment(&temporary);
     let mut application = Application::start(&environment).expect("application startup");
+    assert_eq!(
+        application.reliable_publish_count.load(Ordering::Acquire),
+        1,
+        "initial live bundle publishes one current reliable projection"
+    );
+    assert_eq!(
+        application
+            .state
+            .reliable_state_projection_for_outcome(BootstrapOutcome::Healthy, None)
+            .expect("initial reliable projection")
+            .reminder_policy()
+            .sync_state(),
+        tokenmaster_desktop::DesktopReminderSyncState::Synchronized
+    );
+    assert!(
+        application
+            .bundle
+            .lock()
+            .expect("initial bundle")
+            .as_ref()
+            .expect("initial live bundle")
+            .reminder
+            .owner()
+            .is_some(),
+        "synchronization completes before the optional reminder starts"
+    );
 
     let root = DataRoot::resolve(&environment).expect("data root");
     assert!(root.archive_path().exists());
@@ -708,9 +738,15 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     let old_notifier = Arc::clone(&bundle_slot.as_ref().expect("healthy bundle").notifier);
     drop(bundle_slot);
 
+    let direct_restart_publications = application.reliable_publish_count.load(Ordering::Acquire);
     application
         .restart_services()
         .expect("controlled service restart");
+    assert_eq!(
+        application.reliable_publish_count.load(Ordering::Acquire),
+        direct_restart_publications + 1,
+        "direct restart publishes exactly one current reliable projection"
+    );
     let restarted_slot = application.bundle.lock().expect("restarted bundle slot");
     assert!(restarted_slot.generation > old_bundle_generation);
     assert!(restarted_slot.is_some());
@@ -733,6 +769,7 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
         .lock()
         .expect("pre-restore bundle")
         .generation;
+    let operation_restore_publications = application.reliable_publish_count.load(Ordering::Acquire);
     let ApplicationCommandAdmission::Started(restore) = application
         .commands
         .submit(ApplicationCommand::RestoreData(selected_restore))
@@ -744,6 +781,11 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     assert_eq!(
         restore_completion.outcome(),
         ApplicationCommandOutcome::Succeeded
+    );
+    assert_eq!(
+        application.reliable_publish_count.load(Ordering::Acquire),
+        operation_restore_publications,
+        "operation replacement leaves publication to its one completion projection"
     );
     let restored_slot = application.bundle.lock().expect("restored bundle slot");
     assert!(restored_slot.generation > pre_restore_generation);
@@ -829,6 +871,9 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     disable_periodic_backups(&migration_root);
     let mut migration_application =
         Application::start(&migration_environment).expect("guarded migration startup");
+    let direct_restore_publications = migration_application
+        .reliable_publish_count
+        .load(Ordering::Acquire);
     assert!(
         migration_application
             .bundle
@@ -863,6 +908,13 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     migration_application
         .restore_selected(legacy_restore, RestoreMode::DataOnly)
         .expect("legacy selected restore passes guarded migration lifecycle");
+    assert_eq!(
+        migration_application
+            .reliable_publish_count
+            .load(Ordering::Acquire),
+        direct_restore_publications + 1,
+        "direct restored bundle publishes exactly one current reliable projection"
+    );
     let restored_legacy_slot = migration_application
         .bundle
         .lock()

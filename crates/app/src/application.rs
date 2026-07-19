@@ -11,11 +11,12 @@ use tokenmaster_codex::{CodexRootInput, ConfiguredCodexRoot, build_discovery_req
 use tokenmaster_desktop::{
     DesktopBridgeFactory, DesktopController, DesktopIntent, DesktopIntentAdmission,
     DesktopIntentRouter, DesktopIntentSink, DesktopOperationKind, DesktopOperationPhase,
-    DesktopOperationSnapshot, DesktopQueryPlan, DesktopRefreshAdmission, DesktopRefreshUrgency,
-    DesktopReliableStateNotifier, DesktopReliableStateProjection, DesktopRestoreSelection,
-    DesktopRuntimeObservation, DesktopSessionDetailIntent, DesktopSessionDetailIntentAdmission,
-    DesktopSessionDetailIntentRouter, DesktopSessionDetailIntentSink, DesktopShell,
-    DesktopSnapshotBridge, select_production_renderer,
+    DesktopOperationSnapshot, DesktopQueryPlan, DesktopRefreshAdmission, DesktopRefreshIngress,
+    DesktopRefreshUrgency, DesktopReliableStateNotifier, DesktopReliableStateProjection,
+    DesktopRestoreSelection, DesktopRuntimeObservation, DesktopSessionDetailIntent,
+    DesktopSessionDetailIntentAdmission, DesktopSessionDetailIntentRouter,
+    DesktopSessionDetailIntentSink, DesktopShell, DesktopSnapshotBridge,
+    select_production_renderer,
 };
 use tokenmaster_engine::{
     RefreshOutcome, RefreshUrgency, WorkerCompletion, WorkerCompletionNotifier,
@@ -117,10 +118,9 @@ struct Application {
     bridge: SharedBridge,
     bundle: SharedBundle,
     commands: ApplicationOperationWorker,
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "Task 12B command worker binds controlled restart")
-    )]
+    reliable_notifier: DesktopReliableStateNotifier,
+    #[cfg(test)]
+    reliable_publish_count: Arc<AtomicU64>,
     state: Arc<ApplicationStateOwner>,
     preflight: Arc<Mutex<ApplicationPreflight>>,
     live_started: Arc<AtomicBool>,
@@ -201,12 +201,8 @@ impl Application {
         let preflight = Arc::new(Mutex::new(preflight));
         let live_started = Arc::new(AtomicBool::new(live_started));
         let reliable_notifier = shell.reliable_state_notifier();
-        if live_started.load(Ordering::Acquire) {
-            let projection = state
-                .reliable_state_projection_for_outcome(outcome, None)
-                .unwrap_or_else(|_| DesktopReliableStateProjection::unavailable());
-            let _ = reliable_notifier.publish(projection);
-        }
+        #[cfg(test)]
+        let reliable_publish_count = Arc::new(AtomicU64::new(0));
         let command_environment = environment.clone();
         let command_data_root = data_root.clone();
         let command_state = Arc::clone(&state);
@@ -264,7 +260,7 @@ impl Application {
             )))
             .map_err(|_| ApplicationError::internal())?;
 
-        Ok(Self {
+        let application = Self {
             environment: environment.clone(),
             data_root,
             shell,
@@ -272,11 +268,16 @@ impl Application {
             bridge,
             bundle,
             commands,
+            reliable_notifier,
+            #[cfg(test)]
+            reliable_publish_count,
             state,
             preflight,
             live_started,
             shutdown: false,
-        })
+        };
+        application.publish_live_reliable_projection();
+        Ok(application)
     }
 
     fn run_event_loop(&self) -> Result<(), ApplicationError> {
@@ -341,6 +342,7 @@ impl Application {
                     .lock()
                     .map_err(|_| ApplicationError::internal())? = Some(bridge);
                 self.live_started.store(true, Ordering::Release);
+                self.publish_live_reliable_projection();
                 Ok(())
             }
             Err(error) => {
@@ -438,6 +440,7 @@ impl Application {
                     .lock()
                     .map_err(|_| ApplicationError::internal())? = Some(bridge);
                 self.live_started.store(true, Ordering::Release);
+                self.publish_live_reliable_projection();
                 Ok(())
             }
             Err(error) => {
@@ -445,6 +448,24 @@ impl Application {
                 Err(error)
             }
         }
+    }
+
+    fn publish_live_reliable_projection(&self) {
+        if !self.live_started.load(Ordering::Acquire) {
+            return;
+        }
+        let projection = self
+            .preflight
+            .lock()
+            .map_err(|_| ApplicationError::internal())
+            .and_then(|preflight| {
+                self.state
+                    .reliable_state_projection_for_outcome(preflight.effective_outcome(), None)
+            })
+            .unwrap_or_else(|_| DesktopReliableStateProjection::unavailable());
+        let _ = self.reliable_notifier.publish(projection);
+        #[cfg(test)]
+        self.reliable_publish_count.fetch_add(1, Ordering::AcqRel);
     }
 
     fn shutdown(&mut self) -> Result<(), ApplicationError> {
@@ -1041,6 +1062,7 @@ fn finish_live_bundle(
     controller
         .attach_snapshot_notifier(live_bridge.notifier())
         .map_err(|_| ApplicationError::controller())?;
+    let refresh_ingress = controller.refresh_ingress();
     let notification_presentation = match reminder.owner() {
         Some(runtime) => {
             let presenter = bridge_factory
@@ -1066,6 +1088,7 @@ fn finish_live_bundle(
             reminder,
             notification_presentation,
             controller,
+            refresh_ingress,
             maintenance,
             #[cfg(test)]
             notifier: Arc::clone(&started.notifier),
@@ -1195,17 +1218,7 @@ fn execute_application_operation(
             ApplicationCommand::UpdateReminderPolicy,
             ApplicationOperationPayload::ReminderPolicy(update),
         ) => {
-            let Some(intent) =
-                DesktopIntent::update_reminder_policy(update.enabled(), update.lead_seconds()).ok()
-            else {
-                return ApplicationCommandExecution::Failed(
-                    ApplicationCommandFailure::InvalidSelection,
-                );
-            };
-            let DesktopIntent::UpdateReminderPolicy(update) = intent else {
-                return ApplicationCommandExecution::Failed(ApplicationCommandFailure::Internal);
-            };
-            match state.update_reminder_policy(permit, update, || {
+            match state.update_reminder_policy(permit, update.into_policy(), || {
                 publish_atomic_operation(reliable_state, permit.command());
             }) {
                 Ok(()) => execute_state_command(synchronize_reminder_policy_after_settings(
@@ -1287,11 +1300,16 @@ fn synchronize_reminder_policy_after_settings(
     if state.synchronize_reminder_profile(data_root).is_err() {
         return Ok(());
     }
-    let reminder = bundle
-        .lock()
-        .map_err(|_| ApplicationError::internal())?
-        .as_ref()
-        .and_then(|bundle| bundle.reminder.owner().cloned());
+    let (reminder, ingress) = {
+        let slot = bundle.lock().map_err(|_| ApplicationError::internal())?;
+        let Some(bundle) = slot.as_ref() else {
+            return Ok(());
+        };
+        (
+            bundle.reminder.owner().cloned(),
+            bundle.refresh_ingress.clone(),
+        )
+    };
     if let Some(reminder) = reminder {
         reminder
             .lock()
@@ -1299,16 +1317,9 @@ fn synchronize_reminder_policy_after_settings(
             .notify_profile_changed()
             .map_err(|_| ApplicationError::state())?;
     }
-    if let Some(bundle) = bundle
-        .lock()
-        .map_err(|_| ApplicationError::internal())?
-        .as_ref()
-    {
-        bundle
-            .controller
-            .refresh(DesktopRefreshUrgency::Hint)
-            .map_err(|_| ApplicationError::controller())?;
-    }
+    ingress
+        .refresh(DesktopRefreshUrgency::Hint)
+        .map_err(|_| ApplicationError::controller())?;
     Ok(())
 }
 
@@ -1766,6 +1777,7 @@ struct ApplicationBundle {
     reminder: OptionalReminderRuntime,
     notification_presentation: Option<ReminderPresentationCoordinator>,
     controller: DesktopController,
+    refresh_ingress: DesktopRefreshIngress,
     maintenance: BackupMaintenanceRuntime,
     #[cfg(test)]
     notifier: Arc<ApplicationRuntimeNotifier>,

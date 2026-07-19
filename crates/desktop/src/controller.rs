@@ -10,8 +10,8 @@ use std::{
 
 use tokenmaster_engine::{
     Clock, MonotonicTime, RefreshAdmission, RefreshDeadline, RefreshOutcome, RefreshPermit,
-    RefreshRequestId, RefreshUrgency, RefreshWorker, WorkerCompletionKind, WorkerError,
-    WorkerErrorCode, WorkerPhase,
+    RefreshRequestId, RefreshSubmitter, RefreshUrgency, RefreshWorker, WorkerCompletionKind,
+    WorkerError, WorkerErrorCode, WorkerPhase,
 };
 use tokenmaster_product::{
     ProductAttemptGeneration, ProductGitRuntimeHealth, ProductQuotaRuntimeHealth, ProductReducer,
@@ -537,6 +537,40 @@ pub struct DesktopController {
     work: DesktopWorkSlot,
 }
 
+#[derive(Clone)]
+pub struct DesktopRefreshIngress {
+    worker: RefreshSubmitter,
+    clock: Arc<dyn Clock>,
+    work: DesktopWorkSlot,
+}
+
+impl DesktopRefreshIngress {
+    pub fn refresh(
+        &self,
+        urgency: DesktopRefreshUrgency,
+    ) -> Result<DesktopRefreshAdmission, DesktopControllerError> {
+        let mut work = lock_work(&self.work)?;
+        let deadline_ms = self
+            .clock
+            .now()
+            .as_millis()
+            .checked_add(urgency.budget_ms())
+            .ok_or_else(|| DesktopControllerError::new(DesktopControllerErrorCode::Internal))?;
+        let admission = self
+            .worker
+            .submit(
+                urgency.engine(),
+                Some(RefreshDeadline::from_millis(deadline_ms)),
+            )
+            .map(map_admission)
+            .map_err(map_worker_error)?;
+        if let Some(attempt) = scheduled_work_attempt(admission)? {
+            work.refresh_attempt = Some(attempt);
+        }
+        Ok(admission)
+    }
+}
+
 impl DesktopController {
     pub fn open(
         path: impl AsRef<Path>,
@@ -639,12 +673,16 @@ impl DesktopController {
         &self,
         urgency: DesktopRefreshUrgency,
     ) -> Result<DesktopRefreshAdmission, DesktopControllerError> {
-        let mut work = lock_work(&self.work)?;
-        let admission = self.submit(urgency)?;
-        if let Some(attempt) = scheduled_work_attempt(admission)? {
-            work.refresh_attempt = Some(attempt);
+        self.refresh_ingress().refresh(urgency)
+    }
+
+    #[must_use]
+    pub fn refresh_ingress(&self) -> DesktopRefreshIngress {
+        DesktopRefreshIngress {
+            worker: self.worker.submitter(),
+            clock: Arc::clone(&self.clock),
+            work: Arc::clone(&self.work),
         }
-        Ok(admission)
     }
 
     pub fn request_session_detail(

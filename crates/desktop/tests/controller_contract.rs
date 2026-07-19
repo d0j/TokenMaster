@@ -271,6 +271,39 @@ fn controller_contract_is_typed_bounded_and_deterministic() {
 }
 
 #[test]
+fn cloned_refresh_ingress_uses_the_existing_controller_worker() {
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let mut controller = DesktopController::spawn(
+        UnavailableSource { calls },
+        DesktopQueryPlan::overview().expect("overview plan"),
+    )
+    .expect("controller starts");
+    let first = controller.refresh_ingress();
+    let second = first.clone();
+    assert!(matches!(
+        first
+            .refresh(DesktopRefreshUrgency::Hint)
+            .expect("first refresh"),
+        DesktopRefreshAdmission::Started { .. }
+    ));
+    assert!(matches!(
+        second
+            .refresh(DesktopRefreshUrgency::Hint)
+            .expect("second refresh"),
+        DesktopRefreshAdmission::Coalesced { .. } | DesktopRefreshAdmission::Started { .. }
+    ));
+    let _ = wait_for_completion(&controller);
+    controller.shutdown().expect("controller shutdown");
+    assert_eq!(
+        first
+            .refresh(DesktopRefreshUrgency::Hint)
+            .expect_err("closed ingress")
+            .stable_code(),
+        "closed"
+    );
+}
+
+#[test]
 fn controller_snapshot_epoch_is_bound_once_before_work() {
     let calls = Arc::new(Mutex::new(Vec::new()));
     let mut controller = DesktopController::spawn(
