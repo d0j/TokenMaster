@@ -115,9 +115,14 @@ renderer/data/runtime work and the existing five tray intents do not expand.
 
 ## Task 5 — add opt-in current-user startup
 
-Extend device-local settings only. Add typed current-user startup read/write/readback,
-verified executable identity, explicit stale relocation, access-denied degradation,
-no shell/elevation/machine-wide authority, and config export exclusion.
+Implement the approved design in
+`docs/superpowers/specs/2026-07-19-tokenmaster-current-user-startup-design.md`.
+Use the fixed current-user Run value as the sole device-local source of truth rather
+than adding a second persisted desired-state flag. Add typed read/write/readback,
+verified executable identity, explicit stale repair/removal, access-denied degradation,
+no shell/elevation/machine-wide authority, and config/backup exclusion by construction.
+Keep inspection read-only and non-fatal; keep every mutation explicit, bounded, and
+immediately reread-verified.
 
 ## Task 6 — P3-E closure
 
