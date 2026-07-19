@@ -1946,3 +1946,28 @@ verifies its raw callback pointer before registering the icon or publishing Avai
 then clears that pointer before destroying handles. Interactive Explorer restart, Windows foreground policy,
 sleep/resume, and resource return still require acceptance; hotkey,
 single-instance/startup, M0, package, signing, soak, and release are not claimed.
+
+## ADR-079 — Use one current-session event for single-instance arbitration and activation
+
+Decision: reserve the non-inheritable auto-reset event
+`Local\TokenMaster.CurrentSession.Activation.v1` before renderer/data construction. A
+new event is the primary reservation; an existing event is a secondary process that
+only calls `SetEvent` and exits. The primary later starts one joined message-driven
+thread with one unnamed shutdown event and fixed `Ctrl+Alt+T` / ID `0x544D` hotkey.
+Both secondary and hotkey input normalize to the existing Show/restore/focus action and
+coalesce through one pending bit and one event-loop task.
+
+Rationale: one auto-reset event provides both ownership lifetime and a capacity-one
+cross-process wake without a path, payload, server, socket, pipe, hidden window, queue,
+or polling loop. `Local\` gives explicit session isolation; the creator-token default
+DACL gives current-user access without embedding identity in an object name. Starting
+the native thread only after the weak-window sink exists retains an activation that
+arrives during startup while removing a mutable callback slot from Platform.
+
+The fixed chord deliberately avoids WhereMyTokens' ordinary `Ctrl+Shift+D`, which can
+override a common in-application shortcut. Registration conflict and other failure are
+distinct bounded health states and do not make the visible product unusable. A claim or
+secondary-signal failure fails closed as `current_session_unavailable`; unregister or
+join failure prevents clean-run publication. Configurable hotkeys, startup, interactive
+conflict/secondary/sleep/resource acceptance, M0, package, signing, soak, and release
+remain later work.

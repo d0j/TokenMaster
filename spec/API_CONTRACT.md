@@ -1077,6 +1077,28 @@ backup, restore, reminder, activation, or native lifecycle work. Snapshot applic
 clones the bounded projection while holding Desktop state, releases the mutex, and only
 then updates Slint properties and refreshes an open palette.
 
+### P3-E.4 current-session integration API
+
+`tokenmaster-platform` exposes a typed current-session claim with exactly two successful
+outcomes: one opaque primary owner or one secondary-signal receipt. Claim and secondary
+signal failures expose only stable `OwnershipUnavailable` or `SignalFailed` categories;
+the application maps both to `current_session_unavailable`. No OS handle, object name,
+user identity, path, process identity, native error text, or payload crosses this API.
+
+The primary owner accepts exactly one thread-safe activation sink, reports a bounded
+snapshot of thread and hotkey health plus checked counters, and closes synchronously.
+Its activation sink accepts only the fixed Show/restore/focus request and returns typed
+Accepted or Rejected admission. Shutdown signals and joins the exact owner thread;
+unregister or join failure is `ShutdownFailed` and prevents clean-run publication.
+`Drop` performs the same best-effort cleanup without inventing success.
+
+The application activation bridge retains one pending bit and one scheduled Slint
+event-loop task. Repeated secondary or hotkey signals replace that bit and cannot append
+to a queue. Scheduling failure retains one retryable pending bit; the visible-window
+startup path performs one explicit flush. Delivery upgrades only the existing weak
+`MainWindow`, then unminimizes, shows, raises, and requests foreground focus. It never
+opens SQLite, queries product data, creates a second window, or changes route state.
+
 ## Provider plugin ABI
 
 The future external-provider ABI is `tokenmaster:provider@1` expressed in WIT and

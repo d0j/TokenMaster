@@ -108,6 +108,31 @@ fixed product identifiers with no path or identity text. The primary owns fixed 
 handles and one joined integration thread. A secondary instance signals the primary
 to show the existing window and exits before opening SQLite or starting workers.
 
+On Windows the exact arbitration object is the non-inheritable auto-reset event
+`Local\TokenMaster.CurrentSession.Activation.v1`. A newly created event makes the
+caller primary. `ERROR_ALREADY_EXISTS` makes it secondary; that process performs only
+`SetEvent`, closes its handle, and exits successfully. Any create/open or signal failure
+returns the stable path-free `current_session_unavailable` application error and MUST
+NOT fall through to a second state/runtime graph. The event uses the creator token's
+default DACL, the explicit current-session namespace, no user/path-derived name, and
+no payload.
+
+After the primary window/lifecycle sink exists, Platform creates one non-inheritable
+unnamed manual-reset shutdown event and one joined thread named
+`tokenmaster-session-integration`. That thread waits on shutdown, activation, and its
+message queue with `MsgWaitForMultipleObjectsEx`; it owns registration and removal of
+hotkey ID `0x544D`. The fixed chord is `Ctrl+Alt+T` (`MOD_CONTROL | MOD_ALT |
+MOD_NOREPEAT`, virtual key `T`). It always requests Show/restore/focus for the existing
+window. `Ctrl+Alt+T` avoids the ordinary application-level `Ctrl+Shift+D` chord used by
+the reference while remaining mnemonic and easy to type.
+
+Hotkey registration success is `Registered`; `ERROR_HOTKEY_ALREADY_REGISTERED` is
+`Conflict`; every other registration failure is `Unavailable`. Conflict or unavailable
+hotkey state leaves single-instance ownership, tray, and the visible main window
+usable. No retry timer is added. Registration, message dispatch, unregistration, and
+thread exit have bounded path-free health/counters; sink panic is contained and cannot
+unwind through the native loop.
+
 The primary retains at most one pending activation bit. Ten thousand secondary-instance
 or hotkey signals coalesce without queue growth. The default global shortcut is a
 documented fixed chord; conflict is explicit and leaves tray/window operation intact.

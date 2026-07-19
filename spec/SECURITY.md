@@ -36,6 +36,22 @@ remains the sole clean-mark authority. Interactive Explorer restart, Windows foc
 policy, sleep/resume, and resource-return behavior remain release evidence rather
 than facts inferred from source tests.
 
+P3-E.4 reserves one fixed current-session Windows event before renderer, data-root,
+SQLite, or runtime construction. The event is non-inheritable, auto-reset, explicitly
+scoped to `Local\`, and uses the creator token's default DACL. Its fixed product name
+contains no account, SID, path, executable, profile, or provider identity. A secondary
+process can submit only the event's one-bit Show request; it sends no payload and exits
+without touching TokenMaster data. Failure to create/open/signal fails closed instead
+of starting a second runtime.
+
+The primary's one joined integration thread owns only that event, one non-inheritable
+unnamed shutdown event, and one fixed `Ctrl+Alt+T` registration. Its wait is message-
+driven and has no socket, pipe, HTTP, shared memory, window, timer, sleep, polling,
+clipboard, shell, command, or arbitrary message surface. Hotkey conflict/unavailability
+is explicit and cannot disable the already-visible app or tray. Activation retains one
+pending bit and one Slint task; native dispatch catches sink panic. Synchronous
+unregister/join precedes the sole clean-run transition.
+
 ## TM-SEC-001 — Local-first operation
 
 No telemetry, cloud sync, remote listener, automatic upload, analytics SDK, or

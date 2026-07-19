@@ -88,10 +88,21 @@ and capacity-one lifecycle coalescing. Keep M0 imports/dependencies forbidden.
 
 ## Task 4 — add current-session activation and hotkey
 
-Specify exact fixed Win32 identifiers and stable errors, then add one platform owner
-for primary/secondary activation plus one fixed global hotkey. Secondary activation
-must signal before SQLite/runtime startup. Cover ownership, security, conflicts,
-10,000-signal coalescing, panic/failure cleanup, and handle/thread return.
+Use the exact auto-reset event `Local\TokenMaster.CurrentSession.Activation.v1`, fixed
+hotkey ID `0x544D`, and fixed `Ctrl+Alt+T` chord with `MOD_NOREPEAT`. Add one Platform
+owner for primary/secondary activation plus one joined native integration thread.
+Secondary activation performs only `SetEvent` and exits before renderer, data-root,
+SQLite, or runtime startup. Claim/signal failure is the stable path-free
+`current_session_unavailable` error and never falls through to a second runtime.
+
+The primary starts the thread only after the window activation sink exists. The thread
+uses one unnamed shutdown event plus the named activation event and message queue; no
+window, socket, pipe, HTTP listener, timer, sleep, polling retry, or payload is added.
+Cover exact ownership, default-DACL/current-session security, hotkey conflict versus
+unavailable health, 10,000-signal capacity-one coalescing, sink-panic containment,
+startup race retention, explicit unregister/join before clean mark, and handle/thread/
+USER/GDI return. Extend application/source mutation audits so claim remains before any
+renderer/data/runtime work and the existing five tray intents do not expand.
 
 ## Task 5 — add opt-in current-user startup
 
