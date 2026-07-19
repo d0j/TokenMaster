@@ -33,9 +33,11 @@ up to 32 provider-defined rows, shows unavailable/unknown-ratio truth, and retai
 one normal-window-size restore value. Keyboard, pointer, and accessibility return to
 Dashboard through stable route selection. The compiled 32-row/unknown-ratio/10,000-
 switch contract, 141 audit mutations, release audit, strict Desktop Clippy/tests, and
-independent Critical/Important/Minor 0/0/0 review pass. Do not claim production tray/
-close, hotkey, single-instance/startup, interactive Windows/DPI/screen-reader, P4/P5/
-P6, M0, package/signing/soak, or release acceptance.
+independent Critical/Important/Minor 0/0/0 review pass. Clean-root, formatting, strict
+workspace Clippy, and the complete locked workspace test/doctest gate pass in 753.4
+seconds. Do not claim production tray/close, hotkey, single-instance/startup,
+interactive Windows/DPI/screen-reader, P4/P5/P6, M0, package/signing/soak, or release
+acceptance.
 
 P0-A and the incorporated P0-B Codex-lineage surface are complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`. The P0-C pure

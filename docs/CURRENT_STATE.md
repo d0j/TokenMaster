@@ -43,9 +43,11 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   worker, timer, queue, cache, controller, provider assumption, or native authority.
   Compiled coverage proves 32 rows, explicit unknown ratio, same-component identity,
   exact restoration, and 10,000 mode cycles; release audit, 141 mutations, strict
-  Desktop Clippy/tests, and independent 0/0/0 review pass. Production tray/close,
-  hotkey, single-instance/startup, interactive Windows/DPI/screen-reader acceptance,
-  P4/P5/P6, M0, packaging, signing, soak, and release remain incomplete.
+  Desktop Clippy/tests, and independent 0/0/0 review pass. Clean-root, formatting,
+  strict workspace Clippy, and the complete locked workspace test/doctest gate also
+  pass; the latter completed in 753.4 seconds. Production tray/close, hotkey, single-
+  instance/startup, interactive Windows/DPI/screen-reader acceptance, P4/P5/P6, M0,
+  packaging, signing, soak, and release remain incomplete.
 
 - M0 native architecture proof: one process, software-rendered Slint UI, tray
   lifecycle, three layouts, three skins, English/Russian/pseudo localization,
