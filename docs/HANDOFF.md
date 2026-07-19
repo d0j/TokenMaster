@@ -9,6 +9,15 @@
 
 ## Current implementation boundary
 
+Global reminder settings synchronization is implemented and developer-closed. Portable
+settings are desired-state authority; generation-bound global projection runs at
+startup, explicit Save, and confirmed config import, leaves durable settings Pending
+when archive synchronization is unavailable, and preserves scope overrides/delivery/
+acknowledgement/provider evidence. The Settings editor is fixed at five presets and
+eight normalized custom rows. Do not claim per-scope editing, snooze, quiet hours,
+OS/tray delivery, usage alerts, activation, P4/P5/P6, M0, package/signing/soak, or
+release acceptance.
+
 P0-A and the incorporated P0-B Codex-lineage surface are complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`. The P0-C pure
 classifier is complete under
@@ -870,7 +879,8 @@ The exact clean-root/fmt/workspace-Clippy/workspace-test developer baseline also
 No M0, interactive Windows, soak, package, signing, or release acceptance is claimed.
 
 The immediate next implementation slice is notification settings synchronization and
-editing for the existing bounded default/custom reminder profile. Snooze, quiet hours,
+editing for the existing bounded default/custom reminder profile is now implemented
+for the global profile. Per-scope editing, snooze, quiet hours,
 OS/tray delivery, usage alerts, and activation remain separate unfinished capabilities.
 Reuse the immutable snapshot/controller boundary; do not turn route selection into
 query authority. Later-page Sessions navigation and interactive History range

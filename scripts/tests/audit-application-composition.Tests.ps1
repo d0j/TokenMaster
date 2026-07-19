@@ -797,6 +797,71 @@ Describe "TokenMaster application composition audit" {
             Should -Throw "*TM-APP-NOTIFICATION-SHUTDOWN-ORDER*"
     }
 
+    It "rejects an unsealed reminder operation payload" {
+        $fixture = New-AppAuditFixture -Name "reminder-unsealed-payload"
+        $path = Join-Path $fixture "crates\app\src\command.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'payload: ApplicationOperationPayload::ReminderPolicy(update),',
+            'payload: ApplicationOperationPayload::Empty,'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-REMINDER-SEALED*"
+    }
+
+    It "rejects reminder profile generation drift" {
+        $fixture = New-AppAuditFixture -Name "reminder-generation-drift"
+        $path = Join-Path $fixture "crates\app\src\state.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '.checked_add(1)',
+            '.checked_add(2)'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-REMINDER-GENERATION*"
+    }
+
+    It "rejects synchronizing reminder state before durable settings save" {
+        $fixture = New-AppAuditFixture -Name "reminder-settings-first-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'Ok(()) => execute_state_command(synchronize_reminder_policy_after_settings(',
+            'Ok(()) => execute_state_command(synchronize_reminder_policy_before_settings('
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-REMINDER-SETTINGS-FIRST*"
+    }
+
+    It "rejects publishing synchronized before the global profile commit" {
+        $fixture = New-AppAuditFixture -Name "reminder-sync-state-order"
+        $path = Join-Path $fixture "crates\app\src\state.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '.store(REMINDER_SYNC_SYNCHRONIZED, Ordering::Release);',
+            '.store(REMINDER_SYNC_PENDING, Ordering::Release);'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-REMINDER-SYNC-STATE*"
+    }
+
+    It "rejects dropping reminder synchronization after confirmed config import" {
+        $fixture = New-AppAuditFixture -Name "reminder-import-sync-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'Ok(_) => execute_state_command(synchronize_reminder_policy_after_settings(',
+            'Ok(_) => execute_state_command(skip_reminder_policy_synchronization('
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-REMINDER-IMPORT-BINDING*"
+    }
+
     It "reports the bounded notification composition receipt" {
         $fixture = New-AppAuditFixture -Name "notification-receipt"
         $receipt = & $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json

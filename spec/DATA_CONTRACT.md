@@ -1,5 +1,16 @@
 # TokenMaster data contract
 
+## Global reminder profile projection
+
+The portable reminder policy is desired-state authority. Its generation maps to the
+global reminder-profile revision `N + 1`; one immediate transaction replaces only the
+global row and rebuilds inherited due rows while preserving scope overrides, deliveries,
+acknowledgements, and provider evidence. It admits at most 32 inheriting scopes, 64
+current lots per scope, and 256 aggregate lots for this synchronized projection, with
+at most eight leads. Archive projection failure does not undo a durable policy save.
+Per-scope policy, snooze, quiet hours, OS/tray delivery, usage alerts, and activation
+data remain absent.
+
 ## TM-DATA-001 — Private content prohibition
 
 The archive, settings, diagnostics, UI snapshots, CLI, MCP, backups, logs, reports,

@@ -4,6 +4,19 @@ This is the primary normative product contract. MUST and MUST NOT are binding.
 TokenMaster is Windows-first, portable, local-first, and implemented as one Rust
 workspace.
 
+## Global reminder settings synchronization
+
+Portable settings are the desired-state authority for the single global reminder
+profile. A committed settings generation `N` projects to global profile revision
+`N + 1`; startup of first-install, current, migrated, reconstructed, and restored
+archives, explicit Save, and confirmed config import use that same synchronizer.
+Pending is visible before durable settings mutation and Synchronized follows only a
+successful atomic global-profile store commit; archive Busy/unavailable leaves the
+durable desired state retryable as Pending. The fixed Settings editor supports
+enable/disable, five recommended leads, and at most eight normalized custom leads.
+Per-scope editing, snooze, quiet hours, OS/tray delivery, usage alerts, activation,
+P4/P5/P6, M0 acceptance, package/signing/soak, and release remain incomplete.
+
 ## Product goal
 
 TokenMaster MUST provide a fast, responsive, stable usage monitor with the complete

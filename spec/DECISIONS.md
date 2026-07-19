@@ -1828,3 +1828,25 @@ Rationale: event-loop scheduling is not evidence that the user-visible model exi
 Separating the present-only bridge from durable authority prevents false delivery,
 keeps UI latency and memory constant, preserves crash replay, and avoids exposing
 runtime locks or private delivery identity to Slint.
+
+## ADR-074 — Synchronize one global reminder profile from portable desired state
+
+Decision: portable settings remain the desired-state authority for reminder policy.
+The existing single operation worker publishes Pending, durably saves a changed policy,
+and then uses one synchronizer to map generation `N` to global profile revision `N +
+1`. Startup, restored/reconstructed/migrated paths, explicit Save, and confirmed
+config import reuse that synchronizer. A failed archive projection never rolls back a
+durable desired state and remains visibly retryable as Pending.
+
+The store replaces only the global profile in one immediate transaction, rebuilding
+inherited due rows while preserving scope overrides, deliveries, acknowledgements, and
+provider evidence. It admits 32 inheriting scopes, 64 current lots per scope, and 256
+aggregate lots, with at most eight leads. Desktop owns a fixed five-preset/eight-custom-row editor with
+checked conversion, dirty-draft retention, accessibility labels, and no runtime,
+store, timer, polling, worker, queue, or delivery authority.
+
+Rationale: deriving the global profile from durable portable settings gives import and
+recovery one authoritative policy without allowing a UI draft or archive availability
+to become semantic authority. Per-scope editing, snooze, quiet hours, OS/tray delivery,
+usage alerts, activation, P4/P5/P6, M0, packaging, signing, soak, and release remain
+separate work.

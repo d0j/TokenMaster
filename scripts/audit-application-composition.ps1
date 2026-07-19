@@ -70,6 +70,8 @@ $applicationText = [System.IO.File]::ReadAllText((Join-Path $appSource 'applicat
 $dataRootText = [System.IO.File]::ReadAllText((Join-Path $appSource 'data_root.rs'))
 $notificationText = [System.IO.File]::ReadAllText((Join-Path $appSource 'notification.rs'))
 $operationText = [System.IO.File]::ReadAllText((Join-Path $appSource 'operation.rs'))
+$commandText = [System.IO.File]::ReadAllText((Join-Path $appSource 'command.rs'))
+$stateText = [System.IO.File]::ReadAllText((Join-Path $appSource 'state.rs'))
 $reminderRuntimeText = [System.IO.File]::ReadAllText($reminderRuntimePath)
 
 if ($productionText -match 'LiveRuntime::start_notified\(') {
@@ -120,7 +122,7 @@ foreach ($contract in @(
     @{ Name = 'TM-APP-REBUILD-RETRY-RECONCILE'; Pattern = 'if source_reconciliation_required \{[\s\S]{0,256}?permit\.begin_irreversible\(\)[\s\S]{0,512}?start_reconstructed_bundle\('; Count = 1 },
     @{ Name = 'TM-APP-REBUILD-ATOMIC'; Pattern = 'RecoveryBoundary::BeforeJournalPublication[\s\S]{0,256}?on_irreversible\(\)'; Count = 1 },
     @{ Name = 'TM-APP-MANUAL-BACKUP-ATOMIC'; Pattern = 'fn execute_manual_backup_command\([\s\S]{0,1024}?permit\.begin_irreversible\(\)[\s\S]{0,512}?publish_atomic_operation\(reliable_state, permit\.command\(\)\)'; Count = 1 },
-    @{ Name = 'TM-APP-ATOMIC-PROJECTION'; Pattern = 'publish_atomic_operation\(reliable_state, permit\.command\(\)\)'; Count = 9 },
+    @{ Name = 'TM-APP-ATOMIC-PROJECTION'; Pattern = 'publish_atomic_operation\(reliable_state, permit\.command\(\)\)'; Count = 10 },
     @{ Name = 'TM-APP-RESTORED-MIGRATION'; Pattern = 'fn start_restored_bundle\('; Count = 1 },
     @{ Name = 'TM-APP-PRE-MIGRATION'; Pattern = 'wait_for_mandatory_backup\([\s\S]{0,96}?MaintenancePurpose::PreMigration\s*\)'; Count = 2 },
     @{ Name = 'TM-APP-POST-MIGRATION'; Pattern = 'wait_for_mandatory_backup\([\s\S]{0,96}?MaintenancePurpose::PostMigration\s*\)'; Count = 2 },
@@ -181,6 +183,63 @@ $operationWorkerBuilderCount = [regex]::Matches(
 ).Count
 if ($operationWorkerBuilderCount -ne 1) {
     throw "TM-APP-OPERATION-SPAWN: expected 1, observed $operationWorkerBuilderCount"
+}
+
+$reminderSealedPayloadCount = [regex]::Matches(
+    $commandText,
+    'ApplicationCommand::UpdateReminderPolicy,\s*payload:\s*ApplicationOperationPayload::ReminderPolicy\(update\)'
+).Count
+if ($reminderSealedPayloadCount -ne 1 -or
+    [regex]::Matches($commandText, 'pub\(crate\)\s+struct ApplicationReminderPolicyUpdate').Count -ne 1 -or
+    $commandText -notmatch 'ApplicationReminderPolicyUpdate\(\[redacted\]\)') {
+    throw 'TM-APP-REMINDER-SEALED: one redacted typed reminder payload must remain bound to UpdateReminderPolicy'
+}
+$reminderProfileFunction = [regex]::Match(
+    $stateText,
+    '(?s)fn reminder_profile_from_settings\(.*?\r?\n\}\r?\n\r?\nimpl fmt::Debug'
+).Value
+if ([string]::IsNullOrWhiteSpace($reminderProfileFunction) -or
+    [regex]::Matches($reminderProfileFunction, '\.unwrap_or\(0\)\s*\.checked_add\(1\)\s*\.filter\(\|value\| \*value <= i64::MAX as u64\)').Count -ne 1) {
+    throw 'TM-APP-REMINDER-GENERATION: settings generation must map exactly to global profile revision N + 1'
+}
+$reminderUpdateFunction = [regex]::Match(
+    $stateText,
+    '(?s)pub\(crate\) fn update_reminder_policy\(.*?\r?\n    \}\r?\n\r?\n    pub\(crate\) fn synchronize_reminder_profile'
+).Value
+$pendingIndex = $reminderUpdateFunction.IndexOf('store(REMINDER_SYNC_PENDING, Ordering::Release)', [System.StringComparison]::Ordinal)
+$settingsSaveIndex = $reminderUpdateFunction.IndexOf('.save(&value)', [System.StringComparison]::Ordinal)
+if ([string]::IsNullOrWhiteSpace($reminderUpdateFunction) -or $pendingIndex -lt 0 -or
+    $settingsSaveIndex -le $pendingIndex) {
+    throw 'TM-APP-REMINDER-SETTINGS-FIRST: durable desired settings must follow Pending publication before archive synchronization'
+}
+$reminderSynchronizeFunction = [regex]::Match(
+    $stateText,
+    '(?s)pub\(crate\) fn synchronize_reminder_profile\(.*?\r?\n    \}\r?\n\r?\n    pub\(crate\) fn mark_reminder_unavailable'
+).Value
+$syncPendingIndex = $reminderSynchronizeFunction.IndexOf('store(REMINDER_SYNC_PENDING, Ordering::Release)', [System.StringComparison]::Ordinal)
+$syncStoreIndex = $reminderSynchronizeFunction.IndexOf('.set_benefit_reminder_global_profile(&profile)', [System.StringComparison]::Ordinal)
+$syncSynchronizedIndex = $reminderSynchronizeFunction.IndexOf('store(REMINDER_SYNC_SYNCHRONIZED, Ordering::Release)', [System.StringComparison]::Ordinal)
+if ([string]::IsNullOrWhiteSpace($reminderSynchronizeFunction) -or $syncPendingIndex -lt 0 -or
+    $syncStoreIndex -le $syncPendingIndex -or $syncSynchronizedIndex -le $syncStoreIndex) {
+    throw 'TM-APP-REMINDER-SYNC-STATE: Pending must precede and Synchronized must follow the global profile commit'
+}
+$reminderSettingsFirstBindingCount = [regex]::Matches(
+    $applicationText,
+    '(?s)\(\s*ApplicationCommand::UpdateReminderPolicy,\s*ApplicationOperationPayload::ReminderPolicy\(update\),\s*\)\s*=>\s*\{\s*match state\s*\.update_reminder_policy\(permit, update\.into_policy\(\),.*?\}\)\s*\{\s*Ok\(\(\)\)\s*=>\s*execute_state_command\(synchronize_reminder_policy_after_settings\('
+).Count
+if ($reminderSettingsFirstBindingCount -ne 1) {
+    throw 'TM-APP-REMINDER-SETTINGS-FIRST: the single operation worker must persist reminder settings before synchronization'
+}
+$reminderImportBindingCount = [regex]::Matches(
+    $applicationText,
+    '(?s)\(ApplicationCommand::ConfirmConfigImport, ApplicationOperationPayload::Empty\)\s*=>\s*\{\s*match state\.commit_pending_config_import\(permit,.*?\}\)\s*\{\s*Ok\(_\)\s*=>\s*execute_state_command\(synchronize_reminder_policy_after_settings\('
+).Count
+$reminderStartupBindingCount = [regex]::Matches(
+    $applicationText,
+    '(?s)let reminder = match state\.synchronize_reminder_profile\(data_root\) \{\s*Ok\(_\) => OptionalReminderRuntime::start\(.*?BenefitReminderRuntime::start_notified'
+).Count
+if ($reminderImportBindingCount -ne 1 -or $reminderStartupBindingCount -ne 1) {
+    throw 'TM-APP-REMINDER-IMPORT-BINDING: startup and confirmed config import must share the sole reminder synchronizer'
 }
 if ($notificationText -notmatch 'const NOTIFICATION_ACK_RETRY: Duration = Duration::from_secs\(60\);' -or
     $notificationText -notmatch 'Err\(error\) if error\.retryable\(\)' -or
@@ -342,6 +401,11 @@ if ($SourceOnly) {
         notification_confirmed_release_count = 1
         notification_bounded_repump_count = 1
         notification_runtime_panic_rollback_count = 1
+        reminder_sealed_payload_count = $reminderSealedPayloadCount
+        reminder_generation_binding_count = 1
+        reminder_settings_first_binding_count = $reminderSettingsFirstBindingCount
+        reminder_import_binding_count = $reminderImportBindingCount
+        reminder_startup_binding_count = $reminderStartupBindingCount
         desktop_controller_count = 1
         session_detail_router_count = 1
         session_detail_current_bundle_binding_count = 1
@@ -468,6 +532,11 @@ foreach ($needle in @(
     notification_confirmed_release_count = 1
     notification_bounded_repump_count = 1
     notification_runtime_panic_rollback_count = 1
+    reminder_sealed_payload_count = $reminderSealedPayloadCount
+    reminder_generation_binding_count = 1
+    reminder_settings_first_binding_count = $reminderSettingsFirstBindingCount
+    reminder_import_binding_count = $reminderImportBindingCount
+    reminder_startup_binding_count = $reminderStartupBindingCount
     desktop_controller_count = 1
     session_detail_router_count = 1
     session_detail_current_bundle_binding_count = 1

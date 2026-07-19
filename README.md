@@ -4,6 +4,13 @@ TokenMaster is a Windows-first, portable, local-first usage monitor for Codex. I
 being built as an original Rust application with a responsive Slint desktop UI and a
 bounded SQLite archive.
 
+Global reminder settings synchronization is implemented: portable settings are the
+desired-state authority, `N` maps to global profile revision `N + 1`, and startup,
+explicit Save, and confirmed import share one retryable synchronizer. Settings edits
+enable/disable five recommended and up to eight normalized custom leads. Per-scope
+editing, snooze, quiet hours, OS/tray delivery, usage alerts, activation, P4/P5/P6,
+M0 acceptance, package/signing/soak, and release remain incomplete.
+
 WhereMyTokens is the UX and feature-breadth reference. ccusage is the usage-analysis,
 model, pricing, and reporting reference. TokenMaster owns the implementation and uses
 neither project as a runtime dependency.
@@ -36,8 +43,9 @@ separate app-owned bridge: a bounded notification becomes visible before durable
 acknowledgement; confirmed release after a failed presentation preserves replay, and
 the same single worker retries presentation without waiting for unrelated product
 activity. A terminal acknowledgement error releases without an automatic presentation
-loop. Notification
-settings editing, OS/tray delivery, remaining shell work, P4 presentation/localization,
+loop. Global reminder settings synchronization/editing is implemented for the portable
+global profile; OS/tray delivery, per-scope editing, snooze, quiet hours, usage alerts,
+activation, remaining shell work, P4 presentation/localization,
 automation, interactive acceptance, packaging, signing, and release evidence remain.
 
 ## Build and verify

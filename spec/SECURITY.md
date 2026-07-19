@@ -1,5 +1,15 @@
 # TokenMaster security contract
 
+## Reminder settings authority boundary
+
+Only the application operation worker may persist and synchronize the portable global
+reminder policy. Desktop forwards a checked bounded typed intent and retains one fixed
+eight-row editor model; it has no store, SQL, runtime, timer, polling, queue, or
+delivery authority. The global projection preserves scope overrides, deliveries,
+acknowledgements, and provider evidence. Per-scope editing, snooze, quiet hours,
+OS/tray delivery, usage alerts, activation, P5 automation, and P6 release controls
+remain unavailable.
+
 ## TM-SEC-001 — Local-first operation
 
 No telemetry, cloud sync, remote listener, automatic upload, analytics SDK, or

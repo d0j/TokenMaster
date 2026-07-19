@@ -1,5 +1,14 @@
 # TokenMaster interface contract
 
+## Reminder policy command
+
+`UpdateReminderPolicy` is a sealed, redacted, bounded operation-worker payload. The
+application publishes Pending, saves portable desired state, then synchronizes the
+single global profile; a successful durable save with an unavailable archive remains
+retryable Pending. Settings projection exposes enable/disable, five recommended leads,
+and up to eight normalized custom leads only. Per-scope editing, snooze, quiet hours,
+OS/tray delivery, usage alerts, activation, CLI/MCP, and release APIs remain absent.
+
 Future interfaces are versioned, local-only, and bounded. Until implementation,
 unlisted API, CLI, and MCP behaviors do not exist.
 
@@ -649,7 +658,7 @@ failure and shutdown releases the lease before clearing local
 backpressure; `Err` and `false` do not clear it. Runtime acknowledgement catches and
 redacts panics, restores the batch to `Leased`, and the adapter may recover only outer-
 mutex poison to execute fallback release. OS/tray scheduling, snooze,
-quiet hours, settings editing, and activation remain unimplemented.
+quiet hours, per-scope settings editing, and activation remain unimplemented.
 
 `UsageReadStore::capture_quota_windows` accepts zero through 32 unique exact window
 keys and a deadline no greater than two seconds. It returns the independent quota

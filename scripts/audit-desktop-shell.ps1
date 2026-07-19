@@ -857,6 +857,106 @@ foreach ($requiredPolicyBound in @(
         throw "TM-DESKTOP-POLICY-BOUND: backup policy control drifted: $requiredPolicyBound"
     }
 }
+$settingsViewText = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'views\settings-view.slint'))
+$reminderLeadCapCount = [regex]::Matches(
+    $reliableStateText,
+    'pub const MAX_DESKTOP_REMINDER_LEADS: usize = 8;'
+).Count
+$reminderPresetCount = [regex]::Matches(
+    $mainUiText,
+    'in-out property <bool> reminder-preset-(?:seven-days|twenty-four-hours|twelve-hours|six-hours|one-hour): false;'
+).Count
+$allReminderPresetCount = [regex]::Matches(
+    $mainUiText,
+    'in-out property <bool> reminder-preset-[A-Za-z0-9-]+: false;'
+).Count
+if ($reminderLeadCapCount -ne 1 -or $reminderPresetCount -ne 5 -or $allReminderPresetCount -ne 5) {
+    throw 'TM-DESKTOP-REMINDER-BOUND: reminder leads must remain capped at eight with exactly five presets'
+}
+$reminderRowsFunction = [regex]::Match(
+    $uiRustText,
+    '(?s)fn reminder_custom_rows\(.*?\r?\n\}\r?\n\r?\nfn apply_route_projection'
+).Value
+$reminderRowModelCount = [regex]::Matches(
+    $mainUiText,
+    'in-out property <\[ReminderCustomLeadRow\]> reminder-custom-lead-rows;'
+).Count
+$reminderRowUpdateCount = [regex]::Matches($uiRustText, 'rows\.set_row_data\(').Count
+if ([string]::IsNullOrWhiteSpace($reminderRowsFunction) -or $reminderRowModelCount -ne 1 -or
+    $reminderRowUpdateCount -ne 1 -or $reminderRowsFunction -notmatch 'Vec::with_capacity\(8\)' -or
+    $reminderRowsFunction -notmatch '\.take\(8\)' -or
+    $reminderRowsFunction -notmatch 'rows\.resize\(\s*8,') {
+    throw 'TM-DESKTOP-REMINDER-MODEL: one fixed eight-row reminder model and one row update site are required'
+}
+$reminderIntentBindingCount = [regex]::Matches(
+    $uiRustText,
+    '(?s)window\.on_save_reminder_policy\(move \|\| \{.*?DesktopIntent::update_reminder_policy\('
+).Count
+if ($mainUiText -notmatch 'callback reminder-custom-lead-edited\(int, bool, int, int\);' -or
+    $mainUiText -notmatch 'root\.reminder-custom-lead-edited\(index, enabled, value, unit-index\);' -or
+    $settingsViewText -notmatch 'callback reminder-custom-lead-edited\(int, bool, int, int\);' -or
+    $reminderIntentBindingCount -ne 1) {
+    throw 'TM-DESKTOP-REMINDER-ROUTING: root forwarding and one checked typed reminder intent are required'
+}
+$reminderProjectionFunction = [regex]::Match(
+    $uiRustText,
+    '(?s)fn reminder_custom_rows\(.*?\r?\n\}\r?\n\r?\nfn apply_route_projection'
+).Value
+if ($reminderProjectionFunction -notmatch 'is_multiple_of\(86_400\)' -or
+    $reminderProjectionFunction -notmatch 'is_multiple_of\(3_600\)' -or
+    $reminderProjectionFunction -notmatch 'is_multiple_of\(60\)' -or
+    $uiRustText -notmatch '\.filter\(\|lead\| !\[604_800, 86_400, 43_200, 21_600, 3_600\]\.contains\(lead\)\)') {
+    throw 'TM-DESKTOP-REMINDER-PROJECTION: custom leads must use the largest exact unit and exclude presets'
+}
+$reminderSaveFunction = [regex]::Match(
+    $uiRustText,
+    '(?s)window\.on_save_reminder_policy\(move \|\| \{.*?\n    \}\);'
+).Value
+$reliableProjectionFunction = [regex]::Match(
+    $uiRustText,
+    '(?s)fn apply_reliable_state_projection\(.*?\r?\n\}\r?\n\r?\nfn saturating_i32'
+).Value
+$reminderSyncStateIndex = $reliableProjectionFunction.IndexOf('window.set_reminder_sync_state(', [System.StringComparison]::Ordinal)
+$reminderDirtyIndex = $reliableProjectionFunction.IndexOf('if !window.get_reminder_dirty() {', [System.StringComparison]::Ordinal)
+$reminderRejectedIndex = $reminderSaveFunction.IndexOf('DesktopIntentAdmission::Rejected =>', [System.StringComparison]::Ordinal)
+$reminderAcceptedIndex = $reminderSaveFunction.IndexOf('DesktopIntentAdmission::Started', [System.StringComparison]::Ordinal)
+$reminderClearIndex = $reminderSaveFunction.IndexOf('window.set_reminder_dirty(false);', [System.StringComparison]::Ordinal)
+if ([string]::IsNullOrWhiteSpace($reminderSaveFunction) -or $reminderRejectedIndex -lt 0 -or
+    $reminderAcceptedIndex -le $reminderRejectedIndex -or $reminderClearIndex -le $reminderAcceptedIndex -or
+    [string]::IsNullOrWhiteSpace($reliableProjectionFunction) -or $reminderSyncStateIndex -lt 0 -or
+    $reminderDirtyIndex -le $reminderSyncStateIndex) {
+    throw 'TM-DESKTOP-REMINDER-DRAFT: sync truth must update while dirty drafts persist and rejected saves retain drafts'
+}
+if ([regex]::Matches($uiRustText, 'let lead = value\.checked_mul\(unit\)\?;').Count -ne 1) {
+    throw 'TM-DESKTOP-REMINDER-CONVERSION: custom lead conversion must use one checked multiplication'
+}
+foreach ($accessibleReminderLabel in @(
+    'Reminder synchronization state ',
+    'Enable expiry reminders',
+    'Reminder lead time 7 days',
+    'Enable custom reminder lead row ',
+    'Custom reminder lead value row ',
+    'Custom reminder lead unit row ',
+    'Save reminder profile',
+    'Reset reminder profile to recommended'
+)) {
+    if ($settingsViewText -notmatch [regex]::Escape($accessibleReminderLabel)) {
+        throw 'TM-DESKTOP-REMINDER-ACCESSIBILITY: reminder controls require distinct stable accessible labels'
+    }
+}
+$reminderScrollCount = [regex]::Matches($settingsViewText, 'settings-scroll := ScrollView \{').Count
+$reminderCardCount = [regex]::Matches($settingsViewText, 'reminder-card := Rectangle \{').Count
+$backupCardCount = [regex]::Matches($settingsViewText, 'backup-card := Rectangle \{').Count
+$backupSaveCount = [regex]::Matches($settingsViewText, 'text: "Save backup policy"').Count
+if ($reminderScrollCount -ne 1 -or $reminderCardCount -ne 1 -or $backupCardCount -ne 1 -or
+    $backupSaveCount -ne 1 -or $settingsViewText -notmatch 'out property <length> reminder-card-bottom:' -or
+    $settingsViewText -notmatch 'out property <length> backup-card-top:') {
+    throw 'TM-DESKTOP-REMINDER-LAYOUT: one intrinsic ScrollView reminder card and one responsive backup control set are required'
+}
+$reminderOwnerBoundary = $mainUiText + "`n" + $settingsViewText + "`n" + $uiRustText
+if ($reminderOwnerBoundary -match '\b(?:Timer|VecDeque|sync_channel|thread::spawn|thread::sleep|animate|LineEdit)\b') {
+    throw 'TM-DESKTOP-REMINDER-OWNER: reminder settings must not add a timer, animation, parser, worker, polling loop, or queue'
+}
 $dashboardModelReplacementCount = [regex]::Matches(
     $uiRustText,
     'set_dashboard_(?:section_rows|quota_rows|benefit_rows|trend_points|session_rows|activity_rows|model_rows)\(model\('
@@ -958,6 +1058,13 @@ if ($SourceOnly) {
         in_app_notification_ready_before_receipt_count = $readyBeforeReceiptCount
         in_app_notification_accessible_label_count = 1
         in_app_notification_epoch_guard_count = $inAppEpochGuardCount
+        reminder_lead_cap = 8
+        reminder_preset_count = $reminderPresetCount
+        reminder_row_model_count = $reminderRowModelCount
+        reminder_row_update_count = $reminderRowUpdateCount
+        reminder_checked_conversion_count = 1
+        reminder_accessible_label_count = 8
+        reminder_scrollview_count = $reminderScrollCount
         help_about_section_count = $helpAboutRenderedSectionCount
         help_about_version_setter_count = $helpAboutVersionSetterCount
         help_about_slint_attribution_count = $helpAboutAttributionCount
@@ -1079,6 +1186,13 @@ if ($LASTEXITCODE -ne 0) {
     in_app_notification_ready_before_receipt_count = $readyBeforeReceiptCount
     in_app_notification_accessible_label_count = 1
     in_app_notification_epoch_guard_count = $inAppEpochGuardCount
+    reminder_lead_cap = 8
+    reminder_preset_count = $reminderPresetCount
+    reminder_row_model_count = $reminderRowModelCount
+    reminder_row_update_count = $reminderRowUpdateCount
+    reminder_checked_conversion_count = 1
+    reminder_accessible_label_count = 8
+    reminder_scrollview_count = $reminderScrollCount
     help_about_section_count = $helpAboutRenderedSectionCount
     help_about_version_setter_count = $helpAboutVersionSetterCount
     help_about_slint_attribution_count = $helpAboutAttributionCount

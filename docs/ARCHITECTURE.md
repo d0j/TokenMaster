@@ -1,5 +1,18 @@
 # TokenMaster architecture
 
+## Global reminder settings synchronization
+
+Portable settings are desired-state authority. The application’s single operation
+worker saves an updated policy before projecting generation `N` to global reminder
+profile revision `N + 1`; startup, explicit Save, and confirmed config import share
+that synchronizer. The store changes only the global profile and inherited due rows,
+preserving scope overrides, deliveries, acknowledgements, and provider evidence; the
+projection is bounded by 32 inheriting scopes, 64 current lots per scope, 256 aggregate
+lots, and eight leads.
+Desktop has one fixed five-preset/eight-row editor projection and no store/runtime/
+timer/polling/queue authority. Per-scope editing, snooze, quiet hours, OS/tray delivery,
+usage alerts, activation, P4/P5/P6, M0, package/signing/soak, and release are open.
+
 ```text
 Codex JSONL sources
   -> bounded native watcher paths reduced immediately to one pathless hint aggregate
@@ -325,7 +338,7 @@ clears bridge-busy state before invoking a receipt. Runtime acknowledgement pani
 redacted and roll `Acknowledging` back to `Leased`; app release clears local
 backpressure only after a confirmed runtime transition, recovers the outer mutex poison
 for this narrow release path, and joins before reminder shutdown.
-OS/tray delivery, settings editing, snooze, quiet hours, and activation remain future
+OS/tray delivery, per-scope settings editing, snooze, quiet hours, and activation remain future
 capabilities.
 
 The watcher is never source authority. Its callback discards `notify` event/error paths

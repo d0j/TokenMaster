@@ -8,6 +8,16 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 
 ## Implemented
 
+- Global reminder settings synchronization/editor: portable settings are desired-state
+  authority; generation `N` maps to global profile revision `N + 1` for first-install,
+  current, migrated, reconstructed, restored, explicit Save, and confirmed config
+  import paths. Pending precedes durable mutation and remains retryable when archive
+  synchronization is Busy/unavailable. The fixed responsive editor supports enable/
+  disable, five recommended leads, and up to eight normalized custom leads while global
+  edits preserve scope overrides, deliveries, acknowledgements, and provider evidence.
+  Per-scope editing, snooze, quiet hours, OS/tray delivery, usage alerts, activation,
+  P4/P5/P6, M0 acceptance, package/signing/soak, and release remain incomplete.
+
 - M0 native architecture proof: one process, software-rendered Slint UI, tray
   lifecycle, three layouts, three skins, English/Russian/pseudo localization,
   bounded chart/session models, and explicit resource-gate contracts.
@@ -130,8 +140,8 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   rebuild, notification take/ack/release, settings mutation, or activation. Focused
   projection/UI/full Desktop tests, strict Desktop Clippy, source audit, and 82/82
   mutation contracts pass. App-owned presentation receipts are implemented separately;
-  settings synchronization/editing, snooze, quiet hours, OS delivery, usage alerts,
-  and activation remain unfinished capabilities. Independent re-review returned READY with Critical/
+  per-scope editing, snooze, quiet hours, OS delivery, usage alerts, and activation
+  remain unfinished capabilities. Independent re-review returned READY with Critical/
   Important/Minor 0/0/0 after lossless millisecond UTC, waiting-state, audit-authority,
   wide-completeness, and populated-replacement findings were closed. Clean-root,
   formatting, strict warnings-as-errors workspace Clippy, release composition, and the
@@ -147,7 +157,8 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   released without automatic re-presentation. Runtime panic rolls acknowledgement back to a
   releasable lease; `Err`/`false` release retains local backpressure, and Desktop becomes
   ready before invoking the receipt. Focused Desktop/app/reminder-runtime tests, source
-  receipts, and the combined 177/177 Desktop/application mutation suite pass. Settings synchronization/editing,
+  receipts, and the combined 177/177 Desktop/application mutation suite pass. Global
+  settings synchronization/editing is implemented separately; per-scope editing,
   snooze, quiet hours, OS/tray delivery, usage alerts, and activation remain open.
   The exact clean-root/fmt/workspace-Clippy/workspace-test developer baseline also
   passes; this is not M0, interactive Windows, soak, package, signing, or release

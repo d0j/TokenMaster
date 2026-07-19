@@ -1,5 +1,15 @@
 # TokenMaster project history
 
+## 2026-07-19 — global reminder settings developer closure
+
+Portable settings became the desired-state authority for the single global reminder
+profile. Generation `N` maps to revision `N + 1`; startup, explicit Save, and confirmed
+config import reuse one Pending-first synchronizer. The store preserves scope overrides,
+deliveries, acknowledgements, and provider evidence while the fixed editor supports five
+recommended and eight normalized custom leads. This is developer closure only: per-scope
+editing, snooze, quiet hours, OS/tray delivery, usage alerts, activation, P4/P5/P6, M0,
+package/signing/soak, and release are not accepted.
+
 ## 2026-07-14 — clean TokenMaster foundation
 
 The repository was established as a single-root Rust project. It retains the active

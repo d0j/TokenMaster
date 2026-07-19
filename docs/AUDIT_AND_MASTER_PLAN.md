@@ -4,6 +4,13 @@ Status: architecture and release plan approved after closure review; P0 through 
 P2-A, P2-B, P2-C pinned pricing, and the P2-D quota history core are implemented;
 the permitted built-in Codex quota normalizer/transport, exact-native executable
 discovery, and dedicated quota refresh/store publication are also implemented.
+
+Global reminder settings synchronization is developer-closed: mutation-resistant
+application/Desktop receipts guard the sealed worker payload, settings-first
+generation-bound global projection, fixed eight-row editor, dirty draft, accessibility,
+and no new owner surfaces. This does not claim per-scope editing, snooze, quiet hours,
+OS/tray delivery, usage alerts, activation, P4/P5/P6, M0, package/signing/soak, or
+release acceptance.
 Typed banked-reset domain/core/Codex normalization, strict schema-v12 store
 foundation, immutable FEFO current/revision-bound history queries, and combined Codex
 runtime publication with separate quota/benefit truth are implemented. Reminder
@@ -305,7 +312,7 @@ visible-before-ack receipt ordering, one condition-variable worker, exact 60-sec
 Busy/StoreUnavailable acknowledgement retry, same-worker failed-presentation re-pump,
 terminal-acknowledgement release without re-presentation, panic-safe runtime rollback,
 confirmed failure/shutdown release, and release-before-
-local-clear backpressure. Notification settings synchronization/editing remain next; snooze, quiet
+local-clear backpressure. Per-scope notification settings editing remains next; snooze, quiet
 hours, OS/tray delivery, usage alerts, and activation remain later independent slices.
 P3-D.6 independent re-review is Critical/Important/Minor 0/0/0; its 82 mutation audit,
 release composition, strict workspace Clippy, and complete locked workspace test/

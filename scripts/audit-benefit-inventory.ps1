@@ -197,8 +197,45 @@ $storePath = Join-Path $root 'crates\store\src\usage\benefit_reminder.rs'
 $storeText = Get-ProductionRustText -Path $storePath
 $writePath = Join-Path $root 'crates\store\src\usage\benefit_write.rs'
 $writeText = Get-ProductionRustText -Path $writePath
+$benefitQueryPath = Join-Path $root 'crates\store\src\usage\query\benefit.rs'
+$benefitQueryText = Get-ProductionRustText -Path $benefitQueryPath
+$benefitDomainPath = Join-Path $root 'crates\domain\src\benefit.rs'
+$benefitDomainText = Get-ProductionRustText -Path $benefitDomainPath
 $schemaPath = Join-Path $root 'crates\store\src\usage\benefit_schema.rs'
 $schemaText = Get-ProductionRustText -Path $schemaPath
+$globalProfileFunction = [regex]::Match(
+    $writeText,
+    '(?s)fn set_benefit_reminder_global_profile_inner\(.*?\r?\n    \}\r?\n\}'
+).Value
+if ([string]::IsNullOrWhiteSpace($globalProfileFunction) -or
+    [regex]::Matches($globalProfileFunction, 'transaction_with_behavior\(TransactionBehavior::Immediate\)').Count -ne 1 -or
+    [regex]::Matches($globalProfileFunction, "DELETE FROM benefit_reminder_profile\s+WHERE profile_kind = 'global' AND length\(profile_scope_id\) = 0").Count -ne 1 -or
+    [regex]::Matches($globalProfileFunction, 'insert_global_profile\(&transaction, profile\)').Count -ne 1 -or
+    [regex]::Matches($globalProfileFunction, 'transaction\.commit\(\)').Count -ne 2) {
+    throw 'TM-BENEFIT-REMINDER-GLOBAL-ATOMIC: global profile replacement must use one immediate transaction and atomic commit paths'
+}
+$globalScopeLoader = [regex]::Match(
+    $writeText,
+    '(?s)fn load_benefit_scopes_for_global_profile\(.*?\r?\n\}'
+).Value
+if ([string]::IsNullOrWhiteSpace($globalScopeLoader) -or
+    $globalScopeLoader -notmatch "profile\.profile_kind = 'scope'" -or
+    $globalScopeLoader -notmatch 'MAX_BENEFIT_OVERVIEW_SCOPES\s*\.checked_add\(1\)' -or
+    $globalScopeLoader -notmatch 'if rows\.len\(\) > MAX_BENEFIT_OVERVIEW_SCOPES' -or
+    $globalScopeLoader -notmatch 'if total_lots > MAX_BENEFIT_OVERVIEW_LOTS') {
+    throw 'TM-BENEFIT-REMINDER-GLOBAL-OVERRIDES: inherited-only rebuild must preserve scope overrides and enforce scope and lot caps'
+}
+if ($globalProfileFunction -notmatch 'checked_replace_count\(' -or
+    $globalProfileFunction -notmatch 'global\.revision\.get\(\) == 0' -or
+    $globalProfileFunction -notmatch 'global\.current_lot_count != 0\s*\|\|\s*global\.retained_change_count != 0\s*\|\|\s*next_global_due_count != 0\s*\|\|\s*global\.retained_delivery_count != 0') {
+    throw 'TM-BENEFIT-REMINDER-GLOBAL-PRISTINE: global profile application must preserve checked counts and reject non-pristine unpublished state'
+}
+if ($benefitDomainText -notmatch 'pub const MAX_BENEFIT_LOTS_PER_OBSERVATION: usize = 64;' -or
+    $benefitQueryText -notmatch 'pub const MAX_BENEFIT_CURRENT_LOTS: usize = tokenmaster_domain::MAX_BENEFIT_LOTS_PER_OBSERVATION;' -or
+    $benefitQueryText -notmatch 'pub const MAX_BENEFIT_OVERVIEW_SCOPES: usize = 32;' -or
+    $benefitQueryText -notmatch 'pub const MAX_BENEFIT_OVERVIEW_LOTS: usize = 256;') {
+    throw 'TM-BENEFIT-REMINDER-GLOBAL-BOUND: synchronized global projection must retain 64 current lots per scope, 32 scopes, and 256 aggregate lots'
+}
 foreach ($pattern in @(
     'transaction_with_behavior\(TransactionBehavior::Immediate\)',
     'MAX_BENEFIT_REMINDER_DUE_PAGE_SIZE',
@@ -347,6 +384,11 @@ foreach ($artifact in $artifacts) {
     runtime_direct_sql = $false
     bounded_due_page = $true
     durable_less_urgent_suppression = $true
+    global_profile_transaction_count = 1
+    inherited_scope_cap = 32
+    current_lots_per_scope_cap = 64
+    global_projection_lot_cap = 256
+    global_profile_lead_cap = 8
     release_artifact_count = $artifacts.Count
     forbidden_binary_string_count = 0
 } | ConvertTo-Json -Compress

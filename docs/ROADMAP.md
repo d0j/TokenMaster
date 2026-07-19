@@ -2,6 +2,12 @@
 
 ## M0 — native architecture proof
 
+Global reminder settings synchronization/editor is complete as developer evidence:
+portable desired state projects generation-bound global reminders on startup, Save, and
+confirmed import. Per-scope editing, snooze, quiet hours, OS/tray delivery, usage
+alerts, activation, P4/P5/P6, M0 acceptance, package/signing/soak, and release remain
+open.
+
 Implemented: Rust/Slint/SQLite baseline, tray lifecycle, layouts, skins,
 English/Russian localization, accessibility-aware presentation contracts, resource
 gates, and developer stress harness.

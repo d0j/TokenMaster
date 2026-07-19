@@ -1348,4 +1348,93 @@ Describe "TokenMaster production desktop audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-UI-POLLING*"
     }
+
+    It "rejects widening the fixed desktop reminder lead cap" {
+        $fixture = New-DesktopAuditFixture -Name "reminder-lead-cap-drift"
+        $path = Join-Path $fixture "crates\desktop\src\reliable_state.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'MAX_DESKTOP_REMINDER_LEADS: usize = 8',
+            'MAX_DESKTOP_REMINDER_LEADS: usize = 9'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-REMINDER-BOUND*"
+    }
+
+    It "rejects a sixth reminder preset" {
+        $fixture = New-DesktopAuditFixture -Name "reminder-preset-count-drift"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\main.slint") `
+            -Value 'in-out property <bool> reminder-preset-extra: false;'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-REMINDER-BOUND*"
+    }
+
+    It "rejects widening the fixed reminder draft rows" {
+        $fixture = New-DesktopAuditFixture -Name "reminder-row-cap-drift"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [regex]::Replace(
+            [System.IO.File]::ReadAllText($path),
+            'rows\.resize\(\s*8,',
+            'rows.resize(9,',
+            1
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-REMINDER-MODEL*"
+    }
+
+    It "rejects unchecked custom reminder conversion" {
+        $fixture = New-DesktopAuditFixture -Name "reminder-unchecked-conversion"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'let lead = value.checked_mul(unit)?;',
+            'let lead = value * unit;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-REMINDER-CONVERSION*"
+    }
+
+    It "rejects overwriting a dirty reminder draft on publication" {
+        $fixture = New-DesktopAuditFixture -Name "reminder-dirty-draft-drift"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'if !window.get_reminder_dirty() {',
+            'if true {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-REMINDER-DRAFT*"
+    }
+
+    It "rejects removing a custom reminder accessibility label" {
+        $fixture = New-DesktopAuditFixture -Name "reminder-accessibility-drift"
+        $path = Join-Path $fixture "crates\desktop\ui\views\settings-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'accessible-label: "Custom reminder lead unit row " + (index + 1);',
+            'accessible-label: "Custom unit";'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-REMINDER-ACCESSIBILITY*"
+    }
+
+    It "rejects replacing the intrinsic reminder ScrollView card" {
+        $fixture = New-DesktopAuditFixture -Name "reminder-scroll-drift"
+        $path = Join-Path $fixture "crates\desktop\ui\views\settings-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'settings-scroll := ScrollView {',
+            'settings-scroll := VerticalLayout {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-REMINDER-LAYOUT*"
+    }
 }
