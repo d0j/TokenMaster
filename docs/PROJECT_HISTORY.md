@@ -3222,3 +3222,51 @@ warnings-as-errors workspace Clippy, and the complete locked workspace test/doct
 suite pass; the full suite completed in 725.2 seconds. P3-D.2b exact generation-bound
 detail, later-page navigation, remaining routes, presentation, automation, acceptance,
 packaging, signing, and product release remain open.
+
+## 2026-07-19 — P3-D.2b exact Sessions detail
+
+The detail slice began with the stale-identity problem rather than the card layout.
+Product generations restart when an application bundle replaces its controller, so the
+implementation adds a checked monotonic `DesktopSnapshotEpoch` beside the viewed product
+generation and a nonzero per-click selection generation/ordinal. A higher epoch accepts
+the restarted backend generation, rejects the obsolete backend, and clears selection.
+Product correlation retains only generation/ordinal and never an opaque session key.
+
+One typed UI intent is admitted only through the current application bundle. The existing
+controller worker owns one latest-only pending selection slot shared with refresh work;
+only that worker may resolve the visible ordinal to `UsageSessionKey`. Exact result
+publication is selection-latest-only. Rapid clicks, stale product/epoch, missing row or
+detail, query failure, cancellation, dataset invalidation, safe mode, and bundle shutdown
+all fail closed without retaining another selection's payload, creating a queue, or
+adding a worker/cache/timer/snapshot slot.
+
+Desktop and the compiled Slint view add synchronous highlight/loading feedback and one
+explicit idle/loading/ready/missing/unavailable detail projection. Ready state renders
+exact summary and envelope freshness/quality plus a combined cap of 32 model and 32
+approved path-free project-alias aggregate rows, with explicit truncation. Rows support
+pointer hover/click, explicit Tab navigation, Enter/Space, and the accessibility default
+action. The runtime headless contract sends real pointer, Enter, and Space events; the
+source mutation rail separately pins the Tab-focus binding. Opaque
+keys, cursors, provider/profile/source/session identities, raw paths, prompts, responses,
+reasoning content, commands, credentials, SQL, and query authority remain outside Slint.
+
+TDD contracts cover epoch replacement, product correlation, latest-only worker behavior,
+refresh/detail coalescing, cancellation, missing/failure states, 32+32 truncation/privacy,
+current-bundle rejection, and real headless Slint interaction. Independent review then
+closed UI-thread mutex waiting, nanosecond duration borrowing, missing narrow reasoning/
+component fields, and callback-only interaction evidence. Product, Desktop, and app
+focused tests plus strict package Clippy pass. Eight new Desktop audit cases and four new
+application mutations bring their combined audit suite to 93/93; product/Desktop/application release
+audits pass and report one controller worker, one snapshot slot, one detail model, zero
+retained product/UI session keys, and no new authority/dependency/polling surface. Models,
+Projects, Activity, later-page Sessions navigation, presentation, automation, interactive
+acceptance, packaging, signing, and product release remain open.
+
+Independent follow-up review returned READY with Critical/Important/Minor 0/0/0. Its
+initial sole Minor noted that the lexical queue rail was broader than the session-detail
+boundary; the pattern was scoped to session/detail lines, a false-positive acceptance
+case was added, and all 41 Desktop audit cases passed. The final clean-root, formatting,
+strict workspace Clippy, and complete locked workspace test/doctest baseline passed in
+820.7 seconds overall (18.845, 1.611, and 22.080 seconds for the first three stages). One
+credential-dependent live Codex contract remains explicitly ignored. No M0, package,
+signing, or product-release acceptance is inferred.

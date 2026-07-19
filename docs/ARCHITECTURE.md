@@ -149,9 +149,18 @@ query plan requests at most 64 all-time newest-first session summaries and publi
 `has_more`; Dashboard still copies only its first 12 rows. `DesktopSessionsProjection`
 removes the opaque dataset-bound keys and copies aggregate timestamps, event/token/cost
 facts, evidence, and page completeness into one responsive Slint model. Route selection
-does not query or rebuild that model. P3-D.2b will resolve a visible ordinal plus viewed
-product generation back to the controller-owned opaque key, coalesce exact-detail work
-on the existing worker, and publish only the latest matching selection generation.
+does not query or rebuild that model.
+
+P3-D.2b adds a three-axis exact-detail path without widening that authority. Every
+controller/bridge lifetime has a checked `DesktopSnapshotEpoch`; the typed selection also
+binds the viewed product generation and a nonzero click generation plus visible ordinal.
+The application admits it only against the current bundle. One latest-only work slot
+multiplexes detail with refresh on the existing controller worker, where the opaque key is
+resolved and used transiently. Product and Desktop retain one replace-only correlated
+detail, never another row's payload or key. Slint changes highlight/loading synchronously
+and replaces one capped 32-model+32-project detail model with explicit missing,
+unavailable, evidence, and truncation truth. No query callback, queue, thread, timer,
+cache, window reconstruction, or additional snapshot slot exists.
 
 The active P3-D.0 contour adds reliable state without changing the current live archive
 identity. Task 1 establishes library-only `tokenmaster-state` with stable path-private

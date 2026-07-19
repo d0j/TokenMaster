@@ -27,6 +27,58 @@ Describe "TokenMaster application composition audit" {
             Should -Not -Throw
     }
 
+    It "rejects removing the typed session-detail router" {
+        $fixture = New-AppAuditFixture -Name "session-detail-router"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'DesktopSessionDetailIntentRouter::new()',
+            'DesktopSessionDetailIntentRouter::unbound()'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-SESSION-DETAIL-ROUTER*"
+    }
+
+    It "rejects routing session detail outside the current bundle controller" {
+        $fixture = New-AppAuditFixture -Name "session-detail-current-bundle"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'bundle.controller.request_session_detail(intent)',
+            'obsolete_controller.request_session_detail(intent)'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-SESSION-DETAIL-CURRENT-BUNDLE*"
+    }
+
+    It "rejects fabricating session-detail admission in safe mode" {
+        $fixture = New-AppAuditFixture -Name "session-detail-safe-mode"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'let Some(bundle) = slot.as_ref() else {',
+            'let Some(bundle) = slot.as_ref().or_else(fake_bundle) else {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-SESSION-DETAIL-SAFE-MODE*"
+    }
+
+    It "rejects blocking the UI thread on current-bundle ownership" {
+        $fixture = New-AppAuditFixture -Name "session-detail-blocking-lock"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'let Ok(slot) = bundle.try_lock() else {',
+            'let Ok(slot) = bundle.lock() else {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-SESSION-DETAIL-NONBLOCKING*"
+    }
+
     It "rejects a second live runtime owner" {
         $fixture = New-AppAuditFixture -Name "duplicate-live"
         Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\application.rs") `

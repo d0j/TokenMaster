@@ -1,7 +1,7 @@
 import {
     RouteRow, DashboardSectionRow, DashboardQuotaRow, DashboardBenefitRow,
     DashboardTrendPoint, DashboardSessionRow, DashboardActivityRow, DashboardModelRow,
-    HistoryDayRow, SessionListRow, RestorePointRow
+    HistoryDayRow, SessionListRow, SessionDetailBreakdownRow, RestorePointRow
 } from "models.slint";
 import { UiTokens } from "tokens.slint";
 import { RouteNavItem } from "components/route-nav-item.slint";
@@ -55,6 +55,26 @@ export component MainWindow inherits Window {
     in property <string> sessions-evidence-label;
     in property <string> sessions-loaded-label;
     in property <string> sessions-page-status-label;
+    in property <int> sessions-selected-row: -1;
+    in property <string> session-detail-state: "idle";
+    in property <string> session-detail-status-label;
+    in property <string> session-detail-evidence-label;
+    in property <string> session-detail-period-label;
+    in property <string> session-detail-duration-label;
+    in property <string> session-detail-event-label;
+    in property <string> session-detail-input-availability;
+    in property <string> session-detail-input-label;
+    in property <string> session-detail-cached-availability;
+    in property <string> session-detail-cached-label;
+    in property <string> session-detail-output-availability;
+    in property <string> session-detail-output-label;
+    in property <string> session-detail-reasoning-availability;
+    in property <string> session-detail-reasoning-label;
+    in property <string> session-detail-total-availability;
+    in property <string> session-detail-total-label;
+    in property <string> session-detail-cost-availability;
+    in property <string> session-detail-cost-label;
+    in property <[SessionDetailBreakdownRow]> session-detail-breakdown-rows;
     out property <bool> dashboard-visible: root.active-route-key == "dashboard";
     out property <bool> history-visible: root.active-route-key == "history";
     out property <bool> sessions-visible: root.active-route-key == "sessions";
@@ -93,6 +113,7 @@ export component MainWindow inherits Window {
     in property <bool> high-contrast: false;
     in property <bool> reduced-motion: false;
     callback select-route(string);
+    callback select-session(int);
     callback export-config();
     callback import-config();
     callback confirm-config-import();
@@ -224,6 +245,27 @@ export component MainWindow inherits Window {
                     evidence-label: root.sessions-evidence-label;
                     loaded-label: root.sessions-loaded-label;
                     page-status-label: root.sessions-page-status-label;
+                    selected-row: root.sessions-selected-row;
+                    detail-state: root.session-detail-state;
+                    detail-status-label: root.session-detail-status-label;
+                    detail-evidence-label: root.session-detail-evidence-label;
+                    detail-period-label: root.session-detail-period-label;
+                    detail-duration-label: root.session-detail-duration-label;
+                    detail-event-label: root.session-detail-event-label;
+                    detail-input-availability: root.session-detail-input-availability;
+                    detail-input-label: root.session-detail-input-label;
+                    detail-cached-availability: root.session-detail-cached-availability;
+                    detail-cached-label: root.session-detail-cached-label;
+                    detail-output-availability: root.session-detail-output-availability;
+                    detail-output-label: root.session-detail-output-label;
+                    detail-reasoning-availability: root.session-detail-reasoning-availability;
+                    detail-reasoning-label: root.session-detail-reasoning-label;
+                    detail-total-availability: root.session-detail-total-availability;
+                    detail-total-label: root.session-detail-total-label;
+                    detail-cost-availability: root.session-detail-cost-availability;
+                    detail-cost-label: root.session-detail-cost-label;
+                    detail-breakdown-rows: root.session-detail-breakdown-rows;
+                    select-row(index) => { root.select-session(index); }
                 }
 
                 if root.data-health-visible: DataHealthView {

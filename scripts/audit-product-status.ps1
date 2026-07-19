@@ -95,6 +95,22 @@ if ($runtimeText -match 'PathBuf|RepositoryCandidate|repository_id|association_i
 if ($stateText -match '\b(Vec|VecDeque|HashMap|BTreeMap|LinkedList)<') {
     throw 'product current-state projection contains an unbounded or history-capable collection'
 }
+if ($productText -match '\bUsageSessionKey\b') {
+    throw 'product session detail must correlate by generation and ordinal without retaining an opaque session key'
+}
+foreach ($pattern in @(
+    'session_detail_selection: Option<ProductSessionDetailSelection>',
+    'publish_session_detail',
+    'fail_session_detail',
+    'classify_session_detail',
+    'ProductSection::unavailable\(attempt, code\)',
+    'next\.session_detail_selection = Some\(selection\)',
+    'next\.session_detail = section'
+)) {
+    if ($stateText -notmatch $pattern) {
+        throw "product session-detail correlation drifted: $pattern"
+    }
+}
 if ($productText -match '\bunsafe\b') {
     throw 'product production source contains unsafe code'
 }
@@ -216,6 +232,8 @@ foreach ($needle in @(
     production_source_file_count = $productFiles.Count
     foreign_production_source_file_count = 0
     dynamic_state_collection_count = 0
+    retained_session_key_count = 0
+    session_detail_correlation_slot_count = 1
     runtime_owner_count = 0
     direct_filesystem_network_process_sql_ui_authority = $false
     forbidden_status_scan_count = 0

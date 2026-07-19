@@ -174,6 +174,12 @@ fn higher_snapshot_epoch_accepts_restarted_generation_and_rejects_old_backend() 
     assert_eq!(state.projection().selected(), DesktopRouteKey::Settings);
 
     assert_eq!(
+        state.apply_snapshot(&newer),
+        DesktopApplyOutcome::IgnoredNotNewer
+    );
+    assert_eq!(state.projection().generation(), initial.generation());
+
+    assert_eq!(
         state.apply_snapshot_for_epoch(epoch_one, &newer),
         DesktopApplyOutcome::IgnoredNotNewer
     );

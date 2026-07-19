@@ -733,12 +733,33 @@ direct-authority surfaces. Clean-root, formatting, strict warnings-as-errors wor
 Clippy, and the complete locked workspace test/doctest suite pass; the full suite
 completed in 725.2 seconds.
 
-The immediate next implementation slice is P3-D.2b exact session detail over the
-existing dataset-bound keyset APIs. Bind visible ordinal to the viewed product generation,
-resolve the opaque key only inside the controller, coalesce latest selection work on the
-existing worker, and reject stale selection/results. Then continue Models, Projects,
-and Activity. Interactive History range selection remains a later bounded replacement
-of the same product section.
+P3-D.2b exact Sessions detail is implemented under
+`docs/superpowers/specs/2026-07-19-tokenmaster-session-detail-design.md` and
+`docs/superpowers/plans/2026-07-19-tokenmaster-session-detail.md`. A checked backend
+epoch plus viewed product generation and nonzero selection generation/ordinal prevent
+controller-restart alias and rapid-click stale publication. Slint submits no opaque key;
+the current app bundle routes one typed intent to the existing controller worker, which
+keeps one latest-only slot and resolves the key transiently. Product/Desktop retain one
+replace-only correlation/model. The real UI provides immediate selected/loading state,
+explicit missing/unavailable truth, exact summary/freshness/quality, and at most 32 model
+plus 32 approved path-free project-alias rows, including every token component in narrow
+layout. Busy current-bundle ownership rejects without waiting on the UI thread. Focused
+contracts, strict package Clippy, 93/93 desktop/application audit cases, and
+product/desktop/application release audits pass. Real headless pointer/Enter/Space events
+and a Tab-binding mutation rail cover row interaction. No worker, queue, cache, timer,
+polling/authority surface, dependency, or second snapshot slot was added.
+Independent follow-up review returned READY with Critical/Important/Minor 0/0/0 after
+its sole lexical audit Minor was closed by scoping the queue rail and passing all 41
+Desktop audit cases. The
+final clean-root, formatting, strict workspace Clippy, and complete locked workspace
+test/doctest baseline passed in 820.7 seconds overall (18.845, 1.611, and 22.080 seconds
+for the first three stages). The credential-dependent live Codex contract remains
+explicitly ignored. This is P3-D.2b closure, not M0/package/signing/release acceptance.
+
+The immediate next implementation slice is the bounded Models route, then Projects and
+Activity. Reuse the immutable snapshot/controller boundary and existing worker; do not
+turn route selection into query authority. Later-page Sessions navigation and interactive
+History range selection remain bounded replacements of their existing product sections.
 Keep the fixed archive path and writer sidecar; never copy only the live main file or
 treat busy/disk/access/schema-newer as corruption authority. Keep automatic recovery
 data only; device-local settings never move. Do not relax the state boundary into path,

@@ -404,9 +404,21 @@ copies at most 64 identity-free summary rows and explicit continuation availabil
 `apply_projection` replaces the single Sessions Slint model only during initial window
 construction or an accepted newer product generation. Route selection is presentation-
 only and cannot rebuild the list, issue a detail query, create a timer/worker, or
-recreate `MainWindow`. P3-D.2b will add exact detail through controller-resolved ordinal
-selection bound to the viewed product generation; it will not expose the opaque query
-key or accept a late result for another generation/selection.
+recreate `MainWindow`.
+
+P3-D.2b adds `DesktopSessionDetailIntent` with snapshot epoch, viewed product generation,
+and identity-free selection generation/ordinal. The UI adapter changes highlight and
+loading state synchronously, then submits that value to an installed typed sink. The
+application sink admits it only through a nonblocking acquisition of the current live
+bundle controller and rejects contention, safe-mode, missing, stale, deadline, or closed
+ownership. The controller retains one
+latest selection slot and multiplexes it with refresh work on the existing capacity-one
+worker. Only inside that worker, and only while epoch/product generation still match, is
+the ordinal resolved to `UsageSessionKey` and passed to `usage_session_detail`. Result
+publication is latest-selection-only; cancellation, stale work, missing rows, failures,
+and bundle replacement cannot surface another row's detail. No callback performs the
+query, no click queue/cache/thread exists, and one bounded detail Slint model is replaced
+in the existing `MainWindow`.
 
 `CodexAppServerCommand` accepts one already resolved absolute native executable path.
 The path must name a regular non-reparse file; Windows additionally requires an

@@ -62,7 +62,12 @@ the UI MUST NOT claim that the first page is the complete archive when more rows
 Opaque query keys and cursors MUST remain behind the desktop controller boundary. Exact
 session detail is a separate generation-bound follow-up: a selection MUST resolve
 against the viewed product generation and MUST NOT publish a late result for another
-selection or dataset.
+selection or dataset. Backend/controller replacement MUST add an independent monotonic
+epoch because product generations can restart. Slint MUST submit only a visible ordinal;
+the controller MUST resolve the opaque key inside the existing worker. Ready detail MUST
+retain at most 32 model and 32 approved path-free project-alias rows, show exact summary
+and evidence facts, and expose explicit loading, missing, unavailable, and truncation
+states without retaining another selection's payload.
 
 All data-bearing routes MUST derive from one bounded immutable product snapshot. The
 snapshot MUST distinguish refresh-attempt order from durable source revisions, retain

@@ -193,6 +193,17 @@ remains presentation-only and owns no page/detail cache. Exact detail cannot be 
 without controller-side generation/selection matching and must keep all opaque query
 identity outside Slint.
 
+P3-D.2b keeps the opaque `UsageSessionKey` inside the controller worker. Public/UI intent
+contains only backend epoch, immutable product generation, selection generation, and
+visible ordinal. Product correlation contains only selection generation and ordinal.
+The application routes through a weak current-bundle reference and fails closed when no
+live controller exists. It uses nonblocking bundle acquisition and rejects contention
+instead of waiting behind backup/recovery ownership on the UI thread. Ready UI data
+contains exact aggregate summary/evidence plus at
+most 32 model and 32 path-free project-alias rows; no provider/profile/source/session key,
+cursor, absolute path, prompt, response, reasoning content, command, credential, SQL,
+filesystem, network, process, or browser authority crosses the frontend boundary.
+
 Providers emit bounded observation/session-relation drafts only. They cannot create
 event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or
 canonical events. Those values are created only by TokenMaster accounting code. Store

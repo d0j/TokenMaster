@@ -949,8 +949,26 @@ facts: first/last UTC instant, event count, optional input/cached/output/reasoni
 tokens, cost, freshness, quality, stable reasons, and continuation availability. It
 owns no provider/profile/source/workspace/project/session identity, opaque key, cursor,
 query service, archive handle, prior page, or detail cache. The raw dataset-bound key
-remains inside query/product/controller state for the later generation-bound exact
-detail path and never crosses into Slint.
+remains inside query/controller state for the generation-bound exact-detail path and
+never crosses into product correlation, Desktop projection, or Slint.
+
+### P3-D.2b exact Sessions detail projection
+
+Every live backend bundle owns one nonzero checked `DesktopSnapshotEpoch`. Inside one
+epoch, product generations remain strictly newer-only; a higher epoch accepts a restarted
+generation, rejects later output from an older backend, and clears the active selection.
+One accepted click allocates a nonzero `ProductSessionDetailSelectionGeneration` and
+correlates only that generation plus the zero-based visible ordinal. Product state owns
+one optional correlation and one replace-only detail section; it never owns an opaque
+`UsageSessionKey`, click history, result history, or cross-selection retained payload.
+
+`DesktopSessionDetailProjection` has exactly `idle`, `loading`, `ready`, `missing`, and
+`unavailable` states. Ready state copies the exact summary, envelope freshness/quality,
+and at most 32 model plus 32 approved path-free project-alias aggregate rows. Each row
+contains only display kind/label, event count, typed token components, total, and cost.
+Query or projection omission sets explicit truncation. Provider/profile/source/session
+keys, cursors, raw paths, prompts, responses, reasoning content, commands, and credentials
+never enter the projection or Slint model.
 
 Only explicit provider ancestry identifies a parent. A strong signature covers the
 normalized model, emitted delta, and provider cumulative snapshot. A weak signature

@@ -4,7 +4,10 @@ use rusqlite::Connection;
 use tempfile::TempDir;
 use tokenmaster_engine::RefreshOutcome;
 use tokenmaster_platform::BackupDirectory;
-use tokenmaster_product::ProductSectionKind;
+use tokenmaster_product::{
+    ProductReducer, ProductSectionKind, ProductSessionDetailSelection,
+    ProductSessionDetailSelectionGeneration,
+};
 use tokenmaster_state::{
     BackupCatalog, BackupMaintenanceRuntime, BackupPolicy, BackupPurpose, BootstrapOutcome,
     MaintenanceExecution, MaintenanceSourceState, PortableSettings, PriorRunCondition, RestoreMode,
@@ -92,6 +95,54 @@ fn wait_for_application_completion(application: &Application) -> ApplicationComm
         assert!(Instant::now() < deadline, "application operation timed out");
         std::thread::yield_now();
     }
+}
+
+#[test]
+fn session_detail_sink_rejects_when_no_live_bundle_owns_the_controller() {
+    let bundle: SharedBundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
+    let sink = ApplicationSessionDetailIntentSink::new(Arc::downgrade(&bundle));
+    let intent = DesktopSessionDetailIntent::new(
+        tokenmaster_desktop::DesktopSnapshotEpoch::new(1).expect("epoch"),
+        ProductReducer::new().snapshot().generation(),
+        ProductSessionDetailSelection::new(
+            ProductSessionDetailSelectionGeneration::new(1).expect("selection generation"),
+            0,
+        ),
+    );
+    assert_eq!(
+        sink.submit(intent),
+        DesktopSessionDetailIntentAdmission::Rejected
+    );
+
+    drop(bundle);
+    assert_eq!(
+        sink.submit(intent),
+        DesktopSessionDetailIntentAdmission::Rejected
+    );
+}
+
+#[test]
+fn session_detail_sink_never_waits_for_a_busy_bundle_owner() {
+    let bundle: SharedBundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
+    let sink = ApplicationSessionDetailIntentSink::new(Arc::downgrade(&bundle));
+    let intent = DesktopSessionDetailIntent::new(
+        tokenmaster_desktop::DesktopSnapshotEpoch::new(1).expect("epoch"),
+        ProductReducer::new().snapshot().generation(),
+        ProductSessionDetailSelection::new(
+            ProductSessionDetailSelectionGeneration::new(1).expect("selection generation"),
+            0,
+        ),
+    );
+    let guard = bundle.lock().expect("busy bundle guard");
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    let worker = std::thread::spawn(move || {
+        let _ = sender.send(sink.submit(intent));
+    });
+    let timely = receiver.recv_timeout(Duration::from_millis(100));
+    drop(guard);
+    worker.join().expect("session admission worker");
+
+    assert_eq!(timely, Ok(DesktopSessionDetailIntentAdmission::Rejected));
 }
 
 #[test]

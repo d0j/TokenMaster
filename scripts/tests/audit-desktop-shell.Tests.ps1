@@ -195,6 +195,95 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-SESSIONS-REQUEST*"
     }
 
+    It "rejects exact session-detail presentation-bound drift" {
+        $fixture = New-DesktopAuditFixture -Name "session-detail-bound"
+        $path = Join-Path $fixture "crates\desktop\src\sessions.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'pub const MAX_SESSION_DETAIL_MODEL_ROWS: usize = 32;',
+            'pub const MAX_SESSION_DETAIL_MODEL_ROWS: usize = 320;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSION-DETAIL-BOUND*"
+    }
+
+    It "rejects replacing the latest-only session-detail work slot with a queue" {
+        $fixture = New-DesktopAuditFixture -Name "session-detail-slot"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'pending_selection: Option<PendingDesktopSessionDetail>',
+            'pending_selection: Vec<PendingDesktopSessionDetail>'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSION-DETAIL-SLOT*"
+    }
+
+    It "rejects hiding a session-detail queue behind a type alias" {
+        $fixture = New-DesktopAuditFixture -Name "session-detail-aliased-queue"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        Add-Content -LiteralPath $path `
+            -Value 'type DetailQueue = std::collections::VecDeque<DesktopSessionDetailIntent>;'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSION-DETAIL-SLOT*"
+    }
+
+    It "accepts an unrelated bounded vector type in the controller" {
+        $fixture = New-DesktopAuditFixture -Name "unrelated-bounded-vector"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        Add-Content -LiteralPath $path -Value 'type UnrelatedBoundedData = Vec<u8>;'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Not -Throw
+    }
+
+    It "rejects opaque session keys crossing into the UI projection" {
+        $fixture = New-DesktopAuditFixture -Name "session-detail-identity"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\sessions.rs") `
+            -Value 'struct LeakyDetail { key: UsageSessionKey }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSION-DETAIL-IDENTITY*"
+    }
+
+    It "rejects removing the typed session-detail selection callback" {
+        $fixture = New-DesktopAuditFixture -Name "session-detail-routing"
+        $path = Join-Path $fixture "crates\desktop\ui\main.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'callback select-session(int);',
+            'callback select-session-removed(int);'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSION-DETAIL-ROUTING*"
+    }
+
+    It "rejects removing tab navigation from session rows" {
+        $fixture = New-DesktopAuditFixture -Name "session-detail-tab-navigation"
+        $path = Join-Path $fixture "crates\desktop\ui\views\sessions-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'focus-on-tab-navigation: true;',
+            'focus-on-tab-navigation: false;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSION-DETAIL-ROUTING*"
+    }
+
+    It "rejects a second session-detail model replacement site" {
+        $fixture = New-DesktopAuditFixture -Name "session-detail-model"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\ui.rs") `
+            -Value 'fn duplicate_detail_model() { window.set_session_detail_breakdown_rows(model(rows)); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSION-DETAIL-MODEL*"
+    }
+
     It "rejects restore-point presentation-bound drift" {
         $fixture = New-DesktopAuditFixture -Name "restore-bound"
         $path = Join-Path $fixture "crates\desktop\src\reliable_state.rs"
@@ -382,7 +471,10 @@ Describe "TokenMaster production desktop audit" {
         $receipt.history_model_replacement_count | Should -Be 1
         $receipt.history_projection_application_count | Should -Be 1
         $receipt.session_row_maximum | Should -Be 64
+        $receipt.session_detail_model_row_maximum | Should -Be 32
+        $receipt.session_detail_project_row_maximum | Should -Be 32
         $receipt.sessions_model_replacement_count | Should -Be 1
+        $receipt.session_detail_model_replacement_count | Should -Be 1
         $receipt.sessions_projection_application_count | Should -Be 1
         $receipt.restore_point_maximum | Should -Be 15
         $receipt.restore_model_replacement_count | Should -Be 1

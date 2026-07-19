@@ -48,6 +48,26 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   the 33/33 mutation audit plus release audit/build pass. The complete post-slice
   locked workspace test/doctest suite and strict warnings-as-errors Clippy pass; the
   full suite completed in 725.2 seconds.
+- P3-D.2b exact Sessions detail: each live controller/bridge bundle owns a checked
+  backend epoch, and every click binds that epoch, the viewed immutable product
+  generation, and a nonzero selection generation plus visible ordinal. One latest-only
+  slot multiplexes exact detail with refresh on the existing worker; the opaque query
+  key is resolved only there and never enters product correlation, Desktop, Slint, logs,
+  or serialization. The responsive card updates highlight/loading synchronously and
+  renders explicit idle/loading/ready/missing/unavailable states, exact summary and
+  freshness/quality, plus at most 32 model and 32 approved path-free project-alias rows.
+  Narrow layout retains every token bucket including reasoning. Current-bundle admission
+  is nonblocking and rejects immediately while another operation owns the bundle mutex.
+  Focused product/controller/projection/application/real-Slint contracts, strict package
+  Clippy, 93 desktop/application audit cases, and product/desktop/application release
+  audits pass. The compiled-UI contract sends real pointer, Enter, and Space events; a
+  source mutation pins Tab navigation. No worker, queue, timer, cache, polling site,
+  database owner, dependency, or second snapshot slot was added.
+  Independent follow-up review returned READY with Critical/Important/Minor 0/0/0 after
+  its one audit-scope Minor was closed by the 41/41 Desktop suite. The final clean-root/format/strict-
+  Clippy/complete locked test-doctest baseline passed in 820.7 seconds overall (18.845,
+  1.611, and 22.080 seconds for the first three stages). The credential-dependent live
+  Codex contract remains explicitly ignored; M0 and product-release gates are separate.
 - M1 usage foundation: bounded provider roots, path-private source discovery,
   reparse-safe streaming enumeration, typed bounded JSONL parser, cumulative token
   state, physical/logical source identity, byte framing, revalidation, strict SQLite
@@ -1292,12 +1312,11 @@ release target passes independently.
 
 ## Next implementation slice
 
-P3-D.0 Reliable State, P3-D.1 History, and P3-D.2a bounded Sessions list are complete.
-Continue with P3-D.2b exact session detail: bind visible ordinal and viewed product
-generation, resolve the opaque key only inside the controller, coalesce work on the
-existing query worker, and reject stale selection/results. Then implement Models,
-Projects, Activity, and supporting notification/help routes. Interactive History ranges
-remain a bounded follow-up over the same replace-only product section. P3-E then owns
+P3-D.0 Reliable State, P3-D.1 History, and P3-D.2 bounded Sessions list/detail are
+complete. Continue with the independently useful Models route, then Projects and
+Activity. Later-page Sessions navigation and interactive History ranges remain bounded
+replacements of their existing sections rather than new frontend query owners.
+Supporting notification/help routes remain after those data views. P3-E then owns
 command palette, tray, compact widget, and remaining shell lifecycle. Interactive
 Windows, P4 presentation, P5 CLI/MCP, activation, M0, packaging, signing, soak, and
 product release remain unclaimed.

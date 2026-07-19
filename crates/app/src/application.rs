@@ -11,9 +11,11 @@ use tokenmaster_codex::{CodexRootInput, ConfiguredCodexRoot, build_discovery_req
 use tokenmaster_desktop::{
     DesktopBridgeFactory, DesktopController, DesktopIntent, DesktopIntentAdmission,
     DesktopIntentRouter, DesktopIntentSink, DesktopOperationKind, DesktopOperationPhase,
-    DesktopOperationSnapshot, DesktopQueryPlan, DesktopRefreshUrgency,
+    DesktopOperationSnapshot, DesktopQueryPlan, DesktopRefreshAdmission, DesktopRefreshUrgency,
     DesktopReliableStateNotifier, DesktopReliableStateProjection, DesktopRestoreSelection,
-    DesktopRuntimeObservation, DesktopShell, DesktopSnapshotBridge, select_production_renderer,
+    DesktopRuntimeObservation, DesktopSessionDetailIntent, DesktopSessionDetailIntentAdmission,
+    DesktopSessionDetailIntentRouter, DesktopSessionDetailIntentSink, DesktopShell,
+    DesktopSnapshotBridge, select_production_renderer,
 };
 use tokenmaster_engine::{
     RefreshOutcome, RefreshUrgency, WorkerCompletion, WorkerCompletionNotifier,
@@ -149,12 +151,17 @@ impl Application {
         let reliable_state = state
             .reliable_state_projection_for_outcome(preflight.effective_outcome(), None)
             .unwrap_or_else(|_| DesktopReliableStateProjection::unavailable());
-        let intent_router = Rc::new(DesktopIntentRouter::new());
-        let shell =
-            DesktopShell::new_with_reliable_state(&initial, reliable_state, intent_router.clone())
-                .map_err(|_| ApplicationError::ui_unavailable())?;
-        let bridge_factory = shell.bridge_factory();
         let bundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
+        let intent_router = Rc::new(DesktopIntentRouter::new());
+        let session_detail_router = Rc::new(DesktopSessionDetailIntentRouter::new());
+        let shell = DesktopShell::new_with_reliable_state_and_session_sink(
+            &initial,
+            reliable_state,
+            intent_router.clone(),
+            session_detail_router.clone(),
+        )
+        .map_err(|_| ApplicationError::ui_unavailable())?;
+        let bridge_factory = shell.bridge_factory();
         let outcome = preflight.report().outcome();
         let may_start_live = matches!(
             outcome,
@@ -241,6 +248,11 @@ impl Application {
         intent_router
             .install(Rc::new(ApplicationDesktopIntentSink::new(
                 commands.submitter(),
+            )))
+            .map_err(|_| ApplicationError::internal())?;
+        session_detail_router
+            .install(Rc::new(ApplicationSessionDetailIntentSink::new(
+                Arc::downgrade(&bundle),
             )))
             .map_err(|_| ApplicationError::internal())?;
 
@@ -473,6 +485,38 @@ impl Application {
 struct ApplicationDesktopIntentSink {
     dialog: NativeFileDialog,
     submitter: ApplicationOperationSubmitter,
+}
+
+struct ApplicationSessionDetailIntentSink {
+    bundle: Weak<Mutex<ApplicationBundleSlot>>,
+}
+
+impl ApplicationSessionDetailIntentSink {
+    fn new(bundle: Weak<Mutex<ApplicationBundleSlot>>) -> Self {
+        Self { bundle }
+    }
+}
+
+impl DesktopSessionDetailIntentSink for ApplicationSessionDetailIntentSink {
+    fn submit(&self, intent: DesktopSessionDetailIntent) -> DesktopSessionDetailIntentAdmission {
+        let Some(bundle) = self.bundle.upgrade() else {
+            return DesktopSessionDetailIntentAdmission::Rejected;
+        };
+        let Ok(slot) = bundle.try_lock() else {
+            return DesktopSessionDetailIntentAdmission::Rejected;
+        };
+        let Some(bundle) = slot.as_ref() else {
+            return DesktopSessionDetailIntentAdmission::Rejected;
+        };
+        match bundle.controller.request_session_detail(intent) {
+            Ok(
+                DesktopRefreshAdmission::Started { .. } | DesktopRefreshAdmission::Coalesced { .. },
+            ) => DesktopSessionDetailIntentAdmission::Accepted,
+            Ok(DesktopRefreshAdmission::DeadlineExceeded { .. }) | Err(_) => {
+                DesktopSessionDetailIntentAdmission::Rejected
+            }
+        }
+    }
 }
 
 impl ApplicationDesktopIntentSink {

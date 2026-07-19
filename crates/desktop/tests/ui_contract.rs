@@ -1,7 +1,18 @@
 mod support;
 
-use slint::{ComponentHandle, Model, SharedString};
-use tokenmaster_desktop::{DesktopApplyOutcome, DesktopShell};
+use std::{cell::RefCell, rc::Rc};
+
+use i_slint_backend_testing::{AccessibleRole, ElementQuery};
+use slint::{
+    ComponentHandle, Model, SharedString,
+    platform::{Key, PointerEventButton, WindowEvent},
+};
+use tokenmaster_desktop::{
+    DesktopApplyOutcome, DesktopIntent, DesktopIntentAdmission, DesktopIntentSink,
+    DesktopReliableStateProjection, DesktopSessionDetailIntent,
+    DesktopSessionDetailIntentAdmission, DesktopSessionDetailIntentSink, DesktopShell,
+    DesktopSnapshotEpoch,
+};
 use tokenmaster_product::{ProductAttemptGeneration, ProductReducer};
 use tokenmaster_query::{
     BenefitOverviewRequest, GitOutputRequest, PageSize, QueryErrorCode, QueryService,
@@ -12,6 +23,26 @@ use tokenmaster_query::{
 use support::dashboard_fixture::{
     FixedClock, add_distinct_usage_rows, add_quota_windows, range, seed,
 };
+
+struct RejectingIntentSink;
+
+impl DesktopIntentSink for RejectingIntentSink {
+    fn submit(&self, _intent: DesktopIntent) -> DesktopIntentAdmission {
+        DesktopIntentAdmission::Rejected
+    }
+}
+
+#[derive(Default)]
+struct RecordingSessionDetailSink {
+    intents: RefCell<Vec<DesktopSessionDetailIntent>>,
+}
+
+impl DesktopSessionDetailIntentSink for RecordingSessionDetailSink {
+    fn submit(&self, intent: DesktopSessionDetailIntent) -> DesktopSessionDetailIntentAdmission {
+        self.intents.borrow_mut().push(intent);
+        DesktopSessionDetailIntentAdmission::Accepted
+    }
+}
 
 fn ready_reducer(path: &std::path::Path, additional_quota_windows: u8) -> ProductReducer {
     ready_reducer_with_usage(path, additional_quota_windows, 0)
@@ -95,6 +126,8 @@ fn ready_reducer_with_usage(
 
 #[test]
 fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
+    i_slint_backend_testing::init_no_event_loop();
+
     let reducer = ProductReducer::new();
     let snapshot = reducer.snapshot();
     let shell = DesktopShell::new(&snapshot).expect("desktop shell");
@@ -167,6 +200,123 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
 
     assert_compiled_dashboard_renders_real_bounded_models_and_switches_layout_in_place();
     assert_compiled_sessions_render_one_bounded_page_without_recreating_the_window();
+    assert_compiled_session_selection_is_immediate_correlated_and_bounded_in_place();
+}
+
+fn assert_compiled_session_selection_is_immediate_correlated_and_bounded_in_place() {
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory.path().join("ui-session-detail.sqlite3");
+    let mut reducer = ready_reducer(&path, 0);
+    let snapshot = reducer.snapshot();
+    let sink = Rc::new(RecordingSessionDetailSink::default());
+    let shell = DesktopShell::new_with_reliable_state_and_session_sink(
+        &snapshot,
+        DesktopReliableStateProjection::unavailable(),
+        Rc::new(RejectingIntentSink),
+        sink.clone(),
+    )
+    .expect("desktop shell");
+    let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+    assert_eq!(
+        shell
+            .apply_snapshot_for_epoch(epoch, &snapshot)
+            .expect("bind backend epoch"),
+        DesktopApplyOutcome::Accepted
+    );
+    let window = shell.window();
+
+    window.invoke_select_route(SharedString::from("sessions"));
+    window.show().expect("show sessions window");
+    let session_rows = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::Button)
+        .match_predicate(|element| {
+            element
+                .accessible_label()
+                .is_some_and(|label| label.starts_with("From "))
+        })
+        .find_all();
+    assert_eq!(session_rows.len(), 1);
+    session_rows[0].mock_single_click(PointerEventButton::Left);
+    assert_eq!(window.get_sessions_selected_row(), 0);
+    assert_eq!(window.get_session_detail_state(), "loading");
+    assert_eq!(window.get_session_detail_breakdown_rows().row_count(), 0);
+    let intent = sink
+        .intents
+        .borrow()
+        .first()
+        .copied()
+        .expect("one identity-free selection intent");
+    assert_eq!(intent.snapshot_epoch(), epoch);
+    assert_eq!(intent.product_generation(), snapshot.generation());
+    assert_eq!(intent.selection().row_ordinal(), 0);
+    dispatch_key(window, Key::Return);
+    dispatch_key(window, Key::Space);
+    assert_eq!(
+        sink.intents.borrow().len(),
+        3,
+        "pointer, Enter, and Space each traverse the real session-row bindings"
+    );
+    let latest_intent = sink
+        .intents
+        .borrow()
+        .last()
+        .copied()
+        .expect("latest keyboard selection intent");
+
+    let mut service = QueryService::open(&path, FixedClock).expect("query service");
+    let sessions = service
+        .usage_sessions(
+            UsageSessionPageRequest::first(PageSize::new(1).expect("page size"), Vec::new())
+                .expect("session request"),
+        )
+        .expect("sessions");
+    let detail = service
+        .usage_session_detail(sessions.payload().sessions()[0].key().clone())
+        .expect("session detail");
+    reducer
+        .publish_session_detail(
+            ProductAttemptGeneration::new(2).expect("attempt"),
+            latest_intent.selection(),
+            detail,
+        )
+        .expect("publish detail");
+    assert_eq!(
+        shell
+            .apply_snapshot_for_epoch(epoch, &reducer.snapshot())
+            .expect("apply exact detail"),
+        DesktopApplyOutcome::Accepted
+    );
+    assert_eq!(window.get_session_detail_state(), "ready");
+    assert_eq!(
+        window.get_session_detail_evidence_label(),
+        "Fresh · Authoritative"
+    );
+    assert_eq!(window.get_sessions_selected_row(), 0);
+    assert_eq!(window.get_session_detail_event_label(), "1");
+    assert_eq!(window.get_session_detail_breakdown_rows().row_count(), 2);
+
+    let unavailable = DesktopShell::new(&snapshot).expect("unavailable shell");
+    unavailable
+        .apply_snapshot_for_epoch(epoch, &snapshot)
+        .expect("bind unavailable shell epoch");
+    unavailable.window().invoke_select_session(0);
+    assert_eq!(
+        unavailable.window().get_session_detail_state(),
+        "unavailable"
+    );
+    assert_eq!(
+        unavailable.window().get_session_detail_status_label(),
+        "Unavailable · Request Rejected"
+    );
+}
+
+fn dispatch_key(window: &tokenmaster_desktop::MainWindow, key: Key) {
+    window
+        .window()
+        .dispatch_event(WindowEvent::KeyPressed { text: key.into() });
+    window
+        .window()
+        .dispatch_event(WindowEvent::KeyReleased { text: key.into() });
 }
 
 fn assert_compiled_dashboard_renders_real_bounded_models_and_switches_layout_in_place() {

@@ -120,7 +120,7 @@ if ($reliableStateText -notmatch 'pub struct DesktopRecoveryReceipt' -or
 }
 $uiAdapterText = [System.IO.File]::ReadAllText((Join-Path $sourceRoot 'ui.rs')) + "`n" +
     $uiText
-if ($uiAdapterText -match 'QueryService::|RefreshWorker::|DesktopController::|\.usage_analytics\(|\.quota_overview\(|\.benefit_overview\(') {
+if ($uiAdapterText -match 'QueryService::|RefreshWorker::|DesktopController::|\.usage_analytics\(|\.usage_session_detail\(|\.quota_overview\(|\.benefit_overview\(') {
     throw 'TM-DESKTOP-UI-QUERY: Slint callbacks must not perform controller or query work'
 }
 if ($controllerText -match 'QuotaCurrentRequest::new\s*\(\s*Vec::new\(\)\s*\)') {
@@ -224,6 +224,50 @@ $sessionsModelReplacementCount = [regex]::Matches(
 ).Count
 if ($sessionsModelReplacementCount -ne 1) {
     throw 'TM-DESKTOP-SESSIONS-MODEL: sessions must have one bounded model replacement site'
+}
+$sessionDetailBounds = [ordered]@{
+    MAX_SESSION_DETAIL_MODEL_ROWS = 32
+    MAX_SESSION_DETAIL_PROJECT_ROWS = 32
+}
+foreach ($bound in $sessionDetailBounds.GetEnumerator()) {
+    $pattern = "pub const $([regex]::Escape($bound.Key)): usize = $($bound.Value);"
+    if ($sessionsText -notmatch $pattern) {
+        throw "TM-DESKTOP-SESSION-DETAIL-BOUND: $($bound.Key) drifted"
+    }
+}
+if ($sessionsText -notmatch 'Vec::with_capacity\(MAX_SESSION_DETAIL_MODEL_ROWS \+ MAX_SESSION_DETAIL_PROJECT_ROWS\)' -or
+    $sessionsText -notmatch 'model_count >= MAX_SESSION_DETAIL_MODEL_ROWS' -or
+    $sessionsText -notmatch 'project_count >= MAX_SESSION_DETAIL_PROJECT_ROWS') {
+    throw 'TM-DESKTOP-SESSION-DETAIL-BOUND: exact session detail must retain at most 32 model and 32 project rows'
+}
+$sessionDetailQueuePattern = '(?im)^(?=[^\r\n]*(?:session|detail))[^\r\n]*(?:\b(?:VecDeque|HashMap|BTreeMap|LinkedList)\b|\bVec\s*<|\b(?:sync_)?channel\s*(?:::)?\s*(?:<|\())'
+if ($controllerText -notmatch 'pending_selection:\s*Option<PendingDesktopSessionDetail>' -or
+    $controllerText -notmatch 'latest_selection_generation:\s*Option<ProductSessionDetailSelectionGeneration>' -or
+    $controllerText -match $sessionDetailQueuePattern) {
+    throw 'TM-DESKTOP-SESSION-DETAIL-SLOT: exact detail work must use one latest-only typed slot'
+}
+$presentationText = [System.IO.File]::ReadAllText((Join-Path $sourceRoot 'presentation.rs'))
+$sessionUiBoundaryText = $sessionsText + "`n" + $presentationText + "`n" + $uiRustText + "`n" + $uiText
+if ($sessionUiBoundaryText -match '\bUsageSessionKey\b') {
+    throw 'TM-DESKTOP-SESSION-DETAIL-IDENTITY: opaque session keys must remain inside the controller worker'
+}
+if ($controllerText -notmatch 'source\s*\.usage_session_detail\(key\)' -or
+    $controllerText -notmatch 'DesktopSessionDetailIntent' -or
+    $uiText -notmatch 'callback select-session\(int\)' -or
+    $uiRustText -notmatch 'window\.on_select_session\(' -or
+    $uiText -notmatch 'row-focus := FocusScope' -or
+    $uiText -notmatch 'focus-on-tab-navigation:\s*true' -or
+    $uiText -notmatch 'row-focus\.focus\(\)' -or
+    $uiText -notmatch 'row-touch\.has-hover' -or
+    $uiText -notmatch 'accessible-action-default') {
+    throw 'TM-DESKTOP-SESSION-DETAIL-ROUTING: typed selection must route through the controller worker'
+}
+$sessionDetailModelReplacementCount = [regex]::Matches(
+    $uiRustText,
+    'set_session_detail_breakdown_rows\(model\(rows\)\)'
+).Count
+if ($sessionDetailModelReplacementCount -ne 1) {
+    throw 'TM-DESKTOP-SESSION-DETAIL-MODEL: exact detail must have one bounded model replacement site'
 }
 $reliableStatePath = Join-Path $sourceRoot 'reliable_state.rs'
 $reliableStateText = [System.IO.File]::ReadAllText($reliableStatePath)
@@ -350,7 +394,10 @@ if ($SourceOnly) {
         history_projection_application_count = $historyProjectionCallCount - 1
         history_polling_surface_count = 0
         session_row_maximum = 64
+        session_detail_model_row_maximum = 32
+        session_detail_project_row_maximum = 32
         sessions_model_replacement_count = $sessionsModelReplacementCount
+        session_detail_model_replacement_count = $sessionDetailModelReplacementCount
         sessions_projection_application_count = $sessionsProjectionCallCount - 1
         sessions_polling_surface_count = 0
         restore_point_maximum = 15
@@ -431,7 +478,10 @@ if ($LASTEXITCODE -ne 0) {
     history_projection_application_count = $historyProjectionCallCount - 1
     history_polling_surface_count = 0
     session_row_maximum = 64
+    session_detail_model_row_maximum = 32
+    session_detail_project_row_maximum = 32
     sessions_model_replacement_count = $sessionsModelReplacementCount
+    session_detail_model_replacement_count = $sessionDetailModelReplacementCount
     sessions_projection_application_count = $sessionsProjectionCallCount - 1
     sessions_polling_surface_count = 0
     restore_point_maximum = 15

@@ -1,4 +1,4 @@
-import { SessionListRow } from "../models.slint";
+import { SessionListRow, SessionDetailBreakdownRow } from "../models.slint";
 import { UiTokens } from "../tokens.slint";
 import { SectionState } from "../components/section-state.slint";
 import { ScrollView } from "std-widgets.slint";
@@ -44,6 +44,8 @@ component SessionsTableCard inherits Rectangle {
     in property <[SessionListRow]> rows;
     in property <bool> narrow;
     in property <string> state;
+    in property <int> selected-row;
+    callback select-row(int);
 
     min-height: max(96px, 64px + root.rows.length * 38px);
     background: UiTokens.surface;
@@ -56,7 +58,7 @@ component SessionsTableCard inherits Rectangle {
     VerticalLayout {
         padding: UiTokens.space;
         spacing: 0px;
-        Text { text: "Session details"; color: UiTokens.text-primary; font-size: 15px; font-weight: 750; height: 32px; }
+        Text { text: "Session summaries"; color: UiTokens.text-primary; font-size: 15px; font-weight: 750; height: 32px; }
         if root.rows.length == 0: Text {
             text: root.state == "waiting" ? "Waiting for session evidence" : "Session evidence unavailable";
             color: UiTokens.text-secondary;
@@ -86,10 +88,16 @@ component SessionsTableCard inherits Rectangle {
         }
         for session[i] in root.rows: Rectangle {
             height: 38px;
-            background: mod(i, 2) == 0 ? UiTokens.surface-subtle : transparent;
+            background: root.selected-row == session.row-index || row-focus.has-focus ? UiTokens.accent-subtle : (row-touch.has-hover ? UiTokens.surface-raised : (mod(i, 2) == 0 ? UiTokens.surface-subtle : transparent));
+            border-color: root.selected-row == session.row-index || row-focus.has-focus ? UiTokens.accent : transparent;
+            border-width: root.selected-row == session.row-index || row-focus.has-focus ? 1px : 0px;
             border-radius: UiTokens.radius-sm;
-            accessible-role: list-item;
+            accessible-role: button;
             accessible-label: "From " + session.first-label + " to " + session.last-label + " " + session.event-label + " events " + session.total-label + " tokens " + session.cost-label;
+            accessible-action-default => {
+                row-focus.focus();
+                root.select-row(session.row-index);
+            }
             if root.narrow: HorizontalLayout {
                 padding-left: UiTokens.space-sm;
                 padding-right: UiTokens.space-sm;
@@ -113,6 +121,144 @@ component SessionsTableCard inherits Rectangle {
                 Text { text: session.total-label; color: session.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; horizontal-alignment: right; }
                 Text { text: session.cost-label; color: session.cost-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; width: 78px; horizontal-alignment: right; }
             }
+            row-touch := TouchArea {
+                clicked => {
+                    row-focus.focus();
+                    root.select-row(session.row-index);
+                }
+            }
+            row-focus := FocusScope {
+                x: 0px;
+                width: 0px;
+                focus-on-tab-navigation: true;
+                key-pressed(event) => {
+                    if event.text == " " || event.text == "\n" {
+                        root.select-row(session.row-index);
+                        return accept;
+                    }
+                    return reject;
+                }
+            }
+        }
+    }
+}
+
+component SessionDetailCard inherits Rectangle {
+    in property <string> state;
+    in property <string> status-label;
+    in property <string> evidence-label;
+    in property <string> period-label;
+    in property <string> duration-label;
+    in property <string> event-label;
+    in property <string> input-availability;
+    in property <string> input-label;
+    in property <string> cached-availability;
+    in property <string> cached-label;
+    in property <string> output-availability;
+    in property <string> output-label;
+    in property <string> reasoning-availability;
+    in property <string> reasoning-label;
+    in property <string> total-availability;
+    in property <string> total-label;
+    in property <string> cost-availability;
+    in property <string> cost-label;
+    in property <[SessionDetailBreakdownRow]> breakdown-rows;
+    in property <bool> narrow;
+
+    min-height: root.state == "ready" ? 172px + root.breakdown-rows.length * (root.narrow ? 62px : 34px) : 92px;
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: region;
+    accessible-label: "Selected session detail " + root.status-label;
+
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: UiTokens.space-sm;
+        HorizontalLayout {
+            Text { text: "Selected session"; color: UiTokens.text-primary; font-size: 15px; font-weight: 750; horizontal-stretch: 1; }
+            Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: 11px; }
+            Text { text: root.status-label; color: root.state == "unavailable" ? UiTokens.unavailable : UiTokens.text-secondary; font-size: 11px; }
+        }
+        if root.state != "ready": Text {
+            text: root.state == "idle" ? "Select a session summary to inspect its exact totals and breakdown." :
+                  root.state == "loading" ? "Loading exact session detail…" :
+                  root.state == "missing" ? "This session is no longer present in the current archive snapshot." :
+                  "Session detail is unavailable. Select the row again to retry.";
+            color: UiTokens.text-secondary;
+            font-size: 12px;
+            wrap: word-wrap;
+            min-height: 38px;
+        }
+        if root.state == "ready": VerticalLayout {
+            spacing: UiTokens.space-sm;
+            Text { text: root.period-label; color: UiTokens.text-primary; font-size: 12px; font-weight: 700; }
+            if !root.narrow: HorizontalLayout {
+                spacing: UiTokens.space;
+                Text { text: "Duration " + root.duration-label; color: UiTokens.text-secondary; font-size: 11px; }
+                Text { text: "Events " + root.event-label; color: UiTokens.text-secondary; font-size: 11px; }
+                Text { text: "Input " + root.input-label; color: root.input-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; }
+                Text { text: "Cached " + root.cached-label; color: root.cached-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; }
+                Text { text: "Output " + root.output-label; color: root.output-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; }
+                Text { text: "Reasoning " + root.reasoning-label; color: root.reasoning-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; }
+                Text { text: "Total " + root.total-label; color: root.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; }
+                Text { text: "Cost " + root.cost-label; color: root.cost-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; }
+            }
+            if root.narrow: VerticalLayout {
+                spacing: UiTokens.space-xs;
+                HorizontalLayout {
+                    spacing: UiTokens.space;
+                    Text { text: "Duration " + root.duration-label; color: UiTokens.text-secondary; font-size: 11px; }
+                    Text { text: "Events " + root.event-label; color: UiTokens.text-secondary; font-size: 11px; }
+                    Text { text: "Cost " + root.cost-label; color: root.cost-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; }
+                }
+                HorizontalLayout {
+                    spacing: UiTokens.space;
+                    Text { text: "Input " + root.input-label; color: root.input-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; }
+                    Text { text: "Cached " + root.cached-label; color: root.cached-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; }
+                    Text { text: "Output " + root.output-label; color: root.output-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; }
+                }
+                HorizontalLayout {
+                    spacing: UiTokens.space;
+                    Text { text: "Reasoning " + root.reasoning-label; color: root.reasoning-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; }
+                    Text { text: "Total " + root.total-label; color: root.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; }
+                }
+            }
+            Text { text: "Model and project breakdown"; color: UiTokens.text-primary; font-size: 12px; font-weight: 700; height: 24px; }
+            for item in root.breakdown-rows: Rectangle {
+                height: root.narrow ? 62px : 34px;
+                if !root.narrow: HorizontalLayout {
+                    spacing: UiTokens.space-sm;
+                    Text { text: item.kind; color: UiTokens.accent; font-size: 10px; width: 50px; }
+                    Text { text: item.label; color: UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; overflow: elide; }
+                    Text { text: item.event-label; color: UiTokens.text-secondary; font-size: 10px; width: 42px; horizontal-alignment: right; }
+                    Text { text: item.input-label; color: item.input-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 10px; width: 62px; horizontal-alignment: right; }
+                    Text { text: item.cached-label; color: item.cached-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 10px; width: 62px; horizontal-alignment: right; }
+                    Text { text: item.output-label; color: item.output-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 10px; width: 62px; horizontal-alignment: right; }
+                    Text { text: item.reasoning-label; color: item.reasoning-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 10px; width: 62px; horizontal-alignment: right; }
+                    Text { text: item.total-label; color: item.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 10px; width: 70px; horizontal-alignment: right; }
+                    Text { text: item.cost-label; color: item.cost-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 10px; width: 78px; horizontal-alignment: right; }
+                }
+                if root.narrow: VerticalLayout {
+                    spacing: UiTokens.space-xs;
+                    HorizontalLayout {
+                        spacing: UiTokens.space-sm;
+                        Text { text: item.kind; color: UiTokens.accent; font-size: 10px; width: 50px; }
+                        Text { text: item.label; color: UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; overflow: elide; }
+                        Text { text: "Events " + item.event-label; color: UiTokens.text-secondary; font-size: 10px; }
+                        Text { text: "Cost " + item.cost-label; color: item.cost-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 10px; }
+                    }
+                    HorizontalLayout {
+                        spacing: UiTokens.space-sm;
+                        Text { text: "In " + item.input-label; color: item.input-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 10px; }
+                        Text { text: "Cached " + item.cached-label; color: item.cached-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 10px; }
+                        Text { text: "Out " + item.output-label; color: item.output-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 10px; }
+                        Text { text: "Reasoning " + item.reasoning-label; color: item.reasoning-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 10px; }
+                        Text { text: "Total " + item.total-label; color: item.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 10px; horizontal-stretch: 1; }
+                    }
+                }
+            }
         }
     }
 }
@@ -124,6 +270,27 @@ export component SessionsView inherits Rectangle {
     in property <string> evidence-label;
     in property <string> loaded-label;
     in property <string> page-status-label;
+    in property <int> selected-row;
+    in property <string> detail-state;
+    in property <string> detail-status-label;
+    in property <string> detail-evidence-label;
+    in property <string> detail-period-label;
+    in property <string> detail-duration-label;
+    in property <string> detail-event-label;
+    in property <string> detail-input-availability;
+    in property <string> detail-input-label;
+    in property <string> detail-cached-availability;
+    in property <string> detail-cached-label;
+    in property <string> detail-output-availability;
+    in property <string> detail-output-label;
+    in property <string> detail-reasoning-availability;
+    in property <string> detail-reasoning-label;
+    in property <string> detail-total-availability;
+    in property <string> detail-total-label;
+    in property <string> detail-cost-availability;
+    in property <string> detail-cost-label;
+    in property <[SessionDetailBreakdownRow]> detail-breakdown-rows;
+    callback select-row(int);
     out property <bool> narrow: root.width < 760px;
 
     background: UiTokens.background;
@@ -141,7 +308,35 @@ export component SessionsView inherits Rectangle {
                 loaded-label: root.loaded-label;
                 page-status-label: root.page-status-label;
             }
-            SessionsTableCard { rows: root.rows; narrow: root.narrow; state: root.state; }
+            SessionsTableCard {
+                rows: root.rows;
+                narrow: root.narrow;
+                state: root.state;
+                selected-row: root.selected-row;
+                select-row(index) => { root.select-row(index); }
+            }
+            SessionDetailCard {
+                state: root.detail-state;
+                status-label: root.detail-status-label;
+                evidence-label: root.detail-evidence-label;
+                period-label: root.detail-period-label;
+                duration-label: root.detail-duration-label;
+                event-label: root.detail-event-label;
+                input-availability: root.detail-input-availability;
+                input-label: root.detail-input-label;
+                cached-availability: root.detail-cached-availability;
+                cached-label: root.detail-cached-label;
+                output-availability: root.detail-output-availability;
+                output-label: root.detail-output-label;
+                reasoning-availability: root.detail-reasoning-availability;
+                reasoning-label: root.detail-reasoning-label;
+                total-availability: root.detail-total-availability;
+                total-label: root.detail-total-label;
+                cost-availability: root.detail-cost-availability;
+                cost-label: root.detail-cost-label;
+                breakdown-rows: root.detail-breakdown-rows;
+                narrow: root.narrow;
+            }
         }
     }
 }

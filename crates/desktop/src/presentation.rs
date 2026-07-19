@@ -1,10 +1,14 @@
 use std::{fmt, num::NonZeroU64};
 
 use tokenmaster_product::{
-    ProductGeneration, ProductRoute, ProductRouteState, ProductRouteStatus, ProductSnapshot,
+    ProductGeneration, ProductRoute, ProductRouteState, ProductRouteStatus,
+    ProductSessionDetailSelection, ProductSessionDetailSelectionGeneration, ProductSnapshot,
 };
 
-use crate::{DesktopDashboardProjection, DesktopHistoryProjection, DesktopSessionsProjection};
+use crate::{
+    DesktopDashboardProjection, DesktopHistoryProjection, DesktopSessionDetailIntent,
+    DesktopSessionsProjection,
+};
 
 pub const DESKTOP_ROUTE_COUNT: usize = ProductRoute::ALL.len();
 const MAX_ROUTE_REASONS: usize = 11;
@@ -227,6 +231,14 @@ pub struct DesktopProjection {
 impl DesktopProjection {
     #[must_use]
     pub fn from_snapshot(snapshot: &ProductSnapshot, selected: DesktopRouteKey) -> Self {
+        Self::from_snapshot_with_selection(snapshot, selected, None)
+    }
+
+    fn from_snapshot_with_selection(
+        snapshot: &ProductSnapshot,
+        selected: DesktopRouteKey,
+        active_session_detail: Option<DesktopSessionDetailIntent>,
+    ) -> Self {
         Self {
             generation: snapshot.generation(),
             selected,
@@ -235,7 +247,10 @@ impl DesktopProjection {
             }),
             dashboard: DesktopDashboardProjection::from_snapshot(snapshot),
             history: DesktopHistoryProjection::from_snapshot(snapshot),
-            sessions: DesktopSessionsProjection::from_snapshot(snapshot),
+            sessions: DesktopSessionsProjection::from_snapshot_with_selection(
+                snapshot,
+                active_session_detail,
+            ),
         }
     }
 
@@ -320,6 +335,8 @@ impl DesktopSnapshotEpoch {
 pub struct DesktopState {
     projection: DesktopProjection,
     snapshot_epoch: Option<DesktopSnapshotEpoch>,
+    active_session_detail: Option<DesktopSessionDetailIntent>,
+    next_session_selection_generation: u64,
 }
 
 impl DesktopState {
@@ -328,6 +345,8 @@ impl DesktopState {
         Self {
             projection: DesktopProjection::from_snapshot(snapshot, selected),
             snapshot_epoch: None,
+            active_session_detail: None,
+            next_session_selection_generation: 1,
         }
     }
 
@@ -345,12 +364,47 @@ impl DesktopState {
         self.projection.select_stable_key(value)
     }
 
+    pub fn select_session_row(
+        &mut self,
+        row_ordinal: usize,
+    ) -> Result<DesktopSessionDetailIntent, DesktopSessionSelectionError> {
+        let epoch = self
+            .snapshot_epoch
+            .ok_or(DesktopSessionSelectionError::Unavailable)?;
+        if row_ordinal >= self.projection.sessions().rows().len() {
+            return Err(DesktopSessionSelectionError::OutOfRange);
+        }
+        let row_ordinal =
+            u8::try_from(row_ordinal).map_err(|_| DesktopSessionSelectionError::OutOfRange)?;
+        let generation =
+            ProductSessionDetailSelectionGeneration::new(self.next_session_selection_generation)
+                .ok_or(DesktopSessionSelectionError::CapacityExceeded)?;
+        self.next_session_selection_generation = self
+            .next_session_selection_generation
+            .checked_add(1)
+            .unwrap_or(0);
+        let selection = ProductSessionDetailSelection::new(generation, row_ordinal);
+        let intent =
+            DesktopSessionDetailIntent::new(epoch, self.projection.generation(), selection);
+        self.active_session_detail = Some(intent);
+        self.projection.sessions.start_detail(row_ordinal);
+        Ok(intent)
+    }
+
+    pub fn reject_session_detail(&mut self, intent: DesktopSessionDetailIntent) {
+        if self.active_session_detail == Some(intent) {
+            self.projection
+                .sessions
+                .reject_detail(intent.selection().row_ordinal());
+        }
+    }
+
     pub fn apply_snapshot(&mut self, snapshot: &ProductSnapshot) -> DesktopApplyOutcome {
-        if snapshot.generation() <= self.projection.generation() {
+        if self.snapshot_epoch.is_some() || snapshot.generation() <= self.projection.generation() {
             return DesktopApplyOutcome::IgnoredNotNewer;
         }
 
-        self.replace_projection(snapshot);
+        self.replace_projection(snapshot, false);
         DesktopApplyOutcome::Accepted
     }
 
@@ -369,12 +423,45 @@ impl DesktopState {
             Some(_) | None => {}
         }
 
+        let replace_backend = self.snapshot_epoch.is_some_and(|current| epoch > current);
         self.snapshot_epoch = Some(epoch);
-        self.replace_projection(snapshot);
+        self.replace_projection(snapshot, replace_backend);
         DesktopApplyOutcome::Accepted
     }
 
-    fn replace_projection(&mut self, snapshot: &ProductSnapshot) {
-        self.projection = DesktopProjection::from_snapshot(snapshot, self.projection.selected());
+    fn replace_projection(&mut self, snapshot: &ProductSnapshot, replace_backend: bool) {
+        let active = if replace_backend {
+            None
+        } else {
+            self.active_session_detail.filter(|active| {
+                snapshot.session_detail_selection() == Some(active.selection())
+                    || snapshot.generation() == active.product_generation()
+            })
+        };
+        self.active_session_detail = active;
+        self.projection = DesktopProjection::from_snapshot_with_selection(
+            snapshot,
+            self.projection.selected(),
+            active,
+        );
     }
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopSessionSelectionError {
+    Unavailable,
+    OutOfRange,
+    CapacityExceeded,
+}
+
+impl fmt::Display for DesktopSessionSelectionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Unavailable => "session_selection_unavailable",
+            Self::OutOfRange => "session_selection_out_of_range",
+            Self::CapacityExceeded => "session_selection_capacity_exceeded",
+        })
+    }
+}
+
+impl std::error::Error for DesktopSessionSelectionError {}

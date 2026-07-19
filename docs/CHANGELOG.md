@@ -6,6 +6,34 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.2b exact Sessions detail with checked backend epochs and independent
+  viewed-product/selection generations. Slint submits only a visible ordinal; the current
+  app bundle routes one typed intent to the existing capacity-one worker, which resolves
+  the opaque session key transiently and publishes only the latest matching selection.
+- Added immediate selected/loading UI state and one responsive detail card with explicit
+  idle/loading/ready/missing/unavailable truth, exact timestamps/duration/events/token
+  buckets/cost/freshness/quality, and a combined maximum of 32 model plus 32 approved
+  path-free project-alias rows. Failure, cancellation, dataset drift, and backend
+  replacement never retain or show another row's payload.
+- Expanded product/Desktop/application fail-closed audits for identity-free correlation,
+  one latest-only work slot, current-bundle routing, exact bounds/model replacement,
+  nonblocking bundle admission, keyboard/focus/hover selection, and no UI query
+  authority. All 93 desktop/application
+  audit cases and the three release audits pass with one controller worker/snapshot
+  slot, zero retained session keys in product/UI, and no new dependency, timer, queue,
+  cache, polling site, or authority surface.
+- Closed independent review findings: a busy application bundle now rejects detail
+  admission with `try_lock` instead of waiting on the UI thread; sub-second duration
+  formatting borrows nanoseconds exactly; narrow summary/breakdown rows retain reasoning
+  and every other aggregate; the headless compiled-UI contract now sends real pointer,
+  Enter, and Space events, while a mutation rail pins explicit Tab navigation.
+  The session-detail queue rail is scoped to detail fields/aliases, so unrelated bounded
+  controller vectors remain permitted and are covered by a negative false-positive case.
+- The final four-stage workspace baseline passed in 820.7 seconds overall: clean-root
+  18.845 seconds, formatting 1.611 seconds, strict locked workspace Clippy 22.080 seconds,
+  then the complete locked tests/doctests. The credential-dependent live Codex contract
+  remains explicitly ignored; no M0, package, signing, or release acceptance is claimed.
+
 - Implemented P3-D.2a as the bounded Sessions list. The existing desktop worker now
   requests one all-time newest-first page capped at 64; Dashboard retains its first 12
   rows while the independent product section preserves explicit `has_more`.
@@ -13,7 +41,7 @@ All notable changes are recorded here.
   last activity, duration, events, input/cached/output/reasoning/total tokens, cost,
   freshness/quality, and accessible wide/narrow row meaning. Opaque keys/cursors remain
   controller-owned; route switching adds no query, rebuild, timer, worker, cache, or
-  archive handle. Generation-bound exact detail remains P3-D.2b.
+  archive handle.
 - Expanded the production desktop audit to 33 mutation contracts and exact Sessions
   bounds/model/application receipts. Focused controller/projection/package/UI tests and
   the release audit/build pass with 10 Rust/16 Slint files, one worker/slot, a 64-row

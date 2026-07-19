@@ -127,6 +127,12 @@ foreach ($contract in @(
     @{ Name = 'TM-APP-QUOTA-OWNER'; Pattern = 'CodexQuotaRuntime::start_notified\('; Count = 1 },
     @{ Name = 'TM-APP-REMINDER-OWNER'; Pattern = 'BenefitReminderRuntime::start_notified\('; Count = 1 },
     @{ Name = 'TM-APP-CONTROLLER'; Pattern = 'DesktopController::open\('; Count = 1 },
+    @{ Name = 'TM-APP-SESSION-DETAIL-ROUTER'; Pattern = 'DesktopSessionDetailIntentRouter::new\('; Count = 1 },
+    @{ Name = 'TM-APP-SESSION-DETAIL-SHELL'; Pattern = 'DesktopShell::new_with_reliable_state_and_session_sink\('; Count = 1 },
+    @{ Name = 'TM-APP-SESSION-DETAIL-INSTALL'; Pattern = 'session_detail_router\s*\.install\(Rc::new\(ApplicationSessionDetailIntentSink::new\('; Count = 1 },
+    @{ Name = 'TM-APP-SESSION-DETAIL-CURRENT-BUNDLE'; Pattern = 'bundle\.controller\.request_session_detail\(intent\)'; Count = 1 },
+    @{ Name = 'TM-APP-SESSION-DETAIL-SAFE-MODE'; Pattern = 'let Some\(bundle\) = slot\.as_ref\(\) else \{\s*return DesktopSessionDetailIntentAdmission::Rejected'; Count = 1 },
+    @{ Name = 'TM-APP-SESSION-DETAIL-NONBLOCKING'; Pattern = 'let Ok\(slot\) = bundle\.try_lock\(\) else \{\s*return DesktopSessionDetailIntentAdmission::Rejected'; Count = 1 },
     @{ Name = 'TM-APP-BRIDGE'; Pattern = '\.snapshot_bridge\('; Count = 1 },
     @{ Name = 'TM-APP-EVENT-LOOP'; Pattern = 'slint::run_event_loop\('; Count = 1 },
     @{ Name = 'TM-APP-PORTABLE-MARKER'; Pattern = '"tokenmaster\.portable"'; Count = 1 },
@@ -220,6 +226,9 @@ if ($SourceOnly) {
         quota_runtime_owner_count = 1
         reminder_runtime_owner_count = 1
         desktop_controller_count = 1
+        session_detail_router_count = 1
+        session_detail_current_bundle_binding_count = 1
+        session_detail_nonblocking_binding_count = 1
         desktop_bridge_count = 1
         application_polling_surface_count = 0
         arbitrary_root_surface_count = 0
@@ -336,6 +345,9 @@ foreach ($needle in @(
     quota_runtime_owner_count = 1
     reminder_runtime_owner_count = 1
     desktop_controller_count = 1
+    session_detail_router_count = 1
+    session_detail_current_bundle_binding_count = 1
+    session_detail_nonblocking_binding_count = 1
     desktop_bridge_count = 1
     application_polling_surface_count = 0
     arbitrary_root_surface_count = 0

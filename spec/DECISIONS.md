@@ -1652,3 +1652,28 @@ Bolting detail onto row callbacks would either expose private query identity to 
 allow rapid selection and dataset refresh to publish stale detail for the wrong row.
 The split delivers visible value now while making the concurrency and privacy boundary
 explicit before detail authority exists.
+
+## ADR-067 — Bind exact session detail to backend, snapshot, and selection generations
+
+Decision: P3-D.2b identifies an exact selection with three axes: a checked monotonic
+`DesktopSnapshotEpoch` for the live controller/bridge lifetime, the viewed immutable
+`ProductGeneration`, and a nonzero selection generation plus visible row ordinal. Slint
+submits no opaque key. The application forwards the intent only to the current live
+bundle; the existing controller worker resolves the ordinal to `UsageSessionKey` only
+after epoch and product-generation validation. A higher backend epoch accepts a restarted
+inner generation, rejects the old backend, and clears selection.
+
+The controller shares one latest-only selection slot with ordinary refresh admission and
+creates no worker, queue, or cache. Product state correlates one replace-only detail
+section by selection generation/ordinal and never retains a different selection's payload
+on failure. Desktop renders one explicit idle/loading/ready/missing/unavailable projection
+with exact summary/evidence and a combined maximum of 32 model plus 32 approved path-free
+project-alias rows. Route-only navigation remains query-free and does not rebuild models.
+The weak application bundle handoff uses `try_lock` and rejects contention so maintenance
+ownership can never turn a row selection into a UI-thread wait.
+
+Rationale: product generation alone can alias after controller replacement, while an
+opaque UI key would widen the privacy/authority boundary. A per-click worker or queue
+would add shutdown/order/memory growth. The three-axis value plus latest-only slot makes
+rapid clicks, concurrent refresh, cancellation, failure, dataset drift, and backend
+replacement fail closed with constant frontend memory and no stale-row disclosure.

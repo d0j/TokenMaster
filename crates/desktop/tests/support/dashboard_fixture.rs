@@ -94,6 +94,51 @@ pub fn add_distinct_usage_rows(path: &Path, additional: u8) {
     transaction.commit().expect("commit usage scale fixture");
 }
 
+pub fn add_session_breakdown_rows(path: &Path, additional: u8) {
+    let mut connection = Connection::open(path).expect("session breakdown connection");
+    connection
+        .pragma_update(None, "foreign_keys", "ON")
+        .expect("foreign keys");
+    let transaction = connection
+        .transaction()
+        .expect("session breakdown transaction");
+    for index in 0..additional {
+        let seed = index.checked_add(100).expect("bounded fixture seed");
+        transaction
+            .execute(
+                "INSERT INTO usage_event(
+                   fingerprint, event_id, selected_file_key, selected_generation,
+                   selected_source_offset, projection_revision_id, origin_revision_id,
+                   retained, provider_id, profile_id, session_id, source_id,
+                   timestamp_seconds, timestamp_nanos, model, input_tokens,
+                   cached_tokens, output_tokens, reasoning_tokens, total_tokens,
+                   reported_cost_usd_micros, fallback_model, service_tier, long_context,
+                   project_alias, activity_read, activity_edit_write, activity_search,
+                   activity_git, activity_build_test, activity_web, activity_subagents,
+                   activity_terminal
+                 ) VALUES (
+                   ?1, ?2, ?3, 0, ?4, 0, 0, 0, 'codex', 'default',
+                   'dashboard-private-session', 'dashboard-private-source', ?5, 0, ?6,
+                   1, 0, 1, 0, 2, 1, 0, 'standard', 'no', ?7,
+                   0, 0, 0, 0, 0, 0, 0, 0
+                 )",
+                params![
+                    [seed; 32].as_slice(),
+                    format!("dashboard-private-breakdown-event-{index:02}"),
+                    [7_u8; 32].as_slice(),
+                    i64::from(index) + 100,
+                    DAY_START_SECONDS + 3_601 + i64::from(index),
+                    format!("detail-model-{index:02}"),
+                    format!("detail-project-{index:02}"),
+                ],
+            )
+            .expect("session breakdown row");
+    }
+    transaction
+        .commit()
+        .expect("commit session breakdown fixture");
+}
+
 pub fn add_second_git_project(path: &Path) {
     let connection = Connection::open(path).expect("second project connection");
     connection

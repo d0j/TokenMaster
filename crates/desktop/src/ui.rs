@@ -17,10 +17,11 @@ use crate::{
     DashboardSectionRow, DashboardSessionRow, DashboardTrendPoint, DesktopActivityKey,
     DesktopCostValue, DesktopDashboardProjection, DesktopDashboardSectionKey, DesktopFreshness,
     DesktopHistoryProjection, DesktopIntent, DesktopIntentSink, DesktopOperationSnapshot,
-    DesktopQuality, DesktopReliableStateProjection, DesktopSessionsProjection,
-    DesktopSnapshotBridge, DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue,
-    DesktopValueAvailability, HistoryDayRow, MainWindow, RestorePointRow, RouteRow, SessionListRow,
-    UnavailableDesktopIntentSink,
+    DesktopQuality, DesktopReliableStateProjection, DesktopSessionDetailIntentAdmission,
+    DesktopSessionDetailIntentSink, DesktopSessionsProjection, DesktopSnapshotBridge,
+    DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue, DesktopValueAvailability,
+    HistoryDayRow, MainWindow, RestorePointRow, RouteRow, SessionDetailBreakdownRow,
+    SessionListRow, UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
 };
 
@@ -230,6 +231,20 @@ impl DesktopShell {
         reliable_state: DesktopReliableStateProjection,
         intent_sink: Rc<dyn DesktopIntentSink>,
     ) -> Result<Self, slint::PlatformError> {
+        Self::new_with_reliable_state_and_session_sink(
+            snapshot,
+            reliable_state,
+            intent_sink,
+            Rc::new(UnavailableDesktopSessionDetailIntentSink),
+        )
+    }
+
+    pub fn new_with_reliable_state_and_session_sink(
+        snapshot: &ProductSnapshot,
+        reliable_state: DesktopReliableStateProjection,
+        intent_sink: Rc<dyn DesktopIntentSink>,
+        session_sink: Rc<dyn DesktopSessionDetailIntentSink>,
+    ) -> Result<Self, slint::PlatformError> {
         let window = MainWindow::new()?;
         let initial_state = DesktopState::new(snapshot, DesktopRouteKey::Dashboard);
         apply_projection(&window, initial_state.projection());
@@ -238,6 +253,7 @@ impl DesktopShell {
         let reliable_state = Arc::new(Mutex::new(reliable_state));
         wire_route_selection(&window, state.clone());
         wire_reliable_state_intents(&window, reliable_state.clone(), intent_sink);
+        wire_session_detail_intents(&window, state.clone(), session_sink);
         Ok(Self {
             window,
             state,
@@ -260,6 +276,22 @@ impl DesktopShell {
             .lock()
             .map_err(|_| DesktopUiError::state_unavailable())?;
         let outcome = state.apply_snapshot(snapshot);
+        if outcome == DesktopApplyOutcome::Accepted {
+            apply_projection(&self.window, state.projection());
+        }
+        Ok(outcome)
+    }
+
+    pub fn apply_snapshot_for_epoch(
+        &self,
+        epoch: DesktopSnapshotEpoch,
+        snapshot: &ProductSnapshot,
+    ) -> Result<DesktopApplyOutcome, DesktopUiError> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| DesktopUiError::state_unavailable())?;
+        let outcome = state.apply_snapshot_for_epoch(epoch, snapshot);
         if outcome == DesktopApplyOutcome::Accepted {
             apply_projection(&self.window, state.projection());
         }
@@ -449,6 +481,39 @@ fn wire_route_selection(window: &MainWindow, state: SharedDesktopState) {
         };
         if state.select_stable_key(key.as_str()).is_ok() {
             apply_route_projection(&window, state.projection());
+        }
+    });
+}
+
+fn wire_session_detail_intents(
+    window: &MainWindow,
+    state: SharedDesktopState,
+    sink: Rc<dyn DesktopSessionDetailIntentSink>,
+) {
+    let weak = window.as_weak();
+    window.on_select_session(move |row| {
+        let Ok(row) = usize::try_from(row) else {
+            return;
+        };
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        let intent = {
+            let Ok(mut state) = state.lock() else {
+                return;
+            };
+            let Ok(intent) = state.select_session_row(row) else {
+                return;
+            };
+            apply_session_detail_projection(&window, state.projection().sessions());
+            intent
+        };
+        if sink.submit(intent) == DesktopSessionDetailIntentAdmission::Rejected {
+            let Ok(mut state) = state.lock() else {
+                return;
+            };
+            state.reject_session_detail(intent);
+            apply_session_detail_projection(&window, state.projection().sessions());
         }
     });
 }
@@ -851,7 +916,9 @@ fn apply_sessions_projection(window: &MainWindow, sessions: &DesktopSessionsProj
     let rows = sessions
         .rows()
         .iter()
-        .map(|session| SessionListRow {
+        .enumerate()
+        .map(|(index, session)| SessionListRow {
+            row_index: i32::try_from(index).unwrap_or(i32::MAX),
             first_label: format_timestamp_seconds_utc(session.first_timestamp_seconds()).into(),
             last_label: format_timestamp_seconds_utc(session.last_timestamp_seconds()).into(),
             duration_label: format_session_duration(
@@ -877,6 +944,112 @@ fn apply_sessions_projection(window: &MainWindow, sessions: &DesktopSessionsProj
         })
         .collect::<Vec<_>>();
     window.set_session_list_rows(model(rows));
+    apply_session_detail_projection(window, sessions);
+}
+
+fn apply_session_detail_projection(window: &MainWindow, sessions: &DesktopSessionsProjection) {
+    let detail = sessions.detail();
+    window.set_sessions_selected_row(detail.selected_ordinal().map_or(-1, i32::from));
+    window.set_session_detail_state(detail.state().stable_code().into());
+    window.set_session_detail_evidence_label(
+        format_evidence(detail.freshness(), detail.quality()).into(),
+    );
+    let status = match detail.state() {
+        crate::DesktopSessionDetailState::Idle => "No selection".to_owned(),
+        crate::DesktopSessionDetailState::Loading => "Loading".to_owned(),
+        crate::DesktopSessionDetailState::Ready if detail.truncated() => {
+            "Ready · breakdown limited to 32 models and 32 projects".to_owned()
+        }
+        crate::DesktopSessionDetailState::Ready => "Ready".to_owned(),
+        crate::DesktopSessionDetailState::Missing => "Not found".to_owned(),
+        crate::DesktopSessionDetailState::Unavailable => detail.failure_code().map_or_else(
+            || "Unavailable".to_owned(),
+            |code| format!("Unavailable · {}", humanize_key(code)),
+        ),
+    };
+    window.set_session_detail_status_label(status.into());
+    if let Some(summary) = detail.summary() {
+        window.set_session_detail_period_label(
+            format!(
+                "{} → {}",
+                format_timestamp_seconds_utc(summary.first_timestamp_seconds()),
+                format_timestamp_seconds_utc(summary.last_timestamp_seconds())
+            )
+            .into(),
+        );
+        window.set_session_detail_duration_label(
+            format_session_duration(
+                summary.first_timestamp_seconds(),
+                summary.first_timestamp_nanos(),
+                summary.last_timestamp_seconds(),
+                summary.last_timestamp_nanos(),
+            )
+            .into(),
+        );
+        window.set_session_detail_event_label(format_integer(summary.event_count()).into());
+        window.set_session_detail_input_availability(
+            availability_code(summary.input().availability()).into(),
+        );
+        window.set_session_detail_input_label(format_tokens(summary.input()).into());
+        window.set_session_detail_cached_availability(
+            availability_code(summary.cached().availability()).into(),
+        );
+        window.set_session_detail_cached_label(format_tokens(summary.cached()).into());
+        window.set_session_detail_output_availability(
+            availability_code(summary.output().availability()).into(),
+        );
+        window.set_session_detail_output_label(format_tokens(summary.output()).into());
+        window.set_session_detail_reasoning_availability(
+            availability_code(summary.reasoning().availability()).into(),
+        );
+        window.set_session_detail_reasoning_label(format_tokens(summary.reasoning()).into());
+        window.set_session_detail_total_availability(
+            availability_code(summary.total_tokens().availability()).into(),
+        );
+        window.set_session_detail_total_label(format_tokens(summary.total_tokens()).into());
+        window.set_session_detail_cost_availability(
+            availability_code(summary.cost().availability()).into(),
+        );
+        window.set_session_detail_cost_label(format_cost(summary.cost()).into());
+    } else {
+        window.set_session_detail_period_label("".into());
+        window.set_session_detail_duration_label("".into());
+        window.set_session_detail_event_label("".into());
+        window.set_session_detail_input_availability("unavailable".into());
+        window.set_session_detail_input_label("Unavailable".into());
+        window.set_session_detail_cached_availability("unavailable".into());
+        window.set_session_detail_cached_label("Unavailable".into());
+        window.set_session_detail_output_availability("unavailable".into());
+        window.set_session_detail_output_label("Unavailable".into());
+        window.set_session_detail_reasoning_availability("unavailable".into());
+        window.set_session_detail_reasoning_label("Unavailable".into());
+        window.set_session_detail_total_availability("unavailable".into());
+        window.set_session_detail_total_label("Unavailable".into());
+        window.set_session_detail_cost_availability("unavailable".into());
+        window.set_session_detail_cost_label("Unavailable".into());
+    }
+    let rows = detail
+        .breakdown_rows()
+        .iter()
+        .map(|row| SessionDetailBreakdownRow {
+            kind: row.kind().stable_code().into(),
+            label: row.label().into(),
+            event_label: format_integer(row.event_count()).into(),
+            input_availability: availability_code(row.input().availability()).into(),
+            input_label: format_tokens(row.input()).into(),
+            cached_availability: availability_code(row.cached().availability()).into(),
+            cached_label: format_tokens(row.cached()).into(),
+            output_availability: availability_code(row.output().availability()).into(),
+            output_label: format_tokens(row.output()).into(),
+            reasoning_availability: availability_code(row.reasoning().availability()).into(),
+            reasoning_label: format_tokens(row.reasoning()).into(),
+            total_availability: availability_code(row.total_tokens().availability()).into(),
+            total_label: format_tokens(row.total_tokens()).into(),
+            cost_availability: availability_code(row.cost().availability()).into(),
+            cost_label: format_cost(row.cost()).into(),
+        })
+        .collect::<Vec<_>>();
+    window.set_session_detail_breakdown_rows(model(rows));
 }
 
 fn format_session_duration(
@@ -885,21 +1058,23 @@ fn format_session_duration(
     last_seconds: i64,
     last_nanos: u32,
 ) -> String {
-    let Some(seconds) = last_seconds
-        .checked_sub(first_seconds)
-        .and_then(|value| u64::try_from(value).ok())
-    else {
+    const NANOS_PER_SECOND: i128 = 1_000_000_000;
+    if first_nanos >= NANOS_PER_SECOND as u32 || last_nanos >= NANOS_PER_SECOND as u32 {
         return "Unavailable".to_owned();
-    };
-    if seconds == 0 {
-        return if last_nanos < first_nanos {
-            "Unavailable".to_owned()
-        } else if last_nanos > first_nanos {
-            "<1s".to_owned()
-        } else {
-            "0s".to_owned()
-        };
     }
+    let duration_nanos = (i128::from(last_seconds) - i128::from(first_seconds)) * NANOS_PER_SECOND
+        + i128::from(last_nanos)
+        - i128::from(first_nanos);
+    if duration_nanos < 0 {
+        return "Unavailable".to_owned();
+    }
+    if duration_nanos == 0 {
+        return "0s".to_owned();
+    }
+    if duration_nanos < NANOS_PER_SECOND {
+        return "<1s".to_owned();
+    }
+    let seconds = u64::try_from(duration_nanos / NANOS_PER_SECOND).unwrap_or(u64::MAX);
     let hours = seconds / 3_600;
     let minutes = (seconds % 3_600) / 60;
     let seconds = seconds % 60;
@@ -1294,4 +1469,29 @@ fn format_timestamp_seconds_utc(value: i64) -> String {
         || "Unavailable".to_owned(),
         |value| value.format("%Y-%m-%d %H:%M:%S UTC").to_string(),
     )
+}
+
+#[cfg(test)]
+mod duration_tests {
+    use super::format_session_duration;
+
+    #[test]
+    fn duration_borrows_nanoseconds_across_the_second_boundary() {
+        assert_eq!(
+            format_session_duration(10, 900_000_000, 11, 100_000_000),
+            "<1s"
+        );
+        assert_eq!(
+            format_session_duration(10, 100_000_000, 11, 900_000_000),
+            "1s"
+        );
+        assert_eq!(
+            format_session_duration(10, 100_000_000, 10, 100_000_000),
+            "0s"
+        );
+        assert_eq!(
+            format_session_duration(11, 100_000_000, 10, 900_000_000),
+            "Unavailable"
+        );
+    }
 }

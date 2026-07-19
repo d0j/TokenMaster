@@ -136,8 +136,11 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   existing-worker request, bounded newest-first projection, and responsive real view.
   P3-D.2a Sessions list is complete with one independent newest-first page capped at 64,
   explicit `has_more`, a responsive full token/cost table, and no exposed query identity.
-  Exact session detail, models, projects, activity, remaining notifications/help,
-  interactive History ranges, command palette, tray, and compact widget remain P3-D-P3-E.
+  P3-D.2b exact detail is complete with backend/product/selection generation binding,
+  latest-only existing-worker work, synchronous selection/loading, exact summary/evidence,
+  32-model+32-project bounds, and no exposed opaque key. Later-page navigation, models,
+  projects, activity, remaining notifications/help, interactive History ranges, command
+  palette, tray, and compact widget remain P3-D-P3-E.
 - **P4 — presentation:** modular skins/layouts/density/scheme/locale, en/ru/pseudo,
   accessibility, DPI, reduced motion, and visible-paint/resource gates.
 - **P5 — automation:** strict bounded JSON CLI and a separate stdio MCP process for
@@ -178,10 +181,11 @@ generation-safe current-bundle restart foundation and Task 12B.2a identity-pinne
   bindings, Task 14 sealed native file-dialog backend, and Task 15 bounded Data Health/
   Settings UI plus no-backup reconstruction, and Task 16 adversarial/privacy/
   compatibility closure, Task 17 resource/performance evidence, and Task 18
-  documentation/acceptance closure are implemented. P3-D.1 History and P3-D.2a bounded
-  Sessions list are implemented over the same immutable snapshot/controller boundary
-  with no new worker/timer/cache. Generation-bound exact session detail is the next
-  P3-D supporting-data slice.
+  documentation/acceptance closure are implemented. P3-D.1 History and complete P3-D.2
+  bounded Sessions list/detail are implemented over the same immutable snapshot/controller
+  boundary with no new worker/timer/cache. Models is the next independently useful P3-D
+  supporting-data slice, followed by Projects and Activity; later-page Sessions navigation
+  remains a separate bounded replacement of the same list section.
 
 P3-D.0 Reliable State is approved under
 `docs/superpowers/specs/2026-07-17-tokenmaster-reliable-state-design.md` with the

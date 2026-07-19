@@ -1,5 +1,9 @@
 # TokenMaster P3-D.2b Exact Session Detail Design
 
+**Status:** Complete in the production product/controller/Desktop/application path with
+focused/release audits, independent review, and final locked workspace baseline passing.
+M0, packaging, signing, and product-release acceptance remain separate gates.
+
 ## Goal
 
 Add click-to-detail to the bounded Sessions route without exposing an opaque query key,
@@ -28,8 +32,10 @@ against its current 64-row model, allocates a nonzero selection generation, reco
 current snapshot epoch/product generation, switches the detail card to `loading`, and
 submits one typed `DesktopSessionSelectionIntent`.
 
-The application routes that intent to the currently installed controller. The controller
-rejects a mismatched snapshot epoch or non-newer selection generation. It stores one
+The application routes that intent to the currently installed controller through a weak
+current-bundle reference. Bundle ownership uses `try_lock`; contention rejects immediately
+rather than waiting on the UI thread. The controller rejects a mismatched snapshot epoch
+or non-newer selection generation. It stores one
 latest pending selection and one `refresh_pending` bit, then submits the existing
 capacity-one worker. Repeated clicks replace the pending selection; refresh and detail
 requests can coexist in the next coalesced execution. No per-click queue or thread exists.
@@ -66,9 +72,13 @@ paths, prompts, responses, reasoning content, commands, and credentials remain a
 
 ## UI behavior
 
-Rows are keyboard/focus accessible buttons with selected and hover states. Clicking a
+Rows are keyboard/focus accessible buttons with selected and hover states. They expose
+explicit Tab navigation and Enter/Space activation. Clicking a
 row updates selection/loading presentation synchronously; the query remains off the UI
-thread. A detail card below the list shows exact summary and bounded breakdowns. A rapid
+thread and also transfers focus to the row. A detail card below the list shows exact
+summary and bounded breakdowns in both wide and narrow layouts; every token component,
+including reasoning, remains visible. Duration formatting uses exact nanosecond borrowing.
+A rapid
 second click immediately moves the highlight/loading state and makes the first result
 ineligible. Route-only navigation still performs no query or model reconstruction.
 
@@ -81,7 +91,8 @@ ineligible. Route-only navigation still performs no query or model reconstructio
 - One monotonically allocated bridge epoch per backend bundle; overflow fails closed.
 - Tests: epoch replacement/rejection, valid selection, stale generation, missing row/
   detail, query failure, rapid selection, refresh/detail coalescing, cancellation,
-  application routing/restart, projection bounds/privacy, and real Slint interaction.
+  application routing/restart/contention, projection bounds/privacy, duration borrowing,
+  and real Slint pointer/Enter/Space interaction plus a Tab-binding mutation.
 - Audits: one worker/slot, exact model/bounds/application sites, no UI query authority,
   no opaque identity, clean root, strict Clippy, full locked workspace tests.
 

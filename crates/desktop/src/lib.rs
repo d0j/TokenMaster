@@ -24,7 +24,10 @@ mod ui;
 
 pub use dashboard::*;
 pub use history::*;
-pub use presentation::{DesktopApplyOutcome, DesktopRouteKey, DesktopSnapshotEpoch, DesktopState};
+pub use presentation::{
+    DesktopApplyOutcome, DesktopRouteKey, DesktopSessionSelectionError, DesktopSnapshotEpoch,
+    DesktopState,
+};
 pub use reliable_state::*;
 pub use sessions::*;
 pub use shell::select_production_renderer;

@@ -1,5 +1,8 @@
 # TokenMaster P3-D.2 Sessions Route Design
 
+**Status:** P3-D.2a list and P3-D.2b exact detail are implemented; later-page navigation
+remains a separate future slice over the same bounded section.
+
 ## Goal
 
 Replace the Sessions placeholder with the next real product route while preserving

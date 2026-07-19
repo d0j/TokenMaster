@@ -3,6 +3,10 @@
 **Goal:** Deliver exact generation-safe session detail on the existing bounded worker
 with no opaque UI identity, stale rapid-click result, or controller-restart alias.
 
+**Status:** Complete. Tasks 1-5 pass focused tests, 93/93 desktop/application audit
+cases, all three release audits, independent review, and the final locked workspace
+baseline. This does not imply M0, packaging, signing, or product-release acceptance.
+
 ## Task 1: Make backend replacement identity explicit
 
 **Files:** `crates/desktop/src/bridge.rs`, `crates/desktop/src/presentation.rs`,
@@ -45,10 +49,12 @@ Sessions view/main window, projection/UI tests, application session-intent routi
 
 1. Add RED projection tests for idle/loading/ready/missing/unavailable, 32+32 breakdown
    caps, truncation, approved labels, values, and privacy.
-2. Add the typed session-intent router and current-bundle application sink.
+2. Add the typed session-intent router and a nonblocking current-bundle application sink.
 3. Add a selectable accessible list and one responsive summary/breakdown detail card.
-4. Prove synchronous loading/highlight, rapid click, stale result rejection, same-window
-   route switching, and no UI-thread query/model rebuild.
+4. Prove synchronous loading/highlight, rapid click, stale result rejection, exact
+   nanosecond duration formatting, full wide/narrow aggregate parity, real pointer/
+   Enter/Space dispatch, explicit Tab binding, same-window route switching, and no
+   UI-thread query/model rebuild or mutex wait.
 5. Run focused UI/application tests and strict package Clippy; commit.
 
 ## Task 5: Expand audits, synchronize truth, and verify

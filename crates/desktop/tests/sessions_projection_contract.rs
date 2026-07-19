@@ -2,13 +2,16 @@ mod support;
 
 use tempfile::TempDir;
 use tokenmaster_desktop::{
-    DesktopDashboardSectionState, DesktopFreshness, DesktopQuality, DesktopRouteKey, DesktopState,
-    MAX_SESSION_ROWS,
+    DesktopDashboardSectionState, DesktopFreshness, DesktopQuality, DesktopRouteKey,
+    DesktopSessionBreakdownKind, DesktopSessionDetailState, DesktopSnapshotEpoch, DesktopState,
+    MAX_SESSION_DETAIL_MODEL_ROWS, MAX_SESSION_DETAIL_PROJECT_ROWS, MAX_SESSION_ROWS,
 };
 use tokenmaster_product::{ProductAttemptGeneration, ProductReducer};
-use tokenmaster_query::{PageSize, QueryService, UsageSessionPageRequest};
+use tokenmaster_query::{PageSize, QueryErrorCode, QueryService, UsageSessionPageRequest};
 
-use support::dashboard_fixture::{DAY_START_SECONDS, FixedClock, add_distinct_usage_rows, seed};
+use support::dashboard_fixture::{
+    DAY_START_SECONDS, FixedClock, add_distinct_usage_rows, add_session_breakdown_rows, seed,
+};
 
 fn attempt(value: u64) -> ProductAttemptGeneration {
     ProductAttemptGeneration::new(value).expect("nonzero attempt")
@@ -76,4 +79,135 @@ fn ready_sessions_map_one_newest_first_page_and_preserve_has_more() {
             .windows(2)
             .all(|pair| { pair[0].last_timestamp_seconds() >= pair[1].last_timestamp_seconds() })
     );
+}
+
+#[test]
+fn exact_detail_projects_idle_loading_ready_missing_and_unavailable_with_fixed_caps() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("session-detail-projection.sqlite3");
+    seed(&path);
+    add_session_breakdown_rows(&path, 40);
+    let mut service = QueryService::open(&path, FixedClock).expect("query service");
+    let status = service.product_data_status().expect("status");
+    let sessions = service
+        .usage_sessions(
+            UsageSessionPageRequest::first(PageSize::new(1).expect("page"), Vec::new())
+                .expect("request"),
+        )
+        .expect("sessions");
+    let key = sessions.payload().sessions()[0].key().clone();
+    let detail = service
+        .usage_session_detail(key.clone())
+        .expect("session detail");
+    let mut reducer = ProductReducer::new();
+    reducer
+        .publish_data_status(attempt(1), status)
+        .expect("publish status");
+    reducer
+        .publish_sessions(attempt(1), sessions)
+        .expect("publish sessions");
+    let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+    let mut state = DesktopState::new(&reducer.snapshot(), DesktopRouteKey::Sessions);
+    assert_eq!(
+        state.apply_snapshot_for_epoch(epoch, &reducer.snapshot()),
+        tokenmaster_desktop::DesktopApplyOutcome::Accepted
+    );
+    assert_eq!(
+        state.projection().sessions().detail().state(),
+        DesktopSessionDetailState::Idle
+    );
+
+    let first_intent = state
+        .select_session_row(0)
+        .expect("select exact visible row");
+    let loading = state.projection().sessions().detail();
+    assert_eq!(loading.state(), DesktopSessionDetailState::Loading);
+    assert_eq!(loading.selected_ordinal(), Some(0));
+    assert!(loading.summary().is_none());
+    assert!(loading.breakdown_rows().is_empty());
+
+    reducer
+        .publish_session_detail(attempt(2), first_intent.selection(), detail)
+        .expect("publish detail");
+    assert_eq!(
+        state.apply_snapshot_for_epoch(epoch, &reducer.snapshot()),
+        tokenmaster_desktop::DesktopApplyOutcome::Accepted
+    );
+    let ready = state.projection().sessions().detail();
+    assert_eq!(ready.state(), DesktopSessionDetailState::Ready);
+    assert_eq!(ready.selected_ordinal(), Some(0));
+    assert_eq!(ready.freshness(), Some(DesktopFreshness::Fresh));
+    assert_eq!(ready.quality(), Some(DesktopQuality::Authoritative));
+    assert_eq!(ready.summary().expect("summary").event_count(), 41);
+    assert_eq!(
+        ready.breakdown_rows().len(),
+        MAX_SESSION_DETAIL_MODEL_ROWS + MAX_SESSION_DETAIL_PROJECT_ROWS
+    );
+    assert_eq!(
+        ready
+            .breakdown_rows()
+            .iter()
+            .filter(|row| row.kind() == DesktopSessionBreakdownKind::Model)
+            .count(),
+        MAX_SESSION_DETAIL_MODEL_ROWS
+    );
+    assert_eq!(
+        ready
+            .breakdown_rows()
+            .iter()
+            .filter(|row| row.kind() == DesktopSessionBreakdownKind::Project)
+            .count(),
+        MAX_SESSION_DETAIL_PROJECT_ROWS
+    );
+    assert!(ready.truncated());
+    assert!(ready.breakdown_rows().iter().all(|row| {
+        !row.label().contains('/')
+            && !row.label().contains('\\')
+            && !row.label().contains("private")
+    }));
+
+    let failed_intent = state.select_session_row(0).expect("reselect row");
+    assert_eq!(
+        state.projection().sessions().detail().state(),
+        DesktopSessionDetailState::Loading
+    );
+    reducer
+        .fail_session_detail(
+            attempt(3),
+            failed_intent.selection(),
+            QueryErrorCode::DeadlineExceeded,
+        )
+        .expect("fail detail");
+    state.apply_snapshot_for_epoch(epoch, &reducer.snapshot());
+    let unavailable = state.projection().sessions().detail();
+    assert_eq!(unavailable.state(), DesktopSessionDetailState::Unavailable);
+    assert!(unavailable.summary().is_none());
+    assert!(unavailable.breakdown_rows().is_empty());
+
+    let connection = rusqlite::Connection::open(&path).expect("missing detail connection");
+    connection
+        .execute("DELETE FROM usage_session_rollup", [])
+        .expect("remove session rollup");
+    drop(connection);
+    let missing = service
+        .usage_session_detail(key)
+        .expect("typed missing detail");
+    let missing_intent = state.select_session_row(0).expect("select missing row");
+    reducer
+        .publish_session_detail(attempt(4), missing_intent.selection(), missing)
+        .expect("publish missing detail");
+    state.apply_snapshot_for_epoch(epoch, &reducer.snapshot());
+    let missing = state.projection().sessions().detail();
+    assert_eq!(missing.state(), DesktopSessionDetailState::Missing);
+    assert!(missing.summary().is_none());
+    assert!(missing.breakdown_rows().is_empty());
+
+    let replacement_epoch = DesktopSnapshotEpoch::new(2).expect("replacement epoch");
+    assert_eq!(
+        state.apply_snapshot_for_epoch(replacement_epoch, &reducer.snapshot()),
+        tokenmaster_desktop::DesktopApplyOutcome::Accepted
+    );
+    let replaced = state.projection().sessions().detail();
+    assert_eq!(replaced.state(), DesktopSessionDetailState::Idle);
+    assert_eq!(replaced.selected_ordinal(), None);
 }
