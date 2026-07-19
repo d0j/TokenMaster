@@ -835,8 +835,27 @@ and the complete locked workspace test/doctest gate pass in 1,216.4 seconds over
 (25.8/1.7/76.0 seconds for clean-root/fmt/Clippy). P3-D.6 is closed without inferring
 product release acceptance.
 
-The immediate next implementation slice is Help/About, followed by a separate app-owned
-notification presentation/settings contour. That bridge must acknowledge a leased
+P3-D.7 Help/About is implemented under
+`docs/superpowers/specs/2026-07-19-tokenmaster-help-about-route-design.md` and
+`docs/superpowers/plans/2026-07-19-tokenmaster-help-about-route.md`. The route is ready
+without archive/runtime state and contains six fixed accessible sections for product
+navigation, source/evidence truth, privacy, recovery, honest automation status, and
+licenses. `DesktopShell` sets `env!("CARGO_PKG_VERSION")` exactly once during window
+construction. One pinned standard `AboutSlint` provides in-product Slint attribution;
+TokenMaster adds no arbitrary URL, browser/session, network, diagnostic, callback,
+model, query, worker, timer, queue, cache, connection, polling, provider mutation, or
+release-receipt authority. The compiled Slint contract, source audit, and 104/104
+mutation cases pass. Independent final review is Critical/Important/Minor 0/0/0.
+Release composition and the exact clean-root/fmt/strict workspace Clippy/locked
+workspace test-doctest baseline pass in 879.3 seconds. The first baseline attempt
+exposed a product resource-test warm-up false plateau; a deterministic exact-sample
+regression now continues warming when the retained ceiling exceeds the unchanged 2 MiB
+return tolerance, passes in three independent processes, and has a separate 0/0/0
+review. P4 locale/presentation, P5 CLI/MCP, and P6 notices/SBOM/MSVC/package/signing/
+public-download/release evidence remain unfinished.
+
+The immediate next implementation slice is the separate app-owned notification
+presentation/settings contour. That bridge must acknowledge a leased
 batch only after successful UI presentation and release it on failure/cancellation;
 settings synchronization/editing, snooze, quiet hours, OS delivery, usage alerts, and
 activation remain unfinished.

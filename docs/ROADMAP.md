@@ -158,12 +158,18 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   five expiry precisions, explicit evidence/coverage/warnings/truncation, and zero new
   query/runtime/delivery authority. Focused/full Desktop, strict package Clippy, source
   audit, and 82 mutation cases pass. Independent re-review is 0/0/0 and the complete
-  locked workspace gate passes in 1,216.4 seconds. P3-D.6 is closed; Help/About is next.
-  Full rhythm aggregation,
+  locked workspace gate passes in 1,216.4 seconds. P3-D.6 is closed. P3-D.7 adds an
+  archive-independent responsive six-section Help/About guide, applies the compile-time
+  package version once, and mounts one standard pinned Slint attribution widget with
+  zero model/query/runtime/callback/polling or TokenMaster URL authority. Its compiled
+  UI, source/release audits, 104 mutation cases, independent 0/0/0 review, and exact
+  clean-root/fmt/strict workspace Clippy/locked test-doctest baseline pass. Full rhythm aggregation,
   notification presentation receipts/settings, later-page navigation, interactive
   History ranges, command palette, tray, and compact widget remain P3-D-P3-E.
 - **P4 — presentation:** modular skins/layouts/density/scheme/locale, en/ru/pseudo,
-  accessibility, DPI, reduced motion, and visible-paint/resource gates.
+  accessibility, DPI, reduced motion, and visible-paint/resource gates. Help/About
+  full screen-reader acceptance must replace verbose region-plus-child duplicate
+  announcements with concise region names plus semantic child text.
 - **P5 — automation:** strict bounded JSON CLI and a separate stdio MCP process for
   Hermes and other clients after the complete UI; read-only/advisory by default with
   no provider-mutation authority.
@@ -209,8 +215,10 @@ generation-safe current-bundle restart foundation and Task 12B.2a identity-pinne
   Models and Projects share one recent-usage query; Projects reuses one existing Git
   query and keeps its UTC window separate; Activity reuses one existing latest page;
   Notifications reuses one existing all-current benefit overview and does not
-  acknowledge delivery. Help/About is next, followed by the separate app-owned
-  notification presentation/settings contour. Later-page Sessions navigation
+  acknowledge delivery. P3-D.7 Help/About is also implemented as six static responsive
+  sections with one compile-time version, one standard pinned Slint attribution widget,
+  and zero projection/model/query/runtime/callback/polling authority. The separate app-
+  owned notification presentation/settings contour is next. Later-page Sessions navigation
   remains a separate bounded replacement of the same list section.
 
 P3-D.0 Reliable State is approved under

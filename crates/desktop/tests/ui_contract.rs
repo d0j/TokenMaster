@@ -251,6 +251,7 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert!(!window.get_models_visible());
     assert!(!window.get_projects_visible());
     assert!(!window.get_activity_visible());
+    assert!(!window.get_help_about_visible());
     assert_eq!(window.get_history_day_rows().row_count(), 0);
     assert_eq!(window.get_history_total_tokens(), "—");
     assert_eq!(window.get_session_list_rows().row_count(), 0);
@@ -336,7 +337,94 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert_compiled_projects_keep_recent_usage_and_today_code_separate_in_place();
     assert_compiled_activity_renders_bounded_safe_events_in_place();
     assert_compiled_notifications_render_expiry_truth_in_place();
+    assert_compiled_help_about_is_static_truthful_and_responsive();
     assert_compiled_session_selection_is_immediate_correlated_and_bounded_in_place();
+}
+
+fn assert_compiled_help_about_is_static_truthful_and_responsive() {
+    let reducer = ProductReducer::new();
+    let snapshot = reducer.snapshot();
+    let shell = DesktopShell::new(&snapshot).expect("desktop shell");
+    let window = shell.window();
+    let component_address = window as *const _;
+
+    window.invoke_select_route(SharedString::from("help_about"));
+    assert!(window.get_help_about_visible());
+    assert!(!window.get_dashboard_visible());
+    assert!(!window.get_settings_visible());
+    assert_eq!(window.get_active_route_state(), "ready");
+    assert_eq!(window.get_help_product_version(), env!("CARGO_PKG_VERSION"));
+    assert_eq!(window.get_help_about_section_count(), 6);
+    window.show().expect("show Help/About window");
+    window
+        .window()
+        .set_size(slint::PhysicalSize::new(1120, 720));
+    assert_eq!(window.get_help_about_layout_mode(), "wide");
+
+    window.window().set_size(slint::PhysicalSize::new(700, 720));
+    assert_eq!(window.get_help_about_layout_mode(), "narrow");
+    window.window().set_size(slint::PhysicalSize::new(900, 720));
+    assert_eq!(window.get_help_about_layout_mode(), "narrow");
+    window
+        .window()
+        .set_size(slint::PhysicalSize::new(1120, 1200));
+    assert_eq!(window.get_help_about_layout_mode(), "wide");
+
+    let labels = ElementQuery::from_root(window)
+        .match_predicate(|element| element.accessible_label().is_some())
+        .find_all()
+        .into_iter()
+        .filter_map(|element| element.accessible_label())
+        .collect::<Vec<_>>();
+    let region_labels = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::Region)
+        .find_all()
+        .into_iter()
+        .filter_map(|element| element.accessible_label())
+        .collect::<Vec<_>>();
+    for required in [
+        "Start here",
+        "Data sources and truth",
+        "Privacy by design",
+        "Health and recovery",
+        "Automation status",
+        "About and licenses",
+    ] {
+        assert_eq!(
+            region_labels
+                .iter()
+                .filter(|label| label.contains(required))
+                .count(),
+            1,
+            "accessible Help/About section must appear exactly once: {required}"
+        );
+    }
+    assert!(
+        region_labels
+            .iter()
+            .any(|label| label.contains("No prompts, responses, reasoning, commands")),
+        "privacy boundary must be accessible"
+    );
+    assert!(
+        region_labels
+            .iter()
+            .any(|label| label.contains("CLI and stdio MCP are not available")),
+        "automation availability must be truthful"
+    );
+    assert_eq!(
+        labels
+            .iter()
+            .filter(|label| label.as_str() == "#MadeWithSlint")
+            .count(),
+        1
+    );
+
+    window.invoke_select_route(SharedString::from("dashboard"));
+    assert!(!window.get_help_about_visible());
+    window.invoke_select_route(SharedString::from("help_about"));
+    assert!(window.get_help_about_visible());
+    assert_eq!(component_address, shell.window() as *const _);
+    assert_eq!(window.get_help_product_version(), env!("CARGO_PKG_VERSION"));
 }
 
 fn assert_compiled_notifications_render_expiry_truth_in_place() {

@@ -1,7 +1,7 @@
 # TokenMaster P3-D.7 Help/About Route Design
 
 **Date:** 2026-07-19
-**Status:** Approved for implementation
+**Status:** Implemented and independently reviewed
 **Scope:** Replace the final data-independent P3-D placeholder with a truthful,
 responsive, fixed-memory Help/About route.
 
@@ -44,16 +44,20 @@ the public-download attribution as a P6 package/release requirement.
      machine-interface quota evidence, with unavailable/stale truth;
    - **Privacy by design** — prompts, responses, reasoning, commands, source contents,
      credentials, raw paths, and private identity are not retained or exposed;
-   - **Health and recovery** — Data Health and Settings are the existing local
-     diagnostic/recovery surfaces; no support upload is claimed;
+   - **Health and recovery** — Data Health owns backup, verification, restore,
+     rebuild, and recovery truth; Settings owns backup policy and portable
+     configuration; no support upload is claimed;
    - **Automation status** — P5 strict JSON CLI and stdio MCP are not available in the
      current build; no listener/browser/session automation is active;
    - **About and licenses** — TokenMaster MIT, both pinned MIT reference lineages, the
      standard Slint attribution widget, and no false SBOM/package claim.
 
-The six cards are instantiated once. A position-only responsive layout places them in
-two columns at 800 px or wider and one column below 800 px. The same text and accessible
-meaning survive both layouts. A single scroll surface bounds the viewport.
+The view is mounted once for the lifetime of `MainWindow`; route selection changes only
+its visibility. Its six cards are instantiated once. A position-only responsive layout
+places them in two columns when the post-navigation content width is at least 800 px and
+one column below 800 px. The same text and accessible meaning survive both layouts. A
+single scroll surface bounds the viewport. `MainWindow` exposes layout and section-count
+truth from this child rather than duplicating window-width arithmetic or a second count.
 
 ## 4. Version and build truth
 
@@ -69,6 +73,10 @@ The view imports and mounts exactly one `AboutSlint` from `std-widgets.slint`. T
 pinned standard component contains Slint's fixed `https://slint.dev` action. TokenMaster
 source adds no `Platform.open-url`, arbitrary URL, browser/session state, network client,
 callback, or URL property.
+
+The standard widget receives 112 px inside a 232 px attribution card, and the external
+MIT reference line uses at least 10 px body text, so logo, version/link text, and the
+local license context are not clipped or visually de-emphasized.
 
 The deterministic audit must fail if:
 
@@ -104,7 +112,9 @@ approved English/Russian/pseudo catalogs and hot locale switching.
 Every card is an accessible region whose label carries its full meaning. The root and
 Slint attribution remain discoverable from the top-level Help/About route. Meaning does
 not depend on color. Wide/narrow tests and the real headless accessibility tree are
-required now; full keyboard/DPI/locale acceptance remains P4/P6.
+required now. P4/P6 full screen-reader acceptance must refine the current verbose
+region-plus-child announcements into concise region names plus semantic child text,
+alongside full keyboard/DPI/locale acceptance.
 
 ## 8. Deferred capabilities
 

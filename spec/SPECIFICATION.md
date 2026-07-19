@@ -344,6 +344,17 @@ or rendering this route MUST NOT take, acknowledge, release, schedule, or otherw
 mutate a reminder delivery. Visible delivery requires a separate app-owned presentation
 receipt that acknowledges only after successful presentation and releases on failure.
 
+Help/About MUST remain ready without an archive or live runtime. It MUST present one
+responsive fixed six-section guide covering navigation, data-source truth, privacy,
+health/recovery, current automation availability, and licenses. The package version
+MUST come from the compile-time Cargo package version and MUST be applied exactly once
+during window construction. The route MUST mount exactly one standard pinned Slint
+`AboutSlint` attribution widget. It MUST NOT own a list model, query, diagnostic probe,
+callback, filesystem/network/process/browser/SQL surface, worker, timer, queue, cache,
+polling loop, provider mutation, or dynamic release claim. P4 owns unified locale and
+presentation switching; P5 owns CLI/MCP; generated notices, SBOM, MSVC package,
+signing, public-download attribution, and release identity remain P6 receipt truth.
+
 ### TM-UI-002 — Reactive presentation boundary
 
 Skin, layout, locale, selection, and range changes MUST update bounded presentation

@@ -443,6 +443,17 @@ cache/connection, or recreate `MainWindow`. A future delivery bridge must remain
 application-owned, acknowledge only after successful UI presentation, and release the
 lease on any failed or cancelled presentation.
 
+`HelpAboutView` is a static presentation-only route and deliberately has no product
+snapshot, archive, query, model, callback, or runtime API. `DesktopShell` passes only
+`env!("CARGO_PKG_VERSION")` once immediately after `MainWindow` construction. The
+view instantiates six fixed accessible sections and exactly one standard pinned
+`AboutSlint`; wide/narrow reflow changes positions only and allocates no replacement
+model. Route selection changes visibility in the existing window. TokenMaster exposes
+no URL property, arbitrary-link callback, browser/session bridge, dynamic diagnostics,
+release-channel lookup, or package/signing/SBOM assertion through this route. The
+standard widget's fixed Slint attribution action is the sole library-provided license
+surface and does not widen TokenMaster provider or automation authority.
+
 `DesktopQueryPlan` also owns one all-time `usage_sessions` request with page size 64.
 It executes sequentially on the same capacity-one query worker; Dashboard copies only
 its first 12 summaries while the independent product Sessions section retains the

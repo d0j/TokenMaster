@@ -3443,3 +3443,50 @@ locked workspace test/doctest gate pass in 1,216.4 seconds overall
 Help/About, app-owned presentation receipts, settings synchronization/editing, snooze,
 quiet hours, OS delivery, usage alerts, activation, presentation/automation/release
 work, packaging, signing, M0, and release acceptance remain open.
+
+## 2026-07-19 — P3-D.7 bounded Help/About route
+
+The Help/About slice began by proving that `ProductRoute::HelpAbout` was already ready
+without an archive while the compiled shell still rendered its generic placeholder.
+The boundary audit rejected a dynamic diagnostics or release-status owner: the useful
+truth is fixed product navigation, source/evidence semantics, privacy, Data Health and
+Settings ownership, current automation availability, and license attribution. ADR-072
+therefore selects one archive-independent static view, the compile-time Cargo package
+version, and the pinned standard `AboutSlint` widget. P4 still owns unified en/ru/pseudo
+localization, P5 owns bounded read-only CLI/MCP, and P6 owns generated notices/SBOM,
+MSVC/package/signing/public-download attribution and release identity.
+
+TDD replaced the placeholder with one always-mounted `HelpAboutView`. Its five guide
+cards plus one attribution card are instantiated once and only visibility changes on
+route selection. Content-width layout truth flows back from the child, so a 900-pixel
+window correctly uses the narrow layout after the fixed navigation rail. The standard
+attribution widget has a 112-pixel safe height inside a 232-pixel card, and the external
+MIT reference line remains at readable body-text size. The route owns no projection,
+list model, query, dynamic diagnostics, callback, URL, browser/session surface, worker,
+timer, queue, cache, connection, polling loop, provider mutation, or release receipt.
+
+The real headless Slint contract proves ready-without-archive state, compile-time
+version, each of the six section region labels exactly once, one standard attribution
+label, 700/900 narrow and 1120 wide layout, truthful privacy/automation text, and
+in-place `MainWindow` identity.
+The deterministic audit parses five guide plus one attribution instance, requires the
+single always-mounted child, child-owned layout/count truth, safe attribution geometry,
+one version setter, and computed zero model/authority/polling counts. Its 104 mutation
+cases reject duplicate/removed sections, conditional reconstruction, full-window
+breakpoint drift, hardcoded outer counts, clipped/small attribution, list models,
+callbacks/open-URL authority, wrong recovery ownership, hidden privacy, and false
+release/automation/all-provider claims. The complete Desktop package, strict package
+Clippy, source/release audits, and focused formatting/diff checks pass. Independent
+final review returned Critical/Important/Minor 0/0/0.
+
+The first exact workspace baseline stopped at the existing product resource contract:
+its warm-up accepted a bimodal 3.5-6.1 MiB process profile at a 3,723,264-byte floor,
+then the measured 5.12-6.06 MiB minima missed the unchanged 2 MiB return tolerance.
+A deterministic regression preserves the exact 16 samples and fails the old selector.
+The corrected selector additionally rejects a retained ceiling more than the same 2 MiB
+above its floor, so it continues warming rather than loosening the resource gate. Three
+new processes pass 1,088 captures each, strict focused Clippy passes, and independent
+review returned 0/0/0. The subsequent uninterrupted `TM-CLEAN-PASS`, formatting,
+strict workspace Clippy, and complete locked workspace test/doctest baseline passes in
+879.3 seconds. P3-D.7 is closed as a developer slice; P4/P5/P6, M0, packaging, signing,
+and product-release acceptance remain unclaimed.

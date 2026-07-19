@@ -1781,3 +1781,25 @@ before the user could see it and could permanently suppress an expiry warning. E
 the reminder runtime to Slint would also widen frontend authority. The split delivers
 instant inventory/profile visibility now while preserving crash-safe retry semantics,
 constant frontend memory, and a narrow future command boundary.
+
+## ADR-072 — Keep Help/About static and use the standard Slint attribution surface
+
+Decision: P3-D.7 replaces the Help/About placeholder with one archive-independent
+static Slint view containing six fixed accessible sections. `DesktopShell` applies the
+compile-time Cargo package version exactly once during window construction. The view
+owns no product projection, list model, query, diagnostic probe, worker, timer,
+callback, cache, queue, connection, polling loop, or mutable capability.
+
+The view mounts exactly one pinned standard `AboutSlint` widget. Its library-owned
+fixed Slint attribution action is accepted as the selected Royalty-free License 2.0
+route. TokenMaster adds no `Platform.open-url`, URL property, arbitrary-link callback,
+browser/session reuse, or private endpoint surface. Generated third-party notices,
+SBOM, canonical MSVC package/signature identity, public-download attribution, and
+release acceptance remain P6 receipt-owned. P4 migrates the complete UI together to
+en/ru/pseudo locales; P5 adds bounded read-only CLI/MCP without changing this view.
+
+Rationale: a static route is immediately useful in normal, unavailable, recovery, and
+safe-mode states while retaining constant memory and zero refresh latency. A dynamic
+diagnostics or release-status screen would duplicate authoritative owners and invite
+false claims. The standard widget satisfies the chosen attribution surface without
+inventing a TokenMaster-controlled browser or URL API.

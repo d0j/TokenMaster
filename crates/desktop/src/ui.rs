@@ -249,6 +249,7 @@ impl DesktopShell {
         session_sink: Rc<dyn DesktopSessionDetailIntentSink>,
     ) -> Result<Self, slint::PlatformError> {
         let window = MainWindow::new()?;
+        window.set_help_product_version(env!("CARGO_PKG_VERSION").into());
         let initial_state = DesktopState::new(snapshot, DesktopRouteKey::Dashboard);
         apply_projection(&window, initial_state.projection());
         apply_reliable_state_projection(&window, &reliable_state);

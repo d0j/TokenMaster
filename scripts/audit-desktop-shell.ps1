@@ -40,8 +40,8 @@ if ($productionManifestText -match '\btokenmaster-(store|provider|runtime|codex|
 $rustFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.rs')
 $uiFiles = @(Get-ChildItem -LiteralPath $uiRoot -Recurse -File -Filter '*.slint')
 $productionFiles = @($rustFiles + $uiFiles)
-if ($rustFiles.Count -ne 14 -or $uiFiles.Count -ne 20) {
-    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain fourteen Rust and twenty Slint files'
+if ($rustFiles.Count -ne 14 -or $uiFiles.Count -ne 21) {
+    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain fourteen Rust and twenty-one Slint files'
 }
 $uiText = ($uiFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
@@ -145,7 +145,9 @@ if (
 ) {
     throw 'TM-DESKTOP-UI-POLLING: UI must remain timer animation and polling free'
 }
-if ($uiAdapterText -match '(?i)\b(?:WhereMyTokens|WhereMyToken|WhereMyTokens)\b') {
+$fixedUpstreamAttribution = 'WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies.'
+$legacyProductBoundary = $uiAdapterText.Replace($fixedUpstreamAttribution, '')
+if ($legacyProductBoundary -match '(?i)\b(?:WhereMyTokens|WhereMyToken|WhereMyTokens)\b') {
     throw 'TM-DESKTOP-LEGACY-PRODUCT: production UI must contain only TokenMaster product identity'
 }
 
@@ -513,6 +515,139 @@ if ($notificationsProjectionText -match '\.(?:opaque_id|target|delivery_id|lot_i
 if ($notificationsViewText -cnotmatch 'Text \{ text: scope\.completeness-label \+ " · " \+ scope\.evidence-label;[^\r\n]*visible: !root\.narrow;') {
     throw 'TM-DESKTOP-NOTIFICATIONS-VIEW: wide Notifications rows must preserve visible per-scope completeness'
 }
+$helpAboutViewPath = Join-Path $uiRoot 'views\help-about-view.slint'
+$helpAboutViewText = [System.IO.File]::ReadAllText($helpAboutViewPath)
+$helpAboutBoundary = $mainUiText + "`n" + $helpAboutViewText
+if ($mainUiText -cnotmatch 'out property <string> help-about-layout-mode: help-view\.layout-mode;') {
+    throw 'TM-DESKTOP-HELP-ABOUT-VIEW: MainWindow must expose the child content-width layout truth'
+}
+if ($mainUiText -cnotmatch 'out property <int> help-about-section-count: help-view\.section-count;') {
+    throw 'TM-DESKTOP-HELP-ABOUT-BOUND: MainWindow must expose the child section-count truth'
+}
+foreach ($requiredPattern in @(
+    'import \{ HelpAboutView \} from "views/help-about-view\.slint";',
+    'out property <bool> help-about-visible: root\.active-route-key == "help_about";',
+    'out property <string> help-about-layout-mode: help-view\.layout-mode;',
+    'out property <int> help-about-section-count: help-view\.section-count;',
+    'help-view := HelpAboutView',
+    'visible: root\.help-about-visible;',
+    '!root\.help-about-visible',
+    'out property <bool> narrow: root\.width < 800px;',
+    'out property <string> layout-mode: root\.narrow \? "narrow" : "wide";',
+    'property <length> card-height: 232px;',
+    'product-version: root\.help-product-version;'
+)) {
+    if ($helpAboutBoundary -cnotmatch $requiredPattern) {
+        throw "TM-DESKTOP-HELP-ABOUT-VIEW: missing responsive Help About contract $requiredPattern"
+    }
+}
+$helpAboutMountCount = [regex]::Matches(
+    $mainUiText,
+    '(?m)^\s*help-view := HelpAboutView\s*\{'
+).Count
+if ($helpAboutMountCount -ne 1 -or
+    $mainUiText -match 'if root\.help-about-visible:\s*(?:[A-Za-z0-9_-]+\s*:=\s*)?HelpAboutView') {
+    throw 'TM-DESKTOP-HELP-ABOUT-LIFECYCLE: Help About must stay mounted once and switch visibility only'
+}
+$helpAboutSectionCountMatch = [regex]::Match(
+    $helpAboutViewText,
+    'out property <int> section-count: ([0-9]+);'
+)
+$helpAboutSectionCount = if ($helpAboutSectionCountMatch.Success) {
+    [int]$helpAboutSectionCountMatch.Groups[1].Value
+} else {
+    0
+}
+$helpAboutGuideCardCount = [regex]::Matches(
+    $helpAboutViewText,
+    '(?m)^\s*HelpSectionCard\s*\{'
+).Count
+$helpAboutAttributionCardCount = [regex]::Matches(
+    $helpAboutViewText,
+    '(?m)^\s*AttributionCard\s*\{'
+).Count
+$helpAboutRenderedSectionCount = $helpAboutGuideCardCount + $helpAboutAttributionCardCount
+if ($helpAboutSectionCount -ne 6 -or
+    $helpAboutGuideCardCount -ne 5 -or
+    $helpAboutAttributionCardCount -ne 1 -or
+    $helpAboutRenderedSectionCount -ne $helpAboutSectionCount -or
+    [regex]::Matches($helpAboutViewText, 'out property <int> section-count:').Count -ne 1) {
+    throw 'TM-DESKTOP-HELP-ABOUT-BOUND: Help About must expose exactly six fixed sections'
+}
+$helpAboutAttributionCount = [regex]::Matches($helpAboutViewText, '\bAboutSlint\s*\{').Count
+$helpAboutAttributionImportCount = [regex]::Matches(
+    $helpAboutViewText,
+    'import \{ AboutSlint, ScrollView \} from "std-widgets\.slint";'
+).Count
+$helpAboutAttributionHeightCount = [regex]::Matches(
+    $helpAboutViewText,
+    'AboutSlint\s*\{\s*height: 112px;'
+).Count
+$helpAboutAttributionTextSizeCount = [regex]::Matches(
+    $helpAboutViewText,
+    '(?s)text: "WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies\.";\s*color:[^;]+;\s*font-size: 10px;'
+).Count
+if ($helpAboutAttributionCount -ne 1 -or
+    $helpAboutAttributionImportCount -ne 1 -or
+    $helpAboutAttributionHeightCount -ne 1 -or
+    $helpAboutAttributionTextSizeCount -ne 1) {
+    throw 'TM-DESKTOP-HELP-ABOUT-ATTRIBUTION: Help About must mount exactly one standard Slint attribution widget'
+}
+foreach ($requiredText in @(
+    'Start here',
+    'Data sources and truth',
+    'Privacy by design',
+    'Health and recovery',
+    'Automation status',
+    'About and licenses',
+    'No prompts, responses, reasoning, commands',
+    'CLI and stdio MCP are not available',
+    'No browser session reuse or private endpoint replay',
+    'Data Health owns backup, verification, restore, rebuild, and recovery truth. Settings owns backup policy and portable configuration.',
+    'TokenMaster · MIT',
+    $fixedUpstreamAttribution
+)) {
+    if (-not $helpAboutViewText.Contains($requiredText, [System.StringComparison]::Ordinal)) {
+        throw "TM-DESKTOP-HELP-ABOUT-CONTENT: missing truthful Help About content $requiredText"
+    }
+}
+$helpAboutAccessibleRegionCount = [regex]::Matches(
+    $helpAboutViewText,
+    'accessible-role:\s*region;'
+).Count
+if ($helpAboutAccessibleRegionCount -ne 4) {
+    throw 'TM-DESKTOP-HELP-ABOUT-VIEW: Help About accessible region structure drifted'
+}
+$helpAboutVersionSetterPattern = 'set_help_product_version\(env!\("CARGO_PKG_VERSION"\)\.into\(\)\)'
+$helpAboutVersionSetterCount = [regex]::Matches(
+    $uiRustText,
+    $helpAboutVersionSetterPattern
+).Count
+$helpAboutConstructor = [regex]::Match(
+    $uiRustText,
+    '(?s)pub fn new_with_reliable_state_and_session_sink\(.*?\r?\n    \}\r?\n\r?\n    #\[must_use\]'
+).Value
+if ($helpAboutVersionSetterCount -ne 1 -or
+    [regex]::Matches($helpAboutConstructor, $helpAboutVersionSetterPattern).Count -ne 1 -or
+    $uiRustText -match 'std::env::var|option_env!|git describe') {
+    throw 'TM-DESKTOP-HELP-ABOUT-VERSION: Help About version must be applied exactly once from the compile-time package version'
+}
+$helpAboutModelPattern = '(?i)\b(?:ModelRc|VecModel|model\s*<)\b|property\s*<\[|(?m)^\s*for\s+[A-Za-z0-9_-]+\s+in\s+'
+$helpAboutAuthorityPattern = '(?i)\bcallback\b|Platform\.open-url|https?://|\b(?:QueryService|UsageReadStore|UsageStore|Connection|rusqlite|reqwest|webbrowser)\b|std::(?:env|fs|net|process)|\b(?:activate|acknowledge|deliver|schedule)-benefit\b'
+$helpAboutPollingPattern = '(?i)\b(?:Timer|poll_help|poll_about|thread::spawn|thread::sleep)\b'
+$helpAboutModelCount = [regex]::Matches($helpAboutViewText, $helpAboutModelPattern).Count
+$helpAboutAuthorityCount = [regex]::Matches($helpAboutViewText, $helpAboutAuthorityPattern).Count
+$helpAboutPollingSurfaceCount = [regex]::Matches($helpAboutViewText, $helpAboutPollingPattern).Count
+if ($helpAboutAuthorityCount -ne 0) {
+    throw 'TM-DESKTOP-HELP-ABOUT-AUTHORITY: Help About must remain static and control-free'
+}
+if ($helpAboutModelCount -ne 0 -or $helpAboutPollingSurfaceCount -ne 0) {
+    throw 'TM-DESKTOP-HELP-ABOUT-BOUND: Help About must not own models timers or polling'
+}
+$helpAboutFalseClaimPattern = '(?i)\b(?:release (?:accepted|ready|complete)|package (?:signed|ready)|signed (?:build|package|release)|SBOM (?:included|available|complete)|MSVC (?:build|release) (?:available|complete)|CLI is available|stdio MCP is available|automation is available|all providers (?:are )?(?:supported|available)|every provider (?:is )?(?:supported|available))\b'
+if ($helpAboutViewText -match $helpAboutFalseClaimPattern) {
+    throw 'TM-DESKTOP-HELP-ABOUT-CLAIM: Help About must not claim deferred release or automation capability'
+}
 $sessionsPath = Join-Path $sourceRoot 'sessions.rs'
 $sessionsText = [System.IO.File]::ReadAllText($sessionsPath)
 if ($sessionsText -notmatch 'pub const MAX_SESSION_ROWS: usize = 64;' -or
@@ -727,6 +862,12 @@ if ($SourceOnly) {
         notifications_delivery_authority_count = $notificationsDeliveryAuthorityCount
         notifications_owner_control_count = $notificationsOwnerControlCount
         notifications_polling_surface_count = $notificationsPollingSurfaceCount
+        help_about_section_count = $helpAboutRenderedSectionCount
+        help_about_version_setter_count = $helpAboutVersionSetterCount
+        help_about_slint_attribution_count = $helpAboutAttributionCount
+        help_about_model_count = $helpAboutModelCount
+        help_about_authority_count = $helpAboutAuthorityCount
+        help_about_polling_surface_count = $helpAboutPollingSurfaceCount
         session_row_maximum = 64
         session_detail_model_row_maximum = 32
         session_detail_project_row_maximum = 32
@@ -836,6 +977,12 @@ if ($LASTEXITCODE -ne 0) {
     notifications_delivery_authority_count = $notificationsDeliveryAuthorityCount
     notifications_owner_control_count = $notificationsOwnerControlCount
     notifications_polling_surface_count = $notificationsPollingSurfaceCount
+    help_about_section_count = $helpAboutRenderedSectionCount
+    help_about_version_setter_count = $helpAboutVersionSetterCount
+    help_about_slint_attribution_count = $helpAboutAttributionCount
+    help_about_model_count = $helpAboutModelCount
+    help_about_authority_count = $helpAboutAuthorityCount
+    help_about_polling_surface_count = $helpAboutPollingSurfaceCount
     session_row_maximum = 64
     session_detail_model_row_maximum = 32
     session_detail_project_row_maximum = 32

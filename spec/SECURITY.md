@@ -245,6 +245,18 @@ mutation authority. A later presentation bridge must be app-owned and may acknow
 only after successful visible application; every failed/cancelled presentation must
 release its lease for retry.
 
+P3-D.7 Help/About adds only fixed compiled English fallback text, the compile-time
+Cargo package version, responsive geometry, and exactly one pinned standard
+`AboutSlint` widget. It owns no archive/query/model/diagnostic/runtime state and no
+TokenMaster callback, URL property, filesystem, environment, network, process,
+browser/session, SQL, provider, activation, notification-delivery, or release-receipt
+authority. The standard widget's fixed Slint attribution action is a narrow selected-
+license surface; TokenMaster does not accept or construct an arbitrary URL. Help text
+must keep prompts, responses, reasoning, commands, source contents, credentials, raw
+absolute paths, private identities, and raw operating-system errors outside Slint.
+Claims about CLI/MCP, MSVC, notices, SBOM, signing, packaging, or release acceptance
+remain unavailable until their owning P5/P6 gates pass.
+
 Providers emit bounded observation/session-relation drafts only. They cannot create
 event fingerprints, replay signatures/evidence, event IDs, replay dispositions, or
 canonical events. Those values are created only by TokenMaster accounting code. Store

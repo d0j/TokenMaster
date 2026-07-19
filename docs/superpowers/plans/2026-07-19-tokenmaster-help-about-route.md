@@ -33,10 +33,10 @@ PowerShell mutation audits.
 - Modify: `crates/desktop/tests/ui_contract.rs`
 
 **Acceptance:**
-- [ ] Initial test requires the real Help/About mount, ready-without-archive state,
+- [x] Initial test requires the real Help/About mount, ready-without-archive state,
   compile-time version, six sections, wide/narrow switch, required content, standard
   Slint attribution accessibility, and unchanged window identity.
-- [ ] The test fails because the current route is still the placeholder.
+- [x] The test fails because the current route is still the placeholder.
 
 ### Task 2: Implement the static responsive route
 
@@ -46,12 +46,12 @@ PowerShell mutation audits.
 - Modify: `crates/desktop/src/ui.rs`
 
 **Acceptance:**
-- [ ] Add one `help-about-visible` mount and exclude it from the placeholder.
-- [ ] Set the package version exactly once during `DesktopShell` construction.
-- [ ] Instantiate six fixed accessible cards once and reflow by position only.
-- [ ] Mount exactly one standard `AboutSlint`.
-- [ ] Keep source, privacy, health, automation-unavailable, and license truth complete.
-- [ ] Run focused real-Slint and complete Desktop package tests green.
+- [x] Add one `help-about-visible` mount and exclude it from the placeholder.
+- [x] Set the package version exactly once during `DesktopShell` construction.
+- [x] Instantiate six fixed accessible cards once and reflow by position only.
+- [x] Mount exactly one standard `AboutSlint`.
+- [x] Keep source, privacy, health, automation-unavailable, and license truth complete.
+- [x] Run focused real-Slint and complete Desktop package tests green.
 
 ### Task 3: Extend deterministic architecture/license/privacy audits
 
@@ -60,13 +60,13 @@ PowerShell mutation audits.
 - Modify: `scripts/tests/audit-desktop-shell.Tests.ps1`
 
 **Acceptance:**
-- [ ] Update exact Slint production file count.
-- [ ] Assert one real mount, six sections, one version setter, one standard attribution,
+- [x] Update exact Slint production file count.
+- [x] Assert one real mount, six sections, one version setter, one standard attribution,
   responsive/accessibility content, and no placeholder fallback.
-- [ ] Assert zero model/query/runtime/store/worker/thread/timer/animation/queue/cache/
+- [x] Assert zero model/query/runtime/store/worker/thread/timer/animation/queue/cache/
   connection/polling/dynamic-diagnostic/callback/product-open-URL authority.
-- [ ] Reject false signed/MSVC/SBOM/release/provider/automation claims.
-- [ ] Add RED/GREEN mutations for each boundary and run source/release plus Pester green.
+- [x] Reject false signed/MSVC/SBOM/release/provider/automation claims.
+- [x] Add RED/GREEN mutations for each boundary and run source/release plus Pester green.
 
 ### Task 4: Synchronize durable project truth
 
@@ -85,18 +85,18 @@ PowerShell mutation audits.
 - Modify: `docs/AUDIT_AND_MASTER_PLAN.md`
 
 **Acceptance:**
-- [ ] Record the fixed-content/version/attribution/privacy/no-runtime boundary.
-- [ ] Keep P4 localization/presentation, P5 automation, P6 notices/SBOM/package/signing,
+- [x] Record the fixed-content/version/attribution/privacy/no-runtime boundary.
+- [x] Keep P4 localization/presentation, P5 automation, P6 notices/SBOM/package/signing,
   M0, and release acceptance incomplete.
-- [ ] Store no current commit hash.
+- [x] Store no current commit hash.
 
 ### Task 5: Independent review and closeout
 
-- [ ] Run focused Desktop/audit tests first.
-- [ ] Run `git diff --check`.
-- [ ] Run clean-root, Rust formatting, warnings-as-errors workspace Clippy, and locked
+- [x] Run focused Desktop/audit tests first.
+- [x] Run `git diff --check`.
+- [x] Run clean-root, Rust formatting, warnings-as-errors workspace Clippy, and locked
   workspace tests exactly as required by `AGENTS.md`.
-- [ ] Resolve every Critical/Important independent-review finding and re-review.
-- [ ] Audit task-owned agents/processes, stage only this slice, and create English
+- [x] Resolve every Critical/Important independent-review finding and re-review.
+- [x] Audit task-owned agents/processes, stage only this slice, and create English
   conventional commits.
-- [ ] Do not push, merge, package, sign, or claim release acceptance without authority.
+- [x] Do not push, merge, package, sign, or claim release acceptance without authority.

@@ -12,6 +12,7 @@ import { ModelsView } from "views/models-view.slint";
 import { ProjectsView } from "views/projects-view.slint";
 import { ActivityView } from "views/activity-view.slint";
 import { NotificationsView } from "views/notifications-view.slint";
+import { HelpAboutView } from "views/help-about-view.slint";
 import { SessionsView } from "views/sessions-view.slint";
 import { DataHealthView } from "views/data-health-view.slint";
 import { SettingsView } from "views/settings-view.slint";
@@ -101,6 +102,7 @@ export component MainWindow inherits Window {
     in property <string> notifications-evidence-label;
     in property <string> notifications-loaded-label;
     in property <string> notifications-completeness-label;
+    in property <string> help-product-version;
     in property <[SessionListRow]> session-list-rows;
     in property <string> sessions-state;
     in property <string> sessions-reasons;
@@ -136,12 +138,15 @@ export component MainWindow inherits Window {
     out property <bool> notifications-visible: root.active-route-key == "notifications";
     out property <bool> data-health-visible: root.active-route-key == "data_health";
     out property <bool> settings-visible: root.active-route-key == "settings";
+    out property <bool> help-about-visible: root.active-route-key == "help_about";
     out property <string> dashboard-layout-mode: root.width < 1010px ? "narrow" : "wide";
     out property <string> sessions-layout-mode: root.width < 1010px ? "narrow" : "wide";
     out property <string> models-layout-mode: root.width < 800px ? "narrow" : "wide";
     out property <string> projects-layout-mode: root.width < 800px ? "narrow" : "wide";
     out property <string> activity-layout-mode: root.width < 800px ? "narrow" : "wide";
     out property <string> notifications-layout-mode: root.width < 800px ? "narrow" : "wide";
+    out property <string> help-about-layout-mode: help-view.layout-mode;
+    out property <int> help-about-section-count: help-view.section-count;
     in property <string> reliable-state-generation;
     in property <string> reliable-state-health;
     in property <bool> reliable-state-safe-mode;
@@ -457,7 +462,14 @@ export component MainWindow inherits Window {
                     update-backup-policy(enabled, quiet, interval, budget) => { root.update-backup-policy(enabled, quiet, interval, budget); }
                 }
 
-                if !root.dashboard-visible && !root.history-visible && !root.sessions-visible && !root.models-visible && !root.projects-visible && !root.activity-visible && !root.notifications-visible && !root.data-health-visible && !root.settings-visible: RouteState {
+                help-view := HelpAboutView {
+                    width: parent.width;
+                    height: parent.height;
+                    visible: root.help-about-visible;
+                    product-version: root.help-product-version;
+                }
+
+                if !root.dashboard-visible && !root.history-visible && !root.sessions-visible && !root.models-visible && !root.projects-visible && !root.activity-visible && !root.notifications-visible && !root.data-health-visible && !root.settings-visible && !root.help-about-visible: RouteState {
                     x: UiTokens.space;
                     y: UiTokens.space;
                     width: parent.width - 2 * UiTokens.space;

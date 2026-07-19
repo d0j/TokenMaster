@@ -1380,11 +1380,28 @@ seconds, and the GNU release application build pass. The only new ordinary-suite
 behavior is an explicit debug skip for the release-only UI measurement; its exact
 release target passes independently.
 
+P3-D.7 Help/About replaces the final P3-D data-independent placeholder with one
+archive-independent responsive guide. Six fixed accessible sections explain
+navigation, source/evidence truth, privacy, recovery, current automation availability,
+and licenses. `DesktopShell` applies the compile-time Cargo package version once; the
+route owns no projection, model, query, runtime, diagnostics, callback, timer, queue,
+cache, polling, or TokenMaster URL/browser surface. Exactly one pinned standard
+`AboutSlint` supplies the selected in-product attribution. The compiled Slint contract,
+source/release audits, full Desktop package, strict package Clippy, and 104/104 mutation
+cases pass. Independent final review returned Critical/Important/Minor 0/0/0. The first
+full baseline exposed a pre-existing bimodal warm-up false plateau in the product
+private-byte resource test; its exact 16-sample regression now forces continued warm-
+up without widening the 2 MiB return tolerance, passes in three independent processes,
+and received a separate 0/0/0 review. The subsequent exact clean-root/fmt/strict
+workspace Clippy/locked workspace test-doctest baseline passes in 879.3 seconds.
+Unified en/ru/pseudo locale switching remains P4, CLI/MCP remains P5, and generated
+notices/SBOM/MSVC/package/signing/public-download/release evidence remains P6.
+
 ## Next implementation slice
 
 P3-D.0 Reliable State, P3-D.1 History, P3-D.2 bounded Sessions list/detail, P3-D.3
 Models, P3-D.4 Projects, P3-D.5 Recent activity, and the bounded read-only P3-D.6
-Notifications route are implemented. Continue with Help/About, then close the separate
+Notifications route plus P3-D.7 Help/About are implemented. Continue with the separate
 app-owned notification presentation/settings contour without widening Slint authority.
 Later-page Sessions navigation and interactive History ranges remain bounded
 replacements of their existing sections rather than new frontend query owners.

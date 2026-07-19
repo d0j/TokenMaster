@@ -296,11 +296,19 @@ acceptance closure are complete. P3-D.1 History, P3-D.2 Sessions list/detail, P3
 Models, P3-D.4 Projects, P3-D.5 Recent activity, and the read-only P3-D.6 Notifications
 expiry center now extend the same bounded snapshot/controller boundary. Notifications
 reuses the existing benefit overview with 32 profile/256 lot/eight-lead caps and zero
-delivery acknowledgement or new runtime owner. Help/About is the next route slice;
-app-owned notification presentation receipts/settings remain a separate contour.
+delivery acknowledgement or new runtime owner. P3-D.7 Help/About now closes its P3-D
+archive-independent route placeholder with six static accessible sections, one compile-
+time version setter, one standard pinned Slint attribution widget, and zero model/query/
+runtime/callback/polling owner. App-owned notification presentation receipts/settings
+remain the next separate contour.
 P3-D.6 independent re-review is Critical/Important/Minor 0/0/0; its 82 mutation audit,
 release composition, strict workspace Clippy, and complete locked workspace test/
 doctest gate pass in one 1,216.4-second baseline.
+P3-D.7 independent final review is also Critical/Important/Minor 0/0/0; its real Slint
+contract, release audit, 104 mutation cases, and exact clean-root/fmt/strict workspace
+Clippy/locked test-doctest baseline pass in 879.3 seconds. The baseline-discovered
+product resource warm-up false plateau has an exact deterministic regression, three
+independent live passes, unchanged 2 MiB return tolerance, and separate 0/0/0 review.
 
 The final planning pass fixes a six-state database/settings transaction, explicit
 manual data-only or data-plus-portable-settings choice, data-only automatic recovery,

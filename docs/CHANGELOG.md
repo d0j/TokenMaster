@@ -6,6 +6,25 @@ All notable changes are recorded here.
 
 ### Added
 
+- Implemented P3-D.7 as an archive-independent responsive Help/About route with six
+  fixed accessible sections for navigation, source/evidence truth, privacy, recovery,
+  current automation availability, and licenses. It reflows without a list model and
+  remains ready when product data is unavailable.
+- Applied the compile-time Cargo package version exactly once during window
+  construction and mounted exactly one pinned standard `AboutSlint` attribution
+  widget. TokenMaster adds no arbitrary URL/browser/session surface, callback, query,
+  dynamic diagnostics, runtime owner, timer, queue, cache, polling, or release claim.
+- Added a compiled real-Slint route contract and expanded the deterministic Desktop
+  audit to 104/104 mutation cases covering the real mount, exact five-guide-plus-one-
+  attribution section instances, responsive breakpoint, accessible privacy/automation
+  truth, compile-time version identity,
+  standard attribution, zero list-model/control/open-URL authority, and false release/
+  automation/all-provider claims. The complete Desktop package and strict package
+  Clippy pass. Independent final review returned Critical/Important/Minor 0/0/0; the
+  release audit and exact clean-root/fmt/strict workspace Clippy/locked workspace test-
+  doctest baseline pass in 879.3 seconds. P4 localization, P5 CLI/MCP, and P6 notices/
+  SBOM/MSVC/package/signing/public-download/release evidence remain separate.
+
 - Implemented P3-D.6 as a responsive read-only Notifications expiry-safety center over
   the existing all-current benefit overview. It retains at most 32 effective reminder
   profiles, 256 separate current lots, and eight leads/profile while preserving exact/
@@ -1040,6 +1059,11 @@ All notable changes are recorded here.
 
 ### Fixed
 
+- Hardened the product resource-gate warm-up against the exact bimodal private-byte
+  profile exposed by the first full P3-D.7 baseline. Warm-up now continues when its
+  retained ceiling exceeds its floor by the unchanged 2 MiB return tolerance; a
+  deterministic 16-sample regression, three independent live passes, independent
+  0/0/0 review, and the subsequent complete workspace baseline pass.
 - Removed a startup race in `RefreshScheduler::spawn_paused`: paused instances now
   begin with no preloaded recovery flags, and `resume()` installs the single recovery
   request. A fast scheduler thread can no longer submit both the constructor flag and

@@ -619,6 +619,260 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-NOTIFICATIONS-REBUILD*"
     }
 
+    It "rejects removing the Help About route mount" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-mount"
+        $path = Join-Path $fixture "crates\desktop\ui\main.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'help-view := HelpAboutView',
+            'help-view := RemovedHelpAboutView'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-VIEW*"
+    }
+
+    It "rejects conditional Help About reconstruction on route switches" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-conditional-lifecycle"
+        $path = Join-Path $fixture "crates\desktop\ui\main.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'help-view := HelpAboutView',
+            'if root.help-about-visible: help-view := HelpAboutView'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-LIFECYCLE*"
+    }
+
+    It "rejects deriving Help About layout from full window width" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-layout-owner"
+        $path = Join-Path $fixture "crates\desktop\ui\main.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'out property <string> help-about-layout-mode: help-view.layout-mode;',
+            'out property <string> help-about-layout-mode: root.width < 800px ? "narrow" : "wide";'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-VIEW*"
+    }
+
+    It "rejects duplicating the Help About section count in MainWindow" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-section-owner"
+        $path = Join-Path $fixture "crates\desktop\ui\main.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'out property <int> help-about-section-count: help-view.section-count;',
+            'out property <int> help-about-section-count: 6;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-BOUND*"
+    }
+
+    It "rejects Help About section-count drift" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-sections"
+        $path = Join-Path $fixture "crates\desktop\ui\views\help-about-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'out property <int> section-count: 6;',
+            'out property <int> section-count: 60;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-BOUND*"
+    }
+
+    It "rejects a duplicated Help About section instance" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-section-duplicate"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\views\help-about-view.slint") `
+            -Value 'HelpSectionCard {'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-BOUND*"
+    }
+
+    It "rejects removed Help About section instances" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-section-removed"
+        $path = Join-Path $fixture "crates\desktop\ui\views\help-about-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'HelpSectionCard {',
+            'Rectangle {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-BOUND*"
+    }
+
+    It "rejects removing the standard Slint attribution" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-attribution"
+        $path = Join-Path $fixture "crates\desktop\ui\views\help-about-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'AboutSlint {',
+            'Rectangle {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-ATTRIBUTION*"
+    }
+
+    It "rejects clipping the standard Slint attribution" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-attribution-height"
+        $path = Join-Path $fixture "crates\desktop\ui\views\help-about-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'height: 112px;',
+            'height: 72px;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-ATTRIBUTION*"
+    }
+
+    It "rejects undersized Help About license reference text" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-attribution-font"
+        $path = Join-Path $fixture "crates\desktop\ui\views\help-about-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'font-size: 10px;',
+            'font-size: 9px;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-ATTRIBUTION*"
+    }
+
+    It "rejects an undersized Help About section card" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-card-height"
+        $path = Join-Path $fixture "crates\desktop\ui\views\help-about-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'property <length> card-height: 232px;',
+            'property <length> card-height: 204px;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-VIEW*"
+    }
+
+    It "rejects a dynamic Help About version source" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-version-source"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'window.set_help_product_version(env!("CARGO_PKG_VERSION").into());',
+            'window.set_help_product_version(std::env::var("TOKENMASTER_VERSION").unwrap().into());'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-VERSION*"
+    }
+
+    It "rejects duplicate Help About version application" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-version-duplicate"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\ui.rs") `
+            -Value 'fn duplicate_help_version(window: &MainWindow) { window.set_help_product_version(env!("CARGO_PKG_VERSION").into()); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-VERSION*"
+    }
+
+    It "rejects Help About callbacks or control authority" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-authority"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\views\help-about-view.slint") `
+            -Value 'export component FalseHelpControl { callback activate-benefit(); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-AUTHORITY*"
+    }
+
+    It "rejects a TokenMaster Help About open URL surface" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-open-url"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\views\help-about-view.slint") `
+            -Value 'export component FalseHelpLink { in property <string> target; clicked => { Platform.open-url(root.target); } }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-AUTHORITY*"
+    }
+
+    It "rejects a Help About list model" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-model"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\views\help-about-view.slint") `
+            -Value 'export component FalseHelpModel { in property <[string]> rows; }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-BOUND*"
+    }
+
+    It "rejects removing the responsive Help About breakpoint" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-responsive"
+        $path = Join-Path $fixture "crates\desktop\ui\views\help-about-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'out property <bool> narrow: root.width < 800px;',
+            'out property <bool> narrow: false;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-VIEW*"
+    }
+
+    It "rejects hiding the Help About privacy boundary" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-privacy"
+        $path = Join-Path $fixture "crates\desktop\ui\views\help-about-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'No prompts, responses, reasoning, commands',
+            'Private content may be retained'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-CONTENT*"
+    }
+
+    It "rejects misrouting recovery operations to Settings" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-operation-owner"
+        $path = Join-Path $fixture "crates\desktop\ui\views\help-about-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'Data Health owns backup, verification, restore, rebuild, and recovery truth. Settings owns backup policy and portable configuration.',
+            'Settings owns backup, restore, and portable configuration.'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-CONTENT*"
+    }
+
+    It "rejects false release readiness in Help About" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-false-claim"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\views\help-about-view.slint") `
+            -Value '// release accepted'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-CLAIM*"
+    }
+
+    It "rejects false automation readiness in Help About" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-false-automation"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\views\help-about-view.slint") `
+            -Value '// CLI is available'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-CLAIM*"
+    }
+
+    It "rejects false provider readiness in Help About" {
+        $fixture = New-DesktopAuditFixture -Name "help-about-false-provider"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\views\help-about-view.slint") `
+            -Value '// all providers supported'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HELP-ABOUT-CLAIM*"
+    }
+
     It "rejects sessions presentation-bound drift" {
         $fixture = New-DesktopAuditFixture -Name "sessions-bound"
         $path = Join-Path $fixture "crates\desktop\src\sessions.rs"
@@ -935,12 +1189,12 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-CONTROLLER-SLOT*"
     }
 
-    It "accepts the bounded dashboard History Sessions Models Projects Activity and Notifications desktop boundary" {
+    It "accepts the bounded dashboard History Sessions Models Projects Activity Notifications and Help About desktop boundary" {
         $fixture = New-DesktopAuditFixture -Name "library-boundary"
 
         $receipt = & $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json
         $receipt.rust_source_file_count | Should -Be 14
-        $receipt.slint_source_file_count | Should -Be 20
+        $receipt.slint_source_file_count | Should -Be 21
         $receipt.dashboard_section_count | Should -Be 6
         $receipt.dashboard_model_replacement_count | Should -Be 7
         $receipt.history_day_maximum | Should -Be 30
@@ -969,6 +1223,12 @@ Describe "TokenMaster production desktop audit" {
         $receipt.notifications_delivery_authority_count | Should -Be 0
         $receipt.notifications_owner_control_count | Should -Be 0
         $receipt.notifications_polling_surface_count | Should -Be 0
+        $receipt.help_about_section_count | Should -Be 6
+        $receipt.help_about_version_setter_count | Should -Be 1
+        $receipt.help_about_slint_attribution_count | Should -Be 1
+        $receipt.help_about_model_count | Should -Be 0
+        $receipt.help_about_authority_count | Should -Be 0
+        $receipt.help_about_polling_surface_count | Should -Be 0
         $receipt.session_row_maximum | Should -Be 64
         $receipt.session_detail_model_row_maximum | Should -Be 32
         $receipt.session_detail_project_row_maximum | Should -Be 32
