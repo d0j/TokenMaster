@@ -52,6 +52,13 @@ is explicit and cannot disable the already-visible app or tray. Activation retai
 pending bit and one Slint task; native dispatch catches sink panic. Synchronous
 unregister/join precedes the sole clean-run transition.
 
+Focused contracts prove early branching, the exact fixed identifiers, checked counters,
+panic containment, 10,000-signal application coalescing, and 256 test-owner cycles that
+return handles, threads, USER, and GDI objects with real hotkey registration disabled.
+Actual two-process arbitration, foreground policy, occupied-hotkey behavior, default-
+DACL access between live tokens/sessions, sleep/resume, and RegisterHotKey resource
+return remain interactive release evidence.
+
 ## TM-SEC-001 — Local-first operation
 
 No telemetry, cloud sync, remote listener, automatic upload, analytics SDK, or

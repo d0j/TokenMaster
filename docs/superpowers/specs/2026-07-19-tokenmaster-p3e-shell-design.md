@@ -103,6 +103,10 @@ focus through the current native main-window handle.
 
 ## P3-E.4 — single instance and global hotkey
 
+Status: implemented as developer evidence. Live multi-process, focus, occupied-hotkey,
+cross-token ACL, sleep/resume, and real hotkey resource behavior remain final
+interactive acceptance evidence.
+
 Platform owns one current-session, current-user native integration owner. It uses
 fixed product identifiers with no path or identity text. The primary owns fixed native
 handles and one joined integration thread. A secondary instance signals the primary

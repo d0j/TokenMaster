@@ -44,8 +44,11 @@ acknowledgement; confirmed release after a failed presentation preserves replay,
 the same single worker retries presentation without waiting for unrelated product
 activity. A terminal acknowledgement error releases without an automatic presentation
 loop. Global reminder settings synchronization/editing is implemented for the portable
-global profile; OS/tray delivery, per-scope editing, snooze, quiet hours, usage alerts,
-activation, remaining shell work, P4 presentation/localization,
+global profile. The production shell now also has the bounded route palette, same-window
+compact quota mode, fail-visible tray lifecycle, current-session single-instance Show,
+and fixed global `Ctrl+Alt+T` Show/restore/focus shortcut. Current-user startup, live
+Windows shell acceptance, OS/tray reminder delivery, per-scope editing, snooze, quiet
+hours, usage alerts, benefit activation, remaining shell closure, P4 presentation/localization,
 automation, interactive acceptance, packaging, signing, and release evidence remain.
 
 ## Build and verify

@@ -3624,3 +3624,40 @@ mutation cases pass. The release audit reports one native owner, five intents, o
 router slot, one close handler, and the pinned icon hash. Interactive Explorer restart,
 foreground policy, sleep/resume, and resource return remain open with hotkey,
 single-instance/startup, P4/P5/P6, M0, packaging, signing, soak, and release.
+
+## 2026-07-19 — P3-E.4 current-session activation and global hotkey
+
+The production entry now claims the exact non-inheritable auto-reset event
+`Local\TokenMaster.CurrentSession.Activation.v1` before selecting a renderer,
+capturing the application environment, resolving a data root, opening SQLite, or
+starting runtime work. A newly created event reserves the primary process. An existing-
+event process performs only `SetEvent`, closes the temporary handle, and exits
+successfully; create/open/signal failure returns the stable path-free
+`current_session_unavailable` code and never starts a second runtime graph.
+
+After the sole window and lifecycle sink exist, the primary starts one joined thread
+named `tokenmaster-session-integration`. It owns one unnamed manual-reset shutdown
+event, registers fixed hotkey ID `0x544D` as `Ctrl+Alt+T` with `MOD_NOREPEAT`, and waits
+with `MsgWaitForMultipleObjectsEx` on shutdown, the activation event, and its message
+queue. Hotkey conflict is distinct from unavailable registration and leaves the visible
+window, tray, and single-instance reservation usable. Both signal sources request the
+existing Show/restore/focus path; no path, identity, payload, socket, pipe, listener,
+window, timer, sleep, polling retry, or arbitrary message authority was added.
+
+The app bridge retains one pending activation bit, one scheduled bit, and at most one
+Slint event-loop task. A 10,000-request burst schedules once and records 9,999
+coalesced requests; one startup scheduling failure keeps a retryable bit for the
+visible-window flush. Native and delivery panic boundaries keep the integration owner
+alive. Application shutdown closes activation admission, signals, unregisters, and
+joins before command/runtime teardown can publish the sole clean mark.
+
+Focused platform and complete app-package tests pass, including stable failure-code,
+startup retry, panic containment, and 10,000-request contracts. Eighty-four computed
+application-composition mutation cases pin early claim, exact event/hotkey, capacity,
+weak ownership, stable error, and shutdown ordering. Strict focused Clippy passes.
+Two hundred fifty-six test-owner cycles return handles, threads, USER, and GDI objects
+with real hotkey registration intentionally disabled. Independent high-risk review
+returned Critical 0, Important 0, Minor 0, Ready. Live two-process arbitration,
+occupied-hotkey behavior, foreground policy, cross-token default-DACL behavior,
+sleep/resume, and real RegisterHotKey resource return remain interactive gates.
+Current-user startup, P4/P5/P6, M0, packaging, signing, soak, and release remain open.

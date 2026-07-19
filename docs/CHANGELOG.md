@@ -6,6 +6,21 @@ All notable changes are recorded here.
 
 ### Added
 
+- Added P3-E.4 current-session single-instance activation and the fixed global
+  `Ctrl+Alt+T` shortcut. The sole production entry claims one non-inheritable auto-reset
+  `Local\TokenMaster.CurrentSession.Activation.v1` event before renderer/data startup;
+  an existing-event process only signals Show and exits, while claim/signal failures
+  fail closed as `current_session_unavailable`. The primary later owns one joined
+  message-driven thread and one unnamed shutdown event. Both sources reuse the existing
+  Show/restore/focus path through one pending bit and one scheduled Slint task, with
+  startup retry retention and panic containment. Ten thousand requests remain constant-
+  capacity; 256 test-owner cycles return handles, threads, USER, and GDI resources.
+  Focused platform/app tests, strict focused Clippy, 84 application-audit mutations,
+  and independent Critical/Important/Minor 0/0/0 review pass. Live two-process,
+  occupied-hotkey, foreground-policy, cross-token ACL, sleep/resume, and real hotkey
+  resource acceptance remain interactive. Current-user startup, P4/P5/P6, M0,
+  packaging, signing, soak, and release are not claimed.
+
 - Added the P3-E.3 production tray lifecycle around the sole production window: one
   pinned TokenMaster SVG design, one isolated Windows tray owner, five typed actions
   (Show, Hide, OpenCompact, OpenDashboard, Quit), one queue-free single-install router,
@@ -18,8 +33,9 @@ All notable changes are recorded here.
   was added. Native callback state is exact-readback verified before icon registration
   or Available publication. Desktop/application release audits, 226 combined audit mutations, strict
   package Clippy, and full package tests pass. Live Explorer/focus/sleep/resource
-  return remains interactive evidence; hotkey, single-instance/startup, P4/P5/P6, M0,
-  packaging, signing, soak, and release are not claimed.
+  return remains interactive evidence. P3-E.4 current-session activation is recorded
+  above; current-user startup, P4/P5/P6, M0, packaging, signing, soak, and release are
+  not claimed.
 
 - Added the P3-E.1 bounded route command palette as the final full-window layer of the
   sole production `MainWindow`. It reuses the fixed immutable 11-route projection,

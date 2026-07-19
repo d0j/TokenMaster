@@ -316,10 +316,11 @@ terminal-acknowledgement release without re-presentation, panic-safe runtime rol
 confirmed failure/shutdown release, and release-before-
 local-clear backpressure. Global notification settings synchronization/editing is
 implemented with one latest-wins pending payload and visible Pending before durable
-settings mutation. P3-E.1 palette, P3-E.2 compact mode, and P3-E.3 production tray/
-close lifecycle are developer-closed. P3-E.3 now uses one checked top-level Windows
-tray owner with fail-visible/quit-on-close recovery and no timer, polling retry, or
-worker. Current-session activation/global hotkey and current-user startup are next.
+settings mutation. P3-E.1 palette, P3-E.2 compact mode, P3-E.3 production tray/close
+lifecycle, and P3-E.4 current-session activation/global hotkey are developer-closed.
+P3-E.4 claims one fixed event before data startup, uses one joined native owner and one
+pending activation/UI task, and adds no payload, queue, timer, or polling retry. Opt-in
+current-user startup is next, followed by interactive/resource shell closure.
 Per-scope editing, snooze, quiet hours, reminder OS/tray delivery, usage alerts, and
 activation remain later independent slices.
 P3-D.6 independent re-review is Critical/Important/Minor 0/0/0; its 82 mutation audit,

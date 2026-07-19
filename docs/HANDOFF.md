@@ -25,8 +25,8 @@ query cap is 64 Unicode scalar values, the result model is replace-only and capp
 Desktop state mutex. Compiled keyboard/text/pointer/accessibility/snapshot tests,
 release audit, 134 audit mutations, clean-root, fmt, strict workspace Clippy, and the
 complete locked workspace suite pass. That receipt did not claim native lifecycle;
-P3-E.3 tray status is recorded below. It does not claim hotkey/single-instance/startup,
-P4/P5/P6, M0, package/signing/soak, or release.
+P3-E.3/P3-E.4 native status is recorded below. It does not itself claim current-user
+startup, P4/P5/P6, M0, package/signing/soak, or release.
 
 P3-E.2 is developer-closed. The `compact_widget` route is an always-mounted
 presentation mode in that same `MainWindow`, reuses the current Dashboard quota model
@@ -36,9 +36,9 @@ Dashboard through stable route selection. The compiled 32-row/unknown-ratio/10,0
 switch contract, 141 audit mutations, release audit, strict Desktop Clippy/tests, and
 independent Critical/Important/Minor 0/0/0 review pass. Clean-root, formatting, strict
 workspace Clippy, and the complete locked workspace test/doctest gate pass in 753.4
-seconds. That receipt did not claim native lifecycle; P3-E.3 tray status is recorded
-below. Do not claim hotkey, single-instance/startup, interactive Windows/DPI/screen-
-reader, P4/P5/P6, M0, package/signing/soak, or release acceptance.
+seconds. That receipt did not claim native lifecycle; P3-E.3/P3-E.4 status is recorded
+below. Do not claim current-user startup, interactive Windows/DPI/screen-reader,
+P4/P5/P6, M0, package/signing/soak, or release acceptance.
 
 P3-E.3 is developer-closed. Production owns one isolated Windows tray adapter and one
 fixed TokenMaster SVG design asset; Slint `system-tray` is excluded from Desktop. Its
@@ -50,8 +50,22 @@ raise, and request focus for the same weakly held window. Quit returns through n
 joined shutdown, the only clean-mark path. Desktop/application release audits, 226
 combined mutation cases, strict package Clippy, and full package tests pass. Actual
 Explorer restart, foreground policy, sleep/resume, and resource return remain
-interactive gates. Do not claim hotkey, single-instance/startup, P4/P5/P6, M0,
-package/signing/soak, or release acceptance.
+interactive gates. P3-E.4 current-session status is recorded below. Do not claim
+current-user startup, P4/P5/P6, M0, package/signing/soak, or release acceptance.
+
+P3-E.4 is developer-closed. `tokenmaster-platform` claims the exact non-inheritable
+auto-reset event `Local\TokenMaster.CurrentSession.Activation.v1` before renderer/data
+startup. A secondary performs only `SetEvent` and exits; claim/signal failures fail
+closed as `current_session_unavailable`. After the weak-window sink exists, one joined
+native thread owns the unnamed shutdown event and fixed `Ctrl+Alt+T` registration.
+Secondary and hotkey requests use the existing Show/restore/focus path through one
+pending bit and one scheduled Slint task; 10,000 requests retain constant capacity and
+panics are contained. Shutdown joins/unregisters before clean publication. Focused
+tests, strict focused Clippy, 84 application audit mutations, 256 test-owner resource
+cycles, and independent Critical/Important/Minor 0/0/0 review pass. Do not infer live
+two-process, occupied-hotkey, foreground-policy, cross-token ACL, sleep/resume, or real
+RegisterHotKey resource evidence. Current-user startup and remaining P3-E/P4/P5/P6,
+M0, packaging, signing, soak, and release remain open.
 
 P0-A and the incorporated P0-B Codex-lineage surface are complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`. The P0-C pure
@@ -929,8 +943,8 @@ treat busy/disk/access/schema-newer as corruption authority. Keep automatic reco
 data only; device-local settings never move. Do not relax the state boundary into path,
 generic-stream, generic age-extraction, or batch-deletion authority.
 
-The immediate next implementation slice is current-session activation/global hotkey,
-followed by opt-in current-user startup and P3-E resource/interactive closure. Later-page
+The immediate next implementation slice is opt-in current-user startup, followed by
+P3-E resource/interactive closure. Later-page
 Sessions navigation and interactive
 History ranges remain bounded replacements of existing sections. Remaining P3-E, P4
 presentation, CLI/MCP, activation, M0 acceptance,

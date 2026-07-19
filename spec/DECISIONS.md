@@ -1944,10 +1944,15 @@ failure semantics without a thread, timer, polling retry, or queue. The confined
 Win32 adapter is the only `unsafe` boundary: it boxes, installs, and exact-readback
 verifies its raw callback pointer before registering the icon or publishing Available,
 then clears that pointer before destroying handles. Interactive Explorer restart, Windows foreground policy,
-sleep/resume, and resource return still require acceptance; hotkey,
-single-instance/startup, M0, package, signing, soak, and release are not claimed.
+sleep/resume, and resource return still require acceptance. Current-session hotkey/
+single-instance status is governed by ADR-079; current-user startup, M0, package,
+signing, soak, and release are not claimed.
 
 ## ADR-079 — Use one current-session event for single-instance arbitration and activation
+
+Status: implemented as P3-E.4 developer evidence. Interactive multi-process, focus,
+hotkey-conflict, cross-token ACL, sleep/resume, and real hotkey resource acceptance
+remain open.
 
 Decision: reserve the non-inheritable auto-reset event
 `Local\TokenMaster.CurrentSession.Activation.v1` before renderer/data construction. A
@@ -1968,6 +1973,6 @@ The fixed chord deliberately avoids WhereMyTokens' ordinary `Ctrl+Shift+D`, whic
 override a common in-application shortcut. Registration conflict and other failure are
 distinct bounded health states and do not make the visible product unusable. A claim or
 secondary-signal failure fails closed as `current_session_unavailable`; unregister or
-join failure prevents clean-run publication. Configurable hotkeys, startup, interactive
-conflict/secondary/sleep/resource acceptance, M0, package, signing, soak, and release
-remain later work.
+join failure prevents clean-run publication. Configurable hotkeys, current-user startup,
+interactive conflict/secondary/focus/ACL/sleep/resource acceptance, M0, package,
+signing, soak, and release remain later work.

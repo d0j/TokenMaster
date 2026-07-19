@@ -88,6 +88,14 @@ and capacity-one lifecycle coalescing. Keep M0 imports/dependencies forbidden.
 
 ## Task 4 — add current-session activation and hotkey
 
+Status: complete as developer evidence. The production entry claims the exact fixed
+event before renderer/data work, secondary activation signals and exits, one joined
+message-driven owner registers fixed `Ctrl+Alt+T`, and one pending bit plus one Slint
+task bounds delivery to the existing window. Focused platform/app tests, 84 mutation
+cases, strict focused Clippy, 256 test-owner resource cycles, and independent 0/0/0
+review pass. Live two-process/focus/conflict/ACL/sleep/real-hotkey-resource behavior
+remains Task 6/P6 interactive evidence.
+
 Use the exact auto-reset event `Local\TokenMaster.CurrentSession.Activation.v1`, fixed
 hotkey ID `0x544D`, and fixed `Ctrl+Alt+T` chord with `MOD_NOREPEAT`. Add one Platform
 owner for primary/secondary activation plus one joined native integration thread.
@@ -116,4 +124,4 @@ Update specification, API/data/security contracts, traceability, decisions, curr
 state, roadmap, changelog, project history, and handoff. Run focused audits, independent
 high-risk review, clean-root, fmt, strict full-workspace Clippy, full locked workspace
 tests, release composition, and Windows resource-return gates. Leave P4/P5/P6,
-activation, M0, packaging, signing, soak, and release explicitly open.
+benefit activation, M0, packaging, signing, soak, and release explicitly open.

@@ -1079,6 +1079,10 @@ then updates Slint properties and refreshes an open palette.
 
 ### P3-E.4 current-session integration API
 
+This API is implemented as developer evidence; live multi-process, Windows foreground,
+occupied-hotkey, cross-token ACL, sleep/resume, and real hotkey resource behavior remain
+interactive acceptance rather than source-test claims.
+
 `tokenmaster-platform` exposes a typed current-session claim with exactly two successful
 outcomes: one opaque primary owner or one secondary-signal receipt. Claim and secondary
 signal failures expose only stable `OwnershipUnavailable` or `SignalFailed` categories;

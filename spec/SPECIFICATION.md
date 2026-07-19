@@ -17,17 +17,18 @@ enable/disable, five recommended leads, and at most eight normalized custom lead
 Per-scope editing, snooze, quiet hours, reminder OS/tray delivery, usage alerts, activation,
 P4/P5/P6, M0 acceptance, package/signing/soak, and release remain incomplete.
 
-P3-E.2 compact quota mode and P3-E.3 production tray lifecycle are implemented as
-developer evidence around the sole production window. Compact reuses the current
-bounded quota projection and one reversible geometry slot. One isolated Windows tray
-adapter emits only Show, Hide, OpenCompact, OpenDashboard, and Quit; the application
-owns their consequences, and Quit returns to the existing joined shutdown/clean-mark
-path. The adapter uses one hidden top-level tool window so Explorer broadcasts reach
-it, checks every re-registration result, makes the main window visible on failure,
-and permits close-to-tray only while the icon is available. Neither slice adds query,
-snapshot, worker, timer, cache, data, or provider authority. Global hotkey,
-single-instance activation, current-user startup, and interactive Windows/Explorer/
-DPI/screen-reader/resource acceptance remain incomplete.
+P3-E.2 compact quota mode, P3-E.3 production tray lifecycle, and P3-E.4 current-session
+activation are implemented as developer evidence around the sole production window.
+Compact reuses the current bounded quota projection and one reversible geometry slot.
+One isolated Windows tray adapter emits only Show, Hide, OpenCompact, OpenDashboard,
+and Quit; the application owns their consequences, and Quit returns to the existing
+joined shutdown/clean-mark path. One fixed current-session auto-reset event arbitrates
+the primary process before renderer/data startup; a secondary can only signal Show and
+exit. One joined message-driven owner registers fixed `Ctrl+Alt+T`, while the app keeps
+one pending activation bit and one scheduled UI task. None of these slices adds query,
+snapshot, unbounded queue, timer, cache, data, or provider authority. Current-user
+startup and interactive Windows/Explorer/focus/hotkey/ACL/sleep/DPI/screen-reader/
+resource acceptance remain incomplete.
 
 ## Product goal
 
@@ -259,6 +260,16 @@ reuse the current immutable quota projection. It MUST show every published provi
 defined quota window up to the existing bound, represent an unknown ratio explicitly,
 provide one checked return-to-dashboard action, retain at most one device-local normal
 window-size restore value, and MUST NOT query or retain a second product snapshot.
+
+Production startup MUST claim the fixed non-inheritable auto-reset event
+`Local\TokenMaster.CurrentSession.Activation.v1` before renderer, data-root, SQLite, or
+runtime work. The existing-event path MUST only signal activation and exit; claim or
+signal failure MUST fail closed as `current_session_unavailable`. The primary MUST own
+one joined message-driven thread, one unnamed shutdown event, and fixed
+`Ctrl+Alt+T`/`MOD_NOREPEAT` registration. Hotkey conflict MUST degrade explicitly
+without hiding or stopping the main application. Secondary and hotkey activation MUST
+reuse Show/restore/focus, retain at most one pending bit and one scheduled UI task, and
+MUST join/unregister before clean-run publication.
 
 ### TM-FUNC-006 — Safe local interfaces
 

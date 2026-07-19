@@ -31,8 +31,8 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   and open-snapshot refresh; the release desktop audit and 134 mutation cases pass.
   Clean-root, formatting, strict workspace Clippy, and the complete locked workspace
   test/doctest gate pass; the latter completed in 879.2 seconds. That P3-E.1 receipt
-  did not claim native lifecycle; P3-E.3 tray status is recorded below. Hotkey/single-
-  instance/startup, P4/P5/P6, M0, packaging, signing, soak, and release remain incomplete.
+  did not claim native lifecycle; P3-E.3/P3-E.4 status is recorded below. Current-user
+  startup, P4/P5/P6, M0, packaging, signing, soak, and release remain incomplete.
 
 - P3-E.2 bounded compact quota mode: the existing `compact_widget` route now switches
   the sole always-mounted `MainWindow` to a 420 by 560 logical-pixel quota surface and
@@ -46,9 +46,9 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   Desktop Clippy/tests, and independent 0/0/0 review pass. Clean-root, formatting,
   strict workspace Clippy, and the complete locked workspace test/doctest gate also
   pass; the latter completed in 753.4 seconds. That P3-E.2 receipt did not claim native
-  lifecycle; P3-E.3 tray status is recorded below. Hotkey, single-instance/startup,
-  interactive Windows/DPI/screen-reader acceptance, P4/P5/P6, M0, packaging, signing,
-  soak, and release remain incomplete.
+  lifecycle; P3-E.3/P3-E.4 status is recorded below. Current-user startup, interactive
+  Windows/DPI/screen-reader acceptance, P4/P5/P6, M0, packaging, signing, soak, and
+  release remain incomplete.
 
 - P3-E.3 production tray lifecycle: the release composition constructs exactly one
   isolated Windows tray owner after showing the sole `MainWindow`. Icon click and the
@@ -60,8 +60,28 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   returns through joined shutdown before the sole clean mark. Slint `system-tray` is
   absent from production Desktop and remains only in the separate M0 probe. Desktop/
   app release audits, 226 combined mutation cases, strict package Clippy, and full
-  Desktop/app tests pass. Global hotkey, single-instance activation, startup, actual
-  Explorer/focus behavior, interactive Windows/DPI/screen-reader/resource acceptance,
+  Desktop/app tests pass. P3-E.4 current-session status is recorded below. Current-user
+  startup, actual Explorer/focus behavior, interactive Windows/DPI/screen-reader/
+  resource acceptance, P4/P5/P6, M0, packaging, signing, soak, and release remain
+  incomplete.
+
+- P3-E.4 current-session single-instance activation/global hotkey: `run()` claims the
+  fixed non-inheritable auto-reset event
+  `Local\TokenMaster.CurrentSession.Activation.v1` before renderer, environment,
+  data-root, SQLite, or runtime construction. An existing-event process performs only
+  `SetEvent`, closes its capability, and exits; failures expose the stable path-free
+  `current_session_unavailable` code and never fall through to a second runtime. The
+  primary starts one joined `tokenmaster-session-integration` owner after the weak-
+  window sink exists, registers fixed `Ctrl+Alt+T` with `MOD_NOREPEAT`, and normalizes
+  hotkey/secondary input to the existing Show/restore/focus path. The app bridge keeps
+  one pending bit and one scheduled Slint task; 10,000 requests coalesce, scheduling
+  failure retains one startup-flushable bit, and delivery/native sink panic is
+  contained. Shutdown closes admission and joins/unregisters before the clean mark.
+  Focused platform/app tests, 84 application-audit mutations, strict focused Clippy,
+  256 test-owner handle/thread/USER/GDI return cycles, and independent Critical/
+  Important/Minor 0/0/0 review pass. Live two-process arbitration, occupied hotkey,
+  foreground policy, cross-token ACL, sleep/resume, and real RegisterHotKey resource
+  return remain interactive evidence. Current-user startup is the next P3-E slice;
   P4/P5/P6, M0, packaging, signing, soak, and release remain incomplete.
 
 - M0 native architecture proof: one process, software-rendered Slint UI, tray
@@ -1474,8 +1494,8 @@ P3-D.0 Reliable State, P3-D.1 History, P3-D.2 bounded Sessions list/detail, P3-D
 Models, P3-D.4 Projects, P3-D.5 Recent activity, and the bounded read-only P3-D.6
 Notifications route plus P3-D.7 Help/About, the app-owned visible presentation/receipt
 bridge, global reminder settings synchronization/editor, P3-E.1 route command palette,
-P3-E.2 compact quota mode, and P3-E.3 production tray lifecycle are implemented.
-Continue with current-session single-instance activation/global hotkey, then opt-in
+P3-E.2 compact quota mode, P3-E.3 production tray lifecycle, and P3-E.4 current-session
+single-instance activation/global hotkey are implemented. Continue with opt-in
 current-user startup and remaining shell closure.
 Later-page Sessions navigation and interactive History ranges remain bounded
 replacements of their existing sections rather than new frontend query owners. Interactive
