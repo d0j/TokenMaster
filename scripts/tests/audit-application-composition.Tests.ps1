@@ -81,6 +81,45 @@ Describe "TokenMaster application composition audit" {
             Should -Throw "*TM-APP-SESSION-DETAIL-NONBLOCKING*"
     }
 
+    It "rejects removing the production lifecycle router" {
+        $fixture = New-AppAuditFixture -Name "lifecycle-router"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'DesktopLifecycleIntentRouter::new()',
+            'DesktopLifecycleIntentRouter::unbound()'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-LIFECYCLE-ROUTER*"
+    }
+
+    It "rejects routing the tray compact action to another route" {
+        $fixture = New-AppAuditFixture -Name "lifecycle-compact-route"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'DesktopLifecycleIntent::OpenCompact => Self::OpenRoute("compact_widget")',
+            'DesktopLifecycleIntent::OpenCompact => Self::OpenRoute("settings")'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-LIFECYCLE-COMPACT*"
+    }
+
+    It "rejects showing the optional tray before the visible fallback" {
+        $fixture = New-AppAuditFixture -Name "lifecycle-visible-fallback"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'let _ = self.shell.show_lifecycle_surface();',
+            'let _ = show_lifecycle_surface_before_window();'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-LIFECYCLE-SURFACE*"
+    }
+
     It "rejects a second live runtime owner" {
         $fixture = New-AppAuditFixture -Name "duplicate-live"
         Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\application.rs") `
@@ -914,5 +953,9 @@ Describe "TokenMaster application composition audit" {
         $receipt.notification_bounded_repump_count | Should -Be 1
         $receipt.notification_runtime_panic_rollback_count | Should -Be 1
         $receipt.reminder_startup_pending_binding_count | Should -Be 1
+        $receipt.lifecycle_router_count | Should -Be 1
+        $receipt.lifecycle_intent_count | Should -Be 5
+        $receipt.lifecycle_window_owner_count | Should -Be 1
+        $receipt.lifecycle_polling_surface_count | Should -Be 0
     }
 }

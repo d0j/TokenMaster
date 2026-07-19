@@ -1,0 +1,37 @@
+export component TokenMasterTray inherits SystemTrayIcon {
+    icon: @image-url("assets/tokenmaster-tray-color-32.svg");
+    tooltip: "TokenMaster — local usage intelligence";
+    title: "TokenMaster";
+
+    callback show-requested();
+    callback hide-requested();
+    callback open-compact-requested();
+    callback open-dashboard-requested();
+    callback quit-requested();
+
+    clicked => { root.show-requested(); }
+
+    Menu {
+        MenuItem {
+            title: "Show";
+            activated => { root.show-requested(); }
+        }
+        MenuItem {
+            title: "Open Dashboard";
+            activated => { root.open-dashboard-requested(); }
+        }
+        MenuItem {
+            title: "Open Compact";
+            activated => { root.open-compact-requested(); }
+        }
+        MenuItem {
+            title: "Hide";
+            activated => { root.hide-requested(); }
+        }
+        MenuSeparator { }
+        MenuItem {
+            title: "Quit";
+            activated => { root.quit-requested(); }
+        }
+    }
+}

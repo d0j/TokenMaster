@@ -10,13 +10,15 @@ use slint::ComponentHandle;
 use tokenmaster_codex::{CodexRootInput, ConfiguredCodexRoot, build_discovery_request};
 use tokenmaster_desktop::{
     DesktopBridgeFactory, DesktopController, DesktopIntent, DesktopIntentAdmission,
-    DesktopIntentRouter, DesktopIntentSink, DesktopOperationKind, DesktopOperationPhase,
-    DesktopOperationSnapshot, DesktopQueryPlan, DesktopRefreshAdmission, DesktopRefreshIngress,
-    DesktopRefreshUrgency, DesktopReliableStateNotifier, DesktopReliableStateProjection,
-    DesktopReminderPolicy, DesktopReminderSyncState, DesktopRestoreSelection,
-    DesktopRuntimeObservation, DesktopSessionDetailIntent, DesktopSessionDetailIntentAdmission,
+    DesktopIntentRouter, DesktopIntentSink, DesktopLifecycleIntent,
+    DesktopLifecycleIntentAdmission, DesktopLifecycleIntentRouter, DesktopLifecycleIntentSink,
+    DesktopOperationKind, DesktopOperationPhase, DesktopOperationSnapshot, DesktopQueryPlan,
+    DesktopRefreshAdmission, DesktopRefreshIngress, DesktopRefreshUrgency,
+    DesktopReliableStateNotifier, DesktopReliableStateProjection, DesktopReminderPolicy,
+    DesktopReminderSyncState, DesktopRestoreSelection, DesktopRuntimeObservation,
+    DesktopSessionDetailIntent, DesktopSessionDetailIntentAdmission,
     DesktopSessionDetailIntentRouter, DesktopSessionDetailIntentSink, DesktopShell,
-    DesktopSnapshotBridge, select_production_renderer,
+    DesktopSnapshotBridge, MainWindow, select_production_renderer,
 };
 use tokenmaster_engine::{
     RefreshOutcome, RefreshUrgency, WorkerCompletion, WorkerCompletionNotifier,
@@ -156,6 +158,17 @@ impl Application {
         let bundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
         let intent_router = Rc::new(DesktopIntentRouter::new());
         let session_detail_router = Rc::new(DesktopSessionDetailIntentRouter::new());
+        let lifecycle_router = Rc::new(DesktopLifecycleIntentRouter::new());
+        #[cfg(not(test))]
+        let shell = DesktopShell::new_with_reliable_state_and_all_sinks(
+            &initial,
+            reliable_state,
+            intent_router.clone(),
+            session_detail_router.clone(),
+            lifecycle_router.clone(),
+        )
+        .map_err(|_| ApplicationError::ui_unavailable())?;
+        #[cfg(test)]
         let shell = DesktopShell::new_with_reliable_state_and_session_sink(
             &initial,
             reliable_state,
@@ -259,6 +272,11 @@ impl Application {
                 Arc::downgrade(&bundle),
             )))
             .map_err(|_| ApplicationError::internal())?;
+        lifecycle_router
+            .install(Rc::new(ApplicationDesktopLifecycleSink::new(
+                shell.window().as_weak(),
+            )))
+            .map_err(|_| ApplicationError::internal())?;
 
         let application = Self {
             environment: environment.clone(),
@@ -285,6 +303,7 @@ impl Application {
             .window()
             .show()
             .map_err(|_| ApplicationError::ui_unavailable())?;
+        let _ = self.shell.show_lifecycle_surface();
         slint::run_event_loop().map_err(|_| ApplicationError::event_loop())
     }
 
@@ -516,8 +535,84 @@ struct ApplicationDesktopIntentSink {
     submitter: ApplicationOperationSubmitter,
 }
 
+struct ApplicationDesktopLifecycleSink {
+    window: slint::Weak<MainWindow>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ApplicationDesktopLifecycleEffect {
+    Show,
+    Hide,
+    OpenRoute(&'static str),
+    Quit,
+}
+
+impl ApplicationDesktopLifecycleEffect {
+    const fn from_intent(intent: DesktopLifecycleIntent) -> Self {
+        match intent {
+            DesktopLifecycleIntent::Show => Self::Show,
+            DesktopLifecycleIntent::Hide => Self::Hide,
+            DesktopLifecycleIntent::OpenCompact => Self::OpenRoute("compact_widget"),
+            DesktopLifecycleIntent::OpenDashboard => Self::OpenRoute("dashboard"),
+            DesktopLifecycleIntent::Quit => Self::Quit,
+        }
+    }
+}
+
 struct ApplicationSessionDetailIntentSink {
     bundle: Weak<Mutex<ApplicationBundleSlot>>,
+}
+
+impl ApplicationDesktopLifecycleSink {
+    const fn new(window: slint::Weak<MainWindow>) -> Self {
+        Self { window }
+    }
+
+    fn show_route(&self, route: &str) -> DesktopLifecycleIntentAdmission {
+        let Some(window) = self.window.upgrade() else {
+            return DesktopLifecycleIntentAdmission::Rejected;
+        };
+        window.invoke_select_route(route.into());
+        window.window().set_minimized(false);
+        match window.show() {
+            Ok(()) => DesktopLifecycleIntentAdmission::Accepted,
+            Err(_) => DesktopLifecycleIntentAdmission::Rejected,
+        }
+    }
+}
+
+impl DesktopLifecycleIntentSink for ApplicationDesktopLifecycleSink {
+    fn submit(&self, intent: DesktopLifecycleIntent) -> DesktopLifecycleIntentAdmission {
+        match ApplicationDesktopLifecycleEffect::from_intent(intent) {
+            ApplicationDesktopLifecycleEffect::Show => {
+                let Some(window) = self.window.upgrade() else {
+                    return DesktopLifecycleIntentAdmission::Rejected;
+                };
+                window.window().set_minimized(false);
+                match window.show() {
+                    Ok(()) => DesktopLifecycleIntentAdmission::Accepted,
+                    Err(_) => DesktopLifecycleIntentAdmission::Rejected,
+                }
+            }
+            ApplicationDesktopLifecycleEffect::Hide => {
+                let Some(window) = self.window.upgrade() else {
+                    return DesktopLifecycleIntentAdmission::Rejected;
+                };
+                match window.hide() {
+                    Ok(()) => DesktopLifecycleIntentAdmission::Accepted,
+                    Err(_) => DesktopLifecycleIntentAdmission::Rejected,
+                }
+            }
+            ApplicationDesktopLifecycleEffect::OpenRoute(route) => self.show_route(route),
+            ApplicationDesktopLifecycleEffect::Quit => {
+                if self.window.upgrade().is_none() {
+                    return DesktopLifecycleIntentAdmission::Rejected;
+                }
+                let _ = slint::quit_event_loop();
+                DesktopLifecycleIntentAdmission::Accepted
+            }
+        }
+    }
 }
 
 impl ApplicationSessionDetailIntentSink {

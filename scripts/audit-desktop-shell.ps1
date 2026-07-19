@@ -40,8 +40,8 @@ if ($productionManifestText -match '\btokenmaster-(store|provider|runtime|codex|
 $rustFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.rs')
 $uiFiles = @(Get-ChildItem -LiteralPath $uiRoot -Recurse -File -Filter '*.slint')
 $productionFiles = @($rustFiles + $uiFiles)
-if ($rustFiles.Count -ne 15 -or $uiFiles.Count -ne 24) {
-    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain fifteen Rust and twenty-four Slint files'
+if ($rustFiles.Count -ne 15 -or $uiFiles.Count -ne 25) {
+    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain fifteen Rust and twenty-five Slint files'
 }
 $uiText = ($uiFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
@@ -438,6 +438,62 @@ if ($compactWidgetGeometrySlotCount -ne 1 -or
 }
 if ($compactWidgetOwnerCount -ne 0) {
     throw 'TM-DESKTOP-COMPACT-NO-OWNER: compact mode must add no query snapshot worker timer cache or controller owner'
+}
+$trayPath = Join-Path $uiRoot 'tray.slint'
+$trayAssetPath = Join-Path $uiRoot 'assets\tokenmaster-tray-color-32.svg'
+$shellPath = Join-Path $sourceRoot 'shell.rs'
+foreach ($requiredTrayFile in @($trayPath, $trayAssetPath, $shellPath)) {
+    if (-not (Test-Path -LiteralPath $requiredTrayFile)) {
+        throw 'TM-DESKTOP-TRAY-BOUNDARY: production tray files are incomplete'
+    }
+}
+$trayText = [System.IO.File]::ReadAllText($trayPath)
+$shellText = [System.IO.File]::ReadAllText($shellPath)
+$trayComponentCount = [regex]::Matches(
+    $trayText,
+    'inherits SystemTrayIcon'
+).Count
+$trayCallbackCount = [regex]::Matches(
+    $trayText,
+    'callback (?:show|hide|open-compact|open-dashboard|quit)-requested\(\);'
+).Count
+$trayIntentCount = [regex]::Matches(
+    $shellText,
+    'Self::(?:Show|Hide|OpenCompact|OpenDashboard|Quit),'
+).Count
+$trayRouterSlotCount = [regex]::Matches(
+    $shellText,
+    'sink:\s*RefCell<Option<Rc<dyn DesktopLifecycleIntentSink>>>'
+).Count
+$trayCloseHandlerCount = [regex]::Matches(
+    $uiRustProductionText,
+    'on_close_requested\(\|\| slint::CloseRequestResponse::HideWindow\)'
+).Count
+$trayOwnerCount = [regex]::Matches(
+    $trayText,
+    '(?i)\b(?:Timer|thread|spawn|cache|history|worker|query|snapshot|controller|runtime|store)\b'
+).Count + [regex]::Matches(
+    $productionText,
+    'Tray(?:Worker|Query|Cache|Snapshot|Controller|Runtime|Store)'
+).Count
+$trayIconHash = (Get-FileHash -LiteralPath $trayAssetPath -Algorithm SHA256).Hash
+if ($trayComponentCount -ne 1 -or $trayCallbackCount -ne 5 -or
+    $trayText -notmatch 'export component TokenMasterTray inherits SystemTrayIcon' -or
+    [regex]::Matches($trayText, 'clicked\s*=>\s*\{\s*root\.show-requested\(\);\s*\}').Count -ne 1 -or
+    [regex]::Matches($trayText, 'activated\s*=>\s*\{\s*root\.(?:show|hide|open-compact|open-dashboard|quit)-requested\(\);\s*\}').Count -ne 5) {
+    throw 'TM-DESKTOP-TRAY-SURFACE: tray must expose one icon with five typed menu intents and click-to-show'
+}
+if ($trayIntentCount -ne 5 -or $trayRouterSlotCount -ne 1 -or
+    [regex]::Matches($uiRustProductionText, 'submit\(DesktopLifecycleIntent::(?:Show|Hide|OpenCompact|OpenDashboard|Quit)\)').Count -ne 5) {
+    throw 'TM-DESKTOP-TRAY-INTENT: tray must use one queue-free router slot and exactly five typed lifecycle intents'
+}
+if ([regex]::Matches($uiRustProductionText, 'tray:\s*Option<TokenMasterTray>').Count -ne 1 -or
+    [regex]::Matches($uiRustProductionText, 'TokenMasterTray::new\(\)\?').Count -ne 1 -or
+    $trayCloseHandlerCount -ne 1 -or $trayOwnerCount -ne 0) {
+    throw 'TM-DESKTOP-TRAY-LIFECYCLE: tray must remain one optional component with close-to-tray and no new owner'
+}
+if ($trayIconHash -ne '1782E746EFBB423DF3252FD76B9E9E7135416DA966DF0C5652588AC29C0A6246') {
+    throw 'TM-DESKTOP-TRAY-ASSET: production tray icon hash drifted'
 }
 $historyPath = Join-Path $sourceRoot 'history.rs'
 $historyText = [System.IO.File]::ReadAllText($historyPath)
@@ -1201,6 +1257,12 @@ if ($SourceOnly) {
         compact_widget_quota_model_count = $compactWidgetQuotaPropertyCount
         compact_widget_geometry_slot_count = $compactWidgetGeometrySlotCount
         compact_widget_owner_count = $compactWidgetOwnerCount
+        tray_component_count = $trayComponentCount
+        tray_intent_count = $trayIntentCount
+        tray_router_slot_count = $trayRouterSlotCount
+        tray_close_handler_count = $trayCloseHandlerCount
+        tray_owner_count = $trayOwnerCount
+        tray_icon_sha256 = $trayIconHash
         controller_worker_count = $workerConstructionCount
         retained_snapshot_slot_count = $snapshotSlotCount
         event_loop_schedule_site_count = $eventScheduleCount
@@ -1338,6 +1400,12 @@ if ($LASTEXITCODE -ne 0) {
     compact_widget_quota_model_count = $compactWidgetQuotaPropertyCount
     compact_widget_geometry_slot_count = $compactWidgetGeometrySlotCount
     compact_widget_owner_count = $compactWidgetOwnerCount
+    tray_component_count = $trayComponentCount
+    tray_intent_count = $trayIntentCount
+    tray_router_slot_count = $trayRouterSlotCount
+    tray_close_handler_count = $trayCloseHandlerCount
+    tray_owner_count = $trayOwnerCount
+    tray_icon_sha256 = $trayIconHash
     fixed_route_count = 11
     maximum_route_reason_count = 11
     retained_route_model_count = 1

@@ -189,6 +189,20 @@ fn global_reminder_profile(archive: &std::path::Path) -> (i64, i64, i64, Vec<i64
     (profile.0, profile.1, profile.2, leads)
 }
 
+#[test]
+fn desktop_lifecycle_effects_are_exact_and_route_only_to_existing_views() {
+    assert_eq!(
+        DesktopLifecycleIntent::ALL.map(ApplicationDesktopLifecycleEffect::from_intent),
+        [
+            ApplicationDesktopLifecycleEffect::Show,
+            ApplicationDesktopLifecycleEffect::Hide,
+            ApplicationDesktopLifecycleEffect::OpenRoute("compact_widget"),
+            ApplicationDesktopLifecycleEffect::OpenRoute("dashboard"),
+            ApplicationDesktopLifecycleEffect::Quit,
+        ]
+    );
+}
+
 fn portable_with_reminder_policy(
     settings: &SettingsValue,
     leads: &[u32],

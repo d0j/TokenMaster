@@ -137,11 +137,20 @@ foreach ($contract in @(
     @{ Name = 'TM-APP-NOTIFICATION-PUMP'; Pattern = 'presentation\.pump\(\)'; Count = 1 },
     @{ Name = 'TM-APP-CONTROLLER'; Pattern = 'DesktopController::open\('; Count = 1 },
     @{ Name = 'TM-APP-SESSION-DETAIL-ROUTER'; Pattern = 'DesktopSessionDetailIntentRouter::new\('; Count = 1 },
-    @{ Name = 'TM-APP-SESSION-DETAIL-SHELL'; Pattern = 'DesktopShell::new_with_reliable_state_and_session_sink\('; Count = 1 },
+    @{ Name = 'TM-APP-SESSION-DETAIL-SHELL'; Pattern = '#\[cfg\(not\(test\)\)\]\s*let shell = DesktopShell::new_with_reliable_state_and_all_sinks\('; Count = 1 },
+    @{ Name = 'TM-APP-LIFECYCLE-TEST-ISOLATION'; Pattern = '#\[cfg\(test\)\]\s*let shell = DesktopShell::new_with_reliable_state_and_session_sink\('; Count = 1 },
     @{ Name = 'TM-APP-SESSION-DETAIL-INSTALL'; Pattern = 'session_detail_router\s*\.install\(Rc::new\(ApplicationSessionDetailIntentSink::new\('; Count = 1 },
     @{ Name = 'TM-APP-SESSION-DETAIL-CURRENT-BUNDLE'; Pattern = 'bundle\.controller\.request_session_detail\(intent\)'; Count = 1 },
     @{ Name = 'TM-APP-SESSION-DETAIL-SAFE-MODE'; Pattern = 'let Some\(bundle\) = slot\.as_ref\(\) else \{\s*return DesktopSessionDetailIntentAdmission::Rejected'; Count = 1 },
     @{ Name = 'TM-APP-SESSION-DETAIL-NONBLOCKING'; Pattern = 'let Ok\(slot\) = bundle\.try_lock\(\) else \{\s*return DesktopSessionDetailIntentAdmission::Rejected'; Count = 1 },
+    @{ Name = 'TM-APP-LIFECYCLE-ROUTER'; Pattern = 'DesktopLifecycleIntentRouter::new\('; Count = 1 },
+    @{ Name = 'TM-APP-LIFECYCLE-INSTALL'; Pattern = 'lifecycle_router\s*\.install\(Rc::new\(ApplicationDesktopLifecycleSink::new\('; Count = 1 },
+    @{ Name = 'TM-APP-LIFECYCLE-WEAK'; Pattern = 'struct ApplicationDesktopLifecycleSink\s*\{\s*window:\s*slint::Weak<MainWindow>'; Count = 1 },
+    @{ Name = 'TM-APP-LIFECYCLE-IMPL'; Pattern = 'impl DesktopLifecycleIntentSink for ApplicationDesktopLifecycleSink'; Count = 1 },
+    @{ Name = 'TM-APP-LIFECYCLE-COMPACT'; Pattern = 'DesktopLifecycleIntent::OpenCompact => Self::OpenRoute\("compact_widget"\)'; Count = 1 },
+    @{ Name = 'TM-APP-LIFECYCLE-DASHBOARD'; Pattern = 'DesktopLifecycleIntent::OpenDashboard => Self::OpenRoute\("dashboard"\)'; Count = 1 },
+    @{ Name = 'TM-APP-LIFECYCLE-QUIT'; Pattern = 'ApplicationDesktopLifecycleEffect::Quit => \{[\s\S]{0,256}?slint::quit_event_loop\(\)'; Count = 1 },
+    @{ Name = 'TM-APP-LIFECYCLE-SURFACE'; Pattern = 'let _ = self\.shell\.show_lifecycle_surface\(\);'; Count = 1 },
     @{ Name = 'TM-APP-BRIDGE'; Pattern = '\.snapshot_bridge\('; Count = 1 },
     @{ Name = 'TM-APP-EVENT-LOOP'; Pattern = 'slint::run_event_loop\('; Count = 1 },
     @{ Name = 'TM-APP-PORTABLE-MARKER'; Pattern = '"tokenmaster\.portable"'; Count = 1 },
@@ -159,6 +168,18 @@ $orderedRestoreLaunches = [regex]::Matches(
 ).Count
 if ($orderedRestoreLaunches -ne 2) {
     throw 'TM-APP-RESTORE-RECOVERY-ORDER: recovery receipt must bind before restored lifecycle work'
+}
+
+$eventLoopFunction = [regex]::Match(
+    $applicationText,
+    '(?s)fn run_event_loop\(&self\).*?\r?\n    \}\r?\n\r?\n'
+).Value
+$visibleIndex = $eventLoopFunction.IndexOf('.window()', [System.StringComparison]::Ordinal)
+$trayIndex = $eventLoopFunction.IndexOf('show_lifecycle_surface()', [System.StringComparison]::Ordinal)
+$loopIndex = $eventLoopFunction.IndexOf('slint::run_event_loop()', [System.StringComparison]::Ordinal)
+if ([string]::IsNullOrWhiteSpace($eventLoopFunction) -or $visibleIndex -lt 0 -or
+    $trayIndex -le $visibleIndex -or $loopIndex -le $trayIndex) {
+    throw 'TM-APP-LIFECYCLE-VISIBLE-FALLBACK: visible window must precede optional tray show and the event loop'
 }
 
 if ($applicationText -notmatch 'Weak<Mutex<ApplicationBundleSlot>>' -or
@@ -457,6 +478,10 @@ if ($SourceOnly) {
         session_detail_router_count = 1
         session_detail_current_bundle_binding_count = 1
         session_detail_nonblocking_binding_count = 1
+        lifecycle_router_count = 1
+        lifecycle_intent_count = 5
+        lifecycle_window_owner_count = 1
+        lifecycle_polling_surface_count = 0
         desktop_bridge_count = 1
         application_polling_surface_count = 0
         arbitrary_root_surface_count = 0
@@ -591,6 +616,10 @@ foreach ($needle in @(
     session_detail_router_count = 1
     session_detail_current_bundle_binding_count = 1
     session_detail_nonblocking_binding_count = 1
+    lifecycle_router_count = 1
+    lifecycle_intent_count = 5
+    lifecycle_window_owner_count = 1
+    lifecycle_polling_surface_count = 0
     desktop_bridge_count = 1
     application_polling_surface_count = 0
     arbitrary_root_surface_count = 0

@@ -40,7 +40,10 @@ pub use presentation::{
 pub use projects::*;
 pub use reliable_state::*;
 pub use sessions::*;
-pub use shell::select_production_renderer;
+pub use shell::{
+    DesktopLifecycleIntent, DesktopLifecycleIntentAdmission, DesktopLifecycleIntentRouter,
+    DesktopLifecycleIntentRouterError, DesktopLifecycleIntentSink, select_production_renderer,
+};
 pub use ui::{
     DesktopBridgeFactory, DesktopReliableStateNotifier, DesktopShell, DesktopUiError,
     DesktopUiErrorCode,

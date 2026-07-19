@@ -20,14 +20,15 @@ use crate::{
     DesktopActivityProjection, DesktopBenefitExpiry, DesktopCostComposition, DesktopCostValue,
     DesktopDashboardProjection, DesktopDashboardSectionKey, DesktopFreshness,
     DesktopHistoryProjection, DesktopInAppNotificationBatch, DesktopInAppNotificationBridge,
-    DesktopIntent, DesktopIntentSink, DesktopModelsProjection, DesktopNotificationsProjection,
-    DesktopOperationSnapshot, DesktopProjectsProjection, DesktopQuality,
-    DesktopReliableStateProjection, DesktopReminderPolicy, DesktopSessionDetailIntentAdmission,
-    DesktopSessionDetailIntentSink, DesktopSessionsProjection, DesktopSnapshotBridge,
-    DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue, DesktopValueAvailability,
-    HistoryDayRow, InAppNotificationRow, MainWindow, ModelUsageRow, ProjectUsageRow,
-    RecentActivityRow, ReminderCustomLeadRow, ReminderScopeRow, RestorePointRow, RouteRow,
-    SessionDetailBreakdownRow, SessionListRow, UnavailableDesktopIntentSink,
+    DesktopIntent, DesktopIntentSink, DesktopLifecycleIntent, DesktopLifecycleIntentSink,
+    DesktopModelsProjection, DesktopNotificationsProjection, DesktopOperationSnapshot,
+    DesktopProjectsProjection, DesktopQuality, DesktopReliableStateProjection,
+    DesktopReminderPolicy, DesktopSessionDetailIntentAdmission, DesktopSessionDetailIntentSink,
+    DesktopSessionsProjection, DesktopSnapshotBridge, DesktopSnapshotEpoch,
+    DesktopSnapshotReceiver, DesktopTokenValue, DesktopValueAvailability, HistoryDayRow,
+    InAppNotificationRow, MainWindow, ModelUsageRow, ProjectUsageRow, RecentActivityRow,
+    ReminderCustomLeadRow, ReminderScopeRow, RestorePointRow, RouteRow, SessionDetailBreakdownRow,
+    SessionListRow, TokenMasterTray, UnavailableDesktopIntentSink,
     UnavailableDesktopSessionDetailIntentSink,
     in_app_notification::NotificationEpochState,
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
@@ -35,6 +36,7 @@ use crate::{
 
 pub struct DesktopShell {
     window: MainWindow,
+    tray: Option<TokenMasterTray>,
     state: SharedDesktopState,
     reliable_state: SharedReliableState,
     snapshot_epochs: Arc<AtomicU64>,
@@ -402,7 +404,47 @@ impl DesktopShell {
         intent_sink: Rc<dyn DesktopIntentSink>,
         session_sink: Rc<dyn DesktopSessionDetailIntentSink>,
     ) -> Result<Self, slint::PlatformError> {
+        Self::new_with_optional_lifecycle_sink(
+            snapshot,
+            reliable_state,
+            intent_sink,
+            session_sink,
+            None,
+        )
+    }
+
+    pub fn new_with_reliable_state_and_all_sinks(
+        snapshot: &ProductSnapshot,
+        reliable_state: DesktopReliableStateProjection,
+        intent_sink: Rc<dyn DesktopIntentSink>,
+        session_sink: Rc<dyn DesktopSessionDetailIntentSink>,
+        lifecycle_sink: Rc<dyn DesktopLifecycleIntentSink>,
+    ) -> Result<Self, slint::PlatformError> {
+        Self::new_with_optional_lifecycle_sink(
+            snapshot,
+            reliable_state,
+            intent_sink,
+            session_sink,
+            Some(lifecycle_sink),
+        )
+    }
+
+    fn new_with_optional_lifecycle_sink(
+        snapshot: &ProductSnapshot,
+        reliable_state: DesktopReliableStateProjection,
+        intent_sink: Rc<dyn DesktopIntentSink>,
+        session_sink: Rc<dyn DesktopSessionDetailIntentSink>,
+        lifecycle_sink: Option<Rc<dyn DesktopLifecycleIntentSink>>,
+    ) -> Result<Self, slint::PlatformError> {
         let window = MainWindow::new()?;
+        let tray = if let Some(lifecycle_sink) = lifecycle_sink {
+            let tray = TokenMasterTray::new()?;
+            wire_tray_lifecycle(&tray, lifecycle_sink);
+            wire_close_to_tray(&window);
+            Some(tray)
+        } else {
+            None
+        };
         window.set_help_product_version(env!("CARGO_PKG_VERSION").into());
         let initial_state = DesktopState::new(snapshot, DesktopRouteKey::Dashboard);
         apply_projection(&window, initial_state.projection());
@@ -417,6 +459,7 @@ impl DesktopShell {
         wire_in_app_notification_dismissal(&window);
         Ok(Self {
             window,
+            tray,
             state,
             reliable_state,
             snapshot_epochs: Arc::new(AtomicU64::new(1)),
@@ -427,6 +470,13 @@ impl DesktopShell {
     #[must_use]
     pub const fn window(&self) -> &MainWindow {
         &self.window
+    }
+
+    pub fn show_lifecycle_surface(&self) -> Result<(), slint::PlatformError> {
+        match self.tray.as_ref() {
+            Some(tray) => tray.show(),
+            None => Ok(()),
+        }
     }
 
     pub fn apply_snapshot(
@@ -819,6 +869,38 @@ fn reminder_custom_rows(leads: &[u32]) -> ModelRc<ReminderCustomLeadRow> {
         },
     );
     model(rows)
+}
+
+fn wire_tray_lifecycle(tray: &TokenMasterTray, lifecycle_sink: Rc<dyn DesktopLifecycleIntentSink>) {
+    let sink = lifecycle_sink.clone();
+    tray.on_show_requested(move || {
+        let _ = sink.submit(DesktopLifecycleIntent::Show);
+    });
+
+    let sink = lifecycle_sink.clone();
+    tray.on_hide_requested(move || {
+        let _ = sink.submit(DesktopLifecycleIntent::Hide);
+    });
+
+    let sink = lifecycle_sink.clone();
+    tray.on_open_compact_requested(move || {
+        let _ = sink.submit(DesktopLifecycleIntent::OpenCompact);
+    });
+
+    let sink = lifecycle_sink.clone();
+    tray.on_open_dashboard_requested(move || {
+        let _ = sink.submit(DesktopLifecycleIntent::OpenDashboard);
+    });
+
+    tray.on_quit_requested(move || {
+        let _ = lifecycle_sink.submit(DesktopLifecycleIntent::Quit);
+    });
+}
+
+fn wire_close_to_tray(window: &MainWindow) {
+    window
+        .window()
+        .on_close_requested(|| slint::CloseRequestResponse::HideWindow);
 }
 
 fn wire_route_selection(
@@ -2719,6 +2801,8 @@ fn format_timestamp_utc(seconds: i64, nanos: u32) -> String {
 
 #[cfg(test)]
 mod duration_tests {
+    use std::cell::RefCell;
+    use std::rc::Rc;
     use std::sync::mpsc::sync_channel;
     use std::thread;
     use std::time::{Duration, Instant};
@@ -2728,10 +2812,24 @@ mod duration_tests {
         format_session_duration, format_timestamp_utc,
     };
     use crate::{
-        DesktopBenefitExpiry, DesktopOperationKind, DesktopOperationPhase,
+        DesktopBenefitExpiry, DesktopLifecycleIntent, DesktopLifecycleIntentAdmission,
+        DesktopLifecycleIntentSink, DesktopOperationKind, DesktopOperationPhase,
         DesktopOperationSnapshot, DesktopReminderPolicy, DesktopReminderSyncState,
+        UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
     };
     use tokenmaster_product::ProductReducer;
+
+    #[derive(Default)]
+    struct RecordingLifecycleSink {
+        intents: RefCell<Vec<DesktopLifecycleIntent>>,
+    }
+
+    impl DesktopLifecycleIntentSink for RecordingLifecycleSink {
+        fn submit(&self, intent: DesktopLifecycleIntent) -> DesktopLifecycleIntentAdmission {
+            self.intents.borrow_mut().push(intent);
+            DesktopLifecycleIntentAdmission::Accepted
+        }
+    }
 
     #[test]
     fn notification_expiry_preserves_exact_millisecond_endpoints() {
@@ -2857,11 +2955,28 @@ mod duration_tests {
     #[test]
     fn pending_reminder_publications_wait_for_the_visible_atomic_projection() -> Result<(), String>
     {
-        let shell = DesktopShell::new_with_reliable_state_unbound(
+        let lifecycle_sink = Rc::new(RecordingLifecycleSink::default());
+        let shell = DesktopShell::new_with_optional_lifecycle_sink(
             &ProductReducer::new().snapshot(),
             DesktopReliableStateProjection::unavailable(),
+            Rc::new(UnavailableDesktopIntentSink),
+            Rc::new(UnavailableDesktopSessionDetailIntentSink),
+            Some(lifecycle_sink.clone()),
         )
         .map_err(|_| String::from("desktop shell"))?;
+        let tray = shell
+            .tray
+            .as_ref()
+            .ok_or_else(|| String::from("tray component"))?;
+        tray.invoke_show_requested();
+        tray.invoke_hide_requested();
+        tray.invoke_open_compact_requested();
+        tray.invoke_open_dashboard_requested();
+        tray.invoke_quit_requested();
+        assert_eq!(
+            lifecycle_sink.intents.borrow().as_slice(),
+            &DesktopLifecycleIntent::ALL
+        );
         assert_pending_reminder_publication_waits_for_visible_atomic_projection(
             &shell,
             |notifier| {
