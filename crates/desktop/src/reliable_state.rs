@@ -768,6 +768,33 @@ pub enum DesktopIntent {
         retention_budget_mib: u32,
     },
     UpdateReminderPolicy(DesktopReminderPolicyUpdate),
+    EnableCurrentUserStartup,
+    RepairCurrentUserStartup,
+    DisableCurrentUserStartup,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopCurrentUserStartupStatus {
+    Disabled,
+    EnabledVerified,
+    StaleRelocation,
+    Conflict,
+    AccessDenied,
+    Unavailable,
+}
+
+impl DesktopCurrentUserStartupStatus {
+    #[must_use]
+    pub const fn stable_code(self) -> &'static str {
+        match self {
+            Self::Disabled => "disabled",
+            Self::EnabledVerified => "enabled_verified",
+            Self::StaleRelocation => "stale_relocation",
+            Self::Conflict => "conflict",
+            Self::AccessDenied => "access_denied",
+            Self::Unavailable => "unavailable",
+        }
+    }
 }
 
 #[derive(Eq, PartialEq)]
@@ -889,6 +916,15 @@ impl fmt::Debug for DesktopIntent {
                 .finish(),
             Self::UpdateReminderPolicy(_) => {
                 formatter.write_str("DesktopIntent::UpdateReminderPolicy([redacted])")
+            }
+            Self::EnableCurrentUserStartup => {
+                formatter.write_str("DesktopIntent::EnableCurrentUserStartup")
+            }
+            Self::RepairCurrentUserStartup => {
+                formatter.write_str("DesktopIntent::RepairCurrentUserStartup")
+            }
+            Self::DisableCurrentUserStartup => {
+                formatter.write_str("DesktopIntent::DisableCurrentUserStartup")
             }
         }
     }

@@ -9,23 +9,25 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use slint::ComponentHandle;
 use tokenmaster_codex::{CodexRootInput, ConfiguredCodexRoot, build_discovery_request};
 use tokenmaster_desktop::{
-    DesktopBridgeFactory, DesktopController, DesktopIntent, DesktopIntentAdmission,
-    DesktopIntentRouter, DesktopIntentSink, DesktopLifecycleIntent,
-    DesktopLifecycleIntentAdmission, DesktopLifecycleIntentRouter, DesktopLifecycleIntentSink,
-    DesktopOperationKind, DesktopOperationPhase, DesktopOperationSnapshot, DesktopQueryPlan,
-    DesktopRefreshAdmission, DesktopRefreshIngress, DesktopRefreshUrgency,
-    DesktopReliableStateNotifier, DesktopReliableStateProjection, DesktopReminderPolicy,
-    DesktopReminderSyncState, DesktopRestoreSelection, DesktopRuntimeObservation,
-    DesktopSessionDetailIntent, DesktopSessionDetailIntentAdmission,
-    DesktopSessionDetailIntentRouter, DesktopSessionDetailIntentSink, DesktopShell,
-    DesktopSnapshotBridge, MainWindow, select_production_renderer,
+    DesktopBridgeFactory, DesktopController, DesktopCurrentUserStartupPresenter,
+    DesktopCurrentUserStartupStatus, DesktopIntent, DesktopIntentAdmission, DesktopIntentRouter,
+    DesktopIntentSink, DesktopLifecycleIntent, DesktopLifecycleIntentAdmission,
+    DesktopLifecycleIntentRouter, DesktopLifecycleIntentSink, DesktopOperationKind,
+    DesktopOperationPhase, DesktopOperationSnapshot, DesktopQueryPlan, DesktopRefreshAdmission,
+    DesktopRefreshIngress, DesktopRefreshUrgency, DesktopReliableStateNotifier,
+    DesktopReliableStateProjection, DesktopReminderPolicy, DesktopReminderSyncState,
+    DesktopRestoreSelection, DesktopRuntimeObservation, DesktopSessionDetailIntent,
+    DesktopSessionDetailIntentAdmission, DesktopSessionDetailIntentRouter,
+    DesktopSessionDetailIntentSink, DesktopShell, DesktopSnapshotBridge, MainWindow,
+    select_production_renderer,
 };
 use tokenmaster_engine::{
     RefreshOutcome, RefreshUrgency, WorkerCompletion, WorkerCompletionNotifier,
 };
 use tokenmaster_platform::{
     CurrentSessionActivationAdmission, CurrentSessionActivationSink, CurrentSessionClaim,
-    CurrentSessionIntegration, CurrentSessionPrimary, ExclusiveFileLeaseGuard, FileDialogFileType,
+    CurrentSessionIntegration, CurrentSessionPrimary, CurrentUserStartup, CurrentUserStartupAction,
+    CurrentUserStartupError, CurrentUserStartupStatus, ExclusiveFileLeaseGuard, FileDialogFileType,
     FileDialogResult, FileDialogSelector, NativeFileDialog,
 };
 use tokenmaster_product::{
@@ -298,9 +300,17 @@ impl Application {
             execution
         })
         .map_err(|_| ApplicationError::internal())?;
+        let current_user_startup_port: Rc<dyn ApplicationCurrentUserStartupPort> =
+            Rc::new(NativeApplicationCurrentUserStartupPort);
+        let current_user_startup_presenter = shell.current_user_startup_presenter();
+        let _ = current_user_startup_presenter.present(map_current_user_startup_status(
+            current_user_startup_port.inspect(),
+        ));
         intent_router
-            .install(Rc::new(ApplicationDesktopIntentSink::new(
+            .install(Rc::new(ApplicationDesktopIntentSink::new_with_startup(
                 commands.submitter(),
+                current_user_startup_port,
+                current_user_startup_presenter,
             )))
             .map_err(|_| ApplicationError::internal())?;
         session_detail_router
@@ -604,6 +614,35 @@ impl Application {
 struct ApplicationDesktopIntentSink {
     dialog: NativeFileDialog,
     submitter: ApplicationOperationSubmitter,
+    current_user_startup: Option<ApplicationCurrentUserStartupBinding>,
+}
+
+struct ApplicationCurrentUserStartupBinding {
+    port: Rc<dyn ApplicationCurrentUserStartupPort>,
+    presenter: DesktopCurrentUserStartupPresenter,
+}
+
+trait ApplicationCurrentUserStartupPort {
+    fn inspect(&self) -> CurrentUserStartupStatus;
+    fn apply(
+        &self,
+        action: CurrentUserStartupAction,
+    ) -> Result<CurrentUserStartupStatus, CurrentUserStartupError>;
+}
+
+struct NativeApplicationCurrentUserStartupPort;
+
+impl ApplicationCurrentUserStartupPort for NativeApplicationCurrentUserStartupPort {
+    fn inspect(&self) -> CurrentUserStartupStatus {
+        CurrentUserStartup::inspect().status()
+    }
+
+    fn apply(
+        &self,
+        action: CurrentUserStartupAction,
+    ) -> Result<CurrentUserStartupStatus, CurrentUserStartupError> {
+        CurrentUserStartup::apply(action).map(|snapshot| snapshot.status())
+    }
 }
 
 struct ApplicationDesktopLifecycleSink {
@@ -940,10 +979,24 @@ impl DesktopSessionDetailIntentSink for ApplicationSessionDetailIntentSink {
 }
 
 impl ApplicationDesktopIntentSink {
+    #[cfg(test)]
     fn new(submitter: ApplicationOperationSubmitter) -> Self {
         Self {
             dialog: NativeFileDialog::default(),
             submitter,
+            current_user_startup: None,
+        }
+    }
+
+    fn new_with_startup(
+        submitter: ApplicationOperationSubmitter,
+        port: Rc<dyn ApplicationCurrentUserStartupPort>,
+        presenter: DesktopCurrentUserStartupPresenter,
+    ) -> Self {
+        Self {
+            dialog: NativeFileDialog::default(),
+            submitter,
+            current_user_startup: Some(ApplicationCurrentUserStartupBinding { port, presenter }),
         }
     }
 
@@ -961,6 +1014,29 @@ impl ApplicationDesktopIntentSink {
 
     fn selection(selection: DesktopRestoreSelection) -> Option<ApplicationBackupSelection> {
         ApplicationBackupSelection::new(selection.catalog_generation(), selection.ordinal())
+    }
+
+    fn submit_current_user_startup(
+        &self,
+        action: CurrentUserStartupAction,
+    ) -> DesktopIntentAdmission {
+        let Some(binding) = self.current_user_startup.as_ref() else {
+            return DesktopIntentAdmission::Rejected;
+        };
+        match binding.port.apply(action) {
+            Ok(status) => binding
+                .presenter
+                .present(map_current_user_startup_status(status))
+                .map_or(DesktopIntentAdmission::Rejected, |()| {
+                    DesktopIntentAdmission::Started
+                }),
+            Err(error) => {
+                let _ = binding
+                    .presenter
+                    .present(map_current_user_startup_error(error));
+                DesktopIntentAdmission::Rejected
+            }
+        }
     }
 }
 
@@ -1071,8 +1147,49 @@ impl DesktopIntentSink for ApplicationDesktopIntentSink {
                     },
                 )
             }
+            DesktopIntent::EnableCurrentUserStartup => {
+                self.submit_current_user_startup(CurrentUserStartupAction::Enable)
+            }
+            DesktopIntent::RepairCurrentUserStartup => {
+                self.submit_current_user_startup(CurrentUserStartupAction::RepairStale)
+            }
+            DesktopIntent::DisableCurrentUserStartup => {
+                self.submit_current_user_startup(CurrentUserStartupAction::Disable)
+            }
             DesktopIntent::RebuildData => self.submit_plain(ApplicationCommand::Rebuild),
         }
+    }
+}
+
+const fn map_current_user_startup_status(
+    status: CurrentUserStartupStatus,
+) -> DesktopCurrentUserStartupStatus {
+    match status {
+        CurrentUserStartupStatus::Disabled => DesktopCurrentUserStartupStatus::Disabled,
+        CurrentUserStartupStatus::EnabledVerified => {
+            DesktopCurrentUserStartupStatus::EnabledVerified
+        }
+        CurrentUserStartupStatus::StaleRelocation => {
+            DesktopCurrentUserStartupStatus::StaleRelocation
+        }
+        CurrentUserStartupStatus::Conflict => DesktopCurrentUserStartupStatus::Conflict,
+        CurrentUserStartupStatus::AccessDenied => DesktopCurrentUserStartupStatus::AccessDenied,
+        CurrentUserStartupStatus::Unavailable => DesktopCurrentUserStartupStatus::Unavailable,
+    }
+}
+
+const fn map_current_user_startup_error(
+    error: CurrentUserStartupError,
+) -> DesktopCurrentUserStartupStatus {
+    match error {
+        CurrentUserStartupError::AccessDenied => DesktopCurrentUserStartupStatus::AccessDenied,
+        CurrentUserStartupError::StaleRequiresRepair => {
+            DesktopCurrentUserStartupStatus::StaleRelocation
+        }
+        CurrentUserStartupError::Conflict => DesktopCurrentUserStartupStatus::Conflict,
+        CurrentUserStartupError::Unavailable
+        | CurrentUserStartupError::InvalidState
+        | CurrentUserStartupError::ReadbackFailed => DesktopCurrentUserStartupStatus::Unavailable,
     }
 }
 

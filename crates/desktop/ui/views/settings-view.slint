@@ -23,6 +23,10 @@ export component SettingsView inherits Rectangle {
     in property <string> reminder-feedback;
     in property <string> reminder-sync-state;
     in property <string> settings-health;
+    in property <string> current-user-startup-status;
+    in property <bool> current-user-startup-can-enable;
+    in property <bool> current-user-startup-can-disable;
+    in property <bool> current-user-startup-can-repair;
     in property <bool> config-import-preview-visible;
     in property <string> config-import-created-label;
     in property <string> config-import-bytes-label;
@@ -44,6 +48,9 @@ export component SettingsView inherits Rectangle {
     callback reminder-custom-lead-edited(int, bool, int, int);
     callback save-reminder-policy();
     callback reset-reminder-recommended();
+    callback enable-current-user-startup();
+    callback repair-current-user-startup();
+    callback disable-current-user-startup();
 
     background: UiTokens.background;
     accessible-role: groupbox;
@@ -118,6 +125,55 @@ export component SettingsView inherits Rectangle {
                     budget := SpinBox { row: root.settings-layout-mode == "wide" ? 0 : 2; col: root.settings-layout-mode == "wide" ? 5 : 1; minimum: 256; maximum: 65536; value: root.retention-budget-mib; accessible-label: "Backup retention budget in mebibytes"; }
                 }
                 Button { text: "Save backup policy"; accessible-label: "Save automatic backup policy"; clicked => { root.update-backup-policy(enabled.checked, quiet.value, interval.value, budget.value); } }
+            }
+        }
+
+        startup-card := Rectangle {
+            height: root.current-user-startup-status == "stale_relocation" ? 190px : 146px;
+            background: UiTokens.surface;
+            border-color: UiTokens.border;
+            border-width: root.high-contrast ? 2px : 1px;
+            border-radius: UiTokens.radius;
+
+            VerticalLayout {
+                padding: UiTokens.space;
+                spacing: UiTokens.space-sm;
+                Text { text: "Start with Windows"; color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
+                Text {
+                    text: root.current-user-startup-status == "disabled" ? "Disabled. TokenMaster will not start when you sign in."
+                        : root.current-user-startup-status == "enabled_verified" ? "Enabled and verified for this executable."
+                        : root.current-user-startup-status == "stale_relocation" ? "The registration points to a previous TokenMaster location. Repair or remove it explicitly."
+                        : root.current-user-startup-status == "conflict" ? "A conflicting startup value is present. TokenMaster will not overwrite it."
+                        : root.current-user-startup-status == "access_denied" ? "Windows denied access to the current-user startup value."
+                        : "Current-user startup is unavailable on this system.";
+                    color: root.current-user-startup-status == "enabled_verified" ? UiTokens.ready : root.current-user-startup-status == "disabled" ? UiTokens.text-secondary : UiTokens.degraded;
+                    wrap: word-wrap;
+                    horizontal-stretch: 1;
+                    accessible-label: "Current-user startup status " + root.current-user-startup-status;
+                }
+                HorizontalLayout {
+                    spacing: UiTokens.space-sm;
+                    if root.current-user-startup-can-enable: Button {
+                        text: "Enable at sign-in";
+                        accessible-label: "Enable TokenMaster at Windows sign-in";
+                        clicked => { root.enable-current-user-startup(); }
+                    }
+                    if root.current-user-startup-can-disable && !root.current-user-startup-can-repair: Button {
+                        text: "Disable at sign-in";
+                        accessible-label: "Disable TokenMaster at Windows sign-in";
+                        clicked => { root.disable-current-user-startup(); }
+                    }
+                    if root.current-user-startup-can-repair: Button {
+                        text: "Repair registration";
+                        accessible-label: "Repair TokenMaster startup registration";
+                        clicked => { root.repair-current-user-startup(); }
+                    }
+                    if root.current-user-startup-can-repair: Button {
+                        text: "Remove old registration";
+                        accessible-label: "Remove old TokenMaster startup registration";
+                        clicked => { root.disable-current-user-startup(); }
+                    }
+                }
             }
         }
 

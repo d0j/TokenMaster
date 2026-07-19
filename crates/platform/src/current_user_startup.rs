@@ -186,10 +186,16 @@ mod imp {
     use std::fs::{self, File};
     use std::os::windows::ffi::{OsStrExt, OsStringExt};
     use std::os::windows::fs::MetadataExt;
-    use std::path::{Path, PathBuf};
+    use std::os::windows::io::AsRawHandle;
+    use std::path::{Component, Path, PathBuf, Prefix};
 
     use windows::Win32::Foundation::{
-        ERROR_ACCESS_DENIED, ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND, ERROR_SUCCESS, WIN32_ERROR,
+        ERROR_ACCESS_DENIED, ERROR_FILE_NOT_FOUND, ERROR_MORE_DATA, ERROR_PATH_NOT_FOUND,
+        ERROR_SUCCESS, HANDLE, WIN32_ERROR,
+    };
+    use windows::Win32::Storage::FileSystem::{
+        FILE_NAME_NORMALIZED, GETFINALPATHNAMEBYHANDLE_FLAGS, GetDriveTypeW,
+        GetFinalPathNameByHandleW, VOLUME_NAME_DOS,
     };
     use windows::Win32::System::Registry::{
         HKEY_CURRENT_USER, REG_SZ, REG_VALUE_TYPE, RRF_NOEXPAND, RRF_RT_ANY, RegDeleteKeyValueW,
@@ -205,20 +211,25 @@ mod imp {
 
     const RUN_SUBKEY: PCWSTR = w!("Software\\Microsoft\\Windows\\CurrentVersion\\Run");
     const VALUE_NAME: PCWSTR = w!("TokenMaster");
-    const MAX_COMMAND_BYTES: u32 = 32 * 1024;
+    // The Windows Run contract limits command data to 260 UTF-16 code units.
+    const MAX_COMMAND_UTF16_UNITS: usize = 260;
+    const MAX_REGISTRY_VALUE_BYTES: u32 = ((MAX_COMMAND_UTF16_UNITS + 1) * 2) as u32;
+    const MAX_RESOLVED_PATH_UTF16_UNITS: usize = 1024;
     const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
 
     struct VerifiedExecutable {
         path: PathBuf,
         identity: PhysicalFileIdentity,
         basename: OsString,
+        command: Vec<u16>,
     }
 
     impl VerifiedExecutable {
         fn current() -> Result<Self, CurrentUserStartupError> {
-            let path = std::env::current_exe().map_err(|_| CurrentUserStartupError::Unavailable)?;
-            validate_ordinary_file(&path)?;
-            let file = File::open(&path).map_err(map_io_error)?;
+            let launch_path =
+                std::env::current_exe().map_err(|_| CurrentUserStartupError::Unavailable)?;
+            let (file, path) = open_verified_local_file(&launch_path)?;
+            let command = build_command(&path)?;
             let identity = PhysicalFileIdentity::from_file(&file)
                 .map_err(|_| CurrentUserStartupError::Unavailable)?;
             let basename = path
@@ -229,29 +240,33 @@ mod imp {
                 path,
                 identity,
                 basename,
+                command,
             })
         }
+    }
 
-        fn command(&self) -> Result<Vec<u16>, CurrentUserStartupError> {
-            let path = self.path.as_os_str().encode_wide().collect::<Vec<_>>();
-            if path.contains(&u16::from(b'"')) {
-                return Err(CurrentUserStartupError::Unavailable);
-            }
-            let mut command = Vec::with_capacity(path.len().saturating_add(3));
-            command.push(u16::from(b'"'));
-            command.extend(path);
-            command.push(u16::from(b'"'));
-            command.push(0);
-            let bytes = command
-                .len()
-                .checked_mul(2)
-                .and_then(|value| u32::try_from(value).ok())
-                .ok_or(CurrentUserStartupError::Unavailable)?;
-            if bytes > MAX_COMMAND_BYTES {
-                return Err(CurrentUserStartupError::Unavailable);
-            }
-            Ok(command)
+    fn build_command(path: &Path) -> Result<Vec<u16>, CurrentUserStartupError> {
+        let path = path.as_os_str().encode_wide().collect::<Vec<_>>();
+        if path.contains(&u16::from(b'"')) {
+            return Err(CurrentUserStartupError::Unavailable);
         }
+        let mut command = Vec::with_capacity(path.len().saturating_add(3));
+        command.push(u16::from(b'"'));
+        command.extend(path);
+        command.push(u16::from(b'"'));
+        if command.len() > MAX_COMMAND_UTF16_UNITS {
+            return Err(CurrentUserStartupError::Unavailable);
+        }
+        command.push(0);
+        let bytes = command
+            .len()
+            .checked_mul(2)
+            .and_then(|value| u32::try_from(value).ok())
+            .ok_or(CurrentUserStartupError::Unavailable)?;
+        if bytes > MAX_REGISTRY_VALUE_BYTES {
+            return Err(CurrentUserStartupError::Unavailable);
+        }
+        Ok(command)
     }
 
     struct NativeBackend {
@@ -275,7 +290,7 @@ mod imp {
         }
 
         fn write_current(&mut self) -> Result<(), CurrentUserStartupError> {
-            let command = self.executable.command()?;
+            let command = &self.executable.command;
             let bytes = u32::try_from(command.len().saturating_mul(2))
                 .map_err(|_| CurrentUserStartupError::Unavailable)?;
             // SAFETY: hive/subkey/value/type are fixed; the UTF-16 buffer is owned,
@@ -343,14 +358,17 @@ mod imp {
             return Ok(None);
         }
         map_registry_result(size_result)?;
-        if value_type != REG_SZ
-            || !(2..=MAX_COMMAND_BYTES).contains(&bytes)
-            || !bytes.is_multiple_of(2)
-        {
+        if !valid_registry_shape(value_type, bytes) {
             return Ok(Some(Vec::new()));
         }
-        let mut command = vec![0_u16; (bytes / 2) as usize];
-        let mut read_bytes = bytes;
+        let expected_units = (bytes / 2) as usize;
+        let buffer_units = expected_units
+            .checked_add(1)
+            .ok_or(CurrentUserStartupError::Unavailable)?;
+        let mut command = vec![u16::MAX; buffer_units];
+        let mut read_bytes = bytes
+            .checked_add(2)
+            .ok_or(CurrentUserStartupError::Unavailable)?;
         // SAFETY: the second call uses the exact bounded byte capacity obtained above;
         // races that change the required size fail rather than retry or truncate.
         let read_result = unsafe {
@@ -364,15 +382,45 @@ mod imp {
                 Some(&mut read_bytes),
             )
         };
-        map_registry_result(read_result)?;
-        if value_type != REG_SZ || read_bytes != bytes || command.last() != Some(&0) {
+        if read_result == ERROR_MORE_DATA {
             return Ok(Some(Vec::new()));
         }
+        map_registry_result(read_result)?;
+        Ok(Some(finalize_registry_command(
+            command,
+            expected_units,
+            bytes,
+            read_bytes,
+            value_type,
+        )))
+    }
+
+    fn finalize_registry_command(
+        mut command: Vec<u16>,
+        expected_units: usize,
+        expected_bytes: u32,
+        read_bytes: u32,
+        value_type: REG_VALUE_TYPE,
+    ) -> Vec<u16> {
+        if value_type != REG_SZ
+            || read_bytes != expected_bytes
+            || command.get(expected_units.saturating_sub(1)) != Some(&0)
+        {
+            return Vec::new();
+        }
+        command.truncate(expected_units);
         command.pop();
         if command.is_empty() || command.contains(&0) {
-            return Ok(Some(Vec::new()));
+            Vec::new()
+        } else {
+            command
         }
-        Ok(Some(command))
+    }
+
+    fn valid_registry_shape(value_type: REG_VALUE_TYPE, bytes: u32) -> bool {
+        value_type == REG_SZ
+            && (2..=MAX_REGISTRY_VALUE_BYTES).contains(&bytes)
+            && bytes.is_multiple_of(2)
     }
 
     fn classify_command(
@@ -388,26 +436,32 @@ mod imp {
         if !same_ascii_name(basename, &current.basename) {
             return Ok(CurrentUserStartupStatus::Conflict);
         }
-        match validate_ordinary_file(&path).and_then(|()| File::open(&path).map_err(map_io_error)) {
-            Ok(file) => {
-                let identity = PhysicalFileIdentity::from_file(&file)
-                    .map_err(|_| CurrentUserStartupError::Unavailable)?;
-                if identity == current.identity {
-                    Ok(CurrentUserStartupStatus::EnabledVerified)
-                } else {
-                    Ok(CurrentUserStartupStatus::StaleRelocation)
-                }
-            }
-            Err(CurrentUserStartupError::Unavailable) if !path.exists() => {
-                Ok(CurrentUserStartupStatus::StaleRelocation)
-            }
-            Err(error) => Err(error),
+        if !supported_local_drive(&path) {
+            return Ok(CurrentUserStartupStatus::Conflict);
+        }
+        // A registry-controlled alternate path is stale without being opened. This
+        // prevents inspection from following UNC, device, mapped-remote, or reparse
+        // destinations and keeps repair explicit.
+        if path != current.path {
+            return Ok(CurrentUserStartupStatus::StaleRelocation);
+        }
+        let (file, resolved_path) = open_verified_local_file(&path)?;
+        if resolved_path != current.path {
+            return Ok(CurrentUserStartupStatus::StaleRelocation);
+        }
+        let identity = PhysicalFileIdentity::from_file(&file)
+            .map_err(|_| CurrentUserStartupError::Unavailable)?;
+        if identity == current.identity {
+            Ok(CurrentUserStartupStatus::EnabledVerified)
+        } else {
+            Ok(CurrentUserStartupStatus::StaleRelocation)
         }
     }
 
     fn parse_exact_quoted_path(command: &[u16]) -> Option<PathBuf> {
         let quote = u16::from(b'"');
         if command.len() < 3
+            || command.len() > MAX_COMMAND_UTF16_UNITS
             || command.first() != Some(&quote)
             || command.last() != Some(&quote)
             || command[1..command.len() - 1].contains(&quote)
@@ -415,7 +469,42 @@ mod imp {
             return None;
         }
         let path = PathBuf::from(OsString::from_wide(&command[1..command.len() - 1]));
-        path.is_absolute().then_some(path)
+        local_drive_root(&path).map(|_| path)
+    }
+
+    fn local_drive_root(path: &Path) -> Option<[u16; 4]> {
+        let mut components = path.components();
+        let drive = match components.next()? {
+            Component::Prefix(prefix) => match prefix.kind() {
+                Prefix::Disk(drive) => drive,
+                _ => return None,
+            },
+            _ => return None,
+        };
+        if !matches!(components.next(), Some(Component::RootDir))
+            || !components.all(|component| matches!(component, Component::Normal(_)))
+        {
+            return None;
+        }
+        Some([u16::from(drive), u16::from(b':'), u16::from(b'\\'), 0])
+    }
+
+    fn supported_local_drive(path: &Path) -> bool {
+        let Some(root) = local_drive_root(path) else {
+            return false;
+        };
+        // SAFETY: `root` is a valid NUL-terminated `X:\` UTF-16 string and the API
+        // does not retain its pointer. No file or network path is opened here.
+        let drive_type = unsafe { GetDriveTypeW(PCWSTR(root.as_ptr())) };
+        supported_drive_type(drive_type)
+    }
+
+    const fn supported_drive_type(drive_type: u32) -> bool {
+        const DRIVE_REMOVABLE: u32 = 2;
+        const DRIVE_FIXED: u32 = 3;
+        const DRIVE_RAMDISK: u32 = 6;
+
+        matches!(drive_type, DRIVE_REMOVABLE | DRIVE_FIXED | DRIVE_RAMDISK)
     }
 
     fn same_ascii_name(left: &std::ffi::OsStr, right: &std::ffi::OsStr) -> bool {
@@ -425,25 +514,67 @@ mod imp {
     }
 
     fn validate_ordinary_file(path: &Path) -> Result<(), CurrentUserStartupError> {
-        if !path.is_absolute() {
+        if !supported_local_drive(path) {
             return Err(CurrentUserStartupError::Unavailable);
         }
-        let metadata = fs::symlink_metadata(path).map_err(map_io_error)?;
-        if !metadata.is_file()
-            || metadata.file_type().is_symlink()
-            || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-        {
-            return Err(CurrentUserStartupError::Unavailable);
-        }
+        reject_reparse_ancestry(path)?;
         Ok(())
     }
 
-    fn map_io_error(error: std::io::Error) -> CurrentUserStartupError {
-        if error.kind() == std::io::ErrorKind::PermissionDenied {
-            CurrentUserStartupError::AccessDenied
-        } else {
-            CurrentUserStartupError::Unavailable
+    fn open_verified_local_file(path: &Path) -> Result<(File, PathBuf), CurrentUserStartupError> {
+        validate_ordinary_file(path)?;
+        let file = crate::windows::open_regular_no_follow(path)
+            .map_err(|_| CurrentUserStartupError::Unavailable)?;
+        let resolved_path = resolved_local_path(&file)?;
+        Ok((file, resolved_path))
+    }
+
+    fn resolved_local_path(file: &File) -> Result<PathBuf, CurrentUserStartupError> {
+        let mut resolved = vec![0_u16; MAX_RESOLVED_PATH_UTF16_UNITS];
+        // SAFETY: `file` remains open, `resolved` is one bounded writable UTF-16
+        // buffer, and GetFinalPathNameByHandleW does not retain either argument.
+        let written = unsafe {
+            GetFinalPathNameByHandleW(
+                HANDLE(file.as_raw_handle()),
+                &mut resolved,
+                GETFINALPATHNAMEBYHANDLE_FLAGS(FILE_NAME_NORMALIZED.0 | VOLUME_NAME_DOS.0),
+            )
+        } as usize;
+        if written == 0 || written >= resolved.len() {
+            return Err(CurrentUserStartupError::Unavailable);
         }
+        resolved.truncate(written);
+        parse_resolved_dos_path(&resolved).ok_or(CurrentUserStartupError::Unavailable)
+    }
+
+    fn parse_resolved_dos_path(resolved: &[u16]) -> Option<PathBuf> {
+        if !resolved.starts_with(&wide_prefix()) {
+            return None;
+        }
+        let path = PathBuf::from(OsString::from_wide(&resolved[wide_prefix().len()..]));
+        supported_local_drive(&path).then_some(path)
+    }
+
+    const fn wide_prefix() -> [u16; 4] {
+        [b'\\' as u16, b'\\' as u16, b'?' as u16, b'\\' as u16]
+    }
+
+    fn reject_reparse_ancestry(path: &Path) -> Result<(), CurrentUserStartupError> {
+        let mut current = PathBuf::new();
+        for component in path.components() {
+            current.push(component.as_os_str());
+            if matches!(component, Component::Prefix(_) | Component::RootDir) {
+                continue;
+            }
+            let metadata =
+                fs::symlink_metadata(&current).map_err(|_| CurrentUserStartupError::Unavailable)?;
+            if metadata.file_type().is_symlink()
+                || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+            {
+                return Err(CurrentUserStartupError::Unavailable);
+            }
+        }
+        Ok(())
     }
 
     const fn is_missing(result: WIN32_ERROR) -> bool {
@@ -457,6 +588,179 @@ mod imp {
             Err(CurrentUserStartupError::AccessDenied)
         } else {
             Err(CurrentUserStartupError::Unavailable)
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::ffi::OsStr;
+
+        use super::*;
+
+        fn wide(value: &str) -> Vec<u16> {
+            OsStr::new(value).encode_wide().collect()
+        }
+
+        #[test]
+        fn exact_command_parser_accepts_only_one_quoted_absolute_path() {
+            assert_eq!(
+                parse_exact_quoted_path(&wide(r#""C:\Apps\TokenMaster.exe""#)),
+                Some(PathBuf::from(r"C:\Apps\TokenMaster.exe"))
+            );
+            assert_eq!(
+                parse_exact_quoted_path(&wide(r#""C:\Apps\TokenMaster.exe" --hidden"#)),
+                None
+            );
+            assert_eq!(
+                parse_exact_quoted_path(&wide(r"C:\Apps\TokenMaster.exe")),
+                None
+            );
+            assert_eq!(parse_exact_quoted_path(&wide(r#""TokenMaster.exe""#)), None);
+            assert_eq!(
+                parse_exact_quoted_path(&wide(r#""\\server\share\TokenMaster.exe""#)),
+                None
+            );
+            assert_eq!(
+                parse_exact_quoted_path(&wide(r#""\\?\C:\Apps\TokenMaster.exe""#)),
+                None
+            );
+            assert_eq!(
+                parse_exact_quoted_path(&wide(r#""\\.\C:\Apps\TokenMaster.exe""#)),
+                None
+            );
+            assert_eq!(
+                parse_exact_quoted_path(&wide(r#""C:\Apps\"TokenMaster.exe""#)),
+                None
+            );
+
+            let at_limit = format!(r#""C:\{}""#, "a".repeat(255));
+            let over_limit = format!(r#""C:\{}""#, "a".repeat(256));
+            assert_eq!(wide(&at_limit).len(), MAX_COMMAND_UTF16_UNITS);
+            assert!(parse_exact_quoted_path(&wide(&at_limit)).is_some());
+            assert_eq!(wide(&over_limit).len(), MAX_COMMAND_UTF16_UNITS + 1);
+            assert_eq!(parse_exact_quoted_path(&wide(&over_limit)), None);
+        }
+
+        #[test]
+        fn current_command_builder_rejects_an_impossible_run_registration_early() {
+            let at_limit = PathBuf::from(format!(r"C:\{}", "a".repeat(255)));
+            let over_limit = PathBuf::from(format!(r"C:\{}", "a".repeat(256)));
+
+            let command = build_command(&at_limit)
+                .unwrap_or_else(|error| panic!("260-unit command must fit: {error:?}"));
+            assert_eq!(command.len(), MAX_COMMAND_UTF16_UNITS + 1);
+            assert_eq!(command.last(), Some(&0));
+            assert_eq!(
+                build_command(&over_limit),
+                Err(CurrentUserStartupError::Unavailable)
+            );
+        }
+
+        #[test]
+        fn registry_string_finalizer_rejects_missing_or_embedded_nul_and_size_drift() {
+            let valid = wide(r#""C:\Apps\TokenMaster.exe""#);
+            let expected_units = valid.len() + 1;
+            let expected_bytes = (expected_units * 2) as u32;
+
+            let mut terminated = valid.clone();
+            terminated.extend([0, u16::MAX]);
+            assert_eq!(
+                finalize_registry_command(
+                    terminated,
+                    expected_units,
+                    expected_bytes,
+                    expected_bytes,
+                    REG_SZ,
+                ),
+                valid
+            );
+
+            let mut missing_nul = valid.clone();
+            missing_nul.extend([u16::from(b'x'), 0]);
+            assert!(
+                finalize_registry_command(
+                    missing_nul,
+                    expected_units,
+                    expected_bytes,
+                    expected_bytes,
+                    REG_SZ,
+                )
+                .is_empty()
+            );
+
+            let mut embedded_nul = valid;
+            embedded_nul[2] = 0;
+            embedded_nul.extend([0, u16::MAX]);
+            assert!(
+                finalize_registry_command(
+                    embedded_nul,
+                    expected_units,
+                    expected_bytes,
+                    expected_bytes,
+                    REG_SZ,
+                )
+                .is_empty()
+            );
+
+            assert!(
+                finalize_registry_command(
+                    vec![0; expected_units + 1],
+                    expected_units,
+                    expected_bytes,
+                    expected_bytes + 2,
+                    REG_SZ,
+                )
+                .is_empty()
+            );
+
+            assert!(
+                finalize_registry_command(
+                    vec![0; expected_units + 1],
+                    expected_units,
+                    expected_bytes,
+                    expected_bytes,
+                    REG_VALUE_TYPE(999),
+                )
+                .is_empty()
+            );
+
+            assert!(valid_registry_shape(REG_SZ, 2));
+            assert!(valid_registry_shape(REG_SZ, MAX_REGISTRY_VALUE_BYTES));
+            assert!(!valid_registry_shape(REG_SZ, 0));
+            assert!(!valid_registry_shape(REG_SZ, 1));
+            assert!(!valid_registry_shape(REG_SZ, 3));
+            assert!(!valid_registry_shape(REG_SZ, MAX_REGISTRY_VALUE_BYTES + 2));
+            assert!(!valid_registry_shape(REG_VALUE_TYPE(999), 2));
+        }
+
+        #[test]
+        fn owned_basename_match_is_ascii_case_insensitive_and_otherwise_closed() {
+            assert!(same_ascii_name(
+                OsStr::new("TOKENMASTER.EXE"),
+                OsStr::new("TokenMaster.exe")
+            ));
+            assert!(!same_ascii_name(
+                OsStr::new("Other.exe"),
+                OsStr::new("TokenMaster.exe")
+            ));
+            assert!(!same_ascii_name(
+                OsStr::new("TokenMastеr.exe"),
+                OsStr::new("TokenMaster.exe")
+            ));
+            assert!(supported_drive_type(2));
+            assert!(supported_drive_type(3));
+            assert!(supported_drive_type(6));
+            assert!(!supported_drive_type(0));
+            assert!(!supported_drive_type(4));
+
+            assert_eq!(
+                parse_resolved_dos_path(&wide(r"\\?\C:\Apps\TokenMaster.exe")),
+                Some(PathBuf::from(r"C:\Apps\TokenMaster.exe"))
+            );
+            assert_eq!(
+                parse_resolved_dos_path(&wide(r"\\?\UNC\server\TokenMaster.exe")),
+                None
+            );
         }
     }
 }
@@ -487,6 +791,8 @@ mod tests {
         states: Vec<Result<CurrentUserStartupStatus, CurrentUserStartupError>>,
         writes: usize,
         deletes: usize,
+        write_result: Result<(), CurrentUserStartupError>,
+        delete_result: Result<(), CurrentUserStartupError>,
     }
 
     impl FakeBackend {
@@ -497,6 +803,8 @@ mod tests {
                 states,
                 writes: 0,
                 deletes: 0,
+                write_result: Ok(()),
+                delete_result: Ok(()),
             }
         }
 
@@ -505,7 +813,19 @@ mod tests {
                 states: vec![Err(error)],
                 writes: 0,
                 deletes: 0,
+                write_result: Ok(()),
+                delete_result: Ok(()),
             }
+        }
+
+        fn with_write_error(mut self, error: CurrentUserStartupError) -> Self {
+            self.write_result = Err(error);
+            self
+        }
+
+        fn with_delete_error(mut self, error: CurrentUserStartupError) -> Self {
+            self.delete_result = Err(error);
+            self
         }
     }
 
@@ -518,12 +838,12 @@ mod tests {
 
         fn write_current(&mut self) -> Result<(), CurrentUserStartupError> {
             self.writes += 1;
-            Ok(())
+            self.write_result
         }
 
         fn delete(&mut self) -> Result<(), CurrentUserStartupError> {
             self.deletes += 1;
-            Ok(())
+            self.delete_result
         }
     }
 
@@ -544,6 +864,10 @@ mod tests {
         let mut enabled = FakeBackend::new([CurrentUserStartupStatus::EnabledVerified]);
         assert!(apply_with(&mut enabled, CurrentUserStartupAction::Enable).is_ok());
         assert_eq!((enabled.writes, enabled.deletes), (0, 0));
+
+        let mut repair_enabled = FakeBackend::new([CurrentUserStartupStatus::EnabledVerified]);
+        assert!(apply_with(&mut repair_enabled, CurrentUserStartupAction::RepairStale).is_ok());
+        assert_eq!((repair_enabled.writes, repair_enabled.deletes), (0, 0));
 
         let mut stale = FakeBackend::new([CurrentUserStartupStatus::StaleRelocation]);
         assert_eq!(
@@ -569,6 +893,23 @@ mod tests {
         assert!(apply_with(&mut remove_stale, CurrentUserStartupAction::Disable).is_ok());
         assert_eq!((remove_stale.writes, remove_stale.deletes), (0, 1));
 
+        let mut remove_enabled = FakeBackend::new([
+            CurrentUserStartupStatus::EnabledVerified,
+            CurrentUserStartupStatus::Disabled,
+        ]);
+        assert!(apply_with(&mut remove_enabled, CurrentUserStartupAction::Disable).is_ok());
+        assert_eq!((remove_enabled.writes, remove_enabled.deletes), (0, 1));
+
+        let mut already_disabled = FakeBackend::new([CurrentUserStartupStatus::Disabled]);
+        assert!(apply_with(&mut already_disabled, CurrentUserStartupAction::Disable).is_ok());
+        assert_eq!((already_disabled.writes, already_disabled.deletes), (0, 0));
+
+        let mut invalid_repair = FakeBackend::new([CurrentUserStartupStatus::Disabled]);
+        assert_eq!(
+            apply_with(&mut invalid_repair, CurrentUserStartupAction::RepairStale),
+            Err(CurrentUserStartupError::InvalidState)
+        );
+
         let mut conflict = FakeBackend::new([CurrentUserStartupStatus::Conflict]);
         assert_eq!(
             apply_with(&mut conflict, CurrentUserStartupAction::Disable),
@@ -584,6 +925,74 @@ mod tests {
             apply_with(&mut mismatched, CurrentUserStartupAction::Enable),
             Err(CurrentUserStartupError::ReadbackFailed)
         );
+
+        let mut mismatched_repair = FakeBackend::new([
+            CurrentUserStartupStatus::StaleRelocation,
+            CurrentUserStartupStatus::StaleRelocation,
+        ]);
+        assert_eq!(
+            apply_with(
+                &mut mismatched_repair,
+                CurrentUserStartupAction::RepairStale
+            ),
+            Err(CurrentUserStartupError::ReadbackFailed)
+        );
+
+        let mut mismatched_disable = FakeBackend::new([
+            CurrentUserStartupStatus::EnabledVerified,
+            CurrentUserStartupStatus::EnabledVerified,
+        ]);
+        assert_eq!(
+            apply_with(&mut mismatched_disable, CurrentUserStartupAction::Disable),
+            Err(CurrentUserStartupError::ReadbackFailed)
+        );
+    }
+
+    #[test]
+    fn degraded_states_reject_every_action_without_mutation() {
+        for (status, expected) in [
+            (
+                CurrentUserStartupStatus::Conflict,
+                CurrentUserStartupError::Conflict,
+            ),
+            (
+                CurrentUserStartupStatus::AccessDenied,
+                CurrentUserStartupError::AccessDenied,
+            ),
+            (
+                CurrentUserStartupStatus::Unavailable,
+                CurrentUserStartupError::Unavailable,
+            ),
+        ] {
+            for action in [
+                CurrentUserStartupAction::Enable,
+                CurrentUserStartupAction::RepairStale,
+                CurrentUserStartupAction::Disable,
+            ] {
+                let mut backend = FakeBackend::new([status]);
+                assert_eq!(apply_with(&mut backend, action), Err(expected));
+                assert_eq!((backend.writes, backend.deletes), (0, 0));
+            }
+        }
+    }
+
+    #[test]
+    fn mutation_failures_propagate_without_false_success_or_readback() {
+        let mut write_failure = FakeBackend::new([CurrentUserStartupStatus::Disabled])
+            .with_write_error(CurrentUserStartupError::AccessDenied);
+        assert_eq!(
+            apply_with(&mut write_failure, CurrentUserStartupAction::Enable),
+            Err(CurrentUserStartupError::AccessDenied)
+        );
+        assert_eq!((write_failure.writes, write_failure.deletes), (1, 0));
+
+        let mut delete_failure = FakeBackend::new([CurrentUserStartupStatus::EnabledVerified])
+            .with_delete_error(CurrentUserStartupError::Unavailable);
+        assert_eq!(
+            apply_with(&mut delete_failure, CurrentUserStartupAction::Disable),
+            Err(CurrentUserStartupError::Unavailable)
+        );
+        assert_eq!((delete_failure.writes, delete_failure.deletes), (0, 1));
     }
 
     #[test]

@@ -681,6 +681,112 @@ fn reminder_policy_intent_admits_one_bounded_update_policy_request() {
     );
 }
 
+struct NoopDesktopIntentSink;
+
+impl DesktopIntentSink for NoopDesktopIntentSink {
+    fn submit(&self, _intent: DesktopIntent) -> DesktopIntentAdmission {
+        DesktopIntentAdmission::Rejected
+    }
+}
+
+struct FakeCurrentUserStartupPort {
+    current: std::cell::Cell<CurrentUserStartupStatus>,
+    next: std::cell::Cell<Result<CurrentUserStartupStatus, CurrentUserStartupError>>,
+    actions: std::cell::RefCell<Vec<CurrentUserStartupAction>>,
+}
+
+impl FakeCurrentUserStartupPort {
+    fn new(status: CurrentUserStartupStatus) -> Self {
+        Self {
+            current: std::cell::Cell::new(status),
+            next: std::cell::Cell::new(Ok(status)),
+            actions: std::cell::RefCell::new(Vec::new()),
+        }
+    }
+}
+
+impl ApplicationCurrentUserStartupPort for FakeCurrentUserStartupPort {
+    fn inspect(&self) -> CurrentUserStartupStatus {
+        self.current.get()
+    }
+
+    fn apply(
+        &self,
+        action: CurrentUserStartupAction,
+    ) -> Result<CurrentUserStartupStatus, CurrentUserStartupError> {
+        self.actions.borrow_mut().push(action);
+        let result = self.next.get();
+        if let Ok(status) = result {
+            self.current.set(status);
+        }
+        result
+    }
+}
+
+#[test]
+fn current_user_startup_intents_use_one_typed_port_and_publish_failures() {
+    i_slint_backend_testing::init_no_event_loop();
+    let product = ProductReducer::new().snapshot();
+    let shell = DesktopShell::new_with_reliable_state(
+        &product,
+        DesktopReliableStateProjection::unavailable(),
+        Rc::new(NoopDesktopIntentSink),
+    )
+    .expect("desktop shell");
+    let presenter = shell.current_user_startup_presenter();
+    let port = Rc::new(FakeCurrentUserStartupPort::new(
+        CurrentUserStartupStatus::Disabled,
+    ));
+    let mut worker = ApplicationOperationWorker::spawn_with_payload(|_, _| {
+        ApplicationCommandExecution::Succeeded
+    })
+    .expect("operation worker");
+    let sink =
+        ApplicationDesktopIntentSink::new_with_startup(worker.submitter(), port.clone(), presenter);
+
+    port.next.set(Ok(CurrentUserStartupStatus::EnabledVerified));
+    assert_eq!(
+        sink.submit(DesktopIntent::EnableCurrentUserStartup),
+        DesktopIntentAdmission::Started
+    );
+    assert_eq!(
+        shell.window().get_current_user_startup_status(),
+        "enabled_verified"
+    );
+
+    port.next.set(Ok(CurrentUserStartupStatus::StaleRelocation));
+    assert_eq!(
+        sink.submit(DesktopIntent::RepairCurrentUserStartup),
+        DesktopIntentAdmission::Started
+    );
+    assert_eq!(
+        shell.window().get_current_user_startup_status(),
+        "stale_relocation"
+    );
+
+    port.next.set(Err(CurrentUserStartupError::AccessDenied));
+    assert_eq!(
+        sink.submit(DesktopIntent::DisableCurrentUserStartup),
+        DesktopIntentAdmission::Rejected
+    );
+    assert_eq!(
+        shell.window().get_current_user_startup_status(),
+        "access_denied"
+    );
+    assert_eq!(
+        port.actions.borrow().as_slice(),
+        &[
+            CurrentUserStartupAction::Enable,
+            CurrentUserStartupAction::RepairStale,
+            CurrentUserStartupAction::Disable,
+        ]
+    );
+    assert_eq!(
+        worker.shutdown().expect("worker shutdown"),
+        ApplicationOperationWorkerPhase::Stopped
+    );
+}
+
 #[test]
 fn reminder_policy_sync_failure_keeps_the_durable_save_and_returns_success() {
     let temporary = TempDir::new().expect("temporary directory");

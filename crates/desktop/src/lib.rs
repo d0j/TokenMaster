@@ -49,8 +49,8 @@ pub use shell::{
     DesktopTrayAvailability, select_production_renderer,
 };
 pub use ui::{
-    DesktopBridgeFactory, DesktopReliableStateNotifier, DesktopShell, DesktopUiError,
-    DesktopUiErrorCode,
+    DesktopBridgeFactory, DesktopCurrentUserStartupPresenter, DesktopReliableStateNotifier,
+    DesktopShell, DesktopUiError, DesktopUiErrorCode,
 };
 
 pub use bridge::{

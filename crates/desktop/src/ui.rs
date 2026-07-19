@@ -18,9 +18,10 @@ use crate::{
     BenefitLotRow, DashboardActivityRow, DashboardBenefitRow, DashboardModelRow, DashboardQuotaRow,
     DashboardSectionRow, DashboardSessionRow, DashboardTrendPoint, DesktopActivityKey,
     DesktopActivityProjection, DesktopBenefitExpiry, DesktopCloseEffect, DesktopCostComposition,
-    DesktopCostValue, DesktopDashboardProjection, DesktopDashboardSectionKey, DesktopFreshness,
-    DesktopHistoryProjection, DesktopInAppNotificationBatch, DesktopInAppNotificationBridge,
-    DesktopIntent, DesktopIntentSink, DesktopLifecycleIntentSink, DesktopModelsProjection,
+    DesktopCostValue, DesktopCurrentUserStartupStatus, DesktopDashboardProjection,
+    DesktopDashboardSectionKey, DesktopFreshness, DesktopHistoryProjection,
+    DesktopInAppNotificationBatch, DesktopInAppNotificationBridge, DesktopIntent,
+    DesktopIntentSink, DesktopLifecycleIntentSink, DesktopModelsProjection,
     DesktopNotificationsProjection, DesktopOperationSnapshot, DesktopProjectsProjection,
     DesktopQuality, DesktopReliableStateProjection, DesktopReminderPolicy,
     DesktopSessionDetailIntentAdmission, DesktopSessionDetailIntentSink, DesktopSessionsProjection,
@@ -71,6 +72,22 @@ struct ReliableStateDelivery {
 #[derive(Clone)]
 pub struct DesktopReliableStateNotifier {
     inner: Arc<ReliableStateNotifierInner>,
+}
+
+#[derive(Clone)]
+pub struct DesktopCurrentUserStartupPresenter {
+    window: slint::Weak<MainWindow>,
+}
+
+impl DesktopCurrentUserStartupPresenter {
+    pub fn present(&self, status: DesktopCurrentUserStartupStatus) -> Result<(), DesktopUiError> {
+        let window = self
+            .window
+            .upgrade()
+            .ok_or_else(DesktopUiError::state_unavailable)?;
+        apply_current_user_startup(&window, status);
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -573,6 +590,13 @@ impl DesktopShell {
         }
     }
 
+    #[must_use]
+    pub fn current_user_startup_presenter(&self) -> DesktopCurrentUserStartupPresenter {
+        DesktopCurrentUserStartupPresenter {
+            window: self.window.as_weak(),
+        }
+    }
+
     pub fn snapshot_bridge(
         &self,
         receiver: DesktopSnapshotReceiver,
@@ -711,6 +735,18 @@ fn wire_reliable_state_intents(
         let _ = sink.submit(DesktopIntent::CancelOperation);
     });
     let sink = intent_sink.clone();
+    window.on_enable_current_user_startup(move || {
+        let _ = sink.submit(DesktopIntent::EnableCurrentUserStartup);
+    });
+    let sink = intent_sink.clone();
+    window.on_repair_current_user_startup(move || {
+        let _ = sink.submit(DesktopIntent::RepairCurrentUserStartup);
+    });
+    let sink = intent_sink.clone();
+    window.on_disable_current_user_startup(move || {
+        let _ = sink.submit(DesktopIntent::DisableCurrentUserStartup);
+    });
+    let sink = intent_sink.clone();
     window.on_update_backup_policy(move |enabled, quiet, interval, budget| {
         let (Ok(quiet_seconds), Ok(interval_seconds), Ok(retention_budget_mib)) = (
             u32::try_from(quiet),
@@ -727,6 +763,23 @@ fn wire_reliable_state_intents(
         });
     });
     wire_reminder_policy_editor(window, intent_sink);
+}
+
+fn apply_current_user_startup(window: &MainWindow, status: DesktopCurrentUserStartupStatus) {
+    window.set_current_user_startup_status(status.stable_code().into());
+    window.set_current_user_startup_can_enable(matches!(
+        status,
+        DesktopCurrentUserStartupStatus::Disabled
+    ));
+    window.set_current_user_startup_can_disable(matches!(
+        status,
+        DesktopCurrentUserStartupStatus::EnabledVerified
+            | DesktopCurrentUserStartupStatus::StaleRelocation
+    ));
+    window.set_current_user_startup_can_repair(matches!(
+        status,
+        DesktopCurrentUserStartupStatus::StaleRelocation
+    ));
 }
 
 fn wire_reminder_policy_editor(window: &MainWindow, intent_sink: Rc<dyn DesktopIntentSink>) {
