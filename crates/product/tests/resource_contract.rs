@@ -76,6 +76,9 @@ struct ResourceCounts {
 }
 
 #[cfg(windows)]
+const PRIVATE_RETURN_TOLERANCE: usize = 2_097_152;
+
+#[cfg(windows)]
 fn resource_counts() -> ResourceCounts {
     use windows::Win32::Foundation::{CloseHandle, ERROR_NO_MORE_FILES};
     use windows::Win32::System::Diagnostics::ToolHelp::{
@@ -179,13 +182,42 @@ fn stable_warmup_baseline(samples: &[ResourceCounts]) -> Option<ResourceCounts> 
     if current_floor > previous_floor.saturating_add(1_048_576) {
         return None;
     }
+    let retained_floor = previous_floor.max(current_floor);
+    let retained_ceiling = candidate
+        .iter()
+        .map(|sample| sample.private_bytes)
+        .max()
+        .expect("warmup candidate");
+    if retained_ceiling > retained_floor.saturating_add(PRIVATE_RETURN_TOLERANCE) {
+        return None;
+    }
     Some(ResourceCounts {
-        private_bytes: previous_floor.max(current_floor),
+        private_bytes: retained_floor,
         handles: topology.handles,
         threads: topology.threads,
         user_objects: topology.user_objects,
         gdi_objects: topology.gdi_objects,
     })
+}
+
+#[cfg(windows)]
+fn bimodal_warmup_with_repeated_low_outliers_is_not_a_plateau() {
+    let private_bytes = [
+        3_670_016, 3_977_216, 5_095_424, 5_107_712, 5_107_712, 6_045_696, 4_132_864, 3_723_264,
+        5_115_904, 6_053_888, 6_053_888, 3_526_656, 6_053_888, 3_547_136, 6_053_888, 6_062_080,
+    ];
+    let samples = private_bytes.map(|private_bytes| ResourceCounts {
+        private_bytes,
+        handles: 128,
+        threads: 4,
+        user_objects: 1,
+        gdi_objects: 0,
+    });
+
+    assert!(
+        stable_warmup_baseline(&samples).is_none(),
+        "a bimodal warmup with a retained high plateau must continue warming"
+    );
 }
 
 #[cfg(windows)]
@@ -238,9 +270,12 @@ fn repeated_status_open_capture_drop_returns_process_resources() {
         })
         .collect::<Vec<_>>();
     assert!(
-        return_minima
-            .iter()
-            .all(|minimum| *minimum <= baseline.private_bytes.saturating_add(2_097_152)),
+        return_minima.iter().all(|minimum| {
+            *minimum
+                <= baseline
+                    .private_bytes
+                    .saturating_add(PRIVATE_RETURN_TOLERANCE)
+        }),
         "status private bytes did not return: baseline={baseline:?}, warmup={warmup:?}, \
          measured={measured:?}, minima={return_minima:?}"
     );
@@ -254,6 +289,7 @@ fn repeated_status_open_capture_drop_returns_process_resources() {
 #[cfg(windows)]
 fn main() {
     ten_thousand_replacements_retain_one_fixed_product_snapshot();
+    bimodal_warmup_with_repeated_low_outliers_is_not_a_plateau();
     repeated_status_open_capture_drop_returns_process_resources();
 }
 
