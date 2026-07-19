@@ -122,7 +122,7 @@ foreach ($contract in @(
     @{ Name = 'TM-APP-REBUILD-RETRY-RECONCILE'; Pattern = 'if source_reconciliation_required \{[\s\S]{0,256}?permit\.begin_irreversible\(\)[\s\S]{0,512}?start_reconstructed_bundle\('; Count = 1 },
     @{ Name = 'TM-APP-REBUILD-ATOMIC'; Pattern = 'RecoveryBoundary::BeforeJournalPublication[\s\S]{0,256}?on_irreversible\(\)'; Count = 1 },
     @{ Name = 'TM-APP-MANUAL-BACKUP-ATOMIC'; Pattern = 'fn execute_manual_backup_command\([\s\S]{0,1024}?permit\.begin_irreversible\(\)[\s\S]{0,512}?publish_atomic_operation\(reliable_state, permit\.command\(\)\)'; Count = 1 },
-    @{ Name = 'TM-APP-ATOMIC-PROJECTION'; Pattern = 'publish_atomic_operation\(reliable_state, permit\.command\(\)\)'; Count = 10 },
+    @{ Name = 'TM-APP-ATOMIC-PROJECTION'; Pattern = 'publish_atomic_operation\(reliable_state, permit\.command\(\)\)'; Count = 8 },
     @{ Name = 'TM-APP-RESTORED-MIGRATION'; Pattern = 'fn start_restored_bundle\('; Count = 1 },
     @{ Name = 'TM-APP-PRE-MIGRATION'; Pattern = 'wait_for_mandatory_backup\([\s\S]{0,96}?MaintenancePurpose::PreMigration\s*\)'; Count = 2 },
     @{ Name = 'TM-APP-POST-MIGRATION'; Pattern = 'wait_for_mandatory_backup\([\s\S]{0,96}?MaintenancePurpose::PostMigration\s*\)'; Count = 2 },
@@ -206,11 +206,12 @@ $reminderUpdateFunction = [regex]::Match(
     $stateText,
     '(?s)pub\(crate\) fn update_reminder_policy\(.*?\r?\n    \}\r?\n\r?\n    pub\(crate\) fn synchronize_reminder_profile'
 ).Value
-$pendingIndex = $reminderUpdateFunction.IndexOf('store(REMINDER_SYNC_PENDING, Ordering::Release)', [System.StringComparison]::Ordinal)
+$pendingIndex = $reminderUpdateFunction.IndexOf('.swap(REMINDER_SYNC_PENDING, Ordering::AcqRel)', [System.StringComparison]::Ordinal)
+$visiblePendingIndex = $reminderUpdateFunction.IndexOf('on_irreversible().is_err()', [System.StringComparison]::Ordinal)
 $settingsSaveIndex = $reminderUpdateFunction.IndexOf('.save(&value)', [System.StringComparison]::Ordinal)
 if ([string]::IsNullOrWhiteSpace($reminderUpdateFunction) -or $pendingIndex -lt 0 -or
-    $settingsSaveIndex -le $pendingIndex) {
-    throw 'TM-APP-REMINDER-SETTINGS-FIRST: durable desired settings must follow Pending publication before archive synchronization'
+    $visiblePendingIndex -le $pendingIndex -or $settingsSaveIndex -le $visiblePendingIndex) {
+    throw 'TM-APP-REMINDER-SETTINGS-FIRST: durable desired settings must follow acknowledged Pending publication before archive synchronization'
 }
 $reminderSynchronizeFunction = [regex]::Match(
     $stateText,
@@ -223,13 +224,45 @@ if ([string]::IsNullOrWhiteSpace($reminderSynchronizeFunction) -or $syncPendingI
     $syncStoreIndex -le $syncPendingIndex -or $syncSynchronizedIndex -le $syncStoreIndex) {
     throw 'TM-APP-REMINDER-SYNC-STATE: Pending must precede and Synchronized must follow the global profile commit'
 }
-$reminderSettingsFirstBindingCount = [regex]::Matches(
+$reminderOperationBinding = [regex]::Match(
     $applicationText,
-    '(?s)\(\s*ApplicationCommand::UpdateReminderPolicy,\s*ApplicationOperationPayload::ReminderPolicy\(update\),\s*\)\s*=>\s*\{\s*match state\s*\.update_reminder_policy\(permit, update\.into_policy\(\),.*?\}\)\s*\{\s*Ok\(\(\)\)\s*=>\s*execute_state_command\(synchronize_reminder_policy_after_settings\('
-).Count
-if ($reminderSettingsFirstBindingCount -ne 1) {
+    '(?s)\(\s*ApplicationCommand::UpdateReminderPolicy,\s*ApplicationOperationPayload::ReminderPolicy\(update\),\s*\)\s*=>\s*\{.*?\r?\n\s*\}\r?\n\s*\(ApplicationCommand::RestoreData'
+).Value
+$reminderStateUpdateIndex = $reminderOperationBinding.IndexOf('state.update_reminder_policy(permit, policy', [System.StringComparison]::Ordinal)
+$reminderSynchronizeIndex = $reminderOperationBinding.IndexOf('synchronize_reminder_policy_after_settings(', [System.StringComparison]::Ordinal)
+if ([string]::IsNullOrWhiteSpace($reminderOperationBinding) -or $reminderStateUpdateIndex -lt 0 -or
+    $reminderSynchronizeIndex -le $reminderStateUpdateIndex) {
     throw 'TM-APP-REMINDER-SETTINGS-FIRST: the single operation worker must persist reminder settings before synchronization'
 }
+$reminderSettingsFirstBindingCount = 1
+$replaceableCoordinator = [regex]::Match(
+    $commandText,
+    '(?s)pub\(crate\) fn submit_replaceable\(.*?\r?\n    \}\r?\n\r?\n    pub\(crate\) fn retry_last'
+).Value
+if ([string]::IsNullOrWhiteSpace($replaceableCoordinator) -or
+    $replaceableCoordinator -notmatch 'active\.pending = Some\(PendingCommand \{ id, command \}\)' -or
+    $replaceableCoordinator -notmatch 'ApplicationCommandAdmission::Coalesced' -or
+    [regex]::Matches($operationText, 'state\.coordinator\.submit_replaceable\(command\)').Count -ne 1 -or
+    [regex]::Matches($operationText, 'pending\.payload = payload;').Count -ne 1) {
+    throw 'TM-APP-REMINDER-LATEST-WINS: policy updates require one active plus one replaceable pending payload'
+}
+$reminderLatestWinsBindingCount = 1
+if ([regex]::Matches($applicationText, 'publish_pending_reminder_policy\(').Count -ne 3 -or
+    [regex]::Matches($applicationText, 'publish_pending_reminder_operation\(').Count -ne 3) {
+    throw 'TM-APP-REMINDER-VISIBLE-PENDING: Save and confirmed import must use the visible Pending acknowledgement path'
+}
+$reminderImportCommitFunction = [regex]::Match(
+    $stateText,
+    '(?s)pub\(crate\) fn commit_pending_config_import\(.*?\r?\n    \}\r?\n\r?\n    pub\(crate\) fn cancel_pending_config_import'
+).Value
+$importPendingIndex = $reminderImportCommitFunction.IndexOf('.swap(REMINDER_SYNC_PENDING, Ordering::AcqRel)', [System.StringComparison]::Ordinal)
+$importVisibleIndex = $reminderImportCommitFunction.IndexOf('on_irreversible().is_err()', [System.StringComparison]::Ordinal)
+$importCommitIndex = $reminderImportCommitFunction.IndexOf('.commit_import(&preview.settings)', [System.StringComparison]::Ordinal)
+if ([string]::IsNullOrWhiteSpace($reminderImportCommitFunction) -or $importPendingIndex -lt 0 -or
+    $importVisibleIndex -le $importPendingIndex -or $importCommitIndex -le $importVisibleIndex) {
+    throw 'TM-APP-REMINDER-VISIBLE-PENDING: confirmed import must visibly publish Pending before committing settings'
+}
+$reminderVisiblePendingBindingCount = 2
 $reminderImportBindingCount = [regex]::Matches(
     $applicationText,
     '(?s)\(ApplicationCommand::ConfirmConfigImport, ApplicationOperationPayload::Empty\)\s*=>\s*\{\s*match state\.commit_pending_config_import\(permit,.*?\}\)\s*\{\s*Ok\(_\)\s*=>\s*execute_state_command\(synchronize_reminder_policy_after_settings\('
@@ -404,6 +437,8 @@ if ($SourceOnly) {
         reminder_sealed_payload_count = $reminderSealedPayloadCount
         reminder_generation_binding_count = 1
         reminder_settings_first_binding_count = $reminderSettingsFirstBindingCount
+        reminder_latest_wins_binding_count = $reminderLatestWinsBindingCount
+        reminder_visible_pending_binding_count = $reminderVisiblePendingBindingCount
         reminder_import_binding_count = $reminderImportBindingCount
         reminder_startup_binding_count = $reminderStartupBindingCount
         desktop_controller_count = 1
@@ -535,6 +570,8 @@ foreach ($needle in @(
     reminder_sealed_payload_count = $reminderSealedPayloadCount
     reminder_generation_binding_count = 1
     reminder_settings_first_binding_count = $reminderSettingsFirstBindingCount
+    reminder_latest_wins_binding_count = $reminderLatestWinsBindingCount
+    reminder_visible_pending_binding_count = $reminderVisiblePendingBindingCount
     reminder_import_binding_count = $reminderImportBindingCount
     reminder_startup_binding_count = $reminderStartupBindingCount
     desktop_controller_count = 1

@@ -1426,13 +1426,11 @@ notices/SBOM/MSVC/package/signing/public-download/release evidence remains P6.
 
 P3-D.0 Reliable State, P3-D.1 History, P3-D.2 bounded Sessions list/detail, P3-D.3
 Models, P3-D.4 Projects, P3-D.5 Recent activity, and the bounded read-only P3-D.6
-Notifications route plus P3-D.7 Help/About are implemented. Continue with the separate
-notification settings synchronization/editing contour without widening Slint or route
-authority; the app-owned visible presentation/receipt bridge is implemented.
+Notifications route plus P3-D.7 Help/About, the app-owned visible presentation/receipt
+bridge, and global reminder settings synchronization/editor are implemented. Continue
+with P3-E command palette, tray, compact widget, and remaining shell lifecycle.
 Later-page Sessions navigation and interactive History ranges remain bounded
-replacements of their existing sections rather than new frontend query owners.
-P3-E then owns
-command palette, tray, compact widget, and remaining shell lifecycle. Interactive
+replacements of their existing sections rather than new frontend query owners. Interactive
 Windows, P4 presentation, P5 CLI/MCP, activation, M0, packaging, signing, soak, and
 product release remain unclaimed.
 

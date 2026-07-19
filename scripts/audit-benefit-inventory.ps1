@@ -214,6 +214,20 @@ if ([string]::IsNullOrWhiteSpace($globalProfileFunction) -or
     [regex]::Matches($globalProfileFunction, 'transaction\.commit\(\)').Count -ne 2) {
     throw 'TM-BENEFIT-REMINDER-GLOBAL-ATOMIC: global profile replacement must use one immediate transaction and atomic commit paths'
 }
+$scopeProfileFunction = [regex]::Match(
+    $writeText,
+    '(?s)pub fn set_benefit_reminder_override\(.*?\r?\n    \}\r?\n\r?\n    pub fn set_benefit_reminder_global_profile'
+).Value
+$scopeResultIndex = $scopeProfileFunction.IndexOf('let pending_due_count = output_u64(', [System.StringComparison]::Ordinal)
+$scopeCommitIndex = $scopeProfileFunction.LastIndexOf('transaction.commit()', [System.StringComparison]::Ordinal)
+$globalResultIndex = $globalProfileFunction.IndexOf('let pending_due_count = output_u64(', [System.StringComparison]::Ordinal)
+$globalCommitIndex = $globalProfileFunction.LastIndexOf('transaction.commit()', [System.StringComparison]::Ordinal)
+if ([string]::IsNullOrWhiteSpace($scopeProfileFunction) -or $scopeResultIndex -lt 0 -or
+    $scopeCommitIndex -le $scopeResultIndex -or $globalResultIndex -lt 0 -or
+    $globalCommitIndex -le $globalResultIndex) {
+    throw 'TM-BENEFIT-REMINDER-PRECOMMIT-RESULT: every fallible aggregate result conversion must precede the final transaction commit'
+}
+$profilePrecommitResultCount = 2
 $globalScopeLoader = [regex]::Match(
     $writeText,
     '(?s)fn load_benefit_scopes_for_global_profile\(.*?\r?\n\}'
@@ -385,6 +399,7 @@ foreach ($artifact in $artifacts) {
     bounded_due_page = $true
     durable_less_urgent_suppression = $true
     global_profile_transaction_count = 1
+    global_profile_precommit_result_count = $profilePrecommitResultCount
     inherited_scope_cap = 32
     current_lots_per_scope_cap = 64
     global_projection_lot_cap = 256

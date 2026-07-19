@@ -1850,3 +1850,30 @@ recovery one authoritative policy without allowing a UI draft or archive availab
 to become semantic authority. Per-scope editing, snooze, quiet hours, OS/tray delivery,
 usage alerts, activation, P4/P5/P6, M0, packaging, signing, soak, and release remain
 separate work.
+
+## ADR-075 — Acknowledge Pending before mutation and retain the latest desired policy
+
+Decision: payload-free commands retain ordinary coalescing, but reminder and backup
+policy changes use one immutable active operation plus one replaceable pending payload.
+The first later policy occupies that pending slot and subsequent matching policies
+replace only its payload, so the newest admitted desired state executes without queue
+growth. Other payload-bearing commands never report a coalesced admission when their
+payload would be discarded.
+
+Explicit reminder Save and confirmed config import publish a Pending projection with
+the exact atomic-promotion operation and wait at most five seconds for the Slint event
+loop to apply it before changing settings bytes. Failure restores the prior sync state,
+aborts the settings mutation, and preserves a config-import preview for retry. The
+one-shot acknowledgement adds no persistent worker, timer, or queue and transfers no
+store, path, provider, delivery, or activation authority to Desktop.
+
+The store represents aggregate due counts as `u64` because valid overridden scopes are
+outside synchronized rebuild caps. Every fallible conversion occurs before the final
+SQLite commit; result construction after commit is infallible. The 32-scope, 64-lot-
+per-scope, 256-synchronized-lot, and eight-lead work caps remain unchanged.
+
+Rationale: accepting a coalesced payload that is never executed loses user intent, and
+scheduling a UI callback is not proof that Pending became visible. A bounded latest-
+wins slot and visible acknowledgement close both races while preserving constant memory
+and single-worker ordering. Pre-commit validation keeps an error return from
+contradicting already committed archive state.

@@ -5,8 +5,11 @@
 Only the application operation worker may persist and synchronize the portable global
 reminder policy. Desktop forwards a checked bounded typed intent and retains one fixed
 eight-row editor model; it has no store, SQL, runtime, timer, polling, queue, or
-delivery authority. The global projection preserves scope overrides, deliveries,
-acknowledgements, and provider evidence. Per-scope editing, snooze, quiet hours,
+delivery authority. The worker retains at most one active and one latest-wins pending
+policy payload. Desktop returns one bounded acknowledgement only after applying the
+Pending/atomic-promotion projection; a failure prevents the durable settings mutation.
+The global projection validates returned aggregate counts before commit and preserves
+scope overrides, deliveries, acknowledgements, and provider evidence. Per-scope editing, snooze, quiet hours,
 OS/tray delivery, usage alerts, activation, P5 automation, and P6 release controls
 remain unavailable.
 

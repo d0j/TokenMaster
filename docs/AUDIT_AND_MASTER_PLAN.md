@@ -312,7 +312,9 @@ visible-before-ack receipt ordering, one condition-variable worker, exact 60-sec
 Busy/StoreUnavailable acknowledgement retry, same-worker failed-presentation re-pump,
 terminal-acknowledgement release without re-presentation, panic-safe runtime rollback,
 confirmed failure/shutdown release, and release-before-
-local-clear backpressure. Per-scope notification settings editing remains next; snooze, quiet
+local-clear backpressure. Global notification settings synchronization/editing is
+implemented with one latest-wins pending payload and visible Pending before durable
+settings mutation. P3-E shell lifecycle is next; per-scope editing, snooze, quiet
 hours, OS/tray delivery, usage alerts, and activation remain later independent slices.
 P3-D.6 independent re-review is Critical/Important/Minor 0/0/0; its 82 mutation audit,
 release composition, strict workspace Clippy, and complete locked workspace test/

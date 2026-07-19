@@ -878,10 +878,12 @@ focused Desktop/app/runtime tests and 177/177 combined audit mutations pass.
 The exact clean-root/fmt/workspace-Clippy/workspace-test developer baseline also passes.
 No M0, interactive Windows, soak, package, signing, or release acceptance is claimed.
 
-The immediate next implementation slice is notification settings synchronization and
-editing for the existing bounded default/custom reminder profile is now implemented
-for the global profile. Per-scope editing, snooze, quiet hours,
-OS/tray delivery, usage alerts, and activation remain separate unfinished capabilities.
+Notification settings synchronization and editing for the existing bounded default/
+custom reminder profile is implemented for the global profile. The operation worker
+keeps one active plus one latest-wins pending policy payload, and visible Pending is
+acknowledged before a durable settings mutation. Per-scope editing, snooze, quiet
+hours, OS/tray delivery, usage alerts, and activation remain separate unfinished
+capabilities.
 Reuse the immutable snapshot/controller boundary; do not turn route selection into
 query authority. Later-page Sessions navigation and interactive History range
 selection remain bounded replacements of their existing product sections.
@@ -890,8 +892,10 @@ treat busy/disk/access/schema-newer as corruption authority. Keep automatic reco
 data only; device-local settings never move. Do not relax the state boundary into path,
 generic-stream, generic age-extraction, or batch-deletion authority.
 
-P3-E then closes command palette, tray, compact lifecycle, and remaining shell work.
-P3-D-P3-E, P4 presentation, CLI/MCP, activation, M0 acceptance,
+The immediate next implementation slice is P3-E command palette, tray, compact
+lifecycle, and remaining shell work. Later-page Sessions navigation and interactive
+History ranges remain bounded replacements of existing sections. P3-E, P4
+presentation, CLI/MCP, activation, M0 acceptance,
 packaging, signing, and release remain unclaimed. Inventory/reminder read must not
 imply activation authority.
 The prior post-P3-D.0-Task-10 focused evidence includes the Task 5 store contracts,

@@ -3,12 +3,15 @@
 ## Global reminder settings synchronization
 
 Portable settings are desired-state authority. The application’s single operation
-worker saves an updated policy before projecting generation `N` to global reminder
-profile revision `N + 1`; startup, explicit Save, and confirmed config import share
-that synchronizer. The store changes only the global profile and inherited due rows,
-preserving scope overrides, deliveries, acknowledgements, and provider evidence; the
-projection is bounded by 32 inheriting scopes, 64 current lots per scope, 256 aggregate
-lots, and eight leads.
+worker applies a visibly acknowledged Pending projection before saving an updated
+policy, then projects generation `N` to global reminder profile revision `N + 1`;
+startup, explicit Save, and confirmed config import share that synchronizer. Rapid
+policy submissions retain one active operation and one latest-wins pending payload.
+The store validates every returned aggregate before commit, changes only the global
+profile and inherited due rows, and preserves scope overrides, deliveries,
+acknowledgements, and provider evidence. Synchronized rebuild work is bounded by 32
+inheriting scopes, 64 current lots per scope, 256 aggregate lots, and eight leads;
+the aggregate result remains wide enough for valid overridden-scope due rows.
 Desktop has one fixed five-preset/eight-row editor projection and no store/runtime/
 timer/polling/queue authority. Per-scope editing, snooze, quiet hours, OS/tray delivery,
 usage alerts, activation, P4/P5/P6, M0, package/signing/soak, and release are open.

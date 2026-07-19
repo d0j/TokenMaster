@@ -1136,8 +1136,8 @@ Describe "TokenMaster production desktop audit" {
         $fixture = New-DesktopAuditFixture -Name "reliable-slot"
         $path = Join-Path $fixture "crates\desktop\src\ui.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            'latest: Mutex<Option<DesktopReliableStateProjection>>',
-            'latest: Mutex<Vec<DesktopReliableStateProjection>>'
+            'latest: Mutex<Option<ReliableStateDelivery>>',
+            'latest: Mutex<VecDeque<ReliableStateDelivery>>'
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -1410,6 +1410,32 @@ Describe "TokenMaster production desktop audit" {
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-REMINDER-DRAFT*"
+    }
+
+    It "rejects acknowledging Pending before the visible projection is applied" {
+        $fixture = New-DesktopAuditFixture -Name "reminder-visible-pending-order"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'acknowledgement.send(if delivered',
+            'acknowledgement.send(if true'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-REMINDER-VISIBLE-PENDING*"
+    }
+
+    It "rejects widening the visible Pending acknowledgement timeout" {
+        $fixture = New-DesktopAuditFixture -Name "reminder-visible-pending-timeout"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'VISIBLE_REMINDER_PUBLICATION_TIMEOUT: Duration = Duration::from_secs(5)',
+            'VISIBLE_REMINDER_PUBLICATION_TIMEOUT: Duration = Duration::from_secs(50)'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-REMINDER-VISIBLE-PENDING*"
     }
 
     It "rejects removing a custom reminder accessibility label" {

@@ -10,6 +10,14 @@ recommended and eight normalized custom leads. This is developer closure only: p
 editing, snooze, quiet hours, OS/tray delivery, usage alerts, activation, P4/P5/P6, M0,
 package/signing/soak, and release are not accepted.
 
+Independent final review found and closed four acceptance blockers before this slice
+was accepted: same-command coalescing could discard a newer settings payload; Pending
+was scheduled but not visibly acknowledged before settings mutation; aggregate due
+count conversion could fail after SQLite commit; and current planning text still
+pointed back to the completed slice. The repaired path keeps one latest-wins pending
+payload, waits for bounded visible Pending acknowledgement, validates aggregate results
+before commit, and covers 65,536 overridden-scope due rows across retry and reopen.
+
 ## 2026-07-14 — clean TokenMaster foundation
 
 The repository was established as a single-root Rust project. It retains the active

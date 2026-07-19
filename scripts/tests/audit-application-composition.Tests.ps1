@@ -810,6 +810,32 @@ Describe "TokenMaster application composition audit" {
             Should -Throw "*TM-APP-REMINDER-SEALED*"
     }
 
+    It "rejects dropping the replaceable latest reminder payload" {
+        $fixture = New-AppAuditFixture -Name "reminder-latest-wins-drift"
+        $path = Join-Path $fixture "crates\app\src\operation.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'pending.payload = payload;',
+            'let _ = payload;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-REMINDER-LATEST-WINS*"
+    }
+
+    It "rejects bypassing visible Pending for a reminder save" {
+        $fixture = New-AppAuditFixture -Name "reminder-visible-pending-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'publish_pending_reminder_policy(reliable_state, permit.command(), &pending_policy)',
+            'publish_pending_reminder_operation(reliable_state, permit.command())'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-REMINDER-VISIBLE-PENDING*"
+    }
+
     It "rejects reminder profile generation drift" {
         $fixture = New-AppAuditFixture -Name "reminder-generation-drift"
         $path = Join-Path $fixture "crates\app\src\state.rs"

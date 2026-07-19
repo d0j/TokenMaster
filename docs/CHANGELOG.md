@@ -13,7 +13,7 @@ All notable changes are recorded here.
 - Added the fixed responsive Settings editor: enable/disable, five recommended leads,
   and up to eight normalized custom leads with checked conversion, dirty-draft
   retention, accessible labels, and no UI runtime/store/timer/polling/queue authority.
-  Computed application/Desktop/benefit receipts and 189 Pester mutation tests pass.
+  Computed application/Desktop/benefit receipts and 193 Pester mutation tests pass.
   Per-scope editing, snooze, quiet hours, OS/tray delivery, usage alerts, activation,
   P4/P5/P6, M0 acceptance, package/signing/soak, and release remain incomplete.
 
@@ -1095,6 +1095,18 @@ All notable changes are recorded here.
 
 ### Fixed
 
+- Closed the reminder-settings final-review races. Rapid policy saves now retain one
+  active operation plus one latest-wins pending payload instead of acknowledging and
+  discarding a newer value. Explicit Save and confirmed config import wait for a
+  bounded Slint acknowledgement of the visible Pending/atomic-promotion projection
+  before settings bytes may change; publication failure aborts the mutation and keeps
+  an import preview retryable.
+- Widened the aggregate reminder-profile due count to `u64` for valid overridden-scope
+  inventories, moved every fallible count conversion before SQLite commit, and added
+  65,536-due retry/reopen coverage with unchanged durable revisions.
+- Corrected current handoff and roadmap text that still routed the next implementation
+  slice to the already completed global reminder settings editor. P3-E shell lifecycle
+  is now the explicit next slice.
 - Hardened the product resource-gate warm-up against the exact bimodal private-byte
   profile exposed by the first full P3-D.7 baseline. Warm-up now continues when its
   retained ceiling exceeds its floor by the unchanged 2 MiB return tolerance; a

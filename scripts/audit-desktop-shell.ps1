@@ -72,6 +72,12 @@ $bridgePath = Join-Path $sourceRoot 'bridge.rs'
 $bridgeText = [System.IO.File]::ReadAllText($bridgePath)
 $uiRustPath = Join-Path $sourceRoot 'ui.rs'
 $uiRustText = [System.IO.File]::ReadAllText($uiRustPath)
+$uiRustTestBoundary = $uiRustText.IndexOf('#[cfg(test)]', [System.StringComparison]::Ordinal)
+$uiRustProductionText = if ($uiRustTestBoundary -ge 0) {
+    $uiRustText.Substring(0, $uiRustTestBoundary)
+} else {
+    $uiRustText
+}
 $reliableStateText = [System.IO.File]::ReadAllText((Join-Path $sourceRoot 'reliable_state.rs'))
 $workerConstructionCount = [regex]::Matches($controllerText, 'RefreshWorker::spawn\(').Count
 if ($workerConstructionCount -ne 1) {
@@ -102,12 +108,15 @@ if ($bridgeText -notmatch 'window:\s*slint::Weak<MainWindow>') {
 if ($bridgeText -match 'window:\s*MainWindow|\b(slint::Timer|std::thread|thread::spawn|thread::sleep)\b') {
     throw 'TM-DESKTOP-BRIDGE-POLLING: desktop bridge must not retain a strong window, timer, or polling thread'
 }
-if ($uiRustText -notmatch 'window:\s*slint::Weak<MainWindow>' -or
-    $uiRustText -notmatch 'latest:\s*Mutex<Option<DesktopReliableStateProjection>>' -or
-    $uiRustText -notmatch 'scheduled:\s*AtomicBool') {
+if ($uiRustProductionText -notmatch 'window:\s*slint::Weak<MainWindow>' -or
+    $uiRustProductionText -notmatch 'latest:\s*Mutex<Option<ReliableStateDelivery>>' -or
+    $uiRustProductionText -notmatch 'scheduled:\s*AtomicBool') {
     throw 'TM-DESKTOP-RELIABLE-SLOT: reliable-state delivery must use one latest-only slot, one atomic gate, and a weak window'
 }
-if ($uiRustText -match '\bVecDeque\b|\b(?:sync_)?channel\b') {
+$reliableQueueRemainder = $uiRustProductionText -replace 'sync_channel\(1\)', '' -replace '\bmpsc::\{SyncSender, sync_channel\}', ''
+$reliableAckChannelCount = [regex]::Matches($uiRustProductionText, 'sync_channel\(1\)').Count
+if ($reliableAckChannelCount -ne 1 -or
+    $reliableQueueRemainder -match '\bVecDeque\b|\b(?:sync_)?channel\b') {
     throw 'TM-DESKTOP-RELIABLE-QUEUE: reliable-state delivery must not retain an unbounded or ordered event queue'
 }
 if ($reliableStateText -notmatch 'pub struct DesktopRecoveryReceipt' -or
@@ -118,8 +127,8 @@ if ($reliableStateText -notmatch 'pub struct DesktopRecoveryReceipt' -or
     $uiText -notmatch 'Previous quota, reset-credit, reminder, and Git history is unavailable\.') {
     throw 'TM-DESKTOP-RECOVERY-RECEIPT: durable recovery loss must remain explicit and visible'
 }
-$uiAdapterText = [System.IO.File]::ReadAllText((Join-Path $sourceRoot 'ui.rs')) + "`n" +
-    $uiText
+$uiAdapterText = $uiRustText + "`n" + $uiText
+$uiProductionAdapterText = $uiRustProductionText + "`n" + $uiText
 if ($uiAdapterText -match 'QueryService::|RefreshWorker::|DesktopController::|\.usage_analytics\(|\.usage_session_detail\(|\.quota_overview\(|\.benefit_overview\(') {
     throw 'TM-DESKTOP-UI-QUERY: Slint callbacks must not perform controller or query work'
 }
@@ -140,7 +149,7 @@ if ($modelsText -match '(?i)passphrase|password|confirmation') {
     throw 'TM-DESKTOP-SECRET-MODEL: passphrases must never enter a Slint list or global model'
 }
 if (
-    $uiAdapterText -match '(?i)\b(?:slint::Timer|std::thread|thread::spawn|thread::sleep)\b' -or
+    $uiProductionAdapterText -match '(?i)\b(?:slint::Timer|std::thread|thread::spawn|thread::sleep)\b' -or
     $uiText -match '(?i)(?:\bTimer\s*\{|\banimate\s+[A-Za-z_-]+\b|\banimation-[A-Za-z_-]+\b)'
 ) {
     throw 'TM-DESKTOP-UI-POLLING: UI must remain timer animation and polling free'
@@ -912,6 +921,19 @@ $reminderSaveFunction = [regex]::Match(
     $uiRustText,
     '(?s)window\.on_save_reminder_policy\(move \|\| \{.*?\n    \}\);'
 ).Value
+$reliableDeliveryFunction = [regex]::Match(
+    $uiRustProductionText,
+    '(?s)fn deliver_latest\(.*?\r?\n    \}\r?\n\}'
+).Value
+$pendingApplyIndex = $reliableDeliveryFunction.IndexOf('apply_reliable_state_projection(&window, &delivery.projection);', [System.StringComparison]::Ordinal)
+$pendingAckIndex = $reliableDeliveryFunction.IndexOf('acknowledgement.send(if delivered', [System.StringComparison]::Ordinal)
+if ($uiRustProductionText -notmatch 'const VISIBLE_REMINDER_PUBLICATION_TIMEOUT: Duration = Duration::from_secs\(5\);' -or
+    [regex]::Matches($uiRustProductionText, 'recv_timeout\(VISIBLE_REMINDER_PUBLICATION_TIMEOUT\)').Count -ne 1 -or
+    [string]::IsNullOrWhiteSpace($reliableDeliveryFunction) -or $pendingApplyIndex -lt 0 -or
+    $pendingAckIndex -le $pendingApplyIndex) {
+    throw 'TM-DESKTOP-REMINDER-VISIBLE-PENDING: bounded acknowledgement must follow visible Pending projection application'
+}
+$reminderVisiblePendingAckCount = 1
 $reliableProjectionFunction = [regex]::Match(
     $uiRustText,
     '(?s)fn apply_reliable_state_projection\(.*?\r?\n\}\r?\n\r?\nfn saturating_i32'
@@ -953,8 +975,9 @@ if ($reminderScrollCount -ne 1 -or $reminderCardCount -ne 1 -or $backupCardCount
     $settingsViewText -notmatch 'out property <length> backup-card-top:') {
     throw 'TM-DESKTOP-REMINDER-LAYOUT: one intrinsic ScrollView reminder card and one responsive backup control set are required'
 }
-$reminderOwnerBoundary = $mainUiText + "`n" + $settingsViewText + "`n" + $uiRustText
-if ($reminderOwnerBoundary -match '\b(?:Timer|VecDeque|sync_channel|thread::spawn|thread::sleep|animate|LineEdit)\b') {
+$reminderOwnerBoundary = $mainUiText + "`n" + $settingsViewText + "`n" + $uiRustProductionText
+$reminderOwnerRemainder = $reminderOwnerBoundary -replace 'sync_channel\(1\)', '' -replace '\bmpsc::\{SyncSender, sync_channel\}', ''
+if ($reminderOwnerRemainder -match '\b(?:Timer|VecDeque|sync_channel|thread::spawn|thread::sleep|animate|LineEdit)\b') {
     throw 'TM-DESKTOP-REMINDER-OWNER: reminder settings must not add a timer, animation, parser, worker, polling loop, or queue'
 }
 $dashboardModelReplacementCount = [regex]::Matches(
@@ -1065,6 +1088,8 @@ if ($SourceOnly) {
         reminder_checked_conversion_count = 1
         reminder_accessible_label_count = 8
         reminder_scrollview_count = $reminderScrollCount
+        reminder_visible_pending_ack_count = $reminderVisiblePendingAckCount
+        reminder_visible_pending_channel_count = $reliableAckChannelCount
         help_about_section_count = $helpAboutRenderedSectionCount
         help_about_version_setter_count = $helpAboutVersionSetterCount
         help_about_slint_attribution_count = $helpAboutAttributionCount
@@ -1193,6 +1218,8 @@ if ($LASTEXITCODE -ne 0) {
     reminder_checked_conversion_count = 1
     reminder_accessible_label_count = 8
     reminder_scrollview_count = $reminderScrollCount
+    reminder_visible_pending_ack_count = $reminderVisiblePendingAckCount
+    reminder_visible_pending_channel_count = $reliableAckChannelCount
     help_about_section_count = $helpAboutRenderedSectionCount
     help_about_version_setter_count = $helpAboutVersionSetterCount
     help_about_slint_attribution_count = $helpAboutAttributionCount
