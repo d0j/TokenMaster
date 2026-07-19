@@ -58,6 +58,12 @@ $env:RUSTFLAGS = '-Dwarnings'; cargo +1.97.0 clippy -p tokenmaster-desktop --all
 
 ## Task 2 — implement compact content in the existing window
 
+Status: complete as developer evidence. The same `MainWindow` reuses all current
+bounded quota rows, explicit unavailable/unknown-ratio truth, one geometry restore
+slot, and one accessible Dashboard return. Focused/release Desktop gates, 141 mutation
+cases, 10,000 same-component switches, and independent 0/0/0 review pass. Native
+maximized/mixed-DPI/screen-reader behavior remains interactive acceptance evidence.
+
 Create one bounded Compact Widget view from current quota projection. Entry replaces
 only presentation mode; it does not issue a query or create a second window/snapshot.
 Cover dynamic provider windows, explicit unavailable/partial state, resize/restore,

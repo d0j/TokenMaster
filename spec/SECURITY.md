@@ -1213,3 +1213,14 @@ payload and is cleared on dismissal. Source mutations reject cap/model/shortcut/
 accessibility/overlay/route-only drift and any timer, query, worker, cache, or mutation
 authority. This is developer evidence only; interactive keyboard/screen-reader and
 release security acceptance remain P4/P6 gates.
+
+P3-E.2 keeps compact mode inside that same authority-free Desktop boundary. The view
+receives the existing `DashboardQuotaRow` model and current route freshness/reasons;
+it does not receive provider handles, archive access, paths, credentials, private
+identity, native handles, or mutation callbacks. One fixed `Rc<RefCell<_>>` stores only
+whether compact mode is active and one prior physical window size. Entry and return
+replace presentation state after releasing the Desktop mutex and never create another
+window, snapshot, query, timer, worker, queue, cache, or controller. Unknown ratios
+remain explicit and fixed five-hour/weekly assumptions are rejected. This does not
+authorize tray, startup, hotkey, single-instance, close interception, or release
+behavior.

@@ -24,8 +24,18 @@ query cap is 64 Unicode scalar values, the result model is replace-only and capp
 11, accepted snapshots refresh an open palette, and UI setters run after releasing the
 Desktop state mutex. Compiled keyboard/text/pointer/accessibility/snapshot tests,
 release audit, 134 audit mutations, clean-root, fmt, strict workspace Clippy, and the
-complete locked workspace suite pass. This does not claim compact content, production
-tray/hotkey/single-instance/startup, P4/P5/P6, M0, package/signing/soak, or release.
+complete locked workspace suite pass. This does not claim production tray/hotkey/
+single-instance/startup, P4/P5/P6, M0, package/signing/soak, or release.
+
+P3-E.2 is developer-closed. The `compact_widget` route is an always-mounted
+presentation mode in that same `MainWindow`, reuses the current Dashboard quota model
+up to 32 provider-defined rows, shows unavailable/unknown-ratio truth, and retains only
+one normal-window-size restore value. Keyboard, pointer, and accessibility return to
+Dashboard through stable route selection. The compiled 32-row/unknown-ratio/10,000-
+switch contract, 141 audit mutations, release audit, strict Desktop Clippy/tests, and
+independent Critical/Important/Minor 0/0/0 review pass. Do not claim production tray/
+close, hotkey, single-instance/startup, interactive Windows/DPI/screen-reader, P4/P5/
+P6, M0, package/signing/soak, or release acceptance.
 
 P0-A and the incorporated P0-B Codex-lineage surface are complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`. The P0-C pure
@@ -903,9 +913,9 @@ treat busy/disk/access/schema-newer as corruption authority. Keep automatic reco
 data only; device-local settings never move. Do not relax the state boundary into path,
 generic-stream, generic age-extraction, or batch-deletion authority.
 
-The immediate next implementation slice is P3-E.2 compact content in the existing
-window, followed by the production tray lifecycle, current-session activation/global
-hotkey, and opt-in current-user startup. Later-page Sessions navigation and interactive
+The immediate next implementation slice is the production tray lifecycle, followed by
+current-session activation/global hotkey and opt-in current-user startup. Later-page
+Sessions navigation and interactive
 History ranges remain bounded replacements of existing sections. Remaining P3-E, P4
 presentation, CLI/MCP, activation, M0 acceptance,
 packaging, signing, and release remain unclaimed. Inventory/reminder read must not

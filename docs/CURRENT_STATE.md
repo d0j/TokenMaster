@@ -30,9 +30,22 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   Slint setters. Runtime UI tests include 10,000-scalar input, pointer/accessibility,
   and open-snapshot refresh; the release desktop audit and 134 mutation cases pass.
   Clean-root, formatting, strict workspace Clippy, and the complete locked workspace
-  test/doctest gate pass; the latter completed in 879.2 seconds. Compact content,
-  production tray/hotkey/single-instance/startup, P4/P5/P6, M0, packaging, signing,
-  soak, and release remain incomplete.
+  test/doctest gate pass; the latter completed in 879.2 seconds. Production tray/
+  hotkey/single-instance/startup, P4/P5/P6, M0, packaging, signing, soak, and release
+  remain incomplete.
+
+- P3-E.2 bounded compact quota mode: the existing `compact_widget` route now switches
+  the sole always-mounted `MainWindow` to a 420 by 560 logical-pixel quota surface and
+  restores one previously captured valid normal physical size on return. It reuses the
+  exact current Dashboard quota model, renders all provider-defined windows up to the
+  existing 32-row cap, keeps unavailable and unknown-ratio truth explicit, and adds one
+  keyboard/pointer/accessibility Dashboard return. It adds no query, snapshot, window,
+  worker, timer, queue, cache, controller, provider assumption, or native authority.
+  Compiled coverage proves 32 rows, explicit unknown ratio, same-component identity,
+  exact restoration, and 10,000 mode cycles; release audit, 141 mutations, strict
+  Desktop Clippy/tests, and independent 0/0/0 review pass. Production tray/close,
+  hotkey, single-instance/startup, interactive Windows/DPI/screen-reader acceptance,
+  P4/P5/P6, M0, packaging, signing, soak, and release remain incomplete.
 
 - M0 native architecture proof: one process, software-rendered Slint UI, tray
   lifecycle, three layouts, three skins, English/Russian/pseudo localization,
@@ -1443,8 +1456,8 @@ notices/SBOM/MSVC/package/signing/public-download/release evidence remains P6.
 P3-D.0 Reliable State, P3-D.1 History, P3-D.2 bounded Sessions list/detail, P3-D.3
 Models, P3-D.4 Projects, P3-D.5 Recent activity, and the bounded read-only P3-D.6
 Notifications route plus P3-D.7 Help/About, the app-owned visible presentation/receipt
-bridge, global reminder settings synchronization/editor, and P3-E.1 route command
-palette are implemented. Continue with P3-E.2 compact content, then production tray,
+bridge, global reminder settings synchronization/editor, P3-E.1 route command palette,
+and P3-E.2 compact quota mode are implemented. Continue with production tray, then
 hotkey, single-instance/startup, and remaining shell lifecycle.
 Later-page Sessions navigation and interactive History ranges remain bounded
 replacements of their existing sections rather than new frontend query owners. Interactive

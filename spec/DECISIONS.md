@@ -1895,3 +1895,25 @@ could duplicate application authority. Reusing the immutable route projection ke
 latency and retained memory bounded while giving keyboard, pointer, and accessibility
 users one consistent navigation surface. Compact content and native lifecycle remain
 separate P3-E decisions.
+
+## ADR-077 — Keep compact quota content in the existing snapshot and window
+
+Decision: P3-E.2 mounts one always-present `CompactWidgetView` inside the sole
+production `MainWindow`. Selecting `compact_widget` hides the normal shell, shows all
+current `DashboardQuotaRow` values up to the existing 32-row cap, and changes the
+window to a 420 by 560 logical-pixel presentation. Returning to Dashboard restores one
+captured valid normal physical size. The compact surface renders freshness/reasons,
+explicitly distinguishes an unknown usage ratio, and exposes one keyboard, pointer,
+and accessibility return action through the existing stable route selection.
+
+The mode owns no query, second snapshot, provider-specific fixed row, worker, timer,
+queue, cache, controller, window, or native lifecycle authority. Its one bounded
+geometry slot is device-local and is not portable configuration or data authority.
+Close-to-tray, always-on-top policy, Explorer recovery, activation, hotkey, and startup
+remain later typed app/platform capabilities.
+
+Rationale: a separate compact window or data owner would duplicate renderer, snapshot,
+refresh, focus, and shutdown state. Reusing the current quota model makes route entry
+immediate and constant-bounded while preserving provider-defined windows and missing-
+data truth. Exact restoration keeps compact presentation reversible without letting
+window geometry enter the product snapshot.

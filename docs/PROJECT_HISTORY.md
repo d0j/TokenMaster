@@ -3571,3 +3571,26 @@ completed in 879.2 seconds. Final independent rereview returned Critical 0, Impo
 0, Minor 0, and Ready. This closes P3-E.1 only. Compact content, production tray,
 hotkey, single-instance activation, startup integration, P4/P5/P6, M0, packaging,
 signing, soak, and release remain open.
+
+## 2026-07-19 — P3-E.2 bounded compact quota mode
+
+The existing `compact_widget` route now becomes a real compact presentation without
+creating a second application surface. One always-mounted `CompactWidgetView` consumes
+the current Dashboard quota model and current route state/reasons, renders every
+provider-defined window up to the existing 32-row cap, exposes explicit unavailable
+and unknown-ratio text, and returns to Dashboard through keyboard, pointer, or
+accessibility action. The normal shell is hidden rather than reconstructed.
+
+One fixed device-local state cell captures a valid normal physical size, applies a 420
+by 560 logical-pixel compact size using the current scale factor, and restores the
+captured size exactly. Route selection releases the Desktop mutex before Slint setters.
+No query, second snapshot, window, timer, worker, queue, cache, controller, fixed five-
+hour/weekly assumption, portable geometry, or native lifecycle authority was added.
+
+Compiled tests prove unavailable state, 32 dynamic rows, an explicit unknown ratio,
+wide/narrow reflow, exact restoration through keyboard/pointer/accessibility, stable
+component identity, and 10,000 Compact/Dashboard cycles. The release Desktop audit,
+strict Desktop Clippy and package tests, and all 141 mutation cases pass. Independent
+final review returned Critical 0, Important 0, Minor 0, Ready. Production tray/close,
+hotkey, single-instance/startup, native maximized/mixed-DPI/screen-reader evidence,
+P4/P5/P6, M0, packaging, signing, soak, and release remain open.

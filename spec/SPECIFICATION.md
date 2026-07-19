@@ -17,6 +17,12 @@ enable/disable, five recommended leads, and at most eight normalized custom lead
 Per-scope editing, snooze, quiet hours, OS/tray delivery, usage alerts, activation,
 P4/P5/P6, M0 acceptance, package/signing/soak, and release remain incomplete.
 
+P3-E.2 compact quota mode is implemented as developer evidence inside the sole
+production window. It reuses the current bounded quota projection, adds no query,
+snapshot, worker, timer, cache, or native authority, and restores the prior normal
+window size on return. Production tray/close behavior and interactive Windows/DPI/
+screen-reader acceptance remain incomplete.
+
 ## Product goal
 
 TokenMaster MUST provide a fast, responsive, stable usage monitor with the complete
@@ -241,6 +247,12 @@ first-install schema creation.
 The product MUST provide single-instance tray behavior, dashboard/compact access,
 global hotkey, current-user startup, and headless degradation. It MUST support instant
 modular layout, skin, density, and English/Russian locale switching.
+
+Compact access MUST remain a presentation mode of the sole production window and MUST
+reuse the current immutable quota projection. It MUST show every published provider-
+defined quota window up to the existing bound, represent an unknown ratio explicitly,
+provide one checked return-to-dashboard action, retain at most one device-local normal
+window-size restore value, and MUST NOT query or retain a second product snapshot.
 
 ### TM-FUNC-006 — Safe local interfaces
 

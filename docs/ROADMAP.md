@@ -13,8 +13,11 @@ open.
 P3-E.1 command palette is complete as developer evidence: one final full-window
 route-only overlay reuses the fixed 11-route projection, caps its Unicode query at 64
 scalars and its replace-only model at 11 rows, supports keyboard/pointer/accessibility
-activation, and refreshes safely while open. P3-E.2 compact content is next; production
-tray/hotkey/single-instance/startup remain later P3-E slices.
+activation, and refreshes safely while open. P3-E.2 compact content is also complete as
+developer evidence: the same window reuses all current bounded quota rows, explicit
+unknown/unavailable truth, one reversible geometry slot, and one accessible Dashboard
+return without another query/snapshot/owner. Production tray is next; hotkey, current-
+session single-instance activation, and current-user startup remain later P3-E slices.
 
 M0 probe evidence implements: Rust/Slint/SQLite baseline, tray lifecycle, layouts, skins,
 English/Russian localization, accessibility-aware presentation contracts, resource
@@ -184,8 +187,8 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   re-presentation, panic-safe confirmed release, and joined
   lifecycle. Global notification settings synchronization/editing is complete. Full
   rhythm aggregation, later-page navigation, and interactive History ranges remain
-  P3-D. P3-E.1 command palette is complete; compact content, production tray/hotkey/
-  single-instance/startup, and remaining shell lifecycle stay open.
+  P3-D. P3-E.1 command palette and P3-E.2 compact quota mode are complete; production
+  tray/hotkey/single-instance/startup and remaining shell lifecycle stay open.
 - **P4 — presentation:** modular skins/layouts/density/scheme/locale, en/ru/pseudo,
   accessibility, DPI, reduced motion, and visible-paint/resource gates. Help/About
   full screen-reader acceptance must replace verbose region-plus-child duplicate
@@ -239,8 +242,8 @@ generation-safe current-bundle restart foundation and Task 12B.2a identity-pinne
   sections with one compile-time version, one standard pinned Slint attribution widget,
   and zero projection/model/query/runtime/callback/polling authority. The separate app-
   owned notification presentation contour and global settings synchronization/editor
-  are complete. P3-E.1 command palette is complete. P3-E.2 compact content is next,
-  followed by production tray/hotkey/single-instance/startup; later-page Sessions
+  are complete. P3-E.1 command palette and P3-E.2 compact quota mode are complete.
+  Production tray is next, followed by hotkey/single-instance/startup; later-page Sessions
   navigation remains a separate bounded replacement of the same list section.
 
 P3-D.0 Reliable State is approved under
