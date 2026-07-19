@@ -1,7 +1,7 @@
 use std::fmt;
 use std::path::Path;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags};
 
 use crate::{EXPECTED_SQLITE_VERSION, StoreError, StoreErrorCode};
 
@@ -182,6 +182,18 @@ impl UsageStore {
         Self::initialize(Connection::open(path)?, false)
     }
 
+    /// Opens an already-current archive without creating or migrating it.
+    ///
+    /// The schema and runtime policy checks deliberately share the retained
+    /// connection so a pathname cannot be swapped between validation and use.
+    pub fn open_current(path: impl AsRef<Path>) -> Result<Self, StoreError> {
+        let connection = Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        Self::initialize_current(connection)
+    }
+
     fn initialize(mut connection: Connection, in_memory: bool) -> Result<Self, StoreError> {
         let actual: String =
             connection.query_row("SELECT sqlite_version()", [], |row| row.get(0))?;
@@ -193,6 +205,29 @@ impl UsageStore {
         let store = Self {
             connection,
             in_memory,
+        };
+        store.runtime_policy()?;
+        Ok(store)
+    }
+
+    fn initialize_current(connection: Connection) -> Result<Self, StoreError> {
+        let actual: String =
+            connection.query_row("SELECT sqlite_version()", [], |row| row.get(0))?;
+        if actual != EXPECTED_SQLITE_VERSION {
+            return Err(StoreError::new(StoreErrorCode::VersionMismatch));
+        }
+
+        let schema_version: i64 =
+            connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+        if schema_version != USAGE_SCHEMA_VERSION {
+            return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
+        }
+        migration::validate_v13(&connection)?;
+        apply_runtime_policy(&connection, false)?;
+
+        let store = Self {
+            connection,
+            in_memory: false,
         };
         store.runtime_policy()?;
         Ok(store)

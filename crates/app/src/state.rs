@@ -626,12 +626,6 @@ impl ApplicationStateOwner {
     ) -> Result<ReminderProfile, ApplicationError> {
         self.reminder_sync_state
             .store(REMINDER_SYNC_PENDING, Ordering::Release);
-        let inspection =
-            inspect_startup_archive(root.validated_directory(), StartupValidationMode::Normal)
-                .map_err(|_| ApplicationError::state())?;
-        if inspection.status() != StartupArchiveStatus::Current {
-            return Err(ApplicationError::state());
-        }
         let settings = self
             .settings
             .load()
@@ -641,7 +635,7 @@ impl ApplicationStateOwner {
             settings.value().portable().reminders(),
         )?;
         let mut store =
-            UsageStore::open(root.archive_path()).map_err(|_| ApplicationError::state())?;
+            UsageStore::open_current(root.archive_path()).map_err(|_| ApplicationError::state())?;
         store
             .set_benefit_reminder_global_profile(&profile)
             .map_err(|_| ApplicationError::state())?;
