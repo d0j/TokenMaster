@@ -1917,3 +1917,30 @@ refresh, focus, and shutdown state. Reusing the current quota model makes route 
 immediate and constant-bounded while preserving provider-defined windows and missing-
 data truth. Exact restoration keeps compact presentation reversible without letting
 window geometry enter the product snapshot.
+
+## ADR-078 — Use one Slint tray and keep lifecycle authority in the application
+
+Decision: P3-E.3 adds one production `SystemTrayIcon` component and one fixed
+TokenMaster icon asset to Desktop. The component emits only Show, Hide, OpenCompact,
+OpenDashboard, and Quit through a single-install `Rc` router with one optional sink
+slot and no event queue. Desktop intercepts close as HideWindow only in the
+tray-enabled production composition. The application retains a weak reference to the
+sole `MainWindow`, maps both route actions to existing stable routes, restores the same
+window before showing, and treats Quit only as an event-loop return request. The
+existing shutdown sequence remains the sole worker-join and clean-run authority.
+
+The application shows the main window before best-effort tray presentation. Slint
+1.17.1 exposes no native tray-availability receipt on Windows; its backend acquires
+event-loop keepalive only after native tray creation and re-adds the icon from the
+event-driven `TaskbarCreated` path. TokenMaster does not fabricate availability,
+poll, retry, or add a duplicate Win32 tray owner. Unit-test composition omits the
+native tray under `cfg(test)` to avoid winit event-loop recreation across parallel
+workers; source mutation gates require the release composition to use the tray-enabled
+constructor.
+
+Rationale: a second Win32 owner would duplicate lifecycle, Explorer recovery, handle
+cleanup, and failure semantics while increasing memory and leak risk. Typed in-process
+intents preserve the presentation/application boundary and keep shutdown ordering
+unchanged. Explorer restart, foreground focus, missing-tray close behavior, and
+resource return still require interactive Windows acceptance; this decision does not
+claim hotkey, single-instance/startup, M0, package, signing, soak, or release.

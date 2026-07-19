@@ -12,8 +12,22 @@ Startup archive contention preserves that exact durable Pending policy while opt
 runtime health reports StoreUnavailable separately; health is not settings authority.
 The global projection validates returned aggregate counts before commit and preserves
 scope overrides, deliveries, acknowledgements, and provider evidence. Per-scope editing, snooze, quiet hours,
-OS/tray delivery, usage alerts, activation, P5 automation, and P6 release controls
+reminder OS/tray delivery, usage alerts, activation, P5 automation, and P6 release controls
 remain unavailable.
+
+## Production tray authority boundary
+
+Desktop owns one Slint `SystemTrayIcon`, the fixed TokenMaster icon/menu, close-to-tray
+presentation interception, and a queue-free router for exactly five typed lifecycle
+intents. It owns no runtime, store, query, provider, platform handle, thread, timer,
+queue, clean-run transition, or arbitrary command surface. The application retains
+only a weak window handle in the lifecycle sink, shows the main window before the
+optional tray surface, and maps the two route intents to the existing `dashboard` and
+`compact_widget` views. Quit only requests event-loop return; the established joined
+shutdown remains the sole clean-mark authority. Native creation failure therefore
+cannot turn data authority into tray authority or justify a permanently invisible
+process. Explorer restart and foreground/focus behavior remain interactive release
+evidence, not facts inferred from source tests.
 
 ## TM-SEC-001 — Local-first operation
 

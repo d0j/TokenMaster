@@ -19,6 +19,20 @@ Desktop has one fixed five-preset/eight-row editor projection and no store/runti
 timer/polling/queue authority. Per-scope editing, snooze, quiet hours, OS/tray delivery,
 usage alerts, activation, P4/P5/P6, M0, package/signing/soak, and release are open.
 
+## Production tray lifecycle
+
+P3-E.3 composes one Slint `SystemTrayIcon` with the sole production `MainWindow`.
+Desktop maps the fixed menu and icon click to five typed intents through one
+single-install, queue-free router. The application retains a weak window handle and
+executes show/hide, exact Dashboard/Compact selection, and event-loop quit on the UI
+thread. The main window is shown before the optional tray surface; close interception
+returns `HideWindow`, while the pinned Slint backend keeps the loop alive only after a
+native tray handle exists. Its event-driven `TaskbarCreated` handling is source-level
+upstream evidence; actual Explorer recovery and foreground behavior remain interactive
+acceptance. Event-loop return still flows through the existing worker joins and sole
+clean-run transition. No new thread, timer, queue, snapshot, query, runtime, store,
+provider, or native-handle owner is introduced in TokenMaster.
+
 ```text
 Codex JSONL sources
   -> bounded native watcher paths reduced immediately to one pathless hint aggregate

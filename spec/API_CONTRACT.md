@@ -7,7 +7,17 @@ application publishes Pending, saves portable desired state, then synchronizes t
 single global profile; a successful durable save with an unavailable archive remains
 retryable Pending. Settings projection exposes enable/disable, five recommended leads,
 and up to eight normalized custom leads only. Per-scope editing, snooze, quiet hours,
-OS/tray delivery, usage alerts, activation, CLI/MCP, and release APIs remain absent.
+Reminder OS/tray delivery, usage alerts, activation, CLI/MCP, and release APIs remain
+absent.
+
+## Internal desktop lifecycle
+
+The production tray is not a public automation API. Desktop may emit exactly five
+path-free in-process intents: Show, Hide, OpenCompact, OpenDashboard, and Quit. One
+queue-free single-install router forwards them to the application on the UI thread.
+No arbitrary route, command, payload, path, provider operation, or clean-run mutation
+is accepted. Test composition may omit the native tray, but the production binary may
+not silently select that test-only path.
 
 Future interfaces are versioned, local-only, and bounded. Until implementation,
 unlisted API, CLI, and MCP behaviors do not exist.

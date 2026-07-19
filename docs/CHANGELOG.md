@@ -6,6 +6,19 @@ All notable changes are recorded here.
 
 ### Added
 
+- Added the P3-E.3 production tray lifecycle around the sole production window: one
+  pinned TokenMaster SVG, one Slint tray component, five typed actions (Show, Hide,
+  OpenCompact, OpenDashboard, Quit), one queue-free single-install router, and one
+  weak-window application sink. Close hides the window; route actions reuse the
+  existing Dashboard/Compact state; Quit returns through joined shutdown before the
+  sole clean mark. The main window is shown before best-effort tray presentation, and
+  no TokenMaster thread, timer, retry queue, cache, snapshot, controller, store,
+  provider, or native-handle owner was added. Desktop/application release audits, 224
+  combined audit mutations, strict package Clippy, and full package tests pass.
+  Explorer/focus/close fallback and resource return remain interactive evidence;
+  hotkey, single-instance/startup, P4/P5/P6, M0, packaging, signing, soak, and release
+  are not claimed.
+
 - Added the P3-E.1 bounded route command palette as the final full-window layer of the
   sole production `MainWindow`. It reuses the fixed immutable 11-route projection,
   limits the query to 64 Unicode scalar values, keeps one replace-only result model,

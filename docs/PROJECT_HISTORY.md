@@ -3596,3 +3596,26 @@ hotkey, single-instance/startup, native maximized/mixed-DPI/screen-reader eviden
 P4/P5/P6, M0, packaging, signing, soak, and release remain open. The final clean-root,
 formatting, strict workspace Clippy, and complete locked workspace test/doctest gate
 also pass; the full suite completed in 753.4 seconds.
+
+## 2026-07-19 — P3-E.3 production tray lifecycle
+
+Production now composes one Slint tray beside the sole `MainWindow`, using the fixed
+TokenMaster SVG asset. Desktop gained five path-free lifecycle intents, one queue-free
+single-install router, callback wiring for icon/menu actions, and close interception.
+The application gained a weak-window sink for show/hide, exact Dashboard/Compact route
+selection, and event-loop Quit; the existing post-loop shutdown still joins owned
+workers before the sole clean mark. The window is shown before best-effort tray show,
+and no TokenMaster native-handle owner, retry timer, thread, queue, snapshot, query,
+cache, controller, runtime, store, or provider authority was added.
+
+Focused RED/GREEN contracts cover exact intent order and application effect mapping.
+An initial standalone tray component test exposed winit event-loop recreation across
+the full parallel package suite; the final test reuses the single existing shell
+component, while app unit composition omits only the native tray under `cfg(test)` and
+release source audits require the tray-enabled constructor. Full Desktop and app tests,
+strict package Clippy, both release audits, and 224 combined PowerShell mutation tests
+pass. The release audit reports one tray component, five intents, one router slot, one
+close handler, zero tray owners, and the pinned icon hash. Interactive Explorer
+restart, foreground focus, tray-unavailable close behavior, and resource return remain
+open with hotkey, single-instance/startup, P4/P5/P6, M0, packaging, signing, soak, and
+release.

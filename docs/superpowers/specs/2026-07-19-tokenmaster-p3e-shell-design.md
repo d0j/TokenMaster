@@ -71,6 +71,16 @@ remain unchanged. Compact close behavior follows the tray capability rule below.
 
 ## P3-E.3 — tray lifecycle
 
+Status: implemented as developer evidence. One production Slint tray component, five
+typed intents, one queue-free router, same-window route/show/hide handling, visible-
+first optional presentation, close interception, and joined Quit pass focused,
+mutation, package, and release-composition gates. The pinned Slint 1.17.1 Windows
+backend creates its keepalive only after native tray creation and handles
+`TaskbarCreated` event-driven; its public API exposes no separate availability receipt.
+TokenMaster therefore does not invent one or add a duplicate Win32 tray owner. Actual
+Explorer recovery, foreground focus, and tray-unavailable close behavior remain final
+interactive acceptance evidence.
+
 The production Desktop package may declare one Slint `SystemTrayIcon`, but it exposes
 only `Show`, `Hide`, `OpenCompact`, `OpenDashboard`, and `Quit` typed lifecycle intents.
 It owns no application runtime and cannot mark the reliable run clean.
@@ -79,12 +89,15 @@ The application consumes these intents on the UI thread. Show restores and focus
 existing window; Hide hides it; OpenCompact/OpenDashboard select the exact mode/route
 before showing; Quit requests the Slint loop to return. Application shutdown then
 closes admission, joins all owned workers, and only after successful joins publishes a
-clean run. Close-to-tray is enabled only while the tray is proven available. Without a
-tray, a close request exits normally instead of leaving an undiscoverable process.
+clean run. Close interception returns HideWindow in the tray-enabled production
+composition. The pinned backend keeps the loop alive only after its native tray handle
+exists; without that keepalive, close lets the loop return instead of retaining an
+undiscoverable process.
 
-Tray creation failure degrades to the visible main window with bounded health. It does
-not fail data collection, create a retry timer, or spin. Explorer recreation is one
-event-driven re-registration attempt at a time with capacity-one coalescing.
+Tray creation failure degrades to the visible main window: the app shows it before the
+best-effort tray show. Failure does not fail data collection, create a retry timer, or
+spin. Explorer recreation remains the pinned backend's event-driven re-add rather than
+a second TokenMaster owner.
 
 ## P3-E.4 — single instance and global hotkey
 

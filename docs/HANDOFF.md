@@ -15,7 +15,7 @@ startup, explicit Save, and confirmed config import, leaves durable settings Pen
 when archive synchronization is unavailable, and preserves scope overrides/delivery/
 acknowledgement/provider evidence. The Settings editor is fixed at five presets and
 eight normalized custom rows. Do not claim per-scope editing, snooze, quiet hours,
-OS/tray delivery, usage alerts, activation, P4/P5/P6, M0, package/signing/soak, or
+reminder OS/tray delivery, usage alerts, activation, P4/P5/P6, M0, package/signing/soak, or
 release acceptance.
 
 P3-E.1 is developer-closed. The sole production `MainWindow` now exposes one bounded
@@ -24,8 +24,9 @@ query cap is 64 Unicode scalar values, the result model is replace-only and capp
 11, accepted snapshots refresh an open palette, and UI setters run after releasing the
 Desktop state mutex. Compiled keyboard/text/pointer/accessibility/snapshot tests,
 release audit, 134 audit mutations, clean-root, fmt, strict workspace Clippy, and the
-complete locked workspace suite pass. This does not claim production tray/hotkey/
-single-instance/startup, P4/P5/P6, M0, package/signing/soak, or release.
+complete locked workspace suite pass. That receipt did not claim native lifecycle;
+P3-E.3 tray status is recorded below. It does not claim hotkey/single-instance/startup,
+P4/P5/P6, M0, package/signing/soak, or release.
 
 P3-E.2 is developer-closed. The `compact_widget` route is an always-mounted
 presentation mode in that same `MainWindow`, reuses the current Dashboard quota model
@@ -35,9 +36,21 @@ Dashboard through stable route selection. The compiled 32-row/unknown-ratio/10,0
 switch contract, 141 audit mutations, release audit, strict Desktop Clippy/tests, and
 independent Critical/Important/Minor 0/0/0 review pass. Clean-root, formatting, strict
 workspace Clippy, and the complete locked workspace test/doctest gate pass in 753.4
-seconds. Do not claim production tray/close, hotkey, single-instance/startup,
-interactive Windows/DPI/screen-reader, P4/P5/P6, M0, package/signing/soak, or release
-acceptance.
+seconds. That receipt did not claim native lifecycle; P3-E.3 tray status is recorded
+below. Do not claim hotkey, single-instance/startup, interactive Windows/DPI/screen-
+reader, P4/P5/P6, M0, package/signing/soak, or release acceptance.
+
+P3-E.3 is developer-closed. Production owns one Slint tray component and one fixed
+TokenMaster SVG asset. Its icon/menu emit exactly five typed, path-free lifecycle
+intents through one single-install router with no queue. The app maps them to the same
+weakly held window, the existing Dashboard/Compact routes, or event-loop quit; normal
+joined shutdown remains the only clean-mark path. Window show precedes best-effort tray
+show, and no TokenMaster timer/thread/native owner was added. Desktop/application
+release audits, 224 combined mutation cases, strict package Clippy, and full package
+tests pass. Pinned Slint source supplies event-driven `TaskbarCreated` re-add, but
+actual Explorer restart, foreground focus, close/fallback behavior, and resource return
+remain interactive gates. Do not claim hotkey, single-instance/startup, P4/P5/P6, M0,
+package/signing/soak, or release acceptance.
 
 P0-A and the incorporated P0-B Codex-lineage surface are complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`. The P0-C pure
@@ -915,8 +928,8 @@ treat busy/disk/access/schema-newer as corruption authority. Keep automatic reco
 data only; device-local settings never move. Do not relax the state boundary into path,
 generic-stream, generic age-extraction, or batch-deletion authority.
 
-The immediate next implementation slice is the production tray lifecycle, followed by
-current-session activation/global hotkey and opt-in current-user startup. Later-page
+The immediate next implementation slice is current-session activation/global hotkey,
+followed by opt-in current-user startup and P3-E resource/interactive closure. Later-page
 Sessions navigation and interactive
 History ranges remain bounded replacements of existing sections. Remaining P3-E, P4
 presentation, CLI/MCP, activation, M0 acceptance,

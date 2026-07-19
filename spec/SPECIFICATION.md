@@ -14,14 +14,17 @@ Pending is visible before durable settings mutation and Synchronized follows onl
 successful atomic global-profile store commit; archive Busy/unavailable leaves the
 durable desired state retryable as Pending. The fixed Settings editor supports
 enable/disable, five recommended leads, and at most eight normalized custom leads.
-Per-scope editing, snooze, quiet hours, OS/tray delivery, usage alerts, activation,
+Per-scope editing, snooze, quiet hours, reminder OS/tray delivery, usage alerts, activation,
 P4/P5/P6, M0 acceptance, package/signing/soak, and release remain incomplete.
 
-P3-E.2 compact quota mode is implemented as developer evidence inside the sole
-production window. It reuses the current bounded quota projection, adds no query,
-snapshot, worker, timer, cache, or native authority, and restores the prior normal
-window size on return. Production tray/close behavior and interactive Windows/DPI/
-screen-reader acceptance remain incomplete.
+P3-E.2 compact quota mode and P3-E.3 production tray lifecycle are implemented as
+developer evidence around the sole production window. Compact reuses the current
+bounded quota projection and one reversible geometry slot. One Slint tray component
+emits only Show, Hide, OpenCompact, OpenDashboard, and Quit; the application owns
+their consequences, and Quit returns to the existing joined shutdown/clean-mark path.
+Neither slice adds query, snapshot, worker, timer, cache, data, or provider authority.
+Global hotkey, single-instance activation, current-user startup, and interactive
+Windows/Explorer/DPI/screen-reader/resource acceptance remain incomplete.
 
 ## Product goal
 
