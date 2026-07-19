@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use rusqlite::{OptionalExtension, Row, Transaction, TransactionBehavior, params};
 use tokenmaster_benefits::{
     BenefitChange, BenefitChangeKind, BenefitCoreError, BenefitCurrentLot, BenefitInventoryState,
@@ -14,10 +16,12 @@ use tokenmaster_domain::{
     UsageProviderId,
 };
 
-use super::UsageStore;
 use super::benefit_types::{
     BenefitApplyResult, BenefitApplyStatus, BenefitInventoryRevision, BenefitProfileApplyResult,
     MAX_BENEFIT_CHANGES_PER_SCOPE,
+};
+use super::{
+    MAX_BENEFIT_CURRENT_LOTS, MAX_BENEFIT_OVERVIEW_LOTS, MAX_BENEFIT_OVERVIEW_SCOPES, UsageStore,
 };
 use crate::{StoreError, StoreErrorCode};
 
@@ -211,6 +215,83 @@ impl UsageStore {
             output_u16(next_due_count)?,
         ))
     }
+
+    pub fn set_benefit_reminder_global_profile(
+        &mut self,
+        profile: &ReminderProfile,
+    ) -> Result<BenefitProfileApplyResult, StoreError> {
+        self.set_benefit_reminder_global_profile_inner(profile, BenefitWriteFault::None)
+    }
+
+    fn set_benefit_reminder_global_profile_inner(
+        &mut self,
+        profile: &ReminderProfile,
+        fault: BenefitWriteFault,
+    ) -> Result<BenefitProfileApplyResult, StoreError> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let global = load_global_state(&transaction)?;
+        let current = load_active_profile(&transaction, &[0; 32])?;
+        match profile.revision().get().cmp(&current.revision().get()) {
+            Ordering::Less => return Err(StoreError::new(StoreErrorCode::StaleRevision)),
+            Ordering::Equal if profile == &current => {
+                return current_profile_result(&transaction, global);
+            }
+            Ordering::Equal => return Err(StoreError::new(StoreErrorCode::InvalidValue)),
+            Ordering::Greater => {}
+        }
+
+        let scopes = load_benefit_scopes_for_global_profile(&transaction)?;
+        let mut next_global_due_count = global.pending_due_count;
+        transaction.execute(
+            "DELETE FROM benefit_reminder_profile
+             WHERE profile_kind = 'global' AND length(profile_scope_id) = 0",
+            [],
+        )?;
+        insert_global_profile(&transaction, profile)?;
+        benefit_write_fault(fault, BenefitWriteFault::AfterProfile)?;
+        for scope in scopes {
+            if scope.has_override {
+                continue;
+            }
+            let prior_due_count = count_scope_rows(
+                &transaction,
+                "benefit_reminder_due",
+                scope.scope_id.as_bytes(),
+            )?;
+            transaction.execute(
+                "DELETE FROM benefit_reminder_due WHERE scope_id = ?1",
+                [scope.scope_id.as_bytes().as_slice()],
+            )?;
+            let next_due_count = rebuild_due(
+                &transaction,
+                &scope.scope,
+                scope.scope_id.as_bytes(),
+                scope.lots.as_ref(),
+                profile,
+            )?;
+            next_global_due_count =
+                checked_replace_count(next_global_due_count, prior_due_count, next_due_count)?;
+        }
+        let next_global_revision = global.revision.next()?;
+        update_global_state(
+            &transaction,
+            next_global_revision,
+            global.current_lot_count,
+            global.retained_change_count,
+            next_global_due_count,
+            global.retained_delivery_count,
+            global
+                .last_published_at_ms
+                .ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?,
+        )?;
+        transaction.commit()?;
+        Ok(BenefitProfileApplyResult::new(
+            next_global_revision,
+            output_u16(next_global_due_count)?,
+        ))
+    }
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -220,6 +301,7 @@ enum BenefitWriteFault {
     AfterCurrent,
     AfterDue,
     AfterRevision,
+    AfterProfile,
 }
 
 fn benefit_write_fault(
@@ -241,6 +323,107 @@ struct GlobalBenefitState {
     pending_due_count: i64,
     retained_delivery_count: i64,
     last_published_at_ms: Option<i64>,
+}
+
+struct GlobalProfileScope {
+    scope_id: tokenmaster_benefits::BenefitScopeId,
+    scope: BenefitScope,
+    lots: Box<[BenefitCurrentLot]>,
+    has_override: bool,
+}
+
+fn current_profile_result(
+    transaction: &Transaction<'_>,
+    global: GlobalBenefitState,
+) -> Result<BenefitProfileApplyResult, StoreError> {
+    let pending_due_count =
+        transaction.query_row("SELECT count(*) FROM benefit_reminder_due", [], |row| {
+            row.get::<_, i64>(0)
+        })?;
+    if pending_due_count != global.pending_due_count {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    Ok(BenefitProfileApplyResult::new(
+        global.revision,
+        output_u16(pending_due_count)?,
+    ))
+}
+
+fn load_benefit_scopes_for_global_profile(
+    transaction: &Transaction<'_>,
+) -> Result<Vec<GlobalProfileScope>, StoreError> {
+    let lookahead = MAX_BENEFIT_OVERVIEW_SCOPES
+        .checked_add(1)
+        .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?;
+    let limit = input_i64(lookahead)?;
+    let mut statement = transaction.prepare(
+        "SELECT scope_id, provider_id, account_id, workspace_id, current_lot_count,
+                EXISTS(SELECT 1 FROM benefit_reminder_profile AS profile
+                       WHERE profile.profile_kind = 'scope'
+                         AND profile.profile_scope_id = benefit_scope.scope_id)
+         FROM benefit_scope
+         ORDER BY scope_id
+         LIMIT ?1",
+    )?;
+    let rows = statement
+        .query_map([limit], |row| {
+            Ok((
+                row.get::<_, Vec<u8>>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, bool>(5)?,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    if rows.len() > MAX_BENEFIT_OVERVIEW_SCOPES {
+        return Err(StoreError::with_limit(
+            StoreErrorCode::CapacityExceeded,
+            MAX_BENEFIT_OVERVIEW_SCOPES as u64,
+        ));
+    }
+    let mut scopes = Vec::with_capacity(rows.len());
+    let mut total_lots = 0_usize;
+    for (stored_id, provider, account, workspace, current_lot_count, has_override) in rows {
+        let stored_id = fixed_32(stored_id)?;
+        let scope = BenefitScope::new(
+            UsageProviderId::new(provider).map_err(|_| invalid_stored())?,
+            QuotaAccountId::new(account).map_err(|_| invalid_stored())?,
+            workspace
+                .map(QuotaWorkspaceId::new)
+                .transpose()
+                .map_err(|_| invalid_stored())?,
+        );
+        let scope_id = benefit_scope_id(&scope);
+        if scope_id.as_bytes() != &stored_id || current_lot_count < 0 {
+            return Err(invalid_stored());
+        }
+        let current_lot_count = usize::try_from(current_lot_count).map_err(|_| invalid_stored())?;
+        if current_lot_count > MAX_BENEFIT_CURRENT_LOTS {
+            return Err(StoreError::with_limit(
+                StoreErrorCode::CapacityExceeded,
+                MAX_BENEFIT_CURRENT_LOTS as u64,
+            ));
+        }
+        total_lots = total_lots
+            .checked_add(current_lot_count)
+            .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?;
+        if total_lots > MAX_BENEFIT_OVERVIEW_LOTS {
+            return Err(StoreError::with_limit(
+                StoreErrorCode::CapacityExceeded,
+                MAX_BENEFIT_OVERVIEW_LOTS as u64,
+            ));
+        }
+        let state = load_inventory_state(transaction, &scope, scope_id.as_bytes(), None)?;
+        scopes.push(GlobalProfileScope {
+            scope_id,
+            scope,
+            lots: state.lots().to_vec().into_boxed_slice(),
+            has_override,
+        });
+    }
+    Ok(scopes)
 }
 
 fn load_global_state(transaction: &Transaction<'_>) -> Result<GlobalBenefitState, StoreError> {
@@ -895,6 +1078,34 @@ fn insert_profile_override(
     Ok(())
 }
 
+fn insert_global_profile(
+    transaction: &Transaction<'_>,
+    profile: &ReminderProfile,
+) -> Result<(), StoreError> {
+    let in_app = i64::from(profile.channels().contains(&NotificationChannel::InApp));
+    let os_scheduled = i64::from(
+        profile
+            .channels()
+            .contains(&NotificationChannel::OsScheduled),
+    );
+    transaction.execute(
+        "INSERT INTO benefit_reminder_profile(
+           profile_kind, profile_scope_id, revision,
+           channel_in_app, channel_os_scheduled
+         ) VALUES ('global', x'', ?1, ?2, ?3)",
+        params![input_i64(profile.revision().get())?, in_app, os_scheduled,],
+    )?;
+    for lead_time in profile.lead_times() {
+        transaction.execute(
+            "INSERT INTO benefit_reminder_threshold(
+               profile_kind, profile_scope_id, threshold_seconds
+             ) VALUES ('global', x'', ?1)",
+            [i64::from(lead_time.seconds())],
+        )?;
+    }
+    Ok(())
+}
+
 pub(super) fn load_active_profile(
     transaction: &Transaction<'_>,
     scope_id: &[u8; 32],
@@ -1278,7 +1489,9 @@ mod tests {
         BenefitConfidence, BenefitDetailKind, BenefitEvidenceSource, BenefitExpiry,
         BenefitInventoryCompleteness, BenefitInventoryObservationParts, BenefitKind,
         BenefitLabelKey, BenefitLotId, BenefitLotObservationParts, BenefitObservationId,
-        BenefitScope, BenefitState, BenefitTarget, QuotaAccountId, UsageProviderId,
+        BenefitScope, BenefitState, BenefitTarget, NotificationChannel, QuotaAccountId,
+        ReminderLeadTime, ReminderProfile, ReminderProfileParts, ReminderProfileRevision,
+        UsageProviderId,
     };
 
     use super::*;
@@ -1332,11 +1545,15 @@ mod tests {
                (SELECT count(*) FROM benefit_lot_current),
                (SELECT count(*) FROM benefit_change),
                (SELECT count(*) FROM benefit_reminder_due),
+               (SELECT revision FROM benefit_reminder_profile
+                 WHERE profile_kind = 'global' AND length(profile_scope_id) = 0),
+               (SELECT count(*) FROM benefit_reminder_threshold
+                 WHERE profile_kind = 'global' AND length(profile_scope_id) = 0),
                (SELECT revision FROM quota_state WHERE singleton_id = 1),
                (SELECT dataset_generation FROM usage_archive_state WHERE singleton_id = 1),
                (SELECT count(*) FROM usage_event)",
             [],
-            |row| (0..11).map(|index| row.get(index)).collect(),
+            |row| (0..13).map(|index| row.get(index)).collect(),
         )?)
     }
 
@@ -1365,6 +1582,28 @@ mod tests {
             assert_eq!(error.code(), StoreErrorCode::Database);
             assert_eq!(snapshot(&store)?, before);
         }
+        Ok(())
+    }
+
+    #[test]
+    fn global_profile_fault_rolls_back_profile_thresholds_due_and_revision() -> TestResult {
+        let mut store = UsageStore::in_memory()?;
+        store.apply_benefit_observation(&observation(
+            1,
+            1,
+            OBSERVED_AT_MS + 10 * 24 * 60 * 60 * 1_000,
+        )?)?;
+        let before = snapshot(&store)?;
+        let profile = ReminderProfile::new(ReminderProfileParts {
+            revision: ReminderProfileRevision::new(2)?,
+            lead_times: vec![ReminderLeadTime::new(21_600)?],
+            channels: vec![NotificationChannel::InApp],
+        })?;
+        let error = store
+            .set_benefit_reminder_global_profile_inner(&profile, BenefitWriteFault::AfterProfile)
+            .expect_err("injected profile fault");
+        assert_eq!(error.code(), StoreErrorCode::Database);
+        assert_eq!(snapshot(&store)?, before);
         Ok(())
     }
 }
