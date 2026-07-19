@@ -568,20 +568,13 @@ impl ApplicationStateOwner {
         Ok(policy)
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Task 4 wires reminder settings updates into application routing"
-        )
-    )]
     pub(crate) fn update_reminder_policy(
         &self,
         permit: &ApplicationCommandPermit,
         update: DesktopReminderPolicyUpdate,
         mut on_irreversible: impl FnMut(),
     ) -> Result<(), ApplicationError> {
-        if permit.command() != ApplicationCommand::UpdateBackupPolicy || permit.is_cancelled() {
+        if permit.command() != ApplicationCommand::UpdateReminderPolicy || permit.is_cancelled() {
             return Err(ApplicationError::invalid_lifecycle());
         }
         let policy =
@@ -613,13 +606,6 @@ impl ApplicationStateOwner {
         Ok(())
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "Task 4 wires reminder synchronization into application startup"
-        )
-    )]
     pub(crate) fn synchronize_reminder_profile(
         &self,
         root: &DataRoot,
@@ -642,6 +628,11 @@ impl ApplicationStateOwner {
         self.reminder_sync_state
             .store(REMINDER_SYNC_SYNCHRONIZED, Ordering::Release);
         Ok(profile)
+    }
+
+    pub(crate) fn mark_reminder_unavailable(&self) {
+        self.reminder_sync_state
+            .store(REMINDER_SYNC_UNAVAILABLE, Ordering::Release);
     }
 
     fn reminder_sync_state(&self) -> Result<DesktopReminderSyncState, ApplicationError> {
@@ -1076,13 +1067,6 @@ impl ApplicationStateOwner {
     }
 }
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "Task 4 wires reminder synchronization into application startup"
-    )
-)]
 fn reminder_profile_from_settings(
     generation: Option<u64>,
     policy: &tokenmaster_state::ReminderPolicy,

@@ -237,7 +237,7 @@ fn reminder_explicit_save_reuses_generation_for_an_identical_retry() {
 
     owner
         .update_reminder_policy(
-            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            &command_permit(ApplicationCommand::UpdateReminderPolicy),
             reminder_policy_update(true, &[21_600, 3_600]),
             || irreversible_calls += 1,
         )
@@ -251,7 +251,7 @@ fn reminder_explicit_save_reuses_generation_for_an_identical_retry() {
 
     owner
         .update_reminder_policy(
-            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            &command_permit(ApplicationCommand::UpdateReminderPolicy),
             reminder_policy_update(true, &[3_600, 21_600]),
             || irreversible_calls += 1,
         )
@@ -304,7 +304,7 @@ fn reminder_synchronization_projects_settings_generation_to_exact_sqlite_profile
     let owner = ApplicationStateOwner::open(&root).expect("state owner");
     owner
         .update_reminder_policy(
-            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            &command_permit(ApplicationCommand::UpdateReminderPolicy),
             reminder_policy_update(true, &[21_600, 3_600]),
             || {},
         )
@@ -378,7 +378,7 @@ fn reminder_disabled_policy_synchronizes_without_channels_or_leads() {
     let owner = ApplicationStateOwner::open(&root).expect("state owner");
     owner
         .update_reminder_policy(
-            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            &command_permit(ApplicationCommand::UpdateReminderPolicy),
             reminder_policy_update(false, &[]),
             || {},
         )
@@ -408,7 +408,7 @@ fn reminder_failed_archive_sync_preserves_durable_settings_and_projects_pending(
     let owner = ApplicationStateOwner::open(&root).expect("state owner");
     owner
         .update_reminder_policy(
-            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            &command_permit(ApplicationCommand::UpdateReminderPolicy),
             reminder_policy_update(true, &[21_600]),
             || {},
         )
@@ -448,7 +448,7 @@ fn reminder_changed_save_failure_after_synchronization_reopens_as_pending() {
     seed_real_reminder_archive(root.archive_path());
     owner
         .update_reminder_policy(
-            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            &command_permit(ApplicationCommand::UpdateReminderPolicy),
             reminder_policy_update(true, &[21_600]),
             || {},
         )
@@ -468,7 +468,7 @@ fn reminder_changed_save_failure_after_synchronization_reopens_as_pending() {
     let blocked_slot = root.reliable_state().as_path().join("settings-b.tms");
     owner
         .update_reminder_policy(
-            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            &command_permit(ApplicationCommand::UpdateReminderPolicy),
             reminder_policy_update(true, &[10_800]),
             || fs::create_dir(&blocked_slot).expect("block next redundant slot"),
         )
@@ -504,7 +504,7 @@ fn reminder_missing_archive_is_not_created_or_synchronized() {
     let owner = ApplicationStateOwner::open(&root).expect("state owner");
     owner
         .update_reminder_policy(
-            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            &command_permit(ApplicationCommand::UpdateReminderPolicy),
             reminder_policy_update(true, &[21_600]),
             || {},
         )
@@ -535,7 +535,7 @@ fn reminder_supported_legacy_archive_is_not_migrated_or_synchronized() {
     let owner = ApplicationStateOwner::open(&root).expect("state owner");
     owner
         .update_reminder_policy(
-            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            &command_permit(ApplicationCommand::UpdateReminderPolicy),
             reminder_policy_update(true, &[21_600]),
             || {},
         )
@@ -570,7 +570,7 @@ fn reminder_current_archive_write_contention_preserves_profile_and_projects_pend
     let owner = ApplicationStateOwner::open(&root).expect("state owner");
     owner
         .update_reminder_policy(
-            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            &command_permit(ApplicationCommand::UpdateReminderPolicy),
             reminder_policy_update(true, &[21_600]),
             || {},
         )

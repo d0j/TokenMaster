@@ -9,6 +9,7 @@
 use core::fmt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use tokenmaster_desktop::DesktopReminderPolicyUpdate;
 use tokenmaster_platform::{SelectedInputFile, SelectedOutputFile};
 use tokenmaster_state::BackupPassphrase;
 
@@ -31,6 +32,7 @@ pub(crate) enum ApplicationCommand {
     RestoreDataAndPortableSettings(ApplicationBackupSelection),
     Rebuild,
     UpdateBackupPolicy,
+    UpdateReminderPolicy,
 }
 
 impl ApplicationCommand {
@@ -56,6 +58,7 @@ pub(crate) enum ApplicationOperationPayload {
         passphrase: BackupPassphrase,
     },
     BackupPolicy(ApplicationBackupPolicyUpdate),
+    ReminderPolicy(ApplicationReminderPolicyUpdate),
 }
 
 impl fmt::Debug for ApplicationOperationPayload {
@@ -75,6 +78,9 @@ impl fmt::Debug for ApplicationOperationPayload {
                 .write_str("ApplicationOperationPayload::EncryptedBackupOutput([redacted])"),
             Self::BackupPolicy(_) => {
                 formatter.write_str("ApplicationOperationPayload::BackupPolicy([redacted])")
+            }
+            Self::ReminderPolicy(_) => {
+                formatter.write_str("ApplicationOperationPayload::ReminderPolicy([redacted])")
             }
         }
     }
@@ -126,6 +132,41 @@ impl fmt::Debug for ApplicationBackupPolicyUpdate {
     }
 }
 
+#[derive(Eq, PartialEq)]
+pub(crate) struct ApplicationReminderPolicyUpdate {
+    enabled: bool,
+    lead_seconds: Box<[u32]>,
+}
+
+impl ApplicationReminderPolicyUpdate {
+    pub(crate) fn new(enabled: bool, lead_seconds: &[u32]) -> Option<Self> {
+        tokenmaster_state::ReminderPolicy::new(enabled, lead_seconds)
+            .ok()
+            .map(|_| Self {
+                enabled,
+                lead_seconds: lead_seconds.into(),
+            })
+    }
+
+    pub(crate) fn from_desktop(update: DesktopReminderPolicyUpdate) -> Option<Self> {
+        Self::new(update.enabled(), update.lead_seconds())
+    }
+
+    pub(crate) const fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    pub(crate) fn lead_seconds(&self) -> &[u32] {
+        &self.lead_seconds
+    }
+}
+
+impl fmt::Debug for ApplicationReminderPolicyUpdate {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("ApplicationReminderPolicyUpdate([redacted])")
+    }
+}
+
 pub(crate) struct ApplicationOperationRequest {
     command: ApplicationCommand,
     payload: ApplicationOperationPayload,
@@ -174,6 +215,13 @@ impl ApplicationOperationRequest {
         Self {
             command: ApplicationCommand::UpdateBackupPolicy,
             payload: ApplicationOperationPayload::BackupPolicy(update),
+        }
+    }
+
+    pub(crate) const fn update_reminder_policy(update: ApplicationReminderPolicyUpdate) -> Self {
+        Self {
+            command: ApplicationCommand::UpdateReminderPolicy,
+            payload: ApplicationOperationPayload::ReminderPolicy(update),
         }
     }
 

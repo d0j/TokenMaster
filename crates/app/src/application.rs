@@ -44,6 +44,7 @@ use crate::command::{
     ApplicationBackupPolicyUpdate, ApplicationBackupSelection, ApplicationCommand,
     ApplicationCommandAdmission, ApplicationCommandExecution, ApplicationCommandFailure,
     ApplicationCommandPermit, ApplicationOperationPayload, ApplicationOperationRequest,
+    ApplicationReminderPolicyUpdate,
 };
 use crate::notification::{ReminderPresentationCoordinator, RuntimeReminderPresentationPort};
 use crate::operation::{
@@ -200,6 +201,12 @@ impl Application {
         let preflight = Arc::new(Mutex::new(preflight));
         let live_started = Arc::new(AtomicBool::new(live_started));
         let reliable_notifier = shell.reliable_state_notifier();
+        if live_started.load(Ordering::Acquire) {
+            let projection = state
+                .reliable_state_projection_for_outcome(outcome, None)
+                .unwrap_or_else(|_| DesktopReliableStateProjection::unavailable());
+            let _ = reliable_notifier.publish(projection);
+        }
         let command_environment = environment.clone();
         let command_data_root = data_root.clone();
         let command_state = Arc::clone(&state);
@@ -642,7 +649,16 @@ impl DesktopIntentSink for ApplicationDesktopIntentSink {
                     retention_budget_mib,
                 ),
             )),
-            DesktopIntent::UpdateReminderPolicy(_) => DesktopIntentAdmission::Rejected,
+            DesktopIntent::UpdateReminderPolicy(update) => {
+                ApplicationReminderPolicyUpdate::from_desktop(update).map_or(
+                    DesktopIntentAdmission::Rejected,
+                    |update| {
+                        self.submit_request(ApplicationOperationRequest::update_reminder_policy(
+                            update,
+                        ))
+                    },
+                )
+            }
             DesktopIntent::RebuildData => self.submit_plain(ApplicationCommand::Rebuild),
         }
     }
@@ -670,7 +686,9 @@ const fn application_operation_kind(command: ApplicationCommand) -> DesktopOpera
         ApplicationCommand::RestoreData(_)
         | ApplicationCommand::RestoreDataAndPortableSettings(_) => DesktopOperationKind::Restore,
         ApplicationCommand::Rebuild => DesktopOperationKind::Rebuild,
-        ApplicationCommand::UpdateBackupPolicy => DesktopOperationKind::UpdatePolicy,
+        ApplicationCommand::UpdateBackupPolicy | ApplicationCommand::UpdateReminderPolicy => {
+            DesktopOperationKind::UpdatePolicy
+        }
     }
 }
 
@@ -994,11 +1012,17 @@ fn finish_live_bundle(
         OptionalRuntime::start(CodexQuotaRuntimeConfig::new(archive_path.clone()).and_then(
             |config| CodexQuotaRuntime::start_notified(config, started.notifier_port.clone()),
         ));
-    let reminder = OptionalReminderRuntime::start(
-        BenefitReminderRuntimeConfig::new(archive_path.clone()).and_then(|config| {
-            BenefitReminderRuntime::start_notified(config, started.notifier_port.clone())
-        }),
-    );
+    let reminder = match state.synchronize_reminder_profile(data_root) {
+        Ok(_) => OptionalReminderRuntime::start(
+            BenefitReminderRuntimeConfig::new(archive_path.clone()).and_then(|config| {
+                BenefitReminderRuntime::start_notified(config, started.notifier_port.clone())
+            }),
+        ),
+        Err(_) => {
+            state.mark_reminder_unavailable();
+            OptionalReminderRuntime::failed(RuntimeErrorCode::StoreUnavailable)
+        }
+    };
     let maintenance = match maintenance {
         Some(maintenance) => maintenance,
         None => state.start_maintenance(data_root, maintenance_source)?,
@@ -1142,9 +1166,14 @@ fn execute_application_operation(
             execute_state_command(state.stage_config_import_preview(permit, input))
         }
         (ApplicationCommand::ConfirmConfigImport, ApplicationOperationPayload::Empty) => {
-            execute_state_command(state.commit_pending_config_import(permit, || {
+            match state.commit_pending_config_import(permit, || {
                 publish_atomic_operation(reliable_state, permit.command());
-            }))
+            }) {
+                Ok(_) => execute_state_command(synchronize_reminder_policy_after_settings(
+                    state, data_root, bundle,
+                )),
+                Err(error) => execute_state_command::<()>(Err(error)),
+            }
         }
         (ApplicationCommand::CancelConfigImport, ApplicationOperationPayload::Empty) => {
             execute_state_command(state.cancel_pending_config_import(permit))
@@ -1162,6 +1191,29 @@ fn execute_application_operation(
                 })
                 .and_then(|policy| update_live_backup_policy(bundle, &policy)),
         ),
+        (
+            ApplicationCommand::UpdateReminderPolicy,
+            ApplicationOperationPayload::ReminderPolicy(update),
+        ) => {
+            let Some(intent) =
+                DesktopIntent::update_reminder_policy(update.enabled(), update.lead_seconds()).ok()
+            else {
+                return ApplicationCommandExecution::Failed(
+                    ApplicationCommandFailure::InvalidSelection,
+                );
+            };
+            let DesktopIntent::UpdateReminderPolicy(update) = intent else {
+                return ApplicationCommandExecution::Failed(ApplicationCommandFailure::Internal);
+            };
+            match state.update_reminder_policy(permit, update, || {
+                publish_atomic_operation(reliable_state, permit.command());
+            }) {
+                Ok(()) => execute_state_command(synchronize_reminder_policy_after_settings(
+                    state, data_root, bundle,
+                )),
+                Err(error) => execute_state_command::<()>(Err(error)),
+            }
+        }
         (ApplicationCommand::RestoreData(selection), ApplicationOperationPayload::Empty) => {
             execute_restore_operation(
                 environment,
@@ -1225,6 +1277,39 @@ fn update_live_backup_policy(
             .map_err(|_| ApplicationError::state()),
         None => Ok(()),
     }
+}
+
+fn synchronize_reminder_policy_after_settings(
+    state: &ApplicationStateOwner,
+    data_root: &DataRoot,
+    bundle: &SharedBundle,
+) -> Result<(), ApplicationError> {
+    if state.synchronize_reminder_profile(data_root).is_err() {
+        return Ok(());
+    }
+    let reminder = bundle
+        .lock()
+        .map_err(|_| ApplicationError::internal())?
+        .as_ref()
+        .and_then(|bundle| bundle.reminder.owner().cloned());
+    if let Some(reminder) = reminder {
+        reminder
+            .lock()
+            .map_err(|_| ApplicationError::internal())?
+            .notify_profile_changed()
+            .map_err(|_| ApplicationError::state())?;
+    }
+    if let Some(bundle) = bundle
+        .lock()
+        .map_err(|_| ApplicationError::internal())?
+        .as_ref()
+    {
+        bundle
+            .controller
+            .refresh(DesktopRefreshUrgency::Hint)
+            .map_err(|_| ApplicationError::controller())?;
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1798,6 +1883,13 @@ impl OptionalReminderRuntime {
                 owner: None,
                 failure: Some(error.code()),
             },
+        }
+    }
+
+    const fn failed(error: RuntimeErrorCode) -> Self {
+        Self {
+            owner: None,
+            failure: Some(error),
         }
     }
 

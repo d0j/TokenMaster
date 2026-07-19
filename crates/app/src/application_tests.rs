@@ -1,3 +1,4 @@
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use rusqlite::Connection;
@@ -178,6 +179,77 @@ fn operation_projection_is_typed_path_free_and_never_offers_atomic_cancel() {
         None,
     );
     assert!(!atomic.cancellable());
+}
+
+#[test]
+fn reminder_policy_intent_admits_one_bounded_update_policy_request() {
+    let (observed_sender, observed_receiver) = mpsc::sync_channel(1);
+    let mut worker = ApplicationOperationWorker::spawn_with_payload(move |permit, payload| {
+        observed_sender
+            .send((permit.command(), payload))
+            .expect("observed request");
+        ApplicationCommandExecution::Succeeded
+    })
+    .expect("operation worker");
+    let sink = ApplicationDesktopIntentSink::new(worker.submitter());
+
+    assert_eq!(
+        sink.submit(
+            DesktopIntent::update_reminder_policy(true, &[21_600, 3_600])
+                .expect("bounded desktop intent"),
+        ),
+        DesktopIntentAdmission::Started
+    );
+    let (command, payload) = observed_receiver
+        .recv_timeout(Duration::from_secs(5))
+        .expect("reminder request");
+    assert_eq!(command, ApplicationCommand::UpdateReminderPolicy);
+    let ApplicationOperationPayload::ReminderPolicy(update) = payload else {
+        panic!("reminder payload");
+    };
+    assert!(update.enabled());
+    assert_eq!(update.lead_seconds(), &[21_600, 3_600]);
+    assert_eq!(
+        application_operation_kind(command),
+        DesktopOperationKind::UpdatePolicy
+    );
+    assert_eq!(
+        worker.shutdown().expect("worker shutdown"),
+        ApplicationOperationWorkerPhase::Stopped
+    );
+}
+
+#[test]
+fn reminder_policy_sync_failure_keeps_the_durable_save_and_returns_success() {
+    let temporary = TempDir::new().expect("temporary directory");
+    let environment = application_environment(&temporary);
+    let root = DataRoot::resolve(&environment).expect("data root");
+    let state = ApplicationStateOwner::open(&root).expect("state owner");
+    let mut coordinator = ApplicationCommandCoordinator::new();
+    let ApplicationCommandAdmission::Started(permit) =
+        coordinator.submit(ApplicationCommand::UpdateReminderPolicy)
+    else {
+        panic!("reminder permit");
+    };
+    let DesktopIntent::UpdateReminderPolicy(update) =
+        DesktopIntent::update_reminder_policy(true, &[21_600]).expect("desktop reminder update")
+    else {
+        panic!("reminder intent");
+    };
+    state
+        .update_reminder_policy(&permit, update, || {})
+        .expect("durable reminder save");
+    let bundle: SharedBundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
+    synchronize_reminder_policy_after_settings(&state, &root, &bundle)
+        .expect("archive failure remains a successful settings operation");
+    let projection = state
+        .reliable_state_projection_for_outcome(BootstrapOutcome::Healthy, None)
+        .expect("pending reliable projection");
+    assert_eq!(
+        projection.reminder_policy().sync_state(),
+        tokenmaster_desktop::DesktopReminderSyncState::Pending
+    );
+    assert_eq!(projection.reminder_policy().lead_seconds(), &[21_600]);
 }
 
 fn assert_no_backup_rebuild_preserves_corrupt_truth_and_completes_authoritative_reconciliation() {

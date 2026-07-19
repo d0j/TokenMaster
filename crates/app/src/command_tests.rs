@@ -1,8 +1,35 @@
 use super::command::{
     ApplicationBackupSelection, ApplicationCommand, ApplicationCommandAdmission,
     ApplicationCommandCoordinator, ApplicationCommandExecution, ApplicationCommandFailure,
-    ApplicationCommandOutcome, ApplicationCommandRejection,
+    ApplicationCommandOutcome, ApplicationCommandRejection, ApplicationReminderPolicyUpdate,
 };
+use tokenmaster_desktop::DesktopIntent;
+
+#[test]
+fn reminder_policy_payload_is_bounded_validated_and_redacted() {
+    assert!(ApplicationReminderPolicyUpdate::new(true, &[]).is_none());
+    assert!(ApplicationReminderPolicyUpdate::new(false, &[60]).is_none());
+    assert!(ApplicationReminderPolicyUpdate::new(true, &[60, 60]).is_none());
+    assert!(ApplicationReminderPolicyUpdate::new(true, &[59]).is_none());
+    assert!(ApplicationReminderPolicyUpdate::new(true, &[31_536_001]).is_none());
+    assert!(
+        ApplicationReminderPolicyUpdate::new(true, &[60, 61, 62, 63, 64, 65, 66, 67, 68]).is_none()
+    );
+
+    let DesktopIntent::UpdateReminderPolicy(desktop) =
+        DesktopIntent::update_reminder_policy(true, &[21_600, 3_600]).expect("desktop intent")
+    else {
+        panic!("reminder intent");
+    };
+    let update =
+        ApplicationReminderPolicyUpdate::from_desktop(desktop).expect("bounded app payload");
+    assert!(update.enabled());
+    assert_eq!(update.lead_seconds(), &[21_600, 3_600]);
+    assert_eq!(
+        format!("{update:?}"),
+        "ApplicationReminderPolicyUpdate([redacted])"
+    );
+}
 
 #[test]
 fn ten_thousand_identical_hints_retain_one_active_command() {
