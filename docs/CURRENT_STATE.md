@@ -102,10 +102,12 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   contracts pass without changing the real user registry. Focused evidence is nine
   platform unit tests, two platform API tests, two compiled UI tests, one application
   test, 12 unchanged portable-settings tests, 20 audit mutations, strict focused
-  Clippy, and independent Critical/Important/Minor 0/0/0 Ready review. Live enable/relocation/
-  disable, denied-ACL, sign-in launch, and repeated resource-return evidence remain
-  interactive P3-E closure gates; P4/P5/P6, M0, packaging, signing, soak, and release
-  remain incomplete.
+  Clippy, and independent Critical/Important/Minor 0/0/0 Ready review. The exact clean-
+  root/fmt/strict-workspace-Clippy/full locked test-doctest chain passes in 985.4
+  seconds total, and application/Desktop release audits pass in 175.9/133.6 seconds.
+  Live enable/relocation/disable, denied-ACL, sign-in launch, and repeated resource-
+  return evidence remain interactive P3-E closure gates; P4/P5/P6, M0, packaging,
+  signing, soak, and release remain incomplete.
 
 - M0 native architecture proof: one process, software-rendered Slint UI, tray
   lifecycle, three layouts, three skins, English/Russian/pseudo localization,

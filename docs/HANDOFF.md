@@ -82,11 +82,18 @@ Repair is explicit; Disable removes only a verified or recognizable stale TokenM
 entry; Conflict is never overwritten or deleted. Every mutation rereads exact state.
 Inspection is read-only/non-fatal and the UI receives only six path-free statuses plus
 three explicit intents. Focused platform/app/compiled-UI and source/mutation contracts
-pass without mutating the real registry: platform 9+2, compiled UI 2, application 1,
-portable settings 12, audit mutations 20, strict focused Clippy, and independent
-Critical/Important/Minor 0/0/0 Ready review. Live sign-in, relocation, denied ACL,
-enable/disable, and repeated handle/resource return remain interactive gates; this is
-not P3-E, M0, package, signing, soak, or release acceptance.
+  pass without mutating the real registry: platform 9+2, compiled UI 2, application 1,
+  portable settings 12, audit mutations 20, strict focused Clippy, and independent
+  Critical/Important/Minor 0/0/0 Ready review. The final exact clean-root/fmt/strict
+  workspace Clippy/full locked test-doctest gate passes in 985.4 seconds; application
+  and Desktop release audits pass in 175.9 and 133.6 seconds. That baseline work also
+  found and fixed an older scheduler race where a normal concurrent hint could be
+  mistaken for clock rollback. One later resource-gate attempt observed one transient
+  extra process thread; the unchanged strict binary, exact Cargo target, and subsequent
+  complete workspace run passed without widening any threshold. Live sign-in,
+  relocation, denied ACL, enable/disable, and repeated real-registry handle/resource
+  return remain interactive gates; this is not complete P3-E, M0, package, signing,
+  soak, or release acceptance.
 
 P0-A and the incorporated P0-B Codex-lineage surface are complete under
 `docs/superpowers/plans/2026-07-14-tokenmaster-p0-authority-boundary.md`. The P0-C pure

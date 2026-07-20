@@ -115,9 +115,10 @@ renderer/data/runtime work and the existing five tray intents do not expand.
 
 ## Task 5 — add opt-in current-user startup
 
-Status: implemented; focused platform/app/compiled-UI and source/mutation contracts
-pass without mutating the real current-user registry, and independent review is
-Critical/Important/Minor 0/0/0 Ready. Interactive proof remains Task 6.
+Status: complete as developer evidence. Focused platform/app/compiled-UI and source/
+mutation contracts pass without mutating the real current-user registry; independent
+review is Critical/Important/Minor 0/0/0 Ready; the complete workspace gate and both
+release composition audits pass. Interactive proof remains Task 6.
 
 Implement the approved design in
 `docs/superpowers/specs/2026-07-19-tokenmaster-current-user-startup-design.md`.
@@ -129,6 +130,13 @@ Keep inspection read-only and non-fatal; keep every mutation explicit, bounded, 
 immediately reread-verified.
 
 ## Task 6 — P3-E closure
+
+Status: non-interactive developer closeout is complete. Authoritative/project documents,
+focused and mutation gates, independent high-risk review, clean-root, formatting,
+strict full-workspace Clippy, complete locked workspace tests/doctests, Windows resource
+contracts, and both release composition audits pass. Real sign-in, relocation, ACL,
+native interaction, and repeated real-registry resource proof remain open, so P3-E is
+not accepted as a release milestone.
 
 Update specification, API/data/security contracts, traceability, decisions, current
 state, roadmap, changelog, project history, and handoff. Run focused audits, independent

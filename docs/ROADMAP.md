@@ -22,11 +22,12 @@ Windows handle owner on the existing UI thread. P3-E.4 current-session activatio
 developer-complete with one early auto-reset event claim, one joined hotkey/message
 owner, one pending bit, and one scheduled UI task. It fails closed before data startup,
 coalesces 10,000 requests, and joins before clean publication without a payload, queue,
-timer, or polling loop. P3-E.5 current-user startup is developer-implemented with one
-fixed HKCU Run value as the sole truth, exact executable identity/readback, explicit
-stale repair/removal, path-free UI state, and no portable setting or shell/elevation
-authority. Interactive sign-in/relocation/ACL/resource proof is the next P3-E closure
-slice.
+  timer, or polling loop. P3-E.5 current-user startup is developer-complete with one
+  fixed HKCU Run value as the sole truth, exact executable identity/readback, explicit
+  stale repair/removal, path-free UI state, and no portable setting or shell/elevation
+  authority. Its focused review, full workspace quality gate, and both release
+  composition audits pass. Interactive sign-in/relocation/ACL/resource proof is the
+  next P3-E closure slice.
 
 M0 probe evidence implements: Rust/Slint/SQLite baseline, tray lifecycle, layouts, skins,
 English/Russian localization, accessibility-aware presentation contracts, resource

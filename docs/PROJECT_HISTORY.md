@@ -1,5 +1,36 @@
 # TokenMaster project history
 
+## 2026-07-19 — P3-E.5 current-user startup developer closure
+
+Added one opt-in current-user startup capability over the fixed HKCU Run value without
+adding another preference store. The implementation accepts only the verified current
+local executable, distinguishes disabled/verified/stale/conflict/denied/unavailable
+states, requires explicit stale repair, never overwrites a conflict, rereads every
+mutation, and keeps paths out of UI, settings, config, backup, logs, and debug output.
+Focused platform/application/compiled-UI tests, 20 mutation cases, strict focused
+Clippy, and independent Critical/Important/Minor 0/0/0 review pass without mutating the
+real current-user registry.
+
+The first complete gate exposed an older scheduler interleaving: a normal hint could
+publish a newer monotonic tick after the scheduler's first clock sample and be mistaken
+for rollback. A deterministic gated RED test reproduced the spurious Recovery. The
+minimal fix performs one second sample after reading the hint; a complementary test
+proves rollback between hint publication and that sample still fails closed. The final
+test harness uses panic-safe RAII release. Five hundred pre-review and 300 post-review
+whole-binary repetitions, the runtime suite, strict Clippy, and an independent 0/0/0
+concurrency rereview pass.
+
+One subsequent full attempt stopped when the existing recovery resource contract saw
+one extra process thread after its return window. The unchanged strict feature-unified
+binary then passed directly, the exact Cargo target passed in 243.22 seconds, and the
+subsequent complete workspace run passed; no tolerance, resource assertion, or product
+code was weakened. The final exact clean-root/fmt/strict workspace Clippy/full locked
+test-doctest chain passed in 39.4/2.4/1.5/942.1 seconds (985.4 total), with 205 successful
+test-result groups and zero failed groups. Application and Desktop release composition
+audits passed in 175.9 and 133.6 seconds. Real enable/disable, sign-in, relocation,
+denied-ACL, and repeated real-registry resource evidence remain interactive; P3-E,
+M0, packaging, signing, soak, and release are not accepted.
+
 ## 2026-07-19 — global reminder settings developer closure
 
 Portable settings became the desired-state authority for the single global reminder

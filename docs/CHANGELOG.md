@@ -1159,6 +1159,13 @@ All notable changes are recorded here.
 
 ### Fixed
 
+- Fixed an older `RefreshScheduler` race exposed by the P3-E.5 full gate. A hint that
+  arrived after the scheduler sampled monotonic time could previously look like a
+  clock rollback and emit a spurious Recovery refresh. The scheduler now performs one
+  bounded second clock sample after observing the newer hint, while genuine rollback
+  still fails closed. Deterministic concurrent-progress/second-sample-rollback tests,
+  500 pre-review and 300 post-review repeated scheduler runs, the full runtime suite,
+  strict Clippy, and independent Critical/Important/Minor 0/0/0 review pass.
 - Closed the reminder-settings final-review races. Rapid policy saves now retain one
   active operation plus one latest-wins pending payload instead of acknowledging and
   discarding a newer value. Explicit Save and confirmed config import wait for a
