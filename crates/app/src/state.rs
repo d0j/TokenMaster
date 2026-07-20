@@ -550,6 +550,7 @@ impl ApplicationStateOwner {
             PortableSettings::new(
                 current.value().portable().reminders().clone(),
                 policy.clone(),
+                *current.value().portable().presentation(),
             ),
             current.value().device().clone(),
         );
@@ -583,7 +584,11 @@ impl ApplicationStateOwner {
             return Ok(());
         }
         let value = SettingsValue::new(
-            PortableSettings::new(policy.clone(), current.value().portable().backup().clone()),
+            PortableSettings::new(
+                policy.clone(),
+                current.value().portable().backup().clone(),
+                *current.value().portable().presentation(),
+            ),
             current.value().device().clone(),
         );
         if permit.is_cancelled() {

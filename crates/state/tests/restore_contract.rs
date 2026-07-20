@@ -299,8 +299,12 @@ fn changed_portable_settings() -> PortableSettingsCandidate {
         BACKUP_RETENTION_MIN_BYTES,
     )
     .expect("backup policy");
-    PortableSettingsCandidate::new(PortableSettings::new(reminders, backup))
-        .expect("portable settings")
+    PortableSettingsCandidate::new(PortableSettings::new(
+        reminders,
+        backup,
+        tokenmaster_state::PresentationSettings::comfortable(),
+    ))
+    .expect("portable settings")
 }
 
 fn publish_current_sqlite_backup(

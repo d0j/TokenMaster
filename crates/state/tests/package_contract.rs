@@ -18,7 +18,7 @@ use package_support::{
 const PACKAGE_TIME: i64 = 1_721_234_567_890;
 
 #[test]
-fn v1_config_golden_vector_is_deterministic_typed_and_round_trips() {
+fn v2_config_golden_vector_is_deterministic_typed_and_round_trips() {
     let settings = settings();
     let (first, first_receipt) = config_bytes_at(PACKAGE_TIME);
     let (second, second_receipt) = config_bytes_at(PACKAGE_TIME);
@@ -33,6 +33,7 @@ fn v1_config_golden_vector_is_deterministic_typed_and_round_trips() {
     assert_eq!(&first[32..40], b"TMMNF001");
     assert_eq!(u16::from_le_bytes(first[40..42].try_into().unwrap()), 1);
     assert_eq!(u16::from_le_bytes(first[42..44].try_into().unwrap()), 40);
+    assert_eq!(u16::from_le_bytes(first[46..48].try_into().unwrap()), 2);
     assert_eq!(
         i64::from_le_bytes(first[52..60].try_into().unwrap()),
         PACKAGE_TIME
@@ -52,15 +53,15 @@ fn v1_config_golden_vector_is_deterministic_typed_and_round_trips() {
         &digest(&first[..first.len() - 32])
     );
 
-    // Frozen v1 compatibility vector: changing either value requires a new format decision.
-    assert_eq!(first.len(), 405, "frozen v1 golden length");
+    // Frozen v2 compatibility vector: changing either value requires a new format decision.
+    assert_eq!(first.len(), 431, "frozen v2 golden length");
     assert_eq!(
         digest(&first),
         [
-            82, 69, 18, 205, 24, 116, 131, 70, 102, 53, 114, 15, 232, 148, 11, 35, 178, 26, 7, 94,
-            87, 173, 178, 143, 128, 33, 62, 53, 155, 128, 244, 153,
+            116, 198, 148, 239, 5, 62, 156, 196, 172, 123, 59, 221, 108, 85, 138, 56, 90, 142, 62,
+            34, 247, 150, 226, 0, 143, 109, 116, 0, 42, 122, 45, 29,
         ],
-        "frozen v1 golden SHA-256"
+        "frozen v2 golden SHA-256"
     );
 
     let verified = read_config_bytes(&first).expect("read config");

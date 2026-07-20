@@ -1,4 +1,5 @@
 use crate::StateError;
+use crate::settings::{MIN_SUPPORTED_SETTINGS_SCHEMA_VERSION, SETTINGS_SCHEMA_VERSION};
 
 use super::header::PackageKind;
 use super::{BackupCompression, BackupPurpose, validate_package_time};
@@ -13,7 +14,6 @@ const MANIFEST_MAGIC: &[u8; 8] = b"TMMNF001";
 const ENTRY_MAGIC: &[u8; 8] = b"TMENTR01";
 const ENTRY_END_MAGIC: &[u8; 8] = b"TMENEND1";
 const MANIFEST_VERSION: u16 = 1;
-const SETTINGS_SCHEMA_VERSION: u16 = 1;
 const CODEC_ZSTD: u8 = 1;
 const ENTRY_FLAGS: u8 = 0b0000_0011;
 
@@ -38,6 +38,7 @@ impl EntryKind {
 pub(crate) struct Manifest {
     pub(crate) kind: PackageKind,
     pub(crate) entry_count: u8,
+    pub(crate) settings_schema_version: u16,
     pub(crate) database_schema_version: u16,
     pub(crate) compression: BackupCompression,
     pub(crate) created_at_utc_ms: i64,
@@ -67,6 +68,7 @@ impl Manifest {
         Ok(Self {
             kind,
             entry_count: kind.entry_count(),
+            settings_schema_version: SETTINGS_SCHEMA_VERSION,
             database_schema_version,
             compression,
             created_at_utc_ms,
@@ -81,7 +83,7 @@ impl Manifest {
         bytes[10..12].copy_from_slice(&(MANIFEST_BYTES as u16).to_le_bytes());
         bytes[12] = self.kind as u8;
         bytes[13] = self.entry_count;
-        bytes[14..16].copy_from_slice(&SETTINGS_SCHEMA_VERSION.to_le_bytes());
+        bytes[14..16].copy_from_slice(&self.settings_schema_version.to_le_bytes());
         bytes[16..18].copy_from_slice(&self.database_schema_version.to_le_bytes());
         bytes[18] = self.compression as u8;
         bytes[19] = self.backup_purpose.map_or(0, |purpose| purpose as u8);
@@ -100,7 +102,9 @@ impl Manifest {
         }
         let kind = PackageKind::from_wire(bytes[12]).ok_or_else(StateError::unsupported_version)?;
         let settings_schema = u16::from_le_bytes([bytes[14], bytes[15]]);
-        if settings_schema != SETTINGS_SCHEMA_VERSION {
+        if !(MIN_SUPPORTED_SETTINGS_SCHEMA_VERSION..=SETTINGS_SCHEMA_VERSION)
+            .contains(&settings_schema)
+        {
             return Err(StateError::unsupported_version());
         }
         if bytes[28..40] != [0_u8; 12] {
@@ -116,6 +120,7 @@ impl Manifest {
         let manifest = Self {
             kind,
             entry_count: bytes[13],
+            settings_schema_version: settings_schema,
             database_schema_version: u16::from_le_bytes([bytes[16], bytes[17]]),
             compression: BackupCompression::from_wire(bytes[18])
                 .ok_or_else(StateError::unsupported_version)?,

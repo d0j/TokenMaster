@@ -7,7 +7,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use crate::StateError;
 use crate::record::{RecordValue, RecordValueError};
 
-pub const SETTINGS_SCHEMA_VERSION: u16 = 1;
+pub(crate) const SETTINGS_SCHEMA_VERSION: u16 = 2;
+pub(crate) const MIN_SUPPORTED_SETTINGS_SCHEMA_VERSION: u16 = 1;
 pub const MAX_REMINDER_THRESHOLDS: usize = 8;
 pub const REMINDER_LEAD_MIN_SECONDS: u32 = 60;
 pub const REMINDER_LEAD_MAX_SECONDS: u32 = 365 * 24 * 60 * 60;
@@ -251,17 +252,68 @@ pub enum DeviceRoute {
     CompactWidget,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PresentationDensity {
+    Comfortable,
+    Compact,
+    UltraCompact,
+}
+
+impl PresentationDensity {
+    #[must_use]
+    pub const fn stable_key(self) -> &'static str {
+        match self {
+            Self::Comfortable => "comfortable",
+            Self::Compact => "compact",
+            Self::UltraCompact => "ultra_compact",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PresentationSettings {
+    density: PresentationDensity,
+}
+
+impl PresentationSettings {
+    #[must_use]
+    pub const fn new(density: PresentationDensity) -> Self {
+        Self { density }
+    }
+
+    #[must_use]
+    pub const fn comfortable() -> Self {
+        Self::new(PresentationDensity::Comfortable)
+    }
+
+    #[must_use]
+    pub const fn density(self) -> PresentationDensity {
+        self.density
+    }
+}
+
 #[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PortableSettings {
     reminders: ReminderPolicy,
     backup: BackupPolicy,
+    presentation: PresentationSettings,
 }
 
 impl PortableSettings {
     #[must_use]
-    pub const fn new(reminders: ReminderPolicy, backup: BackupPolicy) -> Self {
-        Self { reminders, backup }
+    pub const fn new(
+        reminders: ReminderPolicy,
+        backup: BackupPolicy,
+        presentation: PresentationSettings,
+    ) -> Self {
+        Self {
+            reminders,
+            backup,
+            presentation,
+        }
     }
 
     #[must_use]
@@ -272,6 +324,11 @@ impl PortableSettings {
     #[must_use]
     pub const fn backup(&self) -> &BackupPolicy {
         &self.backup
+    }
+
+    #[must_use]
+    pub const fn presentation(&self) -> &PresentationSettings {
+        &self.presentation
     }
 }
 
@@ -329,7 +386,7 @@ impl SettingsValue {
         )
         .unwrap_or_else(|_| unreachable!("fixed backup defaults are valid"));
         Self::new(
-            PortableSettings::new(reminders, backup),
+            PortableSettings::new(reminders, backup, PresentationSettings::comfortable()),
             DeviceSettings::new(DeviceRoute::Dashboard),
         )
     }
@@ -385,18 +442,8 @@ impl<'de> Deserialize<'de> for SettingsValue {
     }
 }
 
-#[derive(Deserialize)]
-struct SettingsVersionProbe {
-    schema_version: u16,
-}
-
 impl RecordValue for SettingsValue {
     fn decode_json(bytes: &[u8]) -> Result<Self, RecordValueError> {
-        let probe: SettingsVersionProbe =
-            serde_json::from_slice(bytes).map_err(|_| RecordValueError::Invalid)?;
-        if probe.schema_version != SETTINGS_SCHEMA_VERSION {
-            return Err(RecordValueError::UnsupportedVersion);
-        }
-        serde_json::from_slice(bytes).map_err(|_| RecordValueError::Invalid)
+        super::migration::decode_settings_record(bytes)
     }
 }

@@ -10,8 +10,9 @@ use tokenmaster_state::{
     BACKUP_INTERVAL_DEFAULT_SECONDS, BACKUP_INTERVAL_MAX_SECONDS, BACKUP_QUIET_DEFAULT_SECONDS,
     BACKUP_QUIET_MIN_SECONDS, BACKUP_RETENTION_DEFAULT_BYTES, BACKUP_RETENTION_MAX_BYTES,
     BACKUP_RETENTION_MIN_BYTES, DeviceRoute, DeviceSettings, PortableSettings,
-    PortableSettingsCandidate, PortableSettingsTarget, ReminderPolicy, SettingsChangeCategory,
-    SettingsHealthCode, SettingsLoadOutcome, SettingsStore, SettingsValue, StateErrorCode,
+    PortableSettingsCandidate, PortableSettingsTarget, PresentationDensity, PresentationSettings,
+    ReminderPolicy, SettingsChangeCategory, SettingsHealthCode, SettingsLoadOutcome, SettingsStore,
+    SettingsValue, StateErrorCode,
 };
 
 const HEADER_BYTES: usize = 64;
@@ -34,9 +35,33 @@ fn changed_value(route: DeviceRoute, retention_bytes: u64) -> SettingsValue {
     )
     .expect("backup policy");
     SettingsValue::new(
-        PortableSettings::new(reminders, backup),
+        PortableSettings::new(reminders, backup, PresentationSettings::comfortable()),
         DeviceSettings::new(route),
     )
+}
+
+fn legacy_v1_portable_json() -> Value {
+    json!({
+        "schema_version": 1,
+        "portable": {
+            "reminders": {
+                "enabled": true,
+                "lead_seconds": [604800, 86400, 43200, 21600, 3600]
+            },
+            "backup": {
+                "periodic_enabled": true,
+                "quiet_seconds": BACKUP_QUIET_DEFAULT_SECONDS,
+                "interval_seconds": BACKUP_INTERVAL_DEFAULT_SECONDS,
+                "retention_budget_bytes": BACKUP_RETENTION_DEFAULT_BYTES
+            }
+        }
+    })
+}
+
+fn legacy_v1_settings_json(route: &str) -> Value {
+    let mut legacy = legacy_v1_portable_json();
+    legacy["device"] = json!({ "last_route": route });
+    legacy
 }
 
 fn encode_record(generation: u64, payload: &[u8]) -> Vec<u8> {
@@ -59,28 +84,18 @@ fn encode_record(generation: u64, payload: &[u8]) -> Vec<u8> {
 }
 
 #[test]
-fn schema_v1_is_exact_strict_and_uses_only_owned_fields() {
+fn settings_schema_v2_serializes_only_owned_portable_presentation() {
     let value = SettingsValue::safe_defaults();
     let encoded = serde_json::to_value(&value).expect("encode settings");
+    assert_eq!(encoded["schema_version"], 2);
     assert_eq!(
-        encoded,
-        json!({
-            "schema_version": 1,
-            "portable": {
-                "reminders": {
-                    "enabled": true,
-                    "lead_seconds": [604800, 86400, 43200, 21600, 3600]
-                },
-                "backup": {
-                    "periodic_enabled": true,
-                    "quiet_seconds": BACKUP_QUIET_DEFAULT_SECONDS,
-                    "interval_seconds": BACKUP_INTERVAL_DEFAULT_SECONDS,
-                    "retention_budget_bytes": BACKUP_RETENTION_DEFAULT_BYTES
-                }
-            },
-            "device": { "last_route": "dashboard" }
-        })
+        encoded["portable"]["presentation"]["density"],
+        "comfortable"
     );
+    assert!(encoded["portable"].get("skin").is_none());
+    assert!(encoded["portable"].get("layout").is_none());
+    assert!(encoded["portable"].get("color_scheme").is_none());
+    assert!(encoded["portable"].get("locale").is_none());
 
     let mut unknown = encoded;
     unknown
@@ -88,6 +103,205 @@ fn schema_v1_is_exact_strict_and_uses_only_owned_fields() {
         .expect("object")
         .insert("skin".to_owned(), json!("future-placeholder"));
     assert!(serde_json::from_value::<SettingsValue>(unknown).is_err());
+}
+
+#[test]
+fn schema_v1_record_migrates_in_memory_and_explicit_save_writes_v2() {
+    let (root, directory) = fixture();
+    let payload =
+        serde_json::to_vec(&legacy_v1_settings_json("projects")).expect("legacy settings");
+    fs::write(
+        root.path().join("settings-a.tms"),
+        encode_record(7, &payload),
+    )
+    .expect("legacy record");
+    let store = SettingsStore::new(&directory).expect("settings store");
+    let loaded = store.load().expect("migrated load");
+    assert_eq!(loaded.generation(), Some(7));
+    assert_eq!(loaded.value().device().last_route(), DeviceRoute::Projects);
+    assert_eq!(
+        loaded.value().portable().presentation().density(),
+        PresentationDensity::Comfortable
+    );
+    store.save(loaded.value()).expect("explicit v2 save");
+    let newest = store.load().expect("v2 reread");
+    assert_eq!(newest.generation(), Some(8));
+    assert_eq!(newest.value(), loaded.value());
+}
+
+#[test]
+fn portable_v1_migration_has_canonical_v2_digest_and_preview_category() {
+    let (_root, directory) = fixture();
+    let store = SettingsStore::new(&directory).expect("settings store");
+    let legacy = serde_json::to_vec(&legacy_v1_portable_json()).expect("legacy portable");
+    let migrated = store.preview_import(&legacy).expect("legacy preview");
+    assert_eq!(migrated.changed_category_count(), 0);
+    let receipt = store.commit_import(&migrated).expect("migrated commit");
+    let canonical =
+        PortableSettingsCandidate::new(SettingsValue::safe_defaults().portable().clone())
+            .expect("canonical current candidate");
+    assert_eq!(receipt.portable_digest(), canonical.digest());
+
+    let candidate = PortableSettingsCandidate::new(PortableSettings::new(
+        SettingsValue::safe_defaults()
+            .portable()
+            .reminders()
+            .clone(),
+        SettingsValue::safe_defaults().portable().backup().clone(),
+        PresentationSettings::new(PresentationDensity::Compact),
+    ))
+    .expect("compact candidate");
+    let preview = store.preview_candidate(candidate).expect("preview");
+    assert_eq!(
+        preview.categories(),
+        &[SettingsChangeCategory::Presentation]
+    );
+    assert_eq!(preview.changed_field_count(), 1);
+}
+
+#[test]
+fn candidate_and_record_versions_and_presentation_are_strict() {
+    let defaults = SettingsValue::safe_defaults();
+    let current_record = serde_json::to_value(&defaults).expect("current record");
+    let current_candidate = json!({
+        "schema_version": 2,
+        "portable": current_record["portable"].clone(),
+    });
+    let duplicate_presentation = br#"{"schema_version":2,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable"},"presentation":{"density":"compact"}}}"#;
+    let duplicate_record_presentation = br#"{"schema_version":2,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable"},"presentation":{"density":"compact"}},"device":{"last_route":"dashboard"}}"#;
+
+    let mut version_zero_candidate = current_candidate.clone();
+    version_zero_candidate["schema_version"] = json!(0);
+    let mut version_three_candidate = current_candidate.clone();
+    version_three_candidate["schema_version"] = json!(3);
+    let mut missing_presentation_candidate = current_candidate.clone();
+    missing_presentation_candidate["portable"]
+        .as_object_mut()
+        .expect("portable object")
+        .remove("presentation");
+    let mut unknown_skin_candidate = current_candidate.clone();
+    unknown_skin_candidate["portable"]["skin"] = json!("unsupported");
+    let mut invalid_density_candidate = current_candidate.clone();
+    invalid_density_candidate["portable"]["presentation"]["density"] = json!("spacious");
+    let mut wrong_density_type_candidate = current_candidate.clone();
+    wrong_density_type_candidate["portable"]["presentation"]["density"] = json!(1);
+
+    let (_root, directory) = fixture();
+    let store = SettingsStore::new(&directory).expect("settings store");
+    for (candidate, expected) in [
+        (version_zero_candidate, StateErrorCode::UnsupportedVersion),
+        (version_three_candidate, StateErrorCode::UnsupportedVersion),
+        (missing_presentation_candidate, StateErrorCode::InvalidInput),
+        (unknown_skin_candidate, StateErrorCode::InvalidInput),
+        (invalid_density_candidate, StateErrorCode::InvalidInput),
+        (wrong_density_type_candidate, StateErrorCode::InvalidInput),
+    ] {
+        let bytes = serde_json::to_vec(&candidate).expect("candidate bytes");
+        assert_eq!(
+            store
+                .preview_import(&bytes)
+                .expect_err("strict candidate")
+                .code(),
+            expected
+        );
+    }
+    assert_eq!(
+        store
+            .preview_import(duplicate_presentation)
+            .expect_err("duplicate presentation")
+            .code(),
+        StateErrorCode::InvalidInput
+    );
+
+    for (payload, unsupported) in [
+        (
+            {
+                let mut value = current_record.clone();
+                value["schema_version"] = json!(0);
+                value
+            },
+            true,
+        ),
+        (
+            {
+                let mut value = current_record.clone();
+                value["schema_version"] = json!(3);
+                value
+            },
+            true,
+        ),
+        (
+            {
+                let mut value = current_record.clone();
+                value["portable"]
+                    .as_object_mut()
+                    .expect("portable object")
+                    .remove("presentation");
+                value
+            },
+            false,
+        ),
+        (
+            {
+                let mut value = current_record.clone();
+                value["portable"]["skin"] = json!("unsupported");
+                value
+            },
+            false,
+        ),
+        (
+            {
+                let mut value = current_record.clone();
+                value["portable"]["presentation"]["density"] = json!("spacious");
+                value
+            },
+            false,
+        ),
+        (
+            {
+                let mut value = current_record.clone();
+                value["portable"]["presentation"]["density"] = json!(1);
+                value
+            },
+            false,
+        ),
+    ] {
+        let (root, directory) = fixture();
+        let bytes = serde_json::to_vec(&payload).expect("record payload");
+        let record = encode_record(7, &bytes);
+        fs::write(root.path().join("settings-a.tms"), &record).expect("invalid record");
+        let store = SettingsStore::new(&directory).expect("settings store");
+        if unsupported {
+            assert_eq!(
+                store.load().expect_err("unsupported record").code(),
+                StateErrorCode::UnsupportedVersion
+            );
+        } else {
+            assert_eq!(
+                store.load().expect("invalid record defaults").outcome(),
+                SettingsLoadOutcome::Defaults
+            );
+        }
+        assert_eq!(
+            fs::read(root.path().join("settings-a.tms")).unwrap(),
+            record
+        );
+        assert!(!root.path().join("settings-b.tms").exists());
+    }
+
+    let (root, directory) = fixture();
+    let record = encode_record(7, duplicate_record_presentation);
+    fs::write(root.path().join("settings-a.tms"), &record).expect("duplicate record");
+    let store = SettingsStore::new(&directory).expect("settings store");
+    assert_eq!(
+        store.load().expect("duplicate record defaults").outcome(),
+        SettingsLoadOutcome::Defaults
+    );
+    assert_eq!(
+        fs::read(root.path().join("settings-a.tms")).unwrap(),
+        record
+    );
+    assert!(!root.path().join("settings-b.tms").exists());
 }
 
 #[test]
@@ -447,7 +661,7 @@ fn unsupported_or_malformed_import_never_writes_slots() {
 
     for (bytes, expected) in [
         (
-            br#"{"schema_version":2,"portable":{}}"#.as_slice(),
+            br#"{"schema_version":3,"portable":{}}"#.as_slice(),
             StateErrorCode::UnsupportedVersion,
         ),
         (
@@ -455,7 +669,7 @@ fn unsupported_or_malformed_import_never_writes_slots() {
             StateErrorCode::UnsupportedVersion,
         ),
         (
-            br#"{"schema_version":1,"portable":{"reminders":[]}}"#.as_slice(),
+            br#"{"schema_version":2,"portable":{"reminders":[]}}"#.as_slice(),
             StateErrorCode::InvalidInput,
         ),
     ] {
@@ -488,7 +702,7 @@ fn valid_record_with_unsupported_settings_version_is_never_defaults_or_overwritt
             .expect("current peer");
         }
         let mut newer = serde_json::to_value(&current).expect("newer settings value");
-        newer["schema_version"] = json!(2);
+        newer["schema_version"] = json!(3);
         let newer_record = encode_record(
             2,
             &serde_json::to_vec(&newer).expect("newer settings payload"),

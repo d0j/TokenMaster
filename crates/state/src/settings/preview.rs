@@ -72,6 +72,7 @@ struct PortableCandidateWire<'a> {
 pub struct PortableSettingsCandidate {
     portable: PortableSettings,
     digest: PortableSettingsDigest,
+    source_schema_version: u16,
 }
 
 impl PortableSettingsCandidate {
@@ -80,11 +81,15 @@ impl PortableSettingsCandidate {
         Ok(Self {
             portable,
             digest: PortableSettingsDigest(Sha256::digest(encoded).into()),
+            source_schema_version: SETTINGS_SCHEMA_VERSION,
         })
     }
 
     pub(crate) fn decode(bytes: &[u8]) -> Result<Self, StateError> {
-        Self::new(decode_portable_candidate(bytes)?)
+        let decoded = decode_portable_candidate(bytes)?;
+        let mut candidate = Self::new(decoded.portable)?;
+        candidate.source_schema_version = decoded.source_schema_version;
+        Ok(candidate)
     }
 
     pub fn encode_json(&self) -> Result<Vec<u8>, StateError> {
@@ -98,6 +103,10 @@ impl PortableSettingsCandidate {
 
     pub(crate) const fn portable(&self) -> &PortableSettings {
         &self.portable
+    }
+
+    pub(crate) const fn source_schema_version(&self) -> u16 {
+        self.source_schema_version
     }
 }
 
@@ -125,6 +134,7 @@ pub enum SettingsChangeCategory {
     ReminderProfile,
     BackupSchedule,
     BackupRetention,
+    Presentation,
 }
 
 pub struct SettingsImportPreview {
@@ -176,6 +186,10 @@ impl SettingsImportPreview {
             != candidate.portable().backup().retention_budget_bytes()
         {
             categories.push(SettingsChangeCategory::BackupRetention);
+            changed_field_count += 1;
+        }
+        if current.presentation() != candidate.portable().presentation() {
+            categories.push(SettingsChangeCategory::Presentation);
             changed_field_count += 1;
         }
         Self {

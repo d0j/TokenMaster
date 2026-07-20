@@ -79,7 +79,11 @@ fn disable_periodic_backups(root: &DataRoot) {
     )
     .expect("disabled periodic policy");
     let settings = SettingsValue::new(
-        PortableSettings::new(defaults.portable().reminders().clone(), backup),
+        PortableSettings::new(
+            defaults.portable().reminders().clone(),
+            backup,
+            *defaults.portable().presentation(),
+        ),
         defaults.device().clone(),
     );
     SettingsStore::new(root.reliable_state())
@@ -363,6 +367,7 @@ fn portable_with_reminder_policy(
     PortableSettingsCandidate::new(PortableSettings::new(
         reminders,
         settings.portable().backup().clone(),
+        *settings.portable().presentation(),
     ))
     .expect("portable settings candidate")
 }

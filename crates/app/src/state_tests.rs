@@ -130,8 +130,12 @@ fn changed_portable_settings() -> PortableSettingsCandidate {
         defaults.portable().backup().retention_budget_bytes(),
     )
     .expect("backup policy");
-    PortableSettingsCandidate::new(PortableSettings::new(reminders, backup))
-        .expect("portable candidate")
+    PortableSettingsCandidate::new(PortableSettings::new(
+        reminders,
+        backup,
+        *defaults.portable().presentation(),
+    ))
+    .expect("portable candidate")
 }
 
 fn reminder_policy_update(enabled: bool, lead_seconds: &[u32]) -> ReminderPolicy {
