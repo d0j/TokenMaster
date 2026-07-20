@@ -8,6 +8,7 @@ export struct ReminderCustomLeadRow {
 }
 
 export component SettingsView inherits Rectangle {
+    in property <int> presentation-density-id;
     in property <bool> periodic-enabled;
     in property <int> quiet-seconds;
     in property <int> interval-seconds;
@@ -51,6 +52,7 @@ export component SettingsView inherits Rectangle {
     callback enable-current-user-startup();
     callback repair-current-user-startup();
     callback disable-current-user-startup();
+    callback select-presentation-density(int);
 
     background: UiTokens.background;
     accessible-role: groupbox;
@@ -65,6 +67,17 @@ export component SettingsView inherits Rectangle {
 
         Text { text: "Settings"; color: UiTokens.text-primary; font-size: 24px; font-weight: 700; }
         Text { text: "Settings health: " + root.settings-health; color: UiTokens.text-secondary; }
+
+        HorizontalLayout {
+            spacing: UiTokens.space-sm;
+            Text { text: "Density"; color: UiTokens.text-secondary; vertical-alignment: center; }
+            density-selector := ComboBox {
+                model: ["Comfortable", "Compact", "Ultra compact"];
+                current-index: root.presentation-density-id;
+                accessible-label: "Presentation density";
+                selected(_) => { root.select-presentation-density(self.current-index); }
+            }
+        }
 
         reminder-card := Rectangle {
             background: UiTokens.surface;

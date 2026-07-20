@@ -22,14 +22,15 @@ use crate::{
     DesktopDashboardSectionKey, DesktopFreshness, DesktopHistoryProjection,
     DesktopInAppNotificationBatch, DesktopInAppNotificationBridge, DesktopIntent,
     DesktopIntentSink, DesktopLifecycleIntentSink, DesktopModelsProjection,
-    DesktopNotificationsProjection, DesktopOperationSnapshot, DesktopProjectsProjection,
-    DesktopQuality, DesktopReliableStateProjection, DesktopReminderPolicy,
-    DesktopSessionDetailIntentAdmission, DesktopSessionDetailIntentSink, DesktopSessionsProjection,
-    DesktopSnapshotBridge, DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue,
-    DesktopTrayAvailability, DesktopValueAvailability, HistoryDayRow, InAppNotificationRow,
-    MainWindow, ModelUsageRow, ProjectUsageRow, RecentActivityRow, ReminderCustomLeadRow,
-    ReminderScopeRow, RestorePointRow, RouteRow, SessionDetailBreakdownRow, SessionListRow,
-    UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
+    DesktopNotificationsProjection, DesktopOperationSnapshot, DesktopPresentationApplyOutcome,
+    DesktopPresentationStyle, DesktopProjectsProjection, DesktopQuality,
+    DesktopReliableStateProjection, DesktopReminderPolicy, DesktopSessionDetailIntentAdmission,
+    DesktopSessionDetailIntentSink, DesktopSessionsProjection, DesktopSnapshotBridge,
+    DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue, DesktopTrayAvailability,
+    DesktopValueAvailability, HistoryDayRow, InAppNotificationRow, MainWindow, ModelUsageRow,
+    ProjectUsageRow, RecentActivityRow, ReminderCustomLeadRow, ReminderScopeRow, RestorePointRow,
+    RouteRow, SessionDetailBreakdownRow, SessionListRow, UiTokens, UnavailableDesktopIntentSink,
+    UnavailableDesktopSessionDetailIntentSink,
     in_app_notification::NotificationEpochState,
     native_tray::DesktopNativeTrayOwner,
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
@@ -37,6 +38,7 @@ use crate::{
 
 pub struct DesktopShell {
     window: MainWindow,
+    _presentation_style: Rc<RefCell<DesktopPresentationStyle>>,
     tray: RefCell<Option<DesktopNativeTrayOwner>>,
     lifecycle_sink: Option<Rc<dyn DesktopLifecycleIntentSink>>,
     tray_availability: Rc<Cell<DesktopTrayAvailability>>,
@@ -456,6 +458,8 @@ impl DesktopShell {
         lifecycle_sink: Option<Rc<dyn DesktopLifecycleIntentSink>>,
     ) -> Result<Self, slint::PlatformError> {
         let window = MainWindow::new()?;
+        let presentation_style = Rc::new(RefCell::new(DesktopPresentationStyle::new()));
+        apply_presentation_style(&window, *presentation_style.borrow());
         let tray_availability = Rc::new(Cell::new(DesktopTrayAvailability::Unavailable));
         if lifecycle_sink.is_some() {
             wire_close_to_tray(&window, Rc::clone(&tray_availability));
@@ -472,8 +476,10 @@ impl DesktopShell {
         wire_reliable_state_intents(&window, reliable_state.clone(), intent_sink);
         wire_session_detail_intents(&window, state.clone(), session_sink);
         wire_in_app_notification_dismissal(&window);
+        wire_presentation_density(&window, Rc::clone(&presentation_style));
         Ok(Self {
             window,
+            _presentation_style: presentation_style,
             tray: RefCell::new(None),
             lifecycle_sink,
             tray_availability,
@@ -613,6 +619,34 @@ impl DesktopShell {
             notification_epochs: Arc::clone(&self.notification_epochs),
         }
     }
+}
+
+fn apply_presentation_style(window: &MainWindow, style: DesktopPresentationStyle) {
+    window.set_presentation_density_id(style.density().slint_index());
+    window
+        .global::<UiTokens>()
+        .set_density_id(style.density().slint_index());
+    window.set_presentation_revision(i32::try_from(style.revision().get()).unwrap_or(i32::MAX));
+}
+
+fn wire_presentation_density(
+    window: &MainWindow,
+    presentation_style: Rc<RefCell<DesktopPresentationStyle>>,
+) {
+    let weak_window = window.as_weak();
+    window.on_select_presentation_density(move |index| {
+        let Ok(mut style) = presentation_style.try_borrow_mut() else {
+            return;
+        };
+        if style.select_density_index(index) != DesktopPresentationApplyOutcome::Applied {
+            return;
+        }
+        let next_style = *style;
+        drop(style);
+        if let Some(window) = weak_window.upgrade() {
+            apply_presentation_style(&window, next_style);
+        }
+    });
 }
 
 fn wire_in_app_notification_dismissal(window: &MainWindow) {

@@ -1,4 +1,5 @@
 export global UiTokens {
+    in-out property <int> density-id: 0;
     out property <color> background: #0b0f17;
     out property <color> surface: #111827;
     out property <color> surface-raised: #182234;
@@ -14,11 +15,11 @@ export global UiTokens {
     out property <color> waiting: #8fa3bf;
     out property <color> degraded: #f2c66d;
     out property <color> unavailable: #f08b8b;
-    out property <length> space-xs: 4px;
-    out property <length> space-sm: 8px;
-    out property <length> space: 16px;
+    out property <length> space-xs: density-id == 2 ? 2px : (density-id == 1 ? 3px : 4px);
+    out property <length> space-sm: density-id == 2 ? 4px : (density-id == 1 ? 6px : 8px);
+    out property <length> space: density-id == 2 ? 8px : (density-id == 1 ? 12px : 16px);
     out property <length> space-lg: 24px;
-    out property <length> radius-sm: 5px;
-    out property <length> radius: 8px;
-    out property <length> radius-lg: 12px;
+    out property <length> radius-sm: density-id == 2 ? 3px : (density-id == 1 ? 4px : 5px);
+    out property <length> radius: density-id == 2 ? 4px : (density-id == 1 ? 6px : 8px);
+    out property <length> radius-lg: density-id == 2 ? 6px : (density-id == 1 ? 9px : 12px);
 }
