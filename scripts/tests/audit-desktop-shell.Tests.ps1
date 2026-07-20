@@ -1557,6 +1557,15 @@ Describe "TokenMaster production desktop audit" {
         $receipt.density_applied_assertion_count | Should -Be 1
         $receipt.density_final_postcondition_count | Should -Be 1
         $receipt.density_authority_count | Should -Be 0
+        $receipt.density_authority_timer_delay_interval_sleep_count | Should -Be 0
+        $receipt.density_authority_worker_thread_spawn_task_count | Should -Be 0
+        $receipt.density_authority_query_count | Should -Be 0
+        $receipt.density_authority_window_create_count | Should -Be 0
+        $receipt.density_authority_queue_deque_count | Should -Be 0
+        $receipt.density_authority_cache_count | Should -Be 0
+        $receipt.density_authority_channel_count | Should -Be 0
+        $receipt.density_authority_unsafe_count | Should -Be 0
+        $receipt.density_authority_retained_count | Should -Be 0
         $receipt.command_palette_query_scalar_maximum | Should -Be 64
         $receipt.command_palette_model_count | Should -Be 1
         $receipt.command_palette_shortcut_count | Should -Be 1
@@ -1898,7 +1907,8 @@ Describe "TokenMaster production desktop audit" {
     It "rejects an eighth density token table" {
         $fixture = New-DesktopAuditFixture -Name "density-eighth-token"
         $path = Join-Path $fixture "crates\desktop\ui\tokens.slint"
-        Add-Content -LiteralPath $path -Value '    out property <length> density-extra: density-id == 2 ? 1px : (density-id == 1 ? 2px : 3px);'
+        $text = [System.IO.File]::ReadAllText($path) -replace '(\r?\n\})\s*$', "`r`n    out property <length> density-extra: density-id == 2 ? 1px : (density-id == 1 ? 2px : 3px);`$1"
+        [System.IO.File]::WriteAllText($path, $text)
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-DENSITY-TOKENS*"
@@ -2033,6 +2043,132 @@ Describe "TokenMaster production desktop audit" {
         $fixture = New-DesktopAuditFixture -Name "density-authority-sync"
         $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
         Add-Content -LiteralPath $path -Value 'fn density_sync() { Mutex::<u8>::new(0); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"
+    }
+
+    It "rejects a fourth mapping arm hidden after lexical brace decoys" {
+        $fixture = New-DesktopAuditFixture -Name "density-lexical-fourth-mapping"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '    UltraCompact,',
+            "    UltraCompact,`r`n    // }`r`n    /* { /* } */ */`r`n    ExtraCompact,"
+        ).Replace(
+            '            Self::UltraCompact => "ultra_compact",',
+            "            Self::UltraCompact => `"ultra_compact`",`r`n            let _ = `"}`";`r`n            Self::ExtraCompact => `"extra_compact`","
+        ).Replace(
+            '            Self::UltraCompact => 2,',
+            "            Self::UltraCompact => 2,`r`n            let _ = r###`"}`"###;`r`n            Self::ExtraCompact => 3,"
+        ).Replace(
+            '            2 => Some(Self::UltraCompact),',
+            "            2 => Some(Self::UltraCompact),`r`n            let _ = '}';`r`n            3 => Some(Self::ExtraCompact),"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-CONTRACT*"
+    }
+
+    It "rejects a dead in-function revision structure despite loose markers" {
+        $fixture = New-DesktopAuditFixture -Name "density-lexical-revision-structure"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '        let Some(revision) = self.revision.checked_successor() else {',
+            "        if false { let _ = self.revision.checked_successor(); }`r`n        let revision = DesktopPresentationRevision::initial();"
+        ).Replace(
+            '        self.revision = revision;',
+            '        if false { self.revision = revision; }'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-REVISION*"
+    }
+
+    It "rejects a dead stress marker when the 10,000 loop body no longer asserts Applied" {
+        $fixture = New-DesktopAuditFixture -Name "density-lexical-stress-structure"
+        $path = Join-Path $fixture "crates\desktop\tests\presentation_style_contract.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '            DesktopPresentationApplyOutcome::Applied',
+            '            DesktopPresentationApplyOutcome::Unchanged'
+        ).Replace(
+            '    assert_eq!(style.density(), DesktopDensity::Comfortable);',
+            "    if false { assert_eq!(style.select_density_index(0), DesktopPresentationApplyOutcome::Applied); }`r`n    // for index in 0..10_000 { }`r`n    assert_eq!(style.density(), DesktopDensity::Comfortable);"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-STRESS*"
+    }
+
+    It "rejects an eighth multiline UiTokens density property" {
+        $fixture = New-DesktopAuditFixture -Name "density-lexical-multiline-token"
+        $path = Join-Path $fixture "crates\desktop\ui\tokens.slint"
+        $text = [System.IO.File]::ReadAllText($path) -replace '(\r?\n\})\s*$', "`r`n    out property <length> density-extra:`r`n        density-id == 2 ? 1px : (density-id == 1 ? 2px : 3px);`$1"
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-TOKENS*"
+    }
+
+    It "rejects scoped thread spawn authority in the density presentation body" {
+        $fixture = New-DesktopAuditFixture -Name "density-lexical-scoped-thread"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        Add-Content -LiteralPath $path -Value 'fn density_scope() { std::thread::scope(|s| s.spawn(|| {})); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"
+    }
+
+    It "rejects authority after comment string raw-string and character brace decoys in apply" {
+        $fixture = New-DesktopAuditFixture -Name "density-lexical-apply-authority"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '    window.set_presentation_revision(style.revision().get().to_string().into());',
+            "    window.set_presentation_revision(style.revision().get().to_string().into());`r`n    // }`r`n    let _ = `"}`";`r`n    let _ = r###`"}`"###;`r`n    let _ = '}';`r`n    worker::new();"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"
+    }
+
+    It "ignores authority markers in density comments and literals" {
+        $fixture = New-DesktopAuditFixture -Name "density-lexical-non-executable-markers"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\presentation_style.rs") `
+            -Value '// std::thread::scope(|s| s.spawn(|| {})); Timer::default(); }'
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\presentation_style.rs") `
+            -Value 'const DENSITY_MARKER: &str = "unsafe VecDeque QueryService }";'
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\tokens.slint") `
+            -Value '// out property <length> density-fake: density-id == 2 ? 1px : 2px;'
+
+        $receipt = & $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json
+        $receipt.density_authority_count | Should -Be 0
+        $receipt.density_token_table_count | Should -Be 7
+    }
+
+    It "rejects lowercase worker and retained collection constructors" {
+        $fixture = New-DesktopAuditFixture -Name "density-lexical-retained-authority"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        Add-Content -LiteralPath $path -Value 'fn density_authority() { let _ = worker::new(); let _ = Box::new(1); let _ = Vec::<u8>::new(); let _ = HashMap::<u8, u8>::new(); let _ = OnceLock::<u8>::new(); let _ = Cell::new(0); let _ = Rc::new(0); let _ = RefCell::new(0); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"
+    }
+
+    It "rejects multiline channel queue cache and query authority" {
+        $fixture = New-DesktopAuditFixture -Name "density-lexical-multiline-authority"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        Add-Content -LiteralPath $path -Value @'
+fn density_authority() {
+    let _ = std::sync::mpsc::
+        channel::<u8>();
+    let _ = VecDeque::<u8>::new();
+    let _ = DensityCache::new();
+    let _ = QueryService::new();
+}
+'@
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"

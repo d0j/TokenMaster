@@ -80,32 +80,84 @@ $uiRustProductionText = if ($uiRustTestBoundary -ge 0) {
 }
 $reliableStateText = [System.IO.File]::ReadAllText((Join-Path $sourceRoot 'reliable_state.rs'))
 
-function Get-RustFunctionText {
-    param(
-        [Parameter(Mandatory = $true)][string]$Text,
-        [Parameter(Mandatory = $true)][string]$Name
-    )
+function ConvertTo-ExecutableText {
+    param([Parameter(Mandatory = $true)][string]$Text, [switch]$PreserveLiteralText)
 
-    $match = [regex]::Match($Text, "(?m)^\s*(?:pub\s+)?(?:const\s+)?fn\s+$Name\s*\(")
-    if (-not $match.Success) {
-        throw "TM-DESKTOP-DENSITY-WIRING: missing Rust function $Name"
-    }
-    $open = $Text.IndexOf('{', $match.Index)
-    if ($open -lt 0) {
-        throw "TM-DESKTOP-DENSITY-WIRING: missing Rust function body $Name"
-    }
-    $depth = 0
-    for ($index = $open; $index -lt $Text.Length; $index++) {
-        if ($Text[$index] -eq '{') { $depth++ }
-        if ($Text[$index] -eq '}') {
-            $depth--
-            if ($depth -eq 0) {
-                return $Text.Substring($match.Index, $index - $match.Index + 1)
+    $output = New-Object System.Text.StringBuilder $Text.Length
+    $index = 0; $blockDepth = 0
+    while ($index -lt $Text.Length) {
+        $character = $Text[$index]
+        $next = if ($index + 1 -lt $Text.Length) { $Text[$index + 1] } else { [char]0 }
+        if ($blockDepth -gt 0) {
+            if ($character -eq '/' -and $next -eq '*') { [void]$output.Append('  '); $blockDepth++; $index += 2; continue }
+            if ($character -eq '*' -and $next -eq '/') { [void]$output.Append('  '); $blockDepth--; $index += 2; continue }
+            [void]$output.Append($(if ($character -eq "`n" -or $character -eq "`r") { $character } else { ' ' })); $index++; continue
+        }
+        if ($character -eq '/' -and $next -eq '/') {
+            [void]$output.Append('  '); $index += 2
+            while ($index -lt $Text.Length -and $Text[$index] -ne "`n") { [void]$output.Append(' '); $index++ }
+            continue
+        }
+        if ($character -eq '/' -and $next -eq '*') { [void]$output.Append('  '); $blockDepth = 1; $index += 2; continue }
+        $rawStart = if ($character -eq 'r') { $index } elseif ($character -eq 'b' -and $next -eq 'r') { $index + 1 } else { -1 }
+        if ($rawStart -ge 0) {
+            $hashIndex = $rawStart + 1
+            while ($hashIndex -lt $Text.Length -and $Text[$hashIndex] -eq '#') { $hashIndex++ }
+            if ($hashIndex -lt $Text.Length -and $Text[$hashIndex] -eq '"') {
+                $hashCount = $hashIndex - $rawStart - 1
+                do {
+                    [void]$output.Append($(if ($PreserveLiteralText) { $Text[$index] } elseif ($Text[$index] -eq "`n" -or $Text[$index] -eq "`r") { $Text[$index] } else { ' ' }))
+                    $index++
+                    if ($index -gt $hashIndex -and $Text[$index - 1] -eq '"') {
+                        $closing = $true
+                        for ($hash = 0; $hash -lt $hashCount; $hash++) { if ($index + $hash -ge $Text.Length -or $Text[$index + $hash] -ne '#') { $closing = $false; break } }
+                        if ($closing) { for ($hash = 0; $hash -lt $hashCount; $hash++) { [void]$output.Append($(if ($PreserveLiteralText) { $Text[$index] } else { ' ' })); $index++ }; break }
+                    }
+                } while ($index -lt $Text.Length)
+                continue
             }
         }
+        $stringStart = $character -eq '"' -or ($character -eq 'b' -and $next -eq '"')
+        $byteCharacter = $character -eq 'b' -and $next -eq "'" -and $index + 3 -lt $Text.Length -and $Text[$index + 3] -eq "'"
+        $characterLiteral = $character -eq "'" -and (($index + 2 -lt $Text.Length -and $Text[$index + 2] -eq "'") -or ($index + 3 -lt $Text.Length -and $Text[$index + 1] -eq '\' -and $Text[$index + 3] -eq "'"))
+        if ($stringStart -or $byteCharacter -or $characterLiteral) {
+            $quote = if ($stringStart) { '"' } else { "'" }
+            $literalStart = $index
+            do {
+                $literalCharacter = $Text[$index]
+                [void]$output.Append($(if ($PreserveLiteralText) { $literalCharacter } elseif ($literalCharacter -eq "`n" -or $literalCharacter -eq "`r") { $literalCharacter } else { ' ' }))
+                if ($literalCharacter -eq '\' -and $index + 1 -lt $Text.Length) { $index++; [void]$output.Append($(if ($PreserveLiteralText) { $Text[$index] } else { ' ' })) }
+                elseif ($literalCharacter -eq $quote -and $index -gt $literalStart) { $index++; break }
+                $index++
+            } while ($index -lt $Text.Length)
+            continue
+        }
+        [void]$output.Append($character); $index++
     }
-    throw "TM-DESKTOP-DENSITY-WIRING: unclosed Rust function $Name"
+    return $output.ToString()
 }
+
+function Get-ExecutableBracedText {
+    param([Parameter(Mandatory = $true)][string]$Text, [Parameter(Mandatory = $true)][string]$Pattern, [Parameter(Mandatory = $true)][string]$FailureCode, [switch]$PreserveLiteralText)
+    $executable = ConvertTo-ExecutableText -Text $Text
+    $match = [regex]::Match($executable, $Pattern)
+    if (-not $match.Success) { throw "${FailureCode}: missing executable structure" }
+    $open = $executable.IndexOf('{', $match.Index)
+    if ($open -lt 0) { throw "${FailureCode}: missing executable structure body" }
+    $depth = 0
+    for ($index = $open; $index -lt $executable.Length; $index++) {
+        if ($executable[$index] -eq '{') { $depth++ }
+        if ($executable[$index] -eq '}') { $depth--; if ($depth -eq 0) { return ConvertTo-ExecutableText -Text $Text.Substring($match.Index, $index - $match.Index + 1) -PreserveLiteralText:$PreserveLiteralText } }
+    }
+    throw "${FailureCode}: unclosed executable structure"
+}
+
+function Get-RustFunctionText {
+    param([Parameter(Mandatory = $true)][string]$Text, [Parameter(Mandatory = $true)][string]$Name, [switch]$PreserveLiteralText)
+    return Get-ExecutableBracedText -Text $Text -Pattern "(?m)^\s*(?:pub\s+)?(?:const\s+)?fn\s+$Name\s*\(" -FailureCode 'TM-DESKTOP-DENSITY-WIRING' -PreserveLiteralText:$PreserveLiteralText
+}
+
+function Normalize-ExecutableStructure { param([Parameter(Mandatory = $true)][string]$Text); return [regex]::Replace($Text, '\s+', '') }
 
 $presentationStylePath = Join-Path $sourceRoot 'presentation_style.rs'
 $presentationStyleText = [System.IO.File]::ReadAllText($presentationStylePath)
@@ -120,12 +172,10 @@ $slintIndexText = Get-RustFunctionText -Text $presentationStyleText -Name 'slint
 $fromSlintIndexText = Get-RustFunctionText -Text $presentationStyleText -Name 'from_slint_index'
 $checkedSuccessorText = Get-RustFunctionText -Text $presentationStyleText -Name 'checked_successor'
 $selectDensityText = Get-RustFunctionText -Text $presentationStyleText -Name 'select_density_index'
-$densityEnumMatch = [regex]::Match($presentationStyleText, '(?s)pub enum DesktopDensity\s*\{(?<body>.*?)\}')
-if (-not $densityEnumMatch.Success) {
-    throw 'TM-DESKTOP-DENSITY-CONTRACT: DesktopDensity enum must remain explicit'
-}
-$densityVariantMatches = [regex]::Matches($densityEnumMatch.Groups['body'].Value, '(?m)^\s*(?<variant>[A-Za-z][A-Za-z0-9_]*)\s*,\s*$')
+$densityEnumText = Get-ExecutableBracedText -Text $presentationStyleText -Pattern '(?m)^\s*pub\s+enum\s+DesktopDensity\s*\{' -FailureCode 'TM-DESKTOP-DENSITY-CONTRACT'
+$densityVariantMatches = [regex]::Matches($densityEnumText, '(?m)^\s*(?<variant>[A-Za-z][A-Za-z0-9_]*)\s*,\s*$')
 $densityVariantCount = $densityVariantMatches.Count
+$stableKeyText = Get-RustFunctionText -Text $presentationStyleText -Name 'stable_key' -PreserveLiteralText
 $stableKeyArmCount = [regex]::Matches($stableKeyText, '(?m)^\s*Self::[A-Za-z][A-Za-z0-9_]*\s*=>\s*"[^"]+",\s*$').Count
 $slintIndexArmCount = [regex]::Matches($slintIndexText, '(?m)^\s*Self::[A-Za-z][A-Za-z0-9_]*\s*=>\s*\d+,\s*$').Count
 $fromSlintIndexArmCount = [regex]::Matches($fromSlintIndexText, '(?m)^\s*\d+\s*=>\s*Some\(Self::[A-Za-z][A-Za-z0-9_]*\),\s*$').Count
@@ -157,12 +207,18 @@ $densityTokenTables = @(
     'out property <length> radius: density-id == 2 ? 4px : (density-id == 1 ? 6px : 8px);',
     'out property <length> radius-lg: density-id == 2 ? 6px : (density-id == 1 ? 9px : 12px);'
 )
-$densityTokenDeclarationCount = [regex]::Matches(
-    $tokensText,
-    '(?m)^\s*out property <length> [a-z][a-z-]*:\s*.*\bdensity-id\b.*;\s*$'
-).Count
-if ($densityTokenDeclarationCount -ne 7 -or @($densityTokenTables | Where-Object {
-        [regex]::Matches($tokensText, [regex]::Escape($_)).Count -ne 1
+$uiTokensText = Get-ExecutableBracedText -Text $tokensText -Pattern '(?m)^\s*export\s+global\s+UiTokens\s*\{' -FailureCode 'TM-DESKTOP-DENSITY-TOKENS' -PreserveLiteralText
+$densityTokenDeclarations = @([regex]::Matches(
+    $uiTokensText,
+    '(?s)\bout\s+property\s*<\s*length\s*>\s*(?<name>[a-z][a-z-]*)\s*:\s*(?<expression>[^;]*\bdensity-id\b[^;]*);'
+) | ForEach-Object {
+    "out property <length> $($_.Groups['name'].Value): $($_.Groups['expression'].Value);" -replace '\s+', ' '
+})
+$densityTokenDeclarationCount = $densityTokenDeclarations.Count
+$normalizedDensityTokenTables = @($densityTokenTables | ForEach-Object { $_ -replace '\s+', ' ' })
+if ($densityTokenDeclarationCount -ne 7 -or @($normalizedDensityTokenTables | Where-Object {
+        $expectedToken = $_
+        @($densityTokenDeclarations | Where-Object { $_ -eq $expectedToken }).Count -ne 1
     }).Count -ne 0) {
     throw 'TM-DESKTOP-DENSITY-TOKENS: density must retain exactly seven fixed token tables including space-lg 24/18/12'
 }
@@ -192,60 +248,49 @@ $presentationRevisionTypeCount = [regex]::Matches(
     $presentationStyleText,
     'pub struct DesktopPresentationRevision\(u64\);'
 ).Count
-$checkedSuccessorDerivationCount = [regex]::Matches(
-    $checkedSuccessorText,
-    '(?s)match\s+self\.0\.checked_add\(1\)\s*\{\s*Some\(value\)\s*=>\s*Some\(Self\(value\)\),\s*None\s*=>\s*None,\s*\}'
-).Count
-$checkedSuccessorCallCount = [regex]::Matches(
-    $selectDensityText,
-    'let Some\(revision\) = self\.revision\.checked_successor\(\) else'
-).Count
-$densityWriteCount = [regex]::Matches($selectDensityText, 'self\.density = density;').Count
-$revisionWriteCount = [regex]::Matches($selectDensityText, 'self\.revision = revision;').Count
-$appliedOutcomeCount = [regex]::Matches($selectDensityText, 'DesktopPresentationApplyOutcome::Applied').Count
-$successorPosition = $selectDensityText.IndexOf('let Some(revision) = self.revision.checked_successor() else', [System.StringComparison]::Ordinal)
-$densityWritePosition = $selectDensityText.IndexOf('self.density = density;', [System.StringComparison]::Ordinal)
-$revisionWritePosition = $selectDensityText.IndexOf('self.revision = revision;', [System.StringComparison]::Ordinal)
-$appliedPosition = $selectDensityText.IndexOf('DesktopPresentationApplyOutcome::Applied', [System.StringComparison]::Ordinal)
-if ($presentationRevisionTypeCount -ne 1 -or $checkedSuccessorDerivationCount -ne 1 -or
-    $checkedSuccessorCallCount -ne 1 -or $densityWriteCount -ne 1 -or
-    $revisionWriteCount -ne 1 -or $appliedOutcomeCount -ne 1 -or
-    -not ($successorPosition -ge 0 -and $successorPosition -lt $densityWritePosition -and
-        $densityWritePosition -lt $revisionWritePosition -and $revisionWritePosition -lt $appliedPosition)) {
+$expectedCheckedSuccessor = 'constfnchecked_successor(self)->Option<Self>{matchself.0.checked_add(1){Some(value)=>Some(Self(value)),None=>None,}}'
+$expectedSelectDensity = 'pubfnselect_density_index(&mutself,index:i32)->DesktopPresentationApplyOutcome{letSome(density)=DesktopDensity::from_slint_index(index)else{returnDesktopPresentationApplyOutcome::Rejected;};ifdensity==self.density{returnDesktopPresentationApplyOutcome::Unchanged;}letSome(revision)=self.revision.checked_successor()else{returnDesktopPresentationApplyOutcome::RevisionExhausted;};self.density=density;self.revision=revision;DesktopPresentationApplyOutcome::Applied}'
+$checkedSuccessorDerivationCount = [int]((Normalize-ExecutableStructure -Text $checkedSuccessorText) -eq $expectedCheckedSuccessor)
+$selectDensityStructureCount = [int]((Normalize-ExecutableStructure -Text $selectDensityText) -eq $expectedSelectDensity)
+$checkedSuccessorCallCount = $selectDensityStructureCount
+$densityWriteCount = $selectDensityStructureCount
+$revisionWriteCount = $selectDensityStructureCount
+$appliedOutcomeCount = $selectDensityStructureCount
+if ($presentationRevisionTypeCount -ne 1 -or $checkedSuccessorDerivationCount -ne 1 -or $selectDensityStructureCount -ne 1) {
     throw 'TM-DESKTOP-DENSITY-REVISION: density revision updates must remain checked and fail closed'
 }
 $densityStressText = Get-RustFunctionText -Text $presentationStyleContractText -Name 'density_selection_is_checked_revisioned_and_constant_state'
-$densitySwitchLoopCount = [regex]::Matches($densityStressText, 'for index in 0\.\.10_000 \{').Count
-$densityAppliedAssertionCount = [regex]::Matches(
-    $densityStressText,
-    '(?s)assert_eq!\(\s*style\.select_density_index\(expected\),\s*DesktopPresentationApplyOutcome::Applied\s*\);'
-).Count
-$densityFinalPostconditionCount = [regex]::Matches(
-    $densityStressText,
-    '(?s)\}\s*assert_eq!\(style\.density\(\), DesktopDensity::Comfortable\);\s*assert_eq!\(style\.revision\(\)\.get\(\), 10_001\);'
-).Count
-if ($densitySwitchLoopCount -ne 1 -or $densityAppliedAssertionCount -ne 1 -or
-    $densityFinalPostconditionCount -ne 1) {
+$expectedDensityStress = 'fndensity_selection_is_checked_revisioned_and_constant_state(){letmutstyle=DesktopPresentationStyle::new();assert_eq!(style.density(),DesktopDensity::Comfortable);assert_eq!(style.revision().get(),0);assert_eq!(style.select_density_index(1),DesktopPresentationApplyOutcome::Applied);assert_eq!(style.density(),DesktopDensity::Compact);assert_eq!(style.revision().get(),1);assert_eq!(style.select_density_index(1),DesktopPresentationApplyOutcome::Unchanged);letdensity_before_rejection=style.density();letrevision_before_rejection=style.revision();assert_eq!(style.select_density_index(3),DesktopPresentationApplyOutcome::Rejected);assert_eq!(style.density(),density_before_rejection);assert_eq!(style.revision(),revision_before_rejection);forindexin0..10_000{letexpected=matchindex%3{0=>0,1=>1,_=>2,};assert_eq!(style.select_density_index(expected),DesktopPresentationApplyOutcome::Applied);}assert_eq!(style.density(),DesktopDensity::Comfortable);assert_eq!(style.revision().get(),10_001);}'
+$densityStressStructureCount = [int]((Normalize-ExecutableStructure -Text $densityStressText) -eq $expectedDensityStress)
+$densitySwitchLoopCount = $densityStressStructureCount
+$densityAppliedAssertionCount = $densityStressStructureCount
+$densityFinalPostconditionCount = $densityStressStructureCount
+if ($densityStressStructureCount -ne 1) {
     throw 'TM-DESKTOP-DENSITY-STRESS: density must retain one 10,000-switch contract'
 }
-$densityAuthorityText = $presentationStyleText + "`n" + $densityApplyText + "`n" + $densityWireText
+$densityAuthorityText = (ConvertTo-ExecutableText -Text $presentationStyleText) + "`n" + $densityApplyText + "`n" + $densityWireText
+$densityAuthorityText = [regex]::Replace(
+    $densityAuthorityText,
+    'Rc\s*<\s*RefCell\s*<\s*DesktopPresentationStyle\s*>\s*>',
+    ''
+)
 $densityAuthorityPatterns = [ordered]@{
-    timer = 'slint::Timer|\bTimer::'
-    worker_thread_spawn = 'std::thread::spawn|\bthread::spawn|std::thread::Builder'
-    query = '\b(?:QueryService|DesktopQuery|QueryWorker)\b'
-    window_create = '\bCreateWindow(?:ExW)?\b|\b(?:MainWindow|Window)::new\b'
+    timer_delay_interval_sleep = '\b(?:slint\s*::\s*)?(?:Timer|Delay|Interval)\b|\b(?:sleep|delay)\s*\('
+    worker_thread_spawn_task = '\bworker\b|\bthread\s*(?:::\s*(?:scope|spawn|Builder))?\b|\bscoped\b|\bspawn\s*\(|\btask\b|\btokio\b|\basync\b'
+    query = '\b[A-Za-z_][A-Za-z0-9_]*Query[A-Za-z0-9_]*\b'
+    window_create = '\bCreateWindow(?:ExW)?\b|\b(?:MainWindow|Window)\s*::\s*(?:new|builder)\b'
     queue_deque = '\b(?:VecDeque|Queue)\b'
-    cache = '\b[A-Za-z_][A-Za-z0-9_]*Cache(?:::|<)'
-    channel = 'std::sync::mpsc|\bmpsc::|\bsync_channel\b|\bchannel\s*\('
+    cache = '\b[A-Za-z_][A-Za-z0-9_]*Cache\b'
+    channel = '\b(?:mpsc|sync_channel|channel|Sender|Receiver)\b'
     unsafe = '\bunsafe\b'
-    retained_sync = '\b(?:Mutex|RwLock|Arc)(?:\s*<|::\s*<)'
+    retained = '\b(?:Vec|Box|HashMap|BTreeMap|HashSet|BTreeSet|BinaryHeap|Rc|RefCell|Cell|OnceCell|OnceLock|Mutex|RwLock|Arc)(?:\s*(?:::)?\s*<|\s*::\s*(?:new|default|with_capacity))'
 }
 $densityAuthorityCategoryCounts = [ordered]@{}
 foreach ($category in $densityAuthorityPatterns.Keys) {
     $densityAuthorityCategoryCounts[$category] = [regex]::Matches(
         $densityAuthorityText,
         $densityAuthorityPatterns[$category],
-        [System.Text.RegularExpressions.RegexOptions]::None
+        [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
     ).Count
 }
 $densityAuthorityCount = @($densityAuthorityCategoryCounts.Values | Measure-Object -Sum).Sum
@@ -1468,6 +1513,15 @@ if ($SourceOnly) {
         density_applied_assertion_count = $densityAppliedAssertionCount
         density_final_postcondition_count = $densityFinalPostconditionCount
         density_authority_count = $densityAuthorityCount
+        density_authority_timer_delay_interval_sleep_count = $densityAuthorityCategoryCounts.timer_delay_interval_sleep
+        density_authority_worker_thread_spawn_task_count = $densityAuthorityCategoryCounts.worker_thread_spawn_task
+        density_authority_query_count = $densityAuthorityCategoryCounts.query
+        density_authority_window_create_count = $densityAuthorityCategoryCounts.window_create
+        density_authority_queue_deque_count = $densityAuthorityCategoryCounts.queue_deque
+        density_authority_cache_count = $densityAuthorityCategoryCounts.cache
+        density_authority_channel_count = $densityAuthorityCategoryCounts.channel
+        density_authority_unsafe_count = $densityAuthorityCategoryCounts.unsafe
+        density_authority_retained_count = $densityAuthorityCategoryCounts.retained
         command_palette_query_scalar_maximum = $commandPaletteQueryCap
         command_palette_model_count = $commandPaletteModelCount
         command_palette_shortcut_count = $commandPaletteShortcutCount
@@ -1635,6 +1689,15 @@ if ($LASTEXITCODE -ne 0) {
     density_applied_assertion_count = $densityAppliedAssertionCount
     density_final_postcondition_count = $densityFinalPostconditionCount
     density_authority_count = $densityAuthorityCount
+    density_authority_timer_delay_interval_sleep_count = $densityAuthorityCategoryCounts.timer_delay_interval_sleep
+    density_authority_worker_thread_spawn_task_count = $densityAuthorityCategoryCounts.worker_thread_spawn_task
+    density_authority_query_count = $densityAuthorityCategoryCounts.query
+    density_authority_window_create_count = $densityAuthorityCategoryCounts.window_create
+    density_authority_queue_deque_count = $densityAuthorityCategoryCounts.queue_deque
+    density_authority_cache_count = $densityAuthorityCategoryCounts.cache
+    density_authority_channel_count = $densityAuthorityCategoryCounts.channel
+    density_authority_unsafe_count = $densityAuthorityCategoryCounts.unsafe
+    density_authority_retained_count = $densityAuthorityCategoryCounts.retained
     command_palette_query_scalar_maximum = $commandPaletteQueryCap
     command_palette_model_count = $commandPaletteModelCount
     command_palette_shortcut_count = $commandPaletteShortcutCount
