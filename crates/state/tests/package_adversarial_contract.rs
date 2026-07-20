@@ -56,6 +56,21 @@ fn reseal_descriptors_and_package(package: &mut [u8]) {
 }
 
 #[test]
+fn resealed_unsupported_manifest_settings_schemas_are_rejected() {
+    for schema_version in [0_u16, 3_u16] {
+        let mut package = config_bytes();
+        package[46..48].copy_from_slice(&schema_version.to_le_bytes());
+        reseal_descriptors_and_package(&mut package);
+        assert_eq!(
+            read_config_bytes(&package)
+                .expect_err("unsupported manifest settings schema")
+                .code(),
+            StateErrorCode::UnsupportedVersion
+        );
+    }
+}
+
+#[test]
 fn truncation_and_flips_at_every_structural_region_fail_closed() {
     let original = config_bytes();
     let suffix = original

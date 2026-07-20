@@ -138,6 +138,10 @@ pub fn legacy_config_bytes_v1() -> Vec<u8> {
     package_with_settings_source_schema(1, &legacy_v1_portable_json(), None)
 }
 
+pub fn legacy_backup_bytes_v1(database: &[u8]) -> Vec<u8> {
+    package_with_settings_source_schema(1, &legacy_v1_portable_json(), Some(database))
+}
+
 pub fn package_with_settings_source_schema(
     settings_schema_version: u16,
     settings_json: &[u8],
@@ -215,10 +219,17 @@ pub fn package_with_settings_source_schema(
     }
 
     let binding: [u8; 32] = descriptor_hasher.finalize().into();
+    let binding_offset = bytes.len();
     bytes.extend_from_slice(&binding);
+    assert_eq!(bytes.len(), binding_offset + 32);
     bytes.extend_from_slice(b"TMEND001");
+    assert_eq!(
+        &bytes[binding_offset + 32..binding_offset + 40],
+        b"TMEND001"
+    );
     let package_digest: [u8; 32] = Sha256::digest(&bytes).into();
     bytes.extend_from_slice(&package_digest);
+    assert_eq!(bytes.len(), binding_offset + 72);
     bytes
 }
 

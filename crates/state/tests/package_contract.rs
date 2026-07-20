@@ -12,7 +12,7 @@ use tokenmaster_state::{
 
 use package_support::{
     ControlledRoot, PACKAGE_MAX_BYTES, backup_bytes_with, config_bytes_at, digest,
-    legacy_config_bytes_v1, read_backup_bytes, read_config_bytes, settings,
+    legacy_backup_bytes_v1, legacy_config_bytes_v1, read_backup_bytes, read_config_bytes, settings,
 };
 
 const PACKAGE_TIME: i64 = 1_721_234_567_890;
@@ -92,6 +92,33 @@ fn container_v1_reads_settings_v1_and_writes_settings_v2() {
     let (current, _) = config_bytes_at(PACKAGE_TIME);
     assert_eq!(u16::from_le_bytes(current[46..48].try_into().unwrap()), 2);
     assert!(read_config_bytes(&current).is_ok());
+}
+
+#[test]
+fn legacy_backup_retains_database_and_metadata_while_settings_migrate() {
+    let database = b"SQLite format 3\0legacy package database payload";
+    let legacy = legacy_backup_bytes_v1(database);
+    assert_eq!(u16::from_le_bytes(legacy[46..48].try_into().unwrap()), 1);
+
+    let (verified, restored) = read_backup_bytes(&legacy).expect("legacy backup");
+    let canonical: serde_json::Value = serde_json::from_slice(
+        &verified
+            .settings()
+            .encode_json()
+            .expect("canonical settings"),
+    )
+    .expect("canonical settings JSON");
+    assert_eq!(canonical["schema_version"], 2);
+    assert_eq!(
+        canonical["portable"]["presentation"]["density"],
+        "comfortable"
+    );
+    assert_eq!(verified.database_schema_version(), 13);
+    assert_eq!(verified.database_len(), database.len() as u64);
+    assert_eq!(verified.database_sha256(), &digest(database));
+    assert_eq!(verified.metadata().created_at_utc_ms(), PACKAGE_TIME);
+    assert_eq!(verified.metadata().purpose(), BackupPurpose::Manual);
+    assert_eq!(restored, database);
 }
 
 #[test]
