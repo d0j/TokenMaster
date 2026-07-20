@@ -293,7 +293,7 @@ fn reliable_reminder_policy_projects_into_the_bounded_editor() {
     assert_eq!(window.get_settings_layout_mode(), "narrow");
     window
         .window()
-        .set_size(slint::PhysicalSize::new(1120, 900));
+        .set_size(slint::PhysicalSize::new(1120, 1_000));
     assert_eq!(window.get_settings_layout_mode(), "wide");
     window.show().expect("show settings");
     let labels = ElementQuery::from_root(window)
@@ -392,7 +392,7 @@ fn reliable_reminder_policy_projects_into_the_bounded_editor() {
     );
     window
         .window()
-        .set_size(slint::PhysicalSize::new(1120, 900));
+        .set_size(slint::PhysicalSize::new(1120, 1_000));
     set_backup_value(window, "Backup quiet period in seconds", 600);
     set_backup_value(window, "Backup interval in seconds", 43_200);
     set_backup_value(window, "Backup retention budget in mebibytes", 1_024);
@@ -415,7 +415,7 @@ fn reliable_reminder_policy_projects_into_the_bounded_editor() {
     set_backup_value(window, "Backup retention budget in mebibytes", 2_048);
     window
         .window()
-        .set_size(slint::PhysicalSize::new(1120, 900));
+        .set_size(slint::PhysicalSize::new(1120, 1_000));
     assert_eq!(backup_value(window, "Backup quiet period in seconds"), 900);
     assert_eq!(backup_value(window, "Backup interval in seconds"), 86_400);
     assert_eq!(
