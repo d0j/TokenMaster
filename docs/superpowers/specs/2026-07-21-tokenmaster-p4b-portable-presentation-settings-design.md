@@ -269,8 +269,10 @@ It retains no request history, settings bytes, path, queue, or timer.
 - a failed presentation-settings operation while the values differ is `not_saved` and
   keeps the valid visible density rather than causing a jarring rollback;
 - a later admitted selection retries persistence;
-- a successful explicit config import or restore applies its persisted density, clears the
-  unsaved state, and advances the presentation revision only if the visible value changes.
+- a successful confirmed config import or restore explicitly including portable settings
+  applies its persisted density, clears the unsaved state, and advances the presentation
+  revision only if the visible value changes; config preview/cancel and data-only restore
+  do not override a local unsaved density.
 
 Keeping a valid unsaved style visible is intentional. A disk failure is not invalid style
 input, and silently rolling back can overwrite a newer local selection after coalesced
@@ -286,8 +288,10 @@ operations. The explicit status makes restart behavior truthful: only `saved` su
   newer locally visible unsaved density.
 - A matching later projection clears the unsaved state even if an intermediate operation
   status delivery was coalesced.
-- Explicit successful config import/restore is authoritative and may replace a local
-  unsaved density because the user confirmed that portable-settings operation.
+- Explicit successful confirmed config import or restore including portable settings is
+  authoritative and may replace a local unsaved density because the user confirmed that
+  portable-settings operation. Config preview/cancel and data-only restore are not such
+  authority.
 - Failed/cancelled import or restore does not change density.
 - A stale or displaced reliable-state delivery remains bounded by the existing latest-only
   notifier and never creates a presentation history.
