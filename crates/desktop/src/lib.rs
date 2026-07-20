@@ -10,6 +10,7 @@ pub mod in_app_notification;
 pub mod models;
 mod native_tray;
 pub mod notifications;
+pub mod presentation_style;
 pub mod presentation;
 pub mod projects;
 pub mod reliable_state;
@@ -36,6 +37,10 @@ pub use history::*;
 pub use in_app_notification::*;
 pub use models::*;
 pub use notifications::*;
+pub use presentation_style::{
+    DesktopDensity, DesktopPresentationApplyOutcome, DesktopPresentationRevision,
+    DesktopPresentationStyle,
+};
 pub use presentation::{
     DesktopApplyOutcome, DesktopRouteKey, DesktopSessionSelectionError, DesktopSnapshotEpoch,
     DesktopState,
