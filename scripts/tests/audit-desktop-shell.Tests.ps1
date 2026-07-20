@@ -1538,15 +1538,24 @@ Describe "TokenMaster production desktop audit" {
         $receipt = & $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json
         $receipt.rust_source_file_count | Should -Be 17
         $receipt.slint_source_file_count | Should -Be 24
-        $receipt.density_stable_key_index_count | Should -Be 3
+        $receipt.density_variant_count | Should -Be 3
+        $receipt.density_stable_key_arm_count | Should -Be 3
+        $receipt.density_slint_index_arm_count | Should -Be 3
+        $receipt.density_from_slint_index_arm_count | Should -Be 3
         $receipt.density_token_table_count | Should -Be 7
         $receipt.density_owner_count | Should -Be 1
         $receipt.density_owner_slot_count | Should -Be 1
         $receipt.density_root_binding_count | Should -Be 1
         $receipt.density_root_callback_count | Should -Be 1
         $receipt.density_wiring_callback_count | Should -Be 1
-        $receipt.density_checked_revision_count | Should -Be 1
-        $receipt.density_switch_contract_count | Should -Be 1
+        $receipt.density_revision_type_count | Should -Be 1
+        $receipt.density_checked_successor_count | Should -Be 1
+        $receipt.density_successor_call_count | Should -Be 1
+        $receipt.density_write_count | Should -Be 1
+        $receipt.density_revision_write_count | Should -Be 1
+        $receipt.density_switch_loop_count | Should -Be 1
+        $receipt.density_applied_assertion_count | Should -Be 1
+        $receipt.density_final_postcondition_count | Should -Be 1
         $receipt.density_authority_count | Should -Be 0
         $receipt.command_palette_query_scalar_maximum | Should -Be 64
         $receipt.command_palette_model_count | Should -Be 1
@@ -1864,6 +1873,37 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-DENSITY-CONTRACT*"
     }
 
+    It "rejects a fourth density mapping arm" {
+        $fixture = New-DesktopAuditFixture -Name "density-fourth-mapping"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '    UltraCompact,',
+            "    UltraCompact,`r`n    ExtraCompact,"
+        ).Replace(
+            '            Self::UltraCompact => "ultra_compact",',
+            "            Self::UltraCompact => `"ultra_compact`",`r`n            Self::ExtraCompact => `"extra_compact`","
+        ).Replace(
+            '            Self::UltraCompact => 2,',
+            "            Self::UltraCompact => 2,`r`n            Self::ExtraCompact => 3,"
+        ).Replace(
+            '            2 => Some(Self::UltraCompact),',
+            "            2 => Some(Self::UltraCompact),`r`n            3 => Some(Self::ExtraCompact),"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-CONTRACT*"
+    }
+
+    It "rejects an eighth density token table" {
+        $fixture = New-DesktopAuditFixture -Name "density-eighth-token"
+        $path = Join-Path $fixture "crates\desktop\ui\tokens.slint"
+        Add-Content -LiteralPath $path -Value '    out property <length> density-extra: density-id == 2 ? 1px : (density-id == 1 ? 2px : 3px);'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-TOKENS*"
+    }
+
     It "rejects unchecked presentation revision updates" {
         $fixture = New-DesktopAuditFixture -Name "density-revision-drift"
         $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
@@ -1877,10 +1917,122 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-DENSITY-REVISION*"
     }
 
-    It "rejects presentation density authority creation" {
-        $fixture = New-DesktopAuditFixture -Name "density-authority-drift"
+    It "rejects a dead checked_add marker with an unchecked revision path" {
+        $fixture = New-DesktopAuditFixture -Name "density-dead-checked-add"
         $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
-        Add-Content -LiteralPath $path -Value 'fn density_worker() { Timer::default(); QueryService::new(); CreateWindowExW(); }'
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'match self.0.checked_add(1) {',
+            'match Some(self.0.wrapping_add(1)) {'
+        )
+        $text += "`r`nfn dead_checked_add_marker() { let _ = 0_u64.checked_add(1); }"
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-REVISION*"
+    }
+
+    It "rejects a computed successor without revision assignment" {
+        $fixture = New-DesktopAuditFixture -Name "density-missing-revision-assignment"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '        self.revision = revision;',
+            '        let _ = revision;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-REVISION*"
+    }
+
+    It "rejects removing the semantic 10,000-switch outcome assertion" {
+        $fixture = New-DesktopAuditFixture -Name "density-stress-outcome"
+        $path = Join-Path $fixture "crates\desktop\tests\presentation_style_contract.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '            DesktopPresentationApplyOutcome::Applied',
+            '            DesktopPresentationApplyOutcome::Unchanged'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-STRESS*"
+    }
+
+    It "rejects density timer authority" {
+        $fixture = New-DesktopAuditFixture -Name "density-authority-timer"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        Add-Content -LiteralPath $path -Value 'fn density_timer() { slint::Timer::default(); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"
+    }
+
+    It "rejects density thread spawn authority" {
+        $fixture = New-DesktopAuditFixture -Name "density-authority-thread"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        Add-Content -LiteralPath $path -Value 'fn density_worker() { std::thread::spawn(|| {}); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"
+    }
+
+    It "rejects density query authority" {
+        $fixture = New-DesktopAuditFixture -Name "density-authority-query"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        Add-Content -LiteralPath $path -Value 'fn density_query() { QueryService::new(); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"
+    }
+
+    It "rejects density native window creation" {
+        $fixture = New-DesktopAuditFixture -Name "density-authority-window"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        Add-Content -LiteralPath $path -Value 'fn density_window() { CreateWindowExW(); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"
+    }
+
+    It "rejects density queue authority" {
+        $fixture = New-DesktopAuditFixture -Name "density-authority-queue"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        Add-Content -LiteralPath $path -Value 'fn density_queue() { VecDeque::<u8>::new(); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"
+    }
+
+    It "rejects density cache authority" {
+        $fixture = New-DesktopAuditFixture -Name "density-authority-cache"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        Add-Content -LiteralPath $path -Value 'fn density_cache() { DensityCache::new(); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"
+    }
+
+    It "rejects density channel authority" {
+        $fixture = New-DesktopAuditFixture -Name "density-authority-channel"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        Add-Content -LiteralPath $path -Value 'fn density_channel() { std::sync::mpsc::sync_channel::<u8>(1); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"
+    }
+
+    It "rejects density unsafe authority" {
+        $fixture = New-DesktopAuditFixture -Name "density-authority-unsafe"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        Add-Content -LiteralPath $path -Value 'fn density_unsafe() { unsafe {} }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"
+    }
+
+    It "rejects density retained synchronization authority" {
+        $fixture = New-DesktopAuditFixture -Name "density-authority-sync"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        Add-Content -LiteralPath $path -Value 'fn density_sync() { Mutex::<u8>::new(0); }'
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"

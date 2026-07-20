@@ -79,32 +79,72 @@ $uiRustProductionText = if ($uiRustTestBoundary -ge 0) {
     $uiRustText
 }
 $reliableStateText = [System.IO.File]::ReadAllText((Join-Path $sourceRoot 'reliable_state.rs'))
+
+function Get-RustFunctionText {
+    param(
+        [Parameter(Mandatory = $true)][string]$Text,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    $match = [regex]::Match($Text, "(?m)^\s*(?:pub\s+)?(?:const\s+)?fn\s+$Name\s*\(")
+    if (-not $match.Success) {
+        throw "TM-DESKTOP-DENSITY-WIRING: missing Rust function $Name"
+    }
+    $open = $Text.IndexOf('{', $match.Index)
+    if ($open -lt 0) {
+        throw "TM-DESKTOP-DENSITY-WIRING: missing Rust function body $Name"
+    }
+    $depth = 0
+    for ($index = $open; $index -lt $Text.Length; $index++) {
+        if ($Text[$index] -eq '{') { $depth++ }
+        if ($Text[$index] -eq '}') {
+            $depth--
+            if ($depth -eq 0) {
+                return $Text.Substring($match.Index, $index - $match.Index + 1)
+            }
+        }
+    }
+    throw "TM-DESKTOP-DENSITY-WIRING: unclosed Rust function $Name"
+}
+
 $presentationStylePath = Join-Path $sourceRoot 'presentation_style.rs'
 $presentationStyleText = [System.IO.File]::ReadAllText($presentationStylePath)
 $presentationStyleContractPath = Join-Path $desktopRoot 'tests\presentation_style_contract.rs'
 $presentationStyleContractText = [System.IO.File]::ReadAllText($presentationStyleContractPath)
 $mainUiTextForDensity = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'main.slint'))
 $tokensText = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'tokens.slint'))
-$densityWireMatch = [regex]::Match(
-    $uiRustProductionText,
-    '(?s)fn wire_presentation_density\(.*?\n\}'
-)
-if (-not $densityWireMatch.Success) {
-    throw 'TM-DESKTOP-DENSITY-WIRING: presentation density must have one bounded UI wiring function'
+$densityWireText = Get-RustFunctionText -Text $uiRustProductionText -Name 'wire_presentation_density'
+$densityApplyText = Get-RustFunctionText -Text $uiRustProductionText -Name 'apply_presentation_style'
+$stableKeyText = Get-RustFunctionText -Text $presentationStyleText -Name 'stable_key'
+$slintIndexText = Get-RustFunctionText -Text $presentationStyleText -Name 'slint_index'
+$fromSlintIndexText = Get-RustFunctionText -Text $presentationStyleText -Name 'from_slint_index'
+$checkedSuccessorText = Get-RustFunctionText -Text $presentationStyleText -Name 'checked_successor'
+$selectDensityText = Get-RustFunctionText -Text $presentationStyleText -Name 'select_density_index'
+$densityEnumMatch = [regex]::Match($presentationStyleText, '(?s)pub enum DesktopDensity\s*\{(?<body>.*?)\}')
+if (-not $densityEnumMatch.Success) {
+    throw 'TM-DESKTOP-DENSITY-CONTRACT: DesktopDensity enum must remain explicit'
 }
-$densityWireText = $densityWireMatch.Value
+$densityVariantMatches = [regex]::Matches($densityEnumMatch.Groups['body'].Value, '(?m)^\s*(?<variant>[A-Za-z][A-Za-z0-9_]*)\s*,\s*$')
+$densityVariantCount = $densityVariantMatches.Count
+$stableKeyArmCount = [regex]::Matches($stableKeyText, '(?m)^\s*Self::[A-Za-z][A-Za-z0-9_]*\s*=>\s*"[^"]+",\s*$').Count
+$slintIndexArmCount = [regex]::Matches($slintIndexText, '(?m)^\s*Self::[A-Za-z][A-Za-z0-9_]*\s*=>\s*\d+,\s*$').Count
+$fromSlintIndexArmCount = [regex]::Matches($fromSlintIndexText, '(?m)^\s*\d+\s*=>\s*Some\(Self::[A-Za-z][A-Za-z0-9_]*\),\s*$').Count
 $densityPairs = @(
     @{ Variant = 'Comfortable'; Key = 'comfortable'; Index = 0 },
     @{ Variant = 'Compact'; Key = 'compact'; Index = 1 },
     @{ Variant = 'UltraCompact'; Key = 'ultra_compact'; Index = 2 }
 )
+if ($densityVariantCount -ne 3 -or $stableKeyArmCount -ne 3 -or
+    $slintIndexArmCount -ne 3 -or $fromSlintIndexArmCount -ne 3) {
+    throw 'TM-DESKTOP-DENSITY-CONTRACT: density must retain exactly three variants and three arms per mapping'
+}
 foreach ($density in $densityPairs) {
     $keyPattern = "Self::$($density.Variant) => `"$($density.Key)`","
     $indexPattern = "Self::$($density.Variant) => $($density.Index),"
     $fromIndexPattern = "$($density.Index) => Some(Self::$($density.Variant)),"
-    if ([regex]::Matches($presentationStyleText, [regex]::Escape($keyPattern)).Count -ne 1 -or
-        [regex]::Matches($presentationStyleText, [regex]::Escape($indexPattern)).Count -ne 1 -or
-        [regex]::Matches($presentationStyleText, [regex]::Escape($fromIndexPattern)).Count -ne 1) {
+    if ([regex]::Matches($stableKeyText, [regex]::Escape($keyPattern)).Count -ne 1 -or
+        [regex]::Matches($slintIndexText, [regex]::Escape($indexPattern)).Count -ne 1 -or
+        [regex]::Matches($fromSlintIndexText, [regex]::Escape($fromIndexPattern)).Count -ne 1) {
         throw 'TM-DESKTOP-DENSITY-CONTRACT: density keys and Slint indices must remain the exact fixed three-value mapping'
     }
 }
@@ -117,7 +157,11 @@ $densityTokenTables = @(
     'out property <length> radius: density-id == 2 ? 4px : (density-id == 1 ? 6px : 8px);',
     'out property <length> radius-lg: density-id == 2 ? 6px : (density-id == 1 ? 9px : 12px);'
 )
-if ($densityTokenTables.Count -ne 7 -or @($densityTokenTables | Where-Object {
+$densityTokenDeclarationCount = [regex]::Matches(
+    $tokensText,
+    '(?m)^\s*out property <length> [a-z][a-z-]*:\s*.*\bdensity-id\b.*;\s*$'
+).Count
+if ($densityTokenDeclarationCount -ne 7 -or @($densityTokenTables | Where-Object {
         [regex]::Matches($tokensText, [regex]::Escape($_)).Count -ne 1
     }).Count -ne 0) {
     throw 'TM-DESKTOP-DENSITY-TOKENS: density must retain exactly seven fixed token tables including space-lg 24/18/12'
@@ -144,19 +188,68 @@ if ($presentationStyleOwnerCount -ne 1 -or $presentationStyleOwnerSlotCount -ne 
     $densityWiringCallbackCount -ne 1) {
     throw 'TM-DESKTOP-DENSITY-WIRING: density must retain one owner, one root binding, and one callback'
 }
-if ($presentationStyleText -notmatch 'self\.0\.checked_add\(1\)' -or
-    $presentationStyleText -notmatch 'let Some\(revision\) = self\.revision\.checked_successor\(\) else') {
+$presentationRevisionTypeCount = [regex]::Matches(
+    $presentationStyleText,
+    'pub struct DesktopPresentationRevision\(u64\);'
+).Count
+$checkedSuccessorDerivationCount = [regex]::Matches(
+    $checkedSuccessorText,
+    '(?s)match\s+self\.0\.checked_add\(1\)\s*\{\s*Some\(value\)\s*=>\s*Some\(Self\(value\)\),\s*None\s*=>\s*None,\s*\}'
+).Count
+$checkedSuccessorCallCount = [regex]::Matches(
+    $selectDensityText,
+    'let Some\(revision\) = self\.revision\.checked_successor\(\) else'
+).Count
+$densityWriteCount = [regex]::Matches($selectDensityText, 'self\.density = density;').Count
+$revisionWriteCount = [regex]::Matches($selectDensityText, 'self\.revision = revision;').Count
+$appliedOutcomeCount = [regex]::Matches($selectDensityText, 'DesktopPresentationApplyOutcome::Applied').Count
+$successorPosition = $selectDensityText.IndexOf('let Some(revision) = self.revision.checked_successor() else', [System.StringComparison]::Ordinal)
+$densityWritePosition = $selectDensityText.IndexOf('self.density = density;', [System.StringComparison]::Ordinal)
+$revisionWritePosition = $selectDensityText.IndexOf('self.revision = revision;', [System.StringComparison]::Ordinal)
+$appliedPosition = $selectDensityText.IndexOf('DesktopPresentationApplyOutcome::Applied', [System.StringComparison]::Ordinal)
+if ($presentationRevisionTypeCount -ne 1 -or $checkedSuccessorDerivationCount -ne 1 -or
+    $checkedSuccessorCallCount -ne 1 -or $densityWriteCount -ne 1 -or
+    $revisionWriteCount -ne 1 -or $appliedOutcomeCount -ne 1 -or
+    -not ($successorPosition -ge 0 -and $successorPosition -lt $densityWritePosition -and
+        $densityWritePosition -lt $revisionWritePosition -and $revisionWritePosition -lt $appliedPosition)) {
     throw 'TM-DESKTOP-DENSITY-REVISION: density revision updates must remain checked and fail closed'
 }
-$densitySwitchContractCount = [regex]::Matches(
-    $presentationStyleContractText,
-    'for index in 0\.\.10_000 \{\s*\$?\s*let expected = match index % 3'
+$densityStressText = Get-RustFunctionText -Text $presentationStyleContractText -Name 'density_selection_is_checked_revisioned_and_constant_state'
+$densitySwitchLoopCount = [regex]::Matches($densityStressText, 'for index in 0\.\.10_000 \{').Count
+$densityAppliedAssertionCount = [regex]::Matches(
+    $densityStressText,
+    '(?s)assert_eq!\(\s*style\.select_density_index\(expected\),\s*DesktopPresentationApplyOutcome::Applied\s*\);'
 ).Count
-if ($densitySwitchContractCount -ne 1) {
+$densityFinalPostconditionCount = [regex]::Matches(
+    $densityStressText,
+    '(?s)\}\s*assert_eq!\(style\.density\(\), DesktopDensity::Comfortable\);\s*assert_eq!\(style\.revision\(\)\.get\(\), 10_001\);'
+).Count
+if ($densitySwitchLoopCount -ne 1 -or $densityAppliedAssertionCount -ne 1 -or
+    $densityFinalPostconditionCount -ne 1) {
     throw 'TM-DESKTOP-DENSITY-STRESS: density must retain one 10,000-switch contract'
 }
-$densityAuthorityText = $presentationStyleText + "`n" + $densityWireText
-if ($densityAuthorityText -match '\b(?:slint::Timer|Timer|thread::spawn|Worker|Query|CreateWindow(?:ExW)?|Window::new|unsafe|VecDeque|Vec<|Mutex<|Arc<)\b') {
+$densityAuthorityText = $presentationStyleText + "`n" + $densityApplyText + "`n" + $densityWireText
+$densityAuthorityPatterns = [ordered]@{
+    timer = 'slint::Timer|\bTimer::'
+    worker_thread_spawn = 'std::thread::spawn|\bthread::spawn|std::thread::Builder'
+    query = '\b(?:QueryService|DesktopQuery|QueryWorker)\b'
+    window_create = '\bCreateWindow(?:ExW)?\b|\b(?:MainWindow|Window)::new\b'
+    queue_deque = '\b(?:VecDeque|Queue)\b'
+    cache = '\b[A-Za-z_][A-Za-z0-9_]*Cache(?:::|<)'
+    channel = 'std::sync::mpsc|\bmpsc::|\bsync_channel\b|\bchannel\s*\('
+    unsafe = '\bunsafe\b'
+    retained_sync = '\b(?:Mutex|RwLock|Arc)(?:\s*<|::\s*<)'
+}
+$densityAuthorityCategoryCounts = [ordered]@{}
+foreach ($category in $densityAuthorityPatterns.Keys) {
+    $densityAuthorityCategoryCounts[$category] = [regex]::Matches(
+        $densityAuthorityText,
+        $densityAuthorityPatterns[$category],
+        [System.Text.RegularExpressions.RegexOptions]::None
+    ).Count
+}
+$densityAuthorityCount = @($densityAuthorityCategoryCounts.Values | Measure-Object -Sum).Sum
+if ($densityAuthorityCount -ne 0) {
     throw 'TM-DESKTOP-DENSITY-NO-AUTHORITY: presentation density must not create timer/worker/query/window or retained authority'
 }
 $workerConstructionCount = [regex]::Matches($controllerText, 'RefreshWorker::spawn\(').Count
@@ -1356,16 +1449,25 @@ if ($SourceOnly) {
         fixed_route_count = 11
         rust_source_file_count = $rustFiles.Count
         slint_source_file_count = $uiFiles.Count
-        density_stable_key_index_count = $densityPairs.Count
-        density_token_table_count = $densityTokenTables.Count
+        density_variant_count = $densityVariantCount
+        density_stable_key_arm_count = $stableKeyArmCount
+        density_slint_index_arm_count = $slintIndexArmCount
+        density_from_slint_index_arm_count = $fromSlintIndexArmCount
+        density_token_table_count = $densityTokenDeclarationCount
         density_owner_count = $presentationStyleOwnerCount
         density_owner_slot_count = $presentationStyleOwnerSlotCount
         density_root_binding_count = $rootDensityBindingCount
         density_root_callback_count = $rootDensityCallbackCount
         density_wiring_callback_count = $densityWiringCallbackCount
-        density_checked_revision_count = 1
-        density_switch_contract_count = $densitySwitchContractCount
-        density_authority_count = 0
+        density_revision_type_count = $presentationRevisionTypeCount
+        density_checked_successor_count = $checkedSuccessorDerivationCount
+        density_successor_call_count = $checkedSuccessorCallCount
+        density_write_count = $densityWriteCount
+        density_revision_write_count = $revisionWriteCount
+        density_switch_loop_count = $densitySwitchLoopCount
+        density_applied_assertion_count = $densityAppliedAssertionCount
+        density_final_postcondition_count = $densityFinalPostconditionCount
+        density_authority_count = $densityAuthorityCount
         command_palette_query_scalar_maximum = $commandPaletteQueryCap
         command_palette_model_count = $commandPaletteModelCount
         command_palette_shortcut_count = $commandPaletteShortcutCount
@@ -1514,16 +1616,25 @@ if ($LASTEXITCODE -ne 0) {
     direct_production_dependencies = $directProductionDependencies
     rust_source_file_count = $rustFiles.Count
     slint_source_file_count = $uiFiles.Count
-    density_stable_key_index_count = $densityPairs.Count
-    density_token_table_count = $densityTokenTables.Count
+    density_variant_count = $densityVariantCount
+    density_stable_key_arm_count = $stableKeyArmCount
+    density_slint_index_arm_count = $slintIndexArmCount
+    density_from_slint_index_arm_count = $fromSlintIndexArmCount
+    density_token_table_count = $densityTokenDeclarationCount
     density_owner_count = $presentationStyleOwnerCount
     density_owner_slot_count = $presentationStyleOwnerSlotCount
     density_root_binding_count = $rootDensityBindingCount
     density_root_callback_count = $rootDensityCallbackCount
     density_wiring_callback_count = $densityWiringCallbackCount
-    density_checked_revision_count = 1
-    density_switch_contract_count = $densitySwitchContractCount
-    density_authority_count = 0
+    density_revision_type_count = $presentationRevisionTypeCount
+    density_checked_successor_count = $checkedSuccessorDerivationCount
+    density_successor_call_count = $checkedSuccessorCallCount
+    density_write_count = $densityWriteCount
+    density_revision_write_count = $revisionWriteCount
+    density_switch_loop_count = $densitySwitchLoopCount
+    density_applied_assertion_count = $densityAppliedAssertionCount
+    density_final_postcondition_count = $densityFinalPostconditionCount
+    density_authority_count = $densityAuthorityCount
     command_palette_query_scalar_maximum = $commandPaletteQueryCap
     command_palette_model_count = $commandPaletteModelCount
     command_palette_shortcut_count = $commandPaletteShortcutCount

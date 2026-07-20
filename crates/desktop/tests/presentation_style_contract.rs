@@ -31,9 +31,13 @@ fn density_selection_is_checked_revisioned_and_constant_state() {
             1 => 1,
             _ => 2,
         };
-        let _ = style.select_density_index(expected);
+        assert_eq!(
+            style.select_density_index(expected),
+            DesktopPresentationApplyOutcome::Applied
+        );
     }
-    assert!(style.revision().get() <= 10_001);
+    assert_eq!(style.density(), DesktopDensity::Comfortable);
+    assert_eq!(style.revision().get(), 10_001);
 }
 
 #[test]
