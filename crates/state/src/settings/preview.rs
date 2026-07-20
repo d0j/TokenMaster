@@ -152,7 +152,7 @@ impl SettingsImportPreview {
         current: &PortableSettings,
         candidate: PortableSettingsCandidate,
     ) -> Self {
-        let mut categories = Vec::with_capacity(3);
+        let mut categories = Vec::with_capacity(4);
         let mut changed_field_count = 0_usize;
         if current.reminders() != candidate.portable().reminders() {
             categories.push(SettingsChangeCategory::ReminderProfile);

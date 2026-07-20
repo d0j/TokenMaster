@@ -12,8 +12,24 @@ use tokenmaster_state::{
 
 use package_support::{
     ControlledRoot, PACKAGE_MAX_BYTES, backup_bytes, backup_bytes_with, config_bytes,
-    read_backup_bytes, read_config_bytes, settings,
+    legacy_v1_portable_json, package_with_settings_source_schema, read_backup_bytes,
+    read_config_bytes, settings,
 };
+
+#[test]
+fn manifest_and_entry_settings_schema_must_match() {
+    let current_v2 = settings().encode_json().expect("current settings JSON");
+    let legacy_v1 = legacy_v1_portable_json();
+    for (manifest_schema, entry) in [(1_u16, current_v2), (2_u16, legacy_v1)] {
+        let mismatch = package_with_settings_source_schema(manifest_schema, &entry, None);
+        assert_eq!(
+            read_config_bytes(&mismatch)
+                .expect_err("schema mismatch")
+                .code(),
+            StateErrorCode::Integrity
+        );
+    }
+}
 
 fn reseal_descriptors_and_package(package: &mut [u8]) {
     let prefixes: Vec<usize> = package

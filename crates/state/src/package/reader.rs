@@ -266,7 +266,7 @@ fn read_package<R: Read>(
     let receipt = PackageReceipt::new(input.consumed, computed_package_sha256, file_sha256);
     let settings = PortableSettingsCandidate::decode(&settings_bytes)?;
     if settings.source_schema_version() != manifest.settings_schema_version {
-        return Err(StateError::unsupported_version());
+        return Err(StateError::integrity());
     }
     Ok(ParsedPackage {
         settings,

@@ -12,7 +12,7 @@ use tokenmaster_state::{
 
 use package_support::{
     ControlledRoot, PACKAGE_MAX_BYTES, backup_bytes_with, config_bytes_at, digest,
-    read_backup_bytes, read_config_bytes, settings,
+    legacy_config_bytes_v1, read_backup_bytes, read_config_bytes, settings,
 };
 
 const PACKAGE_TIME: i64 = 1_721_234_567_890;
@@ -69,6 +69,29 @@ fn v2_config_golden_vector_is_deterministic_typed_and_round_trips() {
     assert_eq!(verified.created_at_utc_ms(), PACKAGE_TIME);
     assert_eq!(verified.receipt(), first_receipt);
     assert!(read_config_bytes(&first[..first.len() - 1]).is_err());
+}
+
+#[test]
+fn container_v1_reads_settings_v1_and_writes_settings_v2() {
+    let legacy = legacy_config_bytes_v1();
+    assert_eq!(u16::from_le_bytes(legacy[46..48].try_into().unwrap()), 1);
+    let verified = read_config_bytes(&legacy).expect("legacy config");
+    let canonical: serde_json::Value = serde_json::from_slice(
+        &verified
+            .settings()
+            .encode_json()
+            .expect("canonical settings"),
+    )
+    .expect("canonical settings JSON");
+    assert_eq!(canonical["schema_version"], 2);
+    assert_eq!(
+        canonical["portable"]["presentation"]["density"],
+        "comfortable"
+    );
+
+    let (current, _) = config_bytes_at(PACKAGE_TIME);
+    assert_eq!(u16::from_le_bytes(current[46..48].try_into().unwrap()), 2);
+    assert!(read_config_bytes(&current).is_ok());
 }
 
 #[test]

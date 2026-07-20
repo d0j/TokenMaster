@@ -89,13 +89,21 @@ fn settings_schema_v2_serializes_only_owned_portable_presentation() {
     let encoded = serde_json::to_value(&value).expect("encode settings");
     assert_eq!(encoded["schema_version"], 2);
     assert_eq!(
-        encoded["portable"]["presentation"]["density"],
-        "comfortable"
+        encoded["portable"],
+        json!({
+            "reminders": {
+                "enabled": true,
+                "lead_seconds": [604800, 86400, 43200, 21600, 3600]
+            },
+            "backup": {
+                "periodic_enabled": true,
+                "quiet_seconds": BACKUP_QUIET_DEFAULT_SECONDS,
+                "interval_seconds": BACKUP_INTERVAL_DEFAULT_SECONDS,
+                "retention_budget_bytes": BACKUP_RETENTION_DEFAULT_BYTES
+            },
+            "presentation": { "density": "comfortable" }
+        })
     );
-    assert!(encoded["portable"].get("skin").is_none());
-    assert!(encoded["portable"].get("layout").is_none());
-    assert!(encoded["portable"].get("color_scheme").is_none());
-    assert!(encoded["portable"].get("locale").is_none());
 
     let mut unknown = encoded;
     unknown
@@ -110,11 +118,8 @@ fn schema_v1_record_migrates_in_memory_and_explicit_save_writes_v2() {
     let (root, directory) = fixture();
     let payload =
         serde_json::to_vec(&legacy_v1_settings_json("projects")).expect("legacy settings");
-    fs::write(
-        root.path().join("settings-a.tms"),
-        encode_record(7, &payload),
-    )
-    .expect("legacy record");
+    let record = encode_record(7, &payload);
+    fs::write(root.path().join("settings-a.tms"), &record).expect("legacy record");
     let store = SettingsStore::new(&directory).expect("settings store");
     let loaded = store.load().expect("migrated load");
     assert_eq!(loaded.generation(), Some(7));
@@ -123,6 +128,11 @@ fn schema_v1_record_migrates_in_memory_and_explicit_save_writes_v2() {
         loaded.value().portable().presentation().density(),
         PresentationDensity::Comfortable
     );
+    assert_eq!(
+        fs::read(root.path().join("settings-a.tms")).unwrap(),
+        record
+    );
+    assert!(!root.path().join("settings-b.tms").exists());
     store.save(loaded.value()).expect("explicit v2 save");
     let newest = store.load().expect("v2 reread");
     assert_eq!(newest.generation(), Some(8));
@@ -157,6 +167,32 @@ fn portable_v1_migration_has_canonical_v2_digest_and_preview_category() {
         &[SettingsChangeCategory::Presentation]
     );
     assert_eq!(preview.changed_field_count(), 1);
+
+    let all_categories = PortableSettingsCandidate::new(PortableSettings::new(
+        ReminderPolicy::new(true, &[3_600]).expect("reminder policy"),
+        tokenmaster_state::BackupPolicy::new(
+            false,
+            BACKUP_QUIET_DEFAULT_SECONDS + 1,
+            BACKUP_INTERVAL_DEFAULT_SECONDS + 1,
+            BACKUP_RETENTION_MIN_BYTES,
+        )
+        .expect("backup policy"),
+        PresentationSettings::new(PresentationDensity::UltraCompact),
+    ))
+    .expect("four-category candidate");
+    let preview = store
+        .preview_candidate(all_categories)
+        .expect("four-category preview");
+    assert_eq!(
+        preview.categories(),
+        &[
+            SettingsChangeCategory::ReminderProfile,
+            SettingsChangeCategory::BackupSchedule,
+            SettingsChangeCategory::BackupRetention,
+            SettingsChangeCategory::Presentation,
+        ]
+    );
+    assert_eq!(preview.changed_category_count(), 4);
 }
 
 #[test]
