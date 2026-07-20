@@ -1557,6 +1557,8 @@ Describe "TokenMaster production desktop audit" {
         $receipt.density_applied_assertion_count | Should -Be 1
         $receipt.density_final_postcondition_count | Should -Be 1
         $receipt.density_authority_count | Should -Be 0
+        $receipt.density_allowed_owner_occurrence_count | Should -Be 1
+        $receipt.density_allowed_owner_wire_signature_count | Should -Be 1
         $receipt.density_authority_timer_delay_interval_sleep_count | Should -Be 0
         $receipt.density_authority_worker_thread_spawn_task_count | Should -Be 0
         $receipt.density_authority_query_count | Should -Be 0
@@ -2172,5 +2174,88 @@ fn density_authority() {
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"
+    }
+
+    It "rejects authority after a zero-hash raw string brace in apply" {
+        $fixture = New-DesktopAuditFixture -Name "density-zero-hash-raw-apply"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '    window.set_presentation_revision(style.revision().get().to_string().into());',
+            "    window.set_presentation_revision(style.revision().get().to_string().into());`r`n    let _ = r`"}`";`r`n    worker::new();"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"
+    }
+
+    It "rejects authority after a zero-hash byte-raw string brace in wire" {
+        $fixture = New-DesktopAuditFixture -Name "density-zero-hash-byte-raw-wire"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '    let weak_window = window.as_weak();',
+            "    let weak_window = window.as_weak();`r`n    let _ = br`"}`";`r`n    worker::new();"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"
+    }
+
+    It "rejects authority after a byte string brace in apply" {
+        $fixture = New-DesktopAuditFixture -Name "density-byte-string-apply"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '    window.set_presentation_revision(style.revision().get().to_string().into());',
+            "    window.set_presentation_revision(style.revision().get().to_string().into());`r`n    let _ = b`"}`";`r`n    worker::new();"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"
+    }
+
+    It "rejects authority after a byte character brace in wire" {
+        $fixture = New-DesktopAuditFixture -Name "density-byte-character-wire"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '    let weak_window = window.as_weak();',
+            "    let weak_window = window.as_weak();`r`n    let _ = b'}';`r`n    worker::new();"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"
+    }
+
+    It "rejects a second identical density style owner signature" {
+        $fixture = New-DesktopAuditFixture -Name "density-second-identical-owner"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        Add-Content -LiteralPath $path -Value 'fn duplicate_owner(_: Rc<RefCell<DesktopPresentationStyle>>) {}'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"
+    }
+
+    It "rejects Once retained authority" {
+        $fixture = New-DesktopAuditFixture -Name "density-once-authority"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        Add-Content -LiteralPath $path -Value 'fn density_once() { Once::new(); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"
+    }
+
+    It "rejects a non-u64 revision wrapper hidden by comment markers" {
+        $fixture = New-DesktopAuditFixture -Name "density-commented-revision-wrapper"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'pub struct DesktopPresentationRevision(u64);',
+            "// pub struct DesktopPresentationRevision(u64);`r`npub struct DesktopPresentationRevision(u32);"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-REVISION*"
     }
 }

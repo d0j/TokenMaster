@@ -105,15 +105,20 @@ function ConvertTo-ExecutableText {
             while ($hashIndex -lt $Text.Length -and $Text[$hashIndex] -eq '#') { $hashIndex++ }
             if ($hashIndex -lt $Text.Length -and $Text[$hashIndex] -eq '"') {
                 $hashCount = $hashIndex - $rawStart - 1
-                do {
+                while ($index -le $hashIndex) {
                     [void]$output.Append($(if ($PreserveLiteralText) { $Text[$index] } elseif ($Text[$index] -eq "`n" -or $Text[$index] -eq "`r") { $Text[$index] } else { ' ' }))
                     $index++
-                    if ($index -gt $hashIndex -and $Text[$index - 1] -eq '"') {
+                }
+                while ($index -lt $Text.Length) {
+                    $literalCharacter = $Text[$index]
+                    [void]$output.Append($(if ($PreserveLiteralText) { $literalCharacter } elseif ($literalCharacter -eq "`n" -or $literalCharacter -eq "`r") { $literalCharacter } else { ' ' }))
+                    $index++
+                    if ($literalCharacter -eq '"') {
                         $closing = $true
                         for ($hash = 0; $hash -lt $hashCount; $hash++) { if ($index + $hash -ge $Text.Length -or $Text[$index + $hash] -ne '#') { $closing = $false; break } }
                         if ($closing) { for ($hash = 0; $hash -lt $hashCount; $hash++) { [void]$output.Append($(if ($PreserveLiteralText) { $Text[$index] } else { ' ' })); $index++ }; break }
                     }
-                } while ($index -lt $Text.Length)
+                }
                 continue
             }
         }
@@ -122,12 +127,12 @@ function ConvertTo-ExecutableText {
         $characterLiteral = $character -eq "'" -and (($index + 2 -lt $Text.Length -and $Text[$index + 2] -eq "'") -or ($index + 3 -lt $Text.Length -and $Text[$index + 1] -eq '\' -and $Text[$index + 3] -eq "'"))
         if ($stringStart -or $byteCharacter -or $characterLiteral) {
             $quote = if ($stringStart) { '"' } else { "'" }
-            $literalStart = $index
+            $literalOpeningQuote = if (($stringStart -or $byteCharacter) -and $character -eq 'b') { $index + 1 } else { $index }
             do {
                 $literalCharacter = $Text[$index]
                 [void]$output.Append($(if ($PreserveLiteralText) { $literalCharacter } elseif ($literalCharacter -eq "`n" -or $literalCharacter -eq "`r") { $literalCharacter } else { ' ' }))
                 if ($literalCharacter -eq '\' -and $index + 1 -lt $Text.Length) { $index++; [void]$output.Append($(if ($PreserveLiteralText) { $Text[$index] } else { ' ' })) }
-                elseif ($literalCharacter -eq $quote -and $index -gt $literalStart) { $index++; break }
+                elseif ($literalCharacter -eq $quote -and $index -gt $literalOpeningQuote) { $index++; break }
                 $index++
             } while ($index -lt $Text.Length)
             continue
@@ -244,8 +249,9 @@ if ($presentationStyleOwnerCount -ne 1 -or $presentationStyleOwnerSlotCount -ne 
     $densityWiringCallbackCount -ne 1) {
     throw 'TM-DESKTOP-DENSITY-WIRING: density must retain one owner, one root binding, and one callback'
 }
+$presentationStyleExecutableText = ConvertTo-ExecutableText -Text $presentationStyleText
 $presentationRevisionTypeCount = [regex]::Matches(
-    $presentationStyleText,
+    $presentationStyleExecutableText,
     'pub struct DesktopPresentationRevision\(u64\);'
 ).Count
 $expectedCheckedSuccessor = 'constfnchecked_successor(self)->Option<Self>{matchself.0.checked_add(1){Some(value)=>Some(Self(value)),None=>None,}}'
@@ -268,10 +274,19 @@ $densityFinalPostconditionCount = $densityStressStructureCount
 if ($densityStressStructureCount -ne 1) {
     throw 'TM-DESKTOP-DENSITY-STRESS: density must retain one 10,000-switch contract'
 }
-$densityAuthorityText = (ConvertTo-ExecutableText -Text $presentationStyleText) + "`n" + $densityApplyText + "`n" + $densityWireText
+$densityAuthorityText = $presentationStyleExecutableText + "`n" + $densityApplyText + "`n" + $densityWireText
+$densityAllowedOwnerPattern = 'Rc\s*<\s*RefCell\s*<\s*DesktopPresentationStyle\s*>\s*>'
+$densityAllowedOwnerOccurrenceCount = [regex]::Matches($densityAuthorityText, $densityAllowedOwnerPattern).Count
+$densityAllowedOwnerWireSignatureCount = [regex]::Matches(
+    $densityWireText,
+    "(?s)\bfn\s+wire_presentation_density\s*\(\s*window\s*:\s*&\s*MainWindow\s*,\s*presentation_style\s*:\s*$densityAllowedOwnerPattern\s*,?\s*\)"
+).Count
+if ($densityAllowedOwnerOccurrenceCount -ne 1 -or $densityAllowedOwnerWireSignatureCount -ne 1) {
+    throw 'TM-DESKTOP-DENSITY-NO-AUTHORITY: presentation density must retain exactly one wiring owner signature'
+}
 $densityAuthorityText = [regex]::Replace(
     $densityAuthorityText,
-    'Rc\s*<\s*RefCell\s*<\s*DesktopPresentationStyle\s*>\s*>',
+    $densityAllowedOwnerPattern,
     ''
 )
 $densityAuthorityPatterns = [ordered]@{
@@ -283,7 +298,7 @@ $densityAuthorityPatterns = [ordered]@{
     cache = '\b[A-Za-z_][A-Za-z0-9_]*Cache\b'
     channel = '\b(?:mpsc|sync_channel|channel|Sender|Receiver)\b'
     unsafe = '\bunsafe\b'
-    retained = '\b(?:Vec|Box|HashMap|BTreeMap|HashSet|BTreeSet|BinaryHeap|Rc|RefCell|Cell|OnceCell|OnceLock|Mutex|RwLock|Arc)(?:\s*(?:::)?\s*<|\s*::\s*(?:new|default|with_capacity))'
+    retained = '\b(?:Vec|Box|HashMap|BTreeMap|HashSet|BTreeSet|BinaryHeap|Rc|RefCell|Cell|Once|OnceCell|OnceLock|Mutex|RwLock|Arc)(?:\s*(?:::)?\s*<|\s*::\s*(?:new|default|with_capacity))'
 }
 $densityAuthorityCategoryCounts = [ordered]@{}
 foreach ($category in $densityAuthorityPatterns.Keys) {
@@ -1513,6 +1528,8 @@ if ($SourceOnly) {
         density_applied_assertion_count = $densityAppliedAssertionCount
         density_final_postcondition_count = $densityFinalPostconditionCount
         density_authority_count = $densityAuthorityCount
+        density_allowed_owner_occurrence_count = $densityAllowedOwnerOccurrenceCount
+        density_allowed_owner_wire_signature_count = $densityAllowedOwnerWireSignatureCount
         density_authority_timer_delay_interval_sleep_count = $densityAuthorityCategoryCounts.timer_delay_interval_sleep
         density_authority_worker_thread_spawn_task_count = $densityAuthorityCategoryCounts.worker_thread_spawn_task
         density_authority_query_count = $densityAuthorityCategoryCounts.query
@@ -1689,6 +1706,8 @@ if ($LASTEXITCODE -ne 0) {
     density_applied_assertion_count = $densityAppliedAssertionCount
     density_final_postcondition_count = $densityFinalPostconditionCount
     density_authority_count = $densityAuthorityCount
+    density_allowed_owner_occurrence_count = $densityAllowedOwnerOccurrenceCount
+    density_allowed_owner_wire_signature_count = $densityAllowedOwnerWireSignatureCount
     density_authority_timer_delay_interval_sleep_count = $densityAuthorityCategoryCounts.timer_delay_interval_sleep
     density_authority_worker_thread_spawn_task_count = $densityAuthorityCategoryCounts.worker_thread_spawn_task
     density_authority_query_count = $densityAuthorityCategoryCounts.query
