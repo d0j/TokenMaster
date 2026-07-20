@@ -321,7 +321,7 @@ fn run_scheduler<F, E>(
             SchedulerPhase::Running => {}
         }
 
-        let now = clock.now().as_millis();
+        let mut now = clock.now().as_millis();
         if now < last_now {
             state.force_clock_discontinuity();
         }
@@ -343,8 +343,12 @@ fn run_scheduler<F, E>(
         if flags & FLAG_DIRTY != 0 {
             let latest = state.latest_hint_tick.load(Ordering::Acquire);
             if latest > now {
-                state.force_clock_discontinuity();
-                continue;
+                now = clock.now().as_millis();
+                if now < last_now || latest > now {
+                    state.force_clock_discontinuity();
+                    continue;
+                }
+                last_now = now;
             }
             let Some(deadline) = latest.checked_add(QUIET_WINDOW_MILLIS) else {
                 state.force_clock_discontinuity();

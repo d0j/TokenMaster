@@ -1,5 +1,5 @@
 use std::sync::{
-    Arc,
+    Arc, Condvar, Mutex,
     atomic::{AtomicU64, Ordering},
     mpsc::{Receiver, RecvTimeoutError, channel},
 };
@@ -27,6 +27,82 @@ impl FakeClock {
 impl Clock for FakeClock {
     fn now(&self) -> MonotonicTime {
         MonotonicTime::from_millis(self.millis.load(Ordering::Acquire))
+    }
+}
+
+#[derive(Default)]
+struct GatedClock {
+    millis: AtomicU64,
+    gate: Mutex<GatedClockState>,
+    captured: Condvar,
+    released: Condvar,
+}
+
+#[derive(Default)]
+struct GatedClockState {
+    armed: bool,
+    captured: bool,
+    released: bool,
+}
+
+struct SchedulerReadGate<'a> {
+    clock: &'a GatedClock,
+}
+
+impl Drop for SchedulerReadGate<'_> {
+    fn drop(&mut self) {
+        self.clock.release_scheduler_read();
+    }
+}
+
+impl GatedClock {
+    fn set(&self, millis: u64) {
+        self.millis.store(millis, Ordering::Release);
+    }
+
+    fn arm_scheduler_read(&self) -> SchedulerReadGate<'_> {
+        let mut gate = self.gate.lock().expect("clock gate");
+        *gate = GatedClockState {
+            armed: true,
+            captured: false,
+            released: false,
+        };
+        SchedulerReadGate { clock: self }
+    }
+
+    fn wait_for_scheduler_read(&self) {
+        let gate = self.gate.lock().expect("clock gate");
+        let (gate, timeout) = self
+            .captured
+            .wait_timeout_while(gate, Duration::from_secs(2), |gate| !gate.captured)
+            .expect("clock gate wait");
+        assert!(!timeout.timed_out(), "scheduler clock read");
+        assert!(gate.captured);
+    }
+
+    fn release_scheduler_read(&self) {
+        let mut gate = self.gate.lock().unwrap_or_else(|error| error.into_inner());
+        gate.released = true;
+        self.released.notify_all();
+    }
+}
+
+impl Clock for GatedClock {
+    fn now(&self) -> MonotonicTime {
+        let millis = self.millis.load(Ordering::Acquire);
+        if std::thread::current().name() == Some("tokenmaster-scheduler") {
+            let mut gate = self.gate.lock().expect("clock gate");
+            if gate.armed && !gate.captured {
+                gate.captured = true;
+                self.captured.notify_all();
+                gate = self
+                    .released
+                    .wait_while(gate, |gate| !gate.released)
+                    .unwrap_or_else(|error| error.into_inner());
+                gate.armed = false;
+            }
+        }
+        MonotonicTime::from_millis(millis)
     }
 }
 
@@ -205,6 +281,64 @@ fn healthy_and_degraded_periods_are_checked_against_monotonic_time() {
     assert!(hints.watcher_rescan_required());
     assert_eq!(receive(&receiver), RefreshUrgency::Recovery);
 
+    assert_eq!(
+        scheduler.shutdown().expect("shutdown"),
+        SchedulerPhase::Stopped
+    );
+}
+
+#[test]
+fn concurrent_hint_after_scheduler_clock_sample_is_not_a_clock_rollback() {
+    let clock = Arc::new(GatedClock::default());
+    let (sender, receiver) = channel();
+    let mut scheduler = RefreshScheduler::spawn(clock.clone(), move |urgency| {
+        sender.send(urgency).map_err(|_| ())
+    })
+    .expect("scheduler");
+    let hints = scheduler.hints();
+    assert_eq!(receive(&receiver), RefreshUrgency::Recovery);
+
+    clock.set(100);
+    let scheduler_read = clock.arm_scheduler_read();
+    assert!(hints.watcher_healthy());
+    clock.wait_for_scheduler_read();
+    clock.set(101);
+    let accepted = hints.filesystem_changed();
+    drop(scheduler_read);
+    assert!(accepted);
+
+    assert_no_refresh(&receiver);
+    clock.set(101 + QUIET_WINDOW_MILLIS);
+    assert!(hints.watcher_healthy());
+    assert_eq!(receive(&receiver), RefreshUrgency::Hint);
+    assert_eq!(
+        scheduler.shutdown().expect("shutdown"),
+        SchedulerPhase::Stopped
+    );
+}
+
+#[test]
+fn clock_rollback_between_hint_and_scheduler_resample_fails_closed() {
+    let clock = Arc::new(GatedClock::default());
+    let (sender, receiver) = channel();
+    let mut scheduler = RefreshScheduler::spawn(clock.clone(), move |urgency| {
+        sender.send(urgency).map_err(|_| ())
+    })
+    .expect("scheduler");
+    let hints = scheduler.hints();
+    assert_eq!(receive(&receiver), RefreshUrgency::Recovery);
+
+    clock.set(100);
+    let scheduler_read = clock.arm_scheduler_read();
+    assert!(hints.watcher_healthy());
+    clock.wait_for_scheduler_read();
+    clock.set(101);
+    let accepted = hints.filesystem_changed();
+    clock.set(100);
+    drop(scheduler_read);
+
+    assert!(accepted);
+    assert_eq!(receive(&receiver), RefreshUrgency::Recovery);
     assert_eq!(
         scheduler.shutdown().expect("shutdown"),
         SchedulerPhase::Stopped
