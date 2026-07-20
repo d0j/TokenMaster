@@ -1536,8 +1536,18 @@ Describe "TokenMaster production desktop audit" {
         $fixture = New-DesktopAuditFixture -Name "library-boundary"
 
         $receipt = & $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json
-        $receipt.rust_source_file_count | Should -Be 16
+        $receipt.rust_source_file_count | Should -Be 17
         $receipt.slint_source_file_count | Should -Be 24
+        $receipt.density_stable_key_index_count | Should -Be 3
+        $receipt.density_token_table_count | Should -Be 7
+        $receipt.density_owner_count | Should -Be 1
+        $receipt.density_owner_slot_count | Should -Be 1
+        $receipt.density_root_binding_count | Should -Be 1
+        $receipt.density_root_callback_count | Should -Be 1
+        $receipt.density_wiring_callback_count | Should -Be 1
+        $receipt.density_checked_revision_count | Should -Be 1
+        $receipt.density_switch_contract_count | Should -Be 1
+        $receipt.density_authority_count | Should -Be 0
         $receipt.command_palette_query_scalar_maximum | Should -Be 64
         $receipt.command_palette_model_count | Should -Be 1
         $receipt.command_palette_shortcut_count | Should -Be 1
@@ -1826,5 +1836,53 @@ Describe "TokenMaster production desktop audit" {
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-REMINDER-LAYOUT*"
+    }
+
+    It "rejects removing a fixed density key" {
+        $fixture = New-DesktopAuditFixture -Name "density-key-drift"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'Self::UltraCompact => "ultra_compact",',
+            'Self::UltraCompact => "ultra",'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-CONTRACT*"
+    }
+
+    It "rejects widening a fixed density index" {
+        $fixture = New-DesktopAuditFixture -Name "density-index-drift"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '2 => Some(Self::UltraCompact),',
+            '3 => Some(Self::UltraCompact),'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-CONTRACT*"
+    }
+
+    It "rejects unchecked presentation revision updates" {
+        $fixture = New-DesktopAuditFixture -Name "density-revision-drift"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'self.0.checked_add(1)',
+            'self.0.saturating_add(1)'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-REVISION*"
+    }
+
+    It "rejects presentation density authority creation" {
+        $fixture = New-DesktopAuditFixture -Name "density-authority-drift"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        Add-Content -LiteralPath $path -Value 'fn density_worker() { Timer::default(); QueryService::new(); CreateWindowExW(); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"
     }
 }

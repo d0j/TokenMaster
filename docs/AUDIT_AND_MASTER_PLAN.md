@@ -5,6 +5,13 @@ P2-A, P2-B, P2-C pinned pricing, and the P2-D quota history core are implemented
 the permitted built-in Codex quota normalizer/transport, exact-native executable
 discovery, and dedicated quota refresh/store publication are also implemented.
 
+P4-A runtime density is developer-complete only: one checked fixed three-value owner,
+one root binding/callback, seven exact spacing/radius token tables, and a 10,000-switch
+contract are source/mutation audited without timer/worker/query/window/retained
+authority. Full skins/layouts/color schemes/locales/languages, persistence/migration,
+remaining density typography/row-size behavior, accessibility/DPI/paint/resource
+verification, P5/P6, M0, package/sign/signing/soak, and release remain open.
+
 Global reminder settings synchronization is developer-closed: mutation-resistant
 application/Desktop receipts guard the sealed worker payload, settings-first
 generation-bound global projection, fixed eight-row editor, dirty draft, accessibility,

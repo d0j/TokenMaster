@@ -9,6 +9,14 @@
 
 ## Current implementation boundary
 
+P4-A runtime density is developer-complete only. One checked three-value
+`DesktopPresentationStyle` owner, one root binding/callback, seven exact spacing/radius
+token tables, and a 10,000-switch contract are source/mutation audited without adding
+timer/worker/query/window/retained authority. Do not claim full skins/layouts/color
+schemes/locales/languages, persistence/migration, remaining density typography/row-size
+behavior, accessibility/DPI/paint/resource verification, P5/P6, M0,
+interactive/package/sign/signing/soak, or release acceptance.
+
 Global reminder settings synchronization is implemented and developer-closed. Portable
 settings are desired-state authority; generation-bound global projection runs at
 startup, explicit Save, and confirmed config import, leaves durable settings Pending

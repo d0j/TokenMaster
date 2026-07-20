@@ -40,8 +40,8 @@ if ($productionManifestText -match '\btokenmaster-(store|provider|runtime|codex|
 $rustFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.rs')
 $uiFiles = @(Get-ChildItem -LiteralPath $uiRoot -Recurse -File -Filter '*.slint')
 $productionFiles = @($rustFiles + $uiFiles)
-if ($rustFiles.Count -ne 16 -or $uiFiles.Count -ne 24) {
-    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain sixteen Rust and twenty-four Slint files'
+if ($rustFiles.Count -ne 17 -or $uiFiles.Count -ne 24) {
+    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain seventeen Rust and twenty-four Slint files'
 }
 $uiText = ($uiFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
@@ -79,6 +79,86 @@ $uiRustProductionText = if ($uiRustTestBoundary -ge 0) {
     $uiRustText
 }
 $reliableStateText = [System.IO.File]::ReadAllText((Join-Path $sourceRoot 'reliable_state.rs'))
+$presentationStylePath = Join-Path $sourceRoot 'presentation_style.rs'
+$presentationStyleText = [System.IO.File]::ReadAllText($presentationStylePath)
+$presentationStyleContractPath = Join-Path $desktopRoot 'tests\presentation_style_contract.rs'
+$presentationStyleContractText = [System.IO.File]::ReadAllText($presentationStyleContractPath)
+$mainUiTextForDensity = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'main.slint'))
+$tokensText = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'tokens.slint'))
+$densityWireMatch = [regex]::Match(
+    $uiRustProductionText,
+    '(?s)fn wire_presentation_density\(.*?\n\}'
+)
+if (-not $densityWireMatch.Success) {
+    throw 'TM-DESKTOP-DENSITY-WIRING: presentation density must have one bounded UI wiring function'
+}
+$densityWireText = $densityWireMatch.Value
+$densityPairs = @(
+    @{ Variant = 'Comfortable'; Key = 'comfortable'; Index = 0 },
+    @{ Variant = 'Compact'; Key = 'compact'; Index = 1 },
+    @{ Variant = 'UltraCompact'; Key = 'ultra_compact'; Index = 2 }
+)
+foreach ($density in $densityPairs) {
+    $keyPattern = "Self::$($density.Variant) => `"$($density.Key)`","
+    $indexPattern = "Self::$($density.Variant) => $($density.Index),"
+    $fromIndexPattern = "$($density.Index) => Some(Self::$($density.Variant)),"
+    if ([regex]::Matches($presentationStyleText, [regex]::Escape($keyPattern)).Count -ne 1 -or
+        [regex]::Matches($presentationStyleText, [regex]::Escape($indexPattern)).Count -ne 1 -or
+        [regex]::Matches($presentationStyleText, [regex]::Escape($fromIndexPattern)).Count -ne 1) {
+        throw 'TM-DESKTOP-DENSITY-CONTRACT: density keys and Slint indices must remain the exact fixed three-value mapping'
+    }
+}
+$densityTokenTables = @(
+    'out property <length> space-xs: density-id == 2 ? 2px : (density-id == 1 ? 3px : 4px);',
+    'out property <length> space-sm: density-id == 2 ? 4px : (density-id == 1 ? 6px : 8px);',
+    'out property <length> space: density-id == 2 ? 8px : (density-id == 1 ? 12px : 16px);',
+    'out property <length> space-lg: density-id == 2 ? 12px : (density-id == 1 ? 18px : 24px);',
+    'out property <length> radius-sm: density-id == 2 ? 3px : (density-id == 1 ? 4px : 5px);',
+    'out property <length> radius: density-id == 2 ? 4px : (density-id == 1 ? 6px : 8px);',
+    'out property <length> radius-lg: density-id == 2 ? 6px : (density-id == 1 ? 9px : 12px);'
+)
+if ($densityTokenTables.Count -ne 7 -or @($densityTokenTables | Where-Object {
+        [regex]::Matches($tokensText, [regex]::Escape($_)).Count -ne 1
+    }).Count -ne 0) {
+    throw 'TM-DESKTOP-DENSITY-TOKENS: density must retain exactly seven fixed token tables including space-lg 24/18/12'
+}
+$presentationStyleOwnerCount = [regex]::Matches($presentationStyleText, 'pub struct DesktopPresentationStyle\s*\{').Count
+$presentationStyleOwnerSlotCount = [regex]::Matches(
+    $uiRustProductionText,
+    'Rc::new\(RefCell::new\(DesktopPresentationStyle::new\(\)\)\)'
+).Count
+$rootDensityBindingCount = [regex]::Matches(
+    $mainUiTextForDensity,
+    'in-out property <int> presentation-density-id <=> UiTokens\.density-id;'
+).Count
+$rootDensityCallbackCount = [regex]::Matches(
+    $mainUiTextForDensity,
+    'callback select-presentation-density\(int\);'
+).Count
+$densityWiringCallbackCount = [regex]::Matches(
+    $densityWireText,
+    'window\.on_select_presentation_density\(move \|index\| \{'
+).Count
+if ($presentationStyleOwnerCount -ne 1 -or $presentationStyleOwnerSlotCount -ne 1 -or
+    $rootDensityBindingCount -ne 1 -or $rootDensityCallbackCount -ne 1 -or
+    $densityWiringCallbackCount -ne 1) {
+    throw 'TM-DESKTOP-DENSITY-WIRING: density must retain one owner, one root binding, and one callback'
+}
+if ($presentationStyleText -notmatch 'self\.0\.checked_add\(1\)' -or
+    $presentationStyleText -notmatch 'let Some\(revision\) = self\.revision\.checked_successor\(\) else') {
+    throw 'TM-DESKTOP-DENSITY-REVISION: density revision updates must remain checked and fail closed'
+}
+$densitySwitchContractCount = [regex]::Matches(
+    $presentationStyleContractText,
+    'for index in 0\.\.10_000 \{\s*\$?\s*let expected = match index % 3'
+).Count
+if ($densitySwitchContractCount -ne 1) {
+    throw 'TM-DESKTOP-DENSITY-STRESS: density must retain one 10,000-switch contract'
+}
+$densityAuthorityText = $presentationStyleText + "`n" + $densityWireText
+if ($densityAuthorityText -match '\b(?:slint::Timer|Timer|thread::spawn|Worker|Query|CreateWindow(?:ExW)?|Window::new|unsafe|VecDeque|Vec<|Mutex<|Arc<)\b') {
+    throw 'TM-DESKTOP-DENSITY-NO-AUTHORITY: presentation density must not create timer/worker/query/window or retained authority'
+}
 $workerConstructionCount = [regex]::Matches($controllerText, 'RefreshWorker::spawn\(').Count
 if ($workerConstructionCount -ne 1) {
     throw 'TM-DESKTOP-CONTROLLER-WORKER: desktop controller must construct exactly one bounded refresh worker'
@@ -1276,6 +1356,16 @@ if ($SourceOnly) {
         fixed_route_count = 11
         rust_source_file_count = $rustFiles.Count
         slint_source_file_count = $uiFiles.Count
+        density_stable_key_index_count = $densityPairs.Count
+        density_token_table_count = $densityTokenTables.Count
+        density_owner_count = $presentationStyleOwnerCount
+        density_owner_slot_count = $presentationStyleOwnerSlotCount
+        density_root_binding_count = $rootDensityBindingCount
+        density_root_callback_count = $rootDensityCallbackCount
+        density_wiring_callback_count = $densityWiringCallbackCount
+        density_checked_revision_count = 1
+        density_switch_contract_count = $densitySwitchContractCount
+        density_authority_count = 0
         command_palette_query_scalar_maximum = $commandPaletteQueryCap
         command_palette_model_count = $commandPaletteModelCount
         command_palette_shortcut_count = $commandPaletteShortcutCount
@@ -1424,6 +1514,16 @@ if ($LASTEXITCODE -ne 0) {
     direct_production_dependencies = $directProductionDependencies
     rust_source_file_count = $rustFiles.Count
     slint_source_file_count = $uiFiles.Count
+    density_stable_key_index_count = $densityPairs.Count
+    density_token_table_count = $densityTokenTables.Count
+    density_owner_count = $presentationStyleOwnerCount
+    density_owner_slot_count = $presentationStyleOwnerSlotCount
+    density_root_binding_count = $rootDensityBindingCount
+    density_root_callback_count = $rootDensityCallbackCount
+    density_wiring_callback_count = $densityWiringCallbackCount
+    density_checked_revision_count = 1
+    density_switch_contract_count = $densitySwitchContractCount
+    density_authority_count = 0
     command_palette_query_scalar_maximum = $commandPaletteQueryCap
     command_palette_model_count = $commandPaletteModelCount
     command_palette_shortcut_count = $commandPaletteShortcutCount

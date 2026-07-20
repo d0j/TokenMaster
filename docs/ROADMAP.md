@@ -2,6 +2,14 @@
 
 ## M0 — native architecture proof
 
+P4-A runtime density is developer-complete only: the Desktop has one checked fixed
+three-value owner, one root binding/callback, seven exact spacing/radius token tables,
+and a 10,000-switch contract with source/mutation authority checks. P4 remains open
+for full skins, layouts, color schemes, locales/languages, persistence/migration,
+remaining density typography/row-size behavior, accessibility/DPI/paint/resource
+verification, and terminal interactive evidence. P5/P6, M0 acceptance,
+package/sign/signing/soak, and release remain open.
+
 Global reminder settings synchronization/editor is complete as developer evidence:
 portable desired state projects generation-bound global reminders on startup, Save, and
 confirmed import. Startup archive contention preserves the exact desired policy as

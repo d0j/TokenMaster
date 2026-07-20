@@ -6,6 +6,15 @@ All notable changes are recorded here.
 
 ### Added
 
+- Added P4-A developer-only runtime density verification: one checked fixed three-value
+  `DesktopPresentationStyle` owner, one root Slint binding/callback, seven exact
+  spacing/radius token tables, and a 10,000-switch contract. Deterministic source and
+  mutation checks reject key/index/revision drift and new timer/worker/query/window or
+  retained authority. This does not claim full skins/layouts/color schemes/locales/
+  languages, persistence/migration, remaining density typography/row-size behavior,
+  accessibility/DPI/paint/resource verification, P5/P6, M0, package/sign/signing/soak,
+  or release.
+
 - Added P3-E.5 explicit current-user startup without introducing a second preference
   store. One fixed `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` `TokenMaster`
   `REG_SZ` value is the sole device-local truth. The platform writes only the exact

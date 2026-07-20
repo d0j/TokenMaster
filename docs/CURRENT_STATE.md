@@ -8,6 +8,14 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 
 ## Implemented
 
+- P4-A runtime density is developer-complete only: one checked Comfortable/Compact/
+  Ultra compact `DesktopPresentationStyle` owner publishes one root Slint density
+  binding/callback and seven exact spacing/radius token tables; the 10,000-switch
+  contract and source mutations reject added authority. Full skins, layouts, color
+  schemes, locales/languages, persistence/migration, remaining density typography/
+  row-size behavior, accessibility/DPI/paint/resource verification, P5/P6, M0,
+  interactive/package/sign/signing/soak, and release remain open.
+
 - Global reminder settings synchronization/editor: portable settings are desired-state
   authority; generation `N` maps to global profile revision `N + 1` for first-install,
   current, migrated, reconstructed, restored, explicit Save, and confirmed config
