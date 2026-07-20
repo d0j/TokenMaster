@@ -29,7 +29,7 @@ use crate::{
     DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue, DesktopTrayAvailability,
     DesktopValueAvailability, HistoryDayRow, InAppNotificationRow, MainWindow, ModelUsageRow,
     ProjectUsageRow, RecentActivityRow, ReminderCustomLeadRow, ReminderScopeRow, RestorePointRow,
-    RouteRow, SessionDetailBreakdownRow, SessionListRow, UiTokens, UnavailableDesktopIntentSink,
+    RouteRow, SessionDetailBreakdownRow, SessionListRow, UnavailableDesktopIntentSink,
     UnavailableDesktopSessionDetailIntentSink,
     in_app_notification::NotificationEpochState,
     native_tray::DesktopNativeTrayOwner,
@@ -623,10 +623,7 @@ impl DesktopShell {
 
 fn apply_presentation_style(window: &MainWindow, style: DesktopPresentationStyle) {
     window.set_presentation_density_id(style.density().slint_index());
-    window
-        .global::<UiTokens>()
-        .set_density_id(style.density().slint_index());
-    window.set_presentation_revision(i32::try_from(style.revision().get()).unwrap_or(i32::MAX));
+    window.set_presentation_revision(style.revision().get().to_string().into());
 }
 
 fn wire_presentation_density(

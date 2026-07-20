@@ -3,7 +3,6 @@ import {
     DashboardTrendPoint, DashboardSessionRow, DashboardActivityRow, DashboardModelRow,
     HistoryDayRow, ModelUsageRow, ProjectUsageRow, RecentActivityRow, ReminderScopeRow, BenefitLotRow, SessionListRow, SessionDetailBreakdownRow, RestorePointRow, InAppNotificationRow
 } from "models.slint";
-export { UiTokens } from "tokens.slint";
 import { UiTokens } from "tokens.slint";
 import { RouteNavItem } from "components/route-nav-item.slint";
 import { RouteState } from "components/route-state.slint";
@@ -23,9 +22,9 @@ import { SettingsView, ReminderCustomLeadRow } from "views/settings-view.slint";
 import { Button } from "std-widgets.slint";
 
 export component MainWindow inherits Window {
-    in-out property <int> presentation-density-id: 0;
+    in-out property <int> presentation-density-id <=> UiTokens.density-id;
     out property <string> presentation-density-key: root.presentation-density-id == 2 ? "ultra_compact" : (root.presentation-density-id == 1 ? "compact" : "comfortable");
-    in-out property <int> presentation-revision: 0;
+    in-out property <string> presentation-revision: "0";
     out property <length> presentation-space: UiTokens.space;
     out property <length> presentation-radius: UiTokens.radius;
     in property <[RouteRow]> route-rows;
@@ -247,8 +246,6 @@ export component MainWindow inherits Window {
     callback disable-current-user-startup();
     callback dismiss-in-app-notifications();
     callback select-presentation-density(int);
-
-    changed presentation-density-id => { UiTokens.density-id = root.presentation-density-id; }
 
     title: "TokenMaster";
     preferred-width: root.compact-widget-visible ? 420px : 1120px;
