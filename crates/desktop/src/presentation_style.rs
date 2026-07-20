@@ -103,3 +103,26 @@ impl DesktopPresentationStyle {
         DesktopPresentationApplyOutcome::Applied
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        DesktopDensity, DesktopPresentationApplyOutcome, DesktopPresentationRevision,
+        DesktopPresentationStyle,
+    };
+
+    #[test]
+    fn revision_exhaustion_retains_the_current_style() {
+        let mut style = DesktopPresentationStyle {
+            density: DesktopDensity::Comfortable,
+            revision: DesktopPresentationRevision(u64::MAX),
+        };
+
+        assert_eq!(
+            style.select_density_index(1),
+            DesktopPresentationApplyOutcome::RevisionExhausted
+        );
+        assert_eq!(style.density(), DesktopDensity::Comfortable);
+        assert_eq!(style.revision(), DesktopPresentationRevision(u64::MAX));
+    }
+}

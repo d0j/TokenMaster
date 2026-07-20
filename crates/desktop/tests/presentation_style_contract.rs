@@ -17,10 +17,14 @@ fn density_selection_is_checked_revisioned_and_constant_state() {
         style.select_density_index(1),
         DesktopPresentationApplyOutcome::Unchanged
     );
+    let density_before_rejection = style.density();
+    let revision_before_rejection = style.revision();
     assert_eq!(
         style.select_density_index(3),
         DesktopPresentationApplyOutcome::Rejected
     );
+    assert_eq!(style.density(), density_before_rejection);
+    assert_eq!(style.revision(), revision_before_rejection);
     for index in 0..10_000 {
         let expected = match index % 3 {
             0 => 0,
