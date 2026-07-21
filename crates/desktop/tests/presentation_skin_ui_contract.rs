@@ -343,6 +343,41 @@ fn palette_ownership_guard_rejects_an_extra_brush_alias() {
 }
 
 #[test]
+fn palette_ownership_guard_rejects_a_conditional_family_initializer() {
+    let tokens = include_str!("../ui/tokens.slint");
+    let bypass = tokens
+        .replacen(
+            "    in-out property <UiPalette> palette: {",
+            "    in-out property <UiPalette> palette: family-id == 0 ? {",
+            1,
+        )
+        .replacen(
+            "    };\n    in-out property <int> density-id: 0;",
+            "    } : {\n        background: #17110b,\n        surface: #271811,\n        surface-raised: #342218,\n        surface-subtle: #24160e,\n        border: #483529,\n        text-primary: #fbf7f4,\n        text-secondary: #c0ab9e,\n        accent: #fdd47c,\n        accent-subtle: #443017,\n        accent-secondary: #fa8ba7,\n        accent-tertiary: #fcaaf0,\n        ready: #a5d670,\n        waiting: #bfaa8f,\n        degraded: #f2c66d,\n        unavailable: #f08b8b,\n    };\n    in-out property <int> family-id: 0;\n    in-out property <int> density-id: 0;",
+            1,
+        );
+    assert!(
+        assert_palette_ownership(&bypass).is_err(),
+        "a conditional palette family initializer must fail closed"
+    );
+}
+
+#[test]
+fn palette_ownership_guard_rejects_a_spaced_renamed_family_initializer() {
+    let tokens = include_str!("../ui/tokens.slint");
+    let bypass = conditional_palette_initializer(
+        tokens,
+        "variant-choice /* renamed family */ ==\n        0",
+        "variant-choice",
+    );
+    let error = assert_palette_ownership(&bypass).expect_err("conditional palette initializer");
+    assert!(
+        error.contains("direct UiPalette struct initializer"),
+        "the palette initializer guard, not a literal family name, must reject the mutation: {error}"
+    );
+}
+
+#[test]
 fn palette_ownership_guard_tolerates_whitespace_and_comments() {
     let tokens = include_str!("../ui/tokens.slint");
     let formatted = tokens
@@ -552,25 +587,80 @@ fn assert_palette_ownership(tokens: &str) -> Result<(), String> {
             return Err(format!("{role} must be one palette alias"));
         }
     }
-    for forbidden in [
-        "Refined",
-        "Graphite",
-        "Ember",
-        "skin-id",
-        "palette-id",
-        "palette ==",
-        "palette !=",
-        "palette ?",
-        "palette :",
-        "if palette",
-        "match palette",
-        "UiPaletteFamily",
-    ] {
+    let initializer = palette_initializer(&tokens)?;
+    if initializer.contains('?')
+        || initializer.contains("==")
+        || initializer.contains("!=")
+        || ["if", "match", "family", "skin", "theme", "palette"]
+            .into_iter()
+            .any(|identifier| contains_identifier_component(initializer, identifier))
+    {
+        return Err(String::from(
+            "UiPalette initializer must not select a palette family",
+        ));
+    }
+    for forbidden in ["Refined", "Graphite", "Ember", "UiPaletteFamily"] {
         if tokens.contains(forbidden) {
             return Err(format!("Slint must not own {forbidden}"));
         }
     }
     Ok(())
+}
+
+fn palette_initializer(tokens: &str) -> Result<&str, String> {
+    let assignment = "in-outproperty<UiPalette>palette:";
+    let initializer = tokens
+        .find(assignment)
+        .map(|index| &tokens[index + assignment.len()..])
+        .ok_or_else(|| String::from("UiPalette palette assignment"))?;
+    if !initializer.starts_with('{') {
+        return Err(String::from(
+            "UiPalette must use a direct UiPalette struct initializer",
+        ));
+    }
+    let end = matching_brace(initializer)
+        .ok_or_else(|| String::from("balanced UiPalette struct initializer"))?;
+    if !initializer[end + 1..].starts_with(';') {
+        return Err(String::from("terminated UiPalette struct initializer"));
+    }
+    Ok(&initializer[1..end])
+}
+
+fn matching_brace(source: &str) -> Option<usize> {
+    let mut depth = 0_u32;
+    for (index, character) in source.char_indices() {
+        match character {
+            '{' => depth = depth.checked_add(1)?,
+            '}' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    return Some(index);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn contains_identifier_component(source: &str, identifier: &str) -> bool {
+    source
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .any(|component| component == identifier)
+}
+
+fn conditional_palette_initializer(tokens: &str, condition: &str, selector: &str) -> String {
+    tokens
+        .replacen(
+            "    in-out property <UiPalette> palette: {",
+            &format!("    in-out property <UiPalette> palette: {condition} ? {{"),
+            1,
+        )
+        .replacen(
+            "    };\n    in-out property <int> density-id: 0;",
+            &format!("    }} : {{\n        background: #17110b,\n        surface: #271811,\n        surface-raised: #342218,\n        surface-subtle: #24160e,\n        border: #483529,\n        text-primary: #fbf7f4,\n        text-secondary: #c0ab9e,\n        accent: #fdd47c,\n        accent-subtle: #443017,\n        accent-secondary: #fa8ba7,\n        accent-tertiary: #fcaaf0,\n        ready: #a5d670,\n        waiting: #bfaa8f,\n        degraded: #f2c66d,\n        unavailable: #f08b8b,\n    }};\n    in-out property <int> {selector}: 0;\n    in-out property <int> density-id: 0;"),
+            1,
+        )
 }
 
 fn compact_slint_source(source: &str) -> String {
