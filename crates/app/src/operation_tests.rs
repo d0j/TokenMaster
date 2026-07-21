@@ -116,6 +116,39 @@ fn one_thread_executes_one_active_and_one_follow_up_without_retaining_history() 
 }
 
 #[test]
+fn bare_presentation_command_is_rejected_before_worker_or_coordinator_mutation() {
+    let mut worker = ApplicationOperationWorker::spawn(|_| ApplicationCommandExecution::Succeeded)
+        .expect("worker");
+
+    assert_eq!(
+        worker.submit(ApplicationCommand::UpdatePresentation),
+        ApplicationCommandAdmission::Rejected(ApplicationCommandRejection::PayloadRequired)
+    );
+    let snapshot = worker.snapshot().expect("idle snapshot");
+    assert_eq!(snapshot.active_count(), 0);
+    assert_eq!(snapshot.pending_count(), 0);
+    assert_eq!(snapshot.latest_completion(), None);
+
+    assert!(matches!(
+        worker
+            .submitter()
+            .submit_request(ApplicationOperationRequest::update_presentation(
+                DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Graphite),
+            )),
+        ApplicationCommandAdmission::Started(_)
+    ));
+    wait_until(|| {
+        worker
+            .snapshot()
+            .is_ok_and(|snapshot| snapshot.active_count() == 0)
+    });
+    assert_eq!(
+        worker.shutdown().expect("worker shutdown"),
+        ApplicationOperationWorkerPhase::Stopped
+    );
+}
+
+#[test]
 fn failed_command_is_the_only_retry_source_and_reexecutes_once() {
     let attempts = Arc::new(AtomicUsize::new(0));
     let execution_attempts = Arc::clone(&attempts);
@@ -296,10 +329,9 @@ fn irreversible_boundary_rejects_late_cancellation() {
         ApplicationCommandExecution::Succeeded
     })
     .expect("worker");
-    let ApplicationCommandAdmission::Started(active) =
-        worker.submit(ApplicationCommand::ImportConfig)
+    let ApplicationCommandAdmission::Started(active) = worker.submit(ApplicationCommand::Backup)
     else {
-        panic!("import must start");
+        panic!("backup must start");
     };
     assert_eq!(receive(&irreversible_rx), active.id());
     assert!(!worker.cancel(active.id()));

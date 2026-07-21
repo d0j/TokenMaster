@@ -144,7 +144,12 @@ pub(crate) struct ApplicationOperationSubmitter {
 
 impl ApplicationOperationSubmitter {
     pub(crate) fn submit(&self, command: ApplicationCommand) -> ApplicationCommandAdmission {
-        self.submit_request(ApplicationOperationRequest::plain(command))
+        let Some(request) = ApplicationOperationRequest::plain(command) else {
+            return ApplicationCommandAdmission::Rejected(
+                ApplicationCommandRejection::PayloadRequired,
+            );
+        };
+        self.submit_request(request)
     }
 
     pub(crate) fn submit_request(

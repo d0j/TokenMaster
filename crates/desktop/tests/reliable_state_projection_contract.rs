@@ -1,11 +1,16 @@
+use std::cell::Cell;
+use std::rc::Rc;
+
 use tokenmaster_desktop::{
-    DesktopBackupHealth, DesktopBackupPolicy, DesktopDensity, DesktopIntent, DesktopOperationKind,
-    DesktopOperationPhase, DesktopOperationSnapshot, DesktopPresentationSettings,
+    DesktopBackupHealth, DesktopBackupPolicy, DesktopDensity, DesktopIntent,
+    DesktopIntentAdmission, DesktopIntentSink, DesktopOperationKind, DesktopOperationPhase,
+    DesktopOperationSnapshot, DesktopPresentationSelection, DesktopPresentationSettings,
     DesktopRecoveryReceipt, DesktopReliableStateHealth, DesktopReliableStateInput,
     DesktopReliableStateProjection, DesktopReliableStateSummary, DesktopReminderPolicy,
-    DesktopReminderSyncState, DesktopRestorePointInput, DesktopRestoreSelection, DesktopSkin,
-    MAX_DESKTOP_RESTORE_POINTS,
+    DesktopReminderSyncState, DesktopRestorePointInput, DesktopRestoreSelection, DesktopShell,
+    DesktopSkin, MAX_DESKTOP_RESTORE_POINTS,
 };
+use tokenmaster_product::ProductReducer;
 
 fn restore_point(ordinal: u8) -> DesktopRestorePointInput {
     DesktopRestorePointInput::new(
@@ -239,6 +244,75 @@ fn presentation_settings_project_complete_selection_and_legacy_constructors_are_
         legacy_projection.presentation(),
         DesktopPresentationSettings::comfortable()
     );
+}
+
+struct RecordingPresentationIntentSink {
+    submissions: Cell<u8>,
+    selection: Cell<Option<DesktopPresentationSelection>>,
+}
+
+impl DesktopIntentSink for RecordingPresentationIntentSink {
+    fn submit(&self, intent: DesktopIntent) -> DesktopIntentAdmission {
+        let DesktopIntent::UpdatePresentation(selection) = intent else {
+            panic!("presentation selection");
+        };
+        self.submissions.set(self.submissions.get() + 1);
+        self.selection.set(Some(selection));
+        DesktopIntentAdmission::Started
+    }
+}
+
+#[test]
+fn shell_initial_owner_retains_graphite_when_density_callback_submits_complete_selection() {
+    i_slint_backend_testing::init_no_event_loop();
+    let summary = DesktopReliableStateSummary::new_with_settings(
+        DesktopReliableStateHealth::Healthy,
+        false,
+        "healthy",
+        DesktopBackupPolicy::disabled(),
+        DesktopReminderPolicy::unavailable(),
+        DesktopPresentationSettings::new(DesktopDensity::UltraCompact, DesktopSkin::Graphite),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    );
+    let projection = DesktopReliableStateProjection::from_input(DesktopReliableStateInput::new(
+        11,
+        summary,
+        Vec::new(),
+    ));
+    let sink = Rc::new(RecordingPresentationIntentSink {
+        submissions: Cell::new(0),
+        selection: Cell::new(None),
+    });
+    let shell = DesktopShell::new_with_reliable_state(
+        &ProductReducer::new().snapshot(),
+        projection,
+        sink.clone(),
+    )
+    .expect("shell");
+    let window = shell.window();
+    let address = window as *const _;
+    assert_eq!(sink.submissions.get(), 0);
+    assert_eq!(window.get_presentation_density_key(), "ultra_compact");
+
+    window.invoke_select_presentation_density(1);
+
+    assert_eq!(sink.submissions.get(), 1);
+    assert_eq!(
+        sink.selection.get(),
+        Some(DesktopPresentationSelection::new(
+            DesktopDensity::Compact,
+            DesktopSkin::Graphite
+        ))
+    );
+    assert_eq!(address, shell.window() as *const _);
 }
 
 #[test]

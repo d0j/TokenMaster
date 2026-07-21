@@ -37,6 +37,19 @@ pub(crate) enum ApplicationCommand {
 }
 
 impl ApplicationCommand {
+    const fn permits_empty_payload(self) -> bool {
+        matches!(
+            self,
+            Self::ConfirmConfigImport
+                | Self::CancelConfigImport
+                | Self::Backup
+                | Self::Verify
+                | Self::RestoreData(_)
+                | Self::RestoreDataAndPortableSettings(_)
+                | Self::Rebuild
+        )
+    }
+
     const fn supports_payloadless_retry(self) -> bool {
         matches!(self, Self::Backup | Self::Verify | Self::Rebuild)
     }
@@ -267,10 +280,14 @@ pub(crate) struct ApplicationOperationRequest {
 }
 
 impl ApplicationOperationRequest {
-    pub(crate) const fn plain(command: ApplicationCommand) -> Self {
-        Self {
-            command,
-            payload: ApplicationOperationPayload::Empty,
+    pub(crate) const fn plain(command: ApplicationCommand) -> Option<Self> {
+        if command.permits_empty_payload() {
+            Some(Self {
+                command,
+                payload: ApplicationOperationPayload::Empty,
+            })
+        } else {
+            None
         }
     }
 
@@ -471,6 +488,7 @@ impl Eq for ApplicationCommandPermit {}
 pub(crate) enum ApplicationCommandRejection {
     Busy,
     Closed,
+    PayloadRequired,
     NoRetryAvailable,
     CapacityExceeded,
 }

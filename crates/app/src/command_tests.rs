@@ -73,6 +73,25 @@ fn presentation_payload_is_complete_redacted_and_maps_each_pair_exactly() {
 }
 
 #[test]
+fn plain_requests_reject_every_payload_required_command() {
+    for command in [
+        ApplicationCommand::ExportConfig,
+        ApplicationCommand::ImportConfig,
+        ApplicationCommand::BackupCompact,
+        ApplicationCommand::BackupEncrypted,
+        ApplicationCommand::UpdateBackupPolicy,
+        ApplicationCommand::UpdateReminderPolicy,
+        ApplicationCommand::UpdatePresentation,
+    ] {
+        assert!(
+            ApplicationOperationRequest::plain(command).is_none(),
+            "payload-required command must not have an empty request: {command:?}"
+        );
+    }
+    assert!(ApplicationOperationRequest::plain(ApplicationCommand::Backup).is_some());
+}
+
+#[test]
 fn reminder_policy_payload_is_bounded_validated_and_redacted() {
     assert!(ApplicationReminderPolicyUpdate::new(true, &[]).is_none());
     assert!(ApplicationReminderPolicyUpdate::new(false, &[60]).is_none());
