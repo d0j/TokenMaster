@@ -741,14 +741,14 @@ fn terminal_page_completion_rolls_back_only_the_matching_cancelled_navigation() 
     controller.cancel(attempt).expect("cancel active page");
     release_sender.send(()).expect("release page");
     assert_eq!(
-        wait_for_completion(&controller).outcome(),
-        DesktopRefreshOutcome::Cancelled
-    );
-    assert_eq!(
         terminal_receiver
             .recv_timeout(Duration::from_secs(2))
             .expect("terminal rollback"),
         cancelled
+    );
+    assert_eq!(
+        wait_for_completion(&controller).outcome(),
+        DesktopRefreshOutcome::Cancelled
     );
     assert!(controller.take_snapshot().expect("mailbox").is_none());
     assert!(

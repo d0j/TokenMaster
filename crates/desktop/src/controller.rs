@@ -601,7 +601,7 @@ struct DesktopWorkCompletionNotifier {
 
 impl WorkerCompletionNotifier for DesktopWorkCompletionNotifier {
     fn completion_ready(&self, completion: WorkerCompletion) {
-        handle_worker_completion(&self.work, &self.terminal_notifier, completion);
+        let _ = handle_worker_completion(&self.work, &self.terminal_notifier, completion);
     }
 }
 
@@ -625,12 +625,10 @@ fn handle_worker_completion(
     work: &DesktopWorkSlot,
     notifier: &TerminalNavigationNotifier,
     completion: WorkerCompletion,
-) {
-    let intent = match reconcile_navigation_completion(work, completion) {
-        Ok(intent) => intent,
-        Err(_) => return,
-    };
+) -> Result<(), DesktopControllerError> {
+    let intent = reconcile_navigation_completion(work, completion)?;
     notify_terminal_navigation(notifier, intent);
+    Ok(())
 }
 
 #[derive(Clone)]
@@ -960,7 +958,7 @@ impl DesktopController {
                     &self.work,
                     &self.terminal_navigation_notifier,
                     completion,
-                );
+                )?;
                 Ok(map_completion(completion))
             })
             .transpose()
@@ -2176,21 +2174,22 @@ mod tests {
         ));
         release_sender.send(()).expect("release refresh");
 
-        let deadline = Instant::now() + Duration::from_secs(2);
-        let terminal = loop {
-            match terminal_receiver.try_recv() {
-                Ok(intent) => break intent,
-                Err(std::sync::mpsc::TryRecvError::Empty) => {
-                    let _ = controller.try_completion().expect("worker healthy");
-                    assert!(Instant::now() < deadline, "terminal completion timed out");
-                    thread::yield_now();
-                }
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                    panic!("terminal notifier disconnected")
-                }
-            }
-        };
+        let terminal = terminal_receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("worker notifier delivers terminal rollback without completion polling");
         assert_eq!(terminal, intent);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            if controller
+                .try_completion()
+                .expect("worker healthy")
+                .is_some()
+            {
+                break;
+            }
+            assert!(Instant::now() < deadline, "completion timed out");
+            thread::yield_now();
+        }
         assert_eq!(session_calls.load(Ordering::Acquire), 0);
         assert!(controller.take_snapshot().expect("mailbox").is_none());
         controller.shutdown().expect("controller stops");
