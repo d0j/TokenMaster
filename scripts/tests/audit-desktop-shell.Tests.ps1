@@ -918,6 +918,21 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-SESSIONS-REBUILD*"
     }
 
+    It "reports one Sessions projection caller with legal block-comment spacing" {
+        $fixture = New-DesktopAuditFixture -Name "sessions-page-commented-caller-receipt"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $text = $original.Replace(
+            'apply_sessions_projection(window, projection.sessions());',
+            'apply_sessions_projection /* accepted replacement */ (window, projection.sessions());'
+        )
+        $text | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $text)
+
+        $receipt = (& $Audit -RepositoryRoot $fixture -SourceOnly) | ConvertFrom-Json
+        $receipt.sessions_projection_application_count | Should -Be 1
+    }
+
     It "rejects untyped Sessions Next navigation" {
         $fixture = New-DesktopAuditFixture -Name "sessions-next-direction"
         $path = Join-Path $fixture "crates\desktop\src\controller.rs"

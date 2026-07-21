@@ -1463,7 +1463,7 @@ if ($sessionsProjectionDefinitionCount -ne 1 -or
     $applyRouteProjectionText -match '\bapply_sessions_projection\s*\(') {
     throw 'TM-DESKTOP-SESSIONS-REBUILD: only accepted product projection delivery may replace Sessions rows'
 }
-$sessionsProjectionApplicationCount = [regex]::Matches($applyProjectionText, 'apply_sessions_projection\(').Count
+$sessionsProjectionApplicationCount = $sessionsProjectionCallerCount
 $sessionsModelReplacementCount = [regex]::Matches(
     $uiRustText,
     'set_session_list_rows\(model\(rows\)\)'
