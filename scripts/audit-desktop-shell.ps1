@@ -174,10 +174,16 @@ function Get-RustFunctionText {
 
 function Normalize-ExecutableStructure { param([Parameter(Mandatory = $true)][string]$Text); return [regex]::Replace($Text, '\s+', '') }
 
+$uiExecutableText = ConvertTo-ExecutableText -Text $uiText
 $presentationStylePath = Join-Path $sourceRoot 'presentation_style.rs'
 $presentationStyleText = [System.IO.File]::ReadAllText($presentationStylePath)
 $presentationStyleContractPath = Join-Path $desktopRoot 'tests\presentation_style_contract.rs'
 $presentationStyleContractText = [System.IO.File]::ReadAllText($presentationStyleContractPath)
+$presentationSkinUiContractPath = Join-Path $desktopRoot 'tests\presentation_skin_ui_contract.rs'
+if (-not (Test-Path -LiteralPath $presentationSkinUiContractPath)) {
+    throw 'TM-DESKTOP-MISSING-BOUNDARY: presentation_skin_ui_contract.rs'
+}
+$presentationSkinUiContractText = [System.IO.File]::ReadAllText($presentationSkinUiContractPath)
 $mainUiTextForDensity = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'main.slint'))
 $tokensText = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'tokens.slint'))
 $densityWireText = Get-RustFunctionText -Text $uiRustProductionText -Name 'wire_presentation_density'
@@ -316,16 +322,30 @@ $skinRootBindingCount = [regex]::Matches($mainUiTextForDensity, 'in-out property
 $skinRootCallbackCount = [regex]::Matches($mainUiTextForDensity, 'callback select-presentation-skin\(int\);').Count
 $mainWindowText = Get-ExecutableBracedText -Text $mainUiTextForDensity -Pattern '(?m)^\s*export\s+component\s+MainWindow\s+(?:inherits\s+\w+\s*)?\{' -FailureCode 'TM-DESKTOP-PRESENTATION-OWNER'
 $paletteSlotCount = [regex]::Matches($mainWindowText, 'in-out\s+property\s*<\s*UiPalette\s*>').Count
+$uiPaletteStructCount = [regex]::Matches($uiExecutableText, '(?m)^\s*export\s+struct\s+UiPalette\s*\{').Count
+$globalPalettePropertyCount = [regex]::Matches($uiExecutableText, '(?m)\b(?:in-out|in|out)\s+property\s*<\s*UiPalette\s*>').Count
+$uiTokensPalettePropertyCount = [regex]::Matches($uiTokensText, '(?m)\b(?:in-out|in|out)\s+property\s*<\s*UiPalette\s*>').Count
 $paletteAliasCount = [regex]::Matches($uiTokensText, 'out\s+property\s*<\s*(?:color|brush)\s*>').Count
-$settingsSkinCallbackCount = [regex]::Matches([System.IO.File]::ReadAllText((Join-Path $uiRoot 'views\settings-view.slint')), 'callback select-presentation-skin\(int\);').Count
-$settingsViewTextForSkin = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'views\settings-view.slint'))
+$settingsViewTextForSkin = ConvertTo-ExecutableText -Text ([System.IO.File]::ReadAllText((Join-Path $uiRoot 'views\settings-view.slint')))
+$settingsSkinCallbackCount = [regex]::Matches($settingsViewTextForSkin, 'callback select-presentation-skin\(int\);').Count
 $mainPresentationCallbackCount = [regex]::Matches($mainWindowText, 'callback\s+select-presentation-(?:density|skin)\(int\);').Count
 $settingsPresentationCallbackCount = [regex]::Matches($settingsViewTextForSkin, 'callback\s+select-presentation-(?:density|skin)\(int\);').Count
-$extraFamilyCallbackCount = [regex]::Matches($mainWindowText + "`n" + $settingsViewTextForSkin, '(?i)callback\s+[a-z0-9_-]*(?:skin|family|theme)[a-z0-9_-]*\(').Count - 2
+$globalSkinFamilyCallbackCount = [regex]::Matches($uiExecutableText, '(?i)callback\s+[a-z0-9_-]*(?:skin|family|theme)[a-z0-9_-]*\(').Count
+$extraFamilyCallbackCount = $globalSkinFamilyCallbackCount - 2
 $skinForwardBindingCount = [regex]::Matches($mainUiTextForDensity, 'select-presentation-skin\(index\) => \{ root\.select-presentation-skin\(index\); \}').Count
 $skinWireText = Get-RustFunctionText -Text $uiRustProductionText -Name 'wire_presentation_skin'
 $skinWiringCallbackCount = [regex]::Matches($skinWireText, 'window\.on_select_presentation_skin\(move \|index\| \{').Count
-if ($presentationStyleOwnerCount -ne 1 -or $presentationStyleOwnerSlotCount -ne 1 -or $paletteSlotCount -ne 1 -or $paletteAliasCount -ne 15 -or $skinRootBindingCount -ne 1 -or $skinRootCallbackCount -ne 1 -or $settingsSkinCallbackCount -ne 1 -or $mainPresentationCallbackCount -ne 2 -or $settingsPresentationCallbackCount -ne 2 -or $extraFamilyCallbackCount -ne 0 -or $skinForwardBindingCount -ne 1 -or $skinWiringCallbackCount -ne 1 -or [regex]::Matches($uiRustProductionText, 'Arc\s*<\s*Mutex\s*<\s*DesktopPresentationStyle\s*>\s*>').Count -ne 7) { throw 'TM-DESKTOP-PRESENTATION-OWNER: exactly one complete presentation owner and palette slot are required' }
+if ($presentationStyleOwnerCount -ne 1 -or $presentationStyleOwnerSlotCount -ne 1 -or
+    $uiPaletteStructCount -ne 1 -or $globalPalettePropertyCount -ne 2 -or
+    $uiTokensPalettePropertyCount -ne 1 -or $paletteSlotCount -ne 1 -or
+    $paletteAliasCount -ne 15 -or $skinRootBindingCount -ne 1 -or
+    $skinRootCallbackCount -ne 1 -or $settingsSkinCallbackCount -ne 1 -or
+    $mainPresentationCallbackCount -ne 2 -or $settingsPresentationCallbackCount -ne 2 -or
+    $globalSkinFamilyCallbackCount -ne 2 -or $extraFamilyCallbackCount -ne 0 -or
+    $skinForwardBindingCount -ne 1 -or $skinWiringCallbackCount -ne 1 -or
+    [regex]::Matches($uiRustProductionText, 'Arc\s*<\s*Mutex\s*<\s*DesktopPresentationStyle\s*>\s*>').Count -ne 7) {
+    throw 'TM-DESKTOP-PRESENTATION-OWNER: exactly one complete presentation owner and palette slot are required'
+}
 $presentationApplyText = Get-RustFunctionText -Text $uiRustProductionText -Name 'apply_presentation_style'
 $paletteIndex = $presentationApplyText.IndexOf('window.set_presentation_palette(ui_palette(style.skin()));', [System.StringComparison]::Ordinal)
 $metadataIndex = $presentationApplyText.IndexOf('window.set_presentation_revision', [System.StringComparison]::Ordinal)
@@ -361,25 +381,50 @@ $selectSkinText = Get-RustFunctionText -Text $presentationStyleText -Name 'selec
 $selectSkinIfAdmittedText = Get-RustFunctionText -Text $presentationStyleText -Name 'select_skin_index_if_admitted'
 $expectedSelectSkin = 'pubfnselect_skin_index(&mutself,index:i32)->DesktopPresentationApplyOutcome{letSome(skin)=DesktopSkin::from_slint_index(index)else{returnDesktopPresentationApplyOutcome::Rejected;};self.select(self.selection.with_skin(skin),false,|_|true)}'
 $expectedSelectSkinIfAdmitted = 'pubfnselect_skin_index_if_admitted(&mutself,index:i32,admit:implFnOnce(DesktopPresentationSelection)->bool,)->DesktopPresentationApplyOutcome{letSome(skin)=DesktopSkin::from_slint_index(index)else{returnDesktopPresentationApplyOutcome::Rejected;};self.select(self.selection.with_skin(skin),true,admit)}'
+$selectTransitionText = Get-RustFunctionText -Text $presentationStyleText -Name 'select'
+$expectedSelectTransition = 'fnselect(&mutself,selection:DesktopPresentationSelection,admitted:bool,admit:implFnOnce(DesktopPresentationSelection)->bool,)->DesktopPresentationApplyOutcome{ifselection==self.selection{if!admitted||!matches!(self.persistence,DesktopPresentationPersistence::NotSaved){returnDesktopPresentationApplyOutcome::Unchanged;}if!admit(selection){returnDesktopPresentationApplyOutcome::Rejected;}self.persistence=DesktopPresentationPersistence::Saving;returnDesktopPresentationApplyOutcome::Applied;}letSome(revision)=self.revision.checked_successor()else{returnDesktopPresentationApplyOutcome::RevisionExhausted;};ifadmitted&&!admit(selection){returnDesktopPresentationApplyOutcome::Rejected;}self.selection=selection;self.revision=revision;self.persistence=ifadmitted{DesktopPresentationPersistence::Saving}else{DesktopPresentationPersistence::NotSaved};DesktopPresentationApplyOutcome::Applied}'
+$normalizedSelectTransition = Normalize-ExecutableStructure -Text $selectTransitionText
 $checkedSuccessorDerivationCount = [int]((Normalize-ExecutableStructure -Text $checkedSuccessorText) -eq $expectedCheckedSuccessor)
 $selectDensityStructureCount = [int]((Normalize-ExecutableStructure -Text $selectDensityText) -eq $expectedSelectDensity)
 $selectDensityIfAdmittedStructureCount = [int]((Normalize-ExecutableStructure -Text $selectDensityIfAdmittedText) -eq $expectedSelectDensityIfAdmitted)
 $selectSkinStructureCount = [int]((Normalize-ExecutableStructure -Text $selectSkinText) -eq $expectedSelectSkin)
 $selectSkinIfAdmittedStructureCount = [int]((Normalize-ExecutableStructure -Text $selectSkinIfAdmittedText) -eq $expectedSelectSkinIfAdmitted)
-$checkedSuccessorCallCount = $selectDensityStructureCount
-$densityWriteCount = $selectDensityStructureCount
-$revisionWriteCount = $selectDensityStructureCount
-$appliedOutcomeCount = $selectDensityStructureCount
-if ($presentationRevisionTypeCount -ne 1 -or $checkedSuccessorDerivationCount -ne 1 -or $selectDensityStructureCount -ne 1 -or $selectDensityIfAdmittedStructureCount -ne 1 -or $selectSkinStructureCount -ne 1 -or $selectSkinIfAdmittedStructureCount -ne 1) {
+$selectTransitionStructureCount = [int]($normalizedSelectTransition -eq $expectedSelectTransition)
+$checkedSuccessorCallCount = [regex]::Matches($selectTransitionText, 'self\.revision\.checked_successor\(\)').Count
+$densityWriteCount = [regex]::Matches($selectTransitionText, 'self\.selection\s*=\s*selection;').Count
+$revisionWriteCount = [regex]::Matches($selectTransitionText, 'self\.revision\s*=\s*revision;').Count
+$appliedOutcomeCount = [regex]::Matches($selectTransitionText, 'DesktopPresentationApplyOutcome::Applied').Count
+if ($presentationRevisionTypeCount -ne 1 -or $checkedSuccessorDerivationCount -ne 1 -or
+    $selectDensityStructureCount -ne 1 -or $selectDensityIfAdmittedStructureCount -ne 1 -or
+    $selectSkinStructureCount -ne 1 -or $selectSkinIfAdmittedStructureCount -ne 1 -or
+    $selectTransitionStructureCount -ne 1 -or $checkedSuccessorCallCount -ne 1 -or
+    $densityWriteCount -ne 1 -or $revisionWriteCount -ne 1 -or $appliedOutcomeCount -ne 2) {
     throw 'TM-DESKTOP-DENSITY-REVISION: density revision updates must remain checked and fail closed'
 }
 $densityStressText = Get-RustFunctionText -Text $presentationStyleContractText -Name 'selection_is_complete_checked_and_revisioned_across_both_axes'
 $normalizedDensityStress = Normalize-ExecutableStructure -Text $densityStressText
 $densityStressStructureCount = [int]($normalizedDensityStress.Contains('style.select_density_index(1)') -and $normalizedDensityStress.Contains('style.select_skin_index(1)') -and $normalizedDensityStress.Contains('DesktopPresentationSelection::new(DesktopDensity::Compact,DesktopSkin::Refined)') -and $normalizedDensityStress.Contains('assert_eq!(style,before_rejection);'))
-$densitySwitchLoopCount = [regex]::Matches($presentationStressCurrent, 'for\s+index\s+in\s+0\.\.10_000').Count
-$densityAppliedAssertionCount = $densityStressStructureCount
-$densityFinalPostconditionCount = $densityStressStructureCount
-if ($densityStressStructureCount -ne 1) {
+$densityAppliedAssertionCount = [regex]::Matches($normalizedDensityStress, [regex]::Escape('assert_eq!(style.select_density_index(1),DesktopPresentationApplyOutcome::Applied);')).Count
+$densityFinalPostconditionCount = [regex]::Matches($normalizedDensityStress, [regex]::Escape('assert_eq!(style,before_rejection);')).Count
+$uiMixedAxisStressText = Get-RustFunctionText -Text $presentationSkinUiContractText -Name 'density_and_skin_selectors_submit_complete_pairs_and_keep_one_window_models_geometry'
+$normalizedUiMixedAxisStress = Normalize-ExecutableStructure -Text $uiMixedAxisStressText
+$uiMixedAxisProofs = @(
+    'forindexin0..10_000{',
+    'window.invoke_select_presentation_skin(skin.slint_index());',
+    'window.invoke_select_presentation_density(index%3);',
+    'Some(DesktopPresentationSelection::new(matchindex%3{0=>DesktopDensity::Comfortable,1=>DesktopDensity::Compact,_=>DesktopDensity::UltraCompact,},skin,))',
+    'assert_eq!(address,shell.window()as*const_);',
+    'assert_eq!(window.get_route_rows().row_count(),routes);',
+    'assert_eq!(window.get_dashboard_quota_rows().row_count(),quotas);',
+    'assert_eq!(window.window().size(),size);',
+    'assert_eq!(sink.count.get(),20_002);'
+)
+$densitySwitchLoopCount = [regex]::Matches($uiMixedAxisStressText, 'for\s+index\s+in\s+0\.\.10_000').Count
+$presentationOperationSwitchLoopCount = [regex]::Matches($presentationStressCurrent, 'for\s+index\s+in\s+0\.\.10_000').Count
+if ($densityStressStructureCount -ne 1 -or $densityAppliedAssertionCount -ne 1 -or
+    $densityFinalPostconditionCount -ne 1 -or $densitySwitchLoopCount -ne 1 -or
+    $presentationOperationSwitchLoopCount -ne 1 -or
+    @($uiMixedAxisProofs | Where-Object { -not $normalizedUiMixedAxisStress.Contains($_) }).Count -ne 0) {
     throw 'TM-DESKTOP-DENSITY-STRESS: density must retain one 10,000-switch contract'
 }
 $densityAuthorityText = $presentationStyleExecutableText + "`n" + $densityApplyText + "`n" + $densityWireText
@@ -394,15 +439,10 @@ if ($densityAllowedOwnerOccurrenceCount -ne 1 -or $densityAllowedOwnerWireSignat
 }
 $densityAdmissionText = Get-RustFunctionText -Text $uiRustProductionText -Name 'select_presentation_density_if_admitted'
 $skinAdmissionText = Get-RustFunctionText -Text $uiRustProductionText -Name 'select_presentation_skin_if_admitted'
-$admissionBeforeApply = $densityAdmissionText.IndexOf('selected.select_density_index_if_admitted', [System.StringComparison]::Ordinal)
-$firstDirectApply = $densityAdmissionText.IndexOf('selected.select_density_index(', [System.StringComparison]::Ordinal)
-$skinAdmissionBeforeApply = $skinAdmissionText.IndexOf('selected.select_skin_index_if_admitted', [System.StringComparison]::Ordinal)
-$firstDirectSkinApply = $skinAdmissionText.IndexOf('selected.select_skin_index(', [System.StringComparison]::Ordinal)
-if ($admissionBeforeApply -lt 0 -or ($firstDirectApply -ge 0 -and $firstDirectApply -lt $admissionBeforeApply) -or
-    $skinAdmissionBeforeApply -lt 0 -or ($firstDirectSkinApply -ge 0 -and $firstDirectSkinApply -lt $skinAdmissionBeforeApply) -or
-    $densityAdmissionText -notmatch 'intent_sink\.submit\(DesktopIntent::UpdatePresentation\(selection\)\)' -or
-    $skinAdmissionText -notmatch 'intent_sink\.submit\(DesktopIntent::UpdatePresentation\(selection\)\)' -or
-    $skinAdmissionText.IndexOf('selected.select_skin_index_if_admitted', [System.StringComparison]::Ordinal) -lt 0 -or
+$expectedDensityAdmission = 'fnselect_presentation_density_if_admitted(presentation_style:&Arc<Mutex<DesktopPresentationStyle>>,index:i32,intent_sink:&Rc<dynDesktopIntentSink>,)->Option<DesktopPresentationStyle>{letcaptured=*presentation_style.lock().ok()?;letmutselected=captured;ifselected.select_density_index_if_admitted(index,|selection|{matches!(intent_sink.submit(DesktopIntent::UpdatePresentation(selection)),crate::DesktopIntentAdmission::Started|crate::DesktopIntentAdmission::Queued|crate::DesktopIntentAdmission::Coalesced)})!=DesktopPresentationApplyOutcome::Applied{returnNone;}letmutcurrent=presentation_style.lock().ok()?;if*current==captured{*current=selected;}Some(*current)}'
+$expectedSkinAdmission = 'fnselect_presentation_skin_if_admitted(presentation_style:&Arc<Mutex<DesktopPresentationStyle>>,index:i32,intent_sink:&Rc<dynDesktopIntentSink>,)->Option<DesktopPresentationStyle>{letcaptured=*presentation_style.lock().ok()?;letmutselected=captured;ifselected.select_skin_index_if_admitted(index,|selection|{matches!(intent_sink.submit(DesktopIntent::UpdatePresentation(selection)),crate::DesktopIntentAdmission::Started|crate::DesktopIntentAdmission::Queued|crate::DesktopIntentAdmission::Coalesced)})!=DesktopPresentationApplyOutcome::Applied{returnNone;}letmutcurrent=presentation_style.lock().ok()?;if*current==captured{*current=selected;}Some(*current)}'
+if ((Normalize-ExecutableStructure -Text $densityAdmissionText) -ne $expectedDensityAdmission -or
+    (Normalize-ExecutableStructure -Text $skinAdmissionText) -ne $expectedSkinAdmission -or
     $selectDensityIfAdmittedStructureCount -ne 1 -or $selectSkinIfAdmittedStructureCount -ne 1) {
     throw 'TM-DESKTOP-DENSITY-ADMISSION: density must be admitted before any style application'
 }
@@ -1691,6 +1731,7 @@ if ($SourceOnly) {
         density_write_count = $densityWriteCount
         density_revision_write_count = $revisionWriteCount
         density_switch_loop_count = $densitySwitchLoopCount
+        presentation_operation_switch_loop_count = $presentationOperationSwitchLoopCount
         density_applied_assertion_count = $densityAppliedAssertionCount
         density_final_postcondition_count = $densityFinalPostconditionCount
         density_authority_count = $densityAuthorityCount
@@ -1712,6 +1753,9 @@ if ($SourceOnly) {
         palette_role_count = $paletteRoles.Count
         palette_exact_rgb_value_count = $paletteRgbValueCount
         palette_slot_count = $paletteSlotCount
+        palette_property_count = $globalPalettePropertyCount
+        palette_struct_count = $uiPaletteStructCount
+        skin_family_callback_count = $globalSkinFamilyCallbackCount
         skin_root_callback_count = $skinRootCallbackCount
         skin_settings_callback_count = $settingsSkinCallbackCount
         skin_forward_binding_count = $skinForwardBindingCount
@@ -1881,6 +1925,7 @@ if ($LASTEXITCODE -ne 0) {
     density_write_count = $densityWriteCount
     density_revision_write_count = $revisionWriteCount
     density_switch_loop_count = $densitySwitchLoopCount
+    presentation_operation_switch_loop_count = $presentationOperationSwitchLoopCount
     density_applied_assertion_count = $densityAppliedAssertionCount
     density_final_postcondition_count = $densityFinalPostconditionCount
     density_authority_count = $densityAuthorityCount
@@ -1902,6 +1947,9 @@ if ($LASTEXITCODE -ne 0) {
     palette_role_count = $paletteRoles.Count
     palette_exact_rgb_value_count = $paletteRgbValueCount
     palette_slot_count = $paletteSlotCount
+    palette_property_count = $globalPalettePropertyCount
+    palette_struct_count = $uiPaletteStructCount
+    skin_family_callback_count = $globalSkinFamilyCallbackCount
     skin_root_callback_count = $skinRootCallbackCount
     skin_settings_callback_count = $settingsSkinCallbackCount
     skin_forward_binding_count = $skinForwardBindingCount

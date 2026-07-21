@@ -1173,4 +1173,29 @@ Describe "TokenMaster application composition audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-APP-PRESENTATION-COMPLETE*"
     }
+
+    It "rejects one swapped output in the exact nine-pair presentation conversion" {
+        $fixture = New-AppAuditFixture -Name "presentation-swapped-output-pair"
+        $path = Join-Path $fixture "crates\app\src\command.rs"
+        $text = [System.IO.File]::ReadAllText($path)
+        $newline = if ($text.Contains("`r`n")) { "`r`n" } else { "`n" }
+        $original = '                tokenmaster_state::PresentationDensity::Comfortable,' + $newline +
+            '                tokenmaster_state::PresentationSkin::Graphite,'
+        $replacement = '                tokenmaster_state::PresentationDensity::Comfortable,' + $newline +
+            '                tokenmaster_state::PresentationSkin::Ember,'
+        ([regex]::Matches($text, [regex]::Escape($original))).Count | Should -Be 1
+        [System.IO.File]::WriteAllText($path, $text.Replace($original, $replacement))
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-PRESENTATION-COMPLETE*"
+    }
+
+    It "rejects an unbounded second operation channel" {
+        $fixture = New-AppAuditFixture -Name "presentation-second-unbounded-channel"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\operation.rs") `
+            -Value 'fn presentation_unbounded_channel() { let _ = std::sync::mpsc::channel::<u8>(); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-OPERATION-SPAWN*"
+    }
 }

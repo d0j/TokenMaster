@@ -95,18 +95,37 @@ if ([string]::IsNullOrWhiteSpace($v2Migration) -or $v2Migration -notmatch 'Prese
 $commandExecutable = [regex]::Replace($commandText, '(?ms)//.*?$|/\*.*?\*/|"(?:\\.|[^"\\])*"', ' ')
 $normalizedCommand = [regex]::Replace($commandExecutable, '\s+', '')
 $expectedPresentationWrapper = 'pub(crate)structApplicationPresentationUpdate{selection:DesktopPresentationSelection,}'
-$expectedPresentationConversionPrefix = 'pub(crate)constfninto_state_presentation(self)->tokenmaster_state::PresentationSettings{match(self.selection.density(),self.selection.skin()){'
+$expectedPresentationConversion = [regex]::Replace(@'
+pub(crate) const fn into_state_presentation(self) -> tokenmaster_state::PresentationSettings {
+    match (self.selection.density(), self.selection.skin()) {
+        (tokenmaster_desktop::DesktopDensity::Comfortable, tokenmaster_desktop::DesktopSkin::Refined,) => tokenmaster_state::PresentationSettings::new(tokenmaster_state::PresentationDensity::Comfortable, tokenmaster_state::PresentationSkin::Refined,),
+        (tokenmaster_desktop::DesktopDensity::Comfortable, tokenmaster_desktop::DesktopSkin::Graphite,) => tokenmaster_state::PresentationSettings::new(tokenmaster_state::PresentationDensity::Comfortable, tokenmaster_state::PresentationSkin::Graphite,),
+        (tokenmaster_desktop::DesktopDensity::Comfortable, tokenmaster_desktop::DesktopSkin::Ember,) => tokenmaster_state::PresentationSettings::new(tokenmaster_state::PresentationDensity::Comfortable, tokenmaster_state::PresentationSkin::Ember,),
+        (tokenmaster_desktop::DesktopDensity::Compact, tokenmaster_desktop::DesktopSkin::Refined,) => tokenmaster_state::PresentationSettings::new(tokenmaster_state::PresentationDensity::Compact, tokenmaster_state::PresentationSkin::Refined,),
+        (tokenmaster_desktop::DesktopDensity::Compact, tokenmaster_desktop::DesktopSkin::Graphite,) => tokenmaster_state::PresentationSettings::new(tokenmaster_state::PresentationDensity::Compact, tokenmaster_state::PresentationSkin::Graphite,),
+        (tokenmaster_desktop::DesktopDensity::Compact, tokenmaster_desktop::DesktopSkin::Ember,) => tokenmaster_state::PresentationSettings::new(tokenmaster_state::PresentationDensity::Compact, tokenmaster_state::PresentationSkin::Ember,),
+        (tokenmaster_desktop::DesktopDensity::UltraCompact, tokenmaster_desktop::DesktopSkin::Refined,) => tokenmaster_state::PresentationSettings::new(tokenmaster_state::PresentationDensity::UltraCompact, tokenmaster_state::PresentationSkin::Refined,),
+        (tokenmaster_desktop::DesktopDensity::UltraCompact, tokenmaster_desktop::DesktopSkin::Graphite,) => tokenmaster_state::PresentationSettings::new(tokenmaster_state::PresentationDensity::UltraCompact, tokenmaster_state::PresentationSkin::Graphite,),
+        (tokenmaster_desktop::DesktopDensity::UltraCompact, tokenmaster_desktop::DesktopSkin::Ember,) => tokenmaster_state::PresentationSettings::new(tokenmaster_state::PresentationDensity::UltraCompact, tokenmaster_state::PresentationSkin::Ember,),
+    }
+}
+'@, '\s+', '')
 if ([regex]::Matches($commandExecutable, 'ApplicationCommand::UpdatePresentation').Count -ne 1 -or
     [regex]::Matches($commandExecutable, 'ApplicationOperationPayload::Presentation\(ApplicationPresentationUpdate::new\(\s*selection,\s*\)\)').Count -ne 1 -or
     $normalizedCommand.IndexOf($expectedPresentationWrapper, [System.StringComparison]::Ordinal) -lt 0 -or
-    $normalizedCommand.IndexOf($expectedPresentationConversionPrefix, [System.StringComparison]::Ordinal) -lt 0 -or
+    [regex]::Matches($commandExecutable, '\binto_state_presentation\s*\(').Count -ne 1 -or
+    $normalizedCommand.IndexOf($expectedPresentationConversion, [System.StringComparison]::Ordinal) -lt 0 -or
     [regex]::Matches($commandExecutable, 'tokenmaster_state::PresentationSettings::new\(').Count -ne 9 -or
     $commandExecutable -match 'UpdatePresentation(?:Density|Skin)|Presentation(?:Density|Skin)\(') {
     throw 'TM-APP-PRESENTATION-COMPLETE: application presentation requests carry one complete density and skin pair'
 }
 $operationExecutable = [regex]::Replace($operationText, '(?ms)//.*?$|/\*.*?\*/|"(?:\\.|[^"\\])*"', ' ')
+$operationChannelCount = [regex]::Matches(
+    $operationExecutable,
+    '(?<![A-Za-z0-9_])(?:sync_)?channel\s*(?:::\s*<[^>]+>)?\s*\('
+).Count
 if ([regex]::Matches($operationExecutable, '(?:thread::)?Builder::new\(\)').Count -ne 1 -or
-    [regex]::Matches($operationExecutable, 'sync_channel\s*(?:::\s*<[^>]+>)?\s*\(').Count -gt 1 -or
+    $operationChannelCount -gt 1 -or
     $operationExecutable -match 'thread::spawn|slint::Timer|VecDeque') {
     throw 'TM-APP-OPERATION-SPAWN: complete presentation reuses the sole bounded worker authority'
 }
