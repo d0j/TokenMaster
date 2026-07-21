@@ -334,7 +334,10 @@ stale repair/removal, path-free UI state, and config/backup exclusion. The packa
 interactive/resource receipt contract and strict schema/local preflight are fixed;
 authenticated producer/provenance and external evidence remain P6-dependent. P3-D.2c
 later-page Sessions navigation is implemented as one private-cursor, replace-only
-64-row contour on the existing worker with no page history. Interactive History ranges
+64-row contour on the existing worker with no page history. Its corrective terminal
+rail pins one notified worker, one latest rollback slot, one weak top-level event-loop
+route, exact snapshot-before-terminal ordering, and one production app attachment while
+rejecting comment/cfg/unreachable/lock-order bypasses. Interactive History ranges
 are the next bounded P3 implementation slice.
 Per-scope editing, snooze, quiet hours, reminder OS/tray delivery, usage alerts, and
 activation remain later independent slices.

@@ -16,6 +16,13 @@ All notable changes are recorded here.
   cancellation, and mutation contracts pass. This does not claim interactive History
   ranges, P5 JSON/MCP, M0, package/signing/soak, or release acceptance.
 
+- Fixed terminal Sessions navigation recovery. Cancellation, deadline, abandoned, and
+  stale no-snapshot completions now release only the matching pending intent through one
+  existing event-loop task; refresh supersession is lock-safe, callback/poll receipt
+  handling is idempotent, synchronous errors remain visible, retained failed pages can
+  return to newest, and initial unavailable state stays closed. No polling loop, worker,
+  queue, cursor history, or second page/model was added.
+
 - Added the historical P4-B durable density verification: at that boundary settings schema v2 persisted one
   fixed three-value density, strict v1 migrates in memory without a startup write,
   typed packages bind their declared settings source schema, and Desktop applies an

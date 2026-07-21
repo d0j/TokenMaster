@@ -179,7 +179,8 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   32-model+32-project bounds, and no exposed opaque key. P3-D.2c later-page navigation
   is complete with typed Next/Back-to-newest actions, one latest pending intent, private
   worker-local continuation, replace-only 64-row publication, refresh precedence, stale
-  generation fences, accessible keyboard controls, and no cursor history. P3-D.3 Models is implemented
+  generation fences, exact terminal no-snapshot rollback, retained-page newest recovery,
+  accessible keyboard controls, and no cursor history. P3-D.3 Models is implemented
   as a 64-row responsive projection over the same recent-30-day History envelope with
   complete token mix/cost/events, typed cost mode/composition, visible partial-cost
   provenance, and explicit truncation, without a third query. P3-D.4 Projects is

@@ -294,6 +294,13 @@ and authority remain outside Desktop/Slint. Activity route selection adds no que
 callback, worker, timer, queue, cache, connection, or retained row identity. The UI
 does not claim rhythm/heatmap semantics without a separate bounded aggregate.
 
+P3-D.2c terminal Sessions recovery carries only the already public direction intent and
+its checked snapshot/product/navigation generations. One private capacity-one bridge
+slot coalesces to the newest generation and schedules through the existing event-loop
+site; it contains no cursor, key, path, prompt, response, command, credential, or raw
+error. Worker and controller mutexes are released before external notification, and
+full-intent equality makes stale delivery a no-op.
+
 P3-D.6 adds one bounded Notifications projection over the existing all-current benefit
 overview. It exposes only presentation ordinals, provider-neutral lot facts, typed
 expiry precision, effective profile source/coverage/leads, bounded revisions and time

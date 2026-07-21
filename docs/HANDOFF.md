@@ -875,6 +875,16 @@ worker, thread, queue, channel, timer, cache, archive owner, second model, or re
 page history was added. This is developer closure, not M0/package/signing/soak/release
 acceptance.
 
+Corrective P3-D.2c terminal recovery is also implemented. An admitted navigation that
+ends without snapshot publication now releases the exact UI pending correlation through
+the existing weak capacity-one event-loop bridge, without polling or a new worker.
+Callback and receipt consumers reconcile idempotently; refresh supersession and bridge
+delivery invoke external code only after locks are released, and snapshot delivery wins
+within a coalesced task. Retained failed pages allow newest recovery while initial
+unavailable state remains closed. Focused tests and independent code/audit rereviews are
+Critical/Important/Minor 0/0/0. The preceding baseline timings are historical; the new
+final baseline receipt is recorded below.
+
 P3-D.3 Models is implemented under
 `docs/superpowers/specs/2026-07-19-tokenmaster-models-route-design.md` and
 `docs/superpowers/plans/2026-07-19-tokenmaster-models-route.md`. The existing fixed

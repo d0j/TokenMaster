@@ -196,6 +196,14 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   strict workspace Clippy in 44.05 seconds, and the complete locked workspace test/
   doctest gate in 679.7 seconds. No cursor/key/page number, queue,
   worker, thread, timer, cache, archive owner, or retained page history was added.
+  Corrective terminal recovery now clears an admitted pending intent even when the
+  worker publishes no snapshot, without polling: callback and receipt paths share one
+  idempotent exact-intent reconciliation, refresh supersession notifies after unlock,
+  and the existing event-loop bridge retains one latest rollback slot. Failed Next from
+  a retained page exposes newest recovery; initial unavailable state does not. Focused
+  controller/projection/UI/app tests and independent code/audit reviews are 0/0/0. The
+  earlier 679.7-second baseline predates this correction and is superseded by the final
+  gate receipt recorded below before handoff.
 - P3-D.3 bounded Models route: the fixed recent-30-day History request now captures
   Model and Project breakdowns in one immutable envelope, so History, Models, and the
   Projects route share exact range/timezone/freshness without a third analytics

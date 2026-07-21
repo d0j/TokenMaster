@@ -493,6 +493,18 @@ intent, and keeps no cursor history. `Back to newest` and every ordinary refresh
 fixed newest request. Refresh supersedes navigation, while snapshot epoch, product
 generation, and navigation generation reject stale admission and publication.
 
+Every admitted navigation also has one terminal recovery path. The controller's sole
+worker completion is reconciled idempotently by both the event callback and optional
+receipt polling; whichever wins atomically takes the exact pending intent. A completion
+that published no product snapshot delivers that intent through the existing weak,
+capacity-one event-loop bridge, where full-intent equality clears only the matching UI
+pending state. Ordinary refresh supersession emits the same exact rollback only after
+releasing the controller work lock. Snapshot delivery precedes a coalesced terminal
+rollback, so a newer accepted snapshot remains authoritative. Failed `Next` retains one
+bounded page and permits only `Back to newest`; an initial unavailable section without a
+retained page exposes no recovery action. No completion queue, polling requirement,
+second worker, cursor history, or additional page is retained.
+
 `apply_projection` is the sole production path that replaces the single Sessions Slint
 model, only during initial window construction or accepted newer product publication.
 It replaces rather than appends and retains at most 64 rows; pending navigation and

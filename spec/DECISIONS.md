@@ -2071,3 +2071,27 @@ complicates stale-detail ownership. Direction-only replacement preserves access 
 sessions with constant memory, while direct recovery to newest makes refresh and failure
 semantics unambiguous. Exact keyboard, model-identity, sink-lifetime, mutation, and
 generation-race contracts pin the boundary without exposing private query identity.
+
+## ADR-085 — Recover terminal Sessions navigation through one exact event-loop rollback
+
+Status: implemented as corrective P3-D.2c developer evidence.
+
+Decision: use the existing worker completion notifier and snapshot bridge lifecycle to
+release an admitted Sessions navigation when cancellation, deadline, abandonment, or
+stale execution publishes no snapshot. Callback and receipt polling share one
+idempotent reconciliation function; the first consumer atomically takes the exact
+intent, then notifies after all controller locks are released. The bridge retains only
+the highest navigation generation in one slot, schedules one existing event-loop task,
+applies a pending snapshot first, and rejects only an exactly equal UI intent.
+
+Refresh supersession sends the same exact rollback immediately after releasing the work
+lock. Failed `Next` with a retained page permits direct newest recovery, while initial
+unavailable state without a page remains closed. Synchronous completion observation
+continues to report reconciliation failure; the worker callback is intentionally
+best-effort. No polling loop, new worker/thread/channel, completion history, cursor
+history, or second page/model is introduced.
+
+Rationale: publishing a synthetic product snapshot for cancellation would weaken
+snapshot authority, while leaving UI correlation dependent on polling can freeze the
+controls forever. One identity-safe rollback preserves constant memory and keeps
+successful and query-error snapshots authoritative.

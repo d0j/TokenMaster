@@ -3837,3 +3837,14 @@ application release audits pass. The final baseline passes clean-root in 4.545 s
 formatting in 1.799 seconds, strict workspace Clippy in 44.05 seconds, and the complete
 locked workspace test/doctest gate in 679.7 seconds. Interactive History ranges,
 P5 JSON/MCP, P3-E external receipts, P4/P6/M0/package/signing/soak/release remain open.
+
+The closure review then found two real recovery gaps: pre-start/post-query terminal
+completion could leave UI pending forever, and failed Next from the newest page could
+retain data without an enabled recovery action. The corrective pass added one typed
+capacity-one terminal rollback on the existing worker/event-loop path, idempotent
+callback/poll reconciliation, fail-visible synchronous errors, refresh and stale-work
+race fences, retained-page newest recovery, and page-neutral copy. Deterministic tests
+prove notifier delivery before polling, NotStarted/no-query/no-snapshot behavior, exact
+stale equality, and snapshot-before-terminal coalescing. Mutation rails reject removed,
+comment-only, nested-comment, cfg-test-only, unreachable, unbounded, and lock-order
+variants. Independent final code and audit reviews are 0/0/0.
