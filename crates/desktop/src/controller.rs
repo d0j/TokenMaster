@@ -1,5 +1,6 @@
 use std::{
     fmt,
+    num::NonZeroU64,
     path::Path,
     sync::{
         Arc, Mutex, MutexGuard,
@@ -264,6 +265,75 @@ pub struct DesktopSessionDetailIntent {
     selection: ProductSessionDetailSelection,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopSessionPageDirection {
+    Newest,
+    Next,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct DesktopSessionNavigationGeneration(NonZeroU64);
+
+impl DesktopSessionNavigationGeneration {
+    #[must_use]
+    pub const fn new(generation: u64) -> Option<Self> {
+        match NonZeroU64::new(generation) {
+            Some(generation) => Some(Self(generation)),
+            None => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0.get()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DesktopSessionPageIntent {
+    snapshot_epoch: DesktopSnapshotEpoch,
+    product_generation: tokenmaster_product::ProductGeneration,
+    navigation_generation: DesktopSessionNavigationGeneration,
+    direction: DesktopSessionPageDirection,
+}
+
+impl DesktopSessionPageIntent {
+    #[must_use]
+    pub const fn new(
+        snapshot_epoch: DesktopSnapshotEpoch,
+        product_generation: tokenmaster_product::ProductGeneration,
+        navigation_generation: DesktopSessionNavigationGeneration,
+        direction: DesktopSessionPageDirection,
+    ) -> Self {
+        Self {
+            snapshot_epoch,
+            product_generation,
+            navigation_generation,
+            direction,
+        }
+    }
+
+    #[must_use]
+    pub const fn snapshot_epoch(self) -> DesktopSnapshotEpoch {
+        self.snapshot_epoch
+    }
+
+    #[must_use]
+    pub const fn product_generation(self) -> tokenmaster_product::ProductGeneration {
+        self.product_generation
+    }
+
+    #[must_use]
+    pub const fn navigation_generation(self) -> DesktopSessionNavigationGeneration {
+        self.navigation_generation
+    }
+
+    #[must_use]
+    pub const fn direction(self) -> DesktopSessionPageDirection {
+        self.direction
+    }
+}
+
 impl DesktopSessionDetailIntent {
     #[must_use]
     pub const fn new(
@@ -378,6 +448,7 @@ pub enum DesktopControllerErrorCode {
     VersionMismatch,
     CorruptArchive,
     StaleSelection,
+    StaleNavigation,
     Internal,
 }
 
@@ -395,6 +466,7 @@ impl DesktopControllerErrorCode {
             Self::VersionMismatch => "version_mismatch",
             Self::CorruptArchive => "corrupt_archive",
             Self::StaleSelection => "stale_selection",
+            Self::StaleNavigation => "stale_navigation",
             Self::Internal => "internal",
         }
     }
@@ -472,18 +544,27 @@ struct DesktopWorkState {
     refresh_attempt: Option<u64>,
     latest_selection_generation: Option<ProductSessionDetailSelectionGeneration>,
     pending_selection: Option<PendingDesktopSessionDetail>,
+    latest_navigation_generation: Option<DesktopSessionNavigationGeneration>,
+    pending_navigation: Option<PendingDesktopSessionPage>,
 }
 
 #[derive(Clone, Copy)]
 struct DesktopWorkBatch {
     refresh: bool,
     selection: Option<DesktopSessionDetailIntent>,
+    navigation: Option<DesktopSessionPageIntent>,
 }
 
 #[derive(Clone, Copy)]
 struct PendingDesktopSessionDetail {
     attempt: u64,
     intent: DesktopSessionDetailIntent,
+}
+
+#[derive(Clone, Copy)]
+struct PendingDesktopSessionPage {
+    attempt: u64,
+    intent: DesktopSessionPageIntent,
 }
 
 struct DesktopExecutionContext<'a> {
@@ -566,6 +647,7 @@ impl DesktopRefreshIngress {
             .map_err(map_worker_error)?;
         if let Some(attempt) = scheduled_work_attempt(admission)? {
             work.refresh_attempt = Some(attempt);
+            invalidate_navigation(&mut work);
         }
         Ok(admission)
     }
@@ -695,6 +777,11 @@ impl DesktopController {
             ));
         }
         let mut work = lock_work(&self.work)?;
+        if work.latest_navigation_generation.is_some() {
+            return Err(DesktopControllerError::new(
+                DesktopControllerErrorCode::StaleSelection,
+            ));
+        }
         if work
             .latest_selection_generation
             .is_some_and(|current| intent.selection().generation() <= current)
@@ -707,6 +794,34 @@ impl DesktopController {
         if let Some(attempt) = scheduled_work_attempt(admission)? {
             work.latest_selection_generation = Some(intent.selection().generation());
             work.pending_selection = Some(PendingDesktopSessionDetail { attempt, intent });
+        }
+        Ok(admission)
+    }
+
+    pub fn request_session_page(
+        &self,
+        intent: DesktopSessionPageIntent,
+    ) -> Result<DesktopRefreshAdmission, DesktopControllerError> {
+        if self.snapshot_epoch() != Some(intent.snapshot_epoch()) {
+            return Err(DesktopControllerError::new(
+                DesktopControllerErrorCode::StaleNavigation,
+            ));
+        }
+        let mut work = lock_work(&self.work)?;
+        if work
+            .latest_navigation_generation
+            .is_some_and(|current| intent.navigation_generation() <= current)
+        {
+            return Err(DesktopControllerError::new(
+                DesktopControllerErrorCode::StaleNavigation,
+            ));
+        }
+        let admission = self.submit(DesktopRefreshUrgency::Interactive)?;
+        if let Some(attempt) = scheduled_work_attempt(admission)? {
+            work.latest_navigation_generation = Some(intent.navigation_generation());
+            work.pending_navigation = Some(PendingDesktopSessionPage { attempt, intent });
+            work.latest_selection_generation = None;
+            work.pending_selection = None;
         }
         Ok(admission)
     }
@@ -840,6 +955,12 @@ fn execute_work<S: DesktopQuerySource>(
             return outcome;
         }
     }
+    if let Some(navigation) = batch.navigation {
+        let outcome = execute_session_page(source, reducer, permit, context, navigation);
+        if outcome != RefreshOutcome::Completed {
+            return outcome;
+        }
+    }
     if batch.refresh {
         execute_refresh(
             source,
@@ -913,6 +1034,68 @@ fn execute_session_detail<S: DesktopQuerySource>(
         return RefreshOutcome::Failed;
     }
     publish_snapshot(reducer.snapshot(), context.publication)
+}
+
+fn execute_session_page<S: DesktopQuerySource>(
+    source: &mut S,
+    reducer: &mut ProductReducer,
+    permit: &RefreshPermit,
+    context: &DesktopExecutionContext<'_>,
+    intent: DesktopSessionPageIntent,
+) -> RefreshOutcome {
+    let Some(attempt) = ProductAttemptGeneration::new(permit.id().get()) else {
+        return RefreshOutcome::Failed;
+    };
+    if let Some(outcome) = stop_outcome(permit, context.clock) {
+        return outcome;
+    }
+    if !navigation_is_current(reducer, context, intent) {
+        let _ = clear_navigation_if_current(context.work, intent.navigation_generation());
+        return RefreshOutcome::Completed;
+    }
+
+    let request = match intent.direction() {
+        DesktopSessionPageDirection::Newest => Ok(context.plan.sessions.clone()),
+        DesktopSessionPageDirection::Next => reducer
+            .snapshot()
+            .sessions()
+            .payload()
+            .and_then(|sessions| sessions.payload().next_cursor())
+            .cloned()
+            .ok_or(QueryErrorCode::InvalidValue)
+            .and_then(|cursor| {
+                UsageSessionPageRequest::continuation(
+                    context.plan.sessions.page_size(),
+                    cursor,
+                    context.plan.sessions.scopes().to_vec(),
+                )
+                .map_err(|error| error.code())
+            }),
+    };
+    let result = match request {
+        Ok(request) => source.usage_sessions(request).map_err(|error| error.code()),
+        Err(code) => Err(code),
+    };
+    if let Some(outcome) = stop_outcome(permit, context.clock) {
+        return outcome;
+    }
+    if !navigation_is_current(reducer, context, intent) {
+        let _ = clear_navigation_if_current(context.work, intent.navigation_generation());
+        return RefreshOutcome::Completed;
+    }
+
+    let reduced = match result {
+        Ok(value) => reducer.publish_sessions(attempt, value),
+        Err(code) => reducer.fail_sessions(attempt, code),
+    };
+    if reduced.is_err() {
+        return RefreshOutcome::Failed;
+    }
+    let outcome = publish_snapshot(reducer.snapshot(), context.publication);
+    if outcome == RefreshOutcome::Completed {
+        let _ = clear_navigation_if_current(context.work, intent.navigation_generation());
+    }
+    outcome
 }
 
 fn execute_refresh<S: DesktopQuerySource>(
@@ -1129,6 +1312,38 @@ fn lock_work(
         .map_err(|_| DesktopControllerError::new(DesktopControllerErrorCode::Internal))
 }
 
+fn invalidate_navigation(state: &mut DesktopWorkState) {
+    state.latest_navigation_generation = None;
+    state.pending_navigation = None;
+}
+
+fn navigation_is_current(
+    reducer: &ProductReducer,
+    context: &DesktopExecutionContext<'_>,
+    intent: DesktopSessionPageIntent,
+) -> bool {
+    if context.snapshot_epoch.load(Ordering::Acquire) != intent.snapshot_epoch().get()
+        || reducer.snapshot().generation() != intent.product_generation()
+    {
+        return false;
+    }
+    match lock_work(context.work) {
+        Ok(state) => state.latest_navigation_generation == Some(intent.navigation_generation()),
+        Err(_) => false,
+    }
+}
+
+fn clear_navigation_if_current(
+    work: &DesktopWorkSlot,
+    generation: DesktopSessionNavigationGeneration,
+) -> Result<(), DesktopControllerError> {
+    let mut state = lock_work(work)?;
+    if state.latest_navigation_generation == Some(generation) {
+        invalidate_navigation(&mut state);
+    }
+    Ok(())
+}
+
 fn scheduled_work_attempt(
     admission: DesktopRefreshAdmission,
 ) -> Result<Option<u64>, DesktopControllerError> {
@@ -1166,7 +1381,25 @@ fn take_work_batch(state: &mut DesktopWorkState, attempt: u64) -> DesktopWorkBat
         }
         Some(_) | None => None,
     };
-    DesktopWorkBatch { refresh, selection }
+    let navigation = match state.pending_navigation {
+        Some(pending) if pending.attempt == attempt => {
+            state.pending_navigation = None;
+            Some(pending.intent)
+        }
+        Some(pending) if pending.attempt < attempt => {
+            state.pending_navigation = None;
+            if state.latest_navigation_generation == Some(pending.intent.navigation_generation()) {
+                state.latest_navigation_generation = None;
+            }
+            None
+        }
+        Some(_) | None => None,
+    };
+    DesktopWorkBatch {
+        refresh,
+        selection,
+        navigation,
+    }
 }
 
 fn map_admission(value: RefreshAdmission) -> DesktopRefreshAdmission {
@@ -1285,17 +1518,20 @@ mod tests {
             refresh_attempt: Some(2),
             latest_selection_generation: Some(selection.generation()),
             pending_selection: Some(PendingDesktopSessionDetail { attempt: 2, intent }),
+            ..DesktopWorkState::default()
         };
 
         let early = take_work_batch(&mut state, 1);
         assert!(!early.refresh);
         assert!(early.selection.is_none());
+        assert!(early.navigation.is_none());
         assert_eq!(state.refresh_attempt, Some(2));
         assert!(state.pending_selection.is_some());
 
         let exact = take_work_batch(&mut state, 2);
         assert!(exact.refresh);
         assert_eq!(exact.selection, Some(intent));
+        assert!(exact.navigation.is_none());
         assert_eq!(state.refresh_attempt, None);
         assert!(state.pending_selection.is_none());
 
@@ -1304,6 +1540,7 @@ mod tests {
         let stale = take_work_batch(&mut state, 3);
         assert!(!stale.refresh);
         assert!(stale.selection.is_none());
+        assert!(stale.navigation.is_none());
         assert_eq!(state.refresh_attempt, None);
         assert!(state.pending_selection.is_none());
     }
