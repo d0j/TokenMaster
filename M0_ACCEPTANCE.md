@@ -9,10 +9,11 @@ developer gates pass; interactive and uninterrupted 24-hour evidence is missing.
 - Clippy with `-D warnings`, focused tests, full workspace tests, and docs audit pass.
 - Bundled SQLite runtime is exactly 3.53.2.
 - Explicit one-million-row store test passes with 256-row keyset pages.
-- Three layouts, three themes, en/ru, pseudo-locale, and one-window state switches pass.
+- The isolated M0 probe harness (not the current product UI) passes three layouts,
+  three themes, en/ru, pseudo-locale, and one-window state switches.
 - Native tray close keeps the exact process alive; the smoke harness cleans its PID.
-- Software structured stress passes for 10K skins, 10K routes, and 1M rows plus 10K
-  skins. The 1M case ended at 69.85 MiB with zero retained sampled bytes/objects.
+- The probe harness software stress passes for 10K skins, 10K routes, and 1M rows plus
+  10K skins. The 1M case ended at 69.85 MiB with zero retained sampled bytes/objects.
 - A 0.01-hour soak harness smoke passes and cleans the process.
 - A clean-commit long run reached about nine wall-clock hours and 896 samples. The same
   process survived and resumed after Windows low power with stable one-hour resource
