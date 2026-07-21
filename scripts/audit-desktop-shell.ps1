@@ -1445,16 +1445,40 @@ if ($controllerText -notmatch 'pub const MAX_SESSION_ROWS: usize = 64;' -or
     $controllerText -notmatch 'PageSize::new\(Self::MAX_SESSION_ROWS\)') {
     throw 'TM-DESKTOP-SESSIONS-REQUEST: sessions query must remain one bounded first page'
 }
-$sessionsProjectionCallCount = [regex]::Matches($uiRustText, 'apply_sessions_projection\(').Count
-if ($sessionsProjectionCallCount -ne 2) {
-    throw 'TM-DESKTOP-SESSIONS-REBUILD: sessions models must not rebuild during route-only selection'
+$applyProjectionText = Get-RustFunctionText -Text $uiRustProductionText -Name 'apply_projection'
+$applyRouteProjectionText = Get-RustFunctionText -Text $uiRustProductionText -Name 'apply_route_projection'
+$applySessionsProjectionText = Get-RustFunctionText -Text $uiRustProductionText -Name 'apply_sessions_projection'
+if ([regex]::Matches($applyProjectionText, 'apply_sessions_projection\(').Count -ne 1 -or
+    $applyRouteProjectionText -match 'apply_sessions_projection\(') {
+    throw 'TM-DESKTOP-SESSIONS-REBUILD: only accepted product projection delivery may replace Sessions rows'
 }
+$sessionsProjectionApplicationCount = [regex]::Matches($applyProjectionText, 'apply_sessions_projection\(').Count
 $sessionsModelReplacementCount = [regex]::Matches(
     $uiRustText,
     'set_session_list_rows\(model\(rows\)\)'
 ).Count
-if ($sessionsModelReplacementCount -ne 1) {
-    throw 'TM-DESKTOP-SESSIONS-MODEL: sessions must have one bounded model replacement site'
+if ($sessionsModelReplacementCount -ne 1 -or
+    [regex]::Matches($applySessionsProjectionText, 'set_session_list_rows\(model\(rows\)\)').Count -ne 1 -or
+    $applySessionsProjectionText -match '\.(?:push|push_row|extend|set_row_data)\s*\(') {
+    throw 'TM-DESKTOP-SESSIONS-MODEL: Sessions rows must have one replace-only model site without mutation'
+}
+$sessionNavigationText = Get-ExecutableBracedText -Text $controllerText -Pattern '(?m)^\s*fn\s+execute_session_page(?:<[^>]+>)?\s*\(' -FailureCode 'TM-DESKTOP-SESSIONS-NAVIGATION'
+$sessionNavigationCommitText = Get-ExecutableBracedText -Text $controllerText -Pattern '(?m)^\s*fn\s+commit_session_page_with_hook(?:<[^>]+>)?\s*\(' -FailureCode 'TM-DESKTOP-SESSIONS-NAVIGATION'
+$refreshIngressText = Get-RustFunctionText -Text $controllerText -Name 'refresh'
+$sessionNavigationQueuePattern = '(?im)^(?=[^\r\n]*navigation)[^\r\n]*(?:\b(?:VecDeque|HashMap|BTreeMap|LinkedList)\b|\bVec\s*<|\b(?:sync_)?channel\s*(?:::)?\s*(?:<|\())'
+if ($controllerText -notmatch 'pub enum DesktopSessionPageDirection\s*\{\s*Newest,\s*Next,\s*\}' -or
+    $controllerText -notmatch 'pending_navigation:\s*Option<PendingDesktopSessionPage>' -or
+    $controllerText -notmatch 'current_navigation:\s*Option<ActiveDesktopSessionPage>' -or
+    $controllerText -match $sessionNavigationQueuePattern -or
+    $sessionNavigationText -notmatch 'DesktopSessionPageDirection::Newest\s*=>\s*Ok\(context\.plan\.sessions\.clone\(\)\)' -or
+    $sessionNavigationText -notmatch 'DesktopSessionPageDirection::Next\s*=>\s*reducer' -or
+    $sessionNavigationText -match '(?i)\b(?:previous_cursor|cursor_history|navigation_history)\b' -or
+    $refreshIngressText -notmatch 'work\.refresh_attempt\s*=\s*Some\(attempt\);\s*invalidate_navigation\(&mut work\);' -or
+    $sessionNavigationText -notmatch 'navigation_is_current\(reducer, context, permit\.id\(\)\.get\(\), intent\)' -or
+    $sessionNavigationCommitText -notmatch 'context\.snapshot_epoch\.load\(Ordering::Acquire\)\s*==\s*intent\.snapshot_epoch\(\)\.get\(\)' -or
+    $sessionNavigationCommitText -notmatch 'reducer\.snapshot\(\)\.generation\(\)\s*==\s*intent\.product_generation\(\)' -or
+    $sessionNavigationCommitText -notmatch 'active\.intent\.navigation_generation\(\)\s*==\s*intent\.navigation_generation\(\)') {
+    throw 'TM-DESKTOP-SESSIONS-NAVIGATION: Sessions navigation must remain typed, latest-only, refresh-superseded, and stale-fenced'
 }
 $sessionDetailBounds = [ordered]@{
     MAX_SESSION_DETAIL_MODEL_ROWS = 32
@@ -1478,16 +1502,19 @@ if ($controllerText -notmatch 'pending_selection:\s*Option<PendingDesktopSession
     throw 'TM-DESKTOP-SESSION-DETAIL-SLOT: exact detail work must use one latest-only typed slot'
 }
 $presentationText = [System.IO.File]::ReadAllText((Join-Path $sourceRoot 'presentation.rs'))
-$sessionUiBoundaryText = $sessionsText + "`n" + $presentationText + "`n" + $uiRustText + "`n" + $uiText
+$sessionUiBoundaryText = $sessionsText + "`n" + $presentationText + "`n" + $uiRustProductionText + "`n" + $uiText
 if ($sessionUiBoundaryText -match '\bUsageSessionKey\b') {
     throw 'TM-DESKTOP-SESSION-DETAIL-IDENTITY: opaque session keys must remain inside the controller worker'
+}
+if ($sessionUiBoundaryText -match '(?i)\b(?:cursor|session[_-]?key|next[_-]?cursor|previous[_-]?cursor)\b') {
+    throw 'TM-DESKTOP-SESSIONS-PRIVACY: public Desktop and Slint Sessions state must not expose keys or cursors'
 }
 if ($controllerText -notmatch 'source\s*\.usage_session_detail\(key\)' -or
     $controllerText -notmatch 'DesktopSessionDetailIntent' -or
     $uiText -notmatch 'callback select-session\(int\)' -or
     $uiRustText -notmatch 'window\.on_select_session\(' -or
     $uiText -notmatch 'row-focus := FocusScope' -or
-    $uiText -notmatch 'focus-on-tab-navigation:\s*true' -or
+    $uiText -notmatch 'focus-on-tab-navigation:\s*root\.selection-enabled' -or
     $uiText -notmatch 'row-focus\.focus\(\)' -or
     $uiText -notmatch 'row-touch\.has-hover' -or
     $uiText -notmatch 'accessible-action-default') {
@@ -1858,7 +1885,7 @@ if ($SourceOnly) {
         session_detail_project_row_maximum = 32
         sessions_model_replacement_count = $sessionsModelReplacementCount
         session_detail_model_replacement_count = $sessionDetailModelReplacementCount
-        sessions_projection_application_count = $sessionsProjectionCallCount - 1
+        sessions_projection_application_count = $sessionsProjectionApplicationCount
         sessions_polling_surface_count = 0
         restore_point_maximum = 15
         restore_model_replacement_count = $restoreModelReplacementCount
@@ -2057,7 +2084,7 @@ if ($LASTEXITCODE -ne 0) {
     session_detail_project_row_maximum = 32
     sessions_model_replacement_count = $sessionsModelReplacementCount
     session_detail_model_replacement_count = $sessionDetailModelReplacementCount
-    sessions_projection_application_count = $sessionsProjectionCallCount - 1
+    sessions_projection_application_count = $sessionsProjectionApplicationCount
     sessions_polling_surface_count = 0
     restore_point_maximum = 15
     restore_model_replacement_count = $restoreModelReplacementCount

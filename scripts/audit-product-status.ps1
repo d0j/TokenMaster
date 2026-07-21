@@ -98,6 +98,10 @@ if ($stateText -match '\b(Vec|VecDeque|HashMap|BTreeMap|LinkedList)<') {
 if ($productText -match '\bUsageSessionKey\b') {
     throw 'product session detail must correlate by generation and ordinal without retaining an opaque session key'
 }
+if ($stateText -notmatch 'sessions:\s*ProductSection<QueryEnvelope<UsageSessionPage>>' -or
+    $stateText -match '(?i)\bsession_(?:cursor|key|navigation|history)\b') {
+    throw 'product Sessions state must retain only one bounded typed page without cursor, key, or history state'
+}
 foreach ($pattern in @(
     'session_detail_selection: Option<ProductSessionDetailSelection>',
     'publish_session_detail',
@@ -105,7 +109,10 @@ foreach ($pattern in @(
     'classify_session_detail',
     'ProductSection::unavailable\(attempt, code\)',
     'next\.session_detail_selection = Some\(selection\)',
-    'next\.session_detail = section'
+    'next\.session_detail = section',
+    'next\.sessions = section',
+    'next\.session_detail_selection = None',
+    'next\.session_detail = ProductSection::waiting\(\)'
 )) {
     if ($stateText -notmatch $pattern) {
         throw "product session-detail correlation drifted: $pattern"

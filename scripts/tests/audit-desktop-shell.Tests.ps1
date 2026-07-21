@@ -905,6 +905,91 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-SESSIONS-REQUEST*"
     }
 
+    It "accepts a dedicated accepted Sessions page replacement" {
+        $fixture = New-DesktopAuditFixture -Name "sessions-page-replacement"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\ui.rs") `
+            -Value 'fn apply_accepted_sessions_page_replacement(window: &MainWindow, sessions: &DesktopSessionsProjection) { apply_sessions_projection(window, sessions); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Not -Throw
+    }
+
+    It "rejects untyped Sessions Next navigation" {
+        $fixture = New-DesktopAuditFixture -Name "sessions-next-direction"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'DesktopSessionPageDirection::Next => reducer',
+            'DesktopSessionPageDirection::Forward => reducer'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-NAVIGATION*"
+    }
+
+    It "rejects retaining a Sessions navigation queue" {
+        $fixture = New-DesktopAuditFixture -Name "sessions-navigation-queue"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'pending_navigation: Option<PendingDesktopSessionPage>',
+            'pending_navigation: Vec<PendingDesktopSessionPage>'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-NAVIGATION*"
+    }
+
+    It "rejects exposing a Sessions cursor through Slint" {
+        $fixture = New-DesktopAuditFixture -Name "sessions-cursor-ui"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\models.slint") `
+            -Value 'export struct SessionNavigationLeak { cursor: string }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-PRIVACY*"
+    }
+
+    It "rejects appending to the Sessions list model" {
+        $fixture = New-DesktopAuditFixture -Name "sessions-list-append"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'window.set_session_list_rows(model(rows));',
+            'rows.push(todo!()); window.set_session_list_rows(model(rows));'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-MODEL*"
+    }
+
+    It "rejects refresh that leaves a Sessions navigation active" {
+        $fixture = New-DesktopAuditFixture -Name "sessions-refresh-navigation"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [regex]::Replace(
+            [System.IO.File]::ReadAllText($path),
+            'work\.refresh_attempt\s*=\s*Some\(attempt\);\s*invalidate_navigation\(&mut work\);',
+            'work.refresh_attempt = Some(attempt);',
+            1
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-NAVIGATION*"
+    }
+
+    It "rejects a stale Sessions navigation commit" {
+        $fixture = New-DesktopAuditFixture -Name "sessions-stale-navigation"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '&& reducer.snapshot().generation() == intent.product_generation()',
+            '&& true'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-NAVIGATION*"
+    }
+
     It "rejects exact session-detail presentation-bound drift" {
         $fixture = New-DesktopAuditFixture -Name "session-detail-bound"
         $path = Join-Path $fixture "crates\desktop\src\sessions.rs"
@@ -976,7 +1061,7 @@ Describe "TokenMaster production desktop audit" {
         $fixture = New-DesktopAuditFixture -Name "session-detail-tab-navigation"
         $path = Join-Path $fixture "crates\desktop\ui\views\sessions-view.slint"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            'focus-on-tab-navigation: true;',
+            'focus-on-tab-navigation: root.selection-enabled;',
             'focus-on-tab-navigation: false;'
         )
         [System.IO.File]::WriteAllText($path, $text)

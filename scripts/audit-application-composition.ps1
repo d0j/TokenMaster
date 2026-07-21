@@ -282,12 +282,15 @@ foreach ($contract in @(
     @{ Name = 'TM-APP-NOTIFICATION-PUMP'; Pattern = 'presentation\.pump\(\)'; Count = 1 },
     @{ Name = 'TM-APP-CONTROLLER'; Pattern = 'DesktopController::open\('; Count = 1 },
     @{ Name = 'TM-APP-SESSION-DETAIL-ROUTER'; Pattern = 'DesktopSessionDetailIntentRouter::new\('; Count = 1 },
-    @{ Name = 'TM-APP-SESSION-DETAIL-SHELL'; Pattern = '#\[cfg\(not\(test\)\)\]\s*let shell = DesktopShell::new_with_reliable_state_and_all_sinks\('; Count = 1 },
-    @{ Name = 'TM-APP-LIFECYCLE-TEST-ISOLATION'; Pattern = '#\[cfg\(test\)\]\s*let shell = DesktopShell::new_with_reliable_state_and_session_sink\('; Count = 1 },
+    @{ Name = 'TM-APP-SESSION-DETAIL-SHELL'; Pattern = '#\[cfg\(not\(test\)\)\]\s*let shell = DesktopShell::new_with_reliable_state_and_all_session_sinks\('; Count = 1 },
+    @{ Name = 'TM-APP-LIFECYCLE-TEST-ISOLATION'; Pattern = '#\[cfg\(test\)\]\s*let shell = DesktopShell::new_with_reliable_state_and_session_sinks\('; Count = 1 },
     @{ Name = 'TM-APP-SESSION-DETAIL-INSTALL'; Pattern = 'session_detail_router\s*\.install\(Rc::new\(ApplicationSessionDetailIntentSink::new\('; Count = 1 },
     @{ Name = 'TM-APP-SESSION-DETAIL-CURRENT-BUNDLE'; Pattern = 'bundle\.controller\.request_session_detail\(intent\)'; Count = 1 },
     @{ Name = 'TM-APP-SESSION-DETAIL-SAFE-MODE'; Pattern = 'let Some\(bundle\) = slot\.as_ref\(\) else \{\s*return DesktopSessionDetailIntentAdmission::Rejected'; Count = 1 },
     @{ Name = 'TM-APP-SESSION-DETAIL-NONBLOCKING'; Pattern = 'let Ok\(slot\) = bundle\.try_lock\(\) else \{\s*return DesktopSessionDetailIntentAdmission::Rejected'; Count = 1 },
+    @{ Name = 'TM-APP-SESSION-PAGE-ROUTER'; Pattern = 'DesktopSessionPageIntentRouter::new\('; Count = 1 },
+    @{ Name = 'TM-APP-SESSION-PAGE-SHELL'; Pattern = 'DesktopShell::new_with_reliable_state_and_all_session_sinks\([\s\S]{0,512}?session_page_router\.clone\(\)'; Count = 1 },
+    @{ Name = 'TM-APP-SESSION-PAGE-INSTALL'; Pattern = 'session_page_router\s*\.install\(Rc::new\(ApplicationSessionPageIntentSink::new\(\s*Arc::downgrade\(&bundle\)'; Count = 1 },
     @{ Name = 'TM-APP-LIFECYCLE-ROUTER'; Pattern = 'DesktopLifecycleIntentRouter::new\('; Count = 1 },
     @{ Name = 'TM-APP-LIFECYCLE-INSTALL'; Pattern = 'lifecycle_router\s*\.install\(Rc::new\(ApplicationDesktopLifecycleSink::new\('; Count = 1 },
     @{ Name = 'TM-APP-LIFECYCLE-WEAK'; Pattern = 'struct ApplicationDesktopLifecycleSink\s*\{\s*window:\s*slint::Weak<MainWindow>'; Count = 1 },
@@ -306,6 +309,20 @@ foreach ($contract in @(
     if ($actual -ne $contract.Count) {
         throw "$($contract.Name): expected $($contract.Count), observed $actual"
     }
+}
+
+$sessionPageSinkText = [regex]::Match(
+    $applicationText,
+    '(?s)struct ApplicationSessionPageIntentSink\s*\{.*?impl DesktopSessionPageIntentSink for ApplicationSessionPageIntentSink'
+).Value
+$sessionPageSinkStruct = [regex]::Match(
+    $applicationText,
+    '(?s)struct ApplicationSessionPageIntentSink\s*\{.*?\}'
+).Value
+if ([string]::IsNullOrWhiteSpace($sessionPageSinkText) -or
+    $sessionPageSinkStruct -notmatch '^struct ApplicationSessionPageIntentSink\s*\{\s*bundle:\s*Weak<Mutex<ApplicationBundleSlot>>,\s*\}$' -or
+    $sessionPageSinkText -notmatch 'fn request\(&self, intent: DesktopSessionPageIntent\)[\s\S]*?self\.bundle\.upgrade\(\)[\s\S]*?bundle\.try_lock\(\)[\s\S]*?slot\.as_ref\(\)[\s\S]*?controller\s*\.\s*request_session_page\(intent\)') {
+    throw 'TM-APP-SESSION-PAGE-SINK: Sessions page routing must retain one weak current bundle and use a nonblocking typed request'
 }
 
 $orderedRestoreLaunches = [regex]::Matches(
@@ -328,7 +345,7 @@ if ([string]::IsNullOrWhiteSpace($eventLoopFunction) -or $visibleIndex -lt 0 -or
     throw 'TM-APP-LIFECYCLE-VISIBLE-FALLBACK: visible window must precede optional tray show and the event loop'
 }
 
-if ($applicationText -notmatch 'Weak<Mutex<ApplicationBundleSlot>>' -or
+if ($applicationText -notmatch 'struct ApplicationRuntimeNotifier\s*\{\s*bundle:\s*Weak<Mutex<ApplicationBundleSlot>>' -or
     $applicationText -notmatch 'impl WorkerCompletionNotifier for ApplicationRuntimeNotifier') {
     throw 'TM-APP-WEAK-NOTIFIER: runtime completion notifier must retain only weak application state'
 }

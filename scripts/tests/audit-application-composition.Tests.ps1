@@ -85,6 +85,34 @@ Describe "TokenMaster application composition audit" {
             Should -Throw "*TM-APP-SESSION-DETAIL-NONBLOCKING*"
     }
 
+    It "rejects a strong current-bundle Sessions page sink" {
+        $fixture = New-AppAuditFixture -Name "session-page-strong-bundle"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [regex]::Replace(
+            [System.IO.File]::ReadAllText($path),
+            'struct ApplicationSessionPageIntentSink\s*\{\s*bundle:\s*Weak<Mutex<ApplicationBundleSlot>>',
+            'struct ApplicationSessionPageIntentSink { bundle: Arc<Mutex<ApplicationBundleSlot>>',
+            1
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-SESSION-PAGE-SINK*"
+    }
+
+    It "rejects blocking Sessions page routing on the current bundle" {
+        $fixture = New-AppAuditFixture -Name "session-page-blocking-lock"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'let slot = bundle.try_lock().map_err(|_| ())?;',
+            'let slot = bundle.lock().map_err(|_| ())?;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-SESSION-PAGE-SINK*"
+    }
+
     It "rejects removing the production lifecycle router" {
         $fixture = New-AppAuditFixture -Name "lifecycle-router"
         $path = Join-Path $fixture "crates\app\src\application.rs"
@@ -702,9 +730,11 @@ Describe "TokenMaster application composition audit" {
     It "rejects a strong notifier ownership cycle" {
         $fixture = New-AppAuditFixture -Name "strong-notifier"
         $path = Join-Path $fixture "crates\app\src\application.rs"
-        $text = [System.IO.File]::ReadAllText($path).Replace(
-            'Weak<Mutex<ApplicationBundleSlot>>',
-            'Arc<Mutex<ApplicationBundleSlot>>'
+        $text = [regex]::Replace(
+            [System.IO.File]::ReadAllText($path),
+            'struct ApplicationRuntimeNotifier\s*\{\s*bundle:\s*Weak<Mutex<ApplicationBundleSlot>>',
+            'struct ApplicationRuntimeNotifier { bundle: Arc<Mutex<ApplicationBundleSlot>>',
+            1
         )
         [System.IO.File]::WriteAllText($path, $text)
 
