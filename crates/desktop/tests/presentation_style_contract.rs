@@ -1,5 +1,6 @@
 use tokenmaster_desktop::{
-    DesktopDensity, DesktopPresentationApplyOutcome, DesktopPresentationStyle,
+    DesktopDensity, DesktopPresentationApplyOutcome, DesktopPresentationPersistence,
+    DesktopPresentationStyle,
 };
 
 #[test]
@@ -60,4 +61,82 @@ fn density_keys_and_slint_indices_are_fixed() {
         assert_eq!(density.stable_key(), stable_key);
         assert_eq!(density.slint_index(), slint_index);
     }
+}
+
+#[test]
+fn persistence_reconciliation_never_overwrites_a_newer_unsaved_selection() {
+    let mut style = DesktopPresentationStyle::from_persisted(DesktopDensity::Comfortable);
+    assert_eq!(
+        style.select_density_index_if_admitted(1, |_| true),
+        DesktopPresentationApplyOutcome::Applied
+    );
+    assert_eq!(style.persistence(), DesktopPresentationPersistence::Saving);
+    assert_eq!(
+        style.select_density_index_if_admitted(2, |_| true),
+        DesktopPresentationApplyOutcome::Applied
+    );
+    assert_eq!(
+        style.observe_persisted(DesktopDensity::Compact),
+        DesktopPresentationApplyOutcome::Unchanged
+    );
+    assert_eq!(style.density(), DesktopDensity::UltraCompact);
+    style.mark_not_saved();
+    assert_eq!(
+        style.persistence(),
+        DesktopPresentationPersistence::NotSaved
+    );
+    assert_eq!(
+        style.observe_persisted(DesktopDensity::UltraCompact),
+        DesktopPresentationApplyOutcome::Unchanged
+    );
+    assert_eq!(style.persistence(), DesktopPresentationPersistence::Saved);
+}
+
+#[test]
+fn explicit_import_override_is_atomic_and_checked() {
+    let mut style = DesktopPresentationStyle::from_persisted(DesktopDensity::Compact);
+    style.select_density_index_if_admitted(2, |_| true);
+    assert_eq!(
+        style.apply_persisted_override(DesktopDensity::Comfortable),
+        DesktopPresentationApplyOutcome::Applied
+    );
+    assert_eq!(style.density(), DesktopDensity::Comfortable);
+    assert_eq!(style.persisted_density(), DesktopDensity::Comfortable);
+    assert_eq!(style.persistence(), DesktopPresentationPersistence::Saved);
+}
+
+#[test]
+fn admission_runs_once_after_validation_and_rejection_preserves_state() {
+    let mut style = DesktopPresentationStyle::from_persisted(DesktopDensity::Comfortable);
+    let unchanged = style;
+    let mut calls = 0;
+    assert_eq!(
+        style.select_density_index_if_admitted(3, |_| {
+            calls += 1;
+            true
+        }),
+        DesktopPresentationApplyOutcome::Rejected
+    );
+    assert_eq!(calls, 0);
+    assert_eq!(style, unchanged);
+
+    assert_eq!(
+        style.select_density_index_if_admitted(0, |_| {
+            calls += 1;
+            true
+        }),
+        DesktopPresentationApplyOutcome::Unchanged
+    );
+    assert_eq!(calls, 0);
+    assert_eq!(style, unchanged);
+
+    assert_eq!(
+        style.select_density_index_if_admitted(1, |_| {
+            calls += 1;
+            false
+        }),
+        DesktopPresentationApplyOutcome::Rejected
+    );
+    assert_eq!(calls, 1);
+    assert_eq!(style, unchanged);
 }

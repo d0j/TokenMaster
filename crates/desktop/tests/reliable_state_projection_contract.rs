@@ -1,9 +1,10 @@
 use tokenmaster_desktop::{
-    DesktopBackupHealth, DesktopBackupPolicy, DesktopIntent, DesktopOperationKind,
-    DesktopOperationPhase, DesktopOperationSnapshot, DesktopRecoveryReceipt,
-    DesktopReliableStateHealth, DesktopReliableStateInput, DesktopReliableStateProjection,
-    DesktopReliableStateSummary, DesktopReminderPolicy, DesktopReminderSyncState,
-    DesktopRestorePointInput, DesktopRestoreSelection, MAX_DESKTOP_RESTORE_POINTS,
+    DesktopBackupHealth, DesktopBackupPolicy, DesktopDensity, DesktopIntent, DesktopOperationKind,
+    DesktopOperationPhase, DesktopOperationSnapshot, DesktopPresentationSettings,
+    DesktopRecoveryReceipt, DesktopReliableStateHealth, DesktopReliableStateInput,
+    DesktopReliableStateProjection, DesktopReliableStateSummary, DesktopReminderPolicy,
+    DesktopReminderSyncState, DesktopRestorePointInput, DesktopRestoreSelection,
+    MAX_DESKTOP_RESTORE_POINTS,
 };
 
 fn restore_point(ordinal: u8) -> DesktopRestorePointInput {
@@ -182,6 +183,60 @@ fn legacy_reliable_state_summary_uses_unavailable_reminder_fallback() {
     assert_eq!(
         projection.reminder_policy(),
         DesktopReminderPolicy::unavailable()
+    );
+}
+
+#[test]
+fn presentation_settings_project_ultra_compact_and_legacy_constructors_are_comfortable() {
+    let summary = DesktopReliableStateSummary::new_with_settings(
+        DesktopReliableStateHealth::Healthy,
+        false,
+        "healthy",
+        DesktopBackupPolicy::disabled(),
+        DesktopReminderPolicy::unavailable(),
+        DesktopPresentationSettings::new(DesktopDensity::UltraCompact),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    );
+    let projection = DesktopReliableStateProjection::from_input(DesktopReliableStateInput::new(
+        9,
+        summary,
+        Vec::new(),
+    ));
+    assert_eq!(
+        projection.presentation().density(),
+        DesktopDensity::UltraCompact
+    );
+
+    let legacy = DesktopReliableStateSummary::new_with_reminder_policy(
+        DesktopReliableStateHealth::Healthy,
+        false,
+        "healthy",
+        DesktopBackupPolicy::disabled(),
+        DesktopReminderPolicy::unavailable(),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    );
+    let legacy_projection = DesktopReliableStateProjection::from_input(
+        DesktopReliableStateInput::new(10, legacy, Vec::new()),
+    );
+    assert_eq!(
+        legacy_projection.presentation(),
+        DesktopPresentationSettings::comfortable()
     );
 }
 

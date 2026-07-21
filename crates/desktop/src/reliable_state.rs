@@ -2,6 +2,8 @@ use core::fmt;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::presentation_style::DesktopDensity;
+
 pub const MAX_DESKTOP_RESTORE_POINTS: usize = 15;
 pub const MIN_BACKUP_PASSPHRASE_SCALARS: usize = 12;
 pub const MAX_BACKUP_PASSPHRASE_SCALARS: usize = 128;
@@ -103,6 +105,28 @@ pub struct DesktopBackupPolicy {
     quiet_seconds: u32,
     interval_seconds: u32,
     retention_budget_bytes: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DesktopPresentationSettings {
+    density: DesktopDensity,
+}
+
+impl DesktopPresentationSettings {
+    #[must_use]
+    pub const fn new(density: DesktopDensity) -> Self {
+        Self { density }
+    }
+
+    #[must_use]
+    pub const fn comfortable() -> Self {
+        Self::new(DesktopDensity::Comfortable)
+    }
+
+    #[must_use]
+    pub const fn density(self) -> DesktopDensity {
+        self.density
+    }
 }
 
 impl DesktopBackupPolicy {
@@ -470,6 +494,7 @@ pub struct DesktopReliableStateSummary {
     settings_health_code: &'static str,
     policy: DesktopBackupPolicy,
     reminder_policy: DesktopReminderPolicy,
+    presentation: DesktopPresentationSettings,
     latest_success_at_utc_ms: Option<i64>,
     latest_attempt_at_utc_ms: Option<i64>,
     successful_count: Option<u64>,
@@ -535,12 +560,51 @@ impl DesktopReliableStateSummary {
         operation: Option<DesktopOperationSnapshot>,
         config_import_preview: Option<DesktopConfigImportPreview>,
     ) -> Self {
+        Self::new_with_settings(
+            health,
+            safe_mode,
+            settings_health_code,
+            policy,
+            reminder_policy,
+            DesktopPresentationSettings::comfortable(),
+            latest_success_at_utc_ms,
+            latest_attempt_at_utc_ms,
+            successful_count,
+            failure_count,
+            published_bytes,
+            latest_failure_code,
+            recovery_receipt,
+            operation,
+            config_import_preview,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[must_use]
+    pub const fn new_with_settings(
+        health: DesktopReliableStateHealth,
+        safe_mode: bool,
+        settings_health_code: &'static str,
+        policy: DesktopBackupPolicy,
+        reminder_policy: DesktopReminderPolicy,
+        presentation: DesktopPresentationSettings,
+        latest_success_at_utc_ms: Option<i64>,
+        latest_attempt_at_utc_ms: Option<i64>,
+        successful_count: Option<u64>,
+        failure_count: Option<u64>,
+        published_bytes: Option<u64>,
+        latest_failure_code: Option<&'static str>,
+        recovery_receipt: Option<DesktopRecoveryReceipt>,
+        operation: Option<DesktopOperationSnapshot>,
+        config_import_preview: Option<DesktopConfigImportPreview>,
+    ) -> Self {
         Self {
             health,
             safe_mode,
             settings_health_code,
             policy,
             reminder_policy,
+            presentation,
             latest_success_at_utc_ms,
             latest_attempt_at_utc_ms,
             successful_count,
@@ -647,6 +711,11 @@ impl DesktopReliableStateProjection {
     #[must_use]
     pub const fn reminder_policy(&self) -> DesktopReminderPolicy {
         self.summary.reminder_policy
+    }
+
+    #[must_use]
+    pub const fn presentation(&self) -> DesktopPresentationSettings {
+        self.summary.presentation
     }
 
     #[must_use]

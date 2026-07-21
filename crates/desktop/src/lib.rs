@@ -42,8 +42,8 @@ pub use presentation::{
     DesktopState,
 };
 pub use presentation_style::{
-    DesktopDensity, DesktopPresentationApplyOutcome, DesktopPresentationRevision,
-    DesktopPresentationStyle,
+    DesktopDensity, DesktopPresentationApplyOutcome, DesktopPresentationPersistence,
+    DesktopPresentationRevision, DesktopPresentationStyle,
 };
 pub use projects::*;
 pub use reliable_state::*;
