@@ -1688,7 +1688,7 @@ if ($SourceOnly) {
         skin_reverse_index_mapping_count = $skinReverseIndexMappingCount
         palette_role_count = $paletteRoles.Count
         palette_exact_rgb_value_count = $paletteRgbValueCount
-        palette_slot_count = $skinRootBindingCount
+        palette_slot_count = $paletteSlotCount
         skin_root_callback_count = $skinRootCallbackCount
         skin_settings_callback_count = $settingsSkinCallbackCount
         skin_forward_binding_count = $skinForwardBindingCount
@@ -1878,7 +1878,7 @@ if ($LASTEXITCODE -ne 0) {
     skin_reverse_index_mapping_count = $skinReverseIndexMappingCount
     palette_role_count = $paletteRoles.Count
     palette_exact_rgb_value_count = $paletteRgbValueCount
-    palette_slot_count = $skinRootBindingCount
+    palette_slot_count = $paletteSlotCount
     skin_root_callback_count = $skinRootCallbackCount
     skin_settings_callback_count = $settingsSkinCallbackCount
     skin_forward_binding_count = $skinForwardBindingCount

@@ -1152,4 +1152,13 @@ Describe "TokenMaster application composition audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-APP-OPERATION-SPAWN*"
     }
+
+    It "rejects a generic second operation channel bypass" {
+        $fixture = New-AppAuditFixture -Name "presentation-second-generic-channel"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\operation.rs") `
+            -Value 'fn presentation_channel() { let _ = std::sync::mpsc::sync_channel::<u8>(2); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-OPERATION-SPAWN*"
+    }
 }

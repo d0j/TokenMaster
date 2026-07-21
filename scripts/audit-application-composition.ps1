@@ -102,8 +102,10 @@ if ([regex]::Matches($commandExecutable, 'ApplicationCommand::UpdatePresentation
     $commandExecutable -match 'UpdatePresentation(?:Density|Skin)|Presentation(?:Density|Skin)\(') {
     throw 'TM-APP-PRESENTATION-COMPLETE: application presentation requests carry one complete density and skin pair'
 }
-if ([regex]::Matches($operationText, '(?:thread::)?Builder::new\(\)').Count -ne 1 -or
-    $operationText -match 'thread::spawn|slint::Timer|VecDeque|sync_channel\([^1]') {
+$operationExecutable = [regex]::Replace($operationText, '(?ms)//.*?$|/\*.*?\*/|"(?:\\.|[^"\\])*"', ' ')
+if ([regex]::Matches($operationExecutable, '(?:thread::)?Builder::new\(\)').Count -ne 1 -or
+    [regex]::Matches($operationExecutable, 'sync_channel\s*(?:::\s*<[^>]+>)?\s*\(').Count -gt 1 -or
+    $operationExecutable -match 'thread::spawn|slint::Timer|VecDeque') {
     throw 'TM-APP-OPERATION-SPAWN: complete presentation reuses the sole bounded worker authority'
 }
 $reminderRuntimeText = [System.IO.File]::ReadAllText($reminderRuntimePath)
