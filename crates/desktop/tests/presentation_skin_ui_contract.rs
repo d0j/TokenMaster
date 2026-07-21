@@ -315,6 +315,56 @@ fn palette_ownership_guard_rejects_a_second_family_branch() {
 }
 
 #[test]
+fn palette_ownership_guard_rejects_a_second_palette_typed_property() {
+    let tokens = include_str!("../ui/tokens.slint");
+    let bypass = tokens.replacen(
+        "    in-out property <int> density-id: 0;",
+        "    in-out property <UiPalette> secondary: palette;\n    in-out property <int> density-id: 0;",
+        1,
+    );
+    assert!(
+        assert_palette_ownership(&bypass).is_err(),
+        "a second UiPalette property must fail closed"
+    );
+}
+
+#[test]
+fn palette_ownership_guard_rejects_an_extra_brush_alias() {
+    let tokens = include_str!("../ui/tokens.slint");
+    let bypass = tokens.replacen(
+        "    out property <length> space-xs:",
+        "    out property <brush> shadow: root.palette.shadow;\n    out property <length> space-xs:",
+        1,
+    );
+    assert!(
+        assert_palette_ownership(&bypass).is_err(),
+        "an extra palette brush alias must fail closed"
+    );
+}
+
+#[test]
+fn palette_ownership_guard_tolerates_whitespace_and_comments() {
+    let tokens = include_str!("../ui/tokens.slint");
+    let formatted = tokens
+        .replacen(
+            "export struct UiPalette {",
+            "export /* palette */ struct\nUiPalette\n{",
+            1,
+        )
+        .replacen(
+            "in-out property <UiPalette> palette:",
+            "in-out\nproperty <\nUiPalette\n> palette:",
+            1,
+        )
+        .replacen(
+            "out property <color> background: palette.background;",
+            "out /* alias */ property < color > background: palette /* role */.background;",
+            1,
+        );
+    assert_palette_ownership(&formatted).expect("lexical palette ownership guard");
+}
+
+#[test]
 fn stale_terminal_cannot_replace_new_skin_but_import_and_portable_restore_replace_both_axes() {
     i_slint_backend_testing::init_no_event_loop();
 
@@ -459,18 +509,21 @@ fn assert_palette(palette: tokenmaster_desktop::UiPalette, skin: DesktopSkin) {
 }
 
 fn assert_palette_ownership(tokens: &str) -> Result<(), String> {
-    if count(tokens, "export struct UiPalette") != 1 || count(tokens, "export struct") != 1 {
+    let tokens = compact_slint_source(tokens);
+    if count(&tokens, "exportstructUiPalette{") != 1 || count(&tokens, "exportstruct") != 1 {
         return Err(String::from("exactly one UiPalette struct"));
     }
-    if count(tokens, "export global UiTokens") != 1 || count(tokens, "export global") != 1 {
+    if count(&tokens, "exportglobalUiTokens{") != 1 || count(&tokens, "exportglobal") != 1 {
         return Err(String::from("exactly one UiTokens global"));
     }
-    if count(tokens, "in-out property <UiPalette> palette") != 1 || count(tokens, "palette:") != 1 {
+    if count(&tokens, "property<UiPalette>") != 1
+        || count(&tokens, "in-outproperty<UiPalette>palette:") != 1
+    {
         return Err(String::from(
             "exactly one complete palette input and assignment",
         ));
     }
-    for role in [
+    let roles = [
         "background",
         "surface",
         "surface-raised",
@@ -486,10 +539,14 @@ fn assert_palette_ownership(tokens: &str) -> Result<(), String> {
         "waiting",
         "degraded",
         "unavailable",
-    ] {
+    ];
+    if count(&tokens, "property<color>") + count(&tokens, "property<brush>") != roles.len() {
+        return Err(String::from("exactly fifteen palette brush aliases"));
+    }
+    for role in roles {
         if count(
-            tokens,
-            &format!("out property <color> {role}: palette.{role};"),
+            &tokens,
+            &format!("outproperty<color>{role}:palette.{role};"),
         ) != 1
         {
             return Err(format!("{role} must be one palette alias"));
@@ -514,6 +571,45 @@ fn assert_palette_ownership(tokens: &str) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn compact_slint_source(source: &str) -> String {
+    let mut compact = String::new();
+    let mut chars = source.chars().peekable();
+    while let Some(character) = chars.next() {
+        if character == '"' || character == '\'' {
+            let quote = character;
+            let mut escaped = false;
+            for quoted_character in chars.by_ref() {
+                if escaped {
+                    escaped = false;
+                } else if quoted_character == '\\' {
+                    escaped = true;
+                } else if quoted_character == quote {
+                    break;
+                }
+            }
+        } else if character == '/' && chars.peek() == Some(&'/') {
+            chars.next();
+            for comment_character in chars.by_ref() {
+                if comment_character == '\n' {
+                    break;
+                }
+            }
+        } else if character == '/' && chars.peek() == Some(&'*') {
+            chars.next();
+            let mut previous = '\0';
+            for comment_character in chars.by_ref() {
+                if previous == '*' && comment_character == '/' {
+                    break;
+                }
+                previous = comment_character;
+            }
+        } else if !character.is_whitespace() {
+            compact.push(character);
+        }
+    }
+    compact
 }
 
 fn count(haystack: &str, needle: &str) -> usize {
