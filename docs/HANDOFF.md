@@ -885,6 +885,14 @@ unavailable state remains closed. Focused tests and independent code/audit rerev
 Critical/Important/Minor 0/0/0. The preceding baseline timings are historical; the new
 final baseline receipt is recorded below.
 
+The corrective final receipt passes Desktop mutations 242/242 and application mutations
+105/105 in one 318.7-second invocation. Product/Desktop/application release audits pass
+in 4.721/122.476/108.940 seconds. The required clean-root/fmt/strict workspace Clippy/
+complete locked workspace test-doctest chain exits zero in 896.0 seconds; its first
+three stages are 4.675/1.928/36.025 seconds. The only reported dependency warning is the
+known future incompatibility of `proc-macro-error2 v2.0.1`. This remains developer
+closure, not M0/package/signing/soak/release acceptance.
+
 P3-D.3 Models is implemented under
 `docs/superpowers/specs/2026-07-19-tokenmaster-models-route-design.md` and
 `docs/superpowers/plans/2026-07-19-tokenmaster-models-route.md`. The existing fixed

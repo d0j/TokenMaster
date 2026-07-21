@@ -204,6 +204,12 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   controller/projection/UI/app tests and independent code/audit reviews are 0/0/0. The
   earlier 679.7-second baseline predates this correction and is superseded by the final
   gate receipt recorded below before handoff.
+  Final corrective receipt: Desktop mutations 242/242 and application mutations 105/105
+  pass in one 318.7-second invocation; product/Desktop/application release audits pass
+  in 4.721/122.476/108.940 seconds. The exact required baseline chain exits zero in
+  896.0 seconds: clean-root 4.675 seconds, formatting 1.928 seconds, strict workspace
+  Clippy 36.025 seconds, then the complete locked workspace test/doctest suite. The
+  dependency-only future-incompatibility warning remains `proc-macro-error2 v2.0.1`.
 - P3-D.3 bounded Models route: the fixed recent-30-day History request now captures
   Model and Project breakdowns in one immutable envelope, so History, Models, and the
   Projects route share exact range/timezone/freshness without a third analytics

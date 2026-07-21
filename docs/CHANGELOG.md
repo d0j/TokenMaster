@@ -22,6 +22,9 @@ All notable changes are recorded here.
   handling is idempotent, synchronous errors remain visible, retained failed pages can
   return to newest, and initial unavailable state stays closed. No polling loop, worker,
   queue, cursor history, or second page/model was added.
+  The corrective receipt passes 242/242 Desktop and 105/105 application mutations,
+  three release audits, and the exact clean-root/fmt/strict-Clippy/locked-workspace
+  baseline; independent final code and audit reviews are 0/0/0.
 
 - Added the historical P4-B durable density verification: at that boundary settings schema v2 persisted one
   fixed three-value density, strict v1 migrates in memory without a startup write,

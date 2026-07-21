@@ -3848,3 +3848,10 @@ prove notifier delivery before polling, NotStarted/no-query/no-snapshot behavior
 stale equality, and snapshot-before-terminal coalescing. Mutation rails reject removed,
 comment-only, nested-comment, cfg-test-only, unreachable, unbounded, and lock-order
 variants. Independent final code and audit reviews are 0/0/0.
+
+The corrected full receipt passes 242/242 Desktop and 105/105 application mutations in
+318.7 seconds, then product/Desktop/application release audits in
+4.721/122.476/108.940 seconds. The required baseline chain exits zero in 896.0 seconds:
+clean-root 4.675 seconds, formatting 1.928 seconds, strict workspace Clippy 36.025
+seconds, and the complete locked workspace test/doctest suite. No release acceptance is
+inferred.
