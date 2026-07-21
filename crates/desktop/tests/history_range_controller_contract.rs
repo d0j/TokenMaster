@@ -224,6 +224,77 @@ impl DesktopQuerySource for BlockingDetailSource {
     }
 }
 
+struct BlockingRefreshSource {
+    inner: QueryService<FixedClock>,
+    armed: Arc<AtomicBool>,
+    entered: Option<SyncSender<()>>,
+    release: Option<Receiver<()>>,
+}
+
+impl DesktopQuerySource for BlockingRefreshSource {
+    fn product_data_status(&mut self) -> Result<ProductDataStatusEnvelope, QueryError> {
+        if self.armed.swap(false, Ordering::AcqRel) {
+            self.entered
+                .take()
+                .expect("refresh entry sender")
+                .send(())
+                .expect("refresh entry signal");
+            self.release
+                .take()
+                .expect("refresh release receiver")
+                .recv()
+                .expect("refresh release");
+        }
+        self.inner.product_data_status()
+    }
+
+    fn usage_analytics(
+        &mut self,
+        request: UsageAnalyticsRequest,
+    ) -> Result<QueryEnvelope<UsageAnalytics>, QueryError> {
+        self.inner.usage_analytics(request)
+    }
+
+    fn quota_overview(&mut self) -> Result<QuotaEnvelope<QuotaCurrentSnapshot>, QueryError> {
+        self.inner.quota_overview()
+    }
+
+    fn benefit_overview(
+        &mut self,
+        request: BenefitOverviewRequest,
+    ) -> Result<BenefitOverviewEnvelope<BenefitOverviewSnapshot>, QueryError> {
+        self.inner.benefit_overview(request)
+    }
+
+    fn git_output(
+        &mut self,
+        request: GitOutputRequest,
+    ) -> Result<GitEnvelope<GitOutputSnapshot>, QueryError> {
+        self.inner.git_output(request)
+    }
+
+    fn latest_activity(
+        &mut self,
+        request: LatestActivityRequest,
+    ) -> Result<QueryEnvelope<LatestActivityPage>, QueryError> {
+        self.inner.latest_activity(request)
+    }
+
+    fn usage_sessions(
+        &mut self,
+        request: UsageSessionPageRequest,
+    ) -> Result<QueryEnvelope<UsageSessionPage>, QueryError> {
+        self.inner.usage_sessions(request)
+    }
+
+    fn usage_session_detail(
+        &mut self,
+        key: UsageSessionKey,
+    ) -> Result<QueryEnvelope<UsageSessionDetailResult>, QueryError> {
+        self.inner.usage_session_detail(key)
+    }
+}
+
 struct RecordingHistoryTerminalNotifier {
     sender: SyncSender<DesktopHistoryRangeIntent>,
 }
@@ -468,6 +539,92 @@ fn active_detail_query_keeps_history_range_busy_until_terminal_completion() {
         .request_history_range(recovered_range)
         .expect("detail completion clears active scalar");
     let _ = wait_for_completion(&controller);
+    controller.shutdown().expect("shutdown");
+}
+
+#[test]
+fn ten_thousand_range_intents_keep_only_the_direct_latest_follow_up() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("history-range-direct-latest.sqlite3");
+    seed(&path);
+    let range_armed = Arc::new(AtomicBool::new(false));
+    let (entered_sender, entered_receiver) = sync_channel(1);
+    let (release_sender, release_receiver) = sync_channel(1);
+    let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+    let mut controller = DesktopController::spawn(
+        BlockingDetailSource {
+            inner: QueryService::open(&path, FixedClock).expect("query service"),
+            entered: None,
+            release: None,
+            range_armed: Arc::clone(&range_armed),
+            range_entered: Some(entered_sender),
+            range_release: Some(release_receiver),
+            drift_armed: Arc::new(AtomicBool::new(false)),
+            drift: None,
+            range_failure: Arc::new(AtomicBool::new(false)),
+        },
+        DesktopQueryPlan::overview().expect("plan"),
+    )
+    .expect("controller");
+    controller.bind_snapshot_epoch(epoch).expect("bind epoch");
+    controller
+        .refresh(DesktopRefreshUrgency::Interactive)
+        .expect("initial refresh");
+    let _ = wait_for_completion(&controller);
+    let initial = controller
+        .take_snapshot()
+        .expect("mailbox")
+        .expect("initial snapshot");
+
+    range_armed.store(true, Ordering::Release);
+    for generation in 1..=10_000_u64 {
+        let preset = if generation % 2 == 0 {
+            DesktopHistoryRangePreset::Recent7Days
+        } else {
+            DesktopHistoryRangePreset::Recent1Day
+        };
+        let admission = controller
+            .request_history_range(DesktopHistoryRangeIntent::new(
+                epoch,
+                initial.generation(),
+                DesktopHistoryRangeGeneration::new(generation).expect("range generation"),
+                preset,
+            ))
+            .expect("direct latest range admission");
+        if generation == 1 {
+            assert!(matches!(
+                admission,
+                tokenmaster_desktop::DesktopRefreshAdmission::Started { .. }
+            ));
+            entered_receiver
+                .recv_timeout(Duration::from_secs(2))
+                .expect("first range query entered");
+        } else {
+            assert!(matches!(
+                admission,
+                tokenmaster_desktop::DesktopRefreshAdmission::Coalesced { .. }
+            ));
+        }
+    }
+    release_sender.send(()).expect("release first range");
+    let _ = wait_for_completion(&controller);
+    let _ = wait_for_completion(&controller);
+    let published = controller
+        .take_snapshot()
+        .expect("mailbox")
+        .expect("latest range snapshot");
+    assert_eq!(
+        controller
+            .request_history_range(DesktopHistoryRangeIntent::new(
+                epoch,
+                published.generation(),
+                DesktopHistoryRangeGeneration::new(10_001).expect("range generation"),
+                DesktopHistoryRangePreset::Recent7Days,
+            ))
+            .expect_err("only the ten-thousandth direct intent survives")
+            .stable_code(),
+        "stale_history_range"
+    );
     controller.shutdown().expect("shutdown");
 }
 
@@ -749,6 +906,92 @@ fn accepted_success_advances_preset_and_accepted_failure_retains_it() {
         controller
             .request_history_range(retained_preset)
             .expect_err("failure retains last successful preset")
+            .stable_code(),
+        "stale_history_range"
+    );
+    controller.shutdown().expect("shutdown");
+}
+
+#[test]
+fn range_queued_behind_exact_refresh_rebinds_once_to_its_published_generation() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("history-range-refresh-rebind.sqlite3");
+    seed(&path);
+    let armed = Arc::new(AtomicBool::new(false));
+    let (entered_sender, entered_receiver) = sync_channel(1);
+    let (release_sender, release_receiver) = sync_channel(1);
+    let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+    let mut controller = DesktopController::spawn(
+        BlockingRefreshSource {
+            inner: QueryService::open(&path, FixedClock).expect("query service"),
+            armed: Arc::clone(&armed),
+            entered: Some(entered_sender),
+            release: Some(release_receiver),
+        },
+        DesktopQueryPlan::overview().expect("plan"),
+    )
+    .expect("controller");
+    controller.bind_snapshot_epoch(epoch).expect("bind epoch");
+    controller
+        .refresh(DesktopRefreshUrgency::Interactive)
+        .expect("initial refresh");
+    let _ = wait_for_completion(&controller);
+    let initial = controller
+        .take_snapshot()
+        .expect("mailbox")
+        .expect("initial snapshot");
+    let (snapshot_sender, snapshot_receiver) = sync_channel(3);
+    controller
+        .attach_snapshot_notifier(Arc::new(SnapshotBeforeTerminalNotifier {
+            receiver: controller.snapshot_receiver(),
+            sender: snapshot_sender,
+        }))
+        .expect("attach snapshot notifier");
+
+    armed.store(true, Ordering::Release);
+    controller
+        .refresh(DesktopRefreshUrgency::Hint)
+        .expect("blocking refresh");
+    entered_receiver
+        .recv_timeout(Duration::from_secs(2))
+        .expect("refresh query entered");
+    let intent = DesktopHistoryRangeIntent::new(
+        epoch,
+        initial.generation(),
+        DesktopHistoryRangeGeneration::new(1).expect("range generation"),
+        DesktopHistoryRangePreset::Recent1Day,
+    );
+    assert!(matches!(
+        controller
+            .request_history_range(intent)
+            .expect("range queues behind exact refresh"),
+        tokenmaster_desktop::DesktopRefreshAdmission::Coalesced { .. }
+    ));
+    release_sender.send(()).expect("release refresh");
+    let _ = wait_for_completion(&controller);
+    let _ = wait_for_completion(&controller);
+    snapshot_receiver
+        .recv_timeout(Duration::from_secs(2))
+        .expect("refresh snapshot observation");
+    snapshot_receiver
+        .recv_timeout(Duration::from_secs(2))
+        .expect("rebound range snapshot observation");
+    let rebound = controller
+        .take_snapshot()
+        .expect("mailbox")
+        .expect("rebound range snapshot");
+    let same_preset = DesktopHistoryRangeIntent::new(
+        epoch,
+        rebound.generation(),
+        DesktopHistoryRangeGeneration::new(2).expect("range generation"),
+        DesktopHistoryRangePreset::Recent1Day,
+    );
+    assert_eq!(
+        controller
+            .request_history_range(same_preset)
+            .expect_err("only a successful rebound advances the preset")
             .stable_code(),
         "stale_history_range"
     );

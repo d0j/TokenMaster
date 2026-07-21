@@ -684,6 +684,7 @@ struct DesktopWorkBatch {
 #[derive(Clone, Copy)]
 struct PendingDesktopSessionDetail {
     attempt: u64,
+    prerequisite_attempt: Option<u64>,
     intent: DesktopSessionDetailIntent,
 }
 
@@ -710,6 +711,7 @@ struct PendingDesktopHistoryRange {
 struct ActiveDesktopHistoryRange {
     attempt: u64,
     prerequisite_attempt: Option<u64>,
+    rebound_product_generation: Option<ProductGeneration>,
     intent: DesktopHistoryRangeIntent,
 }
 
@@ -788,6 +790,7 @@ fn handle_worker_completion(
     history_range_notifier: &TerminalHistoryRangeNotifier,
     completion: WorkerCompletion,
 ) -> Result<(), DesktopControllerError> {
+    reconcile_session_detail_completion(work, completion)?;
     let navigation = reconcile_navigation_completion(work, completion)?;
     let history_range = reconcile_history_range_completion(work, completion)?;
     notify_terminal_navigation(notifier, navigation);
@@ -1041,9 +1044,9 @@ impl DesktopController {
             ));
         }
         let admission = self.submit(DesktopRefreshUrgency::Interactive)?;
-        if let Some(attempt) = scheduled_work_attempt(admission)? {
+        if let Some(pending) = scheduled_session_detail(admission, intent)? {
             work.latest_selection_generation = Some(intent.selection().generation());
-            work.pending_selection = Some(PendingDesktopSessionDetail { attempt, intent });
+            work.pending_selection = Some(pending);
         }
         Ok(admission)
     }
@@ -1405,10 +1408,14 @@ fn commit_history_range(
         Err(_) => return RefreshOutcome::Failed,
     };
     let valid = context.snapshot_epoch.load(Ordering::Acquire) == intent.snapshot_epoch().get()
-        && reducer.snapshot().generation() == intent.product_generation()
-        && work
-            .current_history_range
-            .is_some_and(|current| current.attempt == worker_attempt && current.intent == intent);
+        && work.current_history_range.is_some_and(|current| {
+            current.intent == intent
+                && history_range_generation_is_current(
+                    current,
+                    worker_attempt,
+                    reducer.snapshot().generation(),
+                )
+        });
     if !valid {
         if work
             .current_history_range
@@ -1793,7 +1800,16 @@ fn execute_refresh<S: DesktopQuerySource>(
         return outcome;
     }
 
-    publish_snapshot(reducer.snapshot(), context.publication)
+    let outcome = publish_snapshot(reducer.snapshot(), context.publication);
+    if outcome == RefreshOutcome::Completed {
+        let generation = reducer.snapshot().generation();
+        let mut work = match lock_work(context.work) {
+            Ok(work) => work,
+            Err(_) => return RefreshOutcome::Failed,
+        };
+        rebind_history_range_after_refresh(&mut work, permit.id().get(), generation);
+    }
+    outcome
 }
 
 fn publish_snapshot(
@@ -1973,16 +1989,43 @@ fn history_range_is_current(
     attempt: u64,
     intent: DesktopHistoryRangeIntent,
 ) -> bool {
-    if context.snapshot_epoch.load(Ordering::Acquire) != intent.snapshot_epoch().get()
-        || reducer.snapshot().generation() != intent.product_generation()
-    {
+    if context.snapshot_epoch.load(Ordering::Acquire) != intent.snapshot_epoch().get() {
         return false;
     }
     match lock_work(context.work) {
-        Ok(state) => state
-            .current_history_range
-            .is_some_and(|current| current.attempt == attempt && current.intent == intent),
+        Ok(state) => state.current_history_range.is_some_and(|current| {
+            current.intent == intent
+                && history_range_generation_is_current(
+                    current,
+                    attempt,
+                    reducer.snapshot().generation(),
+                )
+        }),
         Err(_) => false,
+    }
+}
+
+fn history_range_generation_is_current(
+    current: ActiveDesktopHistoryRange,
+    attempt: u64,
+    product_generation: ProductGeneration,
+) -> bool {
+    current.attempt == attempt
+        && current
+            .rebound_product_generation
+            .unwrap_or(current.intent.product_generation())
+            == product_generation
+}
+
+fn rebind_history_range_after_refresh(
+    state: &mut DesktopWorkState,
+    refresh_attempt: u64,
+    product_generation: ProductGeneration,
+) {
+    if let Some(current) = state.current_history_range.as_mut()
+        && current.prerequisite_attempt == Some(refresh_attempt)
+    {
+        current.rebound_product_generation = Some(product_generation);
     }
 }
 
@@ -2020,6 +2063,30 @@ fn scheduled_work_attempt(
     }
 }
 
+fn scheduled_session_detail(
+    admission: DesktopRefreshAdmission,
+    intent: DesktopSessionDetailIntent,
+) -> Result<Option<PendingDesktopSessionDetail>, DesktopControllerError> {
+    match admission {
+        DesktopRefreshAdmission::Started { attempt } => Ok(Some(PendingDesktopSessionDetail {
+            attempt: attempt.get(),
+            prerequisite_attempt: None,
+            intent,
+        })),
+        DesktopRefreshAdmission::Coalesced {
+            receipt,
+            active_attempt,
+        } => Ok(Some(PendingDesktopSessionDetail {
+            attempt: receipt.get().checked_add(1).ok_or_else(|| {
+                DesktopControllerError::new(DesktopControllerErrorCode::CapacityExceeded)
+            })?,
+            prerequisite_attempt: Some(active_attempt.get()),
+            intent,
+        })),
+        DesktopRefreshAdmission::DeadlineExceeded { .. } => Ok(None),
+    }
+}
+
 fn scheduled_navigation(
     admission: DesktopRefreshAdmission,
     intent: DesktopSessionPageIntent,
@@ -2052,6 +2119,7 @@ fn scheduled_history_range(
         DesktopRefreshAdmission::Started { attempt } => Ok(Some(ActiveDesktopHistoryRange {
             attempt: attempt.get(),
             prerequisite_attempt: None,
+            rebound_product_generation: None,
             intent,
         })),
         DesktopRefreshAdmission::Coalesced {
@@ -2062,6 +2130,7 @@ fn scheduled_history_range(
                 DesktopControllerError::new(DesktopControllerErrorCode::CapacityExceeded)
             })?,
             prerequisite_attempt: Some(active_attempt.get()),
+            rebound_product_generation: None,
             intent,
         })),
         DesktopRefreshAdmission::DeadlineExceeded { .. } => Ok(None),
@@ -2096,9 +2165,6 @@ fn reconcile_history_range_completion(
 ) -> Result<Option<DesktopHistoryRangeIntent>, DesktopControllerError> {
     let mut state = lock_work(work)?;
     let completed = completion.request_id().get();
-    if state.active_selection_attempt == Some(completed) {
-        state.active_selection_attempt = None;
-    }
     let clear_current = state.current_history_range.is_some_and(|current| {
         current.attempt == completed
             || (!completion.follow_up_started()
@@ -2113,6 +2179,29 @@ fn reconcile_history_range_completion(
         return Ok(intent);
     }
     Ok(None)
+}
+
+fn reconcile_session_detail_completion(
+    work: &DesktopWorkSlot,
+    completion: WorkerCompletion,
+) -> Result<(), DesktopControllerError> {
+    let mut state = lock_work(work)?;
+    let completed = completion.request_id().get();
+    if state.active_selection_attempt == Some(completed) {
+        state.active_selection_attempt = None;
+    }
+    let clear_pending = state.pending_selection.is_some_and(|pending| {
+        pending.attempt == completed
+            || (!completion.follow_up_started()
+                && (completion.pending_deadline_exceeded()
+                    || completion.pending_capacity_exceeded()
+                    || completion.follow_up_abandoned())
+                && pending.prerequisite_attempt == Some(completed))
+    });
+    if clear_pending {
+        state.pending_selection = None;
+    }
+    Ok(())
 }
 
 fn take_work_batch(state: &mut DesktopWorkState, attempt: u64) -> DesktopWorkBatch {
@@ -2297,7 +2386,11 @@ mod tests {
         let mut state = DesktopWorkState {
             refresh_attempt: Some(2),
             latest_selection_generation: Some(selection.generation()),
-            pending_selection: Some(PendingDesktopSessionDetail { attempt: 2, intent }),
+            pending_selection: Some(PendingDesktopSessionDetail {
+                attempt: 2,
+                prerequisite_attempt: None,
+                intent,
+            }),
             ..DesktopWorkState::default()
         };
 
@@ -2316,7 +2409,11 @@ mod tests {
         assert!(state.pending_selection.is_none());
 
         state.refresh_attempt = Some(2);
-        state.pending_selection = Some(PendingDesktopSessionDetail { attempt: 2, intent });
+        state.pending_selection = Some(PendingDesktopSessionDetail {
+            attempt: 2,
+            prerequisite_attempt: None,
+            intent,
+        });
         let stale = take_work_batch(&mut state, 3);
         assert!(!stale.refresh);
         assert!(stale.selection.is_none());
@@ -2345,6 +2442,134 @@ mod tests {
                 HistoryRangePublicationAction::TerminalRollback
             );
         }
+    }
+
+    #[test]
+    fn history_range_rebind_is_limited_to_its_exact_prerequisite_refresh() {
+        let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+        let intent = DesktopHistoryRangeIntent::new(
+            epoch,
+            ProductGeneration::INITIAL,
+            DesktopHistoryRangeGeneration::new(1).expect("generation"),
+            DesktopHistoryRangePreset::Recent1Day,
+        );
+        let mut reducer = ProductReducer::new();
+        reducer
+            .fail_history(
+                ProductAttemptGeneration::new(1).expect("attempt"),
+                invalid_query().code(),
+            )
+            .expect("advance generation");
+        let rebound = reducer.snapshot().generation();
+        let mut state = DesktopWorkState {
+            current_history_range: Some(ActiveDesktopHistoryRange {
+                attempt: 2,
+                prerequisite_attempt: Some(1),
+                rebound_product_generation: None,
+                intent,
+            }),
+            ..DesktopWorkState::default()
+        };
+        rebind_history_range_after_refresh(&mut state, 3, rebound);
+        let active = state.current_history_range.expect("current range");
+        assert!(!history_range_generation_is_current(active, 2, rebound));
+        rebind_history_range_after_refresh(&mut state, 1, rebound);
+        let active = state.current_history_range.expect("current range");
+        assert!(history_range_generation_is_current(active, 2, rebound));
+        assert!(!history_range_generation_is_current(active, 3, rebound));
+        assert!(!history_range_generation_is_current(
+            active,
+            2,
+            ProductGeneration::INITIAL
+        ));
+    }
+
+    #[test]
+    fn history_request_is_a_fixed_system_zone_daily_model_project_shape() {
+        let request = DesktopQueryPlan::history_request(DesktopHistoryRangePreset::Recent7Days)
+            .expect("history request");
+        assert_eq!(
+            request.range(),
+            &UsageRange::recent_days(7).expect("bounded recent range")
+        );
+        assert_eq!(request.time_zone(), &UsageTimeZone::system());
+        assert_eq!(request.week_start(), WeekStart::Monday);
+        assert_eq!(request.series(), UsageSeriesSelection::Daily);
+        assert!(request.scopes().is_empty());
+        assert_eq!(
+            request.breakdowns(),
+            [UsageBreakdownKind::Model, UsageBreakdownKind::Project]
+        );
+    }
+
+    #[test]
+    fn range_and_session_slots_are_mutually_exclusive_in_active_and_pending_states() {
+        let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+        let range = DesktopHistoryRangeIntent::new(
+            epoch,
+            ProductGeneration::INITIAL,
+            DesktopHistoryRangeGeneration::new(1).expect("range generation"),
+            DesktopHistoryRangePreset::Recent1Day,
+        );
+        let detail = DesktopSessionDetailIntent::new(
+            epoch,
+            ProductGeneration::INITIAL,
+            ProductSessionDetailSelection::new(
+                ProductSessionDetailSelectionGeneration::new(1).expect("selection generation"),
+                0,
+            ),
+        );
+        let page = DesktopSessionPageIntent::new(
+            epoch,
+            ProductGeneration::INITIAL,
+            DesktopSessionNavigationGeneration::new(1).expect("page generation"),
+            DesktopSessionPageDirection::Newest,
+        );
+        let range_active = ActiveDesktopHistoryRange {
+            attempt: 1,
+            prerequisite_attempt: None,
+            rebound_product_generation: None,
+            intent: range,
+        };
+        let mut state = DesktopWorkState {
+            current_history_range: Some(range_active),
+            ..DesktopWorkState::default()
+        };
+        assert!(history_range_is_active(&state));
+        assert!(!session_interaction_is_active(&state));
+        state.pending_history_range = Some(PendingDesktopHistoryRange {
+            attempt: 2,
+            intent: range,
+        });
+        assert!(history_range_is_active(&state));
+
+        state = DesktopWorkState {
+            pending_selection: Some(PendingDesktopSessionDetail {
+                attempt: 2,
+                prerequisite_attempt: Some(1),
+                intent: detail,
+            }),
+            ..DesktopWorkState::default()
+        };
+        assert!(session_interaction_is_active(&state));
+        assert!(!history_range_is_active(&state));
+        state.active_selection_attempt = Some(2);
+        assert!(session_interaction_is_active(&state));
+
+        state = DesktopWorkState {
+            current_navigation: Some(ActiveDesktopSessionPage {
+                attempt: 1,
+                prerequisite_attempt: None,
+                intent: page,
+            }),
+            pending_navigation: Some(PendingDesktopSessionPage {
+                attempt: 2,
+                intent: page,
+            }),
+            ..DesktopWorkState::default()
+        };
+        assert!(session_interaction_is_active(&state));
+        assert!(!history_range_is_active(&state));
     }
 
     #[test]
@@ -2488,6 +2713,13 @@ mod tests {
         panic_after_release: bool,
     }
 
+    struct DroppedDetailSource {
+        clock: Arc<ManualClock>,
+        entered: Option<std::sync::mpsc::SyncSender<()>>,
+        release: Option<std::sync::mpsc::Receiver<()>>,
+        detail_calls: Arc<AtomicU64>,
+    }
+
     impl DesktopQuerySource for DeadlineSource {
         fn product_data_status(&mut self) -> Result<ProductDataStatusEnvelope, QueryError> {
             self.clock.set(DesktopRefreshUrgency::Hint.budget_ms());
@@ -2599,6 +2831,72 @@ mod tests {
             _key: UsageSessionKey,
         ) -> Result<QueryEnvelope<UsageSessionDetailResult>, QueryError> {
             unreachable!("deadline stops before session detail")
+        }
+    }
+
+    impl DesktopQuerySource for DroppedDetailSource {
+        fn product_data_status(&mut self) -> Result<ProductDataStatusEnvelope, QueryError> {
+            if let Some(entered) = self.entered.take() {
+                entered.send(()).expect("refresh entered");
+                self.release
+                    .take()
+                    .expect("refresh release receiver")
+                    .recv()
+                    .expect("refresh released");
+                self.clock.set(
+                    DesktopRefreshUrgency::Recovery
+                        .budget_ms()
+                        .saturating_add(1),
+                );
+            }
+            Err(invalid_query())
+        }
+
+        fn usage_analytics(
+            &mut self,
+            _request: UsageAnalyticsRequest,
+        ) -> Result<QueryEnvelope<UsageAnalytics>, QueryError> {
+            Err(invalid_query())
+        }
+
+        fn quota_overview(&mut self) -> Result<QuotaEnvelope<QuotaCurrentSnapshot>, QueryError> {
+            Err(invalid_query())
+        }
+
+        fn benefit_overview(
+            &mut self,
+            _request: BenefitOverviewRequest,
+        ) -> Result<BenefitOverviewEnvelope<BenefitOverviewSnapshot>, QueryError> {
+            Err(invalid_query())
+        }
+
+        fn git_output(
+            &mut self,
+            _request: GitOutputRequest,
+        ) -> Result<GitEnvelope<GitOutputSnapshot>, QueryError> {
+            Err(invalid_query())
+        }
+
+        fn latest_activity(
+            &mut self,
+            _request: LatestActivityRequest,
+        ) -> Result<QueryEnvelope<LatestActivityPage>, QueryError> {
+            Err(invalid_query())
+        }
+
+        fn usage_sessions(
+            &mut self,
+            _request: UsageSessionPageRequest,
+        ) -> Result<QueryEnvelope<UsageSessionPage>, QueryError> {
+            Err(invalid_query())
+        }
+
+        fn usage_session_detail(
+            &mut self,
+            _key: UsageSessionKey,
+        ) -> Result<QueryEnvelope<UsageSessionDetailResult>, QueryError> {
+            self.detail_calls.fetch_add(1, Ordering::AcqRel);
+            Err(invalid_query())
         }
     }
 
@@ -2799,6 +3097,96 @@ mod tests {
         }
         assert_eq!(session_calls.load(Ordering::Acquire), 0);
         assert!(controller.take_snapshot().expect("mailbox").is_none());
+        controller.shutdown().expect("controller stops");
+    }
+
+    #[test]
+    fn dropped_detail_follow_up_clears_interaction_slots_and_never_replays() {
+        let clock = Arc::new(ManualClock::new(0));
+        let controller_clock: Arc<dyn Clock> = clock.clone();
+        let (entered_sender, entered_receiver) = sync_channel(1);
+        let (release_sender, release_receiver) = sync_channel(1);
+        let detail_calls = Arc::new(AtomicU64::new(0));
+        let mut controller = DesktopController::spawn_with_clock(
+            DroppedDetailSource {
+                clock,
+                entered: Some(entered_sender),
+                release: Some(release_receiver),
+                detail_calls: Arc::clone(&detail_calls),
+            },
+            DesktopQueryPlan::overview().expect("overview plan"),
+            controller_clock,
+        )
+        .expect("controller starts");
+        let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+        controller.bind_snapshot_epoch(epoch).expect("bind epoch");
+        *lock_published_generation(&controller.publication.published_generation)
+            .expect("published generation") = Some(ProductGeneration::INITIAL);
+
+        controller
+            .refresh(DesktopRefreshUrgency::Hint)
+            .expect("blocking refresh starts");
+        entered_receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("refresh entered");
+        let selection = ProductSessionDetailSelection::new(
+            ProductSessionDetailSelectionGeneration::new(1).expect("selection generation"),
+            0,
+        );
+        assert!(matches!(
+            controller
+                .request_session_detail(DesktopSessionDetailIntent::new(
+                    epoch,
+                    ProductGeneration::INITIAL,
+                    selection,
+                ))
+                .expect("detail queues"),
+            DesktopRefreshAdmission::Coalesced { .. }
+        ));
+        release_sender.send(()).expect("release refresh");
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while controller
+            .try_completion()
+            .expect("worker healthy")
+            .is_none()
+        {
+            assert!(Instant::now() < deadline, "completion timed out");
+            thread::yield_now();
+        }
+
+        let range = DesktopHistoryRangeIntent::new(
+            epoch,
+            ProductGeneration::INITIAL,
+            DesktopHistoryRangeGeneration::new(1).expect("range generation"),
+            DesktopHistoryRangePreset::Recent1Day,
+        );
+        assert!(matches!(
+            controller
+                .request_history_range(range)
+                .expect("dropped detail no longer blocks range"),
+            DesktopRefreshAdmission::Started { .. }
+        ));
+        let _ = loop {
+            if let Some(completion) = controller.try_completion().expect("worker healthy") {
+                break completion;
+            }
+            assert!(Instant::now() < deadline, "range completion timed out");
+            thread::yield_now();
+        };
+        controller
+            .refresh(DesktopRefreshUrgency::Hint)
+            .expect("later refresh starts without replaying detail");
+        let _ = loop {
+            if let Some(completion) = controller.try_completion().expect("worker healthy") {
+                break completion;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "later refresh completion timed out"
+            );
+            thread::yield_now();
+        };
+        assert_eq!(detail_calls.load(Ordering::Acquire), 0);
         controller.shutdown().expect("controller stops");
     }
 
