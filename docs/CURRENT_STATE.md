@@ -1702,6 +1702,12 @@ and M0 developer stress verification pass from the root workspace. The exact com
 are recorded in `docs/HANDOFF.md` and the M0 script; this does not replace external
 acceptance evidence.
 
+The P3-D.0 recovery-resource measurement is release-only. Its debug target now exits
+before measurement, matching the existing UI-latency gate and preventing a slow debug
+scrypt path from producing a non-representative thread peak in the ordinary workspace
+suite. The canonical release command still executes all 64 warm-up and 256 measured
+cycles and remains the only valid resource receipt.
+
 ## P4-B durable density verification (historical boundary)
 
 At the superseded P4-B boundary, settings schema v2 persisted exactly

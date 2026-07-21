@@ -3614,6 +3614,16 @@ palette/presentation callback ownership, exact admission and transition function
 the complete normalized compiled-UI 10,000-cycle proof. P4-C supersedes P4-B's current
 presentation status; P4 remains partial and all interactive/release gates remain open.
 
+## 2026-07-21 — P3-D.0 debug/release measurement separation
+
+The complete debug workspace gate exposed that the recovery-resource contract still
+executed its five-minute unoptimized scrypt contour even though P3-D.0 acceptance has
+always required the optimized release binary. That debug-only run observed a transient
+thread peak outside the release contract. The target now follows the existing UI-latency
+pattern and returns before measurement under debug assertions. The canonical release
+run still executes 64 warm-up plus 256 measured cycles and passed after the change;
+debug compilation remains covered without manufacturing release evidence.
+
 ## 2026-07-21 — P4-B durable density verification (historical boundary)
 
 P4-B recorded the bounded durable-density contract: schema v2 had exactly Comfortable,

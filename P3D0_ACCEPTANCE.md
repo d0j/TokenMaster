@@ -64,8 +64,8 @@ $arguments = @('+1.97.0', 'test', '-p', 'tokenmaster-app', '--test', 'backup_ui_
 
 The first command MUST execute both ignored contracts. Skipped, filtered, retried, or
 non-release tests do not satisfy this contract. The ordinary debug workspace suite
-compiles the UI target but explicitly skips its measurement; only the mandatory
-`--release` command above can pass `P3D0-UI-01` and `P3D0-UI-02`.
+compiles the recovery-resource and UI targets but explicitly skips their measurements;
+only the mandatory `--release` commands above can pass their P3-D.0 gates.
 
 ## Gates
 

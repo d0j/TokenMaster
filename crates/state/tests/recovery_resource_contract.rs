@@ -367,6 +367,11 @@ fn tree_bytes(path: &Path) -> u64 {
 #[cfg(windows)]
 #[test]
 fn repeated_backup_verify_import_cancel_cycles_return_resources_and_disk() {
+    if cfg!(debug_assertions) {
+        println!("recovery_resource_contract: skipped (release-only measurement)");
+        return;
+    }
+
     let fixture = ResourceFixture::new();
     let mut catalog = BackupCatalog::rebuild(&fixture.backups, None).expect("initial catalog");
     let mut largest_package = 0_u64;
