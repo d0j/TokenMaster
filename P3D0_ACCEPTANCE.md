@@ -23,13 +23,17 @@ The receipt MUST record these exact versions from the tested tree:
 | database schema | `13` |
 | package container | `1` (`TMPKG001`) |
 | package manifest | `1` (`TMMNF001`) |
-| settings schema | `1` |
+| settings schema | `3` |
 | P3-D.0 evidence schema | `1` |
 | Zstd crate | `0.13.3` |
 | age crate | `0.12.1` |
 
 The authoritative values remain the source constants and `Cargo.lock`. This table is
 an acceptance pin, not a second implementation authority.
+
+The ignored schema-1 receipt predates the durable presentation migrations and is
+historical evidence only. It cannot satisfy this current schema-3 acceptance pin; a
+new receipt must be generated on one clean exact commit and executable identity.
 
 ## Preconditions
 
@@ -123,7 +127,7 @@ single strict JSON document with no comments and at least these fields:
     "database_schema": 13,
     "package_container": 1,
     "package_manifest": 1,
-    "settings_schema": 1,
+    "settings_schema": 3,
     "evidence_schema": 1,
     "zstd_crate": "0.13.3",
     "age_crate": "0.12.1"

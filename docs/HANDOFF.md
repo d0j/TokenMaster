@@ -801,7 +801,8 @@ full debug run exposed the release-only UI target attempting its 96 MiB measurem
 unoptimized; debug now compiles and explicitly skips only that measurement, while the
 mandatory release target passes unchanged. A local ignored P3-D.0 receipt is valid only
 when generated and identity-validated after the final documentation commit on the
-machine reproducing acceptance.
+machine reproducing acceptance. The retained schema-1 receipt is historical; schema 3
+requires a new exact-commit/executable receipt before it can represent the current tree.
 
 P3-D.1 History is complete under
 `docs/superpowers/specs/2026-07-19-tokenmaster-history-route-design.md` and

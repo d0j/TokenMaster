@@ -1708,6 +1708,10 @@ scrypt path from producing a non-representative thread peak in the ordinary work
 suite. The canonical release command still executes all 64 warm-up and 256 measured
 cycles and remains the only valid resource receipt.
 
+The ignored local P3-D.0 receipt is historical schema-1 evidence and does not identify
+the current schema-3 tree or executable. A new clean exact-commit receipt remains open;
+the historical file must not be used to authorize packaging or a release claim.
+
 ## P4-B durable density verification (historical boundary)
 
 At the superseded P4-B boundary, settings schema v2 persisted exactly

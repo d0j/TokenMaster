@@ -3621,8 +3621,10 @@ executed its five-minute unoptimized scrypt contour even though P3-D.0 acceptanc
 always required the optimized release binary. That debug-only run observed a transient
 thread peak outside the release contract. The target now follows the existing UI-latency
 pattern and returns before measurement under debug assertions. The canonical release
-run still executes 64 warm-up plus 256 measured cycles and passed after the change;
-debug compilation remains covered without manufacturing release evidence.
+run still executes 64 warm-up plus 256 measured cycles; a focused release diagnostic
+passed during the correction, but no new clean exact-HEAD receipt was recorded. The
+retained schema-1 receipt is historical and cannot represent the schema-3 tree. Debug
+compilation remains covered without manufacturing release evidence.
 
 ## 2026-07-21 — P4-B durable density verification (historical boundary)
 
