@@ -56,6 +56,18 @@ fn reseal_descriptors_and_package(package: &mut [u8]) {
 }
 
 #[test]
+fn resealed_supported_manifest_timestamp_remains_readable() {
+    const MUTATED_CREATED_AT_UTC_MS: i64 = 1_721_234_567_891;
+
+    let mut package = config_bytes();
+    package[52..60].copy_from_slice(&MUTATED_CREATED_AT_UTC_MS.to_le_bytes());
+    reseal_descriptors_and_package(&mut package);
+
+    let verified = read_config_bytes(&package).expect("resealed package");
+    assert_eq!(verified.created_at_utc_ms(), MUTATED_CREATED_AT_UTC_MS);
+}
+
+#[test]
 fn resealed_unsupported_manifest_settings_schemas_are_rejected() {
     for schema_version in [0_u16, 3_u16] {
         let mut package = config_bytes();

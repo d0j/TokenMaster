@@ -219,17 +219,10 @@ pub fn package_with_settings_source_schema(
     }
 
     let binding: [u8; 32] = descriptor_hasher.finalize().into();
-    let binding_offset = bytes.len();
     bytes.extend_from_slice(&binding);
-    assert_eq!(bytes.len(), binding_offset + 32);
     bytes.extend_from_slice(b"TMEND001");
-    assert_eq!(
-        &bytes[binding_offset + 32..binding_offset + 40],
-        b"TMEND001"
-    );
     let package_digest: [u8; 32] = Sha256::digest(&bytes).into();
     bytes.extend_from_slice(&package_digest);
-    assert_eq!(bytes.len(), binding_offset + 72);
     bytes
 }
 
