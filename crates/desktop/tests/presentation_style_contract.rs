@@ -64,6 +64,19 @@ fn density_keys_and_slint_indices_are_fixed() {
 }
 
 #[test]
+fn presentation_persistence_codes_are_fixed() {
+    let expected = [
+        (DesktopPresentationPersistence::Saved, "saved"),
+        (DesktopPresentationPersistence::Saving, "saving"),
+        (DesktopPresentationPersistence::NotSaved, "not_saved"),
+    ];
+
+    for (persistence, stable_code) in expected {
+        assert_eq!(persistence.stable_code(), stable_code);
+    }
+}
+
+#[test]
 fn persistence_reconciliation_never_overwrites_a_newer_unsaved_selection() {
     let mut style = DesktopPresentationStyle::from_persisted(DesktopDensity::Comfortable);
     assert_eq!(
@@ -95,14 +108,74 @@ fn persistence_reconciliation_never_overwrites_a_newer_unsaved_selection() {
 #[test]
 fn explicit_import_override_is_atomic_and_checked() {
     let mut style = DesktopPresentationStyle::from_persisted(DesktopDensity::Compact);
-    style.select_density_index_if_admitted(2, |_| true);
+    assert_eq!(
+        style.select_density_index_if_admitted(2, |_| true),
+        DesktopPresentationApplyOutcome::Applied
+    );
+    let revision_before_override = style.revision();
     assert_eq!(
         style.apply_persisted_override(DesktopDensity::Comfortable),
         DesktopPresentationApplyOutcome::Applied
     );
     assert_eq!(style.density(), DesktopDensity::Comfortable);
     assert_eq!(style.persisted_density(), DesktopDensity::Comfortable);
+    assert_eq!(style.revision().get(), revision_before_override.get() + 1);
     assert_eq!(style.persistence(), DesktopPresentationPersistence::Saved);
+}
+
+#[test]
+fn saved_observation_applies_a_new_persisted_density_once() {
+    let mut style = DesktopPresentationStyle::from_persisted(DesktopDensity::Comfortable);
+
+    assert_eq!(
+        style.observe_persisted(DesktopDensity::Compact),
+        DesktopPresentationApplyOutcome::Applied
+    );
+    assert_eq!(style.density(), DesktopDensity::Compact);
+    assert_eq!(style.persisted_density(), DesktopDensity::Compact);
+    assert_eq!(style.revision().get(), 1);
+    assert_eq!(style.persistence(), DesktopPresentationPersistence::Saved);
+}
+
+#[test]
+fn equal_observation_and_override_resolve_persistence_without_revising() {
+    let mut saving = DesktopPresentationStyle::from_persisted(DesktopDensity::Comfortable);
+    assert_eq!(
+        saving.select_density_index_if_admitted(1, |_| true),
+        DesktopPresentationApplyOutcome::Applied
+    );
+    let saving_revision = saving.revision();
+    assert_eq!(
+        saving.observe_persisted(DesktopDensity::Compact),
+        DesktopPresentationApplyOutcome::Unchanged
+    );
+    assert_eq!(saving.revision(), saving_revision);
+    assert_eq!(saving.persistence(), DesktopPresentationPersistence::Saved);
+
+    let mut not_saved = DesktopPresentationStyle::from_persisted(DesktopDensity::Comfortable);
+    not_saved.select_density_index_if_admitted(1, |_| true);
+    not_saved.mark_not_saved();
+    let not_saved_revision = not_saved.revision();
+    assert_eq!(
+        not_saved.observe_persisted(DesktopDensity::Compact),
+        DesktopPresentationApplyOutcome::Unchanged
+    );
+    assert_eq!(not_saved.revision(), not_saved_revision);
+    assert_eq!(
+        not_saved.persistence(),
+        DesktopPresentationPersistence::Saved
+    );
+
+    let override_revision = not_saved.revision();
+    assert_eq!(
+        not_saved.apply_persisted_override(DesktopDensity::Compact),
+        DesktopPresentationApplyOutcome::Unchanged
+    );
+    assert_eq!(not_saved.revision(), override_revision);
+    assert_eq!(
+        not_saved.persistence(),
+        DesktopPresentationPersistence::Saved
+    );
 }
 
 #[test]

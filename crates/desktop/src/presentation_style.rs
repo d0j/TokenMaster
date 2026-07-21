@@ -271,4 +271,21 @@ mod tests {
         assert_eq!(calls, 0);
         assert_eq!(style.density(), DesktopDensity::Comfortable);
     }
+
+    #[test]
+    fn exhausted_override_preserves_the_complete_style() {
+        let mut style = DesktopPresentationStyle {
+            density: DesktopDensity::Compact,
+            persisted_density: DesktopDensity::Comfortable,
+            revision: DesktopPresentationRevision(u64::MAX),
+            persistence: DesktopPresentationPersistence::NotSaved,
+        };
+        let prior = style;
+
+        assert_eq!(
+            style.apply_persisted_override(DesktopDensity::UltraCompact),
+            DesktopPresentationApplyOutcome::RevisionExhausted
+        );
+        assert_eq!(style, prior);
+    }
 }
