@@ -867,8 +867,10 @@ the backing model. Current-bundle application routing is weak and nonblocking.
 
 Focused UI 8/8 and full Desktop tests, strict Desktop Clippy, 231/231 Desktop and 99/99
 application mutation suites, plus product/Desktop/application release audits pass.
-Independent corrective UI rereview returned Critical/Important/Minor 0/0/0. Final
-workspace baseline evidence belongs to closeout below. No public cursor/key/page number,
+Independent corrective UI and audit rereviews returned Critical/Important/Minor 0/0/0.
+The exact final baseline passes clean-root in 4.545 seconds, formatting in 1.799 seconds,
+strict workspace Clippy in 44.05 seconds, and the complete locked workspace test/doctest
+gate in 679.7 seconds. No public cursor/key/page number,
 worker, thread, queue, channel, timer, cache, archive owner, second model, or retained
 page history was added. This is developer closure, not M0/package/signing/soak/release
 acceptance.

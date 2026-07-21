@@ -191,8 +191,10 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   including continuation recovery, narrow/wide accessibility, backing `ModelRc`
   identity, and retained sink lifetime. The focused Desktop suite, strict Desktop
   Clippy, 231/231 Desktop mutations, 99/99 application mutations, and product/Desktop/
-  application release audits pass. Independent UI review is 0/0/0; final workspace
-  baseline evidence is recorded during closeout. No cursor/key/page number, queue,
+  application release audits pass. Independent UI and audit rereviews are 0/0/0. The
+  final baseline passes clean-root in 4.545 seconds, formatting in 1.799 seconds,
+  strict workspace Clippy in 44.05 seconds, and the complete locked workspace test/
+  doctest gate in 679.7 seconds. No cursor/key/page number, queue,
   worker, thread, timer, cache, archive owner, or retained page history was added.
 - P3-D.3 bounded Models route: the fixed recent-30-day History request now captures
   Model and Project breakdowns in one immutable envelope, so History, Models, and the

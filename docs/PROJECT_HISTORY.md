@@ -3833,6 +3833,7 @@ handle drop proof, and narrow/wide accessible-control checks. Independent rerevi
 returned Critical/Important/Minor 0/0/0. The focused UI suite is 8/8 and full Desktop
 tests plus strict Desktop Clippy pass. Audit closure adds 19 Desktop and four
 application cases; full suites pass 231/231 and 99/99. Product, Desktop, and
-application release audits pass. Final clean-root/format/strict workspace Clippy/full
-workspace evidence is recorded by the closeout commit. Interactive History ranges,
+application release audits pass. The final baseline passes clean-root in 4.545 seconds,
+formatting in 1.799 seconds, strict workspace Clippy in 44.05 seconds, and the complete
+locked workspace test/doctest gate in 679.7 seconds. Interactive History ranges,
 P5 JSON/MCP, P3-E external receipts, P4/P6/M0/package/signing/soak/release remain open.
