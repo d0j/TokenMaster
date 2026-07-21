@@ -496,13 +496,21 @@ arbitration is: no work + range admits; refresh + range retains latest follow-up
 range + refresh lets refresh supersede and roll back; range + range rejects UI input
 and retains only the newest valid direct ingress; Sessions interaction + range and
 range + Sessions interaction return `Busy`; backend epoch replacement makes old work
-stale and rolls back the exact pending correlation. Successful publication advances
-product generation and the shared preset; accepted failure retains the shared envelope
-degraded without changing the preset.
+stale, resets the published preset to default 30 days, clears old correlations, and
+rolls back the exact pending correlation. Only `ProductPublishOutcome::Accepted` may
+publish a section-local snapshot. Only an accepted successful range query may update
+the published preset; `Coalesced`, `RejectedOlder`, and `RejectedIncompatible` outcomes
+publish nothing, leave the preset unchanged, and complete through the exact no-snapshot
+rollback. An accepted query failure retains the shared envelope degraded without
+changing the preset.
 
 Terminal no-snapshot completion MUST use a dedicated optional History-range notifier
 beside the Sessions notifier. The two fixed slots MUST NOT displace one another, and
 notification MUST match the whole still-current intent before clearing UI pending state.
+Snapshot publication MUST precede terminal completion observation for the same attempt,
+and successful commit MUST consume current work before completion reconciliation. The
+reconciliation path MUST be exact and idempotent so a committed selection cannot be
+rolled back by terminal handling.
 The frontend MUST retain at most 30 rows. No new range control boundary may carry free-
 form dates/counts, scope/provider/profile identity, query objects, archive handles,
 paths, prompts, responses, reasoning, commands, credentials, or source contents.

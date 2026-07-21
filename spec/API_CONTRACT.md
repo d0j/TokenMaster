@@ -410,7 +410,11 @@ same envelope; no third analytics request exists. Both execute sequentially on t
 existing capacity-one query worker. A selected range replaces the shared snapshot
 atomically; accepted query failure retains the prior envelope degraded for all three
 routes, while terminal cancellation/deadline/abandonment with no snapshot restores the
-prior control and publishes no synthetic failure.
+prior control and publishes no synthetic failure. Only `ProductPublishOutcome::Accepted`
+may publish a section-local snapshot; only an accepted successful query updates the
+preset. `Coalesced`, `RejectedOlder`, and `RejectedIncompatible` publish nothing, leave
+the preset unchanged, and drive the exact no-snapshot rollback. Backend epoch
+replacement resets the published preset to default 30 days and clears old correlations.
 
 The range controller retains one published preset, one persistent scalar generation
 high-water mark, one active correlation, and one latest pending intent. Intent carries
@@ -424,7 +428,10 @@ none+range admit; refresh+range latest follow-up; range+refresh refresh wins and
 back; range+range UI rejects and direct ingress keeps newest valid generation;
 Sessions+range and range+Sessions return `Busy`; epoch replacement makes old work stale
 and rolls back its exact UI intent. Two non-displacing optional terminal notifier slots
-(Sessions and History range) reconcile only a whole-intent match. No range intent may
+(Sessions and History range) reconcile only a whole-intent match. Snapshot publication
+precedes terminal completion observation, and successful commit consumes current work
+before completion reconciliation. Reconciliation is exact and idempotent, so a
+committed selection cannot be rolled back. No range intent may
 carry free-form dates/counts, identity, paths, query objects, or archive handles.
 
 `DesktopHistoryProjection::from_snapshot` is the sole product-to-History mapping. It

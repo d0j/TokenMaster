@@ -2110,6 +2110,13 @@ product-generation, worker-correlation, and selection-generation fences apply be
 query and publication, and stale output is discarded. Two optional non-displacing
 terminal notifier slots reconcile only exact whole-intent matches. The intent boundary
 contains no free-form dates/counts, identity, paths, query objects, or archive handles.
+Only `ProductPublishOutcome::Accepted` publishes a section-local snapshot; only an
+accepted successful query updates the preset. `Coalesced`, `RejectedOlder`, and
+`RejectedIncompatible` publish nothing and leave the preset unchanged, then complete
+through exact no-snapshot rollback. Backend epoch replacement resets the published
+preset to default 30 days and clears old correlations. Snapshot publication precedes
+terminal completion observation, successful commit consumes current work first, and
+exact idempotent reconciliation cannot roll back a committed selection.
 
 Rationale: fixed presets preserve the 30-row bound and truthful rolling semantics while
 avoiding a second analytics owner, retained range history, stale Sessions page-relative
