@@ -172,7 +172,7 @@ function Get-PublicRustFunctionSignatures {
     })
     $declarationStarts = @([regex]::Matches(
         $mask,
-        '\bpub[ \t\r\n]+(?:(?:[A-Za-z_][A-Za-z0-9_]*)[ \t\r\n]+)*fn[ \t\r\n]+(?<name>[A-Za-z_][A-Za-z0-9_]*)'
+        '\bpub[ \t\r\n]+(?:(?:[A-Za-z_][A-Za-z0-9_]*)[ \t\r\n]+)*fn[ \t\r\n]+(?<name>(?:r#)?[A-Za-z_][A-Za-z0-9_]*)'
     ))
     $result = @()
     foreach ($declarationStart in $declarationStarts) {
@@ -340,7 +340,7 @@ $actualPublicPackageConstants = @(
     foreach ($packageFile in $packageFiles) {
         [regex]::Matches(
             $packageMasks[$packageFile.Name],
-            '\bpub[ \t\r\n]+const[ \t\r\n]+(?!fn\b)(?<name>[A-Za-z_][A-Za-z0-9_]*)[ \t\r\n]*:[ \t\r\n]*(?<type>[^=;]+?)[ \t\r\n]*='
+            '\bpub[ \t\r\n]+const[ \t\r\n]+(?!fn\b)(?<name>(?:r#)?[A-Za-z_][A-Za-z0-9_]*)[ \t\r\n]*:[ \t\r\n]*(?<type>[^=;]+?)[ \t\r\n]*='
         ) | ForEach-Object {
             "$($packageFile.Name)|$($_.Groups['name'].Value)|$(($_.Groups['type'].Value -replace '\s+', ''))"
         }

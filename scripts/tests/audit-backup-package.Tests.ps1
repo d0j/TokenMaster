@@ -329,4 +329,22 @@ Describe "TokenMaster backup package audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
     }
+
+    It "rejects a raw-identifier public package function" {
+        $fixture = New-BackupAuditFixture -Name "raw-identifier-public-function"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\package\reader.rs") `
+            -Value 'pub fn r#decode_any(source: &mut dyn Read) { let _ = source; }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
+    }
+
+    It "rejects a raw-identifier public callable constant" {
+        $fixture = New-BackupAuditFixture -Name "raw-identifier-callable-constant"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\package\reader.rs") `
+            -Value 'pub const r#DECODE_ANY: fn(&mut dyn Read) = |source| { let _ = source; };'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
+    }
 }
