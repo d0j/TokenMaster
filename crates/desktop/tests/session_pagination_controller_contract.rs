@@ -22,7 +22,7 @@ use tokenmaster_product::{
 use tokenmaster_query::{
     BenefitOverviewEnvelope, BenefitOverviewRequest, BenefitOverviewSnapshot, GitEnvelope,
     GitOutputRequest, GitOutputSnapshot, LatestActivityPage, LatestActivityRequest, PageSize,
-    ProductDataStatusEnvelope, QueryClock, QueryEnvelope, QueryError, QueryService,
+    ProductDataStatusEnvelope, QueryClock, QueryEnvelope, QueryError, QueryErrorCode, QueryService,
     QueryTimeSample, QuotaCurrentSnapshot, QuotaEnvelope, UsageAnalytics, UsageAnalyticsRequest,
     UsageSessionDetailResult, UsageSessionKey, UsageSessionPage, UsageSessionPageRequest,
 };
@@ -369,6 +369,15 @@ fn newest_and_next_pages_are_worker_resolved_and_page_success_clears_detail() {
         page_continuations.lock().expect("page calls").as_slice(),
         [false, true, false]
     );
+    let error = controller
+        .request_session_page(intent(
+            epoch,
+            newest.generation(),
+            1,
+            DesktopSessionPageDirection::Newest,
+        ))
+        .expect_err("completed navigation generation remains stale");
+    assert_eq!(error.stable_code(), "stale_navigation");
     controller.shutdown().expect("controller stops");
 }
 
@@ -405,6 +414,14 @@ fn missing_continuation_stale_intents_and_page_failure_fail_closed_without_extra
     );
     let missing = wait_for_snapshot(&controller);
     assert_eq!(missing.sessions().kind(), ProductSectionKind::Unavailable);
+    assert_eq!(
+        missing
+            .sessions()
+            .failure()
+            .expect("missing cursor failure")
+            .code(),
+        QueryErrorCode::InvalidValue
+    );
     assert_eq!(page_calls.load(Ordering::Acquire), initial_calls);
 
     let stale_epoch = DesktopSnapshotEpoch::new(2).expect("stale epoch");
@@ -446,6 +463,10 @@ fn missing_continuation_stale_intents_and_page_failure_fail_closed_without_extra
     );
     let failed = wait_for_snapshot(&controller);
     assert_eq!(failed.sessions().kind(), ProductSectionKind::Unavailable);
+    assert_eq!(
+        failed.sessions().failure().expect("query failure").code(),
+        QueryErrorCode::InvalidValue
+    );
     controller.shutdown().expect("controller stops");
 }
 
@@ -507,6 +528,15 @@ fn refresh_supersedes_navigation_and_cancellation_publishes_nothing() {
             .expect("refresh follows page"),
         DesktopRefreshAdmission::Coalesced { .. }
     ));
+    let error = controller
+        .request_session_page(intent(
+            epoch,
+            initial.generation(),
+            1,
+            DesktopSessionPageDirection::Newest,
+        ))
+        .expect_err("refresh invalidation preserves navigation high-water");
+    assert_eq!(error.stable_code(), "stale_navigation");
     release_sender.send(()).expect("release page");
     let snapshot = wait_for_snapshot(&controller);
     assert_eq!(
@@ -556,7 +586,17 @@ fn refresh_supersedes_navigation_and_cancellation_publishes_nothing() {
         DesktopRefreshOutcome::Cancelled
     );
     assert!(cancelled.take_snapshot().expect("mailbox").is_none());
+    let detail_admission =
+        cancelled.request_session_detail(tokenmaster_desktop::DesktopSessionDetailIntent::new(
+            epoch,
+            initial.generation(),
+            selection(1, 0),
+        ));
     cancelled.shutdown().expect("cancelled controller stops");
+    assert!(
+        detail_admission.is_ok(),
+        "completed cancellation releases navigation detail gate"
+    );
 }
 
 #[test]

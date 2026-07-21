@@ -544,7 +544,8 @@ struct DesktopWorkState {
     refresh_attempt: Option<u64>,
     latest_selection_generation: Option<ProductSessionDetailSelectionGeneration>,
     pending_selection: Option<PendingDesktopSessionDetail>,
-    latest_navigation_generation: Option<DesktopSessionNavigationGeneration>,
+    navigation_high_water: Option<DesktopSessionNavigationGeneration>,
+    current_navigation: Option<ActiveDesktopSessionPage>,
     pending_navigation: Option<PendingDesktopSessionPage>,
 }
 
@@ -564,6 +565,13 @@ struct PendingDesktopSessionDetail {
 #[derive(Clone, Copy)]
 struct PendingDesktopSessionPage {
     attempt: u64,
+    intent: DesktopSessionPageIntent,
+}
+
+#[derive(Clone, Copy)]
+struct ActiveDesktopSessionPage {
+    attempt: u64,
+    prerequisite_attempt: Option<u64>,
     intent: DesktopSessionPageIntent,
 }
 
@@ -777,7 +785,7 @@ impl DesktopController {
             ));
         }
         let mut work = lock_work(&self.work)?;
-        if work.latest_navigation_generation.is_some() {
+        if work.current_navigation.is_some() {
             return Err(DesktopControllerError::new(
                 DesktopControllerErrorCode::StaleSelection,
             ));
@@ -809,7 +817,7 @@ impl DesktopController {
         }
         let mut work = lock_work(&self.work)?;
         if work
-            .latest_navigation_generation
+            .navigation_high_water
             .is_some_and(|current| intent.navigation_generation() <= current)
         {
             return Err(DesktopControllerError::new(
@@ -817,9 +825,13 @@ impl DesktopController {
             ));
         }
         let admission = self.submit(DesktopRefreshUrgency::Interactive)?;
-        if let Some(attempt) = scheduled_work_attempt(admission)? {
-            work.latest_navigation_generation = Some(intent.navigation_generation());
-            work.pending_navigation = Some(PendingDesktopSessionPage { attempt, intent });
+        if let Some(active) = scheduled_navigation(admission, intent)? {
+            work.navigation_high_water = Some(intent.navigation_generation());
+            work.current_navigation = Some(active);
+            work.pending_navigation = Some(PendingDesktopSessionPage {
+                attempt: active.attempt,
+                intent,
+            });
             work.latest_selection_generation = None;
             work.pending_selection = None;
         }
@@ -872,8 +884,12 @@ impl DesktopController {
     ) -> Result<Option<DesktopRefreshCompletion>, DesktopControllerError> {
         self.worker
             .try_completion()
-            .map(|completion| completion.map(map_completion))
-            .map_err(map_worker_error)
+            .map_err(map_worker_error)?
+            .map(|completion| {
+                reconcile_navigation_completion(&self.work, completion)?;
+                Ok(map_completion(completion))
+            })
+            .transpose()
     }
 
     #[must_use]
@@ -1049,8 +1065,12 @@ fn execute_session_page<S: DesktopQuerySource>(
     if let Some(outcome) = stop_outcome(permit, context.clock) {
         return outcome;
     }
-    if !navigation_is_current(reducer, context, intent) {
-        let _ = clear_navigation_if_current(context.work, intent.navigation_generation());
+    if !navigation_is_current(reducer, context, permit.id().get(), intent) {
+        let _ = clear_navigation_if_current(
+            context.work,
+            permit.id().get(),
+            intent.navigation_generation(),
+        );
         return RefreshOutcome::Completed;
     }
 
@@ -1079,8 +1099,12 @@ fn execute_session_page<S: DesktopQuerySource>(
     if let Some(outcome) = stop_outcome(permit, context.clock) {
         return outcome;
     }
-    if !navigation_is_current(reducer, context, intent) {
-        let _ = clear_navigation_if_current(context.work, intent.navigation_generation());
+    if !navigation_is_current(reducer, context, permit.id().get(), intent) {
+        let _ = clear_navigation_if_current(
+            context.work,
+            permit.id().get(),
+            intent.navigation_generation(),
+        );
         return RefreshOutcome::Completed;
     }
 
@@ -1093,7 +1117,11 @@ fn execute_session_page<S: DesktopQuerySource>(
     }
     let outcome = publish_snapshot(reducer.snapshot(), context.publication);
     if outcome == RefreshOutcome::Completed {
-        let _ = clear_navigation_if_current(context.work, intent.navigation_generation());
+        let _ = clear_navigation_if_current(
+            context.work,
+            permit.id().get(),
+            intent.navigation_generation(),
+        );
     }
     outcome
 }
@@ -1313,13 +1341,14 @@ fn lock_work(
 }
 
 fn invalidate_navigation(state: &mut DesktopWorkState) {
-    state.latest_navigation_generation = None;
+    state.current_navigation = None;
     state.pending_navigation = None;
 }
 
 fn navigation_is_current(
     reducer: &ProductReducer,
     context: &DesktopExecutionContext<'_>,
+    attempt: u64,
     intent: DesktopSessionPageIntent,
 ) -> bool {
     if context.snapshot_epoch.load(Ordering::Acquire) != intent.snapshot_epoch().get()
@@ -1328,17 +1357,23 @@ fn navigation_is_current(
         return false;
     }
     match lock_work(context.work) {
-        Ok(state) => state.latest_navigation_generation == Some(intent.navigation_generation()),
+        Ok(state) => state.current_navigation.is_some_and(|current| {
+            current.attempt == attempt
+                && current.intent.navigation_generation() == intent.navigation_generation()
+        }),
         Err(_) => false,
     }
 }
 
 fn clear_navigation_if_current(
     work: &DesktopWorkSlot,
+    attempt: u64,
     generation: DesktopSessionNavigationGeneration,
 ) -> Result<(), DesktopControllerError> {
     let mut state = lock_work(work)?;
-    if state.latest_navigation_generation == Some(generation) {
+    if state.current_navigation.is_some_and(|current| {
+        current.attempt == attempt && current.intent.navigation_generation() == generation
+    }) {
         invalidate_navigation(&mut state);
     }
     Ok(())
@@ -1356,6 +1391,49 @@ fn scheduled_work_attempt(
         }
         DesktopRefreshAdmission::DeadlineExceeded { .. } => Ok(None),
     }
+}
+
+fn scheduled_navigation(
+    admission: DesktopRefreshAdmission,
+    intent: DesktopSessionPageIntent,
+) -> Result<Option<ActiveDesktopSessionPage>, DesktopControllerError> {
+    match admission {
+        DesktopRefreshAdmission::Started { attempt } => Ok(Some(ActiveDesktopSessionPage {
+            attempt: attempt.get(),
+            prerequisite_attempt: None,
+            intent,
+        })),
+        DesktopRefreshAdmission::Coalesced {
+            receipt,
+            active_attempt,
+        } => Ok(Some(ActiveDesktopSessionPage {
+            attempt: receipt.get().checked_add(1).ok_or_else(|| {
+                DesktopControllerError::new(DesktopControllerErrorCode::CapacityExceeded)
+            })?,
+            prerequisite_attempt: Some(active_attempt.get()),
+            intent,
+        })),
+        DesktopRefreshAdmission::DeadlineExceeded { .. } => Ok(None),
+    }
+}
+
+fn reconcile_navigation_completion(
+    work: &DesktopWorkSlot,
+    completion: tokenmaster_engine::WorkerCompletion,
+) -> Result<(), DesktopControllerError> {
+    let mut state = lock_work(work)?;
+    let completed = completion.request_id().get();
+    let clear_current = state.current_navigation.is_some_and(|current| {
+        current.attempt == completed
+            || (!completion.follow_up_started()
+                && (completion.pending_deadline_exceeded()
+                    || completion.pending_capacity_exceeded())
+                && current.prerequisite_attempt == Some(completed))
+    });
+    if clear_current {
+        invalidate_navigation(&mut state);
+    }
+    Ok(())
 }
 
 fn take_work_batch(state: &mut DesktopWorkState, attempt: u64) -> DesktopWorkBatch {
@@ -1388,8 +1466,11 @@ fn take_work_batch(state: &mut DesktopWorkState, attempt: u64) -> DesktopWorkBat
         }
         Some(pending) if pending.attempt < attempt => {
             state.pending_navigation = None;
-            if state.latest_navigation_generation == Some(pending.intent.navigation_generation()) {
-                state.latest_navigation_generation = None;
+            if state
+                .current_navigation
+                .is_some_and(|current| current.attempt == pending.attempt)
+            {
+                state.current_navigation = None;
             }
             None
         }
