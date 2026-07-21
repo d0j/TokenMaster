@@ -1426,11 +1426,12 @@ fn commit_history_range(
     let Ok(outcome) = reduced else {
         return RefreshOutcome::Failed;
     };
-    if outcome != ProductPublishOutcome::Accepted {
-        return RefreshOutcome::Completed;
-    }
-    if successful {
-        work.published_history_preset = intent.preset();
+    match history_range_publication_action(outcome, successful) {
+        HistoryRangePublicationAction::TerminalRollback => return RefreshOutcome::Completed,
+        HistoryRangePublicationAction::PublishAndAdvancePreset => {
+            work.published_history_preset = intent.preset();
+        }
+        HistoryRangePublicationAction::PublishWithoutPresetAdvance => {}
     }
     let snapshot = reducer.snapshot();
     let notifier = match lock_notifier(&context.publication.notifier) {
@@ -1456,6 +1457,32 @@ fn commit_history_range(
         notifier.snapshot_ready();
     }
     RefreshOutcome::Completed
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HistoryRangePublicationAction {
+    PublishAndAdvancePreset,
+    PublishWithoutPresetAdvance,
+    TerminalRollback,
+}
+
+const fn history_range_publication_action(
+    outcome: ProductPublishOutcome,
+    successful: bool,
+) -> HistoryRangePublicationAction {
+    match outcome {
+        ProductPublishOutcome::Accepted if successful => {
+            HistoryRangePublicationAction::PublishAndAdvancePreset
+        }
+        ProductPublishOutcome::Accepted => {
+            HistoryRangePublicationAction::PublishWithoutPresetAdvance
+        }
+        ProductPublishOutcome::Coalesced
+        | ProductPublishOutcome::RejectedOlder
+        | ProductPublishOutcome::RejectedIncompatible => {
+            HistoryRangePublicationAction::TerminalRollback
+        }
+    }
 }
 
 fn execute_session_detail<S: DesktopQuerySource>(
@@ -2299,6 +2326,28 @@ mod tests {
     }
 
     #[test]
+    fn history_range_publish_outcome_matrix_never_publishes_nonaccepted_results() {
+        assert_eq!(
+            history_range_publication_action(ProductPublishOutcome::Accepted, true),
+            HistoryRangePublicationAction::PublishAndAdvancePreset
+        );
+        assert_eq!(
+            history_range_publication_action(ProductPublishOutcome::Accepted, false),
+            HistoryRangePublicationAction::PublishWithoutPresetAdvance
+        );
+        for outcome in [
+            ProductPublishOutcome::Coalesced,
+            ProductPublishOutcome::RejectedOlder,
+            ProductPublishOutcome::RejectedIncompatible,
+        ] {
+            assert_eq!(
+                history_range_publication_action(outcome, true),
+                HistoryRangePublicationAction::TerminalRollback
+            );
+        }
+    }
+
+    #[test]
     fn generic_publication_holds_generation_and_latest_until_the_pair_is_consistent() {
         let latest = Arc::new(Mutex::new(None));
         let published_generation = Arc::new(Mutex::new(None));
@@ -2436,6 +2485,7 @@ mod tests {
         entered: std::sync::mpsc::SyncSender<()>,
         release: std::sync::mpsc::Receiver<()>,
         session_calls: Arc<AtomicU64>,
+        panic_after_release: bool,
     }
 
     impl DesktopQuerySource for DeadlineSource {
@@ -2495,6 +2545,7 @@ mod tests {
         fn product_data_status(&mut self) -> Result<ProductDataStatusEnvelope, QueryError> {
             self.entered.send(()).expect("refresh entered");
             self.release.recv().expect("refresh released");
+            assert!(!self.panic_after_release, "test abandoned follow-up");
             self.clock.set(
                 DesktopRefreshUrgency::Recovery
                     .budget_ms()
@@ -2561,6 +2612,16 @@ mod tests {
         }
     }
 
+    struct RecordingHistoryTerminalNotifier {
+        sender: std::sync::mpsc::SyncSender<DesktopHistoryRangeIntent>,
+    }
+
+    impl DesktopTerminalHistoryRangeNotifier for RecordingHistoryTerminalNotifier {
+        fn history_range_terminal(&self, intent: DesktopHistoryRangeIntent) {
+            let _ = self.sender.try_send(intent);
+        }
+    }
+
     #[test]
     fn attempt_deadline_discards_partial_reducer_state() {
         let clock = Arc::new(ManualClock::new(0));
@@ -2610,6 +2671,7 @@ mod tests {
                 entered: entered_sender,
                 release: release_receiver,
                 session_calls: Arc::clone(&session_calls),
+                panic_after_release: false,
             },
             DesktopQueryPlan::overview().expect("overview plan"),
             controller_clock,
@@ -2665,6 +2727,145 @@ mod tests {
         assert_eq!(session_calls.load(Ordering::Acquire), 0);
         assert!(controller.take_snapshot().expect("mailbox").is_none());
         controller.shutdown().expect("controller stops");
+    }
+
+    #[test]
+    fn not_started_history_range_deadline_emits_exact_terminal_rollback_without_snapshot() {
+        let clock = Arc::new(ManualClock::new(0));
+        let controller_clock: Arc<dyn Clock> = clock.clone();
+        let (entered_sender, entered_receiver) = sync_channel(1);
+        let (release_sender, release_receiver) = sync_channel(1);
+        let session_calls = Arc::new(AtomicU64::new(0));
+        let mut controller = DesktopController::spawn_with_clock(
+            PreStartDeadlineSource {
+                clock,
+                entered: entered_sender,
+                release: release_receiver,
+                session_calls: Arc::clone(&session_calls),
+                panic_after_release: false,
+            },
+            DesktopQueryPlan::overview().expect("overview plan"),
+            controller_clock,
+        )
+        .expect("controller starts");
+        let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+        controller.bind_snapshot_epoch(epoch).expect("bind epoch");
+        *lock_published_generation(&controller.publication.published_generation)
+            .expect("published generation") = Some(ProductGeneration::INITIAL);
+        let (terminal_sender, terminal_receiver) = sync_channel(1);
+        controller
+            .attach_terminal_history_range_notifier(Arc::new(RecordingHistoryTerminalNotifier {
+                sender: terminal_sender,
+            }))
+            .expect("attach terminal notifier");
+
+        controller
+            .refresh(DesktopRefreshUrgency::Hint)
+            .expect("blocking refresh starts");
+        entered_receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("refresh entered");
+        let intent = DesktopHistoryRangeIntent::new(
+            epoch,
+            ProductGeneration::INITIAL,
+            DesktopHistoryRangeGeneration::new(1).expect("range generation"),
+            DesktopHistoryRangePreset::Recent1Day,
+        );
+        assert!(matches!(
+            controller
+                .request_history_range(intent)
+                .expect("range queues"),
+            DesktopRefreshAdmission::Coalesced { .. }
+        ));
+        release_sender.send(()).expect("release refresh");
+
+        assert_eq!(
+            terminal_receiver
+                .recv_timeout(Duration::from_secs(2))
+                .expect("worker terminal rollback"),
+            intent
+        );
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            if controller
+                .try_completion()
+                .expect("worker healthy")
+                .is_some()
+            {
+                break;
+            }
+            assert!(Instant::now() < deadline, "completion timed out");
+            thread::yield_now();
+        }
+        assert_eq!(session_calls.load(Ordering::Acquire), 0);
+        assert!(controller.take_snapshot().expect("mailbox").is_none());
+        controller.shutdown().expect("controller stops");
+    }
+
+    #[test]
+    fn panicked_refresh_abandons_pending_history_range_and_notifies_exactly_once() {
+        let clock = Arc::new(ManualClock::new(0));
+        let controller_clock: Arc<dyn Clock> = clock.clone();
+        let (entered_sender, entered_receiver) = sync_channel(1);
+        let (release_sender, release_receiver) = sync_channel(1);
+        let session_calls = Arc::new(AtomicU64::new(0));
+        let mut controller = DesktopController::spawn_with_clock(
+            PreStartDeadlineSource {
+                clock,
+                entered: entered_sender,
+                release: release_receiver,
+                session_calls: Arc::clone(&session_calls),
+                panic_after_release: true,
+            },
+            DesktopQueryPlan::overview().expect("overview plan"),
+            controller_clock,
+        )
+        .expect("controller starts");
+        let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+        controller.bind_snapshot_epoch(epoch).expect("bind epoch");
+        *lock_published_generation(&controller.publication.published_generation)
+            .expect("published generation") = Some(ProductGeneration::INITIAL);
+        let (terminal_sender, terminal_receiver) = sync_channel(1);
+        controller
+            .attach_terminal_history_range_notifier(Arc::new(RecordingHistoryTerminalNotifier {
+                sender: terminal_sender,
+            }))
+            .expect("attach terminal notifier");
+        controller
+            .refresh(DesktopRefreshUrgency::Hint)
+            .expect("blocking refresh starts");
+        entered_receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("refresh entered");
+        let intent = DesktopHistoryRangeIntent::new(
+            epoch,
+            ProductGeneration::INITIAL,
+            DesktopHistoryRangeGeneration::new(1).expect("range generation"),
+            DesktopHistoryRangePreset::Recent1Day,
+        );
+        assert!(matches!(
+            controller
+                .request_history_range(intent)
+                .expect("range queues"),
+            DesktopRefreshAdmission::Coalesced { .. }
+        ));
+        release_sender.send(()).expect("release refresh");
+        assert_eq!(
+            terminal_receiver
+                .recv_timeout(Duration::from_secs(2))
+                .expect("abandoned follow-up terminal rollback"),
+            intent
+        );
+        assert!(terminal_receiver.try_recv().is_err());
+        assert_eq!(session_calls.load(Ordering::Acquire), 0);
+        assert!(controller.take_snapshot().expect("mailbox").is_none());
+        assert_eq!(
+            controller
+                .shutdown()
+                .expect_err("faulted worker does not stop cleanly")
+                .stable_code(),
+            "faulted"
+        );
     }
 
     fn invalid_query() -> QueryError {

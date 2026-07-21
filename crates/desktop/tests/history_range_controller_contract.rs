@@ -1,13 +1,29 @@
-use std::{thread, time::Duration};
+mod support;
+
+use rusqlite::Connection;
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc::{Receiver, SyncSender, sync_channel},
+    },
+    thread,
+    time::Duration,
+};
+use support::dashboard_fixture::{FixedClock, seed};
+use tempfile::TempDir;
 use tokenmaster_desktop::{
     DesktopController, DesktopHistoryRangeGeneration, DesktopHistoryRangeIntent,
     DesktopHistoryRangePreset, DesktopQueryPlan, DesktopQuerySource, DesktopRefreshUrgency,
     DesktopSessionDetailIntent, DesktopSessionNavigationGeneration, DesktopSessionPageDirection,
-    DesktopSessionPageIntent, DesktopSnapshotEpoch,
+    DesktopSessionPageIntent, DesktopSnapshotEpoch, DesktopSnapshotNotifier,
+    DesktopSnapshotReceiver, DesktopTerminalHistoryRangeNotifier,
+    DesktopTerminalNavigationNotifier,
 };
 use tokenmaster_product::{
     ProductGeneration, ProductSessionDetailSelection, ProductSessionDetailSelectionGeneration,
 };
+use tokenmaster_query::QueryService;
 use tokenmaster_query::{
     BenefitOverviewEnvelope, BenefitOverviewRequest, BenefitOverviewSnapshot, GitEnvelope,
     GitOutputRequest, GitOutputSnapshot, LatestActivityPage, LatestActivityRequest,
@@ -105,6 +121,141 @@ impl DesktopQuerySource for UnavailableSource {
         _: UsageSessionKey,
     ) -> Result<QueryEnvelope<UsageSessionDetailResult>, QueryError> {
         Err(query_failure())
+    }
+}
+
+struct BlockingDetailSource {
+    inner: QueryService<FixedClock>,
+    entered: Option<SyncSender<()>>,
+    release: Option<Receiver<()>>,
+    range_armed: Arc<AtomicBool>,
+    range_entered: Option<SyncSender<()>>,
+    range_release: Option<Receiver<()>>,
+    drift_armed: Arc<AtomicBool>,
+    drift: Option<QueryService<FixedClock>>,
+    range_failure: Arc<AtomicBool>,
+}
+
+impl DesktopQuerySource for BlockingDetailSource {
+    fn product_data_status(&mut self) -> Result<ProductDataStatusEnvelope, QueryError> {
+        self.inner.product_data_status()
+    }
+
+    fn usage_analytics(
+        &mut self,
+        request: UsageAnalyticsRequest,
+    ) -> Result<QueryEnvelope<UsageAnalytics>, QueryError> {
+        if request.range().stable_code() == "recent_days"
+            && self.drift_armed.swap(false, Ordering::AcqRel)
+        {
+            return self
+                .drift
+                .as_mut()
+                .expect("dataset drift query service")
+                .usage_analytics(request);
+        }
+        if request.range().stable_code() == "recent_days"
+            && self.range_failure.swap(false, Ordering::AcqRel)
+        {
+            return Err(query_failure());
+        }
+        if request.range().stable_code() == "recent_days"
+            && self.range_armed.swap(false, Ordering::AcqRel)
+        {
+            self.range_entered
+                .take()
+                .expect("range entry sender")
+                .send(())
+                .expect("range entry signal");
+            self.range_release
+                .take()
+                .expect("range release receiver")
+                .recv()
+                .expect("range release");
+        }
+        self.inner.usage_analytics(request)
+    }
+
+    fn quota_overview(&mut self) -> Result<QuotaEnvelope<QuotaCurrentSnapshot>, QueryError> {
+        self.inner.quota_overview()
+    }
+
+    fn benefit_overview(
+        &mut self,
+        request: BenefitOverviewRequest,
+    ) -> Result<BenefitOverviewEnvelope<BenefitOverviewSnapshot>, QueryError> {
+        self.inner.benefit_overview(request)
+    }
+
+    fn git_output(
+        &mut self,
+        request: GitOutputRequest,
+    ) -> Result<GitEnvelope<GitOutputSnapshot>, QueryError> {
+        self.inner.git_output(request)
+    }
+
+    fn latest_activity(
+        &mut self,
+        request: LatestActivityRequest,
+    ) -> Result<QueryEnvelope<LatestActivityPage>, QueryError> {
+        self.inner.latest_activity(request)
+    }
+
+    fn usage_sessions(
+        &mut self,
+        request: UsageSessionPageRequest,
+    ) -> Result<QueryEnvelope<UsageSessionPage>, QueryError> {
+        self.inner.usage_sessions(request)
+    }
+
+    fn usage_session_detail(
+        &mut self,
+        key: UsageSessionKey,
+    ) -> Result<QueryEnvelope<UsageSessionDetailResult>, QueryError> {
+        if let Some(entered) = self.entered.take() {
+            entered.send(()).expect("detail entry signal");
+            self.release
+                .take()
+                .expect("detail release receiver")
+                .recv()
+                .expect("detail release");
+        }
+        self.inner.usage_session_detail(key)
+    }
+}
+
+struct RecordingHistoryTerminalNotifier {
+    sender: SyncSender<DesktopHistoryRangeIntent>,
+}
+
+impl DesktopTerminalHistoryRangeNotifier for RecordingHistoryTerminalNotifier {
+    fn history_range_terminal(&self, intent: DesktopHistoryRangeIntent) {
+        let _ = self.sender.try_send(intent);
+    }
+}
+
+struct RecordingNavigationTerminalNotifier {
+    sender: SyncSender<DesktopSessionPageIntent>,
+}
+
+impl DesktopTerminalNavigationNotifier for RecordingNavigationTerminalNotifier {
+    fn navigation_terminal(&self, intent: DesktopSessionPageIntent) {
+        let _ = self.sender.try_send(intent);
+    }
+}
+
+struct SnapshotBeforeTerminalNotifier {
+    receiver: DesktopSnapshotReceiver,
+    sender: SyncSender<()>,
+}
+
+impl DesktopSnapshotNotifier for SnapshotBeforeTerminalNotifier {
+    fn snapshot_ready(&self) {
+        assert!(
+            self.receiver.has_snapshot().expect("snapshot mailbox"),
+            "snapshot publication precedes observation"
+        );
+        let _ = self.sender.try_send(());
     }
 }
 
@@ -240,4 +391,463 @@ fn range_and_sessions_admissions_are_mutually_exclusive_without_displacement() {
         "busy"
     );
     controller.shutdown().expect("shutdown");
+}
+
+#[test]
+fn active_detail_query_keeps_history_range_busy_until_terminal_completion() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("history-range-active-detail.sqlite3");
+    seed(&path);
+    let (entered_sender, entered_receiver) = sync_channel(1);
+    let (release_sender, release_receiver) = sync_channel(1);
+    let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+    let mut controller = DesktopController::spawn(
+        BlockingDetailSource {
+            inner: QueryService::open(&path, FixedClock).expect("query service"),
+            entered: Some(entered_sender),
+            release: Some(release_receiver),
+            range_armed: Arc::new(AtomicBool::new(false)),
+            range_entered: None,
+            range_release: None,
+            drift_armed: Arc::new(AtomicBool::new(false)),
+            drift: None,
+            range_failure: Arc::new(AtomicBool::new(false)),
+        },
+        DesktopQueryPlan::overview().expect("plan"),
+    )
+    .expect("controller");
+    controller.bind_snapshot_epoch(epoch).expect("bind epoch");
+    controller
+        .refresh(DesktopRefreshUrgency::Interactive)
+        .expect("initial refresh");
+    let _ = wait_for_completion(&controller);
+    let initial = controller
+        .take_snapshot()
+        .expect("mailbox")
+        .expect("initial snapshot");
+    let selection = ProductSessionDetailSelection::new(
+        ProductSessionDetailSelectionGeneration::new(1).expect("selection generation"),
+        0,
+    );
+    controller
+        .request_session_detail(DesktopSessionDetailIntent::new(
+            epoch,
+            initial.generation(),
+            selection,
+        ))
+        .expect("detail admission");
+    entered_receiver
+        .recv_timeout(Duration::from_secs(2))
+        .expect("detail query entered");
+    let range = DesktopHistoryRangeIntent::new(
+        epoch,
+        initial.generation(),
+        DesktopHistoryRangeGeneration::new(1).expect("range generation"),
+        DesktopHistoryRangePreset::Recent1Day,
+    );
+    assert_eq!(
+        controller
+            .request_history_range(range)
+            .expect_err("active detail blocks range")
+            .stable_code(),
+        "busy"
+    );
+    release_sender.send(()).expect("release detail");
+    let _ = wait_for_completion(&controller);
+    let detail = controller
+        .take_snapshot()
+        .expect("mailbox")
+        .expect("detail snapshot");
+    let recovered_range = DesktopHistoryRangeIntent::new(
+        epoch,
+        detail.generation(),
+        DesktopHistoryRangeGeneration::new(1).expect("range generation"),
+        DesktopHistoryRangePreset::Recent1Day,
+    );
+    controller
+        .request_history_range(recovered_range)
+        .expect("detail completion clears active scalar");
+    let _ = wait_for_completion(&controller);
+    controller.shutdown().expect("shutdown");
+}
+
+#[test]
+fn cancelled_range_notifies_exactly_once_without_a_snapshot() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("history-range-cancel.sqlite3");
+    seed(&path);
+    let range_armed = Arc::new(AtomicBool::new(false));
+    let (entered_sender, entered_receiver) = sync_channel(1);
+    let (release_sender, release_receiver) = sync_channel(1);
+    let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+    let mut controller = DesktopController::spawn(
+        BlockingDetailSource {
+            inner: QueryService::open(&path, FixedClock).expect("query service"),
+            entered: None,
+            release: None,
+            range_armed: Arc::clone(&range_armed),
+            range_entered: Some(entered_sender),
+            range_release: Some(release_receiver),
+            drift_armed: Arc::new(AtomicBool::new(false)),
+            drift: None,
+            range_failure: Arc::new(AtomicBool::new(false)),
+        },
+        DesktopQueryPlan::overview().expect("plan"),
+    )
+    .expect("controller");
+    controller.bind_snapshot_epoch(epoch).expect("bind epoch");
+    controller
+        .refresh(DesktopRefreshUrgency::Interactive)
+        .expect("initial refresh");
+    let _ = wait_for_completion(&controller);
+    let initial = controller
+        .take_snapshot()
+        .expect("mailbox")
+        .expect("initial snapshot");
+    let (terminal_sender, terminal_receiver) = sync_channel(1);
+    let (navigation_sender, navigation_receiver) = sync_channel(1);
+    controller
+        .attach_terminal_navigation_notifier(Arc::new(RecordingNavigationTerminalNotifier {
+            sender: navigation_sender,
+        }))
+        .expect("attach navigation terminal notifier");
+    controller
+        .attach_terminal_history_range_notifier(Arc::new(RecordingHistoryTerminalNotifier {
+            sender: terminal_sender,
+        }))
+        .expect("attach history terminal notifier");
+    range_armed.store(true, Ordering::Release);
+    let intent = DesktopHistoryRangeIntent::new(
+        epoch,
+        initial.generation(),
+        DesktopHistoryRangeGeneration::new(1).expect("range generation"),
+        DesktopHistoryRangePreset::Recent1Day,
+    );
+    let attempt = match controller
+        .request_history_range(intent)
+        .expect("range admission")
+    {
+        tokenmaster_desktop::DesktopRefreshAdmission::Started { attempt } => attempt,
+        other => panic!("expected started range, got {other:?}"),
+    };
+    entered_receiver
+        .recv_timeout(Duration::from_secs(2))
+        .expect("range query entered");
+    controller.cancel(attempt).expect("cancel range");
+    release_sender.send(()).expect("release range");
+    assert_eq!(
+        wait_for_completion(&controller).outcome(),
+        tokenmaster_desktop::DesktopRefreshOutcome::Cancelled
+    );
+    assert!(controller.take_snapshot().expect("mailbox").is_none());
+    assert_eq!(
+        terminal_receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("exact terminal rollback"),
+        intent
+    );
+    assert!(
+        terminal_receiver.try_recv().is_err(),
+        "terminal rollback is idempotent"
+    );
+    assert!(
+        navigation_receiver.try_recv().is_err(),
+        "history terminal does not displace the independent navigation slot"
+    );
+    controller.shutdown().expect("shutdown");
+}
+
+#[test]
+fn dataset_identity_drift_is_rejected_without_snapshot_or_preset_advance() {
+    let directory = TempDir::new().expect("temporary directory");
+    let primary_path = directory.path().join("history-range-primary.sqlite3");
+    let drift_path = directory.path().join("history-range-drift.sqlite3");
+    seed(&primary_path);
+    seed(&drift_path);
+    Connection::open(&drift_path)
+        .expect("drift connection")
+        .execute_batch(
+            "UPDATE usage_replay_revision
+              SET status = 'staging', sealed = 0, promoted = 0
+              WHERE revision_id = 0;
+              INSERT INTO usage_replay_revision(
+                revision_id, status, canonicalizer_version, fingerprint_version,
+                replay_signature_version, expected_source_count, evidence_epoch,
+                sealed, promoted, scan_set_id
+              ) VALUES (1, 'current', 1, 2, 1, 1, 1, 1, 1, 1);
+              UPDATE usage_archive_state
+              SET current_revision_id = 1
+              WHERE singleton_id = 1;",
+        )
+        .expect("advance drift dataset identity");
+    let drift_armed = Arc::new(AtomicBool::new(false));
+    let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+    let mut controller = DesktopController::spawn(
+        BlockingDetailSource {
+            inner: QueryService::open(&primary_path, FixedClock).expect("primary query service"),
+            entered: None,
+            release: None,
+            range_armed: Arc::new(AtomicBool::new(false)),
+            range_entered: None,
+            range_release: None,
+            drift_armed: Arc::clone(&drift_armed),
+            drift: Some(QueryService::open(&drift_path, FixedClock).expect("drift query service")),
+            range_failure: Arc::new(AtomicBool::new(false)),
+        },
+        DesktopQueryPlan::overview().expect("plan"),
+    )
+    .expect("controller");
+    controller.bind_snapshot_epoch(epoch).expect("bind epoch");
+    controller
+        .refresh(DesktopRefreshUrgency::Interactive)
+        .expect("initial refresh");
+    let _ = wait_for_completion(&controller);
+    let initial = controller
+        .take_snapshot()
+        .expect("mailbox")
+        .expect("initial snapshot");
+    let (terminal_sender, terminal_receiver) = sync_channel(1);
+    controller
+        .attach_terminal_history_range_notifier(Arc::new(RecordingHistoryTerminalNotifier {
+            sender: terminal_sender,
+        }))
+        .expect("attach history terminal notifier");
+    drift_armed.store(true, Ordering::Release);
+    let intent = DesktopHistoryRangeIntent::new(
+        epoch,
+        initial.generation(),
+        DesktopHistoryRangeGeneration::new(1).expect("range generation"),
+        DesktopHistoryRangePreset::Recent1Day,
+    );
+    controller
+        .request_history_range(intent)
+        .expect("range admission");
+    let _ = wait_for_completion(&controller);
+    assert!(controller.take_snapshot().expect("mailbox").is_none());
+    assert_eq!(
+        terminal_receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("dataset drift terminal rollback"),
+        intent
+    );
+    let same_preset = DesktopHistoryRangeIntent::new(
+        epoch,
+        initial.generation(),
+        DesktopHistoryRangeGeneration::new(2).expect("range generation"),
+        DesktopHistoryRangePreset::Recent1Day,
+    );
+    controller
+        .request_history_range(same_preset)
+        .expect("rejected drift does not advance the published preset");
+    let _ = wait_for_completion(&controller);
+    controller.shutdown().expect("shutdown");
+}
+
+#[test]
+fn accepted_success_advances_preset_and_accepted_failure_retains_it() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("history-range-publication.sqlite3");
+    seed(&path);
+    let range_failure = Arc::new(AtomicBool::new(false));
+    let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+    let mut controller = DesktopController::spawn(
+        BlockingDetailSource {
+            inner: QueryService::open(&path, FixedClock).expect("query service"),
+            entered: None,
+            release: None,
+            range_armed: Arc::new(AtomicBool::new(false)),
+            range_entered: None,
+            range_release: None,
+            drift_armed: Arc::new(AtomicBool::new(false)),
+            drift: None,
+            range_failure: Arc::clone(&range_failure),
+        },
+        DesktopQueryPlan::overview().expect("plan"),
+    )
+    .expect("controller");
+    controller.bind_snapshot_epoch(epoch).expect("bind epoch");
+    let (snapshot_sender, snapshot_receiver) = sync_channel(2);
+    controller
+        .attach_snapshot_notifier(Arc::new(SnapshotBeforeTerminalNotifier {
+            receiver: controller.snapshot_receiver(),
+            sender: snapshot_sender,
+        }))
+        .expect("attach snapshot notifier");
+    controller
+        .refresh(DesktopRefreshUrgency::Interactive)
+        .expect("initial refresh");
+    let _ = wait_for_completion(&controller);
+    snapshot_receiver
+        .recv_timeout(Duration::from_secs(2))
+        .expect("initial snapshot observation");
+    let initial = controller
+        .take_snapshot()
+        .expect("mailbox")
+        .expect("initial snapshot");
+    let success = DesktopHistoryRangeIntent::new(
+        epoch,
+        initial.generation(),
+        DesktopHistoryRangeGeneration::new(1).expect("range generation"),
+        DesktopHistoryRangePreset::Recent1Day,
+    );
+    let (terminal_sender, terminal_receiver) = sync_channel(1);
+    controller
+        .attach_terminal_history_range_notifier(Arc::new(RecordingHistoryTerminalNotifier {
+            sender: terminal_sender,
+        }))
+        .expect("attach terminal notifier");
+    controller
+        .request_history_range(success)
+        .expect("successful range admission");
+    let _ = wait_for_completion(&controller);
+    snapshot_receiver
+        .recv_timeout(Duration::from_secs(2))
+        .expect("successful range snapshot observation");
+    assert!(
+        terminal_receiver.try_recv().is_err(),
+        "successful commit consumes current work before terminal reconciliation"
+    );
+    let published = controller
+        .take_snapshot()
+        .expect("mailbox")
+        .expect("successful range snapshot");
+    let same_preset = DesktopHistoryRangeIntent::new(
+        epoch,
+        published.generation(),
+        DesktopHistoryRangeGeneration::new(2).expect("range generation"),
+        DesktopHistoryRangePreset::Recent1Day,
+    );
+    assert_eq!(
+        controller
+            .request_history_range(same_preset)
+            .expect_err("successful range advances published preset")
+            .stable_code(),
+        "stale_history_range"
+    );
+    range_failure.store(true, Ordering::Release);
+    let failure = DesktopHistoryRangeIntent::new(
+        epoch,
+        published.generation(),
+        DesktopHistoryRangeGeneration::new(2).expect("range generation"),
+        DesktopHistoryRangePreset::Recent7Days,
+    );
+    controller
+        .request_history_range(failure)
+        .expect("failing range admission");
+    let _ = wait_for_completion(&controller);
+    let degraded = controller
+        .take_snapshot()
+        .expect("mailbox")
+        .expect("accepted failure publishes degraded snapshot");
+    let retained_preset = DesktopHistoryRangeIntent::new(
+        epoch,
+        degraded.generation(),
+        DesktopHistoryRangeGeneration::new(3).expect("range generation"),
+        DesktopHistoryRangePreset::Recent1Day,
+    );
+    assert_eq!(
+        controller
+            .request_history_range(retained_preset)
+            .expect_err("failure retains last successful preset")
+            .stable_code(),
+        "stale_history_range"
+    );
+    controller.shutdown().expect("shutdown");
+}
+
+#[test]
+fn refresh_supersedes_active_range_and_rolls_back_before_refresh_publication() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("history-range-refresh-supersession.sqlite3");
+    seed(&path);
+    let range_armed = Arc::new(AtomicBool::new(false));
+    let (entered_sender, entered_receiver) = sync_channel(1);
+    let (release_sender, release_receiver) = sync_channel(1);
+    let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+    let mut controller = DesktopController::spawn(
+        BlockingDetailSource {
+            inner: QueryService::open(&path, FixedClock).expect("query service"),
+            entered: None,
+            release: None,
+            range_armed: Arc::clone(&range_armed),
+            range_entered: Some(entered_sender),
+            range_release: Some(release_receiver),
+            drift_armed: Arc::new(AtomicBool::new(false)),
+            drift: None,
+            range_failure: Arc::new(AtomicBool::new(false)),
+        },
+        DesktopQueryPlan::overview().expect("plan"),
+    )
+    .expect("controller");
+    controller.bind_snapshot_epoch(epoch).expect("bind epoch");
+    controller
+        .refresh(DesktopRefreshUrgency::Interactive)
+        .expect("initial refresh");
+    let _ = wait_for_completion(&controller);
+    let initial = controller
+        .take_snapshot()
+        .expect("mailbox")
+        .expect("initial snapshot");
+    let (terminal_sender, terminal_receiver) = sync_channel(1);
+    controller
+        .attach_terminal_history_range_notifier(Arc::new(RecordingHistoryTerminalNotifier {
+            sender: terminal_sender,
+        }))
+        .expect("attach terminal notifier");
+    range_armed.store(true, Ordering::Release);
+    let intent = DesktopHistoryRangeIntent::new(
+        epoch,
+        initial.generation(),
+        DesktopHistoryRangeGeneration::new(1).expect("range generation"),
+        DesktopHistoryRangePreset::Recent1Day,
+    );
+    controller
+        .request_history_range(intent)
+        .expect("range admission");
+    entered_receiver
+        .recv_timeout(Duration::from_secs(2))
+        .expect("range query entered");
+    assert!(matches!(
+        controller
+            .refresh(DesktopRefreshUrgency::Hint)
+            .expect("refresh supersedes range"),
+        tokenmaster_desktop::DesktopRefreshAdmission::Coalesced { .. }
+    ));
+    assert_eq!(
+        terminal_receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("superseded range rollback"),
+        intent
+    );
+    assert!(controller.take_snapshot().expect("mailbox").is_none());
+    release_sender.send(()).expect("release range");
+    let _ = wait_for_completion(&controller);
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    while controller.take_snapshot().expect("mailbox").is_none() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "refresh snapshot timed out"
+        );
+        thread::yield_now();
+    }
+    assert!(
+        terminal_receiver.try_recv().is_err(),
+        "supersession is idempotent"
+    );
+    controller.shutdown().expect("shutdown");
+}
+
+fn wait_for_completion(
+    controller: &DesktopController,
+) -> tokenmaster_desktop::DesktopRefreshCompletion {
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    loop {
+        if let Some(completion) = controller.try_completion().expect("worker healthy") {
+            return completion;
+        }
+        assert!(std::time::Instant::now() < deadline, "completion timed out");
+        thread::yield_now();
+    }
 }
