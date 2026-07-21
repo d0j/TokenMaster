@@ -382,6 +382,19 @@ Describe "TokenMaster application composition audit" {
             Should -Throw "*TM-APP-MANUAL-BACKUP-ATOMIC*"
     }
 
+    It "rejects removing the presentation density atomic projection" {
+        $fixture = New-AppAuditFixture -Name "presentation-density-atomic-drift"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '|| publish_atomic_operation(reliable_state, permit.command()),',
+            '|| publish_presentation_state(reliable_state, permit.command()),'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-PRESENTATION-ATOMIC*"
+    }
+
     It "rejects losing the durable source-reconciliation obligation after reconstruction" {
         $fixture = New-AppAuditFixture -Name "rebuild-durable-reconcile-drift"
         $path = Join-Path $fixture "crates\app\src\state.rs"

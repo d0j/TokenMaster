@@ -205,7 +205,8 @@ foreach ($contract in @(
     @{ Name = 'TM-APP-REBUILD-RETRY-RECONCILE'; Pattern = 'if source_reconciliation_required \{[\s\S]{0,256}?permit\.begin_irreversible\(\)[\s\S]{0,512}?start_reconstructed_bundle\('; Count = 1 },
     @{ Name = 'TM-APP-REBUILD-ATOMIC'; Pattern = 'RecoveryBoundary::BeforeJournalPublication[\s\S]{0,256}?on_irreversible\(\)'; Count = 1 },
     @{ Name = 'TM-APP-MANUAL-BACKUP-ATOMIC'; Pattern = 'fn execute_manual_backup_command\([\s\S]{0,1024}?permit\.begin_irreversible\(\)[\s\S]{0,512}?publish_atomic_operation\(reliable_state, permit\.command\(\)\)'; Count = 1 },
-    @{ Name = 'TM-APP-ATOMIC-PROJECTION'; Pattern = 'publish_atomic_operation\(reliable_state, permit\.command\(\)\)'; Count = 8 },
+    @{ Name = 'TM-APP-PRESENTATION-ATOMIC'; Pattern = 'ApplicationCommand::UpdatePresentationDensity,\s*ApplicationOperationPayload::PresentationDensity\(update\),\s*\)\s*=>\s*execute_state_command\(state\.update_presentation_density\(\s*permit,\s*update\.into_state_density\(\),\s*\|\|\s*publish_atomic_operation\(reliable_state, permit\.command\(\)\),\s*\)\)'; Count = 1 },
+    @{ Name = 'TM-APP-ATOMIC-PROJECTION'; Pattern = 'publish_atomic_operation\(reliable_state, permit\.command\(\)\)'; Count = 9 },
     @{ Name = 'TM-APP-RESTORED-MIGRATION'; Pattern = 'fn start_restored_bundle\('; Count = 1 },
     @{ Name = 'TM-APP-PRE-MIGRATION'; Pattern = 'wait_for_mandatory_backup\([\s\S]{0,96}?MaintenancePurpose::PreMigration\s*\)'; Count = 2 },
     @{ Name = 'TM-APP-POST-MIGRATION'; Pattern = 'wait_for_mandatory_backup\([\s\S]{0,96}?MaintenancePurpose::PostMigration\s*\)'; Count = 2 },
@@ -331,7 +332,7 @@ if ([string]::IsNullOrWhiteSpace($reminderSynchronizeFunction) -or $syncPendingI
 }
 $reminderOperationBinding = [regex]::Match(
     $applicationText,
-    '(?s)\(\s*ApplicationCommand::UpdateReminderPolicy,\s*ApplicationOperationPayload::ReminderPolicy\(update\),\s*\)\s*=>\s*\{.*?\r?\n\s*\}\r?\n\s*\(ApplicationCommand::RestoreData'
+    '(?s)\(\s*ApplicationCommand::UpdateReminderPolicy,\s*ApplicationOperationPayload::ReminderPolicy\(update\),\s*\)\s*=>\s*\{.*?\r?\n\s*\}\r?\n\s*\(\s*ApplicationCommand::UpdatePresentationDensity'
 ).Value
 $reminderStateUpdateIndex = $reminderOperationBinding.IndexOf('state.update_reminder_policy(permit, policy', [System.StringComparison]::Ordinal)
 $reminderSynchronizeIndex = $reminderOperationBinding.IndexOf('synchronize_reminder_policy_after_settings(', [System.StringComparison]::Ordinal)
