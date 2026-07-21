@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use crate::StateError;
 use crate::record::{RecordValue, RecordValueError};
 
-pub(crate) const SETTINGS_SCHEMA_VERSION: u16 = 2;
+pub const SETTINGS_SCHEMA_VERSION: u16 = 3;
 pub(crate) const MIN_SUPPORTED_SETTINGS_SCHEMA_VERSION: u16 = 1;
 pub const MAX_REMINDER_THRESHOLDS: usize = 8;
 pub const REMINDER_LEAD_MIN_SECONDS: u32 = 60;
@@ -272,25 +272,39 @@ impl PresentationDensity {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PresentationSkin {
+    Refined,
+    Graphite,
+    Ember,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PresentationSettings {
     density: PresentationDensity,
+    skin: PresentationSkin,
 }
 
 impl PresentationSettings {
     #[must_use]
-    pub const fn new(density: PresentationDensity) -> Self {
-        Self { density }
+    pub const fn new(density: PresentationDensity, skin: PresentationSkin) -> Self {
+        Self { density, skin }
     }
 
     #[must_use]
-    pub const fn comfortable() -> Self {
-        Self::new(PresentationDensity::Comfortable)
+    pub const fn refined() -> Self {
+        Self::new(PresentationDensity::Comfortable, PresentationSkin::Refined)
     }
 
     #[must_use]
     pub const fn density(self) -> PresentationDensity {
         self.density
+    }
+
+    #[must_use]
+    pub const fn skin(self) -> PresentationSkin {
+        self.skin
     }
 }
 
@@ -386,7 +400,7 @@ impl SettingsValue {
         )
         .unwrap_or_else(|_| unreachable!("fixed backup defaults are valid"));
         Self::new(
-            PortableSettings::new(reminders, backup, PresentationSettings::comfortable()),
+            PortableSettings::new(reminders, backup, PresentationSettings::refined()),
             DeviceSettings::new(DeviceRoute::Dashboard),
         )
     }

@@ -20,8 +20,8 @@ use tokenmaster_platform::{
 use tokenmaster_state::{
     BackupCompression, BackupPackage, BackupPassphrase, BackupPolicy, BootstrapOutcome,
     ConfigPackage, EncryptedBackupPackage, MAX_CONFIG_PACKAGE_BYTES, PortableSettings,
-    PortableSettingsCandidate, PresentationDensity, PresentationSettings, ReminderPolicy,
-    SettingsChangeCategory, SettingsStore, SettingsValue,
+    PortableSettingsCandidate, PresentationDensity, PresentationSettings, PresentationSkin,
+    ReminderPolicy, SettingsChangeCategory, SettingsStore, SettingsValue,
 };
 use tokenmaster_store::UsageStore;
 
@@ -133,7 +133,7 @@ fn changed_portable_settings() -> PortableSettingsCandidate {
     PortableSettingsCandidate::new(PortableSettings::new(
         reminders,
         backup,
-        PresentationSettings::new(PresentationDensity::UltraCompact),
+        PresentationSettings::new(PresentationDensity::UltraCompact, PresentationSkin::Refined),
     ))
     .expect("portable candidate")
 }
@@ -1202,6 +1202,41 @@ fn presentation_density_update_preserves_every_other_settings_class() {
     assert_eq!(after.value().portable().reminders(), &before_reminders);
     assert_eq!(after.value().portable().backup(), &before_backup);
     assert_eq!(after.value().device(), &before_device);
+}
+
+#[test]
+fn presentation_density_update_preserves_current_skin() {
+    let (_temporary, root) = fixture();
+    let owner = ApplicationStateOwner::open(&root).expect("state owner");
+    let store = SettingsStore::new(root.reliable_state()).expect("settings store");
+    let current = store.load().expect("initial settings");
+    let graphite = SettingsValue::new(
+        PortableSettings::new(
+            current.value().portable().reminders().clone(),
+            current.value().portable().backup().clone(),
+            PresentationSettings::new(PresentationDensity::Comfortable, PresentationSkin::Graphite),
+        ),
+        current.value().device().clone(),
+    );
+    store.save(&graphite).expect("seed graphite skin");
+
+    owner
+        .update_presentation_density(
+            &command_permit(ApplicationCommand::UpdatePresentationDensity),
+            PresentationDensity::Compact,
+            || {},
+        )
+        .expect("save compact density");
+
+    let saved = store.load().expect("saved settings");
+    assert_eq!(
+        saved.value().portable().presentation().density(),
+        PresentationDensity::Compact
+    );
+    assert_eq!(
+        saved.value().portable().presentation().skin(),
+        PresentationSkin::Graphite
+    );
 }
 
 #[test]

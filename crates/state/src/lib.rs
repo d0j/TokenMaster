@@ -66,9 +66,9 @@ pub use settings::{
     BACKUP_RETENTION_DEFAULT_BYTES, BACKUP_RETENTION_MAX_BYTES, BACKUP_RETENTION_MIN_BYTES,
     BackupPolicy, DeviceRoute, DeviceSettings, PortableSettings, PortableSettingsCandidate,
     PortableSettingsDigest, PortableSettingsTarget, PreparedSettingsRestore, PresentationDensity,
-    PresentationSettings, ReminderPolicy, SettingsChangeCategory, SettingsCommitReceipt,
-    SettingsHealthCode, SettingsImportPreview, SettingsLoad, SettingsLoadOutcome, SettingsStore,
-    SettingsValue,
+    PresentationSettings, PresentationSkin, ReminderPolicy, SETTINGS_SCHEMA_VERSION,
+    SettingsChangeCategory, SettingsCommitReceipt, SettingsHealthCode, SettingsImportPreview,
+    SettingsLoad, SettingsLoadOutcome, SettingsStore, SettingsValue,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

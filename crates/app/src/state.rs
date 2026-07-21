@@ -603,7 +603,10 @@ impl ApplicationStateOwner {
             PortableSettings::new(
                 current.value().portable().reminders().clone(),
                 current.value().portable().backup().clone(),
-                PresentationSettings::new(density),
+                PresentationSettings::new(
+                    density,
+                    current.value().portable().presentation().skin(),
+                ),
             ),
             current.value().device().clone(),
         );

@@ -302,7 +302,7 @@ fn changed_portable_settings() -> PortableSettingsCandidate {
     PortableSettingsCandidate::new(PortableSettings::new(
         reminders,
         backup,
-        tokenmaster_state::PresentationSettings::comfortable(),
+        tokenmaster_state::PresentationSettings::refined(),
     ))
     .expect("portable settings")
 }
