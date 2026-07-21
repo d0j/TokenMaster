@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::fs;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
@@ -16,8 +17,9 @@ use tokenmaster_product::{
 use tokenmaster_state::{
     BackupCatalog, BackupMaintenanceRuntime, BackupPolicy, BackupPurpose, BootstrapOutcome,
     ConfigPackage, MAX_CONFIG_PACKAGE_BYTES, MaintenanceExecution, MaintenanceSourceState,
-    PortableSettings, PortableSettingsCandidate, PriorRunCondition, ReminderPolicy, RestoreMode,
-    RunStateStore, SettingsStore, SettingsValue, SystemMaintenanceClock,
+    PortableSettings, PortableSettingsCandidate, PresentationDensity, PresentationSettings,
+    PresentationSkin, PriorRunCondition, ReminderPolicy, RestoreMode, RunStateStore,
+    SETTINGS_SCHEMA_VERSION, SettingsStore, SettingsValue, SystemMaintenanceClock,
 };
 use tokenmaster_store::{USAGE_SCHEMA_VERSION, UsageStore};
 
@@ -768,6 +770,9 @@ fn presentation_execution_persists_and_projects_the_confirmed_operation() {
     let environment = application_environment(&temporary);
     let root = DataRoot::resolve(&environment).expect("data root");
     let state = ApplicationStateOwner::open(&root).expect("state owner");
+    let store = SettingsStore::new(root.reliable_state()).expect("settings store");
+    let before = store.load().expect("settings before presentation save");
+    assert_eq!(before.generation(), None);
     let preflight = Arc::new(Mutex::new(state.prepare(&root).expect("preflight")));
     let shell = DesktopShell::new_with_reliable_state(
         &ProductReducer::new().snapshot(),
@@ -822,6 +827,115 @@ fn presentation_execution_persists_and_projects_the_confirmed_operation() {
         tokenmaster_desktop::DesktopSkin::Ember
     );
     assert_eq!(projection.operation(), Some(completion));
+    let persisted = store.load().expect("settings after presentation save");
+    assert_eq!(persisted.generation(), Some(1));
+    assert_eq!(SETTINGS_SCHEMA_VERSION, 3);
+    assert_eq!(
+        persisted.value().portable().presentation(),
+        &PresentationSettings::new(PresentationDensity::Compact, PresentationSkin::Ember)
+    );
+}
+
+#[test]
+fn presentation_save_failure_keeps_the_exact_old_value_generation_and_failed_projection() {
+    i_slint_backend_testing::init_no_event_loop();
+    let temporary = TempDir::new().expect("temporary directory");
+    let environment = application_environment(&temporary);
+    let root = DataRoot::resolve(&environment).expect("data root");
+    let state = ApplicationStateOwner::open(&root).expect("state owner");
+    let preflight = Arc::new(Mutex::new(state.prepare(&root).expect("preflight")));
+    let mut seed_coordinator = ApplicationCommandCoordinator::new();
+    let ApplicationCommandAdmission::Started(seed_permit) =
+        seed_coordinator.submit(ApplicationCommand::UpdatePresentation)
+    else {
+        panic!("seed presentation permit");
+    };
+    state
+        .update_presentation(
+            &seed_permit,
+            PresentationSettings::new(
+                PresentationDensity::UltraCompact,
+                PresentationSkin::Graphite,
+            ),
+            || {},
+        )
+        .expect("seed known complete pair");
+    let store = SettingsStore::new(root.reliable_state()).expect("settings store");
+    let before = store.load().expect("seeded settings");
+    assert_eq!(before.generation(), Some(1));
+    let before_value = before.value().clone();
+
+    let blocked_slot = root.reliable_state().as_path().join("settings-b.tms");
+    fs::create_dir(&blocked_slot).expect("block exact next settings slot");
+    let shell = DesktopShell::new_with_reliable_state(
+        &ProductReducer::new().snapshot(),
+        DesktopReliableStateProjection::unavailable(),
+        Rc::new(NoopDesktopIntentSink),
+    )
+    .expect("desktop shell");
+    let notifier = shell.reliable_state_notifier();
+    let bundle: SharedBundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
+    let bridge: SharedBridge = Arc::new(Mutex::new(None));
+    let live_started = Arc::new(AtomicBool::new(false));
+    let mut coordinator = ApplicationCommandCoordinator::new();
+    let ApplicationCommandAdmission::Started(permit) =
+        coordinator.submit(ApplicationCommand::UpdatePresentation)
+    else {
+        panic!("presentation permit");
+    };
+    let (_, payload) = ApplicationOperationRequest::update_presentation(
+        tokenmaster_desktop::DesktopPresentationSelection::new(
+            tokenmaster_desktop::DesktopDensity::Compact,
+            tokenmaster_desktop::DesktopSkin::Ember,
+        ),
+    )
+    .into_parts();
+
+    let execution = execute_application_operation(
+        &environment,
+        &root,
+        &state,
+        &preflight,
+        &bundle,
+        &shell.bridge_factory(),
+        &bridge,
+        &live_started,
+        &notifier,
+        &permit,
+        payload,
+    );
+    assert_eq!(
+        execution,
+        ApplicationCommandExecution::Failed(ApplicationCommandFailure::Unavailable)
+    );
+    let completion = application_operation_completion(permit.command(), execution);
+    assert_eq!(completion.kind(), DesktopOperationKind::UpdatePresentation);
+    assert_eq!(completion.phase(), DesktopOperationPhase::Failed);
+    assert_eq!(completion.failure_code(), Some("unavailable"));
+
+    fs::remove_dir(&blocked_slot).expect("remove only test fault");
+    let after = store.load().expect("settings after failed save");
+    assert_eq!(after.generation(), before.generation());
+    assert_eq!(after.value(), &before_value);
+    let projection = state
+        .reliable_state_projection_for_outcome(BootstrapOutcome::FirstInstall, Some(completion))
+        .expect("failed reliable projection");
+    assert_eq!(
+        projection.presentation().density(),
+        tokenmaster_desktop::DesktopDensity::UltraCompact
+    );
+    assert_eq!(
+        projection.presentation().skin(),
+        tokenmaster_desktop::DesktopSkin::Graphite
+    );
+    assert_eq!(projection.operation(), Some(completion));
+
+    let reopened = SettingsStore::new(root.reliable_state())
+        .expect("reopened settings store")
+        .load()
+        .expect("reopened old truth");
+    assert_eq!(reopened.generation(), before.generation());
+    assert_eq!(reopened.value(), &before_value);
 }
 
 struct NoopDesktopIntentSink;
