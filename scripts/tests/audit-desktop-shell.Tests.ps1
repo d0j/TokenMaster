@@ -2489,4 +2489,48 @@ fn density_authority() {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-DENSITY-ADMISSION*"
     }
+
+    It "rejects a second differently named skin callback" {
+        $fixture = New-DesktopAuditFixture -Name "skin-extra-callback"
+        $path = Join-Path $fixture "crates\desktop\ui\views\settings-view.slint"
+        Add-Content -LiteralPath $path -Value 'callback select-presentation-theme(int);'
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PRESENTATION-OWNER*"
+    }
+
+    It "rejects a second differently named UiPalette slot" {
+        $fixture = New-DesktopAuditFixture -Name "skin-extra-slot"
+        $path = Join-Path $fixture "crates\desktop\ui\main.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace('in-out property <UiPalette> presentation-palette <=> UiTokens.palette;', 'in-out property <UiPalette> presentation-palette <=> UiTokens.palette;`r`n    in-out property <UiPalette> family-palette: UiTokens.palette;')
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PRESENTATION-OWNER*"
+    }
+
+    It "rejects a sixteenth palette alias" {
+        $fixture = New-DesktopAuditFixture -Name "skin-extra-alias"
+        $path = Join-Path $fixture "crates\desktop\ui\tokens.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace('    out property <length> space-xs:', '    out property <color> alternate: palette.accent;`r`n    out property <length> space-xs:')
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PRESENTATION-OWNER*"
+    }
+
+    It "rejects showing before the initial palette application" {
+        $fixture = New-DesktopAuditFixture -Name "skin-show-before-apply"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('let window = MainWindow::new()?;', 'let window = MainWindow::new()?;`r`n        window.show()?;')
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PRESENTATION-ORDER*"
+    }
+
+    It "rejects literal-decoy key and reverse-index mapping drift" {
+        $fixture = New-DesktopAuditFixture -Name "skin-literal-reverse-drift"
+        $path = Join-Path $fixture "crates\desktop\src\skin.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('Self::Refined => "refined",', 'let _ = "refined"; Self::Refined => "polished",').Replace('2 => Some(Self::Ember),', '2 => Some(Self::Graphite),')
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SKIN-CONTRACT*"
+    }
 }

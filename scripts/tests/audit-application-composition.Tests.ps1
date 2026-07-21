@@ -1161,4 +1161,16 @@ Describe "TokenMaster application composition audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-APP-OPERATION-SPAWN*"
     }
+
+    It "rejects a presentation conversion that loses the skin axis" {
+        $fixture = New-AppAuditFixture -Name "presentation-constant-skin"
+        $path = Join-Path $fixture "crates\app\src\command.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'match (self.selection.density(), self.selection.skin()) {',
+            'match (self.selection.density(), tokenmaster_desktop::DesktopSkin::Refined) {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-PRESENTATION-COMPLETE*"
+    }
 }

@@ -95,9 +95,11 @@ if ([string]::IsNullOrWhiteSpace($v2Migration) -or $v2Migration -notmatch 'Prese
 $commandExecutable = [regex]::Replace($commandText, '(?ms)//.*?$|/\*.*?\*/|"(?:\\.|[^"\\])*"', ' ')
 $normalizedCommand = [regex]::Replace($commandExecutable, '\s+', '')
 $expectedPresentationWrapper = 'pub(crate)structApplicationPresentationUpdate{selection:DesktopPresentationSelection,}'
+$expectedPresentationConversionPrefix = 'pub(crate)constfninto_state_presentation(self)->tokenmaster_state::PresentationSettings{match(self.selection.density(),self.selection.skin()){'
 if ([regex]::Matches($commandExecutable, 'ApplicationCommand::UpdatePresentation').Count -ne 1 -or
     [regex]::Matches($commandExecutable, 'ApplicationOperationPayload::Presentation\(ApplicationPresentationUpdate::new\(\s*selection,\s*\)\)').Count -ne 1 -or
     $normalizedCommand.IndexOf($expectedPresentationWrapper, [System.StringComparison]::Ordinal) -lt 0 -or
+    $normalizedCommand.IndexOf($expectedPresentationConversionPrefix, [System.StringComparison]::Ordinal) -lt 0 -or
     [regex]::Matches($commandExecutable, 'tokenmaster_state::PresentationSettings::new\(').Count -ne 9 -or
     $commandExecutable -match 'UpdatePresentation(?:Density|Skin)|Presentation(?:Density|Skin)\(') {
     throw 'TM-APP-PRESENTATION-COMPLETE: application presentation requests carry one complete density and skin pair'
