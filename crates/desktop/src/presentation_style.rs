@@ -123,21 +123,7 @@ pub struct DesktopPresentationStyle {
     persistence: DesktopPresentationPersistence,
 }
 
-impl Default for DesktopPresentationStyle {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl DesktopPresentationStyle {
-    #[must_use]
-    pub const fn new() -> Self {
-        Self::from_persisted(DesktopPresentationSelection::new(
-            DesktopDensity::Comfortable,
-            DesktopSkin::Refined,
-        ))
-    }
-
     #[must_use]
     pub const fn from_persisted(selection: DesktopPresentationSelection) -> Self {
         Self {
@@ -219,15 +205,23 @@ impl DesktopPresentationStyle {
         persisted_selection: DesktopPresentationSelection,
     ) -> DesktopPresentationApplyOutcome {
         let was_saved = matches!(self.persistence, DesktopPresentationPersistence::Saved);
-        self.persisted_selection = persisted_selection;
         if self.selection == persisted_selection {
+            self.persisted_selection = persisted_selection;
             self.persistence = DesktopPresentationPersistence::Saved;
             return DesktopPresentationApplyOutcome::Unchanged;
         }
         if !was_saved {
+            self.persisted_selection = persisted_selection;
             return DesktopPresentationApplyOutcome::Unchanged;
         }
-        self.apply_selection(persisted_selection, DesktopPresentationPersistence::Saved)
+        let Some(revision) = self.revision.checked_successor() else {
+            return DesktopPresentationApplyOutcome::RevisionExhausted;
+        };
+        self.selection = persisted_selection;
+        self.persisted_selection = persisted_selection;
+        self.revision = revision;
+        self.persistence = DesktopPresentationPersistence::Saved;
+        DesktopPresentationApplyOutcome::Applied
     }
 
     pub fn observe_persisted_unconfirmed(
@@ -235,18 +229,27 @@ impl DesktopPresentationStyle {
         persisted_selection: DesktopPresentationSelection,
     ) -> DesktopPresentationApplyOutcome {
         let was_saved = matches!(self.persistence, DesktopPresentationPersistence::Saved);
-        self.persisted_selection = persisted_selection;
         if !was_saved || self.selection == persisted_selection {
+            self.persisted_selection = persisted_selection;
             return DesktopPresentationApplyOutcome::Unchanged;
         }
-        self.apply_selection(persisted_selection, DesktopPresentationPersistence::Saved)
+        let Some(revision) = self.revision.checked_successor() else {
+            return DesktopPresentationApplyOutcome::RevisionExhausted;
+        };
+        self.selection = persisted_selection;
+        self.persisted_selection = persisted_selection;
+        self.revision = revision;
+        self.persistence = DesktopPresentationPersistence::Saved;
+        DesktopPresentationApplyOutcome::Applied
     }
 
     pub fn mark_not_saved(&mut self) {
-        if matches!(self.persistence, DesktopPresentationPersistence::Saving)
-            && self.selection != self.persisted_selection
-        {
-            self.persistence = DesktopPresentationPersistence::NotSaved;
+        if matches!(self.persistence, DesktopPresentationPersistence::Saving) {
+            self.persistence = if self.selection == self.persisted_selection {
+                DesktopPresentationPersistence::Saved
+            } else {
+                DesktopPresentationPersistence::NotSaved
+            };
         }
     }
 
@@ -305,20 +308,6 @@ impl DesktopPresentationStyle {
         };
         DesktopPresentationApplyOutcome::Applied
     }
-
-    fn apply_selection(
-        &mut self,
-        selection: DesktopPresentationSelection,
-        persistence: DesktopPresentationPersistence,
-    ) -> DesktopPresentationApplyOutcome {
-        let Some(revision) = self.revision.checked_successor() else {
-            return DesktopPresentationApplyOutcome::RevisionExhausted;
-        };
-        self.selection = selection;
-        self.revision = revision;
-        self.persistence = persistence;
-        DesktopPresentationApplyOutcome::Applied
-    }
 }
 
 #[cfg(test)]
@@ -343,6 +332,50 @@ mod tests {
 
         assert_eq!(
             style.select_skin_index(1),
+            DesktopPresentationApplyOutcome::RevisionExhausted
+        );
+        assert_eq!(style, prior);
+    }
+
+    #[test]
+    fn exhausted_persisted_observation_preserves_every_complete_style_field() {
+        let selection =
+            DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Refined);
+        let mut style = DesktopPresentationStyle {
+            selection,
+            persisted_selection: selection,
+            revision: DesktopPresentationRevision(u64::MAX),
+            persistence: DesktopPresentationPersistence::Saved,
+        };
+        let prior = style;
+
+        assert_eq!(
+            style.observe_persisted(DesktopPresentationSelection::new(
+                DesktopDensity::Compact,
+                DesktopSkin::Graphite,
+            )),
+            DesktopPresentationApplyOutcome::RevisionExhausted
+        );
+        assert_eq!(style, prior);
+    }
+
+    #[test]
+    fn exhausted_unconfirmed_observation_preserves_every_complete_style_field() {
+        let selection =
+            DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Refined);
+        let mut style = DesktopPresentationStyle {
+            selection,
+            persisted_selection: selection,
+            revision: DesktopPresentationRevision(u64::MAX),
+            persistence: DesktopPresentationPersistence::Saved,
+        };
+        let prior = style;
+
+        assert_eq!(
+            style.observe_persisted_unconfirmed(DesktopPresentationSelection::new(
+                DesktopDensity::Compact,
+                DesktopSkin::Graphite,
+            )),
             DesktopPresentationApplyOutcome::RevisionExhausted
         );
         assert_eq!(style, prior);

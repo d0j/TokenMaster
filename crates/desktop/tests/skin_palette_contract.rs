@@ -124,7 +124,50 @@ fn palette_values_are_fixed_copy_data_with_meaningful_contrast() {
     }
 
     let source = include_str!("../src/skin.rs");
-    for forbidden in ["String", "Vec", "Path", "serde", "slint::", "M0", "probe"] {
+    let module = include_str!("../src/lib.rs");
+    assert_eq!(source.matches("pub struct DesktopRgb").count(), 1);
+    assert_eq!(source.matches("pub struct DesktopColorTokens").count(), 1);
+    assert_eq!(source.matches("pub enum DesktopSkin").count(), 1);
+    assert_eq!(
+        source
+            .matches("#[derive(Clone, Copy, Debug, Eq, PartialEq)]")
+            .count(),
+        3
+    );
+    assert_eq!(module.matches("pub mod skin;").count(), 1);
+    assert_eq!(
+        module
+            .matches("pub use skin::{DesktopColorTokens, DesktopRgb, DesktopSkin};")
+            .count(),
+        1
+    );
+    for forbidden in [
+        "use ",
+        "extern crate",
+        "mod ",
+        "String",
+        "Vec",
+        "Box",
+        "Path",
+        "std::",
+        "alloc::",
+        "serde",
+        "use slint",
+        "slint::",
+        "tokio",
+        "thread",
+        "channel",
+        "Mutex",
+        "unsafe",
+        "File",
+        "fs::",
+        "net::",
+        "sql",
+        "http",
+        "M0",
+        "probe",
+        "impl Default",
+    ] {
         assert!(
             !source.contains(forbidden),
             "skin DTO source contains {forbidden}"

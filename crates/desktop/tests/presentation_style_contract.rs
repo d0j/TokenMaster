@@ -12,7 +12,7 @@ const EMBER_ULTRA_COMPACT: DesktopPresentationSelection =
 
 #[test]
 fn selection_is_complete_checked_and_revisioned_across_both_axes() {
-    let mut style = DesktopPresentationStyle::new();
+    let mut style = DesktopPresentationStyle::from_persisted(REFINED_COMFORTABLE);
     assert_eq!(style.selection(), REFINED_COMFORTABLE);
     assert_eq!(style.persisted_selection(), REFINED_COMFORTABLE);
     assert_eq!(style.revision().get(), 0);
@@ -47,14 +47,6 @@ fn selection_is_complete_checked_and_revisioned_across_both_axes() {
         DesktopPresentationApplyOutcome::Rejected
     );
     assert_eq!(style, before_rejection);
-}
-
-#[test]
-fn default_style_matches_the_complete_initial_selection() {
-    assert_eq!(
-        DesktopPresentationStyle::default(),
-        DesktopPresentationStyle::new()
-    );
 }
 
 #[test]
@@ -176,4 +168,40 @@ fn unrelated_projection_and_data_only_restore_leave_complete_selection_unchanged
     assert_eq!(style.selection(), before.selection());
     assert_eq!(style.persisted_selection(), EMBER_ULTRA_COMPACT);
     assert_eq!(style.persistence(), DesktopPresentationPersistence::Saving);
+}
+
+#[test]
+fn terminal_failure_or_cancel_resolves_a_to_b_to_a_to_saved_without_permanent_saving() {
+    for terminal in ["failed", "cancelled"] {
+        let mut style = DesktopPresentationStyle::from_persisted(REFINED_COMFORTABLE);
+        assert_eq!(
+            style.select_skin_index_if_admitted(1, |_| true),
+            DesktopPresentationApplyOutcome::Applied
+        );
+        assert_eq!(
+            style.select_skin_index_if_admitted(0, |_| true),
+            DesktopPresentationApplyOutcome::Applied
+        );
+        assert_eq!(style.selection(), REFINED_COMFORTABLE, "{terminal}");
+        assert_eq!(style.persistence(), DesktopPresentationPersistence::Saving);
+
+        assert_eq!(
+            style.observe_persisted_unconfirmed(REFINED_COMFORTABLE),
+            DesktopPresentationApplyOutcome::Unchanged
+        );
+        style.mark_not_saved();
+        assert_eq!(
+            style.persistence(),
+            DesktopPresentationPersistence::Saved,
+            "{terminal} terminal must not leave a matched complete selection saving"
+        );
+    }
+}
+
+#[test]
+fn presentation_style_source_has_no_default_or_zero_argument_constructor() {
+    let source = include_str!("../src/presentation_style.rs");
+
+    assert!(!source.contains("impl Default for DesktopPresentationStyle"));
+    assert!(!source.contains("pub const fn new() -> Self"));
 }
