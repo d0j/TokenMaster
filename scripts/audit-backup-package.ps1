@@ -9,6 +9,220 @@ $ErrorActionPreference = 'Stop'
 $expectedDependencyPolicySha256 = '26a334260c1739469857836d52d8fcc7719cb9d14319413fd885d620799dc3cc'
 $expectedFeaturePolicySha256 = '9b030a99fe87f68c2aecb2f728121fe655cca6c5818e4295873b223f685f5be8'
 $root = (Resolve-Path -LiteralPath $RepositoryRoot).Path
+
+function Get-RustCodeMask {
+    param([Parameter(Mandatory = $true)][string]$Text)
+
+    $characters = $Text.ToCharArray()
+    $length = $characters.Length
+    $index = 0
+    while ($index -lt $length) {
+        $next = if ($index + 1 -lt $length) { $characters[$index + 1] } else { [char]0 }
+        if ($characters[$index] -eq '/' -and $next -eq '/') {
+            while ($index -lt $length -and $characters[$index] -ne "`n") {
+                $characters[$index] = ' '
+                $index += 1
+            }
+            continue
+        }
+        if ($characters[$index] -eq '/' -and $next -eq '*') {
+            $depth = 1
+            $characters[$index] = ' '
+            $characters[$index + 1] = ' '
+            $index += 2
+            while ($index -lt $length -and $depth -gt 0) {
+                $next = if ($index + 1 -lt $length) { $characters[$index + 1] } else { [char]0 }
+                if ($characters[$index] -eq '/' -and $next -eq '*') {
+                    $depth += 1
+                    $characters[$index] = ' '
+                    $characters[$index + 1] = ' '
+                    $index += 2
+                    continue
+                }
+                if ($characters[$index] -eq '*' -and $next -eq '/') {
+                    $depth -= 1
+                    $characters[$index] = ' '
+                    $characters[$index + 1] = ' '
+                    $index += 2
+                    continue
+                }
+                if ($characters[$index] -ne "`r" -and $characters[$index] -ne "`n") {
+                    $characters[$index] = ' '
+                }
+                $index += 1
+            }
+            continue
+        }
+
+        $rawPrefixStart = -1
+        $rawMarker = -1
+        $previousIsIdentifier = $index -gt 0 -and $characters[$index - 1] -match '[A-Za-z0-9_]'
+        if (-not $previousIsIdentifier -and $characters[$index] -eq 'r') {
+            $rawPrefixStart = $index
+            $rawMarker = $index
+        } elseif (-not $previousIsIdentifier -and $characters[$index] -eq 'b' -and
+            $index + 1 -lt $length -and $characters[$index + 1] -eq 'r') {
+            $rawPrefixStart = $index
+            $rawMarker = $index + 1
+        }
+        if ($rawMarker -ge 0) {
+            $quote = $rawMarker + 1
+            while ($quote -lt $length -and $characters[$quote] -eq '#') {
+                $quote += 1
+            }
+            if ($quote -lt $length -and $characters[$quote] -eq '"') {
+                $hashCount = $quote - $rawMarker - 1
+                $cursor = $quote + 1
+                $end = -1
+                while ($cursor -lt $length) {
+                    if ($characters[$cursor] -eq '"') {
+                        $matchesTerminator = $true
+                        for ($hashIndex = 0; $hashIndex -lt $hashCount; $hashIndex += 1) {
+                            if ($cursor + 1 + $hashIndex -ge $length -or
+                                $characters[$cursor + 1 + $hashIndex] -ne '#') {
+                                $matchesTerminator = $false
+                                break
+                            }
+                        }
+                        if ($matchesTerminator) {
+                            $end = $cursor + $hashCount
+                            break
+                        }
+                    }
+                    $cursor += 1
+                }
+                if ($end -lt 0) {
+                    throw 'TM-BACKUP-PACKAGE-CAPABILITY: unterminated Rust raw string'
+                }
+                for ($cursor = $rawPrefixStart; $cursor -le $end; $cursor += 1) {
+                    if ($characters[$cursor] -ne "`r" -and $characters[$cursor] -ne "`n") {
+                        $characters[$cursor] = ' '
+                    }
+                }
+                $index = $end + 1
+                continue
+            }
+        }
+
+        if ($characters[$index] -eq '"') {
+            $characters[$index] = ' '
+            $index += 1
+            $escaped = $false
+            $closed = $false
+            while ($index -lt $length) {
+                $character = $characters[$index]
+                if ($character -ne "`r" -and $character -ne "`n") {
+                    $characters[$index] = ' '
+                }
+                if (-not $escaped -and $character -eq '"') {
+                    $closed = $true
+                    $index += 1
+                    break
+                }
+                if (-not $escaped -and $character -eq '\') {
+                    $escaped = $true
+                } else {
+                    $escaped = $false
+                }
+                $index += 1
+            }
+            if (-not $closed) {
+                throw 'TM-BACKUP-PACKAGE-CAPABILITY: unterminated Rust string'
+            }
+            continue
+        }
+        $index += 1
+    }
+    return -join $characters
+}
+
+function Get-PublicRustFunctionSignatures {
+    param(
+        [Parameter(Mandatory = $true)][string]$Text,
+        [Parameter(Mandatory = $true)][string]$FileName
+    )
+
+    $mask = Get-RustCodeMask -Text $Text
+    $declarationStarts = @([regex]::Matches(
+        $mask,
+        '\bpub[ \t\r\n]+(?:(?:[A-Za-z_][A-Za-z0-9_]*)[ \t\r\n]+)*fn[ \t\r\n]+(?<name>[A-Za-z_][A-Za-z0-9_]*)'
+    ))
+    $result = @()
+    foreach ($declarationStart in $declarationStarts) {
+        $parenthesisDepth = 0
+        $bracketDepth = 0
+        $angleDepth = 0
+        $nestedBraceDepth = 0
+        $sawParameters = $false
+        $signatureEnd = -1
+        for ($index = $declarationStart.Index; $index -lt $mask.Length; $index += 1) {
+            $character = $mask[$index]
+            switch ($character) {
+                '(' {
+                    $parenthesisDepth += 1
+                    $sawParameters = $true
+                }
+                ')' {
+                    if ($parenthesisDepth -le 0) {
+                        throw 'TM-BACKUP-PACKAGE-CAPABILITY: unbalanced public function parentheses'
+                    }
+                    $parenthesisDepth -= 1
+                }
+                '[' { $bracketDepth += 1 }
+                ']' {
+                    if ($bracketDepth -le 0) {
+                        throw 'TM-BACKUP-PACKAGE-CAPABILITY: unbalanced public function brackets'
+                    }
+                    $bracketDepth -= 1
+                }
+                '<' { $angleDepth += 1 }
+                '>' {
+                    $previous = if ($index -gt 0) { $mask[$index - 1] } else { [char]0 }
+                    if ($angleDepth -gt 0 -and $previous -ne '-') {
+                        $angleDepth -= 1
+                    }
+                }
+                '{' {
+                    if ($sawParameters -and $parenthesisDepth -eq 0 -and $bracketDepth -eq 0 -and
+                        $angleDepth -eq 0 -and $nestedBraceDepth -eq 0) {
+                        $signatureEnd = $index
+                        break
+                    }
+                    $nestedBraceDepth += 1
+                }
+                '}' {
+                    if ($nestedBraceDepth -gt 0) {
+                        $nestedBraceDepth -= 1
+                    }
+                }
+                ';' {
+                    if ($sawParameters -and $parenthesisDepth -eq 0 -and $bracketDepth -eq 0 -and
+                        $angleDepth -eq 0 -and $nestedBraceDepth -eq 0) {
+                        $signatureEnd = $index
+                        break
+                    }
+                }
+            }
+            if ($signatureEnd -ge 0) {
+                break
+            }
+        }
+        if (-not $sawParameters -or $signatureEnd -lt 0) {
+            throw 'TM-BACKUP-PACKAGE-CAPABILITY: public Rust function declaration did not parse'
+        }
+        $normalized = $mask.Substring(
+            $declarationStart.Index,
+            $signatureEnd - $declarationStart.Index
+        ) -replace '\s+', ''
+        $result += [pscustomobject]@{
+            FileName = $FileName
+            Name = $declarationStart.Groups['name'].Value
+            Signature = $normalized
+        }
+    }
+    return $result
+}
+
 $rootManifest = Join-Path $root 'Cargo.toml'
 $stateManifest = Join-Path $root 'crates\state\Cargo.toml'
 $packageSource = Join-Path $root 'crates\state\src\package'
@@ -61,72 +275,64 @@ if ($packageText -match $forbiddenAuthorityPattern) {
 if (@([regex]::Matches($packageReaderText, 'if\s+settings\.source_schema_version\(\)\s*!=\s*manifest\.settings_schema_version\s*\{\s*return\s+Err\(StateError::integrity\(\)\);\s*\}')).Count -ne 1) {
     throw 'TM-BACKUP-SETTINGS-VERSION-BINDING: manifest and settings entry source versions must match exactly'
 }
-$expectedPublicPackageFunctions = [ordered]@{
-    compression = 1
-    copy_verified_stage_to_durable = 1
-    created_at_utc_ms = 2
-    database_len = 1
-    database_schema_version = 1
-    database_sha256 = 1
-    decrypt = 1
-    encrypt = 1
-    existing = 1
-    inspect = 1
-    level = 1
-    metadata = 1
-    new = 2
-    output_len = 1
-    output_sha256 = 1
-    package_len = 1
-    package_sha256 = 1
-    purpose = 1
-    read = 2
-    read_for_recovery = 1
-    receipt = 2
-    settings = 2
-    verify_backup_stage = 1
-    write = 2
-    write_to_backup_stage = 1
-    write_verified_candidate_to_backup_stage = 1
-}
-$publicPackageFunctions = @([regex]::Matches(
-    $packageText,
-    '(?m)^\s*pub\s+(?:(?:const|async|unsafe)\s+)*fn\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)'
-))
-$publicPackageFunctionCounts = @{}
-foreach ($function in $publicPackageFunctions) {
-    $name = $function.Groups['name'].Value
-    if ($publicPackageFunctionCounts.ContainsKey($name)) {
-        $publicPackageFunctionCounts[$name] += 1
-    } else {
-        $publicPackageFunctionCounts[$name] = 1
+$expectedPublicPackageSurface = @(
+    'encryption.rs|pubconstfnoutput_len(self)->u64'
+    'encryption.rs|pubconstfnoutput_sha256(&self)->&[u8;32]'
+    'encryption.rs|pubfndecrypt(source:&mutDurableFileReader,passphrase:BackupPassphrase,database_destination:&mutDurableStagedFile,)->Result<VerifiedBackupPackage,StateError>'
+    'encryption.rs|pubfnencrypt(context:BackupEncryptionContext,source:&mutDurableFileReader,verified:&VerifiedBackupPackage,passphrase:BackupPassphrase,destination:&mutDurableStagedFile,)->Result<ProtectedPackageReceipt,StateError>'
+    'encryption.rs|pubfnexisting(input:&mutString)->Result<Self,StateError>'
+    'encryption.rs|pubfnnew(input:&mutString,confirmation:&mutString)->Result<Self,StateError>'
+    'mod.rs|pubconstfncompression(&self)->BackupCompression'
+    'mod.rs|pubconstfncreated_at_utc_ms(&self)->i64'
+    'mod.rs|pubconstfncreated_at_utc_ms(self)->i64'
+    'mod.rs|pubconstfndatabase_len(&self)->u64'
+    'mod.rs|pubconstfndatabase_schema_version(&self)->u16'
+    'mod.rs|pubconstfndatabase_sha256(&self)->&[u8;32]'
+    'mod.rs|pubconstfnlevel(self)->i32'
+    'mod.rs|pubconstfnmetadata(&self)->BackupMetadata'
+    'mod.rs|pubconstfnpackage_len(self)->u64'
+    'mod.rs|pubconstfnpackage_sha256(&self)->&[u8;32]'
+    'mod.rs|pubconstfnpurpose(self)->BackupPurpose'
+    'mod.rs|pubconstfnreceipt(&self)->PackageReceipt'
+    'mod.rs|pubconstfnreceipt(&self)->PackageReceipt'
+    'mod.rs|pubconstfnsettings(&self)->&PortableSettingsCandidate'
+    'mod.rs|pubconstfnsettings(&self)->&PortableSettingsCandidate'
+    'mod.rs|pubfnnew(created_at_utc_ms:i64,purpose:BackupPurpose)->Result<Self,crate::StateError>'
+    'reader.rs|pubfninspect(source:&mutDurableFileReader)->Result<VerifiedBackupPackage,StateError>'
+    'reader.rs|pubfnread(source:&mutDurableFileReader)->Result<VerifiedConfigPackage,StateError>'
+    'reader.rs|pubfnread(source:&mutDurableFileReader,database_sink:&mutDurableStagedFile,)->Result<VerifiedBackupPackage,StateError>'
+    'reader.rs|pubfnread_for_recovery(source:&mutDurableFileReader,database_sink:&mutRecoveryStagedArchive,)->Result<VerifiedBackupPackage,StateError>'
+    'reader.rs|pubfnverify_backup_stage(source:&BackupStagedFile,)->Result<VerifiedBackupPackage,StateError>'
+    'writer.rs|pubfncopy_verified_stage_to_durable(source:&BackupStagedFile,verified:&VerifiedBackupPackage,destination:&mutDurableStagedFile,)->Result<PackageReceipt,StateError>'
+    'writer.rs|pubfnwrite(settings:&PortableSettingsCandidate,created_at_utc_ms:i64,destination:&mutDurableStagedFile,)->Result<PackageReceipt,StateError>'
+    'writer.rs|pubfnwrite(settings:&PortableSettingsCandidate,database:&mutDurableFileReader,database_len:u64,database_sha256:[u8;32],database_schema_version:u16,compression:BackupCompression,metadata:BackupMetadata,destination:&mutDurableStagedFile,)->Result<PackageReceipt,StateError>'
+    'writer.rs|pubfnwrite_to_backup_stage(settings:&PortableSettingsCandidate,database:&mutDurableFileReader,database_len:u64,database_sha256:[u8;32],database_schema_version:u16,compression:BackupCompression,metadata:BackupMetadata,destination:&mutBackupStagedFile,)->Result<PackageReceipt,StateError>'
+    "writer.rs|pubfnwrite_verified_candidate_to_backup_stage(settings:&PortableSettingsCandidate,mutdatabase:VerifiedBackupCandidateReader<'_>,compression:BackupCompression,metadata:BackupMetadata,destination:&mutBackupStagedFile,)->Result<PackageReceipt,StateError>"
+)
+$publicPackageFunctionDeclarations = @(
+    $packageFiles | ForEach-Object {
+        Get-PublicRustFunctionSignatures `
+            -Text ([System.IO.File]::ReadAllText($_.FullName)) `
+            -FileName $_.Name
     }
-}
-$unexpectedPublicPackageFunctions = @(
-    $publicPackageFunctionCounts.Keys |
-        Where-Object { -not $expectedPublicPackageFunctions.Contains($_) }
 )
-$driftedPublicPackageFunctions = @(
-    $expectedPublicPackageFunctions.Keys |
-        Where-Object {
-            -not $publicPackageFunctionCounts.ContainsKey($_) -or
-            $publicPackageFunctionCounts[$_] -ne $expectedPublicPackageFunctions[$_]
-        }
+$actualPublicPackageSurface = @(
+    $publicPackageFunctionDeclarations |
+        ForEach-Object { "$($_.FileName)|$($_.Signature)" } |
+        Sort-Object -CaseSensitive
 )
-$publicPackageFunctionDeclarations = @([regex]::Matches(
-    $packageText,
-    '(?ms)^\s*pub\s+(?:(?:const|async|unsafe)\s+)*fn\s+[A-Za-z_][A-Za-z0-9_]*\b.*?(?=\{)'
-))
+$canonicalExpectedPublicPackageSurface = @(
+    $expectedPublicPackageSurface | Sort-Object -CaseSensitive
+) -join "`n"
+$canonicalActualPublicPackageSurface = $actualPublicPackageSurface -join "`n"
 $rawPublicPackageFunctions = @(
     $publicPackageFunctionDeclarations |
         Where-Object {
-            $_.Value -cmatch '(?<![A-Za-z0-9_])(?:(?:dyn|impl)\s+)?(?:Read|Write)(?![A-Za-z0-9_])'
+            $_.Signature -cmatch '(?<![A-Za-z0-9_])(?:(?:dyn|impl))?(?:Read|Write)(?![A-Za-z0-9_])'
         }
 )
-if ($publicPackageFunctions.Count -ne 32 -or
-    $publicPackageFunctionDeclarations.Count -ne $publicPackageFunctions.Count -or
-    $unexpectedPublicPackageFunctions.Count -ne 0 -or
-    $driftedPublicPackageFunctions.Count -ne 0 -or
+if ($publicPackageFunctionDeclarations.Count -ne 32 -or
+    $canonicalActualPublicPackageSurface -cne $canonicalExpectedPublicPackageSurface -or
     $rawPublicPackageFunctions.Count -ne 0) {
     throw 'TM-BACKUP-PACKAGE-CAPABILITY: public raw package writer or extractor authority is forbidden'
 }

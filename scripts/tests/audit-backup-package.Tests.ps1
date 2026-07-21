@@ -230,4 +230,40 @@ Describe "TokenMaster backup package audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
     }
+
+    It "rejects a where-clause hidden behind a braced return expression" {
+        $fixture = New-BackupAuditFixture -Name "braced-return-where-reader"
+        $path = Join-Path $fixture "crates\state\src\package\reader.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '    pub fn inspect(source: &mut DurableFileReader) -> Result<VerifiedBackupPackage, StateError> {',
+            '    pub fn inspect<R>(source: &mut R) -> [u8; { 1 }] where R: Read {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
+    }
+
+    It "rejects an added public extern package function" {
+        $fixture = New-BackupAuditFixture -Name "public-extern-package-function"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\package\reader.rs") `
+            -Value 'pub extern "Rust" fn decode(source: &mut dyn Read) { let _ = source; }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
+    }
+
+    It "rejects aliasing raw reader authority in an existing public signature" {
+        $fixture = New-BackupAuditFixture -Name "aliased-reader-bound"
+        $path = Join-Path $fixture "crates\state\src\package\reader.rs"
+        $text = [System.IO.File]::ReadAllText($path)
+        $text = "use std::io::Read as IoRead;`n" + $text.Replace(
+            '    pub fn inspect(source: &mut DurableFileReader) -> Result<VerifiedBackupPackage, StateError> {',
+            '    pub fn inspect<R: IoRead>(source: &mut R) -> Result<VerifiedBackupPackage, StateError> {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
+    }
 }
