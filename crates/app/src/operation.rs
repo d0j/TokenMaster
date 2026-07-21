@@ -168,8 +168,8 @@ impl ApplicationOperationSubmitter {
                     ApplicationOperationPayload::ReminderPolicy(_),
                     ApplicationCommand::UpdateReminderPolicy
                 ) | (
-                    ApplicationOperationPayload::PresentationDensity(_),
-                    ApplicationCommand::UpdatePresentationDensity
+                    ApplicationOperationPayload::Presentation(_),
+                    ApplicationCommand::UpdatePresentation
                 )
             );
             let admission = if replaceable {

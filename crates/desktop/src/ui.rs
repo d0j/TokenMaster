@@ -23,14 +23,14 @@ use crate::{
     DesktopInAppNotificationBatch, DesktopInAppNotificationBridge, DesktopIntent,
     DesktopIntentSink, DesktopLifecycleIntentSink, DesktopModelsProjection,
     DesktopNotificationsProjection, DesktopOperationSnapshot, DesktopPresentationApplyOutcome,
-    DesktopPresentationSelection, DesktopPresentationStyle, DesktopProjectsProjection,
-    DesktopQuality, DesktopReliableStateProjection, DesktopReminderPolicy,
-    DesktopSessionDetailIntentAdmission, DesktopSessionDetailIntentSink, DesktopSessionsProjection,
-    DesktopSkin, DesktopSnapshotBridge, DesktopSnapshotEpoch, DesktopSnapshotReceiver,
-    DesktopTokenValue, DesktopTrayAvailability, DesktopValueAvailability, HistoryDayRow,
-    InAppNotificationRow, MainWindow, ModelUsageRow, ProjectUsageRow, RecentActivityRow,
-    ReminderCustomLeadRow, ReminderScopeRow, RestorePointRow, RouteRow, SessionDetailBreakdownRow,
-    SessionListRow, UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
+    DesktopPresentationStyle, DesktopProjectsProjection, DesktopQuality,
+    DesktopReliableStateProjection, DesktopReminderPolicy, DesktopSessionDetailIntentAdmission,
+    DesktopSessionDetailIntentSink, DesktopSessionsProjection, DesktopSnapshotBridge,
+    DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue, DesktopTrayAvailability,
+    DesktopValueAvailability, HistoryDayRow, InAppNotificationRow, MainWindow, ModelUsageRow,
+    ProjectUsageRow, RecentActivityRow, ReminderCustomLeadRow, ReminderScopeRow, RestorePointRow,
+    RouteRow, SessionDetailBreakdownRow, SessionListRow, UnavailableDesktopIntentSink,
+    UnavailableDesktopSessionDetailIntentSink,
     in_app_notification::NotificationEpochState,
     native_tray::DesktopNativeTrayOwner,
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
@@ -478,10 +478,7 @@ impl DesktopShell {
     ) -> Result<Self, slint::PlatformError> {
         let window = MainWindow::new()?;
         let initial_presentation_style =
-            DesktopPresentationStyle::from_persisted(DesktopPresentationSelection::new(
-                reliable_state.presentation().density(),
-                DesktopSkin::Refined,
-            ));
+            DesktopPresentationStyle::from_persisted(reliable_state.presentation().selection());
         let presentation_style = Arc::new(Mutex::new(initial_presentation_style));
         apply_presentation_style(&window, initial_presentation_style);
         let tray_availability = Rc::new(Cell::new(DesktopTrayAvailability::Unavailable));
@@ -663,10 +660,7 @@ fn reconcile_presentation_style(
     let mut style = presentation_style
         .lock()
         .map_err(|_| DesktopUiError::state_unavailable())?;
-    let projected_selection = DesktopPresentationSelection::new(
-        projection.presentation().density(),
-        DesktopSkin::Refined,
-    );
+    let projected_selection = projection.presentation().selection();
     match presentation_terminal.or_else(|| presentation_terminal_from_projection(projection)) {
         Some(operation)
             if matches!(
@@ -747,9 +741,7 @@ fn select_presentation_density_if_admitted(
     let mut selected = captured;
     if selected.select_density_index_if_admitted(index, |selection| {
         matches!(
-            intent_sink.submit(DesktopIntent::UpdatePresentationDensity(
-                selection.density()
-            )),
+            intent_sink.submit(DesktopIntent::UpdatePresentation(selection)),
             crate::DesktopIntentAdmission::Started
                 | crate::DesktopIntentAdmission::Queued
                 | crate::DesktopIntentAdmission::Coalesced
@@ -3040,8 +3032,9 @@ mod duration_tests {
         }
     }
 
-    fn reliable_state_with_density_and_operation(
+    fn reliable_state_with_presentation_and_operation(
         density: DesktopDensity,
+        skin: DesktopSkin,
         operation: Option<DesktopOperationSnapshot>,
     ) -> DesktopReliableStateProjection {
         let summary = DesktopReliableStateSummary::new_with_settings(
@@ -3050,7 +3043,7 @@ mod duration_tests {
             "healthy",
             DesktopBackupPolicy::disabled(),
             DesktopReminderPolicy::unavailable(),
-            DesktopPresentationSettings::new(density),
+            DesktopPresentationSettings::new(density, skin),
             None,
             None,
             None,
@@ -3080,7 +3073,7 @@ mod duration_tests {
 
     impl DesktopIntentSink for ReentrantPresentationSink {
         fn submit(&self, intent: DesktopIntent) -> DesktopIntentAdmission {
-            if matches!(intent, DesktopIntent::UpdatePresentationDensity(_)) {
+            if matches!(intent, DesktopIntent::UpdatePresentation(_)) {
                 self.submissions.set(self.submissions.get() + 1);
                 let Ok(mut style) = self.style.try_lock() else {
                     return DesktopIntentAdmission::Rejected;
@@ -3149,7 +3142,11 @@ mod duration_tests {
         ] {
             let shell = DesktopShell::new_with_reliable_state(
                 &ProductReducer::new().snapshot(),
-                reliable_state_with_density_and_operation(DesktopDensity::Comfortable, None),
+                reliable_state_with_presentation_and_operation(
+                    DesktopDensity::Comfortable,
+                    DesktopSkin::Refined,
+                    None,
+                ),
                 Rc::new(AcceptingPresentationSink),
             )
             .map_err(|_| String::from("desktop shell"))?;
@@ -3158,8 +3155,9 @@ mod duration_tests {
             let notifier = shell.reliable_state_notifier();
             publish_from_worker(
                 notifier.clone(),
-                reliable_state_with_density_and_operation(
+                reliable_state_with_presentation_and_operation(
                     persisted_density,
+                    DesktopSkin::Refined,
                     Some(DesktopOperationSnapshot::new(
                         DesktopOperationKind::UpdatePresentation,
                         phase,
@@ -3170,8 +3168,9 @@ mod duration_tests {
             )?;
             publish_from_worker(
                 notifier.clone(),
-                reliable_state_with_density_and_operation(
+                reliable_state_with_presentation_and_operation(
                     persisted_density,
+                    DesktopSkin::Refined,
                     Some(DesktopOperationSnapshot::new(
                         DesktopOperationKind::Backup,
                         DesktopOperationPhase::Running,
@@ -3226,7 +3225,11 @@ mod duration_tests {
         ] {
             let shell = DesktopShell::new_with_reliable_state(
                 &ProductReducer::new().snapshot(),
-                reliable_state_with_density_and_operation(DesktopDensity::Comfortable, None),
+                reliable_state_with_presentation_and_operation(
+                    DesktopDensity::Comfortable,
+                    DesktopSkin::Refined,
+                    None,
+                ),
                 Rc::new(AcceptingPresentationSink),
             )
             .map_err(|_| String::from("desktop shell"))?;
@@ -3235,8 +3238,9 @@ mod duration_tests {
             let notifier = shell.reliable_state_notifier();
             publish_from_worker(
                 notifier.clone(),
-                reliable_state_with_density_and_operation(
+                reliable_state_with_presentation_and_operation(
                     DesktopDensity::UltraCompact,
+                    DesktopSkin::Graphite,
                     Some(DesktopOperationSnapshot::new(
                         kind,
                         DesktopOperationPhase::Succeeded,
@@ -3247,8 +3251,9 @@ mod duration_tests {
             )?;
             publish_from_worker(
                 notifier.clone(),
-                reliable_state_with_density_and_operation(
+                reliable_state_with_presentation_and_operation(
                     DesktopDensity::UltraCompact,
+                    DesktopSkin::Graphite,
                     Some(DesktopOperationSnapshot::new(
                         DesktopOperationKind::Backup,
                         DesktopOperationPhase::Running,

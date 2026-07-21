@@ -687,7 +687,7 @@ fn reminder_policy_intent_admits_one_bounded_update_policy_request() {
 }
 
 #[test]
-fn presentation_density_intent_routes_to_the_exact_typed_operation() {
+fn presentation_intent_routes_to_the_exact_typed_operation() {
     let (observed_sender, observed_receiver) = mpsc::sync_channel(1);
     let mut worker = ApplicationOperationWorker::spawn_with_payload(move |permit, payload| {
         observed_sender
@@ -699,25 +699,34 @@ fn presentation_density_intent_routes_to_the_exact_typed_operation() {
     let sink = ApplicationDesktopIntentSink::new(worker.submitter());
 
     assert_eq!(
-        sink.submit(DesktopIntent::UpdatePresentationDensity(
-            tokenmaster_desktop::DesktopDensity::UltraCompact,
+        sink.submit(DesktopIntent::UpdatePresentation(
+            tokenmaster_desktop::DesktopPresentationSelection::new(
+                tokenmaster_desktop::DesktopDensity::UltraCompact,
+                tokenmaster_desktop::DesktopSkin::Graphite
+            ),
         )),
         DesktopIntentAdmission::Started
     );
     let (command, payload) = observed_receiver
         .recv_timeout(Duration::from_secs(5))
         .expect("presentation request");
-    assert_eq!(command, ApplicationCommand::UpdatePresentationDensity);
-    let ApplicationOperationPayload::PresentationDensity(update) = payload else {
+    assert_eq!(command, ApplicationCommand::UpdatePresentation);
+    let ApplicationOperationPayload::Presentation(update) = payload else {
         panic!("presentation payload");
     };
     assert_eq!(
-        update.density(),
-        tokenmaster_desktop::DesktopDensity::UltraCompact
+        update.selection(),
+        tokenmaster_desktop::DesktopPresentationSelection::new(
+            tokenmaster_desktop::DesktopDensity::UltraCompact,
+            tokenmaster_desktop::DesktopSkin::Graphite
+        )
     );
     assert_eq!(
-        update.into_state_density(),
-        tokenmaster_state::PresentationDensity::UltraCompact
+        update.into_state_presentation(),
+        tokenmaster_state::PresentationSettings::new(
+            tokenmaster_state::PresentationDensity::UltraCompact,
+            tokenmaster_state::PresentationSkin::Graphite
+        )
     );
     assert_eq!(
         application_operation_kind(command),
@@ -753,7 +762,7 @@ fn presentation_density_intent_routes_to_the_exact_typed_operation() {
 }
 
 #[test]
-fn presentation_density_execution_persists_and_projects_the_confirmed_operation() {
+fn presentation_execution_persists_and_projects_the_confirmed_operation() {
     i_slint_backend_testing::init_no_event_loop();
     let temporary = TempDir::new().expect("temporary directory");
     let environment = application_environment(&temporary);
@@ -772,12 +781,15 @@ fn presentation_density_execution_persists_and_projects_the_confirmed_operation(
     let live_started = Arc::new(AtomicBool::new(false));
     let mut coordinator = ApplicationCommandCoordinator::new();
     let ApplicationCommandAdmission::Started(permit) =
-        coordinator.submit(ApplicationCommand::UpdatePresentationDensity)
+        coordinator.submit(ApplicationCommand::UpdatePresentation)
     else {
         panic!("presentation permit");
     };
-    let (_, payload) = ApplicationOperationRequest::update_presentation_density(
-        tokenmaster_desktop::DesktopDensity::Compact,
+    let (_, payload) = ApplicationOperationRequest::update_presentation(
+        tokenmaster_desktop::DesktopPresentationSelection::new(
+            tokenmaster_desktop::DesktopDensity::Compact,
+            tokenmaster_desktop::DesktopSkin::Ember,
+        ),
     )
     .into_parts();
 
@@ -804,6 +816,10 @@ fn presentation_density_execution_persists_and_projects_the_confirmed_operation(
     assert_eq!(
         projection.presentation().density(),
         tokenmaster_desktop::DesktopDensity::Compact
+    );
+    assert_eq!(
+        projection.presentation().skin(),
+        tokenmaster_desktop::DesktopSkin::Ember
     );
     assert_eq!(projection.operation(), Some(completion));
 }

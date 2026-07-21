@@ -2,7 +2,8 @@ use core::fmt;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::presentation_style::DesktopDensity;
+use crate::presentation_style::{DesktopDensity, DesktopPresentationSelection};
+use crate::skin::DesktopSkin;
 
 pub const MAX_DESKTOP_RESTORE_POINTS: usize = 15;
 pub const MIN_BACKUP_PASSPHRASE_SCALARS: usize = 12;
@@ -110,22 +111,33 @@ pub struct DesktopBackupPolicy {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DesktopPresentationSettings {
     density: DesktopDensity,
+    skin: DesktopSkin,
 }
 
 impl DesktopPresentationSettings {
     #[must_use]
-    pub const fn new(density: DesktopDensity) -> Self {
-        Self { density }
+    pub const fn new(density: DesktopDensity, skin: DesktopSkin) -> Self {
+        Self { density, skin }
     }
 
     #[must_use]
     pub const fn comfortable() -> Self {
-        Self::new(DesktopDensity::Comfortable)
+        Self::new(DesktopDensity::Comfortable, DesktopSkin::Refined)
     }
 
     #[must_use]
     pub const fn density(self) -> DesktopDensity {
         self.density
+    }
+
+    #[must_use]
+    pub const fn skin(self) -> DesktopSkin {
+        self.skin
+    }
+
+    #[must_use]
+    pub const fn selection(self) -> DesktopPresentationSelection {
+        DesktopPresentationSelection::new(self.density, self.skin)
     }
 }
 
@@ -843,7 +855,7 @@ pub enum DesktopIntent {
         retention_budget_mib: u32,
     },
     UpdateReminderPolicy(DesktopReminderPolicyUpdate),
-    UpdatePresentationDensity(DesktopDensity),
+    UpdatePresentation(DesktopPresentationSelection),
     EnableCurrentUserStartup,
     RepairCurrentUserStartup,
     DisableCurrentUserStartup,
@@ -993,9 +1005,9 @@ impl fmt::Debug for DesktopIntent {
             Self::UpdateReminderPolicy(_) => {
                 formatter.write_str("DesktopIntent::UpdateReminderPolicy([redacted])")
             }
-            Self::UpdatePresentationDensity(density) => formatter
-                .debug_tuple("DesktopIntent::UpdatePresentationDensity")
-                .field(density)
+            Self::UpdatePresentation(selection) => formatter
+                .debug_tuple("DesktopIntent::UpdatePresentation")
+                .field(selection)
                 .finish(),
             Self::EnableCurrentUserStartup => {
                 formatter.write_str("DesktopIntent::EnableCurrentUserStartup")

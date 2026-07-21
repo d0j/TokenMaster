@@ -1151,13 +1151,13 @@ fn backup_policy_update_accepts_only_exact_product_ranges() {
 }
 
 #[test]
-fn presentation_density_update_preserves_every_other_settings_class() {
+fn presentation_update_preserves_every_other_settings_class() {
     let (_temporary, root) = fixture();
     let owner = ApplicationStateOwner::open(&root).expect("state owner");
     owner
-        .update_presentation_density(
-            &command_permit(ApplicationCommand::UpdatePresentationDensity),
-            PresentationDensity::UltraCompact,
+        .update_presentation(
+            &command_permit(ApplicationCommand::UpdatePresentation),
+            PresentationSettings::new(PresentationDensity::UltraCompact, PresentationSkin::Refined),
             || {},
         )
         .expect("seed ultra compact density");
@@ -1188,9 +1188,9 @@ fn presentation_density_update_preserves_every_other_settings_class() {
     let before_device = before.value().device().clone();
 
     owner
-        .update_presentation_density(
-            &command_permit(ApplicationCommand::UpdatePresentationDensity),
-            PresentationDensity::Compact,
+        .update_presentation(
+            &command_permit(ApplicationCommand::UpdatePresentation),
+            PresentationSettings::new(PresentationDensity::Compact, PresentationSkin::Ember),
             || {},
         )
         .expect("save compact density");
@@ -1199,13 +1199,17 @@ fn presentation_density_update_preserves_every_other_settings_class() {
         after.value().portable().presentation().density(),
         PresentationDensity::Compact
     );
+    assert_eq!(
+        after.value().portable().presentation().skin(),
+        PresentationSkin::Ember
+    );
     assert_eq!(after.value().portable().reminders(), &before_reminders);
     assert_eq!(after.value().portable().backup(), &before_backup);
     assert_eq!(after.value().device(), &before_device);
 }
 
 #[test]
-fn presentation_density_update_preserves_current_skin() {
+fn presentation_update_replaces_both_axes_atomically() {
     let (_temporary, root) = fixture();
     let owner = ApplicationStateOwner::open(&root).expect("state owner");
     let store = SettingsStore::new(root.reliable_state()).expect("settings store");
@@ -1221,9 +1225,9 @@ fn presentation_density_update_preserves_current_skin() {
     store.save(&graphite).expect("seed graphite skin");
 
     owner
-        .update_presentation_density(
-            &command_permit(ApplicationCommand::UpdatePresentationDensity),
-            PresentationDensity::Compact,
+        .update_presentation(
+            &command_permit(ApplicationCommand::UpdatePresentation),
+            PresentationSettings::new(PresentationDensity::Compact, PresentationSkin::Ember),
             || {},
         )
         .expect("save compact density");
@@ -1235,12 +1239,12 @@ fn presentation_density_update_preserves_current_skin() {
     );
     assert_eq!(
         saved.value().portable().presentation().skin(),
-        PresentationSkin::Graphite
+        PresentationSkin::Ember
     );
 }
 
 #[test]
-fn presentation_density_save_rejects_wrong_or_cancelled_permits_and_is_idempotent() {
+fn presentation_save_rejects_wrong_or_cancelled_permits_and_is_idempotent_only_for_exact_pair() {
     let (_temporary, root) = fixture();
     let owner = ApplicationStateOwner::open(&root).expect("state owner");
     let store = SettingsStore::new(root.reliable_state()).expect("settings store");
@@ -1248,9 +1252,9 @@ fn presentation_density_save_rejects_wrong_or_cancelled_permits_and_is_idempoten
     let mut callback_count = 0;
 
     owner
-        .update_presentation_density(
+        .update_presentation(
             &command_permit(ApplicationCommand::UpdateBackupPolicy),
-            PresentationDensity::Compact,
+            PresentationSettings::new(PresentationDensity::Compact, PresentationSkin::Graphite),
             || callback_count += 1,
         )
         .expect_err("wrong permit");
@@ -1262,15 +1266,19 @@ fn presentation_density_save_rejects_wrong_or_cancelled_permits_and_is_idempoten
 
     let mut coordinator = ApplicationCommandCoordinator::new();
     let ApplicationCommandAdmission::Started(cancelled) =
-        coordinator.submit(ApplicationCommand::UpdatePresentationDensity)
+        coordinator.submit(ApplicationCommand::UpdatePresentation)
     else {
         panic!("presentation permit");
     };
     assert!(coordinator.cancel(cancelled.id()));
     owner
-        .update_presentation_density(&cancelled, PresentationDensity::Compact, || {
-            callback_count += 1;
-        })
+        .update_presentation(
+            &cancelled,
+            PresentationSettings::new(PresentationDensity::Compact, PresentationSkin::Graphite),
+            || {
+                callback_count += 1;
+            },
+        )
         .expect_err("cancelled permit");
     assert_eq!(callback_count, 0);
     assert_eq!(
@@ -1279,12 +1287,12 @@ fn presentation_density_save_rejects_wrong_or_cancelled_permits_and_is_idempoten
     );
 
     owner
-        .update_presentation_density(
-            &command_permit(ApplicationCommand::UpdatePresentationDensity),
-            PresentationDensity::Comfortable,
+        .update_presentation(
+            &command_permit(ApplicationCommand::UpdatePresentation),
+            PresentationSettings::new(PresentationDensity::Comfortable, PresentationSkin::Refined),
             || callback_count += 1,
         )
-        .expect("equal density is idempotent");
+        .expect("exact equal selection is idempotent");
     assert_eq!(callback_count, 0);
     assert_eq!(
         store.load().expect("equal settings").generation(),
@@ -1292,12 +1300,12 @@ fn presentation_density_save_rejects_wrong_or_cancelled_permits_and_is_idempoten
     );
 
     owner
-        .update_presentation_density(
-            &command_permit(ApplicationCommand::UpdatePresentationDensity),
-            PresentationDensity::Compact,
+        .update_presentation(
+            &command_permit(ApplicationCommand::UpdatePresentation),
+            PresentationSettings::new(PresentationDensity::Comfortable, PresentationSkin::Graphite),
             || callback_count += 1,
         )
-        .expect("changed density");
+        .expect("changed skin is durable mutation");
     assert_eq!(callback_count, 1);
     assert_eq!(
         store
@@ -1307,6 +1315,16 @@ fn presentation_density_save_rejects_wrong_or_cancelled_permits_and_is_idempoten
             .portable()
             .presentation()
             .density(),
-        PresentationDensity::Compact
+        PresentationDensity::Comfortable
+    );
+    assert_eq!(
+        store
+            .load()
+            .expect("changed settings")
+            .value()
+            .portable()
+            .presentation()
+            .skin(),
+        PresentationSkin::Graphite
     );
 }

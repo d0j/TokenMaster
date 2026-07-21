@@ -5,7 +5,7 @@ use std::thread::{self, ThreadId};
 use std::time::{Duration, Instant};
 
 use tempfile::tempdir;
-use tokenmaster_desktop::DesktopDensity;
+use tokenmaster_desktop::{DesktopDensity, DesktopPresentationSelection, DesktopSkin};
 use tokenmaster_platform::{
     ControlledFileDialog, FileDialogFileType, FileDialogResult, FileDialogSelector,
     ValidatedLocalDirectory,
@@ -526,21 +526,21 @@ fn reminder_policy_follow_up_replaces_only_the_pending_payload_with_the_latest_s
 }
 
 #[test]
-fn presentation_density_follow_up_replaces_only_the_pending_payload() {
+fn presentation_follow_up_replaces_only_the_pending_complete_payload() {
     let (started_tx, started_rx) = channel();
     let (release_tx, release_rx) = channel();
     let executed = Arc::new(Mutex::new(Vec::new()));
     let execution_log = Arc::clone(&executed);
     let mut worker = ApplicationOperationWorker::spawn_with_payload(move |permit, payload| {
-        let ApplicationOperationPayload::PresentationDensity(update) = payload else {
-            panic!("presentation density payload");
+        let ApplicationOperationPayload::Presentation(update) = payload else {
+            panic!("presentation payload");
         };
-        let density = update.density();
-        execution_log.lock().expect("execution log").push(density);
+        let selection = update.selection();
+        execution_log.lock().expect("execution log").push(selection);
         started_tx
-            .send((permit.id(), density))
+            .send((permit.id(), selection))
             .expect("started signal");
-        if density == DesktopDensity::Compact {
+        if selection.density() == DesktopDensity::Compact {
             receive(&release_rx);
         }
         ApplicationCommandExecution::Succeeded
@@ -548,26 +548,34 @@ fn presentation_density_follow_up_replaces_only_the_pending_payload() {
     .expect("worker");
     let submitter = worker.submitter();
 
-    let ApplicationCommandAdmission::Started(first) = submitter.submit_request(
-        ApplicationOperationRequest::update_presentation_density(DesktopDensity::Compact),
-    ) else {
+    let ApplicationCommandAdmission::Started(first) =
+        submitter.submit_request(ApplicationOperationRequest::update_presentation(
+            DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Refined),
+        ))
+    else {
         panic!("first density save must start");
     };
-    assert_eq!(receive(&started_rx), (first.id(), DesktopDensity::Compact));
+    assert_eq!(
+        receive(&started_rx),
+        (
+            first.id(),
+            DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Refined)
+        )
+    );
 
     let ApplicationCommandAdmission::Queued {
         request_id: pending,
         active_request_id,
-    } = submitter.submit_request(ApplicationOperationRequest::update_presentation_density(
-        DesktopDensity::UltraCompact,
+    } = submitter.submit_request(ApplicationOperationRequest::update_presentation(
+        DesktopPresentationSelection::new(DesktopDensity::UltraCompact, DesktopSkin::Graphite),
     ))
     else {
         panic!("middle density save must queue");
     };
     assert_eq!(active_request_id, first.id());
     assert_eq!(
-        submitter.submit_request(ApplicationOperationRequest::update_presentation_density(
-            DesktopDensity::Comfortable,
+        submitter.submit_request(ApplicationOperationRequest::update_presentation(
+            DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Ember),
         )),
         ApplicationCommandAdmission::Coalesced {
             request_id: pending,
@@ -579,7 +587,13 @@ fn presentation_density_follow_up_replaces_only_the_pending_payload() {
     assert_eq!(snapshot.pending_count(), 1);
 
     release_tx.send(()).expect("release first save");
-    assert_eq!(receive(&started_rx), (pending, DesktopDensity::Comfortable));
+    assert_eq!(
+        receive(&started_rx),
+        (
+            pending,
+            DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Ember)
+        )
+    );
     wait_until(|| {
         worker
             .snapshot()
@@ -587,7 +601,10 @@ fn presentation_density_follow_up_replaces_only_the_pending_payload() {
     });
     assert_eq!(
         *executed.lock().expect("execution log"),
-        vec![DesktopDensity::Compact, DesktopDensity::Comfortable]
+        vec![
+            DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Refined),
+            DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Ember)
+        ]
     );
     assert_eq!(
         worker.shutdown().expect("worker shutdown"),
@@ -602,13 +619,13 @@ fn ten_thousand_presentation_updates_keep_one_latest_payload() {
     let executed = Arc::new(Mutex::new(Vec::new()));
     let execution_log = Arc::clone(&executed);
     let mut worker = ApplicationOperationWorker::spawn_with_payload(move |_permit, payload| {
-        let ApplicationOperationPayload::PresentationDensity(update) = payload else {
-            panic!("presentation density payload");
+        let ApplicationOperationPayload::Presentation(update) = payload else {
+            panic!("presentation payload");
         };
-        let density = update.density();
-        execution_log.lock().expect("execution log").push(density);
-        started_tx.send(density).expect("started signal");
-        if density == DesktopDensity::Compact {
+        let selection = update.selection();
+        execution_log.lock().expect("execution log").push(selection);
+        started_tx.send(selection).expect("started signal");
+        if selection.density() == DesktopDensity::Compact {
             receive(&release_rx);
         }
         ApplicationCommandExecution::Succeeded
@@ -616,23 +633,46 @@ fn ten_thousand_presentation_updates_keep_one_latest_payload() {
     .expect("worker");
     let submitter = worker.submitter();
     assert!(matches!(
-        submitter.submit_request(ApplicationOperationRequest::update_presentation_density(
-            DesktopDensity::Compact,
+        submitter.submit_request(ApplicationOperationRequest::update_presentation(
+            DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Refined),
         )),
         ApplicationCommandAdmission::Started(_)
     ));
-    assert_eq!(receive(&started_rx), DesktopDensity::Compact);
+    assert_eq!(
+        receive(&started_rx),
+        DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Refined)
+    );
 
-    let mut final_density = DesktopDensity::Comfortable;
+    let mut final_selection =
+        DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Refined);
     for index in 0..10_000 {
-        final_density = match index % 3 {
-            0 => DesktopDensity::Comfortable,
-            1 => DesktopDensity::Compact,
-            _ => DesktopDensity::UltraCompact,
+        final_selection = match index % 9 {
+            0 => {
+                DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Refined)
+            }
+            1 => DesktopPresentationSelection::new(
+                DesktopDensity::Comfortable,
+                DesktopSkin::Graphite,
+            ),
+            2 => DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Ember),
+            3 => DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Refined),
+            4 => DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Graphite),
+            5 => DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Ember),
+            6 => DesktopPresentationSelection::new(
+                DesktopDensity::UltraCompact,
+                DesktopSkin::Refined,
+            ),
+            7 => DesktopPresentationSelection::new(
+                DesktopDensity::UltraCompact,
+                DesktopSkin::Graphite,
+            ),
+            _ => {
+                DesktopPresentationSelection::new(DesktopDensity::UltraCompact, DesktopSkin::Ember)
+            }
         };
         assert!(matches!(
-            submitter.submit_request(ApplicationOperationRequest::update_presentation_density(
-                final_density,
+            submitter.submit_request(ApplicationOperationRequest::update_presentation(
+                final_selection,
             )),
             ApplicationCommandAdmission::Queued { .. }
                 | ApplicationCommandAdmission::Coalesced { .. }
@@ -643,7 +683,7 @@ fn ten_thousand_presentation_updates_keep_one_latest_payload() {
     }
 
     release_tx.send(()).expect("release first save");
-    assert_eq!(receive(&started_rx), final_density);
+    assert_eq!(receive(&started_rx), final_selection);
     wait_until(|| {
         worker
             .snapshot()
@@ -651,7 +691,10 @@ fn ten_thousand_presentation_updates_keep_one_latest_payload() {
     });
     assert_eq!(
         *executed.lock().expect("execution log"),
-        vec![DesktopDensity::Compact, final_density]
+        vec![
+            DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Refined),
+            final_selection
+        ]
     );
     assert_eq!(
         worker.shutdown().expect("worker shutdown"),

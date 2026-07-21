@@ -1,9 +1,76 @@
 use super::command::{
     ApplicationBackupSelection, ApplicationCommand, ApplicationCommandAdmission,
     ApplicationCommandCoordinator, ApplicationCommandExecution, ApplicationCommandFailure,
-    ApplicationCommandOutcome, ApplicationCommandRejection, ApplicationReminderPolicyUpdate,
+    ApplicationCommandOutcome, ApplicationCommandRejection, ApplicationOperationPayload,
+    ApplicationOperationRequest, ApplicationReminderPolicyUpdate,
 };
-use tokenmaster_desktop::DesktopIntent;
+use tokenmaster_desktop::{
+    DesktopDensity, DesktopIntent, DesktopPresentationSelection, DesktopSkin,
+};
+
+#[test]
+fn presentation_payload_is_complete_redacted_and_maps_each_pair_exactly() {
+    for (selection, density, skin) in [
+        (
+            DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Refined),
+            tokenmaster_state::PresentationDensity::Comfortable,
+            tokenmaster_state::PresentationSkin::Refined,
+        ),
+        (
+            DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Graphite),
+            tokenmaster_state::PresentationDensity::Comfortable,
+            tokenmaster_state::PresentationSkin::Graphite,
+        ),
+        (
+            DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Ember),
+            tokenmaster_state::PresentationDensity::Comfortable,
+            tokenmaster_state::PresentationSkin::Ember,
+        ),
+        (
+            DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Refined),
+            tokenmaster_state::PresentationDensity::Compact,
+            tokenmaster_state::PresentationSkin::Refined,
+        ),
+        (
+            DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Graphite),
+            tokenmaster_state::PresentationDensity::Compact,
+            tokenmaster_state::PresentationSkin::Graphite,
+        ),
+        (
+            DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Ember),
+            tokenmaster_state::PresentationDensity::Compact,
+            tokenmaster_state::PresentationSkin::Ember,
+        ),
+        (
+            DesktopPresentationSelection::new(DesktopDensity::UltraCompact, DesktopSkin::Refined),
+            tokenmaster_state::PresentationDensity::UltraCompact,
+            tokenmaster_state::PresentationSkin::Refined,
+        ),
+        (
+            DesktopPresentationSelection::new(DesktopDensity::UltraCompact, DesktopSkin::Graphite),
+            tokenmaster_state::PresentationDensity::UltraCompact,
+            tokenmaster_state::PresentationSkin::Graphite,
+        ),
+        (
+            DesktopPresentationSelection::new(DesktopDensity::UltraCompact, DesktopSkin::Ember),
+            tokenmaster_state::PresentationDensity::UltraCompact,
+            tokenmaster_state::PresentationSkin::Ember,
+        ),
+    ] {
+        let (_, payload) = ApplicationOperationRequest::update_presentation(selection).into_parts();
+        let ApplicationOperationPayload::Presentation(update) = payload else {
+            panic!("complete presentation payload")
+        };
+        assert_eq!(update.selection(), selection);
+        let state = update.into_state_presentation();
+        assert_eq!(state.density(), density);
+        assert_eq!(state.skin(), skin);
+        assert_eq!(
+            format!("{update:?}"),
+            "ApplicationPresentationUpdate([redacted])"
+        );
+    }
+}
 
 #[test]
 fn reminder_policy_payload_is_bounded_validated_and_redacted() {

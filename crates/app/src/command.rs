@@ -9,7 +9,7 @@
 use core::fmt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-use tokenmaster_desktop::{DesktopDensity, DesktopReminderPolicyUpdate};
+use tokenmaster_desktop::{DesktopPresentationSelection, DesktopReminderPolicyUpdate};
 use tokenmaster_platform::{SelectedInputFile, SelectedOutputFile};
 use tokenmaster_state::{BackupPassphrase, ReminderPolicy};
 
@@ -33,7 +33,7 @@ pub(crate) enum ApplicationCommand {
     Rebuild,
     UpdateBackupPolicy,
     UpdateReminderPolicy,
-    UpdatePresentationDensity,
+    UpdatePresentation,
 }
 
 impl ApplicationCommand {
@@ -60,7 +60,7 @@ pub(crate) enum ApplicationOperationPayload {
     },
     BackupPolicy(ApplicationBackupPolicyUpdate),
     ReminderPolicy(ApplicationReminderPolicyUpdate),
-    PresentationDensity(ApplicationPresentationDensityUpdate),
+    Presentation(ApplicationPresentationUpdate),
 }
 
 impl fmt::Debug for ApplicationOperationPayload {
@@ -84,8 +84,8 @@ impl fmt::Debug for ApplicationOperationPayload {
             Self::ReminderPolicy(_) => {
                 formatter.write_str("ApplicationOperationPayload::ReminderPolicy([redacted])")
             }
-            Self::PresentationDensity(_) => {
-                formatter.write_str("ApplicationOperationPayload::PresentationDensity([redacted])")
+            Self::Presentation(_) => {
+                formatter.write_str("ApplicationOperationPayload::Presentation([redacted])")
             }
         }
     }
@@ -173,31 +173,91 @@ impl fmt::Debug for ApplicationReminderPolicyUpdate {
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
-pub(crate) struct ApplicationPresentationDensityUpdate {
-    density: DesktopDensity,
+pub(crate) struct ApplicationPresentationUpdate {
+    selection: DesktopPresentationSelection,
 }
 
-impl ApplicationPresentationDensityUpdate {
-    pub(crate) const fn new(density: DesktopDensity) -> Self {
-        Self { density }
+impl ApplicationPresentationUpdate {
+    pub(crate) const fn new(selection: DesktopPresentationSelection) -> Self {
+        Self { selection }
     }
 
-    pub(crate) const fn density(self) -> DesktopDensity {
-        self.density
+    pub(crate) const fn selection(self) -> DesktopPresentationSelection {
+        self.selection
     }
 
-    pub(crate) const fn into_state_density(self) -> tokenmaster_state::PresentationDensity {
-        match self.density {
-            DesktopDensity::Comfortable => tokenmaster_state::PresentationDensity::Comfortable,
-            DesktopDensity::Compact => tokenmaster_state::PresentationDensity::Compact,
-            DesktopDensity::UltraCompact => tokenmaster_state::PresentationDensity::UltraCompact,
+    pub(crate) const fn into_state_presentation(self) -> tokenmaster_state::PresentationSettings {
+        match (self.selection.density(), self.selection.skin()) {
+            (
+                tokenmaster_desktop::DesktopDensity::Comfortable,
+                tokenmaster_desktop::DesktopSkin::Refined,
+            ) => tokenmaster_state::PresentationSettings::new(
+                tokenmaster_state::PresentationDensity::Comfortable,
+                tokenmaster_state::PresentationSkin::Refined,
+            ),
+            (
+                tokenmaster_desktop::DesktopDensity::Comfortable,
+                tokenmaster_desktop::DesktopSkin::Graphite,
+            ) => tokenmaster_state::PresentationSettings::new(
+                tokenmaster_state::PresentationDensity::Comfortable,
+                tokenmaster_state::PresentationSkin::Graphite,
+            ),
+            (
+                tokenmaster_desktop::DesktopDensity::Comfortable,
+                tokenmaster_desktop::DesktopSkin::Ember,
+            ) => tokenmaster_state::PresentationSettings::new(
+                tokenmaster_state::PresentationDensity::Comfortable,
+                tokenmaster_state::PresentationSkin::Ember,
+            ),
+            (
+                tokenmaster_desktop::DesktopDensity::Compact,
+                tokenmaster_desktop::DesktopSkin::Refined,
+            ) => tokenmaster_state::PresentationSettings::new(
+                tokenmaster_state::PresentationDensity::Compact,
+                tokenmaster_state::PresentationSkin::Refined,
+            ),
+            (
+                tokenmaster_desktop::DesktopDensity::Compact,
+                tokenmaster_desktop::DesktopSkin::Graphite,
+            ) => tokenmaster_state::PresentationSettings::new(
+                tokenmaster_state::PresentationDensity::Compact,
+                tokenmaster_state::PresentationSkin::Graphite,
+            ),
+            (
+                tokenmaster_desktop::DesktopDensity::Compact,
+                tokenmaster_desktop::DesktopSkin::Ember,
+            ) => tokenmaster_state::PresentationSettings::new(
+                tokenmaster_state::PresentationDensity::Compact,
+                tokenmaster_state::PresentationSkin::Ember,
+            ),
+            (
+                tokenmaster_desktop::DesktopDensity::UltraCompact,
+                tokenmaster_desktop::DesktopSkin::Refined,
+            ) => tokenmaster_state::PresentationSettings::new(
+                tokenmaster_state::PresentationDensity::UltraCompact,
+                tokenmaster_state::PresentationSkin::Refined,
+            ),
+            (
+                tokenmaster_desktop::DesktopDensity::UltraCompact,
+                tokenmaster_desktop::DesktopSkin::Graphite,
+            ) => tokenmaster_state::PresentationSettings::new(
+                tokenmaster_state::PresentationDensity::UltraCompact,
+                tokenmaster_state::PresentationSkin::Graphite,
+            ),
+            (
+                tokenmaster_desktop::DesktopDensity::UltraCompact,
+                tokenmaster_desktop::DesktopSkin::Ember,
+            ) => tokenmaster_state::PresentationSettings::new(
+                tokenmaster_state::PresentationDensity::UltraCompact,
+                tokenmaster_state::PresentationSkin::Ember,
+            ),
         }
     }
 }
 
-impl fmt::Debug for ApplicationPresentationDensityUpdate {
+impl fmt::Debug for ApplicationPresentationUpdate {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("ApplicationPresentationDensityUpdate([redacted])")
+        formatter.write_str("ApplicationPresentationUpdate([redacted])")
     }
 }
 
@@ -259,12 +319,12 @@ impl ApplicationOperationRequest {
         }
     }
 
-    pub(crate) const fn update_presentation_density(density: DesktopDensity) -> Self {
+    pub(crate) const fn update_presentation(selection: DesktopPresentationSelection) -> Self {
         Self {
-            command: ApplicationCommand::UpdatePresentationDensity,
-            payload: ApplicationOperationPayload::PresentationDensity(
-                ApplicationPresentationDensityUpdate::new(density),
-            ),
+            command: ApplicationCommand::UpdatePresentation,
+            payload: ApplicationOperationPayload::Presentation(ApplicationPresentationUpdate::new(
+                selection,
+            )),
         }
     }
 

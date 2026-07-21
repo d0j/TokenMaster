@@ -3,7 +3,7 @@ use tokenmaster_desktop::{
     DesktopOperationPhase, DesktopOperationSnapshot, DesktopPresentationSettings,
     DesktopRecoveryReceipt, DesktopReliableStateHealth, DesktopReliableStateInput,
     DesktopReliableStateProjection, DesktopReliableStateSummary, DesktopReminderPolicy,
-    DesktopReminderSyncState, DesktopRestorePointInput, DesktopRestoreSelection,
+    DesktopReminderSyncState, DesktopRestorePointInput, DesktopRestoreSelection, DesktopSkin,
     MAX_DESKTOP_RESTORE_POINTS,
 };
 
@@ -187,14 +187,14 @@ fn legacy_reliable_state_summary_uses_unavailable_reminder_fallback() {
 }
 
 #[test]
-fn presentation_settings_project_ultra_compact_and_legacy_constructors_are_comfortable() {
+fn presentation_settings_project_complete_selection_and_legacy_constructors_are_comfortable() {
     let summary = DesktopReliableStateSummary::new_with_settings(
         DesktopReliableStateHealth::Healthy,
         false,
         "healthy",
         DesktopBackupPolicy::disabled(),
         DesktopReminderPolicy::unavailable(),
-        DesktopPresentationSettings::new(DesktopDensity::UltraCompact),
+        DesktopPresentationSettings::new(DesktopDensity::UltraCompact, DesktopSkin::Graphite),
         None,
         None,
         None,
@@ -214,6 +214,7 @@ fn presentation_settings_project_ultra_compact_and_legacy_constructors_are_comfo
         projection.presentation().density(),
         DesktopDensity::UltraCompact
     );
+    assert_eq!(projection.presentation().skin(), DesktopSkin::Graphite);
 
     let legacy = DesktopReliableStateSummary::new_with_reminder_policy(
         DesktopReliableStateHealth::Healthy,

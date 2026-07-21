@@ -7,7 +7,7 @@ use tokenmaster_desktop::{
     DesktopOperationKind, DesktopOperationPhase, DesktopOperationSnapshot,
     DesktopPresentationSettings, DesktopReliableStateHealth, DesktopReliableStateInput,
     DesktopReliableStateProjection, DesktopReliableStateSummary, DesktopReminderPolicy,
-    DesktopShell,
+    DesktopShell, DesktopSkin,
 };
 use tokenmaster_product::ProductReducer;
 
@@ -45,9 +45,9 @@ impl RecordingIntentSink {
 
 impl DesktopIntentSink for RecordingIntentSink {
     fn submit(&self, intent: DesktopIntent) -> DesktopIntentAdmission {
-        if let DesktopIntent::UpdatePresentationDensity(density) = intent {
+        if let DesktopIntent::UpdatePresentation(selection) = intent {
             self.count.set(self.count.get() + 1);
-            self.last.set(Some(density));
+            self.last.set(Some(selection.density()));
         }
         self.admission
     }
@@ -63,7 +63,7 @@ fn reliable_state_with_density_and_operation(
         "healthy",
         DesktopBackupPolicy::disabled(),
         DesktopReminderPolicy::unavailable(),
-        DesktopPresentationSettings::new(density),
+        DesktopPresentationSettings::new(density, DesktopSkin::Refined),
         None,
         None,
         None,

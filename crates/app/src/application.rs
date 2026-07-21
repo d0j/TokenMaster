@@ -1147,9 +1147,9 @@ impl DesktopIntentSink for ApplicationDesktopIntentSink {
                     },
                 )
             }
-            DesktopIntent::UpdatePresentationDensity(density) => self.submit_request(
-                ApplicationOperationRequest::update_presentation_density(density),
-            ),
+            DesktopIntent::UpdatePresentation(selection) => {
+                self.submit_request(ApplicationOperationRequest::update_presentation(selection))
+            }
             DesktopIntent::EnableCurrentUserStartup => {
                 self.submit_current_user_startup(CurrentUserStartupAction::Enable)
             }
@@ -1224,7 +1224,7 @@ const fn application_operation_kind(command: ApplicationCommand) -> DesktopOpera
         ApplicationCommand::UpdateBackupPolicy | ApplicationCommand::UpdateReminderPolicy => {
             DesktopOperationKind::UpdatePolicy
         }
-        ApplicationCommand::UpdatePresentationDensity => DesktopOperationKind::UpdatePresentation,
+        ApplicationCommand::UpdatePresentation => DesktopOperationKind::UpdatePresentation,
     }
 }
 
@@ -1795,11 +1795,11 @@ fn execute_application_operation(
             }
         }
         (
-            ApplicationCommand::UpdatePresentationDensity,
-            ApplicationOperationPayload::PresentationDensity(update),
-        ) => execute_state_command(state.update_presentation_density(
+            ApplicationCommand::UpdatePresentation,
+            ApplicationOperationPayload::Presentation(update),
+        ) => execute_state_command(state.update_presentation(
             permit,
-            update.into_state_density(),
+            update.into_state_presentation(),
             || publish_atomic_operation(reliable_state, permit.command()),
         )),
         (ApplicationCommand::RestoreData(selection), ApplicationOperationPayload::Empty) => {
