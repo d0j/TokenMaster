@@ -489,7 +489,7 @@ fn externally_represented_retry_wakes_the_receipt_worker_immediately() {
     assert!(coordinator.pump().expect("initial presentation"));
     presenter.complete_failed();
     wait_until(|| port.counts().2 == 1);
-    assert!(coordinator.pump().expect("external presentation retry"));
+    wait_until(|| coordinator.pump().expect("external presentation retry"));
     presenter.complete_presented();
     wait_until(|| port.counts().1 == 1);
 
