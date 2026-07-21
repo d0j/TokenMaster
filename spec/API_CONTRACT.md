@@ -1140,12 +1140,13 @@ provider-neutral observation drafts, read-only benefit lots, and opaque checkpoi
 never canonical events,
 fingerprints, replay dispositions, SQL, UI components, commands, or MCP tools.
 
-## P4-B durable presentation density
+## P4-B durable presentation density (historical boundary)
 
-The only persisted presentation field is `density`: `comfortable`, `compact`, or
-`ultra_compact`. v1 settings decode in memory as v2 Comfortable without a startup
-write; schema 0 and schema 3+ are unsupported. Desktop submits before applying, and
-the existing one-active/one-pending operation worker replaces only the pending density.
+At the P4-B boundary the only persisted presentation field was `density`:
+`comfortable`, `compact`, or `ultra_compact`. That schema-v2 boundary and its v1
+Comfortable migration remain compatibility history; P4-C below supersedes the current
+presentation API. Desktop already submitted before applying and reused the existing
+one-active/one-pending operation worker.
 
 Plugins receive no ambient WASI filesystem, network, environment, subprocess, or
 stdio authority. Optional host capability imports provide scoped read-only filesystem,
@@ -1160,3 +1161,6 @@ limits. The full package/runtime contract is recorded in
 and skin-only payloads do not exist. The sole operation coordinator retains at most one
 active and one latest pending complete payload; no skin-specific API, worker, queue,
 timer, cache, filesystem, network, SQL, window, or unsafe authority is introduced.
+Settings admission is exactly schema v1 through v3: v1 becomes Comfortable+Refined,
+v2 retains density and defaults skin to Refined, and v3 retains the complete pair.
+Canonical writes are v3; schema 0 and schema 4+ reject.

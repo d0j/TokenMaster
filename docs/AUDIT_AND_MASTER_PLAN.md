@@ -5,10 +5,12 @@ P2-A, P2-B, P2-C pinned pricing, and the P2-D quota history core are implemented
 the permitted built-in Codex quota normalizer/transport, exact-native executable
 discovery, and dedicated quota refresh/store publication are also implemented.
 
-P4-B durable density is developer-complete only: one checked fixed three-value v2
-owner, one root binding/callback, seven exact spacing/radius token tables, admission-first
-latest-only persistence, and a 10,000-switch contract are source/mutation audited
-without new timer/worker/query/window/retained authority. Full skins/layouts/color schemes/locales/languages,
+P4-C durable built-in skins are developer-complete as a bounded sub-contour: schema v3
+owns a complete density+skin pair, Rust owns exact Refined/Graphite/Ember 15-role
+palettes, and one Desktop/Slint owner applies one palette before metadata. Exact
+application mapping, complete admission-first latest-only persistence/restore, and
+application plus compiled-UI 10,000-cycle contracts are source/mutation audited without
+new timer/worker/query/window/retained authority. Layouts/color schemes/locales/languages,
 remaining density typography/row-size behavior, accessibility/DPI/paint/resource
 verification, P5/P6, M0, package/sign/signing/soak, and release remain open.
 
@@ -375,10 +377,18 @@ The older replay plan remains historical evidence for
 completed Tasks 1-2, but its Codex-owned Tasks 3+ are superseded and must not be
 executed.
 
-### P4-B durable density audit status
+### P4-B durable density audit status (historical)
 
-Deterministic source and mutation audits now pin schema-v2 density, strict v1/v2
+At that boundary deterministic source and mutation audits pinned schema-v2 density, strict v1/v2
 dispatch, no future-axis placeholders, manifest/entry version equality, no public raw
 writer/extractor, presentation preservation, admission-before-apply, one owner, and
 the existing one-active/one-pending 10,000 latest-payload contract. These audits do not
 replace interactive presentation, package/signing/soak, M0, or release gates.
+
+### P4-C durable built-in skin audit status
+
+Current audits pin exact schema-v3 v1/v2 migration, all nine application density/skin
+conversions, the sole bounded operation channel, exact Refined/Graphite/Ember identities
+and 45 role/RGB pairs, repository-wide palette/property/presentation-callback counts,
+complete admission functions, palette-before-metadata/show ordering, and the normalized
+compiled mixed-axis 10,000-cycle proof. This remains developer evidence only.

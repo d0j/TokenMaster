@@ -2,11 +2,12 @@
 
 ## M0 — native architecture proof
 
-P4-B durable density is developer-complete only: the Desktop has one checked fixed
-three-value v2 owner, one root binding/callback, seven exact spacing/radius token
-tables, admission-first persistence, and a 10,000 latest-payload contract with
-source/mutation authority checks. P4 remains open for full skins, layouts, color
-schemes, locales/languages, remaining density typography/row-size behavior, accessibility/DPI/paint/resource
+P4-C durable built-in skins are developer-complete as a bounded sub-contour: schema v3
+persists one complete density+skin pair; Rust owns exact Refined, Graphite, and Ember
+15-role palettes; one Desktop/Slint owner applies the palette before metadata; and
+admission-first atomic persistence plus application/compiled-UI 10,000-cycle contracts
+are source/mutation audited. P4 remains open for layouts, color schemes,
+locales/languages, remaining density typography/row-size behavior, accessibility/DPI/paint/resource
 verification, and terminal interactive evidence. P5/P6, M0 acceptance,
 package/sign/signing/soak, and release remain open.
 
@@ -423,12 +424,12 @@ host, capability grants, hot installation/update/rollback, quarantine, signature
 Rust/TypeScript SDK templates, conformance kit, and plugin-specific resource/security
 gates. Codex remains built in and pays no plugin runtime cost.
 
-### P4-B completed developer contour
+### P4-B completed developer contour (historical)
 
-Durable density now covers v2 settings, strict v1/v2 dispatch, typed package
+At that boundary durable density covered v2 settings, strict v1/v2 dispatch, typed package
 version-binding, startup hydration, saved/saving/not-saved projection, admission-first
-application, and 10,000 latest-payload switches. Future skin/layout/color-scheme/locale
-axes and all interactive presentation acceptance remain P4 work.
+application, and 10,000 latest-payload switches. P4-C below supersedes its current
+presentation status.
 
 ### P4-C complete
 

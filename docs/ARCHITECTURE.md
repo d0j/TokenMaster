@@ -267,8 +267,9 @@ backup. A post-publication reread is mandatory and any uncertainty becomes
 `RecoveryRequired`.
 Task 4 introduced the only public settings surface over that private core. Its prior
 v1 history stored the provider-neutral reminder default and automatic-backup schedule/
-retention policy separately from the device-local route. Current schema v2 additionally
-stores only presentation density, rejects unknown/newer/invalid/unbounded input, loads
+retention policy separately from the device-local route. Current schema v3 additionally
+stores one complete fixed presentation density+skin pair, migrates exact v1/v2 inputs
+in memory, rejects unknown/newer/invalid/unbounded input, loads
 safe defaults without rewriting two invalid slots, previews only portable category/count
 changes, preserves device state on import, and binds a confirmed publication to a
 reread-verifiable generation plus portable digest.
@@ -446,7 +447,7 @@ strict JSON receipt binds a clean commit and application SHA-256 but is ignored 
 developer output. Physical-display/OS-input, DPI/accessibility, soak, MSVC packaging,
 signing, and release acceptance stay on their separate later rails.
 
-## P4-B durable density
+## P4-B durable density (historical boundary)
 
 The portable desired-state record owns only `presentation.density` in schema v2.
 Hydration accepts v1 or v2 and maps v1 to Comfortable in memory; it does not rewrite
@@ -454,3 +455,13 @@ on startup. The typed package reader binds manifest settings source version to t
 decoded entry. Desktop holds one `Arc<Mutex<DesktopPresentationStyle>>`, admits before
 mutating style, performs no settings/filesystem I/O on the UI thread, and delegates
 through the existing replaceable one-active/one-pending operation worker.
+
+## P4-C complete presentation and built-in skins
+
+Current schema v3 owns one complete `{ density, skin }` selection. v1 becomes
+Comfortable+Refined, v2 retains density and adds Refined, and canonical writes are v3.
+Rust owns three immutable exact 15-role palettes; Slint receives one `UiPalette` value
+and contains no family table or selection branch. The same sole style owner admits a
+complete intent before optimistic application, assigns palette before metadata, and
+uses the existing one-active/one-latest operation worker. No palette cache, second
+window, timer, worker, queue, I/O, SQL, network, or unsafe authority is introduced.

@@ -1154,10 +1154,11 @@ package in a bounded standard age v1 stream; automatic backups store no secret.
 
 Settings, run state, and restore intent use alternating checked A/B records. At the
 prior Task 4 boundary, settings schema v1 stored only product-owned portable reminder/
-backup policy plus the device-local route. Current strict schema v2 additionally owns
-one fixed `presentation.density` value. v1 remains a legacy input that migrates in
-memory to Comfortable without a startup write; schema 0 and schema 3 or newer are
-unsupported. This valid-envelope version distinction prevents a downgraded binary
+backup policy plus the device-local route. The historical schema-v2 boundary added one
+fixed `presentation.density` value. Current strict schema v3 owns the complete fixed
+`presentation.{density,skin}` pair. v1 migrates in memory to Comfortable+Refined and v2
+retains density while defaulting skin to Refined, both without a startup write; schema
+0 and schema 4 or newer are unsupported. This valid-envelope version distinction prevents a downgraded binary
 from loading defaults and overwriting newer state. Ordinary schedule settings cannot
 lower the five-minute quiet or six-hour interval gates. Portable preview/commit is
 base-generation/digest bound, preserves device state, and returns a reconstructible
@@ -2007,7 +2008,7 @@ portable use without elevation, installer, process, shell, task, service, pollin
 retained-path machinery. Bounded synchronous calls keep the UI path immediate and add
 no long-lived memory or thread owner.
 
-## ADR-076 — P4-B durable density remains one bounded axis
+## ADR-081 — P4-B durable density remained one bounded axis (historical)
 
 Settings schema v2 adds only `presentation.density`, fixed to Comfortable, Compact,
 and Ultra compact. v1 is read and migrated in memory to Comfortable; startup does not
@@ -2016,7 +2017,7 @@ Desktop admits the typed command before style mutation and reuses the existing
 one-active/one-pending worker; no new desktop worker, queue, timer, cache, or I/O owner
 is justified. Skins, layouts, schemes, locales, and interactive acceptance remain open.
 
-### P4-C: three built-in skins without new authority
+## ADR-082 — P4-C adds three built-in skins without new authority
 
 Adopt schema v3 and one complete presentation selection. `Refined`/`refined`/0,
 `Graphite`/`graphite`/1, and `Ember`/`ember`/2 are stable. Rust owns the immutable

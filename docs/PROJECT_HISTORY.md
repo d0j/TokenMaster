@@ -3608,19 +3608,21 @@ signing, soak, and release remain open.
 Added schema v3 complete density+skin persistence, exact v1/v2 Refined migration,
 Refined/Graphite/Ember stable identities, immutable 15-role Rust palettes, one Slint
 palette input, one presentation owner, admission-first complete payloads, atomic
-persist/restore, and latest-wins reuse without new authority. This historical entry
-does not revise P4-B; P4 remains partial and all interactive/release gates remain open.
+persist/restore, and latest-wins reuse without new authority. Follow-up audit hardening
+pins the exact nine-pair conversion, direct/aliased channel surface, repository-wide
+palette/presentation callback ownership, exact admission and transition functions, and
+the complete normalized compiled-UI 10,000-cycle proof. P4-C supersedes P4-B's current
+presentation status; P4 remains partial and all interactive/release gates remain open.
 
-## 2026-07-21 — P4-B durable density verification
+## 2026-07-21 — P4-B durable density verification (historical boundary)
 
-P4-B records the bounded durable-density contract: schema v2 has exactly Comfortable,
+P4-B recorded the bounded durable-density contract: schema v2 had exactly Comfortable,
 Compact, and Ultra compact; v1 migrates in memory to Comfortable; unsupported 0/3+
 versions fail closed; typed packages bind manifest and decoded settings source versions.
 Mutation audits cover no future presentation axes/raw package authority, preservation
 through reminder/backup updates, admission-before-apply, the single style owner, and
 the existing one-active/one-pending 10,000 latest-payload proof. This is developer-only
-verification; skins/layouts/color schemes/locales, accessibility/DPI/paint/resource,
-P5/P6, M0, packaging, signing, soak, and release remain open.
+verification and is superseded by P4-C above.
 
 ## 2026-07-19 — P3-E.2 bounded compact quota mode
 

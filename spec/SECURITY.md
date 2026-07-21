@@ -828,9 +828,11 @@ and does not reexport generic record/file authority or accept a path. The author
 audit permits exactly the original bounded record/platform import and one exact
 `ValidatedLocalDirectory` import for that typed constructor, while retaining all six
 fixed-child and alias-reuse gates. Its historical schema v1 wire is a strict legacy
-subset capped at 1 MiB. Current strict schema v2 adds only the fixed three-value
-`presentation.density`; v1 migrates in memory to Comfortable without a startup write,
-while schema 0 and schema 3 or newer reject. Unknown, duplicate, unsupported, invalid
+subset capped at 1 MiB. Current strict schema v3 carries only the fixed complete
+`presentation.{density,skin}` pair in addition to the prior portable fields. v1 migrates
+in memory to Comfortable+Refined without a startup write; v2 retains density and
+defaults skin to Refined; schema 0 and schema 4 or newer reject. Unknown, duplicate,
+unsupported, invalid
 enum/range/relationship, and forbidden-state fields fail before publication. Portable
 input cannot contain or overwrite the device-local route. Errors, `Debug`, previews,
 and serialized values are regression-tested against password, credential, absolute-
@@ -1304,9 +1306,9 @@ counts, three typed intents, four accessible actions, and zero portable startup 
 Real ACL denial, relocation, sign-in launch, and handle return remain interactive P6
 evidence rather than source-test claims.
 
-P4-B presentation adds no path, secret, package-stream, filesystem, or UI-thread
-settings authority. Packages retain only typed stages: no public raw writer/extractor;
-manifest and decoded entry source-settings versions must bind exactly.
+The historical P4-B density boundary added no path, secret, package-stream, filesystem,
+or UI-thread settings authority. Packages retain only typed stages: no public raw
+writer/extractor; manifest and decoded entry source-settings versions must bind exactly.
 
 P4-C retains that boundary. The palette is fixed Rust data (15 semantic RGB roles per
 skin), not a file/provider/theme authority. One admitted complete presentation payload

@@ -6,14 +6,15 @@ All notable changes are recorded here.
 
 ### Added
 
-- Added P4-B durable density verification: current settings schema v2 persists one
+- Added the historical P4-B durable density verification: at that boundary settings schema v2 persisted one
   fixed three-value density, strict v1 migrates in memory without a startup write,
   typed packages bind their declared settings source schema, and Desktop applies an
   admitted value through the existing latest-only operation worker. Saved/saving/
   not-saved projection, startup hydration, source mutations, and 10,000 switches are
-  deterministic developer evidence. Full skins/layouts/color schemes/locales,
-  remaining typography/row-size behavior, accessibility/DPI/paint/resource gates,
-  P5/P6, M0, package/signing/soak, and release remain open.
+  deterministic developer evidence. P4-C later superseded its skin status; layouts,
+  color schemes, locales, remaining typography/row-size behavior,
+  accessibility/DPI/paint/resource gates, P5/P6, M0, package/signing/soak, and release
+  remain open.
 
 - Added P4-A developer-only runtime density verification: one checked fixed three-value
   `DesktopPresentationStyle` owner, one root Slint binding/callback, seven exact
@@ -1266,3 +1267,8 @@ All notable changes are recorded here.
   one admission-first presentation owner, and latest-wins atomic persist/restore.
   Layout, colour-scheme, locale, typography, interactive accessibility/DPI/paint/resource,
   P5/P6/M0, package/signing/soak, and release acceptance remain open.
+- Hardened P4-C evidence against swapped nine-pair mappings, direct or aliased extra
+  channels, any extra Slint `UiPalette` property or presentation callback, alternate
+  pre-admission mutators, revision-write loss, and dead-code 10,000-cycle decoys. The
+  current normative/status documents now consistently identify schema v3/P4-C while
+  retaining P4-B only as compatibility history.

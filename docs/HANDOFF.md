@@ -9,12 +9,13 @@
 
 ## Current implementation boundary
 
-P4-B durable density is developer-complete only. Settings schema v2 persists one
-checked three-value density, strict v1 migrates in memory without a startup write, and
-typed packages bind the declared source schema. One `DesktopPresentationStyle` owner,
-one root binding/callback, seven exact spacing/radius token tables, admission-first
-persistence, and a 10,000-switch contract are source/mutation audited without adding
-timer/worker/query/window/retained authority. Do not claim full skins/layouts/color
+P4-C durable built-in skins are developer-complete as one bounded sub-contour. Settings
+schema v3 persists one complete density+skin pair, strict v1/v2 migrate in memory
+without a startup write, and typed packages bind the declared source schema. One
+`DesktopPresentationStyle` owner, one root palette, exact Refined/Graphite/Ember
+15-role palettes, complete admission-first persistence/restore, and compiled-UI plus
+application 10,000-switch contracts are source/mutation audited without adding
+timer/worker/query/window/retained authority. Do not claim layouts/color
 schemes/locales/languages, remaining density typography/row-size behavior,
 accessibility/DPI/paint/resource verification, P5/P6, M0,
 interactive/package/sign/signing/soak, or release acceptance.
@@ -1214,11 +1215,11 @@ one-million-row M0 scale test remains explicitly ignored in the normal workspace
 This does not accept M0, prove interactive Windows behavior, or package a product
 release. See `M0_ACCEPTANCE.md`.
 
-P4-B durable density truth: v2 has one `presentation.density` field with three fixed
+Historical P4-B density truth: v2 had one `presentation.density` field with three fixed
 keys; v1 decodes in memory to Comfortable and does not cause startup persistence.
 Package manifest and entry versions bind exactly; Desktop admission precedes style
 apply and reuses the existing latest-only operation worker. This is deterministic
-developer evidence, not interactive P4 acceptance or release evidence.
+developer evidence and is superseded by P4-C below.
 
 P4-C supersedes only the current presentation contract: schema v3 carries complete
 density+skin, legacy v1/v2 default Refined as specified, and skins are
