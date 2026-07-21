@@ -382,6 +382,82 @@ fn newest_and_next_pages_are_worker_resolved_and_page_success_clears_detail() {
 }
 
 #[test]
+fn stale_published_product_generation_is_rejected_before_navigation_submission() {
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("desktop-session-pagination-stale.sqlite3");
+    seed_sessions(&path, 65);
+    let page_continuations = Arc::new(Mutex::new(Vec::new()));
+    let page_calls = Arc::new(AtomicUsize::new(0));
+    let fail_pages = Arc::new(AtomicBool::new(false));
+    let gate = Arc::new(PageGate::open());
+    let (mut controller, epoch, initial) = initial_controller(source(
+        &path,
+        page_continuations,
+        page_calls.clone(),
+        fail_pages,
+        gate,
+    ));
+
+    controller
+        .refresh(DesktopRefreshUrgency::Interactive)
+        .expect("current product refresh");
+    let _ = wait_for_completion(&controller);
+    let current = wait_for_snapshot(&controller);
+    assert_ne!(current.generation(), initial.generation());
+    assert_eq!(
+        controller
+            .published_product_generation()
+            .expect("published generation"),
+        Some(current.generation())
+    );
+
+    let initial_calls = page_calls.load(Ordering::Acquire);
+    let error = controller
+        .request_session_page(intent(
+            epoch,
+            initial.generation(),
+            1,
+            DesktopSessionPageDirection::Newest,
+        ))
+        .expect_err("stale published product generation rejects synchronously");
+    assert_eq!(error.stable_code(), "stale_navigation");
+    assert_eq!(page_calls.load(Ordering::Acquire), initial_calls);
+    assert!(controller.take_snapshot().expect("mailbox").is_none());
+    assert_eq!(
+        controller
+            .published_product_generation()
+            .expect("published generation after rejection"),
+        Some(current.generation())
+    );
+
+    assert!(matches!(
+        controller
+            .request_session_page(intent(
+                epoch,
+                current.generation(),
+                1,
+                DesktopSessionPageDirection::Newest,
+            ))
+            .expect("current generation starts navigation"),
+        DesktopRefreshAdmission::Started { .. }
+    ));
+    assert!(matches!(
+        controller
+            .request_session_page(intent(
+                epoch,
+                current.generation(),
+                2,
+                DesktopSessionPageDirection::Next,
+            ))
+            .expect("next current generation coalesces"),
+        DesktopRefreshAdmission::Coalesced { .. }
+    ));
+    controller.shutdown().expect("controller stops");
+}
+
+#[test]
 fn missing_continuation_stale_intents_and_page_failure_fail_closed_without_extra_query() {
     let directory = tempfile::TempDir::new().expect("temporary directory");
     let path = directory
@@ -434,25 +510,36 @@ fn missing_continuation_stale_intents_and_page_failure_fail_closed_without_extra
         ))
         .expect_err("stale epoch rejects");
     assert_eq!(error.stable_code(), "stale_navigation");
-    controller
+    let error = controller
         .request_session_page(intent(
             epoch,
             initial.generation(),
             3,
             DesktopSessionPageDirection::Newest,
         ))
-        .expect("stale product is worker validated");
+        .expect_err("stale product rejects before worker submission");
+    assert_eq!(error.stable_code(), "stale_navigation");
+    assert_eq!(page_calls.load(Ordering::Acquire), initial_calls);
+    assert!(controller.take_snapshot().expect("mailbox").is_none());
+    controller
+        .request_session_page(intent(
+            epoch,
+            missing.generation(),
+            3,
+            DesktopSessionPageDirection::Newest,
+        ))
+        .expect("current product request");
     assert_eq!(
         wait_for_completion(&controller).outcome(),
         DesktopRefreshOutcome::Completed
     );
-    assert!(controller.take_snapshot().expect("mailbox").is_none());
+    let current = wait_for_snapshot(&controller);
 
     fail_pages.store(true, Ordering::Release);
     controller
         .request_session_page(intent(
             epoch,
-            missing.generation(),
+            current.generation(),
             4,
             DesktopSessionPageDirection::Newest,
         ))

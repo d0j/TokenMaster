@@ -15,10 +15,10 @@ use tokenmaster_engine::{
     WorkerError, WorkerErrorCode, WorkerPhase,
 };
 use tokenmaster_product::{
-    ProductAttemptGeneration, ProductGitRuntimeHealth, ProductQuotaRuntimeHealth, ProductReducer,
-    ProductReminderRuntimeHealth, ProductRuntimeGeneration, ProductRuntimeObservationError,
-    ProductSessionDetailSelection, ProductSessionDetailSelectionGeneration, ProductSnapshot,
-    ProductUsageRuntimeHealth,
+    ProductAttemptGeneration, ProductGeneration, ProductGitRuntimeHealth,
+    ProductQuotaRuntimeHealth, ProductReducer, ProductReminderRuntimeHealth,
+    ProductRuntimeGeneration, ProductRuntimeObservationError, ProductSessionDetailSelection,
+    ProductSessionDetailSelectionGeneration, ProductSnapshot, ProductUsageRuntimeHealth,
 };
 use tokenmaster_query::{
     BenefitOverviewEnvelope, BenefitOverviewRequest, BenefitOverviewSnapshot, GitEnvelope,
@@ -523,6 +523,7 @@ impl Clock for DesktopMonotonicClock {
 
 type LatestSnapshot = Arc<Mutex<Option<Arc<ProductSnapshot>>>>;
 type SnapshotNotifier = Arc<Mutex<Option<Arc<dyn DesktopSnapshotNotifier>>>>;
+type PublishedProductGeneration = Arc<Mutex<Option<ProductGeneration>>>;
 type RuntimeObservationSlot = Arc<Mutex<RuntimeObservationState>>;
 type DesktopWorkSlot = Arc<Mutex<DesktopWorkState>>;
 
@@ -530,6 +531,7 @@ type DesktopWorkSlot = Arc<Mutex<DesktopWorkState>>;
 struct DesktopPublication {
     latest: LatestSnapshot,
     notifier: SnapshotNotifier,
+    published_generation: PublishedProductGeneration,
     runtime_observation: RuntimeObservationSlot,
 }
 
@@ -689,10 +691,12 @@ impl DesktopController {
         let worker_clock = clock.clone();
         let latest = Arc::new(Mutex::new(None));
         let notifier = Arc::new(Mutex::new(None));
+        let published_generation = Arc::new(Mutex::new(None));
         let runtime_observation = Arc::new(Mutex::new(RuntimeObservationState::default()));
         let publication = DesktopPublication {
             latest,
             notifier,
+            published_generation,
             runtime_observation,
         };
         let worker_publication = publication.clone();
@@ -816,6 +820,13 @@ impl DesktopController {
             ));
         }
         let mut work = lock_work(&self.work)?;
+        if *lock_published_generation(&self.publication.published_generation)?
+            != Some(intent.product_generation())
+        {
+            return Err(DesktopControllerError::new(
+                DesktopControllerErrorCode::StaleNavigation,
+            ));
+        }
         if work
             .navigation_high_water
             .is_some_and(|current| intent.navigation_generation() <= current)
@@ -939,6 +950,14 @@ impl DesktopController {
 
     pub fn take_snapshot(&self) -> Result<Option<Arc<ProductSnapshot>>, DesktopControllerError> {
         self.snapshot_receiver().take_snapshot()
+    }
+
+    pub fn published_product_generation(
+        &self,
+    ) -> Result<Option<ProductGeneration>, DesktopControllerError> {
+        Ok(*lock_published_generation(
+            &self.publication.published_generation,
+        )?)
     }
 
     pub fn shutdown(&mut self) -> Result<(), DesktopControllerError> {
@@ -1165,8 +1184,13 @@ where
         Err(_) => return RefreshOutcome::Failed,
     };
     let snapshot = reducer.snapshot();
+    let generation = snapshot.generation();
     match lock_latest(&context.publication.latest) {
         Ok(mut latest) => *latest = Some(snapshot),
+        Err(_) => return RefreshOutcome::Failed,
+    }
+    match lock_published_generation(&context.publication.published_generation) {
+        Ok(mut published_generation) => *published_generation = Some(generation),
         Err(_) => return RefreshOutcome::Failed,
     }
     invalidate_navigation(&mut work);
@@ -1297,12 +1321,17 @@ fn publish_snapshot(
     snapshot: Arc<ProductSnapshot>,
     publication: &DesktopPublication,
 ) -> RefreshOutcome {
+    let generation = snapshot.generation();
     let notifier = match lock_notifier(&publication.notifier) {
         Ok(notifier) => notifier.clone(),
         Err(_) => return RefreshOutcome::Failed,
     };
     match lock_latest(&publication.latest) {
         Ok(mut slot) => *slot = Some(snapshot),
+        Err(_) => return RefreshOutcome::Failed,
+    }
+    match lock_published_generation(&publication.published_generation) {
+        Ok(mut published_generation) => *published_generation = Some(generation),
         Err(_) => return RefreshOutcome::Failed,
     }
     if let Some(notifier) = notifier {
@@ -1372,6 +1401,14 @@ fn lock_notifier(
     notifier: &SnapshotNotifier,
 ) -> Result<MutexGuard<'_, Option<Arc<dyn DesktopSnapshotNotifier>>>, DesktopControllerError> {
     notifier
+        .lock()
+        .map_err(|_| DesktopControllerError::new(DesktopControllerErrorCode::Internal))
+}
+
+fn lock_published_generation(
+    generation: &PublishedProductGeneration,
+) -> Result<MutexGuard<'_, Option<ProductGeneration>>, DesktopControllerError> {
+    generation
         .lock()
         .map_err(|_| DesktopControllerError::new(DesktopControllerErrorCode::Internal))
 }
@@ -1717,6 +1754,7 @@ mod tests {
                 work: Arc::clone(&work),
                 called: Arc::clone(&called),
             })))),
+            published_generation: Arc::new(Mutex::new(None)),
             runtime_observation: Arc::new(Mutex::new(RuntimeObservationState::default())),
         };
         let snapshot_epoch = AtomicU64::new(epoch.get());

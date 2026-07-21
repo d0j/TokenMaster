@@ -16,7 +16,7 @@ use tokenmaster_platform::{
     FileDialogSelector, ValidatedLocalDirectory,
 };
 use tokenmaster_product::{
-    ProductReducer, ProductSectionKind, ProductSessionDetailSelection,
+    ProductGeneration, ProductReducer, ProductSectionKind, ProductSessionDetailSelection,
     ProductSessionDetailSelectionGeneration,
 };
 use tokenmaster_state::{
@@ -163,6 +163,34 @@ fn wait_for_desktop_controller_completion(application: &Application) {
             return;
         }
         assert!(Instant::now() < deadline, "desktop controller timed out");
+        std::thread::yield_now();
+    }
+}
+
+fn wait_for_published_product_generation_after(
+    application: &Application,
+    previous: ProductGeneration,
+) -> ProductGeneration {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let generation = {
+            let bundle = application.bundle.lock().expect("live bundle");
+            let controller = &bundle.as_ref().expect("live application bundle").controller;
+            let _ = controller
+                .try_completion()
+                .expect("desktop controller healthy");
+            controller
+                .published_product_generation()
+                .expect("published product generation")
+                .expect("published product generation is initialized")
+        };
+        if generation != previous {
+            return generation;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "published product generation timed out"
+        );
         std::thread::yield_now();
     }
 }
@@ -676,12 +704,13 @@ fn session_page_sink_rejects_missing_weak_and_busy_bundle_without_waiting() {
 
 fn page_intent(
     epoch: DesktopSnapshotEpoch,
+    product_generation: ProductGeneration,
     generation: u64,
     direction: DesktopSessionPageDirection,
 ) -> DesktopSessionPageIntent {
     DesktopSessionPageIntent::new(
         epoch,
-        ProductReducer::new().snapshot().generation(),
+        product_generation,
         DesktopSessionNavigationGeneration::new(generation).expect("navigation generation"),
         direction,
     )
@@ -1687,6 +1716,13 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
         .controller
         .snapshot_epoch()
         .expect("bound session page epoch");
+    let old_session_page_generation = bundle_slot
+        .as_ref()
+        .expect("healthy bundle")
+        .controller
+        .published_product_generation()
+        .expect("old published product generation")
+        .expect("old published product generation is initialized");
     drop(bundle_slot);
 
     let direct_restart_publications = application.reliable_publish_count.load(Ordering::Acquire);
@@ -1712,6 +1748,7 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     assert_eq!(
         session_page_sink.submit(page_intent(
             old_session_page_epoch,
+            old_session_page_generation,
             1,
             DesktopSessionPageDirection::Newest,
         )),
@@ -1811,6 +1848,7 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     assert_eq!(
         safe_session_page_sink.submit(page_intent(
             DesktopSnapshotEpoch::new(1).expect("safe-mode epoch"),
+            ProductReducer::new().snapshot().generation(),
             1,
             DesktopSessionPageDirection::Newest,
         )),
@@ -1992,17 +2030,25 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
             .pause()
             .expect("final live producer pauses");
     }
-    let current_session_page_epoch = application
-        .bundle
-        .lock()
-        .expect("final live bundle")
-        .as_ref()
-        .expect("final live application bundle")
-        .controller
-        .snapshot_epoch()
-        .expect("current session page epoch");
+    let (current_session_page_epoch, current_session_page_product_generation) = {
+        let bundle = application.bundle.lock().expect("final live bundle");
+        let controller = &bundle
+            .as_ref()
+            .expect("final live application bundle")
+            .controller;
+        (
+            controller
+                .snapshot_epoch()
+                .expect("current session page epoch"),
+            controller
+                .published_product_generation()
+                .expect("current published product generation")
+                .expect("current published product generation is initialized"),
+        )
+    };
     let first_page_admission = session_page_sink.request(page_intent(
         current_session_page_epoch,
+        current_session_page_product_generation,
         1,
         DesktopSessionPageDirection::Newest,
     ));
@@ -2013,6 +2059,7 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
             assert!(matches!(
                 session_page_sink.request(page_intent(
                     current_session_page_epoch,
+                    current_session_page_product_generation,
                     2,
                     DesktopSessionPageDirection::Newest,
                 )),
@@ -2025,6 +2072,7 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     assert!(matches!(
         session_page_sink.request(page_intent(
             current_session_page_epoch,
+            current_session_page_product_generation,
             first_page_generation + 1,
             DesktopSessionPageDirection::Next,
         )),
@@ -2033,7 +2081,25 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     assert_eq!(
         session_page_sink.submit(page_intent(
             current_session_page_epoch,
+            current_session_page_product_generation,
             first_page_generation,
+            DesktopSessionPageDirection::Newest,
+        )),
+        DesktopSessionPageIntentAdmission::Rejected
+    );
+    let stale_product_generation = wait_for_published_product_generation_after(
+        &application,
+        current_session_page_product_generation,
+    );
+    assert_ne!(
+        stale_product_generation,
+        current_session_page_product_generation
+    );
+    assert_eq!(
+        session_page_sink.submit(page_intent(
+            current_session_page_epoch,
+            current_session_page_product_generation,
+            first_page_generation + 2,
             DesktopSessionPageDirection::Newest,
         )),
         DesktopSessionPageIntentAdmission::Rejected
@@ -2050,6 +2116,7 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     assert_eq!(
         session_page_sink.submit(page_intent(
             current_session_page_epoch,
+            stale_product_generation,
             first_page_generation + 2,
             DesktopSessionPageDirection::Newest,
         )),
