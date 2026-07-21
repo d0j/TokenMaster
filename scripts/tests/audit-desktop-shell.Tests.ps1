@@ -88,11 +88,181 @@ Describe "TokenMaster production desktop audit" {
 
     It "rejects a second desktop controller worker" {
         $fixture = New-DesktopAuditFixture -Name "controller-worker"
-        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\controller.rs") `
-            -Value 'fn extra_worker() { let _ = RefreshWorker::spawn('
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $text = $original.Replace(
+            'let worker = RefreshWorker::spawn_notified(',
+            'let _extra_worker = RefreshWorker::spawn(fake_clock, fake_execute);`r`n        let worker = RefreshWorker::spawn_notified('
+        )
+        $text | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $text)
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-CONTROLLER-WORKER*"
+    }
+
+    It "rejects removing the controller completion notifier" {
+        $fixture = New-DesktopAuditFixture -Name "terminal-navigation-worker-notifier"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $text = $original.Replace(
+            'RefreshWorker::spawn_notified(',
+            'RefreshWorker::spawn_without_notifier('
+        )
+        $text | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-TERMINAL-RECOVERY*"
+    }
+
+    It "rejects a comment-only controller completion notifier anchor" {
+        $fixture = New-DesktopAuditFixture -Name "terminal-navigation-worker-comment-anchor"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $text = $original.Replace(
+            'RefreshWorker::spawn_notified(',
+            "RefreshWorker::spawn_without_notifier(`r`n            // RefreshWorker::spawn_notified("
+        )
+        $text | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-TERMINAL-RECOVERY*"
+    }
+
+    It "rejects clearing terminal navigation outside the idempotent completion handler" {
+        $fixture = New-DesktopAuditFixture -Name "terminal-navigation-early-clear"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $text = [regex]::Replace(
+            $original,
+            'if !navigation_is_current\(reducer, context, permit\.id\(\)\.get\(\), intent\) \{\r?\n\s*return RefreshOutcome::Completed;',
+            "if !navigation_is_current(reducer, context, permit.id().get(), intent) {`r`n        invalidate_navigation(&mut lock_work(context.work)?);`r`n        return RefreshOutcome::Completed;",
+            1
+        )
+        $text | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-TERMINAL-RECOVERY*"
+    }
+
+    It "rejects notifying refresh supersession while holding the work lock" {
+        $fixture = New-DesktopAuditFixture -Name "terminal-navigation-lock-order"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $text = [regex]::Replace(
+            $original,
+            'drop\(work\);\r?\n\s*notify_terminal_navigation\(',
+            'notify_terminal_navigation(',
+            1
+        )
+        $text | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-TERMINAL-RECOVERY*"
+    }
+
+    It "rejects an unbounded terminal navigation bridge slot" {
+        $fixture = New-DesktopAuditFixture -Name "terminal-navigation-unbounded-slot"
+        $path = Join-Path $fixture "crates\desktop\src\bridge.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $text = $original.Replace(
+            'terminal_intent: std::sync::Mutex<Option<DesktopSessionPageIntent>>',
+            'terminal_intent: std::sync::Mutex<Vec<DesktopSessionPageIntent>>'
+        )
+        $text | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-TERMINAL-RECOVERY*"
+    }
+
+    It "rejects bypassing terminal navigation event-loop scheduling" {
+        $fixture = New-DesktopAuditFixture -Name "terminal-navigation-schedule-bypass"
+        $path = Join-Path $fixture "crates\desktop\src\bridge.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $text = $original.Replace('self.request();', 'self.skip_request();')
+        $text | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-TERMINAL-RECOVERY*"
+    }
+
+    It "rejects scheduling terminal navigation before releasing the pending slot" {
+        $fixture = New-DesktopAuditFixture -Name "terminal-navigation-pending-lock-order"
+        $path = Join-Path $fixture "crates\desktop\src\bridge.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $text = [regex]::Replace(
+            $original,
+            'drop\(pending\);\r?\n\s*self\.request\(\);',
+            "self.request();`r`n        drop(pending);",
+            1
+        )
+        $text | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-TERMINAL-RECOVERY*"
+    }
+
+    It "rejects an unreachable terminal navigation schedule" {
+        $fixture = New-DesktopAuditFixture -Name "terminal-navigation-unreachable-schedule"
+        $path = Join-Path $fixture "crates\desktop\src\bridge.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $text = [regex]::Replace(
+            $original,
+            'drop\(pending\);\r?\n\s*self\.request\(\);',
+            "if false {`r`n            drop(pending);`r`n            self.request();`r`n        }",
+            1
+        )
+        $text | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-TERMINAL-RECOVERY*"
+    }
+
+    It "rejects bypassing the weak terminal navigation notifier route" {
+        $fixture = New-DesktopAuditFixture -Name "terminal-navigation-notifier-bypass"
+        $path = Join-Path $fixture "crates\desktop\src\bridge.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $text = $original.Replace(
+            'inner.request_terminal(intent);',
+            'inner.skip_terminal(intent);'
+        )
+        $text | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-TERMINAL-RECOVERY*"
+    }
+
+    It "rejects an unreachable weak terminal navigation notifier route" {
+        $fixture = New-DesktopAuditFixture -Name "terminal-navigation-unreachable-notifier"
+        $path = Join-Path $fixture "crates\desktop\src\bridge.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $text = $original.Replace(
+            'inner.request_terminal(intent);',
+            'if false { inner.request_terminal(intent); }'
+        )
+        $text | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-TERMINAL-RECOVERY*"
+    }
+
+    It "reports executable terminal navigation recovery counts" {
+        $fixture = New-DesktopAuditFixture -Name "terminal-navigation-receipt"
+
+        $receipt = (& $Audit -RepositoryRoot $fixture -SourceOnly) | ConvertFrom-Json
+        $receipt.notified_controller_worker_count | Should -Be 1
+        $receipt.terminal_navigation_slot_count | Should -Be 1
+        $receipt.terminal_navigation_route_count | Should -Be 1
     }
 
     It "rejects query work from the Slint adapter" {

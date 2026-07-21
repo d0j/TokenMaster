@@ -139,6 +139,100 @@ Describe "TokenMaster application composition audit" {
             Should -Throw "*TM-APP-SESSION-PAGE-SINK*"
     }
 
+    It "rejects removing terminal Sessions recovery from the live bridge" {
+        $fixture = New-AppAuditFixture -Name "session-page-terminal-recovery"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $text = $original.Replace(
+            '.attach_terminal_navigation_notifier(live_bridge.terminal_navigation_notifier())',
+            '.skip_terminal_navigation_notifier(live_bridge.terminal_navigation_notifier())'
+        )
+        $text | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-SESSION-PAGE-TERMINAL-RECOVERY*"
+    }
+
+    It "rejects a comment-only terminal Sessions recovery anchor" {
+        $fixture = New-AppAuditFixture -Name "session-page-terminal-comment-anchor"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $text = $original.Replace(
+            '.attach_terminal_navigation_notifier(live_bridge.terminal_navigation_notifier())',
+            ".skip_terminal_navigation_notifier(live_bridge.terminal_navigation_notifier())`r`n        // controller.attach_terminal_navigation_notifier(live_bridge.terminal_navigation_notifier())"
+        )
+        $text | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-SESSION-PAGE-TERMINAL-RECOVERY*"
+    }
+
+    It "rejects a nested-comment-only terminal Sessions recovery anchor" {
+        $fixture = New-AppAuditFixture -Name "session-page-terminal-nested-comment-anchor"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $text = $original.Replace(
+            '.attach_terminal_navigation_notifier(live_bridge.terminal_navigation_notifier())',
+            ".skip_terminal_navigation_notifier(live_bridge.terminal_navigation_notifier())`r`n        /* outer /* inner */ controller.attach_terminal_navigation_notifier(live_bridge.terminal_navigation_notifier()) */"
+        )
+        $text | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-SESSION-PAGE-TERMINAL-RECOVERY*"
+    }
+
+    It "rejects a cfg-test-only terminal Sessions recovery attachment" {
+        $fixture = New-AppAuditFixture -Name "session-page-terminal-cfg-test-anchor"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $text = $original.Replace(
+            '.attach_terminal_navigation_notifier(live_bridge.terminal_navigation_notifier())',
+            ".skip_terminal_navigation_notifier(live_bridge.terminal_navigation_notifier())`r`n        #[cfg(test)]`r`n        { controller.attach_terminal_navigation_notifier(live_bridge.terminal_navigation_notifier()); }"
+        )
+        $text | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-SESSION-PAGE-TERMINAL-RECOVERY*"
+    }
+
+    It "rejects the complete terminal Sessions sequence inside a cfg-test block" {
+        $fixture = New-AppAuditFixture -Name "session-page-terminal-cfg-test-sequence"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $pattern = 'controller\s*\.attach_snapshot_notifier\(live_bridge\.notifier\(\)\)\s*\.map_err\(\|_\| ApplicationError::controller\(\)\)\?;\s*controller\s*\.attach_terminal_navigation_notifier\(live_bridge\.terminal_navigation_notifier\(\)\)\s*\.map_err\(\|_\| ApplicationError::controller\(\)\)\?;\s*let refresh_ingress = controller\.refresh_ingress\(\);'
+        $replacement = @'
+#[cfg(test)]
+    {
+        controller
+            .attach_snapshot_notifier(live_bridge.notifier())
+            .map_err(|_| ApplicationError::controller())?;
+        controller
+            .attach_terminal_navigation_notifier(live_bridge.terminal_navigation_notifier())
+            .map_err(|_| ApplicationError::controller())?;
+        let refresh_ingress = controller.refresh_ingress();
+        drop(refresh_ingress);
+    }
+    let refresh_ingress = controller.refresh_ingress();
+'@
+        $text = [regex]::Replace($original, $pattern, $replacement, 1)
+        $text | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-SESSION-PAGE-TERMINAL-RECOVERY*"
+    }
+
+    It "reports one executable terminal Sessions recovery attachment" {
+        $fixture = New-AppAuditFixture -Name "session-page-terminal-receipt"
+
+        $receipt = (& $Audit -RepositoryRoot $fixture -SourceOnly) | ConvertFrom-Json
+        $receipt.session_page_terminal_attachment_count | Should -Be 1
+    }
+
     It "rejects removing the production lifecycle router" {
         $fixture = New-AppAuditFixture -Name "lifecycle-router"
         $path = Join-Path $fixture "crates\app\src\application.rs"

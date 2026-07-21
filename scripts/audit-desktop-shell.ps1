@@ -527,9 +527,17 @@ if ($densityAuthorityCount -ne 0) {
     throw 'TM-DESKTOP-DENSITY-NO-AUTHORITY: presentation density must not create timer/worker/query/window or retained authority'
 }
 }
-$workerConstructionCount = [regex]::Matches($controllerText, 'RefreshWorker::spawn\(').Count
+$controllerSpawnText = Get-ExecutableBracedText -Text $controllerText -Pattern '(?m)^\s*fn\s+spawn_with_clock(?:<[^>]+>)?\s*\(' -FailureCode 'TM-DESKTOP-CONTROLLER-WORKER'
+$workerConstructionCount = [regex]::Matches($controllerSpawnText, 'RefreshWorker::spawn\w*\(').Count
 if ($workerConstructionCount -ne 1) {
     throw 'TM-DESKTOP-CONTROLLER-WORKER: desktop controller must construct exactly one bounded refresh worker'
+}
+$notifiedWorkerConstructionCount = [regex]::Matches(
+    $controllerSpawnText,
+    'RefreshWorker::spawn_notified\('
+).Count
+if ($notifiedWorkerConstructionCount -ne 1) {
+    throw 'TM-DESKTOP-SESSIONS-TERMINAL-RECOVERY: the sole controller worker must report terminal navigation completion'
 }
 $snapshotSlotCount = [regex]::Matches(
     $productionText,
@@ -1477,6 +1485,21 @@ $sessionNavigationText = Get-ExecutableBracedText -Text $controllerText -Pattern
 $sessionNavigationCommitText = Get-ExecutableBracedText -Text $controllerText -Pattern '(?m)^\s*fn\s+commit_session_page_with_hook(?:<[^>]+>)?\s*\(' -FailureCode 'TM-DESKTOP-SESSIONS-NAVIGATION'
 $sessionPageAdmissionText = Get-RustFunctionText -Text $controllerText -Name 'request_session_page'
 $refreshIngressText = Get-RustFunctionText -Text $controllerText -Name 'refresh'
+$workerCompletionNotifierText = Get-ExecutableBracedText -Text $controllerText -Pattern '(?m)^\s*impl\s+WorkerCompletionNotifier\s+for\s+DesktopWorkCompletionNotifier\s*\{' -FailureCode 'TM-DESKTOP-SESSIONS-TERMINAL-RECOVERY'
+$handleWorkerCompletionText = Get-RustFunctionText -Text $controllerText -Name 'handle_worker_completion'
+$tryCompletionText = Get-RustFunctionText -Text $controllerText -Name 'try_completion'
+$terminalDeliveryText = Get-ExecutableBracedText -Text $bridgeText -Pattern '(?m)^\s*impl\s+TerminalNavigationDelivery\s+for\s+SlintTerminalNavigationDelivery\s*\{' -FailureCode 'TM-DESKTOP-SESSIONS-TERMINAL-RECOVERY'
+$terminalNotifierRouteText = Get-ExecutableBracedText -Text $bridgeText -Pattern '(?m)^\s*impl\s+DesktopTerminalNavigationNotifier\s+for\s+BridgeTerminalNavigationNotifier\s*\{' -FailureCode 'TM-DESKTOP-SESSIONS-TERMINAL-RECOVERY'
+$bridgeInnerText = Get-ExecutableBracedText -Text $bridgeText -Pattern '(?m)^\s*struct\s+BridgeInner\s*\{' -FailureCode 'TM-DESKTOP-SESSIONS-TERMINAL-RECOVERY'
+$requestTerminalText = Get-RustFunctionText -Text $bridgeText -Name 'request_terminal'
+$requestTerminalNormalized = Normalize-ExecutableStructure -Text $requestTerminalText
+$terminalNotifierRouteNormalized = Normalize-ExecutableStructure -Text $terminalNotifierRouteText
+$expectedTerminalNotifierRouteNormalized = 'implDesktopTerminalNavigationNotifierforBridgeTerminalNavigationNotifier{fnnavigation_terminal(&self,intent:DesktopSessionPageIntent){ifletSome(inner)=self.inner.upgrade(){inner.request_terminal(intent);}}}'
+$bridgeRunOnceText = Get-RustFunctionText -Text $bridgeText -Name 'run_once'
+$bridgeSnapshotIndex = $bridgeRunOnceText.IndexOf('self.receiver.take_snapshot()', [System.StringComparison]::Ordinal)
+$bridgeTerminalIndex = $bridgeRunOnceText.IndexOf('self.terminal_intent.lock()', [System.StringComparison]::Ordinal)
+$refreshDropIndex = $refreshIngressText.IndexOf('drop(work);', [System.StringComparison]::Ordinal)
+$refreshTerminalIndex = $refreshIngressText.IndexOf('notify_terminal_navigation(', [System.StringComparison]::Ordinal)
 $sessionNavigationQueuePattern = '(?im)^(?=[^\r\n]*navigation)[^\r\n]*(?:\b(?:VecDeque|HashMap|BTreeMap|LinkedList)\b|\bVec\s*<|\b(?:sync_)?channel\s*(?:::)?\s*(?:<|\())'
 $sessionEpochFence = [regex]::Match($sessionPageAdmissionText, 'if\s+self\.snapshot_epoch\(\)\s*!=\s*Some\(intent\.snapshot_epoch\(\)\)\s*\{')
 $sessionProductFence = [regex]::Match($sessionPageAdmissionText, 'if\s+\*lock_published_generation\(&self\.publication\.published_generation\)\?\s*!=\s*Some\(intent\.product_generation\(\)\)\s*\{')
@@ -1504,12 +1527,42 @@ if ($controllerText -notmatch 'pub enum DesktopSessionPageDirection\s*\{\s*Newes
     $sessionEpochFence.Index -ge $sessionProductFence.Index -or
     $sessionProductFence.Index -ge $sessionGenerationFence.Index -or
     $sessionGenerationFence.Index -ge $sessionWorkerAdmission.Index -or
-    $refreshIngressText -notmatch 'work\.refresh_attempt\s*=\s*Some\(attempt\);\s*invalidate_navigation\(&mut work\);' -or
+    $refreshIngressText -notmatch 'work\.refresh_attempt\s*=\s*Some\(attempt\);[\s\S]{0,256}?invalidate_navigation\(&mut work\);' -or
     $sessionNavigationText -notmatch 'navigation_is_current\(reducer, context, permit\.id\(\)\.get\(\), intent\)' -or
     $sessionNavigationCommitText -notmatch 'context\.snapshot_epoch\.load\(Ordering::Acquire\)\s*==\s*intent\.snapshot_epoch\(\)\.get\(\)' -or
     $sessionNavigationCommitText -notmatch 'reducer\.snapshot\(\)\.generation\(\)\s*==\s*intent\.product_generation\(\)' -or
     $sessionNavigationCommitText -notmatch 'active\.intent\.navigation_generation\(\)\s*==\s*intent\.navigation_generation\(\)') {
     throw 'TM-DESKTOP-SESSIONS-NAVIGATION: Sessions navigation must remain typed, latest-only, refresh-superseded, and stale-fenced'
+}
+if ($workerCompletionNotifierText -notmatch 'handle_worker_completion\(&self\.work, &self\.terminal_notifier, completion\);' -or
+    $tryCompletionText -notmatch 'handle_worker_completion\(\s*&self\.work,\s*&self\.terminal_navigation_notifier,\s*completion,\s*\)\?;' -or
+    $handleWorkerCompletionText -notmatch 'reconcile_navigation_completion\(work, completion\)' -or
+    $handleWorkerCompletionText -notmatch 'notify_terminal_navigation\(notifier, intent\);' -or
+    $refreshIngressText -notmatch 'let superseded_navigation = work\.current_navigation\.map\(\|active\| active\.intent\);' -or
+    $refreshDropIndex -lt 0 -or $refreshTerminalIndex -le $refreshDropIndex -or
+    $sessionNavigationText -match 'clear_navigation_if_current|invalidate_navigation' -or
+    $bridgeInnerText -notmatch 'terminal_intent:\s*std::sync::Mutex<Option<DesktopSessionPageIntent>>' -or
+    $requestTerminalText -notmatch 'is_none_or\(\|current\|\s*intent\.navigation_generation\(\)\s*>\s*current\.navigation_generation\(\)\s*\)' -or
+    -not $requestTerminalNormalized.EndsWith('drop(pending);self.request();}') -or
+    [regex]::Matches($requestTerminalNormalized, 'self\.request\(\);').Count -ne 1 -or
+    $terminalNotifierRouteNormalized -ne $expectedTerminalNotifierRouteNormalized -or
+    $bridgeSnapshotIndex -lt 0 -or $bridgeTerminalIndex -le $bridgeSnapshotIndex -or
+    $terminalDeliveryText -notmatch 'state\.reject_session_page\(intent\);' -or
+    $terminalDeliveryText -notmatch 'apply_session_navigation_projection\(&window, state\.projection\(\)\.sessions\(\)\);' -or
+    $terminalDeliveryText -notmatch 'apply_session_detail_projection\(&window, state\.projection\(\)\.sessions\(\)\);') {
+    throw 'TM-DESKTOP-SESSIONS-TERMINAL-RECOVERY: terminal navigation must remain bounded, exact, idempotent, lock-safe, and snapshot-ordered'
+}
+$terminalNavigationSlotCount = [regex]::Matches(
+    $bridgeInnerText,
+    'terminal_intent:\s*std::sync::Mutex<Option<DesktopSessionPageIntent>>'
+).Count
+$terminalNavigationRouteCount = [int](
+    $requestTerminalNormalized.EndsWith('drop(pending);self.request();}') -and
+    [regex]::Matches($requestTerminalNormalized, 'self\.request\(\);').Count -eq 1 -and
+    $terminalNotifierRouteNormalized -eq $expectedTerminalNotifierRouteNormalized
+)
+if ($terminalNavigationRouteCount -ne 1) {
+    throw 'TM-DESKTOP-SESSIONS-TERMINAL-RECOVERY: executable terminal navigation route count must remain one'
 }
 $sessionDetailBounds = [ordered]@{
     MAX_SESSION_DETAIL_MODEL_ROWS = 32
@@ -1868,6 +1921,9 @@ if ($SourceOnly) {
         tray_polling_surface_count = $trayPollingSurfaceCount
         tray_icon_sha256 = $trayIconHash
         controller_worker_count = $workerConstructionCount
+        notified_controller_worker_count = $notifiedWorkerConstructionCount
+        terminal_navigation_slot_count = $terminalNavigationSlotCount
+        terminal_navigation_route_count = $terminalNavigationRouteCount
         retained_snapshot_slot_count = $snapshotSlotCount
         event_loop_schedule_site_count = $eventScheduleCount
         bridge_event_loop_schedule_site_count = $bridgeEventScheduleCount
@@ -2067,6 +2123,9 @@ if ($LASTEXITCODE -ne 0) {
     maximum_route_reason_count = 11
     retained_route_model_count = 1
     controller_worker_count = $workerConstructionCount
+    notified_controller_worker_count = $notifiedWorkerConstructionCount
+    terminal_navigation_slot_count = $terminalNavigationSlotCount
+    terminal_navigation_route_count = $terminalNavigationRouteCount
     retained_snapshot_slot_count = $snapshotSlotCount
     event_loop_schedule_site_count = $eventScheduleCount
     bridge_event_loop_schedule_site_count = $bridgeEventScheduleCount

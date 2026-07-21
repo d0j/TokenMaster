@@ -68,7 +68,127 @@ if ($rustFiles.Count -ne 8) {
 $productionText = ($rustFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
 }) -join "`n"
+
+function ConvertTo-AppExecutableText {
+    param([Parameter(Mandatory = $true)][string]$Text)
+
+    $output = New-Object System.Text.StringBuilder $Text.Length
+    $index = 0
+    $blockDepth = 0
+    while ($index -lt $Text.Length) {
+        $character = $Text[$index]
+        $next = if ($index + 1 -lt $Text.Length) { $Text[$index + 1] } else { [char]0 }
+        if ($blockDepth -gt 0) {
+            if ($character -eq '/' -and $next -eq '*') { [void]$output.Append('  '); $blockDepth++; $index += 2; continue }
+            if ($character -eq '*' -and $next -eq '/') { [void]$output.Append('  '); $blockDepth--; $index += 2; continue }
+            [void]$output.Append($(if ($character -eq "`n" -or $character -eq "`r") { $character } else { ' ' }))
+            $index++
+            continue
+        }
+        if ($character -eq '/' -and $next -eq '/') {
+            [void]$output.Append('  ')
+            $index += 2
+            while ($index -lt $Text.Length -and $Text[$index] -ne "`n") { [void]$output.Append(' '); $index++ }
+            continue
+        }
+        if ($character -eq '/' -and $next -eq '*') {
+            [void]$output.Append('  ')
+            $blockDepth = 1
+            $index += 2
+            continue
+        }
+        $rawStart = if ($character -eq 'r') { $index } elseif ($character -eq 'b' -and $next -eq 'r') { $index + 1 } else { -1 }
+        if ($rawStart -ge 0) {
+            $hashIndex = $rawStart + 1
+            while ($hashIndex -lt $Text.Length -and $Text[$hashIndex] -eq '#') { $hashIndex++ }
+            if ($hashIndex -lt $Text.Length -and $Text[$hashIndex] -eq '"') {
+                $hashCount = $hashIndex - $rawStart - 1
+                while ($index -le $hashIndex) { [void]$output.Append(' '); $index++ }
+                while ($index -lt $Text.Length) {
+                    $literal = $Text[$index]
+                    [void]$output.Append($(if ($literal -eq "`n" -or $literal -eq "`r") { $literal } else { ' ' }))
+                    $index++
+                    if ($literal -eq '"') {
+                        $closing = $true
+                        for ($hash = 0; $hash -lt $hashCount; $hash++) {
+                            if ($index + $hash -ge $Text.Length -or $Text[$index + $hash] -ne '#') { $closing = $false; break }
+                        }
+                        if ($closing) {
+                            for ($hash = 0; $hash -lt $hashCount; $hash++) { [void]$output.Append(' '); $index++ }
+                            break
+                        }
+                    }
+                }
+                continue
+            }
+        }
+        $stringStart = $character -eq '"' -or ($character -eq 'b' -and $next -eq '"')
+        $byteCharacter = $character -eq 'b' -and $next -eq "'" -and $index + 3 -lt $Text.Length -and $Text[$index + 3] -eq "'"
+        $characterLiteral = $character -eq "'" -and (($index + 2 -lt $Text.Length -and $Text[$index + 2] -eq "'") -or ($index + 3 -lt $Text.Length -and $Text[$index + 1] -eq '\' -and $Text[$index + 3] -eq "'"))
+        if ($stringStart -or $byteCharacter -or $characterLiteral) {
+            $quote = if ($stringStart) { '"' } else { "'" }
+            $openingQuote = if (($stringStart -or $byteCharacter) -and $character -eq 'b') { $index + 1 } else { $index }
+            do {
+                $literal = $Text[$index]
+                [void]$output.Append($(if ($literal -eq "`n" -or $literal -eq "`r") { $literal } else { ' ' }))
+                if ($literal -eq '\' -and $index + 1 -lt $Text.Length) { $index++; [void]$output.Append(' ') }
+                elseif ($literal -eq $quote -and $index -gt $openingQuote) { $index++; break }
+                $index++
+            } while ($index -lt $Text.Length)
+            continue
+        }
+        [void]$output.Append($character)
+        $index++
+    }
+    return $output.ToString()
+}
+
+function Get-AppExecutableFunctionText {
+    param(
+        [Parameter(Mandatory = $true)][string]$Text,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    $match = [regex]::Match($Text, "(?m)^\s*fn\s+$Name\s*\(")
+    if (-not $match.Success) { throw "TM-APP-SESSION-PAGE-TERMINAL-RECOVERY: missing $Name" }
+    $open = $Text.IndexOf('{', $match.Index)
+    if ($open -lt 0) { throw "TM-APP-SESSION-PAGE-TERMINAL-RECOVERY: missing $Name body" }
+    $depth = 0
+    for ($index = $open; $index -lt $Text.Length; $index++) {
+        if ($Text[$index] -eq '{') { $depth++ }
+        if ($Text[$index] -eq '}') {
+            $depth--
+            if ($depth -eq 0) { return $Text.Substring($match.Index, $index - $match.Index + 1) }
+        }
+    }
+    throw "TM-APP-SESSION-PAGE-TERMINAL-RECOVERY: unclosed $Name body"
+}
+
+function Get-AppTopLevelStatements {
+    param([Parameter(Mandatory = $true)][string]$FunctionText)
+
+    $open = $FunctionText.IndexOf('{')
+    if ($open -lt 0) { throw 'TM-APP-SESSION-PAGE-TERMINAL-RECOVERY: missing function body' }
+    $depth = 1
+    $current = New-Object System.Text.StringBuilder
+    $statements = [System.Collections.Generic.List[string]]::new()
+    for ($index = $open + 1; $index -lt $FunctionText.Length -and $depth -gt 0; $index++) {
+        $character = $FunctionText[$index]
+        [void]$current.Append($character)
+        if ($character -eq '{') { $depth++ }
+        elseif ($character -eq '}') { $depth-- }
+        elseif ($character -eq ';' -and $depth -eq 1) {
+            $statements.Add([regex]::Replace($current.ToString(), '\s+', ''))
+            [void]$current.Clear()
+        }
+    }
+    return $statements.ToArray()
+}
+
 $applicationText = [System.IO.File]::ReadAllText((Join-Path $appSource 'application.rs'))
+$applicationExecutableText = ConvertTo-AppExecutableText -Text $applicationText
+$finishLiveBundleExecutableText = Get-AppExecutableFunctionText -Text $applicationExecutableText -Name 'finish_live_bundle'
+$finishLiveBundleTopLevelStatements = @(Get-AppTopLevelStatements -FunctionText $finishLiveBundleExecutableText)
 $dataRootText = [System.IO.File]::ReadAllText((Join-Path $appSource 'data_root.rs'))
 $notificationText = [System.IO.File]::ReadAllText((Join-Path $appSource 'notification.rs'))
 $operationText = [System.IO.File]::ReadAllText((Join-Path $appSource 'operation.rs'))
@@ -309,6 +429,24 @@ foreach ($contract in @(
     if ($actual -ne $contract.Count) {
         throw "$($contract.Name): expected $($contract.Count), observed $actual"
     }
+}
+
+$expectedSnapshotAttachment = 'controller.attach_snapshot_notifier(live_bridge.notifier()).map_err(|_|ApplicationError::controller())?;'
+$expectedTerminalAttachment = 'controller.attach_terminal_navigation_notifier(live_bridge.terminal_navigation_notifier()).map_err(|_|ApplicationError::controller())?;'
+$expectedRefreshIngress = 'letrefresh_ingress=controller.refresh_ingress();'
+$sessionPageTerminalAttachmentCount = @(
+    $finishLiveBundleTopLevelStatements | Where-Object { $_ -eq $expectedTerminalAttachment }
+).Count
+$sessionTerminalSequenceCount = 0
+for ($index = 0; $index + 2 -lt $finishLiveBundleTopLevelStatements.Count; $index++) {
+    if ($finishLiveBundleTopLevelStatements[$index] -eq $expectedSnapshotAttachment -and
+        $finishLiveBundleTopLevelStatements[$index + 1] -eq $expectedTerminalAttachment -and
+        $finishLiveBundleTopLevelStatements[$index + 2] -eq $expectedRefreshIngress) {
+        $sessionTerminalSequenceCount++
+    }
+}
+if ($sessionPageTerminalAttachmentCount -ne 1 -or $sessionTerminalSequenceCount -ne 1) {
+    throw 'TM-APP-SESSION-PAGE-TERMINAL-RECOVERY: live Sessions navigation must attach one executable terminal rollback route'
 }
 
 $sessionPageSinkText = [regex]::Match(
@@ -664,6 +802,7 @@ if ($SourceOnly) {
         reminder_startup_binding_count = $reminderStartupBindingCount
         reminder_startup_pending_binding_count = $reminderStartupPendingBindingCount
         desktop_controller_count = 1
+        session_page_terminal_attachment_count = $sessionPageTerminalAttachmentCount
         session_detail_router_count = 1
         session_detail_current_bundle_binding_count = 1
         session_detail_nonblocking_binding_count = 1
@@ -812,6 +951,7 @@ foreach ($needle in @(
     reminder_startup_binding_count = $reminderStartupBindingCount
     reminder_startup_pending_binding_count = $reminderStartupPendingBindingCount
     desktop_controller_count = 1
+    session_page_terminal_attachment_count = $sessionPageTerminalAttachmentCount
     session_detail_router_count = 1
     session_detail_current_bundle_binding_count = 1
     session_detail_nonblocking_binding_count = 1
