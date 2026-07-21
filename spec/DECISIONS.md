@@ -1687,8 +1687,9 @@ replacement fail closed with constant frontend memory and no stale-row disclosur
 
 ## ADR-068 — Share one bounded recent-usage envelope across History, Models, and Projects
 
-Decision: P3-D.3 adds Model and Project breakdowns to the existing fixed recent-30-day
-History analytics request. History continues to consume its daily series; Models reads
+Decision: P3-D.3 adds Model and Project breakdowns to the existing shared recent-usage
+History analytics request. The request is selected only by exact rolling 1/7/30 presets,
+with 30 as default and maximum. History continues to consume its daily series; Models reads
 the Model breakdown; P3-D.4 Projects reads the already captured Project
 breakdown. There remains exactly one today Dashboard query and one recent-usage query
 per refresh on the existing capacity-one worker. No Models product section, third
@@ -1704,8 +1705,8 @@ only for an accepted product generation. Backend and desktop truncation are visi
 wide and narrow layouts retain the same row meaning. Provider/profile/source/account/
 workspace/project/session identities and every opaque authority remain outside Models.
 
-Rationale: reusing Dashboard would mislabel today as recent exploration, while a new
-30-day Models query would duplicate aggregate/price work and let view ranges drift.
+Rationale: reusing Dashboard would mislabel today as recent exploration, while a separate
+Models query would duplicate aggregate/price work and let view ranges drift.
 Renaming the current product `history` field would add mechanical API churn without
 changing ownership. The selected shared immutable envelope gives History, Models, and
 Projects coherent range/timezone/evidence, constant frontend memory, instant route
@@ -1719,8 +1720,8 @@ connection, dependency, or route-time work. Desktop keeps at most 32 usage-centr
 rows, matches named aliases to at most 32 loaded Git repositories by exact safe
 `ProjectAlias`, and never matches `Unassociated` or appends Git-only aliases.
 
-The evidence windows remain independent: recent usage is the fixed 30-day local civil
-range, while code output is the existing exact UTC-today range. Both ranges,
+The evidence windows remain independent: recent usage is the selected shared local civil
+range (1/7/30, default 30), while code output is the existing exact UTC-today range. Both ranges,
 timezones, quality, freshness, and completeness render explicitly. Usage controls
 ordering, tokens, cost, events, and relative distribution; Git controls commits/
 added/removed/net and efficiency. The frontend never combines or relabels the periods.
@@ -2095,3 +2096,21 @@ Rationale: publishing a synthetic product snapshot for cancellation would weaken
 snapshot authority, while leaving UI correlation dependent on polling can freeze the
 controls forever. One identity-safe rollback preserves constant memory and keeps
 successful and query-error snapshots authoritative.
+
+## ADR-086 — Bound interactive shared History ranges and arbitration
+
+Decision: one shared recent-usage envelope is controlled by exact rolling 1/7/30-day
+presets, defaulting and capping at 30. History, Models, and Projects replace and degrade
+together; Dashboard today and Projects UTC-today Git evidence remain separate. The
+controller retains one published preset, one persistent scalar range-generation
+high-water mark, one active correlation, and one latest pending intent. Range work and
+Sessions detail/page work are mutually exclusive at admission (`Busy` on conflict).
+Refresh supersedes range work; only the latest eligible follow-up survives. Epoch,
+product-generation, worker-correlation, and selection-generation fences apply before
+query and publication, and stale output is discarded. Two optional non-displacing
+terminal notifier slots reconcile only exact whole-intent matches. The intent boundary
+contains no free-form dates/counts, identity, paths, query objects, or archive handles.
+
+Rationale: fixed presets preserve the 30-row bound and truthful rolling semantics while
+avoiding a second analytics owner, retained range history, stale Sessions page-relative
+state, or unbounded privacy surface.

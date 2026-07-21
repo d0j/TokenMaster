@@ -73,13 +73,18 @@ sessions, models, projects, activity, data health, notifications, settings, agen
 help, command palette, and compact-widget views. Users MUST be able to reorder, hide,
 and collapse board sections without data loss.
 
-The default History route MUST show the latest 30 resolved civil days as an exact
-half-open analytics request, daily newest-first rows, range and timezone context,
-overview tokens/cost/events, and evidence freshness/quality. Empty days MUST preserve
-unavailable token components and legitimate-zero cost semantics rather than fabricate
-complete zero usage. Future range controls MUST replace this bounded request through
-the same snapshot section; they MUST NOT query on route selection or retain prior
-ranges in the frontend.
+The History route MUST expose one shared usage-range control with exactly 1, 7, and
+30 rolling civil-day presets. The initial and restart default MUST be 30 days, and
+30 days is both the maximum requested and displayed range. The selected preset MUST
+drive one exact half-open analytics envelope consumed identically by History, Models,
+and Projects; all three MUST render its range and timezone context. The request MUST
+produce daily newest-first rows, overview tokens/cost/events, and evidence
+freshness/quality. Empty days MUST preserve unavailable token components and
+legitimate-zero cost semantics rather than fabricate complete zero usage. Selecting a
+preset MUST replace the shared envelope through the same snapshot section; route
+selection MUST NOT query or retain prior ranges in the frontend. Dashboard MUST retain
+its today request, and Projects MUST retain its separately labelled UTC-today Git
+range.
 
 The default Sessions route MUST show the newest all-time session page with at most 64
 rows and explicit continuation availability. Each row MUST preserve first/last time,
@@ -360,7 +365,7 @@ reasoning, total, and cost; the narrow layout may reduce visible columns but MUS
 retain the same model and accessible row meaning. No display row may expose a provider,
 profile, source, workspace, project, private session key, or continuation cursor.
 
-Models MUST render the Model breakdown from the same exact recent-30-day analytics
+Models MUST render the Model breakdown from the same exact selected shared analytics
 envelope as History. The wide layout shows canonical model key, events, input, cached,
 output, reasoning, total, cost, and relative total-token distribution. The narrow
 layout MAY rearrange those facts but MUST keep every component in the same owned row
@@ -368,7 +373,7 @@ model and accessible row meaning. Backend or presentation truncation MUST be vis
 No Models row may expose provider, profile, source, account, workspace, project,
 session, opaque key/cursor, path, content, command, credential, or query authority.
 
-Projects MUST render the Project breakdown from that same recent-30-day analytics
+Projects MUST render the Project breakdown from that same selected shared analytics
 envelope and MAY enrich named rows only with exact safe-alias matches from the existing
 Git envelope. `Unassociated` usage never matches Git, and Git-only aliases MUST NOT be
 fabricated as zero-usage rows. Recent usage range/timezone/evidence and UTC-today Git
@@ -476,6 +481,31 @@ model or issue work.
 The current Sessions projection MUST retain at most 64 summary rows in one model and no
 opaque key, cursor, prior page, query service, timer, worker, or archive handle. Its
 route-only selection MUST NOT rebuild the model or issue a detail query.
+
+History range admission MUST use the existing capacity-one worker and MUST retain only
+the published preset, one persistent scalar range-selection high-water generation, one
+active correlation, and one latest pending intent. A range intent MUST contain only the
+current snapshot epoch, viewed product generation, checked newer selection generation,
+and one of the fixed 1/7/30 presets. Sessions detail/page work and History range work
+are mutually exclusive: either interaction MUST return `Busy` for the other without
+changing its state. A full refresh supersedes active or pending range work and uses the
+last successfully published preset; after refresh, only the latest eligible range
+follow-up may run. Admission and publication MUST revalidate epoch, product generation,
+worker correlation, and range generation; stale results MUST be discarded. The exact
+arbitration is: no work + range admits; refresh + range retains latest follow-up;
+range + refresh lets refresh supersede and roll back; range + range rejects UI input
+and retains only the newest valid direct ingress; Sessions interaction + range and
+range + Sessions interaction return `Busy`; backend epoch replacement makes old work
+stale and rolls back the exact pending correlation. Successful publication advances
+product generation and the shared preset; accepted failure retains the shared envelope
+degraded without changing the preset.
+
+Terminal no-snapshot completion MUST use a dedicated optional History-range notifier
+beside the Sessions notifier. The two fixed slots MUST NOT displace one another, and
+notification MUST match the whole still-current intent before clearing UI pending state.
+The frontend MUST retain at most 30 rows. No new range control boundary may carry free-
+form dates/counts, scope/provider/profile identity, query objects, archive handles,
+paths, prompts, responses, reasoning, commands, credentials, or source contents.
 
 ## Performance requirements
 

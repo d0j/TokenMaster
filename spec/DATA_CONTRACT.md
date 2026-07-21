@@ -961,6 +961,21 @@ overview and exact range/timezone/evidence facts, and owns no query service, cur
 archive handle, prior range, or row identity. Missing token components remain typed
 unavailable/partial and cost preserves complete/partial/unavailable/legitimate-zero.
 
+The shared recent-usage envelope is selected only by the closed rolling presets 1, 7,
+and 30 days; 30 is the default and maximum. History, Models, and Projects consume the
+same immutable envelope and replace/degrade together. The envelope's range and timezone
+remain authoritative; Dashboard today and Projects UTC-today Git evidence remain
+separate. The controller retains one published preset, one persistent scalar
+range-selection high-water generation, one active correlation, and one latest pending
+intent. The intent contains only snapshot epoch, viewed product generation, checked
+selection generation, and the fixed preset. Range and Sessions detail/page work are
+mutually exclusive at admission (`Busy` on conflict). Refresh supersedes range work;
+range work may retain only the latest eligible follow-up. Epoch, product-generation,
+worker-correlation, and selection-generation fences apply before query and publication;
+stale output is discarded. Two optional terminal notifier slots (Sessions and History
+range) are non-displacing and clear UI state only on whole-intent equality. No free-form
+date/count, identity, path, query, or archive value crosses this boundary.
+
 ### P3-D.2a bounded Sessions projection
 
 `DesktopQueryPlan` requests one all-time newest-first session page capped at 64 rows.
@@ -997,7 +1012,7 @@ never enter the projection or Slint model.
 
 ### P3-D.3 bounded Models projection
 
-The existing recent-30-day History request also requests Model and Project breakdowns.
+The existing selected shared recent-usage request also requests Model and Project breakdowns.
 It remains one query and one compatible product section: History consumes the daily
 series, Models consumes the Model breakdown, and Projects consumes the
 prefetched Project breakdown. The query/store boundary retains at most 256 Model and

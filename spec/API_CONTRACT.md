@@ -401,13 +401,31 @@ replaces the seven Slint list models once. Route
 callbacks call the route-only projection path; they cannot rebuild Dashboard lists,
 invoke the query facade, create a timer, or recreate `MainWindow`.
 
-`UsageRange::recent_days(day_count)` is the bounded default-history request and rejects
-zero or more than 400 days. `DesktopQueryPlan` owns one fixed 30-day daily History
-request with exactly Model and Project breakdowns alongside the today-only Dashboard
-request. Both execute sequentially on the existing capacity-one query worker; no third
-Models or Projects analytics request exists. History success/failure publishes only the
-independent product History section, and cancellation or deadline still discards the
-entire unpublished attempt.
+`UsageRange::recent_days(day_count)` remains the bounded resolver and rejects zero or
+more than 400 days. The shared desktop range boundary accepts exactly the closed enum
+presets 1, 7, and 30; 30 is the default and maximum. `DesktopQueryPlan` owns one
+selected shared recent-usage request with exactly Model and Project breakdowns alongside
+the unchanged today-only Dashboard request. History, Models, and Projects consume that
+same envelope; no third analytics request exists. Both execute sequentially on the
+existing capacity-one query worker. A selected range replaces the shared snapshot
+atomically; accepted query failure retains the prior envelope degraded for all three
+routes, while terminal cancellation/deadline/abandonment with no snapshot restores the
+prior control and publishes no synthetic failure.
+
+The range controller retains one published preset, one persistent scalar generation
+high-water mark, one active correlation, and one latest pending intent. Intent carries
+only snapshot epoch, viewed product generation, checked newer range generation, and the
+fixed preset. Range and Sessions detail/page admission are mutually exclusive and return
+`Busy` for the other interaction. Refresh supersedes range work and uses the published
+preset; an eligible range may follow only as the latest pending intent. Epoch,
+product-generation, worker-correlation, and range-generation checks run before query
+and before publication; stale results publish nothing. The exact arbitration is:
+none+range admit; refresh+range latest follow-up; range+refresh refresh wins and rolls
+back; range+range UI rejects and direct ingress keeps newest valid generation;
+Sessions+range and range+Sessions return `Busy`; epoch replacement makes old work stale
+and rolls back its exact UI intent. Two non-displacing optional terminal notifier slots
+(Sessions and History range) reconcile only a whole-intent match. No range intent may
+carry free-form dates/counts, identity, paths, query objects, or archive handles.
 
 `DesktopHistoryProjection::from_snapshot` is the sole product-to-History mapping. It
 copies one overview, exact resolved range/timezone/evidence, and at most 30 daily rows

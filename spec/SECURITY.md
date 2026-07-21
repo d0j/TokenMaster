@@ -1321,3 +1321,19 @@ P4-C retains that boundary. The palette is fixed Rust data (15 semantic RGB role
 skin), not a file/provider/theme authority. One admitted complete presentation payload
 is persisted/restored atomically; no partial axis, event-loop yield before metadata, or
 window show before the first Rust palette application is permitted.
+### P3-D interactive History range boundary
+
+The shared usage-range control is a closed 1/7/30 rolling-day enum with default and
+maximum 30. Its typed intent contains only snapshot epoch, viewed product generation,
+checked selection generation, and preset; free-form dates/counts, scope, provider or
+profile identity, paths, query objects, archive handles, prompts, responses, reasoning,
+commands, credentials, and source contents are forbidden. One scalar high-water mark,
+one active correlation, and one latest pending intent are the complete controller state.
+History range and Sessions detail/page work are mutually exclusive at admission, with
+`Busy` on conflict; refresh supersedes range and epoch replacement stales old work.
+Epoch, product-generation, worker-correlation, and selection-generation checks run
+before query and publication. History, Models, and Projects share one envelope and
+degrade together on accepted range-query failure; Dashboard today and Projects
+UTC-today Git ranges remain separate. Two optional terminal notifier slots are fixed,
+non-displacing, and clear only exact whole-intent matches. The 30-row frontend bound
+and no-cache/no-queue/no-additional-worker rules remain mandatory.
