@@ -1,5 +1,23 @@
 # TokenMaster project history
 
+## 2026-07-21 — P3-E packaged interactive acceptance contract
+
+Bounded the evidence-definition gap without claiming or performing interactive
+acceptance. `P3E_ACCEPTANCE.md` separates P3-E developer completion from the P6-owned
+packaged executable, requires a disposable Windows host and verified rollback, fixes
+eleven exact shell/startup/power scenarios, and binds the receipt to clean Git and
+executable identities plus a post-warm-up resource envelope. The read-only preflight is
+fail-closed for schema/local checks but does not authenticate actions or package
+provenance; it cannot launch the GUI, mutate registry/Explorer/power state, package the
+product, or promote the historical M0 probe. P6 producer/manifest binding and external
+evidence remain absent.
+
+The focused Pester 5.7.1 suite passes 27/27, PowerShell parsing and current-user startup/
+application/Desktop source audits pass, clean-root/fmt/diff pass, strict workspace
+Clippy passes in 584.9 seconds, and the complete locked workspace tests/doctests pass in
+829.1 seconds. Independent final high-risk review is Critical/Important/Minor 0/0/0 and
+Ready for this preflight/documentation slice only.
+
 ## 2026-07-19 — P3-E.5 current-user startup developer closure
 
 Added one opt-in current-user startup capability over the fixed HKCU Run value without

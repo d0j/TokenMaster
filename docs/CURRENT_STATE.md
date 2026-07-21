@@ -1532,8 +1532,12 @@ Notifications route plus P3-D.7 Help/About, the app-owned visible presentation/r
 bridge, global reminder settings synchronization/editor, P3-E.1 route command palette,
 P3-E.2 compact quota mode, P3-E.3 production tray lifecycle, P3-E.4 current-session
 single-instance activation/global hotkey, and P3-E.5 explicit current-user startup are
-implemented. Continue with interactive/resource shell closure.
-Later-page Sessions navigation and interactive History ranges remain bounded
+implemented. The P3-E packaged interactive acceptance contract and strict operator-
+receipt schema/local-identity preflight are fixed in `P3E_ACCEPTANCE.md`; authenticated
+actions and package provenance remain deferred until P6 supplies the producer/manifest,
+exact packaged production executable, and a disposable Windows host. No live HKCU,
+Explorer, sign-in, lock, sleep, hotkey, or GUI mutation was performed.
+Continue with later-page Sessions navigation and interactive History ranges as bounded
 replacements of their existing sections rather than new frontend query owners. Interactive
 Windows, P4 presentation, P5 CLI/MCP, activation, M0, packaging, signing, soak, and
 product release remain unclaimed.

@@ -983,10 +983,16 @@ treat busy/disk/access/schema-newer as corruption authority. Keep automatic reco
 data only; device-local settings never move. Do not relax the state boundary into path,
 generic-stream, generic age-extraction, or batch-deletion authority.
 
-The immediate next implementation slice is P3-E resource/interactive closure.
-Later-page
-Sessions navigation and interactive
-History ranges remain bounded replacements of existing sections. Remaining P3-E, P4
+P3-E developer implementation is complete. Its packaged interactive receipt now has a
+contract and strict schema/local-identity preflight in `P3E_ACCEPTANCE.md`, but preflight
+does not authenticate external actions or package provenance. Acceptance remains
+blocked until P6 supplies the producer/manifest binding and exact packaged production
+executable and the run occurs in a disposable Windows user profile or VM with verified
+rollback. Do not substitute the M0 probe or mutate the operator's real HKCU/Explorer/
+power state.
+
+The immediate next implementation slices are later-page Sessions navigation and
+interactive History ranges, both bounded replacements of existing sections. Remaining P3-E evidence, P4
 presentation, CLI/MCP, activation, M0 acceptance,
 packaging, signing, and release remain unclaimed. Inventory/reminder read must not
 imply activation authority.

@@ -2024,3 +2024,24 @@ Adopt schema v3 and one complete presentation selection. `Refined`/`refined`/0,
 15-role palettes; Slint contains no family table or selection branch. This remains a
 partial P4 decision: layout, scheme, locale, typography, accessibility/DPI, paint and
 resource acceptance are explicitly deferred.
+
+## ADR-083 — Validate P3-E interaction only against the packaged production executable
+
+Status: acceptance contract and fail-closed schema/local-identity preflight implemented;
+authenticated P6 package provenance and external evidence remain absent.
+
+Decision: P3-E developer implementation closes before P6, while its final interactive
+receipt is produced only after P6 supplies the exact packaged production executable.
+The read-only preflight is defined early and checks an operator-attested receipt against
+a clean Git commit, executable name/SHA-256, disposable-host and rollback claims, eleven
+fixed scenario claims, and a post-warm-up resource envelope. It never authenticates
+those external claims or P6 provenance, launches the app, mutates HKCU/Explorer/power
+state, creates a package, or treats `tokenmaster-m0` as product evidence. P6 must add
+the authenticated producer/package-manifest binding before acceptance.
+
+Rationale: requiring a packaged executable inside P3-E implementation order creates a
+circular dependency on P6; accepting an unpackaged or isolated probe binary weakens the
+startup identity obligation. Separating developer closure from packaged interactive
+evidence preserves both sequencing and exact executable truth. Real mutation remains an
+external disposable-host operation, so repository automation cannot damage the
+operator's current profile or fabricate manual Windows behavior.

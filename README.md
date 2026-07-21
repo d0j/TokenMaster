@@ -49,8 +49,10 @@ compact quota mode, fail-visible tray lifecycle, current-session single-instance
 fixed global `Ctrl+Alt+T` Show/restore/focus, and explicit current-user startup backed
 only by the fixed HKCU Run value. Live Windows shell acceptance, OS/tray reminder
 delivery, per-scope editing, snooze, quiet hours, usage alerts, benefit activation,
-remaining shell closure, P4 presentation/localization, automation, interactive
-acceptance, packaging, signing, and release evidence remain.
+later-page Sessions/History controls, P4 presentation/localization, automation,
+interactive evidence, packaging, signing, and release remain. The P3-E packaged shell
+receipt contract and strict local preflight are fixed in `P3E_ACCEPTANCE.md`; authenticated
+P6 provenance and external evidence remain absent.
 
 ## Build and verify
 

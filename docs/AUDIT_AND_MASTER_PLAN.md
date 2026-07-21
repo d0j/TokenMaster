@@ -330,8 +330,10 @@ lifecycle, and P3-E.4 current-session activation/global hotkey are developer-clo
 P3-E.4 claims one fixed event before data startup, uses one joined native owner and one
 pending activation/UI task, and adds no payload, queue, timer, or polling retry. P3-E.5
 adds one fixed current-user Run value with exact executable identity/readback, explicit
-stale repair/removal, path-free UI state, and config/backup exclusion. Interactive/
-resource shell closure is next.
+stale repair/removal, path-free UI state, and config/backup exclusion. The packaged
+interactive/resource receipt contract and strict schema/local preflight are fixed;
+authenticated producer/provenance and external evidence remain P6-dependent. Later-page Sessions navigation and interactive History
+ranges are the next bounded P3 implementation slices.
 Per-scope editing, snooze, quiet hours, reminder OS/tray delivery, usage alerts, and
 activation remain later independent slices.
 P3-D.6 independent re-review is Critical/Important/Minor 0/0/0; its 82 mutation audit,

@@ -135,8 +135,10 @@ Status: non-interactive developer closeout is complete. Authoritative/project do
 focused and mutation gates, independent high-risk review, clean-root, formatting,
 strict full-workspace Clippy, complete locked workspace tests/doctests, Windows resource
 contracts, and both release composition audits pass. Real sign-in, relocation, ACL,
-native interaction, and repeated real-registry resource proof remain open, so P3-E is
-not accepted as a release milestone.
+native interaction, and repeated real-registry resource proof remain open. Their exact
+packaged-production receipt contract and strict schema/local preflight are fixed in
+`P3E_ACCEPTANCE.md`, but authenticated producer/provenance and external evidence remain
+P6-dependent, so P3-E is not accepted as an interactive or release milestone.
 
 Update specification, API/data/security contracts, traceability, decisions, current
 state, roadmap, changelog, project history, and handoff. Run focused audits, independent
