@@ -26,11 +26,12 @@ use crate::{
     DesktopPresentationStyle, DesktopProjectsProjection, DesktopQuality,
     DesktopReliableStateProjection, DesktopReminderPolicy, DesktopRgb,
     DesktopSessionDetailIntentAdmission, DesktopSessionDetailIntentSink,
-    DesktopSessionPageIntentSink, DesktopSessionsProjection, DesktopSnapshotBridge,
-    DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue, DesktopTrayAvailability,
-    DesktopValueAvailability, HistoryDayRow, InAppNotificationRow, MainWindow, ModelUsageRow,
-    ProjectUsageRow, RecentActivityRow, ReminderCustomLeadRow, ReminderScopeRow, RestorePointRow,
-    RouteRow, SessionDetailBreakdownRow, SessionListRow, UiPalette, UnavailableDesktopIntentSink,
+    DesktopSessionPageDirection, DesktopSessionPageIntentAdmission, DesktopSessionPageIntentSink,
+    DesktopSessionsProjection, DesktopSnapshotBridge, DesktopSnapshotEpoch,
+    DesktopSnapshotReceiver, DesktopTokenValue, DesktopTrayAvailability, DesktopValueAvailability,
+    HistoryDayRow, InAppNotificationRow, MainWindow, ModelUsageRow, ProjectUsageRow,
+    RecentActivityRow, ReminderCustomLeadRow, ReminderScopeRow, RestorePointRow, RouteRow,
+    SessionDetailBreakdownRow, SessionListRow, UiPalette, UnavailableDesktopIntentSink,
     UnavailableDesktopSessionDetailIntentSink, UnavailableDesktopSessionPageIntentSink,
     in_app_notification::NotificationEpochState,
     native_tray::DesktopNativeTrayOwner,
@@ -535,6 +536,7 @@ impl DesktopShell {
         wire_command_palette(&window, state.clone(), compact_window_mode);
         wire_reliable_state_intents(&window, reliable_state.clone(), Rc::clone(&intent_sink));
         wire_session_detail_intents(&window, state.clone(), session_sink);
+        wire_session_page_intents(&window, state.clone(), session_page_sink.clone());
         wire_in_app_notification_dismissal(&window);
         wire_presentation_density(
             &window,
@@ -1502,6 +1504,44 @@ fn wire_session_detail_intents(
             apply_session_detail_projection(&window, state.projection().sessions());
         }
     });
+}
+
+fn wire_session_page_intents(
+    window: &MainWindow,
+    state: SharedDesktopState,
+    sink: Rc<dyn DesktopSessionPageIntentSink>,
+) {
+    let bind = |direction| {
+        let weak = window.as_weak();
+        let state = state.clone();
+        let sink = sink.clone();
+        move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let intent = {
+                let Ok(mut state) = state.lock() else {
+                    return;
+                };
+                let Ok(intent) = state.request_session_page(direction) else {
+                    return;
+                };
+                apply_session_navigation_projection(&window, state.projection().sessions());
+                apply_session_detail_projection(&window, state.projection().sessions());
+                intent
+            };
+            if sink.submit(intent) == DesktopSessionPageIntentAdmission::Rejected {
+                let Ok(mut state) = state.lock() else {
+                    return;
+                };
+                state.reject_session_page(intent);
+                apply_session_navigation_projection(&window, state.projection().sessions());
+                apply_session_detail_projection(&window, state.projection().sessions());
+            }
+        }
+    };
+    window.on_request_session_page_next(bind(DesktopSessionPageDirection::Next));
+    window.on_request_session_page_newest(bind(DesktopSessionPageDirection::Newest));
 }
 
 pub(crate) fn apply_projection(window: &MainWindow, projection: &DesktopProjection) {
@@ -2496,18 +2536,7 @@ fn apply_sessions_projection(window: &MainWindow, sessions: &DesktopSessionsProj
             )
             .into(),
     );
-    window.set_sessions_page_status_label(
-        sessions
-            .has_more()
-            .map_or("Page status unavailable", |has_more| {
-                if has_more {
-                    "More sessions available"
-                } else {
-                    "All sessions loaded"
-                }
-            })
-            .into(),
-    );
+    apply_session_navigation_projection(window, sessions);
 
     let rows = sessions
         .rows()
@@ -2541,6 +2570,43 @@ fn apply_sessions_projection(window: &MainWindow, sessions: &DesktopSessionsProj
         .collect::<Vec<_>>();
     window.set_session_list_rows(model(rows));
     apply_session_detail_projection(window, sessions);
+}
+
+fn apply_session_navigation_projection(window: &MainWindow, sessions: &DesktopSessionsProjection) {
+    let pending = sessions.navigation_pending();
+    let continuation = sessions.page_kind() == Some(crate::DesktopSessionPageKind::Continuation);
+    let next_enabled = !pending
+        && sessions.state() == crate::DesktopDashboardSectionState::Ready
+        && sessions.has_more() == Some(true);
+    window.set_sessions_navigation_pending(pending);
+    window.set_sessions_next_enabled(next_enabled);
+    window.set_sessions_back_to_newest_enabled(!pending && continuation);
+    let status = if pending {
+        "Loading sessions…"
+    } else {
+        match (sessions.page_kind(), sessions.has_more()) {
+            (Some(crate::DesktopSessionPageKind::Newest), Some(true)) => {
+                "Newest page · More sessions available"
+            }
+            (Some(crate::DesktopSessionPageKind::Newest), Some(false)) => {
+                "Newest page · All sessions loaded"
+            }
+            (Some(crate::DesktopSessionPageKind::Continuation), Some(true)) => {
+                "Older sessions · More sessions available"
+            }
+            (Some(crate::DesktopSessionPageKind::Continuation), Some(false)) => {
+                "Older sessions · Oldest sessions loaded"
+            }
+            (Some(crate::DesktopSessionPageKind::Newest), None) => {
+                "Newest page · Status unavailable"
+            }
+            (Some(crate::DesktopSessionPageKind::Continuation), None) => {
+                "Older sessions · Status unavailable"
+            }
+            (None, _) => "Page status unavailable",
+        }
+    };
+    window.set_sessions_page_status_label(status.into());
 }
 
 fn apply_session_detail_projection(window: &MainWindow, sessions: &DesktopSessionsProjection) {

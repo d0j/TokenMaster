@@ -122,6 +122,9 @@ export component MainWindow inherits Window {
     in property <string> sessions-evidence-label;
     in property <string> sessions-loaded-label;
     in property <string> sessions-page-status-label;
+    in property <bool> sessions-navigation-pending;
+    in property <bool> sessions-next-enabled;
+    in property <bool> sessions-back-to-newest-enabled;
     in property <int> sessions-selected-row: -1;
     in property <string> session-detail-state: "idle";
     in property <string> session-detail-status-label;
@@ -226,6 +229,8 @@ export component MainWindow inherits Window {
     callback activate-command-palette-selection();
     callback activate-command-palette-route(string);
     callback select-session(int);
+    callback request-session-page-next();
+    callback request-session-page-newest();
     callback export-config();
     callback import-config();
     callback confirm-config-import();
@@ -391,6 +396,9 @@ export component MainWindow inherits Window {
                     evidence-label: root.sessions-evidence-label;
                     loaded-label: root.sessions-loaded-label;
                     page-status-label: root.sessions-page-status-label;
+                    navigation-pending: root.sessions-navigation-pending;
+                    next-enabled: root.sessions-next-enabled;
+                    back-to-newest-enabled: root.sessions-back-to-newest-enabled;
                     selected-row: root.sessions-selected-row;
                     detail-state: root.session-detail-state;
                     detail-status-label: root.session-detail-status-label;
@@ -412,6 +420,8 @@ export component MainWindow inherits Window {
                     detail-cost-label: root.session-detail-cost-label;
                     detail-breakdown-rows: root.session-detail-breakdown-rows;
                     select-row(index) => { root.select-session(index); }
+                    request-next-page => { root.request-session-page-next(); }
+                    request-back-to-newest => { root.request-session-page-newest(); }
                 }
 
                 if root.models-visible: ModelsView {

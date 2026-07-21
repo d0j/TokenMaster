@@ -10,8 +10,9 @@ use slint::{
 use tokenmaster_desktop::{
     DesktopApplyOutcome, DesktopIntent, DesktopIntentAdmission, DesktopIntentSink,
     DesktopReliableStateProjection, DesktopSessionDetailIntent,
-    DesktopSessionDetailIntentAdmission, DesktopSessionDetailIntentSink, DesktopShell,
-    DesktopSnapshotEpoch,
+    DesktopSessionDetailIntentAdmission, DesktopSessionDetailIntentSink,
+    DesktopSessionPageDirection, DesktopSessionPageIntent, DesktopSessionPageIntentAdmission,
+    DesktopSessionPageIntentSink, DesktopShell, DesktopSnapshotEpoch,
 };
 use tokenmaster_product::{ProductAttemptGeneration, ProductReducer};
 use tokenmaster_query::{
@@ -42,6 +43,30 @@ impl DesktopSessionDetailIntentSink for RecordingSessionDetailSink {
     fn submit(&self, intent: DesktopSessionDetailIntent) -> DesktopSessionDetailIntentAdmission {
         self.intents.borrow_mut().push(intent);
         DesktopSessionDetailIntentAdmission::Accepted
+    }
+}
+
+#[derive(Default)]
+struct RecordingSessionPageSink {
+    intents: RefCell<Vec<DesktopSessionPageIntent>>,
+}
+
+impl DesktopSessionPageIntentSink for RecordingSessionPageSink {
+    fn submit(&self, intent: DesktopSessionPageIntent) -> DesktopSessionPageIntentAdmission {
+        self.intents.borrow_mut().push(intent);
+        DesktopSessionPageIntentAdmission::Accepted
+    }
+}
+
+#[derive(Default)]
+struct RejectingSessionPageSink {
+    intents: RefCell<Vec<DesktopSessionPageIntent>>,
+}
+
+impl DesktopSessionPageIntentSink for RejectingSessionPageSink {
+    fn submit(&self, intent: DesktopSessionPageIntent) -> DesktopSessionPageIntentAdmission {
+        self.intents.borrow_mut().push(intent);
+        DesktopSessionPageIntentAdmission::Rejected
     }
 }
 
@@ -1194,6 +1219,245 @@ fn assert_compiled_session_selection_is_immediate_correlated_and_bounded_in_plac
     );
 }
 
+#[test]
+fn sessions_pagination_controls_are_accessible_replace_only_and_block_selection_while_pending() {
+    i_slint_backend_testing::init_no_event_loop();
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory.path().join("ui-sessions-pagination.sqlite3");
+    let reducer = ready_reducer_with_usage(&path, 0, 65);
+    let snapshot = reducer.snapshot();
+    let page_sink = Rc::new(RecordingSessionPageSink::default());
+    let detail_sink = Rc::new(RecordingSessionDetailSink::default());
+    let shell = DesktopShell::new_with_reliable_state_and_session_sinks(
+        &snapshot,
+        DesktopReliableStateProjection::unavailable(),
+        Rc::new(RejectingIntentSink),
+        detail_sink.clone(),
+        page_sink.clone(),
+    )
+    .expect("desktop shell");
+    let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+    assert_eq!(
+        shell
+            .apply_snapshot_for_epoch(epoch, &snapshot)
+            .expect("bind snapshot"),
+        DesktopApplyOutcome::Accepted
+    );
+    let window = shell.window();
+    window.invoke_select_route(SharedString::from("sessions"));
+    window.show().expect("show sessions window");
+
+    assert!(!window.get_sessions_navigation_pending());
+    assert!(window.get_sessions_next_enabled());
+    assert!(!window.get_sessions_back_to_newest_enabled());
+    assert_eq!(
+        window.get_sessions_page_status_label(),
+        "Newest page · More sessions available"
+    );
+    let initial_rows = window.get_session_list_rows().row_count();
+    let next = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::Button)
+        .match_predicate(|element| {
+            element
+                .accessible_label()
+                .is_some_and(|label| label == "Next page")
+        })
+        .find_all();
+    let newest = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::Button)
+        .match_predicate(|element| {
+            element
+                .accessible_label()
+                .is_some_and(|label| label == "Back to newest")
+        })
+        .find_all();
+    assert_eq!(next.len(), 1);
+    assert_eq!(newest.len(), 1);
+
+    dispatch_key(window, Key::Tab);
+    next[0].mock_single_click(PointerEventButton::Left);
+    assert_eq!(page_sink.intents.borrow().len(), 1);
+    assert_eq!(
+        page_sink.intents.borrow()[0].direction(),
+        DesktopSessionPageDirection::Next
+    );
+    assert!(window.get_sessions_navigation_pending());
+    assert!(!window.get_sessions_next_enabled());
+    assert!(!window.get_sessions_back_to_newest_enabled());
+    assert_eq!(window.get_sessions_page_status_label(), "Loading sessions…");
+    assert_eq!(window.get_session_list_rows().row_count(), initial_rows);
+
+    let rows = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::Button)
+        .match_predicate(|element| {
+            element
+                .accessible_label()
+                .is_some_and(|label| label.starts_with("From "))
+        })
+        .find_all();
+    rows[0].mock_single_click(PointerEventButton::Left);
+    assert!(detail_sink.intents.borrow().is_empty());
+}
+
+#[test]
+fn rejected_sessions_navigation_restores_controls_and_keyboard_dispatches_both_directions() {
+    i_slint_backend_testing::init_no_event_loop();
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("ui-sessions-navigation-rejected.sqlite3");
+    let mut reducer = ready_reducer_with_usage(&path, 0, 65);
+    let snapshot = reducer.snapshot();
+    let next_sink = Rc::new(RejectingSessionPageSink::default());
+    let next_shell = DesktopShell::new_with_reliable_state_and_session_sinks(
+        &snapshot,
+        DesktopReliableStateProjection::unavailable(),
+        Rc::new(RejectingIntentSink),
+        Rc::new(RecordingSessionDetailSink::default()),
+        next_sink.clone(),
+    )
+    .expect("next shell");
+    let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+    next_shell
+        .apply_snapshot_for_epoch(epoch, &snapshot)
+        .expect("bind snapshot");
+    let next_window = next_shell.window();
+    next_window.invoke_select_route(SharedString::from("sessions"));
+    next_window.show().expect("show next window");
+    let next = ElementQuery::from_root(next_window)
+        .match_accessible_role(AccessibleRole::Button)
+        .match_predicate(|element| {
+            element
+                .accessible_label()
+                .is_some_and(|label| label == "Next page")
+        })
+        .find_all();
+    next[0].mock_single_click(PointerEventButton::Left);
+    dispatch_key(next_window, Key::Return);
+    dispatch_key(next_window, Key::Space);
+    assert_eq!(next_sink.intents.borrow().len(), 3);
+    assert!(
+        next_sink
+            .intents
+            .borrow()
+            .iter()
+            .all(|intent| intent.direction() == DesktopSessionPageDirection::Next)
+    );
+    assert!(!next_window.get_sessions_navigation_pending());
+    assert!(next_window.get_sessions_next_enabled());
+    assert_eq!(
+        next_window.get_sessions_page_status_label(),
+        "Newest page · More sessions available"
+    );
+
+    let mut service = QueryService::open(&path, FixedClock).expect("query service");
+    let newest = service
+        .usage_sessions(
+            UsageSessionPageRequest::first(PageSize::new(64).expect("page"), Vec::new())
+                .expect("newest request"),
+        )
+        .expect("newest page");
+    let continuation = service
+        .usage_sessions(
+            UsageSessionPageRequest::continuation(
+                PageSize::new(64).expect("page"),
+                newest.payload().next_cursor().expect("cursor").clone(),
+                Vec::new(),
+            )
+            .expect("continuation request"),
+        )
+        .expect("continuation page");
+    reducer
+        .publish_sessions(
+            ProductAttemptGeneration::new(2).expect("attempt"),
+            continuation,
+        )
+        .expect("publish continuation");
+    let continuation_snapshot = reducer.snapshot();
+    let newest_sink = Rc::new(RejectingSessionPageSink::default());
+    let newest_shell = DesktopShell::new_with_reliable_state_and_session_sinks(
+        &continuation_snapshot,
+        DesktopReliableStateProjection::unavailable(),
+        Rc::new(RejectingIntentSink),
+        Rc::new(RecordingSessionDetailSink::default()),
+        newest_sink.clone(),
+    )
+    .expect("newest shell");
+    newest_shell
+        .apply_snapshot_for_epoch(epoch, &continuation_snapshot)
+        .expect("bind continuation snapshot");
+    let newest_window = newest_shell.window();
+    newest_window.invoke_select_route(SharedString::from("sessions"));
+    newest_window.show().expect("show newest window");
+    assert!(newest_window.get_sessions_back_to_newest_enabled());
+    assert_eq!(
+        newest_window.get_sessions_page_status_label(),
+        "Older sessions · Oldest sessions loaded"
+    );
+    let newest = ElementQuery::from_root(newest_window)
+        .match_accessible_role(AccessibleRole::Button)
+        .match_predicate(|element| {
+            element
+                .accessible_label()
+                .is_some_and(|label| label == "Back to newest")
+        })
+        .find_all();
+    newest[0].mock_single_click(PointerEventButton::Left);
+    dispatch_key(newest_window, Key::Return);
+    dispatch_key(newest_window, Key::Space);
+    assert_eq!(newest_sink.intents.borrow().len(), 3);
+    assert!(
+        newest_sink
+            .intents
+            .borrow()
+            .iter()
+            .all(|intent| intent.direction() == DesktopSessionPageDirection::Newest)
+    );
+    assert!(newest_window.get_sessions_back_to_newest_enabled());
+}
+
+#[test]
+fn sessions_pagination_ui_contract_rejects_identity_and_append_paths() {
+    let main = include_str!("../ui/main.slint");
+    let models = include_str!("../ui/models.slint");
+    let view = include_str!("../ui/views/sessions-view.slint");
+    let ui = include_str!("../src/ui.rs");
+    assert!(!main.to_ascii_lowercase().contains("cursor"));
+    assert!(!models.to_ascii_lowercase().contains("cursor"));
+    assert!(!view.to_ascii_lowercase().contains("cursor"));
+    assert!(main.contains("sessions-navigation-pending"));
+    assert!(main.contains("sessions-next-enabled"));
+    assert!(main.contains("sessions-back-to-newest-enabled"));
+    assert!(view.contains("focus-on-tab-navigation: true"));
+    assert_eq!(ui.matches("set_session_list_rows(").count(), 1);
+    let sessions_projection = ui
+        .split("fn apply_sessions_projection")
+        .nth(1)
+        .expect("sessions projection")
+        .split("fn apply_session_detail_projection")
+        .next()
+        .expect("sessions projection body");
+    assert!(!sessions_projection.contains(".push("));
+    assert!(!sessions_projection.contains(".append("));
+    assert!(!sessions_projection.contains(".extend("));
+    let navigation_wiring = ui
+        .split("fn wire_session_page_intents")
+        .nth(1)
+        .expect("session navigation wiring")
+        .split("pub(crate) fn apply_projection")
+        .next()
+        .expect("session navigation wiring body");
+    assert!(!navigation_wiring.contains("set_session_list_rows"));
+    let route_wiring = ui
+        .split("fn wire_route_selection")
+        .nth(1)
+        .expect("route wiring")
+        .split("fn wire_command_palette")
+        .next()
+        .expect("route wiring body");
+    assert!(!route_wiring.contains("apply_sessions_projection"));
+}
+
 fn dispatch_key(window: &tokenmaster_desktop::MainWindow, key: Key) {
     window
         .window()
@@ -1451,7 +1715,7 @@ fn assert_compiled_sessions_render_one_bounded_page_without_recreating_the_windo
     assert_eq!(window.get_sessions_loaded_label(), "64 loaded");
     assert_eq!(
         window.get_sessions_page_status_label(),
-        "More sessions available"
+        "Newest page · More sessions available"
     );
     assert_eq!(
         window.get_sessions_evidence_label(),

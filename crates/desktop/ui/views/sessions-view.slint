@@ -1,7 +1,7 @@
 import { SessionListRow, SessionDetailBreakdownRow } from "../models.slint";
 import { UiTokens } from "../tokens.slint";
 import { SectionState } from "../components/section-state.slint";
-import { ScrollView } from "std-widgets.slint";
+import { Button, ScrollView } from "std-widgets.slint";
 
 component SessionsHeaderCard inherits Rectangle {
     in property <string> state;
@@ -9,8 +9,13 @@ component SessionsHeaderCard inherits Rectangle {
     in property <string> evidence-label;
     in property <string> loaded-label;
     in property <string> page-status-label;
+    in property <bool> navigation-pending;
+    in property <bool> next-enabled;
+    in property <bool> back-to-newest-enabled;
+    callback request-next-page();
+    callback request-back-to-newest();
 
-    min-height: 112px;
+    min-height: 146px;
     background: UiTokens.surface;
     border-color: UiTokens.border;
     border-width: 1px;
@@ -37,6 +42,38 @@ component SessionsHeaderCard inherits Rectangle {
             Text { text: root.page-status-label; color: UiTokens.accent; font-size: 12px; horizontal-stretch: 1; }
             Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: 11px; }
         }
+        navigation-focus := FocusScope {
+            height: 32px;
+            focus-on-tab-navigation: true;
+            forward-focus: next-page-button;
+            HorizontalLayout {
+                spacing: UiTokens.space-sm;
+                next-page-button := Button {
+                    text: "Next page";
+                    accessible-label: "Next page";
+                    enabled: root.next-enabled;
+                    clicked => {
+                        next-page-button.focus();
+                        root.request-next-page();
+                    }
+                }
+                back-to-newest-button := Button {
+                    text: "Back to newest";
+                    accessible-label: "Back to newest";
+                    enabled: root.back-to-newest-enabled;
+                    clicked => {
+                        back-to-newest-button.focus();
+                        root.request-back-to-newest();
+                    }
+                }
+                Text {
+                    text: root.navigation-pending ? "Loading sessions…" : root.page-status-label;
+                    color: UiTokens.text-secondary;
+                    font-size: 11px;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
     }
 }
 
@@ -45,6 +82,7 @@ component SessionsTableCard inherits Rectangle {
     in property <bool> narrow;
     in property <string> state;
     in property <int> selected-row;
+    in property <bool> selection-enabled;
     callback select-row(int);
 
     min-height: max(96px, 64px + root.rows.length * 38px);
@@ -95,8 +133,10 @@ component SessionsTableCard inherits Rectangle {
             accessible-role: button;
             accessible-label: "From " + session.first-label + " to " + session.last-label + " " + session.event-label + " events " + session.total-label + " tokens " + session.cost-label;
             accessible-action-default => {
-                row-focus.focus();
-                root.select-row(session.row-index);
+                if root.selection-enabled {
+                    row-focus.focus();
+                    root.select-row(session.row-index);
+                }
             }
             if root.narrow: HorizontalLayout {
                 padding-left: UiTokens.space-sm;
@@ -123,16 +163,19 @@ component SessionsTableCard inherits Rectangle {
             }
             row-touch := TouchArea {
                 clicked => {
-                    row-focus.focus();
-                    root.select-row(session.row-index);
+                    if root.selection-enabled {
+                        row-focus.focus();
+                        root.select-row(session.row-index);
+                    }
                 }
+                enabled: root.selection-enabled;
             }
             row-focus := FocusScope {
                 x: 0px;
                 width: 0px;
-                focus-on-tab-navigation: true;
+                focus-on-tab-navigation: root.selection-enabled;
                 key-pressed(event) => {
-                    if event.text == " " || event.text == "\n" {
+                    if root.selection-enabled && (event.text == " " || event.text == "\n") {
                         root.select-row(session.row-index);
                         return accept;
                     }
@@ -270,6 +313,9 @@ export component SessionsView inherits Rectangle {
     in property <string> evidence-label;
     in property <string> loaded-label;
     in property <string> page-status-label;
+    in property <bool> navigation-pending;
+    in property <bool> next-enabled;
+    in property <bool> back-to-newest-enabled;
     in property <int> selected-row;
     in property <string> detail-state;
     in property <string> detail-status-label;
@@ -291,6 +337,8 @@ export component SessionsView inherits Rectangle {
     in property <string> detail-cost-label;
     in property <[SessionDetailBreakdownRow]> detail-breakdown-rows;
     callback select-row(int);
+    callback request-next-page();
+    callback request-back-to-newest();
     out property <bool> narrow: root.width < 760px;
 
     background: UiTokens.background;
@@ -307,12 +355,18 @@ export component SessionsView inherits Rectangle {
                 evidence-label: root.evidence-label;
                 loaded-label: root.loaded-label;
                 page-status-label: root.page-status-label;
+                navigation-pending: root.navigation-pending;
+                next-enabled: root.next-enabled;
+                back-to-newest-enabled: root.back-to-newest-enabled;
+                request-next-page => { root.request-next-page(); }
+                request-back-to-newest => { root.request-back-to-newest(); }
             }
             SessionsTableCard {
                 rows: root.rows;
                 narrow: root.narrow;
                 state: root.state;
                 selected-row: root.selected-row;
+                selection-enabled: !root.navigation-pending;
                 select-row(index) => { root.select-row(index); }
             }
             SessionDetailCard {

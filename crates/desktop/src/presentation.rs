@@ -402,6 +402,9 @@ impl DesktopState {
         &mut self,
         row_ordinal: usize,
     ) -> Result<DesktopSessionDetailIntent, DesktopSessionSelectionError> {
+        if self.active_session_navigation.is_some() {
+            return Err(DesktopSessionSelectionError::Unavailable);
+        }
         let epoch = self
             .snapshot_epoch
             .ok_or(DesktopSessionSelectionError::Unavailable)?;

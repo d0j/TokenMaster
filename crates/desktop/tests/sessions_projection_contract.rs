@@ -234,6 +234,44 @@ fn session_navigation_requires_epoch_and_retained_recoverable_page() {
 }
 
 #[test]
+fn navigation_pending_rejects_session_selection_without_mutating_detail() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("sessions-selection-pending.sqlite3");
+    seed(&path);
+    add_distinct_usage_rows(&path, 2);
+    let mut service = QueryService::open(&path, FixedClock).expect("query service");
+    let status = service.product_data_status().expect("status");
+    let sessions = service
+        .usage_sessions(
+            UsageSessionPageRequest::first(PageSize::new(1).expect("page"), Vec::new())
+                .expect("request"),
+        )
+        .expect("sessions");
+    let mut reducer = ProductReducer::new();
+    reducer
+        .publish_data_status(attempt(1), status)
+        .expect("publish status");
+    reducer
+        .publish_sessions(attempt(1), sessions)
+        .expect("publish sessions");
+    let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+    let mut state = DesktopState::new(&reducer.snapshot(), DesktopRouteKey::Sessions);
+    assert_eq!(
+        state.apply_snapshot_for_epoch(epoch, &reducer.snapshot()),
+        tokenmaster_desktop::DesktopApplyOutcome::Accepted
+    );
+
+    state
+        .request_session_page(DesktopSessionPageDirection::Next)
+        .expect("navigation starts");
+    assert!(state.select_session_row(0).is_err());
+    assert_eq!(
+        state.projection().sessions().detail().state(),
+        DesktopSessionDetailState::Idle
+    );
+}
+
+#[test]
 fn exact_detail_projects_idle_loading_ready_missing_and_unavailable_with_fixed_caps() {
     let directory = TempDir::new().expect("temporary directory");
     let path = directory.path().join("session-detail-projection.sqlite3");
