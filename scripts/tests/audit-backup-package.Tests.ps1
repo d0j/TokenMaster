@@ -266,4 +266,67 @@ Describe "TokenMaster backup package audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
     }
+
+    It "rejects moving an unchanged public signature to another owning type" {
+        $fixture = New-BackupAuditFixture -Name "public-function-owner-drift"
+        $path = Join-Path $fixture "crates\state\src\package\reader.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'impl BackupPackage {',
+            'impl ConfigPackage {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
+    }
+
+    It "rejects a visibility-macro-generated public package function" {
+        $fixture = New-BackupAuditFixture -Name "macro-generated-public-function"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\package\reader.rs") `
+            -Value 'macro_rules! expose_stream { ($visibility:vis) => { $visibility fn decode_any(source: &mut dyn Read) { let _ = source; } }; } expose_stream!(pub);'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
+    }
+
+    It "rejects an include-generated public package function" {
+        $fixture = New-BackupAuditFixture -Name "include-generated-public-function"
+        $packageRoot = Join-Path $fixture "crates\state\src\package"
+        [System.IO.File]::WriteAllText(
+            (Join-Path $packageRoot "surface.inc"),
+            'pub fn decode_any(source: &mut dyn Read) { let _ = source; }'
+        )
+        Add-Content -LiteralPath (Join-Path $packageRoot "reader.rs") `
+            -Value 'include!("surface.inc");'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
+    }
+
+    It "rejects a new public function re-export" {
+        $fixture = New-BackupAuditFixture -Name "public-function-reexport"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\package\mod.rs") `
+            -Value 'pub use std::mem::drop as decode_any;'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
+    }
+
+    It "rejects a public callable constant" {
+        $fixture = New-BackupAuditFixture -Name "public-callable-constant"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\package\reader.rs") `
+            -Value 'pub const DECODE_ANY: fn(&mut dyn Read) = |source| { let _ = source; };'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
+    }
+
+    It "rejects a new public package trait" {
+        $fixture = New-BackupAuditFixture -Name "public-package-trait"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\package\reader.rs") `
+            -Value 'pub trait PackageDecode { fn decode_any(source: &mut dyn Read); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
+    }
 }

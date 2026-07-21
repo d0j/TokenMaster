@@ -143,6 +143,33 @@ function Get-PublicRustFunctionSignatures {
     )
 
     $mask = Get-RustCodeMask -Text $Text
+    $implBlocks = @([regex]::Matches(
+        $mask,
+        '(?m)^[\t ]*impl\b[^\r\n{]*\{'
+    ) | ForEach-Object {
+        $openingBrace = $_.Index + $_.Length - 1
+        $depth = 0
+        $closingBrace = -1
+        for ($index = $openingBrace; $index -lt $mask.Length; $index += 1) {
+            if ($mask[$index] -eq '{') {
+                $depth += 1
+            } elseif ($mask[$index] -eq '}') {
+                $depth -= 1
+                if ($depth -eq 0) {
+                    $closingBrace = $index
+                    break
+                }
+            }
+        }
+        if ($closingBrace -lt 0) {
+            throw 'TM-BACKUP-PACKAGE-CAPABILITY: Rust impl block did not parse'
+        }
+        [pscustomobject]@{
+            OpeningBrace = $openingBrace
+            ClosingBrace = $closingBrace
+            Header = ($mask.Substring($_.Index, $openingBrace - $_.Index) -replace '\s+', '')
+        }
+    })
     $declarationStarts = @([regex]::Matches(
         $mask,
         '\bpub[ \t\r\n]+(?:(?:[A-Za-z_][A-Za-z0-9_]*)[ \t\r\n]+)*fn[ \t\r\n]+(?<name>[A-Za-z_][A-Za-z0-9_]*)'
@@ -214,9 +241,19 @@ function Get-PublicRustFunctionSignatures {
             $declarationStart.Index,
             $signatureEnd - $declarationStart.Index
         ) -replace '\s+', ''
+        $owners = @(
+            $implBlocks |
+                Where-Object {
+                    $_.OpeningBrace -lt $declarationStart.Index -and
+                    $_.ClosingBrace -gt $signatureEnd
+                } |
+                Sort-Object OpeningBrace -Descending
+        )
+        $owner = if ($owners.Count -gt 0) { $owners[0].Header } else { 'free' }
         $result += [pscustomobject]@{
             FileName = $FileName
             Name = $declarationStart.Groups['name'].Value
+            Owner = $owner
             Signature = $normalized
         }
     }
@@ -267,47 +304,98 @@ $packageText = ($packageFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
 }) -join "`n"
 $packageReaderText = [System.IO.File]::ReadAllText((Join-Path $packageSource 'reader.rs'))
+$packageMasks = @{}
+foreach ($packageFile in $packageFiles) {
+    $packageMasks[$packageFile.Name] = Get-RustCodeMask -Text (
+        [System.IO.File]::ReadAllText($packageFile.FullName)
+    )
+}
+$packageMask = @($packageFiles | ForEach-Object { $packageMasks[$_.Name] }) -join "`n"
 
 $forbiddenAuthorityPattern = '(?is)https?://|\bstd\s*::\s*process\b|\bCommand\s*::\s*new\b|\b(?:TcpStream|TcpListener|UdpSocket)\b|\b(?:reqwest|ureq|webbrowser|headless_chrome|zip|tar|sevenz|libarchive|slint|rusqlite)\s*::|\bplugin\b|powershell(?:\.exe)?|cmd(?:\.exe)?|bash(?:\.exe)?|\bsh\s+-c\b|\bAuthorization\s*:\s*Bearer\b'
 if ($packageText -match $forbiddenAuthorityPattern) {
     throw 'TM-BACKUP-FORBIDDEN-AUTHORITY: package codec gained process/network/shell/generic-extraction/plugin/UI/SQL authority'
 }
+$generatedOrOpenSurfacePattern = '(?is)\bmacro_rules\s*!|\binclude\s*!|\bpub\s+(?:(?:unsafe|auto)\s+)*trait\b|\bpub\s+(?:type|static|mod|union|macro)\b|\bpub\s+extern\s+crate\b'
+if ($packageMask -match $generatedOrOpenSurfacePattern) {
+    throw 'TM-BACKUP-PACKAGE-CAPABILITY: generated, open, or indirect public package surfaces are forbidden'
+}
 if (@([regex]::Matches($packageReaderText, 'if\s+settings\.source_schema_version\(\)\s*!=\s*manifest\.settings_schema_version\s*\{\s*return\s+Err\(StateError::integrity\(\)\);\s*\}')).Count -ne 1) {
     throw 'TM-BACKUP-SETTINGS-VERSION-BINDING: manifest and settings entry source versions must match exactly'
 }
+$expectedPublicPackageConstants = @(
+    'encryption.rs|AGE_SCRYPT_LOG_N|u8'
+    'encryption.rs|MAX_BACKUP_PASSPHRASE_SCALARS|usize'
+    'encryption.rs|MIN_BACKUP_PASSPHRASE_SCALARS|usize'
+    'mod.rs|MAX_CONFIG_PACKAGE_BYTES|u64'
+    'mod.rs|MAX_DATABASE_PACKAGE_BYTES|u64'
+    'mod.rs|MAX_PACKAGE_ENTRIES|usize'
+    'mod.rs|MAX_PACKAGE_MANIFEST_BYTES|usize'
+    'mod.rs|MAX_PACKAGE_TOTAL_EXPANDED_BYTES|u64'
+    'mod.rs|MAX_SETTINGS_PACKAGE_BYTES|u64'
+    'mod.rs|PACKAGE_DECODER_WINDOW_BYTES|u64'
+    'mod.rs|PACKAGE_IO_BUFFER_BYTES|usize'
+) | Sort-Object -CaseSensitive
+$actualPublicPackageConstants = @(
+    foreach ($packageFile in $packageFiles) {
+        [regex]::Matches(
+            $packageMasks[$packageFile.Name],
+            '\bpub[ \t\r\n]+const[ \t\r\n]+(?!fn\b)(?<name>[A-Za-z_][A-Za-z0-9_]*)[ \t\r\n]*:[ \t\r\n]*(?<type>[^=;]+?)[ \t\r\n]*='
+        ) | ForEach-Object {
+            "$($packageFile.Name)|$($_.Groups['name'].Value)|$(($_.Groups['type'].Value -replace '\s+', ''))"
+        }
+    }
+) | Sort-Object -CaseSensitive
+if (($actualPublicPackageConstants -join "`n") -cne ($expectedPublicPackageConstants -join "`n")) {
+    throw 'TM-BACKUP-PACKAGE-CAPABILITY: public package constant surface drifted'
+}
+$publicPackageReexports = @(
+    foreach ($packageFile in $packageFiles) {
+        [regex]::Matches(
+            $packageMasks[$packageFile.Name],
+            '(?s)\bpub[ \t\r\n]+use[ \t\r\n]+.*?;'
+        ) | ForEach-Object {
+            "$($packageFile.Name)|$(($_.Value -replace '\s+', ''))"
+        }
+    }
+)
+$expectedPublicPackageReexport = 'mod.rs|pubuseencryption::{AGE_SCRYPT_LOG_N,BackupEncryptionContext,BackupPassphrase,EncryptedBackupPackage,MAX_BACKUP_PASSPHRASE_SCALARS,MIN_BACKUP_PASSPHRASE_SCALARS,ProtectedPackageReceipt,};'
+if ($publicPackageReexports.Count -ne 1 -or $publicPackageReexports[0] -cne $expectedPublicPackageReexport) {
+    throw 'TM-BACKUP-PACKAGE-CAPABILITY: public package re-export surface drifted'
+}
 $expectedPublicPackageSurface = @(
-    'encryption.rs|pubconstfnoutput_len(self)->u64'
-    'encryption.rs|pubconstfnoutput_sha256(&self)->&[u8;32]'
-    'encryption.rs|pubfndecrypt(source:&mutDurableFileReader,passphrase:BackupPassphrase,database_destination:&mutDurableStagedFile,)->Result<VerifiedBackupPackage,StateError>'
-    'encryption.rs|pubfnencrypt(context:BackupEncryptionContext,source:&mutDurableFileReader,verified:&VerifiedBackupPackage,passphrase:BackupPassphrase,destination:&mutDurableStagedFile,)->Result<ProtectedPackageReceipt,StateError>'
-    'encryption.rs|pubfnexisting(input:&mutString)->Result<Self,StateError>'
-    'encryption.rs|pubfnnew(input:&mutString,confirmation:&mutString)->Result<Self,StateError>'
-    'mod.rs|pubconstfncompression(&self)->BackupCompression'
-    'mod.rs|pubconstfncreated_at_utc_ms(&self)->i64'
-    'mod.rs|pubconstfncreated_at_utc_ms(self)->i64'
-    'mod.rs|pubconstfndatabase_len(&self)->u64'
-    'mod.rs|pubconstfndatabase_schema_version(&self)->u16'
-    'mod.rs|pubconstfndatabase_sha256(&self)->&[u8;32]'
-    'mod.rs|pubconstfnlevel(self)->i32'
-    'mod.rs|pubconstfnmetadata(&self)->BackupMetadata'
-    'mod.rs|pubconstfnpackage_len(self)->u64'
-    'mod.rs|pubconstfnpackage_sha256(&self)->&[u8;32]'
-    'mod.rs|pubconstfnpurpose(self)->BackupPurpose'
-    'mod.rs|pubconstfnreceipt(&self)->PackageReceipt'
-    'mod.rs|pubconstfnreceipt(&self)->PackageReceipt'
-    'mod.rs|pubconstfnsettings(&self)->&PortableSettingsCandidate'
-    'mod.rs|pubconstfnsettings(&self)->&PortableSettingsCandidate'
-    'mod.rs|pubfnnew(created_at_utc_ms:i64,purpose:BackupPurpose)->Result<Self,crate::StateError>'
-    'reader.rs|pubfninspect(source:&mutDurableFileReader)->Result<VerifiedBackupPackage,StateError>'
-    'reader.rs|pubfnread(source:&mutDurableFileReader)->Result<VerifiedConfigPackage,StateError>'
-    'reader.rs|pubfnread(source:&mutDurableFileReader,database_sink:&mutDurableStagedFile,)->Result<VerifiedBackupPackage,StateError>'
-    'reader.rs|pubfnread_for_recovery(source:&mutDurableFileReader,database_sink:&mutRecoveryStagedArchive,)->Result<VerifiedBackupPackage,StateError>'
-    'reader.rs|pubfnverify_backup_stage(source:&BackupStagedFile,)->Result<VerifiedBackupPackage,StateError>'
-    'writer.rs|pubfncopy_verified_stage_to_durable(source:&BackupStagedFile,verified:&VerifiedBackupPackage,destination:&mutDurableStagedFile,)->Result<PackageReceipt,StateError>'
-    'writer.rs|pubfnwrite(settings:&PortableSettingsCandidate,created_at_utc_ms:i64,destination:&mutDurableStagedFile,)->Result<PackageReceipt,StateError>'
-    'writer.rs|pubfnwrite(settings:&PortableSettingsCandidate,database:&mutDurableFileReader,database_len:u64,database_sha256:[u8;32],database_schema_version:u16,compression:BackupCompression,metadata:BackupMetadata,destination:&mutDurableStagedFile,)->Result<PackageReceipt,StateError>'
-    'writer.rs|pubfnwrite_to_backup_stage(settings:&PortableSettingsCandidate,database:&mutDurableFileReader,database_len:u64,database_sha256:[u8;32],database_schema_version:u16,compression:BackupCompression,metadata:BackupMetadata,destination:&mutBackupStagedFile,)->Result<PackageReceipt,StateError>'
-    "writer.rs|pubfnwrite_verified_candidate_to_backup_stage(settings:&PortableSettingsCandidate,mutdatabase:VerifiedBackupCandidateReader<'_>,compression:BackupCompression,metadata:BackupMetadata,destination:&mutBackupStagedFile,)->Result<PackageReceipt,StateError>"
+    'encryption.rs|implBackupPassphrase|pubfnexisting(input:&mutString)->Result<Self,StateError>'
+    'encryption.rs|implBackupPassphrase|pubfnnew(input:&mutString,confirmation:&mutString)->Result<Self,StateError>'
+    'encryption.rs|implEncryptedBackupPackage|pubfndecrypt(source:&mutDurableFileReader,passphrase:BackupPassphrase,database_destination:&mutDurableStagedFile,)->Result<VerifiedBackupPackage,StateError>'
+    'encryption.rs|implEncryptedBackupPackage|pubfnencrypt(context:BackupEncryptionContext,source:&mutDurableFileReader,verified:&VerifiedBackupPackage,passphrase:BackupPassphrase,destination:&mutDurableStagedFile,)->Result<ProtectedPackageReceipt,StateError>'
+    'encryption.rs|implProtectedPackageReceipt|pubconstfnoutput_len(self)->u64'
+    'encryption.rs|implProtectedPackageReceipt|pubconstfnoutput_sha256(&self)->&[u8;32]'
+    'mod.rs|implBackupCompression|pubconstfnlevel(self)->i32'
+    'mod.rs|implBackupMetadata|pubconstfncreated_at_utc_ms(self)->i64'
+    'mod.rs|implBackupMetadata|pubconstfnpurpose(self)->BackupPurpose'
+    'mod.rs|implBackupMetadata|pubfnnew(created_at_utc_ms:i64,purpose:BackupPurpose)->Result<Self,crate::StateError>'
+    'mod.rs|implPackageReceipt|pubconstfnpackage_len(self)->u64'
+    'mod.rs|implPackageReceipt|pubconstfnpackage_sha256(&self)->&[u8;32]'
+    'mod.rs|implVerifiedBackupPackage|pubconstfncompression(&self)->BackupCompression'
+    'mod.rs|implVerifiedBackupPackage|pubconstfndatabase_len(&self)->u64'
+    'mod.rs|implVerifiedBackupPackage|pubconstfndatabase_schema_version(&self)->u16'
+    'mod.rs|implVerifiedBackupPackage|pubconstfndatabase_sha256(&self)->&[u8;32]'
+    'mod.rs|implVerifiedBackupPackage|pubconstfnmetadata(&self)->BackupMetadata'
+    'mod.rs|implVerifiedBackupPackage|pubconstfnreceipt(&self)->PackageReceipt'
+    'mod.rs|implVerifiedBackupPackage|pubconstfnsettings(&self)->&PortableSettingsCandidate'
+    'mod.rs|implVerifiedConfigPackage|pubconstfncreated_at_utc_ms(&self)->i64'
+    'mod.rs|implVerifiedConfigPackage|pubconstfnreceipt(&self)->PackageReceipt'
+    'mod.rs|implVerifiedConfigPackage|pubconstfnsettings(&self)->&PortableSettingsCandidate'
+    'reader.rs|implBackupPackage|pubfninspect(source:&mutDurableFileReader)->Result<VerifiedBackupPackage,StateError>'
+    'reader.rs|implBackupPackage|pubfnread(source:&mutDurableFileReader,database_sink:&mutDurableStagedFile,)->Result<VerifiedBackupPackage,StateError>'
+    'reader.rs|implBackupPackage|pubfnread_for_recovery(source:&mutDurableFileReader,database_sink:&mutRecoveryStagedArchive,)->Result<VerifiedBackupPackage,StateError>'
+    'reader.rs|implBackupPackage|pubfnverify_backup_stage(source:&BackupStagedFile,)->Result<VerifiedBackupPackage,StateError>'
+    'reader.rs|implConfigPackage|pubfnread(source:&mutDurableFileReader)->Result<VerifiedConfigPackage,StateError>'
+    'writer.rs|implBackupPackage|pubfncopy_verified_stage_to_durable(source:&BackupStagedFile,verified:&VerifiedBackupPackage,destination:&mutDurableStagedFile,)->Result<PackageReceipt,StateError>'
+    'writer.rs|implBackupPackage|pubfnwrite(settings:&PortableSettingsCandidate,database:&mutDurableFileReader,database_len:u64,database_sha256:[u8;32],database_schema_version:u16,compression:BackupCompression,metadata:BackupMetadata,destination:&mutDurableStagedFile,)->Result<PackageReceipt,StateError>'
+    'writer.rs|implBackupPackage|pubfnwrite_to_backup_stage(settings:&PortableSettingsCandidate,database:&mutDurableFileReader,database_len:u64,database_sha256:[u8;32],database_schema_version:u16,compression:BackupCompression,metadata:BackupMetadata,destination:&mutBackupStagedFile,)->Result<PackageReceipt,StateError>'
+    "writer.rs|implBackupPackage|pubfnwrite_verified_candidate_to_backup_stage(settings:&PortableSettingsCandidate,mutdatabase:VerifiedBackupCandidateReader<'_>,compression:BackupCompression,metadata:BackupMetadata,destination:&mutBackupStagedFile,)->Result<PackageReceipt,StateError>"
+    'writer.rs|implConfigPackage|pubfnwrite(settings:&PortableSettingsCandidate,created_at_utc_ms:i64,destination:&mutDurableStagedFile,)->Result<PackageReceipt,StateError>'
 )
 $publicPackageFunctionDeclarations = @(
     $packageFiles | ForEach-Object {
@@ -318,7 +406,7 @@ $publicPackageFunctionDeclarations = @(
 )
 $actualPublicPackageSurface = @(
     $publicPackageFunctionDeclarations |
-        ForEach-Object { "$($_.FileName)|$($_.Signature)" } |
+        ForEach-Object { "$($_.FileName)|$($_.Owner)|$($_.Signature)" } |
         Sort-Object -CaseSensitive
 )
 $canonicalExpectedPublicPackageSurface = @(
