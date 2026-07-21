@@ -1185,14 +1185,19 @@ where
     };
     let snapshot = reducer.snapshot();
     let generation = snapshot.generation();
-    match lock_latest(&context.publication.latest) {
-        Ok(mut latest) => *latest = Some(snapshot),
+    let mut published_generation =
+        match lock_published_generation(&context.publication.published_generation) {
+            Ok(value) => value,
+            Err(_) => return RefreshOutcome::Failed,
+        };
+    let mut latest = match lock_latest(&context.publication.latest) {
+        Ok(value) => value,
         Err(_) => return RefreshOutcome::Failed,
-    }
-    match lock_published_generation(&context.publication.published_generation) {
-        Ok(mut published_generation) => *published_generation = Some(generation),
-        Err(_) => return RefreshOutcome::Failed,
-    }
+    };
+    *published_generation = Some(generation);
+    *latest = Some(snapshot);
+    drop(latest);
+    drop(published_generation);
     invalidate_navigation(&mut work);
     drop(work);
     if let Some(notifier) = notifier {
@@ -1321,19 +1326,36 @@ fn publish_snapshot(
     snapshot: Arc<ProductSnapshot>,
     publication: &DesktopPublication,
 ) -> RefreshOutcome {
+    publish_snapshot_with_hook(snapshot, publication, || {})
+}
+
+fn publish_snapshot_with_hook<F>(
+    snapshot: Arc<ProductSnapshot>,
+    publication: &DesktopPublication,
+    after_locks_acquired: F,
+) -> RefreshOutcome
+where
+    F: FnOnce(),
+{
     let generation = snapshot.generation();
     let notifier = match lock_notifier(&publication.notifier) {
         Ok(notifier) => notifier.clone(),
         Err(_) => return RefreshOutcome::Failed,
     };
-    match lock_latest(&publication.latest) {
-        Ok(mut slot) => *slot = Some(snapshot),
+    let mut published_generation =
+        match lock_published_generation(&publication.published_generation) {
+            Ok(value) => value,
+            Err(_) => return RefreshOutcome::Failed,
+        };
+    let mut latest = match lock_latest(&publication.latest) {
+        Ok(value) => value,
         Err(_) => return RefreshOutcome::Failed,
-    }
-    match lock_published_generation(&publication.published_generation) {
-        Ok(mut published_generation) => *published_generation = Some(generation),
-        Err(_) => return RefreshOutcome::Failed,
-    }
+    };
+    after_locks_acquired();
+    *published_generation = Some(generation);
+    *latest = Some(snapshot);
+    drop(latest);
+    drop(published_generation);
     if let Some(notifier) = notifier {
         notifier.snapshot_ready();
     }
@@ -1714,6 +1736,48 @@ mod tests {
         assert!(stale.navigation.is_none());
         assert_eq!(state.refresh_attempt, None);
         assert!(state.pending_selection.is_none());
+    }
+
+    #[test]
+    fn generic_publication_holds_generation_and_latest_until_the_pair_is_consistent() {
+        let latest = Arc::new(Mutex::new(None));
+        let published_generation = Arc::new(Mutex::new(None));
+        let publication = DesktopPublication {
+            latest: Arc::clone(&latest),
+            notifier: Arc::new(Mutex::new(None)),
+            published_generation: Arc::clone(&published_generation),
+            runtime_observation: Arc::new(Mutex::new(RuntimeObservationState::default())),
+        };
+        let snapshot = ProductReducer::new().snapshot();
+        let expected_generation = snapshot.generation();
+        let latest_for_hook = Arc::clone(&latest);
+        let generation_for_hook = Arc::clone(&published_generation);
+
+        assert_eq!(
+            publish_snapshot_with_hook(snapshot, &publication, move || {
+                assert!(matches!(
+                    generation_for_hook.try_lock(),
+                    Err(std::sync::TryLockError::WouldBlock)
+                ));
+                assert!(matches!(
+                    latest_for_hook.try_lock(),
+                    Err(std::sync::TryLockError::WouldBlock)
+                ));
+            }),
+            RefreshOutcome::Completed
+        );
+
+        assert_eq!(
+            *lock_published_generation(&published_generation).expect("generation lock"),
+            Some(expected_generation)
+        );
+        assert_eq!(
+            lock_latest(&latest)
+                .expect("latest lock")
+                .as_ref()
+                .map(|snapshot| snapshot.generation()),
+            Some(expected_generation)
+        );
     }
 
     struct ReentrantWorkNotifier {
