@@ -1450,6 +1450,39 @@ fn rejected_sessions_navigation_restores_controls_and_keyboard_dispatches_both_d
 }
 
 #[test]
+fn retained_unavailable_newest_page_enables_bounded_newest_recovery_only() {
+    i_slint_backend_testing::init_no_event_loop();
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory.path().join("ui-sessions-retained-newest.sqlite3");
+    let mut reducer = ready_reducer_with_usage(&path, 0, 65);
+    reducer
+        .fail_sessions(
+            ProductAttemptGeneration::new(2).expect("attempt"),
+            QueryErrorCode::DeadlineExceeded,
+        )
+        .expect("retain newest payload after failed next page");
+    let snapshot = reducer.snapshot();
+    let shell = DesktopShell::new_with_reliable_state_and_session_sinks(
+        &snapshot,
+        DesktopReliableStateProjection::unavailable(),
+        Rc::new(RejectingIntentSink),
+        Rc::new(RecordingSessionDetailSink::default()),
+        Rc::new(RecordingSessionPageSink::default()),
+    )
+    .expect("desktop shell");
+    shell
+        .apply_snapshot_for_epoch(DesktopSnapshotEpoch::new(1).expect("epoch"), &snapshot)
+        .expect("bind snapshot");
+    let window = shell.window();
+    window.invoke_select_route(SharedString::from("sessions"));
+    assert!(!window.get_sessions_next_enabled());
+    assert!(
+        window.get_sessions_back_to_newest_enabled(),
+        "retained unavailable newest page exposes only its recovery action"
+    );
+}
+
+#[test]
 fn sessions_pagination_ui_contract_rejects_identity_and_append_paths() {
     let main = include_str!("../ui/main.slint");
     let models = include_str!("../ui/models.slint");
@@ -1467,6 +1500,10 @@ fn sessions_pagination_ui_contract_rejects_identity_and_append_paths() {
     );
     assert!(view.contains("forward-focus: next-page-button"));
     assert!(view.contains("forward-focus: back-to-newest-button"));
+    assert!(
+        !view.contains("Newest all-time session summaries"),
+        "session subtitle must not claim a newest page while showing retained/unavailable pages"
+    );
     assert!(session_model_replacement_is_pinned(ui));
     let sessions_projection = ui
         .split("fn apply_sessions_projection")

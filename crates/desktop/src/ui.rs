@@ -2572,15 +2572,22 @@ fn apply_sessions_projection(window: &MainWindow, sessions: &DesktopSessionsProj
     apply_session_detail_projection(window, sessions);
 }
 
-fn apply_session_navigation_projection(window: &MainWindow, sessions: &DesktopSessionsProjection) {
+pub(crate) fn apply_session_navigation_projection(
+    window: &MainWindow,
+    sessions: &DesktopSessionsProjection,
+) {
     let pending = sessions.navigation_pending();
     let continuation = sessions.page_kind() == Some(crate::DesktopSessionPageKind::Continuation);
+    let retained_unavailable_page = sessions.state() != crate::DesktopDashboardSectionState::Ready
+        && sessions.page_kind().is_some();
     let next_enabled = !pending
         && sessions.state() == crate::DesktopDashboardSectionState::Ready
         && sessions.has_more() == Some(true);
     window.set_sessions_navigation_pending(pending);
     window.set_sessions_next_enabled(next_enabled);
-    window.set_sessions_back_to_newest_enabled(!pending && continuation);
+    window.set_sessions_back_to_newest_enabled(
+        !pending && (continuation || retained_unavailable_page),
+    );
     let status = if pending {
         "Loading sessions…"
     } else {
@@ -2609,7 +2616,10 @@ fn apply_session_navigation_projection(window: &MainWindow, sessions: &DesktopSe
     window.set_sessions_page_status_label(status.into());
 }
 
-fn apply_session_detail_projection(window: &MainWindow, sessions: &DesktopSessionsProjection) {
+pub(crate) fn apply_session_detail_projection(
+    window: &MainWindow,
+    sessions: &DesktopSessionsProjection,
+) {
     let detail = sessions.detail();
     window.set_sessions_selected_row(detail.selected_ordinal().map_or(-1, i32::from));
     window.set_session_detail_state(detail.state().stable_code().into());

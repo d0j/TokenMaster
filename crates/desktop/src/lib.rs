@@ -70,5 +70,5 @@ pub use controller::{
     DesktopRefreshIngress, DesktopRefreshOutcome, DesktopRefreshReceipt, DesktopRefreshUrgency,
     DesktopRuntimeObservation, DesktopRuntimeObservationOutcome, DesktopSessionDetailIntent,
     DesktopSessionNavigationGeneration, DesktopSessionPageDirection, DesktopSessionPageIntent,
-    DesktopSnapshotNotifier, DesktopSnapshotReceiver,
+    DesktopSnapshotNotifier, DesktopSnapshotReceiver, DesktopTerminalNavigationNotifier,
 };

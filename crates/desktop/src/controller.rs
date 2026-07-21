@@ -11,8 +11,8 @@ use std::{
 
 use tokenmaster_engine::{
     Clock, MonotonicTime, RefreshAdmission, RefreshDeadline, RefreshOutcome, RefreshPermit,
-    RefreshRequestId, RefreshSubmitter, RefreshUrgency, RefreshWorker, WorkerCompletionKind,
-    WorkerError, WorkerErrorCode, WorkerPhase,
+    RefreshRequestId, RefreshSubmitter, RefreshUrgency, RefreshWorker, WorkerCompletion,
+    WorkerCompletionKind, WorkerCompletionNotifier, WorkerError, WorkerErrorCode, WorkerPhase,
 };
 use tokenmaster_product::{
     ProductAttemptGeneration, ProductGeneration, ProductGitRuntimeHealth,
@@ -523,6 +523,7 @@ impl Clock for DesktopMonotonicClock {
 
 type LatestSnapshot = Arc<Mutex<Option<Arc<ProductSnapshot>>>>;
 type SnapshotNotifier = Arc<Mutex<Option<Arc<dyn DesktopSnapshotNotifier>>>>;
+type TerminalNavigationNotifier = Arc<Mutex<Option<Arc<dyn DesktopTerminalNavigationNotifier>>>>;
 type PublishedProductGeneration = Arc<Mutex<Option<ProductGeneration>>>;
 type RuntimeObservationSlot = Arc<Mutex<RuntimeObservationState>>;
 type DesktopWorkSlot = Arc<Mutex<DesktopWorkState>>;
@@ -589,6 +590,49 @@ pub trait DesktopSnapshotNotifier: Send + Sync + 'static {
     fn snapshot_ready(&self);
 }
 
+pub trait DesktopTerminalNavigationNotifier: Send + Sync + 'static {
+    fn navigation_terminal(&self, intent: DesktopSessionPageIntent);
+}
+
+struct DesktopWorkCompletionNotifier {
+    work: DesktopWorkSlot,
+    terminal_notifier: TerminalNavigationNotifier,
+}
+
+impl WorkerCompletionNotifier for DesktopWorkCompletionNotifier {
+    fn completion_ready(&self, completion: WorkerCompletion) {
+        handle_worker_completion(&self.work, &self.terminal_notifier, completion);
+    }
+}
+
+fn notify_terminal_navigation(
+    notifier: &TerminalNavigationNotifier,
+    intent: Option<DesktopSessionPageIntent>,
+) {
+    let Some(intent) = intent else {
+        return;
+    };
+    let notifier = match lock_terminal_navigation_notifier(notifier) {
+        Ok(notifier) => notifier.clone(),
+        Err(_) => return,
+    };
+    if let Some(notifier) = notifier {
+        notifier.navigation_terminal(intent);
+    }
+}
+
+fn handle_worker_completion(
+    work: &DesktopWorkSlot,
+    notifier: &TerminalNavigationNotifier,
+    completion: WorkerCompletion,
+) {
+    let intent = match reconcile_navigation_completion(work, completion) {
+        Ok(intent) => intent,
+        Err(_) => return,
+    };
+    notify_terminal_navigation(notifier, intent);
+}
+
 #[derive(Clone)]
 pub struct DesktopSnapshotReceiver {
     latest: LatestSnapshot,
@@ -626,6 +670,7 @@ pub struct DesktopController {
     publication: DesktopPublication,
     snapshot_epoch: Arc<AtomicU64>,
     work: DesktopWorkSlot,
+    terminal_navigation_notifier: TerminalNavigationNotifier,
 }
 
 #[derive(Clone)]
@@ -633,6 +678,7 @@ pub struct DesktopRefreshIngress {
     worker: RefreshSubmitter,
     clock: Arc<dyn Clock>,
     work: DesktopWorkSlot,
+    terminal_navigation_notifier: TerminalNavigationNotifier,
 }
 
 impl DesktopRefreshIngress {
@@ -657,7 +703,10 @@ impl DesktopRefreshIngress {
             .map_err(map_worker_error)?;
         if let Some(attempt) = scheduled_work_attempt(admission)? {
             work.refresh_attempt = Some(attempt);
+            let superseded_navigation = work.current_navigation.map(|active| active.intent);
             invalidate_navigation(&mut work);
+            drop(work);
+            notify_terminal_navigation(&self.terminal_navigation_notifier, superseded_navigation);
         }
         Ok(admission)
     }
@@ -702,20 +751,28 @@ impl DesktopController {
         let worker_publication = publication.clone();
         let snapshot_epoch = Arc::new(AtomicU64::new(0));
         let work = Arc::new(Mutex::new(DesktopWorkState::default()));
+        let terminal_navigation_notifier = Arc::new(Mutex::new(None));
         let worker_snapshot_epoch = Arc::clone(&snapshot_epoch);
         let worker_work = Arc::clone(&work);
         let execute_clock = clock.clone();
         let mut reducer = ProductReducer::new();
-        let worker = RefreshWorker::spawn(worker_clock, move |permit| {
-            let context = DesktopExecutionContext {
-                plan: &plan,
-                clock: execute_clock.as_ref(),
-                publication: &worker_publication,
-                snapshot_epoch: &worker_snapshot_epoch,
-                work: &worker_work,
-            };
-            execute_work(&mut source, &mut reducer, permit, &context)
-        })
+        let worker = RefreshWorker::spawn_notified(
+            worker_clock,
+            Arc::new(DesktopWorkCompletionNotifier {
+                work: Arc::clone(&work),
+                terminal_notifier: Arc::clone(&terminal_navigation_notifier),
+            }),
+            move |permit| {
+                let context = DesktopExecutionContext {
+                    plan: &plan,
+                    clock: execute_clock.as_ref(),
+                    publication: &worker_publication,
+                    snapshot_epoch: &worker_snapshot_epoch,
+                    work: &worker_work,
+                };
+                execute_work(&mut source, &mut reducer, permit, &context)
+            },
+        )
         .map_err(map_worker_error)?;
         Ok(Self {
             clock,
@@ -723,6 +780,7 @@ impl DesktopController {
             publication,
             snapshot_epoch,
             work,
+            terminal_navigation_notifier,
         })
     }
 
@@ -776,6 +834,7 @@ impl DesktopController {
             worker: self.worker.submitter(),
             clock: Arc::clone(&self.clock),
             work: Arc::clone(&self.work),
+            terminal_navigation_notifier: Arc::clone(&self.terminal_navigation_notifier),
         }
     }
 
@@ -897,7 +956,11 @@ impl DesktopController {
             .try_completion()
             .map_err(map_worker_error)?
             .map(|completion| {
-                reconcile_navigation_completion(&self.work, completion)?;
+                handle_worker_completion(
+                    &self.work,
+                    &self.terminal_navigation_notifier,
+                    completion,
+                );
                 Ok(map_completion(completion))
             })
             .transpose()
@@ -945,6 +1008,39 @@ impl DesktopController {
         if notify_existing {
             notifier.snapshot_ready();
         }
+        Ok(())
+    }
+
+    pub fn attach_terminal_navigation_notifier(
+        &mut self,
+        notifier: Arc<dyn DesktopTerminalNavigationNotifier>,
+    ) -> Result<(), DesktopControllerError> {
+        let worker = self.worker.snapshot().map_err(map_worker_error)?;
+        match worker.phase() {
+            WorkerPhase::Running => {}
+            WorkerPhase::Faulted => {
+                return Err(DesktopControllerError::new(
+                    DesktopControllerErrorCode::Faulted,
+                ));
+            }
+            WorkerPhase::ShuttingDown | WorkerPhase::Stopped => {
+                return Err(DesktopControllerError::new(
+                    DesktopControllerErrorCode::Closed,
+                ));
+            }
+        }
+        if worker.active_request_id().is_some() || worker.pending_count() != 0 {
+            return Err(DesktopControllerError::new(
+                DesktopControllerErrorCode::Busy,
+            ));
+        }
+        let mut current = lock_terminal_navigation_notifier(&self.terminal_navigation_notifier)?;
+        if current.is_some() {
+            return Err(DesktopControllerError::new(
+                DesktopControllerErrorCode::NotifierAlreadyAttached,
+            ));
+        }
+        *current = Some(notifier);
         Ok(())
     }
 
@@ -1085,11 +1181,6 @@ fn execute_session_page<S: DesktopQuerySource>(
         return outcome;
     }
     if !navigation_is_current(reducer, context, permit.id().get(), intent) {
-        let _ = clear_navigation_if_current(
-            context.work,
-            permit.id().get(),
-            intent.navigation_generation(),
-        );
         return RefreshOutcome::Completed;
     }
 
@@ -1427,6 +1518,17 @@ fn lock_notifier(
         .map_err(|_| DesktopControllerError::new(DesktopControllerErrorCode::Internal))
 }
 
+fn lock_terminal_navigation_notifier(
+    notifier: &TerminalNavigationNotifier,
+) -> Result<
+    MutexGuard<'_, Option<Arc<dyn DesktopTerminalNavigationNotifier>>>,
+    DesktopControllerError,
+> {
+    notifier
+        .lock()
+        .map_err(|_| DesktopControllerError::new(DesktopControllerErrorCode::Internal))
+}
+
 fn lock_published_generation(
     generation: &PublishedProductGeneration,
 ) -> Result<MutexGuard<'_, Option<ProductGeneration>>, DesktopControllerError> {
@@ -1475,20 +1577,6 @@ fn navigation_is_current(
     }
 }
 
-fn clear_navigation_if_current(
-    work: &DesktopWorkSlot,
-    attempt: u64,
-    generation: DesktopSessionNavigationGeneration,
-) -> Result<(), DesktopControllerError> {
-    let mut state = lock_work(work)?;
-    if state.current_navigation.is_some_and(|current| {
-        current.attempt == attempt && current.intent.navigation_generation() == generation
-    }) {
-        invalidate_navigation(&mut state);
-    }
-    Ok(())
-}
-
 fn scheduled_work_attempt(
     admission: DesktopRefreshAdmission,
 ) -> Result<Option<u64>, DesktopControllerError> {
@@ -1530,7 +1618,7 @@ fn scheduled_navigation(
 fn reconcile_navigation_completion(
     work: &DesktopWorkSlot,
     completion: tokenmaster_engine::WorkerCompletion,
-) -> Result<(), DesktopControllerError> {
+) -> Result<Option<DesktopSessionPageIntent>, DesktopControllerError> {
     let mut state = lock_work(work)?;
     let completed = completion.request_id().get();
     let clear_current = state.current_navigation.is_some_and(|current| {
@@ -1542,9 +1630,11 @@ fn reconcile_navigation_completion(
                 && current.prerequisite_attempt == Some(completed))
     });
     if clear_current {
+        let intent = state.current_navigation.map(|active| active.intent);
         invalidate_navigation(&mut state);
+        return Ok(intent);
     }
-    Ok(())
+    Ok(None)
 }
 
 fn take_work_batch(state: &mut DesktopWorkState, attempt: u64) -> DesktopWorkBatch {
@@ -1871,6 +1961,13 @@ mod tests {
         clock: Arc<ManualClock>,
     }
 
+    struct PreStartDeadlineSource {
+        clock: Arc<ManualClock>,
+        entered: std::sync::mpsc::SyncSender<()>,
+        release: std::sync::mpsc::Receiver<()>,
+        session_calls: Arc<AtomicU64>,
+    }
+
     impl DesktopQuerySource for DeadlineSource {
         fn product_data_status(&mut self) -> Result<ProductDataStatusEnvelope, QueryError> {
             self.clock.set(DesktopRefreshUrgency::Hint.budget_ms());
@@ -1924,6 +2021,76 @@ mod tests {
         }
     }
 
+    impl DesktopQuerySource for PreStartDeadlineSource {
+        fn product_data_status(&mut self) -> Result<ProductDataStatusEnvelope, QueryError> {
+            self.entered.send(()).expect("refresh entered");
+            self.release.recv().expect("refresh released");
+            self.clock.set(
+                DesktopRefreshUrgency::Recovery
+                    .budget_ms()
+                    .saturating_add(1),
+            );
+            Err(invalid_query())
+        }
+
+        fn usage_analytics(
+            &mut self,
+            _request: UsageAnalyticsRequest,
+        ) -> Result<QueryEnvelope<UsageAnalytics>, QueryError> {
+            unreachable!("deadline stops before analytics")
+        }
+
+        fn quota_overview(&mut self) -> Result<QuotaEnvelope<QuotaCurrentSnapshot>, QueryError> {
+            unreachable!("deadline stops before quota")
+        }
+
+        fn benefit_overview(
+            &mut self,
+            _request: BenefitOverviewRequest,
+        ) -> Result<BenefitOverviewEnvelope<BenefitOverviewSnapshot>, QueryError> {
+            unreachable!("deadline stops before benefit")
+        }
+
+        fn git_output(
+            &mut self,
+            _request: GitOutputRequest,
+        ) -> Result<GitEnvelope<GitOutputSnapshot>, QueryError> {
+            unreachable!("deadline stops before git")
+        }
+
+        fn latest_activity(
+            &mut self,
+            _request: LatestActivityRequest,
+        ) -> Result<QueryEnvelope<LatestActivityPage>, QueryError> {
+            unreachable!("deadline stops before activity")
+        }
+
+        fn usage_sessions(
+            &mut self,
+            _request: UsageSessionPageRequest,
+        ) -> Result<QueryEnvelope<UsageSessionPage>, QueryError> {
+            self.session_calls.fetch_add(1, Ordering::AcqRel);
+            unreachable!("not-started navigation must not query sessions")
+        }
+
+        fn usage_session_detail(
+            &mut self,
+            _key: UsageSessionKey,
+        ) -> Result<QueryEnvelope<UsageSessionDetailResult>, QueryError> {
+            unreachable!("deadline stops before session detail")
+        }
+    }
+
+    struct RecordingTerminalNotifier {
+        sender: std::sync::mpsc::SyncSender<DesktopSessionPageIntent>,
+    }
+
+    impl DesktopTerminalNavigationNotifier for RecordingTerminalNotifier {
+        fn navigation_terminal(&self, intent: DesktopSessionPageIntent) {
+            let _ = self.sender.try_send(intent);
+        }
+    }
+
     #[test]
     fn attempt_deadline_discards_partial_reducer_state() {
         let clock = Arc::new(ManualClock::new(0));
@@ -1956,6 +2123,76 @@ mod tests {
                 .expect("latest slot healthy")
                 .is_none()
         );
+        controller.shutdown().expect("controller stops");
+    }
+
+    #[test]
+    fn not_started_navigation_deadline_emits_the_exact_terminal_rollback_without_query_or_snapshot()
+    {
+        let clock = Arc::new(ManualClock::new(0));
+        let controller_clock: Arc<dyn Clock> = clock.clone();
+        let (entered_sender, entered_receiver) = sync_channel(1);
+        let (release_sender, release_receiver) = sync_channel(1);
+        let session_calls = Arc::new(AtomicU64::new(0));
+        let mut controller = DesktopController::spawn_with_clock(
+            PreStartDeadlineSource {
+                clock,
+                entered: entered_sender,
+                release: release_receiver,
+                session_calls: Arc::clone(&session_calls),
+            },
+            DesktopQueryPlan::overview().expect("overview plan"),
+            controller_clock,
+        )
+        .expect("controller starts");
+        let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+        controller.bind_snapshot_epoch(epoch).expect("bind epoch");
+        *lock_published_generation(&controller.publication.published_generation)
+            .expect("published generation") = Some(ProductGeneration::INITIAL);
+        let (terminal_sender, terminal_receiver) = sync_channel(1);
+        controller
+            .attach_terminal_navigation_notifier(Arc::new(RecordingTerminalNotifier {
+                sender: terminal_sender,
+            }))
+            .expect("attach terminal notifier");
+
+        controller
+            .refresh(DesktopRefreshUrgency::Hint)
+            .expect("blocking refresh starts");
+        entered_receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("refresh entered");
+        let intent = DesktopSessionPageIntent::new(
+            epoch,
+            ProductGeneration::INITIAL,
+            DesktopSessionNavigationGeneration::new(1).expect("navigation generation"),
+            DesktopSessionPageDirection::Newest,
+        );
+        assert!(matches!(
+            controller
+                .request_session_page(intent)
+                .expect("navigation queues"),
+            DesktopRefreshAdmission::Coalesced { .. }
+        ));
+        release_sender.send(()).expect("release refresh");
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let terminal = loop {
+            match terminal_receiver.try_recv() {
+                Ok(intent) => break intent,
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    let _ = controller.try_completion().expect("worker healthy");
+                    assert!(Instant::now() < deadline, "terminal completion timed out");
+                    thread::yield_now();
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    panic!("terminal notifier disconnected")
+                }
+            }
+        };
+        assert_eq!(terminal, intent);
+        assert_eq!(session_calls.load(Ordering::Acquire), 0);
+        assert!(controller.take_snapshot().expect("mailbox").is_none());
         controller.shutdown().expect("controller stops");
     }
 

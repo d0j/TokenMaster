@@ -1652,6 +1652,9 @@ fn finish_live_bundle(
     controller
         .attach_snapshot_notifier(live_bridge.notifier())
         .map_err(|_| ApplicationError::controller())?;
+    controller
+        .attach_terminal_navigation_notifier(live_bridge.terminal_navigation_notifier())
+        .map_err(|_| ApplicationError::controller())?;
     let refresh_ingress = controller.refresh_ingress();
     let notification_presentation = match reminder.owner() {
         Some(runtime) => {

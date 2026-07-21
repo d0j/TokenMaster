@@ -234,6 +234,64 @@ fn session_navigation_requires_epoch_and_retained_recoverable_page() {
 }
 
 #[test]
+fn retained_newest_page_failure_allows_only_newest_recovery() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("sessions-retained-newest-recovery.sqlite3");
+    seed(&path);
+    add_distinct_usage_rows(&path, 2);
+    let mut service = QueryService::open(&path, FixedClock).expect("query service");
+    let status = service.product_data_status().expect("status");
+    let newest = service
+        .usage_sessions(
+            UsageSessionPageRequest::first(PageSize::new(1).expect("page"), Vec::new())
+                .expect("newest request"),
+        )
+        .expect("newest page");
+
+    let mut reducer = ProductReducer::new();
+    reducer
+        .publish_data_status(attempt(1), status)
+        .expect("publish status");
+    reducer
+        .publish_sessions(attempt(1), newest)
+        .expect("publish newest");
+    let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+    let mut state = DesktopState::new(&reducer.snapshot(), DesktopRouteKey::Sessions);
+    assert_eq!(
+        state.apply_snapshot_for_epoch(epoch, &reducer.snapshot()),
+        tokenmaster_desktop::DesktopApplyOutcome::Accepted
+    );
+
+    let failed_next = state
+        .request_session_page(DesktopSessionPageDirection::Next)
+        .expect("next page starts");
+    reducer
+        .fail_sessions(attempt(2), QueryErrorCode::DeadlineExceeded)
+        .expect("retain newest after failed next");
+    assert_eq!(
+        state.apply_snapshot_for_epoch(epoch, &reducer.snapshot()),
+        tokenmaster_desktop::DesktopApplyOutcome::Accepted
+    );
+    assert_eq!(
+        state.projection().sessions().page_kind(),
+        Some(DesktopSessionPageKind::Newest)
+    );
+    assert!(matches!(
+        state.projection().sessions().state(),
+        DesktopDashboardSectionState::Unavailable | DesktopDashboardSectionState::Degraded
+    ));
+    assert!(
+        state
+            .request_session_page(DesktopSessionPageDirection::Newest)
+            .is_ok(),
+        "retained unavailable newest page must recover through a bounded newest request"
+    );
+    state.reject_session_page(failed_next);
+}
+
+#[test]
 fn navigation_pending_rejects_session_selection_without_mutating_detail() {
     let directory = TempDir::new().expect("temporary directory");
     let path = directory.path().join("sessions-selection-pending.sqlite3");

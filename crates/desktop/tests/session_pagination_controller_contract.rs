@@ -14,6 +14,7 @@ use tokenmaster_desktop::{
     DesktopController, DesktopQueryPlan, DesktopQuerySource, DesktopRefreshAdmission,
     DesktopRefreshOutcome, DesktopRefreshUrgency, DesktopSessionNavigationGeneration,
     DesktopSessionPageDirection, DesktopSessionPageIntent, DesktopSnapshotEpoch,
+    DesktopTerminalNavigationNotifier,
 };
 use tokenmaster_product::{
     ProductGeneration, ProductSectionKind, ProductSessionDetailSelection,
@@ -43,6 +44,16 @@ struct PageGate {
     block: AtomicBool,
     entered: Mutex<Option<SyncSender<()>>>,
     release: Mutex<Option<Receiver<()>>>,
+}
+
+struct RecordingTerminalNavigationNotifier {
+    sender: SyncSender<DesktopSessionPageIntent>,
+}
+
+impl DesktopTerminalNavigationNotifier for RecordingTerminalNavigationNotifier {
+    fn navigation_terminal(&self, intent: DesktopSessionPageIntent) {
+        let _ = self.sender.try_send(intent);
+    }
 }
 
 impl PageGate {
@@ -684,6 +695,192 @@ fn refresh_supersedes_navigation_and_cancellation_publishes_nothing() {
         detail_admission.is_ok(),
         "completed cancellation releases navigation detail gate"
     );
+}
+
+#[test]
+fn terminal_page_completion_rolls_back_only_the_matching_cancelled_navigation() {
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("desktop-session-terminal-cancel.sqlite3");
+    seed_sessions(&path, 65);
+    let gate = Arc::new(PageGate::open());
+    let (mut controller, epoch, initial) = initial_controller(source(
+        &path,
+        Arc::new(Mutex::new(Vec::new())),
+        Arc::new(AtomicUsize::new(0)),
+        Arc::new(AtomicBool::new(false)),
+        gate.clone(),
+    ));
+    let (terminal_sender, terminal_receiver) = sync_channel(1);
+    controller
+        .attach_terminal_navigation_notifier(Arc::new(RecordingTerminalNavigationNotifier {
+            sender: terminal_sender,
+        }))
+        .expect("attach terminal notifier while idle");
+
+    let (entered_sender, entered_receiver) = sync_channel(1);
+    let (release_sender, release_receiver) = sync_channel(1);
+    gate.block_next(entered_sender, release_receiver);
+    let cancelled = intent(
+        epoch,
+        initial.generation(),
+        1,
+        DesktopSessionPageDirection::Next,
+    );
+    let admission = controller
+        .request_session_page(cancelled)
+        .expect("navigation starts");
+    let attempt = match admission {
+        DesktopRefreshAdmission::Started { attempt } => attempt,
+        other => panic!("expected started page, got {other:?}"),
+    };
+    entered_receiver
+        .recv_timeout(Duration::from_secs(2))
+        .expect("page entered");
+    controller.cancel(attempt).expect("cancel active page");
+    release_sender.send(()).expect("release page");
+    assert_eq!(
+        wait_for_completion(&controller).outcome(),
+        DesktopRefreshOutcome::Cancelled
+    );
+    assert_eq!(
+        terminal_receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("terminal rollback"),
+        cancelled
+    );
+    assert!(controller.take_snapshot().expect("mailbox").is_none());
+    assert!(
+        terminal_receiver
+            .recv_timeout(Duration::from_millis(50))
+            .is_err(),
+        "one terminal completion emits one rollback"
+    );
+
+    controller.shutdown().expect("controller stops");
+}
+
+#[test]
+fn refresh_supersession_immediately_rolls_back_the_exact_navigation_without_a_snapshot() {
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("desktop-session-terminal-supersession.sqlite3");
+    seed_sessions(&path, 65);
+    let gate = Arc::new(PageGate::open());
+    let (mut controller, epoch, initial) = initial_controller(source(
+        &path,
+        Arc::new(Mutex::new(Vec::new())),
+        Arc::new(AtomicUsize::new(0)),
+        Arc::new(AtomicBool::new(false)),
+        gate.clone(),
+    ));
+    let (terminal_sender, terminal_receiver) = sync_channel(1);
+    controller
+        .attach_terminal_navigation_notifier(Arc::new(RecordingTerminalNavigationNotifier {
+            sender: terminal_sender,
+        }))
+        .expect("attach terminal notifier while idle");
+
+    let (entered_sender, entered_receiver) = sync_channel(1);
+    let (release_sender, release_receiver) = sync_channel(1);
+    gate.block_next(entered_sender, release_receiver);
+    let navigation = intent(
+        epoch,
+        initial.generation(),
+        1,
+        DesktopSessionPageDirection::Next,
+    );
+    controller
+        .request_session_page(navigation)
+        .expect("navigation starts");
+    entered_receiver
+        .recv_timeout(Duration::from_secs(2))
+        .expect("page entered");
+    assert!(matches!(
+        controller
+            .refresh(DesktopRefreshUrgency::Interactive)
+            .expect("refresh supersedes navigation"),
+        DesktopRefreshAdmission::Coalesced { .. }
+    ));
+    assert_eq!(
+        terminal_receiver
+            .recv_timeout(Duration::from_secs(2))
+            .expect("immediate rollback"),
+        navigation
+    );
+    release_sender.send(()).expect("release page");
+    let _ = wait_for_completion(&controller);
+    let refreshed = wait_for_snapshot(&controller);
+    assert_eq!(refreshed.sessions().kind(), ProductSectionKind::Ready);
+    assert!(
+        terminal_receiver
+            .recv_timeout(Duration::from_millis(50))
+            .is_err(),
+        "refresh publication must not duplicate the supersession rollback"
+    );
+    controller.shutdown().expect("controller stops");
+}
+
+#[test]
+fn successful_and_query_error_page_snapshots_do_not_emit_terminal_rollback() {
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("desktop-session-terminal-snapshots.sqlite3");
+    seed_sessions(&path, 65);
+    let fail_pages = Arc::new(AtomicBool::new(false));
+    let (mut controller, epoch, initial) = initial_controller(source(
+        &path,
+        Arc::new(Mutex::new(Vec::new())),
+        Arc::new(AtomicUsize::new(0)),
+        fail_pages.clone(),
+        Arc::new(PageGate::open()),
+    ));
+    let (terminal_sender, terminal_receiver) = sync_channel(1);
+    controller
+        .attach_terminal_navigation_notifier(Arc::new(RecordingTerminalNavigationNotifier {
+            sender: terminal_sender,
+        }))
+        .expect("attach terminal notifier while idle");
+
+    controller
+        .request_session_page(intent(
+            epoch,
+            initial.generation(),
+            1,
+            DesktopSessionPageDirection::Next,
+        ))
+        .expect("successful page request");
+    let _ = wait_for_completion(&controller);
+    let successful = wait_for_snapshot(&controller);
+    assert!(
+        terminal_receiver
+            .recv_timeout(Duration::from_millis(50))
+            .is_err(),
+        "published page success remains snapshot-authoritative"
+    );
+
+    fail_pages.store(true, Ordering::Release);
+    controller
+        .request_session_page(intent(
+            epoch,
+            successful.generation(),
+            2,
+            DesktopSessionPageDirection::Newest,
+        ))
+        .expect("query-error page request");
+    let _ = wait_for_completion(&controller);
+    let failed = wait_for_snapshot(&controller);
+    assert_eq!(failed.sessions().kind(), ProductSectionKind::Unavailable);
+    assert!(
+        terminal_receiver
+            .recv_timeout(Duration::from_millis(50))
+            .is_err(),
+        "published query error remains snapshot-authoritative"
+    );
+    controller.shutdown().expect("controller stops");
 }
 
 #[test]

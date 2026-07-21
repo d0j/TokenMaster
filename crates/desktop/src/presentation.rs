@@ -455,7 +455,9 @@ impl DesktopState {
                 return Err(DesktopSessionPageNavigationError::Unavailable);
             }
             DesktopSessionPageDirection::Newest
-                if sessions.page_kind() != Some(crate::DesktopSessionPageKind::Continuation) =>
+                if sessions.page_kind() != Some(crate::DesktopSessionPageKind::Continuation)
+                    && !(sessions.state() != DesktopDashboardSectionState::Ready
+                        && sessions.page_kind().is_some()) =>
             {
                 return Err(DesktopSessionPageNavigationError::Unavailable);
             }

@@ -7,9 +7,15 @@ use tokenmaster_product::ProductSnapshot;
 
 use crate::{
     MainWindow,
-    controller::{DesktopSnapshotNotifier, DesktopSnapshotReceiver},
+    controller::{
+        DesktopSessionPageIntent, DesktopSnapshotNotifier, DesktopSnapshotReceiver,
+        DesktopTerminalNavigationNotifier,
+    },
     presentation::{DesktopApplyOutcome, DesktopSnapshotEpoch},
-    ui::{SharedDesktopState, apply_projection},
+    ui::{
+        SharedDesktopState, apply_projection, apply_session_detail_projection,
+        apply_session_navigation_projection,
+    },
 };
 
 pub(crate) type EventTask = Box<dyn FnOnce() + Send + 'static>;
@@ -41,6 +47,10 @@ trait SnapshotDelivery: Send + Sync + 'static {
     fn deliver(&self, snapshot: Arc<ProductSnapshot>) -> DeliveryOutcome;
 }
 
+trait TerminalNavigationDelivery: Send + Sync + 'static {
+    fn deliver(&self, intent: DesktopSessionPageIntent) -> TerminalDeliveryOutcome;
+}
+
 struct SlintSnapshotDelivery {
     epoch: DesktopSnapshotEpoch,
     window: slint::Weak<MainWindow>,
@@ -65,12 +75,49 @@ impl SnapshotDelivery for SlintSnapshotDelivery {
     }
 }
 
+struct SlintTerminalNavigationDelivery {
+    window: slint::Weak<MainWindow>,
+    state: SharedDesktopState,
+}
+
+impl TerminalNavigationDelivery for SlintTerminalNavigationDelivery {
+    fn deliver(&self, intent: DesktopSessionPageIntent) -> TerminalDeliveryOutcome {
+        let Some(window) = self.window.upgrade() else {
+            return TerminalDeliveryOutcome::WindowClosed;
+        };
+        let Ok(mut state) = self.state.lock() else {
+            return TerminalDeliveryOutcome::StateUnavailable;
+        };
+        state.reject_session_page(intent);
+        apply_session_navigation_projection(&window, state.projection().sessions());
+        apply_session_detail_projection(&window, state.projection().sessions());
+        TerminalDeliveryOutcome::Delivered
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DeliveryOutcome {
     Delivered(u64),
     Ignored,
     WindowClosed,
     StateUnavailable,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TerminalDeliveryOutcome {
+    Delivered,
+    WindowClosed,
+    StateUnavailable,
+}
+
+#[cfg(test)]
+struct NoopTerminalNavigationDelivery;
+
+#[cfg(test)]
+impl TerminalNavigationDelivery for NoopTerminalNavigationDelivery {
+    fn deliver(&self, _intent: DesktopSessionPageIntent) -> TerminalDeliveryOutcome {
+        TerminalDeliveryOutcome::Delivered
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -215,6 +262,8 @@ struct BridgeInner {
     receiver: DesktopSnapshotReceiver,
     scheduler: Arc<dyn EventScheduler>,
     delivery: Arc<dyn SnapshotDelivery>,
+    terminal_delivery: Arc<dyn TerminalNavigationDelivery>,
+    terminal_intent: std::sync::Mutex<Option<DesktopSessionPageIntent>>,
     phase: AtomicU8,
     scheduled: AtomicBool,
     scheduled_count: AtomicU64,
@@ -231,11 +280,14 @@ impl BridgeInner {
         receiver: DesktopSnapshotReceiver,
         scheduler: Arc<dyn EventScheduler>,
         delivery: Arc<dyn SnapshotDelivery>,
+        terminal_delivery: Arc<dyn TerminalNavigationDelivery>,
     ) -> Arc<Self> {
         Arc::new(Self {
             receiver,
             scheduler,
             delivery,
+            terminal_delivery,
+            terminal_intent: std::sync::Mutex::new(None),
             phase: AtomicU8::new(DesktopBridgePhase::Running.encoded()),
             scheduled: AtomicBool::new(false),
             scheduled_count: AtomicU64::new(0),
@@ -268,6 +320,23 @@ impl BridgeInner {
                 self.scheduled.store(false, Ordering::Release);
             }
         }
+    }
+
+    fn request_terminal(self: &Arc<Self>, intent: DesktopSessionPageIntent) {
+        if self.phase() != DesktopBridgePhase::Running {
+            return;
+        }
+        let Ok(mut pending) = self.terminal_intent.lock() else {
+            self.fault(DesktopBridgeFailureCode::Internal);
+            return;
+        };
+        if pending
+            .is_none_or(|current| intent.navigation_generation() > current.navigation_generation())
+        {
+            *pending = Some(intent);
+        }
+        drop(pending);
+        self.request();
     }
 
     fn run_once(self: &Arc<Self>) {
@@ -305,14 +374,41 @@ impl BridgeInner {
             }
         }
 
-        self.scheduled.store(false, Ordering::Release);
-        if self.phase() == DesktopBridgePhase::Running {
-            match self.receiver.has_snapshot() {
-                Ok(true) => self.request(),
-                Ok(false) => {}
-                Err(_) => self.fault(DesktopBridgeFailureCode::Internal),
+        let terminal = match self.terminal_intent.lock() {
+            Ok(mut pending) => pending.take(),
+            Err(_) => {
+                self.fault(DesktopBridgeFailureCode::Internal);
+                self.scheduled.store(false, Ordering::Release);
+                return;
+            }
+        };
+        if let Some(intent) = terminal {
+            match self.terminal_delivery.deliver(intent) {
+                TerminalDeliveryOutcome::Delivered => {}
+                TerminalDeliveryOutcome::WindowClosed => {
+                    self.close(DesktopBridgeFailureCode::WindowClosed);
+                }
+                TerminalDeliveryOutcome::StateUnavailable => {
+                    self.fault(DesktopBridgeFailureCode::StateUnavailable);
+                }
             }
         }
+
+        self.scheduled.store(false, Ordering::Release);
+        if self.phase() == DesktopBridgePhase::Running {
+            match (self.receiver.has_snapshot(), self.has_terminal()) {
+                (Ok(true), _) | (_, Ok(true)) => self.request(),
+                (Ok(false), Ok(false)) => {}
+                _ => self.fault(DesktopBridgeFailureCode::Internal),
+            }
+        }
+    }
+
+    fn has_terminal(&self) -> Result<bool, ()> {
+        self.terminal_intent
+            .lock()
+            .map(|pending| pending.is_some())
+            .map_err(|_| ())
     }
 
     fn record_schedule_error(&self, error: ScheduleError) {
@@ -377,6 +473,18 @@ impl DesktopSnapshotNotifier for BridgeNotifier {
     }
 }
 
+struct BridgeTerminalNavigationNotifier {
+    inner: Weak<BridgeInner>,
+}
+
+impl DesktopTerminalNavigationNotifier for BridgeTerminalNavigationNotifier {
+    fn navigation_terminal(&self, intent: DesktopSessionPageIntent) {
+        if let Some(inner) = self.inner.upgrade() {
+            inner.request_terminal(intent);
+        }
+    }
+}
+
 pub struct DesktopSnapshotBridge {
     epoch: DesktopSnapshotEpoch,
     inner: Arc<BridgeInner>,
@@ -401,27 +509,45 @@ impl DesktopSnapshotBridge {
         state: SharedDesktopState,
         receiver: DesktopSnapshotReceiver,
     ) -> Self {
-        Self::with_parts(
+        Self::with_terminal_parts(
             epoch,
             receiver,
             Arc::new(SlintEventScheduler),
             Arc::new(SlintSnapshotDelivery {
                 epoch,
-                window,
-                state,
+                window: window.clone(),
+                state: Arc::clone(&state),
             }),
+            Arc::new(SlintTerminalNavigationDelivery { window, state }),
         )
     }
 
+    #[cfg(test)]
     fn with_parts(
         epoch: DesktopSnapshotEpoch,
         receiver: DesktopSnapshotReceiver,
         scheduler: Arc<dyn EventScheduler>,
         delivery: Arc<dyn SnapshotDelivery>,
     ) -> Self {
+        Self::with_terminal_parts(
+            epoch,
+            receiver,
+            scheduler,
+            delivery,
+            Arc::new(NoopTerminalNavigationDelivery),
+        )
+    }
+
+    fn with_terminal_parts(
+        epoch: DesktopSnapshotEpoch,
+        receiver: DesktopSnapshotReceiver,
+        scheduler: Arc<dyn EventScheduler>,
+        delivery: Arc<dyn SnapshotDelivery>,
+        terminal_delivery: Arc<dyn TerminalNavigationDelivery>,
+    ) -> Self {
         Self {
             epoch,
-            inner: BridgeInner::new(receiver, scheduler, delivery),
+            inner: BridgeInner::new(receiver, scheduler, delivery, terminal_delivery),
         }
     }
 
@@ -433,6 +559,13 @@ impl DesktopSnapshotBridge {
     #[must_use]
     pub fn notifier(&self) -> Arc<dyn DesktopSnapshotNotifier> {
         Arc::new(BridgeNotifier {
+            inner: Arc::downgrade(&self.inner),
+        })
+    }
+
+    #[must_use]
+    pub fn terminal_navigation_notifier(&self) -> Arc<dyn DesktopTerminalNavigationNotifier> {
+        Arc::new(BridgeTerminalNavigationNotifier {
             inner: Arc::downgrade(&self.inner),
         })
     }
@@ -526,6 +659,117 @@ mod tests {
         fn deliver(&self, snapshot: Arc<ProductSnapshot>) -> DeliveryOutcome {
             (self.callback)(snapshot)
         }
+    }
+
+    struct CallbackTerminalDelivery {
+        callback: Box<dyn Fn(DesktopSessionPageIntent) -> TerminalDeliveryOutcome + Send + Sync>,
+    }
+
+    impl TerminalNavigationDelivery for CallbackTerminalDelivery {
+        fn deliver(&self, intent: DesktopSessionPageIntent) -> TerminalDeliveryOutcome {
+            (self.callback)(intent)
+        }
+    }
+
+    fn terminal_intent(generation: u64) -> DesktopSessionPageIntent {
+        DesktopSessionPageIntent::new(
+            test_epoch(),
+            tokenmaster_product::ProductGeneration::INITIAL,
+            crate::DesktopSessionNavigationGeneration::new(generation).expect("generation"),
+            crate::DesktopSessionPageDirection::Newest,
+        )
+    }
+
+    #[test]
+    fn terminal_navigation_delivery_is_weak_coalesced_and_keeps_the_latest_intent() {
+        let receiver = DesktopSnapshotReceiver::empty_for_test();
+        let scheduler = Arc::new(ManualScheduler::new());
+        let delivered = Arc::new(Mutex::new(Vec::new()));
+        let delivery_log = Arc::clone(&delivered);
+        let bridge = DesktopSnapshotBridge::with_terminal_parts(
+            test_epoch(),
+            receiver,
+            scheduler.clone(),
+            Arc::new(CallbackDelivery {
+                callback: Box::new(|snapshot| {
+                    DeliveryOutcome::Delivered(snapshot.generation().get())
+                }),
+            }),
+            Arc::new(CallbackTerminalDelivery {
+                callback: Box::new(move |intent| {
+                    delivery_log
+                        .lock()
+                        .expect("terminal deliveries")
+                        .push(intent.navigation_generation().get());
+                    TerminalDeliveryOutcome::Delivered
+                }),
+            }),
+        );
+        let notifier = bridge.terminal_navigation_notifier();
+        notifier.navigation_terminal(terminal_intent(2));
+        notifier.navigation_terminal(terminal_intent(1));
+        assert_eq!(scheduler.len(), 1);
+        scheduler.run_one();
+        assert_eq!(*delivered.lock().expect("terminal deliveries"), [2]);
+        drop(bridge);
+        notifier.navigation_terminal(terminal_intent(3));
+        assert_eq!(scheduler.len(), 0);
+    }
+
+    #[test]
+    fn coalesced_snapshot_then_terminal_delivery_cannot_replace_newer_snapshot_state() {
+        let receiver = DesktopSnapshotReceiver::empty_for_test();
+        let scheduler = Arc::new(ManualScheduler::new());
+        let visible_generation = Arc::new(AtomicU64::new(0));
+        let snapshot_generation = Arc::clone(&visible_generation);
+        let terminal_generation = Arc::clone(&visible_generation);
+        let stale_terminal = Arc::new(AtomicBool::new(false));
+        let stale_terminal_seen = Arc::clone(&stale_terminal);
+        let bridge = DesktopSnapshotBridge::with_terminal_parts(
+            test_epoch(),
+            receiver.clone(),
+            scheduler.clone(),
+            Arc::new(CallbackDelivery {
+                callback: Box::new(move |snapshot| {
+                    snapshot_generation.store(snapshot.generation().get(), Ordering::Release);
+                    DeliveryOutcome::Delivered(snapshot.generation().get())
+                }),
+            }),
+            Arc::new(CallbackTerminalDelivery {
+                callback: Box::new(move |intent| {
+                    stale_terminal_seen.store(
+                        terminal_generation.load(Ordering::Acquire)
+                            > intent.product_generation().get(),
+                        Ordering::Release,
+                    );
+                    TerminalDeliveryOutcome::Delivered
+                }),
+            }),
+        );
+        let mut reducer = ProductReducer::new();
+        reducer
+            .fail_data_status(
+                ProductAttemptGeneration::new(1).expect("attempt"),
+                QueryErrorCode::Unavailable,
+            )
+            .expect("snapshot generation");
+        let snapshot = reducer.snapshot();
+        let expected_generation = snapshot.generation().get();
+        receiver
+            .replace_snapshot(snapshot)
+            .expect("snapshot queued");
+        let snapshot_notifier = bridge.notifier();
+        let terminal_notifier = bridge.terminal_navigation_notifier();
+        snapshot_notifier.snapshot_ready();
+        terminal_notifier.navigation_terminal(terminal_intent(1));
+        assert_eq!(scheduler.len(), 1);
+        scheduler.run_one();
+        assert_eq!(
+            visible_generation.load(Ordering::Acquire),
+            expected_generation,
+            "snapshot remains authoritative when terminal delivery shares its event"
+        );
+        assert!(stale_terminal.load(Ordering::Acquire));
     }
 
     #[test]
