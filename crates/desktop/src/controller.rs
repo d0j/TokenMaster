@@ -1099,31 +1099,58 @@ fn execute_session_page<S: DesktopQuerySource>(
     if let Some(outcome) = stop_outcome(permit, context.clock) {
         return outcome;
     }
-    if !navigation_is_current(reducer, context, permit.id().get(), intent) {
-        let _ = clear_navigation_if_current(
-            context.work,
-            permit.id().get(),
-            intent.navigation_generation(),
-        );
+    commit_session_page(reducer, context, attempt, permit.id().get(), intent, result)
+}
+
+fn commit_session_page(
+    reducer: &mut ProductReducer,
+    context: &DesktopExecutionContext<'_>,
+    product_attempt: ProductAttemptGeneration,
+    worker_attempt: u64,
+    intent: DesktopSessionPageIntent,
+    result: Result<QueryEnvelope<UsageSessionPage>, QueryErrorCode>,
+) -> RefreshOutcome {
+    let mut work = match lock_work(context.work) {
+        Ok(value) => value,
+        Err(_) => return RefreshOutcome::Failed,
+    };
+    let valid = context.snapshot_epoch.load(Ordering::Acquire) == intent.snapshot_epoch().get()
+        && reducer.snapshot().generation() == intent.product_generation()
+        && work.current_navigation.is_some_and(|active| {
+            active.attempt == worker_attempt
+                && active.intent.navigation_generation() == intent.navigation_generation()
+        });
+    if !valid {
+        if work
+            .current_navigation
+            .is_some_and(|active| active.attempt == worker_attempt)
+        {
+            invalidate_navigation(&mut work);
+        }
         return RefreshOutcome::Completed;
     }
-
     let reduced = match result {
-        Ok(value) => reducer.publish_sessions(attempt, value),
-        Err(code) => reducer.fail_sessions(attempt, code),
+        Ok(value) => reducer.publish_sessions(product_attempt, value),
+        Err(code) => reducer.fail_sessions(product_attempt, code),
     };
     if reduced.is_err() {
         return RefreshOutcome::Failed;
     }
-    let outcome = publish_snapshot(reducer.snapshot(), context.publication);
-    if outcome == RefreshOutcome::Completed {
-        let _ = clear_navigation_if_current(
-            context.work,
-            permit.id().get(),
-            intent.navigation_generation(),
-        );
+    let notifier = match lock_notifier(&context.publication.notifier) {
+        Ok(value) => value.clone(),
+        Err(_) => return RefreshOutcome::Failed,
+    };
+    let snapshot = reducer.snapshot();
+    match lock_latest(&context.publication.latest) {
+        Ok(mut latest) => *latest = Some(snapshot),
+        Err(_) => return RefreshOutcome::Failed,
     }
-    outcome
+    invalidate_navigation(&mut work);
+    drop(work);
+    if let Some(notifier) = notifier {
+        notifier.snapshot_ready();
+    }
+    RefreshOutcome::Completed
 }
 
 fn execute_refresh<S: DesktopQuerySource>(
@@ -1427,7 +1454,8 @@ fn reconcile_navigation_completion(
         current.attempt == completed
             || (!completion.follow_up_started()
                 && (completion.pending_deadline_exceeded()
-                    || completion.pending_capacity_exceeded())
+                    || completion.pending_capacity_exceeded()
+                    || completion.follow_up_abandoned())
                 && current.prerequisite_attempt == Some(completed))
     });
     if clear_current {
