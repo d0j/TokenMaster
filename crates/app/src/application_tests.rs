@@ -843,7 +843,6 @@ fn presentation_save_failure_keeps_the_exact_old_value_generation_and_failed_pro
     let environment = application_environment(&temporary);
     let root = DataRoot::resolve(&environment).expect("data root");
     let state = ApplicationStateOwner::open(&root).expect("state owner");
-    let preflight = Arc::new(Mutex::new(state.prepare(&root).expect("preflight")));
     let mut seed_coordinator = ApplicationCommandCoordinator::new();
     let ApplicationCommandAdmission::Started(seed_permit) =
         seed_coordinator.submit(ApplicationCommand::UpdatePresentation)
@@ -866,44 +865,22 @@ fn presentation_save_failure_keeps_the_exact_old_value_generation_and_failed_pro
     let before_value = before.value().clone();
 
     let blocked_slot = root.reliable_state().as_path().join("settings-b.tms");
-    fs::create_dir(&blocked_slot).expect("block exact next settings slot");
-    let shell = DesktopShell::new_with_reliable_state(
-        &ProductReducer::new().snapshot(),
-        DesktopReliableStateProjection::unavailable(),
-        Rc::new(NoopDesktopIntentSink),
-    )
-    .expect("desktop shell");
-    let notifier = shell.reliable_state_notifier();
-    let bundle: SharedBundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
-    let bridge: SharedBridge = Arc::new(Mutex::new(None));
-    let live_started = Arc::new(AtomicBool::new(false));
     let mut coordinator = ApplicationCommandCoordinator::new();
     let ApplicationCommandAdmission::Started(permit) =
         coordinator.submit(ApplicationCommand::UpdatePresentation)
     else {
         panic!("presentation permit");
     };
-    let (_, payload) = ApplicationOperationRequest::update_presentation(
-        tokenmaster_desktop::DesktopPresentationSelection::new(
-            tokenmaster_desktop::DesktopDensity::Compact,
-            tokenmaster_desktop::DesktopSkin::Ember,
-        ),
-    )
-    .into_parts();
-
-    let execution = execute_application_operation(
-        &environment,
-        &root,
-        &state,
-        &preflight,
-        &bundle,
-        &shell.bridge_factory(),
-        &bridge,
-        &live_started,
-        &notifier,
+    let callback_count = std::cell::Cell::new(0_u8);
+    let execution = execute_state_command(state.update_presentation(
         &permit,
-        payload,
-    );
+        PresentationSettings::new(PresentationDensity::Compact, PresentationSkin::Ember),
+        || {
+            callback_count.set(callback_count.get() + 1);
+            fs::create_dir(&blocked_slot).expect("block exact next settings slot at save boundary");
+        },
+    ));
+    assert_eq!(callback_count.get(), 1);
     assert_eq!(
         execution,
         ApplicationCommandExecution::Failed(ApplicationCommandFailure::Unavailable)
@@ -912,6 +889,7 @@ fn presentation_save_failure_keeps_the_exact_old_value_generation_and_failed_pro
     assert_eq!(completion.kind(), DesktopOperationKind::UpdatePresentation);
     assert_eq!(completion.phase(), DesktopOperationPhase::Failed);
     assert_eq!(completion.failure_code(), Some("unavailable"));
+    assert!(!coordinator.cancel(permit.id()));
 
     fs::remove_dir(&blocked_slot).expect("remove only test fault");
     let after = store.load().expect("settings after failed save");
