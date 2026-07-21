@@ -1110,6 +1110,29 @@ fn commit_session_page(
     intent: DesktopSessionPageIntent,
     result: Result<QueryEnvelope<UsageSessionPage>, QueryErrorCode>,
 ) -> RefreshOutcome {
+    commit_session_page_with_hook(
+        reducer,
+        context,
+        product_attempt,
+        worker_attempt,
+        intent,
+        result,
+        || {},
+    )
+}
+
+fn commit_session_page_with_hook<F>(
+    reducer: &mut ProductReducer,
+    context: &DesktopExecutionContext<'_>,
+    product_attempt: ProductAttemptGeneration,
+    worker_attempt: u64,
+    intent: DesktopSessionPageIntent,
+    result: Result<QueryEnvelope<UsageSessionPage>, QueryErrorCode>,
+    after_validation: F,
+) -> RefreshOutcome
+where
+    F: FnOnce(),
+{
     let mut work = match lock_work(context.work) {
         Ok(value) => value,
         Err(_) => return RefreshOutcome::Failed,
@@ -1129,6 +1152,7 @@ fn commit_session_page(
         }
         return RefreshOutcome::Completed;
     }
+    after_validation();
     let reduced = match result {
         Ok(value) => reducer.publish_sessions(product_attempt, value),
         Err(code) => reducer.fail_sessions(product_attempt, code),
@@ -1586,6 +1610,7 @@ mod tests {
         sync::{
             Arc,
             atomic::{AtomicU64, Ordering},
+            mpsc::sync_channel,
         },
         thread,
         time::{Duration, Instant},
@@ -1652,6 +1677,92 @@ mod tests {
         assert!(stale.navigation.is_none());
         assert_eq!(state.refresh_attempt, None);
         assert!(state.pending_selection.is_none());
+    }
+
+    struct ReentrantWorkNotifier {
+        work: DesktopWorkSlot,
+        called: Arc<AtomicU64>,
+    }
+
+    impl DesktopSnapshotNotifier for ReentrantWorkNotifier {
+        fn snapshot_ready(&self) {
+            drop(lock_work(&self.work).expect("notifier acquires released work lock"));
+            self.called.store(1, Ordering::Release);
+        }
+    }
+
+    #[test]
+    fn session_page_commit_linearizes_latest_before_supersession_and_notifies_after_unlock() {
+        let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+        let intent = DesktopSessionPageIntent::new(
+            epoch,
+            tokenmaster_product::ProductGeneration::INITIAL,
+            DesktopSessionNavigationGeneration::new(1).expect("generation"),
+            DesktopSessionPageDirection::Newest,
+        );
+        let work = Arc::new(Mutex::new(DesktopWorkState {
+            navigation_high_water: Some(intent.navigation_generation()),
+            current_navigation: Some(ActiveDesktopSessionPage {
+                attempt: 1,
+                prerequisite_attempt: None,
+                intent,
+            }),
+            ..DesktopWorkState::default()
+        }));
+        let latest = Arc::new(Mutex::new(None));
+        let called = Arc::new(AtomicU64::new(0));
+        let publication = DesktopPublication {
+            latest: Arc::clone(&latest),
+            notifier: Arc::new(Mutex::new(Some(Arc::new(ReentrantWorkNotifier {
+                work: Arc::clone(&work),
+                called: Arc::clone(&called),
+            })))),
+            runtime_observation: Arc::new(Mutex::new(RuntimeObservationState::default())),
+        };
+        let snapshot_epoch = AtomicU64::new(epoch.get());
+        let clock = ManualClock::new(0);
+        let plan = DesktopQueryPlan::overview().expect("plan");
+        let context = DesktopExecutionContext {
+            plan: &plan,
+            clock: &clock,
+            publication: &publication,
+            snapshot_epoch: &snapshot_epoch,
+            work: &work,
+        };
+        let (started_sender, started_receiver) = sync_channel(1);
+        let (acquired_sender, acquired_receiver) = sync_channel(1);
+        let work_for_hook = Arc::clone(&work);
+        let latest_for_hook = Arc::clone(&latest);
+        let mut reducer = ProductReducer::new();
+        let outcome = commit_session_page_with_hook(
+            &mut reducer,
+            &context,
+            ProductAttemptGeneration::new(1).expect("attempt"),
+            1,
+            intent,
+            Err(QueryErrorCode::InvalidValue),
+            move || {
+                thread::spawn(move || {
+                    started_sender.send(()).expect("thread started");
+                    let state = lock_work(&work_for_hook).expect("supersession acquires work");
+                    assert!(state.current_navigation.is_none());
+                    assert!(
+                        lock_latest(&latest_for_hook)
+                            .expect("latest lock")
+                            .is_some()
+                    );
+                    acquired_sender.send(()).expect("thread acquired");
+                });
+                started_receiver
+                    .recv_timeout(Duration::from_secs(1))
+                    .expect("hook thread starts");
+            },
+        );
+        assert_eq!(outcome, RefreshOutcome::Completed);
+        acquired_receiver
+            .recv_timeout(Duration::from_secs(1))
+            .expect("supersession after commit");
+        assert_eq!(called.load(Ordering::Acquire), 1);
     }
 
     struct DeadlineSource {
