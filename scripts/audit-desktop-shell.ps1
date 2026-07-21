@@ -1448,18 +1448,19 @@ if ($controllerText -notmatch 'pub const MAX_SESSION_ROWS: usize = 64;' -or
 $applyProjectionText = Get-RustFunctionText -Text $uiRustProductionText -Name 'apply_projection'
 $applyRouteProjectionText = Get-RustFunctionText -Text $uiRustProductionText -Name 'apply_route_projection'
 $applySessionsProjectionText = Get-RustFunctionText -Text $uiRustProductionText -Name 'apply_sessions_projection'
+$uiRustProductionExecutableText = ConvertTo-ExecutableText -Text $uiRustProductionText
 $sessionsProjectionDefinitionCount = [regex]::Matches(
-    $uiRustProductionText,
+    $uiRustProductionExecutableText,
     '(?m)^\s*fn\s+apply_sessions_projection\s*\('
 ).Count
 $sessionsProjectionCallerCount = [regex]::Matches(
-    $uiRustProductionText,
-    'apply_sessions_projection\('
+    $uiRustProductionExecutableText,
+    '\bapply_sessions_projection\s*\('
 ).Count - $sessionsProjectionDefinitionCount
 if ($sessionsProjectionDefinitionCount -ne 1 -or
     $sessionsProjectionCallerCount -ne 1 -or
-    [regex]::Matches($applyProjectionText, 'apply_sessions_projection\(').Count -ne 1 -or
-    $applyRouteProjectionText -match 'apply_sessions_projection\(') {
+    [regex]::Matches($applyProjectionText, '\bapply_sessions_projection\s*\(').Count -ne 1 -or
+    $applyRouteProjectionText -match '\bapply_sessions_projection\s*\(') {
     throw 'TM-DESKTOP-SESSIONS-REBUILD: only accepted product projection delivery may replace Sessions rows'
 }
 $sessionsProjectionApplicationCount = [regex]::Matches($applyProjectionText, 'apply_sessions_projection\(').Count
@@ -1480,6 +1481,10 @@ $sessionNavigationQueuePattern = '(?im)^(?=[^\r\n]*navigation)[^\r\n]*(?:\b(?:Ve
 $sessionEpochFence = [regex]::Match($sessionPageAdmissionText, 'if\s+self\.snapshot_epoch\(\)\s*!=\s*Some\(intent\.snapshot_epoch\(\)\)\s*\{')
 $sessionProductFence = [regex]::Match($sessionPageAdmissionText, 'if\s+\*lock_published_generation\(&self\.publication\.published_generation\)\?\s*!=\s*Some\(intent\.product_generation\(\)\)\s*\{')
 $sessionGenerationFence = [regex]::Match($sessionPageAdmissionText, 'if\s+work\s*\.navigation_high_water\s*\.is_some_and\(\|current\|\s*intent\.navigation_generation\(\)\s*<=\s*current\)\s*\{')
+$sessionEpochFenceText = Get-ExecutableBracedText -Text $sessionPageAdmissionText -Pattern 'if\s+self\.snapshot_epoch\(\)\s*!=\s*Some\(intent\.snapshot_epoch\(\)\)\s*\{' -FailureCode 'TM-DESKTOP-SESSIONS-NAVIGATION'
+$sessionProductFenceText = Get-ExecutableBracedText -Text $sessionPageAdmissionText -Pattern 'if\s+\*lock_published_generation\(&self\.publication\.published_generation\)\?\s*!=\s*Some\(intent\.product_generation\(\)\)\s*\{' -FailureCode 'TM-DESKTOP-SESSIONS-NAVIGATION'
+$sessionGenerationFenceText = Get-ExecutableBracedText -Text $sessionPageAdmissionText -Pattern 'if\s+work\s*\.navigation_high_water\s*\.is_some_and\(\|current\|\s*intent\.navigation_generation\(\)\s*<=\s*current\)\s*\{' -FailureCode 'TM-DESKTOP-SESSIONS-NAVIGATION'
+$sessionStaleReturnPattern = 'return\s+Err\(DesktopControllerError::new\(\s*DesktopControllerErrorCode::StaleNavigation,\s*\)\);'
 $sessionWorkerAdmission = [regex]::Match($sessionPageAdmissionText, 'let admission\s*=\s*self\.submit\(DesktopRefreshUrgency::Interactive\)\?;')
 if ($controllerText -notmatch 'pub enum DesktopSessionPageDirection\s*\{\s*Newest,\s*Next,\s*\}' -or
     $controllerText -notmatch 'pending_navigation:\s*Option<PendingDesktopSessionPage>' -or
@@ -1493,6 +1498,9 @@ if ($controllerText -notmatch 'pub enum DesktopSessionPageDirection\s*\{\s*Newes
     -not $sessionProductFence.Success -or
     -not $sessionGenerationFence.Success -or
     -not $sessionWorkerAdmission.Success -or
+    $sessionEpochFenceText -notmatch ('(?s)^\s*if\s+self\.snapshot_epoch\(\)\s*!=\s*Some\(intent\.snapshot_epoch\(\)\)\s*\{\s*' + $sessionStaleReturnPattern + '\s*\}\s*$') -or
+    $sessionProductFenceText -notmatch ('(?s)^\s*if\s+\*lock_published_generation\(&self\.publication\.published_generation\)\?\s*!=\s*Some\(intent\.product_generation\(\)\)\s*\{\s*' + $sessionStaleReturnPattern + '\s*\}\s*$') -or
+    $sessionGenerationFenceText -notmatch ('(?s)^\s*if\s+work\s*\.navigation_high_water\s*\.is_some_and\(\|current\|\s*intent\.navigation_generation\(\)\s*<=\s*current\)\s*\{\s*' + $sessionStaleReturnPattern + '\s*\}\s*$') -or
     $sessionEpochFence.Index -ge $sessionProductFence.Index -or
     $sessionProductFence.Index -ge $sessionGenerationFence.Index -or
     $sessionGenerationFence.Index -ge $sessionWorkerAdmission.Index -or
@@ -1526,20 +1534,26 @@ if ($controllerText -notmatch 'pending_selection:\s*Option<PendingDesktopSession
 }
 $mainUiText = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'main.slint'))
 $modelsText = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'models.slint'))
-$sessionPublicRustText = [regex]::Matches(
-    $sessionsText,
-    '(?s)pub struct DesktopSessions?\w*\s*\{.*?\}'
-).Value -join "`n"
+$sessionsViewText = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'views\sessions-view.slint'))
+$sessionsViewPublicText = Get-ExecutableBracedText -Text $sessionsViewText -Pattern '(?m)^\s*export\s+component\s+SessionsView\s+inherits\s+Rectangle\s*\{' -FailureCode 'TM-DESKTOP-SESSIONS-PRIVACY'
+$sessionsExecutableText = ConvertTo-ExecutableText -Text $sessionsText
+$sessionPublicRustText = @(
+    ([regex]::Matches($sessionsExecutableText, '(?s)\bpub\s+(?:struct|enum|trait)\s+\w*Session\w*\b(?=\s|\{|:)[^{;]*\{.*?\}').Value -join "`n")
+    ([regex]::Matches($sessionsExecutableText, '\bpub\s+(?:struct|enum|trait)\s+\w*Session\w*\b[^;{]*;').Value -join "`n")
+    ([regex]::Matches($sessionsExecutableText, '\bpub\s+type\s+\w*Session\w*\b[^;]*;').Value -join "`n")
+) -join "`n"
 $sessionPublicSlintText = @(
     ([regex]::Matches($modelsText, '(?s)export struct Session\w*\s*\{.*?\}').Value -join "`n")
     ([regex]::Matches($mainUiText, '(?m)^\s*(?:in|out)\s+property\s+<[^>]+>\s+(?:session|sessions)[^;]*;').Value -join "`n")
     ([regex]::Matches($mainUiText, '(?m)^\s*callback\s+(?:select-session|request-session-page-next|request-session-page-newest)\([^;]*\);').Value -join "`n")
+    ([regex]::Matches($sessionsViewPublicText, '(?m)^\s*(?:in|out)\s+property\s+<[^>]+>\s+[^;]+;').Value -join "`n")
+    ([regex]::Matches($sessionsViewPublicText, '(?m)^\s*callback\s+[^;]+;').Value -join "`n")
 ) -join "`n"
 $sessionUiBoundaryText = $sessionPublicRustText + "`n" + $sessionPublicSlintText
 if ($sessionUiBoundaryText -match '\bUsageSessionKey\b') {
     throw 'TM-DESKTOP-SESSION-DETAIL-IDENTITY: opaque session keys must remain inside the controller worker'
 }
-if ($sessionUiBoundaryText -match '(?i)\b(?:cursor|session[_-]?key|next[_-]?cursor|previous[_-]?cursor)\b') {
+if ($sessionUiBoundaryText -match '(?i)\b(?:\w*cursor\w*|session[_-]?key)\b') {
     throw 'TM-DESKTOP-SESSIONS-PRIVACY: public Desktop and Slint Sessions state must not expose keys or cursors'
 }
 if ($controllerText -notmatch 'source\s*\.usage_session_detail\(key\)' -or

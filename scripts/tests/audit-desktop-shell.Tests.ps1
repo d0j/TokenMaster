@@ -910,7 +910,7 @@ Describe "TokenMaster production desktop audit" {
         $path = Join-Path $fixture "crates\desktop\src\ui.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
             '#[cfg(test)]',
-            "fn apply_accepted_sessions_page_replacement(window: &MainWindow, sessions: &DesktopSessionsProjection) { apply_sessions_projection(window, sessions); }`r`n`r`n#[cfg(test)]"
+            "fn apply_accepted_sessions_page_replacement(window: &MainWindow, sessions: &DesktopSessionsProjection) { apply_sessions_projection /* replace */ (window, sessions); }`r`n`r`n#[cfg(test)]"
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -1044,6 +1044,87 @@ Describe "TokenMaster production desktop audit" {
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-SESSIONS-NAVIGATION*"
+    }
+
+    It "rejects delaying the Sessions navigation epoch stale return" {
+        $fixture = New-DesktopAuditFixture -Name "sessions-navigation-epoch-return"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [regex]::Replace(
+            [System.IO.File]::ReadAllText($path),
+            '(if self\.snapshot_epoch\(\) != Some\(intent\.snapshot_epoch\(\)\) \{\s*)(return Err\(DesktopControllerError::new\(\s*DesktopControllerErrorCode::StaleNavigation,\s*\)\);)',
+            '$1let _ = (); $2',
+            1
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-NAVIGATION*"
+    }
+
+    It "rejects delaying the Sessions navigation product stale return" {
+        $fixture = New-DesktopAuditFixture -Name "sessions-navigation-product-return"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [regex]::Replace(
+            [System.IO.File]::ReadAllText($path),
+            '(if \*lock_published_generation\(&self\.publication\.published_generation\)\?\s*!= Some\(intent\.product_generation\(\)\)\s*\{\s*)(return Err\(DesktopControllerError::new\(\s*DesktopControllerErrorCode::StaleNavigation,\s*\)\);)',
+            '$1let _ = (); $2',
+            1
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-NAVIGATION*"
+    }
+
+    It "rejects delaying the Sessions navigation generation stale return" {
+        $fixture = New-DesktopAuditFixture -Name "sessions-navigation-generation-return"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [regex]::Replace(
+            [System.IO.File]::ReadAllText($path),
+            '(if work\s*\.navigation_high_water\s*\.is_some_and\(\|current\| intent\.navigation_generation\(\) <= current\)\s*\{\s*)(return Err\(DesktopControllerError::new\(\s*DesktopControllerErrorCode::StaleNavigation,\s*\)\);)',
+            '$1let _ = (); $2',
+            1
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-NAVIGATION*"
+    }
+
+    It "rejects exposing a cursor property from SessionsView" {
+        $fixture = New-DesktopAuditFixture -Name "sessions-view-cursor"
+        $path = Join-Path $fixture "crates\desktop\ui\views\sessions-view.slint"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'export component SessionsView inherits Rectangle {',
+            "export component SessionsView inherits Rectangle {`r`n    in property <string> cursor;"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-PRIVACY*"
+    }
+
+    It "rejects a public Rust Sessions cursor type" {
+        $fixture = New-DesktopAuditFixture -Name "sessions-public-cursor-type"
+        $path = Join-Path $fixture "crates\desktop\src\sessions.rs"
+        $text = [System.IO.File]::ReadAllText($path)
+        [System.IO.File]::WriteAllText($path, "$text`r`npub type DesktopSessionCursorLeak = String;")
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-PRIVACY*"
+    }
+
+    It "accepts a commented Sessions projection name" {
+        $fixture = New-DesktopAuditFixture -Name "sessions-projection-comment"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '#[cfg(test)]',
+            "// apply_sessions_projection(window, sessions);`r`n#[cfg(test)]"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Not -Throw
     }
 
     It "accepts an unrelated mouse cursor comment outside Sessions contracts" {
