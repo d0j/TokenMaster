@@ -3603,6 +3603,17 @@ completed in 879.2 seconds. Final independent rereview returned Critical 0, Impo
 hotkey, single-instance activation, startup integration, P4/P5/P6, M0, packaging,
 signing, soak, and release remain open.
 
+## 2026-07-21 — P4-B durable density verification
+
+P4-B records the bounded durable-density contract: schema v2 has exactly Comfortable,
+Compact, and Ultra compact; v1 migrates in memory to Comfortable; unsupported 0/3+
+versions fail closed; typed packages bind manifest and decoded settings source versions.
+Mutation audits cover no future presentation axes/raw package authority, preservation
+through reminder/backup updates, admission-before-apply, the single style owner, and
+the existing one-active/one-pending 10,000 latest-payload proof. This is developer-only
+verification; skins/layouts/color schemes/locales, accessibility/DPI/paint/resource,
+P5/P6, M0, packaging, signing, soak, and release remain open.
+
 ## 2026-07-19 — P3-E.2 bounded compact quota mode
 
 The existing `compact_widget` route now becomes a real compact presentation without

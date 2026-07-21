@@ -14,6 +14,12 @@ Describe "TokenMaster production desktop audit" {
             New-Item -ItemType Directory -Path $crateParent -Force | Out-Null
             Copy-Item -LiteralPath (Join-Path $RepositoryRoot "crates\desktop") `
                 -Destination $crateParent -Recurse
+            $appSource = Join-Path $fixture "crates\app\src"
+            New-Item -ItemType Directory -Path $appSource -Force | Out-Null
+            foreach ($relative in @("operation.rs", "operation_tests.rs", "state.rs")) {
+                Copy-Item -LiteralPath (Join-Path $RepositoryRoot "crates\app\src\$relative") `
+                    -Destination $appSource
+            }
             return $fixture
         }
     }
@@ -2257,5 +2263,54 @@ fn density_authority() {
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-DENSITY-REVISION*"
+    }
+
+    It "rejects applying presentation density before intent admission" {
+        $fixture = New-DesktopAuditFixture -Name "density-before-admission"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '    if selected.select_density_index_if_admitted(index, |density| {',
+            '    let _ = selected.select_density_index(index);' + "`r`n" +
+            '    if selected.select_density_index_if_admitted(index, |density| {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-ADMISSION*"
+    }
+
+    It "rejects a second density worker owner" {
+        $fixture = New-DesktopAuditFixture -Name "density-second-worker"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\presentation_style.rs") `
+            -Value 'fn second_density_worker() { std::thread::spawn(|| {}); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-NO-AUTHORITY*"
+    }
+
+    It "rejects removing the latest-payload coalescing proof" {
+        $fixture = New-DesktopAuditFixture -Name "density-missing-latest-payload-proof"
+        $path = Join-Path $fixture "crates\app\src\operation_tests.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'ten_thousand_presentation_updates_keep_one_latest_payload',
+            'coverage_removed'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-STRESS*"
+    }
+
+    It "rejects reminder and backup updates that discard presentation" {
+        $fixture = New-DesktopAuditFixture -Name "presentation-discarded-by-settings-update"
+        $path = Join-Path $fixture "crates\app\src\state.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '*current.value().portable().presentation(),',
+            'PresentationSettings::comfortable(),'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PRESENTATION-PRESERVATION*"
     }
 }

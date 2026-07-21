@@ -1140,6 +1140,13 @@ provider-neutral observation drafts, read-only benefit lots, and opaque checkpoi
 never canonical events,
 fingerprints, replay dispositions, SQL, UI components, commands, or MCP tools.
 
+## P4-B durable presentation density
+
+The only persisted presentation field is `density`: `comfortable`, `compact`, or
+`ultra_compact`. v1 settings decode in memory as v2 Comfortable without a startup
+write; schema 0 and schema 3+ are unsupported. Desktop submits before applying, and
+the existing one-active/one-pending operation worker replaces only the pending density.
+
 Plugins receive no ambient WASI filesystem, network, environment, subprocess, or
 stdio authority. Optional host capability imports provide scoped read-only filesystem,
 allowlisted HTTPS, host-injected credential, and clock operations. All values and the

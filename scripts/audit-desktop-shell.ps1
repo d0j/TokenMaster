@@ -79,6 +79,16 @@ $uiRustProductionText = if ($uiRustTestBoundary -ge 0) {
     $uiRustText
 }
 $reliableStateText = [System.IO.File]::ReadAllText((Join-Path $sourceRoot 'reliable_state.rs'))
+$appRoot = Join-Path $root 'crates\app\src'
+$appStatePath = Join-Path $appRoot 'state.rs'
+$appOperationTestsPath = Join-Path $appRoot 'operation_tests.rs'
+foreach ($required in @($appStatePath, $appOperationTestsPath)) {
+    if (-not (Test-Path -LiteralPath $required)) {
+        throw "TM-DESKTOP-MISSING-BOUNDARY: $([System.IO.Path]::GetFileName($required))"
+    }
+}
+$appStateText = [System.IO.File]::ReadAllText($appStatePath)
+$appOperationTestsText = [System.IO.File]::ReadAllText($appOperationTestsPath)
 
 function ConvertTo-ExecutableText {
     param([Parameter(Mandatory = $true)][string]$Text, [switch]$PreserveLiteralText)
@@ -159,7 +169,7 @@ function Get-ExecutableBracedText {
 
 function Get-RustFunctionText {
     param([Parameter(Mandatory = $true)][string]$Text, [Parameter(Mandatory = $true)][string]$Name, [switch]$PreserveLiteralText)
-    return Get-ExecutableBracedText -Text $Text -Pattern "(?m)^\s*(?:pub\s+)?(?:const\s+)?fn\s+$Name\s*\(" -FailureCode 'TM-DESKTOP-DENSITY-WIRING' -PreserveLiteralText:$PreserveLiteralText
+    return Get-ExecutableBracedText -Text $Text -Pattern "(?m)^\s*(?:pub(?:\s*\([^)]*\))?\s+)?(?:const\s+)?fn\s+$Name\s*\(" -FailureCode 'TM-DESKTOP-DENSITY-WIRING' -PreserveLiteralText:$PreserveLiteralText
 }
 
 function Normalize-ExecutableStructure { param([Parameter(Mandatory = $true)][string]$Text); return [regex]::Replace($Text, '\s+', '') }
@@ -230,7 +240,7 @@ if ($densityTokenDeclarationCount -ne 7 -or @($normalizedDensityTokenTables | Wh
 $presentationStyleOwnerCount = [regex]::Matches($presentationStyleText, 'pub struct DesktopPresentationStyle\s*\{').Count
 $presentationStyleOwnerSlotCount = [regex]::Matches(
     $uiRustProductionText,
-    'Rc::new\(RefCell::new\(DesktopPresentationStyle::new\(\)\)\)'
+    'Arc::new\(Mutex::new\(initial_presentation_style\)\)'
 ).Count
 $rootDensityBindingCount = [regex]::Matches(
     $mainUiTextForDensity,
@@ -255,7 +265,7 @@ $presentationRevisionTypeCount = [regex]::Matches(
     'pub struct DesktopPresentationRevision\(u64\);'
 ).Count
 $expectedCheckedSuccessor = 'constfnchecked_successor(self)->Option<Self>{matchself.0.checked_add(1){Some(value)=>Some(Self(value)),None=>None,}}'
-$expectedSelectDensity = 'pubfnselect_density_index(&mutself,index:i32)->DesktopPresentationApplyOutcome{letSome(density)=DesktopDensity::from_slint_index(index)else{returnDesktopPresentationApplyOutcome::Rejected;};ifdensity==self.density{returnDesktopPresentationApplyOutcome::Unchanged;}letSome(revision)=self.revision.checked_successor()else{returnDesktopPresentationApplyOutcome::RevisionExhausted;};self.density=density;self.revision=revision;DesktopPresentationApplyOutcome::Applied}'
+$expectedSelectDensity = 'pubfnselect_density_index(&mutself,index:i32)->DesktopPresentationApplyOutcome{letSome((density,revision))=self.checked_selection(index)else{returnself.selection_failure(index);};self.density=density;self.revision=revision;self.persistence=DesktopPresentationPersistence::NotSaved;DesktopPresentationApplyOutcome::Applied}'
 $checkedSuccessorDerivationCount = [int]((Normalize-ExecutableStructure -Text $checkedSuccessorText) -eq $expectedCheckedSuccessor)
 $selectDensityStructureCount = [int]((Normalize-ExecutableStructure -Text $selectDensityText) -eq $expectedSelectDensity)
 $checkedSuccessorCallCount = $selectDensityStructureCount
@@ -275,18 +285,40 @@ if ($densityStressStructureCount -ne 1) {
     throw 'TM-DESKTOP-DENSITY-STRESS: density must retain one 10,000-switch contract'
 }
 $densityAuthorityText = $presentationStyleExecutableText + "`n" + $densityApplyText + "`n" + $densityWireText
-$densityAllowedOwnerPattern = 'Rc\s*<\s*RefCell\s*<\s*DesktopPresentationStyle\s*>\s*>'
-$densityAllowedOwnerOccurrenceCount = [regex]::Matches($densityAuthorityText, $densityAllowedOwnerPattern).Count
+$densityAllowedOwnerPattern = 'Arc\s*<\s*Mutex\s*<\s*DesktopPresentationStyle\s*>\s*>'
+$densityAllowedOwnerOccurrenceCount = [regex]::Matches($uiRustProductionText, 'Arc::new\(Mutex::new\(initial_presentation_style\)\)').Count
 $densityAllowedOwnerWireSignatureCount = [regex]::Matches(
     $densityWireText,
-    "(?s)\bfn\s+wire_presentation_density\s*\(\s*window\s*:\s*&\s*MainWindow\s*,\s*presentation_style\s*:\s*$densityAllowedOwnerPattern\s*,?\s*\)"
+    "(?s)\bfn\s+wire_presentation_density\s*\(\s*window\s*:\s*&\s*MainWindow\s*,\s*presentation_style\s*:\s*$densityAllowedOwnerPattern\s*,\s*intent_sink\s*:\s*Rc\s*<\s*dyn\s+DesktopIntentSink\s*>\s*,?\s*\)"
 ).Count
 if ($densityAllowedOwnerOccurrenceCount -ne 1 -or $densityAllowedOwnerWireSignatureCount -ne 1) {
     throw 'TM-DESKTOP-DENSITY-NO-AUTHORITY: presentation density must retain exactly one wiring owner signature'
 }
+$densityAdmissionText = Get-RustFunctionText -Text $uiRustProductionText -Name 'select_presentation_density_if_admitted'
+$admissionBeforeApply = $densityAdmissionText.IndexOf('selected.select_density_index_if_admitted', [System.StringComparison]::Ordinal)
+$firstDirectApply = $densityAdmissionText.IndexOf('selected.select_density_index(', [System.StringComparison]::Ordinal)
+if ($admissionBeforeApply -lt 0 -or ($firstDirectApply -ge 0 -and $firstDirectApply -lt $admissionBeforeApply) -or
+    $densityAdmissionText -notmatch 'intent_sink\.submit\(DesktopIntent::UpdatePresentationDensity\(density\)\)') {
+    throw 'TM-DESKTOP-DENSITY-ADMISSION: density must be admitted before any style application'
+}
+$backupPolicyUpdateText = Get-RustFunctionText -Text $appStateText -Name 'update_backup_policy'
+$reminderPolicyUpdateText = Get-RustFunctionText -Text $appStateText -Name 'update_reminder_policy'
+if (@([regex]::Matches($backupPolicyUpdateText, '\*current\.value\(\)\.portable\(\)\.presentation\(\)')).Count -ne 1 -or
+    @([regex]::Matches($reminderPolicyUpdateText, '\*current\.value\(\)\.portable\(\)\.presentation\(\)')).Count -ne 1) {
+    throw 'TM-DESKTOP-PRESENTATION-PRESERVATION: reminder and backup updates must preserve presentation exactly'
+}
+if (@([regex]::Matches($appOperationTestsText, 'fn\s+presentation_density_follow_up_replaces_only_the_pending_payload\s*\(')).Count -ne 1 -or
+    @([regex]::Matches($appOperationTestsText, 'fn\s+ten_thousand_presentation_updates_keep_one_latest_payload\s*\(')).Count -ne 1) {
+    throw 'TM-DESKTOP-DENSITY-STRESS: one-active one-pending latest-payload proofs are required'
+}
 $densityAuthorityText = [regex]::Replace(
     $densityAuthorityText,
     $densityAllowedOwnerPattern,
+    ''
+)
+$densityAuthorityText = [regex]::Replace(
+    $densityAuthorityText,
+    'Rc\s*<\s*dyn\s+DesktopIntentSink\s*>',
     ''
 )
 $densityAuthorityPatterns = [ordered]@{

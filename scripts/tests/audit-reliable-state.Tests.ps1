@@ -566,4 +566,53 @@ tokenmaster-state = { path = "../state" }
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-STATE-FAULT-MATRIX*"
     }
+
+    It "rejects a missing durable density enum member" {
+        $fixture = New-StateAuditFixture -Name "missing-presentation-density"
+        $path = Join-Path $fixture "crates\state\src\settings\value.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('    UltraCompact,', '')
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-PRESENTATION-CONTRACT*"
+    }
+
+    It "rejects accepting unsupported settings schema versions" {
+        $fixture = New-StateAuditFixture -Name "unsupported-settings-schema"
+        $path = Join-Path $fixture "crates\state\src\settings\migration.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '        1 => decode_portable_v1(bytes),',
+            '        0 | 1 | 3 => decode_portable_v1(bytes),'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-PRESENTATION-CONTRACT*"
+    }
+
+    It "rejects future presentation axes" {
+        $fixture = New-StateAuditFixture -Name "future-presentation-axis"
+        $path = Join-Path $fixture "crates\state\src\settings\value.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '    density: PresentationDensity,',
+            "    density: PresentationDensity,`r`n    skin: String,"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-PRESENTATION-CONTRACT*"
+    }
+
+    It "rejects a non-comfortable v1 presentation migration" {
+        $fixture = New-StateAuditFixture -Name "v1-presentation-migration"
+        $path = Join-Path $fixture "crates\state\src\settings\migration.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'PresentationSettings::comfortable()',
+            'PresentationSettings::new(PresentationDensity::Compact)'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-PRESENTATION-CONTRACT*"
+    }
 }

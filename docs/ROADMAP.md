@@ -2,11 +2,11 @@
 
 ## M0 — native architecture proof
 
-P4-A runtime density is developer-complete only: the Desktop has one checked fixed
-three-value owner, one root binding/callback, seven exact spacing/radius token tables,
-and a 10,000-switch contract with source/mutation authority checks. P4 remains open
-for full skins, layouts, color schemes, locales/languages, persistence/migration,
-remaining density typography/row-size behavior, accessibility/DPI/paint/resource
+P4-B durable density is developer-complete only: the Desktop has one checked fixed
+three-value v2 owner, one root binding/callback, seven exact spacing/radius token
+tables, admission-first persistence, and a 10,000 latest-payload contract with
+source/mutation authority checks. P4 remains open for full skins, layouts, color
+schemes, locales/languages, remaining density typography/row-size behavior, accessibility/DPI/paint/resource
 verification, and terminal interactive evidence. P5/P6, M0 acceptance,
 package/sign/signing/soak, and release remain open.
 
@@ -422,3 +422,10 @@ the versioned WIT API, deterministic `.tmplugin` package, isolated on-demand Was
 host, capability grants, hot installation/update/rollback, quarantine, signatures,
 Rust/TypeScript SDK templates, conformance kit, and plugin-specific resource/security
 gates. Codex remains built in and pays no plugin runtime cost.
+
+### P4-B completed developer contour
+
+Durable density now covers v2 settings, strict v1/v2 dispatch, typed package
+version-binding, startup hydration, saved/saving/not-saved projection, admission-first
+application, and 10,000 latest-payload switches. Future skin/layout/color-scheme/locale
+axes and all interactive presentation acceptance remain P4 work.

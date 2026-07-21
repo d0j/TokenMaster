@@ -5,10 +5,10 @@ P2-A, P2-B, P2-C pinned pricing, and the P2-D quota history core are implemented
 the permitted built-in Codex quota normalizer/transport, exact-native executable
 discovery, and dedicated quota refresh/store publication are also implemented.
 
-P4-A runtime density is developer-complete only: one checked fixed three-value owner,
-one root binding/callback, seven exact spacing/radius token tables, and a 10,000-switch
-contract are source/mutation audited without timer/worker/query/window/retained
-authority. Full skins/layouts/color schemes/locales/languages, persistence/migration,
+P4-B durable density is developer-complete only: one checked fixed three-value v2
+owner, one root binding/callback, seven exact spacing/radius token tables, admission-first
+latest-only persistence, and a 10,000-switch contract are source/mutation audited
+without new timer/worker/query/window/retained authority. Full skins/layouts/color schemes/locales/languages,
 remaining density typography/row-size behavior, accessibility/DPI/paint/resource
 verification, P5/P6, M0, package/sign/signing/soak, and release remain open.
 
@@ -374,3 +374,11 @@ activation remain separate.
 The older replay plan remains historical evidence for
 completed Tasks 1-2, but its Codex-owned Tasks 3+ are superseded and must not be
 executed.
+
+### P4-B durable density audit status
+
+Deterministic source and mutation audits now pin schema-v2 density, strict v1/v2
+dispatch, no future-axis placeholders, manifest/entry version equality, no public raw
+writer/extractor, presentation preservation, admission-before-apply, one owner, and
+the existing one-active/one-pending 10,000 latest-payload contract. These audits do not
+replace interactive presentation, package/signing/soak, M0, or release gates.

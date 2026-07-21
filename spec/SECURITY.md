@@ -1300,3 +1300,7 @@ closed as unavailable. The source/mutation audit fixes the exact HKCU key/value/
 counts, three typed intents, four accessible actions, and zero portable startup fields.
 Real ACL denial, relocation, sign-in launch, and handle return remain interactive P6
 evidence rather than source-test claims.
+
+P4-B presentation adds no path, secret, package-stream, filesystem, or UI-thread
+settings authority. Packages retain only typed stages: no public raw writer/extractor;
+manifest and decoded entry source-settings versions must bind exactly.

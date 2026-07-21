@@ -6,6 +6,15 @@ All notable changes are recorded here.
 
 ### Added
 
+- Added P4-B durable density verification: current settings schema v2 persists one
+  fixed three-value density, strict v1 migrates in memory without a startup write,
+  typed packages bind their declared settings source schema, and Desktop applies an
+  admitted value through the existing latest-only operation worker. Saved/saving/
+  not-saved projection, startup hydration, source mutations, and 10,000 switches are
+  deterministic developer evidence. Full skins/layouts/color schemes/locales,
+  remaining typography/row-size behavior, accessibility/DPI/paint/resource gates,
+  P5/P6, M0, package/signing/soak, and release remain open.
+
 - Added P4-A developer-only runtime density verification: one checked fixed three-value
   `DesktopPresentationStyle` owner, one root Slint binding/callback, seven exact
   spacing/radius token tables, and a 10,000-switch contract. Deterministic source and

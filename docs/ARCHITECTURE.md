@@ -265,12 +265,13 @@ two-pass writer that does not retain encoded JSON. The platform reads only a cal
 bounded exact child and replaces only the inactive slot without creating a third
 backup. A post-publication reread is mandatory and any uncertainty becomes
 `RecoveryRequired`.
-Task 4 adds the only public settings surface over that private core. Schema v1 stores
-the implemented provider-neutral reminder default and automatic-backup schedule/
-retention policy separately from the device-local route. It rejects unknown/newer/
-invalid/unbounded input, loads safe defaults without rewriting two invalid slots,
-previews only portable category/count changes, preserves device state on import, and
-binds a confirmed publication to a reread-verifiable generation plus portable digest.
+Task 4 introduced the only public settings surface over that private core. Its prior
+v1 history stored the provider-neutral reminder default and automatic-backup schedule/
+retention policy separately from the device-local route. Current schema v2 additionally
+stores only presentation density, rejects unknown/newer/invalid/unbounded input, loads
+safe defaults without rewriting two invalid slots, previews only portable category/count
+changes, preserves device state on import, and binds a confirmed publication to a
+reread-verifiable generation plus portable digest.
 Task 5 makes `tokenmaster-store` create consistent page-stepped Online Backup
 candidates and independently verify integrity, foreign keys, exact schema/indexes,
 stored counts/generations, and semantic invariants under bounded defensive SQLite
@@ -444,3 +445,12 @@ production typed state/store surfaces on its own joined test worker. The resulti
 strict JSON receipt binds a clean commit and application SHA-256 but is ignored local
 developer output. Physical-display/OS-input, DPI/accessibility, soak, MSVC packaging,
 signing, and release acceptance stay on their separate later rails.
+
+## P4-B durable density
+
+The portable desired-state record owns only `presentation.density` in schema v2.
+Hydration accepts v1 or v2 and maps v1 to Comfortable in memory; it does not rewrite
+on startup. The typed package reader binds manifest settings source version to the
+decoded entry. Desktop holds one `Arc<Mutex<DesktopPresentationStyle>>`, admits before
+mutating style, performs no settings/filesystem I/O on the UI thread, and delegates
+through the existing replaceable one-active/one-pending operation worker.

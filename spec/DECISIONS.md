@@ -2003,3 +2003,12 @@ silently replacing a same-named entry, while fixed HKCU-only authority preserves
 portable use without elevation, installer, process, shell, task, service, polling, or
 retained-path machinery. Bounded synchronous calls keep the UI path immediate and add
 no long-lived memory or thread owner.
+
+## ADR-076 — P4-B durable density remains one bounded axis
+
+Settings schema v2 adds only `presentation.density`, fixed to Comfortable, Compact,
+and Ultra compact. v1 is read and migrated in memory to Comfortable; startup does not
+rewrite it. Package manifest and decoded settings source versions bind exactly. The
+Desktop admits the typed command before style mutation and reuses the existing
+one-active/one-pending worker; no new desktop worker, queue, timer, cache, or I/O owner
+is justified. Skins, layouts, schemes, locales, and interactive acceptance remain open.

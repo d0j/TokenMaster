@@ -8,12 +8,14 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 
 ## Implemented
 
-- P4-A runtime density is developer-complete only: one checked Comfortable/Compact/
-  Ultra compact `DesktopPresentationStyle` owner publishes one root Slint density
-  binding/callback and seven exact spacing/radius token tables; the 10,000-switch
-  contract and source mutations reject added authority. Full skins, layouts, color
-  schemes, locales/languages, persistence/migration, remaining density typography/
-  row-size behavior, accessibility/DPI/paint/resource verification, P5/P6, M0,
+- P4-B durable density is developer-complete only: settings schema v2 persists one
+  checked Comfortable/Compact/Ultra compact value, migrates strict v1 in memory
+  without a startup write, and binds the source schema through typed packages. One
+  `DesktopPresentationStyle` owner publishes one root Slint density binding/callback
+  and seven exact spacing/radius token tables; admission-first persistence, the
+  10,000-switch contract, and source mutations reject added authority. Full skins,
+  layouts, color schemes, locales/languages, remaining density typography/row-size
+  behavior, accessibility/DPI/paint/resource verification, P5/P6, M0,
   interactive/package/sign/signing/soak, and release remain open.
 
 - Global reminder settings synchronization/editor: portable settings are desired-state
@@ -1698,3 +1700,13 @@ Clippy with `RUSTFLAGS=-Dwarnings`, full locked Rust workspace tests, release bu
 and M0 developer stress verification pass from the root workspace. The exact commands
 are recorded in `docs/HANDOFF.md` and the M0 script; this does not replace external
 acceptance evidence.
+
+## P4-B durable density verification
+
+P4-B is developer evidence only: settings schema v2 persists exactly
+`comfortable|compact|ultra_compact`; v1 migrates in memory to Comfortable without a
+startup write, and 0/3+ reject. Typed package manifest/entry source versions bind.
+Desktop applies only after admission, keeps one style owner and the existing
+one-active/one-pending latest payload worker, and proves 10,000 switches. Skins,
+layouts, color schemes, locales, typography/row sizing, accessibility/DPI/paint/resource,
+P5/P6, M0, package/signing/soak, and release remain open.

@@ -52,10 +52,18 @@ if ($packageFiles.Count -ne 7) {
 $packageText = ($packageFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
 }) -join "`n"
+$packageReaderText = [System.IO.File]::ReadAllText((Join-Path $packageSource 'reader.rs'))
+$packageWriterText = [System.IO.File]::ReadAllText((Join-Path $packageSource 'writer.rs'))
 
 $forbiddenAuthorityPattern = '(?is)https?://|\bstd\s*::\s*process\b|\bCommand\s*::\s*new\b|\b(?:TcpStream|TcpListener|UdpSocket)\b|\b(?:reqwest|ureq|webbrowser|headless_chrome|zip|tar|sevenz|libarchive|slint|rusqlite)\s*::|\bplugin\b|powershell(?:\.exe)?|cmd(?:\.exe)?|bash(?:\.exe)?|\bsh\s+-c\b|\bAuthorization\s*:\s*Bearer\b'
 if ($packageText -match $forbiddenAuthorityPattern) {
     throw 'TM-BACKUP-FORBIDDEN-AUTHORITY: package codec gained process/network/shell/generic-extraction/plugin/UI/SQL authority'
+}
+if (@([regex]::Matches($packageReaderText, 'if\s+settings\.source_schema_version\(\)\s*!=\s*manifest\.settings_schema_version\s*\{\s*return\s+Err\(StateError::integrity\(\)\);\s*\}')).Count -ne 1) {
+    throw 'TM-BACKUP-SETTINGS-VERSION-BINDING: manifest and settings entry source versions must match exactly'
+}
+if ($packageWriterText -match '\bpub\s+fn\s+\w*(?:raw|extract)\w*\s*(?:<[^>]+>)?\s*\([^)]*&mut\s+(?:dyn\s+)?(?:Read|Write)') {
+    throw 'TM-BACKUP-PACKAGE-CAPABILITY: public raw package writer or extractor authority is forbidden'
 }
 
 $coverageContracts = @(

@@ -632,15 +632,18 @@ and rereads both slots. Any uncertainty after publication is recovery-required. 
 generic record/file authority remains crate-private; the typed settings store and
 later typed run/recovery stores are the only intended public surfaces.
 
-Implemented settings schema version 1 contains exactly `portable` and `device`
-classes. Portable state contains one canonical in-app reminder profile (enabled plus
-one through eight unique lead seconds from 60 through 31,536,000) and automatic-
-backup policy (periodic enabled, quiet seconds 300..3,600, interval seconds
+Implemented current settings schema version 2 contains exactly `portable` and
+`device` classes. Portable state contains one canonical in-app reminder profile
+(enabled plus one through eight unique lead seconds from 60 through 31,536,000),
+automatic-backup policy (periodic enabled, quiet seconds 300..3,600, interval seconds
 21,600..604,800 with quiet strictly below interval, and retention budget 256 MiB..
-64 GiB). Defaults are the recommended 7d/24h/12h/6h/1h reminder leads, five-minute
-quiet, six-hour interval, and 2 GiB budget. Device state contains only one of the 11
-implemented route keys. The schema stores no future presentation/provider field and
-no forbidden private state. Portable candidates have their own strict versioned JSON
+64 GiB), and one presentation density fixed to `comfortable`, `compact`, or
+`ultra_compact`. Defaults are the recommended 7d/24h/12h/6h/1h reminder leads,
+five-minute quiet, six-hour interval, 2 GiB budget, and Comfortable density. Strict
+schema v1 remains a legacy subset that migrates in memory to Comfortable without a
+startup write; versions 0 and 3 or newer reject. Device state contains only one of the
+11 implemented route keys. The schema stores no provider, arbitrary style, or
+forbidden private state. Portable candidates have their own strict versioned JSON
 envelope, SHA-256 digest, bounded category/count preview, and never carry device
 state. A committed target is the exact nonzero settings generation plus portable
 digest and can be independently reread-verified.
@@ -667,7 +670,9 @@ stored SHA-256 of every preceding byte. The complete file also receives an indep
 SHA-256 before its controlled stage is sealable.
 
 Header and manifest kind/count must agree: config is exactly one settings entry;
-backup is exactly settings then database. The manifest carries settings schema 1,
+backup is exactly settings then database. The manifest carries the settings source schema
+(v1 or current v2), and the decoded settings entry must have exactly the same source
+schema; new writes encode v2,
 database schema (zero only for config), compression profile, creation time in
 0..253402300799999 UTC milliseconds, and one of periodic/manual/pre-migration/
 post-migration/pre-restore/pre-destructive-maintenance for backup. The sixth value is

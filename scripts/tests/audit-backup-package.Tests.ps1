@@ -151,4 +151,26 @@ Describe "TokenMaster backup package audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-BACKUP-TEST-MATRIX*"
     }
+
+    It "rejects a missing manifest and settings source-version binding" {
+        $fixture = New-BackupAuditFixture -Name "missing-settings-version-binding"
+        $path = Join-Path $fixture "crates\state\src\package\reader.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'if settings.source_schema_version() != manifest.settings_schema_version {',
+            'if false {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-BACKUP-SETTINGS-VERSION-BINDING*"
+    }
+
+    It "rejects a public raw package writer" {
+        $fixture = New-BackupAuditFixture -Name "public-raw-package-writer"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\package\writer.rs") `
+            -Value 'pub fn write_raw_package(destination: &mut dyn Write) { let _ = destination; }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
+    }
 }
