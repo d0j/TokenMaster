@@ -12,15 +12,16 @@ use tokenmaster_state::{
 
 use package_support::{
     ControlledRoot, PACKAGE_MAX_BYTES, backup_bytes, backup_bytes_with, config_bytes,
-    legacy_v1_portable_json, package_with_settings_source_schema, read_backup_bytes,
-    read_config_bytes, settings,
+    legacy_v1_portable_json, legacy_v2_portable_json, package_with_settings_source_schema,
+    read_backup_bytes, read_config_bytes, settings,
 };
 
 #[test]
 fn manifest_and_entry_settings_schema_must_match() {
-    let current_v2 = settings().encode_json().expect("current settings JSON");
+    let current_v3 = settings().encode_json().expect("current settings JSON");
     let legacy_v1 = legacy_v1_portable_json();
-    for (manifest_schema, entry) in [(1_u16, current_v2), (2_u16, legacy_v1)] {
+    let legacy_v2 = legacy_v2_portable_json();
+    for (manifest_schema, entry) in [(1_u16, current_v3), (2_u16, legacy_v1), (3_u16, legacy_v2)] {
         let mismatch = package_with_settings_source_schema(manifest_schema, &entry, None);
         assert_eq!(
             read_config_bytes(&mismatch)
@@ -69,7 +70,7 @@ fn resealed_supported_manifest_timestamp_remains_readable() {
 
 #[test]
 fn resealed_unsupported_manifest_settings_schemas_are_rejected() {
-    for schema_version in [0_u16, 3_u16] {
+    for schema_version in [0_u16, 4_u16] {
         let mut package = config_bytes();
         package[46..48].copy_from_slice(&schema_version.to_le_bytes());
         reseal_descriptors_and_package(&mut package);
@@ -79,6 +80,18 @@ fn resealed_unsupported_manifest_settings_schemas_are_rejected() {
                 .code(),
             StateErrorCode::UnsupportedVersion
         );
+    }
+}
+
+#[test]
+fn v3_settings_entries_reject_missing_duplicate_and_unknown_skins() {
+    for settings_json in [
+        br#"{"schema_version":3,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable"}}}"#.as_slice(),
+        br#"{"schema_version":3,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined","skin":"ember"}}}"#.as_slice(),
+        br#"{"schema_version":3,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"future"}}}"#.as_slice(),
+    ] {
+        let package = package_with_settings_source_schema(3, settings_json, None);
+        assert!(read_config_bytes(&package).is_err(), "invalid v3 skin entry");
     }
 }
 

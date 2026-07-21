@@ -201,6 +201,14 @@ fn schema_v1_v2_v3_dispatch_migrates_in_memory_and_explicit_save_writes_v3() {
     assert_eq!(loaded.generation(), Some(7));
     assert_eq!(loaded.value().device().last_route(), DeviceRoute::Projects);
     assert_eq!(
+        loaded.value().portable().reminders().lead_seconds(),
+        &[604_800, 86_400, 43_200, 21_600, 3_600]
+    );
+    assert_eq!(
+        loaded.value().portable().backup().retention_budget_bytes(),
+        BACKUP_RETENTION_DEFAULT_BYTES
+    );
+    assert_eq!(
         loaded.value().portable().presentation().density(),
         PresentationDensity::Comfortable
     );
@@ -228,6 +236,11 @@ fn schema_v1_v2_v3_dispatch_migrates_in_memory_and_explicit_save_writes_v3() {
     assert_eq!(loaded.generation(), Some(9));
     assert_eq!(loaded.value().device().last_route(), DeviceRoute::History);
     assert_eq!(
+        loaded.value().portable().reminders().lead_seconds(),
+        &[3_600]
+    );
+    assert!(!loaded.value().portable().backup().periodic_enabled());
+    assert_eq!(
         loaded.value().portable().presentation().density(),
         PresentationDensity::Compact
     );
@@ -240,6 +253,68 @@ fn schema_v1_v2_v3_dispatch_migrates_in_memory_and_explicit_save_writes_v3() {
         record
     );
     assert!(!root.path().join("settings-b.tms").exists());
+}
+
+#[test]
+fn legacy_migration_retains_non_default_reminder_and_backup_values() {
+    for (source_version, portable) in [
+        (
+            1,
+            json!({
+                "reminders": { "enabled": true, "lead_seconds": [7200, 3600] },
+                "backup": { "periodic_enabled": false, "quiet_seconds": 600, "interval_seconds": 43200, "retention_budget_bytes": 3_221_225_472_u64 }
+            }),
+        ),
+        (
+            2,
+            json!({
+                "reminders": { "enabled": true, "lead_seconds": [10800] },
+                "backup": { "periodic_enabled": true, "quiet_seconds": 900, "interval_seconds": 64800, "retention_budget_bytes": 4_294_967_296_u64 },
+                "presentation": { "density": "ultra_compact" }
+            }),
+        ),
+    ] {
+        let (root, directory) = fixture();
+        let payload = serde_json::to_vec(&json!({
+            "schema_version": source_version,
+            "portable": portable,
+            "device": { "last_route": "settings" }
+        }))
+        .expect("legacy settings");
+        fs::write(
+            root.path().join("settings-a.tms"),
+            encode_record(1, &payload),
+        )
+        .expect("legacy record");
+
+        let loaded = SettingsStore::new(&directory)
+            .expect("settings store")
+            .load()
+            .expect("migrated settings");
+        let portable = loaded.value().portable();
+        let expected_leads: &[u32] = if source_version == 1 {
+            &[7_200, 3_600]
+        } else {
+            &[10_800]
+        };
+        assert_eq!(portable.reminders().lead_seconds(), expected_leads);
+        assert_eq!(
+            portable.backup().quiet_seconds(),
+            if source_version == 1 { 600 } else { 900 }
+        );
+        assert_eq!(
+            portable.backup().interval_seconds(),
+            if source_version == 1 { 43_200 } else { 64_800 }
+        );
+        assert_eq!(
+            portable.backup().retention_budget_bytes(),
+            if source_version == 1 {
+                3_221_225_472
+            } else {
+                4_294_967_296
+            }
+        );
+    }
 }
 
 #[test]

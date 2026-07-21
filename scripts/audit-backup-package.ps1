@@ -304,6 +304,7 @@ $packageText = ($packageFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
 }) -join "`n"
 $packageReaderText = [System.IO.File]::ReadAllText((Join-Path $packageSource 'reader.rs'))
+$packageManifestText = [System.IO.File]::ReadAllText((Join-Path $packageSource 'manifest.rs'))
 $packageMasks = @{}
 foreach ($packageFile in $packageFiles) {
     $packageMasks[$packageFile.Name] = Get-RustCodeMask -Text (
@@ -325,6 +326,9 @@ if ($packageMask -match $generatedOrOpenSurfacePattern) {
 }
 if (@([regex]::Matches($packageReaderText, 'if\s+settings\.source_schema_version\(\)\s*!=\s*manifest\.settings_schema_version\s*\{\s*return\s+Err\(StateError::integrity\(\)\);\s*\}')).Count -ne 1) {
     throw 'TM-BACKUP-SETTINGS-VERSION-BINDING: manifest and settings entry source versions must match exactly'
+}
+if (@([regex]::Matches($packageManifestText, 'if\s*!\(MIN_SUPPORTED_SETTINGS_SCHEMA_VERSION\.\.=SETTINGS_SCHEMA_VERSION\)\s*\.contains\(&settings_schema\)')).Count -ne 1) {
+    throw 'TM-BACKUP-SETTINGS-VERSION-RANGE: manifests must admit exactly supported settings source versions'
 }
 $expectedPublicPackageConstants = @(
     'encryption.rs|AGE_SCRYPT_LOG_N|u8'

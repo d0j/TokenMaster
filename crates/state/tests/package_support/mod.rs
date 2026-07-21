@@ -134,6 +134,17 @@ pub fn legacy_v1_portable_json() -> Vec<u8> {
     br#"{"schema_version":1,"portable":{"reminders":{"enabled":true,"lead_seconds":[604800,86400,43200,21600,3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648}}}"#.to_vec()
 }
 
+pub fn legacy_v2_portable_json() -> Vec<u8> {
+    br#"{"schema_version":2,"portable":{"reminders":{"enabled":false,"lead_seconds":[]},"backup":{"periodic_enabled":false,"quiet_seconds":600,"interval_seconds":43200,"retention_budget_bytes":3221225472},"presentation":{"density":"compact"}}}"#.to_vec()
+}
+
+pub fn v3_portable_json(skin: &str) -> Vec<u8> {
+    format!(
+        "{{\"schema_version\":3,\"portable\":{{\"reminders\":{{\"enabled\":true,\"lead_seconds\":[3600]}},\"backup\":{{\"periodic_enabled\":true,\"quiet_seconds\":300,\"interval_seconds\":21600,\"retention_budget_bytes\":2147483648}},\"presentation\":{{\"density\":\"comfortable\",\"skin\":\"{skin}\"}}}}}}"
+    )
+    .into_bytes()
+}
+
 pub fn legacy_config_bytes_v1() -> Vec<u8> {
     package_with_settings_source_schema(1, &legacy_v1_portable_json(), None)
 }
@@ -156,8 +167,8 @@ pub fn package_with_settings_source_schema(
 
     let settings: serde_json::Value =
         serde_json::from_slice(settings_json).expect("strict settings JSON fixture");
-    assert!(matches!(settings_schema_version, 1 | 2));
-    assert!(matches!(settings["schema_version"].as_u64(), Some(1 | 2)));
+    assert!(matches!(settings_schema_version, 1..=3));
+    assert!(matches!(settings["schema_version"].as_u64(), Some(1..=3)));
     assert!(!settings_json.is_empty());
 
     let (kind, entry_count, database_schema_version, backup_purpose) = match database {

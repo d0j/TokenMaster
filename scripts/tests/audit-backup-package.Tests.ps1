@@ -165,6 +165,19 @@ Describe "TokenMaster backup package audit" {
             Should -Throw "*TM-BACKUP-SETTINGS-VERSION-BINDING*"
     }
 
+    It "rejects widening manifest settings source versions" {
+        $fixture = New-BackupAuditFixture -Name "widened-settings-version-range"
+        $path = Join-Path $fixture "crates\state\src\package\manifest.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'MIN_SUPPORTED_SETTINGS_SCHEMA_VERSION..=SETTINGS_SCHEMA_VERSION',
+            '0..=u16::MAX'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-BACKUP-SETTINGS-VERSION-RANGE*"
+    }
+
     It "rejects a public raw package writer" {
         $fixture = New-BackupAuditFixture -Name "public-raw-package-writer"
         Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\package\writer.rs") `

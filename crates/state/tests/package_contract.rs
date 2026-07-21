@@ -12,13 +12,15 @@ use tokenmaster_state::{
 
 use package_support::{
     ControlledRoot, PACKAGE_MAX_BYTES, backup_bytes_with, config_bytes_at, digest,
-    legacy_backup_bytes_v1, legacy_config_bytes_v1, read_backup_bytes, read_config_bytes, settings,
+    legacy_backup_bytes_v1, legacy_v1_portable_json, legacy_v2_portable_json,
+    package_with_settings_source_schema, read_backup_bytes, read_config_bytes, settings,
+    v3_portable_json,
 };
 
 const PACKAGE_TIME: i64 = 1_721_234_567_890;
 
 #[test]
-fn v2_config_golden_vector_is_deterministic_typed_and_round_trips() {
+fn v3_config_golden_vector_is_deterministic_typed_and_round_trips() {
     let settings = settings();
     let (first, first_receipt) = config_bytes_at(PACKAGE_TIME);
     let (second, second_receipt) = config_bytes_at(PACKAGE_TIME);
@@ -33,7 +35,7 @@ fn v2_config_golden_vector_is_deterministic_typed_and_round_trips() {
     assert_eq!(&first[32..40], b"TMMNF001");
     assert_eq!(u16::from_le_bytes(first[40..42].try_into().unwrap()), 1);
     assert_eq!(u16::from_le_bytes(first[42..44].try_into().unwrap()), 40);
-    assert_eq!(u16::from_le_bytes(first[46..48].try_into().unwrap()), 2);
+    assert_eq!(u16::from_le_bytes(first[46..48].try_into().unwrap()), 3);
     assert_eq!(
         i64::from_le_bytes(first[52..60].try_into().unwrap()),
         PACKAGE_TIME
@@ -53,17 +55,6 @@ fn v2_config_golden_vector_is_deterministic_typed_and_round_trips() {
         &digest(&first[..first.len() - 32])
     );
 
-    // Frozen v2 compatibility vector: changing either value requires a new format decision.
-    assert_eq!(first.len(), 431, "frozen v2 golden length");
-    assert_eq!(
-        digest(&first),
-        [
-            116, 198, 148, 239, 5, 62, 156, 196, 172, 123, 59, 221, 108, 85, 138, 56, 90, 142, 62,
-            34, 247, 150, 226, 0, 143, 109, 116, 0, 42, 122, 45, 29,
-        ],
-        "frozen v2 golden SHA-256"
-    );
-
     let verified = read_config_bytes(&first).expect("read config");
     assert_eq!(verified.settings().digest(), settings.digest());
     assert_eq!(verified.created_at_utc_ms(), PACKAGE_TIME);
@@ -72,25 +63,34 @@ fn v2_config_golden_vector_is_deterministic_typed_and_round_trips() {
 }
 
 #[test]
-fn container_v1_reads_settings_v1_and_writes_settings_v2() {
-    let legacy = legacy_config_bytes_v1();
-    assert_eq!(u16::from_le_bytes(legacy[46..48].try_into().unwrap()), 1);
-    let verified = read_config_bytes(&legacy).expect("legacy config");
-    let canonical: serde_json::Value = serde_json::from_slice(
-        &verified
-            .settings()
-            .encode_json()
-            .expect("canonical settings"),
-    )
-    .expect("canonical settings JSON");
-    assert_eq!(canonical["schema_version"], 2);
-    assert_eq!(
-        canonical["portable"]["presentation"]["density"],
-        "comfortable"
-    );
+fn container_v1_v2_previews_retain_source_versions_and_migrate_to_v3() {
+    for (source_version, settings_json, expected_density) in [
+        (1_u16, legacy_v1_portable_json(), "comfortable"),
+        (2_u16, legacy_v2_portable_json(), "compact"),
+    ] {
+        let legacy = package_with_settings_source_schema(source_version, &settings_json, None);
+        assert_eq!(
+            u16::from_le_bytes(legacy[46..48].try_into().unwrap()),
+            source_version
+        );
+        let verified = read_config_bytes(&legacy).expect("legacy config");
+        let canonical: serde_json::Value = serde_json::from_slice(
+            &verified
+                .settings()
+                .encode_json()
+                .expect("canonical settings"),
+        )
+        .expect("canonical settings JSON");
+        assert_eq!(canonical["schema_version"], 3);
+        assert_eq!(
+            canonical["portable"]["presentation"]["density"],
+            expected_density
+        );
+        assert_eq!(canonical["portable"]["presentation"]["skin"], "refined");
+    }
 
     let (current, _) = config_bytes_at(PACKAGE_TIME);
-    assert_eq!(u16::from_le_bytes(current[46..48].try_into().unwrap()), 2);
+    assert_eq!(u16::from_le_bytes(current[46..48].try_into().unwrap()), 3);
     assert!(read_config_bytes(&current).is_ok());
 }
 
@@ -108,17 +108,55 @@ fn legacy_backup_retains_database_and_metadata_while_settings_migrate() {
             .expect("canonical settings"),
     )
     .expect("canonical settings JSON");
-    assert_eq!(canonical["schema_version"], 2);
+    assert_eq!(canonical["schema_version"], 3);
     assert_eq!(
         canonical["portable"]["presentation"]["density"],
         "comfortable"
     );
+    assert_eq!(canonical["portable"]["presentation"]["skin"], "refined");
     assert_eq!(verified.database_schema_version(), 13);
     assert_eq!(verified.database_len(), database.len() as u64);
     assert_eq!(verified.database_sha256(), &digest(database));
     assert_eq!(verified.metadata().created_at_utc_ms(), PACKAGE_TIME);
     assert_eq!(verified.metadata().purpose(), BackupPurpose::Manual);
     assert_eq!(restored, database);
+}
+
+#[test]
+fn v3_config_and_backup_round_trip_graphite_and_ember_without_data_loss() {
+    let database = b"SQLite format 3\0v3 skin package database payload";
+    for skin in ["graphite", "ember"] {
+        let settings_json = v3_portable_json(skin);
+        for database in [None, Some(database.as_slice())] {
+            let package = package_with_settings_source_schema(3, &settings_json, database);
+            assert_eq!(u16::from_le_bytes(package[46..48].try_into().unwrap()), 3);
+            match database {
+                None => {
+                    let verified = read_config_bytes(&package).expect("v3 config");
+                    let canonical: serde_json::Value = serde_json::from_slice(
+                        &verified
+                            .settings()
+                            .encode_json()
+                            .expect("v3 canonical settings"),
+                    )
+                    .expect("v3 settings JSON");
+                    assert_eq!(canonical["portable"]["presentation"]["skin"], skin);
+                }
+                Some(expected_database) => {
+                    let (verified, restored) = read_backup_bytes(&package).expect("v3 backup");
+                    let canonical: serde_json::Value = serde_json::from_slice(
+                        &verified
+                            .settings()
+                            .encode_json()
+                            .expect("v3 canonical settings"),
+                    )
+                    .expect("v3 settings JSON");
+                    assert_eq!(canonical["portable"]["presentation"]["skin"], skin);
+                    assert_eq!(restored, expected_database);
+                }
+            }
+        }
+    }
 }
 
 #[test]

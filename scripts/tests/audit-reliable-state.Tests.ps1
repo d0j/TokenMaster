@@ -607,8 +607,8 @@ tokenmaster-state = { path = "../state" }
         $fixture = New-StateAuditFixture -Name "v1-presentation-migration"
         $path = Join-Path $fixture "crates\state\src\settings\migration.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            'PresentationSettings::comfortable()',
-            'PresentationSettings::new(PresentationDensity::Compact)'
+            'PresentationSettings::refined()',
+            'PresentationSettings::new(PresentationDensity::Compact, PresentationSkin::Refined)'
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -620,8 +620,8 @@ tokenmaster-state = { path = "../state" }
         $fixture = New-StateAuditFixture -Name "current-settings-schema-constant-drift"
         $path = Join-Path $fixture "crates\state\src\settings\value.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            'pub(crate) const SETTINGS_SCHEMA_VERSION: u16 = 2;',
-            'pub(crate) const SETTINGS_SCHEMA_VERSION: u16 = 3;'
+            'pub const SETTINGS_SCHEMA_VERSION: u16 = 3;',
+            'pub const SETTINGS_SCHEMA_VERSION: u16 = 4;'
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -661,6 +661,29 @@ tokenmaster-state = { path = "../state" }
         $text = [System.IO.File]::ReadAllText($path).Replace(
             'Self::UltraCompact => "ultra_compact"',
             'Self::UltraCompact => "ultra-compact"'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-PRESENTATION-CONTRACT*"
+    }
+
+    It "rejects a missing durable presentation skin" {
+        $fixture = New-StateAuditFixture -Name "missing-presentation-skin"
+        $path = Join-Path $fixture "crates\state\src\settings\value.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('    skin: PresentationSkin,', '')
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-PRESENTATION-CONTRACT*"
+    }
+
+    It "rejects widening the strict settings version dispatch" {
+        $fixture = New-StateAuditFixture -Name "widened-settings-version-dispatch"
+        $path = Join-Path $fixture "crates\state\src\settings\migration.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '        1 => decode_portable_v1(bytes),',
+            '        0 | 1 => decode_portable_v1(bytes),'
         )
         [System.IO.File]::WriteAllText($path, $text)
 

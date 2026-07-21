@@ -346,24 +346,26 @@ if ($unapprovedIoMembers.Count -ne 0) {
 $presentationDensityEnum = [regex]::Match($settingsValueText, '(?s)pub\s+enum\s+PresentationDensity\s*\{(?<body>.*?)\}').Groups['body'].Value
 $presentationSettingsBody = [regex]::Match($settingsValueText, '(?s)pub\s+struct\s+PresentationSettings\s*\{(?<body>.*?)\}').Groups['body'].Value
 $portableSettingsBody = [regex]::Match($settingsValueText, '(?s)pub\s+struct\s+PortableSettings\s*\{(?<body>.*?)\}').Groups['body'].Value
-$currentSettingsSchemaCount = @([regex]::Matches($settingsValueText, '(?m)^\s*pub\(crate\)\s+const\s+SETTINGS_SCHEMA_VERSION\s*:\s*u16\s*=\s*2\s*;\s*$')).Count
+$presentationSkinEnum = [regex]::Match($settingsValueText, '(?s)pub\s+enum\s+PresentationSkin\s*\{(?<body>.*?)\}').Groups['body'].Value
+$currentSettingsSchemaCount = @([regex]::Matches($settingsValueText, '(?m)^\s*pub\s+const\s+SETTINGS_SCHEMA_VERSION\s*:\s*u16\s*=\s*3\s*;\s*$')).Count
 $minimumSettingsSchemaCount = @([regex]::Matches($settingsValueText, '(?m)^\s*pub\(crate\)\s+const\s+MIN_SUPPORTED_SETTINGS_SCHEMA_VERSION\s*:\s*u16\s*=\s*1\s*;\s*$')).Count
 $densitySnakeCaseWireCount = @([regex]::Matches($settingsValueText, '(?s)#\[serde\(rename_all\s*=\s*"snake_case"\)\]\s*pub\s+enum\s+PresentationDensity\s*\{')).Count
 $portableStrictWireCount = @([regex]::Matches($settingsValueText, '(?s)#\[derive\([^\]]*Deserialize[^\]]*\)\]\s*#\[serde\(deny_unknown_fields\)\]\s*pub\s+struct\s+PortableSettings\s*\{')).Count
-$strictPortableDispatch = @([regex]::Matches($settingsMigrationText, '(?s)match\s+probe\.schema_version\s*\{\s*1\s*=>\s*decode_portable_v1\(bytes\),\s*SETTINGS_SCHEMA_VERSION\s*=>\s*decode_portable_v2\(bytes\),\s*_\s*=>\s*Err\(StateError::unsupported_version\(\)\),\s*\}')).Count
-$strictRecordDispatch = @([regex]::Matches($settingsMigrationText, '(?s)match\s+probe\.schema_version\s*\{\s*1\s*=>\s*decode_settings_v1\(bytes\),\s*SETTINGS_SCHEMA_VERSION\s*=>\s*decode_settings_v2\(bytes\),\s*_\s*=>\s*Err\(RecordValueError::UnsupportedVersion\),\s*\}')).Count
+$strictPortableDispatch = @([regex]::Matches($settingsMigrationText, '(?s)match\s+probe\.schema_version\s*\{\s*1\s*=>\s*decode_portable_v1\(bytes\),\s*2\s*=>\s*decode_portable_v2\(bytes\),\s*SETTINGS_SCHEMA_VERSION\s*=>\s*decode_portable_v3\(bytes\),\s*_\s*=>\s*Err\(StateError::unsupported_version\(\)\),\s*\}')).Count
+$strictRecordDispatch = @([regex]::Matches($settingsMigrationText, '(?s)match\s+probe\.schema_version\s*\{\s*1\s*=>\s*decode_settings_v1\(bytes\),\s*2\s*=>\s*decode_settings_v2\(bytes\),\s*SETTINGS_SCHEMA_VERSION\s*=>\s*decode_settings_v3\(bytes\),\s*_\s*=>\s*Err\(RecordValueError::UnsupportedVersion\),\s*\}')).Count
 if ($currentSettingsSchemaCount -ne 1 -or $minimumSettingsSchemaCount -ne 1 -or
     $densitySnakeCaseWireCount -ne 1 -or $portableStrictWireCount -ne 1 -or
     ($presentationDensityEnum -replace '\s+', '') -ne 'Comfortable,Compact,UltraCompact,' -or
-    ($presentationSettingsBody -replace '\s+', '') -ne 'density:PresentationDensity,' -or
+    ($presentationSkinEnum -replace '\s+', '') -ne 'Refined,Graphite,Ember,' -or
+    ($presentationSettingsBody -replace '\s+', '') -ne 'density:PresentationDensity,skin:PresentationSkin,' -or
     ($portableSettingsBody -replace '\s+', '') -ne 'reminders:ReminderPolicy,backup:BackupPolicy,presentation:PresentationSettings,' -or
     @([regex]::Matches($settingsValueText, 'Self::Comfortable\s*=>\s*"comfortable"')).Count -ne 1 -or
     @([regex]::Matches($settingsValueText, 'Self::Compact\s*=>\s*"compact"')).Count -ne 1 -or
     @([regex]::Matches($settingsValueText, 'Self::UltraCompact\s*=>\s*"ultra_compact"')).Count -ne 1 -or
     $strictPortableDispatch -ne 1 -or $strictRecordDispatch -ne 1 -or
-    @([regex]::Matches($settingsMigrationText, 'PresentationSettings::comfortable\(\)')).Count -ne 1 -or
+    @([regex]::Matches($settingsMigrationText, 'PresentationSettings::refined\(\)')).Count -ne 1 -or
     $settingsMigrationText -match '\.save\s*\(') {
-    throw 'TM-STATE-PRESENTATION-CONTRACT: v2 density must remain exact, strict, and migrated only in memory'
+    throw 'TM-STATE-PRESENTATION-CONTRACT: v3 presentation must remain exact, strict, and migrated only in memory'
 }
 $exactChildUses = @([regex]::Matches($productionText, '\bexact_child\b'))
 $approvedExactChildPattern = 'DurableFileTarget\s*::\s*exact_child\s*\(\s*directory\s*,\s*"(?<child>settings-a\.tms|settings-b\.tms|run-a\.tms|run-b\.tms|recovery-a\.tms|recovery-b\.tms)"\s*\)'
