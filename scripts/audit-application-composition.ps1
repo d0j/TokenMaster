@@ -124,8 +124,14 @@ $operationChannelCount = [regex]::Matches(
     $operationExecutable,
     '(?<![A-Za-z0-9_])(?:sync_)?channel\s*(?:::\s*<[^>]+>)?\s*\('
 ).Count
+$operationChannelSymbolCount = [regex]::Matches(
+    $operationExecutable,
+    '\b(?:sync_)?channel\b'
+).Count
 if ([regex]::Matches($operationExecutable, '(?:thread::)?Builder::new\(\)').Count -ne 1 -or
     $operationChannelCount -gt 1 -or
+    $operationChannelSymbolCount -ne 2 -or
+    [regex]::Matches($operationExecutable, 'use\s+std::sync::mpsc::\{\s*Receiver\s*,\s*SyncSender\s*,\s*TrySendError\s*,\s*sync_channel\s*\}\s*;').Count -ne 1 -or
     $operationExecutable -match 'thread::spawn|slint::Timer|VecDeque') {
     throw 'TM-APP-OPERATION-SPAWN: complete presentation reuses the sole bounded worker authority'
 }

@@ -1198,4 +1198,13 @@ Describe "TokenMaster application composition audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-APP-OPERATION-SPAWN*"
     }
+
+    It "rejects a second operation channel hidden behind an import alias" {
+        $fixture = New-AppAuditFixture -Name "presentation-aliased-channel"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\operation.rs") `
+            -Value 'use std::sync::mpsc::channel as open_channel; fn aliased_channel() { let _ = open_channel::<u8>(); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-OPERATION-SPAWN*"
+    }
 }

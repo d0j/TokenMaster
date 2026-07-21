@@ -323,14 +323,15 @@ $skinRootCallbackCount = [regex]::Matches($mainUiTextForDensity, 'callback selec
 $mainWindowText = Get-ExecutableBracedText -Text $mainUiTextForDensity -Pattern '(?m)^\s*export\s+component\s+MainWindow\s+(?:inherits\s+\w+\s*)?\{' -FailureCode 'TM-DESKTOP-PRESENTATION-OWNER'
 $paletteSlotCount = [regex]::Matches($mainWindowText, 'in-out\s+property\s*<\s*UiPalette\s*>').Count
 $uiPaletteStructCount = [regex]::Matches($uiExecutableText, '(?m)^\s*export\s+struct\s+UiPalette\s*\{').Count
-$globalPalettePropertyCount = [regex]::Matches($uiExecutableText, '(?m)\b(?:in-out|in|out)\s+property\s*<\s*UiPalette\s*>').Count
-$uiTokensPalettePropertyCount = [regex]::Matches($uiTokensText, '(?m)\b(?:in-out|in|out)\s+property\s*<\s*UiPalette\s*>').Count
+$globalPalettePropertyCount = [regex]::Matches($uiExecutableText, '(?m)\bproperty\s*<\s*UiPalette\s*>').Count
+$uiTokensPalettePropertyCount = [regex]::Matches($uiTokensText, '(?m)\bproperty\s*<\s*UiPalette\s*>').Count
 $paletteAliasCount = [regex]::Matches($uiTokensText, 'out\s+property\s*<\s*(?:color|brush)\s*>').Count
 $settingsViewTextForSkin = ConvertTo-ExecutableText -Text ([System.IO.File]::ReadAllText((Join-Path $uiRoot 'views\settings-view.slint')))
 $settingsSkinCallbackCount = [regex]::Matches($settingsViewTextForSkin, 'callback select-presentation-skin\(int\);').Count
 $mainPresentationCallbackCount = [regex]::Matches($mainWindowText, 'callback\s+select-presentation-(?:density|skin)\(int\);').Count
 $settingsPresentationCallbackCount = [regex]::Matches($settingsViewTextForSkin, 'callback\s+select-presentation-(?:density|skin)\(int\);').Count
 $globalSkinFamilyCallbackCount = [regex]::Matches($uiExecutableText, '(?i)callback\s+[a-z0-9_-]*(?:skin|family|theme)[a-z0-9_-]*\(').Count
+$globalPresentationCallbackCount = [regex]::Matches($uiExecutableText, '(?i)callback\s+[a-z0-9_-]*presentation[a-z0-9_-]*\(').Count
 $extraFamilyCallbackCount = $globalSkinFamilyCallbackCount - 2
 $skinForwardBindingCount = [regex]::Matches($mainUiTextForDensity, 'select-presentation-skin\(index\) => \{ root\.select-presentation-skin\(index\); \}').Count
 $skinWireText = Get-RustFunctionText -Text $uiRustProductionText -Name 'wire_presentation_skin'
@@ -341,7 +342,8 @@ if ($presentationStyleOwnerCount -ne 1 -or $presentationStyleOwnerSlotCount -ne 
     $paletteAliasCount -ne 15 -or $skinRootBindingCount -ne 1 -or
     $skinRootCallbackCount -ne 1 -or $settingsSkinCallbackCount -ne 1 -or
     $mainPresentationCallbackCount -ne 2 -or $settingsPresentationCallbackCount -ne 2 -or
-    $globalSkinFamilyCallbackCount -ne 2 -or $extraFamilyCallbackCount -ne 0 -or
+    $globalSkinFamilyCallbackCount -ne 2 -or $globalPresentationCallbackCount -ne 4 -or
+    $extraFamilyCallbackCount -ne 0 -or
     $skinForwardBindingCount -ne 1 -or $skinWiringCallbackCount -ne 1 -or
     [regex]::Matches($uiRustProductionText, 'Arc\s*<\s*Mutex\s*<\s*DesktopPresentationStyle\s*>\s*>').Count -ne 7) {
     throw 'TM-DESKTOP-PRESENTATION-OWNER: exactly one complete presentation owner and palette slot are required'
@@ -408,6 +410,12 @@ $densityAppliedAssertionCount = [regex]::Matches($normalizedDensityStress, [rege
 $densityFinalPostconditionCount = [regex]::Matches($normalizedDensityStress, [regex]::Escape('assert_eq!(style,before_rejection);')).Count
 $uiMixedAxisStressText = Get-RustFunctionText -Text $presentationSkinUiContractText -Name 'density_and_skin_selectors_submit_complete_pairs_and_keep_one_window_models_geometry'
 $normalizedUiMixedAxisStress = Normalize-ExecutableStructure -Text $uiMixedAxisStressText
+$uiMixedAxisStressSha256 = [Convert]::ToHexString(
+    [System.Security.Cryptography.SHA256]::HashData(
+        [System.Text.Encoding]::UTF8.GetBytes($normalizedUiMixedAxisStress)
+    )
+).ToLowerInvariant()
+$expectedUiMixedAxisStressSha256 = '0f8e1e7cc0bc9ed225d7dcbc338e2e464689c84812d75a5f4ae479463e20d429'
 $uiMixedAxisProofs = @(
     'forindexin0..10_000{',
     'window.invoke_select_presentation_skin(skin.slint_index());',
@@ -424,6 +432,7 @@ $presentationOperationSwitchLoopCount = [regex]::Matches($presentationStressCurr
 if ($densityStressStructureCount -ne 1 -or $densityAppliedAssertionCount -ne 1 -or
     $densityFinalPostconditionCount -ne 1 -or $densitySwitchLoopCount -ne 1 -or
     $presentationOperationSwitchLoopCount -ne 1 -or
+    $uiMixedAxisStressSha256 -ne $expectedUiMixedAxisStressSha256 -or
     @($uiMixedAxisProofs | Where-Object { -not $normalizedUiMixedAxisStress.Contains($_) }).Count -ne 0) {
     throw 'TM-DESKTOP-DENSITY-STRESS: density must retain one 10,000-switch contract'
 }
@@ -1732,6 +1741,7 @@ if ($SourceOnly) {
         density_revision_write_count = $revisionWriteCount
         density_switch_loop_count = $densitySwitchLoopCount
         presentation_operation_switch_loop_count = $presentationOperationSwitchLoopCount
+        presentation_ui_switch_structure_sha256 = $uiMixedAxisStressSha256
         density_applied_assertion_count = $densityAppliedAssertionCount
         density_final_postcondition_count = $densityFinalPostconditionCount
         density_authority_count = $densityAuthorityCount
@@ -1756,6 +1766,7 @@ if ($SourceOnly) {
         palette_property_count = $globalPalettePropertyCount
         palette_struct_count = $uiPaletteStructCount
         skin_family_callback_count = $globalSkinFamilyCallbackCount
+        presentation_callback_count = $globalPresentationCallbackCount
         skin_root_callback_count = $skinRootCallbackCount
         skin_settings_callback_count = $settingsSkinCallbackCount
         skin_forward_binding_count = $skinForwardBindingCount
@@ -1926,6 +1937,7 @@ if ($LASTEXITCODE -ne 0) {
     density_revision_write_count = $revisionWriteCount
     density_switch_loop_count = $densitySwitchLoopCount
     presentation_operation_switch_loop_count = $presentationOperationSwitchLoopCount
+    presentation_ui_switch_structure_sha256 = $uiMixedAxisStressSha256
     density_applied_assertion_count = $densityAppliedAssertionCount
     density_final_postcondition_count = $densityFinalPostconditionCount
     density_authority_count = $densityAuthorityCount
@@ -1950,6 +1962,7 @@ if ($LASTEXITCODE -ne 0) {
     palette_property_count = $globalPalettePropertyCount
     palette_struct_count = $uiPaletteStructCount
     skin_family_callback_count = $globalSkinFamilyCallbackCount
+    presentation_callback_count = $globalPresentationCallbackCount
     skin_root_callback_count = $skinRootCallbackCount
     skin_settings_callback_count = $settingsSkinCallbackCount
     skin_forward_binding_count = $skinForwardBindingCount

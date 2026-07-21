@@ -1561,6 +1561,7 @@ Describe "TokenMaster production desktop audit" {
         $receipt.density_revision_write_count | Should -Be 1
         $receipt.density_switch_loop_count | Should -Be 1
         $receipt.presentation_operation_switch_loop_count | Should -Be 1
+        $receipt.presentation_ui_switch_structure_sha256 | Should -Be '0f8e1e7cc0bc9ed225d7dcbc338e2e464689c84812d75a5f4ae479463e20d429'
         $receipt.density_applied_assertion_count | Should -Be 1
         $receipt.density_final_postcondition_count | Should -Be 1
         $receipt.density_authority_count | Should -Be 0
@@ -1585,6 +1586,7 @@ Describe "TokenMaster production desktop audit" {
         $receipt.palette_property_count | Should -Be 2
         $receipt.palette_struct_count | Should -Be 1
         $receipt.skin_family_callback_count | Should -Be 2
+        $receipt.presentation_callback_count | Should -Be 4
         $receipt.skin_root_callback_count | Should -Be 1
         $receipt.skin_settings_callback_count | Should -Be 1
         $receipt.skin_forward_binding_count | Should -Be 1
@@ -2635,5 +2637,54 @@ fn density_authority() {
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-DENSITY-REVISION*"
+    }
+
+    It "rejects a private UiPalette property in another component" {
+        $fixture = New-DesktopAuditFixture -Name "skin-private-palette-property"
+        $path = Join-Path $fixture "crates\desktop\ui\views\activity-view.slint"
+        $text = [System.IO.File]::ReadAllText($path)
+        $text = $text.Replace(
+            'import { UiTokens } from "../tokens.slint";',
+            'import { UiPalette, UiTokens } from "../tokens.slint";'
+        )
+        $original = 'export component ActivityView inherits Rectangle {'
+        $replacement = $original + [Environment]::NewLine +
+            '    private property <UiPalette> alternate-palette: UiTokens.palette;'
+        ([regex]::Matches($text, [regex]::Escape($original))).Count | Should -Be 1
+        [System.IO.File]::WriteAllText($path, $text.Replace($original, $replacement))
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PRESENTATION-OWNER*"
+    }
+
+    It "rejects a presentation palette callback in another component" {
+        $fixture = New-DesktopAuditFixture -Name "skin-palette-callback"
+        $path = Join-Path $fixture "crates\desktop\ui\views\activity-view.slint"
+        $text = [System.IO.File]::ReadAllText($path)
+        $original = 'export component ActivityView inherits Rectangle {'
+        $replacement = $original + [Environment]::NewLine +
+            '    callback select-presentation-palette(int);'
+        ([regex]::Matches($text, [regex]::Escape($original))).Count | Should -Be 1
+        [System.IO.File]::WriteAllText($path, $text.Replace($original, $replacement))
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PRESENTATION-OWNER*"
+    }
+
+    It "rejects a dead ten-thousand-loop decoy around a weakened live UI proof" {
+        $fixture = New-DesktopAuditFixture -Name "skin-ui-dead-switch-decoy"
+        $path = Join-Path $fixture "crates\desktop\tests\presentation_skin_ui_contract.rs"
+        $text = [System.IO.File]::ReadAllText($path)
+        $original = '    for index in 0..10_000 {'
+        $newline = if ($text.Contains("`r`n")) { "`r`n" } else { "`n" }
+        $replacement = '    if false {' + $newline +
+            '        for index in 0..10_000 { let _ = index; }' + $newline +
+            '    }' + $newline + $newline +
+            '    for index in 0..1_000 {'
+        ([regex]::Matches($text, [regex]::Escape($original))).Count | Should -Be 1
+        [System.IO.File]::WriteAllText($path, $text.Replace($original, $replacement))
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-STRESS*"
     }
 }
