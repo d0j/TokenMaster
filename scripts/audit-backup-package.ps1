@@ -311,6 +311,9 @@ foreach ($packageFile in $packageFiles) {
     )
 }
 $packageMask = @($packageFiles | ForEach-Object { $packageMasks[$_.Name] }) -join "`n"
+if ($packageMask -match '[^\x00-\x7F]') {
+    throw 'TM-BACKUP-PACKAGE-CAPABILITY: package code identifiers and syntax must remain ASCII'
+}
 
 $forbiddenAuthorityPattern = '(?is)https?://|\bstd\s*::\s*process\b|\bCommand\s*::\s*new\b|\b(?:TcpStream|TcpListener|UdpSocket)\b|\b(?:reqwest|ureq|webbrowser|headless_chrome|zip|tar|sevenz|libarchive|slint|rusqlite)\s*::|\bplugin\b|powershell(?:\.exe)?|cmd(?:\.exe)?|bash(?:\.exe)?|\bsh\s+-c\b|\bAuthorization\s*:\s*Bearer\b'
 if ($packageText -match $forbiddenAuthorityPattern) {

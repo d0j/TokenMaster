@@ -347,4 +347,22 @@ Describe "TokenMaster backup package audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
     }
+
+    It "rejects a Unicode public package function identifier" {
+        $fixture = New-BackupAuditFixture -Name "unicode-public-function"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\package\reader.rs") `
+            -Value 'pub fn Δ(source: &mut dyn Read) { let _ = source; }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
+    }
+
+    It "rejects a Unicode public callable constant identifier" {
+        $fixture = New-BackupAuditFixture -Name "unicode-public-callable-constant"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\package\reader.rs") `
+            -Value 'pub const Λ: fn(&mut dyn Read) = |source| { let _ = source; };'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
+    }
 }
