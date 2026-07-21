@@ -108,7 +108,7 @@ fn settings_schema_v3_contract() {
     assert_eq!(refined.density(), PresentationDensity::Comfortable);
     assert_eq!(refined.skin(), PresentationSkin::Refined);
 
-    let encoded = serde_json::to_value(&SettingsValue::safe_defaults()).expect("encode settings");
+    let encoded = serde_json::to_value(SettingsValue::safe_defaults()).expect("encode settings");
     assert_eq!(
         encoded,
         json!({
