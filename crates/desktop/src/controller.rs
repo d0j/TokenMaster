@@ -2445,6 +2445,79 @@ mod tests {
     }
 
     #[test]
+    fn nonaccepted_history_commits_keep_current_work_for_exact_terminal_rollback() {
+        for (seed_attempt, worker_attempt) in [(2_u64, 2_u64), (3_u64, 2_u64)] {
+            let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+            let mut reducer = ProductReducer::new();
+            reducer
+                .fail_history(
+                    ProductAttemptGeneration::new(seed_attempt).expect("seed attempt"),
+                    invalid_query().code(),
+                )
+                .expect("seed history generation");
+            let intent = DesktopHistoryRangeIntent::new(
+                epoch,
+                reducer.snapshot().generation(),
+                DesktopHistoryRangeGeneration::new(1).expect("range generation"),
+                DesktopHistoryRangePreset::Recent1Day,
+            );
+            let work = Arc::new(Mutex::new(DesktopWorkState {
+                history_range_high_water: Some(intent.generation()),
+                current_history_range: Some(ActiveDesktopHistoryRange {
+                    attempt: worker_attempt,
+                    prerequisite_attempt: None,
+                    rebound_product_generation: None,
+                    intent,
+                }),
+                ..DesktopWorkState::default()
+            }));
+            let latest = Arc::new(Mutex::new(None));
+            let publication = DesktopPublication {
+                latest: Arc::clone(&latest),
+                notifier: Arc::new(Mutex::new(None)),
+                published_generation: Arc::new(Mutex::new(None)),
+                runtime_observation: Arc::new(Mutex::new(RuntimeObservationState::default())),
+            };
+            let snapshot_epoch = AtomicU64::new(epoch.get());
+            let clock = ManualClock::new(0);
+            let plan = DesktopQueryPlan::overview().expect("plan");
+            let context = DesktopExecutionContext {
+                plan: &plan,
+                clock: &clock,
+                publication: &publication,
+                snapshot_epoch: &snapshot_epoch,
+                work: &work,
+            };
+
+            assert_eq!(
+                commit_history_range(
+                    &mut reducer,
+                    &context,
+                    ProductAttemptGeneration::new(worker_attempt).expect("worker attempt"),
+                    worker_attempt,
+                    intent,
+                    Err(QueryErrorCode::InvalidValue),
+                ),
+                RefreshOutcome::Completed
+            );
+            assert!(lock_latest(&latest).expect("latest lock").is_none());
+            let state = lock_work(&work).expect("work lock");
+            assert_eq!(
+                state.published_history_preset,
+                DesktopHistoryRangePreset::Recent30Days
+            );
+            assert_eq!(
+                state.current_history_range.map(|current| current.attempt),
+                Some(worker_attempt)
+            );
+            assert_eq!(
+                state.current_history_range.map(|current| current.intent),
+                Some(intent)
+            );
+        }
+    }
+
+    #[test]
     fn history_range_rebind_is_limited_to_its_exact_prerequisite_refresh() {
         let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
         let intent = DesktopHistoryRangeIntent::new(
@@ -2720,6 +2793,10 @@ mod tests {
         detail_calls: Arc<AtomicU64>,
     }
 
+    struct ActiveRangeDeadlineSource {
+        clock: Arc<ManualClock>,
+    }
+
     impl DesktopQuerySource for DeadlineSource {
         fn product_data_status(&mut self) -> Result<ProductDataStatusEnvelope, QueryError> {
             self.clock.set(DesktopRefreshUrgency::Hint.budget_ms());
@@ -2900,6 +2977,60 @@ mod tests {
         }
     }
 
+    impl DesktopQuerySource for ActiveRangeDeadlineSource {
+        fn product_data_status(&mut self) -> Result<ProductDataStatusEnvelope, QueryError> {
+            Err(invalid_query())
+        }
+
+        fn usage_analytics(
+            &mut self,
+            _request: UsageAnalyticsRequest,
+        ) -> Result<QueryEnvelope<UsageAnalytics>, QueryError> {
+            self.clock
+                .set(DesktopRefreshUrgency::Interactive.budget_ms());
+            Err(invalid_query())
+        }
+
+        fn quota_overview(&mut self) -> Result<QuotaEnvelope<QuotaCurrentSnapshot>, QueryError> {
+            Err(invalid_query())
+        }
+
+        fn benefit_overview(
+            &mut self,
+            _request: BenefitOverviewRequest,
+        ) -> Result<BenefitOverviewEnvelope<BenefitOverviewSnapshot>, QueryError> {
+            Err(invalid_query())
+        }
+
+        fn git_output(
+            &mut self,
+            _request: GitOutputRequest,
+        ) -> Result<GitEnvelope<GitOutputSnapshot>, QueryError> {
+            Err(invalid_query())
+        }
+
+        fn latest_activity(
+            &mut self,
+            _request: LatestActivityRequest,
+        ) -> Result<QueryEnvelope<LatestActivityPage>, QueryError> {
+            Err(invalid_query())
+        }
+
+        fn usage_sessions(
+            &mut self,
+            _request: UsageSessionPageRequest,
+        ) -> Result<QueryEnvelope<UsageSessionPage>, QueryError> {
+            Err(invalid_query())
+        }
+
+        fn usage_session_detail(
+            &mut self,
+            _key: UsageSessionKey,
+        ) -> Result<QueryEnvelope<UsageSessionDetailResult>, QueryError> {
+            Err(invalid_query())
+        }
+    }
+
     struct RecordingTerminalNotifier {
         sender: std::sync::mpsc::SyncSender<DesktopSessionPageIntent>,
     }
@@ -2951,6 +3082,70 @@ mod tests {
                 .take_snapshot()
                 .expect("latest slot healthy")
                 .is_none()
+        );
+        controller.shutdown().expect("controller stops");
+    }
+
+    #[test]
+    fn active_history_range_deadline_rolls_back_once_without_snapshot_or_preset_advance() {
+        let clock = Arc::new(ManualClock::new(0));
+        let controller_clock: Arc<dyn Clock> = clock.clone();
+        let mut controller = DesktopController::spawn_with_clock(
+            ActiveRangeDeadlineSource { clock },
+            DesktopQueryPlan::overview().expect("overview plan"),
+            controller_clock,
+        )
+        .expect("controller starts");
+        let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+        controller.bind_snapshot_epoch(epoch).expect("bind epoch");
+        *lock_published_generation(&controller.publication.published_generation)
+            .expect("published generation") = Some(ProductGeneration::INITIAL);
+        let (terminal_sender, terminal_receiver) = sync_channel(1);
+        controller
+            .attach_terminal_history_range_notifier(Arc::new(RecordingHistoryTerminalNotifier {
+                sender: terminal_sender,
+            }))
+            .expect("attach terminal notifier");
+        let intent = DesktopHistoryRangeIntent::new(
+            epoch,
+            ProductGeneration::INITIAL,
+            DesktopHistoryRangeGeneration::new(1).expect("range generation"),
+            DesktopHistoryRangePreset::Recent1Day,
+        );
+        assert!(matches!(
+            controller
+                .request_history_range(intent)
+                .expect("active range starts"),
+            DesktopRefreshAdmission::Started { .. }
+        ));
+        assert_eq!(
+            terminal_receiver
+                .recv_timeout(Duration::from_secs(2))
+                .expect("terminal rollback"),
+            intent
+        );
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let completion = loop {
+            if let Some(completion) = controller.try_completion().expect("worker healthy") {
+                break completion;
+            }
+            assert!(Instant::now() < deadline, "completion timed out");
+            thread::yield_now();
+        };
+        assert_eq!(
+            completion.outcome(),
+            DesktopRefreshOutcome::DeadlineExceeded
+        );
+        assert!(controller.take_snapshot().expect("mailbox").is_none());
+        assert_eq!(
+            lock_work(&controller.work)
+                .expect("work lock")
+                .published_history_preset,
+            DesktopHistoryRangePreset::Recent30Days
+        );
+        assert!(
+            terminal_receiver.try_recv().is_err(),
+            "terminal rollback is once"
         );
         controller.shutdown().expect("controller stops");
     }

@@ -295,6 +295,74 @@ impl DesktopQuerySource for BlockingRefreshSource {
     }
 }
 
+struct BlockingNavigationSource {
+    inner: QueryService<FixedClock>,
+    armed: Arc<AtomicBool>,
+    entered: Option<SyncSender<()>>,
+    release: Option<Receiver<()>>,
+}
+
+impl DesktopQuerySource for BlockingNavigationSource {
+    fn product_data_status(&mut self) -> Result<ProductDataStatusEnvelope, QueryError> {
+        self.inner.product_data_status()
+    }
+
+    fn usage_analytics(
+        &mut self,
+        request: UsageAnalyticsRequest,
+    ) -> Result<QueryEnvelope<UsageAnalytics>, QueryError> {
+        self.inner.usage_analytics(request)
+    }
+
+    fn quota_overview(&mut self) -> Result<QuotaEnvelope<QuotaCurrentSnapshot>, QueryError> {
+        self.inner.quota_overview()
+    }
+
+    fn benefit_overview(
+        &mut self,
+        request: BenefitOverviewRequest,
+    ) -> Result<BenefitOverviewEnvelope<BenefitOverviewSnapshot>, QueryError> {
+        self.inner.benefit_overview(request)
+    }
+
+    fn git_output(
+        &mut self,
+        request: GitOutputRequest,
+    ) -> Result<GitEnvelope<GitOutputSnapshot>, QueryError> {
+        self.inner.git_output(request)
+    }
+
+    fn latest_activity(
+        &mut self,
+        request: LatestActivityRequest,
+    ) -> Result<QueryEnvelope<LatestActivityPage>, QueryError> {
+        self.inner.latest_activity(request)
+    }
+
+    fn usage_sessions(
+        &mut self,
+        request: UsageSessionPageRequest,
+    ) -> Result<QueryEnvelope<UsageSessionPage>, QueryError> {
+        if self.armed.swap(false, Ordering::AcqRel) {
+            let entered = self.entered.take().expect("navigation entry sender");
+            entered.send(()).expect("navigation entry signal");
+            self.release
+                .take()
+                .expect("navigation release receiver")
+                .recv()
+                .expect("navigation release");
+        }
+        self.inner.usage_sessions(request)
+    }
+
+    fn usage_session_detail(
+        &mut self,
+        key: UsageSessionKey,
+    ) -> Result<QueryEnvelope<UsageSessionDetailResult>, QueryError> {
+        self.inner.usage_session_detail(key)
+    }
+}
+
 struct RecordingHistoryTerminalNotifier {
     sender: SyncSender<DesktopHistoryRangeIntent>,
 }
@@ -543,6 +611,87 @@ fn active_detail_query_keeps_history_range_busy_until_terminal_completion() {
 }
 
 #[test]
+fn active_and_pending_navigation_reject_range_without_displacement() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("history-range-active-navigation.sqlite3");
+    seed(&path);
+    let (entered_sender, entered_receiver) = sync_channel(1);
+    let (release_sender, release_receiver) = sync_channel(1);
+    let armed = Arc::new(AtomicBool::new(false));
+    let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+    let mut controller = DesktopController::spawn(
+        BlockingNavigationSource {
+            inner: QueryService::open(&path, FixedClock).expect("query service"),
+            armed: Arc::clone(&armed),
+            entered: Some(entered_sender),
+            release: Some(release_receiver),
+        },
+        DesktopQueryPlan::overview().expect("plan"),
+    )
+    .expect("controller");
+    controller.bind_snapshot_epoch(epoch).expect("bind epoch");
+    controller
+        .refresh(DesktopRefreshUrgency::Interactive)
+        .expect("initial refresh");
+    let _ = wait_for_completion(&controller);
+    let initial = controller
+        .take_snapshot()
+        .expect("mailbox")
+        .expect("initial snapshot");
+    armed.store(true, Ordering::Release);
+    controller
+        .request_session_page(DesktopSessionPageIntent::new(
+            epoch,
+            initial.generation(),
+            DesktopSessionNavigationGeneration::new(1).expect("navigation generation"),
+            DesktopSessionPageDirection::Newest,
+        ))
+        .expect("active navigation admission");
+    entered_receiver
+        .recv_timeout(Duration::from_secs(2))
+        .expect("navigation query entered");
+    let range = |generation| {
+        DesktopHistoryRangeIntent::new(
+            epoch,
+            initial.generation(),
+            DesktopHistoryRangeGeneration::new(generation).expect("range generation"),
+            DesktopHistoryRangePreset::Recent1Day,
+        )
+    };
+    assert_eq!(
+        controller
+            .request_history_range(range(1))
+            .expect_err("active navigation blocks range")
+            .stable_code(),
+        "busy"
+    );
+    assert!(matches!(
+        controller
+            .request_session_page(DesktopSessionPageIntent::new(
+                epoch,
+                initial.generation(),
+                DesktopSessionNavigationGeneration::new(2).expect("navigation generation"),
+                DesktopSessionPageDirection::Next,
+            ))
+            .expect("pending navigation admission"),
+        tokenmaster_desktop::DesktopRefreshAdmission::Coalesced { .. }
+    ));
+    assert_eq!(
+        controller
+            .request_history_range(range(2))
+            .expect_err("pending navigation blocks range without displacement")
+            .stable_code(),
+        "busy"
+    );
+    release_sender.send(()).expect("release navigation");
+    let _ = wait_for_completion(&controller);
+    let _ = wait_for_completion(&controller);
+    controller.shutdown().expect("shutdown");
+}
+
+#[test]
 fn ten_thousand_range_intents_keep_only_the_direct_latest_follow_up() {
     let directory = TempDir::new().expect("temporary directory");
     let path = directory.path().join("history-range-direct-latest.sqlite3");
@@ -599,6 +748,21 @@ fn ten_thousand_range_intents_keep_only_the_direct_latest_follow_up() {
             entered_receiver
                 .recv_timeout(Duration::from_secs(2))
                 .expect("first range query entered");
+            assert_eq!(
+                controller
+                    .request_session_detail(DesktopSessionDetailIntent::new(
+                        epoch,
+                        initial.generation(),
+                        ProductSessionDetailSelection::new(
+                            ProductSessionDetailSelectionGeneration::new(1)
+                                .expect("selection generation"),
+                            0,
+                        ),
+                    ))
+                    .expect_err("active range blocks detail without displacement")
+                    .stable_code(),
+                "busy"
+            );
         } else {
             assert!(matches!(
                 admission,
