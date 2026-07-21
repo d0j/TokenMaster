@@ -9,6 +9,7 @@ export struct ReminderCustomLeadRow {
 
 export component SettingsView inherits Rectangle {
     in property <int> presentation-density-id;
+    in property <int> presentation-skin-id;
     in property <string> presentation-persistence-state;
     in property <bool> periodic-enabled;
     in property <int> quiet-seconds;
@@ -54,6 +55,7 @@ export component SettingsView inherits Rectangle {
     callback repair-current-user-startup();
     callback disable-current-user-startup();
     callback select-presentation-density(int);
+    callback select-presentation-skin(int);
 
     background: UiTokens.background;
     accessible-role: groupbox;
@@ -78,13 +80,20 @@ export component SettingsView inherits Rectangle {
                 accessible-label: "Presentation density";
                 selected(_) => { root.select-presentation-density(self.current-index); }
             }
+            Text { text: "Skin"; color: UiTokens.text-secondary; vertical-alignment: center; }
+            skin-selector := ComboBox {
+                model: ["Refined", "Graphite", "Ember"];
+                current-index: root.presentation-skin-id;
+                accessible-label: "Presentation skin";
+                selected(_) => { root.select-presentation-skin(self.current-index); }
+            }
         }
         Text {
             text: root.presentation-persistence-state == "saved" ? "Saved"
                 : root.presentation-persistence-state == "saving" ? "Saving…"
-                : "Not saved — choose a density again to retry";
+                : "Not saved — choose the current presentation again to retry";
             color: UiTokens.text-secondary;
-            accessible-label: "Presentation density persistence " + self.text;
+            accessible-label: "Presentation persistence " + self.text;
         }
 
         reminder-card := Rectangle {

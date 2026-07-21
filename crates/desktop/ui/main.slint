@@ -3,7 +3,7 @@ import {
     DashboardTrendPoint, DashboardSessionRow, DashboardActivityRow, DashboardModelRow,
     HistoryDayRow, ModelUsageRow, ProjectUsageRow, RecentActivityRow, ReminderScopeRow, BenefitLotRow, SessionListRow, SessionDetailBreakdownRow, RestorePointRow, InAppNotificationRow
 } from "models.slint";
-import { UiTokens } from "tokens.slint";
+import { UiPalette, UiTokens } from "tokens.slint";
 import { RouteNavItem } from "components/route-nav-item.slint";
 import { RouteState } from "components/route-state.slint";
 import { InAppNotificationPanel } from "components/in-app-notification-panel.slint";
@@ -22,8 +22,11 @@ import { SettingsView, ReminderCustomLeadRow } from "views/settings-view.slint";
 import { Button } from "std-widgets.slint";
 
 export component MainWindow inherits Window {
+    in-out property <UiPalette> presentation-palette <=> UiTokens.palette;
     in-out property <int> presentation-density-id <=> UiTokens.density-id;
     out property <string> presentation-density-key: root.presentation-density-id == 2 ? "ultra_compact" : (root.presentation-density-id == 1 ? "compact" : "comfortable");
+    in-out property <int> presentation-skin-id: 0;
+    out property <string> presentation-skin-key: root.presentation-skin-id == 2 ? "ember" : (root.presentation-skin-id == 1 ? "graphite" : "refined");
     in-out property <string> presentation-revision: "0";
     in-out property <string> presentation-persistence-state: "saved";
     out property <length> presentation-space: UiTokens.space;
@@ -247,6 +250,7 @@ export component MainWindow inherits Window {
     callback disable-current-user-startup();
     callback dismiss-in-app-notifications();
     callback select-presentation-density(int);
+    callback select-presentation-skin(int);
 
     title: "TokenMaster";
     preferred-width: root.compact-widget-visible ? 420px : 1120px;
@@ -522,6 +526,7 @@ export component MainWindow inherits Window {
                     width: parent.width;
                     height: parent.height;
                     presentation-density-id: root.presentation-density-id;
+                    presentation-skin-id: root.presentation-skin-id;
                     presentation-persistence-state: root.presentation-persistence-state;
                     periodic-enabled: root.backup-periodic-enabled;
                     quiet-seconds: root.backup-quiet-seconds;
@@ -562,6 +567,7 @@ export component MainWindow inherits Window {
                     repair-current-user-startup => { root.repair-current-user-startup(); }
                     disable-current-user-startup => { root.disable-current-user-startup(); }
                     select-presentation-density(index) => { root.select-presentation-density(index); }
+                    select-presentation-skin(index) => { root.select-presentation-skin(index); }
                     visible: root.settings-visible;
                 }
 

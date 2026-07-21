@@ -11,7 +11,7 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
-use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
+use slint::{Color, ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use tokenmaster_product::ProductSnapshot;
 
 use crate::{
@@ -24,13 +24,13 @@ use crate::{
     DesktopIntentSink, DesktopLifecycleIntentSink, DesktopModelsProjection,
     DesktopNotificationsProjection, DesktopOperationSnapshot, DesktopPresentationApplyOutcome,
     DesktopPresentationStyle, DesktopProjectsProjection, DesktopQuality,
-    DesktopReliableStateProjection, DesktopReminderPolicy, DesktopSessionDetailIntentAdmission,
-    DesktopSessionDetailIntentSink, DesktopSessionsProjection, DesktopSnapshotBridge,
-    DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue, DesktopTrayAvailability,
-    DesktopValueAvailability, HistoryDayRow, InAppNotificationRow, MainWindow, ModelUsageRow,
-    ProjectUsageRow, RecentActivityRow, ReminderCustomLeadRow, ReminderScopeRow, RestorePointRow,
-    RouteRow, SessionDetailBreakdownRow, SessionListRow, UnavailableDesktopIntentSink,
-    UnavailableDesktopSessionDetailIntentSink,
+    DesktopReliableStateProjection, DesktopReminderPolicy, DesktopRgb,
+    DesktopSessionDetailIntentAdmission, DesktopSessionDetailIntentSink, DesktopSessionsProjection,
+    DesktopSnapshotBridge, DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue,
+    DesktopTrayAvailability, DesktopValueAvailability, HistoryDayRow, InAppNotificationRow,
+    MainWindow, ModelUsageRow, ProjectUsageRow, RecentActivityRow, ReminderCustomLeadRow,
+    ReminderScopeRow, RestorePointRow, RouteRow, SessionDetailBreakdownRow, SessionListRow,
+    UiPalette, UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
     in_app_notification::NotificationEpochState,
     native_tray::DesktopNativeTrayOwner,
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
@@ -497,7 +497,12 @@ impl DesktopShell {
         wire_reliable_state_intents(&window, reliable_state.clone(), Rc::clone(&intent_sink));
         wire_session_detail_intents(&window, state.clone(), session_sink);
         wire_in_app_notification_dismissal(&window);
-        wire_presentation_density(&window, Arc::clone(&presentation_style), intent_sink);
+        wire_presentation_density(
+            &window,
+            Arc::clone(&presentation_style),
+            intent_sink.clone(),
+        );
+        wire_presentation_skin(&window, Arc::clone(&presentation_style), intent_sink);
         Ok(Self {
             window,
             _presentation_style: presentation_style,
@@ -647,9 +652,36 @@ impl DesktopShell {
 }
 
 fn apply_presentation_style(window: &MainWindow, style: DesktopPresentationStyle) {
+    window.set_presentation_palette(ui_palette(style.skin()));
+    window.set_presentation_skin_id(style.skin().slint_index());
     window.set_presentation_density_id(style.density().slint_index());
     window.set_presentation_revision(style.revision().get().to_string().into());
     window.set_presentation_persistence_state(style.persistence().stable_code().into());
+}
+
+fn ui_palette(skin: crate::DesktopSkin) -> UiPalette {
+    let tokens = skin.color_tokens();
+    UiPalette {
+        background: ui_color(tokens.background()),
+        surface: ui_color(tokens.surface()),
+        surface_raised: ui_color(tokens.surface_raised()),
+        surface_subtle: ui_color(tokens.surface_subtle()),
+        border: ui_color(tokens.border()),
+        text_primary: ui_color(tokens.text_primary()),
+        text_secondary: ui_color(tokens.text_secondary()),
+        accent: ui_color(tokens.accent()),
+        accent_subtle: ui_color(tokens.accent_subtle()),
+        accent_secondary: ui_color(tokens.accent_secondary()),
+        accent_tertiary: ui_color(tokens.accent_tertiary()),
+        ready: ui_color(tokens.ready()),
+        waiting: ui_color(tokens.waiting()),
+        degraded: ui_color(tokens.degraded()),
+        unavailable: ui_color(tokens.unavailable()),
+    }
+}
+
+fn ui_color(color: DesktopRgb) -> Color {
+    Color::from_rgb_u8(color.red(), color.green(), color.blue())
 }
 
 fn reconcile_presentation_style(
@@ -732,6 +764,24 @@ fn wire_presentation_density(
     });
 }
 
+fn wire_presentation_skin(
+    window: &MainWindow,
+    presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
+    intent_sink: Rc<dyn DesktopIntentSink>,
+) {
+    let weak_window = window.as_weak();
+    window.on_select_presentation_skin(move |index| {
+        let Some(next_style) =
+            select_presentation_skin_if_admitted(&presentation_style, index, &intent_sink)
+        else {
+            return;
+        };
+        if let Some(window) = weak_window.upgrade() {
+            apply_presentation_style(&window, next_style);
+        }
+    });
+}
+
 fn select_presentation_density_if_admitted(
     presentation_style: &Arc<Mutex<DesktopPresentationStyle>>,
     index: i32,
@@ -740,6 +790,31 @@ fn select_presentation_density_if_admitted(
     let captured = *presentation_style.lock().ok()?;
     let mut selected = captured;
     if selected.select_density_index_if_admitted(index, |selection| {
+        matches!(
+            intent_sink.submit(DesktopIntent::UpdatePresentation(selection)),
+            crate::DesktopIntentAdmission::Started
+                | crate::DesktopIntentAdmission::Queued
+                | crate::DesktopIntentAdmission::Coalesced
+        )
+    }) != DesktopPresentationApplyOutcome::Applied
+    {
+        return None;
+    }
+    let mut current = presentation_style.lock().ok()?;
+    if *current == captured {
+        *current = selected;
+    }
+    Some(*current)
+}
+
+fn select_presentation_skin_if_admitted(
+    presentation_style: &Arc<Mutex<DesktopPresentationStyle>>,
+    index: i32,
+    intent_sink: &Rc<dyn DesktopIntentSink>,
+) -> Option<DesktopPresentationStyle> {
+    let captured = *presentation_style.lock().ok()?;
+    let mut selected = captured;
+    if selected.select_skin_index_if_admitted(index, |selection| {
         matches!(
             intent_sink.submit(DesktopIntent::UpdatePresentation(selection)),
             crate::DesktopIntentAdmission::Started
