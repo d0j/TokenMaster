@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use i_slint_backend_testing::{AccessibleRole, ElementQuery};
@@ -14,33 +13,41 @@ use tokenmaster_product::ProductReducer;
 
 struct RecordingIntentSink {
     admission: DesktopIntentAdmission,
-    densities: RefCell<Vec<DesktopDensity>>,
+    count: std::cell::Cell<u64>,
+    last: std::cell::Cell<Option<DesktopDensity>>,
 }
 
 impl RecordingIntentSink {
     fn accepting() -> Self {
         Self {
             admission: DesktopIntentAdmission::Started,
-            densities: RefCell::new(Vec::new()),
+            count: std::cell::Cell::new(0),
+            last: std::cell::Cell::new(None),
         }
     }
 
     fn rejecting() -> Self {
         Self {
             admission: DesktopIntentAdmission::Rejected,
-            densities: RefCell::new(Vec::new()),
+            count: std::cell::Cell::new(0),
+            last: std::cell::Cell::new(None),
         }
     }
 
     fn last(&self) -> Option<DesktopDensity> {
-        self.densities.borrow().last().copied()
+        self.last.get()
+    }
+
+    fn count(&self) -> u64 {
+        self.count.get()
     }
 }
 
 impl DesktopIntentSink for RecordingIntentSink {
     fn submit(&self, intent: DesktopIntent) -> DesktopIntentAdmission {
         if let DesktopIntent::UpdatePresentationDensity(density) = intent {
-            self.densities.borrow_mut().push(density);
+            self.count.set(self.count.get() + 1);
+            self.last.set(Some(density));
         }
         self.admission
     }
@@ -143,7 +150,15 @@ fn stale_persisted_density_does_not_overwrite_a_newer_saving_selection() {
     assert_eq!(window.get_presentation_persistence_state(), "saving");
 
     shell
-        .apply_reliable_state(reliable_state_with_density(DesktopDensity::Compact))
+        .apply_reliable_state(reliable_state_with_density_and_operation(
+            DesktopDensity::Compact,
+            Some(DesktopOperationSnapshot::new(
+                DesktopOperationKind::UpdatePresentation,
+                DesktopOperationPhase::Succeeded,
+                false,
+                None,
+            )),
+        ))
         .expect("matching reliable state");
     assert_eq!(window.get_presentation_persistence_state(), "saved");
 }
@@ -156,7 +171,7 @@ fn failed_density_persistence_is_not_saved_but_import_and_portable_restore_overr
     let shell = DesktopShell::new_with_reliable_state(
         &ProductReducer::new().snapshot(),
         reliable_state_with_density(DesktopDensity::Comfortable),
-        sink,
+        sink.clone(),
     )
     .expect("shell");
     let window = shell.window();
@@ -241,7 +256,7 @@ fn ten_thousand_accepted_density_switches_reuse_the_same_window_routes_and_model
     let shell = DesktopShell::new_with_reliable_state(
         &ProductReducer::new().snapshot(),
         reliable_state_with_density(DesktopDensity::Comfortable),
-        sink,
+        sink.clone(),
     )
     .expect("shell");
     let window = shell.window();
@@ -256,6 +271,67 @@ fn ten_thousand_accepted_density_switches_reuse_the_same_window_routes_and_model
     assert_eq!(component_address, shell.window() as *const _);
     assert_eq!(window.get_route_rows().row_count(), routes);
     assert_eq!(window.get_dashboard_quota_rows().row_count(), quotas);
+    assert_eq!(sink.count(), 9_999);
+    assert_eq!(sink.last(), Some(DesktopDensity::Comfortable));
+}
+
+#[test]
+fn stale_running_projection_cannot_confirm_a_newer_a_to_b_to_a_selection() {
+    i_slint_backend_testing::init_no_event_loop();
+
+    let sink = Rc::new(RecordingIntentSink::accepting());
+    let shell = DesktopShell::new_with_reliable_state(
+        &ProductReducer::new().snapshot(),
+        reliable_state_with_density(DesktopDensity::Comfortable),
+        sink,
+    )
+    .expect("shell");
+    let window = shell.window();
+    window.invoke_select_presentation_density(1);
+    window.invoke_select_presentation_density(0);
+    assert_eq!(window.get_presentation_density_key(), "comfortable");
+    assert_eq!(window.get_presentation_persistence_state(), "saving");
+
+    shell
+        .apply_reliable_state(reliable_state_with_density_and_operation(
+            DesktopDensity::Comfortable,
+            Some(DesktopOperationSnapshot::new(
+                DesktopOperationKind::UpdatePresentation,
+                DesktopOperationPhase::Running,
+                true,
+                None,
+            )),
+        ))
+        .expect("stale running A");
+    assert_eq!(window.get_presentation_persistence_state(), "saving");
+
+    shell
+        .apply_reliable_state(reliable_state_with_density_and_operation(
+            DesktopDensity::Compact,
+            Some(DesktopOperationSnapshot::new(
+                DesktopOperationKind::UpdatePresentation,
+                DesktopOperationPhase::Succeeded,
+                false,
+                None,
+            )),
+        ))
+        .expect("successful B");
+    assert_eq!(window.get_presentation_density_key(), "comfortable");
+    assert_eq!(window.get_presentation_persistence_state(), "saving");
+
+    shell
+        .apply_reliable_state(reliable_state_with_density_and_operation(
+            DesktopDensity::Comfortable,
+            Some(DesktopOperationSnapshot::new(
+                DesktopOperationKind::UpdatePresentation,
+                DesktopOperationPhase::Succeeded,
+                false,
+                None,
+            )),
+        ))
+        .expect("successful A");
+    assert_eq!(window.get_presentation_density_key(), "comfortable");
+    assert_eq!(window.get_presentation_persistence_state(), "saved");
 }
 
 #[test]

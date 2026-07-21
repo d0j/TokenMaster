@@ -172,6 +172,23 @@ impl DesktopPresentationStyle {
         DesktopPresentationApplyOutcome::Applied
     }
 
+    pub fn observe_persisted_unconfirmed(
+        &mut self,
+        persisted_density: DesktopDensity,
+    ) -> DesktopPresentationApplyOutcome {
+        let was_saved = matches!(self.persistence, DesktopPresentationPersistence::Saved);
+        self.persisted_density = persisted_density;
+        if !was_saved || self.density == persisted_density {
+            return DesktopPresentationApplyOutcome::Unchanged;
+        }
+        let Some(revision) = self.revision.checked_successor() else {
+            return DesktopPresentationApplyOutcome::RevisionExhausted;
+        };
+        self.density = persisted_density;
+        self.revision = revision;
+        DesktopPresentationApplyOutcome::Applied
+    }
+
     pub fn mark_not_saved(&mut self) {
         if matches!(self.persistence, DesktopPresentationPersistence::Saving)
             && self.density != self.persisted_density

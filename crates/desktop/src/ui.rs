@@ -666,11 +666,17 @@ fn reconcile_presentation_style(
                     crate::DesktopOperationPhase::Failed | crate::DesktopOperationPhase::Cancelled
                 ) =>
         {
-            style.observe_persisted(projected_density);
+            style.observe_persisted_unconfirmed(projected_density);
             style.mark_not_saved();
         }
-        _ => {
+        Some(operation)
+            if operation.kind() == crate::DesktopOperationKind::UpdatePresentation
+                && operation.phase() == crate::DesktopOperationPhase::Succeeded =>
+        {
             style.observe_persisted(projected_density);
+        }
+        _ => {
+            style.observe_persisted_unconfirmed(projected_density);
         }
     }
     Ok(*style)
@@ -683,26 +689,40 @@ fn wire_presentation_density(
 ) {
     let weak_window = window.as_weak();
     window.on_select_presentation_density(move |index| {
-        let Ok(mut style) = presentation_style.lock() else {
+        let Some(next_style) =
+            select_presentation_density_if_admitted(&presentation_style, index, &intent_sink)
+        else {
             return;
         };
-        if style.select_density_index_if_admitted(index, |density| {
-            matches!(
-                intent_sink.submit(DesktopIntent::UpdatePresentationDensity(density)),
-                crate::DesktopIntentAdmission::Started
-                    | crate::DesktopIntentAdmission::Queued
-                    | crate::DesktopIntentAdmission::Coalesced
-            )
-        }) != DesktopPresentationApplyOutcome::Applied
-        {
-            return;
-        }
-        let next_style = *style;
-        drop(style);
         if let Some(window) = weak_window.upgrade() {
             apply_presentation_style(&window, next_style);
         }
     });
+}
+
+fn select_presentation_density_if_admitted(
+    presentation_style: &Arc<Mutex<DesktopPresentationStyle>>,
+    index: i32,
+    intent_sink: &Rc<dyn DesktopIntentSink>,
+) -> Option<DesktopPresentationStyle> {
+    let captured = *presentation_style.lock().ok()?;
+    let mut selected = captured;
+    if selected.select_density_index_if_admitted(index, |density| {
+        matches!(
+            intent_sink.submit(DesktopIntent::UpdatePresentationDensity(density)),
+            crate::DesktopIntentAdmission::Started
+                | crate::DesktopIntentAdmission::Queued
+                | crate::DesktopIntentAdmission::Coalesced
+        )
+    }) != DesktopPresentationApplyOutcome::Applied
+    {
+        return None;
+    }
+    let mut current = presentation_style.lock().ok()?;
+    if *current == captured {
+        *current = selected;
+    }
+    Some(*current)
 }
 
 fn wire_in_app_notification_dismissal(window: &MainWindow) {
@@ -2944,21 +2964,75 @@ fn format_timestamp_utc(seconds: i64, nanos: u32) -> String {
 
 #[cfg(test)]
 mod duration_tests {
+    use std::cell::Cell;
     use std::rc::Rc;
     use std::sync::mpsc::sync_channel;
+    use std::sync::{Arc, Mutex};
     use std::thread;
     use std::time::{Duration, Instant};
 
     use super::{
-        DesktopReliableStateProjection, DesktopShell, format_benefit_expiry,
-        format_session_duration, format_timestamp_utc,
+        DesktopReliableStateProjection, DesktopShell, MainWindow, apply_presentation_style,
+        format_benefit_expiry, format_session_duration, format_timestamp_utc,
+        wire_presentation_density,
     };
     use crate::{
-        DesktopBenefitExpiry, DesktopOperationKind, DesktopOperationPhase,
-        DesktopOperationSnapshot, DesktopReminderPolicy, DesktopReminderSyncState,
+        DesktopBenefitExpiry, DesktopDensity, DesktopIntent, DesktopIntentAdmission,
+        DesktopIntentSink, DesktopOperationKind, DesktopOperationPhase, DesktopOperationSnapshot,
+        DesktopPresentationStyle, DesktopReminderPolicy, DesktopReminderSyncState,
         UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
     };
     use tokenmaster_product::ProductReducer;
+
+    struct ReentrantPresentationSink {
+        style: Arc<Mutex<DesktopPresentationStyle>>,
+        acquired_style: Cell<bool>,
+    }
+
+    impl DesktopIntentSink for ReentrantPresentationSink {
+        fn submit(&self, intent: DesktopIntent) -> DesktopIntentAdmission {
+            if matches!(intent, DesktopIntent::UpdatePresentationDensity(_)) {
+                let Ok(mut style) = self.style.try_lock() else {
+                    return DesktopIntentAdmission::Rejected;
+                };
+                self.acquired_style.set(true);
+                assert_eq!(
+                    style.select_density_index(2),
+                    crate::DesktopPresentationApplyOutcome::Applied
+                );
+            }
+            DesktopIntentAdmission::Started
+        }
+    }
+
+    #[test]
+    fn presentation_submission_does_not_hold_the_style_mutex_or_overwrite_reentry()
+    -> Result<(), String> {
+        i_slint_backend_testing::init_no_event_loop();
+        let window = MainWindow::new().map_err(|_| String::from("window"))?;
+        let style = Arc::new(Mutex::new(DesktopPresentationStyle::from_persisted(
+            DesktopDensity::Comfortable,
+        )));
+        let initial_style = *style.lock().map_err(|_| String::from("initial style"))?;
+        apply_presentation_style(&window, initial_style);
+        let sink = Rc::new(ReentrantPresentationSink {
+            style: Arc::clone(&style),
+            acquired_style: Cell::new(false),
+        });
+        wire_presentation_density(&window, Arc::clone(&style), sink.clone());
+
+        window.invoke_select_presentation_density(1);
+
+        assert!(sink.acquired_style.get());
+        assert_eq!(
+            style
+                .lock()
+                .map_err(|_| String::from("reentrant style"))?
+                .density(),
+            DesktopDensity::UltraCompact
+        );
+        Ok(())
+    }
 
     #[test]
     fn notification_expiry_preserves_exact_millisecond_endpoints() {

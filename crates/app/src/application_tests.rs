@@ -686,6 +686,128 @@ fn reminder_policy_intent_admits_one_bounded_update_policy_request() {
     );
 }
 
+#[test]
+fn presentation_density_intent_routes_to_the_exact_typed_operation() {
+    let (observed_sender, observed_receiver) = mpsc::sync_channel(1);
+    let mut worker = ApplicationOperationWorker::spawn_with_payload(move |permit, payload| {
+        observed_sender
+            .send((permit.command(), payload))
+            .expect("observed request");
+        ApplicationCommandExecution::Succeeded
+    })
+    .expect("operation worker");
+    let sink = ApplicationDesktopIntentSink::new(worker.submitter());
+
+    assert_eq!(
+        sink.submit(DesktopIntent::UpdatePresentationDensity(
+            tokenmaster_desktop::DesktopDensity::UltraCompact,
+        )),
+        DesktopIntentAdmission::Started
+    );
+    let (command, payload) = observed_receiver
+        .recv_timeout(Duration::from_secs(5))
+        .expect("presentation request");
+    assert_eq!(command, ApplicationCommand::UpdatePresentationDensity);
+    let ApplicationOperationPayload::PresentationDensity(update) = payload else {
+        panic!("presentation payload");
+    };
+    assert_eq!(
+        update.density(),
+        tokenmaster_desktop::DesktopDensity::UltraCompact
+    );
+    assert_eq!(
+        update.into_state_density(),
+        tokenmaster_state::PresentationDensity::UltraCompact
+    );
+    assert_eq!(
+        application_operation_kind(command),
+        DesktopOperationKind::UpdatePresentation
+    );
+    let selection = ApplicationBackupSelection::new(1, 0).expect("selection");
+    assert_eq!(
+        application_operation_kind(ApplicationCommand::ConfirmConfigImport),
+        DesktopOperationKind::ApplyConfig
+    );
+    assert_eq!(
+        application_operation_kind(ApplicationCommand::RestoreDataAndPortableSettings(
+            selection
+        )),
+        DesktopOperationKind::RestoreWithPortableSettings
+    );
+    assert_eq!(
+        application_operation_kind(ApplicationCommand::ImportConfig),
+        DesktopOperationKind::ImportConfig
+    );
+    assert_eq!(
+        application_operation_kind(ApplicationCommand::CancelConfigImport),
+        DesktopOperationKind::ImportConfig
+    );
+    assert_eq!(
+        application_operation_kind(ApplicationCommand::RestoreData(selection)),
+        DesktopOperationKind::Restore
+    );
+    assert_eq!(
+        worker.shutdown().expect("worker shutdown"),
+        ApplicationOperationWorkerPhase::Stopped
+    );
+}
+
+#[test]
+fn presentation_density_execution_persists_and_projects_the_confirmed_operation() {
+    i_slint_backend_testing::init_no_event_loop();
+    let temporary = TempDir::new().expect("temporary directory");
+    let environment = application_environment(&temporary);
+    let root = DataRoot::resolve(&environment).expect("data root");
+    let state = ApplicationStateOwner::open(&root).expect("state owner");
+    let preflight = Arc::new(Mutex::new(state.prepare(&root).expect("preflight")));
+    let shell = DesktopShell::new_with_reliable_state(
+        &ProductReducer::new().snapshot(),
+        DesktopReliableStateProjection::unavailable(),
+        Rc::new(NoopDesktopIntentSink),
+    )
+    .expect("desktop shell");
+    let notifier = shell.reliable_state_notifier();
+    let bundle: SharedBundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
+    let bridge: SharedBridge = Arc::new(Mutex::new(None));
+    let live_started = Arc::new(AtomicBool::new(false));
+    let mut coordinator = ApplicationCommandCoordinator::new();
+    let ApplicationCommandAdmission::Started(permit) =
+        coordinator.submit(ApplicationCommand::UpdatePresentationDensity)
+    else {
+        panic!("presentation permit");
+    };
+    let (_, payload) = ApplicationOperationRequest::update_presentation_density(
+        tokenmaster_desktop::DesktopDensity::Compact,
+    )
+    .into_parts();
+
+    let execution = execute_application_operation(
+        &environment,
+        &root,
+        &state,
+        &preflight,
+        &bundle,
+        &shell.bridge_factory(),
+        &bridge,
+        &live_started,
+        &notifier,
+        &permit,
+        payload,
+    );
+    assert_eq!(execution, ApplicationCommandExecution::Succeeded);
+    let completion = application_operation_completion(permit.command(), execution);
+    assert_eq!(completion.kind(), DesktopOperationKind::UpdatePresentation);
+    assert_eq!(completion.phase(), DesktopOperationPhase::Succeeded);
+    let projection = state
+        .reliable_state_projection_for_outcome(BootstrapOutcome::FirstInstall, Some(completion))
+        .expect("reliable projection");
+    assert_eq!(
+        projection.presentation().density(),
+        tokenmaster_desktop::DesktopDensity::Compact
+    );
+    assert_eq!(projection.operation(), Some(completion));
+}
+
 struct NoopDesktopIntentSink;
 
 impl DesktopIntentSink for NoopDesktopIntentSink {

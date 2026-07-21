@@ -179,6 +179,37 @@ fn equal_observation_and_override_resolve_persistence_without_revising() {
 }
 
 #[test]
+fn unconfirmed_observation_never_confirms_a_local_a_to_b_to_a_sequence() {
+    let mut style = DesktopPresentationStyle::from_persisted(DesktopDensity::Comfortable);
+    assert_eq!(
+        style.select_density_index_if_admitted(1, |_| true),
+        DesktopPresentationApplyOutcome::Applied
+    );
+    assert_eq!(
+        style.select_density_index_if_admitted(0, |_| true),
+        DesktopPresentationApplyOutcome::Applied
+    );
+    assert_eq!(style.persistence(), DesktopPresentationPersistence::Saving);
+
+    assert_eq!(
+        style.observe_persisted_unconfirmed(DesktopDensity::Comfortable),
+        DesktopPresentationApplyOutcome::Unchanged
+    );
+    assert_eq!(style.persistence(), DesktopPresentationPersistence::Saving);
+    assert_eq!(
+        style.observe_persisted(DesktopDensity::Compact),
+        DesktopPresentationApplyOutcome::Unchanged
+    );
+    assert_eq!(style.density(), DesktopDensity::Comfortable);
+    assert_eq!(style.persistence(), DesktopPresentationPersistence::Saving);
+    assert_eq!(
+        style.observe_persisted(DesktopDensity::Comfortable),
+        DesktopPresentationApplyOutcome::Unchanged
+    );
+    assert_eq!(style.persistence(), DesktopPresentationPersistence::Saved);
+}
+
+#[test]
 fn admission_runs_once_after_validation_and_rejection_preserves_state() {
     let mut style = DesktopPresentationStyle::from_persisted(DesktopDensity::Comfortable);
     let unchanged = style;

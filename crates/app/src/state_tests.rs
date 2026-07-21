@@ -1203,3 +1203,75 @@ fn presentation_density_update_preserves_every_other_settings_class() {
     assert_eq!(after.value().portable().backup(), &before_backup);
     assert_eq!(after.value().device(), &before_device);
 }
+
+#[test]
+fn presentation_density_save_rejects_wrong_or_cancelled_permits_and_is_idempotent() {
+    let (_temporary, root) = fixture();
+    let owner = ApplicationStateOwner::open(&root).expect("state owner");
+    let store = SettingsStore::new(root.reliable_state()).expect("settings store");
+    let before = store.load().expect("initial settings");
+    let mut callback_count = 0;
+
+    owner
+        .update_presentation_density(
+            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            PresentationDensity::Compact,
+            || callback_count += 1,
+        )
+        .expect_err("wrong permit");
+    assert_eq!(callback_count, 0);
+    assert_eq!(
+        store.load().expect("wrong permit settings").generation(),
+        before.generation()
+    );
+
+    let mut coordinator = ApplicationCommandCoordinator::new();
+    let ApplicationCommandAdmission::Started(cancelled) =
+        coordinator.submit(ApplicationCommand::UpdatePresentationDensity)
+    else {
+        panic!("presentation permit");
+    };
+    assert!(coordinator.cancel(cancelled.id()));
+    owner
+        .update_presentation_density(&cancelled, PresentationDensity::Compact, || {
+            callback_count += 1;
+        })
+        .expect_err("cancelled permit");
+    assert_eq!(callback_count, 0);
+    assert_eq!(
+        store.load().expect("cancelled settings").generation(),
+        before.generation()
+    );
+
+    owner
+        .update_presentation_density(
+            &command_permit(ApplicationCommand::UpdatePresentationDensity),
+            PresentationDensity::Comfortable,
+            || callback_count += 1,
+        )
+        .expect("equal density is idempotent");
+    assert_eq!(callback_count, 0);
+    assert_eq!(
+        store.load().expect("equal settings").generation(),
+        before.generation()
+    );
+
+    owner
+        .update_presentation_density(
+            &command_permit(ApplicationCommand::UpdatePresentationDensity),
+            PresentationDensity::Compact,
+            || callback_count += 1,
+        )
+        .expect("changed density");
+    assert_eq!(callback_count, 1);
+    assert_eq!(
+        store
+            .load()
+            .expect("changed settings")
+            .value()
+            .portable()
+            .presentation()
+            .density(),
+        PresentationDensity::Compact
+    );
+}

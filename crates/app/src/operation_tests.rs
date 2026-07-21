@@ -596,7 +596,7 @@ fn presentation_density_follow_up_replaces_only_the_pending_payload() {
 }
 
 #[test]
-fn presentation_density_stress_retains_one_active_and_one_latest_pending_payload() {
+fn ten_thousand_presentation_updates_keep_one_latest_payload() {
     let (started_tx, started_rx) = channel();
     let (release_tx, release_rx) = channel();
     let executed = Arc::new(Mutex::new(Vec::new()));
