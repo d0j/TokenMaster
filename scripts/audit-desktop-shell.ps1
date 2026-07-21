@@ -1448,7 +1448,17 @@ if ($controllerText -notmatch 'pub const MAX_SESSION_ROWS: usize = 64;' -or
 $applyProjectionText = Get-RustFunctionText -Text $uiRustProductionText -Name 'apply_projection'
 $applyRouteProjectionText = Get-RustFunctionText -Text $uiRustProductionText -Name 'apply_route_projection'
 $applySessionsProjectionText = Get-RustFunctionText -Text $uiRustProductionText -Name 'apply_sessions_projection'
-if ([regex]::Matches($applyProjectionText, 'apply_sessions_projection\(').Count -ne 1 -or
+$sessionsProjectionDefinitionCount = [regex]::Matches(
+    $uiRustProductionText,
+    '(?m)^\s*fn\s+apply_sessions_projection\s*\('
+).Count
+$sessionsProjectionCallerCount = [regex]::Matches(
+    $uiRustProductionText,
+    'apply_sessions_projection\('
+).Count - $sessionsProjectionDefinitionCount
+if ($sessionsProjectionDefinitionCount -ne 1 -or
+    $sessionsProjectionCallerCount -ne 1 -or
+    [regex]::Matches($applyProjectionText, 'apply_sessions_projection\(').Count -ne 1 -or
     $applyRouteProjectionText -match 'apply_sessions_projection\(') {
     throw 'TM-DESKTOP-SESSIONS-REBUILD: only accepted product projection delivery may replace Sessions rows'
 }
@@ -1464,15 +1474,28 @@ if ($sessionsModelReplacementCount -ne 1 -or
 }
 $sessionNavigationText = Get-ExecutableBracedText -Text $controllerText -Pattern '(?m)^\s*fn\s+execute_session_page(?:<[^>]+>)?\s*\(' -FailureCode 'TM-DESKTOP-SESSIONS-NAVIGATION'
 $sessionNavigationCommitText = Get-ExecutableBracedText -Text $controllerText -Pattern '(?m)^\s*fn\s+commit_session_page_with_hook(?:<[^>]+>)?\s*\(' -FailureCode 'TM-DESKTOP-SESSIONS-NAVIGATION'
+$sessionPageAdmissionText = Get-RustFunctionText -Text $controllerText -Name 'request_session_page'
 $refreshIngressText = Get-RustFunctionText -Text $controllerText -Name 'refresh'
 $sessionNavigationQueuePattern = '(?im)^(?=[^\r\n]*navigation)[^\r\n]*(?:\b(?:VecDeque|HashMap|BTreeMap|LinkedList)\b|\bVec\s*<|\b(?:sync_)?channel\s*(?:::)?\s*(?:<|\())'
+$sessionEpochFence = [regex]::Match($sessionPageAdmissionText, 'if\s+self\.snapshot_epoch\(\)\s*!=\s*Some\(intent\.snapshot_epoch\(\)\)\s*\{')
+$sessionProductFence = [regex]::Match($sessionPageAdmissionText, 'if\s+\*lock_published_generation\(&self\.publication\.published_generation\)\?\s*!=\s*Some\(intent\.product_generation\(\)\)\s*\{')
+$sessionGenerationFence = [regex]::Match($sessionPageAdmissionText, 'if\s+work\s*\.navigation_high_water\s*\.is_some_and\(\|current\|\s*intent\.navigation_generation\(\)\s*<=\s*current\)\s*\{')
+$sessionWorkerAdmission = [regex]::Match($sessionPageAdmissionText, 'let admission\s*=\s*self\.submit\(DesktopRefreshUrgency::Interactive\)\?;')
 if ($controllerText -notmatch 'pub enum DesktopSessionPageDirection\s*\{\s*Newest,\s*Next,\s*\}' -or
     $controllerText -notmatch 'pending_navigation:\s*Option<PendingDesktopSessionPage>' -or
     $controllerText -notmatch 'current_navigation:\s*Option<ActiveDesktopSessionPage>' -or
     $controllerText -match $sessionNavigationQueuePattern -or
     $sessionNavigationText -notmatch 'DesktopSessionPageDirection::Newest\s*=>\s*Ok\(context\.plan\.sessions\.clone\(\)\)' -or
     $sessionNavigationText -notmatch 'DesktopSessionPageDirection::Next\s*=>\s*reducer' -or
+    $sessionNavigationText -notmatch '\.ok_or\(QueryErrorCode::InvalidValue\)' -or
     $sessionNavigationText -match '(?i)\b(?:previous_cursor|cursor_history|navigation_history)\b' -or
+    -not $sessionEpochFence.Success -or
+    -not $sessionProductFence.Success -or
+    -not $sessionGenerationFence.Success -or
+    -not $sessionWorkerAdmission.Success -or
+    $sessionEpochFence.Index -ge $sessionProductFence.Index -or
+    $sessionProductFence.Index -ge $sessionGenerationFence.Index -or
+    $sessionGenerationFence.Index -ge $sessionWorkerAdmission.Index -or
     $refreshIngressText -notmatch 'work\.refresh_attempt\s*=\s*Some\(attempt\);\s*invalidate_navigation\(&mut work\);' -or
     $sessionNavigationText -notmatch 'navigation_is_current\(reducer, context, permit\.id\(\)\.get\(\), intent\)' -or
     $sessionNavigationCommitText -notmatch 'context\.snapshot_epoch\.load\(Ordering::Acquire\)\s*==\s*intent\.snapshot_epoch\(\)\.get\(\)' -or
@@ -1501,8 +1524,18 @@ if ($controllerText -notmatch 'pending_selection:\s*Option<PendingDesktopSession
     $controllerText -match $sessionDetailQueuePattern) {
     throw 'TM-DESKTOP-SESSION-DETAIL-SLOT: exact detail work must use one latest-only typed slot'
 }
-$presentationText = [System.IO.File]::ReadAllText((Join-Path $sourceRoot 'presentation.rs'))
-$sessionUiBoundaryText = $sessionsText + "`n" + $presentationText + "`n" + $uiRustProductionText + "`n" + $uiText
+$mainUiText = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'main.slint'))
+$modelsText = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'models.slint'))
+$sessionPublicRustText = [regex]::Matches(
+    $sessionsText,
+    '(?s)pub struct DesktopSessions?\w*\s*\{.*?\}'
+).Value -join "`n"
+$sessionPublicSlintText = @(
+    ([regex]::Matches($modelsText, '(?s)export struct Session\w*\s*\{.*?\}').Value -join "`n")
+    ([regex]::Matches($mainUiText, '(?m)^\s*(?:in|out)\s+property\s+<[^>]+>\s+(?:session|sessions)[^;]*;').Value -join "`n")
+    ([regex]::Matches($mainUiText, '(?m)^\s*callback\s+(?:select-session|request-session-page-next|request-session-page-newest)\([^;]*\);').Value -join "`n")
+) -join "`n"
+$sessionUiBoundaryText = $sessionPublicRustText + "`n" + $sessionPublicSlintText
 if ($sessionUiBoundaryText -match '\bUsageSessionKey\b') {
     throw 'TM-DESKTOP-SESSION-DETAIL-IDENTITY: opaque session keys must remain inside the controller worker'
 }

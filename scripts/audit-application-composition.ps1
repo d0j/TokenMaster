@@ -319,9 +319,17 @@ $sessionPageSinkStruct = [regex]::Match(
     $applicationText,
     '(?s)struct ApplicationSessionPageIntentSink\s*\{.*?\}'
 ).Value
+$sessionPageSinkSubmitText = [regex]::Match(
+    $applicationText,
+    '(?ms)^impl DesktopSessionPageIntentSink for ApplicationSessionPageIntentSink \{.*?^\}'
+).Value
 if ([string]::IsNullOrWhiteSpace($sessionPageSinkText) -or
+    [string]::IsNullOrWhiteSpace($sessionPageSinkSubmitText) -or
     $sessionPageSinkStruct -notmatch '^struct ApplicationSessionPageIntentSink\s*\{\s*bundle:\s*Weak<Mutex<ApplicationBundleSlot>>,\s*\}$' -or
-    $sessionPageSinkText -notmatch 'fn request\(&self, intent: DesktopSessionPageIntent\)[\s\S]*?self\.bundle\.upgrade\(\)[\s\S]*?bundle\.try_lock\(\)[\s\S]*?slot\.as_ref\(\)[\s\S]*?controller\s*\.\s*request_session_page\(intent\)') {
+    $sessionPageSinkText -notmatch 'fn request\(&self, intent: DesktopSessionPageIntent\)[\s\S]*?self\.bundle\.upgrade\(\)[\s\S]*?bundle\.try_lock\(\)[\s\S]*?slot\.as_ref\(\)[\s\S]*?controller\s*\.\s*request_session_page\(intent\)' -or
+    $sessionPageSinkSubmitText -notmatch 'fn submit\(&self, intent: DesktopSessionPageIntent\) -> DesktopSessionPageIntentAdmission\s*\{\s*match self\.request\(intent\)\s*\{' -or
+    $sessionPageSinkSubmitText -notmatch 'Ok\(\s*DesktopRefreshAdmission::Started \{ \.\. \} \| DesktopRefreshAdmission::Coalesced \{ \.\. \},\s*\) => DesktopSessionPageIntentAdmission::Accepted,' -or
+    $sessionPageSinkSubmitText -notmatch 'Ok\(DesktopRefreshAdmission::DeadlineExceeded \{ \.\. \}\) \| Err\(_\) => \{\s*DesktopSessionPageIntentAdmission::Rejected\s*\}') {
     throw 'TM-APP-SESSION-PAGE-SINK: Sessions page routing must retain one weak current bundle and use a nonblocking typed request'
 }
 

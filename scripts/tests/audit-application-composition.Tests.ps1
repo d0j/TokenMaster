@@ -113,6 +113,32 @@ Describe "TokenMaster application composition audit" {
             Should -Throw "*TM-APP-SESSION-PAGE-SINK*"
     }
 
+    It "rejects bypassing the typed Sessions page request dispatch" {
+        $fixture = New-AppAuditFixture -Name "session-page-bypass-request"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'match self.request(intent) {',
+            'match self.request_directly(intent) {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-SESSION-PAGE-SINK*"
+    }
+
+    It "rejects fabricating accepted Sessions page admission" {
+        $fixture = New-AppAuditFixture -Name "session-page-fabricated-admission"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'DesktopSessionPageIntentAdmission::Accepted,',
+            'DesktopSessionPageIntentAdmission::Rejected,'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-SESSION-PAGE-SINK*"
+    }
+
     It "rejects removing the production lifecycle router" {
         $fixture = New-AppAuditFixture -Name "lifecycle-router"
         $path = Join-Path $fixture "crates\app\src\application.rs"

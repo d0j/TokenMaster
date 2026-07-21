@@ -905,13 +905,17 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-SESSIONS-REQUEST*"
     }
 
-    It "accepts a dedicated accepted Sessions page replacement" {
-        $fixture = New-DesktopAuditFixture -Name "sessions-page-replacement"
-        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\ui.rs") `
-            -Value 'fn apply_accepted_sessions_page_replacement(window: &MainWindow, sessions: &DesktopSessionsProjection) { apply_sessions_projection(window, sessions); }'
+    It "rejects a second production Sessions projection caller" {
+        $fixture = New-DesktopAuditFixture -Name "sessions-page-second-caller"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '#[cfg(test)]',
+            "fn apply_accepted_sessions_page_replacement(window: &MainWindow, sessions: &DesktopSessionsProjection) { apply_sessions_projection(window, sessions); }`r`n`r`n#[cfg(test)]"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
-            Should -Not -Throw
+            Should -Throw "*TM-DESKTOP-SESSIONS-REBUILD*"
     }
 
     It "rejects untyped Sessions Next navigation" {
@@ -990,6 +994,67 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-SESSIONS-NAVIGATION*"
     }
 
+    It "rejects removing the Sessions navigation epoch admission fence" {
+        $fixture = New-DesktopAuditFixture -Name "sessions-navigation-epoch-fence"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'if self.snapshot_epoch() != Some(intent.snapshot_epoch()) {',
+            'if false {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-NAVIGATION*"
+    }
+
+    It "rejects removing the Sessions navigation product-generation admission fence" {
+        $fixture = New-DesktopAuditFixture -Name "sessions-navigation-product-fence"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '!= Some(intent.product_generation())',
+            '== Some(intent.product_generation())'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-NAVIGATION*"
+    }
+
+    It "rejects weakening the Sessions navigation monotonic admission fence" {
+        $fixture = New-DesktopAuditFixture -Name "sessions-navigation-generation-fence"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'intent.navigation_generation() <= current',
+            'intent.navigation_generation() < current'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-NAVIGATION*"
+    }
+
+    It "rejects changing missing Sessions continuation to a non-invalid-value failure" {
+        $fixture = New-DesktopAuditFixture -Name "sessions-continuation-fail-closed"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '.ok_or(QueryErrorCode::InvalidValue)',
+            '.ok_or(QueryErrorCode::Internal)'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SESSIONS-NAVIGATION*"
+    }
+
+    It "accepts an unrelated mouse cursor comment outside Sessions contracts" {
+        $fixture = New-DesktopAuditFixture -Name "unrelated-mouse-cursor"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\ui\main.slint") `
+            -Value '// unrelated mouse cursor behavior'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Not -Throw
+    }
+
     It "rejects exact session-detail presentation-bound drift" {
         $fixture = New-DesktopAuditFixture -Name "session-detail-bound"
         $path = Join-Path $fixture "crates\desktop\src\sessions.rs"
@@ -1038,7 +1103,7 @@ Describe "TokenMaster production desktop audit" {
     It "rejects opaque session keys crossing into the UI projection" {
         $fixture = New-DesktopAuditFixture -Name "session-detail-identity"
         Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\src\sessions.rs") `
-            -Value 'struct LeakyDetail { key: UsageSessionKey }'
+            -Value 'pub struct DesktopSessionLeakyDetail { key: UsageSessionKey }'
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-SESSION-DETAIL-IDENTITY*"
