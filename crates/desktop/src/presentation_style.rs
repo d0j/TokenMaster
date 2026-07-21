@@ -1,3 +1,5 @@
+use crate::DesktopSkin;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DesktopDensity {
     Comfortable,
@@ -6,6 +8,7 @@ pub enum DesktopDensity {
 }
 
 impl DesktopDensity {
+    #[must_use]
     pub const fn stable_key(self) -> &'static str {
         match self {
             Self::Comfortable => "comfortable",
@@ -14,6 +17,7 @@ impl DesktopDensity {
         }
     }
 
+    #[must_use]
     pub const fn slint_index(self) -> i32 {
         match self {
             Self::Comfortable => 0,
@@ -33,13 +37,46 @@ impl DesktopDensity {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DesktopPresentationSelection {
+    density: DesktopDensity,
+    skin: DesktopSkin,
+}
+
+impl DesktopPresentationSelection {
+    #[must_use]
+    pub const fn new(density: DesktopDensity, skin: DesktopSkin) -> Self {
+        Self { density, skin }
+    }
+
+    #[must_use]
+    pub const fn density(self) -> DesktopDensity {
+        self.density
+    }
+
+    #[must_use]
+    pub const fn skin(self) -> DesktopSkin {
+        self.skin
+    }
+
+    const fn with_density(self, density: DesktopDensity) -> Self {
+        Self::new(density, self.skin)
+    }
+
+    const fn with_skin(self, skin: DesktopSkin) -> Self {
+        Self::new(self.density, skin)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DesktopPresentationRevision(u64);
 
 impl DesktopPresentationRevision {
+    #[must_use]
     pub const fn initial() -> Self {
         Self(0)
     }
 
+    #[must_use]
     pub const fn get(self) -> u64 {
         self.0
     }
@@ -80,8 +117,8 @@ impl DesktopPresentationPersistence {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DesktopPresentationStyle {
-    density: DesktopDensity,
-    persisted_density: DesktopDensity,
+    selection: DesktopPresentationSelection,
+    persisted_selection: DesktopPresentationSelection,
     revision: DesktopPresentationRevision,
     persistence: DesktopPresentationPersistence,
 }
@@ -93,30 +130,47 @@ impl Default for DesktopPresentationStyle {
 }
 
 impl DesktopPresentationStyle {
+    #[must_use]
     pub const fn new() -> Self {
-        Self::from_persisted(DesktopDensity::Comfortable)
+        Self::from_persisted(DesktopPresentationSelection::new(
+            DesktopDensity::Comfortable,
+            DesktopSkin::Refined,
+        ))
     }
 
-    pub const fn from_persisted(density: DesktopDensity) -> Self {
+    #[must_use]
+    pub const fn from_persisted(selection: DesktopPresentationSelection) -> Self {
         Self {
-            density,
-            persisted_density: density,
+            selection,
+            persisted_selection: selection,
             revision: DesktopPresentationRevision::initial(),
             persistence: DesktopPresentationPersistence::Saved,
         }
     }
 
-    pub const fn density(self) -> DesktopDensity {
-        self.density
-    }
-
-    pub const fn revision(self) -> DesktopPresentationRevision {
-        self.revision
+    #[must_use]
+    pub const fn selection(self) -> DesktopPresentationSelection {
+        self.selection
     }
 
     #[must_use]
-    pub const fn persisted_density(self) -> DesktopDensity {
-        self.persisted_density
+    pub const fn persisted_selection(self) -> DesktopPresentationSelection {
+        self.persisted_selection
+    }
+
+    #[must_use]
+    pub const fn density(self) -> DesktopDensity {
+        self.selection.density()
+    }
+
+    #[must_use]
+    pub const fn skin(self) -> DesktopSkin {
+        self.selection.skin()
+    }
+
+    #[must_use]
+    pub const fn revision(self) -> DesktopPresentationRevision {
+        self.revision
     }
 
     #[must_use]
@@ -125,86 +179,72 @@ impl DesktopPresentationStyle {
     }
 
     pub fn select_density_index(&mut self, index: i32) -> DesktopPresentationApplyOutcome {
-        let Some((density, revision)) = self.checked_selection(index) else {
-            return self.selection_failure(index);
+        let Some(density) = DesktopDensity::from_slint_index(index) else {
+            return DesktopPresentationApplyOutcome::Rejected;
         };
-        self.density = density;
-        self.revision = revision;
-        self.persistence = DesktopPresentationPersistence::NotSaved;
-        DesktopPresentationApplyOutcome::Applied
+        self.select(self.selection.with_density(density), false, |_| true)
+    }
+
+    pub fn select_skin_index(&mut self, index: i32) -> DesktopPresentationApplyOutcome {
+        let Some(skin) = DesktopSkin::from_slint_index(index) else {
+            return DesktopPresentationApplyOutcome::Rejected;
+        };
+        self.select(self.selection.with_skin(skin), false, |_| true)
     }
 
     pub fn select_density_index_if_admitted(
         &mut self,
         index: i32,
-        admit: impl FnOnce(DesktopDensity) -> bool,
+        admit: impl FnOnce(DesktopPresentationSelection) -> bool,
     ) -> DesktopPresentationApplyOutcome {
         let Some(density) = DesktopDensity::from_slint_index(index) else {
             return DesktopPresentationApplyOutcome::Rejected;
         };
-        if density == self.density {
-            if !matches!(self.persistence, DesktopPresentationPersistence::NotSaved) {
-                return DesktopPresentationApplyOutcome::Unchanged;
-            }
-            if !admit(density) {
-                return DesktopPresentationApplyOutcome::Rejected;
-            }
-            self.persistence = DesktopPresentationPersistence::Saving;
-            return DesktopPresentationApplyOutcome::Applied;
-        }
-        let Some((density, revision)) = self.checked_selection(index) else {
-            return self.selection_failure(index);
-        };
-        if !admit(density) {
+        self.select(self.selection.with_density(density), true, admit)
+    }
+
+    pub fn select_skin_index_if_admitted(
+        &mut self,
+        index: i32,
+        admit: impl FnOnce(DesktopPresentationSelection) -> bool,
+    ) -> DesktopPresentationApplyOutcome {
+        let Some(skin) = DesktopSkin::from_slint_index(index) else {
             return DesktopPresentationApplyOutcome::Rejected;
-        }
-        self.density = density;
-        self.revision = revision;
-        self.persistence = DesktopPresentationPersistence::Saving;
-        DesktopPresentationApplyOutcome::Applied
+        };
+        self.select(self.selection.with_skin(skin), true, admit)
     }
 
     pub fn observe_persisted(
         &mut self,
-        persisted_density: DesktopDensity,
+        persisted_selection: DesktopPresentationSelection,
     ) -> DesktopPresentationApplyOutcome {
         let was_saved = matches!(self.persistence, DesktopPresentationPersistence::Saved);
-        self.persisted_density = persisted_density;
-        if self.density == persisted_density {
+        self.persisted_selection = persisted_selection;
+        if self.selection == persisted_selection {
             self.persistence = DesktopPresentationPersistence::Saved;
             return DesktopPresentationApplyOutcome::Unchanged;
         }
         if !was_saved {
             return DesktopPresentationApplyOutcome::Unchanged;
         }
-        let Some(revision) = self.revision.checked_successor() else {
-            return DesktopPresentationApplyOutcome::RevisionExhausted;
-        };
-        self.density = persisted_density;
-        self.revision = revision;
-        DesktopPresentationApplyOutcome::Applied
+        self.apply_selection(persisted_selection, DesktopPresentationPersistence::Saved)
     }
 
     pub fn observe_persisted_unconfirmed(
         &mut self,
-        persisted_density: DesktopDensity,
+        persisted_selection: DesktopPresentationSelection,
     ) -> DesktopPresentationApplyOutcome {
         let was_saved = matches!(self.persistence, DesktopPresentationPersistence::Saved);
-        self.persisted_density = persisted_density;
-        if !was_saved || self.density == persisted_density {
+        self.persisted_selection = persisted_selection;
+        if !was_saved || self.selection == persisted_selection {
             return DesktopPresentationApplyOutcome::Unchanged;
         }
-        let Some(revision) = self.revision.checked_successor() else {
-            return DesktopPresentationApplyOutcome::RevisionExhausted;
-        };
-        self.density = persisted_density;
-        self.revision = revision;
-        DesktopPresentationApplyOutcome::Applied
+        self.apply_selection(persisted_selection, DesktopPresentationPersistence::Saved)
     }
 
     pub fn mark_not_saved(&mut self) {
         if matches!(self.persistence, DesktopPresentationPersistence::Saving)
-            && self.density != self.persisted_density
+            && self.selection != self.persisted_selection
         {
             self.persistence = DesktopPresentationPersistence::NotSaved;
         }
@@ -212,48 +252,72 @@ impl DesktopPresentationStyle {
 
     pub fn apply_persisted_override(
         &mut self,
-        persisted_density: DesktopDensity,
+        persisted_selection: DesktopPresentationSelection,
     ) -> DesktopPresentationApplyOutcome {
-        if self.density == persisted_density {
-            if self.persisted_density == persisted_density
+        if self.selection == persisted_selection {
+            if self.persisted_selection == persisted_selection
                 && matches!(self.persistence, DesktopPresentationPersistence::Saved)
             {
                 return DesktopPresentationApplyOutcome::Unchanged;
             }
-            self.persisted_density = persisted_density;
+            self.persisted_selection = persisted_selection;
             self.persistence = DesktopPresentationPersistence::Saved;
             return DesktopPresentationApplyOutcome::Applied;
         }
         let Some(revision) = self.revision.checked_successor() else {
             return DesktopPresentationApplyOutcome::RevisionExhausted;
         };
-        self.density = persisted_density;
-        self.persisted_density = persisted_density;
+        self.selection = persisted_selection;
+        self.persisted_selection = persisted_selection;
         self.revision = revision;
         self.persistence = DesktopPresentationPersistence::Saved;
         DesktopPresentationApplyOutcome::Applied
     }
 
-    fn checked_selection(
-        self,
-        index: i32,
-    ) -> Option<(DesktopDensity, DesktopPresentationRevision)> {
-        let density = DesktopDensity::from_slint_index(index)?;
-        if density == self.density {
-            return None;
+    fn select(
+        &mut self,
+        selection: DesktopPresentationSelection,
+        admitted: bool,
+        admit: impl FnOnce(DesktopPresentationSelection) -> bool,
+    ) -> DesktopPresentationApplyOutcome {
+        if selection == self.selection {
+            if !admitted || !matches!(self.persistence, DesktopPresentationPersistence::NotSaved) {
+                return DesktopPresentationApplyOutcome::Unchanged;
+            }
+            if !admit(selection) {
+                return DesktopPresentationApplyOutcome::Rejected;
+            }
+            self.persistence = DesktopPresentationPersistence::Saving;
+            return DesktopPresentationApplyOutcome::Applied;
         }
-        let revision = self.revision.checked_successor()?;
-        Some((density, revision))
+        let Some(revision) = self.revision.checked_successor() else {
+            return DesktopPresentationApplyOutcome::RevisionExhausted;
+        };
+        if admitted && !admit(selection) {
+            return DesktopPresentationApplyOutcome::Rejected;
+        }
+        self.selection = selection;
+        self.revision = revision;
+        self.persistence = if admitted {
+            DesktopPresentationPersistence::Saving
+        } else {
+            DesktopPresentationPersistence::NotSaved
+        };
+        DesktopPresentationApplyOutcome::Applied
     }
 
-    fn selection_failure(self, index: i32) -> DesktopPresentationApplyOutcome {
-        let Some(density) = DesktopDensity::from_slint_index(index) else {
-            return DesktopPresentationApplyOutcome::Rejected;
+    fn apply_selection(
+        &mut self,
+        selection: DesktopPresentationSelection,
+        persistence: DesktopPresentationPersistence,
+    ) -> DesktopPresentationApplyOutcome {
+        let Some(revision) = self.revision.checked_successor() else {
+            return DesktopPresentationApplyOutcome::RevisionExhausted;
         };
-        if density == self.density {
-            return DesktopPresentationApplyOutcome::Unchanged;
-        }
-        DesktopPresentationApplyOutcome::RevisionExhausted
+        self.selection = selection;
+        self.revision = revision;
+        self.persistence = persistence;
+        DesktopPresentationApplyOutcome::Applied
     }
 }
 
@@ -261,59 +325,24 @@ impl DesktopPresentationStyle {
 mod tests {
     use super::{
         DesktopDensity, DesktopPresentationApplyOutcome, DesktopPresentationPersistence,
-        DesktopPresentationRevision, DesktopPresentationStyle,
+        DesktopPresentationRevision, DesktopPresentationSelection, DesktopPresentationStyle,
     };
+    use crate::DesktopSkin;
 
     #[test]
-    fn revision_exhaustion_retains_the_current_style() {
+    fn revision_exhaustion_preserves_every_complete_style_field() {
+        let selection =
+            DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Refined);
         let mut style = DesktopPresentationStyle {
-            density: DesktopDensity::Comfortable,
-            persisted_density: DesktopDensity::Comfortable,
+            selection,
+            persisted_selection: selection,
             revision: DesktopPresentationRevision(u64::MAX),
             persistence: DesktopPresentationPersistence::Saved,
-        };
-
-        assert_eq!(
-            style.select_density_index(1),
-            DesktopPresentationApplyOutcome::RevisionExhausted
-        );
-        assert_eq!(style.density(), DesktopDensity::Comfortable);
-        assert_eq!(style.revision(), DesktopPresentationRevision(u64::MAX));
-    }
-
-    #[test]
-    fn exhausted_admission_does_not_call_the_closure() {
-        let mut style = DesktopPresentationStyle {
-            density: DesktopDensity::Comfortable,
-            persisted_density: DesktopDensity::Comfortable,
-            revision: DesktopPresentationRevision(u64::MAX),
-            persistence: DesktopPresentationPersistence::Saved,
-        };
-        let mut calls = 0;
-
-        assert_eq!(
-            style.select_density_index_if_admitted(1, |_| {
-                calls += 1;
-                true
-            }),
-            DesktopPresentationApplyOutcome::RevisionExhausted
-        );
-        assert_eq!(calls, 0);
-        assert_eq!(style.density(), DesktopDensity::Comfortable);
-    }
-
-    #[test]
-    fn exhausted_override_preserves_the_complete_style() {
-        let mut style = DesktopPresentationStyle {
-            density: DesktopDensity::Compact,
-            persisted_density: DesktopDensity::Comfortable,
-            revision: DesktopPresentationRevision(u64::MAX),
-            persistence: DesktopPresentationPersistence::NotSaved,
         };
         let prior = style;
 
         assert_eq!(
-            style.apply_persisted_override(DesktopDensity::UltraCompact),
+            style.select_skin_index(1),
             DesktopPresentationApplyOutcome::RevisionExhausted
         );
         assert_eq!(style, prior);

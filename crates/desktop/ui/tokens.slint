@@ -1,20 +1,55 @@
+export struct UiPalette {
+    background: color,
+    surface: color,
+    surface-raised: color,
+    surface-subtle: color,
+    border: color,
+    text-primary: color,
+    text-secondary: color,
+    accent: color,
+    accent-subtle: color,
+    accent-secondary: color,
+    accent-tertiary: color,
+    ready: color,
+    waiting: color,
+    degraded: color,
+    unavailable: color,
+}
+
 export global UiTokens {
+    in-out property <UiPalette> palette: {
+        background: #0b0f17,
+        surface: #111827,
+        surface-raised: #182234,
+        surface-subtle: #0e1624,
+        border: #293548,
+        text-primary: #f4f7fb,
+        text-secondary: #9eabc0,
+        accent: #7cd4fd,
+        accent-subtle: #173044,
+        accent-secondary: #a78bfa,
+        accent-tertiary: #f0abfc,
+        ready: #70d6a5,
+        waiting: #8fa3bf,
+        degraded: #f2c66d,
+        unavailable: #f08b8b,
+    };
     in-out property <int> density-id: 0;
-    out property <color> background: #0b0f17;
-    out property <color> surface: #111827;
-    out property <color> surface-raised: #182234;
-    out property <color> surface-subtle: #0e1624;
-    out property <color> border: #293548;
-    out property <color> text-primary: #f4f7fb;
-    out property <color> text-secondary: #9eabc0;
-    out property <color> accent: #7cd4fd;
-    out property <color> accent-subtle: #173044;
-    out property <color> accent-secondary: #a78bfa;
-    out property <color> accent-tertiary: #f0abfc;
-    out property <color> ready: #70d6a5;
-    out property <color> waiting: #8fa3bf;
-    out property <color> degraded: #f2c66d;
-    out property <color> unavailable: #f08b8b;
+    out property <color> background: palette.background;
+    out property <color> surface: palette.surface;
+    out property <color> surface-raised: palette.surface-raised;
+    out property <color> surface-subtle: palette.surface-subtle;
+    out property <color> border: palette.border;
+    out property <color> text-primary: palette.text-primary;
+    out property <color> text-secondary: palette.text-secondary;
+    out property <color> accent: palette.accent;
+    out property <color> accent-subtle: palette.accent-subtle;
+    out property <color> accent-secondary: palette.accent-secondary;
+    out property <color> accent-tertiary: palette.accent-tertiary;
+    out property <color> ready: palette.ready;
+    out property <color> waiting: palette.waiting;
+    out property <color> degraded: palette.degraded;
+    out property <color> unavailable: palette.unavailable;
     out property <length> space-xs: density-id == 2 ? 2px : (density-id == 1 ? 3px : 4px);
     out property <length> space-sm: density-id == 2 ? 4px : (density-id == 1 ? 6px : 8px);
     out property <length> space: density-id == 2 ? 8px : (density-id == 1 ? 12px : 16px);

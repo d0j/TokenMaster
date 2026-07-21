@@ -23,14 +23,14 @@ use crate::{
     DesktopInAppNotificationBatch, DesktopInAppNotificationBridge, DesktopIntent,
     DesktopIntentSink, DesktopLifecycleIntentSink, DesktopModelsProjection,
     DesktopNotificationsProjection, DesktopOperationSnapshot, DesktopPresentationApplyOutcome,
-    DesktopPresentationStyle, DesktopProjectsProjection, DesktopQuality,
-    DesktopReliableStateProjection, DesktopReminderPolicy, DesktopSessionDetailIntentAdmission,
-    DesktopSessionDetailIntentSink, DesktopSessionsProjection, DesktopSnapshotBridge,
-    DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue, DesktopTrayAvailability,
-    DesktopValueAvailability, HistoryDayRow, InAppNotificationRow, MainWindow, ModelUsageRow,
-    ProjectUsageRow, RecentActivityRow, ReminderCustomLeadRow, ReminderScopeRow, RestorePointRow,
-    RouteRow, SessionDetailBreakdownRow, SessionListRow, UnavailableDesktopIntentSink,
-    UnavailableDesktopSessionDetailIntentSink,
+    DesktopPresentationSelection, DesktopPresentationStyle, DesktopProjectsProjection,
+    DesktopQuality, DesktopReliableStateProjection, DesktopReminderPolicy,
+    DesktopSessionDetailIntentAdmission, DesktopSessionDetailIntentSink, DesktopSessionsProjection,
+    DesktopSkin, DesktopSnapshotBridge, DesktopSnapshotEpoch, DesktopSnapshotReceiver,
+    DesktopTokenValue, DesktopTrayAvailability, DesktopValueAvailability, HistoryDayRow,
+    InAppNotificationRow, MainWindow, ModelUsageRow, ProjectUsageRow, RecentActivityRow,
+    ReminderCustomLeadRow, ReminderScopeRow, RestorePointRow, RouteRow, SessionDetailBreakdownRow,
+    SessionListRow, UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
     in_app_notification::NotificationEpochState,
     native_tray::DesktopNativeTrayOwner,
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
@@ -478,7 +478,10 @@ impl DesktopShell {
     ) -> Result<Self, slint::PlatformError> {
         let window = MainWindow::new()?;
         let initial_presentation_style =
-            DesktopPresentationStyle::from_persisted(reliable_state.presentation().density());
+            DesktopPresentationStyle::from_persisted(DesktopPresentationSelection::new(
+                reliable_state.presentation().density(),
+                DesktopSkin::Refined,
+            ));
         let presentation_style = Arc::new(Mutex::new(initial_presentation_style));
         apply_presentation_style(&window, initial_presentation_style);
         let tray_availability = Rc::new(Cell::new(DesktopTrayAvailability::Unavailable));
@@ -660,7 +663,10 @@ fn reconcile_presentation_style(
     let mut style = presentation_style
         .lock()
         .map_err(|_| DesktopUiError::state_unavailable())?;
-    let projected_density = projection.presentation().density();
+    let projected_selection = DesktopPresentationSelection::new(
+        projection.presentation().density(),
+        DesktopSkin::Refined,
+    );
     match presentation_terminal.or_else(|| presentation_terminal_from_projection(projection)) {
         Some(operation)
             if matches!(
@@ -669,7 +675,7 @@ fn reconcile_presentation_style(
                     | crate::DesktopOperationKind::RestoreWithPortableSettings
             ) && operation.phase() == crate::DesktopOperationPhase::Succeeded =>
         {
-            style.apply_persisted_override(projected_density);
+            style.apply_persisted_override(projected_selection);
         }
         Some(operation)
             if operation.kind() == crate::DesktopOperationKind::UpdatePresentation
@@ -678,17 +684,17 @@ fn reconcile_presentation_style(
                     crate::DesktopOperationPhase::Failed | crate::DesktopOperationPhase::Cancelled
                 ) =>
         {
-            style.observe_persisted_unconfirmed(projected_density);
+            style.observe_persisted_unconfirmed(projected_selection);
             style.mark_not_saved();
         }
         Some(operation)
             if operation.kind() == crate::DesktopOperationKind::UpdatePresentation
                 && operation.phase() == crate::DesktopOperationPhase::Succeeded =>
         {
-            style.observe_persisted(projected_density);
+            style.observe_persisted(projected_selection);
         }
         _ => {
-            style.observe_persisted_unconfirmed(projected_density);
+            style.observe_persisted_unconfirmed(projected_selection);
         }
     }
     Ok(*style)
@@ -739,9 +745,11 @@ fn select_presentation_density_if_admitted(
 ) -> Option<DesktopPresentationStyle> {
     let captured = *presentation_style.lock().ok()?;
     let mut selected = captured;
-    if selected.select_density_index_if_admitted(index, |density| {
+    if selected.select_density_index_if_admitted(index, |selection| {
         matches!(
-            intent_sink.submit(DesktopIntent::UpdatePresentationDensity(density)),
+            intent_sink.submit(DesktopIntent::UpdatePresentationDensity(
+                selection.density()
+            )),
             crate::DesktopIntentAdmission::Started
                 | crate::DesktopIntentAdmission::Queued
                 | crate::DesktopIntentAdmission::Coalesced
@@ -3011,10 +3019,10 @@ mod duration_tests {
     use crate::{
         DesktopBackupPolicy, DesktopBenefitExpiry, DesktopDensity, DesktopIntent,
         DesktopIntentAdmission, DesktopIntentSink, DesktopOperationKind, DesktopOperationPhase,
-        DesktopOperationSnapshot, DesktopPresentationSettings, DesktopPresentationStyle,
-        DesktopReliableStateHealth, DesktopReliableStateInput, DesktopReliableStateSummary,
-        DesktopReminderPolicy, DesktopReminderSyncState, UnavailableDesktopIntentSink,
-        UnavailableDesktopSessionDetailIntentSink,
+        DesktopOperationSnapshot, DesktopPresentationSelection, DesktopPresentationSettings,
+        DesktopPresentationStyle, DesktopReliableStateHealth, DesktopReliableStateInput,
+        DesktopReliableStateSummary, DesktopReminderPolicy, DesktopReminderSyncState, DesktopSkin,
+        UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
     };
     use tokenmaster_product::ProductReducer;
 
@@ -3093,7 +3101,7 @@ mod duration_tests {
         i_slint_backend_testing::init_no_event_loop();
         let window = MainWindow::new().map_err(|_| String::from("window"))?;
         let style = Arc::new(Mutex::new(DesktopPresentationStyle::from_persisted(
-            DesktopDensity::Comfortable,
+            DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Refined),
         )));
         let initial_style = *style.lock().map_err(|_| String::from("initial style"))?;
         apply_presentation_style(&window, initial_style);
@@ -3111,8 +3119,8 @@ mod duration_tests {
         let reentrant_style = *style.lock().map_err(|_| String::from("reentrant style"))?;
         assert_eq!(reentrant_style.density(), DesktopDensity::UltraCompact);
         assert_eq!(
-            reentrant_style.persisted_density(),
-            DesktopDensity::Comfortable
+            reentrant_style.persisted_selection(),
+            DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Refined)
         );
         assert_eq!(reentrant_style.revision().get(), 1);
         assert_eq!(

@@ -16,6 +16,7 @@ pub mod projects;
 pub mod reliable_state;
 pub mod sessions;
 pub mod shell;
+pub mod skin;
 
 mod bridge;
 mod controller;
@@ -43,7 +44,7 @@ pub use presentation::{
 };
 pub use presentation_style::{
     DesktopDensity, DesktopPresentationApplyOutcome, DesktopPresentationPersistence,
-    DesktopPresentationRevision, DesktopPresentationStyle,
+    DesktopPresentationRevision, DesktopPresentationSelection, DesktopPresentationStyle,
 };
 pub use projects::*;
 pub use reliable_state::*;
@@ -53,6 +54,7 @@ pub use shell::{
     DesktopLifecycleIntentRouter, DesktopLifecycleIntentRouterError, DesktopLifecycleIntentSink,
     DesktopTrayAvailability, select_production_renderer,
 };
+pub use skin::{DesktopColorTokens, DesktopRgb, DesktopSkin};
 pub use ui::{
     DesktopBridgeFactory, DesktopCurrentUserStartupPresenter, DesktopReliableStateNotifier,
     DesktopShell, DesktopUiError, DesktopUiErrorCode,
