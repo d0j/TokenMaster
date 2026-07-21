@@ -9,6 +9,7 @@ export struct ReminderCustomLeadRow {
 
 export component SettingsView inherits Rectangle {
     in property <int> presentation-density-id;
+    in property <string> presentation-persistence-state;
     in property <bool> periodic-enabled;
     in property <int> quiet-seconds;
     in property <int> interval-seconds;
@@ -77,6 +78,13 @@ export component SettingsView inherits Rectangle {
                 accessible-label: "Presentation density";
                 selected(_) => { root.select-presentation-density(self.current-index); }
             }
+        }
+        Text {
+            text: root.presentation-persistence-state == "saved" ? "Saved"
+                : root.presentation-persistence-state == "saving" ? "Saving…"
+                : "Not saved — choose a density again to retry";
+            color: UiTokens.text-secondary;
+            accessible-label: "Presentation density persistence " + self.text;
         }
 
         reminder-card := Rectangle {

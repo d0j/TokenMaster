@@ -25,6 +25,7 @@ export component MainWindow inherits Window {
     in-out property <int> presentation-density-id <=> UiTokens.density-id;
     out property <string> presentation-density-key: root.presentation-density-id == 2 ? "ultra_compact" : (root.presentation-density-id == 1 ? "compact" : "comfortable");
     in-out property <string> presentation-revision: "0";
+    in-out property <string> presentation-persistence-state: "saved";
     out property <length> presentation-space: UiTokens.space;
     out property <length> presentation-radius: UiTokens.radius;
     in property <[RouteRow]> route-rows;
@@ -521,6 +522,7 @@ export component MainWindow inherits Window {
                     width: parent.width;
                     height: parent.height;
                     presentation-density-id: root.presentation-density-id;
+                    presentation-persistence-state: root.presentation-persistence-state;
                     periodic-enabled: root.backup-periodic-enabled;
                     quiet-seconds: root.backup-quiet-seconds;
                     interval-seconds: root.backup-interval-seconds;

@@ -38,7 +38,7 @@ use crate::{
 
 pub struct DesktopShell {
     window: MainWindow,
-    _presentation_style: Rc<RefCell<DesktopPresentationStyle>>,
+    _presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
     tray: RefCell<Option<DesktopNativeTrayOwner>>,
     lifecycle_sink: Option<Rc<dyn DesktopLifecycleIntentSink>>,
     tray_availability: Rc<Cell<DesktopTrayAvailability>>,
@@ -139,6 +139,7 @@ impl DesktopBridgeFactory {
 struct ReliableStateNotifierInner {
     window: slint::Weak<MainWindow>,
     state: SharedReliableState,
+    presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
     latest: Mutex<Option<ReliableStateDelivery>>,
     next_delivery_id: AtomicU64,
     scheduled: AtomicBool,
@@ -316,11 +317,18 @@ impl ReliableStateNotifierInner {
             let Some(window) = self.window.upgrade() else {
                 return false;
             };
+            let Ok(style) =
+                reconcile_presentation_style(&self.presentation_style, &delivery.projection)
+            else {
+                return false;
+            };
             let Ok(mut state) = self.state.lock() else {
                 return false;
             };
-            apply_reliable_state_projection(&window, &delivery.projection);
             *state = delivery.projection.clone();
+            drop(state);
+            apply_reliable_state_projection(&window, &delivery.projection);
+            apply_presentation_style(&window, style);
             true
         });
         if let Some(acknowledgement) = delivery.and_then(|delivery| delivery.acknowledgement) {
@@ -458,8 +466,10 @@ impl DesktopShell {
         lifecycle_sink: Option<Rc<dyn DesktopLifecycleIntentSink>>,
     ) -> Result<Self, slint::PlatformError> {
         let window = MainWindow::new()?;
-        let presentation_style = Rc::new(RefCell::new(DesktopPresentationStyle::new()));
-        apply_presentation_style(&window, *presentation_style.borrow());
+        let initial_presentation_style =
+            DesktopPresentationStyle::from_persisted(reliable_state.presentation().density());
+        let presentation_style = Arc::new(Mutex::new(initial_presentation_style));
+        apply_presentation_style(&window, initial_presentation_style);
         let tray_availability = Rc::new(Cell::new(DesktopTrayAvailability::Unavailable));
         if lifecycle_sink.is_some() {
             wire_close_to_tray(&window, Rc::clone(&tray_availability));
@@ -473,10 +483,10 @@ impl DesktopShell {
         let compact_window_mode = Rc::new(RefCell::new(CompactWindowMode::default()));
         wire_route_selection(&window, state.clone(), compact_window_mode.clone());
         wire_command_palette(&window, state.clone(), compact_window_mode);
-        wire_reliable_state_intents(&window, reliable_state.clone(), intent_sink);
+        wire_reliable_state_intents(&window, reliable_state.clone(), Rc::clone(&intent_sink));
         wire_session_detail_intents(&window, state.clone(), session_sink);
         wire_in_app_notification_dismissal(&window);
-        wire_presentation_density(&window, Rc::clone(&presentation_style));
+        wire_presentation_density(&window, Arc::clone(&presentation_style), intent_sink);
         Ok(Self {
             window,
             _presentation_style: presentation_style,
@@ -569,12 +579,15 @@ impl DesktopShell {
         &self,
         projection: DesktopReliableStateProjection,
     ) -> Result<(), DesktopUiError> {
+        let style = reconcile_presentation_style(&self._presentation_style, &projection)?;
         let mut reliable_state = self
             .reliable_state
             .lock()
             .map_err(|_| DesktopUiError::state_unavailable())?;
+        *reliable_state = projection.clone();
+        drop(reliable_state);
         apply_reliable_state_projection(&self.window, &projection);
-        *reliable_state = projection;
+        apply_presentation_style(&self.window, style);
         Ok(())
     }
 
@@ -588,6 +601,7 @@ impl DesktopShell {
             inner: Arc::new(ReliableStateNotifierInner {
                 window: self.window.as_weak(),
                 state: Arc::clone(&self.reliable_state),
+                presentation_style: Arc::clone(&self._presentation_style),
                 latest: Mutex::new(None),
                 next_delivery_id: AtomicU64::new(1),
                 scheduled: AtomicBool::new(false),
@@ -624,18 +638,63 @@ impl DesktopShell {
 fn apply_presentation_style(window: &MainWindow, style: DesktopPresentationStyle) {
     window.set_presentation_density_id(style.density().slint_index());
     window.set_presentation_revision(style.revision().get().to_string().into());
+    window.set_presentation_persistence_state(style.persistence().stable_code().into());
+}
+
+fn reconcile_presentation_style(
+    presentation_style: &Arc<Mutex<DesktopPresentationStyle>>,
+    projection: &DesktopReliableStateProjection,
+) -> Result<DesktopPresentationStyle, DesktopUiError> {
+    let mut style = presentation_style
+        .lock()
+        .map_err(|_| DesktopUiError::state_unavailable())?;
+    let projected_density = projection.presentation().density();
+    match projection.operation() {
+        Some(operation)
+            if matches!(
+                operation.kind(),
+                crate::DesktopOperationKind::ApplyConfig
+                    | crate::DesktopOperationKind::RestoreWithPortableSettings
+            ) && operation.phase() == crate::DesktopOperationPhase::Succeeded =>
+        {
+            style.apply_persisted_override(projected_density);
+        }
+        Some(operation)
+            if operation.kind() == crate::DesktopOperationKind::UpdatePresentation
+                && matches!(
+                    operation.phase(),
+                    crate::DesktopOperationPhase::Failed | crate::DesktopOperationPhase::Cancelled
+                ) =>
+        {
+            style.observe_persisted(projected_density);
+            style.mark_not_saved();
+        }
+        _ => {
+            style.observe_persisted(projected_density);
+        }
+    }
+    Ok(*style)
 }
 
 fn wire_presentation_density(
     window: &MainWindow,
-    presentation_style: Rc<RefCell<DesktopPresentationStyle>>,
+    presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
+    intent_sink: Rc<dyn DesktopIntentSink>,
 ) {
     let weak_window = window.as_weak();
     window.on_select_presentation_density(move |index| {
-        let Ok(mut style) = presentation_style.try_borrow_mut() else {
+        let Ok(mut style) = presentation_style.lock() else {
             return;
         };
-        if style.select_density_index(index) != DesktopPresentationApplyOutcome::Applied {
+        if style.select_density_index_if_admitted(index, |density| {
+            matches!(
+                intent_sink.submit(DesktopIntent::UpdatePresentationDensity(density)),
+                crate::DesktopIntentAdmission::Started
+                    | crate::DesktopIntentAdmission::Queued
+                    | crate::DesktopIntentAdmission::Coalesced
+            )
+        }) != DesktopPresentationApplyOutcome::Applied
+        {
             return;
         }
         let next_style = *style;

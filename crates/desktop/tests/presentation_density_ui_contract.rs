@@ -1,7 +1,262 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use i_slint_backend_testing::{AccessibleRole, ElementQuery};
 use slint::{ComponentHandle, Model, SharedString};
-use tokenmaster_desktop::DesktopShell;
+use tokenmaster_desktop::{
+    DesktopBackupPolicy, DesktopDensity, DesktopIntent, DesktopIntentAdmission, DesktopIntentSink,
+    DesktopOperationKind, DesktopOperationPhase, DesktopOperationSnapshot,
+    DesktopPresentationSettings, DesktopReliableStateHealth, DesktopReliableStateInput,
+    DesktopReliableStateProjection, DesktopReliableStateSummary, DesktopReminderPolicy,
+    DesktopShell,
+};
 use tokenmaster_product::ProductReducer;
+
+struct RecordingIntentSink {
+    admission: DesktopIntentAdmission,
+    densities: RefCell<Vec<DesktopDensity>>,
+}
+
+impl RecordingIntentSink {
+    fn accepting() -> Self {
+        Self {
+            admission: DesktopIntentAdmission::Started,
+            densities: RefCell::new(Vec::new()),
+        }
+    }
+
+    fn rejecting() -> Self {
+        Self {
+            admission: DesktopIntentAdmission::Rejected,
+            densities: RefCell::new(Vec::new()),
+        }
+    }
+
+    fn last(&self) -> Option<DesktopDensity> {
+        self.densities.borrow().last().copied()
+    }
+}
+
+impl DesktopIntentSink for RecordingIntentSink {
+    fn submit(&self, intent: DesktopIntent) -> DesktopIntentAdmission {
+        if let DesktopIntent::UpdatePresentationDensity(density) = intent {
+            self.densities.borrow_mut().push(density);
+        }
+        self.admission
+    }
+}
+
+fn reliable_state_with_density_and_operation(
+    density: DesktopDensity,
+    operation: Option<DesktopOperationSnapshot>,
+) -> DesktopReliableStateProjection {
+    let summary = DesktopReliableStateSummary::new_with_settings(
+        DesktopReliableStateHealth::Healthy,
+        false,
+        "healthy",
+        DesktopBackupPolicy::disabled(),
+        DesktopReminderPolicy::unavailable(),
+        DesktopPresentationSettings::new(density),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        operation,
+        None,
+    );
+    DesktopReliableStateProjection::from_input(DesktopReliableStateInput::new(
+        1,
+        summary,
+        Vec::new(),
+    ))
+}
+
+fn reliable_state_with_density(density: DesktopDensity) -> DesktopReliableStateProjection {
+    reliable_state_with_density_and_operation(density, None)
+}
+
+#[test]
+fn persisted_density_hydrates_before_show_and_admitted_switch_is_immediate() {
+    i_slint_backend_testing::init_no_event_loop();
+
+    let sink = Rc::new(RecordingIntentSink::accepting());
+    let shell = DesktopShell::new_with_reliable_state(
+        &ProductReducer::new().snapshot(),
+        reliable_state_with_density(DesktopDensity::UltraCompact),
+        sink.clone(),
+    )
+    .expect("shell");
+    let window = shell.window();
+    assert_eq!(window.get_presentation_density_key(), "ultra_compact");
+    assert_eq!(window.get_presentation_persistence_state(), "saved");
+
+    window.invoke_select_presentation_density(1);
+
+    assert_eq!(window.get_presentation_density_key(), "compact");
+    assert_eq!(window.get_presentation_persistence_state(), "saving");
+    assert_eq!(sink.last(), Some(DesktopDensity::Compact));
+}
+
+#[test]
+fn rejected_density_admission_retains_visible_density_and_revision() {
+    i_slint_backend_testing::init_no_event_loop();
+
+    let sink = Rc::new(RecordingIntentSink::rejecting());
+    let shell = DesktopShell::new_with_reliable_state(
+        &ProductReducer::new().snapshot(),
+        reliable_state_with_density(DesktopDensity::Comfortable),
+        sink.clone(),
+    )
+    .expect("shell");
+    let window = shell.window();
+    let density = window.get_presentation_density_key();
+    let revision = window.get_presentation_revision();
+
+    window.invoke_select_presentation_density(1);
+
+    assert_eq!(window.get_presentation_density_key(), density);
+    assert_eq!(window.get_presentation_revision(), revision);
+    assert_eq!(window.get_presentation_persistence_state(), "saved");
+    assert_eq!(sink.last(), Some(DesktopDensity::Compact));
+}
+
+#[test]
+fn stale_persisted_density_does_not_overwrite_a_newer_saving_selection() {
+    i_slint_backend_testing::init_no_event_loop();
+
+    let sink = Rc::new(RecordingIntentSink::accepting());
+    let shell = DesktopShell::new_with_reliable_state(
+        &ProductReducer::new().snapshot(),
+        reliable_state_with_density(DesktopDensity::UltraCompact),
+        sink,
+    )
+    .expect("shell");
+    let window = shell.window();
+    window.invoke_select_presentation_density(1);
+    shell
+        .apply_reliable_state(reliable_state_with_density(DesktopDensity::UltraCompact))
+        .expect("stale reliable state");
+    assert_eq!(window.get_presentation_density_key(), "compact");
+    assert_eq!(window.get_presentation_persistence_state(), "saving");
+
+    shell
+        .apply_reliable_state(reliable_state_with_density(DesktopDensity::Compact))
+        .expect("matching reliable state");
+    assert_eq!(window.get_presentation_persistence_state(), "saved");
+}
+
+#[test]
+fn failed_density_persistence_is_not_saved_but_import_and_portable_restore_override() {
+    i_slint_backend_testing::init_no_event_loop();
+
+    let sink = Rc::new(RecordingIntentSink::accepting());
+    let shell = DesktopShell::new_with_reliable_state(
+        &ProductReducer::new().snapshot(),
+        reliable_state_with_density(DesktopDensity::Comfortable),
+        sink,
+    )
+    .expect("shell");
+    let window = shell.window();
+    window.invoke_select_presentation_density(1);
+    shell
+        .apply_reliable_state(reliable_state_with_density_and_operation(
+            DesktopDensity::Comfortable,
+            Some(DesktopOperationSnapshot::new(
+                DesktopOperationKind::UpdatePresentation,
+                DesktopOperationPhase::Failed,
+                false,
+                Some("unavailable"),
+            )),
+        ))
+        .expect("failed presentation save");
+    assert_eq!(window.get_presentation_density_key(), "compact");
+    assert_eq!(window.get_presentation_persistence_state(), "not_saved");
+
+    for kind in [
+        DesktopOperationKind::ApplyConfig,
+        DesktopOperationKind::RestoreWithPortableSettings,
+    ] {
+        shell
+            .apply_reliable_state(reliable_state_with_density_and_operation(
+                DesktopDensity::UltraCompact,
+                Some(DesktopOperationSnapshot::new(
+                    kind,
+                    DesktopOperationPhase::Succeeded,
+                    false,
+                    None,
+                )),
+            ))
+            .expect("portable settings override");
+        assert_eq!(window.get_presentation_density_key(), "ultra_compact");
+        assert_eq!(window.get_presentation_persistence_state(), "saved");
+    }
+}
+
+#[test]
+fn preview_cancel_and_data_only_restore_do_not_override_unsaved_density() {
+    i_slint_backend_testing::init_no_event_loop();
+
+    let sink = Rc::new(RecordingIntentSink::accepting());
+    let shell = DesktopShell::new_with_reliable_state(
+        &ProductReducer::new().snapshot(),
+        reliable_state_with_density(DesktopDensity::Comfortable),
+        sink,
+    )
+    .expect("shell");
+    let window = shell.window();
+    window.invoke_select_presentation_density(1);
+    for (kind, phase) in [
+        (
+            DesktopOperationKind::ImportConfig,
+            DesktopOperationPhase::Succeeded,
+        ),
+        (
+            DesktopOperationKind::ImportConfig,
+            DesktopOperationPhase::Cancelled,
+        ),
+        (
+            DesktopOperationKind::Restore,
+            DesktopOperationPhase::Succeeded,
+        ),
+    ] {
+        shell
+            .apply_reliable_state(reliable_state_with_density_and_operation(
+                DesktopDensity::UltraCompact,
+                Some(DesktopOperationSnapshot::new(kind, phase, false, None)),
+            ))
+            .expect("non-overriding reliable state");
+        assert_eq!(window.get_presentation_density_key(), "compact");
+        assert_eq!(window.get_presentation_persistence_state(), "saving");
+    }
+}
+
+#[test]
+fn ten_thousand_accepted_density_switches_reuse_the_same_window_routes_and_models() {
+    i_slint_backend_testing::init_no_event_loop();
+
+    let sink = Rc::new(RecordingIntentSink::accepting());
+    let shell = DesktopShell::new_with_reliable_state(
+        &ProductReducer::new().snapshot(),
+        reliable_state_with_density(DesktopDensity::Comfortable),
+        sink,
+    )
+    .expect("shell");
+    let window = shell.window();
+    let component_address = window as *const _;
+    let routes = window.get_route_rows().row_count();
+    let quotas = window.get_dashboard_quota_rows().row_count();
+
+    for index in 0..10_000 {
+        window.invoke_select_presentation_density(index % 3);
+    }
+
+    assert_eq!(component_address, shell.window() as *const _);
+    assert_eq!(window.get_route_rows().row_count(), routes);
+    assert_eq!(window.get_dashboard_quota_rows().row_count(), quotas);
+}
 
 #[test]
 fn density_hot_switch_keeps_the_same_window_route_and_models() {
@@ -9,7 +264,12 @@ fn density_hot_switch_keeps_the_same_window_route_and_models() {
 
     let reducer = ProductReducer::new();
     let snapshot = reducer.snapshot();
-    let shell = DesktopShell::new(&snapshot).expect("desktop shell");
+    let shell = DesktopShell::new_with_reliable_state(
+        &snapshot,
+        reliable_state_with_density(DesktopDensity::Comfortable),
+        Rc::new(RecordingIntentSink::accepting()),
+    )
+    .expect("desktop shell");
     let window = shell.window();
     let component_address = window as *const _;
 

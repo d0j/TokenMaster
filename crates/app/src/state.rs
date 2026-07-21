@@ -7,9 +7,10 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tokenmaster_desktop::{
     DesktopBackupHealth, DesktopBackupPolicy, DesktopConfigImportPreview, DesktopOperationSnapshot,
-    DesktopRecoveryReceipt, DesktopReliableStateHealth, DesktopReliableStateInput,
-    DesktopReliableStateProjection, DesktopReliableStateSummary, DesktopReminderPolicy,
-    DesktopReminderSyncState, DesktopRestorePointInput, DesktopRestoreSelection,
+    DesktopPresentationSettings, DesktopRecoveryReceipt, DesktopReliableStateHealth,
+    DesktopReliableStateInput, DesktopReliableStateProjection, DesktopReliableStateSummary,
+    DesktopReminderPolicy, DesktopReminderSyncState, DesktopRestorePointInput,
+    DesktopRestoreSelection,
 };
 use tokenmaster_domain::{
     NotificationChannel, ReminderLeadTime, ReminderProfile, ReminderProfileParts,
@@ -25,11 +26,12 @@ use tokenmaster_state::{
     BackupMetadata, BackupPackage, BackupPassphrase, BackupPolicy, BackupPurpose, BootstrapOutcome,
     BootstrapReport, CatalogHealth, CatalogSelectionBinding, ConfigPackage, EncryptedBackupPackage,
     MAX_CONFIG_PACKAGE_BYTES, MaintenanceExecution, MaintenancePermit, MaintenanceSourceState,
-    PendingMigration, PortableSettings, PreparedBootstrap, RecoveryBoundary, RecoveryCoordinator,
-    RecoveryJournalLoad, RecoveryJournalStore, RecoveryLaunchDecision, RecoveryPhase,
-    RecoveryReceipt, RestoreMode, RestoreSafety, RetentionAdmission, RetentionPolicy, RunSession,
-    RunStateStore, SettingsCommitReceipt, SettingsImportPreview, SettingsStore, SettingsValue,
-    StateBootstrap, StateErrorCode, SystemMaintenanceClock,
+    PendingMigration, PortableSettings, PreparedBootstrap, PresentationDensity,
+    PresentationSettings, RecoveryBoundary, RecoveryCoordinator, RecoveryJournalLoad,
+    RecoveryJournalStore, RecoveryLaunchDecision, RecoveryPhase, RecoveryReceipt, RestoreMode,
+    RestoreSafety, RetentionAdmission, RetentionPolicy, RunSession, RunStateStore,
+    SettingsCommitReceipt, SettingsImportPreview, SettingsStore, SettingsValue, StateBootstrap,
+    StateErrorCode, SystemMaintenanceClock,
 };
 
 #[cfg(test)]
@@ -267,7 +269,18 @@ impl ApplicationStateOwner {
             RecoveryJournalLoad::Invalid => return Err(ApplicationError::state()),
         };
         let health = reliable_health(outcome, corrupt_count != 0, settings.health_code());
-        let summary = DesktopReliableStateSummary::new_with_reminder_policy(
+        let presentation = DesktopPresentationSettings::new(
+            match settings.value().portable().presentation().density() {
+                PresentationDensity::Comfortable => {
+                    tokenmaster_desktop::DesktopDensity::Comfortable
+                }
+                PresentationDensity::Compact => tokenmaster_desktop::DesktopDensity::Compact,
+                PresentationDensity::UltraCompact => {
+                    tokenmaster_desktop::DesktopDensity::UltraCompact
+                }
+            },
+        );
+        let summary = DesktopReliableStateSummary::new_with_settings(
             health,
             matches!(
                 outcome,
@@ -281,6 +294,7 @@ impl ApplicationStateOwner {
                 policy.retention_budget_bytes(),
             ),
             reminder_policy,
+            presentation,
             latest_success,
             catalog
                 .points()
@@ -565,6 +579,45 @@ impl ApplicationStateOwner {
             .save(&value)
             .map_err(|_| ApplicationError::state())?;
         Ok(policy)
+    }
+
+    pub(crate) fn update_presentation_density(
+        &self,
+        permit: &ApplicationCommandPermit,
+        density: PresentationDensity,
+        mut on_irreversible: impl FnMut(),
+    ) -> Result<(), ApplicationError> {
+        if permit.command() != ApplicationCommand::UpdatePresentationDensity
+            || permit.is_cancelled()
+        {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        let current = self
+            .settings
+            .load()
+            .map_err(|_| ApplicationError::state())?;
+        if current.value().portable().presentation().density() == density {
+            return Ok(());
+        }
+        let value = SettingsValue::new(
+            PortableSettings::new(
+                current.value().portable().reminders().clone(),
+                current.value().portable().backup().clone(),
+                PresentationSettings::new(density),
+            ),
+            current.value().device().clone(),
+        );
+        if permit.is_cancelled() {
+            return Err(ApplicationError::invalid_lifecycle());
+        }
+        permit
+            .begin_irreversible()
+            .map_err(|_| ApplicationError::invalid_lifecycle())?;
+        on_irreversible();
+        self.settings
+            .save(&value)
+            .map_err(|_| ApplicationError::state())?;
+        Ok(())
     }
 
     pub(crate) fn update_reminder_policy(

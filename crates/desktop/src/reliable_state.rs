@@ -255,8 +255,11 @@ pub enum DesktopOperationKind {
     Backup,
     Verify,
     Restore,
+    RestoreWithPortableSettings,
     Rebuild,
     UpdatePolicy,
+    ApplyConfig,
+    UpdatePresentation,
 }
 
 impl DesktopOperationKind {
@@ -268,8 +271,11 @@ impl DesktopOperationKind {
             Self::Backup => "backup",
             Self::Verify => "verify",
             Self::Restore => "restore",
+            Self::RestoreWithPortableSettings => "restore_with_portable_settings",
             Self::Rebuild => "rebuild",
             Self::UpdatePolicy => "update_policy",
+            Self::ApplyConfig => "apply_config",
+            Self::UpdatePresentation => "update_presentation",
         }
     }
 }
@@ -837,6 +843,7 @@ pub enum DesktopIntent {
         retention_budget_mib: u32,
     },
     UpdateReminderPolicy(DesktopReminderPolicyUpdate),
+    UpdatePresentationDensity(DesktopDensity),
     EnableCurrentUserStartup,
     RepairCurrentUserStartup,
     DisableCurrentUserStartup,
@@ -986,6 +993,10 @@ impl fmt::Debug for DesktopIntent {
             Self::UpdateReminderPolicy(_) => {
                 formatter.write_str("DesktopIntent::UpdateReminderPolicy([redacted])")
             }
+            Self::UpdatePresentationDensity(density) => formatter
+                .debug_tuple("DesktopIntent::UpdatePresentationDensity")
+                .field(density)
+                .finish(),
             Self::EnableCurrentUserStartup => {
                 formatter.write_str("DesktopIntent::EnableCurrentUserStartup")
             }

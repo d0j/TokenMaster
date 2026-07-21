@@ -1147,6 +1147,9 @@ impl DesktopIntentSink for ApplicationDesktopIntentSink {
                     },
                 )
             }
+            DesktopIntent::UpdatePresentationDensity(density) => self.submit_request(
+                ApplicationOperationRequest::update_presentation_density(density),
+            ),
             DesktopIntent::EnableCurrentUserStartup => {
                 self.submit_current_user_startup(CurrentUserStartupAction::Enable)
             }
@@ -1205,19 +1208,23 @@ fn map_command_admission(admission: ApplicationCommandAdmission) -> DesktopInten
 const fn application_operation_kind(command: ApplicationCommand) -> DesktopOperationKind {
     match command {
         ApplicationCommand::ExportConfig => DesktopOperationKind::ExportConfig,
-        ApplicationCommand::ImportConfig
-        | ApplicationCommand::ConfirmConfigImport
-        | ApplicationCommand::CancelConfigImport => DesktopOperationKind::ImportConfig,
+        ApplicationCommand::ImportConfig | ApplicationCommand::CancelConfigImport => {
+            DesktopOperationKind::ImportConfig
+        }
+        ApplicationCommand::ConfirmConfigImport => DesktopOperationKind::ApplyConfig,
         ApplicationCommand::Backup
         | ApplicationCommand::BackupCompact
         | ApplicationCommand::BackupEncrypted => DesktopOperationKind::Backup,
         ApplicationCommand::Verify => DesktopOperationKind::Verify,
-        ApplicationCommand::RestoreData(_)
-        | ApplicationCommand::RestoreDataAndPortableSettings(_) => DesktopOperationKind::Restore,
+        ApplicationCommand::RestoreData(_) => DesktopOperationKind::Restore,
+        ApplicationCommand::RestoreDataAndPortableSettings(_) => {
+            DesktopOperationKind::RestoreWithPortableSettings
+        }
         ApplicationCommand::Rebuild => DesktopOperationKind::Rebuild,
         ApplicationCommand::UpdateBackupPolicy | ApplicationCommand::UpdateReminderPolicy => {
             DesktopOperationKind::UpdatePolicy
         }
+        ApplicationCommand::UpdatePresentationDensity => DesktopOperationKind::UpdatePresentation,
     }
 }
 
@@ -1787,6 +1794,14 @@ fn execute_application_operation(
                 Err(error) => execute_state_command::<()>(Err(error)),
             }
         }
+        (
+            ApplicationCommand::UpdatePresentationDensity,
+            ApplicationOperationPayload::PresentationDensity(update),
+        ) => execute_state_command(state.update_presentation_density(
+            permit,
+            update.into_state_density(),
+            || publish_atomic_operation(reliable_state, permit.command()),
+        )),
         (ApplicationCommand::RestoreData(selection), ApplicationOperationPayload::Empty) => {
             execute_restore_operation(
                 environment,

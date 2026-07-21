@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::Connection;
 use tempfile::TempDir;
-use tokenmaster_desktop::{DesktopReliableStateHealth, DesktopReminderSyncState};
+use tokenmaster_desktop::{DesktopDensity, DesktopReliableStateHealth, DesktopReminderSyncState};
 use tokenmaster_domain::{
     BenefitConfidence, BenefitDetailKind, BenefitEvidenceSource, BenefitExpiry,
     BenefitInventoryCompleteness, BenefitInventoryObservation, BenefitInventoryObservationParts,
@@ -20,8 +20,8 @@ use tokenmaster_platform::{
 use tokenmaster_state::{
     BackupCompression, BackupPackage, BackupPassphrase, BackupPolicy, BootstrapOutcome,
     ConfigPackage, EncryptedBackupPackage, MAX_CONFIG_PACKAGE_BYTES, PortableSettings,
-    PortableSettingsCandidate, ReminderPolicy, SettingsChangeCategory, SettingsStore,
-    SettingsValue,
+    PortableSettingsCandidate, PresentationDensity, PresentationSettings, ReminderPolicy,
+    SettingsChangeCategory, SettingsStore, SettingsValue,
 };
 use tokenmaster_store::UsageStore;
 
@@ -133,7 +133,7 @@ fn changed_portable_settings() -> PortableSettingsCandidate {
     PortableSettingsCandidate::new(PortableSettings::new(
         reminders,
         backup,
-        *defaults.portable().presentation(),
+        PresentationSettings::new(PresentationDensity::UltraCompact),
     ))
     .expect("portable candidate")
 }
@@ -812,11 +812,14 @@ fn config_import_preview_is_bounded_and_commit_preserves_device_settings() {
     let preview = owner
         .preview_config_import(&permit, source)
         .expect("config preview");
-    assert_eq!(preview.changed_category_count(), 1);
-    assert_eq!(preview.changed_field_count(), 1);
+    assert_eq!(preview.changed_category_count(), 2);
+    assert_eq!(preview.changed_field_count(), 2);
     assert_eq!(
         preview.categories(),
-        [SettingsChangeCategory::ReminderProfile]
+        [
+            SettingsChangeCategory::ReminderProfile,
+            SettingsChangeCategory::Presentation,
+        ]
     );
     assert_eq!(preview.created_at_utc_ms(), 1_721_234_567_890);
     assert!(preview.package_bytes() <= MAX_CONFIG_PACKAGE_BYTES);
@@ -848,6 +851,14 @@ fn config_import_preview_is_bounded_and_commit_preserves_device_settings() {
         changed.digest()
     );
     assert_eq!(after.value().device(), before.value().device());
+    assert_eq!(
+        owner
+            .reliable_state_projection_for_outcome(BootstrapOutcome::FirstInstall, None)
+            .expect("post-import projection")
+            .presentation()
+            .density(),
+        DesktopDensity::UltraCompact
+    );
 }
 
 #[test]
@@ -889,8 +900,8 @@ fn pending_config_import_is_projected_cancelled_or_committed_without_paths() {
         .reliable_state_projection(preflight.report())
         .expect("project pending import");
     let preview = projected.config_import_preview().expect("pending preview");
-    assert_eq!(preview.changed_category_count(), 1);
-    assert_eq!(preview.changed_field_count(), 1);
+    assert_eq!(preview.changed_category_count(), 2);
+    assert_eq!(preview.changed_field_count(), 2);
     assert_eq!(preview.created_at_utc_ms(), 1_721_234_567_890);
     assert!(preview.package_bytes() <= MAX_CONFIG_PACKAGE_BYTES);
     assert!(!format!("{projected:?}").contains(&temporary.path().display().to_string()));
@@ -1137,4 +1148,58 @@ fn backup_policy_update_accepts_only_exact_product_ranges() {
             )
             .expect_err("out-of-range policy must fail");
     }
+}
+
+#[test]
+fn presentation_density_update_preserves_every_other_settings_class() {
+    let (_temporary, root) = fixture();
+    let owner = ApplicationStateOwner::open(&root).expect("state owner");
+    owner
+        .update_presentation_density(
+            &command_permit(ApplicationCommand::UpdatePresentationDensity),
+            PresentationDensity::UltraCompact,
+            || {},
+        )
+        .expect("seed ultra compact density");
+    owner
+        .update_backup_policy(
+            &command_permit(ApplicationCommand::UpdateBackupPolicy),
+            ApplicationBackupPolicyUpdate::new(true, 300, 21_600, 256),
+            || {},
+        )
+        .expect("save backup policy");
+    let reminder = ReminderPolicy::new(true, &[21_600, 3_600]).expect("reminder policy");
+    owner
+        .update_reminder_policy(
+            &command_permit(ApplicationCommand::UpdateReminderPolicy),
+            reminder.clone(),
+            || Ok(()),
+        )
+        .expect("save reminder policy");
+
+    let store = SettingsStore::new(root.reliable_state()).expect("settings store");
+    let before = store.load().expect("settings before density update");
+    assert_eq!(
+        before.value().portable().presentation().density(),
+        PresentationDensity::UltraCompact
+    );
+    let before_reminders = before.value().portable().reminders().clone();
+    let before_backup = before.value().portable().backup().clone();
+    let before_device = before.value().device().clone();
+
+    owner
+        .update_presentation_density(
+            &command_permit(ApplicationCommand::UpdatePresentationDensity),
+            PresentationDensity::Compact,
+            || {},
+        )
+        .expect("save compact density");
+    let after = store.load().expect("settings after density update");
+    assert_eq!(
+        after.value().portable().presentation().density(),
+        PresentationDensity::Compact
+    );
+    assert_eq!(after.value().portable().reminders(), &before_reminders);
+    assert_eq!(after.value().portable().backup(), &before_backup);
+    assert_eq!(after.value().device(), &before_device);
 }

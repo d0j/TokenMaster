@@ -9,7 +9,7 @@
 use core::fmt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
-use tokenmaster_desktop::DesktopReminderPolicyUpdate;
+use tokenmaster_desktop::{DesktopDensity, DesktopReminderPolicyUpdate};
 use tokenmaster_platform::{SelectedInputFile, SelectedOutputFile};
 use tokenmaster_state::{BackupPassphrase, ReminderPolicy};
 
@@ -33,6 +33,7 @@ pub(crate) enum ApplicationCommand {
     Rebuild,
     UpdateBackupPolicy,
     UpdateReminderPolicy,
+    UpdatePresentationDensity,
 }
 
 impl ApplicationCommand {
@@ -59,6 +60,7 @@ pub(crate) enum ApplicationOperationPayload {
     },
     BackupPolicy(ApplicationBackupPolicyUpdate),
     ReminderPolicy(ApplicationReminderPolicyUpdate),
+    PresentationDensity(ApplicationPresentationDensityUpdate),
 }
 
 impl fmt::Debug for ApplicationOperationPayload {
@@ -81,6 +83,9 @@ impl fmt::Debug for ApplicationOperationPayload {
             }
             Self::ReminderPolicy(_) => {
                 formatter.write_str("ApplicationOperationPayload::ReminderPolicy([redacted])")
+            }
+            Self::PresentationDensity(_) => {
+                formatter.write_str("ApplicationOperationPayload::PresentationDensity([redacted])")
             }
         }
     }
@@ -167,6 +172,35 @@ impl fmt::Debug for ApplicationReminderPolicyUpdate {
     }
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub(crate) struct ApplicationPresentationDensityUpdate {
+    density: DesktopDensity,
+}
+
+impl ApplicationPresentationDensityUpdate {
+    pub(crate) const fn new(density: DesktopDensity) -> Self {
+        Self { density }
+    }
+
+    pub(crate) const fn density(self) -> DesktopDensity {
+        self.density
+    }
+
+    pub(crate) const fn into_state_density(self) -> tokenmaster_state::PresentationDensity {
+        match self.density {
+            DesktopDensity::Comfortable => tokenmaster_state::PresentationDensity::Comfortable,
+            DesktopDensity::Compact => tokenmaster_state::PresentationDensity::Compact,
+            DesktopDensity::UltraCompact => tokenmaster_state::PresentationDensity::UltraCompact,
+        }
+    }
+}
+
+impl fmt::Debug for ApplicationPresentationDensityUpdate {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("ApplicationPresentationDensityUpdate([redacted])")
+    }
+}
+
 pub(crate) struct ApplicationOperationRequest {
     command: ApplicationCommand,
     payload: ApplicationOperationPayload,
@@ -222,6 +256,15 @@ impl ApplicationOperationRequest {
         Self {
             command: ApplicationCommand::UpdateReminderPolicy,
             payload: ApplicationOperationPayload::ReminderPolicy(update),
+        }
+    }
+
+    pub(crate) const fn update_presentation_density(density: DesktopDensity) -> Self {
+        Self {
+            command: ApplicationCommand::UpdatePresentationDensity,
+            payload: ApplicationOperationPayload::PresentationDensity(
+                ApplicationPresentationDensityUpdate::new(density),
+            ),
         }
     }
 

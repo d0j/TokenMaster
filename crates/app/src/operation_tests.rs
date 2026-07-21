@@ -5,6 +5,7 @@ use std::thread::{self, ThreadId};
 use std::time::{Duration, Instant};
 
 use tempfile::tempdir;
+use tokenmaster_desktop::DesktopDensity;
 use tokenmaster_platform::{
     ControlledFileDialog, FileDialogFileType, FileDialogResult, FileDialogSelector,
     ValidatedLocalDirectory,
@@ -517,6 +518,140 @@ fn reminder_policy_follow_up_replaces_only_the_pending_payload_with_the_latest_s
     assert_eq!(
         *executed.lock().expect("execution log"),
         vec![21_600, 3_600]
+    );
+    assert_eq!(
+        worker.shutdown().expect("worker shutdown"),
+        ApplicationOperationWorkerPhase::Stopped
+    );
+}
+
+#[test]
+fn presentation_density_follow_up_replaces_only_the_pending_payload() {
+    let (started_tx, started_rx) = channel();
+    let (release_tx, release_rx) = channel();
+    let executed = Arc::new(Mutex::new(Vec::new()));
+    let execution_log = Arc::clone(&executed);
+    let mut worker = ApplicationOperationWorker::spawn_with_payload(move |permit, payload| {
+        let ApplicationOperationPayload::PresentationDensity(update) = payload else {
+            panic!("presentation density payload");
+        };
+        let density = update.density();
+        execution_log.lock().expect("execution log").push(density);
+        started_tx
+            .send((permit.id(), density))
+            .expect("started signal");
+        if density == DesktopDensity::Compact {
+            receive(&release_rx);
+        }
+        ApplicationCommandExecution::Succeeded
+    })
+    .expect("worker");
+    let submitter = worker.submitter();
+
+    let ApplicationCommandAdmission::Started(first) = submitter.submit_request(
+        ApplicationOperationRequest::update_presentation_density(DesktopDensity::Compact),
+    ) else {
+        panic!("first density save must start");
+    };
+    assert_eq!(receive(&started_rx), (first.id(), DesktopDensity::Compact));
+
+    let ApplicationCommandAdmission::Queued {
+        request_id: pending,
+        active_request_id,
+    } = submitter.submit_request(ApplicationOperationRequest::update_presentation_density(
+        DesktopDensity::UltraCompact,
+    ))
+    else {
+        panic!("middle density save must queue");
+    };
+    assert_eq!(active_request_id, first.id());
+    assert_eq!(
+        submitter.submit_request(ApplicationOperationRequest::update_presentation_density(
+            DesktopDensity::Comfortable,
+        )),
+        ApplicationCommandAdmission::Coalesced {
+            request_id: pending,
+            active_request_id: first.id(),
+        }
+    );
+    let snapshot = worker.snapshot().expect("snapshot");
+    assert_eq!(snapshot.active_count(), 1);
+    assert_eq!(snapshot.pending_count(), 1);
+
+    release_tx.send(()).expect("release first save");
+    assert_eq!(receive(&started_rx), (pending, DesktopDensity::Comfortable));
+    wait_until(|| {
+        worker
+            .snapshot()
+            .is_ok_and(|snapshot| snapshot.active_count() == 0)
+    });
+    assert_eq!(
+        *executed.lock().expect("execution log"),
+        vec![DesktopDensity::Compact, DesktopDensity::Comfortable]
+    );
+    assert_eq!(
+        worker.shutdown().expect("worker shutdown"),
+        ApplicationOperationWorkerPhase::Stopped
+    );
+}
+
+#[test]
+fn presentation_density_stress_retains_one_active_and_one_latest_pending_payload() {
+    let (started_tx, started_rx) = channel();
+    let (release_tx, release_rx) = channel();
+    let executed = Arc::new(Mutex::new(Vec::new()));
+    let execution_log = Arc::clone(&executed);
+    let mut worker = ApplicationOperationWorker::spawn_with_payload(move |_permit, payload| {
+        let ApplicationOperationPayload::PresentationDensity(update) = payload else {
+            panic!("presentation density payload");
+        };
+        let density = update.density();
+        execution_log.lock().expect("execution log").push(density);
+        started_tx.send(density).expect("started signal");
+        if density == DesktopDensity::Compact {
+            receive(&release_rx);
+        }
+        ApplicationCommandExecution::Succeeded
+    })
+    .expect("worker");
+    let submitter = worker.submitter();
+    assert!(matches!(
+        submitter.submit_request(ApplicationOperationRequest::update_presentation_density(
+            DesktopDensity::Compact,
+        )),
+        ApplicationCommandAdmission::Started(_)
+    ));
+    assert_eq!(receive(&started_rx), DesktopDensity::Compact);
+
+    let mut final_density = DesktopDensity::Comfortable;
+    for index in 0..10_000 {
+        final_density = match index % 3 {
+            0 => DesktopDensity::Comfortable,
+            1 => DesktopDensity::Compact,
+            _ => DesktopDensity::UltraCompact,
+        };
+        assert!(matches!(
+            submitter.submit_request(ApplicationOperationRequest::update_presentation_density(
+                final_density,
+            )),
+            ApplicationCommandAdmission::Queued { .. }
+                | ApplicationCommandAdmission::Coalesced { .. }
+        ));
+        let snapshot = worker.snapshot().expect("snapshot");
+        assert_eq!(snapshot.active_count(), 1);
+        assert_eq!(snapshot.pending_count(), 1);
+    }
+
+    release_tx.send(()).expect("release first save");
+    assert_eq!(receive(&started_rx), final_density);
+    wait_until(|| {
+        worker
+            .snapshot()
+            .is_ok_and(|snapshot| snapshot.active_count() == 0)
+    });
+    assert_eq!(
+        *executed.lock().expect("execution log"),
+        vec![DesktopDensity::Compact, final_density]
     );
     assert_eq!(
         worker.shutdown().expect("worker shutdown"),
