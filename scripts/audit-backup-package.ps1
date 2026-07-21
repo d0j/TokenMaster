@@ -53,7 +53,6 @@ $packageText = ($packageFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
 }) -join "`n"
 $packageReaderText = [System.IO.File]::ReadAllText((Join-Path $packageSource 'reader.rs'))
-$packageWriterText = [System.IO.File]::ReadAllText((Join-Path $packageSource 'writer.rs'))
 
 $forbiddenAuthorityPattern = '(?is)https?://|\bstd\s*::\s*process\b|\bCommand\s*::\s*new\b|\b(?:TcpStream|TcpListener|UdpSocket)\b|\b(?:reqwest|ureq|webbrowser|headless_chrome|zip|tar|sevenz|libarchive|slint|rusqlite)\s*::|\bplugin\b|powershell(?:\.exe)?|cmd(?:\.exe)?|bash(?:\.exe)?|\bsh\s+-c\b|\bAuthorization\s*:\s*Bearer\b'
 if ($packageText -match $forbiddenAuthorityPattern) {
@@ -62,7 +61,72 @@ if ($packageText -match $forbiddenAuthorityPattern) {
 if (@([regex]::Matches($packageReaderText, 'if\s+settings\.source_schema_version\(\)\s*!=\s*manifest\.settings_schema_version\s*\{\s*return\s+Err\(StateError::integrity\(\)\);\s*\}')).Count -ne 1) {
     throw 'TM-BACKUP-SETTINGS-VERSION-BINDING: manifest and settings entry source versions must match exactly'
 }
-if ($packageWriterText -match '\bpub\s+fn\s+\w*(?:raw|extract)\w*\s*(?:<[^>]+>)?\s*\([^)]*&mut\s+(?:dyn\s+)?(?:Read|Write)') {
+$expectedPublicPackageFunctions = [ordered]@{
+    compression = 1
+    copy_verified_stage_to_durable = 1
+    created_at_utc_ms = 2
+    database_len = 1
+    database_schema_version = 1
+    database_sha256 = 1
+    decrypt = 1
+    encrypt = 1
+    existing = 1
+    inspect = 1
+    level = 1
+    metadata = 1
+    new = 2
+    output_len = 1
+    output_sha256 = 1
+    package_len = 1
+    package_sha256 = 1
+    purpose = 1
+    read = 2
+    read_for_recovery = 1
+    receipt = 2
+    settings = 2
+    verify_backup_stage = 1
+    write = 2
+    write_to_backup_stage = 1
+    write_verified_candidate_to_backup_stage = 1
+}
+$publicPackageFunctions = @([regex]::Matches(
+    $packageText,
+    '(?m)^\s*pub\s+(?:(?:const|async|unsafe)\s+)*fn\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)'
+))
+$publicPackageFunctionCounts = @{}
+foreach ($function in $publicPackageFunctions) {
+    $name = $function.Groups['name'].Value
+    if ($publicPackageFunctionCounts.ContainsKey($name)) {
+        $publicPackageFunctionCounts[$name] += 1
+    } else {
+        $publicPackageFunctionCounts[$name] = 1
+    }
+}
+$unexpectedPublicPackageFunctions = @(
+    $publicPackageFunctionCounts.Keys |
+        Where-Object { -not $expectedPublicPackageFunctions.Contains($_) }
+)
+$driftedPublicPackageFunctions = @(
+    $expectedPublicPackageFunctions.Keys |
+        Where-Object {
+            -not $publicPackageFunctionCounts.ContainsKey($_) -or
+            $publicPackageFunctionCounts[$_] -ne $expectedPublicPackageFunctions[$_]
+        }
+)
+$publicPackageFunctionDeclarations = @([regex]::Matches(
+    $packageText,
+    '(?ms)^\s*pub\s+(?:(?:async|unsafe)\s+)*fn\s+[A-Za-z_][A-Za-z0-9_]*\s*(?:<[^{}\r\n]*>)?\s*\((?<parameters>.*?)\)\s*(?:->|where|\{)'
+))
+$rawPublicPackageFunctions = @(
+    $publicPackageFunctionDeclarations |
+        Where-Object {
+            $_.Value -cmatch '(?<![A-Za-z0-9_])(?:(?:dyn|impl)\s+)?(?:Read|Write)(?![A-Za-z0-9_])'
+        }
+)
+if ($publicPackageFunctions.Count -ne 32 -or
+    $unexpectedPublicPackageFunctions.Count -ne 0 -or
+    $driftedPublicPackageFunctions.Count -ne 0 -or
+    $rawPublicPackageFunctions.Count -ne 0) {
     throw 'TM-BACKUP-PACKAGE-CAPABILITY: public raw package writer or extractor authority is forbidden'
 }
 

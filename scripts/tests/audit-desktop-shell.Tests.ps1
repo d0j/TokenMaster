@@ -2313,4 +2313,53 @@ fn density_authority() {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-PRESENTATION-PRESERVATION*"
     }
+
+    It "rejects density assignment inside the admitted callee before admission" {
+        $fixture = New-DesktopAuditFixture -Name "density-callee-before-admission"
+        $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
+        $text = [System.IO.File]::ReadAllText($path)
+        $newline = if ($text.Contains("`r`n")) { "`r`n" } else { "`n" }
+        $before = '        if !admit(density) {' + $newline +
+            '            return DesktopPresentationApplyOutcome::Rejected;' + $newline +
+            '        }' + $newline +
+            '        self.density = density;'
+        $after = '        self.density = density;' + $newline +
+            '        if !admit(density) {' + $newline +
+            '            return DesktopPresentationApplyOutcome::Rejected;' + $newline +
+            '        }'
+        $text = $text.Replace($before, $after)
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-ADMISSION*"
+    }
+
+    It "rejects empty active and pending coalescing assertions while test names remain" {
+        $fixture = New-DesktopAuditFixture -Name "density-empty-coalescing-assertions"
+        $path = Join-Path $fixture "crates\app\src\operation_tests.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '        assert_eq!(snapshot.active_count(), 1);',
+            '        let _ = snapshot.active_count();'
+        ).Replace(
+            '        assert_eq!(snapshot.pending_count(), 1);',
+            '        let _ = snapshot.pending_count();'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-STRESS*"
+    }
+
+    It "rejects loss of the final coalesced payload assertion while the test name remains" {
+        $fixture = New-DesktopAuditFixture -Name "density-missing-final-payload-assertion"
+        $path = Join-Path $fixture "crates\app\src\operation_tests.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '    assert_eq!(receive(&started_rx), final_density);',
+            '    let _ = receive(&started_rx);'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-STRESS*"
+    }
 }

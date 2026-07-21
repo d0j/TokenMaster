@@ -822,19 +822,22 @@ with an injected before/after replacement boundary, 40 deterministic process kil
 20 replacement-entry race kills, and state-level process deaths before partial write,
 after seal/before publish, and after publish/before reread of generation 3.
 
-Implemented Task 4 exposes only a fixed-purpose `SettingsStore` constructed from a
-validated local-directory capability; it does not reexport generic record/file
-authority or accept a path. The authority audit now permits exactly the original
-bounded record/platform import and one exact `ValidatedLocalDirectory` import for
-that typed constructor, while retaining all six fixed-child and alias-reuse gates.
-Schema v1 is strict and capped at 1 MiB. Unknown, duplicate, newer/older unsupported,
-invalid enum/range/relationship, and forbidden-state fields fail before publication.
-Portable input cannot contain or overwrite the device-local route. Errors, `Debug`,
-previews, and serialized values are regression-tested against password, credential,
-absolute-path, prompt/response/command, and source-content canaries. A two-invalid-
-slot load preserves both files; only an explicit validated save replaces one and
-keeps the peer as evidence. Restore identity is a nonzero generation plus portable
-SHA-256 digest and has a fixed reread verifier for later journal resume.
+Implemented Task 4 originally exposed only a fixed-purpose `SettingsStore` constructed
+from a validated local-directory capability; that authority boundary remains current
+and does not reexport generic record/file authority or accept a path. The authority
+audit permits exactly the original bounded record/platform import and one exact
+`ValidatedLocalDirectory` import for that typed constructor, while retaining all six
+fixed-child and alias-reuse gates. Its historical schema v1 wire is a strict legacy
+subset capped at 1 MiB. Current strict schema v2 adds only the fixed three-value
+`presentation.density`; v1 migrates in memory to Comfortable without a startup write,
+while schema 0 and schema 3 or newer reject. Unknown, duplicate, unsupported, invalid
+enum/range/relationship, and forbidden-state fields fail before publication. Portable
+input cannot contain or overwrite the device-local route. Errors, `Debug`, previews,
+and serialized values are regression-tested against password, credential, absolute-
+path, prompt/response/command, and source-content canaries. A two-invalid-slot load
+preserves both files; only an explicit validated save replaces one and keeps the peer
+as evidence. Restore identity is a nonzero generation plus portable SHA-256 digest and
+has a fixed reread verifier for later journal resume.
 
 Implemented Task 5 never copies the live SQLite main file. It uses Online Backup so
 committed WAL state is included, steps pages under cancellation/deadline control, and

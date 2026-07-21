@@ -173,4 +173,35 @@ Describe "TokenMaster backup package audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
     }
+
+    It "rejects a reader-side generic raw extractor regardless of its name" {
+        $fixture = New-BackupAuditFixture -Name "public-reader-generic-extractor"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\package\reader.rs") `
+            -Value 'pub fn decode_any<R: Read>(source: &mut R) { let _ = source; }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
+    }
+
+    It "rejects a generic raw writer whose name avoids raw and extract" {
+        $fixture = New-BackupAuditFixture -Name "public-generic-writer"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\state\src\package\writer.rs") `
+            -Value 'pub fn stream_package<W: Write>(destination: &mut W) { let _ = destination; }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
+    }
+
+    It "rejects widening an existing package method to a generic raw reader" {
+        $fixture = New-BackupAuditFixture -Name "widen-existing-reader-signature"
+        $path = Join-Path $fixture "crates\state\src\package\reader.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '    pub fn inspect(source: &mut DurableFileReader)',
+            '    pub fn inspect<R: Read>(source: &mut R)'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
+    }
 }

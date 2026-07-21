@@ -1152,14 +1152,17 @@ isolated candidate; compact manual export vacuums only that candidate. The fixed
 entry plus whole-package SHA-256. Optional manual passphrase protection wraps the
 package in a bounded standard age v1 stream; automatic backups store no secret.
 
-Settings, run state, and restore intent use alternating checked A/B records.
-The implemented settings schema starts at v1 and stores only current product-owned
-portable reminder/backup policy plus the device-local route. It treats a valid-
-envelope newer schema as unsupported rather than corruption, so a downgraded binary
-cannot load defaults and overwrite it. Ordinary schedule settings cannot lower the
-five-minute quiet or six-hour interval gates. Portable preview/commit is base-
-generation/digest bound, preserves device state, and returns a reconstructible target
-for idempotent journal resume. Generic records and directory paths remain private.
+Settings, run state, and restore intent use alternating checked A/B records. At the
+prior Task 4 boundary, settings schema v1 stored only product-owned portable reminder/
+backup policy plus the device-local route. Current strict schema v2 additionally owns
+one fixed `presentation.density` value. v1 remains a legacy input that migrates in
+memory to Comfortable without a startup write; schema 0 and schema 3 or newer are
+unsupported. This valid-envelope version distinction prevents a downgraded binary
+from loading defaults and overwriting newer state. Ordinary schedule settings cannot
+lower the five-minute quiet or six-hour interval gates. Portable preview/commit is
+base-generation/digest bound, preserves device state, and returns a reconstructible
+target for idempotent journal resume. Generic records and directory paths remain
+private.
 
 The implemented snapshot layer uses 64-page Online Backup steps, bounded busy retry,
 cooperative cancellation/deadline checks, fixed staging children, and a defensive

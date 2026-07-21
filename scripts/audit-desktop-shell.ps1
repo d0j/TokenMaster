@@ -187,6 +187,7 @@ $slintIndexText = Get-RustFunctionText -Text $presentationStyleText -Name 'slint
 $fromSlintIndexText = Get-RustFunctionText -Text $presentationStyleText -Name 'from_slint_index'
 $checkedSuccessorText = Get-RustFunctionText -Text $presentationStyleText -Name 'checked_successor'
 $selectDensityText = Get-RustFunctionText -Text $presentationStyleText -Name 'select_density_index'
+$selectDensityIfAdmittedText = Get-RustFunctionText -Text $presentationStyleText -Name 'select_density_index_if_admitted'
 $densityEnumText = Get-ExecutableBracedText -Text $presentationStyleText -Pattern '(?m)^\s*pub\s+enum\s+DesktopDensity\s*\{' -FailureCode 'TM-DESKTOP-DENSITY-CONTRACT'
 $densityVariantMatches = [regex]::Matches($densityEnumText, '(?m)^\s*(?<variant>[A-Za-z][A-Za-z0-9_]*)\s*,\s*$')
 $densityVariantCount = $densityVariantMatches.Count
@@ -266,8 +267,10 @@ $presentationRevisionTypeCount = [regex]::Matches(
 ).Count
 $expectedCheckedSuccessor = 'constfnchecked_successor(self)->Option<Self>{matchself.0.checked_add(1){Some(value)=>Some(Self(value)),None=>None,}}'
 $expectedSelectDensity = 'pubfnselect_density_index(&mutself,index:i32)->DesktopPresentationApplyOutcome{letSome((density,revision))=self.checked_selection(index)else{returnself.selection_failure(index);};self.density=density;self.revision=revision;self.persistence=DesktopPresentationPersistence::NotSaved;DesktopPresentationApplyOutcome::Applied}'
+$expectedSelectDensityIfAdmitted = 'pubfnselect_density_index_if_admitted(&mutself,index:i32,admit:implFnOnce(DesktopDensity)->bool,)->DesktopPresentationApplyOutcome{letSome(density)=DesktopDensity::from_slint_index(index)else{returnDesktopPresentationApplyOutcome::Rejected;};ifdensity==self.density{if!matches!(self.persistence,DesktopPresentationPersistence::NotSaved){returnDesktopPresentationApplyOutcome::Unchanged;}if!admit(density){returnDesktopPresentationApplyOutcome::Rejected;}self.persistence=DesktopPresentationPersistence::Saving;returnDesktopPresentationApplyOutcome::Applied;}letSome((density,revision))=self.checked_selection(index)else{returnself.selection_failure(index);};if!admit(density){returnDesktopPresentationApplyOutcome::Rejected;}self.density=density;self.revision=revision;self.persistence=DesktopPresentationPersistence::Saving;DesktopPresentationApplyOutcome::Applied}'
 $checkedSuccessorDerivationCount = [int]((Normalize-ExecutableStructure -Text $checkedSuccessorText) -eq $expectedCheckedSuccessor)
 $selectDensityStructureCount = [int]((Normalize-ExecutableStructure -Text $selectDensityText) -eq $expectedSelectDensity)
+$selectDensityIfAdmittedStructureCount = [int]((Normalize-ExecutableStructure -Text $selectDensityIfAdmittedText) -eq $expectedSelectDensityIfAdmitted)
 $checkedSuccessorCallCount = $selectDensityStructureCount
 $densityWriteCount = $selectDensityStructureCount
 $revisionWriteCount = $selectDensityStructureCount
@@ -298,7 +301,8 @@ $densityAdmissionText = Get-RustFunctionText -Text $uiRustProductionText -Name '
 $admissionBeforeApply = $densityAdmissionText.IndexOf('selected.select_density_index_if_admitted', [System.StringComparison]::Ordinal)
 $firstDirectApply = $densityAdmissionText.IndexOf('selected.select_density_index(', [System.StringComparison]::Ordinal)
 if ($admissionBeforeApply -lt 0 -or ($firstDirectApply -ge 0 -and $firstDirectApply -lt $admissionBeforeApply) -or
-    $densityAdmissionText -notmatch 'intent_sink\.submit\(DesktopIntent::UpdatePresentationDensity\(density\)\)') {
+    $densityAdmissionText -notmatch 'intent_sink\.submit\(DesktopIntent::UpdatePresentationDensity\(density\)\)' -or
+    $selectDensityIfAdmittedStructureCount -ne 1) {
     throw 'TM-DESKTOP-DENSITY-ADMISSION: density must be admitted before any style application'
 }
 $backupPolicyUpdateText = Get-RustFunctionText -Text $appStateText -Name 'update_backup_policy'
@@ -307,8 +311,31 @@ if (@([regex]::Matches($backupPolicyUpdateText, '\*current\.value\(\)\.portable\
     @([regex]::Matches($reminderPolicyUpdateText, '\*current\.value\(\)\.portable\(\)\.presentation\(\)')).Count -ne 1) {
     throw 'TM-DESKTOP-PRESENTATION-PRESERVATION: reminder and backup updates must preserve presentation exactly'
 }
-if (@([regex]::Matches($appOperationTestsText, 'fn\s+presentation_density_follow_up_replaces_only_the_pending_payload\s*\(')).Count -ne 1 -or
-    @([regex]::Matches($appOperationTestsText, 'fn\s+ten_thousand_presentation_updates_keep_one_latest_payload\s*\(')).Count -ne 1) {
+$densityFollowUpTestNameCount = @([regex]::Matches($appOperationTestsText, 'fn\s+presentation_density_follow_up_replaces_only_the_pending_payload\s*\(')).Count
+$densityLatestPayloadTestNameCount = @([regex]::Matches($appOperationTestsText, 'fn\s+ten_thousand_presentation_updates_keep_one_latest_payload\s*\(')).Count
+if ($densityFollowUpTestNameCount -ne 1 -or $densityLatestPayloadTestNameCount -ne 1) {
+    throw 'TM-DESKTOP-DENSITY-STRESS: one-active one-pending latest-payload proofs are required'
+}
+$densityFollowUpTestText = Get-RustFunctionText -Text $appOperationTestsText -Name 'presentation_density_follow_up_replaces_only_the_pending_payload'
+$densityLatestPayloadTestText = Get-RustFunctionText -Text $appOperationTestsText -Name 'ten_thousand_presentation_updates_keep_one_latest_payload'
+$normalizedDensityFollowUpTest = Normalize-ExecutableStructure -Text $densityFollowUpTestText
+$normalizedDensityLatestPayloadTest = Normalize-ExecutableStructure -Text $densityLatestPayloadTestText
+$densityFollowUpProofs = @(
+    'assert_eq!(snapshot.active_count(),1);',
+    'assert_eq!(snapshot.pending_count(),1);',
+    'assert_eq!(receive(&started_rx),(pending,DesktopDensity::Comfortable));',
+    'vec![DesktopDensity::Compact,DesktopDensity::Comfortable]'
+)
+$densityLatestPayloadProofs = @(
+    'forindexin0..10_000{',
+    'ApplicationCommandAdmission::Queued{..}|ApplicationCommandAdmission::Coalesced{..}',
+    'assert_eq!(snapshot.active_count(),1);',
+    'assert_eq!(snapshot.pending_count(),1);',
+    'assert_eq!(receive(&started_rx),final_density);',
+    'vec![DesktopDensity::Compact,final_density]'
+)
+if (@($densityFollowUpProofs | Where-Object { -not $normalizedDensityFollowUpTest.Contains($_) }).Count -ne 0 -or
+    @($densityLatestPayloadProofs | Where-Object { -not $normalizedDensityLatestPayloadTest.Contains($_) }).Count -ne 0) {
     throw 'TM-DESKTOP-DENSITY-STRESS: one-active one-pending latest-payload proofs are required'
 }
 $densityAuthorityText = [regex]::Replace(

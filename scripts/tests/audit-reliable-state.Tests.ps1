@@ -615,4 +615,56 @@ tokenmaster-state = { path = "../state" }
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-STATE-PRESENTATION-CONTRACT*"
     }
+
+    It "rejects current settings schema constant drift" {
+        $fixture = New-StateAuditFixture -Name "current-settings-schema-constant-drift"
+        $path = Join-Path $fixture "crates\state\src\settings\value.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'pub(crate) const SETTINGS_SCHEMA_VERSION: u16 = 2;',
+            'pub(crate) const SETTINGS_SCHEMA_VERSION: u16 = 3;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-PRESENTATION-CONTRACT*"
+    }
+
+    It "rejects minimum settings schema constant drift" {
+        $fixture = New-StateAuditFixture -Name "minimum-settings-schema-constant-drift"
+        $path = Join-Path $fixture "crates\state\src\settings\value.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'pub(crate) const MIN_SUPPORTED_SETTINGS_SCHEMA_VERSION: u16 = 1;',
+            'pub(crate) const MIN_SUPPORTED_SETTINGS_SCHEMA_VERSION: u16 = 0;'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-PRESENTATION-CONTRACT*"
+    }
+
+    It "rejects a future top-level portable settings axis" {
+        $fixture = New-StateAuditFixture -Name "future-portable-settings-axis"
+        $path = Join-Path $fixture "crates\state\src\settings\value.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '    presentation: PresentationSettings,',
+            "    presentation: PresentationSettings,`r`n    skin: String,"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-PRESENTATION-CONTRACT*"
+    }
+
+    It "rejects presentation density wire-key drift" {
+        $fixture = New-StateAuditFixture -Name "presentation-density-key-drift"
+        $path = Join-Path $fixture "crates\state\src\settings\value.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'Self::UltraCompact => "ultra_compact"',
+            'Self::UltraCompact => "ultra-compact"'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-STATE-PRESENTATION-CONTRACT*"
+    }
 }
