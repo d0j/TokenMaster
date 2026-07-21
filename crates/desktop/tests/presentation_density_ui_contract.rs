@@ -211,6 +211,41 @@ fn failed_density_persistence_is_not_saved_but_import_and_portable_restore_overr
 }
 
 #[test]
+fn same_density_not_saved_retry_is_admitted_without_revising_the_window() {
+    i_slint_backend_testing::init_no_event_loop();
+
+    let sink = Rc::new(RecordingIntentSink::accepting());
+    let shell = DesktopShell::new_with_reliable_state(
+        &ProductReducer::new().snapshot(),
+        reliable_state_with_density(DesktopDensity::Comfortable),
+        sink.clone(),
+    )
+    .expect("shell");
+    let window = shell.window();
+    window.invoke_select_presentation_density(1);
+    let revision = window.get_presentation_revision();
+    shell
+        .apply_reliable_state(reliable_state_with_density_and_operation(
+            DesktopDensity::Comfortable,
+            Some(DesktopOperationSnapshot::new(
+                DesktopOperationKind::UpdatePresentation,
+                DesktopOperationPhase::Failed,
+                false,
+                Some("unavailable"),
+            )),
+        ))
+        .expect("failed presentation save");
+    assert_eq!(window.get_presentation_persistence_state(), "not_saved");
+
+    window.invoke_select_presentation_density(1);
+
+    assert_eq!(sink.count(), 2);
+    assert_eq!(window.get_presentation_density_key(), "compact");
+    assert_eq!(window.get_presentation_revision(), revision);
+    assert_eq!(window.get_presentation_persistence_state(), "saving");
+}
+
+#[test]
 fn preview_cancel_and_data_only_restore_do_not_override_unsaved_density() {
     i_slint_backend_testing::init_no_event_loop();
 

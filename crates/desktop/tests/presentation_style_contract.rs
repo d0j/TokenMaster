@@ -244,3 +244,62 @@ fn admission_runs_once_after_validation_and_rejection_preserves_state() {
     assert_eq!(calls, 1);
     assert_eq!(style, unchanged);
 }
+
+#[test]
+fn same_density_not_saved_retry_submits_once_without_revising() {
+    let mut style = DesktopPresentationStyle::from_persisted(DesktopDensity::Comfortable);
+    assert_eq!(
+        style.select_density_index_if_admitted(1, |_| true),
+        DesktopPresentationApplyOutcome::Applied
+    );
+    style.mark_not_saved();
+    let revision = style.revision();
+    let before_retry = style;
+    let mut calls = 0;
+
+    assert_eq!(
+        style.select_density_index_if_admitted(1, |_| {
+            calls += 1;
+            true
+        }),
+        DesktopPresentationApplyOutcome::Applied
+    );
+    assert_eq!(calls, 1);
+    assert_eq!(style.density(), DesktopDensity::Compact);
+    assert_eq!(style.persisted_density(), DesktopDensity::Comfortable);
+    assert_eq!(style.revision(), revision);
+    assert_eq!(style.persistence(), DesktopPresentationPersistence::Saving);
+
+    let before_rejection = style;
+    let calls_before_unchanged = calls;
+    assert_eq!(
+        style.select_density_index_if_admitted(1, |_| false),
+        DesktopPresentationApplyOutcome::Unchanged
+    );
+    assert_eq!(calls, calls_before_unchanged);
+    assert_eq!(style, before_rejection);
+
+    assert_ne!(before_retry.persistence(), style.persistence());
+}
+
+#[test]
+fn same_density_not_saved_rejection_preserves_all_style_fields() {
+    let mut style = DesktopPresentationStyle::from_persisted(DesktopDensity::Comfortable);
+    assert_eq!(
+        style.select_density_index_if_admitted(1, |_| true),
+        DesktopPresentationApplyOutcome::Applied
+    );
+    style.mark_not_saved();
+    let before_rejection = style;
+    let mut calls = 0;
+
+    assert_eq!(
+        style.select_density_index_if_admitted(1, |_| {
+            calls += 1;
+            false
+        }),
+        DesktopPresentationApplyOutcome::Rejected
+    );
+    assert_eq!(calls, 1);
+    assert_eq!(style, before_rejection);
+}

@@ -139,6 +139,19 @@ impl DesktopPresentationStyle {
         index: i32,
         admit: impl FnOnce(DesktopDensity) -> bool,
     ) -> DesktopPresentationApplyOutcome {
+        let Some(density) = DesktopDensity::from_slint_index(index) else {
+            return DesktopPresentationApplyOutcome::Rejected;
+        };
+        if density == self.density {
+            if !matches!(self.persistence, DesktopPresentationPersistence::NotSaved) {
+                return DesktopPresentationApplyOutcome::Unchanged;
+            }
+            if !admit(density) {
+                return DesktopPresentationApplyOutcome::Rejected;
+            }
+            self.persistence = DesktopPresentationPersistence::Saving;
+            return DesktopPresentationApplyOutcome::Applied;
+        }
         let Some((density, revision)) = self.checked_selection(index) else {
             return self.selection_failure(index);
         };

@@ -68,6 +68,7 @@ type SharedCompactWindowMode = Rc<RefCell<CompactWindowMode>>;
 struct ReliableStateDelivery {
     id: u64,
     projection: DesktopReliableStateProjection,
+    presentation_terminal: Option<DesktopOperationSnapshot>,
     acknowledgement: Option<SyncSender<Result<(), DesktopUiError>>>,
 }
 
@@ -169,16 +170,24 @@ impl DesktopReliableStateNotifier {
                 current.checked_add(1)
             })
             .map_err(|_| DesktopUiError::state_unavailable())?;
-        let displaced = self
+        let mut latest = self
             .inner
             .latest
             .lock()
-            .map_err(|_| DesktopUiError::state_unavailable())?
-            .replace(ReliableStateDelivery {
-                id,
-                projection,
-                acknowledgement,
+            .map_err(|_| DesktopUiError::state_unavailable())?;
+        let presentation_terminal =
+            presentation_terminal_from_projection(&projection).or_else(|| {
+                latest
+                    .as_ref()
+                    .and_then(|delivery| delivery.presentation_terminal)
             });
+        let displaced = latest.replace(ReliableStateDelivery {
+            id,
+            projection,
+            presentation_terminal,
+            acknowledgement,
+        });
+        drop(latest);
         if let Some(acknowledgement) = displaced.and_then(|delivery| delivery.acknowledgement) {
             let _ = acknowledgement.send(Err(DesktopUiError::state_unavailable()));
         }
@@ -317,9 +326,11 @@ impl ReliableStateNotifierInner {
             let Some(window) = self.window.upgrade() else {
                 return false;
             };
-            let Ok(style) =
-                reconcile_presentation_style(&self.presentation_style, &delivery.projection)
-            else {
+            let Ok(style) = reconcile_presentation_style(
+                &self.presentation_style,
+                &delivery.projection,
+                delivery.presentation_terminal,
+            ) else {
                 return false;
             };
             let Ok(mut state) = self.state.lock() else {
@@ -579,7 +590,7 @@ impl DesktopShell {
         &self,
         projection: DesktopReliableStateProjection,
     ) -> Result<(), DesktopUiError> {
-        let style = reconcile_presentation_style(&self._presentation_style, &projection)?;
+        let style = reconcile_presentation_style(&self._presentation_style, &projection, None)?;
         let mut reliable_state = self
             .reliable_state
             .lock()
@@ -644,12 +655,13 @@ fn apply_presentation_style(window: &MainWindow, style: DesktopPresentationStyle
 fn reconcile_presentation_style(
     presentation_style: &Arc<Mutex<DesktopPresentationStyle>>,
     projection: &DesktopReliableStateProjection,
+    presentation_terminal: Option<DesktopOperationSnapshot>,
 ) -> Result<DesktopPresentationStyle, DesktopUiError> {
     let mut style = presentation_style
         .lock()
         .map_err(|_| DesktopUiError::state_unavailable())?;
     let projected_density = projection.presentation().density();
-    match projection.operation() {
+    match presentation_terminal.or_else(|| presentation_terminal_from_projection(projection)) {
         Some(operation)
             if matches!(
                 operation.kind(),
@@ -680,6 +692,26 @@ fn reconcile_presentation_style(
         }
     }
     Ok(*style)
+}
+
+fn presentation_terminal_from_projection(
+    projection: &DesktopReliableStateProjection,
+) -> Option<DesktopOperationSnapshot> {
+    let operation = projection.operation()?;
+    match (operation.kind(), operation.phase()) {
+        (
+            crate::DesktopOperationKind::UpdatePresentation,
+            crate::DesktopOperationPhase::Succeeded
+            | crate::DesktopOperationPhase::Failed
+            | crate::DesktopOperationPhase::Cancelled,
+        )
+        | (crate::DesktopOperationKind::ApplyConfig, crate::DesktopOperationPhase::Succeeded)
+        | (
+            crate::DesktopOperationKind::RestoreWithPortableSettings,
+            crate::DesktopOperationPhase::Succeeded,
+        ) => Some(operation),
+        _ => None,
+    }
 }
 
 fn wire_presentation_density(
@@ -2977,21 +3009,71 @@ mod duration_tests {
         wire_presentation_density,
     };
     use crate::{
-        DesktopBenefitExpiry, DesktopDensity, DesktopIntent, DesktopIntentAdmission,
-        DesktopIntentSink, DesktopOperationKind, DesktopOperationPhase, DesktopOperationSnapshot,
-        DesktopPresentationStyle, DesktopReminderPolicy, DesktopReminderSyncState,
-        UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
+        DesktopBackupPolicy, DesktopBenefitExpiry, DesktopDensity, DesktopIntent,
+        DesktopIntentAdmission, DesktopIntentSink, DesktopOperationKind, DesktopOperationPhase,
+        DesktopOperationSnapshot, DesktopPresentationSettings, DesktopPresentationStyle,
+        DesktopReliableStateHealth, DesktopReliableStateInput, DesktopReliableStateSummary,
+        DesktopReminderPolicy, DesktopReminderSyncState, UnavailableDesktopIntentSink,
+        UnavailableDesktopSessionDetailIntentSink,
     };
     use tokenmaster_product::ProductReducer;
 
     struct ReentrantPresentationSink {
         style: Arc<Mutex<DesktopPresentationStyle>>,
         acquired_style: Cell<bool>,
+        submissions: Cell<u64>,
+    }
+
+    struct AcceptingPresentationSink;
+
+    impl DesktopIntentSink for AcceptingPresentationSink {
+        fn submit(&self, _: DesktopIntent) -> DesktopIntentAdmission {
+            DesktopIntentAdmission::Started
+        }
+    }
+
+    fn reliable_state_with_density_and_operation(
+        density: DesktopDensity,
+        operation: Option<DesktopOperationSnapshot>,
+    ) -> DesktopReliableStateProjection {
+        let summary = DesktopReliableStateSummary::new_with_settings(
+            DesktopReliableStateHealth::Healthy,
+            false,
+            "healthy",
+            DesktopBackupPolicy::disabled(),
+            DesktopReminderPolicy::unavailable(),
+            DesktopPresentationSettings::new(density),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            operation,
+            None,
+        );
+        DesktopReliableStateProjection::from_input(DesktopReliableStateInput::new(
+            1,
+            summary,
+            Vec::new(),
+        ))
+    }
+
+    fn publish_from_worker(
+        notifier: super::DesktopReliableStateNotifier,
+        projection: DesktopReliableStateProjection,
+    ) -> Result<(), String> {
+        thread::spawn(move || notifier.publish(projection))
+            .join()
+            .map_err(|_| String::from("publisher thread"))?
+            .map_err(|_| String::from("publication"))
     }
 
     impl DesktopIntentSink for ReentrantPresentationSink {
         fn submit(&self, intent: DesktopIntent) -> DesktopIntentAdmission {
             if matches!(intent, DesktopIntent::UpdatePresentationDensity(_)) {
+                self.submissions.set(self.submissions.get() + 1);
                 let Ok(mut style) = self.style.try_lock() else {
                     return DesktopIntentAdmission::Rejected;
                 };
@@ -3018,19 +3100,164 @@ mod duration_tests {
         let sink = Rc::new(ReentrantPresentationSink {
             style: Arc::clone(&style),
             acquired_style: Cell::new(false),
+            submissions: Cell::new(0),
         });
         wire_presentation_density(&window, Arc::clone(&style), sink.clone());
 
         window.invoke_select_presentation_density(1);
 
         assert!(sink.acquired_style.get());
+        assert_eq!(sink.submissions.get(), 1);
+        let reentrant_style = *style.lock().map_err(|_| String::from("reentrant style"))?;
+        assert_eq!(reentrant_style.density(), DesktopDensity::UltraCompact);
         assert_eq!(
-            style
-                .lock()
-                .map_err(|_| String::from("reentrant style"))?
-                .density(),
-            DesktopDensity::UltraCompact
+            reentrant_style.persisted_density(),
+            DesktopDensity::Comfortable
         );
+        assert_eq!(reentrant_style.revision().get(), 1);
+        assert_eq!(
+            reentrant_style.persistence(),
+            crate::DesktopPresentationPersistence::NotSaved
+        );
+        assert_eq!(window.get_presentation_density_key(), "ultra_compact");
+        assert_eq!(window.get_presentation_revision(), "1");
+        assert_eq!(window.get_presentation_persistence_state(), "not_saved");
+        Ok(())
+    }
+
+    #[test]
+    fn terminal_presentation_outcomes_survive_generic_replacement_until_one_delivery()
+    -> Result<(), String> {
+        for (phase, persisted_density, expected_persistence) in [
+            (
+                DesktopOperationPhase::Succeeded,
+                DesktopDensity::Compact,
+                "saved",
+            ),
+            (
+                DesktopOperationPhase::Failed,
+                DesktopDensity::Comfortable,
+                "not_saved",
+            ),
+        ] {
+            let shell = DesktopShell::new_with_reliable_state(
+                &ProductReducer::new().snapshot(),
+                reliable_state_with_density_and_operation(DesktopDensity::Comfortable, None),
+                Rc::new(AcceptingPresentationSink),
+            )
+            .map_err(|_| String::from("desktop shell"))?;
+            let window = shell.window();
+            window.invoke_select_presentation_density(1);
+            let notifier = shell.reliable_state_notifier();
+            publish_from_worker(
+                notifier.clone(),
+                reliable_state_with_density_and_operation(
+                    persisted_density,
+                    Some(DesktopOperationSnapshot::new(
+                        DesktopOperationKind::UpdatePresentation,
+                        phase,
+                        false,
+                        None,
+                    )),
+                ),
+            )?;
+            publish_from_worker(
+                notifier.clone(),
+                reliable_state_with_density_and_operation(
+                    persisted_density,
+                    Some(DesktopOperationSnapshot::new(
+                        DesktopOperationKind::Backup,
+                        DesktopOperationPhase::Running,
+                        false,
+                        None,
+                    )),
+                ),
+            )?;
+            notifier
+                .publish_operation(Some(DesktopOperationSnapshot::new(
+                    DesktopOperationKind::Backup,
+                    DesktopOperationPhase::Running,
+                    false,
+                    None,
+                )))
+                .map_err(|_| String::from("generic operation publication"))?;
+            assert!(
+                notifier
+                    .inner
+                    .latest
+                    .lock()
+                    .map_err(|_| String::from("latest delivery"))?
+                    .is_some(),
+                "capacity one retains exactly one pending delivery"
+            );
+
+            notifier.inner.deliver_latest();
+
+            assert_eq!(window.get_presentation_density_key(), "compact");
+            assert_eq!(
+                window.get_presentation_persistence_state(),
+                expected_persistence
+            );
+            assert_eq!(window.get_reliable_operation_kind(), "backup");
+            assert!(
+                notifier
+                    .inner
+                    .latest
+                    .lock()
+                    .map_err(|_| String::from("delivered latest"))?
+                    .is_none(),
+                "terminal marker is consumed with the sole delivery"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn config_and_portable_restore_terminals_survive_generic_replacement() -> Result<(), String> {
+        for kind in [
+            DesktopOperationKind::ApplyConfig,
+            DesktopOperationKind::RestoreWithPortableSettings,
+        ] {
+            let shell = DesktopShell::new_with_reliable_state(
+                &ProductReducer::new().snapshot(),
+                reliable_state_with_density_and_operation(DesktopDensity::Comfortable, None),
+                Rc::new(AcceptingPresentationSink),
+            )
+            .map_err(|_| String::from("desktop shell"))?;
+            let window = shell.window();
+            window.invoke_select_presentation_density(1);
+            let notifier = shell.reliable_state_notifier();
+            publish_from_worker(
+                notifier.clone(),
+                reliable_state_with_density_and_operation(
+                    DesktopDensity::UltraCompact,
+                    Some(DesktopOperationSnapshot::new(
+                        kind,
+                        DesktopOperationPhase::Succeeded,
+                        false,
+                        None,
+                    )),
+                ),
+            )?;
+            publish_from_worker(
+                notifier.clone(),
+                reliable_state_with_density_and_operation(
+                    DesktopDensity::UltraCompact,
+                    Some(DesktopOperationSnapshot::new(
+                        DesktopOperationKind::Backup,
+                        DesktopOperationPhase::Running,
+                        false,
+                        None,
+                    )),
+                ),
+            )?;
+
+            notifier.inner.deliver_latest();
+
+            assert_eq!(window.get_presentation_density_key(), "ultra_compact");
+            assert_eq!(window.get_presentation_persistence_state(), "saved");
+            assert_eq!(window.get_reliable_operation_kind(), "backup");
+        }
         Ok(())
     }
 
