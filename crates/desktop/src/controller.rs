@@ -15,7 +15,7 @@ use tokenmaster_engine::{
     WorkerCompletionKind, WorkerCompletionNotifier, WorkerError, WorkerErrorCode, WorkerPhase,
 };
 use tokenmaster_product::{
-    ProductAttemptGeneration, ProductGeneration, ProductGitRuntimeHealth,
+    ProductAttemptGeneration, ProductGeneration, ProductGitRuntimeHealth, ProductPublishOutcome,
     ProductQuotaRuntimeHealth, ProductReducer, ProductReminderRuntimeHealth,
     ProductRuntimeGeneration, ProductRuntimeObservationError, ProductSessionDetailSelection,
     ProductSessionDetailSelectionGeneration, ProductSnapshot, ProductUsageRuntimeHealth,
@@ -34,7 +34,6 @@ use crate::presentation::DesktopSnapshotEpoch;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DesktopQueryPlan {
     analytics: UsageAnalyticsRequest,
-    history: UsageAnalyticsRequest,
     git: GitOutputRequest,
     activity: LatestActivityRequest,
     sessions: UsageSessionPageRequest,
@@ -65,15 +64,6 @@ impl DesktopQueryPlan {
             ],
         )
         .map_err(map_query_error)?;
-        let history = UsageAnalyticsRequest::new(
-            UsageRange::recent_days(Self::HISTORY_DAYS).map_err(map_query_error)?,
-            UsageTimeZone::system(),
-            WeekStart::Monday,
-            UsageSeriesSelection::Daily,
-            Vec::new(),
-            vec![UsageBreakdownKind::Model, UsageBreakdownKind::Project],
-        )
-        .map_err(map_query_error)?;
         let git = GitOutputRequest::new(
             UsageRange::today(),
             WeekStart::Monday,
@@ -85,11 +75,29 @@ impl DesktopQueryPlan {
             .map_err(map_query_error)?;
         Ok(Self {
             analytics,
-            history,
             git,
             activity: LatestActivityRequest::first(overview_page_size),
             sessions,
         })
+    }
+
+    #[must_use]
+    pub const fn default_history_range_preset() -> DesktopHistoryRangePreset {
+        DesktopHistoryRangePreset::Recent30Days
+    }
+
+    fn history_request(
+        preset: DesktopHistoryRangePreset,
+    ) -> Result<UsageAnalyticsRequest, DesktopControllerError> {
+        UsageAnalyticsRequest::new(
+            UsageRange::recent_days(preset.day_count()).map_err(map_query_error)?,
+            UsageTimeZone::system(),
+            WeekStart::Monday,
+            UsageSeriesSelection::Daily,
+            Vec::new(),
+            vec![UsageBreakdownKind::Model, UsageBreakdownKind::Project],
+        )
+        .map_err(map_query_error)
     }
 }
 
@@ -263,6 +271,93 @@ pub struct DesktopSessionDetailIntent {
     snapshot_epoch: DesktopSnapshotEpoch,
     product_generation: tokenmaster_product::ProductGeneration,
     selection: ProductSessionDetailSelection,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopHistoryRangePreset {
+    Recent1Day,
+    Recent7Days,
+    Recent30Days,
+}
+
+impl DesktopHistoryRangePreset {
+    #[must_use]
+    pub const fn day_count(self) -> u16 {
+        match self {
+            Self::Recent1Day => 1,
+            Self::Recent7Days => 7,
+            Self::Recent30Days => 30,
+        }
+    }
+
+    #[must_use]
+    pub const fn stable_code(self) -> &'static str {
+        match self {
+            Self::Recent1Day => "recent_1_day",
+            Self::Recent7Days => "recent_7_days",
+            Self::Recent30Days => "recent_30_days",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct DesktopHistoryRangeGeneration(NonZeroU64);
+
+impl DesktopHistoryRangeGeneration {
+    #[must_use]
+    pub const fn new(generation: u64) -> Option<Self> {
+        match NonZeroU64::new(generation) {
+            Some(generation) => Some(Self(generation)),
+            None => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0.get()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DesktopHistoryRangeIntent {
+    snapshot_epoch: DesktopSnapshotEpoch,
+    product_generation: ProductGeneration,
+    generation: DesktopHistoryRangeGeneration,
+    preset: DesktopHistoryRangePreset,
+}
+
+impl DesktopHistoryRangeIntent {
+    #[must_use]
+    pub const fn new(
+        snapshot_epoch: DesktopSnapshotEpoch,
+        product_generation: ProductGeneration,
+        generation: DesktopHistoryRangeGeneration,
+        preset: DesktopHistoryRangePreset,
+    ) -> Self {
+        Self {
+            snapshot_epoch,
+            product_generation,
+            generation,
+            preset,
+        }
+    }
+
+    #[must_use]
+    pub const fn snapshot_epoch(self) -> DesktopSnapshotEpoch {
+        self.snapshot_epoch
+    }
+    #[must_use]
+    pub const fn product_generation(self) -> ProductGeneration {
+        self.product_generation
+    }
+    #[must_use]
+    pub const fn generation(self) -> DesktopHistoryRangeGeneration {
+        self.generation
+    }
+    #[must_use]
+    pub const fn preset(self) -> DesktopHistoryRangePreset {
+        self.preset
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -449,6 +544,7 @@ pub enum DesktopControllerErrorCode {
     CorruptArchive,
     StaleSelection,
     StaleNavigation,
+    StaleHistoryRange,
     Internal,
 }
 
@@ -467,6 +563,7 @@ impl DesktopControllerErrorCode {
             Self::CorruptArchive => "corrupt_archive",
             Self::StaleSelection => "stale_selection",
             Self::StaleNavigation => "stale_navigation",
+            Self::StaleHistoryRange => "stale_history_range",
             Self::Internal => "internal",
         }
     }
@@ -524,6 +621,8 @@ impl Clock for DesktopMonotonicClock {
 type LatestSnapshot = Arc<Mutex<Option<Arc<ProductSnapshot>>>>;
 type SnapshotNotifier = Arc<Mutex<Option<Arc<dyn DesktopSnapshotNotifier>>>>;
 type TerminalNavigationNotifier = Arc<Mutex<Option<Arc<dyn DesktopTerminalNavigationNotifier>>>>;
+type TerminalHistoryRangeNotifier =
+    Arc<Mutex<Option<Arc<dyn DesktopTerminalHistoryRangeNotifier>>>>;
 type PublishedProductGeneration = Arc<Mutex<Option<ProductGeneration>>>;
 type RuntimeObservationSlot = Arc<Mutex<RuntimeObservationState>>;
 type DesktopWorkSlot = Arc<Mutex<DesktopWorkState>>;
@@ -542,14 +641,36 @@ struct RuntimeObservationState {
     pending: Option<DesktopRuntimeObservation>,
 }
 
-#[derive(Default)]
 struct DesktopWorkState {
     refresh_attempt: Option<u64>,
     latest_selection_generation: Option<ProductSessionDetailSelectionGeneration>,
     pending_selection: Option<PendingDesktopSessionDetail>,
+    active_selection_attempt: Option<u64>,
     navigation_high_water: Option<DesktopSessionNavigationGeneration>,
     current_navigation: Option<ActiveDesktopSessionPage>,
     pending_navigation: Option<PendingDesktopSessionPage>,
+    published_history_preset: DesktopHistoryRangePreset,
+    history_range_high_water: Option<DesktopHistoryRangeGeneration>,
+    current_history_range: Option<ActiveDesktopHistoryRange>,
+    pending_history_range: Option<PendingDesktopHistoryRange>,
+}
+
+impl Default for DesktopWorkState {
+    fn default() -> Self {
+        Self {
+            refresh_attempt: None,
+            latest_selection_generation: None,
+            pending_selection: None,
+            active_selection_attempt: None,
+            navigation_high_water: None,
+            current_navigation: None,
+            pending_navigation: None,
+            published_history_preset: DesktopQueryPlan::default_history_range_preset(),
+            history_range_high_water: None,
+            current_history_range: None,
+            pending_history_range: None,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -557,6 +678,7 @@ struct DesktopWorkBatch {
     refresh: bool,
     selection: Option<DesktopSessionDetailIntent>,
     navigation: Option<DesktopSessionPageIntent>,
+    history_range: Option<DesktopHistoryRangeIntent>,
 }
 
 #[derive(Clone, Copy)]
@@ -578,6 +700,19 @@ struct ActiveDesktopSessionPage {
     intent: DesktopSessionPageIntent,
 }
 
+#[derive(Clone, Copy)]
+struct PendingDesktopHistoryRange {
+    attempt: u64,
+    intent: DesktopHistoryRangeIntent,
+}
+
+#[derive(Clone, Copy)]
+struct ActiveDesktopHistoryRange {
+    attempt: u64,
+    prerequisite_attempt: Option<u64>,
+    intent: DesktopHistoryRangeIntent,
+}
+
 struct DesktopExecutionContext<'a> {
     plan: &'a DesktopQueryPlan,
     clock: &'a dyn Clock,
@@ -594,14 +729,24 @@ pub trait DesktopTerminalNavigationNotifier: Send + Sync + 'static {
     fn navigation_terminal(&self, intent: DesktopSessionPageIntent);
 }
 
+pub trait DesktopTerminalHistoryRangeNotifier: Send + Sync + 'static {
+    fn history_range_terminal(&self, intent: DesktopHistoryRangeIntent);
+}
+
 struct DesktopWorkCompletionNotifier {
     work: DesktopWorkSlot,
     terminal_notifier: TerminalNavigationNotifier,
+    terminal_history_range_notifier: TerminalHistoryRangeNotifier,
 }
 
 impl WorkerCompletionNotifier for DesktopWorkCompletionNotifier {
     fn completion_ready(&self, completion: WorkerCompletion) {
-        let _ = handle_worker_completion(&self.work, &self.terminal_notifier, completion);
+        let _ = handle_worker_completion(
+            &self.work,
+            &self.terminal_notifier,
+            &self.terminal_history_range_notifier,
+            completion,
+        );
     }
 }
 
@@ -621,13 +766,32 @@ fn notify_terminal_navigation(
     }
 }
 
+fn notify_terminal_history_range(
+    notifier: &TerminalHistoryRangeNotifier,
+    intent: Option<DesktopHistoryRangeIntent>,
+) {
+    let Some(intent) = intent else {
+        return;
+    };
+    let notifier = match lock_terminal_history_range_notifier(notifier) {
+        Ok(notifier) => notifier.clone(),
+        Err(_) => return,
+    };
+    if let Some(notifier) = notifier {
+        notifier.history_range_terminal(intent);
+    }
+}
+
 fn handle_worker_completion(
     work: &DesktopWorkSlot,
     notifier: &TerminalNavigationNotifier,
+    history_range_notifier: &TerminalHistoryRangeNotifier,
     completion: WorkerCompletion,
 ) -> Result<(), DesktopControllerError> {
-    let intent = reconcile_navigation_completion(work, completion)?;
-    notify_terminal_navigation(notifier, intent);
+    let navigation = reconcile_navigation_completion(work, completion)?;
+    let history_range = reconcile_history_range_completion(work, completion)?;
+    notify_terminal_navigation(notifier, navigation);
+    notify_terminal_history_range(history_range_notifier, history_range);
     Ok(())
 }
 
@@ -669,6 +833,7 @@ pub struct DesktopController {
     snapshot_epoch: Arc<AtomicU64>,
     work: DesktopWorkSlot,
     terminal_navigation_notifier: TerminalNavigationNotifier,
+    terminal_history_range_notifier: TerminalHistoryRangeNotifier,
 }
 
 #[derive(Clone)]
@@ -677,6 +842,7 @@ pub struct DesktopRefreshIngress {
     clock: Arc<dyn Clock>,
     work: DesktopWorkSlot,
     terminal_navigation_notifier: TerminalNavigationNotifier,
+    terminal_history_range_notifier: TerminalHistoryRangeNotifier,
 }
 
 impl DesktopRefreshIngress {
@@ -702,9 +868,15 @@ impl DesktopRefreshIngress {
         if let Some(attempt) = scheduled_work_attempt(admission)? {
             work.refresh_attempt = Some(attempt);
             let superseded_navigation = work.current_navigation.map(|active| active.intent);
+            let superseded_history_range = work.current_history_range.map(|active| active.intent);
             invalidate_navigation(&mut work);
+            invalidate_history_range(&mut work);
             drop(work);
             notify_terminal_navigation(&self.terminal_navigation_notifier, superseded_navigation);
+            notify_terminal_history_range(
+                &self.terminal_history_range_notifier,
+                superseded_history_range,
+            );
         }
         Ok(admission)
     }
@@ -750,6 +922,7 @@ impl DesktopController {
         let snapshot_epoch = Arc::new(AtomicU64::new(0));
         let work = Arc::new(Mutex::new(DesktopWorkState::default()));
         let terminal_navigation_notifier = Arc::new(Mutex::new(None));
+        let terminal_history_range_notifier = Arc::new(Mutex::new(None));
         let worker_snapshot_epoch = Arc::clone(&snapshot_epoch);
         let worker_work = Arc::clone(&work);
         let execute_clock = clock.clone();
@@ -759,6 +932,7 @@ impl DesktopController {
             Arc::new(DesktopWorkCompletionNotifier {
                 work: Arc::clone(&work),
                 terminal_notifier: Arc::clone(&terminal_navigation_notifier),
+                terminal_history_range_notifier: Arc::clone(&terminal_history_range_notifier),
             }),
             move |permit| {
                 let context = DesktopExecutionContext {
@@ -779,6 +953,7 @@ impl DesktopController {
             snapshot_epoch,
             work,
             terminal_navigation_notifier,
+            terminal_history_range_notifier,
         })
     }
 
@@ -833,6 +1008,7 @@ impl DesktopController {
             clock: Arc::clone(&self.clock),
             work: Arc::clone(&self.work),
             terminal_navigation_notifier: Arc::clone(&self.terminal_navigation_notifier),
+            terminal_history_range_notifier: Arc::clone(&self.terminal_history_range_notifier),
         }
     }
 
@@ -846,6 +1022,11 @@ impl DesktopController {
             ));
         }
         let mut work = lock_work(&self.work)?;
+        if history_range_is_active(&work) {
+            return Err(DesktopControllerError::new(
+                DesktopControllerErrorCode::Busy,
+            ));
+        }
         if work.current_navigation.is_some() {
             return Err(DesktopControllerError::new(
                 DesktopControllerErrorCode::StaleSelection,
@@ -877,6 +1058,11 @@ impl DesktopController {
             ));
         }
         let mut work = lock_work(&self.work)?;
+        if history_range_is_active(&work) {
+            return Err(DesktopControllerError::new(
+                DesktopControllerErrorCode::Busy,
+            ));
+        }
         if *lock_published_generation(&self.publication.published_generation)?
             != Some(intent.product_generation())
         {
@@ -902,6 +1088,45 @@ impl DesktopController {
             });
             work.latest_selection_generation = None;
             work.pending_selection = None;
+        }
+        Ok(admission)
+    }
+
+    pub fn request_history_range(
+        &self,
+        intent: DesktopHistoryRangeIntent,
+    ) -> Result<DesktopRefreshAdmission, DesktopControllerError> {
+        if self.snapshot_epoch() != Some(intent.snapshot_epoch())
+            || *lock_published_generation(&self.publication.published_generation)?
+                != Some(intent.product_generation())
+        {
+            return Err(DesktopControllerError::new(
+                DesktopControllerErrorCode::StaleHistoryRange,
+            ));
+        }
+        let mut work = lock_work(&self.work)?;
+        if session_interaction_is_active(&work) {
+            return Err(DesktopControllerError::new(
+                DesktopControllerErrorCode::Busy,
+            ));
+        }
+        if intent.preset() == work.published_history_preset
+            || work
+                .history_range_high_water
+                .is_some_and(|current| intent.generation() <= current)
+        {
+            return Err(DesktopControllerError::new(
+                DesktopControllerErrorCode::StaleHistoryRange,
+            ));
+        }
+        let admission = self.submit(DesktopRefreshUrgency::Interactive)?;
+        if let Some(active) = scheduled_history_range(admission, intent)? {
+            work.history_range_high_water = Some(intent.generation());
+            work.current_history_range = Some(active);
+            work.pending_history_range = Some(PendingDesktopHistoryRange {
+                attempt: active.attempt,
+                intent,
+            });
         }
         Ok(admission)
     }
@@ -957,6 +1182,7 @@ impl DesktopController {
                 handle_worker_completion(
                     &self.work,
                     &self.terminal_navigation_notifier,
+                    &self.terminal_history_range_notifier,
                     completion,
                 )?;
                 Ok(map_completion(completion))
@@ -1042,6 +1268,40 @@ impl DesktopController {
         Ok(())
     }
 
+    pub fn attach_terminal_history_range_notifier(
+        &mut self,
+        notifier: Arc<dyn DesktopTerminalHistoryRangeNotifier>,
+    ) -> Result<(), DesktopControllerError> {
+        let worker = self.worker.snapshot().map_err(map_worker_error)?;
+        match worker.phase() {
+            WorkerPhase::Running => {}
+            WorkerPhase::Faulted => {
+                return Err(DesktopControllerError::new(
+                    DesktopControllerErrorCode::Faulted,
+                ));
+            }
+            WorkerPhase::ShuttingDown | WorkerPhase::Stopped => {
+                return Err(DesktopControllerError::new(
+                    DesktopControllerErrorCode::Closed,
+                ));
+            }
+        }
+        if worker.active_request_id().is_some() || worker.pending_count() != 0 {
+            return Err(DesktopControllerError::new(
+                DesktopControllerErrorCode::Busy,
+            ));
+        }
+        let mut current =
+            lock_terminal_history_range_notifier(&self.terminal_history_range_notifier)?;
+        if current.is_some() {
+            return Err(DesktopControllerError::new(
+                DesktopControllerErrorCode::NotifierAlreadyAttached,
+            ));
+        }
+        *current = Some(notifier);
+        Ok(())
+    }
+
     pub fn take_snapshot(&self) -> Result<Option<Arc<ProductSnapshot>>, DesktopControllerError> {
         self.snapshot_receiver().take_snapshot()
     }
@@ -1084,6 +1344,12 @@ fn execute_work<S: DesktopQuerySource>(
             return outcome;
         }
     }
+    if let Some(history_range) = batch.history_range {
+        let outcome = execute_history_range(source, reducer, permit, context, history_range);
+        if outcome != RefreshOutcome::Completed {
+            return outcome;
+        }
+    }
     if let Some(navigation) = batch.navigation {
         let outcome = execute_session_page(source, reducer, permit, context, navigation);
         if outcome != RefreshOutcome::Completed {
@@ -1091,17 +1357,105 @@ fn execute_work<S: DesktopQuerySource>(
         }
     }
     if batch.refresh {
-        execute_refresh(
-            source,
-            context.plan,
-            reducer,
-            permit,
-            context.clock,
-            context.publication,
-        )
+        execute_refresh(source, reducer, permit, context)
     } else {
         RefreshOutcome::Completed
     }
+}
+
+fn execute_history_range<S: DesktopQuerySource>(
+    source: &mut S,
+    reducer: &mut ProductReducer,
+    permit: &RefreshPermit,
+    context: &DesktopExecutionContext<'_>,
+    intent: DesktopHistoryRangeIntent,
+) -> RefreshOutcome {
+    let Some(attempt) = ProductAttemptGeneration::new(permit.id().get()) else {
+        return RefreshOutcome::Failed;
+    };
+    if let Some(outcome) = stop_outcome(permit, context.clock) {
+        return outcome;
+    }
+    if !history_range_is_current(reducer, context, permit.id().get(), intent) {
+        return RefreshOutcome::Completed;
+    }
+    let request = match DesktopQueryPlan::history_request(intent.preset()) {
+        Ok(request) => request,
+        Err(_) => return RefreshOutcome::Failed,
+    };
+    let result = source
+        .usage_analytics(request)
+        .map_err(|error| error.code());
+    if let Some(outcome) = stop_outcome(permit, context.clock) {
+        return outcome;
+    }
+    commit_history_range(reducer, context, attempt, permit.id().get(), intent, result)
+}
+
+fn commit_history_range(
+    reducer: &mut ProductReducer,
+    context: &DesktopExecutionContext<'_>,
+    product_attempt: ProductAttemptGeneration,
+    worker_attempt: u64,
+    intent: DesktopHistoryRangeIntent,
+    result: Result<QueryEnvelope<UsageAnalytics>, QueryErrorCode>,
+) -> RefreshOutcome {
+    let mut work = match lock_work(context.work) {
+        Ok(work) => work,
+        Err(_) => return RefreshOutcome::Failed,
+    };
+    let valid = context.snapshot_epoch.load(Ordering::Acquire) == intent.snapshot_epoch().get()
+        && reducer.snapshot().generation() == intent.product_generation()
+        && work
+            .current_history_range
+            .is_some_and(|current| current.attempt == worker_attempt && current.intent == intent);
+    if !valid {
+        if work
+            .current_history_range
+            .is_some_and(|current| current.attempt == worker_attempt)
+        {
+            invalidate_history_range(&mut work);
+        }
+        return RefreshOutcome::Completed;
+    }
+    let successful = result.is_ok();
+    let reduced = match result {
+        Ok(value) => reducer.publish_history(product_attempt, value),
+        Err(code) => reducer.fail_history(product_attempt, code),
+    };
+    let Ok(outcome) = reduced else {
+        return RefreshOutcome::Failed;
+    };
+    if outcome != ProductPublishOutcome::Accepted {
+        return RefreshOutcome::Completed;
+    }
+    if successful {
+        work.published_history_preset = intent.preset();
+    }
+    let snapshot = reducer.snapshot();
+    let notifier = match lock_notifier(&context.publication.notifier) {
+        Ok(notifier) => notifier.clone(),
+        Err(_) => return RefreshOutcome::Failed,
+    };
+    let mut published_generation =
+        match lock_published_generation(&context.publication.published_generation) {
+            Ok(generation) => generation,
+            Err(_) => return RefreshOutcome::Failed,
+        };
+    let mut latest = match lock_latest(&context.publication.latest) {
+        Ok(latest) => latest,
+        Err(_) => return RefreshOutcome::Failed,
+    };
+    *published_generation = Some(snapshot.generation());
+    *latest = Some(snapshot);
+    drop(latest);
+    drop(published_generation);
+    invalidate_history_range(&mut work);
+    drop(work);
+    if let Some(notifier) = notifier {
+        notifier.snapshot_ready();
+    }
+    RefreshOutcome::Completed
 }
 
 fn execute_session_detail<S: DesktopQuerySource>(
@@ -1297,20 +1651,18 @@ where
 
 fn execute_refresh<S: DesktopQuerySource>(
     source: &mut S,
-    plan: &DesktopQueryPlan,
     reducer: &mut ProductReducer,
     permit: &RefreshPermit,
-    clock: &dyn Clock,
-    publication: &DesktopPublication,
+    context: &DesktopExecutionContext<'_>,
 ) -> RefreshOutcome {
     let Some(attempt) = ProductAttemptGeneration::new(permit.id().get()) else {
         return RefreshOutcome::Failed;
     };
-    if let Some(outcome) = stop_outcome(permit, clock) {
+    if let Some(outcome) = stop_outcome(permit, context.clock) {
         return outcome;
     }
 
-    let observation = match lock_runtime_observation(&publication.runtime_observation) {
+    let observation = match lock_runtime_observation(&context.publication.runtime_observation) {
         Ok(mut state) => state.pending.take(),
         Err(_) => return RefreshOutcome::Failed,
     };
@@ -1327,29 +1679,35 @@ fn execute_refresh<S: DesktopQuerySource>(
     if result.is_err() {
         return RefreshOutcome::Failed;
     }
-    if let Some(outcome) = stop_outcome(permit, clock) {
+    if let Some(outcome) = stop_outcome(permit, context.clock) {
         return outcome;
     }
 
-    let result = match source.usage_analytics(plan.analytics.clone()) {
+    let result = match source.usage_analytics(context.plan.analytics.clone()) {
         Ok(value) => reducer.publish_analytics(attempt, value),
         Err(error) => reducer.fail_analytics(attempt, error.code()),
     };
     if result.is_err() {
         return RefreshOutcome::Failed;
     }
-    if let Some(outcome) = stop_outcome(permit, clock) {
+    if let Some(outcome) = stop_outcome(permit, context.clock) {
         return outcome;
     }
 
-    let result = match source.usage_analytics(plan.history.clone()) {
+    let history_request = match lock_work(context.work)
+        .and_then(|work| DesktopQueryPlan::history_request(work.published_history_preset))
+    {
+        Ok(request) => request,
+        Err(_) => return RefreshOutcome::Failed,
+    };
+    let result = match source.usage_analytics(history_request) {
         Ok(value) => reducer.publish_history(attempt, value),
         Err(error) => reducer.fail_history(attempt, error.code()),
     };
     if result.is_err() {
         return RefreshOutcome::Failed;
     }
-    if let Some(outcome) = stop_outcome(permit, clock) {
+    if let Some(outcome) = stop_outcome(permit, context.clock) {
         return outcome;
     }
 
@@ -1360,7 +1718,7 @@ fn execute_refresh<S: DesktopQuerySource>(
     if result.is_err() {
         return RefreshOutcome::Failed;
     }
-    if let Some(outcome) = stop_outcome(permit, clock) {
+    if let Some(outcome) = stop_outcome(permit, context.clock) {
         return outcome;
     }
 
@@ -1371,44 +1729,44 @@ fn execute_refresh<S: DesktopQuerySource>(
     if result.is_err() {
         return RefreshOutcome::Failed;
     }
-    if let Some(outcome) = stop_outcome(permit, clock) {
+    if let Some(outcome) = stop_outcome(permit, context.clock) {
         return outcome;
     }
 
-    let result = match source.git_output(plan.git.clone()) {
+    let result = match source.git_output(context.plan.git.clone()) {
         Ok(value) => reducer.publish_git(attempt, value),
         Err(error) => reducer.fail_git(attempt, error.code()),
     };
     if result.is_err() {
         return RefreshOutcome::Failed;
     }
-    if let Some(outcome) = stop_outcome(permit, clock) {
+    if let Some(outcome) = stop_outcome(permit, context.clock) {
         return outcome;
     }
 
-    let result = match source.latest_activity(plan.activity) {
+    let result = match source.latest_activity(context.plan.activity) {
         Ok(value) => reducer.publish_activity(attempt, value),
         Err(error) => reducer.fail_activity(attempt, error.code()),
     };
     if result.is_err() {
         return RefreshOutcome::Failed;
     }
-    if let Some(outcome) = stop_outcome(permit, clock) {
+    if let Some(outcome) = stop_outcome(permit, context.clock) {
         return outcome;
     }
 
-    let result = match source.usage_sessions(plan.sessions.clone()) {
+    let result = match source.usage_sessions(context.plan.sessions.clone()) {
         Ok(value) => reducer.publish_sessions(attempt, value),
         Err(error) => reducer.fail_sessions(attempt, error.code()),
     };
     if result.is_err() {
         return RefreshOutcome::Failed;
     }
-    if let Some(outcome) = stop_outcome(permit, clock) {
+    if let Some(outcome) = stop_outcome(permit, context.clock) {
         return outcome;
     }
 
-    publish_snapshot(reducer.snapshot(), publication)
+    publish_snapshot(reducer.snapshot(), context.publication)
 }
 
 fn publish_snapshot(
@@ -1527,6 +1885,17 @@ fn lock_terminal_navigation_notifier(
         .map_err(|_| DesktopControllerError::new(DesktopControllerErrorCode::Internal))
 }
 
+fn lock_terminal_history_range_notifier(
+    notifier: &TerminalHistoryRangeNotifier,
+) -> Result<
+    MutexGuard<'_, Option<Arc<dyn DesktopTerminalHistoryRangeNotifier>>>,
+    DesktopControllerError,
+> {
+    notifier
+        .lock()
+        .map_err(|_| DesktopControllerError::new(DesktopControllerErrorCode::Internal))
+}
+
 fn lock_published_generation(
     generation: &PublishedProductGeneration,
 ) -> Result<MutexGuard<'_, Option<ProductGeneration>>, DesktopControllerError> {
@@ -1553,6 +1922,41 @@ fn lock_work(
 fn invalidate_navigation(state: &mut DesktopWorkState) {
     state.current_navigation = None;
     state.pending_navigation = None;
+}
+
+fn invalidate_history_range(state: &mut DesktopWorkState) {
+    state.current_history_range = None;
+    state.pending_history_range = None;
+}
+
+fn history_range_is_active(state: &DesktopWorkState) -> bool {
+    state.current_history_range.is_some() || state.pending_history_range.is_some()
+}
+
+fn session_interaction_is_active(state: &DesktopWorkState) -> bool {
+    state.pending_selection.is_some()
+        || state.active_selection_attempt.is_some()
+        || state.current_navigation.is_some()
+        || state.pending_navigation.is_some()
+}
+
+fn history_range_is_current(
+    reducer: &ProductReducer,
+    context: &DesktopExecutionContext<'_>,
+    attempt: u64,
+    intent: DesktopHistoryRangeIntent,
+) -> bool {
+    if context.snapshot_epoch.load(Ordering::Acquire) != intent.snapshot_epoch().get()
+        || reducer.snapshot().generation() != intent.product_generation()
+    {
+        return false;
+    }
+    match lock_work(context.work) {
+        Ok(state) => state
+            .current_history_range
+            .is_some_and(|current| current.attempt == attempt && current.intent == intent),
+        Err(_) => false,
+    }
 }
 
 fn navigation_is_current(
@@ -1613,6 +2017,30 @@ fn scheduled_navigation(
     }
 }
 
+fn scheduled_history_range(
+    admission: DesktopRefreshAdmission,
+    intent: DesktopHistoryRangeIntent,
+) -> Result<Option<ActiveDesktopHistoryRange>, DesktopControllerError> {
+    match admission {
+        DesktopRefreshAdmission::Started { attempt } => Ok(Some(ActiveDesktopHistoryRange {
+            attempt: attempt.get(),
+            prerequisite_attempt: None,
+            intent,
+        })),
+        DesktopRefreshAdmission::Coalesced {
+            receipt,
+            active_attempt,
+        } => Ok(Some(ActiveDesktopHistoryRange {
+            attempt: receipt.get().checked_add(1).ok_or_else(|| {
+                DesktopControllerError::new(DesktopControllerErrorCode::CapacityExceeded)
+            })?,
+            prerequisite_attempt: Some(active_attempt.get()),
+            intent,
+        })),
+        DesktopRefreshAdmission::DeadlineExceeded { .. } => Ok(None),
+    }
+}
+
 fn reconcile_navigation_completion(
     work: &DesktopWorkSlot,
     completion: tokenmaster_engine::WorkerCompletion,
@@ -1635,6 +2063,31 @@ fn reconcile_navigation_completion(
     Ok(None)
 }
 
+fn reconcile_history_range_completion(
+    work: &DesktopWorkSlot,
+    completion: tokenmaster_engine::WorkerCompletion,
+) -> Result<Option<DesktopHistoryRangeIntent>, DesktopControllerError> {
+    let mut state = lock_work(work)?;
+    let completed = completion.request_id().get();
+    if state.active_selection_attempt == Some(completed) {
+        state.active_selection_attempt = None;
+    }
+    let clear_current = state.current_history_range.is_some_and(|current| {
+        current.attempt == completed
+            || (!completion.follow_up_started()
+                && (completion.pending_deadline_exceeded()
+                    || completion.pending_capacity_exceeded()
+                    || completion.follow_up_abandoned())
+                && current.prerequisite_attempt == Some(completed))
+    });
+    if clear_current {
+        let intent = state.current_history_range.map(|active| active.intent);
+        invalidate_history_range(&mut state);
+        return Ok(intent);
+    }
+    Ok(None)
+}
+
 fn take_work_batch(state: &mut DesktopWorkState, attempt: u64) -> DesktopWorkBatch {
     let refresh = match state.refresh_attempt {
         Some(expected) if expected == attempt => {
@@ -1650,6 +2103,7 @@ fn take_work_batch(state: &mut DesktopWorkState, attempt: u64) -> DesktopWorkBat
     let selection = match state.pending_selection {
         Some(pending) if pending.attempt == attempt => {
             state.pending_selection = None;
+            state.active_selection_attempt = Some(attempt);
             Some(pending.intent)
         }
         Some(pending) if pending.attempt < attempt => {
@@ -1675,10 +2129,28 @@ fn take_work_batch(state: &mut DesktopWorkState, attempt: u64) -> DesktopWorkBat
         }
         Some(_) | None => None,
     };
+    let history_range = match state.pending_history_range {
+        Some(pending) if pending.attempt == attempt => {
+            state.pending_history_range = None;
+            Some(pending.intent)
+        }
+        Some(pending) if pending.attempt < attempt => {
+            state.pending_history_range = None;
+            if state
+                .current_history_range
+                .is_some_and(|current| current.attempt == pending.attempt)
+            {
+                state.current_history_range = None;
+            }
+            None
+        }
+        Some(_) | None => None,
+    };
     DesktopWorkBatch {
         refresh,
         selection,
         navigation,
+        history_range,
     }
 }
 

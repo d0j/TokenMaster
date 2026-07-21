@@ -10,8 +10,8 @@ use std::{
 };
 
 use tokenmaster_desktop::{
-    DesktopAttempt, DesktopController, DesktopQueryPlan, DesktopQuerySource,
-    DesktopRefreshAdmission, DesktopRefreshOutcome, DesktopRefreshUrgency,
+    DesktopAttempt, DesktopController, DesktopHistoryRangePreset, DesktopQueryPlan,
+    DesktopQuerySource, DesktopRefreshAdmission, DesktopRefreshOutcome, DesktopRefreshUrgency,
     DesktopRuntimeObservation, DesktopRuntimeObservationOutcome, DesktopSnapshotEpoch,
     DesktopSnapshotNotifier, DesktopSnapshotReceiver,
 };
@@ -183,6 +183,10 @@ fn controller_contract_is_typed_bounded_and_deterministic() {
     assert_eq!(DesktopQueryPlan::MAX_DASHBOARD_ROWS, 12);
     assert_eq!(DesktopQueryPlan::MAX_SESSION_ROWS, 64);
     assert_eq!(DesktopQueryPlan::MAX_REPOSITORIES, 32);
+    assert_eq!(
+        DesktopQueryPlan::default_history_range_preset(),
+        DesktopHistoryRangePreset::Recent30Days
+    );
 
     let calls = Arc::new(Mutex::new(Vec::new()));
     let mut controller = DesktopController::spawn(

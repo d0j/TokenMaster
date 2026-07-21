@@ -66,9 +66,11 @@ pub use bridge::{
 };
 pub use controller::{
     DesktopAttempt, DesktopController, DesktopControllerError, DesktopControllerErrorCode,
+    DesktopHistoryRangeGeneration, DesktopHistoryRangeIntent, DesktopHistoryRangePreset,
     DesktopQueryPlan, DesktopQuerySource, DesktopRefreshAdmission, DesktopRefreshCompletion,
     DesktopRefreshIngress, DesktopRefreshOutcome, DesktopRefreshReceipt, DesktopRefreshUrgency,
     DesktopRuntimeObservation, DesktopRuntimeObservationOutcome, DesktopSessionDetailIntent,
     DesktopSessionNavigationGeneration, DesktopSessionPageDirection, DesktopSessionPageIntent,
-    DesktopSnapshotNotifier, DesktopSnapshotReceiver, DesktopTerminalNavigationNotifier,
+    DesktopSnapshotNotifier, DesktopSnapshotReceiver, DesktopTerminalHistoryRangeNotifier,
+    DesktopTerminalNavigationNotifier,
 };
