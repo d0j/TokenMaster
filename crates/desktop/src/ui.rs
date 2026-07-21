@@ -3125,7 +3125,6 @@ mod duration_tests {
         Ok(())
     }
 
-    #[test]
     fn terminal_presentation_outcomes_survive_generic_replacement_until_one_delivery()
     -> Result<(), String> {
         for (phase, persisted_density, expected_persistence) in [
@@ -3212,7 +3211,6 @@ mod duration_tests {
         Ok(())
     }
 
-    #[test]
     fn config_and_portable_restore_terminals_survive_generic_replacement() -> Result<(), String> {
         for kind in [
             DesktopOperationKind::ApplyConfig,
@@ -3382,7 +3380,6 @@ mod duration_tests {
         Ok(())
     }
 
-    #[test]
     fn pending_reminder_publications_wait_for_the_visible_atomic_projection() -> Result<(), String>
     {
         let shell = DesktopShell::new_with_optional_lifecycle_sink(
@@ -3429,5 +3426,13 @@ mod duration_tests {
             },
             "import_config",
         )
+    }
+
+    #[test]
+    fn reliable_state_delivery_contracts_share_one_slint_event_loop() -> Result<(), String> {
+        i_slint_backend_testing::init_integration_test_with_system_time();
+        terminal_presentation_outcomes_survive_generic_replacement_until_one_delivery()?;
+        config_and_portable_restore_terminals_survive_generic_replacement()?;
+        pending_reminder_publications_wait_for_the_visible_atomic_projection()
     }
 }
