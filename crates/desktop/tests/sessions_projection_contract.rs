@@ -3,8 +3,9 @@ mod support;
 use tempfile::TempDir;
 use tokenmaster_desktop::{
     DesktopDashboardSectionState, DesktopFreshness, DesktopQuality, DesktopRouteKey,
-    DesktopSessionBreakdownKind, DesktopSessionDetailState, DesktopSessionPageDirection,
-    DesktopSessionPageKind, DesktopSnapshotEpoch, DesktopState, MAX_SESSION_DETAIL_MODEL_ROWS,
+    DesktopSessionBreakdownKind, DesktopSessionDetailState, DesktopSessionNavigationGeneration,
+    DesktopSessionPageDirection, DesktopSessionPageIntent, DesktopSessionPageKind,
+    DesktopSnapshotEpoch, DesktopState, MAX_SESSION_DETAIL_MODEL_ROWS,
     MAX_SESSION_DETAIL_PROJECT_ROWS, MAX_SESSION_ROWS,
 };
 use tokenmaster_product::{ProductAttemptGeneration, ProductReducer};
@@ -162,10 +163,43 @@ fn session_navigation_projects_page_kind_and_rejects_only_its_pending_handoff() 
         Some(DesktopSessionPageKind::Continuation)
     );
     assert!(!state.projection().sessions().navigation_pending());
+    reducer
+        .fail_sessions(attempt(3), QueryErrorCode::DeadlineExceeded)
+        .expect("retain continuation after failure");
+    assert_eq!(
+        state.apply_snapshot_for_epoch(epoch, &reducer.snapshot()),
+        tokenmaster_desktop::DesktopApplyOutcome::Accepted
+    );
+    assert!(matches!(
+        state.projection().sessions().state(),
+        DesktopDashboardSectionState::Unavailable | DesktopDashboardSectionState::Degraded
+    ));
+    assert_eq!(
+        state.projection().sessions().page_kind(),
+        Some(DesktopSessionPageKind::Continuation)
+    );
     let newest = state
         .request_session_page(DesktopSessionPageDirection::Newest)
-        .expect("newest intent from continuation");
+        .expect("newest intent from retained continuation");
     assert_eq!(newest.direction(), DesktopSessionPageDirection::Newest);
+    assert!(state.projection().sessions().navigation_pending());
+    let mismatched = DesktopSessionPageIntent::new(
+        epoch,
+        state.projection().generation(),
+        DesktopSessionNavigationGeneration::new(newest.navigation_generation().get() + 1)
+            .expect("mismatched generation"),
+        DesktopSessionPageDirection::Next,
+    );
+    state.reject_session_page(mismatched);
+    assert!(state.projection().sessions().navigation_pending());
+    reducer
+        .fail_sessions(attempt(4), QueryErrorCode::DeadlineExceeded)
+        .expect("newer retained failure");
+    assert_eq!(
+        state.apply_snapshot_for_epoch(epoch, &reducer.snapshot()),
+        tokenmaster_desktop::DesktopApplyOutcome::Accepted
+    );
+    assert!(!state.projection().sessions().navigation_pending());
     let replacement_epoch = DesktopSnapshotEpoch::new(2).expect("replacement epoch");
     assert_eq!(
         state.apply_snapshot_for_epoch(replacement_epoch, &reducer.snapshot()),

@@ -452,21 +452,13 @@ impl DesktopState {
                 return Err(DesktopSessionPageNavigationError::Unavailable);
             }
             DesktopSessionPageDirection::Newest
-                if sessions.state() != DesktopDashboardSectionState::Ready
-                    || sessions.page_kind()
-                        != Some(crate::DesktopSessionPageKind::Continuation) =>
+                if sessions.page_kind() != Some(crate::DesktopSessionPageKind::Continuation) =>
             {
                 return Err(DesktopSessionPageNavigationError::Unavailable);
             }
             DesktopSessionPageDirection::Newest | DesktopSessionPageDirection::Next => {}
         }
-        let generation =
-            DesktopSessionNavigationGeneration::new(self.next_session_navigation_generation)
-                .ok_or(DesktopSessionPageNavigationError::CapacityExceeded)?;
-        self.next_session_navigation_generation = self
-            .next_session_navigation_generation
-            .checked_add(1)
-            .unwrap_or(0);
+        let generation = self.next_session_navigation_generation()?;
         let intent = DesktopSessionPageIntent::new(
             epoch,
             self.projection.generation(),
@@ -533,6 +525,19 @@ impl DesktopState {
             active,
         );
     }
+
+    fn next_session_navigation_generation(
+        &mut self,
+    ) -> Result<DesktopSessionNavigationGeneration, DesktopSessionPageNavigationError> {
+        let generation =
+            DesktopSessionNavigationGeneration::new(self.next_session_navigation_generation)
+                .ok_or(DesktopSessionPageNavigationError::CapacityExceeded)?;
+        self.next_session_navigation_generation = self
+            .next_session_navigation_generation
+            .checked_add(1)
+            .unwrap_or(0);
+        Ok(generation)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -553,6 +558,25 @@ impl fmt::Display for DesktopSessionPageNavigationError {
 }
 
 impl std::error::Error for DesktopSessionPageNavigationError {}
+
+#[cfg(test)]
+mod tests {
+    use tokenmaster_product::ProductReducer;
+
+    use super::*;
+
+    #[test]
+    fn navigation_generation_overflow_is_rejected_before_intent_publication() {
+        let snapshot = ProductReducer::new().snapshot();
+        let mut state = DesktopState::new(&snapshot, DesktopRouteKey::Sessions);
+        state.next_session_navigation_generation = u64::MAX;
+        assert!(state.next_session_navigation_generation().is_ok());
+        assert_eq!(
+            state.next_session_navigation_generation(),
+            Err(DesktopSessionPageNavigationError::CapacityExceeded)
+        );
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DesktopSessionSelectionError {

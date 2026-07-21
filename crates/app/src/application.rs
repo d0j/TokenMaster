@@ -973,6 +973,16 @@ impl ApplicationSessionPageIntentSink {
     fn new(bundle: Weak<Mutex<ApplicationBundleSlot>>) -> Self {
         Self { bundle }
     }
+
+    fn request(&self, intent: DesktopSessionPageIntent) -> Result<DesktopRefreshAdmission, ()> {
+        let bundle = self.bundle.upgrade().ok_or(())?;
+        let slot = bundle.try_lock().map_err(|_| ())?;
+        let bundle = slot.as_ref().ok_or(())?;
+        bundle
+            .controller
+            .request_session_page(intent)
+            .map_err(|_| ())
+    }
 }
 
 impl DesktopSessionDetailIntentSink for ApplicationSessionDetailIntentSink {
@@ -999,16 +1009,7 @@ impl DesktopSessionDetailIntentSink for ApplicationSessionDetailIntentSink {
 
 impl DesktopSessionPageIntentSink for ApplicationSessionPageIntentSink {
     fn submit(&self, intent: DesktopSessionPageIntent) -> DesktopSessionPageIntentAdmission {
-        let Some(bundle) = self.bundle.upgrade() else {
-            return DesktopSessionPageIntentAdmission::Rejected;
-        };
-        let Ok(slot) = bundle.try_lock() else {
-            return DesktopSessionPageIntentAdmission::Rejected;
-        };
-        let Some(bundle) = slot.as_ref() else {
-            return DesktopSessionPageIntentAdmission::Rejected;
-        };
-        match bundle.controller.request_session_page(intent) {
+        match self.request(intent) {
             Ok(
                 DesktopRefreshAdmission::Started { .. } | DesktopRefreshAdmission::Coalesced { .. },
             ) => DesktopSessionPageIntentAdmission::Accepted,

@@ -40,6 +40,7 @@ use crate::{
 pub struct DesktopShell {
     window: MainWindow,
     _presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
+    _session_page_sink: Rc<dyn DesktopSessionPageIntentSink>,
     tray: RefCell<Option<DesktopNativeTrayOwner>>,
     lifecycle_sink: Option<Rc<dyn DesktopLifecycleIntentSink>>,
     tray_availability: Rc<Cell<DesktopTrayAvailability>>,
@@ -511,7 +512,7 @@ impl DesktopShell {
         reliable_state: DesktopReliableStateProjection,
         intent_sink: Rc<dyn DesktopIntentSink>,
         session_sink: Rc<dyn DesktopSessionDetailIntentSink>,
-        _session_page_sink: Rc<dyn DesktopSessionPageIntentSink>,
+        session_page_sink: Rc<dyn DesktopSessionPageIntentSink>,
         lifecycle_sink: Option<Rc<dyn DesktopLifecycleIntentSink>>,
     ) -> Result<Self, slint::PlatformError> {
         let window = MainWindow::new()?;
@@ -544,6 +545,7 @@ impl DesktopShell {
         Ok(Self {
             window,
             _presentation_style: presentation_style,
+            _session_page_sink: session_page_sink,
             tray: RefCell::new(None),
             lifecycle_sink,
             tray_availability,
@@ -3126,8 +3128,9 @@ mod duration_tests {
         DesktopIntentAdmission, DesktopIntentSink, DesktopOperationKind, DesktopOperationPhase,
         DesktopOperationSnapshot, DesktopPresentationSelection, DesktopPresentationSettings,
         DesktopPresentationStyle, DesktopReliableStateHealth, DesktopReliableStateInput,
-        DesktopReliableStateSummary, DesktopReminderPolicy, DesktopReminderSyncState, DesktopSkin,
-        UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
+        DesktopReliableStateSummary, DesktopReminderPolicy, DesktopReminderSyncState,
+        DesktopSessionPageIntent, DesktopSessionPageIntentAdmission, DesktopSessionPageIntentSink,
+        DesktopSkin, UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
         UnavailableDesktopSessionPageIntentSink,
     };
     use tokenmaster_product::ProductReducer;
@@ -3140,10 +3143,42 @@ mod duration_tests {
 
     struct AcceptingPresentationSink;
 
+    struct RetainingSessionPageSink {
+        _token: Rc<()>,
+    }
+
+    impl DesktopSessionPageIntentSink for RetainingSessionPageSink {
+        fn submit(&self, _intent: DesktopSessionPageIntent) -> DesktopSessionPageIntentAdmission {
+            DesktopSessionPageIntentAdmission::Rejected
+        }
+    }
+
     impl DesktopIntentSink for AcceptingPresentationSink {
         fn submit(&self, _: DesktopIntent) -> DesktopIntentAdmission {
             DesktopIntentAdmission::Started
         }
+    }
+
+    #[test]
+    fn shell_retains_the_supplied_session_page_sink_for_its_lifetime() -> Result<(), String> {
+        i_slint_backend_testing::init_no_event_loop();
+        let token = Rc::new(());
+        let weak = Rc::downgrade(&token);
+        let page_sink: Rc<dyn DesktopSessionPageIntentSink> =
+            Rc::new(RetainingSessionPageSink { _token: token });
+        let shell = DesktopShell::new_with_reliable_state_and_session_sinks(
+            &ProductReducer::new().snapshot(),
+            DesktopReliableStateProjection::unavailable(),
+            Rc::new(UnavailableDesktopIntentSink),
+            Rc::new(UnavailableDesktopSessionDetailIntentSink),
+            Rc::clone(&page_sink),
+        )
+        .map_err(|_| String::from("desktop shell"))?;
+        drop(page_sink);
+        assert!(weak.upgrade().is_some());
+        drop(shell);
+        assert!(weak.upgrade().is_none());
+        Ok(())
     }
 
     fn reliable_state_with_presentation_and_operation(

@@ -6,8 +6,9 @@ use std::time::{Duration, Instant};
 use rusqlite::Connection;
 use tempfile::TempDir;
 use tokenmaster_desktop::{
-    DesktopSessionNavigationGeneration, DesktopSessionPageDirection, DesktopSessionPageIntent,
-    DesktopSessionPageIntentAdmission, DesktopSessionPageIntentSink,
+    DesktopRefreshAdmission, DesktopSessionNavigationGeneration, DesktopSessionPageDirection,
+    DesktopSessionPageIntent, DesktopSessionPageIntentAdmission, DesktopSessionPageIntentSink,
+    DesktopSnapshotEpoch,
 };
 use tokenmaster_engine::RefreshOutcome;
 use tokenmaster_platform::{
@@ -144,6 +145,26 @@ fn wait_for_initial_live_refresh(application: &Application) {
         .wait_for_completion(Duration::from_secs(30))
         .expect("initial live refresh")
         .expect("initial live refresh completion");
+}
+
+fn wait_for_desktop_controller_completion(application: &Application) {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let completion = {
+            let bundle = application.bundle.lock().expect("live bundle");
+            bundle
+                .as_ref()
+                .expect("live application bundle")
+                .controller
+                .try_completion()
+                .expect("desktop controller completion")
+        };
+        if completion.is_some() {
+            return;
+        }
+        assert!(Instant::now() < deadline, "desktop controller timed out");
+        std::thread::yield_now();
+    }
 }
 
 fn write_reminder_config_package(
@@ -651,6 +672,19 @@ fn session_page_sink_rejects_missing_weak_and_busy_bundle_without_waiting() {
     drop(guard);
     worker.join().expect("session page admission worker");
     assert_eq!(timely, Ok(DesktopSessionPageIntentAdmission::Rejected));
+}
+
+fn page_intent(
+    epoch: DesktopSnapshotEpoch,
+    generation: u64,
+    direction: DesktopSessionPageDirection,
+) -> DesktopSessionPageIntent {
+    DesktopSessionPageIntent::new(
+        epoch,
+        ProductReducer::new().snapshot().generation(),
+        DesktopSessionNavigationGeneration::new(generation).expect("navigation generation"),
+        direction,
+    )
 }
 
 #[test]
@@ -1645,6 +1679,14 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     assert_eq!(maintenance.snapshot().worker().successful_count(), 19);
     let old_bundle_generation = bundle_slot.generation;
     let old_notifier = Arc::clone(&bundle_slot.as_ref().expect("healthy bundle").notifier);
+    let session_page_sink =
+        ApplicationSessionPageIntentSink::new(Arc::downgrade(&application.bundle));
+    let old_session_page_epoch = bundle_slot
+        .as_ref()
+        .expect("healthy bundle")
+        .controller
+        .snapshot_epoch()
+        .expect("bound session page epoch");
     drop(bundle_slot);
 
     let direct_restart_publications = application.reliable_publish_count.load(Ordering::Acquire);
@@ -1659,7 +1701,22 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     let restarted_slot = application.bundle.lock().expect("restarted bundle slot");
     assert!(restarted_slot.generation > old_bundle_generation);
     assert!(restarted_slot.is_some());
+    let restarted_session_page_epoch = restarted_slot
+        .as_ref()
+        .expect("restarted bundle")
+        .controller
+        .snapshot_epoch()
+        .expect("restarted session page epoch");
+    assert_ne!(restarted_session_page_epoch, old_session_page_epoch);
     drop(restarted_slot);
+    assert_eq!(
+        session_page_sink.submit(page_intent(
+            old_session_page_epoch,
+            1,
+            DesktopSessionPageDirection::Newest,
+        )),
+        DesktopSessionPageIntentAdmission::Rejected
+    );
     let obsolete_runtime_generation = old_notifier.next_generation.load(Ordering::Acquire);
     old_notifier
         .publish()
@@ -1749,6 +1806,16 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     drop(safe_owner);
     let mut safe_application =
         Application::start(&safe_environment).expect("safe-mode application");
+    let safe_session_page_sink =
+        ApplicationSessionPageIntentSink::new(Arc::downgrade(&safe_application.bundle));
+    assert_eq!(
+        safe_session_page_sink.submit(page_intent(
+            DesktopSnapshotEpoch::new(1).expect("safe-mode epoch"),
+            1,
+            DesktopSessionPageDirection::Newest,
+        )),
+        DesktopSessionPageIntentAdmission::Rejected
+    );
     assert!(
         safe_application
             .bundle
@@ -1915,6 +1982,79 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     failed_migration_application
         .shutdown()
         .expect("failed migration safe-mode shutdown");
+
+    {
+        let mut bundle = application.bundle.lock().expect("final live bundle");
+        bundle
+            .as_mut()
+            .expect("final live application bundle")
+            .live
+            .pause()
+            .expect("final live producer pauses");
+    }
+    let current_session_page_epoch = application
+        .bundle
+        .lock()
+        .expect("final live bundle")
+        .as_ref()
+        .expect("final live application bundle")
+        .controller
+        .snapshot_epoch()
+        .expect("current session page epoch");
+    let first_page_admission = session_page_sink.request(page_intent(
+        current_session_page_epoch,
+        1,
+        DesktopSessionPageDirection::Newest,
+    ));
+    let first_page_generation = match first_page_admission {
+        Ok(DesktopRefreshAdmission::Started { .. }) => 1,
+        Ok(DesktopRefreshAdmission::Coalesced { .. }) => {
+            wait_for_desktop_controller_completion(&application);
+            assert!(matches!(
+                session_page_sink.request(page_intent(
+                    current_session_page_epoch,
+                    2,
+                    DesktopSessionPageDirection::Newest,
+                )),
+                Ok(DesktopRefreshAdmission::Started { .. })
+            ));
+            2
+        }
+        other => panic!("first session page admission: {other:?}"),
+    };
+    assert!(matches!(
+        session_page_sink.request(page_intent(
+            current_session_page_epoch,
+            first_page_generation + 1,
+            DesktopSessionPageDirection::Next,
+        )),
+        Ok(DesktopRefreshAdmission::Coalesced { .. })
+    ));
+    assert_eq!(
+        session_page_sink.submit(page_intent(
+            current_session_page_epoch,
+            first_page_generation,
+            DesktopSessionPageDirection::Newest,
+        )),
+        DesktopSessionPageIntentAdmission::Rejected
+    );
+    {
+        let mut bundle = application.bundle.lock().expect("final live bundle");
+        bundle
+            .as_mut()
+            .expect("final live application bundle")
+            .controller
+            .shutdown()
+            .expect("final controller closes");
+    }
+    assert_eq!(
+        session_page_sink.submit(page_intent(
+            current_session_page_epoch,
+            first_page_generation + 2,
+            DesktopSessionPageDirection::Newest,
+        )),
+        DesktopSessionPageIntentAdmission::Rejected
+    );
 
     application.shutdown().expect("joined application shutdown");
     let final_restart = application
