@@ -204,4 +204,30 @@ Describe "TokenMaster backup package audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
     }
+
+    It "rejects widening an existing package method through a where-clause raw reader" {
+        $fixture = New-BackupAuditFixture -Name "widen-existing-reader-where-clause"
+        $path = Join-Path $fixture "crates\state\src\package\reader.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '    pub fn inspect(source: &mut DurableFileReader) -> Result<VerifiedBackupPackage, StateError> {',
+            '    pub fn inspect<R>(source: &mut R) -> Result<VerifiedBackupPackage, StateError> where R: Read {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
+    }
+
+    It "rejects widening an existing const package method with raw reader authority" {
+        $fixture = New-BackupAuditFixture -Name "widen-existing-const-signature"
+        $path = Join-Path $fixture "crates\state\src\package\mod.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '    pub const fn level(self) -> i32 {',
+            '    pub const fn level(self, source: &mut dyn Read) -> i32 {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-BACKUP-PACKAGE-CAPABILITY*"
+    }
 }

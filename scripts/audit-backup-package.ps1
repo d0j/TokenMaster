@@ -115,7 +115,7 @@ $driftedPublicPackageFunctions = @(
 )
 $publicPackageFunctionDeclarations = @([regex]::Matches(
     $packageText,
-    '(?ms)^\s*pub\s+(?:(?:async|unsafe)\s+)*fn\s+[A-Za-z_][A-Za-z0-9_]*\s*(?:<[^{}\r\n]*>)?\s*\((?<parameters>.*?)\)\s*(?:->|where|\{)'
+    '(?ms)^\s*pub\s+(?:(?:const|async|unsafe)\s+)*fn\s+[A-Za-z_][A-Za-z0-9_]*\b.*?(?=\{)'
 ))
 $rawPublicPackageFunctions = @(
     $publicPackageFunctionDeclarations |
@@ -124,6 +124,7 @@ $rawPublicPackageFunctions = @(
         }
 )
 if ($publicPackageFunctions.Count -ne 32 -or
+    $publicPackageFunctionDeclarations.Count -ne $publicPackageFunctions.Count -or
     $unexpectedPublicPackageFunctions.Count -ne 0 -or
     $driftedPublicPackageFunctions.Count -ne 0 -or
     $rawPublicPackageFunctions.Count -ne 0) {
