@@ -586,3 +586,12 @@ Royalty-free License 2.0 attribution route unless a separately reviewed license 
 replaces it. GNU developer/M0 evidence MUST NOT be represented as MSVC release
 evidence. Automatic update and installer behavior MUST remain unavailable until a
 separate signed-manifest, rollback, downgrade, and interrupted-update contract passes.
+
+## P4-C durable built-in skins (partial)
+
+Presentation is one complete `{ density, skin }` selection. The only skin identities are
+`refined`, `graphite`, and `ember`; Rust owns immutable exact 15-role palettes and Slint
+aliases one palette value. One desktop owner admits a complete request before mutation,
+persists/restores both axes together, and reuses the latest-wins worker. Layout, colour
+scheme, locale, typography, interactive DPI/accessibility/paint/resource, P5/P6/M0,
+package/signing/soak, and release acceptance remain open.

@@ -1125,3 +1125,10 @@ contract plus its terminating NUL and file handles until one readback
 completes, then releases them.
 Registry-provided UNC/device/remote paths never become filesystem inputs. An alternate
 same-basename local path is classified from bounded command metadata without opening it.
+
+## P4-C presentation record
+
+Settings schema v3 serializes exactly `presentation.density` and `presentation.skin`.
+v1 migrates in memory to Comfortable+Refined; v2 retains density and defaults only skin
+to Refined; v3 retains the complete pair. Admission is exactly v1..=v3 and canonical
+writes are v3. Missing, unknown, partial, or extra values reject.

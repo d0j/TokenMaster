@@ -1710,3 +1710,12 @@ Desktop applies only after admission, keeps one style owner and the existing
 one-active/one-pending latest payload worker, and proves 10,000 switches. Skins,
 layouts, color schemes, locales, typography/row sizing, accessibility/DPI/paint/resource,
 P5/P6, M0, package/signing/soak, and release remain open.
+
+## P4-C — partial durable built-in skins
+
+Schema v3 now persists the complete density+skin pair. v1 is Comfortable+Refined and
+v2 is existing density+Refined; v3 is exact `refined|graphite|ember`. Rust owns exact
+immutable 15-role palettes and the Desktop has one owner, complete admission-first
+payload, atomic persist/restore, and existing latest-wins worker. No new authority was
+added. Layout/scheme/locale/typography/interactive DPI/accessibility/paint/resource,
+P5/P6/M0/package/signing/soak/release remain open.

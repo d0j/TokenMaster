@@ -1307,3 +1307,8 @@ evidence rather than source-test claims.
 P4-B presentation adds no path, secret, package-stream, filesystem, or UI-thread
 settings authority. Packages retain only typed stages: no public raw writer/extractor;
 manifest and decoded entry source-settings versions must bind exactly.
+
+P4-C retains that boundary. The palette is fixed Rust data (15 semantic RGB roles per
+skin), not a file/provider/theme authority. One admitted complete presentation payload
+is persisted/restored atomically; no partial axis, event-loop yield before metadata, or
+window show before the first Rust palette application is permitted.

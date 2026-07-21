@@ -116,3 +116,9 @@ Tasks 3+ in the older replay plan are historical and superseded.
 
 The clean-root invariant is implemented by `scripts/audit-clean-root.ps1` and its
 Pester contracts.
+
+P4-C: `TM-FUNC-005` and `TM-UI-002` extend to schema-v3 complete presentation,
+Refined/Graphite/Ember exact identity, one palette owner, admission-first application,
+and latest-wins complete payload persistence. `audit-desktop-shell` and
+`audit-application-composition` source/Pester mutation rails are the developer receipt;
+interactive and release traceability remains open.

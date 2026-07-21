@@ -20,6 +20,8 @@ Describe "TokenMaster application composition audit" {
                 -Destination $crateParent -Recurse
             Copy-Item -LiteralPath (Join-Path $RepositoryRoot "crates\platform") `
                 -Destination $crateParent -Recurse
+            Copy-Item -LiteralPath (Join-Path $RepositoryRoot "crates\state") `
+                -Destination $crateParent -Recurse
             return $fixture
         }
     }
@@ -1088,5 +1090,53 @@ Describe "TokenMaster application composition audit" {
         $receipt.current_session_pending_bit_count | Should -Be 1
         $receipt.current_session_scheduled_bit_count | Should -Be 1
         $receipt.current_session_scheduled_task_count | Should -Be 1
+    }
+
+    It "rejects a partial density-only presentation payload" {
+        $fixture = New-AppAuditFixture -Name "presentation-partial-density"
+        $path = Join-Path $fixture "crates\app\src\command.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'ApplicationPresentationUpdate::new(',
+            'ApplicationPresentationDensityUpdate::new('
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-PRESENTATION-COMPLETE*"
+    }
+
+    It "rejects a schema range wider than v1 through v3" {
+        $fixture = New-AppAuditFixture -Name "presentation-schema-range"
+        $path = Join-Path $fixture "crates\state\src\settings\migration.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'SETTINGS_SCHEMA_VERSION => decode_portable_v3(bytes),',
+            '3 | 4 => decode_portable_v3(bytes),'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-PRESENTATION-SCHEMA*"
+    }
+
+    It "rejects a missing v2 Refined migration default" {
+        $fixture = New-AppAuditFixture -Name "presentation-v2-default"
+        $path = Join-Path $fixture "crates\state\src\settings\migration.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'PresentationSkin::Refined',
+            'PresentationSkin::Graphite'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-PRESENTATION-SCHEMA*"
+    }
+
+    It "rejects a second presentation worker authority" {
+        $fixture = New-AppAuditFixture -Name "presentation-second-worker"
+        Add-Content -LiteralPath (Join-Path $fixture "crates\app\src\operation.rs") `
+            -Value 'fn skin_worker() { std::thread::spawn(|| {}); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-OPERATION-SPAWN*"
     }
 }

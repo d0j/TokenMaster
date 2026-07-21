@@ -1219,3 +1219,10 @@ keys; v1 decodes in memory to Comfortable and does not cause startup persistence
 Package manifest and entry versions bind exactly; Desktop admission precedes style
 apply and reuses the existing latest-only operation worker. This is deterministic
 developer evidence, not interactive P4 acceptance or release evidence.
+
+P4-C supersedes only the current presentation contract: schema v3 carries complete
+density+skin, legacy v1/v2 default Refined as specified, and skins are
+refined/graphite/ember with exact Rust-owned 15-role palettes. One presentation owner
+applies palette before metadata after admission; persistence/restore and coalescing
+never split axes. This is still partial developer evidence; all non-skin P4 and release
+gates remain open.

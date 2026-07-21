@@ -2015,3 +2015,11 @@ rewrite it. Package manifest and decoded settings source versions bind exactly. 
 Desktop admits the typed command before style mutation and reuses the existing
 one-active/one-pending worker; no new desktop worker, queue, timer, cache, or I/O owner
 is justified. Skins, layouts, schemes, locales, and interactive acceptance remain open.
+
+### P4-C: three built-in skins without new authority
+
+Adopt schema v3 and one complete presentation selection. `Refined`/`refined`/0,
+`Graphite`/`graphite`/1, and `Ember`/`ember`/2 are stable. Rust owns the immutable
+15-role palettes; Slint contains no family table or selection branch. This remains a
+partial P4 decision: layout, scheme, locale, typography, accessibility/DPI, paint and
+resource acceptance are explicitly deferred.

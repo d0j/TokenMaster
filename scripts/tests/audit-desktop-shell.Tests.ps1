@@ -1542,7 +1542,7 @@ Describe "TokenMaster production desktop audit" {
         $fixture = New-DesktopAuditFixture -Name "library-boundary"
 
         $receipt = & $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json
-        $receipt.rust_source_file_count | Should -Be 17
+        $receipt.rust_source_file_count | Should -Be 18
         $receipt.slint_source_file_count | Should -Be 24
         $receipt.density_variant_count | Should -Be 3
         $receipt.density_stable_key_arm_count | Should -Be 3
@@ -1966,8 +1966,8 @@ Describe "TokenMaster production desktop audit" {
         $fixture = New-DesktopAuditFixture -Name "density-stress-outcome"
         $path = Join-Path $fixture "crates\desktop\tests\presentation_style_contract.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            '            DesktopPresentationApplyOutcome::Applied',
-            '            DesktopPresentationApplyOutcome::Unchanged'
+            'DesktopPresentationApplyOutcome::Applied',
+            'DesktopPresentationApplyOutcome::Unchanged'
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -2082,11 +2082,8 @@ Describe "TokenMaster production desktop audit" {
         $fixture = New-DesktopAuditFixture -Name "density-lexical-revision-structure"
         $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            '        let Some(revision) = self.revision.checked_successor() else {',
-            "        if false { let _ = self.revision.checked_successor(); }`r`n        let revision = DesktopPresentationRevision::initial();"
-        ).Replace(
-            '        self.revision = revision;',
-            '        if false { self.revision = revision; }'
+            'match self.0.checked_add(1) {',
+            'match Some(self.0.wrapping_add(1)) {'
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -2098,8 +2095,8 @@ Describe "TokenMaster production desktop audit" {
         $fixture = New-DesktopAuditFixture -Name "density-lexical-stress-structure"
         $path = Join-Path $fixture "crates\desktop\tests\presentation_style_contract.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            '            DesktopPresentationApplyOutcome::Applied',
-            '            DesktopPresentationApplyOutcome::Unchanged'
+            'DesktopPresentationApplyOutcome::Applied',
+            'DesktopPresentationApplyOutcome::Unchanged'
         ).Replace(
             '    assert_eq!(style.density(), DesktopDensity::Comfortable);',
             "    if false { assert_eq!(style.select_density_index(0), DesktopPresentationApplyOutcome::Applied); }`r`n    // for index in 0..10_000 { }`r`n    assert_eq!(style.density(), DesktopDensity::Comfortable);"
@@ -2269,9 +2266,9 @@ fn density_authority() {
         $fixture = New-DesktopAuditFixture -Name "density-before-admission"
         $path = Join-Path $fixture "crates\desktop\src\ui.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            '    if selected.select_density_index_if_admitted(index, |density| {',
+            '    if selected.select_density_index_if_admitted(index, |selection| {',
             '    let _ = selected.select_density_index(index);' + "`r`n" +
-            '    if selected.select_density_index_if_admitted(index, |density| {'
+            '    if selected.select_density_index_if_admitted(index, |selection| {'
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -2306,7 +2303,7 @@ fn density_authority() {
         $path = Join-Path $fixture "crates\app\src\state.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
             '*current.value().portable().presentation(),',
-            'PresentationSettings::comfortable(),'
+            'PresentationSettings::refined(),'
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -2319,15 +2316,10 @@ fn density_authority() {
         $path = Join-Path $fixture "crates\desktop\src\presentation_style.rs"
         $text = [System.IO.File]::ReadAllText($path)
         $newline = if ($text.Contains("`r`n")) { "`r`n" } else { "`n" }
-        $before = '        if !admit(density) {' + $newline +
-            '            return DesktopPresentationApplyOutcome::Rejected;' + $newline +
-            '        }' + $newline +
-            '        self.density = density;'
-        $after = '        self.density = density;' + $newline +
-            '        if !admit(density) {' + $newline +
-            '            return DesktopPresentationApplyOutcome::Rejected;' + $newline +
-            '        }'
-        $text = $text.Replace($before, $after)
+        $text = $text.Replace(
+            '        if !admit(selection) {',
+            '        self.selection = selection;' + $newline + '        if !admit(selection) {'
+        )
         [System.IO.File]::WriteAllText($path, $text)
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
@@ -2354,12 +2346,63 @@ fn density_authority() {
         $fixture = New-DesktopAuditFixture -Name "density-missing-final-payload-assertion"
         $path = Join-Path $fixture "crates\app\src\operation_tests.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            '    assert_eq!(receive(&started_rx), final_density);',
+            '    assert_eq!(receive(&started_rx), final_selection);',
             '    let _ = receive(&started_rx);'
         )
         [System.IO.File]::WriteAllText($path, $text)
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-DENSITY-STRESS*"
+    }
+
+    It "rejects a fourth skin and a stable skin mapping drift" {
+        $fixture = New-DesktopAuditFixture -Name "skin-fourth"
+        $path = Join-Path $fixture "crates\desktop\src\skin.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '    Ember,',
+            '    Ember,`r`n    Aurora,'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SKIN-CONTRACT*"
+    }
+
+    It "rejects a missing palette role and Slint skin family table" {
+        $fixture = New-DesktopAuditFixture -Name "skin-palette-table"
+        $skinPath = Join-Path $fixture "crates\desktop\src\skin.rs"
+        $tokensPath = Join-Path $fixture "crates\desktop\ui\tokens.slint"
+        $text = [System.IO.File]::ReadAllText($skinPath).Replace('    unavailable: DesktopRgb,', '')
+        [System.IO.File]::WriteAllText($skinPath, $text)
+        Add-Content -LiteralPath $tokensPath -Value 'property <color> graphite-family: #000000;'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SKIN-PALETTE*"
+    }
+
+    It "rejects a second palette owner callback and pre-admission UI mutation" {
+        $fixture = New-DesktopAuditFixture -Name "skin-second-owner"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'fn ui_palette(skin: crate::DesktopSkin) -> UiPalette {',
+            "fn duplicate_skin_owner(_: Arc<Mutex<DesktopPresentationStyle>>) {}`r`n`r`nfn ui_palette(skin: crate::DesktopSkin) -> UiPalette {"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PRESENTATION-OWNER*"
+    }
+
+    It "rejects yielding between the Rust palette and presentation metadata" {
+        $fixture = New-DesktopAuditFixture -Name "skin-yield"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '    window.set_presentation_skin_id(style.skin().slint_index());',
+            '    window.set_presentation_skin_id(style.skin().slint_index());`r`n    slint::invoke_from_event_loop(|| {}).unwrap();'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PRESENTATION-ORDER*"
     }
 }

@@ -74,6 +74,33 @@ $notificationText = [System.IO.File]::ReadAllText((Join-Path $appSource 'notific
 $operationText = [System.IO.File]::ReadAllText((Join-Path $appSource 'operation.rs'))
 $commandText = [System.IO.File]::ReadAllText((Join-Path $appSource 'command.rs'))
 $stateText = [System.IO.File]::ReadAllText((Join-Path $appSource 'state.rs'))
+$settingsValuePath = Join-Path $root 'crates\state\src\settings\value.rs'
+$settingsMigrationPath = Join-Path $root 'crates\state\src\settings\migration.rs'
+foreach ($required in @($settingsValuePath, $settingsMigrationPath)) {
+    if (-not (Test-Path -LiteralPath $required)) { throw "TM-APP-MISSING-BOUNDARY: $([System.IO.Path]::GetFileName($required))" }
+}
+$settingsValueText = [System.IO.File]::ReadAllText($settingsValuePath)
+$settingsMigrationText = [System.IO.File]::ReadAllText($settingsMigrationPath)
+if ([regex]::Matches($settingsValueText, 'pub const SETTINGS_SCHEMA_VERSION:\s*u16\s*=\s*3;').Count -ne 1 -or
+    [regex]::Matches($settingsMigrationText, '(?m)^\s*1\s*=>\s*decode_(?:portable|settings)_v1\(bytes\),').Count -ne 2 -or
+    [regex]::Matches($settingsMigrationText, '(?m)^\s*2\s*=>\s*decode_(?:portable|settings)_v2\(bytes\),').Count -ne 2 -or
+    [regex]::Matches($settingsMigrationText, 'SETTINGS_SCHEMA_VERSION\s*=>\s*decode_(?:portable|settings)_v3\(bytes\),').Count -ne 2 -or
+    $settingsMigrationText -match '(?m)^\s*(?:0|[4-9]|\d{2,})\s*(?:\||=>)') {
+    throw 'TM-APP-PRESENTATION-SCHEMA: settings admission is exactly schema v1 through v3'
+}
+$v2Migration = [regex]::Match($settingsMigrationText, '(?s)impl PortableSettingsV2Wire \{.*?\n\}').Value
+if ([string]::IsNullOrWhiteSpace($v2Migration) -or $v2Migration -notmatch 'PresentationSkin::Refined') {
+    throw 'TM-APP-PRESENTATION-SCHEMA: v2 migrates only the missing skin to Refined'
+}
+if ([regex]::Matches($commandText, 'ApplicationCommand::UpdatePresentation').Count -ne 1 -or
+    [regex]::Matches($commandText, 'ApplicationOperationPayload::Presentation\(ApplicationPresentationUpdate::new\(\s*selection,\s*\)\)').Count -ne 1 -or
+    $commandText -match 'UpdatePresentationDensity|PresentationDensity\(') {
+    throw 'TM-APP-PRESENTATION-COMPLETE: application presentation requests carry one complete density and skin pair'
+}
+if ([regex]::Matches($operationText, '(?:thread::)?Builder::new\(\)').Count -ne 1 -or
+    $operationText -match 'thread::spawn|slint::Timer|VecDeque|sync_channel\([^1]') {
+    throw 'TM-APP-OPERATION-SPAWN: complete presentation reuses the sole bounded worker authority'
+}
 $reminderRuntimeText = [System.IO.File]::ReadAllText($reminderRuntimePath)
 $currentSessionText = [System.IO.File]::ReadAllText($currentSessionPath)
 
@@ -205,7 +232,7 @@ foreach ($contract in @(
     @{ Name = 'TM-APP-REBUILD-RETRY-RECONCILE'; Pattern = 'if source_reconciliation_required \{[\s\S]{0,256}?permit\.begin_irreversible\(\)[\s\S]{0,512}?start_reconstructed_bundle\('; Count = 1 },
     @{ Name = 'TM-APP-REBUILD-ATOMIC'; Pattern = 'RecoveryBoundary::BeforeJournalPublication[\s\S]{0,256}?on_irreversible\(\)'; Count = 1 },
     @{ Name = 'TM-APP-MANUAL-BACKUP-ATOMIC'; Pattern = 'fn execute_manual_backup_command\([\s\S]{0,1024}?permit\.begin_irreversible\(\)[\s\S]{0,512}?publish_atomic_operation\(reliable_state, permit\.command\(\)\)'; Count = 1 },
-    @{ Name = 'TM-APP-PRESENTATION-ATOMIC'; Pattern = 'ApplicationCommand::UpdatePresentationDensity,\s*ApplicationOperationPayload::PresentationDensity\(update\),\s*\)\s*=>\s*execute_state_command\(state\.update_presentation_density\(\s*permit,\s*update\.into_state_density\(\),\s*\|\|\s*publish_atomic_operation\(reliable_state, permit\.command\(\)\),\s*\)\)'; Count = 1 },
+    @{ Name = 'TM-APP-PRESENTATION-ATOMIC'; Pattern = 'ApplicationCommand::UpdatePresentation,\s*ApplicationOperationPayload::Presentation\(update\),\s*\)\s*=>\s*execute_state_command\(state\.update_presentation\(\s*permit,\s*update\.into_state_presentation\(\),\s*\|\|\s*publish_atomic_operation\(reliable_state, permit\.command\(\)\),\s*\)\)'; Count = 1 },
     @{ Name = 'TM-APP-ATOMIC-PROJECTION'; Pattern = 'publish_atomic_operation\(reliable_state, permit\.command\(\)\)'; Count = 9 },
     @{ Name = 'TM-APP-RESTORED-MIGRATION'; Pattern = 'fn start_restored_bundle\('; Count = 1 },
     @{ Name = 'TM-APP-PRE-MIGRATION'; Pattern = 'wait_for_mandatory_backup\([\s\S]{0,96}?MaintenancePurpose::PreMigration\s*\)'; Count = 2 },
@@ -332,7 +359,7 @@ if ([string]::IsNullOrWhiteSpace($reminderSynchronizeFunction) -or $syncPendingI
 }
 $reminderOperationBinding = [regex]::Match(
     $applicationText,
-    '(?s)\(\s*ApplicationCommand::UpdateReminderPolicy,\s*ApplicationOperationPayload::ReminderPolicy\(update\),\s*\)\s*=>\s*\{.*?\r?\n\s*\}\r?\n\s*\(\s*ApplicationCommand::UpdatePresentationDensity'
+    '(?s)\(\s*ApplicationCommand::UpdateReminderPolicy,\s*ApplicationOperationPayload::ReminderPolicy\(update\),\s*\)\s*=>\s*\{.*?\r?\n\s*\}\r?\n\s*\(\s*ApplicationCommand::UpdatePresentation'
 ).Value
 $reminderStateUpdateIndex = $reminderOperationBinding.IndexOf('state.update_reminder_policy(permit, policy', [System.StringComparison]::Ordinal)
 $reminderSynchronizeIndex = $reminderOperationBinding.IndexOf('synchronize_reminder_policy_after_settings(', [System.StringComparison]::Ordinal)

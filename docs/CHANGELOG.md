@@ -1260,3 +1260,9 @@ All notable changes are recorded here.
   incompatible `panic=abort` engine builds.
 - Made malformed, incomplete, or oversized relevant live input fail before checkpoint
   or batch commit, preventing a degraded full rebuild from being mislabeled complete.
+
+- Added P4-C partial durable built-in skins: schema v3 complete density+skin settings,
+  v1/v2 Refined migration, Refined/Graphite/Ember immutable 15-role Rust palettes,
+  one admission-first presentation owner, and latest-wins atomic persist/restore.
+  Layout, colour-scheme, locale, typography, interactive accessibility/DPI/paint/resource,
+  P5/P6/M0, package/signing/soak, and release acceptance remain open.

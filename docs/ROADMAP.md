@@ -429,3 +429,12 @@ Durable density now covers v2 settings, strict v1/v2 dispatch, typed package
 version-binding, startup hydration, saved/saving/not-saved projection, admission-first
 application, and 10,000 latest-payload switches. Future skin/layout/color-scheme/locale
 axes and all interactive presentation acceptance remain P4 work.
+
+### P4-C complete
+
+Developer contract coverage now includes durable built-in Refined, Graphite, and Ember
+skins through schema v3, legacy default migration, exact 15-role Rust palettes, one
+Slint palette input, one owner, complete latest-wins payload, persistence, and restore.
+P4 remains partial: layout, colour scheme, locale, typography, interactive DPI,
+accessibility, paint/resource evidence and all P5/P6/M0/package/signing/soak/release
+work are still open.

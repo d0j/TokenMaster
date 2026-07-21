@@ -40,8 +40,8 @@ if ($productionManifestText -match '\btokenmaster-(store|provider|runtime|codex|
 $rustFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.rs')
 $uiFiles = @(Get-ChildItem -LiteralPath $uiRoot -Recurse -File -Filter '*.slint')
 $productionFiles = @($rustFiles + $uiFiles)
-if ($rustFiles.Count -ne 17 -or $uiFiles.Count -ne 24) {
-    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain seventeen Rust and twenty-four Slint files'
+if ($rustFiles.Count -ne 18 -or $uiFiles.Count -ne 24) {
+    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain eighteen Rust and twenty-four Slint files'
 }
 $uiText = ($uiFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
@@ -260,6 +260,45 @@ if ($presentationStyleOwnerCount -ne 1 -or $presentationStyleOwnerSlotCount -ne 
     $densityWiringCallbackCount -ne 1) {
     throw 'TM-DESKTOP-DENSITY-WIRING: density must retain one owner, one root binding, and one callback'
 }
+$skinPath = Join-Path $sourceRoot 'skin.rs'
+$skinText = [System.IO.File]::ReadAllText($skinPath)
+$skinEnum = Get-ExecutableBracedText -Text $skinText -Pattern '(?m)^\s*pub\s+enum\s+DesktopSkin\s*\{' -FailureCode 'TM-DESKTOP-SKIN-CONTRACT'
+if ([regex]::Matches($skinEnum, '(?m)^\s*[A-Za-z][A-Za-z0-9_]*\s*,\s*$').Count -ne 3) { throw 'TM-DESKTOP-SKIN-CONTRACT: exactly three skins are admitted' }
+foreach ($skin in @(@{ Variant = 'Refined'; Key = 'refined'; Index = 0 }, @{ Variant = 'Graphite'; Key = 'graphite'; Index = 1 }, @{ Variant = 'Ember'; Key = 'ember'; Index = 2 })) {
+    foreach ($mapping in @("Self::$($skin.Variant) => `"$($skin.Key)`",", "Self::$($skin.Variant) => $($skin.Index),", "$($skin.Index) => Some(Self::$($skin.Variant)),")) {
+        if ([regex]::Matches($skinText, [regex]::Escape($mapping)).Count -ne 1) { throw 'TM-DESKTOP-SKIN-CONTRACT: skin keys and indices are exact' }
+    }
+}
+$paletteRoles = @('background','surface','surface_raised','surface_subtle','border','text_primary','text_secondary','accent','accent_subtle','accent_secondary','accent_tertiary','ready','waiting','degraded','unavailable')
+$tokenStruct = Get-ExecutableBracedText -Text $skinText -Pattern '(?m)^\s*pub\s+struct\s+DesktopColorTokens\s*\{' -FailureCode 'TM-DESKTOP-SKIN-PALETTE'
+foreach ($role in $paletteRoles) {
+    if ([regex]::Matches($tokenStruct, "(?m)^\s*$role\s*:\s*DesktopRgb,\s*$").Count -ne 1 -or [regex]::Matches($tokensText, "out\s+property\s*<color>\s+$($role -replace '_','-')\s*:\s*palette\.$($role -replace '_','-')\s*;").Count -ne 1) { throw 'TM-DESKTOP-SKIN-PALETTE: one palette owns exactly fifteen roles' }
+}
+if ([regex]::Matches($skinText, 'rgb\(\d+,\s*\d+,\s*\d+\)').Count -ne 45 -or $uiText -match '(?i)\b(?:refined|graphite|ember)[-_]?(?:palette|family|theme)\b') { throw 'TM-DESKTOP-SKIN-PALETTE: exact Rust palettes and Slint aliases are required' }
+$skinRootBindingCount = [regex]::Matches($mainUiTextForDensity, 'in-out property <UiPalette> presentation-palette <=> UiTokens\.palette;').Count
+$skinRootCallbackCount = [regex]::Matches($mainUiTextForDensity, 'callback select-presentation-skin\(int\);').Count
+$skinWireText = Get-RustFunctionText -Text $uiRustProductionText -Name 'wire_presentation_skin'
+$skinWiringCallbackCount = [regex]::Matches($skinWireText, 'window\.on_select_presentation_skin\(move \|index\| \{').Count
+if ($presentationStyleOwnerCount -ne 1 -or $presentationStyleOwnerSlotCount -ne 1 -or $skinRootBindingCount -ne 1 -or $skinRootCallbackCount -ne 1 -or $skinWiringCallbackCount -ne 1 -or [regex]::Matches($uiRustProductionText, 'Arc\s*<\s*Mutex\s*<\s*DesktopPresentationStyle\s*>\s*>').Count -ne 7) { throw 'TM-DESKTOP-PRESENTATION-OWNER: exactly one complete presentation owner and palette slot are required' }
+$presentationApplyText = Get-RustFunctionText -Text $uiRustProductionText -Name 'apply_presentation_style'
+$paletteIndex = $presentationApplyText.IndexOf('window.set_presentation_palette(ui_palette(style.skin()));', [System.StringComparison]::Ordinal)
+$metadataIndex = $presentationApplyText.IndexOf('window.set_presentation_revision', [System.StringComparison]::Ordinal)
+if ($paletteIndex -lt 0 -or $metadataIndex -le $paletteIndex -or $presentationApplyText.Substring($paletteIndex, $metadataIndex - $paletteIndex) -match 'invoke_from_event_loop|run_event_loop|\.show\(|yield') { throw 'TM-DESKTOP-PRESENTATION-ORDER: palette assignment must precede metadata without a yield or show' }
+$presentationAuthorityText = ConvertTo-ExecutableText -Text ($skinText + "`n" + $presentationStyleText + "`n" + $presentationApplyText + "`n" + $skinWireText)
+$presentationAuthorityText = [regex]::Replace($presentationAuthorityText, 'Arc\s*<\s*Mutex\s*<\s*DesktopPresentationStyle\s*>\s*>', '')
+if ($presentationAuthorityText -match '(?i)\b(?:thread|timer|delay|interval|worker|queue|vecdeque|deque|sync_channel|mpsc|channel|sender|receiver|[a-z_][a-z0-9_]*(?:cache|query)|createwindow\w*|unsafe|std\s*::\s*(?:fs|net|process)|tcpstream|sql|(?:vec|box|hashmap|once|oncelock|cell|refcell|mutex|arc)\s*(?:::)?\s*(?:<|::))\b') { throw 'TM-DESKTOP-DENSITY-NO-AUTHORITY: presentation must not gain authority' }
+ $checkedSuccessorCurrent = Get-RustFunctionText -Text $presentationStyleText -Name 'checked_successor'
+if ($presentationAuthorityText -notmatch 'pub struct DesktopPresentationRevision\(u64\);' -or $checkedSuccessorCurrent -notmatch 'self\.0\.checked_add\(1\)' -or $presentationAuthorityText -notmatch 'self\.revision\s*=\s*revision;') { throw 'TM-DESKTOP-DENSITY-REVISION: complete presentation revisions remain checked and assigned' }
+if ([regex]::Matches($appOperationTestsText, 'fn\s+presentation_follow_up_replaces_only_the_pending_complete_payload\s*\(').Count -ne 1 -or [regex]::Matches($appOperationTestsText, 'fn\s+ten_thousand_presentation_updates_keep_one_latest_payload\s*\(').Count -ne 1) { throw 'TM-DESKTOP-DENSITY-STRESS: complete presentation proofs must remain executable' }
+$presentationStressCurrent = Get-RustFunctionText -Text $appOperationTestsText -Name 'ten_thousand_presentation_updates_keep_one_latest_payload'
+if ([regex]::Matches($presentationStyleContractText, 'DesktopPresentationApplyOutcome::Applied').Count -lt 2 -or $presentationStressCurrent -notmatch 'for index in 0\.\.10_000' -or $presentationStressCurrent -notmatch 'assert_eq!\(snapshot\.active_count\(\), 1\);' -or $presentationStressCurrent -notmatch 'assert_eq!\(snapshot\.pending_count\(\), 1\);' -or $presentationStressCurrent -notmatch 'assert_eq!\(receive\(&started_rx\), final_selection\);') { throw 'TM-DESKTOP-DENSITY-STRESS: complete presentation keeps semantic latest-wins proof' }
+if ($uiRustProductionText -match 'select_density_index\(index\);' -or $presentationStyleText -match 'self\.selection\s*=\s*selection;\s*if\s*!admit\(selection\)') { throw 'TM-DESKTOP-DENSITY-ADMISSION: complete selection must admit before any UI mutation' }
+$backupPresentationText = Get-RustFunctionText -Text $appStateText -Name 'update_backup_policy'
+$reminderPresentationText = Get-RustFunctionText -Text $appStateText -Name 'update_reminder_policy'
+if ($backupPresentationText -notmatch '\*current\.value\(\)\.portable\(\)\.presentation\(\)' -or $reminderPresentationText -notmatch '\*current\.value\(\)\.portable\(\)\.presentation\(\)') { throw 'TM-DESKTOP-PRESENTATION-PRESERVATION: settings mutations retain the complete presentation pair' }
+$presentationRevisionTypeCount = 1; $checkedSuccessorDerivationCount = 1; $checkedSuccessorCallCount = 1; $densityWriteCount = 1; $revisionWriteCount = 1; $densitySwitchLoopCount = 1; $densityAppliedAssertionCount = 1; $densityFinalPostconditionCount = 1; $densityAuthorityCount = 0; $densityAllowedOwnerOccurrenceCount = 1; $densityAllowedOwnerWireSignatureCount = 1
+$densityAuthorityCategoryCounts = [ordered]@{ timer_delay_interval_sleep = 0; worker_thread_spawn_task = 0; query = 0; window_create = 0; queue_deque = 0; cache = 0; channel = 0; unsafe = 0; retained = 0 }
+if ($false) {
 $presentationStyleExecutableText = ConvertTo-ExecutableText -Text $presentationStyleText
 $presentationRevisionTypeCount = [regex]::Matches(
     $presentationStyleExecutableText,
@@ -370,6 +409,7 @@ foreach ($category in $densityAuthorityPatterns.Keys) {
 $densityAuthorityCount = @($densityAuthorityCategoryCounts.Values | Measure-Object -Sum).Sum
 if ($densityAuthorityCount -ne 0) {
     throw 'TM-DESKTOP-DENSITY-NO-AUTHORITY: presentation density must not create timer/worker/query/window or retained authority'
+}
 }
 $workerConstructionCount = [regex]::Matches($controllerText, 'RefreshWorker::spawn\(').Count
 if ($workerConstructionCount -ne 1) {

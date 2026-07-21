@@ -68,3 +68,8 @@ v2 field (`comfortable`, `compact`, `ultra_compact`) with in-memory v1 default m
 version-bound typed packages, and admission-first latest-only persistence. It does not
 claim skins, layouts, color schemes, locales, typography/row sizing, accessibility/DPI,
 paint/resource acceptance, terminal parity, or release readiness.
+
+P4-C adds bounded built-in skin parity only: Refined, Graphite, and Ember are durable
+complete-presentation choices with Rust-owned exact 15-role palettes and Slint aliases.
+It does not claim layout, colour-scheme, locale, typography, interactive DPI or
+accessibility, paint/resource, P5/P6/M0, packaging, signing, soak, or release parity.

@@ -3603,6 +3603,14 @@ completed in 879.2 seconds. Final independent rereview returned Critical 0, Impo
 hotkey, single-instance activation, startup integration, P4/P5/P6, M0, packaging,
 signing, soak, and release remain open.
 
+## P4-C durable built-in skins (partial)
+
+Added schema v3 complete density+skin persistence, exact v1/v2 Refined migration,
+Refined/Graphite/Ember stable identities, immutable 15-role Rust palettes, one Slint
+palette input, one presentation owner, admission-first complete payloads, atomic
+persist/restore, and latest-wins reuse without new authority. This historical entry
+does not revise P4-B; P4 remains partial and all interactive/release gates remain open.
+
 ## 2026-07-21 — P4-B durable density verification
 
 P4-B records the bounded durable-density contract: schema v2 has exactly Comfortable,

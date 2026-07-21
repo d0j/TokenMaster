@@ -1153,3 +1153,10 @@ allowlisted HTTPS, host-injected credential, and clock operations. All values an
 engine-to-host framed protocol use strict versioned schemas and hard byte/count/time
 limits. The full package/runtime contract is recorded in
 `docs/superpowers/specs/2026-07-14-tokenmaster-provider-plugin-system-design.md`.
+
+## P4-C presentation API
+
+`UpdatePresentation` accepts one typed complete density+skin value only. Density-only
+and skin-only payloads do not exist. The sole operation coordinator retains at most one
+active and one latest pending complete payload; no skin-specific API, worker, queue,
+timer, cache, filesystem, network, SQL, window, or unsafe authority is introduced.
