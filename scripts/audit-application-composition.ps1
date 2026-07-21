@@ -92,9 +92,14 @@ $v2Migration = [regex]::Match($settingsMigrationText, '(?s)impl PortableSettings
 if ([string]::IsNullOrWhiteSpace($v2Migration) -or $v2Migration -notmatch 'PresentationSkin::Refined') {
     throw 'TM-APP-PRESENTATION-SCHEMA: v2 migrates only the missing skin to Refined'
 }
-if ([regex]::Matches($commandText, 'ApplicationCommand::UpdatePresentation').Count -ne 1 -or
-    [regex]::Matches($commandText, 'ApplicationOperationPayload::Presentation\(ApplicationPresentationUpdate::new\(\s*selection,\s*\)\)').Count -ne 1 -or
-    $commandText -match 'UpdatePresentationDensity|PresentationDensity\(') {
+$commandExecutable = [regex]::Replace($commandText, '(?ms)//.*?$|/\*.*?\*/|"(?:\\.|[^"\\])*"', ' ')
+$normalizedCommand = [regex]::Replace($commandExecutable, '\s+', '')
+$expectedPresentationWrapper = 'pub(crate)structApplicationPresentationUpdate{selection:DesktopPresentationSelection,}'
+if ([regex]::Matches($commandExecutable, 'ApplicationCommand::UpdatePresentation').Count -ne 1 -or
+    [regex]::Matches($commandExecutable, 'ApplicationOperationPayload::Presentation\(ApplicationPresentationUpdate::new\(\s*selection,\s*\)\)').Count -ne 1 -or
+    $normalizedCommand.IndexOf($expectedPresentationWrapper, [System.StringComparison]::Ordinal) -lt 0 -or
+    [regex]::Matches($commandExecutable, 'tokenmaster_state::PresentationSettings::new\(').Count -ne 9 -or
+    $commandExecutable -match 'UpdatePresentation(?:Density|Skin)|Presentation(?:Density|Skin)\(') {
     throw 'TM-APP-PRESENTATION-COMPLETE: application presentation requests carry one complete density and skin pair'
 }
 if ([regex]::Matches($operationText, '(?:thread::)?Builder::new\(\)').Count -ne 1 -or

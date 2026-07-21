@@ -1574,6 +1574,18 @@ Describe "TokenMaster production desktop audit" {
         $receipt.density_authority_channel_count | Should -Be 0
         $receipt.density_authority_unsafe_count | Should -Be 0
         $receipt.density_authority_retained_count | Should -Be 0
+        $receipt.skin_variant_count | Should -Be 3
+        $receipt.skin_key_mapping_count | Should -Be 3
+        $receipt.skin_index_mapping_count | Should -Be 3
+        $receipt.skin_reverse_index_mapping_count | Should -Be 3
+        $receipt.palette_role_count | Should -Be 15
+        $receipt.palette_exact_rgb_value_count | Should -Be 45
+        $receipt.palette_slot_count | Should -Be 1
+        $receipt.skin_root_callback_count | Should -Be 1
+        $receipt.skin_settings_callback_count | Should -Be 1
+        $receipt.skin_forward_binding_count | Should -Be 1
+        $receipt.skin_wiring_callback_count | Should -Be 1
+        $receipt.palette_order_count | Should -Be 1
         $receipt.command_palette_query_scalar_maximum | Should -Be 64
         $receipt.command_palette_model_count | Should -Be 1
         $receipt.command_palette_shortcut_count | Should -Be 1
@@ -2355,7 +2367,7 @@ fn density_authority() {
             Should -Throw "*TM-DESKTOP-DENSITY-STRESS*"
     }
 
-    It "rejects a fourth skin and a stable skin mapping drift" {
+    It "rejects a fourth skin variant" {
         $fixture = New-DesktopAuditFixture -Name "skin-fourth"
         $path = Join-Path $fixture "crates\desktop\src\skin.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
@@ -2368,16 +2380,46 @@ fn density_authority() {
             Should -Throw "*TM-DESKTOP-SKIN-CONTRACT*"
     }
 
-    It "rejects a missing palette role and Slint skin family table" {
-        $fixture = New-DesktopAuditFixture -Name "skin-palette-table"
+    It "rejects a changed executable skin key despite a comment decoy" {
+        $fixture = New-DesktopAuditFixture -Name "skin-key-comment-decoy"
+        $path = Join-Path $fixture "crates\\desktop\\src\\skin.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'Self::Refined => "refined",',
+            "// Self::Refined => `"refined`",`r`n            Self::Refined => `"polished`","
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SKIN-CONTRACT*"
+    }
+
+    It "rejects a missing palette role" {
+        $fixture = New-DesktopAuditFixture -Name "skin-missing-palette-role"
         $skinPath = Join-Path $fixture "crates\desktop\src\skin.rs"
-        $tokensPath = Join-Path $fixture "crates\desktop\ui\tokens.slint"
         $text = [System.IO.File]::ReadAllText($skinPath).Replace('    unavailable: DesktopRgb,', '')
         [System.IO.File]::WriteAllText($skinPath, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SKIN-PALETTE*"
+    }
+
+    It "rejects a Slint skin family table" {
+        $fixture = New-DesktopAuditFixture -Name "skin-family-table"
+        $tokensPath = Join-Path $fixture "crates\desktop\ui\tokens.slint"
         Add-Content -LiteralPath $tokensPath -Value 'property <color> graphite-family: #000000;'
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-SKIN-PALETTE*"
+    }
+
+    It "rejects a stable skin mapping drift" {
+        $fixture = New-DesktopAuditFixture -Name "skin-index-drift"
+        $path = Join-Path $fixture "crates\desktop\src\skin.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('Self::Graphite => 1,', 'Self::Graphite => 9,')
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SKIN-CONTRACT*"
     }
 
     It "rejects a second palette owner callback and pre-admission UI mutation" {
@@ -2404,5 +2446,47 @@ fn density_authority() {
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-PRESENTATION-ORDER*"
+    }
+
+    It "rejects one RGB component drift and a comment palette decoy" {
+        $fixture = New-DesktopAuditFixture -Name "skin-rgb-comment-decoy"
+        $path = Join-Path $fixture "crates\\desktop\\src\\skin.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'background: rgb(11, 15, 23),',
+            "// background: rgb(11, 15, 23),`r`n        background: rgb(12, 15, 23),"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-SKIN-PALETTE*"
+    }
+
+    It "rejects a differently named palette slot and extra alias" {
+        $fixture = New-DesktopAuditFixture -Name "skin-extra-slot-alias"
+        $mainPath = Join-Path $fixture "crates\\desktop\\ui\\main.slint"
+        $tokensPath = Join-Path $fixture "crates\\desktop\\ui\\tokens.slint"
+        $main = [System.IO.File]::ReadAllText($mainPath).Replace(
+            'in-out property <UiPalette> presentation-palette <=> UiTokens.palette;',
+            "in-out property <UiPalette> presentation-palette <=> UiTokens.palette;`r`n    in-out property <UiPalette> alternate-palette: UiTokens.palette;"
+        )
+        [System.IO.File]::WriteAllText($mainPath, $main)
+        Add-Content -LiteralPath $tokensPath -Value '    out property <color> alternate: palette.accent;'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-PRESENTATION-OWNER*"
+    }
+
+    It "rejects skin application before complete-pair admission" {
+        $fixture = New-DesktopAuditFixture -Name "skin-before-admission"
+        $path = Join-Path $fixture "crates\\desktop\\src\\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '    if selected.select_skin_index_if_admitted(index, |selection| {',
+            '    let _ = selected.select_skin_index(index);' + "`r`n" +
+            '    if selected.select_skin_index_if_admitted(index, |selection| {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-DENSITY-ADMISSION*"
     }
 }

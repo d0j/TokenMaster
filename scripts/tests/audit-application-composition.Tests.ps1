@@ -1105,6 +1105,19 @@ Describe "TokenMaster application composition audit" {
             Should -Throw "*TM-APP-PRESENTATION-COMPLETE*"
     }
 
+    It "rejects a partial skin-only presentation payload" {
+        $fixture = New-AppAuditFixture -Name "presentation-partial-skin"
+        $path = Join-Path $fixture "crates\\app\\src\\command.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'selection: DesktopPresentationSelection,',
+            'skin: tokenmaster_desktop::DesktopSkin,'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-PRESENTATION-COMPLETE*"
+    }
+
     It "rejects a schema range wider than v1 through v3" {
         $fixture = New-AppAuditFixture -Name "presentation-schema-range"
         $path = Join-Path $fixture "crates\state\src\settings\migration.rs"
