@@ -3807,3 +3807,32 @@ application 1, portable settings 12, audit mutations 20, strict focused Clippy, 
 independent Critical/Important/Minor 0/0/0 Ready review. Live enable/relocation/disable, sign-in launch, access-denied ACL,
 and repeated resource return remain Task 6 interactive gates. P4/P5/P6, M0, package,
 signing, soak, and release remain open.
+
+## 2026-07-21 — P3-D.2c bounded Sessions navigation
+
+The first-page Sessions contour is extended without turning the frontend into a page
+cache. The product page now identifies only newest versus continuation. Slint emits
+typed `Next` or `Back to newest` intent and retains pending/enablement truth, while the
+opaque dataset-bound cursor is resolved only inside the existing controller worker.
+The worker owns one latest pending navigation slot, no queue and no cursor history.
+Back and ordinary refresh both request newest; refresh supersedes navigation.
+
+Publication is fenced by backend epoch, viewed product generation, navigation
+generation, cancellation, deadline, and current publication authority. An accepted
+page replaces the sole at-most-64-row model and clears page-relative exact detail;
+pending state clears detail and blocks row selection without model churn. Application
+routing keeps one weak current-bundle reference and uses nonblocking admission. No new
+worker, thread, channel, timer, cache, archive owner, model, public key/cursor/page
+number, or retained page collection was introduced.
+
+The initial UI review found that continuation recovery was not proven keyboard-
+reachable and that setter location, `ModelRc` identity, and sink lifetime lacked exact
+proof. The corrective pass added conditional focus plus real bounded Tab-to-Return
+tests for both actions, exact setter-move mutation, pointer-identity comparison, caller-
+handle drop proof, and narrow/wide accessible-control checks. Independent rereview
+returned Critical/Important/Minor 0/0/0. The focused UI suite is 8/8 and full Desktop
+tests plus strict Desktop Clippy pass. Audit closure adds 19 Desktop and four
+application cases; full suites pass 231/231 and 99/99. Product, Desktop, and
+application release audits pass. Final clean-root/format/strict workspace Clippy/full
+workspace evidence is recorded by the closeout commit. Interactive History ranges,
+P5 JSON/MCP, P3-E external receipts, P4/P6/M0/package/signing/soak/release remain open.

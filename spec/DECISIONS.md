@@ -2045,3 +2045,29 @@ startup identity obligation. Separating developer closure from packaged interact
 evidence preserves both sequencing and exact executable truth. Real mutation remains an
 external disposable-host operation, so repository automation cannot damage the
 operator's current profile or fabricate manual Windows behavior.
+
+## ADR-084 — Navigate Sessions with one private forward cursor and no page history
+
+Status: implemented as P3-D.2c developer evidence.
+
+Decision: Sessions exposes only `Next page` and `Back to newest`. The current immutable
+page carries an identity-free newest/continuation kind and `has_more`; Slint emits only
+the typed direction plus checked snapshot/product/navigation generations. The opaque
+dataset-bound continuation remains inside the existing capacity-one controller worker.
+The controller retains one latest pending navigation intent, no queue and no cursor
+history. `Back to newest` jumps directly to the fixed first request. Ordinary refresh
+also resets to newest and supersedes navigation.
+
+Every accepted result replaces the sole at-most-64-row Sessions model and clears exact
+detail. Pending navigation clears detail and disables row selection without rebuilding
+the model. Snapshot epoch, viewed product generation, navigation generation, cancellation,
+deadline, refresh precedence, and current publication authority all fail stale work
+closed. The application handoff retains only a weak current bundle and uses nonblocking
+admission. No worker, channel, timer, cache, archive owner, public cursor, page number,
+or unbounded retained collection is added.
+
+Rationale: cumulative load-more or a browser-like cursor stack grows frontend memory and
+complicates stale-detail ownership. Direction-only replacement preserves access to older
+sessions with constant memory, while direct recovery to newest makes refresh and failure
+semantics unambiguous. Exact keyboard, model-identity, sink-lifetime, mutation, and
+generation-race contracts pin the boundary without exposing private query identity.

@@ -476,18 +476,29 @@ release-channel lookup, or package/signing/SBOM assertion through this route. Th
 standard widget's fixed Slint attribution action is the sole library-provided license
 surface and does not widen TokenMaster provider or automation authority.
 
-`DesktopQueryPlan` also owns one all-time `usage_sessions` request with page size 64.
-It executes sequentially on the same capacity-one query worker; Dashboard copies only
-its first 12 summaries while the independent product Sessions section retains the
-bounded page and `has_more`. Sessions failure remains section-local and complete-attempt
-cancellation/deadline rules are unchanged.
+`DesktopQueryPlan` also owns the newest all-time `usage_sessions` request with page size
+64. It executes sequentially on the same capacity-one query worker; Dashboard copies
+only its first 12 summaries while the independent product Sessions section retains one
+bounded page, its identity-free newest/continuation kind, and `has_more`. Sessions
+failure remains section-local and complete-attempt cancellation/deadline rules are
+unchanged.
 
 `DesktopSessionsProjection::from_snapshot` is the sole product-to-Sessions mapping. It
-copies at most 64 identity-free summary rows and explicit continuation availability.
-`apply_projection` replaces the single Sessions Slint model only during initial window
-construction or an accepted newer product generation. Route selection is presentation-
-only and cannot rebuild the list, issue a detail query, create a timer/worker, or
-recreate `MainWindow`.
+copies at most 64 identity-free summary rows, newest/continuation page kind, and explicit
+continuation availability. Slint may request only typed `Next` or `Back to newest`
+directions and receives only pending/enablement state; no opaque cursor or page identity
+crosses the controller boundary. The controller resolves the current page's opaque
+continuation only inside the existing worker, retains at most one latest navigation
+intent, and keeps no cursor history. `Back to newest` and every ordinary refresh use the
+fixed newest request. Refresh supersedes navigation, while snapshot epoch, product
+generation, and navigation generation reject stale admission and publication.
+
+`apply_projection` is the sole production path that replaces the single Sessions Slint
+model, only during initial window construction or accepted newer product publication.
+It replaces rather than appends and retains at most 64 rows; pending navigation and
+route-only switching preserve the backing model. Page replacement or failure clears
+page-relative selection and exact detail. Route selection cannot issue a page/detail
+query, create a timer/worker/cache, or recreate `MainWindow`.
 
 P3-D.2b adds `DesktopSessionDetailIntent` with snapshot epoch, viewed product generation,
 and identity-free selection generation/ordinal. The UI adapter changes highlight and

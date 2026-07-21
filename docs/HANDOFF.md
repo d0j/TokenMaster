@@ -854,6 +854,25 @@ test/doctest baseline passed in 820.7 seconds overall (18.845, 1.611, and 22.080
 for the first three stages). The credential-dependent live Codex contract remains
 explicitly ignored. This is P3-D.2b closure, not M0/package/signing/release acceptance.
 
+P3-D.2c bounded Sessions navigation is implemented under
+`docs/superpowers/specs/2026-07-21-tokenmaster-sessions-pagination-design.md` and
+`docs/superpowers/plans/2026-07-21-tokenmaster-sessions-pagination.md`. Slint exposes
+only `Next page`, `Back to newest`, pending, and enablement; opaque continuation stays
+inside the existing controller worker. One latest pending navigation intent replaces
+the sole at-most-64-row page, never appends or retains cursor history. Back and ordinary
+refresh both request newest, refresh supersedes navigation, and epoch/product/navigation
+generations plus cancellation/deadline reject stale work. Page replacement/failure and
+pending admission clear exact detail; pending also blocks row selection without changing
+the backing model. Current-bundle application routing is weak and nonblocking.
+
+Focused UI 8/8 and full Desktop tests, strict Desktop Clippy, 231/231 Desktop and 99/99
+application mutation suites, plus product/Desktop/application release audits pass.
+Independent corrective UI rereview returned Critical/Important/Minor 0/0/0. Final
+workspace baseline evidence belongs to closeout below. No public cursor/key/page number,
+worker, thread, queue, channel, timer, cache, archive owner, second model, or retained
+page history was added. This is developer closure, not M0/package/signing/soak/release
+acceptance.
+
 P3-D.3 Models is implemented under
 `docs/superpowers/specs/2026-07-19-tokenmaster-models-route-design.md` and
 `docs/superpowers/plans/2026-07-19-tokenmaster-models-route.md`. The existing fixed
@@ -976,8 +995,8 @@ StoreUnavailable, and settings bytes remain unchanged. Per-scope editing, snooze
 hours, OS/tray delivery, usage alerts, and activation remain separate unfinished
 capabilities.
 Reuse the immutable snapshot/controller boundary; do not turn route selection into
-query authority. Later-page Sessions navigation and interactive History range
-selection remain bounded replacements of their existing product sections.
+query authority. Interactive History range selection remains a bounded replacement of
+the existing product section.
 Keep the fixed archive path and writer sidecar; never copy only the live main file or
 treat busy/disk/access/schema-newer as corruption authority. Keep automatic recovery
 data only; device-local settings never move. Do not relax the state boundary into path,
@@ -991,8 +1010,8 @@ executable and the run occurs in a disposable Windows user profile or VM with ve
 rollback. Do not substitute the M0 probe or mutate the operator's real HKCU/Explorer/
 power state.
 
-The immediate next implementation slices are later-page Sessions navigation and
-interactive History ranges, both bounded replacements of existing sections. Remaining P3-E evidence, P4
+The immediate next implementation slice is interactive History ranges as a bounded
+replacement of the existing section. Remaining P3-E evidence, P4
 presentation, CLI/MCP, activation, M0 acceptance,
 packaging, signing, and release remain unclaimed. Inventory/reminder read must not
 imply activation authority.

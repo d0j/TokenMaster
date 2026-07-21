@@ -176,7 +176,10 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   explicit `has_more`, a responsive full token/cost table, and no exposed query identity.
   P3-D.2b exact detail is complete with backend/product/selection generation binding,
   latest-only existing-worker work, synchronous selection/loading, exact summary/evidence,
-  32-model+32-project bounds, and no exposed opaque key. P3-D.3 Models is implemented
+  32-model+32-project bounds, and no exposed opaque key. P3-D.2c later-page navigation
+  is complete with typed Next/Back-to-newest actions, one latest pending intent, private
+  worker-local continuation, replace-only 64-row publication, refresh precedence, stale
+  generation fences, accessible keyboard controls, and no cursor history. P3-D.3 Models is implemented
   as a 64-row responsive projection over the same recent-30-day History envelope with
   complete token mix/cost/events, typed cost mode/composition, visible partial-cost
   provenance, and explicit truncation, without a third query. P3-D.4 Projects is
@@ -207,8 +210,8 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   retry, same-worker failed-presentation re-pump, terminal-ack release without
   re-presentation, panic-safe confirmed release, and joined
   lifecycle. Global notification settings synchronization/editing is complete. Full
-  rhythm aggregation, later-page navigation, and interactive History ranges remain
-  P3-D. P3-E.1 command palette, P3-E.2 compact quota mode, P3-E.3 production tray
+  rhythm aggregation and interactive History ranges remain P3-D. P3-E.1 command
+  palette, P3-E.2 compact quota mode, P3-E.3 production tray
   lifecycle, P3-E.4 hotkey/single-instance activation, and P3-E.5 current-user startup
   are complete as developer implementation; interactive shell closure stays open.
 - **P4 — presentation:** modular skins/layouts/density/scheme/locale, en/ru/pseudo,
@@ -254,7 +257,7 @@ generation-safe current-bundle restart foundation and Task 12B.2a identity-pinne
   Settings UI plus no-backup reconstruction, and Task 16 adversarial/privacy/
   compatibility closure, Task 17 resource/performance evidence, and Task 18
   documentation/acceptance closure are implemented. P3-D.1 History, complete P3-D.2
-  bounded Sessions list/detail, P3-D.3 Models, P3-D.4 Projects, P3-D.5 Recent
+  bounded Sessions list/detail/later-page navigation, P3-D.3 Models, P3-D.4 Projects, P3-D.5 Recent
   activity, and P3-D.6 Notifications are implemented over
   the same immutable snapshot/controller boundary with no new worker/timer/cache.
   Models and Projects share one recent-usage query; Projects reuses one existing Git
@@ -269,8 +272,7 @@ generation-safe current-bundle restart foundation and Task 12B.2a identity-pinne
   startup are complete as developer implementation. The packaged interactive/resource
   receipt contract and local preflight are fixed, while authenticated provenance and
   external evidence remain P6-dependent.
-  Later-page Sessions navigation and interactive History ranges are the next bounded
-  replacements of their existing sections.
+  Interactive History ranges are the next bounded replacement of the existing section.
 
 P3-D.0 Reliable State is approved under
 `docs/superpowers/specs/2026-07-17-tokenmaster-reliable-state-design.md` with the

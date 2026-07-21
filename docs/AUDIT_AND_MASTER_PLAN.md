@@ -332,8 +332,10 @@ pending activation/UI task, and adds no payload, queue, timer, or polling retry.
 adds one fixed current-user Run value with exact executable identity/readback, explicit
 stale repair/removal, path-free UI state, and config/backup exclusion. The packaged
 interactive/resource receipt contract and strict schema/local preflight are fixed;
-authenticated producer/provenance and external evidence remain P6-dependent. Later-page Sessions navigation and interactive History
-ranges are the next bounded P3 implementation slices.
+authenticated producer/provenance and external evidence remain P6-dependent. P3-D.2c
+later-page Sessions navigation is implemented as one private-cursor, replace-only
+64-row contour on the existing worker with no page history. Interactive History ranges
+are the next bounded P3 implementation slice.
 Per-scope editing, snooze, quiet hours, reminder OS/tray delivery, usage alerts, and
 activation remain later independent slices.
 P3-D.6 independent re-review is Critical/Important/Minor 0/0/0; its 82 mutation audit,

@@ -6,6 +6,16 @@ All notable changes are recorded here.
 
 ### Added
 
+- Added P3-D.2c bounded Sessions navigation. `Next page` and `Back to newest` route
+  direction-only intents through the current weak application bundle and existing
+  capacity-one controller worker. The opaque continuation remains worker-local; one
+  latest pending intent and one replace-only at-most-64-row model retain no cursor/page
+  history. Refresh and Back reset to newest, stale epoch/product/navigation generations
+  fail closed, and page changes clear exact detail. Real pointer/Enter/Space/Tab,
+  narrow/wide accessibility, model-identity, sink-lifetime, rapid-input, refresh-race,
+  cancellation, and mutation contracts pass. This does not claim interactive History
+  ranges, P5 JSON/MCP, M0, package/signing/soak, or release acceptance.
+
 - Added the historical P4-B durable density verification: at that boundary settings schema v2 persisted one
   fixed three-value density, strict v1 migrates in memory without a startup write,
   typed packages bind their declared settings source schema, and Desktop applies an

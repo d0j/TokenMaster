@@ -180,6 +180,20 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   Clippy/complete locked test-doctest baseline passed in 820.7 seconds overall (18.845,
   1.611, and 22.080 seconds for the first three stages). The credential-dependent live
   Codex contract remains explicitly ignored; M0 and product-release gates are separate.
+- P3-D.2c bounded Sessions navigation: the same worker now accepts typed `Next` and
+  `Back to newest` intents while retaining one latest pending request and no cursor
+  history. The opaque continuation is resolved only inside worker execution. Refresh
+  and Back both reset to the fixed newest request; snapshot epoch, product generation,
+  navigation generation, cancellation, deadline, and refresh precedence fence stale
+  work. Every accepted page replaces the sole at-most-64-row model and clears exact
+  detail. Pending state disables both navigation and row selection without model churn.
+  Real Slint pointer, Enter, Space, and bounded Tab-to-action tests cover both controls,
+  including continuation recovery, narrow/wide accessibility, backing `ModelRc`
+  identity, and retained sink lifetime. The focused Desktop suite, strict Desktop
+  Clippy, 231/231 Desktop mutations, 99/99 application mutations, and product/Desktop/
+  application release audits pass. Independent UI review is 0/0/0; final workspace
+  baseline evidence is recorded during closeout. No cursor/key/page number, queue,
+  worker, thread, timer, cache, archive owner, or retained page history was added.
 - P3-D.3 bounded Models route: the fixed recent-30-day History request now captures
   Model and Project breakdowns in one immutable envelope, so History, Models, and the
   Projects route share exact range/timezone/freshness without a third analytics
@@ -1537,8 +1551,8 @@ receipt schema/local-identity preflight are fixed in `P3E_ACCEPTANCE.md`; authen
 actions and package provenance remain deferred until P6 supplies the producer/manifest,
 exact packaged production executable, and a disposable Windows host. No live HKCU,
 Explorer, sign-in, lock, sleep, hotkey, or GUI mutation was performed.
-Continue with later-page Sessions navigation and interactive History ranges as bounded
-replacements of their existing sections rather than new frontend query owners. Interactive
+Continue with interactive History ranges as a bounded replacement of the existing
+History section rather than a new frontend query owner. Interactive
 Windows, P4 presentation, P5 CLI/MCP, activation, M0, packaging, signing, soak, and
 product release remain unclaimed.
 
