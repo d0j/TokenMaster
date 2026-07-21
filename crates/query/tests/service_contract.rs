@@ -634,6 +634,10 @@ fn session_page_detail_cursor_and_stale_dataset_are_opaque_and_exact() {
                 .expect("request"),
         )
         .expect("first session page");
+    assert_eq!(
+        first.payload().page_kind(),
+        tokenmaster_query::UsageSessionPageKind::Newest
+    );
     assert_eq!(first.payload().sessions().len(), 2);
     assert!(first.payload().has_more());
     assert_eq!(
@@ -718,6 +722,10 @@ fn session_page_detail_cursor_and_stale_dataset_are_opaque_and_exact() {
             .expect("continuation request"),
         )
         .expect("continuation page");
+    assert_eq!(
+        second.payload().page_kind(),
+        tokenmaster_query::UsageSessionPageKind::Continuation
+    );
     assert_eq!(second.header().snapshot_generation().get(), 3);
     assert_eq!(second.header().publication_generation().get(), 5);
     assert_eq!(second.payload().sessions().len(), 1);

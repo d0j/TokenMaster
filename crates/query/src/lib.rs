@@ -70,7 +70,7 @@ pub use service::{
 };
 pub use session::{
     UsageSessionCursor, UsageSessionDetail, UsageSessionDetailResult, UsageSessionKey,
-    UsageSessionPage, UsageSessionPageRequest, UsageSessionSummary,
+    UsageSessionPage, UsageSessionPageKind, UsageSessionPageRequest, UsageSessionSummary,
 };
 pub use status::{
     PRODUCT_DATA_STATUS_SCHEMA_VERSION, ProductAggregateProgress, ProductAggregateState,

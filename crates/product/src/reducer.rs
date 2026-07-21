@@ -274,13 +274,35 @@ impl ProductReducer {
         QueryEnvelope<LatestActivityPage>,
         usage_compatible
     );
-    section_methods!(
-        publish_sessions,
-        fail_sessions,
-        sessions,
-        QueryEnvelope<UsageSessionPage>,
-        usage_compatible
-    );
+    pub fn publish_sessions(
+        &mut self,
+        attempt: ProductAttemptGeneration,
+        value: QueryEnvelope<UsageSessionPage>,
+    ) -> Result<ProductPublishOutcome, ProductReducerError> {
+        let outcome = classify(self.current.sessions.attempt_generation(), attempt);
+        if outcome != ProductPublishOutcome::Accepted {
+            return Ok(outcome);
+        }
+        if !usage_compatible(&self.current, &value) {
+            return Ok(ProductPublishOutcome::RejectedIncompatible);
+        }
+        self.replace_sessions(ProductSection::ready(attempt, value))?;
+        Ok(ProductPublishOutcome::Accepted)
+    }
+
+    pub fn fail_sessions(
+        &mut self,
+        attempt: ProductAttemptGeneration,
+        code: QueryErrorCode,
+    ) -> Result<ProductPublishOutcome, ProductReducerError> {
+        let outcome = classify(self.current.sessions.attempt_generation(), attempt);
+        if outcome != ProductPublishOutcome::Accepted {
+            return Ok(outcome);
+        }
+        let section = ProductSection::unavailable_retaining(attempt, code, &self.current.sessions);
+        self.replace_sessions(section)?;
+        Ok(ProductPublishOutcome::Accepted)
+    }
     pub fn publish_session_detail(
         &mut self,
         attempt: ProductAttemptGeneration,
@@ -347,6 +369,20 @@ impl ProductReducer {
         next.generation = next.generation.checked_next()?;
         next.session_detail_selection = Some(selection);
         next.session_detail = section;
+        next.refresh_routes();
+        self.current = Arc::new(next);
+        Ok(())
+    }
+
+    fn replace_sessions(
+        &mut self,
+        section: ProductSection<QueryEnvelope<UsageSessionPage>>,
+    ) -> Result<(), ProductReducerError> {
+        let mut next = (*self.current).clone();
+        next.generation = next.generation.checked_next()?;
+        next.sessions = section;
+        next.session_detail_selection = None;
+        next.session_detail = ProductSection::waiting();
         next.refresh_routes();
         self.current = Arc::new(next);
         Ok(())

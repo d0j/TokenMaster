@@ -250,6 +250,73 @@ fn detail_selection_is_latest_wins_and_never_retains_another_rows_payload() {
 }
 
 #[test]
+fn sessions_replacement_clears_page_relative_detail_but_unrelated_publication_does_not() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("sessions-replacement-product.sqlite3");
+    seed_two_sessions(&path);
+    let mut service = QueryService::open(&path, FixedClock).expect("query service");
+    let status = service.product_data_status().expect("status");
+    let page = service
+        .usage_sessions(
+            UsageSessionPageRequest::first(PageSize::new(2).expect("page"), Vec::new())
+                .expect("request"),
+        )
+        .expect("sessions");
+    let detail = service
+        .usage_session_detail(page.payload().sessions()[0].key().clone())
+        .expect("detail");
+    let exact_selection = selection(1, 0);
+    let mut reducer = ProductReducer::new();
+    reducer
+        .publish_data_status(attempt(1), status)
+        .expect("publish status");
+
+    reducer
+        .publish_session_detail(attempt(2), exact_selection, detail.clone())
+        .expect("publish detail");
+    reducer
+        .publish_sessions(attempt(2), page.clone())
+        .expect("publish sessions");
+    let after_success = reducer.snapshot();
+    assert_eq!(after_success.session_detail_selection(), None);
+    assert_eq!(
+        after_success.session_detail().kind(),
+        ProductSectionKind::Waiting
+    );
+
+    reducer
+        .publish_session_detail(attempt(3), exact_selection, detail.clone())
+        .expect("republish detail");
+    reducer
+        .fail_sessions(attempt(3), QueryErrorCode::DeadlineExceeded)
+        .expect("fail sessions");
+    let after_failure = reducer.snapshot();
+    assert_eq!(after_failure.session_detail_selection(), None);
+    assert_eq!(
+        after_failure.session_detail().kind(),
+        ProductSectionKind::Waiting
+    );
+
+    reducer
+        .publish_session_detail(attempt(4), exact_selection, detail)
+        .expect("publish exact detail");
+    reducer
+        .fail_activity(attempt(1), QueryErrorCode::DeadlineExceeded)
+        .expect("fail unrelated activity");
+    let after_unrelated = reducer.snapshot();
+    assert_eq!(
+        after_unrelated.session_detail_selection(),
+        Some(exact_selection)
+    );
+    assert_eq!(
+        after_unrelated.session_detail().kind(),
+        ProductSectionKind::Ready
+    );
+}
+
+#[test]
 fn missing_detail_is_ready_truth_for_the_exact_selection() {
     let directory = TempDir::new().expect("temporary directory");
     let path = directory

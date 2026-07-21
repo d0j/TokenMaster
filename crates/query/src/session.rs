@@ -198,12 +198,24 @@ impl UsageSessionSummary {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UsageSessionPage {
+    page_kind: UsageSessionPageKind,
     sessions: Arc<[UsageSessionSummary]>,
     next_cursor: Option<UsageSessionCursor>,
     has_more: bool,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UsageSessionPageKind {
+    Newest,
+    Continuation,
+}
+
 impl UsageSessionPage {
+    #[must_use]
+    pub const fn page_kind(&self) -> UsageSessionPageKind {
+        self.page_kind
+    }
+
     #[must_use]
     pub const fn sessions(&self) -> &Arc<[UsageSessionSummary]> {
         &self.sessions
@@ -323,6 +335,11 @@ pub(crate) fn map_page_capture(
         return Err(QueryError::new(QueryErrorCode::CorruptArchive));
     }
     Ok(UsageSessionPage {
+        page_kind: if request.is_continuation() {
+            UsageSessionPageKind::Continuation
+        } else {
+            UsageSessionPageKind::Newest
+        },
         sessions: Arc::from(sessions),
         next_cursor,
         has_more: capture.has_more(),
