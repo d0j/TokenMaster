@@ -1,6 +1,7 @@
 use std::{cell::Cell, rc::Rc};
 
-use slint::{ComponentHandle, Model};
+use i_slint_backend_testing::{AccessibleRole, ElementHandle, ElementQuery};
+use slint::{ComponentHandle, Model, SharedString};
 use tokenmaster_desktop::{
     DesktopBackupPolicy, DesktopDensity, DesktopIntent, DesktopIntentAdmission, DesktopIntentSink,
     DesktopOperationKind, DesktopOperationPhase, DesktopOperationSnapshot,
@@ -163,17 +164,154 @@ fn density_and_skin_selectors_submit_complete_pairs_and_keep_one_window_models_g
     );
 
     for index in 0..10_000 {
+        let skin = if index % 2 == 0 {
+            DesktopSkin::Graphite
+        } else {
+            DesktopSkin::Ember
+        };
+        window.invoke_select_presentation_skin(skin.slint_index());
         window.invoke_select_presentation_density(index % 3);
-        window.invoke_select_presentation_skin(index % 3);
+        assert_eq!(
+            sink.last.get(),
+            Some(DesktopPresentationSelection::new(
+                match index % 3 {
+                    0 => DesktopDensity::Comfortable,
+                    1 => DesktopDensity::Compact,
+                    _ => DesktopDensity::UltraCompact,
+                },
+                skin,
+            )),
+            "density submission {index} must retain the immediately current skin"
+        );
     }
 
     assert_eq!(window.get_presentation_density_key(), "comfortable");
-    assert_eq!(window.get_presentation_skin_key(), "refined");
+    assert_eq!(window.get_presentation_skin_key(), "ember");
     assert_eq!(address, shell.window() as *const _);
     assert_eq!(window.get_route_rows().row_count(), routes);
     assert_eq!(window.get_dashboard_quota_rows().row_count(), quotas);
     assert_eq!(window.window().size(), size);
     assert_eq!(sink.count.get(), 20_002);
+}
+
+#[test]
+fn skin_selector_is_exactly_one_accessible_combobox_and_stays_in_bounds() {
+    i_slint_backend_testing::init_no_event_loop();
+
+    let shell = DesktopShell::new_with_reliable_state(
+        &ProductReducer::new().snapshot(),
+        reliable_state(DesktopDensity::Comfortable, DesktopSkin::Graphite, None),
+        Rc::new(RecordingIntentSink::accepting()),
+    )
+    .expect("shell");
+    let window = shell.window();
+    window.invoke_select_route(SharedString::from("settings"));
+    window.show().expect("show settings");
+    let scale_factor = window.window().scale_factor();
+
+    for (width, height, layout) in [
+        (560, 480, "narrow"),
+        (700, 900, "narrow"),
+        (1120, 1000, "wide"),
+    ] {
+        window.window().set_size(
+            slint::LogicalSize::new(width as f32, height as f32).to_physical(scale_factor),
+        );
+        let actual_size = window.window().size().to_logical(scale_factor);
+        let settings = ElementHandle::find_by_accessible_label(window, "TokenMaster settings")
+            .find(|element| element.accessible_role() == Some(AccessibleRole::Groupbox))
+            .expect("settings root");
+        let settings_position = settings.absolute_position();
+        let settings_size = settings.size();
+        let strip = ElementHandle::find_by_element_id(window, "SettingsView::presentation-strip")
+            .next()
+            .expect("presentation strip");
+        let strip_position = strip.absolute_position();
+        let strip_size = strip.size();
+        assert!(
+            strip_position.x >= 0.0
+                && strip_position.y >= 0.0
+                && strip_position.x + strip_size.width <= actual_size.width
+                && strip_position.y + strip_size.height <= actual_size.height,
+            "presentation strip fits actual {}x{}",
+            actual_size.width,
+            actual_size.height,
+        );
+        assert_eq!(window.get_settings_layout_mode(), layout);
+        let selectors = ElementQuery::from_root(window)
+            .match_accessible_role(AccessibleRole::Combobox)
+            .match_predicate(|element| {
+                element.accessible_label().as_deref() == Some("Presentation skin")
+            })
+            .find_all();
+        assert_eq!(selectors.len(), 1, "one Skin selector at {width}x{height}");
+        let selector = ElementHandle::find_by_accessible_label(window, "Presentation skin")
+            .find(|element| element.accessible_role() == Some(AccessibleRole::Combobox))
+            .expect("skin selector");
+        let position = selector.absolute_position();
+        let size = selector.size();
+        assert!(
+            size.width > 0.0 && size.height > 0.0,
+            "skin selector has bounds"
+        );
+        assert!(
+            position.x >= 0.0 && position.y >= 0.0,
+            "skin selector starts in bounds"
+        );
+        assert!(
+            position.x + size.width <= actual_size.width
+                && position.y + size.height <= actual_size.height,
+            "skin selector fits requested {width}x{height} and actual {}x{}; SettingsView x={} y={} width={} height={}; selector x={} y={} width={} height={}",
+            actual_size.width,
+            actual_size.height,
+            settings_position.x,
+            settings_position.y,
+            settings_size.width,
+            settings_size.height,
+            position.x,
+            position.y,
+            size.width,
+            size.height,
+        );
+        for (label, role) in [
+            ("Presentation density", AccessibleRole::Combobox),
+            ("Presentation skin", AccessibleRole::Combobox),
+            ("Presentation persistence Saved", AccessibleRole::Text),
+        ] {
+            let element = ElementHandle::find_by_accessible_label(window, label)
+                .find(|element| element.accessible_role() == Some(role))
+                .expect("presentation strip control");
+            let position = element.absolute_position();
+            let size = element.size();
+            assert!(
+                position.x >= strip_position.x
+                    && position.y >= strip_position.y
+                    && position.x + size.width <= strip_position.x + strip_size.width
+                    && position.y + size.height <= strip_position.y + strip_size.height,
+                "{label} stays in the presentation strip at {width}x{height}"
+            );
+        }
+    }
+}
+
+#[test]
+fn slint_owns_exactly_one_complete_palette_without_family_logic() {
+    let tokens = include_str!("../ui/tokens.slint");
+    assert_palette_ownership(tokens).expect("one complete Rust-owned palette input");
+}
+
+#[test]
+fn palette_ownership_guard_rejects_a_second_family_branch() {
+    let tokens = include_str!("../ui/tokens.slint");
+    let bypass = tokens.replacen(
+        "export global UiTokens",
+        "export global UiPaletteFamily { in-out property <UiPalette> palette; }\n\nexport global UiTokens",
+        1,
+    );
+    assert!(
+        assert_palette_ownership(&bypass).is_err(),
+        "a second Slint palette family must fail closed"
+    );
 }
 
 #[test]
@@ -318,6 +456,64 @@ fn assert_palette(palette: tokenmaster_desktop::UiPalette, skin: DesktopSkin) {
             skin.stable_key()
         );
     }
+}
+
+fn assert_palette_ownership(tokens: &str) -> Result<(), String> {
+    if count(tokens, "export struct UiPalette") != 1 || count(tokens, "export struct") != 1 {
+        return Err(String::from("exactly one UiPalette struct"));
+    }
+    if count(tokens, "export global UiTokens") != 1 || count(tokens, "export global") != 1 {
+        return Err(String::from("exactly one UiTokens global"));
+    }
+    if count(tokens, "in-out property <UiPalette> palette") != 1 || count(tokens, "palette:") != 1 {
+        return Err(String::from(
+            "exactly one complete palette input and assignment",
+        ));
+    }
+    for role in [
+        "background",
+        "surface",
+        "surface-raised",
+        "surface-subtle",
+        "border",
+        "text-primary",
+        "text-secondary",
+        "accent",
+        "accent-subtle",
+        "accent-secondary",
+        "accent-tertiary",
+        "ready",
+        "waiting",
+        "degraded",
+        "unavailable",
+    ] {
+        if count(
+            tokens,
+            &format!("out property <color> {role}: palette.{role};"),
+        ) != 1
+        {
+            return Err(format!("{role} must be one palette alias"));
+        }
+    }
+    for forbidden in [
+        "Refined",
+        "Graphite",
+        "Ember",
+        "skin-id",
+        "palette-id",
+        "palette ==",
+        "palette !=",
+        "palette ?",
+        "palette :",
+        "if palette",
+        "match palette",
+        "UiPaletteFamily",
+    ] {
+        if tokens.contains(forbidden) {
+            return Err(format!("Slint must not own {forbidden}"));
+        }
+    }
+    Ok(())
 }
 
 fn count(haystack: &str, needle: &str) -> usize {

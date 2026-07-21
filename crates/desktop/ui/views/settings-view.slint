@@ -61,40 +61,72 @@ export component SettingsView inherits Rectangle {
     accessible-role: groupbox;
     accessible-label: "TokenMaster settings";
 
-    settings-scroll := ScrollView {
+    presentation-strip := Rectangle {
         width: root.width;
-        height: root.height;
-        viewport := VerticalLayout {
-        padding: UiTokens.space;
-        spacing: UiTokens.space;
+        height: root.settings-layout-mode == "wide" ? 88px : 112px;
+        background: UiTokens.background;
 
-        Text { text: "Settings"; color: UiTokens.text-primary; font-size: 24px; font-weight: 700; }
-        Text { text: "Settings health: " + root.settings-health; color: UiTokens.text-secondary; }
-
-        HorizontalLayout {
-            spacing: UiTokens.space-sm;
-            Text { text: "Density"; color: UiTokens.text-secondary; vertical-alignment: center; }
-            density-selector := ComboBox {
-                model: ["Comfortable", "Compact", "Ultra compact"];
-                current-index: root.presentation-density-id;
-                accessible-label: "Presentation density";
-                selected(_) => { root.select-presentation-density(self.current-index); }
-            }
-            Text { text: "Skin"; color: UiTokens.text-secondary; vertical-alignment: center; }
-            skin-selector := ComboBox {
-                model: ["Refined", "Graphite", "Ember"];
-                current-index: root.presentation-skin-id;
-                accessible-label: "Presentation skin";
-                selected(_) => { root.select-presentation-skin(self.current-index); }
-            }
+        density-label := Text {
+            x: 8px;
+            y: 8px;
+            width: 64px;
+            height: 32px;
+            text: "Density";
+            color: UiTokens.text-secondary;
+            vertical-alignment: center;
         }
-        Text {
+        density-selector := ComboBox {
+            x: 80px;
+            y: 8px;
+            width: root.settings-layout-mode == "wide" ? root.width / 2 - 88px : root.width - 88px;
+            height: 32px;
+            model: ["Comfortable", "Compact", "Ultra compact"];
+            current-index: root.presentation-density-id;
+            accessible-label: "Presentation density";
+            selected(_) => { root.select-presentation-density(self.current-index); }
+        }
+        skin-label := Text {
+            x: root.settings-layout-mode == "wide" ? root.width / 2 + 8px : 8px;
+            y: root.settings-layout-mode == "wide" ? 8px : 44px;
+            width: 40px;
+            height: 32px;
+            text: "Skin";
+            color: UiTokens.text-secondary;
+            vertical-alignment: center;
+        }
+        skin-selector := ComboBox {
+            x: root.settings-layout-mode == "wide" ? root.width / 2 + 56px : 80px;
+            y: root.settings-layout-mode == "wide" ? 8px : 44px;
+            width: root.settings-layout-mode == "wide" ? root.width / 2 - 64px : root.width - 88px;
+            height: 32px;
+            model: ["Refined", "Graphite", "Ember"];
+            current-index: root.presentation-skin-id;
+            accessible-label: "Presentation skin";
+            selected(_) => { root.select-presentation-skin(self.current-index); }
+        }
+        persistence-label := Text {
+            x: 8px;
+            y: root.settings-layout-mode == "wide" ? 48px : 84px;
+            width: root.width - 16px;
+            height: 24px;
             text: root.presentation-persistence-state == "saved" ? "Saved"
                 : root.presentation-persistence-state == "saving" ? "Saving…"
                 : "Not saved — choose the current presentation again to retry";
             color: UiTokens.text-secondary;
             accessible-label: "Presentation persistence " + self.text;
         }
+    }
+
+    settings-scroll := ScrollView {
+        y: presentation-strip.height;
+        width: root.width;
+        height: root.height - presentation-strip.height;
+        viewport := VerticalLayout {
+        padding: UiTokens.space;
+        spacing: UiTokens.space;
+
+        Text { text: "Settings"; color: UiTokens.text-primary; font-size: 24px; font-weight: 700; }
+        Text { text: "Settings health: " + root.settings-health; color: UiTokens.text-secondary; }
 
         reminder-card := Rectangle {
             background: UiTokens.surface;

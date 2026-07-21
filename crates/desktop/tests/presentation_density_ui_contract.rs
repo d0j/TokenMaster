@@ -5,16 +5,16 @@ use slint::{ComponentHandle, Model, SharedString};
 use tokenmaster_desktop::{
     DesktopBackupPolicy, DesktopDensity, DesktopIntent, DesktopIntentAdmission, DesktopIntentSink,
     DesktopOperationKind, DesktopOperationPhase, DesktopOperationSnapshot,
-    DesktopPresentationSettings, DesktopReliableStateHealth, DesktopReliableStateInput,
-    DesktopReliableStateProjection, DesktopReliableStateSummary, DesktopReminderPolicy,
-    DesktopShell, DesktopSkin,
+    DesktopPresentationSelection, DesktopPresentationSettings, DesktopReliableStateHealth,
+    DesktopReliableStateInput, DesktopReliableStateProjection, DesktopReliableStateSummary,
+    DesktopReminderPolicy, DesktopShell, DesktopSkin,
 };
 use tokenmaster_product::ProductReducer;
 
 struct RecordingIntentSink {
     admission: DesktopIntentAdmission,
     count: std::cell::Cell<u64>,
-    last: std::cell::Cell<Option<DesktopDensity>>,
+    last: std::cell::Cell<Option<DesktopPresentationSelection>>,
 }
 
 impl RecordingIntentSink {
@@ -35,6 +35,10 @@ impl RecordingIntentSink {
     }
 
     fn last(&self) -> Option<DesktopDensity> {
+        self.last.get().map(DesktopPresentationSelection::density)
+    }
+
+    fn last_selection(&self) -> Option<DesktopPresentationSelection> {
         self.last.get()
     }
 
@@ -47,7 +51,7 @@ impl DesktopIntentSink for RecordingIntentSink {
     fn submit(&self, intent: DesktopIntent) -> DesktopIntentAdmission {
         if let DesktopIntent::UpdatePresentation(selection) = intent {
             self.count.set(self.count.get() + 1);
-            self.last.set(Some(selection.density()));
+            self.last.set(Some(selection));
         }
         self.admission
     }
@@ -57,13 +61,21 @@ fn reliable_state_with_density_and_operation(
     density: DesktopDensity,
     operation: Option<DesktopOperationSnapshot>,
 ) -> DesktopReliableStateProjection {
+    reliable_state_with_presentation_and_operation(density, DesktopSkin::Refined, operation)
+}
+
+fn reliable_state_with_presentation_and_operation(
+    density: DesktopDensity,
+    skin: DesktopSkin,
+    operation: Option<DesktopOperationSnapshot>,
+) -> DesktopReliableStateProjection {
     let summary = DesktopReliableStateSummary::new_with_settings(
         DesktopReliableStateHealth::Healthy,
         false,
         "healthy",
         DesktopBackupPolicy::disabled(),
         DesktopReminderPolicy::unavailable(),
-        DesktopPresentationSettings::new(density, DesktopSkin::Refined),
+        DesktopPresentationSettings::new(density, skin),
         None,
         None,
         None,
@@ -79,6 +91,33 @@ fn reliable_state_with_density_and_operation(
         summary,
         Vec::new(),
     ))
+}
+
+#[test]
+fn density_selector_submits_the_current_non_default_skin_without_a_skin_callback() {
+    i_slint_backend_testing::init_no_event_loop();
+
+    let sink = Rc::new(RecordingIntentSink::accepting());
+    let shell = DesktopShell::new_with_reliable_state(
+        &ProductReducer::new().snapshot(),
+        reliable_state_with_presentation_and_operation(
+            DesktopDensity::Comfortable,
+            DesktopSkin::Graphite,
+            None,
+        ),
+        sink.clone(),
+    )
+    .expect("shell");
+
+    shell.window().invoke_select_presentation_density(2);
+
+    assert_eq!(
+        sink.last_selection(),
+        Some(DesktopPresentationSelection::new(
+            DesktopDensity::UltraCompact,
+            DesktopSkin::Graphite,
+        ))
+    );
 }
 
 fn reliable_state_with_density(density: DesktopDensity) -> DesktopReliableStateProjection {
