@@ -2,7 +2,8 @@ use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use tokenmaster_product::ProductSnapshot;
 use tokenmaster_query::{
-    UsageBreakdownIdentity, UsageBreakdownKind, UsageSessionDetail, UsageSessionSummary,
+    UsageBreakdownIdentity, UsageBreakdownKind, UsageSessionDetail, UsageSessionPageKind,
+    UsageSessionSummary,
 };
 
 use crate::dashboard::{
@@ -10,12 +11,91 @@ use crate::dashboard::{
 };
 use crate::{
     DesktopCostValue, DesktopDashboardSectionState, DesktopFreshness, DesktopQuality,
-    DesktopSectionReasonCodes, DesktopTokenValue, controller::DesktopSessionDetailIntent,
+    DesktopSectionReasonCodes, DesktopTokenValue,
+    controller::{DesktopSessionDetailIntent, DesktopSessionPageIntent},
 };
 
 pub const MAX_SESSION_ROWS: usize = 64;
 pub const MAX_SESSION_DETAIL_MODEL_ROWS: usize = 32;
 pub const MAX_SESSION_DETAIL_PROJECT_ROWS: usize = 32;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopSessionPageKind {
+    Newest,
+    Continuation,
+}
+
+impl DesktopSessionPageKind {
+    #[must_use]
+    pub const fn stable_code(self) -> &'static str {
+        match self {
+            Self::Newest => "newest",
+            Self::Continuation => "continuation",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopSessionPageIntentAdmission {
+    Accepted,
+    Rejected,
+}
+
+pub trait DesktopSessionPageIntentSink {
+    fn submit(&self, intent: DesktopSessionPageIntent) -> DesktopSessionPageIntentAdmission;
+}
+
+#[derive(Default)]
+pub struct DesktopSessionPageIntentRouter {
+    sink: RefCell<Option<Rc<dyn DesktopSessionPageIntentSink>>>,
+}
+
+impl DesktopSessionPageIntentRouter {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            sink: RefCell::new(None),
+        }
+    }
+
+    pub fn install(
+        &self,
+        sink: Rc<dyn DesktopSessionPageIntentSink>,
+    ) -> Result<(), DesktopSessionPageIntentRouterError> {
+        let mut slot = self
+            .sink
+            .try_borrow_mut()
+            .map_err(|_| DesktopSessionPageIntentRouterError)?;
+        if slot.is_some() {
+            return Err(DesktopSessionPageIntentRouterError);
+        }
+        *slot = Some(sink);
+        Ok(())
+    }
+}
+
+impl DesktopSessionPageIntentSink for DesktopSessionPageIntentRouter {
+    fn submit(&self, intent: DesktopSessionPageIntent) -> DesktopSessionPageIntentAdmission {
+        let Ok(slot) = self.sink.try_borrow() else {
+            return DesktopSessionPageIntentAdmission::Rejected;
+        };
+        slot.as_ref()
+            .map_or(DesktopSessionPageIntentAdmission::Rejected, |sink| {
+                sink.submit(intent)
+            })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DesktopSessionPageIntentRouterError;
+
+pub(crate) struct UnavailableDesktopSessionPageIntentSink;
+
+impl DesktopSessionPageIntentSink for UnavailableDesktopSessionPageIntentSink {
+    fn submit(&self, _intent: DesktopSessionPageIntent) -> DesktopSessionPageIntentAdmission {
+        DesktopSessionPageIntentAdmission::Rejected
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DesktopSessionDetailIntentAdmission {
@@ -448,6 +528,8 @@ pub struct DesktopSessionsProjection {
     reason_codes: DesktopSectionReasonCodes,
     freshness: Option<DesktopFreshness>,
     quality: Option<DesktopQuality>,
+    page_kind: Option<DesktopSessionPageKind>,
+    navigation_pending: bool,
     has_more: Option<bool>,
     rows: Arc<[DesktopSessionListRow]>,
     detail: DesktopSessionDetailProjection,
@@ -470,6 +552,8 @@ impl DesktopSessionsProjection {
                 reason_codes: section.reason_codes(),
                 freshness: None,
                 quality: None,
+                page_kind: None,
+                navigation_pending: false,
                 has_more: None,
                 rows: Arc::from(Vec::new()),
                 detail: DesktopSessionDetailProjection::from_snapshot(snapshot, active),
@@ -498,6 +582,8 @@ impl DesktopSessionsProjection {
             reason_codes: section.reason_codes(),
             freshness: Some(map_freshness(envelope.header().freshness())),
             quality: Some(map_quality(envelope.header().quality())),
+            page_kind: Some(map_page_kind(payload.page_kind())),
+            navigation_pending: false,
             has_more: Some(payload.has_more() || source_rows.len() > MAX_SESSION_ROWS),
             rows: Arc::from(rows),
             detail: DesktopSessionDetailProjection::from_snapshot(snapshot, active),
@@ -525,6 +611,16 @@ impl DesktopSessionsProjection {
     }
 
     #[must_use]
+    pub const fn page_kind(&self) -> Option<DesktopSessionPageKind> {
+        self.page_kind
+    }
+
+    #[must_use]
+    pub const fn navigation_pending(&self) -> bool {
+        self.navigation_pending
+    }
+
+    #[must_use]
     pub const fn has_more(&self) -> Option<bool> {
         self.has_more
     }
@@ -547,6 +643,22 @@ impl DesktopSessionsProjection {
         self.detail =
             DesktopSessionDetailProjection::unavailable(selected_ordinal, "request_rejected");
     }
+
+    pub(crate) fn start_navigation(&mut self) {
+        self.navigation_pending = true;
+        self.detail = DesktopSessionDetailProjection::idle();
+    }
+
+    pub(crate) fn reject_navigation(&mut self) {
+        self.navigation_pending = false;
+    }
+}
+
+const fn map_page_kind(kind: UsageSessionPageKind) -> DesktopSessionPageKind {
+    match kind {
+        UsageSessionPageKind::Newest => DesktopSessionPageKind::Newest,
+        UsageSessionPageKind::Continuation => DesktopSessionPageKind::Continuation,
+    }
 }
 
 fn map_session_row(session: &UsageSessionSummary) -> DesktopSessionListRow {
@@ -563,5 +675,64 @@ fn map_session_row(session: &UsageSessionSummary) -> DesktopSessionListRow {
         reasoning: map_tokens(metrics.reasoning(), metrics.event_count()),
         total: map_tokens(metrics.total(), metrics.event_count()),
         cost: map_cost(session.cost()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::rc::Rc;
+
+    use tokenmaster_product::ProductGeneration;
+
+    use super::*;
+    use crate::{
+        DesktopSessionNavigationGeneration, DesktopSessionPageDirection, DesktopSnapshotEpoch,
+    };
+
+    struct AcceptingPageSink;
+
+    impl DesktopSessionPageIntentSink for AcceptingPageSink {
+        fn submit(&self, _intent: DesktopSessionPageIntent) -> DesktopSessionPageIntentAdmission {
+            DesktopSessionPageIntentAdmission::Accepted
+        }
+    }
+
+    fn intent() -> DesktopSessionPageIntent {
+        let epoch = match DesktopSnapshotEpoch::new(1) {
+            Some(epoch) => epoch,
+            None => unreachable!("nonzero epoch"),
+        };
+        let generation = match DesktopSessionNavigationGeneration::new(1) {
+            Some(generation) => generation,
+            None => unreachable!("nonzero generation"),
+        };
+        DesktopSessionPageIntent::new(
+            epoch,
+            ProductGeneration::INITIAL,
+            generation,
+            DesktopSessionPageDirection::Newest,
+        )
+    }
+
+    #[test]
+    fn session_page_router_is_single_install_and_rejects_borrow_contention() {
+        let router = DesktopSessionPageIntentRouter::new();
+        assert_eq!(
+            router.submit(intent()),
+            DesktopSessionPageIntentAdmission::Rejected
+        );
+        assert!(router.install(Rc::new(AcceptingPageSink)).is_ok());
+        assert!(router.install(Rc::new(AcceptingPageSink)).is_err());
+        assert_eq!(
+            router.submit(intent()),
+            DesktopSessionPageIntentAdmission::Accepted
+        );
+
+        let blocked = DesktopSessionPageIntentRouter::new();
+        let _borrow = blocked.sink.borrow_mut();
+        assert_eq!(
+            blocked.submit(intent()),
+            DesktopSessionPageIntentAdmission::Rejected
+        );
     }
 }

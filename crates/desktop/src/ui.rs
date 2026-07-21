@@ -25,12 +25,13 @@ use crate::{
     DesktopNotificationsProjection, DesktopOperationSnapshot, DesktopPresentationApplyOutcome,
     DesktopPresentationStyle, DesktopProjectsProjection, DesktopQuality,
     DesktopReliableStateProjection, DesktopReminderPolicy, DesktopRgb,
-    DesktopSessionDetailIntentAdmission, DesktopSessionDetailIntentSink, DesktopSessionsProjection,
-    DesktopSnapshotBridge, DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue,
-    DesktopTrayAvailability, DesktopValueAvailability, HistoryDayRow, InAppNotificationRow,
-    MainWindow, ModelUsageRow, ProjectUsageRow, RecentActivityRow, ReminderCustomLeadRow,
-    ReminderScopeRow, RestorePointRow, RouteRow, SessionDetailBreakdownRow, SessionListRow,
-    UiPalette, UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
+    DesktopSessionDetailIntentAdmission, DesktopSessionDetailIntentSink,
+    DesktopSessionPageIntentSink, DesktopSessionsProjection, DesktopSnapshotBridge,
+    DesktopSnapshotEpoch, DesktopSnapshotReceiver, DesktopTokenValue, DesktopTrayAvailability,
+    DesktopValueAvailability, HistoryDayRow, InAppNotificationRow, MainWindow, ModelUsageRow,
+    ProjectUsageRow, RecentActivityRow, ReminderCustomLeadRow, ReminderScopeRow, RestorePointRow,
+    RouteRow, SessionDetailBreakdownRow, SessionListRow, UiPalette, UnavailableDesktopIntentSink,
+    UnavailableDesktopSessionDetailIntentSink, UnavailableDesktopSessionPageIntentSink,
     in_app_notification::NotificationEpochState,
     native_tray::DesktopNativeTrayOwner,
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
@@ -444,11 +445,28 @@ impl DesktopShell {
         intent_sink: Rc<dyn DesktopIntentSink>,
         session_sink: Rc<dyn DesktopSessionDetailIntentSink>,
     ) -> Result<Self, slint::PlatformError> {
+        Self::new_with_reliable_state_and_session_sinks(
+            snapshot,
+            reliable_state,
+            intent_sink,
+            session_sink,
+            Rc::new(UnavailableDesktopSessionPageIntentSink),
+        )
+    }
+
+    pub fn new_with_reliable_state_and_session_sinks(
+        snapshot: &ProductSnapshot,
+        reliable_state: DesktopReliableStateProjection,
+        intent_sink: Rc<dyn DesktopIntentSink>,
+        session_sink: Rc<dyn DesktopSessionDetailIntentSink>,
+        session_page_sink: Rc<dyn DesktopSessionPageIntentSink>,
+    ) -> Result<Self, slint::PlatformError> {
         Self::new_with_optional_lifecycle_sink(
             snapshot,
             reliable_state,
             intent_sink,
             session_sink,
+            session_page_sink,
             None,
         )
     }
@@ -460,11 +478,30 @@ impl DesktopShell {
         session_sink: Rc<dyn DesktopSessionDetailIntentSink>,
         lifecycle_sink: Rc<dyn DesktopLifecycleIntentSink>,
     ) -> Result<Self, slint::PlatformError> {
+        Self::new_with_reliable_state_and_all_session_sinks(
+            snapshot,
+            reliable_state,
+            intent_sink,
+            session_sink,
+            Rc::new(UnavailableDesktopSessionPageIntentSink),
+            lifecycle_sink,
+        )
+    }
+
+    pub fn new_with_reliable_state_and_all_session_sinks(
+        snapshot: &ProductSnapshot,
+        reliable_state: DesktopReliableStateProjection,
+        intent_sink: Rc<dyn DesktopIntentSink>,
+        session_sink: Rc<dyn DesktopSessionDetailIntentSink>,
+        session_page_sink: Rc<dyn DesktopSessionPageIntentSink>,
+        lifecycle_sink: Rc<dyn DesktopLifecycleIntentSink>,
+    ) -> Result<Self, slint::PlatformError> {
         Self::new_with_optional_lifecycle_sink(
             snapshot,
             reliable_state,
             intent_sink,
             session_sink,
+            session_page_sink,
             Some(lifecycle_sink),
         )
     }
@@ -474,6 +511,7 @@ impl DesktopShell {
         reliable_state: DesktopReliableStateProjection,
         intent_sink: Rc<dyn DesktopIntentSink>,
         session_sink: Rc<dyn DesktopSessionDetailIntentSink>,
+        _session_page_sink: Rc<dyn DesktopSessionPageIntentSink>,
         lifecycle_sink: Option<Rc<dyn DesktopLifecycleIntentSink>>,
     ) -> Result<Self, slint::PlatformError> {
         let window = MainWindow::new()?;
@@ -3090,6 +3128,7 @@ mod duration_tests {
         DesktopPresentationStyle, DesktopReliableStateHealth, DesktopReliableStateInput,
         DesktopReliableStateSummary, DesktopReminderPolicy, DesktopReminderSyncState, DesktopSkin,
         UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
+        UnavailableDesktopSessionPageIntentSink,
     };
     use tokenmaster_product::ProductReducer;
 
@@ -3475,6 +3514,7 @@ mod duration_tests {
             DesktopReliableStateProjection::unavailable(),
             Rc::new(UnavailableDesktopIntentSink),
             Rc::new(UnavailableDesktopSessionDetailIntentSink),
+            Rc::new(UnavailableDesktopSessionPageIntentSink),
             None,
         )
         .map_err(|_| String::from("desktop shell"))?;

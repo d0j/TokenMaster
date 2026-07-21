@@ -3,8 +3,9 @@ mod support;
 use tempfile::TempDir;
 use tokenmaster_desktop::{
     DesktopDashboardSectionState, DesktopFreshness, DesktopQuality, DesktopRouteKey,
-    DesktopSessionBreakdownKind, DesktopSessionDetailState, DesktopSnapshotEpoch, DesktopState,
-    MAX_SESSION_DETAIL_MODEL_ROWS, MAX_SESSION_DETAIL_PROJECT_ROWS, MAX_SESSION_ROWS,
+    DesktopSessionBreakdownKind, DesktopSessionDetailState, DesktopSessionPageDirection,
+    DesktopSessionPageKind, DesktopSnapshotEpoch, DesktopState, MAX_SESSION_DETAIL_MODEL_ROWS,
+    MAX_SESSION_DETAIL_PROJECT_ROWS, MAX_SESSION_ROWS,
 };
 use tokenmaster_product::{ProductAttemptGeneration, ProductReducer};
 use tokenmaster_query::{PageSize, QueryErrorCode, QueryService, UsageSessionPageRequest};
@@ -79,6 +80,123 @@ fn ready_sessions_map_one_newest_first_page_and_preserve_has_more() {
             .windows(2)
             .all(|pair| { pair[0].last_timestamp_seconds() >= pair[1].last_timestamp_seconds() })
     );
+}
+
+#[test]
+fn session_navigation_projects_page_kind_and_rejects_only_its_pending_handoff() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("sessions-navigation.sqlite3");
+    seed(&path);
+    add_distinct_usage_rows(&path, 2);
+    let mut service = QueryService::open(&path, FixedClock).expect("query service");
+    let status = service.product_data_status().expect("status");
+    let newest = service
+        .usage_sessions(
+            UsageSessionPageRequest::first(PageSize::new(1).expect("page"), Vec::new())
+                .expect("newest request"),
+        )
+        .expect("newest page");
+    let continuation = service
+        .usage_sessions(
+            UsageSessionPageRequest::continuation(
+                PageSize::new(1).expect("page"),
+                newest
+                    .payload()
+                    .next_cursor()
+                    .expect("continuation cursor")
+                    .clone(),
+                Vec::new(),
+            )
+            .expect("continuation request"),
+        )
+        .expect("continuation page");
+
+    let mut reducer = ProductReducer::new();
+    reducer
+        .publish_data_status(attempt(1), status)
+        .expect("publish status");
+    reducer
+        .publish_sessions(attempt(1), newest)
+        .expect("publish newest");
+    let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+    let mut state = DesktopState::new(&reducer.snapshot(), DesktopRouteKey::Sessions);
+    assert_eq!(
+        state.apply_snapshot_for_epoch(epoch, &reducer.snapshot()),
+        tokenmaster_desktop::DesktopApplyOutcome::Accepted
+    );
+    assert_eq!(
+        state.projection().sessions().page_kind(),
+        Some(DesktopSessionPageKind::Newest)
+    );
+    let debug = format!("{:?}", state.projection().sessions());
+    assert!(!debug.contains("cursor"));
+    assert!(!debug.contains("UsageSessionKey"));
+    assert!(!state.projection().sessions().navigation_pending());
+
+    state.select_session_row(0).expect("select visible row");
+    assert_eq!(
+        state.projection().sessions().detail().state(),
+        DesktopSessionDetailState::Loading
+    );
+    let next = state
+        .request_session_page(DesktopSessionPageDirection::Next)
+        .expect("next intent");
+    assert_eq!(next.direction(), DesktopSessionPageDirection::Next);
+    assert!(state.projection().sessions().navigation_pending());
+    assert_eq!(
+        state.projection().sessions().detail().state(),
+        DesktopSessionDetailState::Idle
+    );
+    state.reject_session_page(next);
+    assert!(!state.projection().sessions().navigation_pending());
+
+    reducer
+        .publish_sessions(attempt(2), continuation)
+        .expect("publish continuation");
+    assert_eq!(
+        state.apply_snapshot_for_epoch(epoch, &reducer.snapshot()),
+        tokenmaster_desktop::DesktopApplyOutcome::Accepted
+    );
+    assert_eq!(
+        state.projection().sessions().page_kind(),
+        Some(DesktopSessionPageKind::Continuation)
+    );
+    assert!(!state.projection().sessions().navigation_pending());
+    let newest = state
+        .request_session_page(DesktopSessionPageDirection::Newest)
+        .expect("newest intent from continuation");
+    assert_eq!(newest.direction(), DesktopSessionPageDirection::Newest);
+    let replacement_epoch = DesktopSnapshotEpoch::new(2).expect("replacement epoch");
+    assert_eq!(
+        state.apply_snapshot_for_epoch(replacement_epoch, &reducer.snapshot()),
+        tokenmaster_desktop::DesktopApplyOutcome::Accepted
+    );
+    assert!(!state.projection().sessions().navigation_pending());
+    let after_replacement = state
+        .request_session_page(DesktopSessionPageDirection::Newest)
+        .expect("newest intent after replacement");
+    assert!(
+        after_replacement.navigation_generation().get() > newest.navigation_generation().get(),
+        "backend epoch replacement must not reset local navigation generation"
+    );
+}
+
+#[test]
+fn session_navigation_requires_epoch_and_retained_recoverable_page() {
+    let reducer = ProductReducer::new();
+    let snapshot = reducer.snapshot();
+    let mut state = DesktopState::new(&snapshot, DesktopRouteKey::Sessions);
+    assert!(
+        state
+            .request_session_page(DesktopSessionPageDirection::Next)
+            .is_err()
+    );
+    assert_eq!(
+        state.projection().sessions().page_kind(),
+        None,
+        "unavailable sessions never invent a page kind"
+    );
+    assert!(!state.projection().sessions().navigation_pending());
 }
 
 #[test]

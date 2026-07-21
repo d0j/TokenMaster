@@ -18,8 +18,9 @@ use tokenmaster_desktop::{
     DesktopReliableStateProjection, DesktopReminderPolicy, DesktopReminderSyncState,
     DesktopRestoreSelection, DesktopRuntimeObservation, DesktopSessionDetailIntent,
     DesktopSessionDetailIntentAdmission, DesktopSessionDetailIntentRouter,
-    DesktopSessionDetailIntentSink, DesktopShell, DesktopSnapshotBridge, MainWindow,
-    select_production_renderer,
+    DesktopSessionDetailIntentSink, DesktopSessionPageIntent, DesktopSessionPageIntentAdmission,
+    DesktopSessionPageIntentRouter, DesktopSessionPageIntentSink, DesktopShell,
+    DesktopSnapshotBridge, MainWindow, select_production_renderer,
 };
 use tokenmaster_engine::{
     RefreshOutcome, RefreshUrgency, WorkerCompletion, WorkerCompletionNotifier,
@@ -196,22 +197,25 @@ impl Application {
         let bundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
         let intent_router = Rc::new(DesktopIntentRouter::new());
         let session_detail_router = Rc::new(DesktopSessionDetailIntentRouter::new());
+        let session_page_router = Rc::new(DesktopSessionPageIntentRouter::new());
         let lifecycle_router = Rc::new(DesktopLifecycleIntentRouter::new());
         #[cfg(not(test))]
-        let shell = DesktopShell::new_with_reliable_state_and_all_sinks(
+        let shell = DesktopShell::new_with_reliable_state_and_all_session_sinks(
             &initial,
             reliable_state,
             intent_router.clone(),
             session_detail_router.clone(),
+            session_page_router.clone(),
             lifecycle_router.clone(),
         )
         .map_err(|_| ApplicationError::ui_unavailable())?;
         #[cfg(test)]
-        let shell = DesktopShell::new_with_reliable_state_and_session_sink(
+        let shell = DesktopShell::new_with_reliable_state_and_session_sinks(
             &initial,
             reliable_state,
             intent_router.clone(),
             session_detail_router.clone(),
+            session_page_router.clone(),
         )
         .map_err(|_| ApplicationError::ui_unavailable())?;
         let bridge_factory = shell.bridge_factory();
@@ -315,6 +319,11 @@ impl Application {
             .map_err(|_| ApplicationError::internal())?;
         session_detail_router
             .install(Rc::new(ApplicationSessionDetailIntentSink::new(
+                Arc::downgrade(&bundle),
+            )))
+            .map_err(|_| ApplicationError::internal())?;
+        session_page_router
+            .install(Rc::new(ApplicationSessionPageIntentSink::new(
                 Arc::downgrade(&bundle),
             )))
             .map_err(|_| ApplicationError::internal())?;
@@ -895,6 +904,10 @@ struct ApplicationSessionDetailIntentSink {
     bundle: Weak<Mutex<ApplicationBundleSlot>>,
 }
 
+struct ApplicationSessionPageIntentSink {
+    bundle: Weak<Mutex<ApplicationBundleSlot>>,
+}
+
 impl ApplicationDesktopLifecycleSink {
     const fn new(window: slint::Weak<MainWindow>) -> Self {
         Self { window }
@@ -956,6 +969,12 @@ impl ApplicationSessionDetailIntentSink {
     }
 }
 
+impl ApplicationSessionPageIntentSink {
+    fn new(bundle: Weak<Mutex<ApplicationBundleSlot>>) -> Self {
+        Self { bundle }
+    }
+}
+
 impl DesktopSessionDetailIntentSink for ApplicationSessionDetailIntentSink {
     fn submit(&self, intent: DesktopSessionDetailIntent) -> DesktopSessionDetailIntentAdmission {
         let Some(bundle) = self.bundle.upgrade() else {
@@ -973,6 +992,28 @@ impl DesktopSessionDetailIntentSink for ApplicationSessionDetailIntentSink {
             ) => DesktopSessionDetailIntentAdmission::Accepted,
             Ok(DesktopRefreshAdmission::DeadlineExceeded { .. }) | Err(_) => {
                 DesktopSessionDetailIntentAdmission::Rejected
+            }
+        }
+    }
+}
+
+impl DesktopSessionPageIntentSink for ApplicationSessionPageIntentSink {
+    fn submit(&self, intent: DesktopSessionPageIntent) -> DesktopSessionPageIntentAdmission {
+        let Some(bundle) = self.bundle.upgrade() else {
+            return DesktopSessionPageIntentAdmission::Rejected;
+        };
+        let Ok(slot) = bundle.try_lock() else {
+            return DesktopSessionPageIntentAdmission::Rejected;
+        };
+        let Some(bundle) = slot.as_ref() else {
+            return DesktopSessionPageIntentAdmission::Rejected;
+        };
+        match bundle.controller.request_session_page(intent) {
+            Ok(
+                DesktopRefreshAdmission::Started { .. } | DesktopRefreshAdmission::Coalesced { .. },
+            ) => DesktopSessionPageIntentAdmission::Accepted,
+            Ok(DesktopRefreshAdmission::DeadlineExceeded { .. }) | Err(_) => {
+                DesktopSessionPageIntentAdmission::Rejected
             }
         }
     }

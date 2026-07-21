@@ -6,9 +6,10 @@ use tokenmaster_product::{
 };
 
 use crate::{
-    DesktopActivityProjection, DesktopDashboardProjection, DesktopHistoryProjection,
-    DesktopModelsProjection, DesktopNotificationsProjection, DesktopProjectsProjection,
-    DesktopSessionDetailIntent, DesktopSessionsProjection,
+    DesktopActivityProjection, DesktopDashboardProjection, DesktopDashboardSectionState,
+    DesktopHistoryProjection, DesktopModelsProjection, DesktopNotificationsProjection,
+    DesktopProjectsProjection, DesktopSessionDetailIntent, DesktopSessionNavigationGeneration,
+    DesktopSessionPageDirection, DesktopSessionPageIntent, DesktopSessionsProjection,
 };
 
 pub const DESKTOP_ROUTE_COUNT: usize = ProductRoute::ALL.len();
@@ -366,6 +367,8 @@ pub struct DesktopState {
     snapshot_epoch: Option<DesktopSnapshotEpoch>,
     active_session_detail: Option<DesktopSessionDetailIntent>,
     next_session_selection_generation: u64,
+    active_session_navigation: Option<DesktopSessionPageIntent>,
+    next_session_navigation_generation: u64,
 }
 
 impl DesktopState {
@@ -376,6 +379,8 @@ impl DesktopState {
             snapshot_epoch: None,
             active_session_detail: None,
             next_session_selection_generation: 1,
+            active_session_navigation: None,
+            next_session_navigation_generation: 1,
         }
     }
 
@@ -428,6 +433,59 @@ impl DesktopState {
         }
     }
 
+    pub fn request_session_page(
+        &mut self,
+        direction: DesktopSessionPageDirection,
+    ) -> Result<DesktopSessionPageIntent, DesktopSessionPageNavigationError> {
+        let epoch = self
+            .snapshot_epoch
+            .ok_or(DesktopSessionPageNavigationError::Unavailable)?;
+        if self.active_session_navigation.is_some() {
+            return Err(DesktopSessionPageNavigationError::Pending);
+        }
+        let sessions = self.projection.sessions();
+        match direction {
+            DesktopSessionPageDirection::Next
+                if sessions.state() != DesktopDashboardSectionState::Ready
+                    || sessions.has_more() != Some(true) =>
+            {
+                return Err(DesktopSessionPageNavigationError::Unavailable);
+            }
+            DesktopSessionPageDirection::Newest
+                if sessions.state() != DesktopDashboardSectionState::Ready
+                    || sessions.page_kind()
+                        != Some(crate::DesktopSessionPageKind::Continuation) =>
+            {
+                return Err(DesktopSessionPageNavigationError::Unavailable);
+            }
+            DesktopSessionPageDirection::Newest | DesktopSessionPageDirection::Next => {}
+        }
+        let generation =
+            DesktopSessionNavigationGeneration::new(self.next_session_navigation_generation)
+                .ok_or(DesktopSessionPageNavigationError::CapacityExceeded)?;
+        self.next_session_navigation_generation = self
+            .next_session_navigation_generation
+            .checked_add(1)
+            .unwrap_or(0);
+        let intent = DesktopSessionPageIntent::new(
+            epoch,
+            self.projection.generation(),
+            generation,
+            direction,
+        );
+        self.active_session_navigation = Some(intent);
+        self.active_session_detail = None;
+        self.projection.sessions.start_navigation();
+        Ok(intent)
+    }
+
+    pub fn reject_session_page(&mut self, intent: DesktopSessionPageIntent) {
+        if self.active_session_navigation == Some(intent) {
+            self.active_session_navigation = None;
+            self.projection.sessions.reject_navigation();
+        }
+    }
+
     pub fn apply_snapshot(&mut self, snapshot: &ProductSnapshot) -> DesktopApplyOutcome {
         if self.snapshot_epoch.is_some() || snapshot.generation() <= self.projection.generation() {
             return DesktopApplyOutcome::IgnoredNotNewer;
@@ -459,6 +517,7 @@ impl DesktopState {
     }
 
     fn replace_projection(&mut self, snapshot: &ProductSnapshot, replace_backend: bool) {
+        self.active_session_navigation = None;
         let active = if replace_backend {
             None
         } else {
@@ -475,6 +534,25 @@ impl DesktopState {
         );
     }
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopSessionPageNavigationError {
+    Unavailable,
+    Pending,
+    CapacityExceeded,
+}
+
+impl fmt::Display for DesktopSessionPageNavigationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Unavailable => "session_page_unavailable",
+            Self::Pending => "session_page_pending",
+            Self::CapacityExceeded => "session_page_capacity_exceeded",
+        })
+    }
+}
+
+impl std::error::Error for DesktopSessionPageNavigationError {}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DesktopSessionSelectionError {

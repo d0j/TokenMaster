@@ -5,6 +5,10 @@ use std::time::{Duration, Instant};
 
 use rusqlite::Connection;
 use tempfile::TempDir;
+use tokenmaster_desktop::{
+    DesktopSessionNavigationGeneration, DesktopSessionPageDirection, DesktopSessionPageIntent,
+    DesktopSessionPageIntentAdmission, DesktopSessionPageIntentSink,
+};
 use tokenmaster_engine::RefreshOutcome;
 use tokenmaster_platform::{
     BackupDirectory, ControlledFileDialog, DurableFileTarget, FileDialogFileType, FileDialogResult,
@@ -613,6 +617,40 @@ fn session_detail_sink_never_waits_for_a_busy_bundle_owner() {
     worker.join().expect("session admission worker");
 
     assert_eq!(timely, Ok(DesktopSessionDetailIntentAdmission::Rejected));
+}
+
+#[test]
+fn session_page_sink_rejects_missing_weak_and_busy_bundle_without_waiting() {
+    let bundle: SharedBundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
+    let sink = ApplicationSessionPageIntentSink::new(Arc::downgrade(&bundle));
+    let intent = DesktopSessionPageIntent::new(
+        tokenmaster_desktop::DesktopSnapshotEpoch::new(1).expect("epoch"),
+        ProductReducer::new().snapshot().generation(),
+        DesktopSessionNavigationGeneration::new(1).expect("navigation generation"),
+        DesktopSessionPageDirection::Newest,
+    );
+    assert_eq!(
+        sink.submit(intent),
+        DesktopSessionPageIntentAdmission::Rejected
+    );
+
+    let orphaned_bundle: SharedBundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
+    let orphaned_sink = ApplicationSessionPageIntentSink::new(Arc::downgrade(&orphaned_bundle));
+    drop(orphaned_bundle);
+    assert_eq!(
+        orphaned_sink.submit(intent),
+        DesktopSessionPageIntentAdmission::Rejected
+    );
+
+    let guard = bundle.lock().expect("busy bundle guard");
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    let worker = std::thread::spawn(move || {
+        let _ = sender.send(sink.submit(intent));
+    });
+    let timely = receiver.recv_timeout(Duration::from_millis(100));
+    drop(guard);
+    worker.join().expect("session page admission worker");
+    assert_eq!(timely, Ok(DesktopSessionPageIntentAdmission::Rejected));
 }
 
 #[test]
