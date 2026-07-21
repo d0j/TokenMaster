@@ -42,10 +42,20 @@ component SessionsHeaderCard inherits Rectangle {
             Text { text: root.page-status-label; color: UiTokens.accent; font-size: 12px; horizontal-stretch: 1; }
             Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: 11px; }
         }
-        navigation-focus := FocusScope {
-            height: 32px;
-            focus-on-tab-navigation: true;
+        next-navigation-focus := FocusScope {
+            width: 0px;
+            height: 0px;
+            focus-on-tab-navigation: root.next-enabled;
             forward-focus: next-page-button;
+        }
+        back-navigation-focus := FocusScope {
+            width: 0px;
+            height: 0px;
+            focus-on-tab-navigation: !root.next-enabled && root.back-to-newest-enabled;
+            forward-focus: back-to-newest-button;
+        }
+        navigation-controls := Rectangle {
+            height: 32px;
             HorizontalLayout {
                 spacing: UiTokens.space-sm;
                 next-page-button := Button {

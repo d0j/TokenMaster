@@ -14,7 +14,7 @@ use tokenmaster_desktop::{
     DesktopSessionPageDirection, DesktopSessionPageIntent, DesktopSessionPageIntentAdmission,
     DesktopSessionPageIntentSink, DesktopShell, DesktopSnapshotEpoch,
 };
-use tokenmaster_product::{ProductAttemptGeneration, ProductReducer};
+use tokenmaster_product::{ProductAttemptGeneration, ProductReducer, ProductSnapshot};
 use tokenmaster_query::{
     BenefitOverviewRequest, GitOutputRequest, LatestActivityRequest, PageSize, QueryErrorCode,
     QueryService, UsageAnalyticsRequest, UsageBreakdownKind, UsageRange, UsageSeriesSelection,
@@ -61,6 +61,17 @@ impl DesktopSessionPageIntentSink for RecordingSessionPageSink {
 #[derive(Default)]
 struct RejectingSessionPageSink {
     intents: RefCell<Vec<DesktopSessionPageIntent>>,
+}
+
+struct RetainedSessionPageSink {
+    intents: Rc<RefCell<Vec<DesktopSessionPageIntent>>>,
+}
+
+impl DesktopSessionPageIntentSink for RetainedSessionPageSink {
+    fn submit(&self, intent: DesktopSessionPageIntent) -> DesktopSessionPageIntentAdmission {
+        self.intents.borrow_mut().push(intent);
+        DesktopSessionPageIntentAdmission::Accepted
+    }
 }
 
 impl DesktopSessionPageIntentSink for RejectingSessionPageSink {
@@ -1274,6 +1285,28 @@ fn sessions_pagination_controls_are_accessible_replace_only_and_block_selection_
     assert_eq!(next.len(), 1);
     assert_eq!(newest.len(), 1);
 
+    for (width, layout) in [(700, "narrow"), (1120, "wide")] {
+        window
+            .window()
+            .set_size(slint::PhysicalSize::new(width, 720));
+        assert_eq!(window.get_sessions_layout_mode(), layout);
+        for label in ["Next page", "Back to newest"] {
+            assert_eq!(
+                ElementQuery::from_root(window)
+                    .match_accessible_role(AccessibleRole::Button)
+                    .match_predicate(move |element| {
+                        element
+                            .accessible_label()
+                            .is_some_and(|value| value == label)
+                    })
+                    .find_all()
+                    .len(),
+                1,
+                "{label} remains accessible in {layout} layout"
+            );
+        }
+    }
+
     dispatch_key(window, Key::Tab);
     next[0].mock_single_click(PointerEventButton::Left);
     assert_eq!(page_sink.intents.borrow().len(), 1);
@@ -1428,8 +1461,13 @@ fn sessions_pagination_ui_contract_rejects_identity_and_append_paths() {
     assert!(main.contains("sessions-navigation-pending"));
     assert!(main.contains("sessions-next-enabled"));
     assert!(main.contains("sessions-back-to-newest-enabled"));
-    assert!(view.contains("focus-on-tab-navigation: true"));
-    assert_eq!(ui.matches("set_session_list_rows(").count(), 1);
+    assert!(view.contains("focus-on-tab-navigation: root.next-enabled"));
+    assert!(
+        view.contains("focus-on-tab-navigation: !root.next-enabled && root.back-to-newest-enabled")
+    );
+    assert!(view.contains("forward-focus: next-page-button"));
+    assert!(view.contains("forward-focus: back-to-newest-button"));
+    assert!(session_model_replacement_is_pinned(ui));
     let sessions_projection = ui
         .split("fn apply_sessions_projection")
         .nth(1)
@@ -1456,6 +1494,190 @@ fn sessions_pagination_ui_contract_rejects_identity_and_append_paths() {
         .next()
         .expect("route wiring body");
     assert!(!route_wiring.contains("apply_sessions_projection"));
+}
+
+#[test]
+fn sessions_pagination_model_identity_does_not_churn_for_pending_or_route_selection() {
+    i_slint_backend_testing::init_no_event_loop();
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory.path().join("ui-sessions-model-identity.sqlite3");
+    let reducer = ready_reducer_with_usage(&path, 0, 65);
+    let snapshot = reducer.snapshot();
+    let page_sink = Rc::new(RecordingSessionPageSink::default());
+    let shell = DesktopShell::new_with_reliable_state_and_session_sinks(
+        &snapshot,
+        DesktopReliableStateProjection::unavailable(),
+        Rc::new(RejectingIntentSink),
+        Rc::new(RecordingSessionDetailSink::default()),
+        page_sink,
+    )
+    .expect("desktop shell");
+    shell
+        .apply_snapshot_for_epoch(DesktopSnapshotEpoch::new(1).expect("epoch"), &snapshot)
+        .expect("bind snapshot");
+    let window = shell.window();
+    window.invoke_select_route(SharedString::from("sessions"));
+    let initial = window.get_session_list_rows();
+    window.invoke_request_session_page_next();
+    assert!(window.get_sessions_navigation_pending());
+    assert_eq!(window.get_session_list_rows(), initial);
+    window.invoke_select_route(SharedString::from("dashboard"));
+    window.invoke_select_route(SharedString::from("sessions"));
+    assert_eq!(window.get_session_list_rows(), initial);
+}
+
+#[test]
+fn shell_retains_session_page_sink_after_caller_rc_is_dropped() {
+    i_slint_backend_testing::init_no_event_loop();
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory.path().join("ui-sessions-retained-sink.sqlite3");
+    let reducer = ready_reducer_with_usage(&path, 0, 65);
+    let snapshot = reducer.snapshot();
+    let intents = Rc::new(RefCell::new(Vec::new()));
+    let page_sink: Rc<dyn DesktopSessionPageIntentSink> = Rc::new(RetainedSessionPageSink {
+        intents: intents.clone(),
+    });
+    let weak = Rc::downgrade(&page_sink);
+    let shell = DesktopShell::new_with_reliable_state_and_session_sinks(
+        &snapshot,
+        DesktopReliableStateProjection::unavailable(),
+        Rc::new(RejectingIntentSink),
+        Rc::new(RecordingSessionDetailSink::default()),
+        page_sink.clone(),
+    )
+    .expect("desktop shell");
+    shell
+        .apply_snapshot_for_epoch(DesktopSnapshotEpoch::new(1).expect("epoch"), &snapshot)
+        .expect("bind snapshot");
+    drop(page_sink);
+    assert!(weak.upgrade().is_some());
+    shell.window().invoke_request_session_page_next();
+    assert_eq!(intents.borrow().len(), 1);
+    drop(shell);
+    assert!(weak.upgrade().is_none());
+}
+
+fn session_model_replacement_is_pinned(ui: &str) -> bool {
+    const REPLACEMENT: &str = "window.set_session_list_rows(model(rows));";
+    if ui.matches(REPLACEMENT).count() != 1 {
+        return false;
+    }
+    let sessions_projection = ui
+        .split("fn apply_sessions_projection")
+        .nth(1)
+        .expect("sessions projection")
+        .split("fn apply_session_detail_projection")
+        .next()
+        .expect("sessions projection body");
+    if !sessions_projection.contains(REPLACEMENT) {
+        return false;
+    }
+    let route_wiring = ui
+        .split("fn wire_route_selection")
+        .nth(1)
+        .expect("route wiring")
+        .split("fn wire_command_palette")
+        .next()
+        .expect("route wiring body");
+    if route_wiring.contains(REPLACEMENT) {
+        return false;
+    }
+
+    let moved = ui
+        .replacen(REPLACEMENT, "", 1)
+        .replacen(
+            "apply_selected_route(&window, &projection, &compact_window_mode);",
+            "apply_selected_route(&window, &projection, &compact_window_mode);\n        window.set_session_list_rows(model(rows));",
+            1,
+        );
+    !moved.is_empty() && !moved.eq(ui) && !session_model_replacement_is_pinned(&moved)
+}
+
+#[test]
+fn tab_reaches_the_enabled_next_button_without_pointer_activation() {
+    i_slint_backend_testing::init_no_event_loop();
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory.path().join("ui-sessions-tab-next.sqlite3");
+    let reducer = ready_reducer_with_usage(&path, 0, 65);
+    let snapshot = reducer.snapshot();
+    assert_session_page_direction_reachable_by_tab(&snapshot, DesktopSessionPageDirection::Next);
+}
+
+#[test]
+fn tab_reaches_the_enabled_back_to_newest_button_without_pointer_activation() {
+    i_slint_backend_testing::init_no_event_loop();
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory.path().join("ui-sessions-tab-newest.sqlite3");
+    let mut reducer = ready_reducer_with_usage(&path, 0, 65);
+    let mut service = QueryService::open(&path, FixedClock).expect("query service");
+    let newest = service
+        .usage_sessions(
+            UsageSessionPageRequest::first(PageSize::new(64).expect("page"), Vec::new())
+                .expect("newest request"),
+        )
+        .expect("newest page");
+    let continuation = service
+        .usage_sessions(
+            UsageSessionPageRequest::continuation(
+                PageSize::new(64).expect("page"),
+                newest.payload().next_cursor().expect("cursor").clone(),
+                Vec::new(),
+            )
+            .expect("continuation request"),
+        )
+        .expect("continuation page");
+    reducer
+        .publish_sessions(
+            ProductAttemptGeneration::new(2).expect("attempt"),
+            continuation,
+        )
+        .expect("publish continuation");
+    let snapshot = reducer.snapshot();
+    assert_session_page_direction_reachable_by_tab(&snapshot, DesktopSessionPageDirection::Newest);
+}
+
+fn assert_session_page_direction_reachable_by_tab(
+    snapshot: &ProductSnapshot,
+    direction: DesktopSessionPageDirection,
+) {
+    let mut reachable_at = None;
+    for tab_count in 1..=32 {
+        let page_sink = Rc::new(RecordingSessionPageSink::default());
+        let shell = DesktopShell::new_with_reliable_state_and_session_sinks(
+            snapshot,
+            DesktopReliableStateProjection::unavailable(),
+            Rc::new(RejectingIntentSink),
+            Rc::new(RecordingSessionDetailSink::default()),
+            page_sink.clone(),
+        )
+        .expect("desktop shell");
+        shell
+            .apply_snapshot_for_epoch(DesktopSnapshotEpoch::new(1).expect("epoch"), snapshot)
+            .expect("bind snapshot");
+        let window = shell.window();
+        window.invoke_select_route(SharedString::from("sessions"));
+        window.show().expect("show sessions window");
+        window
+            .window()
+            .dispatch_event(WindowEvent::WindowActiveChanged(true));
+        for _ in 0..tab_count {
+            dispatch_key(window, Key::Tab);
+        }
+        dispatch_key(window, Key::Return);
+        if page_sink
+            .intents
+            .borrow()
+            .first()
+            .is_some_and(|intent| intent.direction() == direction)
+        {
+            reachable_at = Some(tab_count);
+            break;
+        }
+    }
+    assert!(
+        reachable_at.is_some(),
+        "{direction:?} must be reachable by Tab then Return"
+    );
 }
 
 fn dispatch_key(window: &tokenmaster_desktop::MainWindow, key: Key) {
