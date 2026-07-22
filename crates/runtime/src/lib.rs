@@ -12,6 +12,7 @@ mod incremental;
 mod lease;
 mod lifecycle;
 mod live;
+mod provider;
 mod publication;
 mod quota;
 mod recovery;
@@ -33,6 +34,9 @@ pub use incremental::{IncrementalRefreshOutcome, IncrementalRefreshReport, refre
 pub use lease::RuntimeWriterLease;
 pub use lifecycle::{LivePhase, LiveRefreshKind, LiveRefreshSnapshot, LiveRuntimeSnapshot};
 pub use live::LiveRuntime;
+pub use provider::{
+    CodexUsageProviderFactory, LiveProviderAdapter, ProviderWatchRoots, UsageProviderFactory,
+};
 pub use publication::{
     EngineDiagnostics, EnginePublicationQuality, EngineSnapshot, EngineSnapshotGeneration,
 };

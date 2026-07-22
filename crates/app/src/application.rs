@@ -40,7 +40,7 @@ use tokenmaster_product::{
 };
 use tokenmaster_runtime::{
     BenefitReminderRuntime, BenefitReminderRuntimeConfig, CodexQuotaRuntime,
-    CodexQuotaRuntimeConfig, LiveRuntime, RuntimeErrorCode,
+    CodexQuotaRuntimeConfig, CodexUsageProviderFactory, LiveRuntime, RuntimeErrorCode,
 };
 use tokenmaster_state::{
     BackupMaintenanceRuntime, BackupPassphrase, BootstrapOutcome, MAX_CONFIG_PACKAGE_BYTES,
@@ -1641,9 +1641,11 @@ fn start_guarded_live(
         bundle_generation,
     ));
     let notifier_port: Arc<dyn WorkerCompletionNotifier> = notifier.clone();
-    let live = LiveRuntime::start_notified_guarded(
+    let usage_provider =
+        CodexUsageProviderFactory::new(discovery).map_err(|_| ApplicationError::live_runtime())?;
+    let live = LiveRuntime::start_notified_guarded_with_provider(
         data_root.archive_path(),
-        discovery,
+        Box::new(usage_provider),
         guard,
         notifier_port.clone(),
     )

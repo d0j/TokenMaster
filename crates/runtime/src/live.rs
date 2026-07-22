@@ -21,10 +21,10 @@ use crate::publication::{
 };
 use crate::recovery::{StartupRecoveryReport, recover_startup};
 use crate::{
-    BoundedFilesystemWatcher, CodexAdapter, GitRuntime, GitRuntimeConfig,
-    IncrementalRefreshOutcome, RefreshHintSink, RefreshScheduler, RuntimeError, RuntimeErrorCode,
-    SchedulerError, SchedulerErrorCode, SchedulerPhase, StoreArchive, SystemClock, WatcherSnapshot,
-    refresh_incremental,
+    BoundedFilesystemWatcher, CodexUsageProviderFactory, GitRuntime, GitRuntimeConfig,
+    IncrementalRefreshOutcome, LiveProviderAdapter, RefreshHintSink, RefreshScheduler,
+    RuntimeError, RuntimeErrorCode, SchedulerError, SchedulerErrorCode, SchedulerPhase,
+    StoreArchive, SystemClock, UsageProviderFactory, WatcherSnapshot, refresh_incremental,
 };
 
 pub struct LiveRuntime {
@@ -43,7 +43,10 @@ pub struct LiveRuntime {
 
 impl LiveRuntime {
     pub fn start(archive_path: &Path, request: DiscoveryRequest) -> Result<Self, RuntimeError> {
-        Self::start_with_notifier(archive_path, request, None)
+        Self::start_with_provider(
+            archive_path,
+            Box::new(CodexUsageProviderFactory::new(request)?),
+        )
     }
 
     pub fn start_notified(
@@ -51,7 +54,11 @@ impl LiveRuntime {
         request: DiscoveryRequest,
         notifier: Arc<dyn WorkerCompletionNotifier>,
     ) -> Result<Self, RuntimeError> {
-        Self::start_with_notifier(archive_path, request, Some(notifier))
+        Self::start_notified_with_provider(
+            archive_path,
+            Box::new(CodexUsageProviderFactory::new(request)?),
+            notifier,
+        )
     }
 
     /// Starts with the exact platform writer guard already held by state bootstrap.
@@ -60,7 +67,11 @@ impl LiveRuntime {
         request: DiscoveryRequest,
         startup_guard: ExclusiveFileLeaseGuard,
     ) -> Result<Self, RuntimeError> {
-        Self::start_guarded_with_notifier(archive_path, request, startup_guard, None)
+        Self::start_guarded_with_provider(
+            archive_path,
+            Box::new(CodexUsageProviderFactory::new(request)?),
+            startup_guard,
+        )
     }
 
     /// Starts with an existing bootstrap guard and completion notifier.
@@ -70,35 +81,73 @@ impl LiveRuntime {
         startup_guard: ExclusiveFileLeaseGuard,
         notifier: Arc<dyn WorkerCompletionNotifier>,
     ) -> Result<Self, RuntimeError> {
-        Self::start_guarded_with_notifier(archive_path, request, startup_guard, Some(notifier))
+        Self::start_notified_guarded_with_provider(
+            archive_path,
+            Box::new(CodexUsageProviderFactory::new(request)?),
+            startup_guard,
+            notifier,
+        )
     }
 
-    fn start_with_notifier(
+    pub fn start_with_provider(
         archive_path: &Path,
-        request: DiscoveryRequest,
-        notifier: Option<Arc<dyn WorkerCompletionNotifier>>,
+        factory: Box<dyn UsageProviderFactory>,
     ) -> Result<Self, RuntimeError> {
         let lease = crate::RuntimeWriterLease::new(archive_path)?;
         let startup_guard = lease.try_acquire_startup().map_err(startup_port_error)?;
-        Self::start_with_lease_and_guard(archive_path, request, lease, startup_guard, notifier)
+        Self::start_with_lease_and_guard(archive_path, factory, lease, startup_guard, None)
     }
 
-    fn start_guarded_with_notifier(
+    pub fn start_notified_with_provider(
         archive_path: &Path,
-        request: DiscoveryRequest,
+        factory: Box<dyn UsageProviderFactory>,
+        notifier: Arc<dyn WorkerCompletionNotifier>,
+    ) -> Result<Self, RuntimeError> {
+        let lease = crate::RuntimeWriterLease::new(archive_path)?;
+        let startup_guard = lease.try_acquire_startup().map_err(startup_port_error)?;
+        Self::start_with_lease_and_guard(
+            archive_path,
+            factory,
+            lease,
+            startup_guard,
+            Some(notifier),
+        )
+    }
+
+    pub fn start_guarded_with_provider(
+        archive_path: &Path,
+        factory: Box<dyn UsageProviderFactory>,
         startup_guard: ExclusiveFileLeaseGuard,
-        notifier: Option<Arc<dyn WorkerCompletionNotifier>>,
     ) -> Result<Self, RuntimeError> {
         let lease = crate::RuntimeWriterLease::new(archive_path)?;
         lease
             .authorize_startup_guard(&startup_guard)
             .map_err(startup_port_error)?;
-        Self::start_with_lease_and_guard(archive_path, request, lease, startup_guard, notifier)
+        Self::start_with_lease_and_guard(archive_path, factory, lease, startup_guard, None)
+    }
+
+    pub fn start_notified_guarded_with_provider(
+        archive_path: &Path,
+        factory: Box<dyn UsageProviderFactory>,
+        startup_guard: ExclusiveFileLeaseGuard,
+        notifier: Arc<dyn WorkerCompletionNotifier>,
+    ) -> Result<Self, RuntimeError> {
+        let lease = crate::RuntimeWriterLease::new(archive_path)?;
+        lease
+            .authorize_startup_guard(&startup_guard)
+            .map_err(startup_port_error)?;
+        Self::start_with_lease_and_guard(
+            archive_path,
+            factory,
+            lease,
+            startup_guard,
+            Some(notifier),
+        )
     }
 
     fn start_with_lease_and_guard(
         archive_path: &Path,
-        request: DiscoveryRequest,
+        factory: Box<dyn UsageProviderFactory>,
         lease: crate::RuntimeWriterLease,
         startup_guard: ExclusiveFileLeaseGuard,
         notifier: Option<Arc<dyn WorkerCompletionNotifier>>,
@@ -129,11 +178,12 @@ impl LiveRuntime {
         let latest_refresh = Arc::new(Mutex::new(LiveRefreshSnapshot::not_run()));
         let execution_refresh = Arc::clone(&latest_refresh);
         let execution_publication = Arc::clone(&engine_publication);
+        let repository_hints =
+            crate::provider::repository_hints_for(&*factory, git_runtime.ingress());
         let mut execution = LiveExecution {
             clock: Arc::clone(&clock),
             lease,
-            adapter: CodexAdapter::new(request)?
-                .with_repository_hint_ingress(git_runtime.ingress()),
+            adapter: factory.build(repository_hints)?,
             archive,
             watcher_slot: execution_watcher,
             reset_watcher: execution_reset,
@@ -446,7 +496,7 @@ impl Drop for LiveRuntime {
 struct LiveExecution {
     clock: Arc<dyn Clock>,
     lease: crate::RuntimeWriterLease,
-    adapter: CodexAdapter,
+    adapter: Box<dyn LiveProviderAdapter>,
     archive: StoreArchive,
     watcher_slot: Arc<Mutex<Option<BoundedFilesystemWatcher>>>,
     reset_watcher: Arc<AtomicBool>,
@@ -529,7 +579,7 @@ impl LiveExecution {
                 ArchivePublicationQuality::Complete | ArchivePublicationQuality::Partial
             );
         if incremental {
-            match refresh_incremental(&mut self.adapter, &mut self.archive, &control) {
+            match refresh_incremental(self.adapter.as_mut(), &mut self.archive, &control) {
                 Ok(report) if report.outcome() == IncrementalRefreshOutcome::RebuildRequired => {
                     self.full_rebuild(permit, guard)
                 }
@@ -561,7 +611,7 @@ impl LiveExecution {
             permit,
             self.clock.as_ref(),
             &mut lease,
-            &mut self.adapter,
+            self.adapter.as_mut(),
             &mut self.archive,
         );
         LiveRefreshSnapshot::result(
@@ -572,9 +622,8 @@ impl LiveExecution {
     }
 
     fn sync_watcher(&mut self, urgency: RefreshUrgency) {
-        let Some(roots) = self.adapter.watch_roots() else {
-            return;
-        };
+        let roots = self.adapter.watch_roots();
+        let roots = roots.as_slice();
         let reset = self.reset_watcher.swap(false, Ordering::AcqRel);
         let roots_changed = roots != self.last_watch_roots;
         let periodic_retry = !self.watch_set_complete && urgency == RefreshUrgency::Periodic;
@@ -592,7 +641,7 @@ impl LiveExecution {
             Err(_) => 0,
         };
         self.watch_set_complete = root_count == roots.len();
-        self.last_watch_roots = roots;
+        self.last_watch_roots = roots.to_vec();
     }
 }
 

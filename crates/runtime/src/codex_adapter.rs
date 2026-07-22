@@ -51,8 +51,10 @@ impl CodexAdapter {
         self
     }
 
-    pub(crate) fn watch_roots(&self) -> Option<Vec<PathBuf>> {
-        let snapshot = self.snapshot.as_ref()?;
+    fn watch_roots(&self) -> Vec<PathBuf> {
+        let Some(snapshot) = self.snapshot.as_ref() else {
+            return Vec::new();
+        };
         let mut roots = snapshot
             .profiles()
             .iter()
@@ -61,7 +63,7 @@ impl CodexAdapter {
             .collect::<Vec<_>>();
         roots.sort_unstable();
         roots.dedup();
-        Some(roots)
+        roots
     }
 
     fn profile_sources<'a>(
@@ -249,6 +251,12 @@ impl Adapter for CodexAdapter {
             };
             sink.on_source(source, state, &mut reader)
         })
+    }
+}
+
+impl crate::LiveProviderAdapter for CodexAdapter {
+    fn watch_roots(&self) -> crate::ProviderWatchRoots {
+        crate::ProviderWatchRoots::from_bounded(self.watch_roots())
     }
 }
 

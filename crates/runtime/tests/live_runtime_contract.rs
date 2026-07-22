@@ -10,11 +10,11 @@ use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use tokenmaster_codex::{CodexRootInput, ConfiguredCodexRoot, build_discovery_request};
 use tokenmaster_engine::{
-    Adapter, AdapterBatch, AdapterCheckpoint, AdapterCompletion, Clock, CompletionQuality,
-    DiscoveredSource, MonotonicTime, OneShotExecutor, OperationControl, PortError,
-    RefreshAdmission, RefreshCoordinator, RefreshDeadline, RefreshOutcome, RefreshUrgency,
-    ReplaySourceSink, ScopeIdentity, ScopeSink, SinkControl, SourceBatchReader, SourceSink,
-    WorkerCompletion, WriterLease,
+    Adapter, AdapterBatch, AdapterCheckpoint, AdapterCompletion, AdapterSourceProgress,
+    AdapterSourceState, Clock, CompletionQuality, DiscoveredSource, MonotonicTime, OneShotExecutor,
+    OperationControl, PortError, RefreshAdmission, RefreshCoordinator, RefreshDeadline,
+    RefreshOutcome, RefreshUrgency, ReplaySourceSink, ScopeIdentity, ScopeSink, SinkControl,
+    SourceBatchReader, SourceSink, WorkerCompletion, WriterLease,
 };
 use tokenmaster_provider::DiscoveryRequest;
 use tokenmaster_runtime::{
@@ -131,7 +131,7 @@ impl ReplaySourceSink for InterruptingSink<'_> {
     fn on_source(
         &mut self,
         source: DiscoveredSource,
-        initial_checkpoint: AdapterCheckpoint,
+        initial_checkpoint: AdapterSourceState,
         reader: &mut dyn SourceBatchReader,
     ) -> Result<SinkControl, PortError> {
         let mut interrupting = InterruptingReader {
@@ -151,6 +151,14 @@ struct InterruptingReader<'a> {
 }
 
 impl SourceBatchReader for InterruptingReader<'_> {
+    fn restore_checkpoint(
+        &mut self,
+        progress: &AdapterSourceProgress,
+        control: &OperationControl<'_>,
+    ) -> Result<AdapterCheckpoint, PortError> {
+        self.inner.restore_checkpoint(progress, control)
+    }
+
     fn validate_checkpoint(
         &mut self,
         checkpoint: &AdapterCheckpoint,
