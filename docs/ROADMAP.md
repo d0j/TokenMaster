@@ -211,7 +211,7 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   retry, same-worker failed-presentation re-pump, terminal-ack release without
   re-presentation, panic-safe confirmed release, and joined
   lifecycle. Global notification settings synchronization/editing is complete. Full
-  rhythm aggregation and interactive History ranges remain P3-D. P3-E.1 command
+  rhythm aggregation remains P3-D. P3-E.1 command
   palette, P3-E.2 compact quota mode, P3-E.3 production tray
   lifecycle, P3-E.4 hotkey/single-instance activation, and P3-E.5 current-user startup
   are complete as developer implementation; interactive shell closure stays open.
@@ -273,7 +273,12 @@ generation-safe current-bundle restart foundation and Task 12B.2a identity-pinne
   startup are complete as developer implementation. The packaged interactive/resource
   receipt contract and local preflight are fixed, while authenticated provenance and
   external evidence remain P6-dependent.
-  Interactive History ranges are the next bounded replacement of the existing section.
+  Interactive History ranges (P3-D Tasks 1-5) are developer-complete: fixed 1/7/30
+  rolling civil-day presets, default/max 30, one worker/slot, shared History/Models/
+  Projects envelope, exact epoch/product/range fences, accepted-only publication,
+  terminal rollback, and refresh rebind. Task 2/3/4 focused receipts and final cfg
+  parser checks are recorded in `docs/CURRENT_STATE.md`; this does not claim P4/P5/P6,
+  M0, package/signing/soak, or release acceptance.
 
 P3-D.0 Reliable State is approved under
 `docs/superpowers/specs/2026-07-17-tokenmaster-reliable-state-design.md` with the
@@ -411,6 +416,11 @@ Complete the six-section board and supporting exploration views, tray/hotkey/sta
 compact widget, notifications, settings, modular skins, en/ru, and migration tools.
 Every row in `docs/FEATURE_PARITY.md` must be implemented or explicitly rejected under
 its normative rationale before a parity claim.
+
+The next product-completeness slice is bounded full rhythm aggregation, which closes
+the remaining P3-D contour without adding query/runtime authority. P4 presentation
+follows; external Windows interaction, M0 soak, and P6 MSVC package/signing require a
+later frozen packaged executable. P5 CLI/MCP is a separate product surface.
 
 ## 1.0 — release candidate and stable
 

@@ -465,3 +465,15 @@ and contains no family table or selection branch. The same sole style owner admi
 complete intent before optimistic application, assigns palette before metadata, and
 uses the existing one-active/one-latest operation worker. No palette cache, second
 window, timer, worker, queue, I/O, SQL, network, or unsafe authority is introduced.
+
+## P3-D interactive History ranges
+
+The History range control is a bounded replacement of the existing section. It admits
+only fixed 1/7/30 rolling civil-day presets, with 30 as initial and maximum range. One
+existing worker and one pending slot replace the shared History/Models/Projects
+analytics envelope. Publication requires exact backend epoch, product generation, and
+selected-range correlation; stale or superseded work is discarded, terminal failure
+performs the exact rollback, and refresh rebinds the selected range. The envelope and
+UI retain no prior-range history, private identity, or extra query/runtime authority.
+Tasks 1-5 are developer evidence only; interactive Windows and release gates remain
+outside this contour.

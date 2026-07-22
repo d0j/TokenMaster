@@ -6,6 +6,13 @@ All notable changes are recorded here.
 
 ### Added
 
+- Added P3-D interactive History ranges (Tasks 1-5): fixed 1/7/30 rolling civil-day
+  presets with default/max 30, one worker/slot, and a shared History/Models/Projects
+  envelope. Exact epoch/product/range fences, accepted-only publication, terminal
+  rollback, refresh rebind, bounded replacement, and path/private-content guards are
+  covered by the recorded focused, Desktop, application, and parser-audit receipts.
+  This does not claim P4/P5/P6/M0/package/signing/soak/release acceptance.
+
 - Added P3-D.2c bounded Sessions navigation. `Next page` and `Back to newest` route
   direction-only intents through the current weak application bundle and existing
   capacity-one controller worker. The opaque continuation remains worker-local; one

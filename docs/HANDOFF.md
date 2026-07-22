@@ -1015,8 +1015,12 @@ StoreUnavailable, and settings bytes remain unchanged. Per-scope editing, snooze
 hours, OS/tray delivery, usage alerts, and activation remain separate unfinished
 capabilities.
 Reuse the immutable snapshot/controller boundary; do not turn route selection into
-query authority. Interactive History range selection remains a bounded replacement of
-the existing product section.
+query authority. Interactive History range selection (P3-D Tasks 1-5) is complete as
+developer evidence: fixed 1/7/30, default/max 30, one worker/slot, shared
+History/Models/Projects envelope, exact epoch/product/range fences, accepted-only
+publication, terminal rollback, and refresh rebind. Task 2/3/4 receipts are recorded
+in `docs/CURRENT_STATE.md`; cfg-focused parser checks are 28/28 and Desktop
+source-only passes. This does not claim P4/P5/P6/M0/package/signing/soak/release.
 Keep the fixed archive path and writer sidecar; never copy only the live main file or
 treat busy/disk/access/schema-newer as corruption authority. Keep automatic recovery
 data only; device-local settings never move. Do not relax the state boundary into path,
@@ -1030,9 +1034,12 @@ executable and the run occurs in a disposable Windows user profile or VM with ve
 rollback. Do not substitute the M0 probe or mutate the operator's real HKCU/Explorer/
 power state.
 
-The immediate next implementation slice is interactive History ranges as a bounded
-replacement of the existing section. Remaining P3-E evidence, P4
-presentation, CLI/MCP, activation, M0 acceptance,
+The immediate next product slice is bounded full rhythm aggregation, the remaining
+P3-D contour. P4 then owns keyboard/screen-reader, DPI/mixed-monitor, focus,
+input-to-paint, and resource evidence; the external Explorer/sleep/hotkey matrix and
+M0 soak/package/signing rails require a later frozen packaged executable. CLI/MCP
+remains P5. Do not treat developer receipts as release acceptance. Remaining P3-E
+evidence, P4 presentation, CLI/MCP, activation, M0 acceptance,
 packaging, signing, and release remain unclaimed. Inventory/reminder read must not
 imply activation authority.
 The prior post-P3-D.0-Task-10 focused evidence includes the Task 5 store contracts,

@@ -338,7 +338,14 @@ later-page Sessions navigation is implemented as one private-cursor, replace-onl
 rail pins one notified worker, one latest rollback slot, one weak top-level event-loop
 route, exact snapshot-before-terminal ordering, and one production app attachment while
 rejecting comment/cfg/unreachable/lock-order bypasses. Interactive History ranges
-are the next bounded P3 implementation slice.
+(P3-D Tasks 1-5) are now complete developer evidence: fixed 1/7/30 (default/max 30),
+one worker/slot, shared History/Models/Projects envelope, exact epoch/product/range
+fences, accepted-only publication, terminal rollback, and refresh rebind. Task 2
+passes 13/13 + 12/12 + 47/47; Task 3 passes 5/5 + 1/1 + 79/79; Task 4 UI passes
+4/4 with real 10,000 replacement. Final localized cfg parser checks pass 28/28 and
+Desktop source-only passes. The next product-completeness slice is bounded full rhythm
+aggregation; P4 interactive presentation follows it. Do not claim P4/P5/P6/M0/
+package/signing/soak/release.
 Per-scope editing, snooze, quiet hours, reminder OS/tray delivery, usage alerts, and
 activation remain later independent slices.
 P3-D.6 independent re-review is Critical/Important/Minor 0/0/0; its 82 mutation audit,

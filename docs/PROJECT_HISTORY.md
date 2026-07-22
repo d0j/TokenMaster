@@ -1,5 +1,19 @@
 # TokenMaster project history
 
+## 2026-07-22 — P3-D interactive History ranges (Tasks 1-5)
+
+Closed the bounded interactive History range contour. Fixed 1/7/30 rolling civil-day
+presets use default/max 30 and one existing worker/slot to replace the shared
+History/Models/Projects envelope. Epoch, product-generation, and range fences admit
+only the selected result; terminal failures perform exact rollback and refresh
+rebinds the selected range. Task 2 passed 13/13, 12/12, and 47/47; Task 3 passed
+projection 5/5, bridge 1/1, and application 79/79; Task 4 UI passed 4/4 including
+the real 10,000-replacement contract and full Desktop coverage. The final pre-parser-
+fix receipt was Desktop 302/302 (741.68s), Application 110/110 (51.53s), and three
+audits exit 0; localized parser fixes then passed cfg-focused 28/28 and Desktop
+source-only. This is developer evidence only; P4/P5/P6/M0/package/signing/soak/release
+acceptance remain open.
+
 ## 2026-07-21 — P3-E packaged interactive acceptance contract
 
 Bounded the evidence-definition gap without claiming or performing interactive

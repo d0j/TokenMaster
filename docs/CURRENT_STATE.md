@@ -151,6 +151,16 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   one application path, a 30-day maximum, and zero polling/private-ID/direct-authority
   surfaces. Strict workspace Clippy and the complete locked test/doctest suite pass;
   the full suite completed in 710.7 seconds.
+- P3-D interactive History ranges (Tasks 1-5) are developer-complete. Fixed 1/7/30
+  rolling civil-day presets use default/max 30, one worker and one slot, and replace
+  the shared History/Models/Projects envelope. Publication is accepted only when
+  epoch, product generation, and selected range match; terminal failure performs the
+  exact rollback, and refresh rebinds the selected range. Task 2 passes 13/13, 12/12,
+  and 47/47; Task 3 projection/bridge/application passes 5/5, 1/1, and 79/79; Task 4
+  UI passes 4/4 including real 10,000-replacement and full Desktop coverage. The last
+  pre-parser-fix receipt was Desktop 302/302 (741.68s), Application 110/110 (51.53s),
+  and three audits exit 0; localized parser fixes then pass cfg-focused 28/28 and
+  Desktop source-only. This is not P4/P5/P6/M0/package/signing/soak/release acceptance.
 - P3-D.2a bounded Sessions list: the existing desktop query plan requests one all-time
   newest-first page capped at 64 while Dashboard keeps its 12-row summary. A separate
   identity-free projection and responsive Slint route render last activity, duration,
@@ -1567,7 +1577,7 @@ receipt schema/local-identity preflight are fixed in `P3E_ACCEPTANCE.md`; authen
 actions and package provenance remain deferred until P6 supplies the producer/manifest,
 exact packaged production executable, and a disposable Windows host. No live HKCU,
 Explorer, sign-in, lock, sleep, hotkey, or GUI mutation was performed.
-Continue with interactive History ranges as a bounded replacement of the existing
+Interactive History ranges are now complete as a bounded replacement of the existing
 History section rather than a new frontend query owner. Interactive
 Windows, P4 presentation, P5 CLI/MCP, activation, M0, packaging, signing, soak, and
 product release remain unclaimed.
