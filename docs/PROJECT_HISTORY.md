@@ -14,6 +14,17 @@ DPI/paint/resource, P5/P6, M0, packaging/signing/soak, and release acceptance. T
 cycle changed product behavior and required evidence, so `AUDIT_HARDENING_LOOP` did
 not trigger; only one bounded receipt correction was allowed.
 
+Independent final review found two Important defects and no Critical defect. Workbench
+had drifted from the accepted two-pair plus full-width Activity composition, and one
+application persistence test still expected schema v4. Focused red/green corrections
+closed both; the single re-review found no new Critical issue. Application mutations
+pass 110/110, the focused desktop presentation receipt passes 19/19, and direct
+application/desktop executable receipts pass in 134.4/142.4 seconds. Final developer
+gates pass: clean-root 5.8 seconds, format 2.1 seconds, warnings-as-errors locked
+workspace Clippy 52.3 seconds, and complete locked workspace tests/doctests 735.8
+seconds. The historical 304-test desktop mutation aggregate exceeded its bounded
+20-minute run and was not repeated after the affected focused receipt passed.
+
 ## 2026-07-22 — P4-D independent color schemes
 
 Extended the complete presentation contract to schema v4 with requested System,

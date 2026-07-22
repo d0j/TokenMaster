@@ -1221,6 +1221,10 @@ All notable changes are recorded here.
 
 ### Fixed
 
+- Aligned Workbench with its accepted wide layout: Plan Usage remains full width,
+  Code Output pairs with Sessions, Trend pairs with Model Usage, and Activity remains
+  full width. Geometry contracts now verify row pairing and full-width behavior.
+- Updated the application persistence contract to expect current settings schema v5.
 - Fixed an older `RefreshScheduler` race exposed by the P3-E.5 full gate. A hint that
   arrived after the scheduler sampled monotonic time could previously look like a
   clock rollback and emit a spurious Recovery refresh. The scheduler now performs one

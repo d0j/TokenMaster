@@ -23,12 +23,18 @@ another presentation audit refinement.
 
 ## Audit/evidence state
 
-Focused Rust and compiled-UI contracts, both direct source receipts, all 110 application
-composition mutations, and the focused 19-test desktop presentation receipt pass. The
+Focused Rust and compiled-UI contracts, both direct executable receipts, all 110
+application composition mutations, and the focused 19-test desktop presentation receipt
+pass. Independent Sol High review found two Important issues: Workbench row geometry
+drift and one stale schema-v4 app assertion. Both are corrected; the single re-review
+closed them with no new Critical finding. The
 historical 304-test desktop mutation aggregate exceeded its bounded 20-minute run after
 showing one stale expected receipt hash; that fixture was corrected and the affected
 receipt passed. It is not a release gate and MUST NOT be rerun as an audit-hardening
-loop. The required workspace baseline remains the final cycle acceptance check.
+loop. Final developer baseline passes: clean-root 5.8 seconds, formatting 2.1 seconds,
+warnings-as-errors locked workspace Clippy 52.3 seconds, and the complete locked
+workspace test/doctest suite 735.8 seconds. Application and desktop executable receipts
+passed in 134.4 and 142.4 seconds. This remains developer evidence only.
 
 ## Release blockers
 
