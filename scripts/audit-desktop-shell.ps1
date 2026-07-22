@@ -1057,7 +1057,7 @@ if ($historyBoundConstantCount -ne 1 -or
 if ($historyProjectionText -match '#\[\s*cfg\b|\bcfg!\s*\(') {
     throw 'TM-DESKTOP-HISTORY-RANGE-CFG: audited History definitions must not contain cfg attributes or cfg! branches'
 }
-if ($historyBoundAttributes -match '#\s*\[\s*cfg(?:_attr)?\b') {
+if ($historyBoundAttributes -match '#\s*\[\s*(?:r#)?cfg(?:_attr)?\b') {
     throw 'TM-DESKTOP-HISTORY-RANGE-CFG: audited History definitions must not contain cfg attributes or cfg! branches'
 }
 $controllerTestModule = [regex]::Match($controllerText, '(?ms)^\s*#\[cfg\(test\)\]\s*\r?\n\s*mod\s+tests\s*\{')

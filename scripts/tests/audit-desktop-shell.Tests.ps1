@@ -440,6 +440,22 @@ Describe "TokenMaster production desktop audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-CFG*"
     }
 
+    It "rejects a raw cfg-decorated sole History bound constant" {
+        $fixture = New-DesktopAuditFixture -Name "history-bound-raw-cfg-constant"
+        $path = Join-Path $fixture "crates\desktop\src\history.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('pub const MAX_HISTORY_DAYS: usize = 30;', "#[r#cfg(debug_assertions)]`r`npub const MAX_HISTORY_DAYS: usize = 30;")
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-CFG*"
+    }
+
+    It "rejects a raw cfg-attr-decorated sole History bound constant" {
+        $fixture = New-DesktopAuditFixture -Name "history-bound-raw-cfg-attr-constant"
+        $path = Join-Path $fixture "crates\desktop\src\history.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('pub const MAX_HISTORY_DAYS: usize = 30;', "#[r#cfg_attr(debug_assertions, allow(dead_code))]`r`npub const MAX_HISTORY_DAYS: usize = 30;")
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-CFG*"
+    }
+
     It "rejects an arbitrary history range count" {
         $fixture = New-DesktopAuditFixture -Name "history-range-arbitrary-count"
         $path = Join-Path $fixture "crates\desktop\src\controller.rs"
