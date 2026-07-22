@@ -1016,10 +1016,19 @@ $historyText = [System.IO.File]::ReadAllText($historyPath)
 $historyProductionText = $historyText.Substring(0, [Math]::Max(0, $historyText.IndexOf('#[cfg(test)]', [System.StringComparison]::Ordinal)))
 if ($historyText.IndexOf('#[cfg(test)]', [System.StringComparison]::Ordinal) -lt 0) { $historyProductionText = $historyText }
 $historyProductionSyntax = ConvertTo-ExecutableText -Text $historyProductionText
-$historyProjectionText = Get-RustFunctionText -Text $historyProductionSyntax -Name 'from_snapshot_with_range'
-if ([regex]::Matches($historyProductionSyntax, '(?m)^\s*pub\s+const\s+MAX_HISTORY_DAYS\s*:\s*usize\s*=\s*30\s*;').Count -ne 1 -or
+$historyProjectionDefinition = '(?m)^\s*pub(?:\s*\([^)]*\))?\s+fn\s+from_snapshot_with_range\s*\('
+$historyBoundConstantCount = [regex]::Matches($historyProductionSyntax, '(?m)^\s*pub\s+const\s+MAX_HISTORY_DAYS\s*:\s*usize\s*=\s*30\s*;').Count
+$historyProjectionDefinitionCount = [regex]::Matches($historyProductionSyntax, $historyProjectionDefinition).Count
+if ($historyBoundConstantCount -gt 1 -or $historyProjectionDefinitionCount -gt 1) {
+    throw 'TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION: raw production History symbols must occur exactly once'
+}
+$historyProjectionText = if ($historyProjectionDefinitionCount -eq 1) { Get-ExecutableBracedText -Text $historyProductionSyntax -Pattern $historyProjectionDefinition -FailureCode 'TM-DESKTOP-HISTORY-BOUND' } else { '' }
+if ($historyBoundConstantCount -ne 1 -or
     [regex]::Matches($historyProjectionText, '\.take\(MAX_HISTORY_DAYS\)').Count -ne 1) {
     throw 'TM-DESKTOP-HISTORY-BOUND: history projection must retain at most thirty daily rows'
+}
+if ($historyProjectionText -match '#\[\s*cfg\b|\bcfg!\s*\(') {
+    throw 'TM-DESKTOP-HISTORY-RANGE-CFG: audited History definitions must not contain cfg attributes or cfg! branches'
 }
 $controllerTestModule = [regex]::Match($controllerText, '(?ms)^\s*#\[cfg\(test\)\]\s*\r?\n\s*mod\s+tests\s*\{')
 $controllerProductionText = if ($controllerTestModule.Success) {
@@ -1029,6 +1038,14 @@ $controllerProductionText = if ($controllerTestModule.Success) {
 }
 $controllerExecutableText = Remove-DisabledRustBlocks -Text $controllerProductionText
 $controllerProductionSyntax = ConvertTo-ExecutableText -Text $controllerProductionText
+$desktopWorkStateDefinition = '(?m)^\s*struct\s+DesktopWorkState\s*\{'
+if ([regex]::Matches($controllerProductionSyntax, $desktopWorkStateDefinition).Count -ne 1) {
+    throw 'TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION: raw production History symbols must occur exactly once'
+}
+$desktopWorkStateRawText = Get-ExecutableBracedText -Text $controllerProductionSyntax -Pattern $desktopWorkStateDefinition -FailureCode 'TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION'
+if ($desktopWorkStateRawText -match '#\[\s*cfg\b|\bcfg!\s*\(') {
+    throw 'TM-DESKTOP-HISTORY-RANGE-CFG: audited History definitions must not contain cfg attributes or cfg! branches'
+}
 $historyDefinitionPatterns = @(
     '(?m)^\s*pub\s+enum\s+DesktopHistoryRangePreset\s*\{',
     '(?m)^\s*impl\s+DesktopHistoryRangePreset\s*\{',
