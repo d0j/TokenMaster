@@ -456,6 +456,22 @@ Describe "TokenMaster production desktop audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-CFG*"
     }
 
+    It "rejects a raw spaced cfg branch in the History projection body" {
+        $fixture = New-DesktopAuditFixture -Name "history-bound-raw-spaced-cfg-branch"
+        $path = Join-Path $fixture "crates\desktop\src\history.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('.take(MAX_HISTORY_DAYS)', 'if r#cfg ! (debug_assertions) { points.take(MAX_HISTORY_DAYS) } else { points.take(31) }')
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-CFG*"
+    }
+
+    It "handles an empty extracted History body before its semantic gate" {
+        $fixture = New-DesktopAuditFixture -Name "history-empty-extracted-body"
+        $path = Join-Path $fixture "crates\desktop\src\presentation.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('self.reject_history_range(intent);', '')
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-TERMINAL*"
+    }
+
     It "rejects an arbitrary history range count" {
         $fixture = New-DesktopAuditFixture -Name "history-range-arbitrary-count"
         $path = Join-Path $fixture "crates\desktop\src\controller.rs"

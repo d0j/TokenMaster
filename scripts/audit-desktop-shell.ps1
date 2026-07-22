@@ -216,6 +216,14 @@ function Get-ContiguousRustAttributesBefore {
     return $attributes -join "`n"
 }
 
+function Test-ContainsExecutableCfg {
+    param([AllowNull()][AllowEmptyString()][string]$Text)
+
+    if ([string]::IsNullOrEmpty($Text)) { return $false }
+    $executable = ConvertTo-ExecutableText -Text $Text
+    return $executable -match '#\s*\[\s*(?:r#)?cfg(?:_attr)?\b|\b(?:r#)?cfg\s*!\s*\('
+}
+
 function Normalize-ExecutableStructure { param([Parameter(Mandatory = $true)][string]$Text); return [regex]::Replace($Text, '\s+', '') }
 
 $uiExecutableText = ConvertTo-ExecutableText -Text $uiText
@@ -1054,10 +1062,10 @@ if ($historyBoundConstantCount -ne 1 -or
     [regex]::Matches($historyProjectionText, '\.take\(MAX_HISTORY_DAYS\)').Count -ne 1) {
     throw 'TM-DESKTOP-HISTORY-BOUND: history projection must retain at most thirty daily rows'
 }
-if ($historyProjectionText -match '#\[\s*cfg\b|\bcfg!\s*\(') {
+if (Test-ContainsExecutableCfg -Text $historyProjectionText) {
     throw 'TM-DESKTOP-HISTORY-RANGE-CFG: audited History definitions must not contain cfg attributes or cfg! branches'
 }
-if ($historyBoundAttributes -match '#\s*\[\s*(?:r#)?cfg(?:_attr)?\b') {
+if (Test-ContainsExecutableCfg -Text $historyBoundAttributes) {
     throw 'TM-DESKTOP-HISTORY-RANGE-CFG: audited History definitions must not contain cfg attributes or cfg! branches'
 }
 $controllerTestModule = [regex]::Match($controllerText, '(?ms)^\s*#\[cfg\(test\)\]\s*\r?\n\s*mod\s+tests\s*\{')
@@ -1073,7 +1081,7 @@ if ([regex]::Matches($controllerProductionSyntax, $desktopWorkStateDefinition).C
     throw 'TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION: raw production History symbols must occur exactly once'
 }
 $desktopWorkStateRawText = Get-ExecutableBracedText -Text $controllerProductionSyntax -Pattern $desktopWorkStateDefinition -FailureCode 'TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION'
-if ($desktopWorkStateRawText -match '#\[\s*cfg\b|\bcfg!\s*\(') {
+if (Test-ContainsExecutableCfg -Text $desktopWorkStateRawText) {
     throw 'TM-DESKTOP-HISTORY-RANGE-CFG: audited History definitions must not contain cfg attributes or cfg! branches'
 }
 $historyDefinitionPatterns = @(
@@ -1132,7 +1140,7 @@ foreach ($controllerHistoryFunction in @('history_request', 'history_range_is_cu
 }
 foreach ($controllerHistoryCfgPattern in $controllerHistoryCfgPatterns) {
     $controllerHistoryBody = Get-ExecutableBracedText -Text $controllerProductionSyntax -Pattern $controllerHistoryCfgPattern -FailureCode 'TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION'
-    if ($controllerHistoryBody -match '#\[\s*cfg\b|\bcfg!\s*\(') {
+    if (Test-ContainsExecutableCfg -Text $controllerHistoryBody) {
         throw 'TM-DESKTOP-HISTORY-RANGE-CFG: audited History definitions must not contain cfg attributes or cfg! branches'
     }
 }
@@ -1210,7 +1218,7 @@ foreach ($historyAuditedSymbol in $historyAuditedSymbols) {
         throw 'TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION: each audited History definition must occur exactly once in production syntax'
     }
     $historyBody = Get-ExecutableBracedText -Text $historyAuditedSymbol.Source -Pattern $historyAuditedSymbol.Body -FailureCode 'TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION'
-    if ($historyBody -match '#\[\s*cfg\b|\bcfg!\s*\(') {
+    if (Test-ContainsExecutableCfg -Text $historyBody) {
         throw 'TM-DESKTOP-HISTORY-RANGE-CFG: audited History definitions must not contain cfg attributes or cfg! branches'
     }
 }
