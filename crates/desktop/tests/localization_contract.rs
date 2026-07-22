@@ -561,6 +561,55 @@ fn help_about_catalog_and_source_use_the_closed_translation_key_set() {
 }
 
 #[test]
+fn pseudo_help_about_preserves_product_dependency_and_license_names() {
+    let catalog = std::fs::read_to_string(
+        Path::new(TRANSLATION_ROOT)
+            .join("pseudo")
+            .join("LC_MESSAGES")
+            .join("tokenmaster-desktop.po"),
+    )
+    .expect("bundled pseudo catalog");
+    let entries = po_entries(&catalog);
+    let protected = [
+        ("TokenMaster", &["TokenMaster"][..]),
+        ("TokenMaster · MIT", &["TokenMaster", "MIT"][..]),
+        (
+            "WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies.",
+            &["WhereMyTokens", "ccusage", "MIT"][..],
+        ),
+        (
+            "TokenMaster Help and About. Version {0}. Local-first usage intelligence with explicit data-source, privacy, health, automation, and license truth.",
+            &["TokenMaster"][..],
+        ),
+        (
+            "TokenMaster version {0}. Fast local-first Codex usage, quota, expiry, and recovery visibility with bounded memory and explicit unavailable truth.",
+            &["TokenMaster"][..],
+        ),
+        (
+            "About and licenses. TokenMaster is MIT licensed. WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies. The interface is made with Slint under the selected Royalty-free License 2.0 attribution route.",
+            &[
+                "TokenMaster",
+                "MIT",
+                "WhereMyTokens",
+                "ccusage",
+                "Slint",
+                "Royalty-free License 2.0",
+            ][..],
+        ),
+    ];
+
+    for (msgid, names) in protected {
+        let msgstr = entries.get(msgid).expect("protected Help/About entry");
+        for name in names {
+            assert!(
+                msgstr.contains(name),
+                "pseudo translation for {msgid:?} must preserve {name:?} verbatim"
+            );
+        }
+    }
+}
+
+#[test]
 fn sessions_and_dashboard_use_the_closed_translation_key_set() {
     let sessions = include_str!("../ui/views/sessions-view.slint");
     let dashboard = include_str!("../ui/views/dashboard-view.slint");
