@@ -596,6 +596,15 @@ fn schema_v5_preserves_complete_style_and_defaults_board_without_a_startup_write
 
 #[test]
 fn schema_v6_candidate_and_record_migrate_locale_to_english() {
+    let expected_board = BoardPreferences::new([
+        BoardSectionPreference::new(BoardSectionKey::Models, true, true),
+        BoardSectionPreference::new(BoardSectionKey::PlanUsage, true, false),
+        BoardSectionPreference::new(BoardSectionKey::Activity, false, true),
+        BoardSectionPreference::new(BoardSectionKey::Sessions, true, false),
+        BoardSectionPreference::new(BoardSectionKey::Trend, false, true),
+        BoardSectionPreference::new(BoardSectionKey::CodeOutput, true, false),
+    ])
+    .expect("valid noncanonical board");
     let mut legacy_record =
         serde_json::to_value(SettingsValue::safe_defaults()).expect("current settings record");
     legacy_record["schema_version"] = json!(6);
@@ -603,6 +612,14 @@ fn schema_v6_candidate_and_record_migrate_locale_to_english() {
         .as_object_mut()
         .expect("presentation object")
         .remove("locale");
+    legacy_record["portable"]["presentation"]["board"] = json!([
+        { "key": "models", "visible": true, "collapsed": true },
+        { "key": "plan_usage", "visible": true, "collapsed": false },
+        { "key": "activity", "visible": false, "collapsed": true },
+        { "key": "sessions", "visible": true, "collapsed": false },
+        { "key": "trend", "visible": false, "collapsed": true },
+        { "key": "code_output", "visible": true, "collapsed": false }
+    ]);
     let legacy_candidate = json!({
         "schema_version": 6,
         "portable": legacy_record["portable"].clone(),
@@ -614,15 +631,14 @@ fn schema_v6_candidate_and_record_migrate_locale_to_english() {
         .preview_import(&serde_json::to_vec(&legacy_candidate).expect("v6 candidate"))
         .expect("v6 candidate preview");
     store.commit_import(&preview).expect("commit v6 candidate");
+    let candidate_loaded = store.load().expect("candidate migration load");
     assert_eq!(
-        store
-            .load()
-            .expect("candidate migration load")
-            .value()
-            .portable()
-            .presentation()
-            .locale(),
+        candidate_loaded.value().portable().presentation().locale(),
         PresentationLocale::English
+    );
+    assert_eq!(
+        candidate_loaded.value().portable().presentation().board(),
+        expected_board
     );
 
     let record = encode_record(
@@ -638,6 +654,10 @@ fn schema_v6_candidate_and_record_migrate_locale_to_english() {
     assert_eq!(
         loaded.value().portable().presentation().locale(),
         PresentationLocale::English
+    );
+    assert_eq!(
+        loaded.value().portable().presentation().board(),
+        expected_board
     );
 }
 
@@ -789,7 +809,7 @@ fn candidate_and_record_versions_and_presentation_are_strict() {
     let defaults = SettingsValue::safe_defaults();
     let current_record = serde_json::to_value(&defaults).expect("current record");
     let current_candidate = json!({
-        "schema_version": 6,
+        "schema_version": SETTINGS_SCHEMA_VERSION,
         "portable": current_record["portable"].clone(),
     });
     let duplicate_presentation = br#"{"schema_version":5,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined","color_scheme":"system","layout":"refined"},"presentation":{"density":"compact","skin":"refined","color_scheme":"dark","layout":"workbench"}}}"#;
@@ -817,6 +837,15 @@ fn candidate_and_record_versions_and_presentation_are_strict() {
         .remove("color_scheme");
     let mut unknown_scheme_candidate = current_candidate.clone();
     unknown_scheme_candidate["portable"]["presentation"]["color_scheme"] = json!("future");
+    let mut missing_locale_candidate = current_candidate.clone();
+    missing_locale_candidate["portable"]["presentation"]
+        .as_object_mut()
+        .expect("presentation object")
+        .remove("locale");
+    let mut unknown_locale_candidate = current_candidate.clone();
+    unknown_locale_candidate["portable"]["presentation"]["locale"] = json!("future");
+    let mut wrong_locale_type_candidate = current_candidate.clone();
+    wrong_locale_type_candidate["portable"]["presentation"]["locale"] = json!(1);
 
     let (_root, directory) = fixture();
     let store = SettingsStore::new(&directory).expect("settings store");
@@ -829,6 +858,9 @@ fn candidate_and_record_versions_and_presentation_are_strict() {
         (wrong_density_type_candidate, StateErrorCode::InvalidInput),
         (missing_scheme_candidate, StateErrorCode::InvalidInput),
         (unknown_scheme_candidate, StateErrorCode::InvalidInput),
+        (missing_locale_candidate, StateErrorCode::InvalidInput),
+        (unknown_locale_candidate, StateErrorCode::InvalidInput),
+        (wrong_locale_type_candidate, StateErrorCode::InvalidInput),
     ] {
         let bytes = serde_json::to_vec(&candidate).expect("candidate bytes");
         assert_eq!(
@@ -843,6 +875,14 @@ fn candidate_and_record_versions_and_presentation_are_strict() {
         store
             .preview_import(duplicate_presentation)
             .expect_err("duplicate presentation")
+            .code(),
+        StateErrorCode::InvalidInput
+    );
+    let duplicate_locale_candidate = br#"{"schema_version":7,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined","color_scheme":"system","layout":"refined","locale":"en","locale":"ru","board":[{"key":"plan_usage","visible":true,"collapsed":false},{"key":"code_output","visible":true,"collapsed":false},{"key":"trend","visible":true,"collapsed":false},{"key":"sessions","visible":true,"collapsed":false},{"key":"activity","visible":true,"collapsed":false},{"key":"models","visible":true,"collapsed":false}]}}}"#;
+    assert_eq!(
+        store
+            .preview_import(duplicate_locale_candidate)
+            .expect_err("duplicate locale candidate")
             .code(),
         StateErrorCode::InvalidInput
     );
@@ -899,6 +939,33 @@ fn candidate_and_record_versions_and_presentation_are_strict() {
             },
             false,
         ),
+        (
+            {
+                let mut value = current_record.clone();
+                value["portable"]["presentation"]
+                    .as_object_mut()
+                    .expect("presentation object")
+                    .remove("locale");
+                value
+            },
+            false,
+        ),
+        (
+            {
+                let mut value = current_record.clone();
+                value["portable"]["presentation"]["locale"] = json!("unsupported");
+                value
+            },
+            false,
+        ),
+        (
+            {
+                let mut value = current_record.clone();
+                value["portable"]["presentation"]["locale"] = json!(1);
+                value
+            },
+            false,
+        ),
     ] {
         let (root, directory) = fixture();
         let bytes = serde_json::to_vec(&payload).expect("record payload");
@@ -936,6 +1003,20 @@ fn candidate_and_record_versions_and_presentation_are_strict() {
         record
     );
     assert!(!root.path().join("settings-b.tms").exists());
+
+    let duplicate_locale_record = br#"{"schema_version":7,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined","color_scheme":"system","layout":"refined","locale":"en","locale":"ru","board":[{"key":"plan_usage","visible":true,"collapsed":false},{"key":"code_output","visible":true,"collapsed":false},{"key":"trend","visible":true,"collapsed":false},{"key":"sessions","visible":true,"collapsed":false},{"key":"activity","visible":true,"collapsed":false},{"key":"models","visible":true,"collapsed":false}]}},"device":{"last_route":"dashboard"}}"#;
+    let (root, directory) = fixture();
+    let record = encode_record(7, duplicate_locale_record);
+    fs::write(root.path().join("settings-a.tms"), &record).expect("duplicate locale record");
+    let store = SettingsStore::new(&directory).expect("settings store");
+    assert_eq!(
+        store.load().expect("record invalid boundary").outcome(),
+        SettingsLoadOutcome::Defaults
+    );
+    assert_eq!(
+        fs::read(root.path().join("settings-a.tms")).unwrap(),
+        record
+    );
 }
 
 #[test]
