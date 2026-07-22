@@ -419,3 +419,102 @@ msgstr "［Řêðûçêð ɱõţîõñ êñåβļêð ·····］"
 
 msgid "Reduced motion ready"
 msgstr "［Řêðûçêð ɱõţîõñ řêåðÿ ·····］"
+
+msgid "Projects"
+msgstr "［Þřõĵêçţš ·····］"
+
+msgid "Recent usage · {0} · {1}"
+msgstr "［Řêçêñţ ûšåğê · {0} · {1} ·····］"
+
+msgid "Projects. Recent usage {0} {1} {2}. Today code {3} {4} {5}. {6}. {7}."
+msgstr "［Þřõĵêçţš. Řêçêñţ ûšåğê {0} {1} {2}. Ţõðåÿ çõðê {3} {4} {5}. {6}. {7}. ·······］"
+
+msgid "Today code · {0} · {1}"
+msgstr "［Ţõðåÿ çõðê · {0} · {1} ·····］"
+
+msgid "Recent tokens"
+msgstr "［Řêçêñţ ţõķêñš ·····］"
+
+msgid "Recent cost · {0}"
+msgstr "［Řêçêñţ çõšţ · {0} ·····］"
+
+msgid "Recent events"
+msgstr "［Řêçêñţ êṽêñţš ·····］"
+
+msgid "Recent usage by project with separately labelled today code output"
+msgstr "［Řêçêñţ ûšåğê βÿ þřõĵêçţ ŵîţĥ šêþåřåţêļÿ ļåβêļļêð ţõðåÿ çõðê õûţþûţ ·······］"
+
+msgid "Usage by project"
+msgstr "［Ûšåğê βÿ þřõĵêçţ ·····］"
+
+msgid "Waiting for project evidence"
+msgstr "［Ŵåîţîñğ ƒõř þřõĵêçţ êṽîðêñçê ·····］"
+
+msgid "No project usage in this range"
+msgstr "［Ñõ þřõĵêçţ ûšåğê îñ ţĥîš řåñğê ·····］"
+
+msgid "Project evidence unavailable"
+msgstr "［Þřõĵêçţ êṽîðêñçê ûñåṽåîļåβļê ·····］"
+
+msgid "Project"
+msgstr "［Þřõĵêçţ ···］"
+
+msgid "Relative"
+msgstr "［Řêļåţîṽê ···］"
+
+msgid "Total"
+msgstr "［Ţõţåļ ···］"
+
+msgid "Cost"
+msgstr "［Çõšţ ···］"
+
+msgid "Events"
+msgstr "［Êṽêñţš ···］"
+
+msgid "Commits"
+msgstr "［Çõɱɱîţš ···］"
+
+msgid "+Added"
+msgstr "［+Åððêð ···］"
+
+msgid "-Removed"
+msgstr "［-Řêɱõṽêð ···］"
+
+msgid "Net"
+msgstr "［Ñêţ ···］"
+
+msgid "Cost / 100 added product-code lines"
+msgstr "［Çõšţ / 100 åððêð þřõðûçţ-çõðê ļîñêš ·······］"
+
+msgid "Recent usage {0} input {1} cached {2} output {3} reasoning {4} total {5} cost {6} {7} events {8}. Today code {9} {10} commits {11} added {12} removed {13} net {14} efficiency {15} {16} {17}"
+msgstr "［Řêçêñţ ûšåğê {0} îñþûţ {1} çåçĥêð {2} õûţþûţ {3} řêåšõñîñğ {4} ţõţåļ {5} çõšţ {6} {7} êṽêñţš {8}. Ţõðåÿ çõðê {9} {10} çõɱɱîţš {11} åððêð {12} řêɱõṽêð {13} ñêţ {14} êƒƒîçîêñçÿ {15} {16} {17} ·······］"
+
+msgid "Recent · In {0} · Cache {1} · Out {2} · Reason {3} · {4} events"
+msgstr "［Řêçêñţ · Îñ {0} · Çåçĥê {1} · Õûţ {2} · Řêåšõñ {3} · {4} êṽêñţš ·····］"
+
+msgid "Today code · {0} · {1} · {2} commits · {3} / {4} · net {5}"
+msgstr "［Ţõðåÿ çõðê · {0} · {1} · {2} çõɱɱîţš · {3} / {4} · ñêţ {5} ·····］"
+
+msgid "Recent mix · In {0} · Cache {1} · Out {2} · Reason {3} · {4} | Today code · {5} · {6} · {7} {8}"
+msgstr "［Řêçêñţ ɱîẋ · Îñ {0} · Çåçĥê {1} · Õûţ {2} · Řêåšõñ {3} · {4} | Ţõðåÿ çõðê · {5} · {6} · {7} {8} ·······］"
+
+msgid "Compact quota window {0} {1} {2} {3}"
+msgstr "［Çõɱþåçţ ɋûõţå ŵîñðõŵ {0} {1} {2} {3} ·····］"
+
+msgid "Usage ratio unavailable"
+msgstr "［Ûšåğê řåţîõ ûñåṽåîļåβļê ·····］"
+
+msgid "Compact quota"
+msgstr "［Çõɱþåçţ ɋûõţå ·····］"
+
+msgid "Current quota"
+msgstr "［Çûřřêñţ ɋûõţå ·····］"
+
+msgid "Return to Dashboard"
+msgstr "［Řêţûřñ ţõ Ðåšĥβõåřð ·····］"
+
+msgid "Waiting for quota evidence"
+msgstr "［Ŵåîţîñğ ƒõř ɋûõţå êṽîðêñçê ·····］"
+
+msgid "Quota evidence unavailable"
+msgstr "［Ɋûõţå êṽîðêñçê ûñåṽåîļåβļê ·····］"

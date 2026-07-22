@@ -12,7 +12,7 @@ component CompactQuotaRow inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius;
     accessible-role: groupbox;
-    accessible-label: "Compact quota window " + root.quota.label + " " + root.quota.usage-label + " " + root.quota.reset-label + " " + root.quota.evidence-label;
+    accessible-label: @tr("Compact quota window {0} {1} {2} {3}", root.quota.label, root.quota.usage-label, root.quota.reset-label, root.quota.evidence-label);
 
     VerticalLayout {
         padding: UiTokens.space-sm;
@@ -44,10 +44,10 @@ component CompactQuotaRow inherits Rectangle {
             }
         }
         if !root.quota.ratio-known: Text {
-            text: "Usage ratio unavailable";
+            text: @tr("Usage ratio unavailable");
             color: UiTokens.unavailable;
             font-size: 11px;
-            accessible-label: "Usage ratio unavailable";
+            accessible-label: @tr("Usage ratio unavailable");
         }
         HorizontalLayout {
             spacing: UiTokens.space-sm;
@@ -84,7 +84,7 @@ export component CompactWidgetView inherits Rectangle {
 
     background: UiTokens.background;
     accessible-role: region;
-    accessible-label: "Compact quota";
+    accessible-label: @tr("Compact quota");
 
     changed visible => {
         if (root.visible) {
@@ -105,14 +105,14 @@ export component CompactWidgetView inherits Rectangle {
                 VerticalLayout {
                     spacing: UiTokens.space-xs;
                     horizontal-stretch: 1;
-                    Text { text: "TokenMaster"; color: UiTokens.text-primary; font-size: 18px; font-weight: 800; }
-                    Text { text: "Current quota"; color: UiTokens.text-secondary; font-size: 11px; }
+                    Text { text: @tr("TokenMaster"); color: UiTokens.text-primary; font-size: 18px; font-weight: 800; }
+                    Text { text: @tr("Current quota"); color: UiTokens.text-secondary; font-size: 11px; }
                 }
                 SectionState { state: root.state; reasons: root.reasons; }
             }
             return-button := Button {
-                text: "Return to Dashboard";
-                accessible-label: "Return to Dashboard";
+                text: @tr("Return to Dashboard");
+                accessible-label: @tr("Return to Dashboard");
                 clicked => { root.return-dashboard(); }
             }
             if root.quotas.length == 0: Rectangle {
@@ -122,9 +122,9 @@ export component CompactWidgetView inherits Rectangle {
                 border-width: 1px;
                 border-radius: UiTokens.radius;
                 Text {
-                    text: root.state == "waiting" ? "Waiting for quota evidence" : "Quota evidence unavailable";
+                    text: root.state == "waiting" ? @tr("Waiting for quota evidence") : @tr("Quota evidence unavailable");
                     color: UiTokens.text-secondary;
-                    accessible-label: root.state == "waiting" ? "Waiting for quota evidence" : "Quota evidence unavailable";
+                    accessible-label: root.state == "waiting" ? @tr("Waiting for quota evidence") : @tr("Quota evidence unavailable");
                     horizontal-alignment: center;
                     vertical-alignment: center;
                 }

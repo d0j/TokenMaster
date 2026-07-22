@@ -31,7 +31,7 @@ component ProjectsHeaderCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: region;
-    accessible-label: "Projects. Recent usage " + root.usage-range-label + " " + root.usage-time-zone-label + " " + root.usage-evidence-label + ". Today code " + root.code-range-label + " " + root.code-time-zone-label + " " + root.code-evidence-label + ". " + root.loaded-label + ". " + root.code-coverage-label;
+    accessible-label: @tr("Projects. Recent usage {0} {1} {2}. Today code {3} {4} {5}. {6}. {7}.", root.usage-range-label, root.usage-time-zone-label, root.usage-evidence-label, root.code-range-label, root.code-time-zone-label, root.code-evidence-label, root.loaded-label, root.code-coverage-label);
 
     VerticalLayout {
         padding: UiTokens.space;
@@ -41,9 +41,9 @@ component ProjectsHeaderCard inherits Rectangle {
             VerticalLayout {
                 spacing: UiTokens.space-xs;
                 horizontal-stretch: 1;
-                Text { text: "Projects"; color: UiTokens.text-primary; font-size: 19px; font-weight: 800; }
+                Text { text: @tr("Projects"); color: UiTokens.text-primary; font-size: 19px; font-weight: 800; }
                 Text {
-                    text: "Recent usage · " + root.usage-range-label + " · " + root.usage-time-zone-label;
+                    text: @tr("Recent usage · {0} · {1}", root.usage-range-label, root.usage-time-zone-label);
                     color: UiTokens.text-secondary;
                     font-size: 11px;
                     overflow: elide;
@@ -54,7 +54,7 @@ component ProjectsHeaderCard inherits Rectangle {
         if root.narrow: VerticalLayout {
             spacing: UiTokens.space-xs;
             Text { text: root.usage-evidence-label + " · " + root.loaded-label + " · " + root.completeness-label; color: UiTokens.text-secondary; font-size: 11px; overflow: elide; }
-            Text { text: "Today code · " + root.code-range-label + " · " + root.code-time-zone-label; color: UiTokens.accent; font-size: 11px; overflow: elide; }
+            Text { text: @tr("Today code · {0} · {1}", root.code-range-label, root.code-time-zone-label); color: UiTokens.accent; font-size: 11px; overflow: elide; }
             Text { text: root.code-evidence-label + " · " + root.code-coverage-label + " · " + root.code-completeness-label; color: UiTokens.text-secondary; font-size: 11px; overflow: elide; }
         }
         if !root.narrow: HorizontalLayout {
@@ -65,15 +65,15 @@ component ProjectsHeaderCard inherits Rectangle {
         }
         if !root.narrow: HorizontalLayout {
             spacing: UiTokens.space;
-            Text { text: "Today code · " + root.code-range-label + " · " + root.code-time-zone-label; color: UiTokens.accent; font-size: 11px; }
+            Text { text: @tr("Today code · {0} · {1}", root.code-range-label, root.code-time-zone-label); color: UiTokens.accent; font-size: 11px; }
             Text { text: root.code-evidence-label; color: UiTokens.text-secondary; font-size: 11px; }
             Text { text: root.code-coverage-label + " · " + root.code-completeness-label; color: UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; overflow: elide; }
         }
         HorizontalLayout {
             spacing: UiTokens.space;
-            MetricValue { label: "Recent tokens"; value: root.total-tokens; availability: root.total-availability; horizontal-stretch: 1; }
-            MetricValue { label: "Recent cost · " + root.cost-evidence-label; value: root.cost; availability: root.cost-availability; horizontal-stretch: 1; }
-            MetricValue { label: "Recent events"; value: root.events; availability: root.events == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Recent tokens"); value: root.total-tokens; availability: root.total-availability; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Recent cost · {0}", root.cost-evidence-label); value: root.cost; availability: root.cost-availability; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Recent events"); value: root.events; availability: root.events == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
         }
     }
 }
@@ -89,14 +89,14 @@ component ProjectsTableCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: table;
-    accessible-label: "Recent usage by project with separately labelled today code output";
+    accessible-label: @tr("Recent usage by project with separately labelled today code output");
 
     VerticalLayout {
         padding: UiTokens.space;
         spacing: 0px;
-        Text { text: "Usage by project"; color: UiTokens.text-primary; font-size: 15px; font-weight: 750; height: 32px; }
+        Text { text: @tr("Usage by project"); color: UiTokens.text-primary; font-size: 15px; font-weight: 750; height: 32px; }
         if root.rows.length == 0: Text {
-            text: root.state == "waiting" ? "Waiting for project evidence" : (root.state == "ready" ? "No project usage in this range" : "Project evidence unavailable");
+            text: root.state == "waiting" ? @tr("Waiting for project evidence") : (root.state == "ready" ? @tr("No project usage in this range") : @tr("Project evidence unavailable"));
             color: UiTokens.text-secondary;
             font-size: 12px;
             height: 34px;
@@ -104,23 +104,23 @@ component ProjectsTableCard inherits Rectangle {
         if !root.narrow && root.rows.length > 0: HorizontalLayout {
             height: 28px;
             spacing: UiTokens.space-sm;
-            Text { text: "Project"; color: UiTokens.text-secondary; font-size: 10px; width: 128px; }
-            Text { text: "Relative"; color: UiTokens.text-secondary; font-size: 10px; width: 60px; }
-            Text { text: "Total"; color: UiTokens.text-secondary; font-size: 10px; width: 62px; horizontal-alignment: right; }
-            Text { text: "Cost"; color: UiTokens.text-secondary; font-size: 10px; width: 96px; horizontal-alignment: right; }
-            Text { text: "Events"; color: UiTokens.text-secondary; font-size: 10px; width: 42px; horizontal-alignment: right; }
-            Text { text: "Commits"; color: UiTokens.text-secondary; font-size: 10px; width: 48px; horizontal-alignment: right; }
-            Text { text: "+Added"; color: UiTokens.text-secondary; font-size: 10px; width: 54px; horizontal-alignment: right; }
-            Text { text: "-Removed"; color: UiTokens.text-secondary; font-size: 10px; width: 58px; horizontal-alignment: right; }
-            Text { text: "Net"; color: UiTokens.text-secondary; font-size: 10px; width: 52px; horizontal-alignment: right; }
-            Text { text: "Cost / 100 added product-code lines"; color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Project"); color: UiTokens.text-secondary; font-size: 10px; width: 128px; }
+            Text { text: @tr("Relative"); color: UiTokens.text-secondary; font-size: 10px; width: 60px; }
+            Text { text: @tr("Total"); color: UiTokens.text-secondary; font-size: 10px; width: 62px; horizontal-alignment: right; }
+            Text { text: @tr("Cost"); color: UiTokens.text-secondary; font-size: 10px; width: 96px; horizontal-alignment: right; }
+            Text { text: @tr("Events"); color: UiTokens.text-secondary; font-size: 10px; width: 42px; horizontal-alignment: right; }
+            Text { text: @tr("Commits"); color: UiTokens.text-secondary; font-size: 10px; width: 48px; horizontal-alignment: right; }
+            Text { text: @tr("+Added"); color: UiTokens.text-secondary; font-size: 10px; width: 54px; horizontal-alignment: right; }
+            Text { text: @tr("-Removed"); color: UiTokens.text-secondary; font-size: 10px; width: 58px; horizontal-alignment: right; }
+            Text { text: @tr("Net"); color: UiTokens.text-secondary; font-size: 10px; width: 52px; horizontal-alignment: right; }
+            Text { text: @tr("Cost / 100 added product-code lines"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
         }
         for project[i] in root.rows: Rectangle {
             height: root.narrow ? 106px : 56px;
             background: mod(i, 2) == 0 ? UiTokens.surface-subtle : transparent;
             border-radius: UiTokens.radius-sm;
             accessible-role: list-item;
-            accessible-label: "Recent usage " + project.project-label + " input " + project.input-label + " cached " + project.cached-label + " output " + project.output-label + " reasoning " + project.reasoning-label + " total " + project.total-label + " cost " + project.cost-label + " " + project.cost-evidence-label + " events " + project.event-label + ". Today code " + project.code-status-label + " " + project.repository-label + " commits " + project.commits-label + " added " + project.added-label + " removed " + project.removed-label + " net " + project.net-label + " efficiency " + project.efficiency-label + (project.efficiency-reason-label == "" ? "" : " " + project.efficiency-reason-label) + " " + project.code-evidence-label;
+            accessible-label: @tr("Recent usage {0} input {1} cached {2} output {3} reasoning {4} total {5} cost {6} {7} events {8}. Today code {9} {10} commits {11} added {12} removed {13} net {14} efficiency {15} {16} {17}", project.project-label, project.input-label, project.cached-label, project.output-label, project.reasoning-label, project.total-label, project.cost-label, project.cost-evidence-label, project.event-label, project.code-status-label, project.repository-label, project.commits-label, project.added-label, project.removed-label, project.net-label, project.efficiency-label, project.efficiency-reason-label, project.code-evidence-label);
             if root.narrow: VerticalLayout {
                 padding-left: UiTokens.space-sm;
                 padding-right: UiTokens.space-sm;
@@ -140,13 +140,13 @@ component ProjectsTableCard inherits Rectangle {
                     Rectangle { width: max(1px, project.token-ratio * parent.width); height: parent.height; background: UiTokens.accent; border-radius: 2px; }
                 }
                 Text {
-                    text: "Recent · In " + project.input-label + " · Cache " + project.cached-label + " · Out " + project.output-label + " · Reason " + project.reasoning-label + " · " + project.event-label + " events";
+                    text: @tr("Recent · In {0} · Cache {1} · Out {2} · Reason {3} · {4} events", project.input-label, project.cached-label, project.output-label, project.reasoning-label, project.event-label);
                     color: UiTokens.text-secondary;
                     font-size: 10px;
                     overflow: elide;
                 }
                 Text {
-                    text: "Today code · " + project.code-status-label + " · " + project.repository-label + " · " + project.commits-label + " commits · " + project.added-label + " / " + project.removed-label + " · net " + project.net-label;
+                    text: @tr("Today code · {0} · {1} · {2} commits · {3} / {4} · net {5}", project.code-status-label, project.repository-label, project.commits-label, project.added-label, project.removed-label, project.net-label);
                     color: project.code-available ? UiTokens.text-primary : UiTokens.text-secondary;
                     font-size: 10px;
                     overflow: elide;
@@ -184,7 +184,7 @@ component ProjectsTableCard inherits Rectangle {
                     Text { text: project.efficiency-label; color: project.efficiency-label == "—" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; overflow: elide; }
                 }
                 Text {
-                    text: "Recent mix · In " + project.input-label + " · Cache " + project.cached-label + " · Out " + project.output-label + " · Reason " + project.reasoning-label + " · " + project.cost-evidence-label + " | Today code · " + project.code-status-label + " · " + project.repository-label + " · " + project.code-evidence-label + (project.efficiency-reason-label == "" ? "" : " · " + project.efficiency-reason-label);
+                    text: @tr("Recent mix · In {0} · Cache {1} · Out {2} · Reason {3} · {4} | Today code · {5} · {6} · {7} {8}", project.input-label, project.cached-label, project.output-label, project.reasoning-label, project.cost-evidence-label, project.code-status-label, project.repository-label, project.code-evidence-label, project.efficiency-reason-label);
                     color: UiTokens.text-secondary;
                     font-size: 9px;
                     overflow: elide;

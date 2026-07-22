@@ -419,3 +419,102 @@ msgstr "Уменьшенное движение включено"
 
 msgid "Reduced motion ready"
 msgstr "Уменьшенное движение готово"
+
+msgid "Projects"
+msgstr "Проекты"
+
+msgid "Recent usage · {0} · {1}"
+msgstr "Недавнее использование · {0} · {1}"
+
+msgid "Projects. Recent usage {0} {1} {2}. Today code {3} {4} {5}. {6}. {7}."
+msgstr "Проекты. Недавнее использование: {0} {1} {2}. Код за сегодня: {3} {4} {5}. {6}. {7}."
+
+msgid "Today code · {0} · {1}"
+msgstr "Код за сегодня · {0} · {1}"
+
+msgid "Recent tokens"
+msgstr "Недавние токены"
+
+msgid "Recent cost · {0}"
+msgstr "Недавняя стоимость · {0}"
+
+msgid "Recent events"
+msgstr "Недавние события"
+
+msgid "Recent usage by project with separately labelled today code output"
+msgstr "Недавнее использование по проектам с отдельно обозначенными данными кода за сегодня"
+
+msgid "Usage by project"
+msgstr "Использование по проектам"
+
+msgid "Waiting for project evidence"
+msgstr "Ожидание данных по проектам"
+
+msgid "No project usage in this range"
+msgstr "В этом диапазоне нет использования по проектам"
+
+msgid "Project evidence unavailable"
+msgstr "Данные по проектам недоступны"
+
+msgid "Project"
+msgstr "Проект"
+
+msgid "Relative"
+msgstr "Относит."
+
+msgid "Total"
+msgstr "Всего"
+
+msgid "Cost"
+msgstr "Стоимость"
+
+msgid "Events"
+msgstr "События"
+
+msgid "Commits"
+msgstr "Коммиты"
+
+msgid "+Added"
+msgstr "+Добавлено"
+
+msgid "-Removed"
+msgstr "-Удалено"
+
+msgid "Net"
+msgstr "Итого"
+
+msgid "Cost / 100 added product-code lines"
+msgstr "Стоимость / 100 добавленных строк кода продукта"
+
+msgid "Recent usage {0} input {1} cached {2} output {3} reasoning {4} total {5} cost {6} {7} events {8}. Today code {9} {10} commits {11} added {12} removed {13} net {14} efficiency {15} {16} {17}"
+msgstr "Недавнее использование {0}: ввод {1}, кэш {2}, вывод {3}, рассуждения {4}, всего {5}, стоимость {6} {7}, события {8}. Код за сегодня: {9}, {10}, коммиты {11}, добавлено {12}, удалено {13}, итог {14}, эффективность {15} {16} {17}"
+
+msgid "Recent · In {0} · Cache {1} · Out {2} · Reason {3} · {4} events"
+msgstr "Недавнее · Ввод {0} · Кэш {1} · Вывод {2} · Рассуждения {3} · События {4}"
+
+msgid "Today code · {0} · {1} · {2} commits · {3} / {4} · net {5}"
+msgstr "Код за сегодня · {0} · {1} · коммиты {2} · {3} / {4} · итог {5}"
+
+msgid "Recent mix · In {0} · Cache {1} · Out {2} · Reason {3} · {4} | Today code · {5} · {6} · {7} {8}"
+msgstr "Недавний состав · Ввод {0} · Кэш {1} · Вывод {2} · Рассуждения {3} · {4} | Код за сегодня · {5} · {6} · {7} {8}"
+
+msgid "Compact quota window {0} {1} {2} {3}"
+msgstr "Компактное окно квоты {0} {1} {2} {3}"
+
+msgid "Usage ratio unavailable"
+msgstr "Доля использования недоступна"
+
+msgid "Compact quota"
+msgstr "Компактная квота"
+
+msgid "Current quota"
+msgstr "Текущая квота"
+
+msgid "Return to Dashboard"
+msgstr "Вернуться к панели"
+
+msgid "Waiting for quota evidence"
+msgstr "Ожидание данных по квоте"
+
+msgid "Quota evidence unavailable"
+msgstr "Данные по квоте недоступны"

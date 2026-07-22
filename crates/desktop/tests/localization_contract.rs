@@ -162,6 +162,43 @@ const SETTINGS_STARTUP_CONFIG_BOARD_FOOTER_MSGIDS: [&str; 41] = [
     "Reduced motion ready",
 ];
 
+const PROJECTS_COMPACT_MSGIDS: [&str; 34] = [
+    "Projects",
+    "Recent usage · {0} · {1}",
+    "Projects. Recent usage {0} {1} {2}. Today code {3} {4} {5}. {6}. {7}.",
+    "Today code · {0} · {1}",
+    "Recent tokens",
+    "Recent cost · {0}",
+    "Recent events",
+    "Recent usage by project with separately labelled today code output",
+    "Usage by project",
+    "Waiting for project evidence",
+    "No project usage in this range",
+    "Project evidence unavailable",
+    "Project",
+    "Relative",
+    "Total",
+    "Cost",
+    "Events",
+    "Commits",
+    "+Added",
+    "-Removed",
+    "Net",
+    "Cost / 100 added product-code lines",
+    "Recent usage {0} input {1} cached {2} output {3} reasoning {4} total {5} cost {6} {7} events {8}. Today code {9} {10} commits {11} added {12} removed {13} net {14} efficiency {15} {16} {17}",
+    "Recent · In {0} · Cache {1} · Out {2} · Reason {3} · {4} events",
+    "Today code · {0} · {1} · {2} commits · {3} / {4} · net {5}",
+    "Recent mix · In {0} · Cache {1} · Out {2} · Reason {3} · {4} | Today code · {5} · {6} · {7} {8}",
+    "Compact quota window {0} {1} {2} {3}",
+    "Usage ratio unavailable",
+    "Compact quota",
+    "Current quota",
+    "Return to Dashboard",
+    "Waiting for quota evidence",
+    "Quota evidence unavailable",
+    "TokenMaster",
+];
+
 const COMPONENT_RAW_LITERAL_ALLOWLIST: [&str; 11] = [
     "", " ", " · ", ", ", "ready", "degraded", "waiting", "●", "▲", "…", "×",
 ];
@@ -207,6 +244,7 @@ fn shell_component_and_settings_reminder_backup_catalogs_are_complete_and_preser
         .chain(COMPONENT_MSGIDS)
         .chain(SETTINGS_REMINDER_BACKUP_MSGIDS)
         .chain(SETTINGS_STARTUP_CONFIG_BOARD_FOOTER_MSGIDS)
+        .chain(PROJECTS_COMPACT_MSGIDS)
         .collect::<BTreeSet<_>>();
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -243,6 +281,59 @@ fn shell_component_and_settings_reminder_backup_catalogs_are_complete_and_preser
         assert!(
             !catalog.contains("%1"),
             "{locale} must not retain unsupported Slint %1 placeholders"
+        );
+    }
+}
+
+#[test]
+fn projects_and_compact_widget_catalogs_are_complete_before_view_conversion() {
+    let expected = SHELL_MSGIDS
+        .into_iter()
+        .chain(COMPONENT_MSGIDS)
+        .chain(SETTINGS_REMINDER_BACKUP_MSGIDS)
+        .chain(SETTINGS_STARTUP_CONFIG_BOARD_FOOTER_MSGIDS)
+        .chain(PROJECTS_COMPACT_MSGIDS)
+        .collect::<BTreeSet<_>>();
+    for locale in ["ru", "pseudo"] {
+        let catalog = std::fs::read_to_string(
+            Path::new(TRANSLATION_ROOT)
+                .join(locale)
+                .join("LC_MESSAGES")
+                .join("tokenmaster-desktop.po"),
+        )
+        .expect("bundled catalog");
+        let entries = po_entries(&catalog);
+        assert_eq!(
+            entries.keys().copied().collect::<BTreeSet<_>>(),
+            expected,
+            "{locale} must translate exactly the closed Task 2b3 Projects and compact-widget key set"
+        );
+    }
+}
+
+#[test]
+fn projects_and_compact_widget_use_the_closed_translation_key_set() {
+    let projects = include_str!("../ui/views/projects-view.slint");
+    let compact = include_str!("../ui/views/compact-widget-view.slint");
+
+    for msgid in PROJECTS_COMPACT_MSGIDS {
+        assert!(
+            projects.contains(&format!("@tr(\"{msgid}\""))
+                || compact.contains(&format!("@tr(\"{msgid}\"")),
+            "missing Task 2b3 @tr for {msgid:?}"
+        );
+    }
+
+    for raw in [
+        "text: \"Projects\"",
+        "text: \"Current quota\"",
+        "text: \"Return to Dashboard\"",
+        "accessible-label: \"Compact quota\"",
+        "text: \"Usage by project\"",
+    ] {
+        assert!(
+            !projects.contains(raw) && !compact.contains(raw),
+            "unwrapped Task 2b3 literal {raw:?}"
         );
     }
 }
