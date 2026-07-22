@@ -33,7 +33,7 @@ pub enum ProviderQuotaRefreshStage {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProviderQuotaRefreshFailure {
-    Discovery(super::CodexExecutableDiscoveryErrorCode),
+    Discovery(ProviderPollErrorCode),
     Clock(ProviderQuotaClockErrorCode),
     Transport(ProviderPollErrorCode),
     Publication(ProviderQuotaPublicationErrorCode),
@@ -59,7 +59,7 @@ impl ProviderQuotaRefreshFailure {
     #[must_use]
     pub const fn stable_code(self) -> &'static str {
         match self {
-            Self::Discovery(_) => "unavailable",
+            Self::Discovery(error) => error.stable_code(),
             Self::Clock(ProviderQuotaClockErrorCode::Unavailable) => "unavailable",
             Self::Clock(ProviderQuotaClockErrorCode::InvalidTime) => "invalid_time",
             Self::Transport(error) => error.stable_code(),

@@ -8,9 +8,8 @@ use tokenmaster_engine::{
 use tokenmaster_store::{BenefitApplyStatus, QuotaApplyStatus, StoreErrorCode, UsageStore};
 
 use super::{
-    CodexExecutableDiscoveryErrorCode, ProviderQuotaClockErrorCode,
-    ProviderQuotaPublicationErrorCode, ProviderQuotaRefreshFailure, ProviderQuotaRefreshSnapshot,
-    ProviderQuotaRetryMode,
+    ProviderQuotaClockErrorCode, ProviderQuotaPublicationErrorCode, ProviderQuotaRefreshFailure,
+    ProviderQuotaRefreshSnapshot, ProviderQuotaRetryMode,
 };
 use crate::provider_quota::{
     MAX_PROVIDER_QUOTA_WINDOWS, ProviderPollErrorCode, ProviderQuotaPoll, ProviderQuotaSource,
@@ -491,7 +490,11 @@ impl AttemptResult {
     }
 
     fn source(error: ProviderPollErrorCode, observed_at_ms: i64) -> Self {
-        if let Some(error) = provider_discovery_error(error) {
+        if matches!(
+            error,
+            ProviderPollErrorCode::DiscoveryUnavailable
+                | ProviderPollErrorCode::DiscoveryCapacityExceeded
+        ) {
             return Self {
                 outcome: RefreshOutcome::Failed,
                 failure: Some(ProviderQuotaRefreshFailure::Discovery(error)),
@@ -785,20 +788,6 @@ const fn transport_outcome(error: ProviderPollErrorCode) -> RefreshOutcome {
     match error {
         ProviderPollErrorCode::DeadlineExceeded => RefreshOutcome::DeadlineExceeded,
         _ => RefreshOutcome::Failed,
-    }
-}
-
-const fn provider_discovery_error(
-    error: ProviderPollErrorCode,
-) -> Option<CodexExecutableDiscoveryErrorCode> {
-    match error {
-        ProviderPollErrorCode::DiscoveryUnavailable => {
-            Some(CodexExecutableDiscoveryErrorCode::Unavailable)
-        }
-        ProviderPollErrorCode::DiscoveryCapacityExceeded => {
-            Some(CodexExecutableDiscoveryErrorCode::CapacityExceeded)
-        }
-        _ => None,
     }
 }
 

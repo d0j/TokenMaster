@@ -137,6 +137,14 @@ impl ProviderQuotaSource for UnavailableSource {
     }
 }
 
+struct DiscoveryFailureSource(ProviderPollErrorCode);
+
+impl ProviderQuotaSource for DiscoveryFailureSource {
+    fn poll(&mut self, _observed_at_ms: i64) -> Result<ProviderQuotaPoll, ProviderPollErrorCode> {
+        Err(self.0)
+    }
+}
+
 struct OversizedSource;
 
 impl ProviderQuotaSource for OversizedSource {
@@ -262,4 +270,41 @@ fn oversized_provider_poll_fails_before_store_publication() {
         "bounded rejection must precede store publication"
     );
     runtime.shutdown().expect("shutdown");
+}
+
+#[test]
+fn discovery_failures_keep_provider_owned_payloads_and_stable_codes() {
+    let temporary = TempDir::new().expect("temporary directory");
+    for (name, error, stable_code) in [
+        (
+            "missing",
+            ProviderPollErrorCode::DiscoveryUnavailable,
+            "unavailable",
+        ),
+        (
+            "oversized-search",
+            ProviderPollErrorCode::DiscoveryCapacityExceeded,
+            "capacity_exceeded",
+        ),
+    ] {
+        let archive = temporary.path().join(format!("{name}.sqlite3"));
+        let mut runtime =
+            ProviderQuotaRuntime::start_with_source(&archive, DiscoveryFailureSource(error))
+                .expect("runtime");
+
+        assert_eq!(wait(&runtime).outcome(), RefreshOutcome::Failed);
+        let failure = runtime
+            .snapshot()
+            .expect("snapshot")
+            .refresh()
+            .failure()
+            .expect("failure");
+        assert_eq!(failure, ProviderQuotaRefreshFailure::Discovery(error));
+        assert_eq!(failure.stable_code(), stable_code);
+        assert!(
+            !archive.exists(),
+            "discovery failure must precede store publication"
+        );
+        runtime.shutdown().expect("shutdown");
+    }
 }
