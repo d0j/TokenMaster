@@ -13,6 +13,7 @@ export component SettingsView inherits Rectangle {
     in property <int> presentation-skin-id;
     in property <int> presentation-color-scheme-id;
     in property <int> presentation-layout-id;
+    in property <int> presentation-locale-id;
     in property <string> presentation-persistence-state;
     in property <[DashboardBoardEditorRow]> board-editor-rows;
     in property <bool> periodic-enabled;
@@ -62,6 +63,7 @@ export component SettingsView inherits Rectangle {
     callback select-presentation-skin(int);
     callback select-presentation-color-scheme(int);
     callback select-presentation-layout(int);
+    callback select-presentation-locale(int);
     callback move-dashboard-board-row(int, int);
     callback set-dashboard-board-row-visible(int, bool);
     callback set-dashboard-board-row-collapsed(int, bool);
@@ -69,11 +71,11 @@ export component SettingsView inherits Rectangle {
 
     background: UiTokens.background;
     accessible-role: groupbox;
-    accessible-label: "TokenMaster settings";
+    accessible-label: @tr("TokenMaster settings");
 
     presentation-strip := Rectangle {
         width: root.width;
-        height: root.settings-layout-mode == "wide" ? 88px : 116px;
+        height: root.settings-layout-mode == "wide" ? 88px : 148px;
         background: UiTokens.background;
 
         density-label := Text {
@@ -81,7 +83,7 @@ export component SettingsView inherits Rectangle {
             y: 8px;
             width: 64px;
             height: 32px;
-            text: "Density";
+            text: @tr("Density");
             color: UiTokens.text-secondary;
             vertical-alignment: center;
         }
@@ -90,9 +92,9 @@ export component SettingsView inherits Rectangle {
             y: 8px;
             width: root.settings-layout-mode == "wide" ? root.width / 4 - 88px : root.width / 2 - 88px;
             height: 32px;
-            model: ["Comfortable", "Compact", "Ultra compact"];
+            model: [@tr("Comfortable"), @tr("Compact"), @tr("Ultra compact")];
             current-index: root.presentation-density-id;
-            accessible-label: "Presentation density";
+            accessible-label: @tr("Presentation density");
             selected(_) => { root.select-presentation-density(self.current-index); }
         }
         skin-label := Text {
@@ -100,7 +102,7 @@ export component SettingsView inherits Rectangle {
             y: 8px;
             width: 40px;
             height: 32px;
-            text: "Skin";
+            text: @tr("Skin");
             color: UiTokens.text-secondary;
             vertical-alignment: center;
         }
@@ -109,9 +111,9 @@ export component SettingsView inherits Rectangle {
             y: 8px;
             width: root.settings-layout-mode == "wide" ? root.width / 4 - 64px : root.width / 2 - 64px;
             height: 32px;
-            model: ["Refined", "Graphite", "Ember"];
+            model: [@tr("Refined"), @tr("Graphite"), @tr("Ember")];
             current-index: root.presentation-skin-id;
-            accessible-label: "Presentation skin";
+            accessible-label: @tr("Presentation skin");
             selected(_) => { root.select-presentation-skin(self.current-index); }
         }
         scheme-label := Text {
@@ -119,7 +121,7 @@ export component SettingsView inherits Rectangle {
             y: root.settings-layout-mode == "wide" ? 8px : 44px;
             width: 56px;
             height: 32px;
-            text: "Scheme";
+            text: @tr("Scheme");
             color: UiTokens.text-secondary;
             vertical-alignment: center;
         }
@@ -128,9 +130,9 @@ export component SettingsView inherits Rectangle {
             y: root.settings-layout-mode == "wide" ? 8px : 44px;
             width: root.settings-layout-mode == "wide" ? root.width / 4 - 80px : root.width / 2 - 88px;
             height: 32px;
-            model: ["System", "Light", "Dark"];
+            model: [@tr("System"), @tr("Light"), @tr("Dark")];
             current-index: root.presentation-color-scheme-id;
-            accessible-label: "Presentation color scheme";
+            accessible-label: @tr("Presentation color scheme");
             selected(_) => { root.select-presentation-color-scheme(self.current-index); }
         }
         layout-label := Text {
@@ -138,7 +140,7 @@ export component SettingsView inherits Rectangle {
             y: root.settings-layout-mode == "wide" ? 8px : 44px;
             width: 56px;
             height: 32px;
-            text: "Layout";
+            text: @tr("Layout");
             color: UiTokens.text-secondary;
             vertical-alignment: center;
         }
@@ -147,21 +149,40 @@ export component SettingsView inherits Rectangle {
             y: root.settings-layout-mode == "wide" ? 8px : 44px;
             width: root.settings-layout-mode == "wide" ? root.width / 4 - 80px : root.width / 2 - 80px;
             height: 32px;
-            model: ["Refined", "Control center", "Workbench"];
+            model: [@tr("Refined"), @tr("Control center"), @tr("Workbench")];
             current-index: root.presentation-layout-id;
-            accessible-label: "Presentation layout";
+            accessible-label: @tr("Presentation layout");
             selected(_) => { root.select-presentation-layout(self.current-index); }
         }
         persistence-label := Text {
+            x: root.settings-layout-mode == "wide" ? root.width / 4 + 8px : 8px;
+            y: root.settings-layout-mode == "wide" ? 48px : 116px;
+            width: root.settings-layout-mode == "wide" ? 3 * root.width / 4 - 16px : root.width - 16px;
+            height: 24px;
+            text: root.presentation-persistence-state == "saved" ? @tr("Saved")
+                : root.presentation-persistence-state == "saving" ? @tr("Saving…")
+                : @tr("Not saved — choose the current presentation again to retry");
+            color: UiTokens.text-secondary;
+            accessible-label: @tr("Presentation persistence %1", self.text);
+        }
+        locale-label := Text {
             x: 8px;
             y: root.settings-layout-mode == "wide" ? 48px : 84px;
-            width: root.width - 16px;
+            width: 64px;
             height: 24px;
-            text: root.presentation-persistence-state == "saved" ? "Saved"
-                : root.presentation-persistence-state == "saving" ? "Saving…"
-                : "Not saved — choose the current presentation again to retry";
+            text: @tr("Language");
             color: UiTokens.text-secondary;
-            accessible-label: "Presentation persistence " + self.text;
+            vertical-alignment: center;
+        }
+        locale-selector := ComboBox {
+            x: 80px;
+            y: root.settings-layout-mode == "wide" ? 48px : 84px;
+            width: root.settings-layout-mode == "wide" ? root.width / 4 - 88px : root.width / 2 - 88px;
+            height: 24px;
+            model: [@tr("English"), @tr("Russian"), @tr("Pseudo")];
+            current-index: root.presentation-locale-id;
+            accessible-label: @tr("Presentation language");
+            selected(_) => { root.select-presentation-locale(self.current-index); }
         }
     }
 

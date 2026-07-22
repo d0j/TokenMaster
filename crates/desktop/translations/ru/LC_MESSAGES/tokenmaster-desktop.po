@@ -1,0 +1,103 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: ru\n"
+
+msgid "TokenMaster"
+msgstr "TokenMaster"
+
+msgid "Local usage intelligence"
+msgstr "Локальная аналитика использования"
+
+msgid "Go to route"
+msgstr "Перейти к разделу"
+
+msgid "Open route palette"
+msgstr "Открыть палитру разделов"
+
+msgid "TokenMaster settings"
+msgstr "Настройки TokenMaster"
+
+msgid "Density"
+msgstr "Плотность"
+
+msgid "Comfortable"
+msgstr "Обычная"
+
+msgid "Compact"
+msgstr "Компактная"
+
+msgid "Ultra compact"
+msgstr "Сверхкомпактная"
+
+msgid "Presentation density"
+msgstr "Плотность интерфейса"
+
+msgid "Skin"
+msgstr "Оформление"
+
+msgid "Refined"
+msgstr "Утончённое"
+
+msgid "Graphite"
+msgstr "Графит"
+
+msgid "Ember"
+msgstr "Угольки"
+
+msgid "Presentation skin"
+msgstr "Оформление интерфейса"
+
+msgid "Scheme"
+msgstr "Схема"
+
+msgid "System"
+msgstr "Системная"
+
+msgid "Light"
+msgstr "Светлая"
+
+msgid "Dark"
+msgstr "Тёмная"
+
+msgid "Presentation color scheme"
+msgstr "Цветовая схема интерфейса"
+
+msgid "Layout"
+msgstr "Макет"
+
+msgid "Control center"
+msgstr "Центр управления"
+
+msgid "Workbench"
+msgstr "Рабочая панель"
+
+msgid "Presentation layout"
+msgstr "Макет интерфейса"
+
+msgid "Saved"
+msgstr "Сохранено"
+
+msgid "Saving…"
+msgstr "Сохранение…"
+
+msgid "Not saved — choose the current presentation again to retry"
+msgstr "Не сохранено — выберите текущее представление ещё раз для повтора"
+
+msgid "Presentation persistence %1"
+msgstr "Состояние сохранения интерфейса: %1"
+
+msgid "Language"
+msgstr "Язык"
+
+msgid "English"
+msgstr "Английский"
+
+msgid "Russian"
+msgstr "Русский"
+
+msgid "Pseudo"
+msgstr "Псевдо"
+
+msgid "Presentation language"
+msgstr "Язык интерфейса"

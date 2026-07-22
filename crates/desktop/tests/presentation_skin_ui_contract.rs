@@ -1,6 +1,6 @@
 use std::{cell::Cell, rc::Rc};
 
-use i_slint_backend_testing::{AccessibleRole, ElementHandle, ElementQuery};
+use i_slint_backend_testing::{AccessibleRole, ElementHandle};
 use slint::{ComponentHandle, Model, SharedString};
 use tokenmaster_desktop::{
     DesktopBackupPolicy, DesktopDensity, DesktopIntent, DesktopIntentAdmission, DesktopIntentSink,
@@ -256,14 +256,11 @@ fn skin_selector_is_exactly_one_accessible_combobox_and_stays_in_bounds() {
             actual_size.height,
         );
         assert_eq!(window.get_settings_layout_mode(), layout);
-        let selectors = ElementQuery::from_root(window)
-            .match_accessible_role(AccessibleRole::Combobox)
-            .match_predicate(|element| {
-                element.accessible_label().as_deref() == Some("Presentation skin")
-            })
-            .find_all();
+        let selectors = ElementHandle::find_by_element_id(window, "SettingsView::skin-selector")
+            .filter(|element| element.accessible_role() == Some(AccessibleRole::Combobox))
+            .collect::<Vec<_>>();
         assert_eq!(selectors.len(), 1, "one Skin selector at {width}x{height}");
-        let selector = ElementHandle::find_by_accessible_label(window, "Presentation skin")
+        let selector = ElementHandle::find_by_element_id(window, "SettingsView::skin-selector")
             .find(|element| element.accessible_role() == Some(AccessibleRole::Combobox))
             .expect("skin selector");
         let position = selector.absolute_position();
@@ -291,12 +288,12 @@ fn skin_selector_is_exactly_one_accessible_combobox_and_stays_in_bounds() {
             size.width,
             size.height,
         );
-        for (label, role) in [
-            ("Presentation density", AccessibleRole::Combobox),
-            ("Presentation skin", AccessibleRole::Combobox),
-            ("Presentation persistence Saved", AccessibleRole::Text),
+        for (element_id, role) in [
+            ("SettingsView::density-selector", AccessibleRole::Combobox),
+            ("SettingsView::skin-selector", AccessibleRole::Combobox),
+            ("SettingsView::persistence-label", AccessibleRole::Text),
         ] {
-            let element = ElementHandle::find_by_accessible_label(window, label)
+            let element = ElementHandle::find_by_element_id(window, element_id)
                 .find(|element| element.accessible_role() == Some(role))
                 .expect("presentation strip control");
             let position = element.absolute_position();
@@ -306,7 +303,7 @@ fn skin_selector_is_exactly_one_accessible_combobox_and_stays_in_bounds() {
                     && position.y >= strip_position.y
                     && position.x + size.width <= strip_position.x + strip_size.width
                     && position.y + size.height <= strip_position.y + strip_size.height,
-                "{label} stays in the presentation strip at {width}x{height}"
+                "{element_id} stays in the presentation strip at {width}x{height}"
             );
         }
     }
@@ -487,9 +484,11 @@ fn selector_and_atomic_palette_source_contracts_are_stable() {
         count(settings, "callback select-presentation-skin(int);"),
         1
     );
-    assert!(settings.contains("model: [\"Refined\", \"Graphite\", \"Ember\"]"));
-    assert!(settings.contains("accessible-label: \"Presentation skin\""));
-    assert!(settings.contains("Not saved — choose the current presentation again to retry"));
+    assert!(settings.contains("model: [@tr(\"Refined\"), @tr(\"Graphite\"), @tr(\"Ember\")]"));
+    assert!(settings.contains("accessible-label: @tr(\"Presentation skin\")"));
+    assert!(
+        settings.contains("@tr(\"Not saved — choose the current presentation again to retry\")")
+    );
     assert_eq!(count(ui, "window.set_presentation_palette"), 1);
     let palette = ui
         .find("set_presentation_palette")

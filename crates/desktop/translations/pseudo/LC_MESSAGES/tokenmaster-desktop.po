@@ -1,0 +1,103 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: pseudo\n"
+
+msgid "TokenMaster"
+msgstr "［ŢõķêñMåšţêř ···］"
+
+msgid "Local usage intelligence"
+msgstr "［Ŀõçåļ ûšåğê îñţêļļîğêñçê ·······］"
+
+msgid "Go to route"
+msgstr "［Ĝõ ţõ řõûţê ·····］"
+
+msgid "Open route palette"
+msgstr "［Õþêñ řõûţê þåļêţţê ·······］"
+
+msgid "TokenMaster settings"
+msgstr "［ŢõķêñMåšţêř šêţţîñğš ·······］"
+
+msgid "Density"
+msgstr "［Ðêñšîţÿ ···］"
+
+msgid "Comfortable"
+msgstr "［Çõɱƒõřţåβļê ·····］"
+
+msgid "Compact"
+msgstr "［Çõɱþåçţ ···］"
+
+msgid "Ultra compact"
+msgstr "［Ûļţřå çõɱþåçţ ·····］"
+
+msgid "Presentation density"
+msgstr "［Þřêšêñţåţîõñ ðêñšîţÿ ·······］"
+
+msgid "Skin"
+msgstr "［Šķîñ ···］"
+
+msgid "Refined"
+msgstr "［Řêƒîñêð ···］"
+
+msgid "Graphite"
+msgstr "［Ĝřåþĥîţê ···］"
+
+msgid "Ember"
+msgstr "［Êɱβêř ···］"
+
+msgid "Presentation skin"
+msgstr "［Þřêšêñţåţîõñ šķîñ ·······］"
+
+msgid "Scheme"
+msgstr "［Šçĥêɱê ···］"
+
+msgid "System"
+msgstr "［Šÿšţêɱ ···］"
+
+msgid "Light"
+msgstr "［Ŀîğĥţ ···］"
+
+msgid "Dark"
+msgstr "［Ðåřķ ···］"
+
+msgid "Presentation color scheme"
+msgstr "［Þřêšêñţåţîõñ çõļõř šçĥêɱê ·······］"
+
+msgid "Layout"
+msgstr "［Ŀåÿõûţ ···］"
+
+msgid "Control center"
+msgstr "［Çõñţřõļ çêñţêř ·······］"
+
+msgid "Workbench"
+msgstr "［Ŵõřķβêñçĥ ···］"
+
+msgid "Presentation layout"
+msgstr "［Þřêšêñţåţîõñ ļåÿõûţ ·······］"
+
+msgid "Saved"
+msgstr "［Šåṽêð ···］"
+
+msgid "Saving…"
+msgstr "［Šåṽîñğ… ···］"
+
+msgid "Not saved — choose the current presentation again to retry"
+msgstr "［Ñõţ šåṽêð — çĥõõšê ţĥê çûřřêñţ þřêšêñţåţîõñ åğåîñ ţõ řêţřÿ ·······］"
+
+msgid "Presentation persistence %1"
+msgstr "［Þřêšêñţåţîõñ þêřšîšţêñçê %1 ·······］"
+
+msgid "Language"
+msgstr "［Ŀåñğûåğê ···］"
+
+msgid "English"
+msgstr "［Êñğļîšĥ ···］"
+
+msgid "Russian"
+msgstr "［Řûššîåñ ···］"
+
+msgid "Pseudo"
+msgstr "［Þšêûðõ ···］"
+
+msgid "Presentation language"
+msgstr "［Þřêšêñţåţîõñ ļåñğûåğê ·······］"

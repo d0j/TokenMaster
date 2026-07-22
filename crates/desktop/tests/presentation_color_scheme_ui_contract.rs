@@ -89,13 +89,13 @@ fn compiled_ui_owns_one_three_entry_selector_and_reactive_slint_observation() {
     );
     assert_eq!(
         settings
-            .matches("model: [\"System\", \"Light\", \"Dark\"];")
+            .matches("model: [@tr(\"System\"), @tr(\"Light\"), @tr(\"Dark\")];")
             .count(),
         1
     );
     assert_eq!(
         settings
-            .matches("accessible-label: \"Presentation color scheme\";")
+            .matches("accessible-label: @tr(\"Presentation color scheme\");")
             .count(),
         1
     );

@@ -346,8 +346,7 @@ impl ReliableStateNotifierInner {
             *state = delivery.projection.clone();
             drop(state);
             apply_reliable_state_projection(&window, &delivery.projection);
-            apply_presentation_style(&window, style);
-            true
+            apply_presentation_style(&window, style)
         });
         if let Some(acknowledgement) = delivery.and_then(|delivery| delivery.acknowledgement) {
             let _ = acknowledgement.send(if delivered {
@@ -562,11 +561,15 @@ impl DesktopShell {
         session_page_sink: Rc<dyn DesktopSessionPageIntentSink>,
         lifecycle_sink: Option<Rc<dyn DesktopLifecycleIntentSink>>,
     ) -> Result<Self, slint::PlatformError> {
-        let window = MainWindow::new()?;
         let initial_presentation_style =
             DesktopPresentationStyle::from_persisted(reliable_state.presentation().selection());
+        let window = MainWindow::new()?;
         let presentation_style = Arc::new(Mutex::new(initial_presentation_style));
-        apply_presentation_style(&window, initial_presentation_style);
+        if !apply_presentation_style(&window, initial_presentation_style) {
+            return Err(slint::PlatformError::Other(String::from(
+                "missing bundled desktop locale",
+            )));
+        }
         let tray_availability = Rc::new(Cell::new(DesktopTrayAvailability::Unavailable));
         if lifecycle_sink.is_some() {
             wire_close_to_tray(&window, Rc::clone(&tray_availability));
@@ -601,6 +604,11 @@ impl DesktopShell {
             intent_sink.clone(),
         );
         wire_presentation_layout(
+            &window,
+            Arc::clone(&presentation_style),
+            intent_sink.clone(),
+        );
+        wire_presentation_locale(
             &window,
             Arc::clone(&presentation_style),
             intent_sink.clone(),
@@ -738,7 +746,9 @@ impl DesktopShell {
         *reliable_state = projection.clone();
         drop(reliable_state);
         apply_reliable_state_projection(&self.window, &projection);
-        apply_presentation_style(&self.window, style);
+        if !apply_presentation_style(&self.window, style) {
+            return Err(DesktopUiError::state_unavailable());
+        }
         Ok(())
     }
 
@@ -786,12 +796,16 @@ impl DesktopShell {
     }
 }
 
-fn apply_presentation_style(window: &MainWindow, style: DesktopPresentationStyle) {
+fn apply_presentation_style(window: &MainWindow, style: DesktopPresentationStyle) -> bool {
+    if slint::select_bundled_translation(style.locale().stable_key()).is_err() {
+        return false;
+    }
     window.set_presentation_palette(ui_palette(style.skin(), style.effective_color_scheme()));
     window.set_presentation_skin_id(style.skin().slint_index());
     window.set_presentation_density_id(style.density().slint_index());
     window.set_presentation_color_scheme_id(style.color_scheme().slint_index());
     window.set_presentation_layout_id(style.layout().slint_index());
+    window.set_presentation_locale_id(style.locale().slint_index());
     apply_dashboard_board_preferences(
         window,
         style.selection().board(),
@@ -800,6 +814,7 @@ fn apply_presentation_style(window: &MainWindow, style: DesktopPresentationStyle
     window.set_presentation_effective_color_scheme_id(style.effective_color_scheme().slint_index());
     window.set_presentation_revision(style.revision().get().to_string().into());
     window.set_presentation_persistence_state(style.persistence().stable_code().into());
+    true
 }
 
 fn apply_dashboard_board_preferences(
@@ -1025,6 +1040,24 @@ fn wire_presentation_layout(
     });
 }
 
+fn wire_presentation_locale(
+    window: &MainWindow,
+    presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
+    intent_sink: Rc<dyn DesktopIntentSink>,
+) {
+    let weak_window = window.as_weak();
+    window.on_select_presentation_locale(move |index| {
+        let Some(next_style) =
+            select_presentation_locale_if_admitted(&presentation_style, index, &intent_sink)
+        else {
+            return;
+        };
+        if let Some(window) = weak_window.upgrade() {
+            let _ = apply_presentation_style(&window, next_style);
+        }
+    });
+}
+
 fn wire_dashboard_board(
     window: &MainWindow,
     presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
@@ -1221,6 +1254,26 @@ fn select_presentation_color_scheme_if_admitted(
                 | crate::DesktopIntentAdmission::Queued
                 | crate::DesktopIntentAdmission::Coalesced
         )
+    }) != DesktopPresentationApplyOutcome::Applied
+    {
+        return None;
+    }
+    let mut current = presentation_style.lock().ok()?;
+    if *current == captured {
+        *current = selected;
+    }
+    Some(*current)
+}
+
+fn select_presentation_locale_if_admitted(
+    presentation_style: &Arc<Mutex<DesktopPresentationStyle>>,
+    index: i32,
+    intent_sink: &Rc<dyn DesktopIntentSink>,
+) -> Option<DesktopPresentationStyle> {
+    let captured = *presentation_style.lock().ok()?;
+    let mut selected = captured;
+    if selected.select_locale_index_if_admitted(index, |selection| {
+        presentation_admitted(intent_sink, selection)
     }) != DesktopPresentationApplyOutcome::Applied
     {
         return None;

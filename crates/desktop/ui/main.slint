@@ -31,6 +31,8 @@ export component MainWindow inherits Window {
     out property <string> presentation-color-scheme-key: root.presentation-color-scheme-id == 2 ? "dark" : (root.presentation-color-scheme-id == 1 ? "light" : "system");
     in-out property <int> presentation-layout-id: 0;
     out property <string> presentation-layout-key: root.presentation-layout-id == 2 ? "workbench" : (root.presentation-layout-id == 1 ? "control_center" : "refined");
+    in-out property <int> presentation-locale-id: 0;
+    out property <string> presentation-locale-key: root.presentation-locale-id == 2 ? "pseudo" : (root.presentation-locale-id == 1 ? "ru" : "en");
     in-out property <int> presentation-effective-color-scheme-id: 2;
     out property <string> presentation-effective-color-scheme-key: root.presentation-effective-color-scheme-id == 1 ? "light" : "dark";
     out property <int> observed-system-color-scheme-id: Palette.color-scheme == ColorScheme.light ? 1 : (Palette.color-scheme == ColorScheme.dark ? 2 : 0);
@@ -280,6 +282,7 @@ export component MainWindow inherits Window {
     callback select-presentation-skin(int);
     callback select-presentation-color-scheme(int);
     callback select-presentation-layout(int);
+    callback select-presentation-locale(int);
     callback move-dashboard-board-row(int, int);
     callback set-dashboard-board-row-visible(int, bool);
     callback set-dashboard-board-row-collapsed(int, bool);
@@ -287,7 +290,7 @@ export component MainWindow inherits Window {
     callback system-color-scheme-observed(int);
     changed observed-system-color-scheme-id => { root.system-color-scheme-observed(root.observed-system-color-scheme-id); }
 
-    title: "TokenMaster";
+    title: @tr("TokenMaster");
     preferred-width: root.compact-widget-visible ? 420px : 1120px;
     preferred-height: root.compact-widget-visible ? 560px : 720px;
     min-width: root.compact-widget-visible ? 360px : 560px;
@@ -324,21 +327,21 @@ export component MainWindow inherits Window {
                 spacing: 12px;
 
                 Text {
-                    text: "TokenMaster";
+                    text: @tr("TokenMaster");
                     color: UiTokens.text-primary;
                     font-size: 20px;
                     font-weight: 800;
                     vertical-alignment: center;
                 }
                 Text {
-                    text: "Local usage intelligence";
+                    text: @tr("Local usage intelligence");
                     color: UiTokens.text-secondary;
                     vertical-alignment: center;
                     horizontal-stretch: 1;
                 }
                 Button {
-                    text: "Go to route";
-                    accessible-label: "Open route palette";
+                    text: @tr("Go to route");
+                    accessible-label: @tr("Open route palette");
                     clicked => { root.open-command-palette(); }
                 }
                 Text {
@@ -583,6 +586,7 @@ export component MainWindow inherits Window {
                     presentation-skin-id: root.presentation-skin-id;
                     presentation-color-scheme-id: root.presentation-color-scheme-id;
                     presentation-layout-id: root.presentation-layout-id;
+                    presentation-locale-id: root.presentation-locale-id;
                     presentation-persistence-state: root.presentation-persistence-state;
                     board-editor-rows: root.dashboard-board-editor-rows;
                     periodic-enabled: root.backup-periodic-enabled;
@@ -627,6 +631,7 @@ export component MainWindow inherits Window {
                     select-presentation-skin(index) => { root.select-presentation-skin(index); }
                     select-presentation-color-scheme(index) => { root.select-presentation-color-scheme(index); }
                     select-presentation-layout(index) => { root.select-presentation-layout(index); }
+                    select-presentation-locale(index) => { root.select-presentation-locale(index); }
                     move-dashboard-board-row(index, delta) => { root.move-dashboard-board-row(index, delta); }
                     set-dashboard-board-row-visible(index, visible) => { root.set-dashboard-board-row-visible(index, visible); }
                     set-dashboard-board-row-collapsed(index, collapsed) => { root.set-dashboard-board-row-collapsed(index, collapsed); }

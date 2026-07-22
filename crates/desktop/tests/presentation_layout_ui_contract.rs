@@ -185,13 +185,13 @@ fn source_owns_one_three_entry_selector_and_three_dashboard_layout_branches() {
     );
     assert_eq!(
         settings
-            .matches("model: [\"Refined\", \"Control center\", \"Workbench\"];")
+            .matches("model: [@tr(\"Refined\"), @tr(\"Control center\"), @tr(\"Workbench\")];")
             .count(),
         1
     );
     assert_eq!(
         settings
-            .matches("accessible-label: \"Presentation layout\";")
+            .matches("accessible-label: @tr(\"Presentation layout\");")
             .count(),
         1
     );
