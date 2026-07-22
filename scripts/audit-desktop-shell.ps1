@@ -461,7 +461,7 @@ if ($presentationStyleOwnerCount -ne 1 -or $presentationStyleOwnerSlotCount -ne 
     $extraFamilyCallbackCount -ne 0 -or
     $skinForwardBindingCount -ne 1 -or $skinWiringCallbackCount -ne 1 -or
     $layoutWiringCallbackCount -ne 1 -or
-    [regex]::Matches($uiRustProductionText, 'Arc\s*<\s*Mutex\s*<\s*DesktopPresentationStyle\s*>\s*>').Count -ne 12) {
+    [regex]::Matches($uiRustProductionText, 'Arc\s*<\s*Mutex\s*<\s*DesktopPresentationStyle\s*>\s*>').Count -ne 14) {
     throw 'TM-DESKTOP-PRESENTATION-OWNER: exactly one complete presentation owner and palette slot are required'
 }
 $presentationApplyText = Get-RustFunctionText -Text $uiRustProductionText -Name 'apply_presentation_style'

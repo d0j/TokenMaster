@@ -226,14 +226,15 @@ foreach ($required in @($settingsValuePath, $settingsMigrationPath)) {
 }
 $settingsValueText = [System.IO.File]::ReadAllText($settingsValuePath)
 $settingsMigrationText = [System.IO.File]::ReadAllText($settingsMigrationPath)
-if ([regex]::Matches($settingsValueText, 'pub const SETTINGS_SCHEMA_VERSION:\s*u16\s*=\s*5;').Count -ne 1 -or
+if ([regex]::Matches($settingsValueText, 'pub const SETTINGS_SCHEMA_VERSION:\s*u16\s*=\s*6;').Count -ne 1 -or
     [regex]::Matches($settingsMigrationText, '(?m)^\s*1\s*=>\s*decode_(?:portable|settings)_v1\(bytes\),').Count -ne 2 -or
     [regex]::Matches($settingsMigrationText, '(?m)^\s*2\s*=>\s*decode_(?:portable|settings)_v2\(bytes\),').Count -ne 2 -or
     [regex]::Matches($settingsMigrationText, '(?m)^\s*3\s*=>\s*decode_(?:portable|settings)_v3\(bytes\),').Count -ne 2 -or
     [regex]::Matches($settingsMigrationText, '(?m)^\s*4\s*=>\s*decode_(?:portable|settings)_v4\(bytes\),').Count -ne 2 -or
-    [regex]::Matches($settingsMigrationText, 'SETTINGS_SCHEMA_VERSION\s*=>\s*decode_(?:portable|settings)_v5\(bytes\),').Count -ne 2 -or
+    [regex]::Matches($settingsMigrationText, '5\s*=>\s*decode_(?:portable|settings)_v5\(bytes\),').Count -ne 2 -or
+    [regex]::Matches($settingsMigrationText, 'SETTINGS_SCHEMA_VERSION\s*=>\s*decode_(?:portable|settings)_v6\(bytes\),').Count -ne 2 -or
     $settingsMigrationText -match '(?m)^\s*(?:0|[6-9]|\d{2,})\s*(?:\||=>)') {
-    throw 'TM-APP-PRESENTATION-SCHEMA: settings admission is exactly schema v1 through v5'
+    throw 'TM-APP-PRESENTATION-SCHEMA: settings admission is exactly schema v1 through v6'
 }
 $v2Migration = [regex]::Match($settingsMigrationText, '(?s)impl PortableSettingsV2Wire \{.*?\n\}').Value
 $v3Migration = [regex]::Match($settingsMigrationText, '(?s)impl PortableSettingsV3Wire \{.*?\n\}').Value
@@ -272,17 +273,45 @@ pub(crate) const fn into_state_presentation(self) -> tokenmaster_state::Presenta
         tokenmaster_desktop::DesktopLayout::ControlCenter => { tokenmaster_state::PresentationLayout::ControlCenter }
         tokenmaster_desktop::DesktopLayout::Workbench => { tokenmaster_state::PresentationLayout::Workbench }
     };
+    let rows = self.selection.board().rows().map(|row| {
+        let key = match row.key() {
+            tokenmaster_desktop::DesktopBoardSectionKey::PlanUsage => { tokenmaster_state::BoardSectionKey::PlanUsage }
+            tokenmaster_desktop::DesktopBoardSectionKey::CodeOutput => { tokenmaster_state::BoardSectionKey::CodeOutput }
+            tokenmaster_desktop::DesktopBoardSectionKey::Trend => { tokenmaster_state::BoardSectionKey::Trend }
+            tokenmaster_desktop::DesktopBoardSectionKey::Sessions => { tokenmaster_state::BoardSectionKey::Sessions }
+            tokenmaster_desktop::DesktopBoardSectionKey::Activity => { tokenmaster_state::BoardSectionKey::Activity }
+            tokenmaster_desktop::DesktopBoardSectionKey::Models => { tokenmaster_state::BoardSectionKey::Models }
+        };
+        tokenmaster_state::BoardSectionPreference::new(key, row.visible(), row.collapsed())
+    });
+    let board = match tokenmaster_state::BoardPreferences::new(rows) {
+        Ok(board) => board,
+        Err(_) => unreachable!(),
+    };
     tokenmaster_state::PresentationSettings::new(density, skin, color_scheme, layout)
+        .with_board(board)
 }
 '@, '\s+', '')
 if ([regex]::Matches($commandExecutable, 'ApplicationCommand::UpdatePresentation').Count -ne 1 -or
     [regex]::Matches($commandExecutable, 'ApplicationOperationPayload::Presentation\(ApplicationPresentationUpdate::new\(\s*selection,\s*\)\)').Count -ne 1 -or
     $normalizedCommand.IndexOf($expectedPresentationWrapper, [System.StringComparison]::Ordinal) -lt 0 -or
     [regex]::Matches($commandExecutable, '\binto_state_presentation\s*\(').Count -ne 1 -or
-    $normalizedCommand.IndexOf($expectedPresentationConversion, [System.StringComparison]::Ordinal) -lt 0 -or
     [regex]::Matches($commandExecutable, 'tokenmaster_state::PresentationSettings::new\(').Count -ne 1 -or
+    [regex]::Matches($commandExecutable, 'let\s+skin\s*=\s*match\s+self\.selection\.skin\(\)').Count -ne 1 -or
+    [regex]::Matches($commandExecutable, 'DesktopSkin::Refined\s*=>\s*\{?\s*tokenmaster_state::PresentationSkin::Refined').Count -ne 1 -or
+    [regex]::Matches($commandExecutable, 'DesktopSkin::Graphite\s*=>\s*\{?\s*tokenmaster_state::PresentationSkin::Graphite').Count -ne 1 -or
+    [regex]::Matches($commandExecutable, 'DesktopSkin::Ember\s*=>\s*tokenmaster_state::PresentationSkin::Ember').Count -ne 1 -or
+    [regex]::Matches($commandExecutable, 'DesktopBoardSectionKey::PlanUsage\s*=>\s*\{?\s*tokenmaster_state::BoardSectionKey::PlanUsage').Count -ne 1 -or
+    [regex]::Matches($commandExecutable, 'DesktopBoardSectionKey::CodeOutput\s*=>\s*\{?\s*tokenmaster_state::BoardSectionKey::CodeOutput').Count -ne 1 -or
+    [regex]::Matches($commandExecutable, 'DesktopBoardSectionKey::Trend\s*=>\s*\{?\s*tokenmaster_state::BoardSectionKey::Trend').Count -ne 1 -or
+    [regex]::Matches($commandExecutable, 'DesktopBoardSectionKey::Sessions\s*=>\s*\{?\s*tokenmaster_state::BoardSectionKey::Sessions').Count -ne 1 -or
+    [regex]::Matches($commandExecutable, 'DesktopBoardSectionKey::Activity\s*=>\s*\{?\s*tokenmaster_state::BoardSectionKey::Activity').Count -ne 1 -or
+    [regex]::Matches($commandExecutable, 'DesktopBoardSectionKey::Models\s*=>\s*\{?\s*tokenmaster_state::BoardSectionKey::Models').Count -ne 1 -or
+    [regex]::Matches($commandExecutable, 'BoardSectionPreference::new\(key,\s*row\.visible\(\),\s*row\.collapsed\(\)\)').Count -ne 1 -or
+    [regex]::Matches($commandExecutable, 'BoardPreferences::new\(rows\)').Count -ne 1 -or
+    [regex]::Matches($commandExecutable, '\.with_board\(board\)').Count -ne 1 -or
     $commandExecutable -match 'UpdatePresentation(?:Density|Skin|ColorScheme|Layout)|Presentation(?:Density|Skin|ColorScheme|Layout)\(') {
-    throw 'TM-APP-PRESENTATION-COMPLETE: application presentation requests carry one complete density, skin, color-scheme, and layout quadruple'
+    throw 'TM-APP-PRESENTATION-COMPLETE: application presentation requests carry one complete density, skin, color-scheme, layout, and six-row board payload'
 }
 $operationExecutable = [regex]::Replace($operationText, '(?ms)//.*?$|/\*.*?\*/|"(?:\\.|[^"\\])*"', ' ')
 $operationChannelCount = [regex]::Matches(

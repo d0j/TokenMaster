@@ -25,9 +25,11 @@ then P5/P6 release work, not another audit-hardening round.
 
 ## Audit/evidence state
 
-Focused Rust and compiled-UI contracts, both direct executable receipts, all 110
-application composition mutations, and the focused 19-test desktop presentation receipt
-pass. Independent Sol High review found two Important issues: Workbench row geometry
+Focused Rust and compiled-UI contracts, both direct executable source receipts, and all
+110 application composition mutations pass. The bounded desktop receipt acceptance case
+passes; the full 304-test desktop Pester mutation suite was attempted twice and timed out
+at 120 seconds and 300 seconds before test output, so its complete mutation result is not
+verified in this cycle. Independent Sol High review found two Important issues: Workbench row geometry
 drift and one stale schema-v4 app assertion. Both are corrected; the single re-review
 closed them with no new Critical finding. The
 historical 304-test desktop mutation aggregate exceeded its bounded 20-minute run after

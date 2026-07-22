@@ -1344,12 +1344,12 @@ fn attach_history_range_terminal_decoy(controller: &mut DesktopController, live_
             Should -Throw "*TM-APP-PRESENTATION-COMPLETE*"
     }
 
-    It "rejects a schema range wider than v1 through v5" {
+    It "rejects a schema range wider than v1 through v6" {
         $fixture = New-AppAuditFixture -Name "presentation-schema-range"
         $path = Join-Path $fixture "crates\state\src\settings\migration.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            'SETTINGS_SCHEMA_VERSION => decode_portable_v5(bytes),',
-            '5 | 6 => decode_portable_v5(bytes),'
+            'SETTINGS_SCHEMA_VERSION => decode_portable_v6(bytes),',
+            '5 | 6 => decode_portable_v6(bytes),'
         )
         [System.IO.File]::WriteAllText($path, $text)
 

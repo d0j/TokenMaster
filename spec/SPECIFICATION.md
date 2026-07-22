@@ -345,8 +345,10 @@ responsive, and explicit about loading, stale, partial, unavailable, and failure
 states. The dark default SHOULD preserve the useful visual hierarchy of the UI
 reference without copying its implementation.
 
-The Dashboard MUST render exactly six semantic sections in this order: Plan Usage,
-Code Output, Usage and Cost Trend, Sessions, Activity, and Model Usage. Provider quota
+The Dashboard MUST retain exactly six semantic payloads in the canonical default order:
+Plan Usage, Code Output, Usage and Cost Trend, Sessions, Activity, and Model Usage.
+P4-F may display the visible subset in the persisted board/template order; hidden or
+collapsed sections retain their complete payloads and models. Provider quota
 rows MUST be discovered dynamically and MUST NOT assume five-hour or weekly windows.
 Missing token, cost, quota, reset, or benefit evidence MUST render as unavailable,
 never as a fabricated zero. Banked resets MUST remain visually and semantically
