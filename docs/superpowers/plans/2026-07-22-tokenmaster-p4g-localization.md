@@ -49,21 +49,34 @@ existing bundled catalogs, and focused component/catalog source contracts.
 3. Run the localization contract, affected component/UI contracts, and strict
    desktop Clippy; commit and continue to Task 2b without claiming unified locale.
 
-## Task 2b: Complete views and projection localization
+## Tasks 2b1-2b7: Complete fixed view localization
 
-**Scope:** remaining `crates/desktop/ui/views/**`, the remaining Settings content,
-the catalogs, `crates/desktop/src/ui.rs`, a narrow closed display-label resolver,
-and focused desktop contracts.
+Each bounded task adds a failing per-surface catalog/source contract, converts every
+fixed linguistic visible/accessibility string in only the named surfaces to `@tr`,
+extends the Russian and deterministic pseudo catalogs with equal placeholders, runs
+the affected UI contracts plus strict Desktop Clippy, and receives one review. No
+task is described as unified until all seven are complete.
 
-1. Add failing per-surface catalog/source contracts and classify Rust literals into
-   translatable display labels versus invariant keys, codes, evidence, paths,
-   timestamps, numbers, and source data.
-2. Convert every remaining fixed visible/accessibility string to `@tr` and complete
-   the Russian and deterministic pseudo catalogs with placeholder equality.
-3. Localize only the closed Rust display-label set at the existing projection
-   boundary; prove invariant fields remain byte-identical.
-4. Run focused desktop contracts, existing presentation UI contracts, and strict
-   desktop Clippy; commit only when no production view remains mixed-language.
+- **2b1:** Settings heading, reminder editor, and backup policy.
+- **2b2:** Settings startup, portable configuration, dashboard board, and footer.
+- **2b3:** Projects and compact-widget views.
+- **2b4:** Sessions and dashboard views.
+- **2b5:** Data-health and Help/About views.
+- **2b6:** Activity and Models views.
+- **2b7:** History and Notifications views.
+
+## Task 2c: Complete projection localization
+
+**Scope:** `crates/desktop/src/ui.rs`, a narrow closed display-label resolver, the
+catalogs, and focused desktop contracts.
+
+1. Classify Rust literals into translatable display labels versus invariant keys,
+   codes, evidence, paths, timestamps, numbers, and source data.
+2. Add failing contracts for the closed display-label set and invariant fields.
+3. Localize only that set at the existing projection boundary, complete both
+   catalogs, and prove hot en/ru/pseudo output without changing stored/query data.
+4. Run focused Desktop contracts and strict Clippy; commit only when no production
+   surface remains mixed-language.
 
 ## Task 3: Integration and release evidence
 
