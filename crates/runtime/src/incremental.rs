@@ -289,10 +289,10 @@ impl SourceSink for ScanSink<'_> {
     fn on_source(
         &mut self,
         source: DiscoveredSource,
-        checkpoint: tokenmaster_engine::AdapterCheckpoint,
+        state: tokenmaster_engine::AdapterSourceState,
     ) -> Result<SinkControl, PortError> {
         self.archive
-            .observe_source(self.scan_set, &source, &checkpoint)?;
+            .observe_source(self.scan_set, &source, &state)?;
         Ok(SinkControl::Continue)
     }
 }
@@ -307,10 +307,11 @@ impl ReplaySourceSink for PreflightSink<'_> {
     fn on_source(
         &mut self,
         source: DiscoveredSource,
-        _initial_checkpoint: tokenmaster_engine::AdapterCheckpoint,
+        _initial_state: tokenmaster_engine::AdapterSourceState,
         reader: &mut dyn SourceBatchReader,
     ) -> Result<SinkControl, PortError> {
-        let checkpoint = self.archive.current_checkpoint(source.identity())?;
+        let progress = self.archive.current_progress(source.identity())?;
+        let checkpoint = reader.restore_checkpoint(&progress, self.control)?;
         reader.validate_checkpoint(&checkpoint, self.control)?;
         self.files_examined = checked_add(self.files_examined, 1)?;
         Ok(SinkControl::Continue)
@@ -328,12 +329,13 @@ impl ReplaySourceSink for ApplySink<'_> {
     fn on_source(
         &mut self,
         source: DiscoveredSource,
-        _initial_checkpoint: tokenmaster_engine::AdapterCheckpoint,
+        _initial_state: tokenmaster_engine::AdapterSourceState,
         reader: &mut dyn SourceBatchReader,
     ) -> Result<SinkControl, PortError> {
         loop {
             self.control.check()?;
-            let checkpoint = self.archive.current_checkpoint(source.identity())?;
+            let progress = self.archive.current_progress(source.identity())?;
+            let checkpoint = reader.restore_checkpoint(&progress, self.control)?;
             let batch = reader.read_batch(&checkpoint, self.control)?;
             let state = batch.state();
             let counters = batch.counters();

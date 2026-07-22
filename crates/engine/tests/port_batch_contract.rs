@@ -6,7 +6,8 @@ use tokenmaster_domain::{
 };
 use tokenmaster_engine::{
     AdapterBatch, AdapterBatchParts, AdapterCheckpoint, AdapterCounters, AdapterDiagnostics,
-    BatchState, CanonicalBatch, CanonicalBatchParts, ChunkProofBatch, EngineErrorCode,
+    AdapterSourceProgress, AdapterSourceProgressParts, AdapterVerification, BatchState,
+    CanonicalBatch, CanonicalBatchParts, ChunkProofBatch, EngineErrorCode,
     MAX_OBSERVATIONS_PER_BATCH, MAX_RELATIONS_PER_BATCH, ScopeIdentity, SourceIdentity,
 };
 
@@ -82,6 +83,26 @@ fn checkpoint() -> AdapterCheckpoint {
     AdapterCheckpoint::new(vec![1, 2, 3].into_boxed_slice()).unwrap()
 }
 
+fn progress(source: &SourceIdentity) -> AdapterSourceProgress {
+    AdapterSourceProgress::new(AdapterSourceProgressParts {
+        schema_version: 1,
+        physical_identity: None,
+        logical_identity: *source.logical_file_key(),
+        committed_offset: 0,
+        scan_offset: 0,
+        observed_extent: 0,
+        modified_time_ns: None,
+        anchor_start: 0,
+        anchor_len: 0,
+        anchor_sha256: [0; 32],
+        provider_resume: Box::default(),
+        discarding_oversized_record: false,
+        incomplete_tail: false,
+        verification: AdapterVerification::Incremental,
+    })
+    .expect("progress")
+}
+
 fn proofs() -> ChunkProofBatch {
     ChunkProofBatch::new(None, Box::default()).unwrap()
 }
@@ -96,6 +117,7 @@ fn adapter_batch_is_scope_exact_bounded_and_debug_private() {
             relations: vec![relation(&source)].into_boxed_slice(),
             chunk_proofs: proofs(),
             next_checkpoint: checkpoint(),
+            next_progress: progress(&source),
             state: BatchState::SnapshotEnd,
             counters: AdapterCounters::new(1, 120, 1, 0).unwrap(),
             diagnostics: AdapterDiagnostics::default(),
@@ -126,6 +148,7 @@ fn adapter_batch_is_scope_exact_bounded_and_debug_private() {
             relations: Box::default(),
             chunk_proofs: proofs(),
             next_checkpoint: checkpoint(),
+            next_progress: progress(&source),
             state: BatchState::More,
             counters: AdapterCounters::new(1, 1, 1, 0).unwrap(),
             diagnostics: AdapterDiagnostics::default(),
@@ -149,6 +172,7 @@ fn adapter_batch_rejects_count_and_counter_incoherence() {
             relations: Box::default(),
             chunk_proofs: proofs(),
             next_checkpoint: checkpoint(),
+            next_progress: progress(&source),
             state: BatchState::More,
             counters: AdapterCounters::default(),
             diagnostics: AdapterDiagnostics::default(),
@@ -165,6 +189,7 @@ fn adapter_batch_rejects_count_and_counter_incoherence() {
             relations,
             chunk_proofs: proofs(),
             next_checkpoint: checkpoint(),
+            next_progress: progress(&source),
             state: BatchState::More,
             counters: AdapterCounters::default(),
             diagnostics: AdapterDiagnostics::default(),
@@ -180,6 +205,7 @@ fn adapter_batch_rejects_count_and_counter_incoherence() {
             relations: Box::default(),
             chunk_proofs: proofs(),
             next_checkpoint: checkpoint(),
+            next_progress: progress(&source),
             state: BatchState::More,
             counters: AdapterCounters::new(1, 1, 0, 0).unwrap(),
             diagnostics: AdapterDiagnostics::default(),
@@ -202,6 +228,7 @@ fn canonical_batch_accepts_only_scope_exact_accounting_output() {
             relations: vec![relation(&source)].into_boxed_slice(),
             chunk_proofs: proofs(),
             next_checkpoint: checkpoint(),
+            next_progress: progress(&source),
             state: BatchState::SnapshotEnd,
             counters: AdapterCounters::new(1, 120, 1, 0).unwrap(),
             diagnostics: AdapterDiagnostics::default(),
@@ -227,6 +254,7 @@ fn canonical_batch_accepts_only_scope_exact_accounting_output() {
             relations: Box::default(),
             chunk_proofs: proofs(),
             next_checkpoint: checkpoint(),
+            next_progress: progress(&source),
             state: BatchState::More,
             counters: AdapterCounters::new(1, 1, 1, 0).unwrap(),
             diagnostics: AdapterDiagnostics::default(),

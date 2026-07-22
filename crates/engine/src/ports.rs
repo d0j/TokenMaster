@@ -176,11 +176,20 @@ pub trait SourceSink {
     fn on_source(
         &mut self,
         source: DiscoveredSource,
-        initial_checkpoint: AdapterCheckpoint,
+        initial_state: crate::AdapterSourceState,
     ) -> Result<SinkControl, PortError>;
 }
 
 pub trait SourceBatchReader {
+    fn restore_checkpoint(
+        &mut self,
+        _progress: &crate::AdapterSourceProgress,
+        control: &OperationControl<'_>,
+    ) -> Result<AdapterCheckpoint, PortError> {
+        control.check()?;
+        Err(PortError::new(PortErrorCode::InvalidData))
+    }
+
     fn validate_checkpoint(
         &mut self,
         _checkpoint: &AdapterCheckpoint,
@@ -209,7 +218,7 @@ pub trait ReplaySourceSink {
     fn on_source(
         &mut self,
         source: DiscoveredSource,
-        initial_checkpoint: AdapterCheckpoint,
+        initial_state: crate::AdapterSourceState,
         reader: &mut dyn SourceBatchReader,
     ) -> Result<SinkControl, PortError>;
 }

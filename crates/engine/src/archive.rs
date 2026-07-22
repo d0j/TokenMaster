@@ -1,5 +1,5 @@
 use crate::{
-    AdapterCheckpoint, AdapterCompletion, CanonicalBatch, CompletionQuality, DiscoveredSource,
+    AdapterCompletion, AdapterSourceState, CanonicalBatch, CompletionQuality, DiscoveredSource,
     EngineError, EngineErrorCode, PortError, ScopeIdentity, ScopeManifest, SourceIdentity,
 };
 
@@ -87,7 +87,7 @@ pub trait Archive: Send {
         &mut self,
         scan_set: ArchiveScanSetId,
         source: &DiscoveredSource,
-        initial_checkpoint: &AdapterCheckpoint,
+        initial_state: &AdapterSourceState,
     ) -> Result<(), PortError>;
 
     fn finish_scope(
@@ -108,7 +108,7 @@ pub trait Archive: Send {
         &mut self,
         replay: ArchiveReplay,
         source: &DiscoveredSource,
-        initial_checkpoint: &AdapterCheckpoint,
+        initial_state: &AdapterSourceState,
     ) -> Result<ArchiveReplay, PortError>;
 
     fn append_replay_batch(

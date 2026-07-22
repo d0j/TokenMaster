@@ -231,6 +231,170 @@ impl fmt::Debug for AdapterCheckpoint {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AdapterVerification {
+    Incremental,
+    Full,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct AdapterSourceProgressParts {
+    pub schema_version: u16,
+    pub physical_identity: Option<[u8; 32]>,
+    pub logical_identity: [u8; 32],
+    pub committed_offset: u64,
+    pub scan_offset: u64,
+    pub observed_extent: u64,
+    pub modified_time_ns: Option<i64>,
+    pub anchor_start: u64,
+    pub anchor_len: u16,
+    pub anchor_sha256: [u8; 32],
+    pub provider_resume: Box<[u8]>,
+    pub discarding_oversized_record: bool,
+    pub incomplete_tail: bool,
+    pub verification: AdapterVerification,
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct AdapterSourceProgress {
+    parts: AdapterSourceProgressParts,
+}
+
+impl AdapterSourceProgress {
+    pub fn new(parts: AdapterSourceProgressParts) -> Result<Self, EngineError> {
+        if parts.schema_version == 0
+            || parts.scan_offset < parts.committed_offset
+            || parts.scan_offset > parts.observed_extent
+            || (!parts.discarding_oversized_record && parts.scan_offset != parts.committed_offset)
+            || parts.anchor_len > 4096
+            || parts.provider_resume.len() > MAX_ADAPTER_CHECKPOINT_BYTES
+            || parts.anchor_start > parts.committed_offset
+            || u64::from(parts.anchor_len)
+                > parts.committed_offset.saturating_sub(parts.anchor_start)
+            || (parts.discarding_oversized_record
+                && (!parts.incomplete_tail || parts.scan_offset == parts.committed_offset))
+        {
+            return Err(EngineError::new(EngineErrorCode::InvalidValue));
+        }
+        Ok(Self { parts })
+    }
+
+    #[must_use]
+    pub const fn schema_version(&self) -> u16 {
+        self.parts.schema_version
+    }
+    #[must_use]
+    pub const fn physical_identity(&self) -> Option<&[u8; 32]> {
+        self.parts.physical_identity.as_ref()
+    }
+    #[must_use]
+    pub const fn logical_identity(&self) -> &[u8; 32] {
+        &self.parts.logical_identity
+    }
+    #[must_use]
+    pub const fn committed_offset(&self) -> u64 {
+        self.parts.committed_offset
+    }
+    #[must_use]
+    pub const fn scan_offset(&self) -> u64 {
+        self.parts.scan_offset
+    }
+    #[must_use]
+    pub const fn observed_extent(&self) -> u64 {
+        self.parts.observed_extent
+    }
+    #[must_use]
+    pub const fn modified_time_ns(&self) -> Option<i64> {
+        self.parts.modified_time_ns
+    }
+    #[must_use]
+    pub const fn anchor_start(&self) -> u64 {
+        self.parts.anchor_start
+    }
+    #[must_use]
+    pub const fn anchor_len(&self) -> u16 {
+        self.parts.anchor_len
+    }
+    #[must_use]
+    pub const fn anchor_sha256(&self) -> &[u8; 32] {
+        &self.parts.anchor_sha256
+    }
+    #[must_use]
+    pub const fn provider_resume(&self) -> &[u8] {
+        &self.parts.provider_resume
+    }
+    #[must_use]
+    pub const fn discarding_oversized_record(&self) -> bool {
+        self.parts.discarding_oversized_record
+    }
+    #[must_use]
+    pub const fn incomplete_tail(&self) -> bool {
+        self.parts.incomplete_tail
+    }
+    #[must_use]
+    pub const fn verification(&self) -> AdapterVerification {
+        self.parts.verification
+    }
+}
+
+impl fmt::Debug for AdapterSourceProgress {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("AdapterSourceProgress")
+            .field("schema_version", &self.parts.schema_version)
+            .field("physical_identity", &Redacted)
+            .field("logical_identity", &Redacted)
+            .field("committed_offset", &self.parts.committed_offset)
+            .field("scan_offset", &self.parts.scan_offset)
+            .field("observed_extent", &self.parts.observed_extent)
+            .field("modified_time_ns", &self.parts.modified_time_ns)
+            .field("anchor", &Redacted)
+            .field(
+                "discarding_oversized_record",
+                &self.parts.discarding_oversized_record,
+            )
+            .field("incomplete_tail", &self.parts.incomplete_tail)
+            .field("verification", &self.parts.verification)
+            .finish()
+    }
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct AdapterSourceState {
+    checkpoint: AdapterCheckpoint,
+    progress: AdapterSourceProgress,
+}
+
+impl AdapterSourceState {
+    pub fn new(
+        checkpoint: AdapterCheckpoint,
+        progress: AdapterSourceProgress,
+    ) -> Result<Self, EngineError> {
+        Ok(Self {
+            checkpoint,
+            progress,
+        })
+    }
+    #[must_use]
+    pub const fn checkpoint(&self) -> &AdapterCheckpoint {
+        &self.checkpoint
+    }
+    #[must_use]
+    pub const fn progress(&self) -> &AdapterSourceProgress {
+        &self.progress
+    }
+}
+
+impl fmt::Debug for AdapterSourceState {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("AdapterSourceState")
+            .field("checkpoint", &self.checkpoint)
+            .field("progress", &self.progress)
+            .finish()
+    }
+}
+
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct ChunkProof {
     index: u64,

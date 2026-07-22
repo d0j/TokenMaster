@@ -10,14 +10,15 @@ use tokenmaster_domain::{
 };
 use tokenmaster_engine::{
     Adapter, AdapterBatch, AdapterBatchParts, AdapterCheckpoint, AdapterCompletion,
-    AdapterCounters, AdapterDiagnostics, Archive, ArchiveEpoch, ArchiveReplay, ArchiveRevisionId,
-    ArchiveScanSetId, BatchState, CanonicalBatch, Clock, CompletionQuality, DiscoveredSource,
-    ExecutionCounts, MAX_REPLAY_CONTINUATIONS_PER_RUN, MonotonicTime, OneShotExecutor,
-    OperationControl, PortError, PortErrorCode, RefreshAdmission, RefreshCoordinator,
-    RefreshDeadline, RefreshOutcome, RefreshRequestId, RefreshUrgency, ReplayCleanup,
-    ReplayContinuation, ReplayContinuationState, ReplaySourceSink, ScopeIdentity, ScopeManifest,
-    ScopeSink, SourceBatchReader, SourceIdentity, SourceKind, SourceSink, WriterLease,
-    WriterLeaseGuard,
+    AdapterCounters, AdapterDiagnostics, AdapterSourceProgress, AdapterSourceProgressParts,
+    AdapterSourceState, AdapterVerification, Archive, ArchiveEpoch, ArchiveReplay,
+    ArchiveRevisionId, ArchiveScanSetId, BatchState, CanonicalBatch, Clock, CompletionQuality,
+    DiscoveredSource, ExecutionCounts, MAX_REPLAY_CONTINUATIONS_PER_RUN, MonotonicTime,
+    OneShotExecutor, OperationControl, PortError, PortErrorCode, RefreshAdmission,
+    RefreshCoordinator, RefreshDeadline, RefreshOutcome, RefreshRequestId, RefreshUrgency,
+    ReplayCleanup, ReplayContinuation, ReplayContinuationState, ReplaySourceSink, ScopeIdentity,
+    ScopeManifest, ScopeSink, SourceBatchReader, SourceIdentity, SourceKind, SourceSink,
+    WriterLease, WriterLeaseGuard,
 };
 
 type Log = Arc<Mutex<Vec<&'static str>>>;
@@ -122,6 +123,30 @@ fn source_identity() -> SourceIdentity {
 
 fn checkpoint(value: u8) -> AdapterCheckpoint {
     AdapterCheckpoint::new(vec![value].into_boxed_slice()).expect("checkpoint")
+}
+
+fn progress(source: &SourceIdentity) -> AdapterSourceProgress {
+    AdapterSourceProgress::new(AdapterSourceProgressParts {
+        schema_version: 1,
+        physical_identity: None,
+        logical_identity: *source.logical_file_key(),
+        committed_offset: 0,
+        scan_offset: 0,
+        observed_extent: 0,
+        modified_time_ns: None,
+        anchor_start: 0,
+        anchor_len: 0,
+        anchor_sha256: [0; 32],
+        provider_resume: Box::default(),
+        discarding_oversized_record: false,
+        incomplete_tail: false,
+        verification: AdapterVerification::Incremental,
+    })
+    .expect("progress")
+}
+
+fn state(source: &SourceIdentity, checkpoint: AdapterCheckpoint) -> AdapterSourceState {
+    AdapterSourceState::new(checkpoint, progress(source)).expect("state")
 }
 
 fn usage() -> TokenUsage {
@@ -229,6 +254,7 @@ impl SourceBatchReader for FakeSourceReader {
                 } else {
                     checkpoint(2)
                 },
+                next_progress: progress(batch_source),
                 state: if repeats {
                     BatchState::More
                 } else {
@@ -289,7 +315,10 @@ impl Adapter for FakeAdapter {
         {
             let source = self.source.as_ref().expect("checked source");
             let discovered = DiscoveredSource::new(source.clone(), SourceKind::Active);
-            let _ = sink.on_source(discovered, checkpoint(1))?;
+            let _ = sink.on_source(
+                discovered.clone(),
+                state(discovered.identity(), checkpoint(1)),
+            )?;
             1
         } else {
             0
@@ -327,7 +356,11 @@ impl Adapter for FakeAdapter {
                 reads: 0,
             };
             let discovered = DiscoveredSource::new(source.clone(), SourceKind::Active);
-            let _ = sink.on_source(discovered, checkpoint(1), &mut reader)?;
+            let _ = sink.on_source(
+                discovered.clone(),
+                state(discovered.identity(), checkpoint(1)),
+                &mut reader,
+            )?;
             1
         } else {
             0
@@ -381,7 +414,11 @@ impl Adapter for RepeatingCheckpointAdapter {
             reads: 0,
         };
         let discovered = DiscoveredSource::new(source.clone(), SourceKind::Active);
-        let _ = sink.on_source(discovered, checkpoint(1), &mut reader)?;
+        let _ = sink.on_source(
+            discovered.clone(),
+            state(discovered.identity(), checkpoint(1)),
+            &mut reader,
+        )?;
         AdapterCompletion::new(
             CompletionQuality::Complete,
             AdapterCounters::new(1, 0, 0, 0).map_err(PortError::from)?,
@@ -414,7 +451,10 @@ impl Adapter for CrossScopeDiscoveryAdapter {
         record(&self.inner.log, "sources");
         control.check()?;
         let discovered = DiscoveredSource::new(self.foreign_source.clone(), SourceKind::Active);
-        let _ = sink.on_source(discovered, checkpoint(1))?;
+        let _ = sink.on_source(
+            discovered.clone(),
+            state(discovered.identity(), checkpoint(1)),
+        )?;
         AdapterCompletion::new(
             CompletionQuality::Complete,
             AdapterCounters::new(1, 0, 0, 0).map_err(PortError::from)?,
@@ -474,7 +514,11 @@ impl Adapter for MismatchedBatchAdapter {
             reads: 0,
         };
         let discovered = DiscoveredSource::new(source.clone(), SourceKind::Active);
-        let _ = sink.on_source(discovered, checkpoint(1), &mut reader)?;
+        let _ = sink.on_source(
+            discovered.clone(),
+            state(discovered.identity(), checkpoint(1)),
+            &mut reader,
+        )?;
         AdapterCompletion::new(
             CompletionQuality::Complete,
             AdapterCounters::new(1, 0, 0, 0).map_err(PortError::from)?,
@@ -530,7 +574,10 @@ impl Adapter for SequenceAdapter {
             .filter(|source| source.scope() == scope)
         {
             let discovered = DiscoveredSource::new(source.clone(), SourceKind::Active);
-            let _ = sink.on_source(discovered, checkpoint(1))?;
+            let _ = sink.on_source(
+                discovered.clone(),
+                state(discovered.identity(), checkpoint(1)),
+            )?;
             files_read += 1;
         }
         AdapterCompletion::new(
@@ -565,10 +612,18 @@ impl Adapter for SequenceAdapter {
             let discovered = DiscoveredSource::new(source.clone(), SourceKind::Active);
             if let Some(stats) = &self.reader_stats {
                 let mut reader = TrackingSourceReader::new(reader, stats.clone());
-                let _ = sink.on_source(discovered, checkpoint(1), &mut reader)?;
+                let _ = sink.on_source(
+                    discovered.clone(),
+                    state(discovered.identity(), checkpoint(1)),
+                    &mut reader,
+                )?;
             } else {
                 let mut reader = reader;
-                let _ = sink.on_source(discovered, checkpoint(1), &mut reader)?;
+                let _ = sink.on_source(
+                    discovered.clone(),
+                    state(discovered.identity(), checkpoint(1)),
+                    &mut reader,
+                )?;
             }
             files_read += 1;
         }
@@ -626,7 +681,7 @@ impl Archive for FakeArchive {
         &mut self,
         _scan_set: ArchiveScanSetId,
         _source: &DiscoveredSource,
-        _initial_checkpoint: &AdapterCheckpoint,
+        _initial_checkpoint: &AdapterSourceState,
     ) -> Result<(), PortError> {
         record(&self.log, "observe");
         self.fail_if_configured("observe")?;
@@ -676,7 +731,7 @@ impl Archive for FakeArchive {
         &mut self,
         replay: ArchiveReplay,
         source: &DiscoveredSource,
-        _initial_checkpoint: &AdapterCheckpoint,
+        _initial_checkpoint: &AdapterSourceState,
     ) -> Result<ArchiveReplay, PortError> {
         record(&self.log, "prepare");
         self.fail_if_configured("prepare")?;

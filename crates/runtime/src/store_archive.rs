@@ -1,16 +1,11 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use tokenmaster_codex::{
-    BoundaryAnchor, CodexCheckpointV1, LogicalFileIdentity, ParserResumeState,
-    ReaderCheckpointParts, ReaderCheckpointV1, VerificationLevel,
-};
 use tokenmaster_engine::{
-    AdapterCheckpoint, AdapterCompletion, Archive, ArchiveEpoch, ArchiveReplay, ArchiveRevisionId,
-    ArchiveScanSetId, CanonicalBatch, CompletionQuality, DiscoveredSource, PortError,
-    PortErrorCode, ReplayContinuation, ReplayContinuationState, ScopeIdentity, ScopeManifest,
-    SourceIdentity,
+    AdapterCompletion, AdapterSourceProgress, AdapterSourceState, Archive, ArchiveEpoch,
+    ArchiveReplay, ArchiveRevisionId, ArchiveScanSetId, CanonicalBatch, CompletionQuality,
+    DiscoveredSource, PortError, PortErrorCode, ReplayContinuation, ReplayContinuationState,
+    ScopeIdentity, ScopeManifest, SourceIdentity,
 };
-use tokenmaster_platform::PhysicalFileIdentity;
 use tokenmaster_store::{
     AppendBatch, AppendBatchParts, ArchiveGeneration, ArchiveMode, CurrentReplayAppendBatch,
     CurrentReplayAppendBatchParts, CurrentScanPublication, CurrentScanPublicationParts,
@@ -20,7 +15,6 @@ use tokenmaster_store::{
     StoredVerification, UsageStore,
 };
 
-use crate::codex_adapter::encode_checkpoint;
 use crate::error::store_port_error;
 
 pub struct StoreArchive {
@@ -174,16 +168,16 @@ impl StoreArchive {
         })
     }
 
-    pub(crate) fn current_checkpoint(
+    pub(crate) fn current_progress(
         &self,
         source: &SourceIdentity,
-    ) -> Result<AdapterCheckpoint, PortError> {
+    ) -> Result<AdapterSourceProgress, PortError> {
         let snapshot = self
             .store
             .generation_snapshot(source_key(source))
             .map_err(|error| store_port_error(&error))?
             .ok_or_else(|| PortError::new(PortErrorCode::StaleState))?;
-        encode_stored_checkpoint(snapshot.checkpoint(), source)
+        progress_from_stored(snapshot.checkpoint(), source)
     }
 
     pub(crate) fn append_current_batch(
@@ -199,9 +193,9 @@ impl StoreArchive {
             .map_err(|error| store_port_error(&error))?
             .ok_or_else(|| PortError::new(PortErrorCode::StaleState))?;
         let parts = batch.into_parts();
-        let next_reader = decode_checkpoint(&parts.next_checkpoint, source)?;
-        let next_checkpoint = stored_checkpoint(&next_reader, CheckpointStorage::Progress)?;
-        let source_caught_up = checkpoint_is_caught_up(&next_checkpoint);
+        let next_checkpoint =
+            stored_checkpoint_from_progress(&parts.next_progress, CheckpointStorage::Progress)?;
+        let source_caught_up = progress_is_caught_up(&parts.next_progress);
         let previous_partial_chunk = parts
             .chunk_proofs
             .previous_partial()
@@ -306,10 +300,10 @@ impl Archive for StoreArchive {
         &mut self,
         scan_set: ArchiveScanSetId,
         source: &DiscoveredSource,
-        initial_checkpoint: &AdapterCheckpoint,
+        initial_state: &AdapterSourceState,
     ) -> Result<(), PortError> {
         let source_key = source_key(source.identity());
-        let reader = decode_checkpoint(initial_checkpoint, source.identity())?;
+        let progress = initial_state.progress();
         let is_new = self
             .store
             .generation_snapshot(source_key)
@@ -322,8 +316,8 @@ impl Archive for StoreArchive {
                 .archive_state()
                 .map_err(|error| store_port_error(&error))?
                 .mode();
-            let checkpoint = stored_checkpoint(
-                &reader,
+            let checkpoint = stored_checkpoint_from_progress(
+                initial_state.progress(),
                 if self.scan_kind == Some(ScanKind::Incremental)
                     && archive_mode == ArchiveMode::ReplayVerified
                 {
@@ -339,9 +333,7 @@ impl Archive for StoreArchive {
                 source_id: source.identity().source_id().into(),
                 source_kind: stored_source_kind(source.kind()),
                 logical_identity: *source.identity().logical_file_key(),
-                physical_identity: reader
-                    .physical_identity()
-                    .map(|identity| *identity.as_bytes()),
+                physical_identity: progress.physical_identity().copied(),
                 initial_checkpoint: checkpoint,
             })
             .map_err(|error| store_port_error(&error))?;
@@ -425,10 +417,12 @@ impl Archive for StoreArchive {
         &mut self,
         replay: ArchiveReplay,
         source: &DiscoveredSource,
-        initial_checkpoint: &AdapterCheckpoint,
+        initial_state: &AdapterSourceState,
     ) -> Result<ArchiveReplay, PortError> {
-        let reader = decode_checkpoint(initial_checkpoint, source.identity())?;
-        let checkpoint = stored_checkpoint(&reader, CheckpointStorage::ReplayStart)?;
+        let checkpoint = stored_checkpoint_from_progress(
+            initial_state.progress(),
+            CheckpointStorage::ReplayStart,
+        )?;
         let revision = store_revision_id(replay.revision_id())?;
         let next_epoch = self
             .store
@@ -455,8 +449,8 @@ impl Archive for StoreArchive {
             .replay_generation_snapshot(revision, source_key)
             .map_err(|error| store_port_error(&error))?;
         let parts = batch.into_parts();
-        let next_reader = decode_checkpoint(&parts.next_checkpoint, source)?;
-        let next_checkpoint = stored_checkpoint(&next_reader, CheckpointStorage::Progress)?;
+        let next_checkpoint =
+            stored_checkpoint_from_progress(&parts.next_progress, CheckpointStorage::Progress)?;
         let previous_partial_chunk = parts
             .chunk_proofs
             .previous_partial()
@@ -554,57 +548,6 @@ fn source_key(source: &SourceIdentity) -> SourceKey {
     SourceKey::from_bytes(*source.logical_file_key())
 }
 
-fn decode_checkpoint(
-    checkpoint: &AdapterCheckpoint,
-    source: &SourceIdentity,
-) -> Result<tokenmaster_codex::ReaderCheckpointV1, PortError> {
-    CodexCheckpointV1::decode(
-        checkpoint.as_bytes(),
-        LogicalFileIdentity::from_bytes(*source.logical_file_key()),
-    )
-    .map(CodexCheckpointV1::into_reader)
-    .map_err(|_| PortError::new(PortErrorCode::InvalidData))
-}
-
-fn encode_stored_checkpoint(
-    checkpoint: &StoredCheckpoint,
-    source: &SourceIdentity,
-) -> Result<AdapterCheckpoint, PortError> {
-    if checkpoint.logical_identity() != source.logical_file_key() {
-        return Err(PortError::new(PortErrorCode::InvalidData));
-    }
-    let resume: ParserResumeState = serde_json::from_slice(checkpoint.resume())
-        .map_err(|_| PortError::new(PortErrorCode::InvalidData))?;
-    let anchor = BoundaryAnchor::new(
-        checkpoint.anchor_start(),
-        checkpoint.anchor_len(),
-        *checkpoint.anchor_sha256(),
-    )
-    .map_err(|_| PortError::new(PortErrorCode::InvalidData))?;
-    let reader = ReaderCheckpointV1::new(ReaderCheckpointParts {
-        parser_schema_version: checkpoint.parser_schema_version(),
-        physical_identity: checkpoint
-            .physical_identity()
-            .copied()
-            .map(PhysicalFileIdentity::from_persisted_bytes),
-        logical_identity: LogicalFileIdentity::from_bytes(*checkpoint.logical_identity()),
-        committed_offset: checkpoint.committed_offset(),
-        scan_offset: checkpoint.scan_offset(),
-        observed_file_length: checkpoint.observed_file_length(),
-        modified_time_ns: checkpoint.modified_time_ns(),
-        anchor,
-        resume,
-        discarding_oversized_line: checkpoint.discarding_oversized_line(),
-        incomplete_tail: checkpoint.incomplete_tail(),
-        verification: match checkpoint.verification() {
-            StoredVerification::Incremental => VerificationLevel::Incremental,
-            StoredVerification::FullPrefix => VerificationLevel::FullPrefix,
-        },
-    })
-    .map_err(|_| PortError::new(PortErrorCode::InvalidData))?;
-    encode_checkpoint(reader)
-}
-
 #[derive(Clone, Copy)]
 enum CheckpointStorage {
     ReplayStart,
@@ -612,72 +555,105 @@ enum CheckpointStorage {
     Progress,
 }
 
-fn stored_checkpoint(
-    checkpoint: &tokenmaster_codex::ReaderCheckpointV1,
+fn stored_checkpoint_from_progress(
+    progress: &AdapterSourceProgress,
     storage: CheckpointStorage,
 ) -> Result<StoredCheckpoint, PortError> {
-    let (committed_offset, scan_offset, observed_file_length, modified_time_ns, anchor) =
-        match storage {
-            CheckpointStorage::ReplayStart => (0, 0, 0, None, (0, 0, [0; 32])),
-            CheckpointStorage::IncrementalStart => (
-                0,
-                0,
-                checkpoint.observed_file_length(),
-                checkpoint.modified_time_ns(),
-                (0, 0, [0; 32]),
-            ),
-            CheckpointStorage::Progress => (
-                checkpoint.committed_offset(),
-                checkpoint.scan_offset(),
-                checkpoint.observed_file_length(),
-                checkpoint.modified_time_ns(),
-                (
-                    checkpoint.anchor().start(),
-                    checkpoint.anchor().len(),
-                    *checkpoint.anchor().sha256(),
-                ),
-            ),
-        };
-    let verification = if matches!(
-        storage,
-        CheckpointStorage::ReplayStart | CheckpointStorage::IncrementalStart
-    ) || checkpoint.verification() == VerificationLevel::Incremental
-    {
-        StoredVerification::Incremental
-    } else {
-        StoredVerification::FullPrefix
-    };
-    let resume = serde_json::to_vec(checkpoint.resume())
-        .map_err(|_| PortError::new(PortErrorCode::InvalidData))?
-        .into_boxed_slice();
-    StoredCheckpoint::new(StoredCheckpointParts {
-        parser_schema_version: checkpoint.parser_schema_version(),
-        physical_identity: checkpoint
-            .physical_identity()
-            .map(|identity| *identity.as_bytes()),
-        logical_identity: *checkpoint.logical_identity().as_bytes(),
+    let (
         committed_offset,
         scan_offset,
         observed_file_length,
         modified_time_ns,
-        anchor_start: anchor.0,
-        anchor_len: anchor.1,
-        anchor_sha256: anchor.2,
-        resume,
+        anchor_start,
+        anchor_len,
+        anchor_sha256,
+    ) = match storage {
+        CheckpointStorage::ReplayStart => (0, 0, 0, None, 0, 0, [0; 32]),
+        CheckpointStorage::IncrementalStart => (
+            0,
+            0,
+            progress.observed_extent(),
+            progress.modified_time_ns(),
+            0,
+            0,
+            [0; 32],
+        ),
+        CheckpointStorage::Progress => (
+            progress.committed_offset(),
+            progress.scan_offset(),
+            progress.observed_extent(),
+            progress.modified_time_ns(),
+            progress.anchor_start(),
+            progress.anchor_len(),
+            *progress.anchor_sha256(),
+        ),
+    };
+    let verification = if matches!(
+        storage,
+        CheckpointStorage::ReplayStart | CheckpointStorage::IncrementalStart
+    ) || matches!(
+        progress.verification(),
+        tokenmaster_engine::AdapterVerification::Incremental
+    ) {
+        StoredVerification::Incremental
+    } else {
+        StoredVerification::FullPrefix
+    };
+    let stored = StoredCheckpoint::new(StoredCheckpointParts {
+        parser_schema_version: progress.schema_version(),
+        physical_identity: progress.physical_identity().copied(),
+        logical_identity: *progress.logical_identity(),
+        committed_offset,
+        scan_offset,
+        observed_file_length,
+        modified_time_ns,
+        anchor_start,
+        anchor_len,
+        anchor_sha256,
+        resume: progress.provider_resume().to_vec().into_boxed_slice(),
         discarding_oversized_line: matches!(storage, CheckpointStorage::Progress)
-            && checkpoint.discarding_oversized_line(),
+            && progress.discarding_oversized_record(),
         incomplete_tail: matches!(storage, CheckpointStorage::Progress)
-            && checkpoint.incomplete_tail(),
+            && progress.incomplete_tail(),
         verification,
-    })
-    .map_err(|error| store_port_error(&error))
+    });
+    stored.map_err(|error| store_port_error(&error))
 }
 
-fn checkpoint_is_caught_up(checkpoint: &StoredCheckpoint) -> bool {
-    !checkpoint.discarding_oversized_line()
-        && !checkpoint.incomplete_tail()
-        && checkpoint.committed_offset() == checkpoint.scan_offset()
-        && checkpoint.scan_offset() == checkpoint.observed_file_length()
+fn progress_from_stored(
+    checkpoint: &StoredCheckpoint,
+    source: &SourceIdentity,
+) -> Result<AdapterSourceProgress, PortError> {
+    if checkpoint.logical_identity() != source.logical_file_key() {
+        return Err(PortError::new(PortErrorCode::InvalidData));
+    }
+    AdapterSourceProgress::new(tokenmaster_engine::AdapterSourceProgressParts {
+        schema_version: checkpoint.parser_schema_version(),
+        physical_identity: checkpoint.physical_identity().copied(),
+        logical_identity: *checkpoint.logical_identity(),
+        committed_offset: checkpoint.committed_offset(),
+        scan_offset: checkpoint.scan_offset(),
+        observed_extent: checkpoint.observed_file_length(),
+        modified_time_ns: checkpoint.modified_time_ns(),
+        anchor_start: checkpoint.anchor_start(),
+        anchor_len: checkpoint.anchor_len(),
+        anchor_sha256: *checkpoint.anchor_sha256(),
+        provider_resume: checkpoint.resume().to_vec().into_boxed_slice(),
+        discarding_oversized_record: checkpoint.discarding_oversized_line(),
+        incomplete_tail: checkpoint.incomplete_tail(),
+        verification: match checkpoint.verification() {
+            StoredVerification::Incremental => tokenmaster_engine::AdapterVerification::Incremental,
+            StoredVerification::FullPrefix => tokenmaster_engine::AdapterVerification::Full,
+        },
+    })
+    .map_err(PortError::from)
+}
+
+fn progress_is_caught_up(progress: &AdapterSourceProgress) -> bool {
+    !progress.discarding_oversized_record()
+        && !progress.incomplete_tail()
+        && progress.committed_offset() == progress.scan_offset()
+        && progress.scan_offset() == progress.observed_extent()
 }
 
 fn stored_chunk(proof: &tokenmaster_engine::ChunkProof) -> Result<StoredSourceChunk, PortError> {

@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use tokenmaster_codex::{
-    CodexCheckpointV1, CodexProvider, EnumerationCompletion, ParserDiagnosticCode,
+    BoundaryAnchor, CodexCheckpointV1, CodexProvider, EnumerationCompletion, LogicalFileIdentity,
+    ParserDiagnosticCode, ParserResumeState, ReaderCheckpointParts, ReaderCheckpointV1,
     ReaderDiagnosticCode, ReaderErrorCode, ReaderOutcome, SinkDecision, SourceCheckpointStatus,
     SourceChunkDigest, SourceFileDescriptor, enumerate_profile_sources,
     initialize_source_checkpoint, logical_file_identity, read_source_batch,
@@ -9,11 +10,13 @@ use tokenmaster_codex::{
 };
 use tokenmaster_engine::{
     Adapter, AdapterBatch, AdapterBatchParts, AdapterCheckpoint, AdapterCompletion,
-    AdapterCounters, AdapterDiagnosticCode, AdapterDiagnostics, BatchState, ChunkProof,
+    AdapterCounters, AdapterDiagnosticCode, AdapterDiagnostics, AdapterSourceProgress,
+    AdapterSourceProgressParts, AdapterSourceState, AdapterVerification, BatchState, ChunkProof,
     ChunkProofBatch, CompletionQuality, DiscoveredSource, OperationControl, PortError,
     PortErrorCode, ReplaySourceSink, ScopeIdentity, ScopeSink, SinkControl, SourceBatchReader,
     SourceIdentity, SourceKind, SourceSink,
 };
+use tokenmaster_platform::PhysicalFileIdentity;
 use tokenmaster_provider::{
     DiscoveryProvider, DiscoveryRequest, DiscoverySnapshot, ProfileAvailability, SourceDescriptor,
 };
@@ -94,7 +97,7 @@ impl CodexAdapter {
         control: &OperationControl<'_>,
         mut emit: impl FnMut(
             DiscoveredSource,
-            AdapterCheckpoint,
+            AdapterSourceState,
             SourceFileDescriptor,
         ) -> Result<SinkControl, PortError>,
     ) -> Result<AdapterCompletion, PortError> {
@@ -132,14 +135,28 @@ impl CodexAdapter {
                         return SinkDecision::Fail;
                     }
                 };
-                let checkpoint = match encode_checkpoint(initial) {
+                let checkpoint = match encode_checkpoint(initial.clone()) {
                     Ok(checkpoint) => checkpoint,
                     Err(error) => {
                         sink_error = Some(error);
                         return SinkDecision::Fail;
                     }
                 };
-                match emit(source, checkpoint, descriptor) {
+                let progress = match source_progress(&initial) {
+                    Ok(progress) => progress,
+                    Err(error) => {
+                        sink_error = Some(error);
+                        return SinkDecision::Fail;
+                    }
+                };
+                let state = match AdapterSourceState::new(checkpoint, progress) {
+                    Ok(state) => state,
+                    Err(error) => {
+                        sink_error = Some(error.into());
+                        return SinkDecision::Fail;
+                    }
+                };
+                match emit(source, state, descriptor) {
                     Ok(SinkControl::Continue) => {
                         emitted = emitted.saturating_add(1);
                         SinkDecision::Continue
@@ -212,8 +229,8 @@ impl Adapter for CodexAdapter {
         control: &OperationControl<'_>,
         sink: &mut dyn SourceSink,
     ) -> Result<AdapterCompletion, PortError> {
-        self.visit_profile(scope, control, |source, checkpoint, _descriptor| {
-            sink.on_source(source, checkpoint)
+        self.visit_profile(scope, control, |source, state, _descriptor| {
+            sink.on_source(source, state)
         })
     }
 
@@ -223,14 +240,14 @@ impl Adapter for CodexAdapter {
         control: &OperationControl<'_>,
         sink: &mut dyn ReplaySourceSink,
     ) -> Result<AdapterCompletion, PortError> {
-        self.visit_profile(scope, control, |source, checkpoint, descriptor| {
+        self.visit_profile(scope, control, |source, state, descriptor| {
             let mut reader = CodexSourceBatchReader {
                 descriptor,
                 source: source.identity().clone(),
                 latest_repository_activity_hint: None,
                 repository_hint_ingress: self.repository_hint_ingress.clone(),
             };
-            sink.on_source(source, checkpoint, &mut reader)
+            sink.on_source(source, state, &mut reader)
         })
     }
 }
@@ -256,6 +273,49 @@ struct CodexSourceBatchReader {
 }
 
 impl SourceBatchReader for CodexSourceBatchReader {
+    fn restore_checkpoint(
+        &mut self,
+        progress: &AdapterSourceProgress,
+        control: &OperationControl<'_>,
+    ) -> Result<AdapterCheckpoint, PortError> {
+        control.check()?;
+        if progress.logical_identity() != self.source.logical_file_key() {
+            return Err(PortError::new(PortErrorCode::InvalidData));
+        }
+        let resume: ParserResumeState = serde_json::from_slice(progress.provider_resume())
+            .map_err(|_| PortError::new(PortErrorCode::InvalidData))?;
+        let anchor = BoundaryAnchor::new(
+            progress.anchor_start(),
+            progress.anchor_len(),
+            *progress.anchor_sha256(),
+        )
+        .map_err(|_| PortError::new(PortErrorCode::InvalidData))?;
+        let checkpoint = ReaderCheckpointV1::new(ReaderCheckpointParts {
+            parser_schema_version: progress.schema_version(),
+            physical_identity: progress
+                .physical_identity()
+                .copied()
+                .map(PhysicalFileIdentity::from_persisted_bytes),
+            logical_identity: LogicalFileIdentity::from_bytes(*progress.logical_identity()),
+            committed_offset: progress.committed_offset(),
+            scan_offset: progress.scan_offset(),
+            observed_file_length: progress.observed_extent(),
+            modified_time_ns: progress.modified_time_ns(),
+            anchor,
+            resume,
+            discarding_oversized_line: progress.discarding_oversized_record(),
+            incomplete_tail: progress.incomplete_tail(),
+            verification: match progress.verification() {
+                AdapterVerification::Incremental => {
+                    tokenmaster_codex::VerificationLevel::Incremental
+                }
+                AdapterVerification::Full => tokenmaster_codex::VerificationLevel::FullPrefix,
+            },
+        })
+        .map_err(|_| PortError::new(PortErrorCode::InvalidData))?;
+        encode_checkpoint(checkpoint)
+    }
+
     fn validate_checkpoint(
         &mut self,
         checkpoint: &AdapterCheckpoint,
@@ -313,6 +373,7 @@ impl SourceBatchReader for CodexSourceBatchReader {
                     chunk_proofs: ChunkProofBatch::new(None, Box::default())
                         .map_err(PortError::from)?,
                     next_checkpoint: checkpoint.clone(),
+                    next_progress: source_progress(&reader_checkpoint)?,
                     state: BatchState::SnapshotEnd,
                     counters: AdapterCounters::default(),
                     diagnostics: AdapterDiagnostics::default(),
@@ -349,6 +410,7 @@ impl SourceBatchReader for CodexSourceBatchReader {
                         relations: batch.relations().to_vec().into_boxed_slice(),
                         chunk_proofs,
                         next_checkpoint,
+                        next_progress: source_progress(batch.checkpoint())?,
                         state,
                         counters,
                         diagnostics,
@@ -401,6 +463,35 @@ pub(crate) fn encode_checkpoint(
         .encode()
         .map_err(|_| PortError::new(PortErrorCode::CapacityExceeded))?;
     AdapterCheckpoint::new(encoded.into_boxed_slice()).map_err(PortError::from)
+}
+
+fn source_progress(
+    checkpoint: &tokenmaster_codex::ReaderCheckpointV1,
+) -> Result<AdapterSourceProgress, PortError> {
+    AdapterSourceProgress::new(AdapterSourceProgressParts {
+        schema_version: checkpoint.parser_schema_version(),
+        physical_identity: checkpoint
+            .physical_identity()
+            .map(|identity| *identity.as_bytes()),
+        logical_identity: *checkpoint.logical_identity().as_bytes(),
+        committed_offset: checkpoint.committed_offset(),
+        scan_offset: checkpoint.scan_offset(),
+        observed_extent: checkpoint.observed_file_length(),
+        modified_time_ns: checkpoint.modified_time_ns(),
+        anchor_start: checkpoint.anchor().start(),
+        anchor_len: checkpoint.anchor().len(),
+        anchor_sha256: *checkpoint.anchor().sha256(),
+        provider_resume: serde_json::to_vec(checkpoint.resume())
+            .map_err(|_| PortError::new(PortErrorCode::InvalidData))?
+            .into_boxed_slice(),
+        discarding_oversized_record: checkpoint.discarding_oversized_line(),
+        incomplete_tail: checkpoint.incomplete_tail(),
+        verification: match checkpoint.verification() {
+            tokenmaster_codex::VerificationLevel::Incremental => AdapterVerification::Incremental,
+            tokenmaster_codex::VerificationLevel::FullPrefix => AdapterVerification::Full,
+        },
+    })
+    .map_err(PortError::from)
 }
 
 fn completion(

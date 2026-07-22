@@ -81,8 +81,9 @@ pub use ports::{
 };
 pub use time::{MonotonicTime, RefreshDeadline, RefreshRequestId};
 pub use values::{
-    AdapterCheckpoint, AdapterCounters, AdapterDiagnosticCode, AdapterDiagnostics, ChunkProof,
-    ChunkProofBatch, CompletionQuality, DiscoveredSource, MAX_ADAPTER_CHECKPOINT_BYTES,
+    AdapterCheckpoint, AdapterCounters, AdapterDiagnosticCode, AdapterDiagnostics,
+    AdapterSourceProgress, AdapterSourceProgressParts, AdapterSourceState, AdapterVerification,
+    ChunkProof, ChunkProofBatch, CompletionQuality, DiscoveredSource, MAX_ADAPTER_CHECKPOINT_BYTES,
     MAX_CHUNK_PROOFS_PER_BATCH, MAX_PROFILE_ID_BYTES, MAX_PROVIDER_ID_BYTES,
     MAX_SCOPE_MANIFEST_ENTRIES, MAX_SOURCE_ID_BYTES, SOURCE_CHUNK_BYTES, ScopeIdentity,
     ScopeManifest, SourceIdentity, SourceKind,

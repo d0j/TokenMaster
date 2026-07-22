@@ -4,8 +4,8 @@ use tokenmaster_accounting::CanonicalUsageEvent;
 use tokenmaster_domain::{ObservationDraft, SessionRelationDraft};
 
 use crate::{
-    AdapterCheckpoint, AdapterCounters, AdapterDiagnostics, ChunkProofBatch, EngineError,
-    EngineErrorCode, SourceIdentity,
+    AdapterCheckpoint, AdapterCounters, AdapterDiagnostics, AdapterSourceProgress, ChunkProofBatch,
+    EngineError, EngineErrorCode, SourceIdentity,
 };
 
 pub const MAX_OBSERVATIONS_PER_BATCH: usize = 256;
@@ -22,6 +22,7 @@ pub struct AdapterBatchParts {
     pub relations: Box<[SessionRelationDraft]>,
     pub chunk_proofs: ChunkProofBatch,
     pub next_checkpoint: AdapterCheckpoint,
+    pub next_progress: AdapterSourceProgress,
     pub state: BatchState,
     pub counters: AdapterCounters,
     pub diagnostics: AdapterDiagnostics,
@@ -35,6 +36,9 @@ pub struct AdapterBatch {
 impl AdapterBatch {
     pub fn new(source: &SourceIdentity, parts: AdapterBatchParts) -> Result<Self, EngineError> {
         validate_batch_capacity(parts.observations.len(), parts.relations.len())?;
+        if parts.next_progress.logical_identity() != source.logical_file_key() {
+            return Err(EngineError::new(EngineErrorCode::InvalidValue));
+        }
         if parts
             .observations
             .iter()
@@ -76,6 +80,11 @@ impl AdapterBatch {
     #[must_use]
     pub const fn next_checkpoint(&self) -> &AdapterCheckpoint {
         &self.parts.next_checkpoint
+    }
+
+    #[must_use]
+    pub const fn next_progress(&self) -> &AdapterSourceProgress {
+        &self.parts.next_progress
     }
 
     #[must_use]
@@ -125,6 +134,7 @@ pub struct CanonicalBatchParts {
     pub relations: Box<[SessionRelationDraft]>,
     pub chunk_proofs: ChunkProofBatch,
     pub next_checkpoint: AdapterCheckpoint,
+    pub next_progress: AdapterSourceProgress,
     pub state: BatchState,
     pub counters: AdapterCounters,
     pub diagnostics: AdapterDiagnostics,
@@ -138,6 +148,9 @@ pub struct CanonicalBatch {
 impl CanonicalBatch {
     pub fn new(source: &SourceIdentity, parts: CanonicalBatchParts) -> Result<Self, EngineError> {
         validate_batch_capacity(parts.events.len(), parts.relations.len())?;
+        if parts.next_progress.logical_identity() != source.logical_file_key() {
+            return Err(EngineError::new(EngineErrorCode::InvalidValue));
+        }
         if parts
             .events
             .iter()
@@ -179,6 +192,11 @@ impl CanonicalBatch {
     #[must_use]
     pub const fn next_checkpoint(&self) -> &AdapterCheckpoint {
         &self.parts.next_checkpoint
+    }
+
+    #[must_use]
+    pub const fn next_progress(&self) -> &AdapterSourceProgress {
+        &self.parts.next_progress
     }
 
     #[must_use]

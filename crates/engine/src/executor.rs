@@ -1,12 +1,12 @@
 use tokenmaster_accounting::Canonicalizer;
 
 use crate::{
-    Adapter, AdapterCheckpoint, AdapterCompletion, AdapterCounters, AdapterDiagnostics, Archive,
-    ArchiveReplay, ArchiveRevisionId, ArchiveScanSetId, BatchState, CanonicalBatch,
-    CanonicalBatchParts, Clock, CompletionQuality, DiscoveredSource, EngineError, EngineErrorCode,
-    MAX_SCOPE_MANIFEST_ENTRIES, OperationControl, PortError, PortErrorCode, RefreshOutcome,
-    RefreshPermit, RefreshRequestId, ReplayContinuationState, ReplaySourceSink, ScopeIdentity,
-    ScopeManifest, ScopeSink, SinkControl, SourceBatchReader, SourceSink, WriterLease,
+    Adapter, AdapterCompletion, AdapterCounters, AdapterDiagnostics, Archive, ArchiveReplay,
+    ArchiveRevisionId, ArchiveScanSetId, BatchState, CanonicalBatch, CanonicalBatchParts, Clock,
+    CompletionQuality, DiscoveredSource, EngineError, EngineErrorCode, MAX_SCOPE_MANIFEST_ENTRIES,
+    OperationControl, PortError, PortErrorCode, RefreshOutcome, RefreshPermit, RefreshRequestId,
+    ReplayContinuationState, ReplaySourceSink, ScopeIdentity, ScopeManifest, ScopeSink,
+    SinkControl, SourceBatchReader, SourceSink, WriterLease,
 };
 
 pub const MAX_REPLAY_CONTINUATIONS_PER_RUN: usize = 4_096;
@@ -385,7 +385,7 @@ impl OneShotExecutor {
         control: &OperationControl<'_>,
         archive: &mut dyn Archive,
         source: &DiscoveredSource,
-        initial_checkpoint: AdapterCheckpoint,
+        initial_state: crate::AdapterSourceState,
         reader: &mut dyn SourceBatchReader,
         state: &mut ExecutionState,
     ) -> Result<(), PortError> {
@@ -393,10 +393,10 @@ impl OneShotExecutor {
         let current = state.replay.ok_or_else(stale_error)?;
         let replay = validate_replay_transition(
             current,
-            archive.prepare_replay_source(current, source, &initial_checkpoint)?,
+            archive.prepare_replay_source(current, source, &initial_state)?,
         )?;
         state.replay = Some(replay);
-        let mut checkpoint = initial_checkpoint;
+        let mut checkpoint = initial_state.checkpoint().clone();
 
         loop {
             control.check()?;
@@ -483,13 +483,13 @@ impl SourceSink for ArchiveSourceSink<'_> {
     fn on_source(
         &mut self,
         source: crate::DiscoveredSource,
-        initial_checkpoint: AdapterCheckpoint,
+        initial_state: crate::AdapterSourceState,
     ) -> Result<SinkControl, PortError> {
         if source.identity().scope() != self.expected_scope {
             return Err(PortError::new(PortErrorCode::InvalidData));
         }
         self.archive
-            .observe_source(self.scan_set_id, &source, &initial_checkpoint)?;
+            .observe_source(self.scan_set_id, &source, &initial_state)?;
         self.counts.add_observed_source()?;
         Ok(SinkControl::Continue)
     }
@@ -507,7 +507,7 @@ impl ReplaySourceSink for ArchiveReplaySourceSink<'_> {
     fn on_source(
         &mut self,
         source: DiscoveredSource,
-        initial_checkpoint: AdapterCheckpoint,
+        initial_state: crate::AdapterSourceState,
         reader: &mut dyn SourceBatchReader,
     ) -> Result<SinkControl, PortError> {
         if source.identity().scope() != self.expected_scope {
@@ -517,7 +517,7 @@ impl ReplaySourceSink for ArchiveReplaySourceSink<'_> {
             self.control,
             self.archive,
             &source,
-            initial_checkpoint,
+            initial_state,
             reader,
             self.state,
         )?;
@@ -547,6 +547,7 @@ pub fn canonicalize_batch(
             relations: parts.relations,
             chunk_proofs: parts.chunk_proofs,
             next_checkpoint: parts.next_checkpoint,
+            next_progress: parts.next_progress,
             state: parts.state,
             counters: parts.counters,
             diagnostics: parts.diagnostics,
