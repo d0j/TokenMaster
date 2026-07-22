@@ -2121,3 +2121,25 @@ exact idempotent reconciliation cannot roll back a committed selection.
 Rationale: fixed presets preserve the 30-row bound and truthful rolling semantics while
 avoiding a second analytics owner, retained range history, stale Sessions page-relative
 state, or unbounded privacy surface.
+
+## ADR-087 — Aggregate full rhythm through the shared recent History envelope
+
+Decision: an opted-in recent History request produces two fixed distributions: 24
+local-hour buckets and seven Monday-Sunday buckets. The request is limited to 30 civil
+days; query planning walks time without retaining minute rows, compresses local
+occurrences, and rejects more than 768 occurrences or 2,304 aligned rollup segments.
+Each bucket carries the existing aggregate token/event/activity algebra plus elapsed
+minutes and occurrence count, so skipped hours, repeated folds, fractional offsets,
+and skipped dates remain distinguishable from exposed zero activity.
+
+Store evaluation stays inside the existing deferred analytics transaction and reads
+only generation-fenced `usage_time_rollup` rows with the existing dataset and scope
+filters. Activity projects the rhythm from the accepted History envelope using two
+replace-only fixed models, visibly labels range/timezone/evidence/events/exposure, and
+scales hour and weekday distributions independently. The separate newest-first Recent
+activity page remains readable and truthful even when History is unavailable.
+
+Rationale: folding a 12-event page would fabricate time-distribution parity, while a
+minute-series payload or new query owner would grow memory and state. Fixed rollup
+distributions deliver the useful WhereMyTokens rhythm surface with constant frontend
+memory and ccusage-style aggregate truth without raw events, costs, or new authority.

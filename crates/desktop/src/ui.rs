@@ -15,12 +15,12 @@ use slint::{Color, ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use tokenmaster_product::ProductSnapshot;
 
 use crate::{
-    BenefitLotRow, DashboardActivityRow, DashboardBenefitRow, DashboardModelRow, DashboardQuotaRow,
-    DashboardSectionRow, DashboardSessionRow, DashboardTrendPoint, DesktopActivityKey,
-    DesktopActivityProjection, DesktopBenefitExpiry, DesktopCloseEffect, DesktopCostComposition,
-    DesktopCostValue, DesktopCurrentUserStartupStatus, DesktopDashboardProjection,
-    DesktopDashboardSectionKey, DesktopFreshness, DesktopHistoryProjection,
-    DesktopHistoryRangeIntentAdmission, DesktopHistoryRangeIntentSink,
+    ActivityRhythmRow, BenefitLotRow, DashboardActivityRow, DashboardBenefitRow, DashboardModelRow,
+    DashboardQuotaRow, DashboardSectionRow, DashboardSessionRow, DashboardTrendPoint,
+    DesktopActivityKey, DesktopActivityProjection, DesktopBenefitExpiry, DesktopCloseEffect,
+    DesktopCostComposition, DesktopCostValue, DesktopCurrentUserStartupStatus,
+    DesktopDashboardProjection, DesktopDashboardSectionKey, DesktopFreshness,
+    DesktopHistoryProjection, DesktopHistoryRangeIntentAdmission, DesktopHistoryRangeIntentSink,
     DesktopInAppNotificationBatch, DesktopInAppNotificationBridge, DesktopIntent,
     DesktopIntentSink, DesktopLifecycleIntentSink, DesktopModelsProjection,
     DesktopNotificationsProjection, DesktopOperationSnapshot, DesktopPresentationApplyOutcome,
@@ -2361,6 +2361,74 @@ fn apply_activity_route_projection(window: &MainWindow, activity: &DesktopActivi
             })
             .into(),
     );
+    let rhythm = activity.rhythm();
+    window.set_activity_rhythm_state(rhythm.state().stable_code().into());
+    window.set_activity_rhythm_reasons(join_reasons(rhythm.reason_codes().iter()).into());
+    window.set_activity_rhythm_evidence_label(
+        format_evidence(rhythm.freshness(), rhythm.quality()).into(),
+    );
+    window.set_activity_rhythm_time_zone_label(
+        rhythm
+            .time_zone_id()
+            .unwrap_or("Time zone unavailable")
+            .into(),
+    );
+    window.set_activity_rhythm_range_label(
+        rhythm
+            .range()
+            .map_or_else(
+                || "Range unavailable".to_owned(),
+                |(start, end)| {
+                    format!(
+                        "{:04}-{:02}-{:02} – before {:04}-{:02}-{:02}",
+                        start.0, start.1, start.2, end.0, end.1, end.2
+                    )
+                },
+            )
+            .into(),
+    );
+    let hour_maximum = rhythm
+        .hour_rows()
+        .iter()
+        .filter_map(|row| row.total_tokens().known_sum())
+        .max();
+    let weekday_maximum = rhythm
+        .weekday_rows()
+        .iter()
+        .filter_map(|row| row.total_tokens().known_sum())
+        .max();
+    let ratio = |value: DesktopTokenValue, maximum: Option<u64>| -> f32 {
+        match (value.known_sum(), maximum) {
+            (Some(value), Some(maximum)) if maximum > 0 => value as f32 / maximum as f32,
+            _ => 0.0,
+        }
+    };
+    let hour_rows = rhythm
+        .hour_rows()
+        .iter()
+        .map(|row| ActivityRhythmRow {
+            label: format!("{:02}", row.hour()).into(),
+            tokens_label: format_tokens(row.total_tokens()).into(),
+            events_label: format_counted(row.event_count(), "event", "events").into(),
+            exposure_label: format!("{}m/{}x", row.elapsed_minutes(), row.occurrence_count())
+                .into(),
+            ratio: ratio(row.total_tokens(), hour_maximum),
+        })
+        .collect::<Vec<_>>();
+    let weekday_rows = rhythm
+        .weekday_rows()
+        .iter()
+        .map(|row| ActivityRhythmRow {
+            label: humanize_key(row.weekday().stable_code()).into(),
+            tokens_label: format_tokens(row.total_tokens()).into(),
+            events_label: format_counted(row.event_count(), "event", "events").into(),
+            exposure_label: format!("{}m/{}x", row.elapsed_minutes(), row.occurrence_count())
+                .into(),
+            ratio: ratio(row.total_tokens(), weekday_maximum),
+        })
+        .collect::<Vec<_>>();
+    window.set_activity_rhythm_hour_rows(model(hour_rows));
+    window.set_activity_rhythm_weekday_rows(model(weekday_rows));
     let rows = activity
         .rows()
         .iter()

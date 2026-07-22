@@ -174,6 +174,14 @@ pub(crate) struct CalendarBoundaryResolver {
     zone: TimeZone,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct RhythmMinuteKey {
+    pub(crate) date: CalendarDate,
+    pub(crate) hour: u8,
+    pub(crate) weekday_index: u8,
+    pub(crate) offset_seconds: i32,
+}
+
 impl fmt::Debug for CalendarBoundaryResolver {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
@@ -220,6 +228,31 @@ impl CalendarBoundaryResolver {
 
     pub(crate) fn canonical_id(&self) -> &str {
         &self.canonical_id
+    }
+
+    pub(crate) fn rhythm_minute_key(
+        &self,
+        timestamp_seconds: i64,
+    ) -> Result<RhythmMinuteKey, QueryError> {
+        let timestamp = Timestamp::new(timestamp_seconds, 0)
+            .map_err(|_error| QueryError::new(QueryErrorCode::InvalidValue))?;
+        let datetime = self.zone.to_datetime(timestamp);
+        Ok(RhythmMinuteKey {
+            date: CalendarDate::from_jiff(datetime.date())?,
+            hour: u8::try_from(datetime.hour())
+                .map_err(|_error| QueryError::new(QueryErrorCode::Internal))?,
+            weekday_index: u8::try_from(datetime.weekday().to_monday_zero_offset())
+                .map_err(|_error| QueryError::new(QueryErrorCode::Internal))?,
+            offset_seconds: self.zone.to_offset(timestamp).seconds(),
+        })
+    }
+
+    pub(crate) fn rhythm_segments(
+        &self,
+        start_seconds: i64,
+        end_seconds: i64,
+    ) -> Result<Box<[UsageAggregateSegment]>, QueryError> {
+        compose_segments(start_seconds, end_seconds)
     }
 
     pub(crate) fn day(&self, date: CalendarDate) -> Result<CalendarBucket, QueryError> {

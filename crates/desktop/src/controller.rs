@@ -25,8 +25,9 @@ use tokenmaster_query::{
     GitOutputRequest, GitOutputSnapshot, LatestActivityPage, LatestActivityRequest, PageSize,
     ProductDataStatusEnvelope, QueryClock, QueryEnvelope, QueryError, QueryErrorCode, QueryService,
     QuotaCurrentSnapshot, QuotaEnvelope, SystemQueryClock, UsageAnalytics, UsageAnalyticsRequest,
-    UsageBreakdownKind, UsageRange, UsageSeriesSelection, UsageSessionDetailResult,
-    UsageSessionKey, UsageSessionPage, UsageSessionPageRequest, UsageTimeZone, WeekStart,
+    UsageBreakdownKind, UsageRange, UsageRhythmSelection, UsageSeriesSelection,
+    UsageSessionDetailResult, UsageSessionKey, UsageSessionPage, UsageSessionPageRequest,
+    UsageTimeZone, WeekStart,
 };
 
 use crate::presentation::DesktopSnapshotEpoch;
@@ -97,6 +98,7 @@ impl DesktopQueryPlan {
             Vec::new(),
             vec![UsageBreakdownKind::Model, UsageBreakdownKind::Project],
         )
+        .and_then(|request| request.with_rhythm(UsageRhythmSelection::HourAndWeekday))
         .map_err(map_query_error)
     }
 }
@@ -2572,6 +2574,10 @@ mod tests {
             assert_eq!(request.time_zone(), &UsageTimeZone::system());
             assert_eq!(request.week_start(), WeekStart::Monday);
             assert_eq!(request.series(), UsageSeriesSelection::Daily);
+            assert_eq!(
+                request.rhythm(),
+                tokenmaster_query::UsageRhythmSelection::HourAndWeekday
+            );
             assert!(request.scopes().is_empty());
             assert_eq!(
                 request.breakdowns(),

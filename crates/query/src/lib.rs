@@ -25,8 +25,8 @@ pub use activity::{
 pub use analytics::{
     AggregateTokenValue, MAX_QUERY_SERIES_POINTS, ResolvedUsageRange, UsageActivity,
     UsageAnalytics, UsageAnalyticsRequest, UsageBreakdown, UsageBreakdownIdentity,
-    UsageBreakdownItem, UsageBreakdownKind, UsageMetrics, UsageRange, UsageSeriesPoint,
-    UsageSeriesSelection,
+    UsageBreakdownItem, UsageBreakdownKind, UsageMetrics, UsageRange, UsageRhythm, UsageRhythmHour,
+    UsageRhythmSelection, UsageRhythmWeekday, UsageSeriesPoint, UsageSeriesSelection, UsageWeekday,
 };
 pub use benefit::{
     BENEFIT_OVERVIEW_QUERY_SCHEMA_VERSION, BENEFIT_QUERY_SCHEMA_VERSION, BenefitChangeCursor,

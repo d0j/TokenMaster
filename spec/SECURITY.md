@@ -292,7 +292,12 @@ event/dataset/source/session/project identity, cursor/fingerprint/key, paths, co
 prompts, responses, reasoning content, commands, credentials, SQL, raw-event export,
 and authority remain outside Desktop/Slint. Activity route selection adds no query,
 callback, worker, timer, queue, cache, connection, or retained row identity. The UI
-does not claim rhythm/heatmap semantics without a separate bounded aggregate.
+does not derive rhythm/heatmap semantics from those rows. Its separate rhythm evidence
+comes only from the accepted recent History envelope and the existing generation-fenced
+`usage_time_rollup` transaction. Exactly 24 hour and seven weekday rows expose only
+aggregate metrics, elapsed-minute exposure, occurrence count, range, timezone, and
+evidence; 30-day/768-occurrence/2,304-segment caps prevent unbounded input or retention.
+No raw event/content/path/identity/cost authority is added.
 
 P3-D.2c terminal Sessions recovery carries only the already public direction intent and
 its checked snapshot/product/navigation generations. One private capacity-one bridge

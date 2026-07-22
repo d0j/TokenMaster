@@ -1,7 +1,7 @@
 import {
     RouteRow, DashboardSectionRow, DashboardQuotaRow, DashboardBenefitRow,
     DashboardTrendPoint, DashboardSessionRow, DashboardActivityRow, DashboardModelRow,
-    HistoryDayRow, ModelUsageRow, ProjectUsageRow, RecentActivityRow, ReminderScopeRow, BenefitLotRow, SessionListRow, SessionDetailBreakdownRow, RestorePointRow, InAppNotificationRow
+    HistoryDayRow, ModelUsageRow, ProjectUsageRow, RecentActivityRow, ActivityRhythmRow, ReminderScopeRow, BenefitLotRow, SessionListRow, SessionDetailBreakdownRow, RestorePointRow, InAppNotificationRow
 } from "models.slint";
 import { UiPalette, UiTokens } from "tokens.slint";
 import { RouteNavItem } from "components/route-nav-item.slint";
@@ -110,6 +110,13 @@ export component MainWindow inherits Window {
     in property <string> activity-loaded-label;
     in property <string> activity-page-status-label;
     in property <bool> activity-page-available;
+    in property <string> activity-rhythm-state;
+    in property <string> activity-rhythm-reasons;
+    in property <string> activity-rhythm-evidence-label;
+    in property <string> activity-rhythm-time-zone-label;
+    in property <string> activity-rhythm-range-label;
+    in property <[ActivityRhythmRow]> activity-rhythm-hour-rows;
+    in property <[ActivityRhythmRow]> activity-rhythm-weekday-rows;
     in property <[ReminderScopeRow]> reminder-scope-rows;
     in property <[BenefitLotRow]> benefit-lot-rows;
     in property <string> notifications-state;
@@ -488,6 +495,13 @@ export component MainWindow inherits Window {
                     loaded-label: root.activity-loaded-label;
                     page-status-label: root.activity-page-status-label;
                     page-available: root.activity-page-available;
+                    rhythm-state: root.activity-rhythm-state;
+                    rhythm-reasons: root.activity-rhythm-reasons;
+                    rhythm-evidence-label: root.activity-rhythm-evidence-label;
+                    rhythm-time-zone-label: root.activity-rhythm-time-zone-label;
+                    rhythm-range-label: root.activity-rhythm-range-label;
+                    hour-rows: root.activity-rhythm-hour-rows;
+                    weekday-rows: root.activity-rhythm-weekday-rows;
                 }
 
                 if root.notifications-visible: NotificationsView {

@@ -211,7 +211,9 @@ complete desktop UI. Interactive hibernation/soak stay in the frozen-candidate M
   retry, same-worker failed-presentation re-pump, terminal-ack release without
   re-presentation, panic-safe confirmed release, and joined
   lifecycle. Global notification settings synchronization/editing is complete. Full
-  rhythm aggregation remains P3-D. P3-E.1 command
+  rhythm aggregation is implemented as a bounded rollup-only projection: 24 hourly
+  and seven Monday-Sunday buckets, 30 civil days, 768 occurrences, and 2,304 segments.
+  P3-E.1 command
   palette, P3-E.2 compact quota mode, P3-E.3 production tray
   lifecycle, P3-E.4 hotkey/single-instance activation, and P3-E.5 current-user startup
   are complete as developer implementation; interactive shell closure stays open.
@@ -417,8 +419,9 @@ compact widget, notifications, settings, modular skins, en/ru, and migration too
 Every row in `docs/FEATURE_PARITY.md` must be implemented or explicitly rejected under
 its normative rationale before a parity claim.
 
-The next product-completeness slice is bounded full rhythm aggregation, which closes
-the remaining P3-D contour without adding query/runtime authority. P4 presentation
+Bounded full rhythm aggregation now closes the remaining P3-D contour without adding
+query/runtime authority: 24 hourly and seven Monday-Sunday buckets, 30 civil days,
+768 occurrences, and 2,304 segments with DST/fractional/skipped-date coverage. P4 presentation
 follows; external Windows interaction, M0 soak, and P6 MSVC package/signing require a
 later frozen packaged executable. P5 CLI/MCP is a separate product surface.
 

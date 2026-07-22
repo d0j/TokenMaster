@@ -19,8 +19,8 @@ use tokenmaster_desktop::{
 use tokenmaster_product::{ProductAttemptGeneration, ProductReducer, ProductSnapshot};
 use tokenmaster_query::{
     BenefitOverviewRequest, GitOutputRequest, LatestActivityRequest, PageSize, QueryErrorCode,
-    QueryService, UsageAnalyticsRequest, UsageBreakdownKind, UsageRange, UsageSeriesSelection,
-    UsageSessionPageRequest, UsageTimeZone, WeekStart,
+    QueryService, UsageAnalyticsRequest, UsageBreakdownKind, UsageRange, UsageRhythmSelection,
+    UsageSeriesSelection, UsageSessionPageRequest, UsageTimeZone, WeekStart,
 };
 
 use support::dashboard_fixture::{
@@ -144,6 +144,7 @@ fn ready_reducer_with_usage(
                 Vec::new(),
                 vec![UsageBreakdownKind::Model, UsageBreakdownKind::Project],
             )
+            .and_then(|request| request.with_rhythm(UsageRhythmSelection::HourAndWeekday))
             .expect("history request"),
         )
         .expect("history");
@@ -855,6 +856,22 @@ fn assert_compiled_activity_renders_bounded_safe_events_in_place() {
     assert_eq!(window.get_active_route_state(), "ready");
     assert_eq!(window.get_activity_state(), "ready");
     assert_eq!(window.get_activity_context_label(), "UTC timestamps");
+    assert_eq!(window.get_activity_rhythm_state(), "ready");
+    assert_eq!(window.get_activity_rhythm_time_zone_label(), "UTC");
+    assert_eq!(
+        window.get_activity_rhythm_range_label(),
+        "2026-06-17 – before 2026-07-17"
+    );
+    assert_eq!(window.get_activity_rhythm_hour_rows().row_count(), 24);
+    assert_eq!(window.get_activity_rhythm_weekday_rows().row_count(), 7);
+    assert_eq!(
+        window
+            .get_activity_rhythm_hour_rows()
+            .row_data(1)
+            .expect("hour row")
+            .exposure_label,
+        "1800m/30x"
+    );
     assert_eq!(
         window.get_activity_evidence_label(),
         "Fresh · Authoritative"

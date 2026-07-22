@@ -10,6 +10,8 @@ use tokenmaster_desktop::{
 use tokenmaster_product::{ProductAttemptGeneration, ProductReducer};
 use tokenmaster_query::{
     LatestActivityRequest, PageSize, QueryEnvelope, QueryErrorCode, QueryQuality, QueryService,
+    UsageAnalyticsRequest, UsageRange, UsageRhythmSelection, UsageSeriesSelection, UsageTimeZone,
+    UsageWeekday, WeekStart,
 };
 
 use support::dashboard_fixture::{FixedClock, seed};
@@ -32,6 +34,57 @@ fn initial_activity_is_bounded_waiting_truth_without_fabricated_zeroes() {
     assert_eq!(activity.freshness(), None);
     assert_eq!(activity.quality(), None);
     assert_eq!(activity.has_more(), None);
+    assert_eq!(
+        activity.rhythm().state(),
+        DesktopDashboardSectionState::Waiting
+    );
+    assert!(activity.rhythm().hour_rows().is_empty());
+    assert!(activity.rhythm().weekday_rows().is_empty());
+}
+
+#[test]
+fn rhythm_is_a_bounded_history_projection_independent_from_recent_activity() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("activity-rhythm.sqlite3");
+    seed(&path);
+    let mut service = QueryService::open(&path, FixedClock).expect("query service");
+    let history = service
+        .usage_analytics(
+            UsageAnalyticsRequest::new(
+                UsageRange::recent_days(30).expect("recent range"),
+                UsageTimeZone::iana("UTC").expect("UTC"),
+                WeekStart::Monday,
+                UsageSeriesSelection::Daily,
+                Vec::new(),
+                Vec::new(),
+            )
+            .and_then(|request| request.with_rhythm(UsageRhythmSelection::HourAndWeekday))
+            .expect("rhythm request"),
+        )
+        .expect("history rhythm");
+    let mut reducer = ProductReducer::new();
+    reducer
+        .publish_history(attempt(1), history)
+        .expect("publish history");
+
+    let state = DesktopState::new(&reducer.snapshot(), DesktopRouteKey::Activity);
+    let activity = state.projection().activity();
+    let rhythm = activity.rhythm();
+
+    assert_eq!(activity.state(), DesktopDashboardSectionState::Waiting);
+    assert!(activity.rows().is_empty());
+    assert_eq!(rhythm.state(), DesktopDashboardSectionState::Ready);
+    assert_eq!(rhythm.time_zone_id(), Some("UTC"));
+    assert_eq!(rhythm.range(), Some(((2026, 6, 17), (2026, 7, 17))));
+    assert_eq!(rhythm.hour_rows().len(), 24);
+    assert_eq!(rhythm.weekday_rows().len(), 7);
+    assert_eq!(rhythm.hour_rows()[1].hour(), 1);
+    assert_eq!(rhythm.hour_rows()[1].event_count(), 1);
+    assert_eq!(rhythm.hour_rows()[1].total_tokens().known_sum(), Some(140));
+    assert_eq!(rhythm.hour_rows()[1].elapsed_minutes(), 30 * 60);
+    assert_eq!(rhythm.hour_rows()[1].occurrence_count(), 30);
+    assert_eq!(rhythm.weekday_rows()[3].weekday(), UsageWeekday::Thursday);
+    assert_eq!(rhythm.weekday_rows()[3].event_count(), 1);
 }
 
 #[test]

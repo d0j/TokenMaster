@@ -14,6 +14,10 @@ use crate::{StoreError, StoreErrorCode};
 pub const MAX_USAGE_SERIES_POINTS: usize = 400;
 pub const MAX_USAGE_BREAKDOWNS: usize = 4;
 pub const MAX_USAGE_BREAKDOWN_ITEMS: usize = 256;
+pub const MAX_USAGE_RHYTHM_OCCURRENCES: usize = 768;
+pub const MAX_USAGE_RHYTHM_SEGMENTS: usize = 2_304;
+pub const USAGE_RHYTHM_HOURS: usize = 24;
+pub const USAGE_RHYTHM_WEEKDAYS: usize = 7;
 
 const BREAKDOWN_METRICS_SQL: &str = "coalesce(sum(event_count), 0),
        coalesce(sum(input_known_count), 0), coalesce(sum(input_known_sum), 0),
@@ -159,6 +163,7 @@ pub struct UsageAnalyticsQuery {
     series_points: Box<[UsageSeriesPoint]>,
     breakdowns: Box<[UsageBreakdownKind]>,
     scopes: Box<[ScanScope]>,
+    rhythm: Option<UsageRhythmQuery>,
     deadline: Duration,
 }
 
@@ -226,8 +231,81 @@ impl UsageAnalyticsQuery {
             series_points,
             breakdowns: breakdowns.into_boxed_slice(),
             scopes: scopes.into_boxed_slice(),
+            rhythm: None,
             deadline,
         })
+    }
+
+    pub fn with_rhythm(mut self, rhythm: UsageRhythmQuery) -> Result<Self, StoreError> {
+        self.rhythm = Some(rhythm);
+        Ok(self)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UsageRhythmSegment {
+    hour_index: u8,
+    weekday_index: u8,
+    segment: UsageAggregateSegment,
+}
+
+impl UsageRhythmSegment {
+    pub fn new(
+        hour_index: u8,
+        weekday_index: u8,
+        segment: UsageAggregateSegment,
+    ) -> Result<Self, StoreError> {
+        if usize::from(hour_index) >= USAGE_RHYTHM_HOURS
+            || usize::from(weekday_index) >= USAGE_RHYTHM_WEEKDAYS
+        {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self {
+            hour_index,
+            weekday_index,
+            segment,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UsageRhythmQuery {
+    segments: Box<[UsageRhythmSegment]>,
+}
+
+impl UsageRhythmQuery {
+    pub fn new(segments: Box<[UsageRhythmSegment]>) -> Result<Self, StoreError> {
+        if segments.is_empty() || segments.len() > MAX_USAGE_RHYTHM_SEGMENTS {
+            return Err(StoreError::with_limit(
+                StoreErrorCode::CapacityExceeded,
+                MAX_USAGE_RHYTHM_SEGMENTS as u64,
+            ));
+        }
+        if segments
+            .windows(2)
+            .any(|pair| pair[0].segment.end_seconds != pair[1].segment.start_seconds)
+        {
+            return Err(StoreError::new(StoreErrorCode::InvalidValue));
+        }
+        Ok(Self { segments })
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UsageRhythmCapture {
+    hours: Box<[UsageAggregateMetrics]>,
+    weekdays: Box<[UsageAggregateMetrics]>,
+}
+
+impl UsageRhythmCapture {
+    #[must_use]
+    pub const fn hours(&self) -> &[UsageAggregateMetrics] {
+        &self.hours
+    }
+
+    #[must_use]
+    pub const fn weekdays(&self) -> &[UsageAggregateMetrics] {
+        &self.weekdays
     }
 }
 
@@ -315,6 +393,7 @@ pub struct UsageAnalyticsCapture {
     overview: UsageAggregateMetrics,
     series: Box<[UsageSeriesPointCapture]>,
     breakdowns: Box<[UsageBreakdown]>,
+    rhythm: Option<UsageRhythmCapture>,
 }
 
 impl UsageAnalyticsCapture {
@@ -336,6 +415,11 @@ impl UsageAnalyticsCapture {
     #[must_use]
     pub const fn breakdowns(&self) -> &[UsageBreakdown] {
         &self.breakdowns
+    }
+
+    #[must_use]
+    pub const fn rhythm(&self) -> Option<&UsageRhythmCapture> {
+        self.rhythm.as_ref()
     }
 }
 
@@ -431,13 +515,187 @@ where
             &query.scopes,
         )?);
     }
+    let rhythm = query
+        .rhythm
+        .as_ref()
+        .map(|rhythm| {
+            load_rhythm(
+                &transaction,
+                active_generation,
+                dataset_kind,
+                rhythm,
+                &query.scopes,
+                &overview,
+            )
+        })
+        .transpose()?;
     map_sql(transaction.commit())?;
     Ok(UsageAnalyticsCapture {
         publication,
         overview,
         series: series.into_boxed_slice(),
         breakdowns: breakdowns.into_boxed_slice(),
+        rhythm,
     })
+}
+
+fn load_rhythm(
+    connection: &Connection,
+    active_generation: i64,
+    dataset_kind: Option<&'static str>,
+    query: &UsageRhythmQuery,
+    scopes: &[ScanScope],
+    overview: &UsageAggregateMetrics,
+) -> Result<UsageRhythmCapture, StoreError> {
+    let Some(dataset_kind) = dataset_kind else {
+        return Ok(UsageRhythmCapture {
+            hours: vec![UsageAggregateMetrics::default(); USAGE_RHYTHM_HOURS].into_boxed_slice(),
+            weekdays: vec![UsageAggregateMetrics::default(); USAGE_RHYTHM_WEEKDAYS]
+                .into_boxed_slice(),
+        });
+    };
+    let parameters = rhythm_parameters(active_generation, dataset_kind, query, scopes)?;
+    let hours = load_rhythm_dimension(
+        connection,
+        query,
+        &parameters,
+        "hour_index",
+        USAGE_RHYTHM_HOURS,
+    )?;
+    let weekdays = load_rhythm_dimension(
+        connection,
+        query,
+        &parameters,
+        "weekday_index",
+        USAGE_RHYTHM_WEEKDAYS,
+    )?;
+    for buckets in [&hours, &weekdays] {
+        let mut total = UsageAggregateMetrics::default();
+        for bucket in buckets {
+            total.checked_add(bucket)?;
+        }
+        if &total != overview {
+            return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+        }
+    }
+    Ok(UsageRhythmCapture {
+        hours: hours.into_boxed_slice(),
+        weekdays: weekdays.into_boxed_slice(),
+    })
+}
+
+fn load_rhythm_dimension(
+    connection: &Connection,
+    query: &UsageRhythmQuery,
+    parameters: &[Value],
+    dimension: &'static str,
+    expected: usize,
+) -> Result<Vec<UsageAggregateMetrics>, StoreError> {
+    let sql = rhythm_sql(query.segments.len(), dimension);
+    let mut statement = map_sql(connection.prepare(&sql))?;
+    let rows = map_sql(
+        statement.query_map(params_from_iter(parameters.iter()), |row| {
+            Ok((row.get::<_, i64>(0)?, raw_metrics_at(row, 1)?))
+        }),
+    )?;
+    let mut result = Vec::with_capacity(expected);
+    for row in rows {
+        let (index, raw) = map_sql(row)?;
+        let expected_index = i64::try_from(result.len())
+            .map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))?;
+        if index != expected_index || result.len() >= expected {
+            return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+        }
+        result.push(raw.validate()?);
+    }
+    if result.len() != expected {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    Ok(result)
+}
+
+fn rhythm_parameters(
+    active_generation: i64,
+    dataset_kind: &'static str,
+    query: &UsageRhythmQuery,
+    scopes: &[ScanScope],
+) -> Result<Vec<Value>, StoreError> {
+    let mut parameters =
+        Vec::with_capacity(3 + query.segments.len() * 5 + MAX_USAGE_QUERY_SCOPES * 2);
+    parameters.push(Value::Integer(active_generation));
+    parameters.push(Value::Text(dataset_kind.to_owned()));
+    for tagged in &query.segments {
+        parameters.push(Value::Integer(i64::from(tagged.hour_index)));
+        parameters.push(Value::Integer(i64::from(tagged.weekday_index)));
+        parameters.push(Value::Text(tagged.segment.bucket_width.as_sql().to_owned()));
+        parameters.push(Value::Integer(tagged.segment.start_seconds));
+        parameters.push(Value::Integer(tagged.segment.end_seconds));
+    }
+    parameters
+        .push(Value::Integer(i64::try_from(scopes.len()).map_err(
+            |_| StoreError::new(StoreErrorCode::CapacityExceeded),
+        )?));
+    for index in 0..MAX_USAGE_QUERY_SCOPES {
+        if let Some(scope) = scopes.get(index) {
+            parameters.push(Value::Text(scope.provider_id().to_owned()));
+            parameters.push(Value::Text(scope.profile_id().to_owned()));
+        } else {
+            parameters.push(Value::Null);
+            parameters.push(Value::Null);
+        }
+    }
+    Ok(parameters)
+}
+
+fn rhythm_sql(segment_count: usize, dimension: &'static str) -> String {
+    let mut next = 3usize;
+    let values = (0..segment_count)
+        .map(|_| {
+            let row = format!(
+                "(?{}, ?{}, ?{}, ?{}, ?{})",
+                next,
+                next + 1,
+                next + 2,
+                next + 3,
+                next + 4
+            );
+            next += 5;
+            row
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let scope_count = next;
+    next += 1;
+    let scope_values = (0..MAX_USAGE_QUERY_SCOPES)
+        .map(|_| {
+            let pair = format!("(?{}, ?{})", next, next + 1);
+            next += 2;
+            pair
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let expected = if dimension == "hour_index" {
+        USAGE_RHYTHM_HOURS
+    } else {
+        USAGE_RHYTHM_WEEKDAYS
+    };
+    format!(
+        "WITH RECURSIVE
+         rhythm_segment(hour_index, weekday_index, bucket_width, start_seconds, end_seconds) AS (VALUES {values}),
+         rhythm_key(value) AS (SELECT 0 UNION ALL SELECT value + 1 FROM rhythm_key WHERE value + 1 < {expected})
+         SELECT rhythm_key.value, {BREAKDOWN_METRICS_SQL}
+         FROM rhythm_key
+         LEFT JOIN rhythm_segment ON rhythm_segment.{dimension} = rhythm_key.value
+         LEFT JOIN usage_time_rollup AS item
+           ON item.aggregate_generation = ?1 AND item.dataset_kind = ?2
+          AND item.bucket_width = rhythm_segment.bucket_width
+          AND item.bucket_start_seconds >= rhythm_segment.start_seconds
+          AND item.bucket_start_seconds < rhythm_segment.end_seconds
+          AND item.dimension_kind = 'all' AND item.dimension_value = ''
+          AND (?{scope_count} = 0 OR (item.provider_id, item.profile_id) IN (VALUES {scope_values}))
+         GROUP BY rhythm_key.value
+         ORDER BY rhythm_key.value"
+    )
 }
 
 fn load_range_metrics(
@@ -728,6 +986,25 @@ mod tests {
             assert!(details.join("\n").contains("usage_time_rollup"));
         }
         Ok(())
+    }
+
+    #[test]
+    fn rhythm_queries_are_bounded_rollup_only_and_offset_free() {
+        for dimension in ["hour_index", "weekday_index"] {
+            let normalized = rhythm_sql(MAX_USAGE_RHYTHM_SEGMENTS, dimension).to_ascii_lowercase();
+            assert!(normalized.contains("usage_time_rollup"));
+            assert!(!normalized.contains("usage_event"));
+            assert!(!normalized.contains("usage_legacy_event"));
+            assert!(!normalized.contains(" offset "));
+            let last = 3 + (MAX_USAGE_RHYTHM_SEGMENTS - 1) * 5;
+            assert!(normalized.contains(&format!(
+                "(?{last}, ?{}, ?{}, ?{}, ?{})",
+                last + 1,
+                last + 2,
+                last + 3,
+                last + 4
+            )));
+        }
     }
 
     #[test]

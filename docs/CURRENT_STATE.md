@@ -165,6 +165,20 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   successfully as the isolated 8/8 target; the serialized locked workspace
   test/doctest suite then passes in 1,152.2 seconds. This is not P4/P5/P6/M0/package/
   signing/soak/release acceptance.
+- P3-D bounded full rhythm aggregation is developer-complete. The selected recent
+  History request adds exactly 24 local-hour and seven Monday-Sunday buckets from the
+  existing rollup-only analytics transaction, capped at 30 civil days, 768 local
+  occurrences, and 2,304 aligned segments. Each bucket preserves token/event metrics,
+  elapsed-minute exposure, and occurrence count across DST folds/gaps, fractional
+  offsets, and skipped dates. Activity renders the exact range, timezone, evidence,
+  events, and exposure with independent hour/weekday scales while the 12-row Recent
+  activity page remains an independent product section. Focused query/store/controller/
+  projection/compiled-UI contracts and strict affected-crate Clippy pass. This does
+  not claim P4/P5/P6/M0/package/signing/soak/release acceptance. The final serialized
+  locked workspace test/doctest suite passes in 778.5 seconds after correcting one
+  pre-existing restart-test race to await the asynchronous initial controller refresh.
+  The updated Desktop and unchanged Application composition audits both exit zero in
+  one 510.2-second focused run.
 - P3-D.2a bounded Sessions list: the existing desktop query plan requests one all-time
   newest-first page capped at 64 while Dashboard keeps its 12-row summary. A separate
   identity-free projection and responsive Slint route render last activity, duration,

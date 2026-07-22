@@ -1,5 +1,19 @@
 # TokenMaster project history
 
+## 2026-07-22 — P3-D bounded full rhythm aggregation
+
+Implemented the rollup-only rhythm projection: 24 hourly and seven Monday-Sunday
+buckets, at most 30 civil days, 768 occurrences, and 2,304 segments. Metrics, exposure,
+occurrence metadata, DST/fractional/skipped-date semantics, and unavailable/partial
+truth remain explicit; Activity stays independently readable during aggregate rebuild.
+No raw events, paths, prompts, or cost authority cross the projection boundary.
+Final verification corrected one app integration-test race by awaiting the documented
+asynchronous initial controller refresh after service restart. The exact regression
+passes, and the final serialized locked workspace test/doctest suite exits zero in
+778.5 seconds after clean-root, formatting, and strict warnings-as-errors checks. The
+updated Desktop and Application composition audits both exit zero in one 510.2-second
+focused run.
+
 ## 2026-07-22 — Root audit-hardening stop condition
 
 The History-range closeout exposed a delivery-process failure: repeated source-audit

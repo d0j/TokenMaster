@@ -6,16 +6,18 @@ use tokenmaster_pricing::{
     ServiceTier, TokenPriceBasis, UsdMicros, select_cost,
 };
 use tokenmaster_store::{
-    ScanScope, UsageAggregateActivity as StoreActivity, UsageAggregateMetrics as StoreMetrics,
-    UsageAnalyticsCapture as StoreCapture, UsageAnalyticsQuery as StoreQuery,
-    UsageBreakdown as StoreBreakdown, UsageBreakdownIdentity as StoreBreakdownIdentity,
-    UsageBreakdownKind as StoreBreakdownKind,
+    MAX_USAGE_RHYTHM_OCCURRENCES, MAX_USAGE_RHYTHM_SEGMENTS, ScanScope, USAGE_RHYTHM_HOURS,
+    USAGE_RHYTHM_WEEKDAYS, UsageAggregateActivity as StoreActivity,
+    UsageAggregateMetrics as StoreMetrics, UsageAnalyticsCapture as StoreCapture,
+    UsageAnalyticsQuery as StoreQuery, UsageBreakdown as StoreBreakdown,
+    UsageBreakdownIdentity as StoreBreakdownIdentity, UsageBreakdownKind as StoreBreakdownKind,
     UsageBreakdownPriceBasisQuery as StoreBreakdownPriceQuery,
     UsagePriceBasisBatchCapture as StorePriceBatchCapture,
     UsagePriceBasisBatchQuery as StorePriceBatchQuery,
     UsagePriceBasisTargetCapture as StorePriceTarget, UsagePriceLongContext as StorePriceContext,
     UsagePriceTier as StorePriceTier, UsageQueryDatasetIdentity as StoreDatasetIdentity,
-    UsageReportedCostState as StoreReportedState, UsageTokenAggregate as StoreTokenAggregate,
+    UsageReportedCostState as StoreReportedState, UsageRhythmQuery as StoreRhythmQuery,
+    UsageRhythmSegment as StoreRhythmSegment, UsageTokenAggregate as StoreTokenAggregate,
 };
 
 use crate::{
@@ -25,6 +27,7 @@ use crate::{
 
 pub const MAX_QUERY_SERIES_POINTS: usize = 400;
 const MAX_QUERY_BREAKDOWNS: usize = 4;
+const MAX_RHYTHM_DAYS: u16 = 30;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum UsageRangeValue {
@@ -103,6 +106,22 @@ pub enum UsageSeriesSelection {
     Daily,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UsageRhythmSelection {
+    None,
+    HourAndWeekday,
+}
+
+impl UsageRhythmSelection {
+    #[must_use]
+    pub const fn stable_code(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::HourAndWeekday => "hour_and_weekday",
+        }
+    }
+}
+
 impl UsageSeriesSelection {
     #[must_use]
     pub const fn stable_code(self) -> &'static str {
@@ -159,6 +178,7 @@ pub struct UsageAnalyticsRequest {
     series: UsageSeriesSelection,
     scopes: Box<[QueryScope]>,
     breakdowns: Box<[UsageBreakdownKind]>,
+    rhythm: UsageRhythmSelection,
 }
 
 impl UsageAnalyticsRequest {
@@ -193,7 +213,21 @@ impl UsageAnalyticsRequest {
             series,
             scopes: scopes.into_boxed_slice(),
             breakdowns: breakdowns.into_boxed_slice(),
+            rhythm: UsageRhythmSelection::None,
         })
+    }
+
+    pub fn with_rhythm(mut self, rhythm: UsageRhythmSelection) -> Result<Self, QueryError> {
+        if rhythm == UsageRhythmSelection::HourAndWeekday
+            && !matches!(
+                self.range.0,
+                UsageRangeValue::RecentDays(1..=MAX_RHYTHM_DAYS)
+            )
+        {
+            return Err(QueryError::new(QueryErrorCode::CapacityExceeded));
+        }
+        self.rhythm = rhythm;
+        Ok(self)
     }
 
     #[must_use]
@@ -224,6 +258,11 @@ impl UsageAnalyticsRequest {
     #[must_use]
     pub const fn breakdowns(&self) -> &[UsageBreakdownKind] {
         &self.breakdowns
+    }
+
+    #[must_use]
+    pub const fn rhythm(&self) -> UsageRhythmSelection {
+        self.rhythm
     }
 }
 
@@ -524,6 +563,113 @@ pub struct UsageBreakdown {
     truncated: bool,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UsageWeekday {
+    Monday,
+    Tuesday,
+    Wednesday,
+    Thursday,
+    Friday,
+    Saturday,
+    Sunday,
+}
+
+impl UsageWeekday {
+    const ALL: [Self; USAGE_RHYTHM_WEEKDAYS] = [
+        Self::Monday,
+        Self::Tuesday,
+        Self::Wednesday,
+        Self::Thursday,
+        Self::Friday,
+        Self::Saturday,
+        Self::Sunday,
+    ];
+
+    #[must_use]
+    pub const fn stable_code(self) -> &'static str {
+        match self {
+            Self::Monday => "monday",
+            Self::Tuesday => "tuesday",
+            Self::Wednesday => "wednesday",
+            Self::Thursday => "thursday",
+            Self::Friday => "friday",
+            Self::Saturday => "saturday",
+            Self::Sunday => "sunday",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UsageRhythmHour {
+    hour: u8,
+    metrics: UsageMetrics,
+    elapsed_minutes: u64,
+    occurrence_count: u16,
+}
+
+impl UsageRhythmHour {
+    #[must_use]
+    pub const fn hour(&self) -> u8 {
+        self.hour
+    }
+    #[must_use]
+    pub const fn metrics(&self) -> &UsageMetrics {
+        &self.metrics
+    }
+    #[must_use]
+    pub const fn elapsed_minutes(&self) -> u64 {
+        self.elapsed_minutes
+    }
+    #[must_use]
+    pub const fn occurrence_count(&self) -> u16 {
+        self.occurrence_count
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UsageRhythmWeekday {
+    weekday: UsageWeekday,
+    metrics: UsageMetrics,
+    elapsed_minutes: u64,
+    occurrence_count: u16,
+}
+
+impl UsageRhythmWeekday {
+    #[must_use]
+    pub const fn weekday(&self) -> UsageWeekday {
+        self.weekday
+    }
+    #[must_use]
+    pub const fn metrics(&self) -> &UsageMetrics {
+        &self.metrics
+    }
+    #[must_use]
+    pub const fn elapsed_minutes(&self) -> u64 {
+        self.elapsed_minutes
+    }
+    #[must_use]
+    pub const fn occurrence_count(&self) -> u16 {
+        self.occurrence_count
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UsageRhythm {
+    hours: Arc<[UsageRhythmHour]>,
+    weekdays: Arc<[UsageRhythmWeekday]>,
+}
+
+impl UsageRhythm {
+    #[must_use]
+    pub const fn hours(&self) -> &Arc<[UsageRhythmHour]> {
+        &self.hours
+    }
+    #[must_use]
+    pub const fn weekdays(&self) -> &Arc<[UsageRhythmWeekday]> {
+        &self.weekdays
+    }
+}
+
 impl UsageBreakdown {
     #[must_use]
     pub const fn kind(&self) -> UsageBreakdownKind {
@@ -546,6 +692,7 @@ pub struct UsageAnalytics {
     overview_cost: CostResult,
     series: Arc<[UsageSeriesPoint]>,
     breakdowns: Arc<[UsageBreakdown]>,
+    rhythm: Option<UsageRhythm>,
 }
 
 impl UsageAnalytics {
@@ -570,12 +717,26 @@ impl UsageAnalytics {
     pub const fn breakdowns(&self) -> &Arc<[UsageBreakdown]> {
         &self.breakdowns
     }
+
+    #[must_use]
+    pub const fn rhythm(&self) -> Option<&UsageRhythm> {
+        self.rhythm.as_ref()
+    }
 }
 
 pub(crate) struct UsageAnalyticsPlan {
     time_zone_id: Arc<str>,
     overview: CalendarBucket,
     series: Box<[CalendarBucket]>,
+    rhythm: Option<UsageRhythmPlan>,
+}
+
+pub(crate) struct UsageRhythmPlan {
+    store_query: StoreRhythmQuery,
+    hour_elapsed_minutes: [u64; USAGE_RHYTHM_HOURS],
+    hour_occurrence_count: [u16; USAGE_RHYTHM_HOURS],
+    weekday_elapsed_minutes: [u64; USAGE_RHYTHM_WEEKDAYS],
+    weekday_occurrence_count: [u16; USAGE_RHYTHM_WEEKDAYS],
 }
 
 impl UsageAnalyticsPlan {
@@ -612,11 +773,124 @@ pub(crate) fn build_plan(
             date = date.tomorrow()?;
         }
     }
+    let rhythm = if request.rhythm == UsageRhythmSelection::HourAndWeekday {
+        Some(build_rhythm_plan(&resolver, &overview)?)
+    } else {
+        None
+    };
     Ok(UsageAnalyticsPlan {
         time_zone_id: Arc::from(resolver.canonical_id()),
         overview,
         series: series.into_boxed_slice(),
+        rhythm,
     })
+}
+
+fn build_rhythm_plan(
+    resolver: &CalendarBoundaryResolver,
+    overview: &CalendarBucket,
+) -> Result<UsageRhythmPlan, QueryError> {
+    let mut store_segments = Vec::new();
+    let mut hour_elapsed_minutes = [0u64; USAGE_RHYTHM_HOURS];
+    let mut hour_occurrence_count = [0u16; USAGE_RHYTHM_HOURS];
+    let mut weekday_elapsed_minutes = [0u64; USAGE_RHYTHM_WEEKDAYS];
+    let mut weekday_occurrence_count = [0u16; USAGE_RHYTHM_WEEKDAYS];
+    let mut occurrence_count = 0usize;
+    let mut occurrence_start = overview.start_seconds();
+    let mut current_key = resolver.rhythm_minute_key(occurrence_start)?;
+    let mut cursor = occurrence_start
+        .checked_add(60)
+        .ok_or_else(|| QueryError::new(QueryErrorCode::Overflow))?;
+    while cursor < overview.end_seconds() {
+        let key = resolver.rhythm_minute_key(cursor)?;
+        if key != current_key {
+            append_rhythm_occurrence(
+                resolver,
+                occurrence_start,
+                cursor,
+                current_key,
+                &mut store_segments,
+                &mut hour_elapsed_minutes,
+                &mut hour_occurrence_count,
+                &mut weekday_elapsed_minutes,
+                &mut weekday_occurrence_count,
+                &mut occurrence_count,
+            )?;
+            occurrence_start = cursor;
+            current_key = key;
+        }
+        cursor = cursor
+            .checked_add(60)
+            .ok_or_else(|| QueryError::new(QueryErrorCode::Overflow))?;
+    }
+    append_rhythm_occurrence(
+        resolver,
+        occurrence_start,
+        overview.end_seconds(),
+        current_key,
+        &mut store_segments,
+        &mut hour_elapsed_minutes,
+        &mut hour_occurrence_count,
+        &mut weekday_elapsed_minutes,
+        &mut weekday_occurrence_count,
+        &mut occurrence_count,
+    )?;
+    let store_query = StoreRhythmQuery::new(store_segments.into_boxed_slice())
+        .map_err(crate::service::map_store_error)?;
+    Ok(UsageRhythmPlan {
+        store_query,
+        hour_elapsed_minutes,
+        hour_occurrence_count,
+        weekday_elapsed_minutes,
+        weekday_occurrence_count,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_rhythm_occurrence(
+    resolver: &CalendarBoundaryResolver,
+    start_seconds: i64,
+    end_seconds: i64,
+    key: crate::calendar::RhythmMinuteKey,
+    store_segments: &mut Vec<StoreRhythmSegment>,
+    hour_elapsed_minutes: &mut [u64; USAGE_RHYTHM_HOURS],
+    hour_occurrence_count: &mut [u16; USAGE_RHYTHM_HOURS],
+    weekday_elapsed_minutes: &mut [u64; USAGE_RHYTHM_WEEKDAYS],
+    weekday_occurrence_count: &mut [u16; USAGE_RHYTHM_WEEKDAYS],
+    occurrence_count: &mut usize,
+) -> Result<(), QueryError> {
+    *occurrence_count = occurrence_count
+        .checked_add(1)
+        .ok_or_else(|| QueryError::new(QueryErrorCode::Overflow))?;
+    if *occurrence_count > MAX_USAGE_RHYTHM_OCCURRENCES {
+        return Err(QueryError::new(QueryErrorCode::CapacityExceeded));
+    }
+    let hour = usize::from(key.hour);
+    let weekday = usize::from(key.weekday_index);
+    let elapsed = u64::try_from((end_seconds - start_seconds) / 60)
+        .map_err(|_| QueryError::new(QueryErrorCode::Overflow))?;
+    hour_elapsed_minutes[hour] = hour_elapsed_minutes[hour]
+        .checked_add(elapsed)
+        .ok_or_else(|| QueryError::new(QueryErrorCode::Overflow))?;
+    weekday_elapsed_minutes[weekday] = weekday_elapsed_minutes[weekday]
+        .checked_add(elapsed)
+        .ok_or_else(|| QueryError::new(QueryErrorCode::Overflow))?;
+    hour_occurrence_count[hour] = hour_occurrence_count[hour]
+        .checked_add(1)
+        .ok_or_else(|| QueryError::new(QueryErrorCode::Overflow))?;
+    weekday_occurrence_count[weekday] = weekday_occurrence_count[weekday]
+        .checked_add(1)
+        .ok_or_else(|| QueryError::new(QueryErrorCode::Overflow))?;
+    for segment in resolver.rhythm_segments(start_seconds, end_seconds)? {
+        if store_segments.len() == MAX_USAGE_RHYTHM_SEGMENTS {
+            return Err(QueryError::new(QueryErrorCode::CapacityExceeded));
+        }
+        store_segments.push(
+            StoreRhythmSegment::new(key.hour, key.weekday_index, segment)
+                .map_err(crate::service::map_store_error)?,
+        );
+    }
+    Ok(())
 }
 
 pub(crate) fn build_store_query(
@@ -657,7 +931,7 @@ pub(crate) fn build_store_query_from_plan(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_error| QueryError::new(QueryErrorCode::InvalidValue))?
         .into_boxed_slice();
-    let query = StoreQuery::new(
+    let mut query = StoreQuery::new(
         None,
         store_overview,
         store_series,
@@ -666,6 +940,11 @@ pub(crate) fn build_store_query_from_plan(
         deadline,
     )
     .map_err(crate::service::map_store_error)?;
+    if let Some(rhythm) = &plan.rhythm {
+        query = query
+            .with_rhythm(rhythm.store_query.clone())
+            .map_err(crate::service::map_store_error)?;
+    }
     Ok(query)
 }
 
@@ -744,6 +1023,7 @@ pub(crate) fn map_capture(
     cost_mode: CostMode,
 ) -> Result<UsageAnalytics, QueryError> {
     if plan.series.len() != capture.series().len()
+        || plan.rhythm.is_some() != capture.rhythm().is_some()
         || price_capture.publication().dataset_identity()
             != capture.publication().dataset_identity()
         || price_capture.targets().len() != plan.series.len() + 1
@@ -790,6 +1070,11 @@ pub(crate) fn map_capture(
         .zip(breakdown_price_captures)
         .map(|(breakdown, prices)| map_breakdown(breakdown, prices.as_ref(), pricing, cost_mode))
         .collect::<Result<Vec<_>, _>>()?;
+    let rhythm = match (&plan.rhythm, capture.rhythm()) {
+        (Some(plan), Some(capture)) => Some(map_rhythm(plan, capture)?),
+        (None, None) => None,
+        _ => return Err(QueryError::new(QueryErrorCode::CorruptArchive)),
+    };
     Ok(UsageAnalytics {
         range: ResolvedUsageRange {
             time_zone_id: plan.time_zone_id,
@@ -802,6 +1087,48 @@ pub(crate) fn map_capture(
         overview_cost,
         series: Arc::from(series),
         breakdowns: Arc::from(breakdowns),
+        rhythm,
+    })
+}
+
+fn map_rhythm(
+    plan: &UsageRhythmPlan,
+    capture: &tokenmaster_store::UsageRhythmCapture,
+) -> Result<UsageRhythm, QueryError> {
+    if capture.hours().len() != USAGE_RHYTHM_HOURS
+        || capture.weekdays().len() != USAGE_RHYTHM_WEEKDAYS
+    {
+        return Err(QueryError::new(QueryErrorCode::CorruptArchive));
+    }
+    let hours = capture
+        .hours()
+        .iter()
+        .enumerate()
+        .map(|(index, metrics)| {
+            Ok(UsageRhythmHour {
+                hour: u8::try_from(index).map_err(|_| QueryError::new(QueryErrorCode::Internal))?,
+                metrics: UsageMetrics::from_store(metrics)?,
+                elapsed_minutes: plan.hour_elapsed_minutes[index],
+                occurrence_count: plan.hour_occurrence_count[index],
+            })
+        })
+        .collect::<Result<Vec<_>, QueryError>>()?;
+    let weekdays = capture
+        .weekdays()
+        .iter()
+        .enumerate()
+        .map(|(index, metrics)| {
+            Ok(UsageRhythmWeekday {
+                weekday: UsageWeekday::ALL[index],
+                metrics: UsageMetrics::from_store(metrics)?,
+                elapsed_minutes: plan.weekday_elapsed_minutes[index],
+                occurrence_count: plan.weekday_occurrence_count[index],
+            })
+        })
+        .collect::<Result<Vec<_>, QueryError>>()?;
+    Ok(UsageRhythm {
+        hours: Arc::from(hours),
+        weekdays: Arc::from(weekdays),
     })
 }
 

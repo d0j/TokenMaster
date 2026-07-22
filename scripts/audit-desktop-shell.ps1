@@ -1456,8 +1456,46 @@ if ($activityPublicText -match '(?i)\b(?:scope|provider|profile|account|session|
 if ($activityProjectionText -match '\.(?:scope|provider|profile|account|session|source|event_id|cursor|fingerprint|dataset|project|path|key|id)\(\)') {
     throw 'TM-DESKTOP-ACTIVITY-IDENTITY: Activity projection must not read private identity or provenance fields'
 }
-if ($activityViewBoundary -match '(?i)\b(?:rhythm|heatmap|day-of-week|hourly)\b') {
-    throw 'TM-DESKTOP-ACTIVITY-RHYTHM: Recent activity must not claim an unimplemented rhythm or heatmap aggregate'
+foreach ($rhythmBound in @(
+    @{ Name = 'ACTIVITY_RHYTHM_HOURS'; Value = 24 }
+    @{ Name = 'ACTIVITY_RHYTHM_WEEKDAYS'; Value = 7 }
+)) {
+    $pattern = "pub const $([regex]::Escape($rhythmBound.Name)): usize = $($rhythmBound.Value);"
+    if ($activityProjectionText -notmatch $pattern) {
+        throw "TM-DESKTOP-ACTIVITY-RHYTHM-BOUND: $($rhythmBound.Name) drifted"
+    }
+}
+foreach ($requiredPattern in @(
+    'DesktopActivityRhythmProjection::from_snapshot\(snapshot\)',
+    'snapshot\.history\(\)',
+    'payload\.rhythm\(\)',
+    'request\.with_rhythm\(UsageRhythmSelection::HourAndWeekday\)',
+    'set_activity_rhythm_hour_rows\(model\(hour_rows\)\)',
+    'set_activity_rhythm_weekday_rows\(model\(weekday_rows\)\)',
+    'Usage by local hour',
+    'Usage by weekday',
+    'item\.events-label',
+    'item\.exposure-label',
+    'rhythm-range-label',
+    'rhythm-evidence-label'
+)) {
+    if ($activityViewBoundary + "`n" + $activityProjectionText + "`n" + $controllerText -cnotmatch $requiredPattern) {
+        throw "TM-DESKTOP-ACTIVITY-RHYTHM: missing bounded rhythm contract $requiredPattern"
+    }
+}
+$hourRhythmReplacementCount = [regex]::Matches(
+    $uiRustText,
+    'set_activity_rhythm_hour_rows\(model\(hour_rows\)\)'
+).Count
+$weekdayRhythmReplacementCount = [regex]::Matches(
+    $uiRustText,
+    'set_activity_rhythm_weekday_rows\(model\(weekday_rows\)\)'
+).Count
+if ($hourRhythmReplacementCount -ne 1 -or $weekdayRhythmReplacementCount -ne 1) {
+    throw 'TM-DESKTOP-ACTIVITY-RHYTHM-MODEL: rhythm must have exactly two bounded replacement sites'
+}
+if ($activityViewBoundary -match '(?i)\bheatmap\b') {
+    throw 'TM-DESKTOP-ACTIVITY-RHYTHM: Activity must not overclaim an unimplemented heatmap'
 }
 $notificationsProjectionPath = Join-Path $sourceRoot 'notifications.rs'
 $notificationsProjectionText = [System.IO.File]::ReadAllText($notificationsProjectionPath)

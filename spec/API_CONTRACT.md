@@ -478,6 +478,18 @@ initial construction or an accepted newer product generation. Route selection ca
 query, rebuild the model, retain prior pages, create selection/filter/detail/export
 state, add a timer/worker/cache/connection, or recreate `MainWindow`.
 
+The same projection independently reads the accepted recent History envelope only for
+`UsageRhythmSelection::HourAndWeekday`. `UsageAnalyticsRequest::with_rhythm` accepts
+only a recent range of at most 30 civil days. The immutable result contains exactly 24
+ordered hour rows and seven ordered Monday-Sunday rows; every row carries the normal
+aggregate metrics plus elapsed minutes and occurrence count. Query planning caps the
+local calendar walk at 768 occurrences and 2,304 aligned rollup segments. Store capture
+uses the existing deferred analytics transaction and `usage_time_rollup` generation,
+dataset, and scope fences. Desktop/Slint retain only the two fixed models, exact
+resolved range/timezone/evidence, and presentation values; no cost, raw event,
+identity, path, query handle, prior model, worker, timer, cache, or connection crosses
+this API.
+
 `DesktopNotificationsProjection::from_snapshot` is the sole product-to-Notifications
 mapping. It reads the existing benefit overview once and copies at most 32 effective
 profile rows, 256 separate current-lot rows, and eight leads per profile. Typed expiry

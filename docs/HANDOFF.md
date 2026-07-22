@@ -942,8 +942,8 @@ narrow, and accessible rows. Route switching performs no query/model/window rebu
 The projection excludes private identity/provenance/content/authority and remains
 available during aggregate rebuild. Focused 9/9 projection, compiled UI, complete
 Desktop package, strict package Clippy, source/release audits, and 67/67 mutation cases
-pass. It is Recent activity only; full WMT rhythm/time distribution still requires a
-separate bounded timezone/DST-aware aggregate. Independent review found two Important
+pass. It is Recent activity only and remains independent from the later implemented
+bounded rollup rhythm/time-distribution contract recorded below. Independent review found two Important
 empty/evidence-state intersections; red/green fixes degrade partial empty pages,
 preserve exact fractional UTC timestamps, and distinguish retained empty pages from
 unavailable evidence through one safe boolean. Re-review returned READY with
@@ -1037,8 +1037,16 @@ executable and the run occurs in a disposable Windows user profile or VM with ve
 rollback. Do not substitute the M0 probe or mutate the operator's real HKCU/Explorer/
 power state.
 
-The immediate next product slice is bounded full rhythm aggregation, the remaining
-P3-D contour. P4 then owns keyboard/screen-reader, DPI/mixed-monitor, focus,
+Bounded full rhythm aggregation now closes the remaining P3-D contour: 24 hourly and
+seven Monday-Sunday buckets, 30 civil days, 768 occurrences, and 2,304 segments,
+rollup-only in the shared analytics transaction while Activity remains independent.
+Focused contracts, strict warnings-as-errors checks, and the final serialized locked
+workspace test/doctest suite pass; the latter completed in 778.5 seconds. One restart
+integration test now explicitly awaits the asynchronous initial controller refresh
+before reading its published generation, removing a timing race exposed by the added
+bounded work. The updated Desktop and Application composition audits both exit zero in
+one 510.2-second focused run.
+P4 then owns keyboard/screen-reader, DPI/mixed-monitor, focus,
 input-to-paint, and resource evidence; the external Explorer/sleep/hotkey matrix and
 M0 soak/package/signing rails require a later frozen packaged executable. CLI/MCP
 remains P5. Do not treat developer receipts as release acceptance. Remaining P3-E

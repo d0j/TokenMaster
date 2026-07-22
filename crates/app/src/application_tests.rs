@@ -1798,6 +1798,7 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     application
         .restart_services()
         .expect("controlled service restart");
+    wait_for_desktop_controller_completion(&application);
     assert_eq!(
         application.reliable_publish_count.load(Ordering::Acquire),
         direct_restart_publications + 1,

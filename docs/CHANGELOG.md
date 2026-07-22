@@ -6,6 +6,13 @@ All notable changes are recorded here.
 
 ### Added
 
+- Added bounded full rhythm aggregation for Activity: 24 hourly and seven Monday-Sunday
+  buckets, capped at 30 civil days, 768 occurrences, and 2,304 segments. The rollup
+  remains in the shared analytics transaction, preserves DST/fractional/skipped-date
+  and metric/exposure/occurrence metadata, and leaves Recent activity independent.
+- Corrected the service-restart integration contract to await the asynchronous initial
+  controller refresh before reading its published product generation.
+
 - Added P3-D interactive History ranges (Tasks 1-5): fixed 1/7/30 rolling civil-day
   presets with default/max 30, one worker/slot, and a shared History/Models/Projects
   envelope. Exact epoch/product/range fences, accepted-only publication, terminal

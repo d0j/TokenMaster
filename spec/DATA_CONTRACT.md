@@ -1078,8 +1078,11 @@ credential. One accepted immutable product generation replaces the single `Arc` 
 list and Slint model; no previous page, row identity, selection, filter, cache, query
 service, runtime owner, connection, timer, or worker is retained. The Activity section
 does not depend on aggregate readiness, so aggregate rebuild cannot hide its latest
-page. Hourly/day-of-week rhythm data is not derivable from this projection and remains
-a separate future aggregate contract.
+page. Hourly/day-of-week rhythm data is a separate bounded rollup projection: exactly
+24 hourly and seven Monday-Sunday buckets, at most 30 civil days, 768 occurrences,
+and 2,304 segments. It preserves metrics/exposure/occurrence metadata and
+DST/fractional/skipped-date semantics while retaining no raw events, paths, prompts,
+or cost authority; Activity remains independently available during aggregate rebuild.
 
 ### P3-D.6 bounded Notifications projection
 

@@ -392,8 +392,11 @@ freshness, quality, empty, retained-failure, unavailable, and truncation truth M
 remain explicit. No Activity row may expose scope, provider/profile/account, source,
 session/project, event/dataset identity, key/cursor/fingerprint, path, content, prompt,
 response, command, credential, or query authority. This recent-event page MUST NOT be
-labelled as a rhythm, heatmap, hourly, or day-of-week aggregate; that capability needs
-a separate bounded timezone/DST-aware query contract.
+labelled as a rhythm, heatmap, hourly, or day-of-week aggregate; the separate bounded
+rhythm contract supplies 24 hourly and seven Monday-Sunday buckets from the same
+rollup transaction. It is capped at 30 civil days, 768 occurrences, and 2,304
+segments, preserves metrics/exposure/occurrence metadata plus DST/fractional/skipped-
+date truth, and never retains raw events, paths, prompts, or cost authority.
 
 Notifications MUST render the already-published all-current benefit overview as a
 bounded expiry-safety center. It MUST preserve separate current lots, exact/bounded/
