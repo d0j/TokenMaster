@@ -1318,3 +1318,12 @@ blockers are layout, locale, remaining typography/accessibility/DPI/paint/resour
 P5, P6, M0, package/signing/soak and external interactive receipts; Git must be clean
 on the feature branch before the next cycle. The shortest release-critical next slice
 is P4 layout, not another audit-hardening round.
+
+Final P4-D gates: clean-root passed in 6.2 seconds; format check passed in 2.1 seconds;
+warnings-as-errors locked workspace Clippy passed in 43.3 seconds; the post-review
+desktop source receipt passed in 143.4 seconds; and the complete locked workspace
+test/doctest rerun passed in 649.8 seconds. The first full-suite attempt stopped once in
+the unchanged `tokenmaster-git` `process_contract` with its middle failure body lost to
+output truncation; the exact target immediately passed 9/9 in isolation and the full
+rerun passed without source changes. Treat this as a disclosed, non-reproduced transient,
+not a fixed product defect and not release evidence.

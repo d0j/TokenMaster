@@ -1805,3 +1805,10 @@ or persistence. Rust owns six exact 15-role palettes, one existing owner applies
 and the latest-only worker remains capped at one active plus one pending complete
 payload across all 27 combinations. Layout/locale/typography/interactive DPI/
 accessibility/paint/resource, P5/P6/M0/package/signing/soak/release remain open.
+
+Final P4-D developer verification passes clean-root, formatting, warnings-as-errors
+locked workspace Clippy, the desktop source receipt, and the complete locked workspace
+test/doctest suite. The final full suite completed in 649.8 seconds. An earlier attempt
+stopped once in the unchanged `tokenmaster-git` `process_contract` without a retained
+failure body; that target then passed 9/9 in isolation and passed inside the complete
+rerun without source changes. This evidence does not authorize M0 or release acceptance.

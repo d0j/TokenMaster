@@ -16,6 +16,12 @@ complete combinations while retaining the same window, bounded models, and geome
 The cycle used one required-evidence stale-anchor correction pass and did not enter
 `AUDIT_HARDENING_LOOP`. Layout is the next release-critical P4 slice.
 
+Final developer gates passed: clean-root 6.2 seconds, format 2.1 seconds, strict locked
+workspace Clippy 43.3 seconds, post-review desktop receipt 143.4 seconds, and the complete
+locked workspace suite 649.8 seconds. The first full-suite attempt stopped once in the
+unchanged Git process contract without a retained failure body; its isolated 9/9 run and
+the unchanged full rerun both passed. No speculative retry or source fix was added.
+
 ## 2026-07-22 — P3-D bounded full rhythm aggregation
 
 Implemented the rollup-only rhythm projection: 24 hourly and seven Monday-Sunday
