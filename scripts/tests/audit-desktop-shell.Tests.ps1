@@ -392,6 +392,14 @@ Describe "TokenMaster production desktop audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION*"
     }
 
+    It "rejects a constant-only feature-cfg History bound decoy" {
+        $fixture = New-DesktopAuditFixture -Name "history-bound-feature-cfg-constant-only-decoy"
+        $path = Join-Path $fixture "crates\desktop\src\history.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('pub const MAX_HISTORY_DAYS: usize = 30;', "#[cfg(feature = ""decoy"")]`r`npub const MAX_HISTORY_DAYS: usize = 30;`r`npub const MAX_HISTORY_DAYS: usize = 31;")
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION*"
+    }
+
     It "rejects an arbitrary history range count" {
         $fixture = New-DesktopAuditFixture -Name "history-range-arbitrary-count"
         $path = Join-Path $fixture "crates\desktop\src\controller.rs"

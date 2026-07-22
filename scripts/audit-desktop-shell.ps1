@@ -1017,9 +1017,10 @@ $historyProductionText = $historyText.Substring(0, [Math]::Max(0, $historyText.I
 if ($historyText.IndexOf('#[cfg(test)]', [System.StringComparison]::Ordinal) -lt 0) { $historyProductionText = $historyText }
 $historyProductionSyntax = ConvertTo-ExecutableText -Text $historyProductionText
 $historyProjectionDefinition = '(?m)^\s*pub(?:\s*\([^)]*\))?\s+fn\s+from_snapshot_with_range\s*\('
+$historyBoundSymbolCount = [regex]::Matches($historyProductionSyntax, '(?m)^\s*pub\s+const\s+MAX_HISTORY_DAYS\b').Count
 $historyBoundConstantCount = [regex]::Matches($historyProductionSyntax, '(?m)^\s*pub\s+const\s+MAX_HISTORY_DAYS\s*:\s*usize\s*=\s*30\s*;').Count
 $historyProjectionDefinitionCount = [regex]::Matches($historyProductionSyntax, $historyProjectionDefinition).Count
-if ($historyBoundConstantCount -gt 1 -or $historyProjectionDefinitionCount -gt 1) {
+if ($historyBoundSymbolCount -gt 1 -or $historyProjectionDefinitionCount -gt 1) {
     throw 'TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION: raw production History symbols must occur exactly once'
 }
 $historyProjectionText = if ($historyProjectionDefinitionCount -eq 1) { Get-ExecutableBracedText -Text $historyProductionSyntax -Pattern $historyProjectionDefinition -FailureCode 'TM-DESKTOP-HISTORY-BOUND' } else { '' }
