@@ -207,9 +207,11 @@ function Get-ContiguousRustAttributesBefore {
             elseif ($Text[$position] -eq '[') { $depth--; if ($depth -eq 0) { break } }
             $position--
         }
-        if ($position -le 0 -or $Text[$position - 1] -ne '#') { break }
-        $attributes.Insert(0, $Text.Substring($position - 1, $end - $position + 2))
-        $position -= 2
+        $hashIndex = $position - 1
+        while ($hashIndex -ge 0 -and [char]::IsWhiteSpace($Text[$hashIndex])) { $hashIndex-- }
+        if ($hashIndex -lt 0 -or $Text[$hashIndex] -ne '#') { break }
+        $attributes.Insert(0, $Text.Substring($hashIndex, $end - $hashIndex + 1))
+        $position = $hashIndex - 1
     }
     return $attributes -join "`n"
 }
