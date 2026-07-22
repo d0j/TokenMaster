@@ -2,7 +2,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use i_slint_backend_testing::{AccessibleRole, ElementQuery};
-use slint::{Model, SharedString};
+use slint::{ComponentHandle, Model, SharedString};
 use tokenmaster_desktop::{
     DesktopIntent, DesktopIntentAdmission, DesktopIntentSink, DesktopPresentationSelection,
     DesktopReliableStateProjection, DesktopShell,
@@ -38,6 +38,34 @@ fn shell() -> (DesktopShell, Rc<RecordingSink>) {
     )
     .expect("desktop shell");
     (shell, sink)
+}
+
+fn visible_slot_keys(window: &tokenmaster_desktop::MainWindow) -> Vec<String> {
+    let slots = window.get_dashboard_board_visible_slots();
+    (0..slots.row_count())
+        .map(|index| {
+            slots
+                .row_data(index)
+                .expect("visible board slot")
+                .key
+                .to_string()
+        })
+        .collect()
+}
+
+fn card_geometry(window: &tokenmaster_desktop::MainWindow, label: &str) -> (f32, f32) {
+    let label = label.to_owned();
+    let element = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::Groupbox)
+        .match_predicate(move |element| {
+            element.accessible_label().as_deref() == Some(label.as_str())
+        })
+        .find_all()
+        .into_iter()
+        .next()
+        .expect("visible Dashboard card");
+    let position = element.absolute_position();
+    (position.x, position.y)
 }
 
 #[test]
@@ -158,4 +186,55 @@ fn ten_thousand_board_edits_reuse_the_window_and_bounded_models() {
     );
     assert_eq!(window.get_dashboard_board_visible_slots().row_count(), 6);
     assert_eq!(sink.submissions.get(), 10_000);
+}
+
+#[test]
+fn workbench_uses_compatibility_order_only_for_canonical_board_and_compacts_custom_hidden_rows() {
+    let (shell, sink) = shell();
+    let window = shell.window();
+    window
+        .window()
+        .set_size(slint::PhysicalSize::new(1_400, 900));
+    window.invoke_select_presentation_layout(2);
+
+    assert_eq!(
+        visible_slot_keys(window),
+        [
+            "plan_usage",
+            "code_output",
+            "sessions",
+            "trend",
+            "models",
+            "activity",
+        ]
+    );
+    let code = card_geometry(window, "Code Output");
+    let sessions = card_geometry(window, "Sessions");
+    let trend = card_geometry(window, "Usage and Cost Trend");
+    let models = card_geometry(window, "Model Usage");
+    assert_eq!(code.1, sessions.1);
+    assert!(sessions.0 > code.0);
+    assert_eq!(trend.1, models.1);
+    assert!(models.0 > trend.0);
+
+    window.invoke_move_dashboard_board_row(0, 1);
+    let custom = sink.selection.get().expect("custom board selection");
+    let stored_custom_keys = custom
+        .board()
+        .rows()
+        .iter()
+        .map(|row| row.key().stable_key().to_owned())
+        .collect::<Vec<_>>();
+    assert_eq!(visible_slot_keys(window), stored_custom_keys);
+    assert!(
+        card_geometry(window, "Code Output").1 < card_geometry(window, "Plan Usage").1,
+        "custom ordinal slot zero is the first Workbench card"
+    );
+
+    window.invoke_set_dashboard_board_row_visible(0, false);
+    assert_eq!(
+        visible_slot_keys(window),
+        ["plan_usage", "trend", "sessions", "activity", "models"]
+    );
+    assert_eq!(window.get_dashboard_board_visible_slots().row_count(), 5);
 }

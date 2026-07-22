@@ -792,13 +792,21 @@ fn apply_presentation_style(window: &MainWindow, style: DesktopPresentationStyle
     window.set_presentation_density_id(style.density().slint_index());
     window.set_presentation_color_scheme_id(style.color_scheme().slint_index());
     window.set_presentation_layout_id(style.layout().slint_index());
-    apply_dashboard_board_preferences(window, style.selection().board());
+    apply_dashboard_board_preferences(
+        window,
+        style.selection().board(),
+        style.layout().slint_index() == 2,
+    );
     window.set_presentation_effective_color_scheme_id(style.effective_color_scheme().slint_index());
     window.set_presentation_revision(style.revision().get().to_string().into());
     window.set_presentation_persistence_state(style.persistence().stable_code().into());
 }
 
-fn apply_dashboard_board_preferences(window: &MainWindow, board: DesktopBoardPreferences) {
+fn apply_dashboard_board_preferences(
+    window: &MainWindow,
+    board: DesktopBoardPreferences,
+    workbench: bool,
+) {
     let rows = board.rows();
     let visible_count = rows.iter().filter(|row| row.visible()).count();
     let editor_rows = rows
@@ -814,9 +822,16 @@ fn apply_dashboard_board_preferences(window: &MainWindow, board: DesktopBoardPre
             can_hide: !row.visible() || visible_count > 1,
         })
         .collect::<Vec<_>>();
-    let visible_slots = rows
+    let canonical_key_order = rows
         .iter()
-        .filter(|row| row.visible())
+        .zip(DesktopBoardSectionKey::ALL)
+        .all(|(row, key)| row.key() == key);
+    let mut visible_rows = rows.iter().filter(|row| row.visible()).collect::<Vec<_>>();
+    if workbench && canonical_key_order {
+        visible_rows.sort_by_key(|row| workbench_canonical_rank(row.key()));
+    }
+    let visible_slots = visible_rows
+        .into_iter()
         .map(|row| DashboardBoardSlotRow {
             key: row.key().stable_key().into(),
             collapsed: row.collapsed(),
@@ -824,6 +839,17 @@ fn apply_dashboard_board_preferences(window: &MainWindow, board: DesktopBoardPre
         .collect::<Vec<_>>();
     window.set_dashboard_board_editor_rows(model(editor_rows));
     window.set_dashboard_board_visible_slots(model(visible_slots));
+}
+
+const fn workbench_canonical_rank(key: DesktopBoardSectionKey) -> u8 {
+    match key {
+        DesktopBoardSectionKey::PlanUsage => 0,
+        DesktopBoardSectionKey::CodeOutput => 1,
+        DesktopBoardSectionKey::Sessions => 2,
+        DesktopBoardSectionKey::Trend => 3,
+        DesktopBoardSectionKey::Models => 4,
+        DesktopBoardSectionKey::Activity => 5,
+    }
 }
 
 const fn board_section_label(key: DesktopBoardSectionKey) -> &'static str {
