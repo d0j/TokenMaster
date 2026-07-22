@@ -41,7 +41,7 @@ component DashboardHeaderCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: region;
-    accessible-label: "Today's usage";
+    accessible-label: @tr("Today's usage");
 
     VerticalLayout {
         padding: UiTokens.space;
@@ -49,7 +49,7 @@ component DashboardHeaderCard inherits Rectangle {
         HorizontalLayout {
             spacing: UiTokens.space;
             Text {
-                text: "Today";
+                text: @tr("Today");
                 color: UiTokens.text-primary;
                 font-size: 17px;
                 font-weight: 800;
@@ -59,9 +59,9 @@ component DashboardHeaderCard inherits Rectangle {
         }
         HorizontalLayout {
             spacing: UiTokens.space-lg;
-            MetricValue { label: "Tokens"; value: root.tokens; availability: root.tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
-            MetricValue { label: "Cost"; value: root.cost; availability: root.cost == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
-            MetricValue { label: "Events"; value: root.events; availability: root.events == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Tokens"); value: root.tokens; availability: root.tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Cost"); value: root.cost; availability: root.cost == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Events"); value: root.events; availability: root.events == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
         }
     }
 }
@@ -77,14 +77,14 @@ component PlanUsageCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: groupbox;
-    accessible-label: "Plan Usage";
+    accessible-label: @tr("Plan Usage");
 
     VerticalLayout {
         padding: UiTokens.space;
         spacing: UiTokens.space-sm;
-        CardHeader { title: "Plan Usage"; state: root.section.state; reasons: root.section.reasons; }
+        CardHeader { title: @tr("Plan Usage"); state: root.section.state; reasons: root.section.reasons; }
         if root.quotas.length == 0: Text {
-            text: root.section.state == "waiting" ? "Waiting for quota evidence" : "Quota evidence unavailable";
+            text: root.section.state == "waiting" ? @tr("Waiting for quota evidence") : @tr("Quota evidence unavailable");
             color: UiTokens.text-secondary;
             font-size: 12px;
         }
@@ -94,12 +94,12 @@ component PlanUsageCard inherits Rectangle {
             background: UiTokens.surface-raised;
             border-radius: UiTokens.radius;
             accessible-role: groupbox;
-            accessible-label: "Banked resets " + benefit.reset-quantity-label;
+            accessible-label: @tr("Banked resets {0}", benefit.reset-quantity-label);
             VerticalLayout {
                 padding: UiTokens.space-sm;
                 spacing: UiTokens.space-xs;
                 HorizontalLayout {
-                    Text { text: "Banked resets"; color: UiTokens.text-primary; font-weight: 700; horizontal-stretch: 1; }
+                    Text { text: @tr("Banked resets"); color: UiTokens.text-primary; font-weight: 700; horizontal-stretch: 1; }
                     Text { text: benefit.reset-quantity-label; color: UiTokens.accent; font-size: 18px; font-weight: 800; }
                 }
                 Text {
@@ -109,7 +109,7 @@ component PlanUsageCard inherits Rectangle {
                     overflow: elide;
                 }
                 Text {
-                    text: "Credits " + benefit.credit-quantity-label + " · Temporary " + benefit.temporary-quantity-label + " · Unavailable " + benefit.unavailable-quantity-label;
+                    text: @tr("Credits {0} · Temporary {1} · Unavailable {2}", benefit.credit-quantity-label, benefit.temporary-quantity-label, benefit.unavailable-quantity-label);
                     color: UiTokens.text-secondary;
                     font-size: 11px;
                     overflow: elide;
@@ -134,18 +134,18 @@ component CodeOutputCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: groupbox;
-    accessible-label: "Code Output";
+    accessible-label: @tr("Code Output");
 
     VerticalLayout {
         padding: UiTokens.space;
         spacing: UiTokens.space-sm;
-        CardHeader { title: "Code Output"; state: root.section.state; reasons: root.section.reasons; }
+        CardHeader { title: @tr("Code Output"); state: root.section.state; reasons: root.section.reasons; }
         HorizontalLayout {
             spacing: UiTokens.space;
-            MetricValue { label: "Commits"; value: root.commits; availability: root.section.state; horizontal-stretch: 1; }
-            MetricValue { label: "Added"; value: root.added; availability: root.section.state; horizontal-stretch: 1; }
-            MetricValue { label: "Removed"; value: root.removed; availability: root.section.state; horizontal-stretch: 1; }
-            MetricValue { label: "Net"; value: root.net; availability: root.section.state; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Commits"); value: root.commits; availability: root.section.state; horizontal-stretch: 1; }
+            MetricValue { label: @tr("+Added"); value: root.added; availability: root.section.state; horizontal-stretch: 1; }
+            MetricValue { label: @tr("-Removed"); value: root.removed; availability: root.section.state; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Net"); value: root.net; availability: root.section.state; horizontal-stretch: 1; }
         }
         Text { text: root.efficiency; color: UiTokens.accent; font-size: 12px; }
         Text { text: root.evidence; color: UiTokens.text-secondary; font-size: 11px; overflow: elide; }
@@ -162,18 +162,18 @@ component TrendCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: groupbox;
-    accessible-label: "Usage and Cost Trend";
+    accessible-label: @tr("Usage and Cost Trend");
 
     VerticalLayout {
         padding: UiTokens.space;
         spacing: UiTokens.space-sm;
-        CardHeader { title: "Usage and Cost Trend"; state: root.section.state; reasons: root.section.reasons; }
+        CardHeader { title: @tr("Usage and Cost Trend"); state: root.section.state; reasons: root.section.reasons; }
         Rectangle {
             min-height: 112px;
             background: UiTokens.surface-subtle;
             border-radius: UiTokens.radius;
             accessible-role: image;
-            accessible-label: "Daily token trend";
+            accessible-label: @tr("Daily token trend");
             HorizontalLayout {
                 padding-left: UiTokens.space-sm;
                 padding-right: UiTokens.space-sm;
@@ -206,12 +206,12 @@ component SessionsCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: groupbox;
-    accessible-label: "Sessions";
+    accessible-label: @tr("Sessions");
 
     VerticalLayout {
         padding: UiTokens.space;
         spacing: UiTokens.space-sm;
-        CardHeader { title: "Sessions"; state: root.section.state; reasons: root.section.reasons; }
+        CardHeader { title: @tr("Sessions"); state: root.section.state; reasons: root.section.reasons; }
         for row[i] in root.rows: Rectangle {
             height: 34px;
             background: mod(i, 2) == 0 ? UiTokens.surface-subtle : transparent;
@@ -239,12 +239,12 @@ component ActivityCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: groupbox;
-    accessible-label: "Activity";
+    accessible-label: @tr("Activity");
 
     VerticalLayout {
         padding: UiTokens.space;
         spacing: 6px;
-        CardHeader { title: "Activity"; state: root.section.state; reasons: root.section.reasons; }
+        CardHeader { title: @tr("Activity"); state: root.section.state; reasons: root.section.reasons; }
         for row in root.rows: HorizontalLayout {
             height: 20px;
             spacing: UiTokens.space-sm;
@@ -271,12 +271,12 @@ component ModelsCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: groupbox;
-    accessible-label: "Model Usage";
+    accessible-label: @tr("Model Usage");
 
     VerticalLayout {
         padding: UiTokens.space;
         spacing: 6px;
-        CardHeader { title: "Model Usage"; state: root.section.state; reasons: root.section.reasons; }
+        CardHeader { title: @tr("Model Usage"); state: root.section.state; reasons: root.section.reasons; }
         for row in root.rows: HorizontalLayout {
             height: 28px;
             spacing: UiTokens.space-sm;
@@ -305,12 +305,12 @@ component CollapsedSectionCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: groupbox;
-    accessible-label: root.title + " collapsed";
+    accessible-label: @tr("{0} collapsed", root.title);
     VerticalLayout {
         padding: UiTokens.space;
         spacing: UiTokens.space-xs;
-        CardHeader { title: root.title + " (collapsed)"; state: root.state; reasons: root.reasons; }
-        Text { text: "Section collapsed; its data remains available."; color: UiTokens.text-secondary; font-size: 11px; }
+        CardHeader { title: @tr("{0} (collapsed)", root.title); state: root.state; reasons: root.reasons; }
+        Text { text: @tr("Section collapsed; its data remains available."); color: UiTokens.text-secondary; font-size: 11px; }
     }
 }
 
@@ -334,7 +334,7 @@ component DashboardBoardSlot inherits Rectangle {
     if slot.collapsed: CollapsedSectionCard {
         width: parent.width;
         height: parent.height;
-        title: slot.key == "plan_usage" ? "Plan Usage" : (slot.key == "code_output" ? "Code Output" : (slot.key == "trend" ? "Usage and Cost Trend" : (slot.key == "sessions" ? "Sessions" : (slot.key == "activity" ? "Activity" : "Model Usage"))));
+        title: slot.key == "plan_usage" ? @tr("Plan Usage") : (slot.key == "code_output" ? @tr("Code Output") : (slot.key == "trend" ? @tr("Usage and Cost Trend") : (slot.key == "sessions" ? @tr("Sessions") : (slot.key == "activity" ? @tr("Activity") : @tr("Model Usage")))));
         state: slot.key == "plan_usage" ? root.sections[0].state : (slot.key == "code_output" ? root.sections[1].state : (slot.key == "trend" ? root.sections[2].state : (slot.key == "sessions" ? root.sections[3].state : (slot.key == "activity" ? root.sections[4].state : root.sections[5].state))));
         reasons: slot.key == "plan_usage" ? root.sections[0].reasons : (slot.key == "code_output" ? root.sections[1].reasons : (slot.key == "trend" ? root.sections[2].reasons : (slot.key == "sessions" ? root.sections[3].reasons : (slot.key == "activity" ? root.sections[4].reasons : root.sections[5].reasons))));
     }

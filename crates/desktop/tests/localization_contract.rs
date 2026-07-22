@@ -199,6 +199,56 @@ const PROJECTS_COMPACT_MSGIDS: [&str; 34] = [
     "TokenMaster",
 ];
 
+const SESSIONS_DASHBOARD_MSGIDS: [&str; 47] = [
+    "Sessions {0} {1}",
+    "Sessions",
+    "All-time session summaries",
+    "Next page",
+    "Back to newest",
+    "Loading sessions…",
+    "Session summaries",
+    "Waiting for session evidence",
+    "Session evidence unavailable",
+    "Last activity",
+    "Tokens",
+    "Duration",
+    "Input",
+    "Cached",
+    "Output",
+    "Reasoning",
+    "From {0} to {1} {2} events {3} tokens {4}",
+    "Selected session detail {0}",
+    "Selected session",
+    "Select a session summary to inspect its exact totals and breakdown.",
+    "Loading exact session detail…",
+    "This session is no longer present in the current archive snapshot.",
+    "Session detail is unavailable. Select the row again to retry.",
+    "Duration {0}",
+    "Events {0}",
+    "Input {0}",
+    "Cached {0}",
+    "Output {0}",
+    "Reasoning {0}",
+    "Total {0}",
+    "Cost {0}",
+    "Model and project breakdown",
+    "In {0}",
+    "Out {0}",
+    "Today's usage",
+    "Today",
+    "Plan Usage",
+    "Banked resets {0}",
+    "Banked resets",
+    "Credits {0} · Temporary {1} · Unavailable {2}",
+    "Code Output",
+    "Usage and Cost Trend",
+    "Daily token trend",
+    "Model Usage",
+    "{0} collapsed",
+    "{0} (collapsed)",
+    "Section collapsed; its data remains available.",
+];
+
 const COMPONENT_RAW_LITERAL_ALLOWLIST: [&str; 11] = [
     "", " ", " · ", ", ", "ready", "degraded", "waiting", "●", "▲", "…", "×",
 ];
@@ -245,6 +295,7 @@ fn shell_component_and_settings_reminder_backup_catalogs_are_complete_and_preser
         .chain(SETTINGS_REMINDER_BACKUP_MSGIDS)
         .chain(SETTINGS_STARTUP_CONFIG_BOARD_FOOTER_MSGIDS)
         .chain(PROJECTS_COMPACT_MSGIDS)
+        .chain(SESSIONS_DASHBOARD_MSGIDS)
         .collect::<BTreeSet<_>>();
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -293,6 +344,7 @@ fn projects_and_compact_widget_catalogs_are_complete_before_view_conversion() {
         .chain(SETTINGS_REMINDER_BACKUP_MSGIDS)
         .chain(SETTINGS_STARTUP_CONFIG_BOARD_FOOTER_MSGIDS)
         .chain(PROJECTS_COMPACT_MSGIDS)
+        .chain(SESSIONS_DASHBOARD_MSGIDS)
         .collect::<BTreeSet<_>>();
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -308,6 +360,45 @@ fn projects_and_compact_widget_catalogs_are_complete_before_view_conversion() {
             expected,
             "{locale} must translate exactly the closed Task 2b3 Projects and compact-widget key set"
         );
+    }
+}
+
+#[test]
+fn sessions_and_dashboard_catalogs_are_complete_before_view_conversion() {
+    let expected = SHELL_MSGIDS
+        .into_iter()
+        .chain(COMPONENT_MSGIDS)
+        .chain(SETTINGS_REMINDER_BACKUP_MSGIDS)
+        .chain(SETTINGS_STARTUP_CONFIG_BOARD_FOOTER_MSGIDS)
+        .chain(PROJECTS_COMPACT_MSGIDS)
+        .chain(SESSIONS_DASHBOARD_MSGIDS)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(expected.len(), 219, "Task 2b4 exact catalog inventory");
+
+    for locale in ["ru", "pseudo"] {
+        let catalog = std::fs::read_to_string(
+            Path::new(TRANSLATION_ROOT)
+                .join(locale)
+                .join("LC_MESSAGES")
+                .join("tokenmaster-desktop.po"),
+        )
+        .expect("bundled catalog");
+        let entries = po_entries(&catalog);
+        assert_eq!(
+            entries.keys().copied().collect::<BTreeSet<_>>(),
+            expected,
+            "{locale} must translate exactly the closed Task 2b4 Sessions and Dashboard key set"
+        );
+        assert_eq!(po_entry_count(&catalog), 219, "{locale} exact key count");
+        for msgid in SESSIONS_DASHBOARD_MSGIDS {
+            let msgstr = entries.get(msgid).expect("Task 2b4 catalog completeness");
+            assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
+            assert_eq!(
+                placeholders(msgstr),
+                placeholders(msgid),
+                "{locale} must preserve placeholders for {msgid:?}"
+            );
+        }
     }
 }
 
