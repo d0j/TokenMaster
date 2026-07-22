@@ -42,6 +42,13 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-MOCK-DATA*"
     }
 
+    It "ignores test-only seeded history fixtures when checking production authority" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-test-only-seed"
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Not -Throw
+    }
+
     It "rejects the diagnostic renderer" {
         $fixture = New-DesktopAuditFixture -Name "femtovg"
         Add-Content -LiteralPath (Join-Path $fixture "crates\desktop\Cargo.toml") `
@@ -343,6 +350,110 @@ Describe "TokenMaster production desktop audit" {
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-HISTORY-BOUND*"
+    }
+
+    It "rejects an arbitrary history range count" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-arbitrary-count"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'Self::Recent7Days => 7,',
+            'Self::Recent7Days => days,'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-RANGE-PRESETS*"
+    }
+
+    It "rejects a fourth history range preset" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-fourth-preset"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '    Recent30Days,',
+            "    Recent30Days,`r`n    Recent90Days,"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-RANGE-PRESETS*"
+    }
+
+    It "rejects retaining history range work in a vector" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-vector-state"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'pending_history_range: Option<PendingDesktopHistoryRange>,',
+            'pending_history_range: Vec<PendingDesktopHistoryRange>,'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-RANGE-STATE*"
+    }
+
+    It "rejects removing the exact history range generation fence" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-generation-fence"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '                && history_range_generation_is_current(',
+            '                && generation_fence_removed('
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-RANGE-FENCES*"
+    }
+
+    It "rejects resetting the selected history range after a refresh" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-refresh-reset"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'current.rebound_product_generation = Some(product_generation);',
+            "current.rebound_product_generation = Some(product_generation);`r`n        state.published_history_preset = DesktopHistoryRangePreset::Recent30Days;"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-RANGE-REFRESH*"
+    }
+
+    It "rejects a stale history terminal rollback" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-stale-terminal"
+        $path = Join-Path $fixture "crates\desktop\src\presentation.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'if self.active_history_range == Some(intent) {',
+            'if self.active_history_range.is_some() {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-RANGE-TERMINAL*"
+    }
+
+    It "rejects query authority in the history range callback" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-callback-query"
+        $path = Join-Path $fixture "crates\desktop\src\ui.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'if sink.submit(intent) == DesktopHistoryRangeIntentAdmission::Rejected {',
+            'source.usage_analytics(request); if sink.submit(intent) == DesktopHistoryRangeIntentAdmission::Rejected {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-UI-QUERY*"
+    }
+
+    It "rejects a duplicate history analytics authority" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-extra-query"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'let result = source',
+            'let _duplicate = source.usage_analytics(request.clone()); let result = source'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-MODELS-REQUEST*"
     }
 
     It "rejects Models presentation-bound drift" {
@@ -1156,8 +1267,8 @@ Describe "TokenMaster production desktop audit" {
         $path = Join-Path $fixture "crates\desktop\src\controller.rs"
         $text = [regex]::Replace(
             [System.IO.File]::ReadAllText($path),
-            'work\.refresh_attempt\s*=\s*Some\(attempt\);\s*invalidate_navigation\(&mut work\);',
-            'work.refresh_attempt = Some(attempt);',
+            '(?s)(work\.refresh_attempt\s*=\s*Some\(attempt\);.*?)(\s*invalidate_navigation\(&mut work\);)',
+            '${1}',
             1
         )
         [System.IO.File]::WriteAllText($path, $text)
@@ -1489,7 +1600,7 @@ Describe "TokenMaster production desktop audit" {
         $path = Join-Path $fixture "crates\desktop\src\ui.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
             'apply_route_projection(window, projection);',
-            "apply_route_projection(window, projection);`r`n    apply_history_projection(window, projection.history());"
+            "apply_route_projection(window, projection);`r`n    apply_history_snapshot_projection(window, projection.history());"
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -2037,7 +2148,7 @@ Describe "TokenMaster production desktop audit" {
         $receipt.model_row_maximum | Should -Be 64
         $receipt.models_model_replacement_count | Should -Be 1
         $receipt.models_projection_application_count | Should -Be 1
-        $receipt.analytics_query_call_count | Should -Be 2
+        $receipt.analytics_query_call_count | Should -Be 3
         $receipt.project_row_maximum | Should -Be 32
         $receipt.projects_model_replacement_count | Should -Be 1
         $receipt.projects_projection_application_count | Should -Be 1

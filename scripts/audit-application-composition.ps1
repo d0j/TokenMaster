@@ -402,14 +402,14 @@ foreach ($contract in @(
     @{ Name = 'TM-APP-NOTIFICATION-PUMP'; Pattern = 'presentation\.pump\(\)'; Count = 1 },
     @{ Name = 'TM-APP-CONTROLLER'; Pattern = 'DesktopController::open\('; Count = 1 },
     @{ Name = 'TM-APP-SESSION-DETAIL-ROUTER'; Pattern = 'DesktopSessionDetailIntentRouter::new\('; Count = 1 },
-    @{ Name = 'TM-APP-SESSION-DETAIL-SHELL'; Pattern = '#\[cfg\(not\(test\)\)\]\s*let shell = DesktopShell::new_with_reliable_state_and_all_session_sinks\('; Count = 1 },
-    @{ Name = 'TM-APP-LIFECYCLE-TEST-ISOLATION'; Pattern = '#\[cfg\(test\)\]\s*let shell = DesktopShell::new_with_reliable_state_and_session_sinks\('; Count = 1 },
+    @{ Name = 'TM-APP-SESSION-DETAIL-SHELL'; Pattern = '#\[cfg\(not\(test\)\)\]\s*let shell = DesktopShell::new_with_reliable_state_and_all_history_and_session_sinks\('; Count = 1 },
+    @{ Name = 'TM-APP-LIFECYCLE-TEST-ISOLATION'; Pattern = '#\[cfg\(test\)\]\s*let shell = DesktopShell::new_with_reliable_state_and_history_and_session_sinks\('; Count = 1 },
     @{ Name = 'TM-APP-SESSION-DETAIL-INSTALL'; Pattern = 'session_detail_router\s*\.install\(Rc::new\(ApplicationSessionDetailIntentSink::new\('; Count = 1 },
     @{ Name = 'TM-APP-SESSION-DETAIL-CURRENT-BUNDLE'; Pattern = 'bundle\.controller\.request_session_detail\(intent\)'; Count = 1 },
     @{ Name = 'TM-APP-SESSION-DETAIL-SAFE-MODE'; Pattern = 'let Some\(bundle\) = slot\.as_ref\(\) else \{\s*return DesktopSessionDetailIntentAdmission::Rejected'; Count = 1 },
     @{ Name = 'TM-APP-SESSION-DETAIL-NONBLOCKING'; Pattern = 'let Ok\(slot\) = bundle\.try_lock\(\) else \{\s*return DesktopSessionDetailIntentAdmission::Rejected'; Count = 1 },
     @{ Name = 'TM-APP-SESSION-PAGE-ROUTER'; Pattern = 'DesktopSessionPageIntentRouter::new\('; Count = 1 },
-    @{ Name = 'TM-APP-SESSION-PAGE-SHELL'; Pattern = 'DesktopShell::new_with_reliable_state_and_all_session_sinks\([\s\S]{0,512}?session_page_router\.clone\(\)'; Count = 1 },
+    @{ Name = 'TM-APP-SESSION-PAGE-SHELL'; Pattern = 'DesktopShell::new_with_reliable_state_and_all_history_and_session_sinks\([\s\S]{0,512}?session_page_router\.clone\(\)'; Count = 1 },
     @{ Name = 'TM-APP-SESSION-PAGE-INSTALL'; Pattern = 'session_page_router\s*\.install\(Rc::new\(ApplicationSessionPageIntentSink::new\(\s*Arc::downgrade\(&bundle\)'; Count = 1 },
     @{ Name = 'TM-APP-LIFECYCLE-ROUTER'; Pattern = 'DesktopLifecycleIntentRouter::new\('; Count = 1 },
     @{ Name = 'TM-APP-LIFECYCLE-INSTALL'; Pattern = 'lifecycle_router\s*\.install\(Rc::new\(ApplicationDesktopLifecycleSink::new\('; Count = 1 },
@@ -433,20 +433,59 @@ foreach ($contract in @(
 
 $expectedSnapshotAttachment = 'controller.attach_snapshot_notifier(live_bridge.notifier()).map_err(|_|ApplicationError::controller())?;'
 $expectedTerminalAttachment = 'controller.attach_terminal_navigation_notifier(live_bridge.terminal_navigation_notifier()).map_err(|_|ApplicationError::controller())?;'
+$expectedHistoryTerminalAttachment = 'controller.attach_terminal_history_range_notifier(live_bridge.terminal_history_range_notifier()).map_err(|_|ApplicationError::controller())?;'
 $expectedRefreshIngress = 'letrefresh_ingress=controller.refresh_ingress();'
 $sessionPageTerminalAttachmentCount = @(
     $finishLiveBundleTopLevelStatements | Where-Object { $_ -eq $expectedTerminalAttachment }
 ).Count
+$historyRangeTerminalAttachmentCount = @(
+    $finishLiveBundleTopLevelStatements | Where-Object { $_ -eq $expectedHistoryTerminalAttachment }
+).Count
 $sessionTerminalSequenceCount = 0
-for ($index = 0; $index + 2 -lt $finishLiveBundleTopLevelStatements.Count; $index++) {
+for ($index = 0; $index + 1 -lt $finishLiveBundleTopLevelStatements.Count; $index++) {
+    if ($finishLiveBundleTopLevelStatements[$index] -eq $expectedSnapshotAttachment -and
+        $finishLiveBundleTopLevelStatements[$index + 1] -eq $expectedTerminalAttachment) {
+        $sessionTerminalSequenceCount++
+    }
+}
+$historyRangeTerminalSequenceCount = 0
+for ($index = 0; $index + 3 -lt $finishLiveBundleTopLevelStatements.Count; $index++) {
     if ($finishLiveBundleTopLevelStatements[$index] -eq $expectedSnapshotAttachment -and
         $finishLiveBundleTopLevelStatements[$index + 1] -eq $expectedTerminalAttachment -and
-        $finishLiveBundleTopLevelStatements[$index + 2] -eq $expectedRefreshIngress) {
-        $sessionTerminalSequenceCount++
+        $finishLiveBundleTopLevelStatements[$index + 2] -eq $expectedHistoryTerminalAttachment -and
+        $finishLiveBundleTopLevelStatements[$index + 3] -eq $expectedRefreshIngress) {
+        $historyRangeTerminalSequenceCount++
     }
 }
 if ($sessionPageTerminalAttachmentCount -ne 1 -or $sessionTerminalSequenceCount -ne 1) {
     throw 'TM-APP-SESSION-PAGE-TERMINAL-RECOVERY: live Sessions navigation must attach one executable terminal rollback route'
+}
+if ($historyRangeTerminalAttachmentCount -ne 1 -or $historyRangeTerminalSequenceCount -ne 1) {
+    throw 'TM-APP-HISTORY-RANGE-TERMINAL: live History ranges must attach one terminal rollback route before refresh ingress'
+}
+
+$historyRangeSinkText = [regex]::Match(
+    $applicationExecutableText,
+    '(?s)struct ApplicationHistoryRangeIntentSink\s*\{.*?impl DesktopHistoryRangeIntentSink for ApplicationHistoryRangeIntentSink'
+).Value
+$historyRangeSinkStruct = [regex]::Match(
+    $applicationExecutableText,
+    '(?s)struct ApplicationHistoryRangeIntentSink\s*\{.*?\}'
+).Value
+$historyRangeSinkSubmitText = [regex]::Match(
+    $applicationExecutableText,
+    '(?ms)^impl DesktopHistoryRangeIntentSink for ApplicationHistoryRangeIntentSink \{.*?^\}'
+).Value
+if ([regex]::Matches($applicationExecutableText, 'DesktopHistoryRangeIntentRouter::new\(\)').Count -ne 1 -or
+    [regex]::Matches($applicationExecutableText, 'history_range_router\s*\.install\(Rc::new\(ApplicationHistoryRangeIntentSink::new\(').Count -ne 1 -or
+    [string]::IsNullOrWhiteSpace($historyRangeSinkText) -or
+    [string]::IsNullOrWhiteSpace($historyRangeSinkSubmitText) -or
+    $historyRangeSinkStruct -notmatch '^struct ApplicationHistoryRangeIntentSink\s*\{\s*bundle:\s*Weak<Mutex<ApplicationBundleSlot>>,\s*\}$' -or
+    $historyRangeSinkText -notmatch 'fn request\(&self, intent: DesktopHistoryRangeIntent\)[\s\S]*?self\.bundle\.upgrade\(\)[\s\S]*?bundle\.try_lock\(\)[\s\S]*?slot\.as_ref\(\)[\s\S]*?controller\s*\.\s*request_history_range\(intent\)' -or
+    $historyRangeSinkSubmitText -notmatch 'fn submit\(&self, intent: DesktopHistoryRangeIntent\) -> DesktopHistoryRangeIntentAdmission\s*\{\s*match self\.request\(intent\)\s*\{' -or
+    $historyRangeSinkSubmitText -notmatch 'Ok\(\s*DesktopRefreshAdmission::Started \{ \.\. \} \| DesktopRefreshAdmission::Coalesced \{ \.\. \},\s*\) => DesktopHistoryRangeIntentAdmission::Accepted,' -or
+    $historyRangeSinkSubmitText -notmatch 'Ok\(DesktopRefreshAdmission::DeadlineExceeded \{ \.\. \}\) \| Err\(_\) => \{\s*DesktopHistoryRangeIntentAdmission::Rejected\s*\}') {
+    throw 'TM-APP-HISTORY-RANGE-SINK: History range routing must retain one weak current bundle and route only a typed nonblocking controller request'
 }
 
 $sessionPageSinkText = [regex]::Match(

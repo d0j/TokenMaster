@@ -50,9 +50,6 @@ $productionText = ($productionFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)
 }) -join "`n"
 
-if ($productionText -match '\b(seed_probe_models|mock|fixture|seeded|seed)\b') {
-    throw 'TM-DESKTOP-MOCK-DATA: production desktop contains mock or seeded data'
-}
 $forbiddenAuthorityPattern = @(
     'https?://',
     '\bstd::(fs|net|process)\b',
@@ -175,6 +172,17 @@ function Get-RustFunctionText {
 function Normalize-ExecutableStructure { param([Parameter(Mandatory = $true)][string]$Text); return [regex]::Replace($Text, '\s+', '') }
 
 $uiExecutableText = ConvertTo-ExecutableText -Text $uiText
+$productionExecutableText = ($rustFiles | ForEach-Object {
+    $text = [System.IO.File]::ReadAllText($_.FullName)
+    $testModule = [regex]::Match($text, '(?ms)^\s*#\[cfg\(test\)\]\s*\r?\n\s*mod\s+tests\s*\{')
+    if ($testModule.Success) {
+        $text = $text.Substring(0, $testModule.Index)
+    }
+    ConvertTo-ExecutableText -Text $text
+}) -join "`n"
+if ($productionExecutableText -match '\b(seed_probe_models|mock|fixture|seeded|seed)\b') {
+    throw 'TM-DESKTOP-MOCK-DATA: production desktop contains mock or seeded data'
+}
 $presentationStylePath = Join-Path $sourceRoot 'presentation_style.rs'
 $presentationStyleText = [System.IO.File]::ReadAllText($presentationStylePath)
 $presentationStyleContractPath = Join-Path $desktopRoot 'tests\presentation_style_contract.rs'
@@ -986,11 +994,88 @@ if ($historyText -notmatch 'pub const MAX_HISTORY_DAYS: usize = 30;' -or
     $historyText -notmatch '\.take\(MAX_HISTORY_DAYS\)') {
     throw 'TM-DESKTOP-HISTORY-BOUND: history projection must retain at most thirty daily rows'
 }
-if ($controllerText -notmatch 'pub const HISTORY_DAYS: u16 = 30;' -or
-    $controllerText -notmatch 'UsageRange::recent_days\(Self::HISTORY_DAYS\)') {
-    throw 'TM-DESKTOP-HISTORY-REQUEST: history query must remain one fixed bounded recent-days request'
+$controllerTestModule = [regex]::Match($controllerText, '(?ms)^\s*#\[cfg\(test\)\]\s*\r?\n\s*mod\s+tests\s*\{')
+$controllerProductionText = if ($controllerTestModule.Success) {
+    $controllerText.Substring(0, $controllerTestModule.Index)
+} else {
+    $controllerText
 }
-$historyProjectionCallCount = [regex]::Matches($uiRustText, 'apply_history_projection\(').Count
+$controllerExecutableText = ConvertTo-ExecutableText -Text $controllerProductionText -PreserveLiteralText
+$historyPresetText = Get-ExecutableBracedText -Text $controllerExecutableText -Pattern '(?m)^\s*pub\s+enum\s+DesktopHistoryRangePreset\s*\{' -FailureCode 'TM-DESKTOP-HISTORY-RANGE-PRESETS'
+$historyPresetImplText = Get-ExecutableBracedText -Text $controllerExecutableText -Pattern '(?m)^\s*impl\s+DesktopHistoryRangePreset\s*\{' -FailureCode 'TM-DESKTOP-HISTORY-RANGE-PRESETS'
+$historyRequestText = Get-RustFunctionText -Text $controllerExecutableText -Name 'history_request'
+$historyPresetVariants = [regex]::Matches($historyPresetText, '\b(?:Recent1Day|Recent7Days|Recent30Days)\b').Count
+$allHistoryPresetVariants = [regex]::Matches($historyPresetText, '\bRecent[A-Za-z0-9_]+\b').Count
+$recentDaysRequestCount = [regex]::Matches($controllerExecutableText, 'UsageRange::recent_days\(').Count
+if ($historyPresetVariants -ne 3 -or
+    $allHistoryPresetVariants -ne 3 -or
+    $historyPresetImplText -notmatch 'Self::Recent1Day\s*=>\s*1' -or
+    $historyPresetImplText -notmatch 'Self::Recent7Days\s*=>\s*7' -or
+    $historyPresetImplText -notmatch 'Self::Recent30Days\s*=>\s*30' -or
+    $historyRequestText -notmatch 'UsageRange::recent_days\(preset\.day_count\(\)\)' -or
+    $historyRequestText -match 'UsageRange::(?:between|from_|custom)|\b(?:start|end|days|count)\s*:' -or
+    $recentDaysRequestCount -ne 2) {
+    throw 'TM-DESKTOP-HISTORY-RANGE-PRESETS: history ranges must expose only fixed 1/7/30-day executable requests'
+}
+if ($historyRequestText -notmatch 'UsageSeriesSelection::Daily' -or
+    $historyRequestText -notmatch 'Vec::new\(\)' -or
+    $historyRequestText -notmatch 'UsageBreakdownKind::Model' -or
+    $historyRequestText -notmatch 'UsageBreakdownKind::Project') {
+    throw 'TM-DESKTOP-MODELS-REQUEST: Models and Projects must share the one bounded history-range request'
+}
+$historyWorkStateText = Get-ExecutableBracedText -Text $controllerExecutableText -Pattern '(?m)^\s*struct\s+DesktopWorkState\s*\{' -FailureCode 'TM-DESKTOP-HISTORY-RANGE-STATE'
+$historyRangeStateFields = @(
+    [regex]::Matches(
+        $historyWorkStateText,
+        '(?m)^\s*(?:published_history_preset|history_range_high_water|current_history_range|pending_history_range)\s*:[^\r\n]+$'
+    ) | ForEach-Object Value
+) -join "`n"
+if ($historyRangeStateFields -notmatch 'published_history_preset:\s*DesktopHistoryRangePreset' -or
+    $historyRangeStateFields -notmatch 'history_range_high_water:\s*Option<DesktopHistoryRangeGeneration>' -or
+    $historyRangeStateFields -notmatch 'current_history_range:\s*Option<ActiveDesktopHistoryRange>' -or
+    $historyRangeStateFields -notmatch 'pending_history_range:\s*Option<PendingDesktopHistoryRange>' -or
+    $historyRangeStateFields -match '\b(?:Vec|VecDeque|HashMap|BTreeMap|BinaryHeap|Queue)\b') {
+    throw 'TM-DESKTOP-HISTORY-RANGE-STATE: history ranges must retain one scalar high-water mark and active/latest-pending slots only'
+}
+$historyCurrentText = Get-RustFunctionText -Text $controllerExecutableText -Name 'history_range_is_current'
+$historyGenerationText = Get-RustFunctionText -Text $controllerExecutableText -Name 'history_range_generation_is_current'
+$historyCommitText = Get-RustFunctionText -Text $controllerExecutableText -Name 'commit_history_range'
+if ($historyCurrentText -notmatch 'context\.snapshot_epoch\.load\(Ordering::Acquire\)\s*!=\s*intent\.snapshot_epoch\(\)\.get\(\)' -or
+    $historyCurrentText -notmatch 'current\.intent\s*==\s*intent' -or
+    $historyCurrentText -notmatch 'history_range_generation_is_current\(' -or
+    $historyGenerationText -notmatch 'current\.attempt\s*==\s*attempt' -or
+    $historyGenerationText -notmatch 'current\.intent\.product_generation\(\)' -or
+    $historyCommitText -notmatch 'if\s+!valid' -or
+    $historyCommitText -notmatch 'return\s+RefreshOutcome::Completed') {
+    throw 'TM-DESKTOP-HISTORY-RANGE-FENCES: range publication must fence exact epoch, product generation, and attempt before reducer mutation'
+}
+$historyRebindText = Get-RustFunctionText -Text $controllerExecutableText -Name 'rebind_history_range_after_refresh'
+if ($historyRebindText -notmatch 'current\.prerequisite_attempt\s*==\s*Some\(refresh_attempt\)' -or
+    $historyRebindText -notmatch 'current\.rebound_product_generation\s*=\s*Some\(product_generation\)' -or
+    $historyRebindText -match 'published_history_preset\s*=\s*DesktopHistoryRangePreset::Recent30Days') {
+    throw 'TM-DESKTOP-HISTORY-RANGE-REFRESH: refresh may rebind only its exact pending range and must preserve the published preset'
+}
+$presentationPath = Join-Path $sourceRoot 'presentation.rs'
+$presentationText = [System.IO.File]::ReadAllText($presentationPath)
+$presentationTestModule = [regex]::Match($presentationText, '(?ms)^\s*#\[cfg\(test\)\]\s*\r?\n\s*mod\s+tests\s*\{')
+$presentationProductionText = if ($presentationTestModule.Success) { $presentationText.Substring(0, $presentationTestModule.Index) } else { $presentationText }
+$presentationExecutableText = ConvertTo-ExecutableText -Text $presentationProductionText -PreserveLiteralText
+$historyTerminalText = Get-RustFunctionText -Text $presentationExecutableText -Name 'complete_history_range_terminal'
+$historyRejectText = Get-RustFunctionText -Text $presentationExecutableText -Name 'reject_history_range'
+$historyReplacementText = Get-RustFunctionText -Text $presentationExecutableText -Name 'replace_projection'
+if ($historyTerminalText -notmatch 'self\.reject_history_range\(intent\)' -or
+    $historyRejectText -notmatch 'self\.active_history_range\s*==\s*Some\(intent\)' -or
+    $historyReplacementText -notmatch 'history_preset_from_snapshot\(snapshot\)\s*\.filter\(\|candidate\|\s*\*candidate\s*==\s*active\.preset\(\)\)' -or
+    $historyReplacementText -notmatch 'DesktopProjection::from_snapshot_with_selection\(') {
+    throw 'TM-DESKTOP-HISTORY-RANGE-TERMINAL: stale terminal delivery must not roll back a newer range, and replacement must preserve its exact accepted preset'
+}
+$historyRangeWireText = Get-RustFunctionText -Text $uiRustProductionText -Name 'wire_history_range_intents'
+if ([regex]::Matches($historyRangeWireText, 'window\.on_request_history_range_(?:1|7|30)\(').Count -ne 3 -or
+    $historyRangeWireText -match '(?:usage_analytics|UsageAnalyticsRequest|source\.)' -or
+    $historyRangeWireText -notmatch 'sink\.submit\(intent\)') {
+    throw 'TM-DESKTOP-HISTORY-RANGE-WIRING: the route callback must route exactly three fixed intents without query authority'
+}
+$historyProjectionCallCount = [regex]::Matches($uiRustText, 'apply_history_snapshot_projection\(').Count
 if ($historyProjectionCallCount -ne 2) {
     throw 'TM-DESKTOP-HISTORY-REBUILD: history models must not rebuild during route-only selection'
 }
@@ -1008,10 +1093,12 @@ if ($modelsProjectionText -notmatch 'pub const MAX_MODEL_ROWS: usize = 64;' -or
     $modelsProjectionText -notmatch 'breakdown\.truncated\(\) \|\| breakdown\.items\(\)\.len\(\) > MAX_MODEL_ROWS') {
     throw 'TM-DESKTOP-MODELS-BOUND: Models projection must preserve backend truncation and retain at most sixty-four rows'
 }
-$analyticsQueryCallCount = [regex]::Matches($controllerText, 'source\.usage_analytics\(').Count
-$recentModelsRequestPattern = '(?s)let history = UsageAnalyticsRequest::new\(\s*UsageRange::recent_days\(Self::HISTORY_DAYS\).*?UsageSeriesSelection::Daily,\s*Vec::new\(\),\s*vec!\[\s*UsageBreakdownKind::Model,\s*UsageBreakdownKind::Project,?\s*\],\s*\)'
-if ($analyticsQueryCallCount -ne 2 -or $controllerText -notmatch $recentModelsRequestPattern) {
-    throw 'TM-DESKTOP-MODELS-REQUEST: Models and Projects must share the one fixed recent analytics request without a third query'
+$analyticsQueryCallCount = [regex]::Matches($controllerExecutableText, 'source\s*\.\s*usage_analytics\(').Count
+$historyRangeExecuteText = Get-ExecutableBracedText -Text $controllerExecutableText -Pattern '(?m)^\s*fn\s+execute_history_range(?:<[^>]+>)?\s*\(' -FailureCode 'TM-DESKTOP-MODELS-REQUEST'
+if ($analyticsQueryCallCount -ne 3 -or
+    $historyRangeExecuteText -notmatch 'source\s*\.\s*usage_analytics\(request\)' -or
+    $historyRangeExecuteText -notmatch 'DesktopQueryPlan::history_request\(intent\.preset\(\)\)') {
+    throw 'TM-DESKTOP-MODELS-REQUEST: Models and Projects must share one range publication and no duplicate analytics authority'
 }
 $modelsProjectionCallCount = [regex]::Matches($uiRustText, 'apply_models_projection\(').Count
 if ($modelsProjectionCallCount -ne 2) {
@@ -1534,10 +1621,10 @@ if ($controllerText -notmatch 'pub enum DesktopSessionPageDirection\s*\{\s*Newes
     $sessionNavigationCommitText -notmatch 'active\.intent\.navigation_generation\(\)\s*==\s*intent\.navigation_generation\(\)') {
     throw 'TM-DESKTOP-SESSIONS-NAVIGATION: Sessions navigation must remain typed, latest-only, refresh-superseded, and stale-fenced'
 }
-if ($workerCompletionNotifierText -notmatch 'handle_worker_completion\(&self\.work, &self\.terminal_notifier, completion\);' -or
-    $tryCompletionText -notmatch 'handle_worker_completion\(\s*&self\.work,\s*&self\.terminal_navigation_notifier,\s*completion,\s*\)\?;' -or
+if ($workerCompletionNotifierText -notmatch 'handle_worker_completion\(\s*&self\.work,\s*&self\.terminal_notifier,\s*&self\.terminal_history_range_notifier,\s*completion,\s*\);' -or
+    $tryCompletionText -notmatch 'handle_worker_completion\(\s*&self\.work,\s*&self\.terminal_navigation_notifier,\s*&self\.terminal_history_range_notifier,\s*completion,\s*\)\?;' -or
     $handleWorkerCompletionText -notmatch 'reconcile_navigation_completion\(work, completion\)' -or
-    $handleWorkerCompletionText -notmatch 'notify_terminal_navigation\(notifier, intent\);' -or
+    $handleWorkerCompletionText -notmatch 'notify_terminal_navigation\(notifier, navigation\);' -or
     $refreshIngressText -notmatch 'let superseded_navigation = work\.current_navigation\.map\(\|active\| active\.intent\);' -or
     $refreshDropIndex -lt 0 -or $refreshTerminalIndex -le $refreshDropIndex -or
     $sessionNavigationText -match 'clear_navigation_if_current|invalidate_navigation' -or

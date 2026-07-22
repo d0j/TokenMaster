@@ -33,6 +33,47 @@ Describe "TokenMaster application composition audit" {
             Should -Not -Throw
     }
 
+    It "rejects removing the typed history range router" {
+        $fixture = New-AppAuditFixture -Name "history-range-router"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'DesktopHistoryRangeIntentRouter::new()',
+            'DesktopHistoryRangeIntentRouter::unbound()'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-HISTORY-RANGE-SINK*"
+    }
+
+    It "rejects querying from the application history range route" {
+        $fixture = New-AppAuditFixture -Name "history-range-query-route"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [regex]::Replace(
+            [System.IO.File]::ReadAllText($path),
+            '(?s)(impl ApplicationHistoryRangeIntentSink \{.*?fn request\(&self, intent: DesktopHistoryRangeIntent\).*?)bundle\s*\.\s*controller\s*\.\s*request_history_range\(intent\)',
+            '${1}source.usage_analytics(request)',
+            1
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-HISTORY-RANGE-SINK*"
+    }
+
+    It "rejects removing the history range terminal notifier attachment" {
+        $fixture = New-AppAuditFixture -Name "history-range-terminal-attachment"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '.attach_terminal_history_range_notifier(live_bridge.terminal_history_range_notifier())',
+            '.attach_removed_history_range_notifier(live_bridge.terminal_history_range_notifier())'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-HISTORY-RANGE-TERMINAL*"
+    }
+
     It "rejects removing the typed session-detail router" {
         $fixture = New-AppAuditFixture -Name "session-detail-router"
         $path = Join-Path $fixture "crates\app\src\application.rs"
@@ -103,9 +144,11 @@ Describe "TokenMaster application composition audit" {
     It "rejects blocking Sessions page routing on the current bundle" {
         $fixture = New-AppAuditFixture -Name "session-page-blocking-lock"
         $path = Join-Path $fixture "crates\app\src\application.rs"
-        $text = [System.IO.File]::ReadAllText($path).Replace(
-            'let slot = bundle.try_lock().map_err(|_| ())?;',
-            'let slot = bundle.lock().map_err(|_| ())?;'
+        $text = [regex]::Replace(
+            [System.IO.File]::ReadAllText($path),
+            '(?s)(impl ApplicationSessionPageIntentSink \{.*?let slot = )bundle\.try_lock\(\)\.map_err\(\|_\| \(\)\)\?;',
+            '${1}bundle.lock().map_err(|_| ())?;',
+            1
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -116,9 +159,11 @@ Describe "TokenMaster application composition audit" {
     It "rejects bypassing the typed Sessions page request dispatch" {
         $fixture = New-AppAuditFixture -Name "session-page-bypass-request"
         $path = Join-Path $fixture "crates\app\src\application.rs"
-        $text = [System.IO.File]::ReadAllText($path).Replace(
-            'match self.request(intent) {',
-            'match self.request_directly(intent) {'
+        $text = [regex]::Replace(
+            [System.IO.File]::ReadAllText($path),
+            '(?s)(impl DesktopSessionPageIntentSink for ApplicationSessionPageIntentSink \{.*?fn submit\(&self, intent: DesktopSessionPageIntent\) -> DesktopSessionPageIntentAdmission \{\s*)match self\.request\(intent\) \{',
+            '${1}match self.request_directly(intent) {',
+            1
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -203,7 +248,7 @@ Describe "TokenMaster application composition audit" {
         $fixture = New-AppAuditFixture -Name "session-page-terminal-cfg-test-sequence"
         $path = Join-Path $fixture "crates\app\src\application.rs"
         $original = [System.IO.File]::ReadAllText($path)
-        $pattern = 'controller\s*\.attach_snapshot_notifier\(live_bridge\.notifier\(\)\)\s*\.map_err\(\|_\| ApplicationError::controller\(\)\)\?;\s*controller\s*\.attach_terminal_navigation_notifier\(live_bridge\.terminal_navigation_notifier\(\)\)\s*\.map_err\(\|_\| ApplicationError::controller\(\)\)\?;\s*let refresh_ingress = controller\.refresh_ingress\(\);'
+        $pattern = 'controller\s*\.attach_snapshot_notifier\(live_bridge\.notifier\(\)\)\s*\.map_err\(\|_\| ApplicationError::controller\(\)\)\?;\s*controller\s*\.attach_terminal_navigation_notifier\(live_bridge\.terminal_navigation_notifier\(\)\)\s*\.map_err\(\|_\| ApplicationError::controller\(\)\)\?;\s*controller\s*\.attach_terminal_history_range_notifier\(live_bridge\.terminal_history_range_notifier\(\)\)\s*\.map_err\(\|_\| ApplicationError::controller\(\)\)\?;\s*let refresh_ingress = controller\.refresh_ingress\(\);'
         $replacement = @'
 #[cfg(test)]
     {
@@ -212,6 +257,9 @@ Describe "TokenMaster application composition audit" {
             .map_err(|_| ApplicationError::controller())?;
         controller
             .attach_terminal_navigation_notifier(live_bridge.terminal_navigation_notifier())
+            .map_err(|_| ApplicationError::controller())?;
+        controller
+            .attach_terminal_history_range_notifier(live_bridge.terminal_history_range_notifier())
             .map_err(|_| ApplicationError::controller())?;
         let refresh_ingress = controller.refresh_ingress();
         drop(refresh_ingress);
