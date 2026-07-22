@@ -39,6 +39,58 @@ Read in this order before changing behavior:
 - A release is not accepted without the exact receipt gates in `M0_ACCEPTANCE.md` and
   the future product-release checklist.
 
+## Root delivery governance
+
+The root agent is the senior delivery owner, not an implementation worker managed by
+its reviewers. At the start and end of every autonomous cycle, root must state and
+reconcile:
+
+1. the current user-visible product milestone;
+2. the shortest release-critical next outcome;
+3. the remaining real product/release blockers;
+4. whether the cycle changed product behavior, correctness, required evidence, or only
+   audit machinery.
+
+Root owns architecture, critical path, delegation, integration, stop conditions, and
+final acceptance. Children return bounded evidence; they never extend scope or create
+an indefinite review queue. Keep the critical-path decision local to root.
+
+Audit and proof work must remain subordinate to product delivery:
+
+- Classify each finding as a production correctness/security/data-loss defect, a
+  required acceptance-evidence defect, or audit-only hardening. Do not present an
+  audit-only parser/regex weakness as a product defect.
+- Every audit rule must map to an existing source-of-truth requirement and a practical
+  compiling or executable mutation. Do not expand the threat model merely because a
+  new textual decoy can be invented.
+- Prefer types, compiler checks, runtime invariants, and focused behavioral tests over
+  increasingly complex source-text parsing. A textual audit is a last-mile guard, not
+  a substitute parser or a product milestone.
+- Normally allow one implementation review and one final re-review. A further review
+  round requires a newly demonstrated Critical production/security/data-loss risk,
+  not another audit-only bypass.
+- Run focused red/green validation while correcting findings, then one relevant final
+  aggregate and the required baseline. Do not rerun a long full gate after every
+  audit-only edit.
+
+Root must declare `AUDIT_HARDENING_LOOP` when either condition occurs:
+
+- two consecutive correction/review rounds change only audits/tests/docs without
+  changing product behavior or closing a required release receipt; or
+- more than 60 minutes are spent on audit-only hardening after the production behavior
+  and focused contracts already pass.
+
+When triggered, root must immediately stop audit children, report the loop and its
+cost, reject further speculative hardening, preserve the last verified product state,
+and return to the shortest release-critical product slice. One additional bounded fix
+is allowed only for a demonstrated Critical production/security/data-loss defect; it
+must have a focused reproducer and a fixed stop condition. Record the trigger and the
+chosen disposition in `docs/HANDOFF.md` before continuing.
+
+At every handoff, separately report `product state`, `audit/evidence state`, `release
+blockers`, and `Git state`. A green developer baseline must never be described as a
+package, M0, release-candidate, or stable-release acceptance.
+
 ## Verification
 
 Run the narrowest relevant test first. The baseline quality gate is:

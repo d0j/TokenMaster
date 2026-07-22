@@ -1045,6 +1045,14 @@ remains P5. Do not treat developer receipts as release acceptance. Remaining P3-
 evidence, P4 presentation, CLI/MCP, activation, M0 acceptance,
 packaging, signing, and release remain unclaimed. Inventory/reminder read must not
 imply activation authority.
+
+Root delivery guard: the History-range audit entered `AUDIT_HARDENING_LOOP` after
+repeated audit-only review/correction rounds displaced product work. The loop is
+closed. Apply the mandatory root governance in `AGENTS.md`: normally one review plus
+one final re-review, focused corrections followed by one aggregate, and an immediate
+stop after two audit-only rounds or 60 audit-only minutes. The next cycle must report
+product state, audit/evidence state, release blockers, and Git state separately before
+delegating work.
 The prior post-P3-D.0-Task-10 focused evidence includes the Task 5 store contracts,
 5 package contracts, 10 package adversarial contracts, 17 durable-file contracts,
 7 grouped encryption contracts, 6 catalog contracts, 2 retention contracts, 5 backup-

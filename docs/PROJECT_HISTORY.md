@@ -1,5 +1,15 @@
 # TokenMaster project history
 
+## 2026-07-22 — Root audit-hardening stop condition
+
+The History-range closeout exposed a delivery-process failure: repeated source-audit
+review/correction rounds continued after product behavior and focused contracts were
+already green. Root stopped the agents, preserved the verified product state, and
+made `AUDIT_HARDENING_LOOP` mandatory in `AGENTS.md`. Audit-only work now stops after
+two consecutive rounds or 60 minutes unless a focused reproducer demonstrates a
+Critical production/security/data-loss defect. Handoffs must separate product,
+audit/evidence, release-blocker, and Git truth.
+
 ## 2026-07-22 — P3-D interactive History ranges (Tasks 1-5)
 
 Closed the bounded interactive History range contour. Fixed 1/7/30 rolling civil-day
