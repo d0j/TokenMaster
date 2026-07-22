@@ -1,4 +1,5 @@
 fn main() {
+    println!("cargo:rerun-if-changed=translations");
     let emit_debug_info = std::env::var("PROFILE").is_ok_and(|profile| profile != "release");
     let config = slint_build::CompilerConfiguration::new()
         .with_debug_info(emit_debug_info)

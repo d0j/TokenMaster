@@ -1,0 +1,84 @@
+// Localized, display-only atoms for bounded Rust-to-Slint projections.
+// Stable keys and codes remain in Rust data rows; callers use these only for text shown to people.
+export global ProjectionStrings {
+    public pure function route-label(key: string) -> string {
+        if (key == "dashboard") { return @tr("Dashboard"); }
+        if (key == "history") { return @tr("History"); }
+        if (key == "sessions") { return @tr("Sessions"); }
+        if (key == "models") { return @tr("Models"); }
+        if (key == "projects") { return @tr("Projects"); }
+        if (key == "activity") { return @tr("Activity"); }
+        if (key == "data_health") { return @tr("Data Health"); }
+        if (key == "notifications") { return @tr("Notifications"); }
+        if (key == "settings") { return @tr("Settings"); }
+        if (key == "help_about") { return @tr("Help / About"); }
+        if (key == "compact_widget") { return @tr("Compact Widget"); }
+        return key;
+    }
+
+    public pure function dashboard-section-label(key: string) -> string {
+        if (key == "plan_usage") { return @tr("Plan Usage"); }
+        if (key == "code_output") { return @tr("Code Output"); }
+        if (key == "trend") { return @tr("Usage and Cost Trend"); }
+        if (key == "sessions") { return @tr("Sessions"); }
+        if (key == "activity") { return @tr("Activity"); }
+        if (key == "models") { return @tr("Model Usage"); }
+        return key;
+    }
+
+    public pure function freshness-label(code: string) -> string {
+        if (code == "fresh") { return @tr("Fresh"); }
+        if (code == "aging") { return @tr("Aging"); }
+        if (code == "stale") { return @tr("Stale"); }
+        if (code == "unavailable") { return @tr("Unavailable"); }
+        return code;
+    }
+
+    public pure function quality-label(code: string) -> string {
+        if (code == "authoritative") { return @tr("Authoritative"); }
+        if (code == "derived") { return @tr("Derived"); }
+        if (code == "estimated") { return @tr("Estimated"); }
+        if (code == "partial") { return @tr("Partial"); }
+        if (code == "conflict") { return @tr("Conflict"); }
+        if (code == "unknown") { return @tr("Unknown"); }
+        return code;
+    }
+
+    public pure function evidence-label(freshness: string, quality: string) -> string {
+        return @tr("{0} · {1}", freshness, quality);
+    }
+
+    public pure function evidence-unavailable() -> string { return @tr("Evidence unavailable"); }
+    public pure function unavailable() -> string { return @tr("Unavailable"); }
+    public pure function time-unavailable() -> string { return @tr("Time unavailable"); }
+    public pure function no-pending-changes() -> string { return @tr("No pending changes"); }
+    public pure function categories-and-fields(categories: string, fields: string) -> string { return @tr("{0} categories · {1} fields", categories, fields); }
+    public pure function schema(version: string) -> string { return @tr("Schema {0}", version); }
+    public pure function schema-unavailable() -> string { return @tr("Schema unavailable"); }
+    public pure function event-count(count: string, singular: bool) -> string {
+        if (singular) { return @tr("{0} event", count); }
+        return @tr("{0} events", count);
+    }
+    public pure function quota-ratio(value: string, remaining: bool) -> string {
+        if (remaining) { return @tr("{0} remaining", value); }
+        return @tr("{0} used", value);
+    }
+    public pure function quota-units(used: string, capacity: string, unit: string) -> string { return @tr("{0} / {1} {2}", used, capacity, unit); }
+    public pure function quota-units-used(used: string, unit: string) -> string { return @tr("{0} {1} used", used, unit); }
+    public pure function quota-units-remaining(remaining: string, unit: string) -> string { return @tr("{0} {1} remaining", remaining, unit); }
+    public pure function quota-units-capacity(capacity: string, unit: string) -> string { return @tr("{0} {1} capacity", capacity, unit); }
+    public pure function reset-time-unavailable() -> string { return @tr("Reset time unavailable"); }
+    public pure function resets(value: string) -> string { return @tr("Resets {0}", value); }
+    public pure function confidence(value: string) -> string { return @tr("{0} confidence", value); }
+    public pure function expiry-unavailable() -> string { return @tr("Expiry unavailable"); }
+    public pure function expires(value: string) -> string { return @tr("Expires {0}", value); }
+    public pure function in-app-reminders() -> string { return @tr("In-app reminders"); }
+    public pure function reminders-disabled() -> string { return @tr("Reminders disabled"); }
+    public pure function reminder-state-unavailable() -> string { return @tr("Reminder state unavailable"); }
+    public pure function efficiency-unavailable() -> string { return @tr("Efficiency unavailable"); }
+    public pure function per-hundred-lines(value: string) -> string { return @tr("{0} / 100 lines", value); }
+    public pure function completeness(complete: bool) -> string {
+        if (complete) { return @tr("Complete"); }
+        return @tr("Incomplete");
+    }
+}

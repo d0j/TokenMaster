@@ -32,10 +32,10 @@ use crate::{
     DesktopSessionsProjection, DesktopSnapshotBridge, DesktopSnapshotEpoch,
     DesktopSnapshotReceiver, DesktopTokenValue, DesktopTrayAvailability, DesktopValueAvailability,
     HistoryDayRow, InAppNotificationRow, MainWindow, ModelUsageRow, ProjectUsageRow,
-    RecentActivityRow, ReminderCustomLeadRow, ReminderScopeRow, RestorePointRow, RouteRow,
-    SessionDetailBreakdownRow, SessionListRow, UiPalette, UnavailableDesktopHistoryRangeIntentSink,
-    UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
-    UnavailableDesktopSessionPageIntentSink,
+    ProjectionStrings, RecentActivityRow, ReminderCustomLeadRow, ReminderScopeRow, RestorePointRow,
+    RouteRow, SessionDetailBreakdownRow, SessionListRow, UiPalette,
+    UnavailableDesktopHistoryRangeIntentSink, UnavailableDesktopIntentSink,
+    UnavailableDesktopSessionDetailIntentSink, UnavailableDesktopSessionPageIntentSink,
     in_app_notification::NotificationEpochState,
     native_tray::DesktopNativeTrayOwner,
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
@@ -611,6 +611,8 @@ impl DesktopShell {
         wire_presentation_locale(
             &window,
             Arc::clone(&presentation_style),
+            state.clone(),
+            reliable_state.clone(),
             intent_sink.clone(),
         );
         wire_dashboard_board(&window, Arc::clone(&presentation_style), intent_sink);
@@ -829,7 +831,7 @@ fn apply_dashboard_board_preferences(
         .enumerate()
         .map(|(index, row)| DashboardBoardEditorRow {
             key: row.key().stable_key().into(),
-            label: board_section_label(row.key()).into(),
+            label: board_section_label(window, row.key()).into(),
             visible: row.visible(),
             collapsed: row.collapsed(),
             can_move_up: index > 0,
@@ -867,15 +869,11 @@ const fn workbench_canonical_rank(key: DesktopBoardSectionKey) -> u8 {
     }
 }
 
-const fn board_section_label(key: DesktopBoardSectionKey) -> &'static str {
-    match key {
-        DesktopBoardSectionKey::PlanUsage => "Plan Usage",
-        DesktopBoardSectionKey::CodeOutput => "Code Output",
-        DesktopBoardSectionKey::Trend => "Usage and Cost Trend",
-        DesktopBoardSectionKey::Sessions => "Sessions",
-        DesktopBoardSectionKey::Activity => "Activity",
-        DesktopBoardSectionKey::Models => "Model Usage",
-    }
+fn board_section_label(window: &MainWindow, key: DesktopBoardSectionKey) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_dashboard_section_label(key.stable_key().into())
+        .to_string()
 }
 
 fn ui_palette(
@@ -1043,6 +1041,8 @@ fn wire_presentation_layout(
 fn wire_presentation_locale(
     window: &MainWindow,
     presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
+    state: SharedDesktopState,
+    reliable_state: SharedReliableState,
     intent_sink: Rc<dyn DesktopIntentSink>,
 ) {
     let weak_window = window.as_weak();
@@ -1052,10 +1052,29 @@ fn wire_presentation_locale(
         else {
             return;
         };
-        if let Some(window) = weak_window.upgrade() {
-            let _ = apply_presentation_style(&window, next_style);
+        if let Some(window) = weak_window.upgrade()
+            && apply_presentation_style(&window, next_style)
+        {
+            reapply_localized_projection(&window, &state, &reliable_state);
         }
     });
+}
+
+fn reapply_localized_projection(
+    window: &MainWindow,
+    state: &SharedDesktopState,
+    reliable_state: &SharedReliableState,
+) {
+    let projection = state.lock().ok().map(|state| state.projection().clone());
+    let reliable_projection = reliable_state.lock().ok().map(|state| state.clone());
+
+    if let Some(projection) = projection.as_ref() {
+        apply_projection(window, projection);
+        refresh_command_palette_if_open(window, projection);
+    }
+    if let Some(reliable_projection) = reliable_projection.as_ref() {
+        apply_reliable_state_projection(window, reliable_projection);
+    }
 }
 
 fn wire_dashboard_board(
@@ -1785,7 +1804,7 @@ fn apply_command_palette_rows(
         .map(|route| RouteRow {
             key: route.key().stable_key().into(),
             label_key: route.key().label_key().into(),
-            label: route.key().english_label().into(),
+            label: route_label(window, route.key()).into(),
             state: route.state().stable_code().into(),
             reasons: join_reasons(route.reason_codes().iter()).into(),
             selected: false,
@@ -2028,6 +2047,13 @@ pub(crate) fn apply_projection(window: &MainWindow, projection: &DesktopProjecti
     apply_sessions_projection(window, projection.sessions());
 }
 
+fn route_label(window: &MainWindow, key: DesktopRouteKey) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_route_label(key.stable_key().into())
+        .to_string()
+}
+
 fn apply_route_projection(window: &MainWindow, projection: &DesktopProjection) {
     let rows = projection
         .routes()
@@ -2035,7 +2061,7 @@ fn apply_route_projection(window: &MainWindow, projection: &DesktopProjection) {
         .map(|route| RouteRow {
             key: SharedString::from(route.key().stable_key()),
             label_key: SharedString::from(route.key().label_key()),
-            label: SharedString::from(route.key().english_label()),
+            label: SharedString::from(route_label(window, route.key())),
             state: SharedString::from(route.state().stable_code()),
             reasons: SharedString::from(join_reasons(route.reason_codes().iter())),
             selected: route.key() == projection.selected(),
@@ -2045,7 +2071,10 @@ fn apply_route_projection(window: &MainWindow, projection: &DesktopProjection) {
 
     window.set_route_rows(ModelRc::new(VecModel::from(rows)));
     window.set_active_route_key(SharedString::from(projection.selected().stable_key()));
-    window.set_active_route_label(SharedString::from(projection.selected().english_label()));
+    window.set_active_route_label(SharedString::from(route_label(
+        window,
+        projection.selected(),
+    )));
     window.set_active_route_state(SharedString::from(active.state().stable_code()));
     window.set_active_route_reasons(SharedString::from(join_reasons(
         active.reason_codes().iter(),
@@ -2077,7 +2106,7 @@ fn apply_reliable_state_projection(
     window.set_config_import_created_label(
         config_preview
             .map_or_else(
-                || "Unavailable".to_owned(),
+                || projection_unavailable(window),
                 |preview| format_timestamp_ms(preview.created_at_utc_ms()),
             )
             .into(),
@@ -2093,12 +2122,12 @@ fn apply_reliable_state_projection(
     window.set_config_import_changes_label(
         config_preview
             .map_or_else(
-                || "No pending changes".to_owned(),
+                || projection_no_pending_changes(window),
                 |preview| {
-                    format!(
-                        "{} categories · {} fields",
-                        preview.changed_category_count(),
-                        preview.changed_field_count()
+                    projection_categories_and_fields(
+                        window,
+                        u32::from(preview.changed_category_count()),
+                        u32::from(preview.changed_field_count()),
                     )
                 },
             )
@@ -2107,31 +2136,31 @@ fn apply_reliable_state_projection(
     window.set_reliable_latest_success_label(
         projection
             .latest_success_at_utc_ms()
-            .map_or_else(|| "Unavailable".to_owned(), format_timestamp_ms)
+            .map_or_else(|| projection_unavailable(window), format_timestamp_ms)
             .into(),
     );
     window.set_reliable_latest_attempt_label(
         projection
             .latest_attempt_at_utc_ms()
-            .map_or_else(|| "Unavailable".to_owned(), format_timestamp_ms)
+            .map_or_else(|| projection_unavailable(window), format_timestamp_ms)
             .into(),
     );
     window.set_reliable_successful_count_label(
         projection
             .successful_count()
-            .map_or_else(|| "Unavailable".to_owned(), |count| count.to_string())
+            .map_or_else(|| projection_unavailable(window), |count| count.to_string())
             .into(),
     );
     window.set_reliable_failure_count_label(
         projection
             .failure_count()
-            .map_or_else(|| "Unavailable".to_owned(), |count| count.to_string())
+            .map_or_else(|| projection_unavailable(window), |count| count.to_string())
             .into(),
     );
     window.set_reliable_published_bytes_label(
         projection
             .published_bytes()
-            .map_or_else(|| "Unavailable".to_owned(), format_bytes)
+            .map_or_else(|| projection_unavailable(window), format_bytes)
             .into(),
     );
     window.set_reliable_latest_failure_code(
@@ -2199,7 +2228,7 @@ fn apply_reliable_state_projection(
             row_index: saturating_i32(index as u64),
             created_label: point
                 .created_at_utc_ms()
-                .map_or_else(|| "Time unavailable".to_owned(), format_timestamp_ms)
+                .map_or_else(|| projection_time_unavailable(window), format_timestamp_ms)
                 .into(),
             size_label: format_bytes(point.size_bytes()).into(),
             health: point.health().stable_code().into(),
@@ -2207,8 +2236,8 @@ fn apply_reliable_state_projection(
             schema_label: point
                 .database_schema_version()
                 .map_or_else(
-                    || "Schema unavailable".to_owned(),
-                    |version| format!("Schema {version}"),
+                    || projection_schema_unavailable(window),
+                    |version| projection_schema(window, u32::from(version)),
                 )
                 .into(),
             compression_label: humanize_key(point.compression_code()).into(),
@@ -2219,6 +2248,213 @@ fn apply_reliable_state_projection(
 
 fn saturating_i32(value: u64) -> i32 {
     i32::try_from(value).unwrap_or(i32::MAX)
+}
+
+fn projection_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_unavailable()
+        .to_string()
+}
+
+fn projection_time_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_time_unavailable()
+        .to_string()
+}
+
+fn projection_no_pending_changes(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_no_pending_changes()
+        .to_string()
+}
+
+fn projection_categories_and_fields(window: &MainWindow, categories: u32, fields: u32) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_categories_and_fields(categories.to_string().into(), fields.to_string().into())
+        .to_string()
+}
+
+fn projection_schema_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_schema_unavailable()
+        .to_string()
+}
+
+fn projection_schema(window: &MainWindow, version: u32) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_schema(version.to_string().into())
+        .to_string()
+}
+
+fn projection_freshness_label(window: &MainWindow, value: DesktopFreshness) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_freshness_label(freshness_label(value).into())
+        .to_string()
+}
+
+fn projection_quality_label(window: &MainWindow, value: DesktopQuality) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_quality_label(quality_label(value).into())
+        .to_string()
+}
+
+fn format_dashboard_evidence(
+    window: &MainWindow,
+    freshness: Option<DesktopFreshness>,
+    quality: Option<DesktopQuality>,
+) -> String {
+    match freshness.zip(quality) {
+        Some((freshness, quality)) => window
+            .global::<ProjectionStrings>()
+            .invoke_evidence_label(
+                projection_freshness_label(window, freshness).into(),
+                projection_quality_label(window, quality).into(),
+            )
+            .to_string(),
+        None => window
+            .global::<ProjectionStrings>()
+            .invoke_evidence_unavailable()
+            .to_string(),
+    }
+}
+
+fn format_dashboard_events(window: &MainWindow, value: Option<u64>) -> String {
+    value.map_or_else(
+        || "—".to_owned(),
+        |count| {
+            window
+                .global::<ProjectionStrings>()
+                .invoke_event_count(format_integer(count).into(), count == 1)
+                .to_string()
+        },
+    )
+}
+
+fn format_dashboard_ratio(window: &MainWindow, value: Option<u32>, remaining: bool) -> String {
+    value.map_or_else(
+        || "—".to_owned(),
+        |ppm| {
+            window
+                .global::<ProjectionStrings>()
+                .invoke_quota_ratio(
+                    format!("{:.1}%", f64::from(ppm) / 10_000.0).into(),
+                    remaining,
+                )
+                .to_string()
+        },
+    )
+}
+
+fn format_dashboard_quota_units(window: &MainWindow, row: &crate::DesktopQuotaRow) -> String {
+    let strings = window.global::<ProjectionStrings>();
+    let unit = row.unit_key().map_or("units", |value| value);
+    match (
+        row.used_units(),
+        row.remaining_units(),
+        row.capacity_units(),
+    ) {
+        (Some(used), _, Some(capacity)) => strings
+            .invoke_quota_units(
+                format_integer(used).into(),
+                format_integer(capacity).into(),
+                unit.into(),
+            )
+            .to_string(),
+        (_, Some(remaining), Some(capacity)) => strings
+            .invoke_quota_units(
+                format_integer(remaining).into(),
+                format_integer(capacity).into(),
+                unit.into(),
+            )
+            .to_string(),
+        (Some(used), _, None) => strings
+            .invoke_quota_units_used(format_integer(used).into(), unit.into())
+            .to_string(),
+        (_, Some(remaining), None) => strings
+            .invoke_quota_units_remaining(format_integer(remaining).into(), unit.into())
+            .to_string(),
+        (_, _, Some(capacity)) => strings
+            .invoke_quota_units_capacity(format_integer(capacity).into(), unit.into())
+            .to_string(),
+        (None, None, None) => String::new(),
+    }
+}
+
+fn format_dashboard_quota_evidence(window: &MainWindow, row: &crate::DesktopQuotaRow) -> String {
+    let evidence = format_dashboard_evidence(window, Some(row.freshness()), Some(row.quality()));
+    format!(
+        "{} · {}",
+        evidence,
+        window
+            .global::<ProjectionStrings>()
+            .invoke_confidence(row.confidence().to_string().into())
+    )
+}
+
+fn projection_reset_time_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_reset_time_unavailable()
+        .to_string()
+}
+
+fn projection_resets(window: &MainWindow, value: String) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_resets(value.into())
+        .to_string()
+}
+
+fn projection_expiry_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_expiry_unavailable()
+        .to_string()
+}
+
+fn projection_expires(window: &MainWindow, value: String) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_expires(value.into())
+        .to_string()
+}
+
+fn projection_reminder_label(window: &MainWindow, value: &str) -> String {
+    let strings = window.global::<ProjectionStrings>();
+    match value {
+        "in_app_only" => strings.invoke_in_app_reminders().to_string(),
+        "disabled" => strings.invoke_reminders_disabled().to_string(),
+        _ => strings.invoke_reminder_state_unavailable().to_string(),
+    }
+}
+
+fn projection_efficiency_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_efficiency_unavailable()
+        .to_string()
+}
+
+fn projection_per_hundred_lines(window: &MainWindow, value: String) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_per_hundred_lines(value.into())
+        .to_string()
+}
+
+fn projection_completeness(window: &MainWindow, complete: bool) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_completeness(complete)
+        .to_string()
 }
 
 fn format_bytes(value: u64) -> String {
@@ -2258,7 +2494,7 @@ fn apply_dashboard_projection(window: &MainWindow, dashboard: &DesktopDashboardP
         .map(|section| DashboardSectionRow {
             key: section.key().stable_key().into(),
             label_key: section.key().label_key().into(),
-            label: section_label(section.key()).into(),
+            label: dashboard_section_label(window, section.key()).into(),
             state: section.state().stable_code().into(),
             reasons: join_reasons(section.reason_codes().iter()).into(),
             has_data: section.has_data(),
@@ -2269,9 +2505,10 @@ fn apply_dashboard_projection(window: &MainWindow, dashboard: &DesktopDashboardP
     let header = dashboard.header();
     window.set_dashboard_header_tokens(format_tokens(header.tokens()).into());
     window.set_dashboard_header_cost(format_cost(header.cost()).into());
-    window.set_dashboard_header_events(format_optional_events(header.event_count()).into());
+    window
+        .set_dashboard_header_events(format_dashboard_events(window, header.event_count()).into());
     window.set_dashboard_header_evidence(
-        format_evidence(header.freshness(), header.quality()).into(),
+        format_dashboard_evidence(window, header.freshness(), header.quality()).into(),
     );
 
     let quota_rows = dashboard
@@ -2288,23 +2525,17 @@ fn apply_dashboard_projection(window: &MainWindow, dashboard: &DesktopDashboardP
                 label: humanize_key(row.label_key()).into(),
                 ratio_known: used_ppm.is_some(),
                 used_ratio: used_ppm.map_or(0.0, ppm_ratio),
-                usage_label: format_ratio(used_ppm, "used").into(),
-                remaining_label: format_ratio(row.remaining_ppm(), "remaining").into(),
-                units_label: format_quota_units(row).into(),
+                usage_label: format_dashboard_ratio(window, used_ppm, false).into(),
+                remaining_label: format_dashboard_ratio(window, row.remaining_ppm(), true).into(),
+                units_label: format_dashboard_quota_units(window, row).into(),
                 reset_label: row
                     .advertised_reset_at_ms()
                     .map_or_else(
-                        || "Reset time unavailable".to_owned(),
-                        |value| format!("Resets {}", format_timestamp_ms(value)),
+                        || projection_reset_time_unavailable(window),
+                        |value| projection_resets(window, format_timestamp_ms(value)),
                     )
                     .into(),
-                evidence_label: format!(
-                    "{} · {} · {} confidence",
-                    freshness_label(row.freshness()),
-                    quality_label(row.quality()),
-                    row.confidence()
-                )
-                .into(),
+                evidence_label: format_dashboard_quota_evidence(window, row).into(),
             }
         })
         .collect::<Vec<_>>();
@@ -2323,15 +2554,15 @@ fn apply_dashboard_projection(window: &MainWindow, dashboard: &DesktopDashboardP
             expiry_label: scope
                 .nearest_reset_expiry_at_ms()
                 .map_or_else(
-                    || "Expiry unavailable".to_owned(),
-                    |value| format!("Expires {}", format_timestamp_ms(value)),
+                    || projection_expiry_unavailable(window),
+                    |value| projection_expires(window, format_timestamp_ms(value)),
                 )
                 .into(),
-            reminder_label: reminder_label(scope.reminder_coverage()).into(),
-            evidence_label: format!(
-                "{} · {}",
-                freshness_label(scope.freshness()),
-                quality_label(scope.quality())
+            reminder_label: projection_reminder_label(window, scope.reminder_coverage()).into(),
+            evidence_label: format_dashboard_evidence(
+                window,
+                Some(scope.freshness()),
+                Some(scope.quality()),
             )
             .into(),
         })
@@ -3333,21 +3564,17 @@ fn apply_code_output(window: &MainWindow, dashboard: &DesktopDashboardProjection
     window.set_dashboard_code_efficiency(
         code.cost_per_100_added_lines_micros()
             .map_or_else(
-                || "Efficiency unavailable".to_owned(),
-                |value| format!("{} / 100 lines", format_usd_micros(value)),
+                || projection_efficiency_unavailable(window),
+                |value| projection_per_hundred_lines(window, format_usd_micros(value)),
             )
             .into(),
     );
     window.set_dashboard_code_evidence(
         format!(
             "{} · {} · {}",
-            freshness_label(code.freshness()),
-            quality_label(code.quality()),
-            if code.complete() {
-                "complete"
-            } else {
-                "incomplete"
-            }
+            projection_freshness_label(window, code.freshness()),
+            projection_quality_label(window, code.quality()),
+            projection_completeness(window, code.complete())
         )
         .into(),
     );
@@ -3453,15 +3680,11 @@ fn model<T: Clone + 'static>(rows: Vec<T>) -> ModelRc<T> {
     ModelRc::new(VecModel::from(rows))
 }
 
-const fn section_label(key: DesktopDashboardSectionKey) -> &'static str {
-    match key {
-        DesktopDashboardSectionKey::PlanUsage => "Plan Usage",
-        DesktopDashboardSectionKey::CodeOutput => "Code Output",
-        DesktopDashboardSectionKey::Trend => "Usage and Cost Trend",
-        DesktopDashboardSectionKey::Sessions => "Sessions",
-        DesktopDashboardSectionKey::Activity => "Activity",
-        DesktopDashboardSectionKey::Models => "Model Usage",
-    }
+fn dashboard_section_label(window: &MainWindow, key: DesktopDashboardSectionKey) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_dashboard_section_label(key.stable_key().into())
+        .to_string()
 }
 
 const fn activity_label(key: DesktopActivityKey) -> &'static str {
@@ -3582,13 +3805,6 @@ fn format_usd_micros(value: u64) -> String {
     format!("${}.{:06}", format_integer(dollars), micros)
 }
 
-fn format_ratio(value: Option<u32>, kind: &str) -> String {
-    value.map_or_else(
-        || "—".to_owned(),
-        |ppm| format!("{:.1}% {kind}", f64::from(ppm) / 10_000.0),
-    )
-}
-
 fn ppm_ratio(value: u32) -> f32 {
     (f64::from(value) / 1_000_000.0) as f32
 }
@@ -3599,34 +3815,6 @@ fn ratio(value: Option<u64>, maximum: Option<u64>) -> f32 {
             ((value as f64) / (maximum as f64)).clamp(0.0, 1.0) as f32
         }
         _ => 0.0,
-    }
-}
-
-fn format_quota_units(row: &crate::DesktopQuotaRow) -> String {
-    let unit = row.unit_key().map_or("units", |value| value);
-    match (
-        row.used_units(),
-        row.remaining_units(),
-        row.capacity_units(),
-    ) {
-        (Some(used), _, Some(capacity)) => format!(
-            "{} / {} {}",
-            format_integer(used),
-            format_integer(capacity),
-            unit
-        ),
-        (_, Some(remaining), Some(capacity)) => format!(
-            "{} / {} {} remaining",
-            format_integer(remaining),
-            format_integer(capacity),
-            unit
-        ),
-        (Some(used), _, None) => format!("{} {} used", format_integer(used), unit),
-        (_, Some(remaining), None) => {
-            format!("{} {} remaining", format_integer(remaining), unit)
-        }
-        (_, _, Some(capacity)) => format!("{} {} capacity", format_integer(capacity), unit),
-        (None, None, None) => String::new(),
     }
 }
 
@@ -3682,14 +3870,6 @@ const fn quality_label(value: DesktopQuality) -> &'static str {
         DesktopQuality::Partial => "Partial",
         DesktopQuality::Conflict => "Conflict",
         DesktopQuality::Unknown => "Unknown",
-    }
-}
-
-fn reminder_label(value: &str) -> &'static str {
-    match value {
-        "in_app_only" => "In-app reminders",
-        "disabled" => "Reminders disabled",
-        _ => "Reminder state unavailable",
     }
 }
 

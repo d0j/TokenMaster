@@ -2,7 +2,9 @@ use std::cell::Cell;
 use std::collections::BTreeSet;
 use std::path::Path;
 use std::rc::Rc;
+use std::sync::Mutex;
 
+use slint::Model;
 use tokenmaster_desktop::{
     DesktopIntent, DesktopIntentAdmission, DesktopIntentSink, DesktopLocale,
     DesktopPresentationSelection, DesktopReliableStateProjection, DesktopShell,
@@ -10,6 +12,7 @@ use tokenmaster_desktop::{
 use tokenmaster_product::ProductReducer;
 
 const TRANSLATION_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/translations");
+static LOCALE_SWITCH_LOCK: Mutex<()> = Mutex::new(());
 
 const SHELL_MSGIDS: [&str; 33] = [
     "TokenMaster",
@@ -407,6 +410,61 @@ const NOTIFICATIONS_MSGIDS: [&str; 22] = [
     "{0} {1} {2} quantity {3} state {4} {5} {6} {7}",
 ];
 
+const PROJECTION_MSGIDS: [&str; 52] = [
+    "{0} · {1}",
+    "{0} {1} capacity",
+    "{0} {1} remaining",
+    "{0} {1} used",
+    "{0} / {1} {2}",
+    "{0} / 100 lines",
+    "{0} categories · {1} fields",
+    "{0} confidence",
+    "{0} event",
+    "{0} events",
+    "{0} remaining",
+    "{0} used",
+    "Activity",
+    "Aging",
+    "Authoritative",
+    "Code Output",
+    "Compact Widget",
+    "Complete",
+    "Conflict",
+    "Dashboard",
+    "Data Health",
+    "Derived",
+    "Efficiency unavailable",
+    "Estimated",
+    "Evidence unavailable",
+    "Expires {0}",
+    "Expiry unavailable",
+    "Fresh",
+    "Help / About",
+    "History",
+    "In-app reminders",
+    "Incomplete",
+    "Model Usage",
+    "Models",
+    "No pending changes",
+    "Notifications",
+    "Partial",
+    "Plan Usage",
+    "Projects",
+    "Reminder state unavailable",
+    "Reminders disabled",
+    "Reset time unavailable",
+    "Resets {0}",
+    "Schema {0}",
+    "Schema unavailable",
+    "Sessions",
+    "Settings",
+    "Stale",
+    "Time unavailable",
+    "Unavailable",
+    "Unknown",
+    "Usage and Cost Trend",
+];
+
 const COMPONENT_RAW_LITERAL_ALLOWLIST: [&str; 11] = [
     "", " ", " · ", ", ", "ready", "degraded", "waiting", "●", "▲", "…", "×",
 ];
@@ -459,6 +517,7 @@ fn shell_component_and_settings_reminder_backup_catalogs_are_complete_and_preser
         .chain(ACTIVITY_MODELS_MSGIDS)
         .chain(HISTORY_MSGIDS)
         .chain(NOTIFICATIONS_MSGIDS)
+        .chain(PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -513,6 +572,7 @@ fn projects_and_compact_widget_catalogs_are_complete_before_view_conversion() {
         .chain(ACTIVITY_MODELS_MSGIDS)
         .chain(HISTORY_MSGIDS)
         .chain(NOTIFICATIONS_MSGIDS)
+        .chain(PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -545,8 +605,9 @@ fn sessions_and_dashboard_catalogs_are_complete_before_view_conversion() {
         .chain(ACTIVITY_MODELS_MSGIDS)
         .chain(HISTORY_MSGIDS)
         .chain(NOTIFICATIONS_MSGIDS)
+        .chain(PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 344, "Task 2b7b exact catalog inventory");
+    assert_eq!(expected.len(), 387, "projection catalog exact inventory");
 
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -562,7 +623,7 @@ fn sessions_and_dashboard_catalogs_are_complete_before_view_conversion() {
             expected,
             "{locale} must translate exactly the closed Task 2b4 Sessions and Dashboard key set"
         );
-        assert_eq!(po_entry_count(&catalog), 344, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 387, "{locale} exact key count");
         for msgid in SESSIONS_DASHBOARD_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b4 catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -589,8 +650,9 @@ fn data_health_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(ACTIVITY_MODELS_MSGIDS)
         .chain(HISTORY_MSGIDS)
         .chain(NOTIFICATIONS_MSGIDS)
+        .chain(PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 344, "Task 2b7b exact catalog inventory");
+    assert_eq!(expected.len(), 387, "projection catalog exact inventory");
 
     let data_health = include_str!("../ui/views/data-health-view.slint");
     for msgid in DATA_HEALTH_MSGIDS {
@@ -614,7 +676,7 @@ fn data_health_catalog_and_source_use_the_closed_translation_key_set() {
             expected,
             "{locale} must translate exactly the closed Task 2b5a Data Health key set"
         );
-        assert_eq!(po_entry_count(&catalog), 344, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 387, "{locale} exact key count");
         for msgid in DATA_HEALTH_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b5a catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -637,8 +699,9 @@ fn help_about_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(ACTIVITY_MODELS_MSGIDS)
         .chain(HISTORY_MSGIDS)
         .chain(NOTIFICATIONS_MSGIDS)
+        .chain(PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 344, "Task 2b7b exact catalog inventory");
+    assert_eq!(expected.len(), 387, "projection catalog exact inventory");
 
     let help_about = include_str!("../ui/views/help-about-view.slint");
     for msgid in HELP_ABOUT_MSGIDS {
@@ -662,7 +725,7 @@ fn help_about_catalog_and_source_use_the_closed_translation_key_set() {
             expected,
             "{locale} must translate exactly the closed Task 2b5b Help/About key set"
         );
-        assert_eq!(po_entry_count(&catalog), 344, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 387, "{locale} exact key count");
         for msgid in HELP_ABOUT_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b5b catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -685,8 +748,9 @@ fn activity_and_models_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(ACTIVITY_MODELS_MSGIDS)
         .chain(HISTORY_MSGIDS)
         .chain(NOTIFICATIONS_MSGIDS)
+        .chain(PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 344, "Task 2b7b exact catalog inventory");
+    assert_eq!(expected.len(), 387, "projection catalog exact inventory");
 
     let activity = include_str!("../ui/views/activity-view.slint");
     let models = include_str!("../ui/views/models-view.slint");
@@ -708,7 +772,7 @@ fn activity_and_models_catalog_and_source_use_the_closed_translation_key_set() {
         .expect("bundled catalog");
         let entries = po_entries(&catalog);
         assert_eq!(entries.keys().copied().collect::<BTreeSet<_>>(), expected);
-        assert_eq!(po_entry_count(&catalog), 344, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 387, "{locale} exact key count");
         for msgid in ACTIVITY_MODELS_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b6 catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -744,8 +808,9 @@ fn history_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(ACTIVITY_MODELS_MSGIDS)
         .chain(HISTORY_MSGIDS)
         .chain(NOTIFICATIONS_MSGIDS)
+        .chain(PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 344, "Task 2b7b exact catalog inventory");
+    assert_eq!(expected.len(), 387, "projection catalog exact inventory");
 
     let history = include_str!("../ui/views/history-view.slint");
     for msgid in HISTORY_MSGIDS {
@@ -765,7 +830,7 @@ fn history_catalog_and_source_use_the_closed_translation_key_set() {
         .expect("bundled catalog");
         let entries = po_entries(&catalog);
         assert_eq!(entries.keys().copied().collect::<BTreeSet<_>>(), expected);
-        assert_eq!(po_entry_count(&catalog), 344, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 387, "{locale} exact key count");
         for msgid in HISTORY_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b7a catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -788,6 +853,7 @@ fn notifications_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(ACTIVITY_MODELS_MSGIDS)
         .chain(HISTORY_MSGIDS)
         .chain(NOTIFICATIONS_MSGIDS)
+        .chain(PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
 
     let notifications = include_str!("../ui/views/notifications-view.slint");
@@ -1059,6 +1125,7 @@ fn shared_components_use_only_the_closed_translation_key_set() {
 
 #[test]
 fn locale_selector_wires_the_complete_presentation_update_and_hot_bundle_apply() {
+    let _locale_guard = LOCALE_SWITCH_LOCK.lock().expect("locale switch lock");
     i_slint_backend_testing::init_no_event_loop();
     let sink = Rc::new(RecordingIntentSink {
         selection: Cell::new(None),
@@ -1086,8 +1153,51 @@ fn locale_selector_wires_the_complete_presentation_update_and_hot_bundle_apply()
 }
 
 #[test]
+fn locale_switch_reprojects_shared_route_labels_without_mutating_route_payload() {
+    let _locale_guard = LOCALE_SWITCH_LOCK.lock().expect("locale switch lock");
+    i_slint_backend_testing::init_no_event_loop();
+    let sink = Rc::new(RecordingIntentSink {
+        selection: Cell::new(None),
+    });
+    let shell = DesktopShell::new_with_reliable_state(
+        &ProductReducer::new().snapshot(),
+        DesktopReliableStateProjection::unavailable(),
+        sink,
+    )
+    .expect("shell");
+    let window = shell.window();
+    let english_routes = window.get_route_rows();
+    let english_dashboard = english_routes.row_data(0).expect("dashboard route");
+    let route_count = english_routes.row_count();
+    let stable_key = english_dashboard.key.clone();
+    let stable_state = english_dashboard.state.clone();
+
+    assert_eq!(english_dashboard.label, "Dashboard");
+    window.invoke_select_presentation_locale(1);
+
+    let russian_routes = window.get_route_rows();
+    let russian_dashboard = russian_routes.row_data(0).expect("dashboard route");
+    assert_eq!(russian_dashboard.label, "Панель управления");
+    assert_eq!(russian_routes.row_count(), route_count);
+    assert_eq!(russian_dashboard.key, stable_key);
+    assert_eq!(russian_dashboard.state, stable_state);
+
+    window.invoke_select_presentation_locale(2);
+    let pseudo_dashboard = window
+        .get_route_rows()
+        .row_data(0)
+        .expect("dashboard route");
+    assert_ne!(pseudo_dashboard.label, "Dashboard");
+    assert_eq!(pseudo_dashboard.key, stable_key);
+    assert_eq!(pseudo_dashboard.state, stable_state);
+
+    window.invoke_select_presentation_locale(0);
+}
+
+#[test]
 fn shell_and_presentation_strip_use_only_the_closed_translation_key_set() {
     let main = include_str!("../ui/main.slint");
+    let projection_strings = include_str!("../ui/projection-strings.slint");
     let settings = include_str!("../ui/views/settings-view.slint");
     let ui = include_str!("../src/ui.rs");
 
@@ -1096,6 +1206,12 @@ fn shell_and_presentation_strip_use_only_the_closed_translation_key_set() {
             main.contains(&format!("@tr(\"{msgid}\""))
                 || settings.contains(&format!("@tr(\"{msgid}\"")),
             "missing @tr for {msgid:?}"
+        );
+    }
+    for msgid in PROJECTION_MSGIDS {
+        assert!(
+            projection_strings.contains(&format!("@tr(\"{msgid}\"")),
+            "missing ProjectionStrings @tr for {msgid:?}"
         );
     }
     for raw in [
