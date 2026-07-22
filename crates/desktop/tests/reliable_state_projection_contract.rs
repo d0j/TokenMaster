@@ -192,14 +192,18 @@ fn legacy_reliable_state_summary_uses_unavailable_reminder_fallback() {
 }
 
 #[test]
-fn presentation_settings_project_complete_selection_and_legacy_constructors_are_comfortable() {
+fn presentation_settings_project_complete_triple_and_legacy_default_is_system() {
     let summary = DesktopReliableStateSummary::new_with_settings(
         DesktopReliableStateHealth::Healthy,
         false,
         "healthy",
         DesktopBackupPolicy::disabled(),
         DesktopReminderPolicy::unavailable(),
-        DesktopPresentationSettings::new(DesktopDensity::UltraCompact, DesktopSkin::Graphite),
+        DesktopPresentationSettings::new(
+            DesktopDensity::UltraCompact,
+            DesktopSkin::Graphite,
+            tokenmaster_desktop::DesktopColorScheme::Light,
+        ),
         None,
         None,
         None,
@@ -220,6 +224,10 @@ fn presentation_settings_project_complete_selection_and_legacy_constructors_are_
         DesktopDensity::UltraCompact
     );
     assert_eq!(projection.presentation().skin(), DesktopSkin::Graphite);
+    assert_eq!(
+        projection.presentation().color_scheme(),
+        tokenmaster_desktop::DesktopColorScheme::Light
+    );
 
     let legacy = DesktopReliableStateSummary::new_with_reminder_policy(
         DesktopReliableStateHealth::Healthy,
@@ -271,7 +279,11 @@ fn shell_initial_owner_retains_graphite_when_density_callback_submits_complete_s
         "healthy",
         DesktopBackupPolicy::disabled(),
         DesktopReminderPolicy::unavailable(),
-        DesktopPresentationSettings::new(DesktopDensity::UltraCompact, DesktopSkin::Graphite),
+        DesktopPresentationSettings::new(
+            DesktopDensity::UltraCompact,
+            DesktopSkin::Graphite,
+            tokenmaster_desktop::DesktopColorScheme::Dark,
+        ),
         None,
         None,
         None,
@@ -309,7 +321,8 @@ fn shell_initial_owner_retains_graphite_when_density_callback_submits_complete_s
         sink.selection.get(),
         Some(DesktopPresentationSelection::new(
             DesktopDensity::Compact,
-            DesktopSkin::Graphite
+            DesktopSkin::Graphite,
+            tokenmaster_desktop::DesktopColorScheme::Dark,
         ))
     );
     assert_eq!(address, shell.window() as *const _);

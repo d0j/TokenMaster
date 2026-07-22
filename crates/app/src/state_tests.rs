@@ -133,7 +133,11 @@ fn changed_portable_settings() -> PortableSettingsCandidate {
     PortableSettingsCandidate::new(PortableSettings::new(
         reminders,
         backup,
-        PresentationSettings::new(PresentationDensity::UltraCompact, PresentationSkin::Refined),
+        PresentationSettings::new(
+            PresentationDensity::UltraCompact,
+            PresentationSkin::Refined,
+            tokenmaster_state::PresentationColorScheme::System,
+        ),
     ))
     .expect("portable candidate")
 }
@@ -1157,7 +1161,11 @@ fn presentation_update_preserves_every_other_settings_class() {
     owner
         .update_presentation(
             &command_permit(ApplicationCommand::UpdatePresentation),
-            PresentationSettings::new(PresentationDensity::UltraCompact, PresentationSkin::Refined),
+            PresentationSettings::new(
+                PresentationDensity::UltraCompact,
+                PresentationSkin::Refined,
+                tokenmaster_state::PresentationColorScheme::System,
+            ),
             || {},
         )
         .expect("seed ultra compact density");
@@ -1190,7 +1198,11 @@ fn presentation_update_preserves_every_other_settings_class() {
     owner
         .update_presentation(
             &command_permit(ApplicationCommand::UpdatePresentation),
-            PresentationSettings::new(PresentationDensity::Compact, PresentationSkin::Ember),
+            PresentationSettings::new(
+                PresentationDensity::Compact,
+                PresentationSkin::Ember,
+                tokenmaster_state::PresentationColorScheme::System,
+            ),
             || {},
         )
         .expect("save compact density");
@@ -1218,7 +1230,11 @@ fn presentation_update_replaces_both_axes_atomically() {
         PortableSettings::new(
             current.value().portable().reminders().clone(),
             current.value().portable().backup().clone(),
-            PresentationSettings::new(PresentationDensity::Comfortable, PresentationSkin::Graphite),
+            PresentationSettings::new(
+                PresentationDensity::Comfortable,
+                PresentationSkin::Graphite,
+                tokenmaster_state::PresentationColorScheme::System,
+            ),
         ),
         current.value().device().clone(),
     );
@@ -1227,7 +1243,11 @@ fn presentation_update_replaces_both_axes_atomically() {
     owner
         .update_presentation(
             &command_permit(ApplicationCommand::UpdatePresentation),
-            PresentationSettings::new(PresentationDensity::Compact, PresentationSkin::Ember),
+            PresentationSettings::new(
+                PresentationDensity::Compact,
+                PresentationSkin::Ember,
+                tokenmaster_state::PresentationColorScheme::System,
+            ),
             || {},
         )
         .expect("save compact density");
@@ -1254,7 +1274,11 @@ fn presentation_save_rejects_wrong_or_cancelled_permits_and_is_idempotent_only_f
     owner
         .update_presentation(
             &command_permit(ApplicationCommand::UpdateBackupPolicy),
-            PresentationSettings::new(PresentationDensity::Compact, PresentationSkin::Graphite),
+            PresentationSettings::new(
+                PresentationDensity::Compact,
+                PresentationSkin::Graphite,
+                tokenmaster_state::PresentationColorScheme::System,
+            ),
             || callback_count += 1,
         )
         .expect_err("wrong permit");
@@ -1274,7 +1298,11 @@ fn presentation_save_rejects_wrong_or_cancelled_permits_and_is_idempotent_only_f
     owner
         .update_presentation(
             &cancelled,
-            PresentationSettings::new(PresentationDensity::Compact, PresentationSkin::Graphite),
+            PresentationSettings::new(
+                PresentationDensity::Compact,
+                PresentationSkin::Graphite,
+                tokenmaster_state::PresentationColorScheme::System,
+            ),
             || {
                 callback_count += 1;
             },
@@ -1289,7 +1317,11 @@ fn presentation_save_rejects_wrong_or_cancelled_permits_and_is_idempotent_only_f
     owner
         .update_presentation(
             &command_permit(ApplicationCommand::UpdatePresentation),
-            PresentationSettings::new(PresentationDensity::Comfortable, PresentationSkin::Refined),
+            PresentationSettings::new(
+                PresentationDensity::Comfortable,
+                PresentationSkin::Refined,
+                tokenmaster_state::PresentationColorScheme::System,
+            ),
             || callback_count += 1,
         )
         .expect("exact equal selection is idempotent");
@@ -1302,7 +1334,11 @@ fn presentation_save_rejects_wrong_or_cancelled_permits_and_is_idempotent_only_f
     owner
         .update_presentation(
             &command_permit(ApplicationCommand::UpdatePresentation),
-            PresentationSettings::new(PresentationDensity::Comfortable, PresentationSkin::Graphite),
+            PresentationSettings::new(
+                PresentationDensity::Comfortable,
+                PresentationSkin::Graphite,
+                tokenmaster_state::PresentationColorScheme::System,
+            ),
             || callback_count += 1,
         )
         .expect("changed skin is durable mutation");

@@ -1,14 +1,24 @@
 use tokenmaster_desktop::{
-    DesktopDensity, DesktopPresentationApplyOutcome, DesktopPresentationPersistence,
-    DesktopPresentationSelection, DesktopPresentationStyle, DesktopSkin,
+    DesktopColorScheme, DesktopDensity, DesktopPresentationApplyOutcome,
+    DesktopPresentationPersistence, DesktopPresentationSelection, DesktopPresentationStyle,
+    DesktopSkin,
 };
 
-const REFINED_COMFORTABLE: DesktopPresentationSelection =
-    DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Refined);
-const GRAPHITE_COMPACT: DesktopPresentationSelection =
-    DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Graphite);
-const EMBER_ULTRA_COMPACT: DesktopPresentationSelection =
-    DesktopPresentationSelection::new(DesktopDensity::UltraCompact, DesktopSkin::Ember);
+const REFINED_COMFORTABLE: DesktopPresentationSelection = DesktopPresentationSelection::new(
+    DesktopDensity::Comfortable,
+    DesktopSkin::Refined,
+    DesktopColorScheme::System,
+);
+const GRAPHITE_COMPACT: DesktopPresentationSelection = DesktopPresentationSelection::new(
+    DesktopDensity::Compact,
+    DesktopSkin::Graphite,
+    DesktopColorScheme::Light,
+);
+const EMBER_ULTRA_COMPACT: DesktopPresentationSelection = DesktopPresentationSelection::new(
+    DesktopDensity::UltraCompact,
+    DesktopSkin::Ember,
+    DesktopColorScheme::Dark,
+);
 
 #[test]
 fn selection_is_complete_checked_and_revisioned_across_both_axes() {
@@ -23,15 +33,32 @@ fn selection_is_complete_checked_and_revisioned_across_both_axes() {
     );
     assert_eq!(
         style.selection(),
-        DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Refined)
+        DesktopPresentationSelection::new(
+            DesktopDensity::Compact,
+            DesktopSkin::Refined,
+            DesktopColorScheme::System,
+        )
     );
     assert_eq!(style.revision().get(), 1);
     assert_eq!(
         style.select_skin_index(1),
         DesktopPresentationApplyOutcome::Applied
     );
-    assert_eq!(style.selection(), GRAPHITE_COMPACT);
+    assert_eq!(
+        style.selection(),
+        DesktopPresentationSelection::new(
+            DesktopDensity::Compact,
+            DesktopSkin::Graphite,
+            DesktopColorScheme::System,
+        )
+    );
     assert_eq!(style.revision().get(), 2);
+    assert_eq!(
+        style.select_color_scheme_index(1),
+        DesktopPresentationApplyOutcome::Applied
+    );
+    assert_eq!(style.selection(), GRAPHITE_COMPACT);
+    assert_eq!(style.revision().get(), 3);
     assert_eq!(
         style.select_skin_index(1),
         DesktopPresentationApplyOutcome::Unchanged
@@ -83,8 +110,11 @@ fn admission_receives_one_complete_selection_and_same_not_saved_value_retries() 
         }),
         DesktopPresentationApplyOutcome::Applied
     );
-    let graphite_comfortable =
-        DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Graphite);
+    let graphite_comfortable = DesktopPresentationSelection::new(
+        DesktopDensity::Comfortable,
+        DesktopSkin::Graphite,
+        DesktopColorScheme::System,
+    );
     assert_eq!(admitted, Some(graphite_comfortable));
     assert_eq!(style.selection(), graphite_comfortable);
     assert_eq!(style.persistence(), DesktopPresentationPersistence::Saving);
@@ -114,6 +144,10 @@ fn stale_terminal_observations_cannot_overwrite_newer_mixed_axis_selection() {
     );
     assert_eq!(
         style.select_skin_index_if_admitted(2, |_| true),
+        DesktopPresentationApplyOutcome::Applied
+    );
+    assert_eq!(
+        style.select_color_scheme_index_if_admitted(2, |_| true),
         DesktopPresentationApplyOutcome::Applied
     );
     assert_eq!(style.selection(), EMBER_ULTRA_COMPACT);

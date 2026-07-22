@@ -589,7 +589,13 @@ impl DesktopShell {
             Arc::clone(&presentation_style),
             intent_sink.clone(),
         );
-        wire_presentation_skin(&window, Arc::clone(&presentation_style), intent_sink);
+        wire_presentation_skin(
+            &window,
+            Arc::clone(&presentation_style),
+            intent_sink.clone(),
+        );
+        wire_presentation_color_scheme(&window, Arc::clone(&presentation_style), intent_sink);
+        wire_system_color_scheme_observation(&window, Arc::clone(&presentation_style));
         Ok(Self {
             window,
             _presentation_style: presentation_style,
@@ -770,15 +776,20 @@ impl DesktopShell {
 }
 
 fn apply_presentation_style(window: &MainWindow, style: DesktopPresentationStyle) {
-    window.set_presentation_palette(ui_palette(style.skin()));
+    window.set_presentation_palette(ui_palette(style.skin(), style.effective_color_scheme()));
     window.set_presentation_skin_id(style.skin().slint_index());
     window.set_presentation_density_id(style.density().slint_index());
+    window.set_presentation_color_scheme_id(style.color_scheme().slint_index());
+    window.set_presentation_effective_color_scheme_id(style.effective_color_scheme().slint_index());
     window.set_presentation_revision(style.revision().get().to_string().into());
     window.set_presentation_persistence_state(style.persistence().stable_code().into());
 }
 
-fn ui_palette(skin: crate::DesktopSkin) -> UiPalette {
-    let tokens = skin.color_tokens();
+fn ui_palette(
+    skin: crate::DesktopSkin,
+    color_scheme: crate::DesktopEffectiveColorScheme,
+) -> UiPalette {
+    let tokens = skin.color_tokens(color_scheme);
     UiPalette {
         background: ui_color(tokens.background()),
         surface: ui_color(tokens.surface()),
@@ -900,6 +911,49 @@ fn wire_presentation_skin(
     });
 }
 
+fn wire_presentation_color_scheme(
+    window: &MainWindow,
+    presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
+    intent_sink: Rc<dyn DesktopIntentSink>,
+) {
+    let weak_window = window.as_weak();
+    window.on_select_presentation_color_scheme(move |index| {
+        let Some(next_style) =
+            select_presentation_color_scheme_if_admitted(&presentation_style, index, &intent_sink)
+        else {
+            return;
+        };
+        if let Some(window) = weak_window.upgrade() {
+            apply_presentation_style(&window, next_style);
+        }
+    });
+}
+
+fn wire_system_color_scheme_observation(
+    window: &MainWindow,
+    presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
+) {
+    let weak_window = window.as_weak();
+    let observed_style = Arc::clone(&presentation_style);
+    window.on_system_color_scheme_observed(move |index| {
+        let Some(observed) = crate::DesktopSystemColorScheme::from_slint_index(index) else {
+            return;
+        };
+        let Ok(mut style) = observed_style.lock() else {
+            return;
+        };
+        if style.observe_system_color_scheme(observed) != DesktopPresentationApplyOutcome::Applied {
+            return;
+        }
+        let next_style = *style;
+        drop(style);
+        if let Some(window) = weak_window.upgrade() {
+            apply_presentation_style(&window, next_style);
+        }
+    });
+    window.invoke_system_color_scheme_observed(window.get_observed_system_color_scheme_id());
+}
+
 fn select_presentation_density_if_admitted(
     presentation_style: &Arc<Mutex<DesktopPresentationStyle>>,
     index: i32,
@@ -933,6 +987,31 @@ fn select_presentation_skin_if_admitted(
     let captured = *presentation_style.lock().ok()?;
     let mut selected = captured;
     if selected.select_skin_index_if_admitted(index, |selection| {
+        matches!(
+            intent_sink.submit(DesktopIntent::UpdatePresentation(selection)),
+            crate::DesktopIntentAdmission::Started
+                | crate::DesktopIntentAdmission::Queued
+                | crate::DesktopIntentAdmission::Coalesced
+        )
+    }) != DesktopPresentationApplyOutcome::Applied
+    {
+        return None;
+    }
+    let mut current = presentation_style.lock().ok()?;
+    if *current == captured {
+        *current = selected;
+    }
+    Some(*current)
+}
+
+fn select_presentation_color_scheme_if_admitted(
+    presentation_style: &Arc<Mutex<DesktopPresentationStyle>>,
+    index: i32,
+    intent_sink: &Rc<dyn DesktopIntentSink>,
+) -> Option<DesktopPresentationStyle> {
+    let captured = *presentation_style.lock().ok()?;
+    let mut selected = captured;
+    if selected.select_color_scheme_index_if_admitted(index, |selection| {
         matches!(
             intent_sink.submit(DesktopIntent::UpdatePresentation(selection)),
             crate::DesktopIntentAdmission::Started
@@ -3391,14 +3470,14 @@ mod duration_tests {
         wire_presentation_density,
     };
     use crate::{
-        DesktopBackupPolicy, DesktopBenefitExpiry, DesktopDensity, DesktopIntent,
-        DesktopIntentAdmission, DesktopIntentSink, DesktopOperationKind, DesktopOperationPhase,
-        DesktopOperationSnapshot, DesktopPresentationSelection, DesktopPresentationSettings,
-        DesktopPresentationStyle, DesktopReliableStateHealth, DesktopReliableStateInput,
-        DesktopReliableStateSummary, DesktopReminderPolicy, DesktopReminderSyncState,
-        DesktopSessionPageIntent, DesktopSessionPageIntentAdmission, DesktopSessionPageIntentSink,
-        DesktopSkin, UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
-        UnavailableDesktopSessionPageIntentSink,
+        DesktopBackupPolicy, DesktopBenefitExpiry, DesktopColorScheme, DesktopDensity,
+        DesktopIntent, DesktopIntentAdmission, DesktopIntentSink, DesktopOperationKind,
+        DesktopOperationPhase, DesktopOperationSnapshot, DesktopPresentationSelection,
+        DesktopPresentationSettings, DesktopPresentationStyle, DesktopReliableStateHealth,
+        DesktopReliableStateInput, DesktopReliableStateSummary, DesktopReminderPolicy,
+        DesktopReminderSyncState, DesktopSessionPageIntent, DesktopSessionPageIntentAdmission,
+        DesktopSessionPageIntentSink, DesktopSkin, UnavailableDesktopIntentSink,
+        UnavailableDesktopSessionDetailIntentSink, UnavailableDesktopSessionPageIntentSink,
     };
     use tokenmaster_product::ProductReducer;
 
@@ -3459,7 +3538,7 @@ mod duration_tests {
             "healthy",
             DesktopBackupPolicy::disabled(),
             DesktopReminderPolicy::unavailable(),
-            DesktopPresentationSettings::new(density, skin),
+            DesktopPresentationSettings::new(density, skin, DesktopColorScheme::System),
             None,
             None,
             None,
@@ -3510,7 +3589,11 @@ mod duration_tests {
         i_slint_backend_testing::init_no_event_loop();
         let window = MainWindow::new().map_err(|_| String::from("window"))?;
         let style = Arc::new(Mutex::new(DesktopPresentationStyle::from_persisted(
-            DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Refined),
+            DesktopPresentationSelection::new(
+                DesktopDensity::Comfortable,
+                DesktopSkin::Refined,
+                DesktopColorScheme::System,
+            ),
         )));
         let initial_style = *style.lock().map_err(|_| String::from("initial style"))?;
         apply_presentation_style(&window, initial_style);
@@ -3529,7 +3612,11 @@ mod duration_tests {
         assert_eq!(reentrant_style.density(), DesktopDensity::UltraCompact);
         assert_eq!(
             reentrant_style.persisted_selection(),
-            DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Refined)
+            DesktopPresentationSelection::new(
+                DesktopDensity::Comfortable,
+                DesktopSkin::Refined,
+                DesktopColorScheme::System,
+            )
         );
         assert_eq!(reentrant_style.revision().get(), 1);
         assert_eq!(

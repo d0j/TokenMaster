@@ -26,12 +26,12 @@ use tokenmaster_state::{
     BackupMetadata, BackupPackage, BackupPassphrase, BackupPolicy, BackupPurpose, BootstrapOutcome,
     BootstrapReport, CatalogHealth, CatalogSelectionBinding, ConfigPackage, EncryptedBackupPackage,
     MAX_CONFIG_PACKAGE_BYTES, MaintenanceExecution, MaintenancePermit, MaintenanceSourceState,
-    PendingMigration, PortableSettings, PreparedBootstrap, PresentationDensity,
-    PresentationSettings, PresentationSkin, RecoveryBoundary, RecoveryCoordinator,
-    RecoveryJournalLoad, RecoveryJournalStore, RecoveryLaunchDecision, RecoveryPhase,
-    RecoveryReceipt, RestoreMode, RestoreSafety, RetentionAdmission, RetentionPolicy, RunSession,
-    RunStateStore, SettingsCommitReceipt, SettingsImportPreview, SettingsStore, SettingsValue,
-    StateBootstrap, StateErrorCode, SystemMaintenanceClock,
+    PendingMigration, PortableSettings, PreparedBootstrap, PresentationColorScheme,
+    PresentationDensity, PresentationSettings, PresentationSkin, RecoveryBoundary,
+    RecoveryCoordinator, RecoveryJournalLoad, RecoveryJournalStore, RecoveryLaunchDecision,
+    RecoveryPhase, RecoveryReceipt, RestoreMode, RestoreSafety, RetentionAdmission,
+    RetentionPolicy, RunSession, RunStateStore, SettingsCommitReceipt, SettingsImportPreview,
+    SettingsStore, SettingsValue, StateBootstrap, StateErrorCode, SystemMaintenanceClock,
 };
 
 #[cfg(test)]
@@ -269,65 +269,23 @@ impl ApplicationStateOwner {
             RecoveryJournalLoad::Invalid => return Err(ApplicationError::state()),
         };
         let health = reliable_health(outcome, corrupt_count != 0, settings.health_code());
-        let presentation = match (
-            settings.value().portable().presentation().density(),
-            settings.value().portable().presentation().skin(),
-        ) {
-            (PresentationDensity::Comfortable, PresentationSkin::Refined) => {
-                DesktopPresentationSettings::new(
-                    tokenmaster_desktop::DesktopDensity::Comfortable,
-                    tokenmaster_desktop::DesktopSkin::Refined,
-                )
-            }
-            (PresentationDensity::Comfortable, PresentationSkin::Graphite) => {
-                DesktopPresentationSettings::new(
-                    tokenmaster_desktop::DesktopDensity::Comfortable,
-                    tokenmaster_desktop::DesktopSkin::Graphite,
-                )
-            }
-            (PresentationDensity::Comfortable, PresentationSkin::Ember) => {
-                DesktopPresentationSettings::new(
-                    tokenmaster_desktop::DesktopDensity::Comfortable,
-                    tokenmaster_desktop::DesktopSkin::Ember,
-                )
-            }
-            (PresentationDensity::Compact, PresentationSkin::Refined) => {
-                DesktopPresentationSettings::new(
-                    tokenmaster_desktop::DesktopDensity::Compact,
-                    tokenmaster_desktop::DesktopSkin::Refined,
-                )
-            }
-            (PresentationDensity::Compact, PresentationSkin::Graphite) => {
-                DesktopPresentationSettings::new(
-                    tokenmaster_desktop::DesktopDensity::Compact,
-                    tokenmaster_desktop::DesktopSkin::Graphite,
-                )
-            }
-            (PresentationDensity::Compact, PresentationSkin::Ember) => {
-                DesktopPresentationSettings::new(
-                    tokenmaster_desktop::DesktopDensity::Compact,
-                    tokenmaster_desktop::DesktopSkin::Ember,
-                )
-            }
-            (PresentationDensity::UltraCompact, PresentationSkin::Refined) => {
-                DesktopPresentationSettings::new(
-                    tokenmaster_desktop::DesktopDensity::UltraCompact,
-                    tokenmaster_desktop::DesktopSkin::Refined,
-                )
-            }
-            (PresentationDensity::UltraCompact, PresentationSkin::Graphite) => {
-                DesktopPresentationSettings::new(
-                    tokenmaster_desktop::DesktopDensity::UltraCompact,
-                    tokenmaster_desktop::DesktopSkin::Graphite,
-                )
-            }
-            (PresentationDensity::UltraCompact, PresentationSkin::Ember) => {
-                DesktopPresentationSettings::new(
-                    tokenmaster_desktop::DesktopDensity::UltraCompact,
-                    tokenmaster_desktop::DesktopSkin::Ember,
-                )
-            }
+        let state_presentation = settings.value().portable().presentation();
+        let density = match state_presentation.density() {
+            PresentationDensity::Comfortable => tokenmaster_desktop::DesktopDensity::Comfortable,
+            PresentationDensity::Compact => tokenmaster_desktop::DesktopDensity::Compact,
+            PresentationDensity::UltraCompact => tokenmaster_desktop::DesktopDensity::UltraCompact,
         };
+        let skin = match state_presentation.skin() {
+            PresentationSkin::Refined => tokenmaster_desktop::DesktopSkin::Refined,
+            PresentationSkin::Graphite => tokenmaster_desktop::DesktopSkin::Graphite,
+            PresentationSkin::Ember => tokenmaster_desktop::DesktopSkin::Ember,
+        };
+        let color_scheme = match state_presentation.color_scheme() {
+            PresentationColorScheme::System => tokenmaster_desktop::DesktopColorScheme::System,
+            PresentationColorScheme::Light => tokenmaster_desktop::DesktopColorScheme::Light,
+            PresentationColorScheme::Dark => tokenmaster_desktop::DesktopColorScheme::Dark,
+        };
+        let presentation = DesktopPresentationSettings::new(density, skin, color_scheme);
         let summary = DesktopReliableStateSummary::new_with_settings(
             health,
             matches!(

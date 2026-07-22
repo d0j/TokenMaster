@@ -2,7 +2,7 @@ use core::fmt;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::presentation_style::{DesktopDensity, DesktopPresentationSelection};
+use crate::presentation_style::{DesktopColorScheme, DesktopDensity, DesktopPresentationSelection};
 use crate::skin::DesktopSkin;
 
 pub const MAX_DESKTOP_RESTORE_POINTS: usize = 15;
@@ -112,17 +112,30 @@ pub struct DesktopBackupPolicy {
 pub struct DesktopPresentationSettings {
     density: DesktopDensity,
     skin: DesktopSkin,
+    color_scheme: DesktopColorScheme,
 }
 
 impl DesktopPresentationSettings {
     #[must_use]
-    pub const fn new(density: DesktopDensity, skin: DesktopSkin) -> Self {
-        Self { density, skin }
+    pub const fn new(
+        density: DesktopDensity,
+        skin: DesktopSkin,
+        color_scheme: DesktopColorScheme,
+    ) -> Self {
+        Self {
+            density,
+            skin,
+            color_scheme,
+        }
     }
 
     #[must_use]
     pub const fn comfortable() -> Self {
-        Self::new(DesktopDensity::Comfortable, DesktopSkin::Refined)
+        Self::new(
+            DesktopDensity::Comfortable,
+            DesktopSkin::Refined,
+            DesktopColorScheme::System,
+        )
     }
 
     #[must_use]
@@ -136,8 +149,13 @@ impl DesktopPresentationSettings {
     }
 
     #[must_use]
+    pub const fn color_scheme(self) -> DesktopColorScheme {
+        self.color_scheme
+    }
+
+    #[must_use]
     pub const fn selection(self) -> DesktopPresentationSelection {
-        DesktopPresentationSelection::new(self.density, self.skin)
+        DesktopPresentationSelection::new(self.density, self.skin, self.color_scheme)
     }
 }
 

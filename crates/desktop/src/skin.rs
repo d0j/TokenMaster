@@ -172,11 +172,17 @@ impl DesktopSkin {
     }
 
     #[must_use]
-    pub const fn color_tokens(self) -> DesktopColorTokens {
-        match self {
-            Self::Refined => refined_tokens(),
-            Self::Graphite => graphite_tokens(),
-            Self::Ember => ember_tokens(),
+    pub const fn color_tokens(
+        self,
+        color_scheme: crate::DesktopEffectiveColorScheme,
+    ) -> DesktopColorTokens {
+        match (self, color_scheme) {
+            (Self::Refined, crate::DesktopEffectiveColorScheme::Light) => refined_light_tokens(),
+            (Self::Graphite, crate::DesktopEffectiveColorScheme::Light) => graphite_light_tokens(),
+            (Self::Ember, crate::DesktopEffectiveColorScheme::Light) => ember_light_tokens(),
+            (Self::Refined, crate::DesktopEffectiveColorScheme::Dark) => refined_tokens(),
+            (Self::Graphite, crate::DesktopEffectiveColorScheme::Dark) => graphite_tokens(),
+            (Self::Ember, crate::DesktopEffectiveColorScheme::Dark) => ember_tokens(),
         }
     }
 }
@@ -205,6 +211,26 @@ const fn refined_tokens() -> DesktopColorTokens {
     }
 }
 
+const fn refined_light_tokens() -> DesktopColorTokens {
+    DesktopColorTokens {
+        background: rgb(246, 248, 252),
+        surface: rgb(255, 255, 255),
+        surface_raised: rgb(241, 245, 249),
+        surface_subtle: rgb(236, 242, 248),
+        border: rgb(190, 201, 215),
+        text_primary: rgb(17, 24, 39),
+        text_secondary: rgb(75, 85, 99),
+        accent: rgb(0, 80, 125),
+        accent_subtle: rgb(219, 238, 248),
+        accent_secondary: rgb(91, 33, 182),
+        accent_tertiary: rgb(126, 23, 139),
+        ready: rgb(0, 95, 55),
+        waiting: rgb(65, 75, 90),
+        degraded: rgb(120, 65, 0),
+        unavailable: rgb(155, 25, 25),
+    }
+}
+
 const fn graphite_tokens() -> DesktopColorTokens {
     DesktopColorTokens {
         background: rgb(16, 18, 22),
@@ -225,6 +251,26 @@ const fn graphite_tokens() -> DesktopColorTokens {
     }
 }
 
+const fn graphite_light_tokens() -> DesktopColorTokens {
+    DesktopColorTokens {
+        background: rgb(245, 246, 248),
+        surface: rgb(255, 255, 255),
+        surface_raised: rgb(238, 240, 243),
+        surface_subtle: rgb(232, 235, 239),
+        border: rgb(182, 188, 198),
+        text_primary: rgb(22, 25, 30),
+        text_secondary: rgb(72, 78, 88),
+        accent: rgb(21, 78, 145),
+        accent_subtle: rgb(218, 230, 246),
+        accent_secondary: rgb(70, 52, 168),
+        accent_tertiary: rgb(112, 35, 143),
+        ready: rgb(0, 94, 59),
+        waiting: rgb(63, 72, 84),
+        degraded: rgb(115, 67, 0),
+        unavailable: rgb(151, 29, 37),
+    }
+}
+
 const fn ember_tokens() -> DesktopColorTokens {
     DesktopColorTokens {
         background: rgb(20, 13, 10),
@@ -242,5 +288,25 @@ const fn ember_tokens() -> DesktopColorTokens {
         waiting: rgb(189, 169, 158),
         degraded: rgb(244, 200, 111),
         unavailable: rgb(245, 143, 134),
+    }
+}
+
+const fn ember_light_tokens() -> DesktopColorTokens {
+    DesktopColorTokens {
+        background: rgb(255, 248, 242),
+        surface: rgb(255, 255, 255),
+        surface_raised: rgb(250, 239, 230),
+        surface_subtle: rgb(247, 233, 222),
+        border: rgb(211, 184, 165),
+        text_primary: rgb(43, 25, 18),
+        text_secondary: rgb(91, 65, 52),
+        accent: rgb(139, 46, 0),
+        accent_subtle: rgb(249, 222, 204),
+        accent_secondary: rgb(126, 71, 0),
+        accent_tertiary: rgb(139, 35, 91),
+        ready: rgb(20, 96, 54),
+        waiting: rgb(82, 67, 59),
+        degraded: rgb(121, 66, 0),
+        unavailable: rgb(158, 31, 24),
     }
 }

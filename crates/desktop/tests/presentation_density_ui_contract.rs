@@ -75,7 +75,11 @@ fn reliable_state_with_presentation_and_operation(
         "healthy",
         DesktopBackupPolicy::disabled(),
         DesktopReminderPolicy::unavailable(),
-        DesktopPresentationSettings::new(density, skin),
+        DesktopPresentationSettings::new(
+            density,
+            skin,
+            tokenmaster_desktop::DesktopColorScheme::System,
+        ),
         None,
         None,
         None,
@@ -116,6 +120,7 @@ fn density_selector_submits_the_current_non_default_skin_without_a_skin_callback
         Some(DesktopPresentationSelection::new(
             DesktopDensity::UltraCompact,
             DesktopSkin::Graphite,
+            tokenmaster_desktop::DesktopColorScheme::System
         ))
     );
 }

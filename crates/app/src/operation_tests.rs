@@ -133,7 +133,11 @@ fn bare_presentation_command_is_rejected_before_worker_or_coordinator_mutation()
         worker
             .submitter()
             .submit_request(ApplicationOperationRequest::update_presentation(
-                DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Graphite),
+                DesktopPresentationSelection::new(
+                    DesktopDensity::Compact,
+                    DesktopSkin::Graphite,
+                    tokenmaster_desktop::DesktopColorScheme::System
+                ),
             )),
         ApplicationCommandAdmission::Started(_)
     ));
@@ -580,18 +584,24 @@ fn presentation_follow_up_replaces_only_the_pending_complete_payload() {
     .expect("worker");
     let submitter = worker.submitter();
 
-    let ApplicationCommandAdmission::Started(first) =
-        submitter.submit_request(ApplicationOperationRequest::update_presentation(
-            DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Refined),
-        ))
-    else {
+    let ApplicationCommandAdmission::Started(first) = submitter.submit_request(
+        ApplicationOperationRequest::update_presentation(DesktopPresentationSelection::new(
+            DesktopDensity::Compact,
+            DesktopSkin::Refined,
+            tokenmaster_desktop::DesktopColorScheme::System,
+        )),
+    ) else {
         panic!("first density save must start");
     };
     assert_eq!(
         receive(&started_rx),
         (
             first.id(),
-            DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Refined)
+            DesktopPresentationSelection::new(
+                DesktopDensity::Compact,
+                DesktopSkin::Refined,
+                tokenmaster_desktop::DesktopColorScheme::System
+            )
         )
     );
 
@@ -599,7 +609,11 @@ fn presentation_follow_up_replaces_only_the_pending_complete_payload() {
         request_id: pending,
         active_request_id,
     } = submitter.submit_request(ApplicationOperationRequest::update_presentation(
-        DesktopPresentationSelection::new(DesktopDensity::UltraCompact, DesktopSkin::Graphite),
+        DesktopPresentationSelection::new(
+            DesktopDensity::UltraCompact,
+            DesktopSkin::Graphite,
+            tokenmaster_desktop::DesktopColorScheme::System,
+        ),
     ))
     else {
         panic!("middle density save must queue");
@@ -607,7 +621,11 @@ fn presentation_follow_up_replaces_only_the_pending_complete_payload() {
     assert_eq!(active_request_id, first.id());
     assert_eq!(
         submitter.submit_request(ApplicationOperationRequest::update_presentation(
-            DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Ember),
+            DesktopPresentationSelection::new(
+                DesktopDensity::Comfortable,
+                DesktopSkin::Ember,
+                tokenmaster_desktop::DesktopColorScheme::System
+            ),
         )),
         ApplicationCommandAdmission::Coalesced {
             request_id: pending,
@@ -623,7 +641,11 @@ fn presentation_follow_up_replaces_only_the_pending_complete_payload() {
         receive(&started_rx),
         (
             pending,
-            DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Ember)
+            DesktopPresentationSelection::new(
+                DesktopDensity::Comfortable,
+                DesktopSkin::Ember,
+                tokenmaster_desktop::DesktopColorScheme::System
+            )
         )
     );
     wait_until(|| {
@@ -634,8 +656,16 @@ fn presentation_follow_up_replaces_only_the_pending_complete_payload() {
     assert_eq!(
         *executed.lock().expect("execution log"),
         vec![
-            DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Refined),
-            DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Ember)
+            DesktopPresentationSelection::new(
+                DesktopDensity::Compact,
+                DesktopSkin::Refined,
+                tokenmaster_desktop::DesktopColorScheme::System
+            ),
+            DesktopPresentationSelection::new(
+                DesktopDensity::Comfortable,
+                DesktopSkin::Ember,
+                tokenmaster_desktop::DesktopColorScheme::System
+            )
         ]
     );
     assert_eq!(
@@ -666,42 +696,45 @@ fn ten_thousand_presentation_updates_keep_one_latest_payload() {
     let submitter = worker.submitter();
     assert!(matches!(
         submitter.submit_request(ApplicationOperationRequest::update_presentation(
-            DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Refined),
+            DesktopPresentationSelection::new(
+                DesktopDensity::Compact,
+                DesktopSkin::Refined,
+                tokenmaster_desktop::DesktopColorScheme::System
+            ),
         )),
         ApplicationCommandAdmission::Started(_)
     ));
     assert_eq!(
         receive(&started_rx),
-        DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Refined)
+        DesktopPresentationSelection::new(
+            DesktopDensity::Compact,
+            DesktopSkin::Refined,
+            tokenmaster_desktop::DesktopColorScheme::System
+        )
     );
 
-    let mut final_selection =
-        DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Refined);
+    let mut final_selection = DesktopPresentationSelection::new(
+        DesktopDensity::Comfortable,
+        DesktopSkin::Refined,
+        tokenmaster_desktop::DesktopColorScheme::System,
+    );
     for index in 0..10_000 {
-        final_selection = match index % 9 {
-            0 => {
-                DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Refined)
-            }
-            1 => DesktopPresentationSelection::new(
-                DesktopDensity::Comfortable,
-                DesktopSkin::Graphite,
-            ),
-            2 => DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Ember),
-            3 => DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Refined),
-            4 => DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Graphite),
-            5 => DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Ember),
-            6 => DesktopPresentationSelection::new(
-                DesktopDensity::UltraCompact,
-                DesktopSkin::Refined,
-            ),
-            7 => DesktopPresentationSelection::new(
-                DesktopDensity::UltraCompact,
-                DesktopSkin::Graphite,
-            ),
-            _ => {
-                DesktopPresentationSelection::new(DesktopDensity::UltraCompact, DesktopSkin::Ember)
-            }
+        let density = match index % 3 {
+            0 => DesktopDensity::Comfortable,
+            1 => DesktopDensity::Compact,
+            _ => DesktopDensity::UltraCompact,
         };
+        let skin = match (index / 3) % 3 {
+            0 => DesktopSkin::Refined,
+            1 => DesktopSkin::Graphite,
+            _ => DesktopSkin::Ember,
+        };
+        let color_scheme = match (index / 9) % 3 {
+            0 => tokenmaster_desktop::DesktopColorScheme::System,
+            1 => tokenmaster_desktop::DesktopColorScheme::Light,
+            _ => tokenmaster_desktop::DesktopColorScheme::Dark,
+        };
+        final_selection = DesktopPresentationSelection::new(density, skin, color_scheme);
         assert!(matches!(
             submitter.submit_request(ApplicationOperationRequest::update_presentation(
                 final_selection,
@@ -724,7 +757,11 @@ fn ten_thousand_presentation_updates_keep_one_latest_payload() {
     assert_eq!(
         *executed.lock().expect("execution log"),
         vec![
-            DesktopPresentationSelection::new(DesktopDensity::Compact, DesktopSkin::Refined),
+            DesktopPresentationSelection::new(
+                DesktopDensity::Compact,
+                DesktopSkin::Refined,
+                tokenmaster_desktop::DesktopColorScheme::System
+            ),
             final_selection
         ]
     );

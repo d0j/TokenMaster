@@ -840,7 +840,8 @@ fn presentation_intent_routes_to_the_exact_typed_operation() {
         sink.submit(DesktopIntent::UpdatePresentation(
             tokenmaster_desktop::DesktopPresentationSelection::new(
                 tokenmaster_desktop::DesktopDensity::UltraCompact,
-                tokenmaster_desktop::DesktopSkin::Graphite
+                tokenmaster_desktop::DesktopSkin::Graphite,
+                tokenmaster_desktop::DesktopColorScheme::Dark
             ),
         )),
         DesktopIntentAdmission::Started
@@ -856,14 +857,16 @@ fn presentation_intent_routes_to_the_exact_typed_operation() {
         update.selection(),
         tokenmaster_desktop::DesktopPresentationSelection::new(
             tokenmaster_desktop::DesktopDensity::UltraCompact,
-            tokenmaster_desktop::DesktopSkin::Graphite
+            tokenmaster_desktop::DesktopSkin::Graphite,
+            tokenmaster_desktop::DesktopColorScheme::Dark
         )
     );
     assert_eq!(
         update.into_state_presentation(),
         tokenmaster_state::PresentationSettings::new(
             tokenmaster_state::PresentationDensity::UltraCompact,
-            tokenmaster_state::PresentationSkin::Graphite
+            tokenmaster_state::PresentationSkin::Graphite,
+            tokenmaster_state::PresentationColorScheme::Dark
         )
     );
     assert_eq!(
@@ -930,6 +933,7 @@ fn presentation_execution_persists_and_projects_the_confirmed_operation() {
         tokenmaster_desktop::DesktopPresentationSelection::new(
             tokenmaster_desktop::DesktopDensity::Compact,
             tokenmaster_desktop::DesktopSkin::Ember,
+            tokenmaster_desktop::DesktopColorScheme::Light,
         ),
     )
     .into_parts();
@@ -962,13 +966,21 @@ fn presentation_execution_persists_and_projects_the_confirmed_operation() {
         projection.presentation().skin(),
         tokenmaster_desktop::DesktopSkin::Ember
     );
+    assert_eq!(
+        projection.presentation().color_scheme(),
+        tokenmaster_desktop::DesktopColorScheme::Light
+    );
     assert_eq!(projection.operation(), Some(completion));
     let persisted = store.load().expect("settings after presentation save");
     assert_eq!(persisted.generation(), Some(1));
-    assert_eq!(SETTINGS_SCHEMA_VERSION, 3);
+    assert_eq!(SETTINGS_SCHEMA_VERSION, 4);
     assert_eq!(
         persisted.value().portable().presentation(),
-        &PresentationSettings::new(PresentationDensity::Compact, PresentationSkin::Ember)
+        &PresentationSettings::new(
+            PresentationDensity::Compact,
+            PresentationSkin::Ember,
+            tokenmaster_state::PresentationColorScheme::Light
+        )
     );
 }
 
@@ -991,6 +1003,7 @@ fn presentation_save_failure_keeps_the_exact_old_value_generation_and_failed_pro
             PresentationSettings::new(
                 PresentationDensity::UltraCompact,
                 PresentationSkin::Graphite,
+                tokenmaster_state::PresentationColorScheme::System,
             ),
             || {},
         )
@@ -1010,7 +1023,11 @@ fn presentation_save_failure_keeps_the_exact_old_value_generation_and_failed_pro
     let callback_count = std::cell::Cell::new(0_u8);
     let execution = execute_state_command(state.update_presentation(
         &permit,
-        PresentationSettings::new(PresentationDensity::Compact, PresentationSkin::Ember),
+        PresentationSettings::new(
+            PresentationDensity::Compact,
+            PresentationSkin::Ember,
+            tokenmaster_state::PresentationColorScheme::System,
+        ),
         || {
             callback_count.set(callback_count.get() + 1);
             fs::create_dir(&blocked_slot).expect("block exact next settings slot at save boundary");

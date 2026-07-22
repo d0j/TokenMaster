@@ -1,6 +1,8 @@
 use std::mem::size_of;
 
-use tokenmaster_desktop::{DesktopColorTokens, DesktopRgb, DesktopSkin};
+use tokenmaster_desktop::{
+    DesktopColorTokens, DesktopEffectiveColorScheme, DesktopRgb, DesktopSkin,
+};
 
 #[test]
 fn built_in_skins_have_fixed_keys_and_slint_indices() {
@@ -86,8 +88,82 @@ fn built_in_skins_expose_the_exact_fifteen_role_rgb_palettes() {
     ];
 
     for (skin, rgb) in expected {
-        let palette = skin.color_tokens();
+        let palette = skin.color_tokens(DesktopEffectiveColorScheme::Dark);
         assert_eq!(palette.role_count(), 15);
+        assert_eq!(
+            palette.rgb_roles(),
+            rgb.map(|(red, green, blue)| DesktopRgb::new(red, green, blue))
+        );
+    }
+}
+
+#[test]
+fn every_skin_has_an_exact_light_palette() {
+    let expected = [
+        (
+            DesktopSkin::Refined,
+            [
+                (246, 248, 252),
+                (255, 255, 255),
+                (241, 245, 249),
+                (236, 242, 248),
+                (190, 201, 215),
+                (17, 24, 39),
+                (75, 85, 99),
+                (0, 80, 125),
+                (219, 238, 248),
+                (91, 33, 182),
+                (126, 23, 139),
+                (0, 95, 55),
+                (65, 75, 90),
+                (120, 65, 0),
+                (155, 25, 25),
+            ],
+        ),
+        (
+            DesktopSkin::Graphite,
+            [
+                (245, 246, 248),
+                (255, 255, 255),
+                (238, 240, 243),
+                (232, 235, 239),
+                (182, 188, 198),
+                (22, 25, 30),
+                (72, 78, 88),
+                (21, 78, 145),
+                (218, 230, 246),
+                (70, 52, 168),
+                (112, 35, 143),
+                (0, 94, 59),
+                (63, 72, 84),
+                (115, 67, 0),
+                (151, 29, 37),
+            ],
+        ),
+        (
+            DesktopSkin::Ember,
+            [
+                (255, 248, 242),
+                (255, 255, 255),
+                (250, 239, 230),
+                (247, 233, 222),
+                (211, 184, 165),
+                (43, 25, 18),
+                (91, 65, 52),
+                (139, 46, 0),
+                (249, 222, 204),
+                (126, 71, 0),
+                (139, 35, 91),
+                (20, 96, 54),
+                (82, 67, 59),
+                (121, 66, 0),
+                (158, 31, 24),
+            ],
+        ),
+    ];
+
+    for (skin, rgb) in expected {
+        let palette = skin.color_tokens(DesktopEffectiveColorScheme::Light);
         assert_eq!(
             palette.rgb_roles(),
             rgb.map(|(red, green, blue)| DesktopRgb::new(red, green, blue))
@@ -109,7 +185,7 @@ fn palette_values_are_fixed_copy_data_with_meaningful_contrast() {
         DesktopSkin::Graphite,
         DesktopSkin::Ember,
     ] {
-        let palette = skin.color_tokens();
+        let palette = skin.color_tokens(DesktopEffectiveColorScheme::Dark);
         for foreground in [
             palette.text_primary(),
             palette.text_secondary(),
@@ -120,6 +196,18 @@ fn palette_values_are_fixed_copy_data_with_meaningful_contrast() {
             palette.unavailable(),
         ] {
             assert!(contrast_ratio(foreground, palette.surface()) > 6.8);
+        }
+        let light = skin.color_tokens(DesktopEffectiveColorScheme::Light);
+        for foreground in [
+            light.text_primary(),
+            light.text_secondary(),
+            light.accent(),
+            light.ready(),
+            light.waiting(),
+            light.degraded(),
+            light.unavailable(),
+        ] {
+            assert!(contrast_ratio(foreground, light.surface()) >= 4.5);
         }
     }
 

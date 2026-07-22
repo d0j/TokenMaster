@@ -1,6 +1,102 @@
 use crate::DesktopSkin;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopEffectiveColorScheme {
+    Light,
+    Dark,
+}
+
+impl DesktopEffectiveColorScheme {
+    #[must_use]
+    pub const fn stable_key(self) -> &'static str {
+        match self {
+            Self::Light => "light",
+            Self::Dark => "dark",
+        }
+    }
+
+    #[must_use]
+    pub const fn slint_index(self) -> i32 {
+        match self {
+            Self::Light => 1,
+            Self::Dark => 2,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopSystemColorScheme {
+    Unknown,
+    Light,
+    Dark,
+}
+
+impl DesktopSystemColorScheme {
+    #[must_use]
+    pub const fn from_slint_index(index: i32) -> Option<Self> {
+        match index {
+            0 => Some(Self::Unknown),
+            1 => Some(Self::Light),
+            2 => Some(Self::Dark),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopColorScheme {
+    System,
+    Light,
+    Dark,
+}
+
+impl DesktopColorScheme {
+    #[must_use]
+    pub const fn stable_key(self) -> &'static str {
+        match self {
+            Self::System => "system",
+            Self::Light => "light",
+            Self::Dark => "dark",
+        }
+    }
+
+    #[must_use]
+    pub const fn slint_index(self) -> i32 {
+        match self {
+            Self::System => 0,
+            Self::Light => 1,
+            Self::Dark => 2,
+        }
+    }
+
+    #[must_use]
+    pub const fn from_slint_index(index: i32) -> Option<Self> {
+        match index {
+            0 => Some(Self::System),
+            1 => Some(Self::Light),
+            2 => Some(Self::Dark),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn resolve(
+        self,
+        system_color_scheme: DesktopSystemColorScheme,
+    ) -> DesktopEffectiveColorScheme {
+        match (self, system_color_scheme) {
+            (Self::Light, _) | (Self::System, DesktopSystemColorScheme::Light) => {
+                DesktopEffectiveColorScheme::Light
+            }
+            (Self::Dark, _)
+            | (Self::System, DesktopSystemColorScheme::Dark | DesktopSystemColorScheme::Unknown) => {
+                DesktopEffectiveColorScheme::Dark
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DesktopDensity {
     Comfortable,
     Compact,
@@ -40,12 +136,21 @@ impl DesktopDensity {
 pub struct DesktopPresentationSelection {
     density: DesktopDensity,
     skin: DesktopSkin,
+    color_scheme: DesktopColorScheme,
 }
 
 impl DesktopPresentationSelection {
     #[must_use]
-    pub const fn new(density: DesktopDensity, skin: DesktopSkin) -> Self {
-        Self { density, skin }
+    pub const fn new(
+        density: DesktopDensity,
+        skin: DesktopSkin,
+        color_scheme: DesktopColorScheme,
+    ) -> Self {
+        Self {
+            density,
+            skin,
+            color_scheme,
+        }
     }
 
     #[must_use]
@@ -58,12 +163,21 @@ impl DesktopPresentationSelection {
         self.skin
     }
 
+    #[must_use]
+    pub const fn color_scheme(self) -> DesktopColorScheme {
+        self.color_scheme
+    }
+
     const fn with_density(self, density: DesktopDensity) -> Self {
-        Self::new(density, self.skin)
+        Self::new(density, self.skin, self.color_scheme)
     }
 
     const fn with_skin(self, skin: DesktopSkin) -> Self {
-        Self::new(self.density, skin)
+        Self::new(self.density, skin, self.color_scheme)
+    }
+
+    const fn with_color_scheme(self, color_scheme: DesktopColorScheme) -> Self {
+        Self::new(self.density, self.skin, color_scheme)
     }
 }
 
@@ -121,6 +235,7 @@ pub struct DesktopPresentationStyle {
     persisted_selection: DesktopPresentationSelection,
     revision: DesktopPresentationRevision,
     persistence: DesktopPresentationPersistence,
+    system_color_scheme: DesktopSystemColorScheme,
 }
 
 impl DesktopPresentationStyle {
@@ -131,6 +246,7 @@ impl DesktopPresentationStyle {
             persisted_selection: selection,
             revision: DesktopPresentationRevision::initial(),
             persistence: DesktopPresentationPersistence::Saved,
+            system_color_scheme: DesktopSystemColorScheme::Unknown,
         }
     }
 
@@ -152,6 +268,16 @@ impl DesktopPresentationStyle {
     #[must_use]
     pub const fn skin(self) -> DesktopSkin {
         self.selection.skin()
+    }
+
+    #[must_use]
+    pub const fn color_scheme(self) -> DesktopColorScheme {
+        self.selection.color_scheme()
+    }
+
+    #[must_use]
+    pub const fn effective_color_scheme(self) -> DesktopEffectiveColorScheme {
+        self.color_scheme().resolve(self.system_color_scheme)
     }
 
     #[must_use]
@@ -178,6 +304,17 @@ impl DesktopPresentationStyle {
         self.select(self.selection.with_skin(skin), false, |_| true)
     }
 
+    pub fn select_color_scheme_index(&mut self, index: i32) -> DesktopPresentationApplyOutcome {
+        let Some(color_scheme) = DesktopColorScheme::from_slint_index(index) else {
+            return DesktopPresentationApplyOutcome::Rejected;
+        };
+        self.select(
+            self.selection.with_color_scheme(color_scheme),
+            false,
+            |_| true,
+        )
+    }
+
     pub fn select_density_index_if_admitted(
         &mut self,
         index: i32,
@@ -198,6 +335,33 @@ impl DesktopPresentationStyle {
             return DesktopPresentationApplyOutcome::Rejected;
         };
         self.select(self.selection.with_skin(skin), true, admit)
+    }
+
+    pub fn select_color_scheme_index_if_admitted(
+        &mut self,
+        index: i32,
+        admit: impl FnOnce(DesktopPresentationSelection) -> bool,
+    ) -> DesktopPresentationApplyOutcome {
+        let Some(color_scheme) = DesktopColorScheme::from_slint_index(index) else {
+            return DesktopPresentationApplyOutcome::Rejected;
+        };
+        self.select(self.selection.with_color_scheme(color_scheme), true, admit)
+    }
+
+    pub fn observe_system_color_scheme(
+        &mut self,
+        system_color_scheme: DesktopSystemColorScheme,
+    ) -> DesktopPresentationApplyOutcome {
+        if !matches!(self.color_scheme(), DesktopColorScheme::System) {
+            return DesktopPresentationApplyOutcome::Unchanged;
+        }
+        let previous = self.effective_color_scheme();
+        self.system_color_scheme = system_color_scheme;
+        if self.effective_color_scheme() == previous {
+            DesktopPresentationApplyOutcome::Unchanged
+        } else {
+            DesktopPresentationApplyOutcome::Applied
+        }
     }
 
     pub fn observe_persisted(
@@ -316,17 +480,21 @@ mod tests {
         DesktopDensity, DesktopPresentationApplyOutcome, DesktopPresentationPersistence,
         DesktopPresentationRevision, DesktopPresentationSelection, DesktopPresentationStyle,
     };
-    use crate::DesktopSkin;
+    use crate::{DesktopColorScheme, DesktopSkin, DesktopSystemColorScheme};
 
     #[test]
     fn revision_exhaustion_preserves_every_complete_style_field() {
-        let selection =
-            DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Refined);
+        let selection = DesktopPresentationSelection::new(
+            DesktopDensity::Comfortable,
+            DesktopSkin::Refined,
+            DesktopColorScheme::System,
+        );
         let mut style = DesktopPresentationStyle {
             selection,
             persisted_selection: selection,
             revision: DesktopPresentationRevision(u64::MAX),
             persistence: DesktopPresentationPersistence::Saved,
+            system_color_scheme: DesktopSystemColorScheme::Unknown,
         };
         let prior = style;
 
@@ -339,13 +507,17 @@ mod tests {
 
     #[test]
     fn exhausted_persisted_observation_preserves_every_complete_style_field() {
-        let selection =
-            DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Refined);
+        let selection = DesktopPresentationSelection::new(
+            DesktopDensity::Comfortable,
+            DesktopSkin::Refined,
+            DesktopColorScheme::System,
+        );
         let mut style = DesktopPresentationStyle {
             selection,
             persisted_selection: selection,
             revision: DesktopPresentationRevision(u64::MAX),
             persistence: DesktopPresentationPersistence::Saved,
+            system_color_scheme: DesktopSystemColorScheme::Unknown,
         };
         let prior = style;
 
@@ -353,6 +525,7 @@ mod tests {
             style.observe_persisted(DesktopPresentationSelection::new(
                 DesktopDensity::Compact,
                 DesktopSkin::Graphite,
+                DesktopColorScheme::Light,
             )),
             DesktopPresentationApplyOutcome::RevisionExhausted
         );
@@ -361,13 +534,17 @@ mod tests {
 
     #[test]
     fn exhausted_unconfirmed_observation_preserves_every_complete_style_field() {
-        let selection =
-            DesktopPresentationSelection::new(DesktopDensity::Comfortable, DesktopSkin::Refined);
+        let selection = DesktopPresentationSelection::new(
+            DesktopDensity::Comfortable,
+            DesktopSkin::Refined,
+            DesktopColorScheme::System,
+        );
         let mut style = DesktopPresentationStyle {
             selection,
             persisted_selection: selection,
             revision: DesktopPresentationRevision(u64::MAX),
             persistence: DesktopPresentationPersistence::Saved,
+            system_color_scheme: DesktopSystemColorScheme::Unknown,
         };
         let prior = style;
 
@@ -375,6 +552,7 @@ mod tests {
             style.observe_persisted_unconfirmed(DesktopPresentationSelection::new(
                 DesktopDensity::Compact,
                 DesktopSkin::Graphite,
+                DesktopColorScheme::Dark,
             )),
             DesktopPresentationApplyOutcome::RevisionExhausted
         );

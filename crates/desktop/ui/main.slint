@@ -19,7 +19,7 @@ import { CompactWidgetView } from "views/compact-widget-view.slint";
 import { SessionsView } from "views/sessions-view.slint";
 import { DataHealthView } from "views/data-health-view.slint";
 import { SettingsView, ReminderCustomLeadRow } from "views/settings-view.slint";
-import { Button } from "std-widgets.slint";
+import { Button, Palette } from "std-widgets.slint";
 
 export component MainWindow inherits Window {
     in-out property <UiPalette> presentation-palette <=> UiTokens.palette;
@@ -27,6 +27,11 @@ export component MainWindow inherits Window {
     out property <string> presentation-density-key: root.presentation-density-id == 2 ? "ultra_compact" : (root.presentation-density-id == 1 ? "compact" : "comfortable");
     in-out property <int> presentation-skin-id: 0;
     out property <string> presentation-skin-key: root.presentation-skin-id == 2 ? "ember" : (root.presentation-skin-id == 1 ? "graphite" : "refined");
+    in-out property <int> presentation-color-scheme-id: 0;
+    out property <string> presentation-color-scheme-key: root.presentation-color-scheme-id == 2 ? "dark" : (root.presentation-color-scheme-id == 1 ? "light" : "system");
+    in-out property <int> presentation-effective-color-scheme-id: 2;
+    out property <string> presentation-effective-color-scheme-key: root.presentation-effective-color-scheme-id == 1 ? "light" : "dark";
+    out property <int> observed-system-color-scheme-id: Palette.color-scheme == ColorScheme.light ? 1 : (Palette.color-scheme == ColorScheme.dark ? 2 : 0);
     in-out property <string> presentation-revision: "0";
     in-out property <string> presentation-persistence-state: "saved";
     out property <length> presentation-space: UiTokens.space;
@@ -268,6 +273,9 @@ export component MainWindow inherits Window {
     callback dismiss-in-app-notifications();
     callback select-presentation-density(int);
     callback select-presentation-skin(int);
+    callback select-presentation-color-scheme(int);
+    callback system-color-scheme-observed(int);
+    changed observed-system-color-scheme-id => { root.system-color-scheme-observed(root.observed-system-color-scheme-id); }
 
     title: "TokenMaster";
     preferred-width: root.compact-widget-visible ? 420px : 1120px;
@@ -561,6 +569,7 @@ export component MainWindow inherits Window {
                     height: parent.height;
                     presentation-density-id: root.presentation-density-id;
                     presentation-skin-id: root.presentation-skin-id;
+                    presentation-color-scheme-id: root.presentation-color-scheme-id;
                     presentation-persistence-state: root.presentation-persistence-state;
                     periodic-enabled: root.backup-periodic-enabled;
                     quiet-seconds: root.backup-quiet-seconds;
@@ -602,6 +611,7 @@ export component MainWindow inherits Window {
                     disable-current-user-startup => { root.disable-current-user-startup(); }
                     select-presentation-density(index) => { root.select-presentation-density(index); }
                     select-presentation-skin(index) => { root.select-presentation-skin(index); }
+                    select-presentation-color-scheme(index) => { root.select-presentation-color-scheme(index); }
                     visible: root.settings-visible;
                 }
 

@@ -200,71 +200,38 @@ impl ApplicationPresentationUpdate {
     }
 
     pub(crate) const fn into_state_presentation(self) -> tokenmaster_state::PresentationSettings {
-        match (self.selection.density(), self.selection.skin()) {
-            (
-                tokenmaster_desktop::DesktopDensity::Comfortable,
-                tokenmaster_desktop::DesktopSkin::Refined,
-            ) => tokenmaster_state::PresentationSettings::new(
-                tokenmaster_state::PresentationDensity::Comfortable,
-                tokenmaster_state::PresentationSkin::Refined,
-            ),
-            (
-                tokenmaster_desktop::DesktopDensity::Comfortable,
-                tokenmaster_desktop::DesktopSkin::Graphite,
-            ) => tokenmaster_state::PresentationSettings::new(
-                tokenmaster_state::PresentationDensity::Comfortable,
-                tokenmaster_state::PresentationSkin::Graphite,
-            ),
-            (
-                tokenmaster_desktop::DesktopDensity::Comfortable,
-                tokenmaster_desktop::DesktopSkin::Ember,
-            ) => tokenmaster_state::PresentationSettings::new(
-                tokenmaster_state::PresentationDensity::Comfortable,
-                tokenmaster_state::PresentationSkin::Ember,
-            ),
-            (
-                tokenmaster_desktop::DesktopDensity::Compact,
-                tokenmaster_desktop::DesktopSkin::Refined,
-            ) => tokenmaster_state::PresentationSettings::new(
-                tokenmaster_state::PresentationDensity::Compact,
-                tokenmaster_state::PresentationSkin::Refined,
-            ),
-            (
-                tokenmaster_desktop::DesktopDensity::Compact,
-                tokenmaster_desktop::DesktopSkin::Graphite,
-            ) => tokenmaster_state::PresentationSettings::new(
-                tokenmaster_state::PresentationDensity::Compact,
-                tokenmaster_state::PresentationSkin::Graphite,
-            ),
-            (
-                tokenmaster_desktop::DesktopDensity::Compact,
-                tokenmaster_desktop::DesktopSkin::Ember,
-            ) => tokenmaster_state::PresentationSettings::new(
-                tokenmaster_state::PresentationDensity::Compact,
-                tokenmaster_state::PresentationSkin::Ember,
-            ),
-            (
-                tokenmaster_desktop::DesktopDensity::UltraCompact,
-                tokenmaster_desktop::DesktopSkin::Refined,
-            ) => tokenmaster_state::PresentationSettings::new(
-                tokenmaster_state::PresentationDensity::UltraCompact,
-                tokenmaster_state::PresentationSkin::Refined,
-            ),
-            (
-                tokenmaster_desktop::DesktopDensity::UltraCompact,
-                tokenmaster_desktop::DesktopSkin::Graphite,
-            ) => tokenmaster_state::PresentationSettings::new(
-                tokenmaster_state::PresentationDensity::UltraCompact,
-                tokenmaster_state::PresentationSkin::Graphite,
-            ),
-            (
-                tokenmaster_desktop::DesktopDensity::UltraCompact,
-                tokenmaster_desktop::DesktopSkin::Ember,
-            ) => tokenmaster_state::PresentationSettings::new(
-                tokenmaster_state::PresentationDensity::UltraCompact,
-                tokenmaster_state::PresentationSkin::Ember,
-            ),
-        }
+        let density = match self.selection.density() {
+            tokenmaster_desktop::DesktopDensity::Comfortable => {
+                tokenmaster_state::PresentationDensity::Comfortable
+            }
+            tokenmaster_desktop::DesktopDensity::Compact => {
+                tokenmaster_state::PresentationDensity::Compact
+            }
+            tokenmaster_desktop::DesktopDensity::UltraCompact => {
+                tokenmaster_state::PresentationDensity::UltraCompact
+            }
+        };
+        let skin = match self.selection.skin() {
+            tokenmaster_desktop::DesktopSkin::Refined => {
+                tokenmaster_state::PresentationSkin::Refined
+            }
+            tokenmaster_desktop::DesktopSkin::Graphite => {
+                tokenmaster_state::PresentationSkin::Graphite
+            }
+            tokenmaster_desktop::DesktopSkin::Ember => tokenmaster_state::PresentationSkin::Ember,
+        };
+        let color_scheme = match self.selection.color_scheme() {
+            tokenmaster_desktop::DesktopColorScheme::System => {
+                tokenmaster_state::PresentationColorScheme::System
+            }
+            tokenmaster_desktop::DesktopColorScheme::Light => {
+                tokenmaster_state::PresentationColorScheme::Light
+            }
+            tokenmaster_desktop::DesktopColorScheme::Dark => {
+                tokenmaster_state::PresentationColorScheme::Dark
+            }
+        };
+        tokenmaster_state::PresentationSettings::new(density, skin, color_scheme)
     }
 }
 

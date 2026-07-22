@@ -10,6 +10,7 @@ export struct ReminderCustomLeadRow {
 export component SettingsView inherits Rectangle {
     in property <int> presentation-density-id;
     in property <int> presentation-skin-id;
+    in property <int> presentation-color-scheme-id;
     in property <string> presentation-persistence-state;
     in property <bool> periodic-enabled;
     in property <int> quiet-seconds;
@@ -56,6 +57,7 @@ export component SettingsView inherits Rectangle {
     callback disable-current-user-startup();
     callback select-presentation-density(int);
     callback select-presentation-skin(int);
+    callback select-presentation-color-scheme(int);
 
     background: UiTokens.background;
     accessible-role: groupbox;
@@ -63,7 +65,7 @@ export component SettingsView inherits Rectangle {
 
     presentation-strip := Rectangle {
         width: root.width;
-        height: root.settings-layout-mode == "wide" ? 88px : 112px;
+        height: root.settings-layout-mode == "wide" ? 88px : 148px;
         background: UiTokens.background;
 
         density-label := Text {
@@ -78,7 +80,7 @@ export component SettingsView inherits Rectangle {
         density-selector := ComboBox {
             x: 80px;
             y: 8px;
-            width: root.settings-layout-mode == "wide" ? root.width / 2 - 88px : root.width - 88px;
+            width: root.settings-layout-mode == "wide" ? root.width / 3 - 88px : root.width - 88px;
             height: 32px;
             model: ["Comfortable", "Compact", "Ultra compact"];
             current-index: root.presentation-density-id;
@@ -86,7 +88,7 @@ export component SettingsView inherits Rectangle {
             selected(_) => { root.select-presentation-density(self.current-index); }
         }
         skin-label := Text {
-            x: root.settings-layout-mode == "wide" ? root.width / 2 + 8px : 8px;
+            x: root.settings-layout-mode == "wide" ? root.width / 3 + 8px : 8px;
             y: root.settings-layout-mode == "wide" ? 8px : 44px;
             width: 40px;
             height: 32px;
@@ -95,18 +97,37 @@ export component SettingsView inherits Rectangle {
             vertical-alignment: center;
         }
         skin-selector := ComboBox {
-            x: root.settings-layout-mode == "wide" ? root.width / 2 + 56px : 80px;
+            x: root.settings-layout-mode == "wide" ? root.width / 3 + 56px : 80px;
             y: root.settings-layout-mode == "wide" ? 8px : 44px;
-            width: root.settings-layout-mode == "wide" ? root.width / 2 - 64px : root.width - 88px;
+            width: root.settings-layout-mode == "wide" ? root.width / 3 - 64px : root.width - 88px;
             height: 32px;
             model: ["Refined", "Graphite", "Ember"];
             current-index: root.presentation-skin-id;
             accessible-label: "Presentation skin";
             selected(_) => { root.select-presentation-skin(self.current-index); }
         }
+        scheme-label := Text {
+            x: root.settings-layout-mode == "wide" ? 2 * root.width / 3 + 8px : 8px;
+            y: root.settings-layout-mode == "wide" ? 8px : 80px;
+            width: 56px;
+            height: 32px;
+            text: "Scheme";
+            color: UiTokens.text-secondary;
+            vertical-alignment: center;
+        }
+        scheme-selector := ComboBox {
+            x: root.settings-layout-mode == "wide" ? 2 * root.width / 3 + 72px : 80px;
+            y: root.settings-layout-mode == "wide" ? 8px : 80px;
+            width: root.settings-layout-mode == "wide" ? root.width / 3 - 80px : root.width - 88px;
+            height: 32px;
+            model: ["System", "Light", "Dark"];
+            current-index: root.presentation-color-scheme-id;
+            accessible-label: "Presentation color scheme";
+            selected(_) => { root.select-presentation-color-scheme(self.current-index); }
+        }
         persistence-label := Text {
             x: 8px;
-            y: root.settings-layout-mode == "wide" ? 48px : 84px;
+            y: root.settings-layout-mode == "wide" ? 48px : 120px;
             width: root.width - 16px;
             height: 24px;
             text: root.presentation-persistence-state == "saved" ? "Saved"
