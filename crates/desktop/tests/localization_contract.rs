@@ -79,6 +79,10 @@ const COMPONENT_MSGIDS: [&str; 29] = [
     ": ",
 ];
 
+const COMPONENT_RAW_LITERAL_ALLOWLIST: [&str; 11] = [
+    "", " ", " · ", ", ", "ready", "degraded", "waiting", "●", "▲", "…", "×",
+];
+
 struct RecordingIntentSink {
     selection: Cell<Option<DesktopPresentationSelection>>,
 }
@@ -157,42 +161,75 @@ fn shell_and_component_catalogs_are_complete_and_preserve_placeholders() {
 #[test]
 fn shared_components_use_only_the_closed_translation_key_set() {
     let components = [
-        include_str!("../ui/components/backup-row.slint"),
-        include_str!("../ui/components/command-palette.slint"),
-        include_str!("../ui/components/in-app-notification-panel.slint"),
-        include_str!("../ui/components/operation-progress.slint"),
-        include_str!("../ui/components/recovery-banner.slint"),
-        include_str!("../ui/components/route-state.slint"),
-        include_str!("../ui/components/section-state.slint"),
-        include_str!("../ui/components/route-nav-item.slint"),
-        include_str!("../ui/components/quota-row.slint"),
+        (
+            "backup-row.slint",
+            include_str!("../ui/components/backup-row.slint"),
+        ),
+        (
+            "command-palette.slint",
+            include_str!("../ui/components/command-palette.slint"),
+        ),
+        (
+            "in-app-notification-panel.slint",
+            include_str!("../ui/components/in-app-notification-panel.slint"),
+        ),
+        (
+            "metric-value.slint",
+            include_str!("../ui/components/metric-value.slint"),
+        ),
+        (
+            "operation-progress.slint",
+            include_str!("../ui/components/operation-progress.slint"),
+        ),
+        (
+            "quota-row.slint",
+            include_str!("../ui/components/quota-row.slint"),
+        ),
+        (
+            "recovery-banner.slint",
+            include_str!("../ui/components/recovery-banner.slint"),
+        ),
+        (
+            "route-nav-item.slint",
+            include_str!("../ui/components/route-nav-item.slint"),
+        ),
+        (
+            "route-state.slint",
+            include_str!("../ui/components/route-state.slint"),
+        ),
+        (
+            "section-state.slint",
+            include_str!("../ui/components/section-state.slint"),
+        ),
     ];
 
     for msgid in COMPONENT_MSGIDS {
         assert!(
             components
                 .iter()
-                .any(|component| component.contains(&format!("@tr(\"{msgid}\""))),
+                .any(|(_, component)| component.contains(&format!("@tr(\"{msgid}\""))),
             "missing component @tr for {msgid:?}"
         );
     }
-    for raw in [
-        "text: \"Review\"",
-        "accessible-label: \"Route palette\"",
-        "placeholder-text: \"Filter routes\"",
-        "text: \"No matching routes\"",
-        "text: \"Expiry reminder\"",
-        "text: \"Retry\"",
-        "text: \"Cancel\"",
-        "accessible-label: \"Recovery mode status\"",
-        "text: \"State: \" + root.state",
-        "? \"No blocking reasons\" : \"Reasons: \" + root.reasons",
-        "text: \"Product generation \" + root.generation",
-    ] {
-        assert!(
-            !components.iter().any(|component| component.contains(raw)),
-            "unwrapped component literal {raw:?}"
-        );
+
+    for (path, component) in components {
+        for (line_index, line) in component.lines().enumerate() {
+            let property = line.trim_start();
+            if !(property.starts_with("text:")
+                || property.starts_with("accessible-label:")
+                || property.starts_with("placeholder-text:"))
+            {
+                continue;
+            }
+
+            for literal in raw_quoted_literals(property) {
+                assert!(
+                    COMPONENT_RAW_LITERAL_ALLOWLIST.contains(&literal),
+                    "{path}:{} has unwrapped linguistic literal {literal:?}; use @tr",
+                    line_index + 1
+                );
+            }
+        }
     }
 }
 
@@ -294,6 +331,24 @@ fn po_entry_count(catalog: &str) -> usize {
         .filter_map(unquote)
         .filter(|msgid| !msgid.is_empty())
         .count()
+}
+
+fn raw_quoted_literals(line: &str) -> Vec<&str> {
+    let mut literals = Vec::new();
+    let mut cursor = 0;
+    while let Some(relative_start) = line[cursor..].find('"') {
+        let start = cursor + relative_start;
+        let value_start = start + 1;
+        let Some(relative_end) = line[value_start..].find('"') else {
+            break;
+        };
+        let end = value_start + relative_end;
+        if !line[..start].ends_with("@tr(") {
+            literals.push(&line[value_start..end]);
+        }
+        cursor = end + 1;
+    }
+    literals
 }
 
 fn unquote(value: &str) -> Option<&str> {
