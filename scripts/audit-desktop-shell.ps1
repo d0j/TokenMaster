@@ -149,6 +149,29 @@ function ConvertTo-ExecutableText {
     return $output.ToString()
 }
 
+function Remove-DisabledRustBlocks {
+    param([Parameter(Mandatory = $true)][string]$Text)
+
+    $result = ConvertTo-ExecutableText -Text $Text
+    $disabled = [regex]::new('(?s)#\[cfg\(any\(\)\)\]\s*|\bif\s+(?:false|cfg!\(any\(\))\s*')
+    while (($match = $disabled.Match($result)).Success) {
+        $open = $result.IndexOf('{', $match.Index + $match.Length)
+        if ($open -lt 0) { break }
+        $depth = 0
+        $close = -1
+        for ($index = $open; $index -lt $result.Length; $index++) {
+            if ($result[$index] -eq '{') { $depth++ }
+            elseif ($result[$index] -eq '}') {
+                $depth--
+                if ($depth -eq 0) { $close = $index; break }
+            }
+        }
+        if ($close -lt 0) { break }
+        $result = $result.Remove($match.Index, $close - $match.Index + 1).Insert($match.Index, ' ' * ($close - $match.Index + 1))
+    }
+    return $result
+}
+
 function Get-ExecutableBracedText {
     param([Parameter(Mandatory = $true)][string]$Text, [Parameter(Mandatory = $true)][string]$Pattern, [Parameter(Mandatory = $true)][string]$FailureCode, [switch]$PreserveLiteralText)
     $executable = ConvertTo-ExecutableText -Text $Text
@@ -991,7 +1014,8 @@ if ($trayIconHash -ne '1782E746EFBB423DF3252FD76B9E9E7135416DA966DF0C5652588AC29
 $historyPath = Join-Path $sourceRoot 'history.rs'
 $historyText = [System.IO.File]::ReadAllText($historyPath)
 if ($historyText -notmatch 'pub const MAX_HISTORY_DAYS: usize = 30;' -or
-    $historyText -notmatch '\.take\(MAX_HISTORY_DAYS\)') {
+    $historyText -notmatch '\.take\(MAX_HISTORY_DAYS\)' -or
+    $historyText -match '\.take\(\s*(?:3[1-9]|[4-9][0-9]|[1-9][0-9]{2,})\s*\)') {
     throw 'TM-DESKTOP-HISTORY-BOUND: history projection must retain at most thirty daily rows'
 }
 $controllerTestModule = [regex]::Match($controllerText, '(?ms)^\s*#\[cfg\(test\)\]\s*\r?\n\s*mod\s+tests\s*\{')
@@ -1000,7 +1024,7 @@ $controllerProductionText = if ($controllerTestModule.Success) {
 } else {
     $controllerText
 }
-$controllerExecutableText = ConvertTo-ExecutableText -Text $controllerProductionText -PreserveLiteralText
+$controllerExecutableText = Remove-DisabledRustBlocks -Text $controllerProductionText
 $historyPresetText = Get-ExecutableBracedText -Text $controllerExecutableText -Pattern '(?m)^\s*pub\s+enum\s+DesktopHistoryRangePreset\s*\{' -FailureCode 'TM-DESKTOP-HISTORY-RANGE-PRESETS'
 $historyPresetImplText = Get-ExecutableBracedText -Text $controllerExecutableText -Pattern '(?m)^\s*impl\s+DesktopHistoryRangePreset\s*\{' -FailureCode 'TM-DESKTOP-HISTORY-RANGE-PRESETS'
 $historyRequestText = Get-RustFunctionText -Text $controllerExecutableText -Name 'history_request'
@@ -1024,18 +1048,26 @@ if ($historyRequestText -notmatch 'UsageSeriesSelection::Daily' -or
     throw 'TM-DESKTOP-MODELS-REQUEST: Models and Projects must share the one bounded history-range request'
 }
 $historyWorkStateText = Get-ExecutableBracedText -Text $controllerExecutableText -Pattern '(?m)^\s*struct\s+DesktopWorkState\s*\{' -FailureCode 'TM-DESKTOP-HISTORY-RANGE-STATE'
+$desktopControllerText = Get-ExecutableBracedText -Text $controllerExecutableText -Pattern '(?m)^\s*pub\s+struct\s+DesktopController\s*\{' -FailureCode 'TM-DESKTOP-HISTORY-RANGE-STATE'
 $historyRangeStateFields = @(
     [regex]::Matches(
         $historyWorkStateText,
         '(?m)^\s*(?:published_history_preset|history_range_high_water|current_history_range|pending_history_range)\s*:[^\r\n]+$'
     ) | ForEach-Object Value
 ) -join "`n"
+$allHistoryStateFields = @(
+    [regex]::Matches($historyWorkStateText, '(?mi)^\s*\w*history\w*\s*:[^\r\n]+$') | ForEach-Object Value
+) -join "`n"
 if ($historyRangeStateFields -notmatch 'published_history_preset:\s*DesktopHistoryRangePreset' -or
     $historyRangeStateFields -notmatch 'history_range_high_water:\s*Option<DesktopHistoryRangeGeneration>' -or
     $historyRangeStateFields -notmatch 'current_history_range:\s*Option<ActiveDesktopHistoryRange>' -or
     $historyRangeStateFields -notmatch 'pending_history_range:\s*Option<PendingDesktopHistoryRange>' -or
-    $historyRangeStateFields -match '\b(?:Vec|VecDeque|HashMap|BTreeMap|BinaryHeap|Queue)\b') {
+    $allHistoryStateFields -match '(?i)\b(?:Vec|VecDeque|HashMap|BTreeMap|BinaryHeap|Queue|[A-Za-z_][A-Za-z0-9_]*(?:cache|queue))\b') {
     throw 'TM-DESKTOP-HISTORY-RANGE-STATE: history ranges must retain one scalar high-water mark and active/latest-pending slots only'
+}
+if ([regex]::Matches($desktopControllerText, '(?m)^\s*\w*history\w*\s*:\s*TerminalHistoryRangeNotifier').Count -ne 1 -or
+    [regex]::Matches($desktopControllerText, 'terminal_navigation_notifier:\s*TerminalNavigationNotifier').Count -ne 1) {
+    throw 'TM-DESKTOP-HISTORY-RANGE-CONTROLLER-SLOT: controller must retain one distinct History terminal slot without displacing Sessions'
 }
 $historyCurrentText = Get-RustFunctionText -Text $controllerExecutableText -Name 'history_range_is_current'
 $historyGenerationText = Get-RustFunctionText -Text $controllerExecutableText -Name 'history_range_generation_is_current'
@@ -1045,9 +1077,16 @@ if ($historyCurrentText -notmatch 'context\.snapshot_epoch\.load\(Ordering::Acqu
     $historyCurrentText -notmatch 'history_range_generation_is_current\(' -or
     $historyGenerationText -notmatch 'current\.attempt\s*==\s*attempt' -or
     $historyGenerationText -notmatch 'current\.intent\.product_generation\(\)' -or
+    $historyGenerationText -notmatch '==\s*product_generation' -or
     $historyCommitText -notmatch 'if\s+!valid' -or
     $historyCommitText -notmatch 'return\s+RefreshOutcome::Completed') {
     throw 'TM-DESKTOP-HISTORY-RANGE-FENCES: range publication must fence exact epoch, product generation, and attempt before reducer mutation'
+}
+$historyPublicationActionText = Get-RustFunctionText -Text $controllerExecutableText -Name 'history_range_publication_action'
+if ($historyPublicationActionText -notmatch 'ProductPublishOutcome::Accepted\s+if\s+successful\s*=>\s*\{\s*HistoryRangePublicationAction::PublishAndAdvancePreset' -or
+    $historyPublicationActionText -notmatch 'ProductPublishOutcome::Accepted\s*=>\s*\{\s*HistoryRangePublicationAction::PublishWithoutPresetAdvance' -or
+    $historyPublicationActionText -notmatch 'ProductPublishOutcome::Coalesced[\s\S]*ProductPublishOutcome::RejectedOlder[\s\S]*ProductPublishOutcome::RejectedIncompatible\s*=>\s*\{\s*HistoryRangePublicationAction::TerminalRollback') {
+    throw 'TM-DESKTOP-HISTORY-RANGE-ACCEPTANCE: only reducer-accepted History publications may advance or replace shared projections'
 }
 $historyRebindText = Get-RustFunctionText -Text $controllerExecutableText -Name 'rebind_history_range_after_refresh'
 if ($historyRebindText -notmatch 'current\.prerequisite_attempt\s*==\s*Some\(refresh_attempt\)' -or
@@ -1059,7 +1098,7 @@ $presentationPath = Join-Path $sourceRoot 'presentation.rs'
 $presentationText = [System.IO.File]::ReadAllText($presentationPath)
 $presentationTestModule = [regex]::Match($presentationText, '(?ms)^\s*#\[cfg\(test\)\]\s*\r?\n\s*mod\s+tests\s*\{')
 $presentationProductionText = if ($presentationTestModule.Success) { $presentationText.Substring(0, $presentationTestModule.Index) } else { $presentationText }
-$presentationExecutableText = ConvertTo-ExecutableText -Text $presentationProductionText -PreserveLiteralText
+$presentationExecutableText = Remove-DisabledRustBlocks -Text $presentationProductionText
 $historyTerminalText = Get-RustFunctionText -Text $presentationExecutableText -Name 'complete_history_range_terminal'
 $historyRejectText = Get-RustFunctionText -Text $presentationExecutableText -Name 'reject_history_range'
 $historyReplacementText = Get-RustFunctionText -Text $presentationExecutableText -Name 'replace_projection'
@@ -1093,9 +1132,12 @@ if ($modelsProjectionText -notmatch 'pub const MAX_MODEL_ROWS: usize = 64;' -or
     $modelsProjectionText -notmatch 'breakdown\.truncated\(\) \|\| breakdown\.items\(\)\.len\(\) > MAX_MODEL_ROWS') {
     throw 'TM-DESKTOP-MODELS-BOUND: Models projection must preserve backend truncation and retain at most sixty-four rows'
 }
+$executeRefreshText = Get-ExecutableBracedText -Text $controllerExecutableText -Pattern '(?m)^\s*fn\s+execute_refresh(?:<[^>]+>)?\s*\(' -FailureCode 'TM-DESKTOP-MODELS-REQUEST'
 $analyticsQueryCallCount = [regex]::Matches($controllerExecutableText, 'source\s*\.\s*usage_analytics\(').Count
 $historyRangeExecuteText = Get-ExecutableBracedText -Text $controllerExecutableText -Pattern '(?m)^\s*fn\s+execute_history_range(?:<[^>]+>)?\s*\(' -FailureCode 'TM-DESKTOP-MODELS-REQUEST'
 if ($analyticsQueryCallCount -ne 3 -or
+    [regex]::Matches($executeRefreshText, 'source\s*\.\s*usage_analytics\(').Count -ne 2 -or
+    [regex]::Matches($historyRangeExecuteText, 'source\s*\.\s*usage_analytics\(').Count -ne 1 -or
     $historyRangeExecuteText -notmatch 'source\s*\.\s*usage_analytics\(request\)' -or
     $historyRangeExecuteText -notmatch 'DesktopQueryPlan::history_request\(intent\.preset\(\)\)') {
     throw 'TM-DESKTOP-MODELS-REQUEST: Models and Projects must share one range publication and no duplicate analytics authority'
@@ -1650,6 +1692,11 @@ $terminalNavigationRouteCount = [int](
 )
 if ($terminalNavigationRouteCount -ne 1) {
     throw 'TM-DESKTOP-SESSIONS-TERMINAL-RECOVERY: executable terminal navigation route count must remain one'
+}
+$historyBridgeSlotCount = [regex]::Matches($bridgeInnerText, 'history_terminal_intent:\s*std::sync::Mutex<Option<DesktopHistoryRangeIntent>>').Count
+if ($historyBridgeSlotCount -ne 1 -or
+    [regex]::Matches($bridgeInnerText, 'terminal_intent:\s*std::sync::Mutex<Option<DesktopSessionPageIntent>>').Count -ne 1) {
+    throw 'TM-DESKTOP-HISTORY-RANGE-BRIDGE-SLOT: History terminal state must own one distinct latest-only bridge slot without displacing Sessions'
 }
 $sessionDetailBounds = [ordered]@{
     MAX_SESSION_DETAIL_MODEL_ROWS = 32

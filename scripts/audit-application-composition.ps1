@@ -143,6 +143,25 @@ function ConvertTo-AppExecutableText {
     return $output.ToString()
 }
 
+function Remove-AppDisabledRustBlocks {
+    param([Parameter(Mandatory = $true)][string]$Text)
+
+    $result = ConvertTo-AppExecutableText -Text $Text
+    $disabled = [regex]::new('(?s)#\[cfg\(any\(\)\)\]\s*|\bif\s+(?:false|cfg!\(any\(\))\s*')
+    while (($match = $disabled.Match($result)).Success) {
+        $open = $result.IndexOf('{', $match.Index + $match.Length)
+        if ($open -lt 0) { break }
+        $depth = 0; $close = -1
+        for ($index = $open; $index -lt $result.Length; $index++) {
+            if ($result[$index] -eq '{') { $depth++ }
+            elseif ($result[$index] -eq '}') { $depth--; if ($depth -eq 0) { $close = $index; break } }
+        }
+        if ($close -lt 0) { break }
+        $result = $result.Remove($match.Index, $close - $match.Index + 1).Insert($match.Index, ' ' * ($close - $match.Index + 1))
+    }
+    return $result
+}
+
 function Get-AppExecutableFunctionText {
     param(
         [Parameter(Mandatory = $true)][string]$Text,
@@ -186,7 +205,7 @@ function Get-AppTopLevelStatements {
 }
 
 $applicationText = [System.IO.File]::ReadAllText((Join-Path $appSource 'application.rs'))
-$applicationExecutableText = ConvertTo-AppExecutableText -Text $applicationText
+$applicationExecutableText = Remove-AppDisabledRustBlocks -Text $applicationText
 $finishLiveBundleExecutableText = Get-AppExecutableFunctionText -Text $applicationExecutableText -Name 'finish_live_bundle'
 $finishLiveBundleTopLevelStatements = @(Get-AppTopLevelStatements -FunctionText $finishLiveBundleExecutableText)
 $dataRootText = [System.IO.File]::ReadAllText((Join-Path $appSource 'data_root.rs'))

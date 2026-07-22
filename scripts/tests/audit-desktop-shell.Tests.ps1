@@ -456,6 +456,131 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-MODELS-REQUEST*"
     }
 
+    It "rejects a disabled history fence decoy" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-disabled-fence-decoy"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'current.intent == intent',
+            'current.intent != intent && if false { current.intent == intent; false } else { true }'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-RANGE-FENCES*"
+    }
+
+    It "rejects a differently named history cache field" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-hidden-cache"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'pending_history_range: Option<PendingDesktopHistoryRange>,',
+            "pending_history_range: Option<PendingDesktopHistoryRange>,`r`n    history_result_cache: Vec<PendingDesktopHistoryRange>,"
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-RANGE-STATE*"
+    }
+
+    It "rejects a fourth analytics owner outside refresh and history range execution" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-fourth-query-owner"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        Add-Content -LiteralPath $path -Value 'fn history_query_decoy<S: DesktopQuerySource>(source: &mut S, request: UsageAnalyticsRequest) { let _ = source.usage_analytics(request); }'
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-MODELS-REQUEST*"
+    }
+
+    It "rejects publishing a nonaccepted history range outcome" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-nonaccepted-publication"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'ProductPublishOutcome::RejectedOlder',
+            'ProductPublishOutcome::Accepted'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-RANGE-ACCEPTANCE*"
+    }
+
+    It "rejects retaining thirty-one history rows" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-thirty-one-rows"
+        $path = Join-Path $fixture "crates\desktop\src\history.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '.take(MAX_HISTORY_DAYS)',
+            '.take(31)'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-BOUND*"
+    }
+
+    It "rejects a comment decoy for the current history intent fence" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-comment-decoy"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('current.intent == intent', 'current.intent != intent // current.intent == intent')
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-FENCES*"
+    }
+
+    It "rejects a literal decoy for the current history intent fence" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-literal-decoy"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('current.intent == intent', 'current.intent != intent; let _ = "current.intent == intent";')
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-FENCES*"
+    }
+
+    It "rejects cfg-any history fence decoy" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-cfg-any-decoy"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('current.intent == intent', 'current.intent != intent && if cfg!(any()) { current.intent == intent } else { true }')
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-FENCES*"
+    }
+
+    It "rejects inverted epoch fence" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-epoch-inversion"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('!= intent.snapshot_epoch().get()', '== intent.snapshot_epoch().get()')
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-FENCES*"
+    }
+
+    It "rejects inverted attempt fence" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-attempt-inversion"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('current.attempt == attempt', 'current.attempt != attempt')
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-FENCES*"
+    }
+
+    It "rejects inverted product generation fence" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-product-inversion"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('== product_generation', '!= product_generation')
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-FENCES*"
+    }
+
+    It "rejects duplicate History bridge slot without displacing Sessions" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-duplicate-bridge-slot"
+        $path = Join-Path $fixture "crates\desktop\src\bridge.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('history_terminal_intent: std::sync::Mutex<Option<DesktopHistoryRangeIntent>>,', "history_terminal_intent: std::sync::Mutex<Option<DesktopHistoryRangeIntent>>,`r`n    extra_history_terminal_intent: std::sync::Mutex<Option<DesktopHistoryRangeIntent>>,")
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-BRIDGE-SLOT*"
+    }
+
+    It "rejects duplicate History controller slot without displacing Sessions" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-duplicate-controller-slot"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [regex]::Replace([System.IO.File]::ReadAllText($path), '(?s)(pub struct DesktopController\s*\{.*?terminal_history_range_notifier: TerminalHistoryRangeNotifier,)', '${1}' + "`r`n    extra_history_terminal_notifier: TerminalHistoryRangeNotifier,", 1)
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-CONTROLLER-SLOT*"
+    }
+
     It "rejects Models presentation-bound drift" {
         $fixture = New-DesktopAuditFixture -Name "models-bound"
         $path = Join-Path $fixture "crates\desktop\src\models.rs"
