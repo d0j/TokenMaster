@@ -40,9 +40,10 @@ presentation DTOs and their focused tests.
 **Scope:** the nine production files under `crates/desktop/ui/components/**`, the
 existing bundled catalogs, and focused component/catalog source contracts.
 
-1. Add a failing scoped contract that inventories every fixed visible/accessibility
-   component literal and requires complete Russian/pseudo entries with equal
-   placeholders.
+1. Add a failing scoped contract that inventories every fixed linguistic
+   visible/accessibility component literal and requires complete Russian/pseudo
+   entries with equal placeholders. Locale-invariant punctuation and spacing
+   separators may remain raw only through an exact scoped allowlist.
 2. Convert only the nine shared components to `@tr` and extend both catalogs with
    human Russian and deterministic visibly-expanded pseudo translations.
 3. Run the localization contract, affected component/UI contracts, and strict
