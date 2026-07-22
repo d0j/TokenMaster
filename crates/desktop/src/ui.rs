@@ -1660,7 +1660,7 @@ fn wire_session_page_intents(
 pub(crate) fn apply_projection(window: &MainWindow, projection: &DesktopProjection) {
     apply_route_projection(window, projection);
     apply_dashboard_projection(window, projection.dashboard());
-    apply_history_projection(window, projection.history());
+    apply_history_snapshot_projection(window, projection.history());
     apply_models_projection(window, projection.models());
     apply_projects_projection(window, projection.projects());
     apply_activity_route_projection(window, projection.activity());
@@ -1986,6 +1986,10 @@ fn apply_dashboard_projection(window: &MainWindow, dashboard: &DesktopDashboardP
 }
 
 pub(crate) fn apply_history_projection(window: &MainWindow, history: &DesktopHistoryProjection) {
+    apply_history_range_state(window, history);
+}
+
+fn apply_history_snapshot_projection(window: &MainWindow, history: &DesktopHistoryProjection) {
     apply_history_range_state(window, history);
     window.set_history_state(history.state().stable_code().into());
     window.set_history_reasons(join_reasons(history.reason_codes().iter()).into());

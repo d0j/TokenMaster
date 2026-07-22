@@ -14,7 +14,7 @@ use tokenmaster_desktop::{
     DesktopSessionDetailIntent, DesktopSessionDetailIntentAdmission,
     DesktopSessionDetailIntentSink, DesktopSessionPageDirection, DesktopSessionPageIntent,
     DesktopSessionPageIntentAdmission, DesktopSessionPageIntentSink, DesktopShell,
-    DesktopSnapshotEpoch,
+    DesktopSnapshotEpoch, MAX_HISTORY_DAYS, MAX_MODEL_ROWS, MAX_PROJECT_ROWS,
 };
 use tokenmaster_product::{ProductAttemptGeneration, ProductReducer, ProductSnapshot};
 use tokenmaster_query::{
@@ -1732,12 +1732,68 @@ fn history_range_controls_are_fixed_accessible_and_replace_models_without_route_
     assert_eq!(seven_days.len(), 1);
     seven_days[0].mock_single_click(PointerEventButton::Left);
     assert_eq!(range_sink.intents.borrow().len(), 1);
+}
 
-    for _ in 0..10_000 {
-        window.invoke_select_route(SharedString::from("dashboard"));
-        window.invoke_select_route(SharedString::from("history"));
+#[test]
+fn ten_thousand_accepted_history_range_snapshots_replace_shared_bounded_models() {
+    i_slint_backend_testing::init_no_event_loop();
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("ui-history-range-replacements.sqlite3");
+    let mut reducer = ready_reducer_with_usage(&path, 0, 64);
+    let mut service = QueryService::open(&path, FixedClock).expect("query service");
+    let histories = [1, 7, 30].map(|days| {
+        service
+            .usage_analytics(
+                UsageAnalyticsRequest::new(
+                    UsageRange::recent_days(days).expect("recent history range"),
+                    UsageTimeZone::iana("UTC").expect("UTC"),
+                    WeekStart::Monday,
+                    UsageSeriesSelection::Daily,
+                    Vec::new(),
+                    vec![UsageBreakdownKind::Model, UsageBreakdownKind::Project],
+                )
+                .expect("history request"),
+            )
+            .expect("history analytics")
+    });
+    let snapshot = reducer.snapshot();
+    let shell = DesktopShell::new(&snapshot).expect("desktop shell");
+    let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+    shell
+        .apply_snapshot_for_epoch(epoch, &snapshot)
+        .expect("bind snapshot");
+    let window = shell.window();
+
+    for iteration in 0_u64..10_000 {
+        let index = usize::try_from(iteration % 3).expect("preset index");
+        reducer
+            .publish_history(
+                ProductAttemptGeneration::new(iteration + 2).expect("attempt"),
+                histories[index].clone(),
+            )
+            .expect("publish history");
+        let snapshot = reducer.snapshot();
+        assert_eq!(
+            shell
+                .apply_snapshot_for_epoch(epoch, &snapshot)
+                .expect("apply snapshot"),
+            DesktopApplyOutcome::Accepted
+        );
+        let (preset, expected_days, expected_range) = match index {
+            0 => ("recent_1_day", 1, "2026-07-16 – before 2026-07-17"),
+            1 => ("recent_7_days", 7, "2026-07-10 – before 2026-07-17"),
+            _ => ("recent_30_days", 30, "2026-06-17 – before 2026-07-17"),
+        };
+        assert_eq!(window.get_history_range_preset(), preset);
+        assert!(window.get_history_day_rows().row_count() <= expected_days);
+        assert!(window.get_history_day_rows().row_count() <= MAX_HISTORY_DAYS);
+        assert_eq!(window.get_models_range_label(), expected_range);
+        assert_eq!(window.get_projects_usage_range_label(), expected_range);
+        assert!(window.get_model_usage_rows().row_count() <= MAX_MODEL_ROWS);
+        assert!(window.get_project_usage_rows().row_count() <= MAX_PROJECT_ROWS);
     }
-    assert_eq!(window.get_history_day_rows(), initial_rows);
 }
 
 #[test]
@@ -1815,13 +1871,21 @@ fn history_range_rejection_restores_controls_and_tab_reaches_return_and_space() 
 #[test]
 fn history_range_model_replacement_is_bounded_and_has_no_append_or_load_more_path() {
     let ui = include_str!("../src/ui.rs");
-    let projection = ui
+    let terminal_projection = ui
         .split("pub(crate) fn apply_history_projection")
         .nth(1)
         .expect("history projection")
-        .split("fn format_history_range")
+        .split("fn apply_history_snapshot_projection")
         .next()
-        .expect("history projection body");
+        .expect("terminal history projection body");
+    assert!(!terminal_projection.contains("set_history_day_rows"));
+    let projection = ui
+        .split("fn apply_history_snapshot_projection")
+        .nth(1)
+        .expect("accepted snapshot history projection")
+        .split("fn apply_history_range_state")
+        .next()
+        .expect("accepted snapshot history projection body");
     assert_eq!(
         projection
             .matches("window.set_history_day_rows(model(rows));")
