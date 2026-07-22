@@ -2181,3 +2181,18 @@ P5/P6, M0, package/signing/soak, and release remain separate blockers.
 
 Rationale: a closed layout enum delivers the accepted product distinction without
 introducing dynamic UI, unbounded manifests, or another runtime authority.
+
+## ADR-090 — Keep board preferences as one fixed portable manifest
+
+Decision: schema v6 extends the complete presentation value with one fixed six-row
+manifest keyed by `plan_usage`, `code_output`, `trend`, `sessions`, `activity`, and
+`models`. Admission requires an exact permutation and at least one visible row;
+v1-v5 migrate in memory to canonical order, all visible, and noncollapsed without a
+startup write. The existing `UpdatePresentation` owner and one-active/one-latest
+complete payload remain the sole persistence authority.
+
+Settings uses accessible Up/Down, Visible, Collapse, and Reset controls. Dashboard
+retains all six projection/payload models; hidden rows compact and collapsed rows show
+bounded labelled cards. No drag-and-drop, arbitrary geometry, new worker/query/timer,
+queue, cache, or per-row command is introduced. This closes board reorder/hide/
+collapse while preserving P4-E canonical geometry and its remaining release blockers.

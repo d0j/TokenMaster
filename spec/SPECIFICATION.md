@@ -648,7 +648,7 @@ persist settings, enqueue work, poll, or add a watcher thread. Rust owns the six
 skin/scheme palettes and Slint receives one palette value. P4-E below supersedes this
 current value while retaining compatibility.
 
-## P4-E durable layouts (developer-complete)
+## P4-E durable layouts (historical boundary)
 
 Presentation is one complete `{ density, skin, color_scheme, layout }` selection.
 The fixed layout identities are `Refined`, `Control Center`, and `Workbench`.
@@ -661,4 +661,22 @@ single-column composition while the selected layout remains durable. The compile
 proof covers all 81 four-axis combinations and 10,000 switches. Board section
 reorder/hide/collapse under TM-FUNC-004 remains open, as do locale/language,
 typography/accessibility/DPI/paint/resource, P5/P6, M0, packaging/signing/soak, and
-release acceptance.
+P4-F below supersedes the current presentation value while retaining this layout
+geometry contract.
+
+## P4-F durable board preferences (developer-complete)
+
+Presentation schema v6 contains the four existing axes plus a fixed six-row board
+manifest with keys `plan_usage`, `code_output`, `trend`, `sessions`, `activity`, and
+`models`. The manifest is a strict permutation with at least one visible row; hidden
+and collapsed rows retain their complete Dashboard projection and payload models.
+Fresh settings and strict v1-v5 migration use canonical key order, all visible, and
+not collapsed, without a startup write. Settings exposes accessible Up/Down, Visible,
+Collapse, and Reset controls. The existing `UpdatePresentation` admission and
+one-active/one-replaceable-latest complete payload remain the sole authority. Narrow
+uses stored order; wide templates preserve accepted P4-E geometry for canonical order
+and use stored ordinal order for custom boards, compacting hidden rows. This closes the
+board reorder/hide/collapse sub-requirement; TM-FUNC-004 overall remains partial due
+per-scope editing, reminder OS/tray delivery, usage alerts, and remaining presentation.
+Locale/language, typography/row size, accessibility/DPI/paint/resource, live Windows,
+P5 CLI/MCP, P6 packaging/signing/soak, M0, and release acceptance remain open.

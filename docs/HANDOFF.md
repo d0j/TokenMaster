@@ -9,17 +9,19 @@
 
 ## Current implementation boundary
 
-P4-E durable layouts are developer-complete as one bounded sub-contour. Schema v5
-persists `{density, skin, color_scheme, layout}`; strict v1-v4 migrate to Refined,
-and Refined/Control Center/Workbench visibly switch the wide Dashboard while narrow
-width remains single-column with the selected layout durable. One existing owner and
-one-active/one-replaceable-latest worker cover 81 combinations and 10,000 switches.
+P4-F durable board preferences are developer-complete as one bounded sub-contour.
+Schema v6 persists the four existing presentation axes plus a strict fixed six-key
+board manifest. v1-v5 migrate in memory to canonical order/all-visible/noncollapsed;
+the existing one-active/one-replaceable-latest `UpdatePresentation` path remains the
+sole authority. Settings exposes Up/Down, Visible, Collapse, and Reset; Dashboard
+retains all six payload models and compacts hidden rows. Board UI evidence is 5/5
+including 10,000 edits and layout evidence 4/4.
 
 ## Product state
 
-P4-E is developer-complete. It is not a package, release candidate, or stable release.
-The shortest next release-critical outcome is the remaining P4 product surface, not
-another presentation audit refinement.
+P4-F is developer-complete. It is not M0, a package, release candidate, or stable
+release. The shortest next release-critical outcome is remaining P4 presentation and
+then P5/P6 release work, not another audit-hardening round.
 
 ## Audit/evidence state
 
@@ -38,9 +40,10 @@ passed in 134.4 and 142.4 seconds. This remains developer evidence only.
 
 ## Release blockers
 
-Board reorder/hide/collapse remains open, as do locale/language,
-typography/accessibility/DPI/paint/resource, P5/P6, M0, packaging/signing/soak, and
-release acceptance.
+TM-FUNC-004 overall remains partial: per-scope editing, reminder OS/tray delivery,
+usage alerts, and remaining presentation remain open. Locale/language,
+typography/row-size, accessibility/DPI/paint/resource and live Windows acceptance,
+P5 CLI/MCP, P6 package/signing/soak, M0, and release acceptance remain blockers.
 
 ## Git state
 
@@ -1353,16 +1356,22 @@ System. Effective scheme observation is ephemeral and cannot persist or advance
 revision. Six exact Rust-owned palettes cover all skin/scheme pairs, while one existing
 owner and one-active/one-latest-pending worker cover all 27 complete combinations.
 
-P4-E supersedes the current presentation contract: schema v5 carries the complete
+P4-E is historical: schema v5 carried the complete
 density+skin+requested-scheme+layout quadruple; v1-v4 add Refined layout while retaining
 their versioned migration semantics. Refined, Control Center, and Workbench change real
 wide Dashboard geometry; narrow width remains derived, single-column, and safe. The
 existing owner and one-active/one-latest-pending worker cover all 81 combinations.
 
-Handoff truth: product state is P4-E developer-complete; audit/evidence state is focused
+P4-F supersedes the current presentation contract: schema v6 adds a strict fixed
+six-key board manifest, canonical v1-v5 in-memory migration without startup write,
+accessible Up/Down/Visible/Collapse/Reset editing, all-six payload retention, and
+compact hidden rows. Board UI evidence is 5/5 including 10,000 edits and layout 4/4;
+state is 24/24, package 9/9, and app 80+1+7+57.
+
+Handoff truth: product state is P4-F developer-complete; audit/evidence state is focused
 Rust/UI tests plus application and desktop source/mutation receipts (final mutation
-receipt and baseline are reconciled in the current cycle); release blockers are board
-reorder/hide/collapse, locale, remaining typography/accessibility/DPI/paint/resource,
+receipt and baseline are reconciled in the current cycle); release blockers are locale,
+remaining typography/accessibility/DPI/paint/resource,
 P5, P6, M0, package/signing/soak and external interactive receipts. Git must be clean
 on the feature branch before the next cycle. The shortest release-critical next slice
 is the remaining P4 product surface, not another audit-hardening round.

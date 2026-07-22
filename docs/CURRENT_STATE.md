@@ -8,15 +8,18 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 
 ## Implemented
 
-- P4-E durable layouts are developer-complete: schema v5 persists the complete
-  density/skin/color-scheme/layout quadruple; strict v1-v4 migrate to Refined while
-  preserving applicable legacy fields. Refined, Control Center, and Workbench switch
-  the wide Dashboard over the same six sections; narrow width remains the
-  environment-derived single-column composition while selection persists. The
-  existing one-active/one-replaceable-latest worker carries all 81 combinations and
-  the compiled UI proves 10,000 switches. TM-FUNC-004 board reorder/hide/collapse,
-  locale/language, typography/accessibility/DPI/paint/resource, P5/P6, M0,
-  packaging/signing/soak, and release remain open.
+- P4-F durable board preferences are developer-complete: schema v6 extends the four
+  presentation axes with a strict fixed six-key manifest (`plan_usage`, `code_output`,
+  `trend`, `sessions`, `activity`, `models`). v1-v5 migrate in memory to canonical
+  order/all-visible/noncollapsed without startup write. Settings has accessible
+  Up/Down, Visible, Collapse, and Reset; hidden/collapsed rows retain all six payloads.
+  Focused compiled evidence is board UI 5/5 including 10,000 edits and layout 4/4;
+  state 24/24, package 9/9, and app 80+1+7+57 remain green. TM-FUNC-004 overall is
+  still partial: per-scope editing, reminder OS/tray delivery, usage alerts, and
+  remaining presentation are open. Locale/language, typography/row-size,
+  accessibility/DPI/paint/resource and live Windows acceptance, P5 CLI/MCP, P6
+  package/signing/soak, M0, and release acceptance remain blockers. This is not M0,
+  a package, release candidate, or stable release.
   Final review corrected Workbench to the specified Plan-full, Code+Sessions,
   Trend+Model Usage, Activity-full geometry and corrected one stale schema assertion.
   The single re-review found no new Critical issue. Clean-root, format,
@@ -1810,6 +1813,15 @@ immutable 15-role palettes and the Desktop has one owner, complete admission-fir
 payload, atomic persist/restore, and existing latest-wins worker. No new authority was
 added. Layout/scheme/locale/typography/interactive DPI/accessibility/paint/resource,
 P5/P6/M0/package/signing/soak/release remain open.
+
+## P4-F — durable board preferences
+
+Developer-complete board behavior uses schema v6 and the existing atomic
+`UpdatePresentation` owner. The fixed manifest is one strict permutation of the six
+Dashboard keys with at least one visible row; custom hidden rows compact and wide
+templates use stored ordinal order while canonical order preserves P4-E geometry.
+Zero audit-only correction rounds occurred; this cycle changed product behavior and
+required schema evidence, so `AUDIT_HARDENING_LOOP` did not trigger.
 
 ## P4-D — partial independent color schemes
 

@@ -1,5 +1,19 @@
 # TokenMaster project history
 
+## 2026-07-22 — P4-F durable board preferences
+
+Completed the developer P4-F board slice. Settings schema v6 now persists the four
+presentation axes plus a strict fixed manifest of the six Dashboard keys. v1-v5
+migrate in memory to canonical order/all-visible/noncollapsed without startup write.
+Accessible Up/Down, Visible, Collapse, and Reset controls update the complete atomic
+presentation payload; hidden/collapsed rows retain all six projection models and
+custom hidden rows compact. Evidence: board UI 5/5 including 10,000 edits, layout
+4/4, state 24/24, package 9/9, app 80+1+7+57. This closes board reorder/hide/collapse
+but not TM-FUNC-004 overall or release acceptance. Locale/language, typography,
+accessibility/DPI/paint/resource and live Windows, P5 CLI/MCP, P6 package/signing/soak,
+M0, and release remain open. Zero audit-only correction rounds; the cycle changed
+product behavior and required schema evidence, so `AUDIT_HARDENING_LOOP` did not trigger.
+
 ## 2026-07-22 — P4-E durable layouts
 
 Completed the developer P4-E layout slice. Settings schema v5 now persists one

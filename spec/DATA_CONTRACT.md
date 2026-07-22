@@ -632,7 +632,7 @@ and rereads both slots. Any uncertainty after publication is recovery-required. 
 generic record/file authority remains crate-private; the typed settings store and
 later typed run/recovery stores are the only intended public surfaces.
 
-Implemented current settings schema version 5 contains exactly `portable` and
+Implemented current settings schema version 6 contains exactly `portable` and
 `device` classes. Portable state contains one canonical in-app reminder profile
 (enabled plus one through eight unique lead seconds from 60 through 31,536,000),
 automatic-backup policy (periodic enabled, quiet seconds 300..3,600, interval seconds
@@ -643,9 +643,10 @@ fixed to `system`, `light`, or `dark`, plus layout fixed to `refined`, `control_
 or `workbench`. Defaults are
 the recommended 7d/24h/12h/6h/1h reminder leads, five-minute quiet, six-hour interval,
 2 GiB budget, Comfortable density, Refined skin, System color scheme, and Refined
-layout. Strict schemas v1 through v4 migrate in memory without a startup write; legacy
-fields retain their versioned migration semantics and layout defaults to Refined.
-Versions 0 and 6 or newer reject. Device state contains only one of the
+layout. Strict schemas v1 through v5 migrate in memory without a startup write; legacy
+fields retain their versioned migration semantics and presentation defaults to Refined
+with the canonical all-visible, noncollapsed board.
+Versions 0 and 7 or newer reject. Device state contains only one of the
 11 implemented route keys. The schema stores no provider, arbitrary style, or
 forbidden private state. Portable candidates have their own strict versioned JSON
 envelope, SHA-256 digest, bounded category/count preview, and never carry device
@@ -1164,12 +1165,12 @@ density+skin and adds Dark, and v4 retains the complete triple. Admission is exa
 v1..=v4 and canonical writes are v4. Missing, unknown, partial, or extra values reject.
 Observed effective system color is runtime presentation state only and is never stored.
 
-## P4-E presentation record
+## P4-F presentation record
 
-Settings schema v5 serializes exactly `presentation.density`, `presentation.skin`,
-`presentation.color_scheme`, and `presentation.layout`. Layout is the fixed enum
-`refined`, `control_center`, or `workbench`; unknown, partial, or extra values reject.
-Fresh settings and strict v1-v4 migration use `refined`, preserving applicable legacy
-fields without a startup write. Admission is exactly v1..=v5 and canonical writes are
-v5. The selected layout remains durable even when narrow width selects the safe
-single-column composition.
+Settings schema v6 serializes those four presentation axes plus a fixed six-row board
+manifest. Keys are exactly `plan_usage`, `code_output`, `trend`, `sessions`,
+`activity`, and `models`; the manifest must be a strict permutation with at least one
+visible row. Fresh settings and strict v1-v5 migration use canonical order, all
+visible, and noncollapsed rows without a startup write. Admission is exactly v1..=v6
+and canonical writes are v6. Hidden/collapsed rows retain all six Dashboard payloads;
+the existing atomic complete-presentation owner remains authoritative.

@@ -2,13 +2,14 @@
 
 ## M0 — native architecture proof
 
-P4-E durable layouts are developer-complete as a bounded sub-contour: schema v5
-persists the complete density/skin/color-scheme/layout quadruple; v1-v4 migrate to
-Refined; and Refined/Control Center/Workbench switch the wide Dashboard while narrow
-width remains single-column. The existing owner/worker proves 81 combinations and
-10,000 switches. Board reorder/hide/collapse, locale/language, typography/
-accessibility/DPI/paint/resource, P5/P6, M0, packaging/signing/soak, and release remain
-open.
+P4-F board preferences are developer-complete as a bounded sub-contour: schema v6
+adds a strict fixed six-key manifest, v1-v5 migrate in memory to canonical
+all-visible/noncollapsed order, and Settings provides accessible Up/Down, Visible,
+Collapse, and Reset. Board UI evidence is 5/5 including 10,000 edits and layout 4/4;
+all six Dashboard payloads remain retained. TM-FUNC-004 overall remains partial due
+per-scope editing, reminder OS/tray delivery, usage alerts, and remaining presentation.
+Locale/language, typography/row-size, accessibility/DPI/paint/resource and live
+Windows acceptance, P5/P6, M0, packaging/signing/soak, and release remain open.
 
 P4-D independent color schemes are developer-complete as a bounded sub-contour: schema
 v4 persists one complete density+skin+scheme triple; strict v1-v3 migrate to Dark;
@@ -476,9 +477,10 @@ its current presentation value.
 
 ### P4-E complete
 
-Developer contract coverage now includes strict schema-v5 complete presentation,
+Developer contract coverage now includes strict schema-v6 complete presentation plus
+the fixed board manifest, canonical v1-v5 migration, board UI 5/5 and layout 4/4.
+P4-E historical coverage included strict schema-v5 complete presentation,
 Refined/Control Center/Workbench, v1-v4 Refined migration, real wide Dashboard geometry,
 narrow single-column safety, 81 combinations, and 10,000 compiled-UI switches. P4
-remains partial: board reorder/hide/collapse, locale, typography, interactive DPI/
-accessibility, paint/resource evidence and all P5/P6/M0/package/signing/soak/release
-work are still open.
+remains partial for locale, typography, interactive DPI/accessibility, paint/resource,
+per-scope settings, and release work.

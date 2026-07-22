@@ -1236,11 +1236,13 @@ the effective palette without submitting an application intent, changing revisio
 persisting settings. The six skin/scheme combinations map through typed axis matches,
 not a growing cross-product command surface.
 
-## P4-E presentation API
+## P4-F presentation API
 
-`UpdatePresentation` accepts one typed complete density+skin+color-scheme+layout
-value; no per-axis application command exists. The existing coordinator retains at
-most one active and one replaceable-latest complete payload. Layout maps only to the
-fixed `Refined`, `Control Center`, or `Workbench` enum and adds no worker, queue,
-timer, cache, query, or persistence authority. Settings admission is exactly v1..=v5;
-v1-v4 migrate to Refined and canonical writes are v5.
+`UpdatePresentation` accepts one typed complete density+skin+color-scheme+layout+board
+value; no per-axis or per-row application command exists. The existing coordinator
+retains at most one active and one replaceable-latest complete payload. Board edits are
+validated as a six-key permutation with at least one visible row and add no worker,
+queue, timer, cache, query, or persistence authority. Settings admission is exactly
+v1..=v6; v1-v5 migrate to the canonical visible, noncollapsed board and canonical
+writes are v6. Settings uses accessible Up/Down, Visible, Collapse, and Reset actions;
+Dashboard keeps all six projection/payload models while compacting hidden rows.

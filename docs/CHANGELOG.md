@@ -6,6 +6,15 @@ All notable changes are recorded here.
 
 ### Added
 
+- Added P4-F durable board preferences: schema v6 extends complete presentation with
+  a strict fixed six-key manifest (`plan_usage`, `code_output`, `trend`, `sessions`,
+  `activity`, `models`), in-memory v1-v5 canonical migration without startup write,
+  accessible Up/Down/Visible/Collapse/Reset controls, compact hidden rows, and
+  all-six payload retention. Focused evidence passes board UI 5/5 including 10,000
+  edits, layout 4/4, state 24/24, package 9/9, and app 80+1+7+57. TM-FUNC-004 remains
+  partial; locale/language, typography/accessibility/DPI/paint/resource and live
+  Windows acceptance, P5/P6, M0, package/signing/soak, and release remain open.
+
 - Added P4-E durable presentation layouts: schema v5 persists the complete
   density/skin/color-scheme/layout value, strict v1-v4 migrate to Refined, and the
   wide Dashboard supports Refined, Control Center, and Workbench over existing

@@ -1353,12 +1353,13 @@ UTC-today Git ranges remain separate. Two optional terminal notifier slots are f
 non-displacing, and clear only exact whole-intent matches. The 30-row frontend bound
 and no-cache/no-queue/no-additional-worker rules remain mandatory.
 
-## P4-E layout boundary
+## P4-F board preference boundary
 
-Layout is a closed three-value presentation enum (`Refined`, `Control Center`, or
-`Workbench`) carried only inside the complete four-axis settings value. Strict schema
-v5 and v1-v4 in-memory migration reject unknown, partial, and extra layout data.
-Layout switching reuses the existing owner, worker, window, route models, and bounded
-Dashboard inputs; it adds no path, content, command, SQL, HTTP, filesystem, plugin,
-timer, queue, cache, or dynamic UI authority. Narrow width remains environment-derived
-single-column presentation and does not alter durable selection.
+The complete presentation value carries the closed three-value layout enum and a fixed
+six-row board manifest. Board keys are a closed enum; deserialization rejects unknown,
+duplicate, missing, extra, or all-hidden rows. Preferences cannot inject UI code,
+geometry, paths, commands, SQL, HTTP, filesystem access, prompts, or source data.
+Board edits reuse the existing owner, worker, window, route models, and bounded
+Dashboard inputs; they add no worker, query, timer, queue, cache, or dynamic authority.
+All six payloads remain present when rows are hidden or collapsed. Narrow width is
+environment-derived and stores no alternate geometry.
