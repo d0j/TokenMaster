@@ -1032,7 +1032,10 @@ $historyDefinitionPatterns = @(
     '(?m)^\s*(?:const\s+)?fn\s+history_request\b',
     '(?m)^\s*(?:const\s+)?fn\s+history_range_is_current\b',
     '(?m)^\s*(?:const\s+)?fn\s+history_range_generation_is_current\b',
-    '(?m)^\s*(?:const\s+)?fn\s+history_range_publication_action\b'
+    '(?m)^\s*(?:const\s+)?fn\s+commit_history_range\b',
+    '(?m)^\s*(?:const\s+)?fn\s+history_range_publication_action\b',
+    '(?m)^\s*(?:const\s+)?fn\s+rebind_history_range_after_refresh\b',
+    '(?m)^\s*(?:const\s+)?fn\s+execute_history_range\b'
 )
 foreach ($historyDefinitionPattern in $historyDefinitionPatterns) {
     if ([regex]::Matches($controllerProductionSyntax, $historyDefinitionPattern).Count -ne 1) {
@@ -1063,20 +1066,24 @@ if ($historyRequestText -notmatch 'UsageSeriesSelection::Daily' -or
 }
 $historyWorkStateText = Get-ExecutableBracedText -Text $controllerExecutableText -Pattern '(?m)^\s*struct\s+DesktopWorkState\s*\{' -FailureCode 'TM-DESKTOP-HISTORY-RANGE-STATE'
 $desktopControllerText = Get-ExecutableBracedText -Text $controllerExecutableText -Pattern '(?m)^\s*pub\s+struct\s+DesktopController\s*\{' -FailureCode 'TM-DESKTOP-HISTORY-RANGE-STATE'
-$historyRangeStateFields = @(
-    [regex]::Matches(
-        $historyWorkStateText,
-        '(?m)^\s*(?:published_history_preset|history_range_high_water|current_history_range|pending_history_range)\s*:[^\r\n]+$'
-    ) | ForEach-Object Value
-) -join "`n"
-$allHistoryStateFields = @(
-    [regex]::Matches($historyWorkStateText, '(?mi)^\s*\w*history\w*\s*:[^\r\n]+$') | ForEach-Object Value
-) -join "`n"
-if ($historyRangeStateFields -notmatch 'published_history_preset:\s*DesktopHistoryRangePreset' -or
-    $historyRangeStateFields -notmatch 'history_range_high_water:\s*Option<DesktopHistoryRangeGeneration>' -or
-    $historyRangeStateFields -notmatch 'current_history_range:\s*Option<ActiveDesktopHistoryRange>' -or
-    $historyRangeStateFields -notmatch 'pending_history_range:\s*Option<PendingDesktopHistoryRange>' -or
-    $allHistoryStateFields -match '(?i)\b(?:Vec|VecDeque|HashMap|BTreeMap|BinaryHeap|Queue|[A-Za-z_][A-Za-z0-9_]*(?:cache|queue))\b') {
+$historyRangeStateTypeWhitelist = @(
+    'published_history_preset:DesktopHistoryRangePreset',
+    'history_range_high_water:Option<DesktopHistoryRangeGeneration>',
+    'current_history_range:Option<ActiveDesktopHistoryRange>',
+    'pending_history_range:Option<PendingDesktopHistoryRange>'
+)
+$historyRangeStateTypeSignatures = @(
+    [regex]::Matches($historyWorkStateText, '(?m)^\s*(?<name>\w+)\s*:\s*(?<type>[^,\r\n]+),?\s*$') |
+        ForEach-Object {
+            $type = $_.Groups['type'].Value
+            if ($type -match '\b(?:DesktopHistoryRange(?:Preset|Generation|Intent)?|ActiveDesktopHistoryRange|PendingDesktopHistoryRange)\b') {
+                "$($_.Groups['name'].Value):$([regex]::Replace($type, '\s+', ''))"
+            }
+        }
+)
+if ($historyRangeStateTypeSignatures.Count -ne $historyRangeStateTypeWhitelist.Count -or
+    @($historyRangeStateTypeSignatures | Where-Object { $_ -notin $historyRangeStateTypeWhitelist }).Count -ne 0 -or
+    @($historyRangeStateTypeWhitelist | Where-Object { $_ -notin $historyRangeStateTypeSignatures }).Count -ne 0) {
     throw 'TM-DESKTOP-HISTORY-RANGE-STATE: history ranges must retain one scalar high-water mark and active/latest-pending slots only'
 }
 if ([regex]::Matches($desktopControllerText, '(?m)^\s*\w+\s*:\s*TerminalHistoryRangeNotifier\s*,').Count -ne 1 -or
@@ -1086,6 +1093,19 @@ if ([regex]::Matches($desktopControllerText, '(?m)^\s*\w+\s*:\s*TerminalHistoryR
 $historyCurrentText = Get-RustFunctionText -Text $controllerExecutableText -Name 'history_range_is_current'
 $historyGenerationText = Get-RustFunctionText -Text $controllerExecutableText -Name 'history_range_generation_is_current'
 $historyCommitText = Get-RustFunctionText -Text $controllerExecutableText -Name 'commit_history_range'
+$controllerHistoryCfgPatterns = @(
+    '(?m)^\s*pub\s+enum\s+DesktopHistoryRangePreset\s*\{',
+    '(?m)^\s*impl\s+DesktopHistoryRangePreset\s*\{'
+)
+foreach ($controllerHistoryFunction in @('history_request', 'history_range_is_current', 'history_range_generation_is_current', 'commit_history_range', 'history_range_publication_action', 'rebind_history_range_after_refresh', 'execute_history_range')) {
+    $controllerHistoryCfgPatterns += "(?m)^\s*(?:pub(?:\s*\([^)]*\))?\s+)?(?:const\s+)?fn\s+$controllerHistoryFunction(?:<[^>]+>)?\s*\("
+}
+foreach ($controllerHistoryCfgPattern in $controllerHistoryCfgPatterns) {
+    $controllerHistoryBody = Get-ExecutableBracedText -Text $controllerProductionSyntax -Pattern $controllerHistoryCfgPattern -FailureCode 'TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION'
+    if ($controllerHistoryBody -match '#\[\s*cfg\b|\bcfg!\s*\(') {
+        throw 'TM-DESKTOP-HISTORY-RANGE-CFG: audited History definitions must not contain cfg attributes or cfg! branches'
+    }
+}
 if ($historyCurrentText -notmatch 'context\.snapshot_epoch\.load\(Ordering::Acquire\)\s*!=\s*intent\.snapshot_epoch\(\)\.get\(\)' -or
     $historyCurrentText -notmatch 'current\.intent\s*==\s*intent' -or
     $historyCurrentText -notmatch 'history_range_generation_is_current\(' -or
@@ -1125,6 +1145,7 @@ $presentationPath = Join-Path $sourceRoot 'presentation.rs'
 $presentationText = [System.IO.File]::ReadAllText($presentationPath)
 $presentationTestModule = [regex]::Match($presentationText, '(?ms)^\s*#\[cfg\(test\)\]\s*\r?\n\s*mod\s+tests\s*\{')
 $presentationProductionText = if ($presentationTestModule.Success) { $presentationText.Substring(0, $presentationTestModule.Index) } else { $presentationText }
+$presentationProductionSyntax = ConvertTo-ExecutableText -Text $presentationProductionText
 $presentationExecutableText = Remove-DisabledRustBlocks -Text $presentationProductionText
 $historyTerminalText = Get-RustFunctionText -Text $presentationExecutableText -Name 'complete_history_range_terminal'
 $historyRejectText = Get-RustFunctionText -Text $presentationExecutableText -Name 'reject_history_range'
@@ -1136,6 +1157,33 @@ if ($historyTerminalText -notmatch 'self\.reject_history_range\(intent\)' -or
     throw 'TM-DESKTOP-HISTORY-RANGE-TERMINAL: stale terminal delivery must not roll back a newer range, and replacement must preserve its exact accepted preset'
 }
 $historyRangeWireText = Get-RustFunctionText -Text $uiRustProductionText -Name 'wire_history_range_intents'
+$uiRustProductionSyntax = ConvertTo-ExecutableText -Text $uiRustProductionText
+$historyAuditedSymbols = @(
+    [pscustomobject]@{ Source = $controllerProductionSyntax; Definition = '(?m)^\s*pub\s+enum\s+DesktopHistoryRangePreset\s*\{'; Body = '(?m)^\s*pub\s+enum\s+DesktopHistoryRangePreset\s*\{'; Label = 'DesktopHistoryRangePreset enum' },
+    [pscustomobject]@{ Source = $controllerProductionSyntax; Definition = '(?m)^\s*impl\s+DesktopHistoryRangePreset\s*\{'; Body = '(?m)^\s*impl\s+DesktopHistoryRangePreset\s*\{'; Label = 'DesktopHistoryRangePreset impl' }
+)
+foreach ($controllerHistoryFunction in @('history_request', 'history_range_is_current', 'history_range_generation_is_current', 'commit_history_range', 'history_range_publication_action', 'rebind_history_range_after_refresh', 'execute_history_range')) {
+    $functionPattern = "(?m)^\s*(?:pub(?:\s*\([^)]*\))?\s+)?(?:const\s+)?fn\s+$controllerHistoryFunction(?:<[^>]+>)?\s*\("
+    $historyAuditedSymbols += [pscustomobject]@{ Source = $controllerProductionSyntax; Definition = $functionPattern; Body = $functionPattern; Label = $controllerHistoryFunction }
+}
+foreach ($presentationHistoryFunction in @('complete_history_range_terminal', 'reject_history_range', 'replace_projection')) {
+    $functionPattern = "(?m)^\s*(?:pub(?:\s*\([^)]*\))?\s+)?fn\s+$presentationHistoryFunction\s*\("
+    $historyAuditedSymbols += [pscustomobject]@{ Source = $presentationProductionSyntax; Definition = $functionPattern; Body = $functionPattern; Label = $presentationHistoryFunction }
+}
+foreach ($uiHistoryFunction in @('wire_history_range_intents', 'apply_history_projection', 'apply_history_snapshot_projection', 'apply_history_range_state', 'format_history_range')) {
+    $functionPattern = "(?m)^\s*(?:pub(?:\s*\([^)]*\))?\s+)?fn\s+$uiHistoryFunction\s*\("
+    $historyAuditedSymbols += [pscustomobject]@{ Source = $uiRustProductionSyntax; Definition = $functionPattern; Body = $functionPattern; Label = $uiHistoryFunction }
+}
+foreach ($historyAuditedSymbol in $historyAuditedSymbols) {
+    $definitions = [regex]::Matches($historyAuditedSymbol.Source, $historyAuditedSymbol.Definition)
+    if ($definitions.Count -ne 1) {
+        throw 'TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION: each audited History definition must occur exactly once in production syntax'
+    }
+    $historyBody = Get-ExecutableBracedText -Text $historyAuditedSymbol.Source -Pattern $historyAuditedSymbol.Body -FailureCode 'TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION'
+    if ($historyBody -match '#\[\s*cfg\b|\bcfg!\s*\(') {
+        throw 'TM-DESKTOP-HISTORY-RANGE-CFG: audited History definitions must not contain cfg attributes or cfg! branches'
+    }
+}
 if ([regex]::Matches($historyRangeWireText, 'window\.on_request_history_range_(?:1|7|30)\(').Count -ne 3 -or
     $historyRangeWireText -match '(?:usage_analytics|UsageAnalyticsRequest|source\.)' -or
     $historyRangeWireText -notmatch 'sink\.submit\(intent\)') {

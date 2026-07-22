@@ -418,12 +418,65 @@ fn history_range_generation_is_current() -> bool {
             Should -Throw "*TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION*"
     }
 
+    It "rejects feature-cfg duplicate commit rebind and execute History definitions" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-feature-cfg-controller-definition-decoys"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $replacement = @'
+#[cfg(feature = "decoy")]
+fn commit_history_range() {}
+#[cfg(feature = "decoy")]
+fn rebind_history_range_after_refresh() {}
+#[cfg(feature = "decoy")]
+fn execute_history_range() {}
+
+#[cfg(test)]
+'@
+        $text = [regex]::Replace($original, '(?m)^#\[cfg\(test\)\](?=\r?$)', $replacement, 1)
+        $text | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION*"
+    }
+
+    It "rejects a feature-cfg duplicate presentation History definition" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-feature-cfg-presentation-definition-decoy"
+        $path = Join-Path $fixture "crates\desktop\src\presentation.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $replacement = @'
+#[cfg(feature = "decoy")]
+fn complete_history_range_terminal() {}
+
+#[cfg(test)]
+'@
+        $text = [regex]::Replace($original, '(?m)^#\[cfg\(test\)\](?=\r?$)', $replacement, 1)
+        $text | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION*"
+    }
+
     It "rejects retaining history range work in a vector" {
         $fixture = New-DesktopAuditFixture -Name "history-range-vector-state"
         $path = Join-Path $fixture "crates\desktop\src\controller.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
             'pending_history_range: Option<PendingDesktopHistoryRange>,',
             'pending_history_range: Vec<PendingDesktopHistoryRange>,'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-RANGE-STATE*"
+    }
+
+    It "rejects a renamed History range backlog by exact state type" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-renamed-backlog-type"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'pending_history_range: Option<PendingDesktopHistoryRange>,',
+            "pending_history_range: Option<PendingDesktopHistoryRange>,`r`n    range_backlog: Vec<PendingDesktopHistoryRange>,"
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -578,7 +631,20 @@ fn history_range_generation_is_current() -> bool {
         $path = Join-Path $fixture "crates\desktop\src\controller.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace('current.intent == intent', 'current.intent != intent && if cfg!(any()) { current.intent == intent } else { true }')
         [System.IO.File]::WriteAllText($path, $text)
-        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-FENCES*"
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-CFG*"
+    }
+
+    It "rejects an inline cfg anchor in an audited History body" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-inline-cfg-anchor"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'current.intent == intent',
+            'current.intent == intent && cfg!(feature = "decoy")'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-RANGE-CFG*"
     }
 
     It "rejects inverted epoch fence" {
