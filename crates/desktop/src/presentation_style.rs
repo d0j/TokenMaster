@@ -1,6 +1,42 @@
 use crate::DesktopSkin;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopDensity {
+    Comfortable,
+    Compact,
+    UltraCompact,
+}
+
+impl DesktopDensity {
+    #[must_use]
+    pub const fn stable_key(self) -> &'static str {
+        match self {
+            Self::Comfortable => "comfortable",
+            Self::Compact => "compact",
+            Self::UltraCompact => "ultra_compact",
+        }
+    }
+
+    #[must_use]
+    pub const fn slint_index(self) -> i32 {
+        match self {
+            Self::Comfortable => 0,
+            Self::Compact => 1,
+            Self::UltraCompact => 2,
+        }
+    }
+
+    const fn from_slint_index(index: i32) -> Option<Self> {
+        match index {
+            0 => Some(Self::Comfortable),
+            1 => Some(Self::Compact),
+            2 => Some(Self::UltraCompact),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DesktopEffectiveColorScheme {
     Light,
     Dark,
@@ -92,42 +128,6 @@ impl DesktopColorScheme {
             | (Self::System, DesktopSystemColorScheme::Dark | DesktopSystemColorScheme::Unknown) => {
                 DesktopEffectiveColorScheme::Dark
             }
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DesktopDensity {
-    Comfortable,
-    Compact,
-    UltraCompact,
-}
-
-impl DesktopDensity {
-    #[must_use]
-    pub const fn stable_key(self) -> &'static str {
-        match self {
-            Self::Comfortable => "comfortable",
-            Self::Compact => "compact",
-            Self::UltraCompact => "ultra_compact",
-        }
-    }
-
-    #[must_use]
-    pub const fn slint_index(self) -> i32 {
-        match self {
-            Self::Comfortable => 0,
-            Self::Compact => 1,
-            Self::UltraCompact => 2,
-        }
-    }
-
-    const fn from_slint_index(index: i32) -> Option<Self> {
-        match index {
-            0 => Some(Self::Comfortable),
-            1 => Some(Self::Compact),
-            2 => Some(Self::UltraCompact),
-            _ => None,
         }
     }
 }
