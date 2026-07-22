@@ -56,6 +56,15 @@ struct PresentationSettingsV4Wire {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct PresentationSettingsV5Wire {
+    density: PresentationDensity,
+    skin: PresentationSkin,
+    color_scheme: PresentationColorScheme,
+    layout: PresentationLayout,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PortableSettingsV2Wire {
     reminders: ReminderPolicy,
     backup: BackupPolicy,
@@ -86,6 +95,29 @@ struct PortableSettingsV4Wire {
     reminders: ReminderPolicy,
     backup: BackupPolicy,
     presentation: PresentationSettingsV4Wire,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PortableSettingsV5Wire {
+    reminders: ReminderPolicy,
+    backup: BackupPolicy,
+    presentation: PresentationSettingsV5Wire,
+}
+
+impl PortableSettingsV5Wire {
+    fn migrate(self) -> PortableSettings {
+        PortableSettings::new(
+            self.reminders,
+            self.backup,
+            PresentationSettings::new(
+                self.presentation.density,
+                self.presentation.skin,
+                self.presentation.color_scheme,
+                self.presentation.layout,
+            ),
+        )
+    }
 }
 
 impl PortableSettingsV4Wire {
@@ -145,6 +177,13 @@ struct PortableCandidateV4Wire {
 #[serde(deny_unknown_fields)]
 struct PortableCandidateV5Wire {
     schema_version: u16,
+    portable: PortableSettingsV5Wire,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PortableCandidateV6Wire {
+    schema_version: u16,
     portable: PortableSettings,
 }
 
@@ -184,6 +223,14 @@ struct SettingsValueV4Wire {
 #[serde(deny_unknown_fields)]
 struct SettingsValueV5Wire {
     schema_version: u16,
+    portable: PortableSettingsV5Wire,
+    device: DeviceSettings,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SettingsValueV6Wire {
+    schema_version: u16,
     portable: PortableSettings,
     device: DeviceSettings,
 }
@@ -204,7 +251,8 @@ pub(super) fn decode_portable_candidate(
         2 => decode_portable_v2(bytes),
         3 => decode_portable_v3(bytes),
         4 => decode_portable_v4(bytes),
-        SETTINGS_SCHEMA_VERSION => decode_portable_v5(bytes),
+        5 => decode_portable_v5(bytes),
+        SETTINGS_SCHEMA_VERSION => decode_portable_v6(bytes),
         _ => Err(StateError::unsupported_version()),
     }
 }
@@ -217,7 +265,8 @@ pub(super) fn decode_settings_record(bytes: &[u8]) -> Result<SettingsValue, Reco
         2 => decode_settings_v2(bytes),
         3 => decode_settings_v3(bytes),
         4 => decode_settings_v4(bytes),
-        SETTINGS_SCHEMA_VERSION => decode_settings_v5(bytes),
+        5 => decode_settings_v5(bytes),
+        SETTINGS_SCHEMA_VERSION => decode_settings_v6(bytes),
         _ => Err(RecordValueError::UnsupportedVersion),
     }
 }
@@ -281,6 +330,18 @@ fn decode_portable_v4(bytes: &[u8]) -> Result<DecodedPortableSettings, StateErro
 fn decode_portable_v5(bytes: &[u8]) -> Result<DecodedPortableSettings, StateError> {
     let wire: PortableCandidateV5Wire =
         serde_json::from_slice(bytes).map_err(|_| StateError::invalid_input())?;
+    if wire.schema_version != 5 {
+        return Err(StateError::unsupported_version());
+    }
+    Ok(DecodedPortableSettings {
+        portable: wire.portable.migrate(),
+        source_schema_version: 5,
+    })
+}
+
+fn decode_portable_v6(bytes: &[u8]) -> Result<DecodedPortableSettings, StateError> {
+    let wire: PortableCandidateV6Wire =
+        serde_json::from_slice(bytes).map_err(|_| StateError::invalid_input())?;
     if wire.schema_version != SETTINGS_SCHEMA_VERSION {
         return Err(StateError::unsupported_version());
     }
@@ -328,6 +389,15 @@ fn decode_settings_v4(bytes: &[u8]) -> Result<SettingsValue, RecordValueError> {
 
 fn decode_settings_v5(bytes: &[u8]) -> Result<SettingsValue, RecordValueError> {
     let wire: SettingsValueV5Wire =
+        serde_json::from_slice(bytes).map_err(|_| RecordValueError::Invalid)?;
+    if wire.schema_version != 5 {
+        return Err(RecordValueError::UnsupportedVersion);
+    }
+    Ok(SettingsValue::new(wire.portable.migrate(), wire.device))
+}
+
+fn decode_settings_v6(bytes: &[u8]) -> Result<SettingsValue, RecordValueError> {
+    let wire: SettingsValueV6Wire =
         serde_json::from_slice(bytes).map_err(|_| RecordValueError::Invalid)?;
     if wire.schema_version != SETTINGS_SCHEMA_VERSION {
         return Err(RecordValueError::UnsupportedVersion);

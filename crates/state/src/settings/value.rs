@@ -1,13 +1,13 @@
 use core::fmt;
 
 use serde::de::{Error as _, SeqAccess, Visitor};
-use serde::ser::SerializeStruct;
+use serde::ser::{SerializeSeq, SerializeStruct};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::StateError;
 use crate::record::{RecordValue, RecordValueError};
 
-pub const SETTINGS_SCHEMA_VERSION: u16 = 5;
+pub const SETTINGS_SCHEMA_VERSION: u16 = 6;
 pub(crate) const MIN_SUPPORTED_SETTINGS_SCHEMA_VERSION: u16 = 1;
 pub const MAX_REMINDER_THRESHOLDS: usize = 8;
 pub const REMINDER_LEAD_MIN_SECONDS: u32 = 60;
@@ -295,6 +295,182 @@ pub enum PresentationLayout {
     Workbench,
 }
 
+pub const BOARD_SECTION_COUNT: usize = 6;
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BoardSectionKey {
+    PlanUsage,
+    CodeOutput,
+    Trend,
+    Sessions,
+    Activity,
+    Models,
+}
+
+impl BoardSectionKey {
+    pub const ALL: [Self; BOARD_SECTION_COUNT] = [
+        Self::PlanUsage,
+        Self::CodeOutput,
+        Self::Trend,
+        Self::Sessions,
+        Self::Activity,
+        Self::Models,
+    ];
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub struct BoardSectionPreference {
+    key: BoardSectionKey,
+    visible: bool,
+    collapsed: bool,
+}
+
+impl BoardSectionPreference {
+    #[must_use]
+    pub const fn new(key: BoardSectionKey, visible: bool, collapsed: bool) -> Self {
+        Self {
+            key,
+            visible,
+            collapsed,
+        }
+    }
+
+    #[must_use]
+    pub const fn key(self) -> BoardSectionKey {
+        self.key
+    }
+
+    #[must_use]
+    pub const fn visible(self) -> bool {
+        self.visible
+    }
+
+    #[must_use]
+    pub const fn collapsed(self) -> bool {
+        self.collapsed
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BoardSectionPreferenceWire {
+    key: BoardSectionKey,
+    visible: bool,
+    collapsed: bool,
+}
+
+impl<'de> Deserialize<'de> for BoardSectionPreference {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let wire = BoardSectionPreferenceWire::deserialize(deserializer)?;
+        Ok(Self::new(wire.key, wire.visible, wire.collapsed))
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BoardPreferences {
+    rows: [BoardSectionPreference; BOARD_SECTION_COUNT],
+}
+
+impl BoardPreferences {
+    pub fn new(rows: [BoardSectionPreference; BOARD_SECTION_COUNT]) -> Result<Self, StateError> {
+        let mut seen = [false; BOARD_SECTION_COUNT];
+        let mut visible = false;
+        for row in rows {
+            let index = match row.key() {
+                BoardSectionKey::PlanUsage => 0,
+                BoardSectionKey::CodeOutput => 1,
+                BoardSectionKey::Trend => 2,
+                BoardSectionKey::Sessions => 3,
+                BoardSectionKey::Activity => 4,
+                BoardSectionKey::Models => 5,
+            };
+            if seen[index] {
+                return Err(StateError::invalid_input());
+            }
+            seen[index] = true;
+            visible |= row.visible();
+        }
+        if !seen.into_iter().all(|present| present) || !visible {
+            return Err(StateError::invalid_input());
+        }
+        Ok(Self { rows })
+    }
+
+    #[must_use]
+    pub const fn canonical() -> Self {
+        Self {
+            rows: [
+                BoardSectionPreference::new(BoardSectionKey::PlanUsage, true, false),
+                BoardSectionPreference::new(BoardSectionKey::CodeOutput, true, false),
+                BoardSectionPreference::new(BoardSectionKey::Trend, true, false),
+                BoardSectionPreference::new(BoardSectionKey::Sessions, true, false),
+                BoardSectionPreference::new(BoardSectionKey::Activity, true, false),
+                BoardSectionPreference::new(BoardSectionKey::Models, true, false),
+            ],
+        }
+    }
+
+    #[must_use]
+    pub const fn rows(&self) -> &[BoardSectionPreference; BOARD_SECTION_COUNT] {
+        &self.rows
+    }
+}
+
+impl Serialize for BoardPreferences {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut sequence = serializer.serialize_seq(Some(BOARD_SECTION_COUNT))?;
+        for row in self.rows {
+            sequence.serialize_element(&row)?;
+        }
+        sequence.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for BoardPreferences {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct BoardPreferencesVisitor;
+
+        impl<'de> Visitor<'de> for BoardPreferencesVisitor {
+            type Value = BoardPreferences;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("exactly six board section preferences")
+            }
+
+            fn visit_seq<A>(self, mut sequence: A) -> Result<Self::Value, A::Error>
+            where
+                A: SeqAccess<'de>,
+            {
+                let mut rows =
+                    [BoardSectionPreference::new(BoardSectionKey::PlanUsage, false, false);
+                        BOARD_SECTION_COUNT];
+                for row in &mut rows {
+                    *row = sequence
+                        .next_element()?
+                        .ok_or_else(|| A::Error::custom("board preference count is not six"))?;
+                }
+                if sequence.next_element::<BoardSectionPreference>()?.is_some() {
+                    return Err(A::Error::custom("board preference count exceeds six"));
+                }
+                BoardPreferences::new(rows)
+                    .map_err(|_| A::Error::custom("invalid board preferences"))
+            }
+        }
+
+        deserializer.deserialize_seq(BoardPreferencesVisitor)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PresentationSettings {
@@ -302,6 +478,7 @@ pub struct PresentationSettings {
     skin: PresentationSkin,
     color_scheme: PresentationColorScheme,
     layout: PresentationLayout,
+    board: BoardPreferences,
 }
 
 impl PresentationSettings {
@@ -317,6 +494,7 @@ impl PresentationSettings {
             skin,
             color_scheme,
             layout,
+            board: BoardPreferences::canonical(),
         }
     }
 
@@ -358,6 +536,17 @@ impl PresentationSettings {
     #[must_use]
     pub const fn layout(self) -> PresentationLayout {
         self.layout
+    }
+
+    #[must_use]
+    pub const fn board(self) -> BoardPreferences {
+        self.board
+    }
+
+    #[must_use]
+    pub const fn with_board(mut self, board: BoardPreferences) -> Self {
+        self.board = board;
+        self
     }
 }
 
