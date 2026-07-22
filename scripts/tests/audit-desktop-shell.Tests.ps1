@@ -352,6 +352,38 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-HISTORY-BOUND*"
     }
 
+    It "rejects comment-only history bound anchors" {
+        $fixture = New-DesktopAuditFixture -Name "history-bound-comment-anchor"
+        $path = Join-Path $fixture "crates\desktop\src\history.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('pub const MAX_HISTORY_DAYS: usize = 30;', "// pub const MAX_HISTORY_DAYS: usize = 30;`r`npub const MAX_HISTORY_DAYS: usize = 31;")
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-BOUND*"
+    }
+
+    It "rejects literal-only history bound anchors" {
+        $fixture = New-DesktopAuditFixture -Name "history-bound-literal-anchor"
+        $path = Join-Path $fixture "crates\desktop\src\history.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('pub const MAX_HISTORY_DAYS: usize = 30;', "const _DECOY: &str = ""pub const MAX_HISTORY_DAYS: usize = 30;"";`r`npub const MAX_HISTORY_DAYS: usize = 31;")
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-BOUND*"
+    }
+
+    It "rejects a real thirty-one-row history projection" {
+        $fixture = New-DesktopAuditFixture -Name "history-bound-real-thirty-one"
+        $path = Join-Path $fixture "crates\desktop\src\history.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('.take(MAX_HISTORY_DAYS)', '.take(31)')
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-BOUND*"
+    }
+
+    It "rejects a differently named history bound constant" {
+        $fixture = New-DesktopAuditFixture -Name "history-bound-renamed-constant"
+        $path = Join-Path $fixture "crates\desktop\src\history.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('MAX_HISTORY_DAYS', 'MAX_HISTORY_ROWS')
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-BOUND*"
+    }
+
     It "rejects an arbitrary history range count" {
         $fixture = New-DesktopAuditFixture -Name "history-range-arbitrary-count"
         $path = Join-Path $fixture "crates\desktop\src\controller.rs"
@@ -440,6 +472,15 @@ fn execute_history_range() {}
             Should -Throw "*TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION*"
     }
 
+    It "rejects a feature-cfg duplicate refresh executor definition" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-feature-cfg-refresh-executor"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $text = [regex]::Replace($original, '(?m)^#\[cfg\(test\)\](?=\r?$)', "#[cfg(feature = ""decoy"")]`r`nfn execute_refresh() {}`r`n`r`n#[cfg(test)]", 1)
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION*"
+    }
+
     It "rejects a feature-cfg duplicate presentation History definition" {
         $fixture = New-DesktopAuditFixture -Name "history-range-feature-cfg-presentation-definition-decoy"
         $path = Join-Path $fixture "crates\desktop\src\presentation.rs"
@@ -469,6 +510,14 @@ fn complete_history_range_terminal() {}
 
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-DESKTOP-HISTORY-RANGE-STATE*"
+    }
+
+    It "rejects a History range backlog alias in the whole work-state schema" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-backlog-alias"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('pending_history_range: Option<PendingDesktopHistoryRange>,', "type RangeBacklog = Vec<PendingDesktopHistoryRange>;`r`n    pending_history_range: Option<PendingDesktopHistoryRange>,`r`n    range_backlog: RangeBacklog,")
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-STATE*"
     }
 
     It "rejects a renamed History range backlog by exact state type" {

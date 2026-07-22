@@ -1013,9 +1013,12 @@ if ($trayIconHash -ne '1782E746EFBB423DF3252FD76B9E9E7135416DA966DF0C5652588AC29
 }
 $historyPath = Join-Path $sourceRoot 'history.rs'
 $historyText = [System.IO.File]::ReadAllText($historyPath)
-if ($historyText -notmatch 'pub const MAX_HISTORY_DAYS: usize = 30;' -or
-    $historyText -notmatch '\.take\(MAX_HISTORY_DAYS\)' -or
-    $historyText -match '\.take\(\s*(?:3[1-9]|[4-9][0-9]|[1-9][0-9]{2,})\s*\)') {
+$historyProductionText = $historyText.Substring(0, [Math]::Max(0, $historyText.IndexOf('#[cfg(test)]', [System.StringComparison]::Ordinal)))
+if ($historyText.IndexOf('#[cfg(test)]', [System.StringComparison]::Ordinal) -lt 0) { $historyProductionText = $historyText }
+$historyProductionSyntax = ConvertTo-ExecutableText -Text $historyProductionText
+$historyProjectionText = Get-RustFunctionText -Text $historyProductionSyntax -Name 'from_snapshot_with_range'
+if ([regex]::Matches($historyProductionSyntax, '(?m)^\s*pub\s+const\s+MAX_HISTORY_DAYS\s*:\s*usize\s*=\s*30\s*;').Count -ne 1 -or
+    [regex]::Matches($historyProjectionText, '\.take\(MAX_HISTORY_DAYS\)').Count -ne 1) {
     throw 'TM-DESKTOP-HISTORY-BOUND: history projection must retain at most thirty daily rows'
 }
 $controllerTestModule = [regex]::Match($controllerText, '(?ms)^\s*#\[cfg\(test\)\]\s*\r?\n\s*mod\s+tests\s*\{')
@@ -1066,26 +1069,6 @@ if ($historyRequestText -notmatch 'UsageSeriesSelection::Daily' -or
 }
 $historyWorkStateText = Get-ExecutableBracedText -Text $controllerExecutableText -Pattern '(?m)^\s*struct\s+DesktopWorkState\s*\{' -FailureCode 'TM-DESKTOP-HISTORY-RANGE-STATE'
 $desktopControllerText = Get-ExecutableBracedText -Text $controllerExecutableText -Pattern '(?m)^\s*pub\s+struct\s+DesktopController\s*\{' -FailureCode 'TM-DESKTOP-HISTORY-RANGE-STATE'
-$historyRangeStateTypeWhitelist = @(
-    'published_history_preset:DesktopHistoryRangePreset',
-    'history_range_high_water:Option<DesktopHistoryRangeGeneration>',
-    'current_history_range:Option<ActiveDesktopHistoryRange>',
-    'pending_history_range:Option<PendingDesktopHistoryRange>'
-)
-$historyRangeStateTypeSignatures = @(
-    [regex]::Matches($historyWorkStateText, '(?m)^\s*(?<name>\w+)\s*:\s*(?<type>[^,\r\n]+),?\s*$') |
-        ForEach-Object {
-            $type = $_.Groups['type'].Value
-            if ($type -match '\b(?:DesktopHistoryRange(?:Preset|Generation|Intent)?|ActiveDesktopHistoryRange|PendingDesktopHistoryRange)\b') {
-                "$($_.Groups['name'].Value):$([regex]::Replace($type, '\s+', ''))"
-            }
-        }
-)
-if ($historyRangeStateTypeSignatures.Count -ne $historyRangeStateTypeWhitelist.Count -or
-    @($historyRangeStateTypeSignatures | Where-Object { $_ -notin $historyRangeStateTypeWhitelist }).Count -ne 0 -or
-    @($historyRangeStateTypeWhitelist | Where-Object { $_ -notin $historyRangeStateTypeSignatures }).Count -ne 0) {
-    throw 'TM-DESKTOP-HISTORY-RANGE-STATE: history ranges must retain one scalar high-water mark and active/latest-pending slots only'
-}
 if ([regex]::Matches($desktopControllerText, '(?m)^\s*\w+\s*:\s*TerminalHistoryRangeNotifier\s*,').Count -ne 1 -or
     [regex]::Matches($desktopControllerText, '(?m)^\s*\w+\s*:\s*TerminalNavigationNotifier\s*,').Count -ne 1) {
     throw 'TM-DESKTOP-HISTORY-RANGE-CONTROLLER-SLOT: controller must retain one distinct History terminal slot without displacing Sessions'
@@ -1097,7 +1080,7 @@ $controllerHistoryCfgPatterns = @(
     '(?m)^\s*pub\s+enum\s+DesktopHistoryRangePreset\s*\{',
     '(?m)^\s*impl\s+DesktopHistoryRangePreset\s*\{'
 )
-foreach ($controllerHistoryFunction in @('history_request', 'history_range_is_current', 'history_range_generation_is_current', 'commit_history_range', 'history_range_publication_action', 'rebind_history_range_after_refresh', 'execute_history_range')) {
+foreach ($controllerHistoryFunction in @('history_request', 'history_range_is_current', 'history_range_generation_is_current', 'commit_history_range', 'history_range_publication_action', 'rebind_history_range_after_refresh', 'execute_history_range', 'execute_refresh')) {
     $controllerHistoryCfgPatterns += "(?m)^\s*(?:pub(?:\s*\([^)]*\))?\s+)?(?:const\s+)?fn\s+$controllerHistoryFunction(?:<[^>]+>)?\s*\("
 }
 foreach ($controllerHistoryCfgPattern in $controllerHistoryCfgPatterns) {
@@ -1162,7 +1145,7 @@ $historyAuditedSymbols = @(
     [pscustomobject]@{ Source = $controllerProductionSyntax; Definition = '(?m)^\s*pub\s+enum\s+DesktopHistoryRangePreset\s*\{'; Body = '(?m)^\s*pub\s+enum\s+DesktopHistoryRangePreset\s*\{'; Label = 'DesktopHistoryRangePreset enum' },
     [pscustomobject]@{ Source = $controllerProductionSyntax; Definition = '(?m)^\s*impl\s+DesktopHistoryRangePreset\s*\{'; Body = '(?m)^\s*impl\s+DesktopHistoryRangePreset\s*\{'; Label = 'DesktopHistoryRangePreset impl' }
 )
-foreach ($controllerHistoryFunction in @('history_request', 'history_range_is_current', 'history_range_generation_is_current', 'commit_history_range', 'history_range_publication_action', 'rebind_history_range_after_refresh', 'execute_history_range')) {
+foreach ($controllerHistoryFunction in @('history_request', 'history_range_is_current', 'history_range_generation_is_current', 'commit_history_range', 'history_range_publication_action', 'rebind_history_range_after_refresh', 'execute_history_range', 'execute_refresh')) {
     $functionPattern = "(?m)^\s*(?:pub(?:\s*\([^)]*\))?\s+)?(?:const\s+)?fn\s+$controllerHistoryFunction(?:<[^>]+>)?\s*\("
     $historyAuditedSymbols += [pscustomobject]@{ Source = $controllerProductionSyntax; Definition = $functionPattern; Body = $functionPattern; Label = $controllerHistoryFunction }
 }
@@ -1793,6 +1776,18 @@ if ($controllerText -notmatch 'pending_selection:\s*Option<PendingDesktopSession
     $controllerText -notmatch 'latest_selection_generation:\s*Option<ProductSessionDetailSelectionGeneration>' -or
     $controllerText -match $sessionDetailQueuePattern) {
     throw 'TM-DESKTOP-SESSION-DETAIL-SLOT: exact detail work must use one latest-only typed slot'
+}
+$desktopWorkStateSchema = @(
+    'refresh_attempt:Option<u64>', 'latest_selection_generation:Option<ProductSessionDetailSelectionGeneration>',
+    'pending_selection:Option<PendingDesktopSessionDetail>', 'active_selection_attempt:Option<u64>',
+    'navigation_high_water:Option<DesktopSessionNavigationGeneration>', 'current_navigation:Option<ActiveDesktopSessionPage>',
+    'pending_navigation:Option<PendingDesktopSessionPage>', 'published_history_preset:DesktopHistoryRangePreset',
+    'history_range_high_water:Option<DesktopHistoryRangeGeneration>', 'current_history_range:Option<ActiveDesktopHistoryRange>',
+    'pending_history_range:Option<PendingDesktopHistoryRange>'
+)
+$desktopWorkStateSignatures = @([regex]::Matches($historyWorkStateText, '(?m)^\s*(?<name>\w+)\s*:\s*(?<type>[^,\r\n]+),?\s*$') | ForEach-Object { "$($_.Groups['name'].Value):$([regex]::Replace($_.Groups['type'].Value, '\s+', ''))" })
+if ($desktopWorkStateSignatures.Count -ne $desktopWorkStateSchema.Count -or @($desktopWorkStateSignatures | Where-Object { $_ -notin $desktopWorkStateSchema }).Count -ne 0 -or @($desktopWorkStateSchema | Where-Object { $_ -notin $desktopWorkStateSignatures }).Count -ne 0) {
+    throw 'TM-DESKTOP-HISTORY-RANGE-STATE: history ranges must retain one scalar high-water mark and active/latest-pending slots only'
 }
 $mainUiText = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'main.slint'))
 $modelsText = [System.IO.File]::ReadAllText((Join-Path $uiRoot 'models.slint'))
