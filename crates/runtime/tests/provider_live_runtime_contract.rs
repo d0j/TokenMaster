@@ -1,4 +1,10 @@
-use std::time::Duration;
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+    },
+    time::Duration,
+};
 
 use tempfile::TempDir;
 use tokenmaster_domain::{
@@ -13,12 +19,12 @@ use tokenmaster_engine::{
     OperationControl, PortError, ReplaySourceSink, ScopeIdentity, ScopeSink, SourceBatchReader,
     SourceIdentity, SourceKind, SourceSink,
 };
-use tokenmaster_provider::{ProviderDescriptor, ProviderId};
+use tokenmaster_provider::{ProviderCapability, ProviderDescriptor, ProviderId};
 use tokenmaster_runtime::{
     GitRepositoryHintIngress, LiveProviderAdapter, LiveRuntime, ProviderWatchRoots, RuntimeError,
     UsageProviderFactory,
 };
-use tokenmaster_store::UsageStore;
+use tokenmaster_store::{UsageActivityQuery, UsageReadStore, UsageStore};
 
 const INITIAL_CHECKPOINT: &[u8] = b"synthetic-provider-v1\0page-0001";
 const NEXT_CHECKPOINT: &[u8] = b"synthetic-provider-v1\0page-0002";
@@ -131,18 +137,32 @@ fn completion(files_read: u64) -> Result<AdapterCompletion, PortError> {
 
 struct SyntheticFactory {
     descriptor: ProviderDescriptor,
+    record: Arc<SyntheticFactoryRecord>,
+}
+
+#[derive(Default)]
+struct SyntheticFactoryRecord {
+    build_count: AtomicUsize,
+    received_repository_hints: AtomicBool,
 }
 
 impl SyntheticFactory {
-    fn new() -> Self {
-        Self {
+    fn new(repository_activity: bool) -> (Self, Arc<SyntheticFactoryRecord>) {
+        let record = Arc::new(SyntheticFactoryRecord::default());
+        let capabilities = repository_activity
+            .then_some(ProviderCapability::RepositoryActivity)
+            .into_iter()
+            .collect::<Vec<_>>();
+        let factory = Self {
             descriptor: ProviderDescriptor::new(
                 ProviderId::new("synthetic").expect("provider id"),
                 "Synthetic",
-                [],
+                capabilities,
             )
             .expect("descriptor"),
-        }
+            record: Arc::clone(&record),
+        };
+        (factory, record)
     }
 }
 
@@ -155,10 +175,10 @@ impl UsageProviderFactory for SyntheticFactory {
         self: Box<Self>,
         repository_hints: Option<GitRepositoryHintIngress>,
     ) -> Result<Box<dyn LiveProviderAdapter>, RuntimeError> {
-        assert!(
-            repository_hints.is_none(),
-            "synthetic has no repository capability"
-        );
+        self.record.build_count.fetch_add(1, Ordering::SeqCst);
+        self.record
+            .received_repository_hints
+            .store(repository_hints.is_some(), Ordering::SeqCst);
         Ok(Box::new(SyntheticAdapter))
     }
 }
@@ -259,7 +279,8 @@ impl SourceBatchReader for SyntheticReader {
 fn injected_synthetic_provider_publishes_usage_without_codex_discovery() {
     let temporary = TempDir::new().expect("temporary directory");
     let archive = temporary.path().join("usage.sqlite3");
-    let mut runtime = LiveRuntime::start_with_provider(&archive, Box::new(SyntheticFactory::new()))
+    let (factory, record) = SyntheticFactory::new(false);
+    let mut runtime = LiveRuntime::start_with_provider(&archive, Box::new(factory))
         .expect("start synthetic provider runtime");
 
     let completion = runtime
@@ -277,6 +298,45 @@ fn injected_synthetic_provider_publishes_usage_without_codex_discovery() {
 
     let store = UsageStore::open(&archive).expect("store");
     assert_eq!(store.counts().expect("counts").canonical_events(), 1);
+
+    let mut reader = UsageReadStore::open(&archive).expect("read store");
+    let capture = reader
+        .capture_activity_page(
+            UsageActivityQuery::new(None, None, 10, Duration::from_secs(2))
+                .expect("activity query"),
+        )
+        .expect("activity capture");
+    assert_eq!(capture.events().len(), 1);
+    assert_eq!(capture.events()[0].provider_id(), "synthetic");
+    assert_eq!(record.build_count.load(Ordering::SeqCst), 1);
+    assert!(
+        !record.received_repository_hints.load(Ordering::SeqCst),
+        "factory without RepositoryActivity must receive no Git ingress"
+    );
+}
+
+#[test]
+fn repository_activity_capable_factory_receives_git_ingress() {
+    let temporary = TempDir::new().expect("temporary directory");
+    let archive = temporary.path().join("usage.sqlite3");
+    let (factory, record) = SyntheticFactory::new(true);
+    let mut runtime = LiveRuntime::start_with_provider(&archive, Box::new(factory))
+        .expect("start repository-capable runtime");
+
+    runtime
+        .wait_for_completion(Duration::from_secs(10))
+        .expect("worker completion")
+        .expect("initial publication");
+    assert_eq!(
+        runtime.shutdown().expect("shutdown"),
+        tokenmaster_runtime::LivePhase::Stopped
+    );
+
+    assert_eq!(record.build_count.load(Ordering::SeqCst), 1);
+    assert!(
+        record.received_repository_hints.load(Ordering::SeqCst),
+        "factory with RepositoryActivity must receive Git ingress"
+    );
 }
 
 #[test]

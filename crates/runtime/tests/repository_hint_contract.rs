@@ -3,7 +3,7 @@ use std::path::Path;
 use tempfile::TempDir;
 use tokenmaster_codex::{CodexRootInput, ConfiguredCodexRoot, build_discovery_request};
 use tokenmaster_engine::{
-    Adapter, AdapterCheckpoint, Clock, DiscoveredSource, MonotonicTime, OperationControl,
+    Adapter, AdapterSourceState, Clock, DiscoveredSource, MonotonicTime, OperationControl,
     PortError, RefreshAdmission, RefreshCoordinator, RefreshUrgency, ReplaySourceSink,
     ScopeIdentity, ScopeSink, SinkControl, SourceBatchReader,
 };
@@ -39,10 +39,10 @@ impl ReplaySourceSink for HintCollector<'_> {
     fn on_source(
         &mut self,
         _source: DiscoveredSource,
-        initial_checkpoint: AdapterCheckpoint,
+        initial_state: AdapterSourceState,
         reader: &mut dyn SourceBatchReader,
     ) -> Result<SinkControl, PortError> {
-        let mut checkpoint = initial_checkpoint;
+        let mut checkpoint = reader.restore_checkpoint(initial_state.progress(), self.control)?;
         loop {
             let batch = reader.read_batch(&checkpoint, self.control)?;
             if let Some(hint) = reader.take_repository_activity_hint() {

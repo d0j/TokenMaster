@@ -3,9 +3,9 @@ use std::path::Path;
 use tempfile::TempDir;
 use tokenmaster_codex::{CodexRootInput, ConfiguredCodexRoot, build_discovery_request};
 use tokenmaster_engine::{
-    AdapterCheckpoint, AdapterCompletion, Archive, ArchiveReplay, ArchiveScanSetId, CanonicalBatch,
-    Clock, CompletionQuality, DiscoveredSource, MonotonicTime, OneShotExecutor, PortError,
-    PortErrorCode, RefreshAdmission, RefreshCoordinator, RefreshOutcome, RefreshUrgency,
+    AdapterCompletion, AdapterSourceState, Archive, ArchiveReplay, ArchiveScanSetId,
+    CanonicalBatch, Clock, CompletionQuality, DiscoveredSource, MonotonicTime, OneShotExecutor,
+    PortError, PortErrorCode, RefreshAdmission, RefreshCoordinator, RefreshOutcome, RefreshUrgency,
     ReplayCleanup, ReplayContinuation, ScopeIdentity, ScopeManifest, SourceIdentity, WriterLease,
     WriterLeaseGuard,
 };
@@ -50,10 +50,9 @@ impl Archive for PreserveCompleteStaging {
         &mut self,
         scan_set: ArchiveScanSetId,
         source: &DiscoveredSource,
-        initial_checkpoint: &AdapterCheckpoint,
+        initial_state: &AdapterSourceState,
     ) -> Result<(), PortError> {
-        self.inner
-            .observe_source(scan_set, source, initial_checkpoint)
+        self.inner.observe_source(scan_set, source, initial_state)
     }
 
     fn finish_scope(
@@ -80,10 +79,10 @@ impl Archive for PreserveCompleteStaging {
         &mut self,
         replay: ArchiveReplay,
         source: &DiscoveredSource,
-        initial_checkpoint: &AdapterCheckpoint,
+        initial_state: &AdapterSourceState,
     ) -> Result<ArchiveReplay, PortError> {
         self.inner
-            .prepare_replay_source(replay, source, initial_checkpoint)
+            .prepare_replay_source(replay, source, initial_state)
     }
 
     fn append_replay_batch(
