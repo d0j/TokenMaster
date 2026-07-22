@@ -8,6 +8,16 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 
 ## Implemented
 
+- P4-E durable layouts are developer-complete: schema v5 persists the complete
+  density/skin/color-scheme/layout quadruple; strict v1-v4 migrate to Refined while
+  preserving applicable legacy fields. Refined, Control Center, and Workbench switch
+  the wide Dashboard over the same six sections; narrow width remains the
+  environment-derived single-column composition while selection persists. The
+  existing one-active/one-replaceable-latest worker carries all 81 combinations and
+  the compiled UI proves 10,000 switches. TM-FUNC-004 board reorder/hide/collapse,
+  locale/language, typography/accessibility/DPI/paint/resource, P5/P6, M0,
+  packaging/signing/soak, and release remain open.
+
 - P4-D independent color schemes are developer-complete as a bounded sub-contour:
   settings schema v4 persists one complete density+skin+scheme triple, migrates strict
   v1-v3 to legacy Dark without a startup write, defaults fresh settings to System, and
@@ -1597,10 +1607,11 @@ actions and package provenance remain deferred until P6 supplies the producer/ma
 exact packaged production executable, and a disposable Windows host. No live HKCU,
 Explorer, sign-in, lock, sleep, hotkey, or GUI mutation was performed.
 Interactive History ranges are now complete as a bounded replacement of the existing
-History section rather than a new frontend query owner. P4-D density, skin, and color
-scheme are developer-complete; P4 layout is the next release-critical product slice.
+History section rather than a new frontend query owner. P4-E density, skin, color
+scheme, and durable layout presets are developer-complete; board customization,
+locale, and the remaining presentation acceptance work are still open.
 Interactive
-Windows, P4 presentation, P5 CLI/MCP, activation, M0, packaging, signing, soak, and
+Windows, remaining P4 presentation, P5 CLI/MCP, activation, M0, packaging, signing, soak, and
 product release remain unclaimed.
 
 P2-D quota history core is complete under
@@ -1812,3 +1823,14 @@ test/doctest suite. The final full suite completed in 649.8 seconds. An earlier 
 stopped once in the unchanged `tokenmaster-git` `process_contract` without a retained
 failure body; that target then passed 9/9 in isolation and passed inside the complete
 rerun without source changes. This evidence does not authorize M0 or release acceptance.
+
+## P4-E — durable built-in layouts
+
+Schema v5 persists the complete density+skin+color-scheme+layout quadruple. Fresh and
+strict v1-v4 settings select Refined layout while preserving applicable legacy fields.
+Refined, Control Center, and Workbench switch real wide Dashboard geometry; narrow
+width remains an environment-derived single-column fallback and does not overwrite the
+durable selection. The existing presentation owner and one-active/one-latest worker
+cover all 81 combinations, including a compiled 10,000-switch UI proof. Board section
+reorder/hide/collapse, locale/language, typography/accessibility/DPI/paint/resource,
+P5/P6/M0/package/signing/soak/release remain open.

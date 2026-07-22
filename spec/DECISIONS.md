@@ -1154,11 +1154,11 @@ package in a bounded standard age v1 stream; automatic backups store no secret.
 
 Settings, run state, and restore intent use alternating checked A/B records. At the
 prior Task 4 boundary, settings schema v1 stored only product-owned portable reminder/
-backup policy plus the device-local route. The historical schema-v2 boundary added one
-fixed `presentation.density` value. Current strict schema v3 owns the complete fixed
-`presentation.{density,skin}` pair. v1 migrates in memory to Comfortable+Refined and v2
-retains density while defaulting skin to Refined, both without a startup write; schema
-0 and schema 4 or newer are unsupported. This valid-envelope version distinction prevents a downgraded binary
+backup policy plus the device-local route. Historical schemas v2 through v4 added the
+fixed density, skin, and requested color-scheme axes. Current strict schema v5 owns the
+complete fixed `presentation.{density,skin,color_scheme,layout}` quadruple. v1-v4
+migrate without a startup write using their versioned defaults and Refined layout;
+schema 0 and schema 6 or newer are unsupported. This valid-envelope version distinction prevents a downgraded binary
 from loading defaults and overwriting newer state. Ordinary schedule settings cannot
 lower the five-minute quiet or six-hour interval gates. Portable preview/commit is
 base-generation/digest bound, preserves device state, and returns a reconstructible
@@ -2164,3 +2164,20 @@ Rationale: requested System is durable user intent while the effective OS scheme
 transient environment state. Separating them prevents persistence churn and preserves
 constant memory; independent typed axis mapping avoids a growing 27-arm product/API
 surface while retaining exhaustive test coverage.
+
+## ADR-089 — Add three durable built-in layouts as one bounded presentation axis
+
+Decision: schema v5 extends the complete presentation value with exactly one fixed
+layout enum: `Refined`, `Control Center`, or `Workbench`. Fresh settings and strict
+v1-v4 migration select Refined while preserving applicable legacy fields. The existing
+admission-first owner and one-active/one-replaceable-latest worker carry all four axes;
+no per-section reorder/hide/collapse authority is added.
+
+Wide Dashboard composition uses the same six semantic sections and bounded models for
+each layout. Narrow width retains the selected durable layout but renders the existing
+safe single-column composition. The 81-combination and 10,000-switch compiled proof
+establish boundedness; locale/language, typography/accessibility/DPI/paint/resource,
+P5/P6, M0, package/signing/soak, and release remain separate blockers.
+
+Rationale: a closed layout enum delivers the accepted product distinction without
+introducing dynamic UI, unbounded manifests, or another runtime authority.

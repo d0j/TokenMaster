@@ -477,3 +477,14 @@ performs the exact rollback, and refresh rebinds the selected range. The envelop
 UI retain no prior-range history, private identity, or extra query/runtime authority.
 Tasks 1-5 are developer evidence only; interactive Windows and release gates remain
 outside this contour.
+
+## P4-E durable layout axis
+
+The presentation owner now carries one complete density/skin/color-scheme/layout
+value. Schema v5 admits the fixed `Refined`, `Control Center`, and `Workbench`
+layouts; v1-v4 migrate to Refined. Wide Dashboard composition reuses the same six
+semantic sections and bounded models, while narrow width uses the existing
+environment-derived single-column composition without changing durable selection.
+The existing one-active/one-replaceable-latest worker remains the sole application
+path; no dynamic manifest, second window, queue, timer, cache, or query authority is
+introduced. Board section reorder/hide/collapse is intentionally outside this slice.

@@ -840,10 +840,11 @@ and does not reexport generic record/file authority or accept a path. The author
 audit permits exactly the original bounded record/platform import and one exact
 `ValidatedLocalDirectory` import for that typed constructor, while retaining all six
 fixed-child and alias-reuse gates. Its historical schema v1 wire is a strict legacy
-subset capped at 1 MiB. Current strict schema v4 carries only the fixed complete
-`presentation.{density,skin,color_scheme}` triple in addition to the prior portable
-fields. v1-v3 migrate in memory without a startup write and select Dark to preserve
-the prior appearance; schema 0 and schema 5 or newer reject. Unknown, duplicate,
+subset capped at 1 MiB. Current strict schema v5 carries only the fixed complete
+`presentation.{density,skin,color_scheme,layout}` quadruple in addition to the prior
+portable fields. v1-v4 migrate in memory without a startup write; earlier fields retain
+their versioned migration semantics and layout defaults to Refined. Schema 0 and schema
+6 or newer reject. Unknown, duplicate,
 unsupported, invalid
 enum/range/relationship, and forbidden-state fields fail before publication. Portable
 input cannot contain or overwrite the device-local route. Errors, `Debug`, previews,
@@ -1351,3 +1352,13 @@ degrade together on accepted range-query failure; Dashboard today and Projects
 UTC-today Git ranges remain separate. Two optional terminal notifier slots are fixed,
 non-displacing, and clear only exact whole-intent matches. The 30-row frontend bound
 and no-cache/no-queue/no-additional-worker rules remain mandatory.
+
+## P4-E layout boundary
+
+Layout is a closed three-value presentation enum (`Refined`, `Control Center`, or
+`Workbench`) carried only inside the complete four-axis settings value. Strict schema
+v5 and v1-v4 in-memory migration reject unknown, partial, and extra layout data.
+Layout switching reuses the existing owner, worker, window, route models, and bounded
+Dashboard inputs; it adds no path, content, command, SQL, HTTP, filesystem, plugin,
+timer, queue, cache, or dynamic UI authority. Narrow width remains environment-derived
+single-column presentation and does not alter durable selection.

@@ -2,6 +2,14 @@
 
 ## M0 — native architecture proof
 
+P4-E durable layouts are developer-complete as a bounded sub-contour: schema v5
+persists the complete density/skin/color-scheme/layout quadruple; v1-v4 migrate to
+Refined; and Refined/Control Center/Workbench switch the wide Dashboard while narrow
+width remains single-column. The existing owner/worker proves 81 combinations and
+10,000 switches. Board reorder/hide/collapse, locale/language, typography/
+accessibility/DPI/paint/resource, P5/P6, M0, packaging/signing/soak, and release remain
+open.
+
 P4-D independent color schemes are developer-complete as a bounded sub-contour: schema
 v4 persists one complete density+skin+scheme triple; strict v1-v3 migrate to Dark;
 fresh defaults use System; Rust owns six exact skin/scheme palettes; reactive effective
@@ -453,18 +461,24 @@ presentation status.
 
 ### P4-C complete
 
-Developer contract coverage now includes durable built-in Refined, Graphite, and Ember
+At the P4-C boundary, developer contract coverage added durable built-in Refined, Graphite, and Ember
 skins through schema v3, legacy default migration, exact 15-role Rust palettes, one
 Slint palette input, one owner, complete latest-wins payload, persistence, and restore.
-P4 remains partial: layout, colour scheme, locale, typography, interactive DPI,
-accessibility, paint/resource evidence and all P5/P6/M0/package/signing/soak/release
-work are still open.
+P4-D and P4-E below supersede its current presentation value.
 
 ### P4-D complete
 
-Developer contract coverage now includes durable requested System/Light/Dark, separate
+At the P4-D boundary, developer contract coverage added durable requested System/Light/Dark, separate
 effective Light/Dark resolution with Unknown-to-Dark fallback, strict schema-v4 complete
 triples and legacy-Dark migration, six exact Rust palettes, no observer authority or
-persistence churn, and one latest-wins 27-combination payload. P4 remains partial:
-layout, locale, typography, interactive DPI/accessibility, paint/resource evidence and
-all P5/P6/M0/package/signing/soak/release work are still open.
+persistence churn, and one latest-wins 27-combination payload. P4-E below supersedes
+its current presentation value.
+
+### P4-E complete
+
+Developer contract coverage now includes strict schema-v5 complete presentation,
+Refined/Control Center/Workbench, v1-v4 Refined migration, real wide Dashboard geometry,
+narrow single-column safety, 81 combinations, and 10,000 compiled-UI switches. P4
+remains partial: board reorder/hide/collapse, locale, typography, interactive DPI/
+accessibility, paint/resource evidence and all P5/P6/M0/package/signing/soak/release
+work are still open.

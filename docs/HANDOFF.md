@@ -9,6 +9,41 @@
 
 ## Current implementation boundary
 
+P4-E durable layouts are developer-complete as one bounded sub-contour. Schema v5
+persists `{density, skin, color_scheme, layout}`; strict v1-v4 migrate to Refined,
+and Refined/Control Center/Workbench visibly switch the wide Dashboard while narrow
+width remains single-column with the selected layout durable. One existing owner and
+one-active/one-replaceable-latest worker cover 81 combinations and 10,000 switches.
+
+## Product state
+
+P4-E is developer-complete. It is not a package, release candidate, or stable release.
+The shortest next release-critical outcome is the remaining P4 product surface, not
+another presentation audit refinement.
+
+## Audit/evidence state
+
+Focused Rust and compiled-UI contracts, both direct source receipts, all 110 application
+composition mutations, and the focused 19-test desktop presentation receipt pass. The
+historical 304-test desktop mutation aggregate exceeded its bounded 20-minute run after
+showing one stale expected receipt hash; that fixture was corrected and the affected
+receipt passed. It is not a release gate and MUST NOT be rerun as an audit-hardening
+loop. The required workspace baseline remains the final cycle acceptance check.
+
+## Release blockers
+
+Board reorder/hide/collapse remains open, as do locale/language,
+typography/accessibility/DPI/paint/resource, P5/P6, M0, packaging/signing/soak, and
+release acceptance.
+
+## Git state
+
+Continue only from the clean `cx/tokenmaster-product-architecture` feature branch.
+Tracked documents intentionally contain no current commit hash; verify live `HEAD` and
+`git status` before work.
+
+## Prior completed contours
+
 P4-D independent color schemes are developer-complete as one bounded sub-contour.
 Settings schema v4 persists one complete density+skin+scheme triple, strict v1-v3
 migrate to Dark without a startup write, fresh settings default to System, and typed
@@ -1312,12 +1347,19 @@ System. Effective scheme observation is ephemeral and cannot persist or advance
 revision. Six exact Rust-owned palettes cover all skin/scheme pairs, while one existing
 owner and one-active/one-latest-pending worker cover all 27 complete combinations.
 
-Handoff truth: product state is P4-D developer-complete; audit/evidence state is focused
-Rust/UI tests plus application and desktop source/mutation receipts green; release
-blockers are layout, locale, remaining typography/accessibility/DPI/paint/resource,
-P5, P6, M0, package/signing/soak and external interactive receipts; Git must be clean
+P4-E supersedes the current presentation contract: schema v5 carries the complete
+density+skin+requested-scheme+layout quadruple; v1-v4 add Refined layout while retaining
+their versioned migration semantics. Refined, Control Center, and Workbench change real
+wide Dashboard geometry; narrow width remains derived, single-column, and safe. The
+existing owner and one-active/one-latest-pending worker cover all 81 combinations.
+
+Handoff truth: product state is P4-E developer-complete; audit/evidence state is focused
+Rust/UI tests plus application and desktop source/mutation receipts (final mutation
+receipt and baseline are reconciled in the current cycle); release blockers are board
+reorder/hide/collapse, locale, remaining typography/accessibility/DPI/paint/resource,
+P5, P6, M0, package/signing/soak and external interactive receipts. Git must be clean
 on the feature branch before the next cycle. The shortest release-critical next slice
-is P4 layout, not another audit-hardening round.
+is the remaining P4 product surface, not another audit-hardening round.
 
 Final P4-D gates: clean-root passed in 6.2 seconds; format check passed in 2.1 seconds;
 warnings-as-errors locked workspace Clippy passed in 43.3 seconds; the post-review

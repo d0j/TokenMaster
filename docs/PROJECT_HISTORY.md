@@ -1,5 +1,19 @@
 # TokenMaster project history
 
+## 2026-07-22 — P4-E durable layouts
+
+Completed the developer P4-E layout slice. Settings schema v5 now persists one
+complete density/skin/color-scheme/layout quadruple; strict v1-v4 migrate to Refined
+without a startup write while preserving applicable legacy fields. Refined, Control
+Center, and Workbench rearrange the existing six Dashboard sections on wide windows;
+narrow width remains the environment-derived single-column composition and retains the
+selected layout. The existing one-active/one-replaceable-latest worker carries all 81
+combinations, and compiled UI evidence covers 10,000 switches. TM-FUNC-004 board
+reorder/hide/collapse remains open, as do locale/language, typography/accessibility/
+DPI/paint/resource, P5/P6, M0, packaging/signing/soak, and release acceptance. This
+cycle changed product behavior and required evidence, so `AUDIT_HARDENING_LOOP` did
+not trigger; only one bounded receipt correction was allowed.
+
 ## 2026-07-22 — P4-D independent color schemes
 
 Extended the complete presentation contract to schema v4 with requested System,

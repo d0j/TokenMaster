@@ -6,6 +6,14 @@ All notable changes are recorded here.
 
 ### Added
 
+- Added P4-E durable presentation layouts: schema v5 persists the complete
+  density/skin/color-scheme/layout value, strict v1-v4 migrate to Refined, and the
+  wide Dashboard supports Refined, Control Center, and Workbench over existing
+  bounded models. Narrow width remains single-column with durable selection. The
+  existing worker proves 81 combinations and 10,000 switches. Board reorder/hide/
+  collapse, locale/language, typography/accessibility/DPI/paint/resource, P5/P6, M0,
+  packaging/signing/soak, and release acceptance remain open.
+
 - Added bounded full rhythm aggregation for Activity: 24 hourly and seven Monday-Sunday
   buckets, capped at 30 civil days, 768 occurrences, and 2,304 segments. The rollup
   remains in the shared analytics transaction, preserves DST/fractional/skipped-date

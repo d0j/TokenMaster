@@ -628,24 +628,37 @@ replaces it. GNU developer/M0 evidence MUST NOT be represented as MSVC release
 evidence. Automatic update and installer behavior MUST remain unavailable until a
 separate signed-manifest, rollback, downgrade, and interrupted-update contract passes.
 
-## P4-C durable built-in skins (partial)
+## P4-C durable built-in skins (historical boundary)
 
-Presentation is one complete `{ density, skin }` selection. The only skin identities are
-`refined`, `graphite`, and `ember`; Rust owns immutable exact 15-role palettes and Slint
-aliases one palette value. One desktop owner admits a complete request before mutation,
-persists/restores both axes together, and reuses the latest-wins worker. Layout, colour
-scheme, locale, typography, interactive DPI/accessibility/paint/resource, P5/P6/M0,
-package/signing/soak, and release acceptance remain open.
+Presentation was one complete `{ density, skin }` selection. The only skin identities
+are `refined`, `graphite`, and `ember`; Rust owns immutable exact 15-role palettes and
+Slint aliases one palette value. One desktop owner admitted a complete request before
+mutation, persisted/restored both axes together, and reused the latest-wins worker.
+P4-D and P4-E below supersede this current value while retaining compatibility.
 
-## P4-D independent color schemes (partial)
+## P4-D independent color schemes (historical boundary)
 
-Presentation is one complete `{ density, skin, color_scheme }` selection. The only
+Presentation was one complete `{ density, skin, color_scheme }` selection. The only
 requested color-scheme identities are `system`, `light`, and `dark`; `system` resolves
 to an observed effective Light or Dark scheme and falls back to Dark when observation
 is unavailable. Fresh defaults use System, while schemas v1 through v3 migrate in
 memory to Dark so an upgrade preserves the prior appearance. A system observation
 MUST change only the effective palette: it MUST NOT advance the presentation revision,
 persist settings, enqueue work, poll, or add a watcher thread. Rust owns the six exact
-skin/scheme palettes and Slint receives one palette value. Layout, locale, remaining
-typography/row-size behavior, interactive DPI/accessibility/paint/resource, P5/P6/M0,
-package/signing/soak, and release acceptance remain open.
+skin/scheme palettes and Slint receives one palette value. P4-E below supersedes this
+current value while retaining compatibility.
+
+## P4-E durable layouts (developer-complete)
+
+Presentation is one complete `{ density, skin, color_scheme, layout }` selection.
+The fixed layout identities are `Refined`, `Control Center`, and `Workbench`.
+Settings schema v5 admits only versions 1 through 5; fresh settings select Refined,
+and v1-v4 migrate in memory to Refined while preserving applicable legacy fields.
+The existing admission-first owner and one-active/one-replaceable-latest worker carry
+the complete value. Wide Dashboard composition visibly switches among the three
+layouts; below the existing narrow breakpoint all retain the environment-derived
+single-column composition while the selected layout remains durable. The compiled UI
+proof covers all 81 four-axis combinations and 10,000 switches. Board section
+reorder/hide/collapse under TM-FUNC-004 remains open, as do locale/language,
+typography/accessibility/DPI/paint/resource, P5/P6, M0, packaging/signing/soak, and
+release acceptance.

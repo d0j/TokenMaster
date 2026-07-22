@@ -1235,3 +1235,12 @@ system-color observation accepts only the closed Unknown/Light/Dark enum and upd
 the effective palette without submitting an application intent, changing revision, or
 persisting settings. The six skin/scheme combinations map through typed axis matches,
 not a growing cross-product command surface.
+
+## P4-E presentation API
+
+`UpdatePresentation` accepts one typed complete density+skin+color-scheme+layout
+value; no per-axis application command exists. The existing coordinator retains at
+most one active and one replaceable-latest complete payload. Layout maps only to the
+fixed `Refined`, `Control Center`, or `Workbench` enum and adds no worker, queue,
+timer, cache, query, or persistence authority. Settings admission is exactly v1..=v5;
+v1-v4 migrate to Refined and canonical writes are v5.

@@ -632,19 +632,20 @@ and rereads both slots. Any uncertainty after publication is recovery-required. 
 generic record/file authority remains crate-private; the typed settings store and
 later typed run/recovery stores are the only intended public surfaces.
 
-Implemented current settings schema version 4 contains exactly `portable` and
+Implemented current settings schema version 5 contains exactly `portable` and
 `device` classes. Portable state contains one canonical in-app reminder profile
 (enabled plus one through eight unique lead seconds from 60 through 31,536,000),
 automatic-backup policy (periodic enabled, quiet seconds 300..3,600, interval seconds
 21,600..604,800 with quiet strictly below interval, and retention budget 256 MiB..
-64 GiB), and one complete presentation triple: density fixed to `comfortable`, `compact`,
+64 GiB), and one complete presentation quadruple: density fixed to `comfortable`, `compact`,
 or `ultra_compact`, skin fixed to `refined`, `graphite`, or `ember`, plus color scheme
-fixed to `system`, `light`, or `dark`. Defaults are
+fixed to `system`, `light`, or `dark`, plus layout fixed to `refined`, `control_center`,
+or `workbench`. Defaults are
 the recommended 7d/24h/12h/6h/1h reminder leads, five-minute quiet, six-hour interval,
-2 GiB budget, Comfortable density, Refined skin, and System color scheme. Strict
-schemas v1 through v3 migrate in memory without a startup write and select Dark to
-preserve the legacy appearance; schema v2 retains density and defaults skin to Refined,
-while schema v3 retains density+skin. Versions 0 and 5 or newer reject. Device state contains only one of the
+2 GiB budget, Comfortable density, Refined skin, System color scheme, and Refined
+layout. Strict schemas v1 through v4 migrate in memory without a startup write; legacy
+fields retain their versioned migration semantics and layout defaults to Refined.
+Versions 0 and 6 or newer reject. Device state contains only one of the
 11 implemented route keys. The schema stores no provider, arbitrary style, or
 forbidden private state. Portable candidates have their own strict versioned JSON
 envelope, SHA-256 digest, bounded category/count preview, and never carry device
@@ -1162,3 +1163,13 @@ Comfortable+Refined+Dark, v2 retains density and adds Refined+Dark, v3 retains
 density+skin and adds Dark, and v4 retains the complete triple. Admission is exactly
 v1..=v4 and canonical writes are v4. Missing, unknown, partial, or extra values reject.
 Observed effective system color is runtime presentation state only and is never stored.
+
+## P4-E presentation record
+
+Settings schema v5 serializes exactly `presentation.density`, `presentation.skin`,
+`presentation.color_scheme`, and `presentation.layout`. Layout is the fixed enum
+`refined`, `control_center`, or `workbench`; unknown, partial, or extra values reject.
+Fresh settings and strict v1-v4 migration use `refined`, preserving applicable legacy
+fields without a startup write. Admission is exactly v1..=v5 and canonical writes are
+v5. The selected layout remains durable even when narrow width selects the safe
+single-column composition.
