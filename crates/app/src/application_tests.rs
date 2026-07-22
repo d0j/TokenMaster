@@ -1745,6 +1745,8 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     let old_notifier = Arc::clone(&bundle_slot.as_ref().expect("healthy bundle").notifier);
     let session_page_sink =
         ApplicationSessionPageIntentSink::new(Arc::downgrade(&application.bundle));
+    let history_range_sink =
+        ApplicationHistoryRangeIntentSink::new(Arc::downgrade(&application.bundle));
     let old_session_page_epoch = bundle_slot
         .as_ref()
         .expect("healthy bundle")
@@ -1759,6 +1761,38 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
         .expect("old published product generation")
         .expect("old published product generation is initialized");
     drop(bundle_slot);
+
+    let duplicate_history_notifier = application
+        .bridge
+        .lock()
+        .expect("live bridge slot")
+        .as_ref()
+        .expect("live bridge")
+        .terminal_history_range_notifier();
+    assert_eq!(
+        application
+            .bundle
+            .lock()
+            .expect("live bundle slot")
+            .as_mut()
+            .expect("live bundle")
+            .controller
+            .attach_terminal_history_range_notifier(duplicate_history_notifier)
+            .expect_err("history notifier attaches exactly once")
+            .code()
+            .stable_code(),
+        "notifier_already_attached"
+    );
+    let old_history_intent = DesktopHistoryRangeIntent::new(
+        old_session_page_epoch,
+        old_session_page_generation,
+        DesktopHistoryRangeGeneration::new(1).expect("initial history generation"),
+        DesktopHistoryRangePreset::Recent1Day,
+    );
+    assert_eq!(
+        history_range_sink.submit(old_history_intent),
+        DesktopHistoryRangeIntentAdmission::Accepted
+    );
 
     let direct_restart_publications = application.reliable_publish_count.load(Ordering::Acquire);
     application
@@ -1779,6 +1813,13 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
         .snapshot_epoch()
         .expect("restarted session page epoch");
     assert_ne!(restarted_session_page_epoch, old_session_page_epoch);
+    let restarted_history_generation = restarted_slot
+        .as_ref()
+        .expect("restarted bundle")
+        .controller
+        .published_product_generation()
+        .expect("restarted published history generation")
+        .expect("restarted published history generation is initialized");
     drop(restarted_slot);
     assert_eq!(
         session_page_sink.submit(page_intent(
@@ -1789,6 +1830,20 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
         )),
         DesktopSessionPageIntentAdmission::Rejected
     );
+    assert_eq!(
+        history_range_sink.submit(old_history_intent),
+        DesktopHistoryRangeIntentAdmission::Rejected
+    );
+    assert_eq!(
+        history_range_sink.submit(DesktopHistoryRangeIntent::new(
+            restarted_session_page_epoch,
+            restarted_history_generation,
+            DesktopHistoryRangeGeneration::new(1).expect("restarted history generation"),
+            DesktopHistoryRangePreset::Recent1Day,
+        )),
+        DesktopHistoryRangeIntentAdmission::Accepted
+    );
+    wait_for_desktop_controller_completion(&application);
     let obsolete_runtime_generation = old_notifier.next_generation.load(Ordering::Acquire);
     old_notifier
         .publish()
@@ -1880,6 +1935,8 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
         Application::start(&safe_environment).expect("safe-mode application");
     let safe_session_page_sink =
         ApplicationSessionPageIntentSink::new(Arc::downgrade(&safe_application.bundle));
+    let safe_history_range_sink =
+        ApplicationHistoryRangeIntentSink::new(Arc::downgrade(&safe_application.bundle));
     assert_eq!(
         safe_session_page_sink.submit(page_intent(
             DesktopSnapshotEpoch::new(1).expect("safe-mode epoch"),
@@ -1888,6 +1945,15 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
             DesktopSessionPageDirection::Newest,
         )),
         DesktopSessionPageIntentAdmission::Rejected
+    );
+    assert_eq!(
+        safe_history_range_sink.submit(DesktopHistoryRangeIntent::new(
+            DesktopSnapshotEpoch::new(1).expect("safe-mode epoch"),
+            ProductReducer::new().snapshot().generation(),
+            DesktopHistoryRangeGeneration::new(1).expect("safe history generation"),
+            DesktopHistoryRangePreset::Recent1Day,
+        )),
+        DesktopHistoryRangeIntentAdmission::Rejected
     );
     assert!(
         safe_application
@@ -2156,6 +2222,15 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
             DesktopSessionPageDirection::Newest,
         )),
         DesktopSessionPageIntentAdmission::Rejected
+    );
+    assert_eq!(
+        history_range_sink.submit(DesktopHistoryRangeIntent::new(
+            current_session_page_epoch,
+            stale_product_generation,
+            DesktopHistoryRangeGeneration::new(2).expect("closed history generation"),
+            DesktopHistoryRangePreset::Recent1Day,
+        )),
+        DesktopHistoryRangeIntentAdmission::Rejected
     );
 
     application.shutdown().expect("joined application shutdown");

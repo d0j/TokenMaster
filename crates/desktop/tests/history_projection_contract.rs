@@ -8,7 +8,8 @@ use tokenmaster_desktop::{
 };
 use tokenmaster_product::{ProductAttemptGeneration, ProductReducer};
 use tokenmaster_query::{
-    QueryService, UsageAnalyticsRequest, UsageRange, UsageSeriesSelection, UsageTimeZone, WeekStart,
+    QueryErrorCode, QueryService, UsageAnalyticsRequest, UsageRange, UsageSeriesSelection,
+    UsageTimeZone, WeekStart,
 };
 
 use support::dashboard_fixture::{FixedClock, seed};
@@ -131,6 +132,59 @@ fn history_range_preset_is_derived_only_from_exact_daily_series_and_terminal_is_
     state.complete_history_range_terminal(intent);
     assert!(!state.projection().history().range_pending());
     state.apply_snapshot_for_epoch(DesktopSnapshotEpoch::new(2).expect("new epoch"), &initial);
+    assert_eq!(
+        state.projection().history().range_preset(),
+        DesktopHistoryRangePreset::Recent30Days
+    );
+}
+
+#[test]
+fn active_history_range_accepts_only_its_exact_snapshot_discriminator() {
+    let initial = ProductReducer::new().snapshot();
+    let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+
+    for snapshot in [snapshot_for_days(7), snapshot_for_days(2)] {
+        let mut state = DesktopState::new(&initial, DesktopRouteKey::History);
+        state.apply_snapshot_for_epoch(epoch, &initial);
+        state
+            .request_history_range(DesktopHistoryRangePreset::Recent1Day)
+            .expect("pending one-day range");
+        state.apply_snapshot_for_epoch(epoch, &snapshot);
+        assert_eq!(
+            state.projection().history().range_preset(),
+            DesktopHistoryRangePreset::Recent30Days
+        );
+        assert!(!state.projection().history().range_pending());
+    }
+
+    let prior = snapshot_for_days(30);
+    let mut reducer = ProductReducer::new();
+    let prior_history = prior
+        .history()
+        .payload()
+        .expect("history payload")
+        .as_ref()
+        .clone();
+    reducer
+        .publish_history(attempt(1), prior_history)
+        .expect("publish prior history");
+    let prior = reducer.snapshot();
+    let mut state = DesktopState::new(&prior, DesktopRouteKey::History);
+    state.apply_snapshot_for_epoch(epoch, &prior);
+    let intent = state
+        .request_history_range(DesktopHistoryRangePreset::Recent1Day)
+        .expect("pending range");
+    reducer
+        .fail_history(attempt(2), QueryErrorCode::Unavailable)
+        .expect("retained history failure");
+    state.apply_snapshot_for_epoch(epoch, &reducer.snapshot());
+    assert_eq!(
+        state.projection().history().range_preset(),
+        DesktopHistoryRangePreset::Recent30Days
+    );
+    assert!(!state.projection().history().range_pending());
+    state.reject_history_range(intent);
+    state.reject_history_range(intent);
     assert_eq!(
         state.projection().history().range_preset(),
         DesktopHistoryRangePreset::Recent30Days

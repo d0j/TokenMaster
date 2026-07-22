@@ -573,6 +573,10 @@ impl DesktopState {
         self.active_session_navigation = None;
         self.published_history_preset = if replace_backend {
             DesktopHistoryRangePreset::Recent30Days
+        } else if let Some(active) = self.active_history_range {
+            history_preset_from_snapshot(snapshot)
+                .filter(|candidate| *candidate == active.preset())
+                .unwrap_or(self.published_history_preset)
         } else {
             history_preset_from_snapshot(snapshot).unwrap_or(self.published_history_preset)
         };
@@ -682,6 +686,23 @@ mod tests {
         assert_eq!(
             state.next_session_navigation_generation(),
             Err(DesktopSessionPageNavigationError::CapacityExceeded)
+        );
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn history_range_generation_overflow_is_rejected_before_intent_publication() {
+        let snapshot = ProductReducer::new().snapshot();
+        let mut state = DesktopState::new(&snapshot, DesktopRouteKey::History);
+        state.apply_snapshot_for_epoch(DesktopSnapshotEpoch::new(1).expect("epoch"), &snapshot);
+        state.next_history_range_generation = u64::MAX;
+        let intent = state
+            .request_history_range(DesktopHistoryRangePreset::Recent1Day)
+            .expect("maximum generation remains valid");
+        state.reject_history_range(intent);
+        assert_eq!(
+            state.request_history_range(DesktopHistoryRangePreset::Recent1Day),
+            Err(DesktopHistoryRangeSelectionError::CapacityExceeded)
         );
     }
 }
