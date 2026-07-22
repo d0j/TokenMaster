@@ -14,6 +14,17 @@ accessibility/DPI/paint/resource and live Windows, P5 CLI/MCP, P6 package/signin
 M0, and release remain open. Zero audit-only correction rounds; the cycle changed
 product behavior and required schema evidence, so `AUDIT_HARDENING_LOOP` did not trigger.
 
+Independent Sol High review found no production/security/data-loss defect and two
+required-evidence defects: stale presentation receipt anchors and contradictory
+fixed-six display wording. One bounded correction and the sole re-review closed both.
+Final gates then caught four warnings-as-errors callback shapes and a Settings viewport
+regression; the callback form was normalized and the board editor moved after existing
+settings in the same scroll surface. Reminder UI 1/1, board UI 5/5, clean-root, format,
+warnings-as-errors workspace Clippy, and the complete locked workspace test/doctest
+suite pass. Application receipt mutations pass 110/110 and both source-only receipts
+pass; the full 304-test desktop Pester suite timed out twice and is explicitly not
+claimed. No additional audit-hardening round was opened.
+
 ## 2026-07-22 — P4-E durable layouts
 
 Completed the developer P4-E layout slice. Settings schema v5 now persists one

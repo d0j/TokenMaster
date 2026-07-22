@@ -72,6 +72,9 @@ fn card_geometry(window: &tokenmaster_desktop::MainWindow, label: &str) -> (f32,
 fn board_editor_exposes_six_accessible_rows_and_canonical_visible_slots() {
     let (shell, _) = shell();
     let window = shell.window();
+    window
+        .window()
+        .set_size(slint::PhysicalSize::new(1_400, 3_000));
     window.invoke_select_route(SharedString::from("settings"));
 
     assert_eq!(window.get_dashboard_board_editor_rows().row_count(), 6);

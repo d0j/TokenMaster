@@ -20,9 +20,12 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   accessibility/DPI/paint/resource and live Windows acceptance, P5 CLI/MCP, P6
   package/signing/soak, M0, and release acceptance remain blockers. This is not M0,
   a package, release candidate, or stable release.
-  Final review corrected Workbench to the specified Plan-full, Code+Sessions,
-  Trend+Model Usage, Activity-full geometry and corrected one stale schema assertion.
-  The single re-review found no new Critical issue. Clean-root, format,
+  Final review found no production/security/data-loss defect and closed two required-
+  evidence defects: stale presentation receipts and contradictory fixed-six display
+  wording. The sole re-review found no new Critical issue. Final gates also collapsed
+  four warnings-as-errors callback shapes and moved the board editor after established
+  settings in the same scroll surface, preserving Reminder/Backup accessibility while
+  keeping board accessibility testable in an expanded viewport. Clean-root, format,
   warnings-as-errors locked workspace Clippy, and the complete locked workspace
   test/doctest suite pass; this is developer evidence, not release acceptance.
 

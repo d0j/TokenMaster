@@ -1044,10 +1044,9 @@ fn wire_dashboard_board(
                     presentation_admitted(sink, selection)
                 })
             })
+            && let Some(window) = move_window.upgrade()
         {
-            if let Some(window) = move_window.upgrade() {
-                apply_presentation_style(&window, next_style);
-            }
+            apply_presentation_style(&window, next_style);
         }
     });
 
@@ -1064,10 +1063,9 @@ fn wire_dashboard_board(
                     presentation_admitted(sink, selection)
                 })
             })
+            && let Some(window) = visible_window.upgrade()
         {
-            if let Some(window) = visible_window.upgrade() {
-                apply_presentation_style(&window, next_style);
-            }
+            apply_presentation_style(&window, next_style);
         }
     });
 
@@ -1084,10 +1082,9 @@ fn wire_dashboard_board(
                     presentation_admitted(sink, selection)
                 })
             })
+            && let Some(window) = collapsed_window.upgrade()
         {
-            if let Some(window) = collapsed_window.upgrade() {
-                apply_presentation_style(&window, next_style);
-            }
+            apply_presentation_style(&window, next_style);
         }
     });
 
@@ -1096,10 +1093,9 @@ fn wire_dashboard_board(
             update_board_if_admitted(&presentation_style, &intent_sink, |style, sink| {
                 style.reset_board_if_admitted(|selection| presentation_admitted(sink, selection))
             })
+            && let Some(window) = weak_window.upgrade()
         {
-            if let Some(window) = weak_window.upgrade() {
-                apply_presentation_style(&window, next_style);
-            }
+            apply_presentation_style(&window, next_style);
         }
     });
 }

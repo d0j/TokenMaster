@@ -25,20 +25,20 @@ then P5/P6 release work, not another audit-hardening round.
 
 ## Audit/evidence state
 
-Focused Rust and compiled-UI contracts, both direct executable source receipts, and all
-110 application composition mutations pass. The bounded desktop receipt acceptance case
-passes; the full 304-test desktop Pester mutation suite was attempted twice and timed out
-at 120 seconds and 300 seconds before test output, so its complete mutation result is not
-verified in this cycle. Independent Sol High review found two Important issues: Workbench row geometry
-drift and one stale schema-v4 app assertion. Both are corrected; the single re-review
-closed them with no new Critical finding. The
-historical 304-test desktop mutation aggregate exceeded its bounded 20-minute run after
-showing one stale expected receipt hash; that fixture was corrected and the affected
-receipt passed. It is not a release gate and MUST NOT be rerun as an audit-hardening
-loop. Final developer baseline passes: clean-root 5.8 seconds, formatting 2.1 seconds,
-warnings-as-errors locked workspace Clippy 52.3 seconds, and the complete locked
-workspace test/doctest suite 735.8 seconds. Application and desktop executable receipts
-passed in 134.4 and 142.4 seconds. This remains developer evidence only.
+Focused Rust and compiled-UI contracts, both direct source-only receipts, and all 110
+application-composition mutations pass. The bounded desktop receipt acceptance case
+passes; the full 304-test desktop Pester mutation suite was attempted twice and timed
+out at 120 seconds and 300 seconds before test output, so its complete result is not
+verified in this cycle. Independent Sol High review found no production/security/data-
+loss defect and two required-evidence defects: stale receipt anchors and contradictory
+fixed-six display wording. The bounded correction and sole re-review closed both with no
+new Critical finding. Final gates then exposed and closed two product-quality issues:
+four warnings-as-errors callback shapes and the board editor displacing established
+Reminder/Backup controls from their tested initial viewport. The board editor now stays
+in the same scroll surface after established settings, and its accessibility is verified
+in an expanded viewport. Final developer gates pass: clean-root 6.2 seconds, formatting,
+warnings-as-errors locked workspace Clippy 43.7 seconds, and the complete locked
+workspace test/doctest suite 604 seconds. This remains developer evidence only.
 
 ## Release blockers
 
