@@ -61,7 +61,8 @@ task is described as unified until all seven are complete.
 - **2b2:** Settings startup, portable configuration, dashboard board, and footer.
 - **2b3:** Projects and compact-widget views.
 - **2b4:** Sessions and dashboard views.
-- **2b5:** Data-health and Help/About views.
+- **2b5a:** Data-health view.
+- **2b5b:** Help/About view.
 - **2b6:** Activity and Models views.
 - **2b7:** History and Notifications views.
 
