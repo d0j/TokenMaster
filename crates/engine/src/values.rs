@@ -262,12 +262,14 @@ pub struct AdapterSourceProgress {
 
 impl AdapterSourceProgress {
     pub fn new(parts: AdapterSourceProgressParts) -> Result<Self, EngineError> {
+        if parts.provider_resume.len() > MAX_ADAPTER_CHECKPOINT_BYTES {
+            return Err(EngineError::new(EngineErrorCode::CapacityExceeded));
+        }
         if parts.schema_version == 0
             || parts.scan_offset < parts.committed_offset
             || parts.scan_offset > parts.observed_extent
             || (!parts.discarding_oversized_record && parts.scan_offset != parts.committed_offset)
             || parts.anchor_len > 4096
-            || parts.provider_resume.len() > MAX_ADAPTER_CHECKPOINT_BYTES
             || parts.anchor_start > parts.committed_offset
             || u64::from(parts.anchor_len)
                 > parts.committed_offset.saturating_sub(parts.anchor_start)

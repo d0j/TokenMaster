@@ -307,9 +307,10 @@ impl ReplaySourceSink for PreflightSink<'_> {
     fn on_source(
         &mut self,
         source: DiscoveredSource,
-        _initial_state: tokenmaster_engine::AdapterSourceState,
+        initial_state: tokenmaster_engine::AdapterSourceState,
         reader: &mut dyn SourceBatchReader,
     ) -> Result<SinkControl, PortError> {
+        validate_checkpoint_pair(reader, &initial_state, self.control)?;
         let progress = self.archive.current_progress(source.identity())?;
         let checkpoint = reader.restore_checkpoint(&progress, self.control)?;
         reader.validate_checkpoint(&checkpoint, self.control)?;
@@ -329,14 +330,19 @@ impl ReplaySourceSink for ApplySink<'_> {
     fn on_source(
         &mut self,
         source: DiscoveredSource,
-        _initial_state: tokenmaster_engine::AdapterSourceState,
+        initial_state: tokenmaster_engine::AdapterSourceState,
         reader: &mut dyn SourceBatchReader,
     ) -> Result<SinkControl, PortError> {
+        validate_checkpoint_pair(reader, &initial_state, self.control)?;
         loop {
             self.control.check()?;
             let progress = self.archive.current_progress(source.identity())?;
             let checkpoint = reader.restore_checkpoint(&progress, self.control)?;
             let batch = reader.read_batch(&checkpoint, self.control)?;
+            let restored_next = reader.restore_checkpoint(batch.next_progress(), self.control)?;
+            if restored_next != *batch.next_checkpoint() {
+                return Err(PortError::new(PortErrorCode::InvalidData));
+            }
             let state = batch.state();
             let counters = batch.counters();
             let unchanged = state == BatchState::SnapshotEnd
@@ -373,6 +379,18 @@ impl ReplaySourceSink for ApplySink<'_> {
         }
         Ok(SinkControl::Continue)
     }
+}
+
+fn validate_checkpoint_pair(
+    reader: &mut dyn SourceBatchReader,
+    state: &tokenmaster_engine::AdapterSourceState,
+    control: &OperationControl<'_>,
+) -> Result<(), PortError> {
+    let restored = reader.restore_checkpoint(state.progress(), control)?;
+    if restored != *state.checkpoint() {
+        return Err(PortError::new(PortErrorCode::InvalidData));
+    }
+    Ok(())
 }
 
 fn close_scan(

@@ -1,5 +1,6 @@
 use tokenmaster_engine::{
-    AdapterCheckpoint, AdapterCounters, AdapterDiagnosticCode, AdapterDiagnostics, ChunkProof,
+    AdapterCheckpoint, AdapterCounters, AdapterDiagnosticCode, AdapterDiagnostics,
+    AdapterSourceProgress, AdapterSourceProgressParts, AdapterVerification, ChunkProof,
     ChunkProofBatch, CompletionQuality, DiscoveredSource, EngineErrorCode,
     MAX_ADAPTER_CHECKPOINT_BYTES, MAX_CHUNK_PROOFS_PER_BATCH, MAX_SCOPE_MANIFEST_ENTRIES,
     SOURCE_CHUNK_BYTES, ScopeIdentity, ScopeManifest, SourceIdentity, SourceKind,
@@ -88,6 +89,28 @@ fn opaque_checkpoint_is_exactly_bounded_and_never_debugs_bytes() {
         AdapterCheckpoint::new(vec![0; MAX_ADAPTER_CHECKPOINT_BYTES + 1].into_boxed_slice())
             .expect_err("oversized checkpoint");
     assert_eq!(oversized.code(), EngineErrorCode::CapacityExceeded);
+}
+
+#[test]
+fn provider_resume_over_32_kib_is_a_capacity_error() {
+    let error = AdapterSourceProgress::new(AdapterSourceProgressParts {
+        schema_version: 1,
+        physical_identity: None,
+        logical_identity: [0; 32],
+        committed_offset: 0,
+        scan_offset: 0,
+        observed_extent: 0,
+        modified_time_ns: None,
+        anchor_start: 0,
+        anchor_len: 0,
+        anchor_sha256: [0; 32],
+        provider_resume: vec![0; MAX_ADAPTER_CHECKPOINT_BYTES + 1].into_boxed_slice(),
+        discarding_oversized_record: false,
+        incomplete_tail: false,
+        verification: AdapterVerification::Incremental,
+    })
+    .expect_err("oversized provider resume");
+    assert_eq!(error.code(), EngineErrorCode::CapacityExceeded);
 }
 
 #[test]

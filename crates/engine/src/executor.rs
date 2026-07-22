@@ -390,13 +390,17 @@ impl OneShotExecutor {
         state: &mut ExecutionState,
     ) -> Result<(), PortError> {
         control.check()?;
+        let restored_initial = reader.restore_checkpoint(initial_state.progress(), control)?;
+        if restored_initial != *initial_state.checkpoint() {
+            return Err(PortError::new(PortErrorCode::InvalidData));
+        }
         let current = state.replay.ok_or_else(stale_error)?;
         let replay = validate_replay_transition(
             current,
             archive.prepare_replay_source(current, source, &initial_state)?,
         )?;
         state.replay = Some(replay);
-        let mut checkpoint = initial_state.checkpoint().clone();
+        let mut checkpoint = restored_initial;
 
         loop {
             control.check()?;
@@ -406,6 +410,10 @@ impl OneShotExecutor {
             }
             let batch_state = batch.state();
             let next_checkpoint = batch.next_checkpoint().clone();
+            let restored_next = reader.restore_checkpoint(batch.next_progress(), control)?;
+            if restored_next != next_checkpoint {
+                return Err(PortError::new(PortErrorCode::InvalidData));
+            }
             if batch_state == BatchState::More && next_checkpoint == checkpoint {
                 return Err(PortError::new(PortErrorCode::InvalidData));
             }

@@ -125,7 +125,7 @@ fn checkpoint(value: u8) -> AdapterCheckpoint {
     AdapterCheckpoint::new(vec![value].into_boxed_slice()).expect("checkpoint")
 }
 
-fn progress(source: &SourceIdentity) -> AdapterSourceProgress {
+fn progress_for(source: &SourceIdentity, checkpoint: &[u8]) -> AdapterSourceProgress {
     AdapterSourceProgress::new(AdapterSourceProgressParts {
         schema_version: 1,
         physical_identity: None,
@@ -137,7 +137,7 @@ fn progress(source: &SourceIdentity) -> AdapterSourceProgress {
         anchor_start: 0,
         anchor_len: 0,
         anchor_sha256: [0; 32],
-        provider_resume: Box::default(),
+        provider_resume: checkpoint.to_vec().into_boxed_slice(),
         discarding_oversized_record: false,
         incomplete_tail: false,
         verification: AdapterVerification::Incremental,
@@ -146,7 +146,8 @@ fn progress(source: &SourceIdentity) -> AdapterSourceProgress {
 }
 
 fn state(source: &SourceIdentity, checkpoint: AdapterCheckpoint) -> AdapterSourceState {
-    AdapterSourceState::new(checkpoint, progress(source)).expect("state")
+    let progress = progress_for(source, checkpoint.as_bytes());
+    AdapterSourceState::new(checkpoint, progress).expect("state")
 }
 
 fn usage() -> TokenUsage {
@@ -222,6 +223,14 @@ impl Drop for TrackingSourceReader {
 }
 
 impl SourceBatchReader for TrackingSourceReader {
+    fn restore_checkpoint(
+        &mut self,
+        progress: &AdapterSourceProgress,
+        control: &OperationControl<'_>,
+    ) -> Result<AdapterCheckpoint, PortError> {
+        self.inner.restore_checkpoint(progress, control)
+    }
+
     fn read_batch(
         &mut self,
         current_checkpoint: &AdapterCheckpoint,
@@ -232,6 +241,16 @@ impl SourceBatchReader for TrackingSourceReader {
 }
 
 impl SourceBatchReader for FakeSourceReader {
+    fn restore_checkpoint(
+        &mut self,
+        progress: &AdapterSourceProgress,
+        control: &OperationControl<'_>,
+    ) -> Result<AdapterCheckpoint, PortError> {
+        control.check()?;
+        AdapterCheckpoint::new(progress.provider_resume().to_vec().into_boxed_slice())
+            .map_err(PortError::from)
+    }
+
     fn read_batch(
         &mut self,
         current_checkpoint: &AdapterCheckpoint,
@@ -242,6 +261,11 @@ impl SourceBatchReader for FakeSourceReader {
         let repeats = self.repeat_first_checkpoint && self.reads == 0;
         self.reads += 1;
         let batch_source = self.batch_source.as_ref().unwrap_or(&self.source);
+        let next_checkpoint = if repeats {
+            current_checkpoint.clone()
+        } else {
+            checkpoint(2)
+        };
         AdapterBatch::new(
             batch_source,
             AdapterBatchParts {
@@ -249,12 +273,8 @@ impl SourceBatchReader for FakeSourceReader {
                 relations: Box::default(),
                 chunk_proofs: tokenmaster_engine::ChunkProofBatch::new(None, Box::default())
                     .map_err(PortError::from)?,
-                next_checkpoint: if repeats {
-                    current_checkpoint.clone()
-                } else {
-                    checkpoint(2)
-                },
-                next_progress: progress(batch_source),
+                next_progress: progress_for(batch_source, next_checkpoint.as_bytes()),
+                next_checkpoint,
                 state: if repeats {
                     BatchState::More
                 } else {
@@ -901,7 +921,7 @@ fn run_sequence_fixture_with_stats(
 
 #[test]
 fn deadline_is_enforced_at_every_execution_control_boundary() {
-    const COMPLETE_PATH_CONTROL_CHECKS: u64 = 15;
+    const COMPLETE_PATH_CONTROL_CHECKS: u64 = 17;
 
     for expire_on in 1..=COMPLETE_PATH_CONTROL_CHECKS + 1 {
         let submit_clock = FakeClock::new(0);

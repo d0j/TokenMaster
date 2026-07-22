@@ -79,10 +79,26 @@ fn permit() -> tokenmaster_engine::RefreshPermit {
 
 struct SyntheticAdapter {
     seen: Arc<Mutex<Vec<Vec<u8>>>>,
+    restored: Arc<Mutex<Vec<Vec<u8>>>>,
+    initial_checkpoint: AdapterCheckpoint,
+    next_checkpoint: AdapterCheckpoint,
 }
 impl SyntheticAdapter {
-    fn state() -> AdapterSourceState {
-        AdapterSourceState::new(checkpoint(), progress()).expect("state")
+    fn new(
+        seen: Arc<Mutex<Vec<Vec<u8>>>>,
+        restored: Arc<Mutex<Vec<Vec<u8>>>>,
+        initial_checkpoint: AdapterCheckpoint,
+        next_checkpoint: AdapterCheckpoint,
+    ) -> Self {
+        Self {
+            seen,
+            restored,
+            initial_checkpoint,
+            next_checkpoint,
+        }
+    }
+    fn state(&self) -> AdapterSourceState {
+        AdapterSourceState::new(self.initial_checkpoint.clone(), progress()).expect("state")
     }
     fn completion() -> Result<AdapterCompletion, PortError> {
         AdapterCompletion::new(
@@ -108,7 +124,7 @@ impl Adapter for SyntheticAdapter {
         _: &OperationControl<'_>,
         sink: &mut dyn SourceSink,
     ) -> Result<AdapterCompletion, PortError> {
-        let _ = sink.on_source(source(), Self::state())?;
+        let _ = sink.on_source(source(), self.state())?;
         Self::completion()
     }
     fn visit_replay_sources(
@@ -119,14 +135,18 @@ impl Adapter for SyntheticAdapter {
     ) -> Result<AdapterCompletion, PortError> {
         let mut reader = SyntheticReader {
             seen: Arc::clone(&self.seen),
+            restored: Arc::clone(&self.restored),
+            next_checkpoint: self.next_checkpoint.clone(),
         };
-        let _ = sink.on_source(source(), Self::state(), &mut reader)?;
+        let _ = sink.on_source(source(), self.state(), &mut reader)?;
         Self::completion()
     }
 }
 
 struct SyntheticReader {
     seen: Arc<Mutex<Vec<Vec<u8>>>>,
+    restored: Arc<Mutex<Vec<Vec<u8>>>>,
+    next_checkpoint: AdapterCheckpoint,
 }
 impl SourceBatchReader for SyntheticReader {
     fn restore_checkpoint(
@@ -139,7 +159,12 @@ impl SourceBatchReader for SyntheticReader {
                 tokenmaster_engine::PortErrorCode::InvalidData,
             ));
         }
-        Ok(checkpoint())
+        let checkpoint = checkpoint();
+        self.restored
+            .lock()
+            .expect("restored")
+            .push(checkpoint.as_bytes().to_vec());
+        Ok(checkpoint)
     }
     fn validate_checkpoint(
         &mut self,
@@ -172,7 +197,7 @@ impl SourceBatchReader for SyntheticReader {
                         .into_boxed_slice(),
                 )
                 .map_err(PortError::from)?,
-                next_checkpoint: checkpoint.clone(),
+                next_checkpoint: self.next_checkpoint.clone(),
                 next_progress: progress(),
                 state: BatchState::SnapshotEnd,
                 counters: AdapterCounters::default(),
@@ -189,9 +214,13 @@ fn full_rebuild_reopen_and_incremental_reuse_exact_opaque_provider_checkpoint() 
     let directory = TempDir::new().expect("temporary store");
     let path = directory.path().join("usage.sqlite");
     let seen = Arc::new(Mutex::new(Vec::new()));
-    let mut adapter = SyntheticAdapter {
-        seen: Arc::clone(&seen),
-    };
+    let restored = Arc::new(Mutex::new(Vec::new()));
+    let mut adapter = SyntheticAdapter::new(
+        Arc::clone(&seen),
+        Arc::clone(&restored),
+        checkpoint(),
+        checkpoint(),
+    );
     let mut archive = StoreArchive::new(UsageStore::open(&path).expect("store"));
     let result = OneShotExecutor::new().run(
         &permit(),
@@ -202,14 +231,23 @@ fn full_rebuild_reopen_and_incremental_reuse_exact_opaque_provider_checkpoint() 
     );
     assert_eq!(result.quality(), CompletionQuality::Complete, "{result:?}");
     drop(archive);
+    seen.lock().expect("seen").clear();
+    restored.lock().expect("restored").clear();
 
     let mut archive = StoreArchive::new(UsageStore::open(&path).expect("reopen"));
     let control = OperationControl::new(&permit(), &FixedClock);
     refresh_incremental(&mut adapter, &mut archive, &control).expect("incremental");
     let seen = seen.lock().expect("seen");
-    assert!(
-        seen.iter()
-            .all(|checkpoint| checkpoint.as_slice() == CHECKPOINT)
+    assert_eq!(seen.as_slice(), [CHECKPOINT.to_vec(), CHECKPOINT.to_vec()]);
+    assert_eq!(
+        restored.lock().expect("restored").as_slice(),
+        [
+            CHECKPOINT.to_vec(),
+            CHECKPOINT.to_vec(),
+            CHECKPOINT.to_vec(),
+            CHECKPOINT.to_vec(),
+            CHECKPOINT.to_vec(),
+        ]
     );
     assert!(
         !format!(
@@ -221,4 +259,71 @@ fn full_rebuild_reopen_and_incremental_reuse_exact_opaque_provider_checkpoint() 
         )
         .contains("synthetic-provider-v1")
     );
+    assert!(
+        !format!(
+            "{:?}",
+            archive
+                .store()
+                .generation_snapshot(tokenmaster_store::SourceKey::from_bytes([7; 32]))
+                .expect("snapshot")
+        )
+        .contains("page-0001")
+    );
+}
+
+#[test]
+fn mismatched_checkpoint_pairs_fail_before_publication_and_reopen_cleanly() {
+    for (initial, next) in [
+        (
+            AdapterCheckpoint::new(b"wrong-initial".to_vec().into_boxed_slice()).unwrap(),
+            checkpoint(),
+        ),
+        (
+            checkpoint(),
+            AdapterCheckpoint::new(b"wrong-next".to_vec().into_boxed_slice()).unwrap(),
+        ),
+    ] {
+        let directory = TempDir::new().expect("temporary store");
+        let path = directory.path().join("usage.sqlite");
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let restored = Arc::new(Mutex::new(Vec::new()));
+        let mut adapter = SyntheticAdapter::new(seen, restored, initial, next);
+        let mut archive = StoreArchive::new(UsageStore::open(&path).expect("store"));
+        let result = OneShotExecutor::new().run(
+            &permit(),
+            &FixedClock,
+            &mut OpenLease,
+            &mut adapter,
+            &mut archive,
+        );
+        assert_eq!(result.quality(), CompletionQuality::Failed);
+        assert!(
+            archive
+                .store()
+                .archive_publication()
+                .expect("publication")
+                .current_revision()
+                .is_none()
+        );
+        drop(archive);
+        let mut clean = SyntheticAdapter::new(
+            Arc::new(Mutex::new(Vec::new())),
+            Arc::new(Mutex::new(Vec::new())),
+            checkpoint(),
+            checkpoint(),
+        );
+        let mut reopened = StoreArchive::new(UsageStore::open(&path).expect("reopen"));
+        let recovered = OneShotExecutor::new().run(
+            &permit(),
+            &FixedClock,
+            &mut OpenLease,
+            &mut clean,
+            &mut reopened,
+        );
+        assert_eq!(
+            recovered.quality(),
+            CompletionQuality::Complete,
+            "{recovered:?}"
+        );
+    }
 }
