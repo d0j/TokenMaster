@@ -192,6 +192,28 @@ function Get-RustFunctionText {
     return Get-ExecutableBracedText -Text $Text -Pattern "(?m)^\s*(?:pub(?:\s*\([^)]*\))?\s+)?(?:const\s+)?fn\s+$Name\s*\(" -FailureCode 'TM-DESKTOP-DENSITY-WIRING' -PreserveLiteralText:$PreserveLiteralText
 }
 
+function Get-ContiguousRustAttributesBefore {
+    param([Parameter(Mandatory = $true)][string]$Text, [Parameter(Mandatory = $true)][int]$DeclarationIndex)
+
+    $position = $DeclarationIndex - 1
+    $attributes = New-Object System.Collections.Generic.List[string]
+    while ($position -ge 0) {
+        while ($position -ge 0 -and [char]::IsWhiteSpace($Text[$position])) { $position-- }
+        if ($position -lt 0 -or $Text[$position] -ne ']') { break }
+        $depth = 0
+        $end = $position
+        while ($position -ge 0) {
+            if ($Text[$position] -eq ']') { $depth++ }
+            elseif ($Text[$position] -eq '[') { $depth--; if ($depth -eq 0) { break } }
+            $position--
+        }
+        if ($position -le 0 -or $Text[$position - 1] -ne '#') { break }
+        $attributes.Insert(0, $Text.Substring($position - 1, $end - $position + 2))
+        $position -= 2
+    }
+    return $attributes -join "`n"
+}
+
 function Normalize-ExecutableStructure { param([Parameter(Mandatory = $true)][string]$Text); return [regex]::Replace($Text, '\s+', '') }
 
 $uiExecutableText = ConvertTo-ExecutableText -Text $uiText
@@ -1019,7 +1041,8 @@ $historyProductionSyntax = ConvertTo-ExecutableText -Text $historyProductionText
 $historyProjectionDefinition = '(?m)^\s*pub(?:\s*\([^)]*\))?\s+fn\s+from_snapshot_with_range\s*\('
 $historyBoundSymbolCount = [regex]::Matches($historyProductionSyntax, '(?m)^\s*pub\s+const\s+MAX_HISTORY_DAYS\b').Count
 $historyBoundConstantCount = [regex]::Matches($historyProductionSyntax, '(?m)^\s*pub\s+const\s+MAX_HISTORY_DAYS\s*:\s*usize\s*=\s*30\s*;').Count
-$historyBoundDeclaration = [regex]::Match($historyProductionSyntax, '(?m)(?:^\s*#\[[^\r\n]+\]\s*\r?\n)*^\s*pub\s+const\s+MAX_HISTORY_DAYS\b[^\r\n]*;')
+$historyBoundDeclaration = [regex]::Match($historyProductionSyntax, '(?m)^\s*pub\s+const\s+MAX_HISTORY_DAYS\b[^\r\n]*;')
+$historyBoundAttributes = if ($historyBoundDeclaration.Success) { Get-ContiguousRustAttributesBefore -Text $historyProductionSyntax -DeclarationIndex $historyBoundDeclaration.Index } else { '' }
 $historyProjectionDefinitionCount = [regex]::Matches($historyProductionSyntax, $historyProjectionDefinition).Count
 if ($historyBoundSymbolCount -gt 1 -or $historyProjectionDefinitionCount -gt 1) {
     throw 'TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION: raw production History symbols must occur exactly once'
@@ -1032,7 +1055,7 @@ if ($historyBoundConstantCount -ne 1 -or
 if ($historyProjectionText -match '#\[\s*cfg\b|\bcfg!\s*\(') {
     throw 'TM-DESKTOP-HISTORY-RANGE-CFG: audited History definitions must not contain cfg attributes or cfg! branches'
 }
-if ($historyBoundDeclaration.Success -and $historyBoundDeclaration.Value -match '#\[\s*cfg(?:_attr)?\b') {
+if ($historyBoundAttributes -match '#\s*\[\s*cfg(?:_attr)?\b') {
     throw 'TM-DESKTOP-HISTORY-RANGE-CFG: audited History definitions must not contain cfg attributes or cfg! branches'
 }
 $controllerTestModule = [regex]::Match($controllerText, '(?ms)^\s*#\[cfg\(test\)\]\s*\r?\n\s*mod\s+tests\s*\{')
