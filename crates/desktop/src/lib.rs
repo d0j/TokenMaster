@@ -43,9 +43,11 @@ pub use presentation::{
     DesktopSessionSelectionError, DesktopSnapshotEpoch, DesktopState,
 };
 pub use presentation_style::{
-    DesktopColorScheme, DesktopDensity, DesktopEffectiveColorScheme, DesktopLayout,
-    DesktopPresentationApplyOutcome, DesktopPresentationPersistence, DesktopPresentationRevision,
-    DesktopPresentationSelection, DesktopPresentationStyle, DesktopSystemColorScheme,
+    DESKTOP_BOARD_SECTION_COUNT, DesktopBoardPreferences, DesktopBoardSectionKey,
+    DesktopBoardSectionPreference, DesktopColorScheme, DesktopDensity, DesktopEffectiveColorScheme,
+    DesktopLayout, DesktopPresentationApplyOutcome, DesktopPresentationPersistence,
+    DesktopPresentationRevision, DesktopPresentationSelection, DesktopPresentationStyle,
+    DesktopSystemColorScheme,
 };
 pub use projects::*;
 pub use reliable_state::*;

@@ -199,7 +199,7 @@ impl ApplicationPresentationUpdate {
         self.selection
     }
 
-    pub(crate) const fn into_state_presentation(self) -> tokenmaster_state::PresentationSettings {
+    pub(crate) fn into_state_presentation(self) -> tokenmaster_state::PresentationSettings {
         let density = match self.selection.density() {
             tokenmaster_desktop::DesktopDensity::Comfortable => {
                 tokenmaster_state::PresentationDensity::Comfortable
@@ -242,7 +242,35 @@ impl ApplicationPresentationUpdate {
                 tokenmaster_state::PresentationLayout::Workbench
             }
         };
+        let rows = self.selection.board().rows().map(|row| {
+            let key = match row.key() {
+                tokenmaster_desktop::DesktopBoardSectionKey::PlanUsage => {
+                    tokenmaster_state::BoardSectionKey::PlanUsage
+                }
+                tokenmaster_desktop::DesktopBoardSectionKey::CodeOutput => {
+                    tokenmaster_state::BoardSectionKey::CodeOutput
+                }
+                tokenmaster_desktop::DesktopBoardSectionKey::Trend => {
+                    tokenmaster_state::BoardSectionKey::Trend
+                }
+                tokenmaster_desktop::DesktopBoardSectionKey::Sessions => {
+                    tokenmaster_state::BoardSectionKey::Sessions
+                }
+                tokenmaster_desktop::DesktopBoardSectionKey::Activity => {
+                    tokenmaster_state::BoardSectionKey::Activity
+                }
+                tokenmaster_desktop::DesktopBoardSectionKey::Models => {
+                    tokenmaster_state::BoardSectionKey::Models
+                }
+            };
+            tokenmaster_state::BoardSectionPreference::new(key, row.visible(), row.collapsed())
+        });
+        let board = match tokenmaster_state::BoardPreferences::new(rows) {
+            Ok(board) => board,
+            Err(_) => unreachable!("Desktop board preferences are validated before mapping"),
+        };
         tokenmaster_state::PresentationSettings::new(density, skin, color_scheme, layout)
+            .with_board(board)
     }
 }
 

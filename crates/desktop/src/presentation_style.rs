@@ -1,5 +1,179 @@
 use crate::DesktopSkin;
 
+pub const DESKTOP_BOARD_SECTION_COUNT: usize = 6;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum DesktopBoardSectionKey {
+    PlanUsage,
+    CodeOutput,
+    Trend,
+    Sessions,
+    Activity,
+    Models,
+}
+
+impl DesktopBoardSectionKey {
+    pub const ALL: [Self; DESKTOP_BOARD_SECTION_COUNT] = [
+        Self::PlanUsage,
+        Self::CodeOutput,
+        Self::Trend,
+        Self::Sessions,
+        Self::Activity,
+        Self::Models,
+    ];
+
+    #[must_use]
+    pub const fn stable_key(self) -> &'static str {
+        match self {
+            Self::PlanUsage => "plan_usage",
+            Self::CodeOutput => "code_output",
+            Self::Trend => "trend",
+            Self::Sessions => "sessions",
+            Self::Activity => "activity",
+            Self::Models => "models",
+        }
+    }
+
+    #[must_use]
+    pub const fn label_key(self) -> &'static str {
+        match self {
+            Self::PlanUsage => "dashboard.plan_usage",
+            Self::CodeOutput => "dashboard.code_output",
+            Self::Trend => "dashboard.trend",
+            Self::Sessions => "dashboard.sessions",
+            Self::Activity => "dashboard.activity",
+            Self::Models => "dashboard.models",
+        }
+    }
+
+    #[must_use]
+    pub const fn index(self) -> usize {
+        self as usize
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DesktopBoardSectionPreference {
+    key: DesktopBoardSectionKey,
+    visible: bool,
+    collapsed: bool,
+}
+
+impl DesktopBoardSectionPreference {
+    #[must_use]
+    pub const fn new(key: DesktopBoardSectionKey, visible: bool, collapsed: bool) -> Self {
+        Self {
+            key,
+            visible,
+            collapsed,
+        }
+    }
+
+    #[must_use]
+    pub const fn key(self) -> DesktopBoardSectionKey {
+        self.key
+    }
+
+    #[must_use]
+    pub const fn visible(self) -> bool {
+        self.visible
+    }
+
+    #[must_use]
+    pub const fn collapsed(self) -> bool {
+        self.collapsed
+    }
+
+    const fn with_visible(mut self, visible: bool) -> Self {
+        self.visible = visible;
+        self
+    }
+
+    const fn with_collapsed(mut self, collapsed: bool) -> Self {
+        self.collapsed = collapsed;
+        self
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DesktopBoardPreferences {
+    rows: [DesktopBoardSectionPreference; DESKTOP_BOARD_SECTION_COUNT],
+}
+
+impl DesktopBoardPreferences {
+    #[must_use]
+    pub fn new(rows: [DesktopBoardSectionPreference; DESKTOP_BOARD_SECTION_COUNT]) -> Option<Self> {
+        let mut seen = [false; DESKTOP_BOARD_SECTION_COUNT];
+        let mut visible = false;
+        for row in rows {
+            let index = row.key().index();
+            if seen[index] {
+                return None;
+            }
+            seen[index] = true;
+            visible |= row.visible();
+        }
+        if !seen.into_iter().all(|present| present) || !visible {
+            return None;
+        }
+        Some(Self { rows })
+    }
+
+    #[must_use]
+    pub const fn canonical() -> Self {
+        Self {
+            rows: [
+                DesktopBoardSectionPreference::new(DesktopBoardSectionKey::PlanUsage, true, false),
+                DesktopBoardSectionPreference::new(DesktopBoardSectionKey::CodeOutput, true, false),
+                DesktopBoardSectionPreference::new(DesktopBoardSectionKey::Trend, true, false),
+                DesktopBoardSectionPreference::new(DesktopBoardSectionKey::Sessions, true, false),
+                DesktopBoardSectionPreference::new(DesktopBoardSectionKey::Activity, true, false),
+                DesktopBoardSectionPreference::new(DesktopBoardSectionKey::Models, true, false),
+            ],
+        }
+    }
+
+    #[must_use]
+    pub const fn rows(&self) -> &[DesktopBoardSectionPreference; DESKTOP_BOARD_SECTION_COUNT] {
+        &self.rows
+    }
+
+    fn move_adjacent(self, index: usize, delta: i32) -> Option<Self> {
+        if !matches!(delta, -1 | 1) {
+            return None;
+        }
+        let target = if delta < 0 {
+            index.checked_sub(1)?
+        } else {
+            index.checked_add(1)?
+        };
+        if index >= DESKTOP_BOARD_SECTION_COUNT || target >= DESKTOP_BOARD_SECTION_COUNT {
+            return None;
+        }
+        let mut rows = self.rows;
+        rows.swap(index, target);
+        Some(Self { rows })
+    }
+
+    fn with_visibility(self, index: usize, visible: bool) -> Option<Self> {
+        let mut rows = self.rows;
+        let current = *rows.get(index)?;
+        if !visible && current.visible() && rows.iter().filter(|row| row.visible()).count() == 1 {
+            return None;
+        }
+        rows[index] = current.with_visible(visible);
+        Some(Self { rows })
+    }
+
+    fn with_collapsed(self, index: usize, collapsed: bool) -> Option<Self> {
+        let mut rows = self.rows;
+        let row = rows.get_mut(index)?;
+        *row = row.with_collapsed(collapsed);
+        Some(Self { rows })
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DesktopDensity {
     Comfortable,
@@ -174,6 +348,7 @@ pub struct DesktopPresentationSelection {
     skin: DesktopSkin,
     color_scheme: DesktopColorScheme,
     layout: DesktopLayout,
+    board: DesktopBoardPreferences,
 }
 
 impl DesktopPresentationSelection {
@@ -189,6 +364,7 @@ impl DesktopPresentationSelection {
             skin,
             color_scheme,
             layout,
+            board: DesktopBoardPreferences::canonical(),
         }
     }
 
@@ -212,20 +388,31 @@ impl DesktopPresentationSelection {
         self.layout
     }
 
+    #[must_use]
+    pub const fn board(self) -> DesktopBoardPreferences {
+        self.board
+    }
+
+    #[must_use]
+    pub const fn with_board(mut self, board: DesktopBoardPreferences) -> Self {
+        self.board = board;
+        self
+    }
+
     const fn with_density(self, density: DesktopDensity) -> Self {
-        Self::new(density, self.skin, self.color_scheme, self.layout)
+        Self::new(density, self.skin, self.color_scheme, self.layout).with_board(self.board)
     }
 
     const fn with_skin(self, skin: DesktopSkin) -> Self {
-        Self::new(self.density, skin, self.color_scheme, self.layout)
+        Self::new(self.density, skin, self.color_scheme, self.layout).with_board(self.board)
     }
 
     const fn with_color_scheme(self, color_scheme: DesktopColorScheme) -> Self {
-        Self::new(self.density, self.skin, color_scheme, self.layout)
+        Self::new(self.density, self.skin, color_scheme, self.layout).with_board(self.board)
     }
 
     const fn with_layout(self, layout: DesktopLayout) -> Self {
-        Self::new(self.density, self.skin, self.color_scheme, layout)
+        Self::new(self.density, self.skin, self.color_scheme, layout).with_board(self.board)
     }
 }
 
@@ -419,6 +606,54 @@ impl DesktopPresentationStyle {
         self.select(self.selection.with_layout(layout), true, admit)
     }
 
+    pub fn move_board_section_if_admitted(
+        &mut self,
+        index: usize,
+        delta: i32,
+        admit: impl FnOnce(DesktopPresentationSelection) -> bool,
+    ) -> DesktopPresentationApplyOutcome {
+        let Some(board) = self.selection.board().move_adjacent(index, delta) else {
+            return DesktopPresentationApplyOutcome::Rejected;
+        };
+        self.select(self.selection.with_board(board), true, admit)
+    }
+
+    pub fn set_board_section_visible_if_admitted(
+        &mut self,
+        index: usize,
+        visible: bool,
+        admit: impl FnOnce(DesktopPresentationSelection) -> bool,
+    ) -> DesktopPresentationApplyOutcome {
+        let Some(board) = self.selection.board().with_visibility(index, visible) else {
+            return DesktopPresentationApplyOutcome::Rejected;
+        };
+        self.select(self.selection.with_board(board), true, admit)
+    }
+
+    pub fn set_board_section_collapsed_if_admitted(
+        &mut self,
+        index: usize,
+        collapsed: bool,
+        admit: impl FnOnce(DesktopPresentationSelection) -> bool,
+    ) -> DesktopPresentationApplyOutcome {
+        let Some(board) = self.selection.board().with_collapsed(index, collapsed) else {
+            return DesktopPresentationApplyOutcome::Rejected;
+        };
+        self.select(self.selection.with_board(board), true, admit)
+    }
+
+    pub fn reset_board_if_admitted(
+        &mut self,
+        admit: impl FnOnce(DesktopPresentationSelection) -> bool,
+    ) -> DesktopPresentationApplyOutcome {
+        self.select(
+            self.selection
+                .with_board(DesktopBoardPreferences::canonical()),
+            true,
+            admit,
+        )
+    }
+
     pub fn observe_system_color_scheme(
         &mut self,
         system_color_scheme: DesktopSystemColorScheme,
@@ -549,6 +784,83 @@ mod tests {
         DesktopPresentationRevision, DesktopPresentationSelection, DesktopPresentationStyle,
     };
     use crate::{DesktopColorScheme, DesktopLayout, DesktopSkin, DesktopSystemColorScheme};
+
+    #[test]
+    fn board_edits_preserve_axes_and_reject_hiding_the_last_visible_section() {
+        let selection = DesktopPresentationSelection::new(
+            DesktopDensity::Comfortable,
+            DesktopSkin::Refined,
+            DesktopColorScheme::System,
+            DesktopLayout::Refined,
+        );
+        let mut style = DesktopPresentationStyle::from_persisted(selection);
+
+        assert_eq!(
+            style.move_board_section_if_admitted(0, 1, |_| true),
+            DesktopPresentationApplyOutcome::Applied
+        );
+        assert_eq!(
+            style.selection().board().rows()[0].key(),
+            crate::DesktopBoardSectionKey::CodeOutput
+        );
+        assert_eq!(style.density(), DesktopDensity::Comfortable);
+        assert_eq!(style.skin(), DesktopSkin::Refined);
+        assert_eq!(style.color_scheme(), DesktopColorScheme::System);
+        assert_eq!(style.layout(), DesktopLayout::Refined);
+        assert_eq!(
+            style.move_board_section_if_admitted(0, 2, |_| true),
+            DesktopPresentationApplyOutcome::Rejected
+        );
+        assert_eq!(
+            style.move_board_section_if_admitted(0, -1, |_| true),
+            DesktopPresentationApplyOutcome::Rejected
+        );
+        assert_eq!(
+            style.set_board_section_collapsed_if_admitted(
+                crate::DESKTOP_BOARD_SECTION_COUNT,
+                true,
+                |_| true,
+            ),
+            DesktopPresentationApplyOutcome::Rejected
+        );
+        let before_rejected_admission = style;
+        assert_eq!(
+            style.set_board_section_collapsed_if_admitted(0, true, |_| false),
+            DesktopPresentationApplyOutcome::Rejected
+        );
+        assert_eq!(style, before_rejected_admission);
+
+        for index in 0..crate::DESKTOP_BOARD_SECTION_COUNT - 1 {
+            assert_eq!(
+                style.set_board_section_visible_if_admitted(index, false, |_| true),
+                DesktopPresentationApplyOutcome::Applied
+            );
+        }
+        assert_eq!(
+            style.set_board_section_visible_if_admitted(
+                crate::DESKTOP_BOARD_SECTION_COUNT - 1,
+                false,
+                |_| true,
+            ),
+            DesktopPresentationApplyOutcome::Rejected
+        );
+        assert_eq!(
+            style.set_board_section_collapsed_if_admitted(
+                crate::DESKTOP_BOARD_SECTION_COUNT - 1,
+                true,
+                |_| true,
+            ),
+            DesktopPresentationApplyOutcome::Applied
+        );
+        assert_eq!(
+            style.reset_board_if_admitted(|_| true),
+            DesktopPresentationApplyOutcome::Applied
+        );
+        assert_eq!(
+            style.selection().board(),
+            crate::DesktopBoardPreferences::canonical()
+        );
+    }
 
     #[test]
     fn revision_exhaustion_preserves_every_complete_style_field() {

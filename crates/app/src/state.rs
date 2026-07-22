@@ -6,7 +6,8 @@ use std::sync::{
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tokenmaster_desktop::{
-    DesktopBackupHealth, DesktopBackupPolicy, DesktopConfigImportPreview, DesktopOperationSnapshot,
+    DesktopBackupHealth, DesktopBackupPolicy, DesktopBoardPreferences, DesktopBoardSectionKey,
+    DesktopBoardSectionPreference, DesktopConfigImportPreview, DesktopOperationSnapshot,
     DesktopPresentationSettings, DesktopRecoveryReceipt, DesktopReliableStateHealth,
     DesktopReliableStateInput, DesktopReliableStateProjection, DesktopReliableStateSummary,
     DesktopReminderPolicy, DesktopReminderSyncState, DesktopRestorePointInput,
@@ -291,7 +292,25 @@ impl ApplicationStateOwner {
             PresentationLayout::ControlCenter => tokenmaster_desktop::DesktopLayout::ControlCenter,
             PresentationLayout::Workbench => tokenmaster_desktop::DesktopLayout::Workbench,
         };
-        let presentation = DesktopPresentationSettings::new(density, skin, color_scheme, layout);
+        let rows = state_presentation.board().rows().map(|row| {
+            let key = match row.key() {
+                tokenmaster_state::BoardSectionKey::PlanUsage => DesktopBoardSectionKey::PlanUsage,
+                tokenmaster_state::BoardSectionKey::CodeOutput => {
+                    DesktopBoardSectionKey::CodeOutput
+                }
+                tokenmaster_state::BoardSectionKey::Trend => DesktopBoardSectionKey::Trend,
+                tokenmaster_state::BoardSectionKey::Sessions => DesktopBoardSectionKey::Sessions,
+                tokenmaster_state::BoardSectionKey::Activity => DesktopBoardSectionKey::Activity,
+                tokenmaster_state::BoardSectionKey::Models => DesktopBoardSectionKey::Models,
+            };
+            DesktopBoardSectionPreference::new(key, row.visible(), row.collapsed())
+        });
+        let board = match DesktopBoardPreferences::new(rows) {
+            Some(board) => board,
+            None => unreachable!("state board preferences are validated before projection"),
+        };
+        let presentation =
+            DesktopPresentationSettings::new(density, skin, color_scheme, layout).with_board(board);
         let summary = DesktopReliableStateSummary::new_with_settings(
             health,
             matches!(

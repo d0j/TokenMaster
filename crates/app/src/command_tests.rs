@@ -5,6 +5,7 @@ use super::command::{
     ApplicationOperationRequest, ApplicationReminderPolicyUpdate,
 };
 use tokenmaster_desktop::{
+    DesktopBoardPreferences, DesktopBoardSectionKey, DesktopBoardSectionPreference,
     DesktopColorScheme, DesktopDensity, DesktopIntent, DesktopLayout, DesktopPresentationSelection,
     DesktopSkin,
 };
@@ -96,6 +97,50 @@ fn presentation_payload_is_complete_redacted_and_maps_all_eighty_one_combination
             }
         }
     }
+}
+
+#[test]
+fn presentation_payload_preserves_each_custom_board_row() {
+    let board = DesktopBoardPreferences::new([
+        DesktopBoardSectionPreference::new(DesktopBoardSectionKey::Models, true, true),
+        DesktopBoardSectionPreference::new(DesktopBoardSectionKey::Activity, false, true),
+        DesktopBoardSectionPreference::new(DesktopBoardSectionKey::Sessions, true, false),
+        DesktopBoardSectionPreference::new(DesktopBoardSectionKey::Trend, false, false),
+        DesktopBoardSectionPreference::new(DesktopBoardSectionKey::CodeOutput, true, true),
+        DesktopBoardSectionPreference::new(DesktopBoardSectionKey::PlanUsage, true, false),
+    ])
+    .expect("complete board preferences");
+    let selection = DesktopPresentationSelection::new(
+        DesktopDensity::Compact,
+        DesktopSkin::Ember,
+        DesktopColorScheme::Light,
+        DesktopLayout::Workbench,
+    )
+    .with_board(board);
+    let (_, payload) = ApplicationOperationRequest::update_presentation(selection).into_parts();
+    let ApplicationOperationPayload::Presentation(update) = payload else {
+        panic!("complete presentation payload")
+    };
+
+    let board = update.into_state_presentation().board();
+    assert_eq!(
+        board.rows()[0].key(),
+        tokenmaster_state::BoardSectionKey::Models
+    );
+    assert!(board.rows()[0].visible());
+    assert!(board.rows()[0].collapsed());
+    assert_eq!(
+        board.rows()[1].key(),
+        tokenmaster_state::BoardSectionKey::Activity
+    );
+    assert!(!board.rows()[1].visible());
+    assert!(board.rows()[1].collapsed());
+    assert_eq!(
+        board.rows()[4].key(),
+        tokenmaster_state::BoardSectionKey::CodeOutput
+    );
+    assert!(board.rows()[4].visible());
+    assert!(board.rows()[4].collapsed());
 }
 
 #[test]

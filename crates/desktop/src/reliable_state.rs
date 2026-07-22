@@ -2,7 +2,9 @@ use core::fmt;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::presentation_style::{DesktopColorScheme, DesktopDensity, DesktopPresentationSelection};
+use crate::presentation_style::{
+    DesktopBoardPreferences, DesktopColorScheme, DesktopDensity, DesktopPresentationSelection,
+};
 use crate::skin::DesktopSkin;
 
 pub const MAX_DESKTOP_RESTORE_POINTS: usize = 15;
@@ -114,6 +116,7 @@ pub struct DesktopPresentationSettings {
     skin: DesktopSkin,
     color_scheme: DesktopColorScheme,
     layout: crate::DesktopLayout,
+    board: DesktopBoardPreferences,
 }
 
 impl DesktopPresentationSettings {
@@ -129,6 +132,7 @@ impl DesktopPresentationSettings {
             skin,
             color_scheme,
             layout,
+            board: DesktopBoardPreferences::canonical(),
         }
     }
 
@@ -163,8 +167,20 @@ impl DesktopPresentationSettings {
     }
 
     #[must_use]
+    pub const fn board(self) -> DesktopBoardPreferences {
+        self.board
+    }
+
+    #[must_use]
+    pub const fn with_board(mut self, board: DesktopBoardPreferences) -> Self {
+        self.board = board;
+        self
+    }
+
+    #[must_use]
     pub const fn selection(self) -> DesktopPresentationSelection {
         DesktopPresentationSelection::new(self.density, self.skin, self.color_scheme, self.layout)
+            .with_board(self.board)
     }
 }
 

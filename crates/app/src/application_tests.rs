@@ -932,13 +932,47 @@ fn presentation_execution_persists_and_projects_the_confirmed_operation() {
     else {
         panic!("presentation permit");
     };
+    let board = tokenmaster_desktop::DesktopBoardPreferences::new([
+        tokenmaster_desktop::DesktopBoardSectionPreference::new(
+            tokenmaster_desktop::DesktopBoardSectionKey::Models,
+            true,
+            true,
+        ),
+        tokenmaster_desktop::DesktopBoardSectionPreference::new(
+            tokenmaster_desktop::DesktopBoardSectionKey::Activity,
+            false,
+            true,
+        ),
+        tokenmaster_desktop::DesktopBoardSectionPreference::new(
+            tokenmaster_desktop::DesktopBoardSectionKey::Sessions,
+            true,
+            false,
+        ),
+        tokenmaster_desktop::DesktopBoardSectionPreference::new(
+            tokenmaster_desktop::DesktopBoardSectionKey::Trend,
+            false,
+            false,
+        ),
+        tokenmaster_desktop::DesktopBoardSectionPreference::new(
+            tokenmaster_desktop::DesktopBoardSectionKey::CodeOutput,
+            true,
+            true,
+        ),
+        tokenmaster_desktop::DesktopBoardSectionPreference::new(
+            tokenmaster_desktop::DesktopBoardSectionKey::PlanUsage,
+            true,
+            false,
+        ),
+    ])
+    .expect("complete board preferences");
     let (_, payload) = ApplicationOperationRequest::update_presentation(
         tokenmaster_desktop::DesktopPresentationSelection::new(
             tokenmaster_desktop::DesktopDensity::Compact,
             tokenmaster_desktop::DesktopSkin::Ember,
             tokenmaster_desktop::DesktopColorScheme::Light,
             tokenmaster_desktop::DesktopLayout::Refined,
-        ),
+        )
+        .with_board(board),
     )
     .into_parts();
 
@@ -974,10 +1008,11 @@ fn presentation_execution_persists_and_projects_the_confirmed_operation() {
         projection.presentation().color_scheme(),
         tokenmaster_desktop::DesktopColorScheme::Light
     );
+    assert_eq!(projection.presentation().board(), board);
     assert_eq!(projection.operation(), Some(completion));
     let persisted = store.load().expect("settings after presentation save");
     assert_eq!(persisted.generation(), Some(1));
-    assert_eq!(SETTINGS_SCHEMA_VERSION, 5);
+    assert_eq!(SETTINGS_SCHEMA_VERSION, 6);
     assert_eq!(
         persisted.value().portable().presentation(),
         &PresentationSettings::new(
@@ -985,6 +1020,41 @@ fn presentation_execution_persists_and_projects_the_confirmed_operation() {
             PresentationSkin::Ember,
             tokenmaster_state::PresentationColorScheme::Light,
             PresentationLayout::Refined,
+        )
+        .with_board(
+            tokenmaster_state::BoardPreferences::new([
+                tokenmaster_state::BoardSectionPreference::new(
+                    tokenmaster_state::BoardSectionKey::Models,
+                    true,
+                    true,
+                ),
+                tokenmaster_state::BoardSectionPreference::new(
+                    tokenmaster_state::BoardSectionKey::Activity,
+                    false,
+                    true,
+                ),
+                tokenmaster_state::BoardSectionPreference::new(
+                    tokenmaster_state::BoardSectionKey::Sessions,
+                    true,
+                    false,
+                ),
+                tokenmaster_state::BoardSectionPreference::new(
+                    tokenmaster_state::BoardSectionKey::Trend,
+                    false,
+                    false,
+                ),
+                tokenmaster_state::BoardSectionPreference::new(
+                    tokenmaster_state::BoardSectionKey::CodeOutput,
+                    true,
+                    true,
+                ),
+                tokenmaster_state::BoardSectionPreference::new(
+                    tokenmaster_state::BoardSectionKey::PlanUsage,
+                    true,
+                    false,
+                ),
+            ])
+            .expect("complete state board preferences"),
         )
     );
 }
