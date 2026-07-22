@@ -295,6 +295,7 @@ component ModelsCard inherits Rectangle {
 }
 
 export component DashboardView inherits Rectangle {
+    in property <int> layout-id;
     in property <[DashboardSectionRow]> sections;
     in property <[DashboardQuotaRow]> quotas;
     in property <[DashboardBenefitRow]> benefits;
@@ -314,6 +315,7 @@ export component DashboardView inherits Rectangle {
     in property <string> code-evidence;
     out property <bool> narrow: root.width < 760px;
     out property <string> layout-mode: root.narrow ? "narrow" : "wide";
+    out property <string> layout-preset: root.layout-id == 2 ? "workbench" : (root.layout-id == 1 ? "control_center" : "refined");
 
     background: UiTokens.background;
 
@@ -331,7 +333,7 @@ export component DashboardView inherits Rectangle {
             ActivityCard { section: root.sections[4]; rows: root.activity; }
             ModelsCard { section: root.sections[5]; rows: root.models; }
         }
-        if !root.narrow: VerticalLayout {
+        if !root.narrow && root.layout-id == 0: VerticalLayout {
             width: parent.width;
             padding: UiTokens.space;
             spacing: UiTokens.space;
@@ -348,6 +350,42 @@ export component DashboardView inherits Rectangle {
                 ActivityCard { section: root.sections[4]; rows: root.activity; horizontal-stretch: 1; }
             }
             ModelsCard { section: root.sections[5]; rows: root.models; }
+        }
+        if !root.narrow && root.layout-id == 1: VerticalLayout {
+            width: parent.width;
+            padding: UiTokens.space;
+            spacing: UiTokens.space;
+            DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
+            HorizontalLayout {
+                spacing: UiTokens.space;
+                PlanUsageCard { section: root.sections[0]; quotas: root.quotas; benefits: root.benefits; horizontal-stretch: 1; }
+                CodeOutputCard { section: root.sections[1]; commits: root.code-commits; added: root.code-added; removed: root.code-removed; net: root.code-net; efficiency: root.code-efficiency; evidence: root.code-evidence; horizontal-stretch: 1; }
+            }
+            TrendCard { section: root.sections[2]; points: root.trend; }
+            HorizontalLayout {
+                spacing: UiTokens.space;
+                SessionsCard { section: root.sections[3]; rows: root.sessions; horizontal-stretch: 1; }
+                ActivityCard { section: root.sections[4]; rows: root.activity; horizontal-stretch: 1; }
+                ModelsCard { section: root.sections[5]; rows: root.models; horizontal-stretch: 1; }
+            }
+        }
+        if !root.narrow && root.layout-id == 2: VerticalLayout {
+            width: parent.width;
+            padding: UiTokens.space;
+            spacing: UiTokens.space;
+            DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
+            PlanUsageCard { section: root.sections[0]; quotas: root.quotas; benefits: root.benefits; }
+            HorizontalLayout {
+                spacing: UiTokens.space;
+                CodeOutputCard { section: root.sections[1]; commits: root.code-commits; added: root.code-added; removed: root.code-removed; net: root.code-net; efficiency: root.code-efficiency; evidence: root.code-evidence; horizontal-stretch: 1; }
+                TrendCard { section: root.sections[2]; points: root.trend; horizontal-stretch: 1; }
+                SessionsCard { section: root.sections[3]; rows: root.sessions; horizontal-stretch: 1; }
+            }
+            HorizontalLayout {
+                spacing: UiTokens.space;
+                ActivityCard { section: root.sections[4]; rows: root.activity; horizontal-stretch: 1; }
+                ModelsCard { section: root.sections[5]; rows: root.models; horizontal-stretch: 1; }
+            }
         }
     }
 }

@@ -276,7 +276,7 @@ impl DesktopIntentSink for RecordingPresentationIntentSink {
 }
 
 #[test]
-fn shell_initial_owner_retains_graphite_when_density_callback_submits_complete_selection() {
+fn shell_hydrates_workbench_and_retains_it_when_density_submits_complete_selection() {
     i_slint_backend_testing::init_no_event_loop();
     let summary = DesktopReliableStateSummary::new_with_settings(
         DesktopReliableStateHealth::Healthy,
@@ -288,7 +288,7 @@ fn shell_initial_owner_retains_graphite_when_density_callback_submits_complete_s
             DesktopDensity::UltraCompact,
             DesktopSkin::Graphite,
             tokenmaster_desktop::DesktopColorScheme::Dark,
-            tokenmaster_desktop::DesktopLayout::Refined,
+            tokenmaster_desktop::DesktopLayout::Workbench,
         ),
         None,
         None,
@@ -319,6 +319,7 @@ fn shell_initial_owner_retains_graphite_when_density_callback_submits_complete_s
     let address = window as *const _;
     assert_eq!(sink.submissions.get(), 0);
     assert_eq!(window.get_presentation_density_key(), "ultra_compact");
+    assert_eq!(window.get_presentation_layout_key(), "workbench");
 
     window.invoke_select_presentation_density(1);
 
@@ -329,7 +330,7 @@ fn shell_initial_owner_retains_graphite_when_density_callback_submits_complete_s
             DesktopDensity::Compact,
             DesktopSkin::Graphite,
             tokenmaster_desktop::DesktopColorScheme::Dark,
-            tokenmaster_desktop::DesktopLayout::Refined,
+            tokenmaster_desktop::DesktopLayout::Workbench,
         ))
     );
     assert_eq!(address, shell.window() as *const _);

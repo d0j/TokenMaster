@@ -594,7 +594,12 @@ impl DesktopShell {
             Arc::clone(&presentation_style),
             intent_sink.clone(),
         );
-        wire_presentation_color_scheme(&window, Arc::clone(&presentation_style), intent_sink);
+        wire_presentation_color_scheme(
+            &window,
+            Arc::clone(&presentation_style),
+            intent_sink.clone(),
+        );
+        wire_presentation_layout(&window, Arc::clone(&presentation_style), intent_sink);
         wire_system_color_scheme_observation(&window, Arc::clone(&presentation_style));
         Ok(Self {
             window,
@@ -780,6 +785,7 @@ fn apply_presentation_style(window: &MainWindow, style: DesktopPresentationStyle
     window.set_presentation_skin_id(style.skin().slint_index());
     window.set_presentation_density_id(style.density().slint_index());
     window.set_presentation_color_scheme_id(style.color_scheme().slint_index());
+    window.set_presentation_layout_id(style.layout().slint_index());
     window.set_presentation_effective_color_scheme_id(style.effective_color_scheme().slint_index());
     window.set_presentation_revision(style.revision().get().to_string().into());
     window.set_presentation_persistence_state(style.persistence().stable_code().into());
@@ -929,6 +935,24 @@ fn wire_presentation_color_scheme(
     });
 }
 
+fn wire_presentation_layout(
+    window: &MainWindow,
+    presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
+    intent_sink: Rc<dyn DesktopIntentSink>,
+) {
+    let weak_window = window.as_weak();
+    window.on_select_presentation_layout(move |index| {
+        let Some(next_style) =
+            select_presentation_layout_if_admitted(&presentation_style, index, &intent_sink)
+        else {
+            return;
+        };
+        if let Some(window) = weak_window.upgrade() {
+            apply_presentation_style(&window, next_style);
+        }
+    });
+}
+
 fn wire_system_color_scheme_observation(
     window: &MainWindow,
     presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
@@ -1012,6 +1036,31 @@ fn select_presentation_color_scheme_if_admitted(
     let captured = *presentation_style.lock().ok()?;
     let mut selected = captured;
     if selected.select_color_scheme_index_if_admitted(index, |selection| {
+        matches!(
+            intent_sink.submit(DesktopIntent::UpdatePresentation(selection)),
+            crate::DesktopIntentAdmission::Started
+                | crate::DesktopIntentAdmission::Queued
+                | crate::DesktopIntentAdmission::Coalesced
+        )
+    }) != DesktopPresentationApplyOutcome::Applied
+    {
+        return None;
+    }
+    let mut current = presentation_style.lock().ok()?;
+    if *current == captured {
+        *current = selected;
+    }
+    Some(*current)
+}
+
+fn select_presentation_layout_if_admitted(
+    presentation_style: &Arc<Mutex<DesktopPresentationStyle>>,
+    index: i32,
+    intent_sink: &Rc<dyn DesktopIntentSink>,
+) -> Option<DesktopPresentationStyle> {
+    let captured = *presentation_style.lock().ok()?;
+    let mut selected = captured;
+    if selected.select_layout_index_if_admitted(index, |selection| {
         matches!(
             intent_sink.submit(DesktopIntent::UpdatePresentation(selection)),
             crate::DesktopIntentAdmission::Started

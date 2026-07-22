@@ -29,6 +29,8 @@ export component MainWindow inherits Window {
     out property <string> presentation-skin-key: root.presentation-skin-id == 2 ? "ember" : (root.presentation-skin-id == 1 ? "graphite" : "refined");
     in-out property <int> presentation-color-scheme-id: 0;
     out property <string> presentation-color-scheme-key: root.presentation-color-scheme-id == 2 ? "dark" : (root.presentation-color-scheme-id == 1 ? "light" : "system");
+    in-out property <int> presentation-layout-id: 0;
+    out property <string> presentation-layout-key: root.presentation-layout-id == 2 ? "workbench" : (root.presentation-layout-id == 1 ? "control_center" : "refined");
     in-out property <int> presentation-effective-color-scheme-id: 2;
     out property <string> presentation-effective-color-scheme-key: root.presentation-effective-color-scheme-id == 1 ? "light" : "dark";
     out property <int> observed-system-color-scheme-id: Palette.color-scheme == ColorScheme.light ? 1 : (Palette.color-scheme == ColorScheme.dark ? 2 : 0);
@@ -171,6 +173,7 @@ export component MainWindow inherits Window {
     out property <bool> help-about-visible: root.active-route-key == "help_about";
     out property <bool> compact-widget-visible: root.active-route-key == "compact_widget";
     out property <string> dashboard-layout-mode: root.width < 1010px ? "narrow" : "wide";
+    out property <string> dashboard-layout-preset: root.presentation-layout-key;
     out property <string> sessions-layout-mode: root.width < 1010px ? "narrow" : "wide";
     out property <string> models-layout-mode: root.width < 800px ? "narrow" : "wide";
     out property <string> projects-layout-mode: root.width < 800px ? "narrow" : "wide";
@@ -274,6 +277,7 @@ export component MainWindow inherits Window {
     callback select-presentation-density(int);
     callback select-presentation-skin(int);
     callback select-presentation-color-scheme(int);
+    callback select-presentation-layout(int);
     callback system-color-scheme-observed(int);
     changed observed-system-color-scheme-id => { root.system-color-scheme-observed(root.observed-system-color-scheme-id); }
 
@@ -370,6 +374,7 @@ export component MainWindow inherits Window {
                 if root.dashboard-visible: DashboardView {
                     width: parent.width;
                     height: parent.height;
+                    layout-id: root.presentation-layout-id;
                     sections: root.dashboard-section-rows;
                     quotas: root.dashboard-quota-rows;
                     benefits: root.dashboard-benefit-rows;
@@ -570,6 +575,7 @@ export component MainWindow inherits Window {
                     presentation-density-id: root.presentation-density-id;
                     presentation-skin-id: root.presentation-skin-id;
                     presentation-color-scheme-id: root.presentation-color-scheme-id;
+                    presentation-layout-id: root.presentation-layout-id;
                     presentation-persistence-state: root.presentation-persistence-state;
                     periodic-enabled: root.backup-periodic-enabled;
                     quiet-seconds: root.backup-quiet-seconds;
@@ -612,6 +618,7 @@ export component MainWindow inherits Window {
                     select-presentation-density(index) => { root.select-presentation-density(index); }
                     select-presentation-skin(index) => { root.select-presentation-skin(index); }
                     select-presentation-color-scheme(index) => { root.select-presentation-color-scheme(index); }
+                    select-presentation-layout(index) => { root.select-presentation-layout(index); }
                     visible: root.settings-visible;
                 }
 

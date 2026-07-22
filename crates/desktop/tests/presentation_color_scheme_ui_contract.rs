@@ -101,7 +101,7 @@ fn compiled_ui_owns_one_three_entry_selector_and_reactive_slint_observation() {
 }
 
 #[test]
-fn ten_thousand_compiled_ui_switches_cover_all_complete_presentation_combinations() {
+fn ten_thousand_compiled_ui_switches_cover_all_eighty_one_complete_combinations() {
     i_slint_backend_testing::init_no_event_loop();
     let sink = Rc::new(RecordingSink {
         submissions: Cell::new(0),
@@ -124,9 +124,11 @@ fn ten_thousand_compiled_ui_switches_cover_all_complete_presentation_combination
         let density_index = index % 3;
         let skin_index = (index / 3) % 3;
         let scheme_index = (index / 9) % 3;
+        let layout_index = (index / 27) % 3;
         window.invoke_select_presentation_density(density_index);
         window.invoke_select_presentation_skin(skin_index);
         window.invoke_select_presentation_color_scheme(scheme_index);
+        window.invoke_select_presentation_layout(layout_index);
 
         assert_eq!(
             sink.selection.get(),
@@ -146,9 +148,13 @@ fn ten_thousand_compiled_ui_switches_cover_all_complete_presentation_combination
                     1 => DesktopColorScheme::Light,
                     _ => DesktopColorScheme::Dark,
                 },
-                tokenmaster_desktop::DesktopLayout::Refined,
+                match layout_index {
+                    0 => tokenmaster_desktop::DesktopLayout::Refined,
+                    1 => tokenmaster_desktop::DesktopLayout::ControlCenter,
+                    _ => tokenmaster_desktop::DesktopLayout::Workbench,
+                },
             )),
-            "compiled UI submission {index} must retain one complete triple"
+            "compiled UI submission {index} must retain one complete quadruple"
         );
     }
 
@@ -157,5 +163,5 @@ fn ten_thousand_compiled_ui_switches_cover_all_complete_presentation_combination
     assert_eq!(window.get_dashboard_quota_rows().row_count(), quotas);
     assert_eq!(window.window().size(), size);
     assert!(sink.submissions.get() >= 10_001);
-    assert!(sink.submissions.get() <= 30_001);
+    assert!(sink.submissions.get() <= 40_001);
 }
