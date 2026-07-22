@@ -226,22 +226,26 @@ foreach ($required in @($settingsValuePath, $settingsMigrationPath)) {
 }
 $settingsValueText = [System.IO.File]::ReadAllText($settingsValuePath)
 $settingsMigrationText = [System.IO.File]::ReadAllText($settingsMigrationPath)
-if ([regex]::Matches($settingsValueText, 'pub const SETTINGS_SCHEMA_VERSION:\s*u16\s*=\s*4;').Count -ne 1 -or
+if ([regex]::Matches($settingsValueText, 'pub const SETTINGS_SCHEMA_VERSION:\s*u16\s*=\s*5;').Count -ne 1 -or
     [regex]::Matches($settingsMigrationText, '(?m)^\s*1\s*=>\s*decode_(?:portable|settings)_v1\(bytes\),').Count -ne 2 -or
     [regex]::Matches($settingsMigrationText, '(?m)^\s*2\s*=>\s*decode_(?:portable|settings)_v2\(bytes\),').Count -ne 2 -or
     [regex]::Matches($settingsMigrationText, '(?m)^\s*3\s*=>\s*decode_(?:portable|settings)_v3\(bytes\),').Count -ne 2 -or
-    [regex]::Matches($settingsMigrationText, 'SETTINGS_SCHEMA_VERSION\s*=>\s*decode_(?:portable|settings)_v4\(bytes\),').Count -ne 2 -or
-    $settingsMigrationText -match '(?m)^\s*(?:0|[5-9]|\d{2,})\s*(?:\||=>)') {
-    throw 'TM-APP-PRESENTATION-SCHEMA: settings admission is exactly schema v1 through v4'
+    [regex]::Matches($settingsMigrationText, '(?m)^\s*4\s*=>\s*decode_(?:portable|settings)_v4\(bytes\),').Count -ne 2 -or
+    [regex]::Matches($settingsMigrationText, 'SETTINGS_SCHEMA_VERSION\s*=>\s*decode_(?:portable|settings)_v5\(bytes\),').Count -ne 2 -or
+    $settingsMigrationText -match '(?m)^\s*(?:0|[6-9]|\d{2,})\s*(?:\||=>)') {
+    throw 'TM-APP-PRESENTATION-SCHEMA: settings admission is exactly schema v1 through v5'
 }
 $v2Migration = [regex]::Match($settingsMigrationText, '(?s)impl PortableSettingsV2Wire \{.*?\n\}').Value
 $v3Migration = [regex]::Match($settingsMigrationText, '(?s)impl PortableSettingsV3Wire \{.*?\n\}').Value
+$v4Migration = [regex]::Match($settingsMigrationText, '(?s)impl PortableSettingsV4Wire \{.*?\n\}').Value
 if ([string]::IsNullOrWhiteSpace($v2Migration) -or
     [string]::IsNullOrWhiteSpace($v3Migration) -or
+    [string]::IsNullOrWhiteSpace($v4Migration) -or
     $v2Migration -notmatch 'PresentationSkin::Refined' -or
     $v2Migration -notmatch 'PresentationSettings::legacy_dark' -or
-    $v3Migration -notmatch 'PresentationSettings::legacy_dark') {
-    throw 'TM-APP-PRESENTATION-SCHEMA: v2 adds Refined and v1-v3 preserve the legacy dark appearance'
+    $v3Migration -notmatch 'PresentationSettings::legacy_dark' -or
+    $v4Migration -notmatch 'PresentationLayout::Refined') {
+    throw 'TM-APP-PRESENTATION-SCHEMA: v1-v3 preserve legacy dark and v1-v4 default Refined layout'
 }
 $commandExecutable = [regex]::Replace($commandText, '(?ms)//.*?$|/\*.*?\*/|"(?:\\.|[^"\\])*"', ' ')
 $normalizedCommand = [regex]::Replace($commandExecutable, '\s+', '')
@@ -263,7 +267,12 @@ pub(crate) const fn into_state_presentation(self) -> tokenmaster_state::Presenta
         tokenmaster_desktop::DesktopColorScheme::Light => { tokenmaster_state::PresentationColorScheme::Light }
         tokenmaster_desktop::DesktopColorScheme::Dark => { tokenmaster_state::PresentationColorScheme::Dark }
     };
-    tokenmaster_state::PresentationSettings::new(density, skin, color_scheme)
+    let layout = match self.selection.layout() {
+        tokenmaster_desktop::DesktopLayout::Refined => { tokenmaster_state::PresentationLayout::Refined }
+        tokenmaster_desktop::DesktopLayout::ControlCenter => { tokenmaster_state::PresentationLayout::ControlCenter }
+        tokenmaster_desktop::DesktopLayout::Workbench => { tokenmaster_state::PresentationLayout::Workbench }
+    };
+    tokenmaster_state::PresentationSettings::new(density, skin, color_scheme, layout)
 }
 '@, '\s+', '')
 if ([regex]::Matches($commandExecutable, 'ApplicationCommand::UpdatePresentation').Count -ne 1 -or
@@ -272,8 +281,8 @@ if ([regex]::Matches($commandExecutable, 'ApplicationCommand::UpdatePresentation
     [regex]::Matches($commandExecutable, '\binto_state_presentation\s*\(').Count -ne 1 -or
     $normalizedCommand.IndexOf($expectedPresentationConversion, [System.StringComparison]::Ordinal) -lt 0 -or
     [regex]::Matches($commandExecutable, 'tokenmaster_state::PresentationSettings::new\(').Count -ne 1 -or
-    $commandExecutable -match 'UpdatePresentation(?:Density|Skin|ColorScheme)|Presentation(?:Density|Skin|ColorScheme)\(') {
-    throw 'TM-APP-PRESENTATION-COMPLETE: application presentation requests carry one complete density, skin, and color-scheme triple'
+    $commandExecutable -match 'UpdatePresentation(?:Density|Skin|ColorScheme|Layout)|Presentation(?:Density|Skin|ColorScheme|Layout)\(') {
+    throw 'TM-APP-PRESENTATION-COMPLETE: application presentation requests carry one complete density, skin, color-scheme, and layout quadruple'
 }
 $operationExecutable = [regex]::Replace($operationText, '(?ms)//.*?$|/\*.*?\*/|"(?:\\.|[^"\\])*"', ' ')
 $operationChannelCount = [regex]::Matches(

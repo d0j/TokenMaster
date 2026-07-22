@@ -7,6 +7,35 @@ pub enum DesktopDensity {
     UltraCompact,
 }
 
+impl DesktopDensity {
+    #[must_use]
+    pub const fn stable_key(self) -> &'static str {
+        match self {
+            Self::Comfortable => "comfortable",
+            Self::Compact => "compact",
+            Self::UltraCompact => "ultra_compact",
+        }
+    }
+
+    #[must_use]
+    pub const fn slint_index(self) -> i32 {
+        match self {
+            Self::Comfortable => 0,
+            Self::Compact => 1,
+            Self::UltraCompact => 2,
+        }
+    }
+
+    const fn from_slint_index(index: i32) -> Option<Self> {
+        match index {
+            0 => Some(Self::Comfortable),
+            1 => Some(Self::Compact),
+            2 => Some(Self::UltraCompact),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DesktopLayout {
     Refined,
@@ -38,35 +67,6 @@ impl DesktopLayout {
             0 => Some(Self::Refined),
             1 => Some(Self::ControlCenter),
             2 => Some(Self::Workbench),
-            _ => None,
-        }
-    }
-}
-
-impl DesktopDensity {
-    #[must_use]
-    pub const fn stable_key(self) -> &'static str {
-        match self {
-            Self::Comfortable => "comfortable",
-            Self::Compact => "compact",
-            Self::UltraCompact => "ultra_compact",
-        }
-    }
-
-    #[must_use]
-    pub const fn slint_index(self) -> i32 {
-        match self {
-            Self::Comfortable => 0,
-            Self::Compact => 1,
-            Self::UltraCompact => 2,
-        }
-    }
-
-    const fn from_slint_index(index: i32) -> Option<Self> {
-        match index {
-            0 => Some(Self::Comfortable),
-            1 => Some(Self::Compact),
-            2 => Some(Self::UltraCompact),
             _ => None,
         }
     }

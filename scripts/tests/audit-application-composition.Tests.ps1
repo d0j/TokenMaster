@@ -1344,12 +1344,12 @@ fn attach_history_range_terminal_decoy(controller: &mut DesktopController, live_
             Should -Throw "*TM-APP-PRESENTATION-COMPLETE*"
     }
 
-    It "rejects a schema range wider than v1 through v4" {
+    It "rejects a schema range wider than v1 through v5" {
         $fixture = New-AppAuditFixture -Name "presentation-schema-range"
         $path = Join-Path $fixture "crates\state\src\settings\migration.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            'SETTINGS_SCHEMA_VERSION => decode_portable_v4(bytes),',
-            '4 | 5 => decode_portable_v4(bytes),'
+            'SETTINGS_SCHEMA_VERSION => decode_portable_v5(bytes),',
+            '5 | 6 => decode_portable_v5(bytes),'
         )
         [System.IO.File]::WriteAllText($path, $text)
 
@@ -1392,23 +1392,20 @@ fn attach_history_range_terminal_decoy(controller: &mut DesktopController, live_
         $fixture = New-AppAuditFixture -Name "presentation-constant-skin"
         $path = Join-Path $fixture "crates\app\src\command.rs"
         $text = [System.IO.File]::ReadAllText($path).Replace(
-            'match (self.selection.density(), self.selection.skin()) {',
-            'match (self.selection.density(), tokenmaster_desktop::DesktopSkin::Refined) {'
+            'let skin = match self.selection.skin() {',
+            'let skin = match tokenmaster_desktop::DesktopSkin::Refined {'
         )
         [System.IO.File]::WriteAllText($path, $text)
         { & $Audit -RepositoryRoot $fixture -SourceOnly } |
             Should -Throw "*TM-APP-PRESENTATION-COMPLETE*"
     }
 
-    It "rejects one swapped output in the exact nine-pair presentation conversion" {
+    It "rejects one swapped output in the exact skin conversion" {
         $fixture = New-AppAuditFixture -Name "presentation-swapped-output-pair"
         $path = Join-Path $fixture "crates\app\src\command.rs"
         $text = [System.IO.File]::ReadAllText($path)
-        $newline = if ($text.Contains("`r`n")) { "`r`n" } else { "`n" }
-        $original = '                tokenmaster_state::PresentationDensity::Comfortable,' + $newline +
-            '                tokenmaster_state::PresentationSkin::Graphite,'
-        $replacement = '                tokenmaster_state::PresentationDensity::Comfortable,' + $newline +
-            '                tokenmaster_state::PresentationSkin::Ember,'
+        $original = '                tokenmaster_state::PresentationSkin::Graphite'
+        $replacement = '                tokenmaster_state::PresentationSkin::Ember'
         ([regex]::Matches($text, [regex]::Escape($original))).Count | Should -Be 1
         [System.IO.File]::WriteAllText($path, $text.Replace($original, $replacement))
 

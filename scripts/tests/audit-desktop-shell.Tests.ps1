@@ -2626,7 +2626,7 @@ fn complete_history_range_terminal() {}
         $receipt.density_revision_write_count | Should -Be 1
         $receipt.density_switch_loop_count | Should -Be 1
         $receipt.presentation_operation_switch_loop_count | Should -Be 1
-        $receipt.presentation_ui_switch_structure_sha256 | Should -Be 'c2ed56726d8f3170c095a259905fc7b903faf91c079248413853d6011abfed94'
+        $receipt.presentation_ui_switch_structure_sha256 | Should -Be '9d01e7855a6ff78a7018607c52862595277d5b16f03ca03d4a4fd601a8b8e3a8'
         $receipt.density_applied_assertion_count | Should -Be 1
         $receipt.density_final_postcondition_count | Should -Be 1
         $receipt.density_authority_count | Should -Be 0
@@ -2651,7 +2651,7 @@ fn complete_history_range_terminal() {}
         $receipt.palette_property_count | Should -Be 2
         $receipt.palette_struct_count | Should -Be 1
         $receipt.skin_family_callback_count | Should -Be 2
-        $receipt.presentation_callback_count | Should -Be 6
+        $receipt.presentation_callback_count | Should -Be 8
         $receipt.skin_root_callback_count | Should -Be 1
         $receipt.skin_settings_callback_count | Should -Be 1
         $receipt.skin_forward_binding_count | Should -Be 1
