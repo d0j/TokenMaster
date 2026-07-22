@@ -2,9 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use tokenmaster_codex::{
-    CodexQuotaErrorCode, CodexQuotaSnapshot, CodexQuotaTransport, MAX_CODEX_QUOTA_WINDOWS,
-};
+use tokenmaster_codex::CodexQuotaErrorCode;
 use tokenmaster_engine::{
     Clock, OperationControl, PortErrorCode, RefreshOutcome, RefreshPermit, WriterLease,
 };
@@ -13,7 +11,9 @@ use tokenmaster_store::{BenefitApplyStatus, QuotaApplyStatus, StoreErrorCode, Us
 use super::{
     CodexExecutableDiscoveryErrorCode, CodexQuotaClockErrorCode, CodexQuotaPublicationErrorCode,
     CodexQuotaRefreshFailure, CodexQuotaRefreshSnapshot, CodexQuotaRetryMode,
-    CodexQuotaRuntimeConfig,
+};
+use crate::provider_quota::{
+    MAX_PROVIDER_QUOTA_WINDOWS, ProviderPollErrorCode, ProviderQuotaPoll, ProviderQuotaSource,
 };
 use crate::{RuntimeError, RuntimeWriterLease};
 
@@ -35,40 +35,6 @@ impl CodexQuotaWallClock for SystemCodexQuotaWallClock {
             return Err(CodexQuotaClockErrorCode::InvalidTime);
         }
         Ok(millis)
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum CodexQuotaSourceFailure {
-    Discovery(CodexExecutableDiscoveryErrorCode),
-    Transport(CodexQuotaErrorCode),
-}
-
-pub(super) trait CodexQuotaSource: Send + 'static {
-    fn poll(&mut self, observed_at_ms: i64) -> Result<CodexQuotaSnapshot, CodexQuotaSourceFailure>;
-}
-
-pub(super) struct RuntimeCodexQuotaSource {
-    config: CodexQuotaRuntimeConfig,
-}
-
-impl RuntimeCodexQuotaSource {
-    pub(super) const fn new(config: CodexQuotaRuntimeConfig) -> Self {
-        Self { config }
-    }
-}
-
-impl CodexQuotaSource for RuntimeCodexQuotaSource {
-    fn poll(&mut self, observed_at_ms: i64) -> Result<CodexQuotaSnapshot, CodexQuotaSourceFailure> {
-        let command = self
-            .config
-            .resolve_current_command()
-            .map_err(|error| CodexQuotaSourceFailure::Discovery(error.code()))?;
-        let transport = CodexQuotaTransport::new(command, self.config.transport_timeout())
-            .map_err(|error| CodexQuotaSourceFailure::Transport(error.code()))?;
-        transport
-            .poll(observed_at_ms)
-            .map_err(|error| CodexQuotaSourceFailure::Transport(error.code()))
     }
 }
 
@@ -153,10 +119,10 @@ pub(super) struct QuotaPublicationReport {
 }
 
 impl QuotaPublicationReport {
-    fn for_snapshot(snapshot: &CodexQuotaSnapshot) -> Self {
+    fn for_poll(poll: &ProviderQuotaPoll) -> Self {
         Self {
             benefit: BenefitPublicationSummary {
-                observation_count: u8::from(snapshot.benefit_observation().is_some()),
+                observation_count: u8::from(poll.benefits().is_some()),
                 ..BenefitPublicationSummary::default()
             },
             ..Self::default()
@@ -194,7 +160,7 @@ impl QuotaPublicationError {
 pub(super) trait QuotaPublisher: Send + 'static {
     fn publish(
         &mut self,
-        snapshot: &CodexQuotaSnapshot,
+        poll: &ProviderQuotaPoll,
         control: &OperationControl<'_>,
     ) -> Result<QuotaPublicationReport, QuotaPublicationError>;
 }
@@ -216,10 +182,10 @@ impl StoreQuotaPublisher {
 impl QuotaPublisher for StoreQuotaPublisher {
     fn publish(
         &mut self,
-        snapshot: &CodexQuotaSnapshot,
+        poll: &ProviderQuotaPoll,
         control: &OperationControl<'_>,
     ) -> Result<QuotaPublicationReport, QuotaPublicationError> {
-        let mut report = QuotaPublicationReport::for_snapshot(snapshot);
+        let mut report = QuotaPublicationReport::for_poll(poll);
         control
             .check()
             .map_err(|error| control_publication_error(error.code(), report))?;
@@ -229,7 +195,7 @@ impl QuotaPublisher for StoreQuotaPublisher {
             .map_err(|error| lease_publication_error(error.code(), report))?;
         let mut store = UsageStore::open(&self.archive_path)
             .map_err(|error| store_publication_error(error.code(), report))?;
-        for observation in snapshot.observations() {
+        for observation in poll.quota() {
             control
                 .check()
                 .map_err(|error| control_publication_error(error.code(), report))?;
@@ -257,7 +223,7 @@ impl QuotaPublisher for StoreQuotaPublisher {
         control
             .check()
             .map_err(|error| control_publication_error(error.code(), report))?;
-        if let Some(observation) = snapshot.benefit_observation() {
+        if let Some(observation) = poll.benefits() {
             match store.apply_benefit_observation(observation) {
                 Ok(result) => {
                     report
@@ -291,10 +257,10 @@ impl QuotaPublisher for StoreQuotaPublisher {
     }
 }
 
-pub(super) struct CodexQuotaExecution<C, S, P>
+pub(super) struct ProviderQuotaExecution<C, S, P>
 where
     C: CodexQuotaWallClock,
-    S: CodexQuotaSource,
+    S: ProviderQuotaSource,
     P: QuotaPublisher,
 {
     monotonic_clock: Arc<dyn Clock>,
@@ -304,10 +270,10 @@ where
     latest: Arc<Mutex<CodexQuotaRefreshSnapshot>>,
 }
 
-impl<C, S, P> CodexQuotaExecution<C, S, P>
+impl<C, S, P> ProviderQuotaExecution<C, S, P>
 where
     C: CodexQuotaWallClock,
-    S: CodexQuotaSource,
+    S: ProviderQuotaSource,
     P: QuotaPublisher,
 {
     pub(super) fn new(
@@ -351,15 +317,21 @@ where
             }
             Err(error) => return self.finish(started_at, AttemptResult::clock(error)),
         };
-        let snapshot = match self.source.poll(observed_at_ms) {
-            Ok(snapshot) => snapshot,
+        let poll = match self.source.poll(observed_at_ms) {
+            Ok(poll) if poll.observed_at_ms() == observed_at_ms => poll,
+            Ok(_) => {
+                return self.finish(
+                    started_at,
+                    AttemptResult::source(ProviderPollErrorCode::InvalidData, observed_at_ms),
+                );
+            }
             Err(error) => {
                 return self.finish(started_at, AttemptResult::source(error, observed_at_ms));
             }
         };
-        let observation_count = u16::try_from(snapshot.observations().len()).unwrap_or(u16::MAX);
-        let publication_report = QuotaPublicationReport::for_snapshot(&snapshot);
-        if snapshot.observations().len() > MAX_CODEX_QUOTA_WINDOWS {
+        let observation_count = u16::try_from(poll.quota().len()).unwrap_or(u16::MAX);
+        let publication_report = QuotaPublicationReport::for_poll(&poll);
+        if poll.quota().len() > MAX_PROVIDER_QUOTA_WINDOWS {
             return self.finish(
                 started_at,
                 AttemptResult::transport_capacity(
@@ -381,7 +353,7 @@ where
                 ),
             );
         }
-        let publication = match self.publisher.publish(&snapshot, &control) {
+        let publication = match self.publisher.publish(&poll, &control) {
             Ok(mut report)
                 if !publication_report_is_consistent(
                     report,
@@ -515,9 +487,9 @@ impl AttemptResult {
         }
     }
 
-    fn source(error: CodexQuotaSourceFailure, observed_at_ms: i64) -> Self {
-        match error {
-            CodexQuotaSourceFailure::Discovery(error) => Self {
+    fn source(error: ProviderPollErrorCode, observed_at_ms: i64) -> Self {
+        if let Some(error) = provider_discovery_error(error) {
+            return Self {
                 outcome: RefreshOutcome::Failed,
                 failure: Some(CodexQuotaRefreshFailure::Discovery(error)),
                 retry_mode: CodexQuotaRetryMode::Normal,
@@ -526,17 +498,18 @@ impl AttemptResult {
                 observed_at_ms: Some(observed_at_ms),
                 quota_succeeded: false,
                 benefit_succeeded: false,
-            },
-            CodexQuotaSourceFailure::Transport(error) => Self {
-                outcome: transport_outcome(error),
-                failure: Some(CodexQuotaRefreshFailure::Transport(error)),
-                retry_mode: transport_retry_mode(error),
-                observation_count: 0,
-                report: QuotaPublicationReport::default(),
-                observed_at_ms: Some(observed_at_ms),
-                quota_succeeded: false,
-                benefit_succeeded: false,
-            },
+            };
+        }
+        let error = provider_transport_error(error);
+        Self {
+            outcome: transport_outcome(error),
+            failure: Some(CodexQuotaRefreshFailure::Transport(error)),
+            retry_mode: transport_retry_mode(error),
+            observation_count: 0,
+            report: QuotaPublicationReport::default(),
+            observed_at_ms: Some(observed_at_ms),
+            quota_succeeded: false,
+            benefit_succeeded: false,
         }
     }
 
@@ -824,6 +797,42 @@ const fn transport_outcome(error: CodexQuotaErrorCode) -> RefreshOutcome {
     }
 }
 
+const fn provider_transport_error(error: ProviderPollErrorCode) -> CodexQuotaErrorCode {
+    match error {
+        ProviderPollErrorCode::DiscoveryUnavailable => CodexQuotaErrorCode::Unavailable,
+        ProviderPollErrorCode::DiscoveryCapacityExceeded => CodexQuotaErrorCode::CapacityExceeded,
+        ProviderPollErrorCode::Unavailable => CodexQuotaErrorCode::Unavailable,
+        ProviderPollErrorCode::SpawnFailed => CodexQuotaErrorCode::SpawnFailed,
+        ProviderPollErrorCode::ProcessExited => CodexQuotaErrorCode::ProcessExited,
+        ProviderPollErrorCode::ProcessCleanupFailed => CodexQuotaErrorCode::ProcessCleanupFailed,
+        ProviderPollErrorCode::InvalidData => CodexQuotaErrorCode::InvalidData,
+        ProviderPollErrorCode::AccountIdentityUnavailable => {
+            CodexQuotaErrorCode::AccountIdentityUnavailable
+        }
+        ProviderPollErrorCode::InvalidTime => CodexQuotaErrorCode::InvalidTime,
+        ProviderPollErrorCode::InvalidCommand => CodexQuotaErrorCode::InvalidCommand,
+        ProviderPollErrorCode::ProtocolError => CodexQuotaErrorCode::ProtocolError,
+        ProviderPollErrorCode::UnsupportedVersion => CodexQuotaErrorCode::UnsupportedVersion,
+        ProviderPollErrorCode::RpcError => CodexQuotaErrorCode::RpcError,
+        ProviderPollErrorCode::DeadlineExceeded => CodexQuotaErrorCode::DeadlineExceeded,
+        ProviderPollErrorCode::CapacityExceeded => CodexQuotaErrorCode::CapacityExceeded,
+    }
+}
+
+const fn provider_discovery_error(
+    error: ProviderPollErrorCode,
+) -> Option<CodexExecutableDiscoveryErrorCode> {
+    match error {
+        ProviderPollErrorCode::DiscoveryUnavailable => {
+            Some(CodexExecutableDiscoveryErrorCode::Unavailable)
+        }
+        ProviderPollErrorCode::DiscoveryCapacityExceeded => {
+            Some(CodexExecutableDiscoveryErrorCode::CapacityExceeded)
+        }
+        _ => None,
+    }
+}
+
 const fn transport_retry_mode(error: CodexQuotaErrorCode) -> CodexQuotaRetryMode {
     match error {
         CodexQuotaErrorCode::Unavailable
@@ -943,18 +952,19 @@ mod tests {
 
     use serde_json::json;
     use tempfile::TempDir;
-    use tokenmaster_codex::{CodexQuotaErrorCode, CodexQuotaNormalizer, CodexQuotaSnapshot};
+    use tokenmaster_codex::{CodexQuotaErrorCode, CodexQuotaNormalizer};
     use tokenmaster_engine::{
         Clock, MonotonicTime, OperationControl, PortErrorCode, RefreshAdmission,
         RefreshCoordinator, RefreshDeadline, RefreshOutcome, RefreshUrgency, WriterLease,
     };
 
     use super::{
-        BenefitPublicationSummary, CodexQuotaExecution, CodexQuotaSource, CodexQuotaSourceFailure,
-        CodexQuotaWallClock, QuotaPublicationError, QuotaPublicationReport,
-        QuotaPublicationSummary, QuotaPublisher, StoreQuotaPublisher,
+        BenefitPublicationSummary, CodexQuotaWallClock, ProviderQuotaExecution,
+        QuotaPublicationError, QuotaPublicationReport, QuotaPublicationSummary, QuotaPublisher,
+        StoreQuotaPublisher,
     };
     use crate::RuntimeWriterLease;
+    use crate::provider_quota::{ProviderPollErrorCode, ProviderQuotaPoll, ProviderQuotaSource};
     use crate::quota::{
         CodexQuotaClockErrorCode, CodexQuotaPublicationErrorCode, CodexQuotaRefreshFailure,
         CodexQuotaRefreshSnapshot, CodexQuotaRetryMode,
@@ -1012,15 +1022,15 @@ mod tests {
 
     struct FakeSource {
         events: Arc<Mutex<Vec<&'static str>>>,
-        result: Result<CodexQuotaSnapshot, CodexQuotaSourceFailure>,
+        result: Result<ProviderQuotaPoll, ProviderPollErrorCode>,
         on_poll: Option<Box<dyn FnOnce() + Send>>,
     }
 
-    impl CodexQuotaSource for FakeSource {
+    impl ProviderQuotaSource for FakeSource {
         fn poll(
             &mut self,
             _observed_at_ms: i64,
-        ) -> Result<CodexQuotaSnapshot, CodexQuotaSourceFailure> {
+        ) -> Result<ProviderQuotaPoll, ProviderPollErrorCode> {
             self.events.lock().test_value("event lock").push("source");
             if let Some(on_poll) = self.on_poll.take() {
                 on_poll();
@@ -1038,7 +1048,7 @@ mod tests {
     impl QuotaPublisher for FakePublisher {
         fn publish(
             &mut self,
-            _snapshot: &CodexQuotaSnapshot,
+            _snapshot: &ProviderQuotaPoll,
             _control: &OperationControl<'_>,
         ) -> Result<QuotaPublicationReport, QuotaPublicationError> {
             self.events.lock().test_value("event lock").push("publish");
@@ -1047,7 +1057,7 @@ mod tests {
         }
     }
 
-    fn normalized(observed_at_ms: i64) -> CodexQuotaSnapshot {
+    fn normalized(observed_at_ms: i64) -> ProviderQuotaPoll {
         let account = serde_json::to_vec(&json!({
             "requiresOpenaiAuth": true,
             "account": {
@@ -1091,8 +1101,9 @@ mod tests {
             "rateLimitsByLimitId": null
         }))
         .test_value("quota fixture");
-        CodexQuotaNormalizer::normalize(&account, &quota, observed_at_ms)
-            .test_value("normalized fixture")
+        let snapshot = CodexQuotaNormalizer::normalize(&account, &quota, observed_at_ms)
+            .test_value("normalized fixture");
+        ProviderQuotaPoll::from_codex(observed_at_ms, snapshot)
     }
 
     fn permit(
@@ -1156,7 +1167,7 @@ mod tests {
             calls: Arc::clone(&calls),
             result: Ok(completed_report()),
         };
-        let mut execution = CodexQuotaExecution::new(
+        let mut execution = ProviderQuotaExecution::new(
             monotonic,
             FixedWallClock(Ok(OBSERVED_AT_MS)),
             source,
@@ -1229,7 +1240,7 @@ mod tests {
             calls: Arc::clone(&calls),
             result: Ok(completed_report()),
         };
-        let mut execution = CodexQuotaExecution::new(
+        let mut execution = ProviderQuotaExecution::new(
             monotonic,
             FixedWallClock(Ok(OBSERVED_AT_MS)),
             source,
@@ -1337,7 +1348,7 @@ mod tests {
             calls: Arc::new(AtomicUsize::new(0)),
             result: Ok(report),
         };
-        let mut execution = CodexQuotaExecution::new(
+        let mut execution = ProviderQuotaExecution::new(
             Arc::new(FakeMonotonicClock::default()),
             FixedWallClock(Ok(OBSERVED_AT_MS)),
             source,
@@ -1394,7 +1405,7 @@ mod tests {
             calls: Arc::new(AtomicUsize::new(0)),
             result: Ok(report),
         };
-        let mut execution = CodexQuotaExecution::new(
+        let mut execution = ProviderQuotaExecution::new(
             Arc::new(FakeMonotonicClock::default()),
             FixedWallClock(Ok(OBSERVED_AT_MS)),
             source,
@@ -1445,7 +1456,7 @@ mod tests {
             calls: Arc::new(AtomicUsize::new(0)),
             result: Ok(report),
         };
-        let mut execution = CodexQuotaExecution::new(
+        let mut execution = ProviderQuotaExecution::new(
             Arc::new(FakeMonotonicClock::default()),
             FixedWallClock(Ok(OBSERVED_AT_MS)),
             source,
@@ -1502,7 +1513,7 @@ mod tests {
             calls: Arc::new(AtomicUsize::new(0)),
             result: Ok(report),
         };
-        let mut execution = CodexQuotaExecution::new(
+        let mut execution = ProviderQuotaExecution::new(
             Arc::new(FakeMonotonicClock::default()),
             FixedWallClock(Ok(OBSERVED_AT_MS)),
             source,
@@ -1536,9 +1547,7 @@ mod tests {
     fn failure_health_preserves_partial_counts_and_retry_classification() {
         let cases = [
             (
-                Err(CodexQuotaSourceFailure::Transport(
-                    CodexQuotaErrorCode::UnsupportedVersion,
-                )),
+                Err(ProviderPollErrorCode::UnsupportedVersion),
                 None,
                 RefreshOutcome::Failed,
                 CodexQuotaRetryMode::Normal,
@@ -1547,9 +1556,7 @@ mod tests {
                 )),
             ),
             (
-                Err(CodexQuotaSourceFailure::Transport(
-                    CodexQuotaErrorCode::DeadlineExceeded,
-                )),
+                Err(ProviderPollErrorCode::DeadlineExceeded),
                 None,
                 RefreshOutcome::DeadlineExceeded,
                 CodexQuotaRetryMode::Accelerated,
@@ -1599,7 +1606,7 @@ mod tests {
                 calls: Arc::new(AtomicUsize::new(0)),
                 result: publisher_result,
             };
-            let mut execution = CodexQuotaExecution::new(
+            let mut execution = ProviderQuotaExecution::new(
                 monotonic,
                 FixedWallClock(Ok(OBSERVED_AT_MS)),
                 source,
@@ -1641,7 +1648,7 @@ mod tests {
             result: Ok(completed_report()),
         };
         let monotonic_clock: Arc<dyn Clock> = monotonic.clone();
-        let mut execution = CodexQuotaExecution::new(
+        let mut execution = ProviderQuotaExecution::new(
             monotonic_clock,
             FixedWallClock(Err(CodexQuotaClockErrorCode::InvalidTime)),
             source,
@@ -1672,7 +1679,7 @@ mod tests {
             result: Ok(completed_report()),
         };
         let monotonic_clock: Arc<dyn Clock> = monotonic.clone();
-        let mut execution = CodexQuotaExecution::new(
+        let mut execution = ProviderQuotaExecution::new(
             monotonic_clock,
             FixedWallClock(Ok(OBSERVED_AT_MS)),
             source,

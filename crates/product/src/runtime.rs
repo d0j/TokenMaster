@@ -3,10 +3,10 @@ use std::num::NonZeroU64;
 use tokenmaster_engine::{RefreshOutcome, WorkerPhase, WorkerSnapshot};
 use tokenmaster_runtime::{
     BenefitReminderFailure, BenefitReminderRetryMode, BenefitReminderRuntimePhase,
-    BenefitReminderRuntimeSnapshot, BenefitReminderSchedulePhase, CodexQuotaRefreshStage,
-    CodexQuotaRetryMode, CodexQuotaRuntimePhase, CodexQuotaRuntimeSnapshot, GitRefreshFailure,
+    BenefitReminderRuntimeSnapshot, BenefitReminderSchedulePhase, GitRefreshFailure,
     GitRuntimePhase, GitRuntimeSnapshot, LivePhase, LiveRefreshKind, LiveRuntimeSnapshot,
-    RuntimeErrorCode, SchedulerPhase, WatcherHealth,
+    ProviderQuotaRefreshStage, ProviderQuotaRetryMode, ProviderQuotaRuntimePhase,
+    ProviderQuotaRuntimeSnapshot, RuntimeErrorCode, SchedulerPhase, WatcherHealth,
 };
 
 use crate::ProductSectionKind;
@@ -535,22 +535,23 @@ impl ProductQuotaRuntimeHealth {
     }
 }
 
-impl From<CodexQuotaRuntimeSnapshot> for ProductQuotaRuntimeHealth {
-    fn from(value: CodexQuotaRuntimeSnapshot) -> Self {
+impl From<ProviderQuotaRuntimeSnapshot> for ProductQuotaRuntimeHealth {
+    fn from(value: ProviderQuotaRuntimeSnapshot) -> Self {
         let schedule = value.schedule();
         let worker = value.worker();
         let refresh = value.refresh();
         let source_failure = refresh.failure().map(|failure| match failure.stage() {
-            CodexQuotaRefreshStage::Discovery => ProductRuntimeFailureCode::QuotaDiscovery,
-            CodexQuotaRefreshStage::Clock => ProductRuntimeFailureCode::QuotaClock,
-            CodexQuotaRefreshStage::Transport => ProductRuntimeFailureCode::QuotaTransport,
-            CodexQuotaRefreshStage::Publication | CodexQuotaRefreshStage::QuotaPublication => {
+            ProviderQuotaRefreshStage::Discovery => ProductRuntimeFailureCode::QuotaDiscovery,
+            ProviderQuotaRefreshStage::Clock => ProductRuntimeFailureCode::QuotaClock,
+            ProviderQuotaRefreshStage::Transport => ProductRuntimeFailureCode::QuotaTransport,
+            ProviderQuotaRefreshStage::Publication
+            | ProviderQuotaRefreshStage::QuotaPublication => {
                 ProductRuntimeFailureCode::QuotaPublication
             }
-            CodexQuotaRefreshStage::BenefitPublication => {
+            ProviderQuotaRefreshStage::BenefitPublication => {
                 ProductRuntimeFailureCode::BenefitPublication
             }
-            CodexQuotaRefreshStage::Control => ProductRuntimeFailureCode::RuntimeControl,
+            ProviderQuotaRefreshStage::Control => ProductRuntimeFailureCode::RuntimeControl,
         });
         let mut quota_failure = refresh
             .quota_failure()
@@ -1107,10 +1108,10 @@ const fn map_outcome(value: RefreshOutcome) -> ProductRefreshOutcome {
     }
 }
 
-const fn map_quota_retry(value: CodexQuotaRetryMode) -> ProductRetryMode {
+const fn map_quota_retry(value: ProviderQuotaRetryMode) -> ProductRetryMode {
     match value {
-        CodexQuotaRetryMode::Normal => ProductRetryMode::Normal,
-        CodexQuotaRetryMode::Accelerated => ProductRetryMode::Accelerated,
+        ProviderQuotaRetryMode::Normal => ProductRetryMode::Normal,
+        ProviderQuotaRetryMode::Accelerated => ProductRetryMode::Accelerated,
     }
 }
 
@@ -1160,13 +1161,13 @@ const fn map_live_lifecycle(value: LivePhase) -> ProductRuntimeLifecycle {
     }
 }
 
-const fn map_quota_lifecycle(value: CodexQuotaRuntimePhase) -> ProductRuntimeLifecycle {
+const fn map_quota_lifecycle(value: ProviderQuotaRuntimePhase) -> ProductRuntimeLifecycle {
     match value {
-        CodexQuotaRuntimePhase::Running => ProductRuntimeLifecycle::Running,
-        CodexQuotaRuntimePhase::Paused => ProductRuntimeLifecycle::Paused,
-        CodexQuotaRuntimePhase::Stopping => ProductRuntimeLifecycle::Stopping,
-        CodexQuotaRuntimePhase::Stopped => ProductRuntimeLifecycle::Stopped,
-        CodexQuotaRuntimePhase::Faulted => ProductRuntimeLifecycle::Faulted,
+        ProviderQuotaRuntimePhase::Running => ProductRuntimeLifecycle::Running,
+        ProviderQuotaRuntimePhase::Paused => ProductRuntimeLifecycle::Paused,
+        ProviderQuotaRuntimePhase::Stopping => ProductRuntimeLifecycle::Stopping,
+        ProviderQuotaRuntimePhase::Stopped => ProductRuntimeLifecycle::Stopped,
+        ProviderQuotaRuntimePhase::Faulted => ProductRuntimeLifecycle::Faulted,
     }
 }
 

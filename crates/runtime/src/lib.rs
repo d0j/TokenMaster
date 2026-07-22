@@ -13,6 +13,7 @@ mod lease;
 mod lifecycle;
 mod live;
 mod provider;
+mod provider_quota;
 mod publication;
 mod quota;
 mod recovery;
@@ -37,6 +38,10 @@ pub use live::LiveRuntime;
 pub use provider::{
     CodexUsageProviderFactory, LiveProviderAdapter, ProviderWatchRoots, UsageProviderFactory,
 };
+pub use provider_quota::{
+    CodexQuotaSource, MAX_PROVIDER_QUOTA_WINDOWS, ProviderPollErrorCode, ProviderQuotaObservation,
+    ProviderQuotaPoll, ProviderQuotaSource,
+};
 pub use publication::{
     EngineDiagnostics, EnginePublicationQuality, EngineSnapshot, EngineSnapshotGeneration,
 };
@@ -46,7 +51,10 @@ pub use quota::{
     CodexQuotaRefreshSnapshot, CodexQuotaRefreshStage, CodexQuotaRetryMode, CodexQuotaRuntime,
     CodexQuotaRuntimeConfig, CodexQuotaRuntimePhase, CodexQuotaRuntimeSnapshot,
     CodexQuotaScheduleSnapshot, MAX_CODEX_EXECUTABLE_SEARCH_DIRS,
-    MAX_CODEX_EXECUTABLE_SEARCH_PATH_BYTES,
+    MAX_CODEX_EXECUTABLE_SEARCH_PATH_BYTES, ProviderQuotaClockErrorCode,
+    ProviderQuotaPublicationErrorCode, ProviderQuotaRefreshFailure, ProviderQuotaRefreshSnapshot,
+    ProviderQuotaRefreshStage, ProviderQuotaRetryMode, ProviderQuotaRuntime,
+    ProviderQuotaRuntimePhase, ProviderQuotaRuntimeSnapshot, ProviderQuotaScheduleSnapshot,
 };
 pub use recovery::{StagingRecoveryOutcome, StartupRecoveryReport};
 pub use reminder::{

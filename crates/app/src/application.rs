@@ -39,8 +39,8 @@ use tokenmaster_product::{
     ProductUsageRuntimeHealth,
 };
 use tokenmaster_runtime::{
-    BenefitReminderRuntime, BenefitReminderRuntimeConfig, CodexQuotaRuntime,
-    CodexQuotaRuntimeConfig, CodexUsageProviderFactory, LiveRuntime, RuntimeErrorCode,
+    BenefitReminderRuntime, BenefitReminderRuntimeConfig, CodexQuotaRuntimeConfig,
+    CodexUsageProviderFactory, LiveRuntime, ProviderQuotaRuntime, RuntimeErrorCode,
 };
 use tokenmaster_state::{
     BackupMaintenanceRuntime, BackupPassphrase, BootstrapOutcome, MAX_CONFIG_PACKAGE_BYTES,
@@ -1671,7 +1671,7 @@ fn finish_live_bundle(
     let archive_path = data_root.archive_path().to_path_buf();
     let quota =
         OptionalRuntime::start(CodexQuotaRuntimeConfig::new(archive_path.clone()).and_then(
-            |config| CodexQuotaRuntime::start_notified(config, started.notifier_port.clone()),
+            |config| ProviderQuotaRuntime::start_notified(config, started.notifier_port.clone()),
         ));
     let reminder = start_optional_reminder_runtime(
         data_root,
@@ -2454,7 +2454,7 @@ impl Drop for Application {
 
 struct ApplicationBundle {
     live: LiveRuntime,
-    quota: OptionalRuntime<CodexQuotaRuntime>,
+    quota: OptionalRuntime<ProviderQuotaRuntime>,
     reminder: OptionalReminderRuntime,
     notification_presentation: Option<ReminderPresentationCoordinator>,
     controller: DesktopController,

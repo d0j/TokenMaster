@@ -12,6 +12,10 @@ pub use discovery::{
 pub use health::{
     CodexQuotaClockErrorCode, CodexQuotaPublicationErrorCode, CodexQuotaRefreshFailure,
     CodexQuotaRefreshSnapshot, CodexQuotaRefreshStage, CodexQuotaRetryMode, CodexQuotaRuntimePhase,
-    CodexQuotaRuntimeSnapshot, CodexQuotaScheduleSnapshot,
+    CodexQuotaRuntimeSnapshot, CodexQuotaScheduleSnapshot, ProviderQuotaClockErrorCode,
+    ProviderQuotaPublicationErrorCode, ProviderQuotaRefreshFailure, ProviderQuotaRefreshSnapshot,
+    ProviderQuotaRefreshStage, ProviderQuotaRetryMode, ProviderQuotaRuntimePhase,
+    ProviderQuotaRuntimeSnapshot, ProviderQuotaScheduleSnapshot,
 };
 pub use runtime::CodexQuotaRuntime;
+pub type ProviderQuotaRuntime = CodexQuotaRuntime;

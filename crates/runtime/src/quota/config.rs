@@ -58,7 +58,7 @@ impl CodexQuotaRuntimeConfig {
         }
     }
 
-    pub(super) fn resolve_current_command(
+    pub(crate) fn resolve_current_command(
         &self,
     ) -> Result<CodexAppServerCommand, super::CodexExecutableDiscoveryError> {
         match &self.executable {
@@ -73,7 +73,7 @@ impl CodexQuotaRuntimeConfig {
         &self.archive_path
     }
 
-    pub(super) const fn transport_timeout(&self) -> Duration {
+    pub(crate) const fn transport_timeout(&self) -> Duration {
         self.transport_timeout
     }
 }

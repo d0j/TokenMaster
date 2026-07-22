@@ -7,13 +7,12 @@ use tokenmaster_engine::{
 };
 use tokenmaster_platform::PowerLifecycleEvent;
 
-use super::execution::{
-    CodexQuotaExecution, RuntimeCodexQuotaSource, StoreQuotaPublisher, SystemCodexQuotaWallClock,
-};
+use super::execution::{ProviderQuotaExecution, StoreQuotaPublisher, SystemCodexQuotaWallClock};
 use super::{
     CodexQuotaRefreshSnapshot, CodexQuotaRetryMode, CodexQuotaRuntimeConfig,
     CodexQuotaRuntimePhase, CodexQuotaRuntimeSnapshot, CodexQuotaScheduleSnapshot,
 };
+use crate::provider_quota::{CodexQuotaSource, ProviderQuotaSource};
 use crate::{
     RefreshHintSink, RefreshScheduler, RuntimeError, RuntimeErrorCode, SchedulerError,
     SchedulerErrorCode, SchedulerPhase, SystemClock, WatcherHealth,
@@ -43,11 +42,34 @@ impl CodexQuotaRuntime {
         config: CodexQuotaRuntimeConfig,
         notifier: Option<Arc<dyn WorkerCompletionNotifier>>,
     ) -> Result<Self, RuntimeError> {
+        let archive_path = config.archive_path().to_path_buf();
+        Self::start_with_source_notified(&archive_path, CodexQuotaSource::new(config), notifier)
+    }
+
+    pub fn start_with_source(
+        archive_path: &std::path::Path,
+        source: impl ProviderQuotaSource,
+    ) -> Result<Self, RuntimeError> {
+        Self::start_with_source_notified(archive_path, source, None)
+    }
+
+    pub fn start_notified_with_source(
+        archive_path: &std::path::Path,
+        source: impl ProviderQuotaSource,
+        notifier: Arc<dyn WorkerCompletionNotifier>,
+    ) -> Result<Self, RuntimeError> {
+        Self::start_with_source_notified(archive_path, source, Some(notifier))
+    }
+
+    fn start_with_source_notified(
+        archive_path: &std::path::Path,
+        source: impl ProviderQuotaSource,
+        notifier: Option<Arc<dyn WorkerCompletionNotifier>>,
+    ) -> Result<Self, RuntimeError> {
         let clock: Arc<dyn Clock> = SystemClock::shared();
         let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
-        let source = RuntimeCodexQuotaSource::new(config.clone());
-        let publisher = StoreQuotaPublisher::new(config.archive_path())?;
-        let mut execution = CodexQuotaExecution::new(
+        let publisher = StoreQuotaPublisher::new(archive_path)?;
+        let mut execution = ProviderQuotaExecution::new(
             Arc::clone(&clock),
             SystemCodexQuotaWallClock,
             source,

@@ -636,7 +636,7 @@ impl LiveExecution {
         let Some(watcher) = slot.as_mut() else {
             return;
         };
-        let root_count = match watcher.replace_roots(&roots) {
+        let root_count = match watcher.replace_roots(roots) {
             Ok(snapshot) => snapshot.root_count(),
             Err(_) => 0,
         };

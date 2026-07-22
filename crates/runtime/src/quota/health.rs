@@ -54,6 +54,57 @@ impl CodexQuotaRefreshFailure {
             Self::Control(_) => CodexQuotaRefreshStage::Control,
         }
     }
+
+    #[must_use]
+    pub const fn stable_code(self) -> &'static str {
+        match self {
+            Self::Discovery(_) => "unavailable",
+            Self::Clock(CodexQuotaClockErrorCode::Unavailable) => "unavailable",
+            Self::Clock(CodexQuotaClockErrorCode::InvalidTime) => "invalid_time",
+            Self::Transport(error) => match error {
+                CodexQuotaErrorCode::DeadlineExceeded => "deadline_exceeded",
+                CodexQuotaErrorCode::CapacityExceeded => "capacity_exceeded",
+                CodexQuotaErrorCode::Unavailable
+                | CodexQuotaErrorCode::SpawnFailed
+                | CodexQuotaErrorCode::ProcessExited
+                | CodexQuotaErrorCode::ProcessCleanupFailed => "unavailable",
+                CodexQuotaErrorCode::InvalidData
+                | CodexQuotaErrorCode::AccountIdentityUnavailable
+                | CodexQuotaErrorCode::InvalidTime
+                | CodexQuotaErrorCode::InvalidCommand
+                | CodexQuotaErrorCode::ProtocolError
+                | CodexQuotaErrorCode::UnsupportedVersion
+                | CodexQuotaErrorCode::RpcError => "invalid_data",
+            },
+            Self::Publication(CodexQuotaPublicationErrorCode::Busy)
+            | Self::QuotaPublication(CodexQuotaPublicationErrorCode::Busy)
+            | Self::BenefitPublication(CodexQuotaPublicationErrorCode::Busy)
+            | Self::Control(PortErrorCode::Busy) => "busy",
+            Self::Publication(CodexQuotaPublicationErrorCode::Cancelled)
+            | Self::QuotaPublication(CodexQuotaPublicationErrorCode::Cancelled)
+            | Self::BenefitPublication(CodexQuotaPublicationErrorCode::Cancelled)
+            | Self::Control(PortErrorCode::Cancelled) => "cancelled",
+            Self::Publication(CodexQuotaPublicationErrorCode::DeadlineExceeded)
+            | Self::QuotaPublication(CodexQuotaPublicationErrorCode::DeadlineExceeded)
+            | Self::BenefitPublication(CodexQuotaPublicationErrorCode::DeadlineExceeded)
+            | Self::Control(PortErrorCode::DeadlineExceeded) => "deadline_exceeded",
+            Self::Publication(CodexQuotaPublicationErrorCode::StoreUnavailable)
+            | Self::QuotaPublication(CodexQuotaPublicationErrorCode::StoreUnavailable)
+            | Self::BenefitPublication(CodexQuotaPublicationErrorCode::StoreUnavailable)
+            | Self::Control(PortErrorCode::Unavailable) => "unavailable",
+            Self::Publication(CodexQuotaPublicationErrorCode::CapacityExceeded)
+            | Self::QuotaPublication(CodexQuotaPublicationErrorCode::CapacityExceeded)
+            | Self::BenefitPublication(CodexQuotaPublicationErrorCode::CapacityExceeded)
+            | Self::Control(PortErrorCode::CapacityExceeded) => "capacity_exceeded",
+            Self::Publication(CodexQuotaPublicationErrorCode::InvalidData)
+            | Self::QuotaPublication(CodexQuotaPublicationErrorCode::InvalidData)
+            | Self::BenefitPublication(CodexQuotaPublicationErrorCode::InvalidData)
+            | Self::Control(PortErrorCode::InvalidData)
+            | Self::Control(PortErrorCode::StaleState)
+            | Self::Control(PortErrorCode::RebuildRequired)
+            | Self::Control(PortErrorCode::Failed) => "invalid_data",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -370,3 +421,13 @@ impl CodexQuotaRuntimeSnapshot {
 }
 
 const _: () = assert!(MAX_CODEX_QUOTA_WINDOWS <= u16::MAX as usize);
+
+pub type ProviderQuotaClockErrorCode = CodexQuotaClockErrorCode;
+pub type ProviderQuotaPublicationErrorCode = CodexQuotaPublicationErrorCode;
+pub type ProviderQuotaRefreshFailure = CodexQuotaRefreshFailure;
+pub type ProviderQuotaRefreshSnapshot = CodexQuotaRefreshSnapshot;
+pub type ProviderQuotaRefreshStage = CodexQuotaRefreshStage;
+pub type ProviderQuotaRetryMode = CodexQuotaRetryMode;
+pub type ProviderQuotaRuntimePhase = CodexQuotaRuntimePhase;
+pub type ProviderQuotaRuntimeSnapshot = CodexQuotaRuntimeSnapshot;
+pub type ProviderQuotaScheduleSnapshot = CodexQuotaScheduleSnapshot;

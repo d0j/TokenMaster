@@ -7,8 +7,8 @@ use tokenmaster_query::{
     UsageSessionPage,
 };
 use tokenmaster_runtime::{
-    BenefitReminderRuntimeSnapshot, CodexQuotaRuntimeSnapshot, GitRuntimeSnapshot,
-    LiveRuntimeSnapshot, RuntimeErrorCode,
+    BenefitReminderRuntimeSnapshot, GitRuntimeSnapshot, LiveRuntimeSnapshot,
+    ProviderQuotaRuntimeSnapshot, RuntimeErrorCode,
 };
 
 use crate::{
@@ -225,7 +225,7 @@ impl ProductReducer {
         fail_quota_runtime,
         fail_quota_runtime_observation,
         quota,
-        CodexQuotaRuntimeSnapshot,
+        ProviderQuotaRuntimeSnapshot,
         ProductQuotaRuntimeHealth
     );
     runtime_methods!(
