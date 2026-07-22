@@ -9,6 +9,10 @@ schemes separate, resolves Unknown to Dark, and reacts to system observations wi
 revision or persistence churn. Rust owns six exact 15-role palettes; the existing
 one-active/one-latest-pending worker remains bounded across all 27 density/skin/scheme
 combinations. Focused state, desktop, application, source-audit, and mutation tests pass.
+Independent review found and corrected one stale-observation transition: OS changes are
+now retained during explicit Light/Dark so returning to System immediately uses the
+latest effective scheme. A real compiled-UI 10,000-switch proof now covers all 27
+complete combinations while retaining the same window, bounded models, and geometry.
 The cycle used one required-evidence stale-anchor correction pass and did not enter
 `AUDIT_HARDENING_LOOP`. Layout is the next release-critical P4 slice.
 

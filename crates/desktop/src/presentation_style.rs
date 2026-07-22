@@ -352,9 +352,6 @@ impl DesktopPresentationStyle {
         &mut self,
         system_color_scheme: DesktopSystemColorScheme,
     ) -> DesktopPresentationApplyOutcome {
-        if !matches!(self.color_scheme(), DesktopColorScheme::System) {
-            return DesktopPresentationApplyOutcome::Unchanged;
-        }
         let previous = self.effective_color_scheme();
         self.system_color_scheme = system_color_scheme;
         if self.effective_color_scheme() == previous {

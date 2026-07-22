@@ -17,6 +17,8 @@ root palette, six exact Refined/Graphite/Ember Light/Dark palettes, reactive sys
 observation without revision/persistence churn, complete admission-first persistence/
 restore, and compiled-UI plus application 10,000-switch 27-combination contracts are
 source/mutation audited without adding timer/worker/query/window/retained authority.
+OS observations received during explicit Light/Dark are retained as one scalar so
+returning to System immediately resolves the latest scheme without repaint churn.
 Do not claim layouts/locales/languages, remaining density typography/row-size behavior,
 accessibility/DPI/paint/resource verification, P5/P6, M0,
 interactive/package/sign/signing/soak, or release acceptance.

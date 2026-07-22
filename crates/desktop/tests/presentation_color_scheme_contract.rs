@@ -123,4 +123,13 @@ fn system_observation_changes_only_effective_scheme_without_revision_or_persiste
         style.effective_color_scheme(),
         DesktopEffectiveColorScheme::Dark
     );
+    assert_eq!(
+        style.select_color_scheme_index(0),
+        DesktopPresentationApplyOutcome::Applied
+    );
+    assert_eq!(
+        style.effective_color_scheme(),
+        DesktopEffectiveColorScheme::Light,
+        "returning to System must use the latest observation received while explicit"
+    );
 }
