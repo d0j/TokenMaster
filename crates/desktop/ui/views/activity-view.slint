@@ -18,7 +18,7 @@ component ActivityHeaderCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: region;
-    accessible-label: "Recent activity " + root.context-label + " " + root.loaded-label + " " + root.page-status-label + " " + root.evidence-label;
+    accessible-label: @tr("Recent activity {0} {1} {2} {3}", root.context-label, root.loaded-label, root.page-status-label, root.evidence-label);
 
     VerticalLayout {
         padding: UiTokens.space;
@@ -28,8 +28,8 @@ component ActivityHeaderCard inherits Rectangle {
             VerticalLayout {
                 spacing: UiTokens.space-xs;
                 horizontal-stretch: 1;
-                Text { text: "Recent activity"; color: UiTokens.text-primary; font-size: 19px; font-weight: 800; }
-                Text { text: "Newest archive events · " + root.context-label; color: UiTokens.text-secondary; font-size: 11px; overflow: elide; }
+                Text { text: @tr("Recent activity"); color: UiTokens.text-primary; font-size: 19px; font-weight: 800; }
+                Text { text: @tr("Newest archive events · {0}", root.context-label); color: UiTokens.text-secondary; font-size: 11px; overflow: elide; }
             }
             SectionState { state: root.state; reasons: root.reasons; }
         }
@@ -53,8 +53,8 @@ component ActivityTableCard inherits Rectangle {
     in property <string> state;
     in property <bool> page-available;
     out property <string> empty-message: !root.page-available
-        ? (root.state == "waiting" ? "Waiting for recent activity evidence" : "Recent activity evidence unavailable")
-        : (root.state == "ready" ? "No activity events in the archive" : "No activity events in the available page");
+        ? (root.state == "waiting" ? @tr("Waiting for recent activity evidence") : @tr("Recent activity evidence unavailable"))
+        : (root.state == "ready" ? @tr("No activity events in the archive") : @tr("No activity events in the available page"));
 
     min-height: max(108px, 70px + root.rows.length * (root.narrow ? 64px : 42px));
     background: UiTokens.surface;
@@ -62,12 +62,12 @@ component ActivityTableCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: table;
-    accessible-label: "Newest bounded activity events with UTC timestamps" + (root.rows.length == 0 ? " " + root.empty-message : "");
+    accessible-label: @tr("Newest bounded activity events with UTC timestamps") + (root.rows.length == 0 ? " " + root.empty-message : "");
 
     VerticalLayout {
         padding: UiTokens.space;
         spacing: 0px;
-        Text { text: "Latest events"; color: UiTokens.text-primary; font-size: 15px; font-weight: 750; height: 32px; }
+        Text { text: @tr("Latest events"); color: UiTokens.text-primary; font-size: 15px; font-weight: 750; height: 32px; }
         if root.rows.length == 0: Text {
             text: root.empty-message;
             color: UiTokens.text-secondary;
@@ -77,20 +77,20 @@ component ActivityTableCard inherits Rectangle {
         if !root.narrow && root.rows.length > 0: HorizontalLayout {
             height: 28px;
             spacing: UiTokens.space-sm;
-            Text { text: "UTC time"; color: UiTokens.text-secondary; font-size: 10px; width: 205px; }
-            Text { text: "Model"; color: UiTokens.text-secondary; font-size: 10px; width: 150px; }
-            Text { text: "Input"; color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: "Cached"; color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: "Output"; color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: "Reasoning"; color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: "Total"; color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("UTC time"); color: UiTokens.text-secondary; font-size: 10px; width: 205px; }
+            Text { text: @tr("Model"); color: UiTokens.text-secondary; font-size: 10px; width: 150px; }
+            Text { text: @tr("Input"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Cached"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Output"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Reasoning"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Total"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
         }
         for item[i] in root.rows: Rectangle {
             height: root.narrow ? 64px : 42px;
             background: mod(i, 2) == 0 ? UiTokens.surface-subtle : transparent;
             border-radius: UiTokens.radius-sm;
             accessible-role: list-item;
-            accessible-label: item.time-label + " model " + item.model-label + " input " + item.input-label + " cached " + item.cached-label + " output " + item.output-label + " reasoning " + item.reasoning-label + " total " + item.total-label;
+            accessible-label: @tr("{0} model {1} input {2} cached {3} output {4} reasoning {5} total {6}", item.time-label, item.model-label, item.input-label, item.cached-label, item.output-label, item.reasoning-label, item.total-label);
             if root.narrow: VerticalLayout {
                 padding-left: UiTokens.space-sm;
                 padding-right: UiTokens.space-sm;
@@ -104,7 +104,7 @@ component ActivityTableCard inherits Rectangle {
                     Text { text: item.total-label; color: item.total-availability == "unavailable" ? UiTokens.text-secondary : UiTokens.text-primary; font-size: 11px; width: 72px; horizontal-alignment: right; }
                 }
                 Text {
-                    text: "In " + item.input-label + " · Cache " + item.cached-label + " · Out " + item.output-label + " · Reason " + item.reasoning-label;
+                    text: @tr("In {0} · Cache {1} · Out {2} · Reason {3}", item.input-label, item.cached-label, item.output-label, item.reasoning-label);
                     color: UiTokens.text-secondary;
                     font-size: 10px;
                     overflow: elide;
@@ -141,7 +141,7 @@ component ActivityRhythmCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: region;
-    accessible-label: root.title + " " + root.range-label + " in " + root.time-zone-label + " " + root.evidence-label;
+    accessible-label: @tr("{0} {1} in {2} {3}", root.title, root.range-label, root.time-zone-label, root.evidence-label);
 
     VerticalLayout {
         padding: UiTokens.space;
@@ -158,7 +158,7 @@ component ActivityRhythmCard inherits Rectangle {
             overflow: elide;
         }
         if root.rows.length == 0: Text {
-            text: root.state == "waiting" ? "Waiting for rhythm evidence" : "Rhythm evidence unavailable";
+            text: root.state == "waiting" ? @tr("Waiting for rhythm evidence") : @tr("Rhythm evidence unavailable");
             color: UiTokens.text-secondary;
             font-size: 12px;
             vertical-stretch: 1;
@@ -229,7 +229,7 @@ export component ActivityView inherits Rectangle {
                 narrow: root.narrow;
             }
             ActivityRhythmCard {
-                title: "Usage by local hour";
+                title: @tr("Usage by local hour");
                 rows: root.hour-rows;
                 state: root.rhythm-state;
                 reasons: root.rhythm-reasons;
@@ -238,7 +238,7 @@ export component ActivityView inherits Rectangle {
                 range-label: root.rhythm-range-label;
             }
             ActivityRhythmCard {
-                title: "Usage by weekday";
+                title: @tr("Usage by weekday");
                 rows: root.weekday-rows;
                 state: root.rhythm-state;
                 reasons: root.rhythm-reasons;

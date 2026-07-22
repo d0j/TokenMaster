@@ -311,6 +311,46 @@ const HELP_ABOUT_MSGIDS: [&str; 29] = [
     "Current automation authority: none.",
 ];
 
+const ACTIVITY_MODELS_MSGIDS: [&str; 37] = [
+    "Recent activity",
+    "Recent activity {0} {1} {2} {3}",
+    "Newest archive events · {0}",
+    "Waiting for recent activity evidence",
+    "Recent activity evidence unavailable",
+    "No activity events in the archive",
+    "No activity events in the available page",
+    "Newest bounded activity events with UTC timestamps",
+    "Latest events",
+    "UTC time",
+    "Model",
+    "Relative",
+    "Input",
+    "Cached",
+    "Output",
+    "Reasoning",
+    "Total",
+    "{0} model {1} input {2} cached {3} output {4} reasoning {5} total {6}",
+    "In {0} · Cache {1} · Out {2} · Reason {3}",
+    "Usage by local hour",
+    "Usage by weekday",
+    "{0} {1} in {2} {3}",
+    "Waiting for rhythm evidence",
+    "Rhythm evidence unavailable",
+    "Model usage {0} {1} {2} cost {3} {4}",
+    "Models",
+    "Total tokens",
+    "Cost · {0}",
+    "Events",
+    "Model usage ranked by total tokens",
+    "Usage by model",
+    "Waiting for model evidence",
+    "No model usage in this range",
+    "Model evidence unavailable",
+    "Cost · evidence",
+    "{0} input {1} cached {2} output {3} reasoning {4} total {5} cost {6} {7} events {8}",
+    "In {0} · Cache {1} · Out {2} · Reason {3} · {4} events",
+];
+
 const COMPONENT_RAW_LITERAL_ALLOWLIST: [&str; 11] = [
     "", " ", " · ", ", ", "ready", "degraded", "waiting", "●", "▲", "…", "×",
 ];
@@ -360,6 +400,7 @@ fn shell_component_and_settings_reminder_backup_catalogs_are_complete_and_preser
         .chain(SESSIONS_DASHBOARD_MSGIDS)
         .chain(DATA_HEALTH_MSGIDS)
         .chain(HELP_ABOUT_MSGIDS)
+        .chain(ACTIVITY_MODELS_MSGIDS)
         .collect::<BTreeSet<_>>();
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -411,6 +452,7 @@ fn projects_and_compact_widget_catalogs_are_complete_before_view_conversion() {
         .chain(SESSIONS_DASHBOARD_MSGIDS)
         .chain(DATA_HEALTH_MSGIDS)
         .chain(HELP_ABOUT_MSGIDS)
+        .chain(ACTIVITY_MODELS_MSGIDS)
         .collect::<BTreeSet<_>>();
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -440,8 +482,9 @@ fn sessions_and_dashboard_catalogs_are_complete_before_view_conversion() {
         .chain(SESSIONS_DASHBOARD_MSGIDS)
         .chain(DATA_HEALTH_MSGIDS)
         .chain(HELP_ABOUT_MSGIDS)
+        .chain(ACTIVITY_MODELS_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 274, "Task 2b5b exact catalog inventory");
+    assert_eq!(expected.len(), 304, "Task 2b6 exact catalog inventory");
 
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -457,7 +500,7 @@ fn sessions_and_dashboard_catalogs_are_complete_before_view_conversion() {
             expected,
             "{locale} must translate exactly the closed Task 2b4 Sessions and Dashboard key set"
         );
-        assert_eq!(po_entry_count(&catalog), 274, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 304, "{locale} exact key count");
         for msgid in SESSIONS_DASHBOARD_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b4 catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -481,8 +524,9 @@ fn data_health_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(SESSIONS_DASHBOARD_MSGIDS)
         .chain(DATA_HEALTH_MSGIDS)
         .chain(HELP_ABOUT_MSGIDS)
+        .chain(ACTIVITY_MODELS_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 274, "Task 2b5b exact catalog inventory");
+    assert_eq!(expected.len(), 304, "Task 2b6 exact catalog inventory");
 
     let data_health = include_str!("../ui/views/data-health-view.slint");
     for msgid in DATA_HEALTH_MSGIDS {
@@ -506,7 +550,7 @@ fn data_health_catalog_and_source_use_the_closed_translation_key_set() {
             expected,
             "{locale} must translate exactly the closed Task 2b5a Data Health key set"
         );
-        assert_eq!(po_entry_count(&catalog), 274, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 304, "{locale} exact key count");
         for msgid in DATA_HEALTH_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b5a catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -526,8 +570,9 @@ fn help_about_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(SESSIONS_DASHBOARD_MSGIDS)
         .chain(DATA_HEALTH_MSGIDS)
         .chain(HELP_ABOUT_MSGIDS)
+        .chain(ACTIVITY_MODELS_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 274, "Task 2b5b exact catalog inventory");
+    assert_eq!(expected.len(), 304, "Task 2b6 exact catalog inventory");
 
     let help_about = include_str!("../ui/views/help-about-view.slint");
     for msgid in HELP_ABOUT_MSGIDS {
@@ -551,9 +596,53 @@ fn help_about_catalog_and_source_use_the_closed_translation_key_set() {
             expected,
             "{locale} must translate exactly the closed Task 2b5b Help/About key set"
         );
-        assert_eq!(po_entry_count(&catalog), 274, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 304, "{locale} exact key count");
         for msgid in HELP_ABOUT_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b5b catalog completeness");
+            assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
+            assert_eq!(placeholders(msgstr), placeholders(msgid));
+        }
+    }
+}
+
+#[test]
+fn activity_and_models_catalog_and_source_use_the_closed_translation_key_set() {
+    let expected = SHELL_MSGIDS
+        .into_iter()
+        .chain(COMPONENT_MSGIDS)
+        .chain(SETTINGS_REMINDER_BACKUP_MSGIDS)
+        .chain(SETTINGS_STARTUP_CONFIG_BOARD_FOOTER_MSGIDS)
+        .chain(PROJECTS_COMPACT_MSGIDS)
+        .chain(SESSIONS_DASHBOARD_MSGIDS)
+        .chain(DATA_HEALTH_MSGIDS)
+        .chain(HELP_ABOUT_MSGIDS)
+        .chain(ACTIVITY_MODELS_MSGIDS)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(expected.len(), 304, "Task 2b6 exact catalog inventory");
+
+    let activity = include_str!("../ui/views/activity-view.slint");
+    let models = include_str!("../ui/views/models-view.slint");
+    for msgid in ACTIVITY_MODELS_MSGIDS {
+        assert!(
+            activity.contains(&format!("@tr(\"{msgid}\""))
+                || models.contains(&format!("@tr(\"{msgid}\"")),
+            "missing Task 2b6 Activity/Models @tr for {msgid:?}"
+        );
+    }
+
+    for locale in ["ru", "pseudo"] {
+        let catalog = std::fs::read_to_string(
+            Path::new(TRANSLATION_ROOT)
+                .join(locale)
+                .join("LC_MESSAGES")
+                .join("tokenmaster-desktop.po"),
+        )
+        .expect("bundled catalog");
+        let entries = po_entries(&catalog);
+        assert_eq!(entries.keys().copied().collect::<BTreeSet<_>>(), expected);
+        assert_eq!(po_entry_count(&catalog), 304, "{locale} exact key count");
+        for msgid in ACTIVITY_MODELS_MSGIDS {
+            let msgstr = entries.get(msgid).expect("Task 2b6 catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
             assert_eq!(placeholders(msgstr), placeholders(msgid));
         }

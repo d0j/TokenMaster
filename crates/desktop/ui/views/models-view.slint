@@ -26,7 +26,7 @@ component ModelsHeaderCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: region;
-    accessible-label: "Model usage " + root.range-label + " " + root.loaded-label + " " + root.completeness-label + " cost " + root.cost + " " + root.cost-evidence-label;
+    accessible-label: @tr("Model usage {0} {1} {2} cost {3} {4}", root.range-label, root.loaded-label, root.completeness-label, root.cost, root.cost-evidence-label);
 
     VerticalLayout {
         padding: UiTokens.space;
@@ -36,7 +36,7 @@ component ModelsHeaderCard inherits Rectangle {
             VerticalLayout {
                 spacing: UiTokens.space-xs;
                 horizontal-stretch: 1;
-                Text { text: "Models"; color: UiTokens.text-primary; font-size: 19px; font-weight: 800; }
+                Text { text: @tr("Models"); color: UiTokens.text-primary; font-size: 19px; font-weight: 800; }
                 Text {
                     text: root.range-label + " · " + root.time-zone-label;
                     color: UiTokens.text-secondary;
@@ -59,9 +59,9 @@ component ModelsHeaderCard inherits Rectangle {
         }
         HorizontalLayout {
             spacing: UiTokens.space;
-            MetricValue { label: "Total tokens"; value: root.total-tokens; availability: root.total-availability; horizontal-stretch: 1; }
-            MetricValue { label: "Cost · " + root.cost-evidence-label; value: root.cost; availability: root.cost-availability; horizontal-stretch: 1; }
-            MetricValue { label: "Events"; value: root.events; availability: root.events == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Total tokens"); value: root.total-tokens; availability: root.total-availability; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Cost · {0}", root.cost-evidence-label); value: root.cost; availability: root.cost-availability; horizontal-stretch: 1; }
+            MetricValue { label: @tr("Events"); value: root.events; availability: root.events == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
         }
     }
 }
@@ -77,14 +77,14 @@ component ModelsTableCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: table;
-    accessible-label: "Model usage ranked by total tokens";
+    accessible-label: @tr("Model usage ranked by total tokens");
 
     VerticalLayout {
         padding: UiTokens.space;
         spacing: 0px;
-        Text { text: "Usage by model"; color: UiTokens.text-primary; font-size: 15px; font-weight: 750; height: 32px; }
+        Text { text: @tr("Usage by model"); color: UiTokens.text-primary; font-size: 15px; font-weight: 750; height: 32px; }
         if root.rows.length == 0: Text {
-            text: root.state == "waiting" ? "Waiting for model evidence" : (root.state == "ready" ? "No model usage in this range" : "Model evidence unavailable");
+            text: root.state == "waiting" ? @tr("Waiting for model evidence") : (root.state == "ready" ? @tr("No model usage in this range") : @tr("Model evidence unavailable"));
             color: UiTokens.text-secondary;
             font-size: 12px;
             height: 34px;
@@ -92,22 +92,22 @@ component ModelsTableCard inherits Rectangle {
         if !root.narrow && root.rows.length > 0: HorizontalLayout {
             height: 28px;
             spacing: UiTokens.space-sm;
-            Text { text: "Model"; color: UiTokens.text-secondary; font-size: 10px; width: 150px; }
-            Text { text: "Relative"; color: UiTokens.text-secondary; font-size: 10px; width: 72px; }
-            Text { text: "Input"; color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: "Cached"; color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: "Output"; color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: "Reasoning"; color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: "Total"; color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
-            Text { text: "Cost · evidence"; color: UiTokens.text-secondary; font-size: 10px; width: 140px; horizontal-alignment: right; }
-            Text { text: "Events"; color: UiTokens.text-secondary; font-size: 10px; width: 54px; horizontal-alignment: right; }
+            Text { text: @tr("Model"); color: UiTokens.text-secondary; font-size: 10px; width: 150px; }
+            Text { text: @tr("Relative"); color: UiTokens.text-secondary; font-size: 10px; width: 72px; }
+            Text { text: @tr("Input"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Cached"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Output"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Reasoning"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Total"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; horizontal-alignment: right; }
+            Text { text: @tr("Cost · evidence"); color: UiTokens.text-secondary; font-size: 10px; width: 140px; horizontal-alignment: right; }
+            Text { text: @tr("Events"); color: UiTokens.text-secondary; font-size: 10px; width: 54px; horizontal-alignment: right; }
         }
         for model[i] in root.rows: Rectangle {
             height: root.narrow ? 70px : 42px;
             background: mod(i, 2) == 0 ? UiTokens.surface-subtle : transparent;
             border-radius: UiTokens.radius-sm;
             accessible-role: list-item;
-            accessible-label: model.model-label + " input " + model.input-label + " cached " + model.cached-label + " output " + model.output-label + " reasoning " + model.reasoning-label + " total " + model.total-label + " cost " + model.cost-label + " " + model.cost-evidence-label + " events " + model.event-label;
+            accessible-label: @tr("{0} input {1} cached {2} output {3} reasoning {4} total {5} cost {6} {7} events {8}", model.model-label, model.input-label, model.cached-label, model.output-label, model.reasoning-label, model.total-label, model.cost-label, model.cost-evidence-label, model.event-label);
             if root.narrow: VerticalLayout {
                 padding-left: UiTokens.space-sm;
                 padding-right: UiTokens.space-sm;
@@ -127,7 +127,7 @@ component ModelsTableCard inherits Rectangle {
                     Rectangle { width: max(1px, model.token-ratio * parent.width); height: parent.height; background: UiTokens.accent; border-radius: 2px; }
                 }
                 Text {
-                    text: "In " + model.input-label + " · Cache " + model.cached-label + " · Out " + model.output-label + " · Reason " + model.reasoning-label + " · " + model.event-label + " events";
+                    text: @tr("In {0} · Cache {1} · Out {2} · Reason {3} · {4} events", model.input-label, model.cached-label, model.output-label, model.reasoning-label, model.event-label);
                     color: UiTokens.text-secondary;
                     font-size: 10px;
                     overflow: elide;
