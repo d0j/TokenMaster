@@ -20,8 +20,9 @@ use crate::{
     DesktopActivityProjection, DesktopBenefitExpiry, DesktopCloseEffect, DesktopCostComposition,
     DesktopCostValue, DesktopCurrentUserStartupStatus, DesktopDashboardProjection,
     DesktopDashboardSectionKey, DesktopFreshness, DesktopHistoryProjection,
-    DesktopHistoryRangeIntentSink, DesktopInAppNotificationBatch, DesktopInAppNotificationBridge,
-    DesktopIntent, DesktopIntentSink, DesktopLifecycleIntentSink, DesktopModelsProjection,
+    DesktopHistoryRangeIntentAdmission, DesktopHistoryRangeIntentSink,
+    DesktopInAppNotificationBatch, DesktopInAppNotificationBridge, DesktopIntent,
+    DesktopIntentSink, DesktopLifecycleIntentSink, DesktopModelsProjection,
     DesktopNotificationsProjection, DesktopOperationSnapshot, DesktopPresentationApplyOutcome,
     DesktopPresentationStyle, DesktopProjectsProjection, DesktopQuality,
     DesktopReliableStateProjection, DesktopReminderPolicy, DesktopRgb,
@@ -579,6 +580,7 @@ impl DesktopShell {
         wire_route_selection(&window, state.clone(), compact_window_mode.clone());
         wire_command_palette(&window, state.clone(), compact_window_mode);
         wire_reliable_state_intents(&window, reliable_state.clone(), Rc::clone(&intent_sink));
+        wire_history_range_intents(&window, state.clone(), history_range_sink.clone());
         wire_session_detail_intents(&window, state.clone(), session_sink);
         wire_session_page_intents(&window, state.clone(), session_page_sink.clone());
         wire_in_app_notification_dismissal(&window);
@@ -690,7 +692,7 @@ impl DesktopShell {
             let intent = state
                 .request_history_range(preset)
                 .map_err(|_| DesktopUiError::state_unavailable())?;
-            apply_history_projection(&self.window, state.projection().history());
+            apply_history_range_state(&self.window, state.projection().history());
             intent
         };
         Ok(intent)
@@ -1547,6 +1549,43 @@ fn dismiss_command_palette(window: &MainWindow) {
     window.set_command_palette_rows(model(Vec::new()));
 }
 
+fn wire_history_range_intents(
+    window: &MainWindow,
+    state: SharedDesktopState,
+    sink: Rc<dyn DesktopHistoryRangeIntentSink>,
+) {
+    let bind = |preset| {
+        let weak = window.as_weak();
+        let state = state.clone();
+        let sink = sink.clone();
+        move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let intent = {
+                let Ok(mut state) = state.lock() else {
+                    return;
+                };
+                let Ok(intent) = state.request_history_range(preset) else {
+                    return;
+                };
+                apply_history_range_state(&window, state.projection().history());
+                intent
+            };
+            if sink.submit(intent) == DesktopHistoryRangeIntentAdmission::Rejected {
+                let Ok(mut state) = state.lock() else {
+                    return;
+                };
+                state.reject_history_range(intent);
+                apply_history_range_state(&window, state.projection().history());
+            }
+        }
+    };
+    window.on_request_history_range_1(bind(crate::DesktopHistoryRangePreset::Recent1Day));
+    window.on_request_history_range_7(bind(crate::DesktopHistoryRangePreset::Recent7Days));
+    window.on_request_history_range_30(bind(crate::DesktopHistoryRangePreset::Recent30Days));
+}
+
 fn wire_session_detail_intents(
     window: &MainWindow,
     state: SharedDesktopState,
@@ -1947,6 +1986,7 @@ fn apply_dashboard_projection(window: &MainWindow, dashboard: &DesktopDashboardP
 }
 
 pub(crate) fn apply_history_projection(window: &MainWindow, history: &DesktopHistoryProjection) {
+    apply_history_range_state(window, history);
     window.set_history_state(history.state().stable_code().into());
     window.set_history_reasons(join_reasons(history.reason_codes().iter()).into());
     window.set_history_range_label(format_history_range(history).into());
@@ -1987,6 +2027,11 @@ pub(crate) fn apply_history_projection(window: &MainWindow, history: &DesktopHis
         })
         .collect::<Vec<_>>();
     window.set_history_day_rows(model(rows));
+}
+
+fn apply_history_range_state(window: &MainWindow, history: &DesktopHistoryProjection) {
+    window.set_history_range_preset(history.range_preset().stable_code().into());
+    window.set_history_range_pending(history.range_pending());
 }
 
 fn format_history_range(history: &DesktopHistoryProjection) -> String {

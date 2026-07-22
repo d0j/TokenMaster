@@ -8,11 +8,13 @@ use slint::{
     platform::{Key, PointerEventButton, WindowEvent},
 };
 use tokenmaster_desktop::{
-    DesktopApplyOutcome, DesktopIntent, DesktopIntentAdmission, DesktopIntentSink,
-    DesktopReliableStateProjection, DesktopSessionDetailIntent,
-    DesktopSessionDetailIntentAdmission, DesktopSessionDetailIntentSink,
-    DesktopSessionPageDirection, DesktopSessionPageIntent, DesktopSessionPageIntentAdmission,
-    DesktopSessionPageIntentSink, DesktopShell, DesktopSnapshotEpoch,
+    DesktopApplyOutcome, DesktopHistoryRangeIntent, DesktopHistoryRangeIntentAdmission,
+    DesktopHistoryRangeIntentSink, DesktopHistoryRangePreset, DesktopIntent,
+    DesktopIntentAdmission, DesktopIntentSink, DesktopReliableStateProjection,
+    DesktopSessionDetailIntent, DesktopSessionDetailIntentAdmission,
+    DesktopSessionDetailIntentSink, DesktopSessionPageDirection, DesktopSessionPageIntent,
+    DesktopSessionPageIntentAdmission, DesktopSessionPageIntentSink, DesktopShell,
+    DesktopSnapshotEpoch,
 };
 use tokenmaster_product::{ProductAttemptGeneration, ProductReducer, ProductSnapshot};
 use tokenmaster_query::{
@@ -31,6 +33,30 @@ struct RejectingIntentSink;
 impl DesktopIntentSink for RejectingIntentSink {
     fn submit(&self, _intent: DesktopIntent) -> DesktopIntentAdmission {
         DesktopIntentAdmission::Rejected
+    }
+}
+
+#[derive(Default)]
+struct RecordingHistoryRangeSink {
+    intents: RefCell<Vec<DesktopHistoryRangeIntent>>,
+}
+
+impl DesktopHistoryRangeIntentSink for RecordingHistoryRangeSink {
+    fn submit(&self, intent: DesktopHistoryRangeIntent) -> DesktopHistoryRangeIntentAdmission {
+        self.intents.borrow_mut().push(intent);
+        DesktopHistoryRangeIntentAdmission::Accepted
+    }
+}
+
+#[derive(Default)]
+struct RejectingHistoryRangeSink {
+    intents: RefCell<Vec<DesktopHistoryRangeIntent>>,
+}
+
+impl DesktopHistoryRangeIntentSink for RejectingHistoryRangeSink {
+    fn submit(&self, intent: DesktopHistoryRangeIntent) -> DesktopHistoryRangeIntentAdmission {
+        self.intents.borrow_mut().push(intent);
+        DesktopHistoryRangeIntentAdmission::Rejected
     }
 }
 
@@ -1628,6 +1654,183 @@ fn session_model_replacement_is_pinned(ui: &str) -> bool {
             1,
         );
     !moved.is_empty() && !moved.eq(ui) && !session_model_replacement_is_pinned(&moved)
+}
+
+#[test]
+fn history_range_controls_are_fixed_accessible_and_replace_models_without_route_churn() {
+    i_slint_backend_testing::init_no_event_loop();
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory.path().join("ui-history-range.sqlite3");
+    let reducer = ready_reducer_with_usage(&path, 0, 64);
+    let snapshot = reducer.snapshot();
+    let range_sink = Rc::new(RecordingHistoryRangeSink::default());
+    let shell = DesktopShell::new_with_reliable_state_and_history_and_session_sinks(
+        &snapshot,
+        DesktopReliableStateProjection::unavailable(),
+        Rc::new(RejectingIntentSink),
+        range_sink.clone(),
+        Rc::new(RecordingSessionDetailSink::default()),
+        Rc::new(RecordingSessionPageSink::default()),
+    )
+    .expect("desktop shell");
+    shell
+        .apply_snapshot_for_epoch(DesktopSnapshotEpoch::new(1).expect("epoch"), &snapshot)
+        .expect("bind snapshot");
+    let window = shell.window();
+    window.invoke_select_route(SharedString::from("history"));
+    window.show().expect("show history window");
+
+    assert_eq!(window.get_history_range_preset(), "recent_30_days");
+    assert!(!window.get_history_range_pending());
+    let initial_rows = window.get_history_day_rows();
+    assert_eq!(initial_rows.row_count(), 30);
+    let controls = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::Button)
+        .match_predicate(|element| {
+            element.accessible_label().is_some_and(|label| {
+                matches!(
+                    label.as_str(),
+                    "History range 1 day" | "History range 7 days" | "History range 30 days"
+                )
+            })
+        })
+        .find_all();
+    assert_eq!(controls.len(), 3);
+
+    controls[2].mock_single_click(PointerEventButton::Left);
+    assert!(range_sink.intents.borrow().is_empty());
+    window.invoke_select_route(SharedString::from("dashboard"));
+    window.invoke_select_route(SharedString::from("history"));
+    assert_eq!(window.get_history_day_rows(), initial_rows);
+
+    let one_day = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::Button)
+        .match_predicate(|element| {
+            element
+                .accessible_label()
+                .is_some_and(|label| label == "History range 1 day")
+        })
+        .find_all();
+    assert_eq!(one_day.len(), 1);
+    one_day[0].mock_single_click(PointerEventButton::Left);
+    assert_eq!(range_sink.intents.borrow().len(), 1);
+    assert_eq!(
+        range_sink.intents.borrow()[0].preset(),
+        DesktopHistoryRangePreset::Recent1Day
+    );
+    assert_eq!(window.get_history_range_preset(), "recent_30_days");
+    assert!(window.get_history_range_pending());
+    assert_eq!(window.get_history_day_rows(), initial_rows);
+    let seven_days = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::Button)
+        .match_predicate(|element| {
+            element
+                .accessible_label()
+                .is_some_and(|label| label == "History range 7 days")
+        })
+        .find_all();
+    assert_eq!(seven_days.len(), 1);
+    seven_days[0].mock_single_click(PointerEventButton::Left);
+    assert_eq!(range_sink.intents.borrow().len(), 1);
+
+    for _ in 0..10_000 {
+        window.invoke_select_route(SharedString::from("dashboard"));
+        window.invoke_select_route(SharedString::from("history"));
+    }
+    assert_eq!(window.get_history_day_rows(), initial_rows);
+}
+
+#[test]
+fn history_range_rejection_restores_controls_and_tab_reaches_return_and_space() {
+    i_slint_backend_testing::init_no_event_loop();
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory.path().join("ui-history-range-rejection.sqlite3");
+    let reducer = ready_reducer_with_usage(&path, 0, 64);
+    let snapshot = reducer.snapshot();
+    let rejecting = Rc::new(RejectingHistoryRangeSink::default());
+    let shell = DesktopShell::new_with_reliable_state_and_history_and_session_sinks(
+        &snapshot,
+        DesktopReliableStateProjection::unavailable(),
+        Rc::new(RejectingIntentSink),
+        rejecting.clone(),
+        Rc::new(RecordingSessionDetailSink::default()),
+        Rc::new(RecordingSessionPageSink::default()),
+    )
+    .expect("desktop shell");
+    shell
+        .apply_snapshot_for_epoch(DesktopSnapshotEpoch::new(1).expect("epoch"), &snapshot)
+        .expect("bind snapshot");
+    let window = shell.window();
+    window.invoke_select_route(SharedString::from("history"));
+    let rows = window.get_history_day_rows();
+    window.invoke_request_history_range_1();
+    assert_eq!(rejecting.intents.borrow().len(), 1);
+    assert!(!window.get_history_range_pending());
+    assert_eq!(window.get_history_range_preset(), "recent_30_days");
+    assert_eq!(window.get_history_day_rows(), rows);
+
+    for key in [Key::Return, Key::Space] {
+        let mut reachable_at = None;
+        for tab_count in 1..=32 {
+            let sink = Rc::new(RecordingHistoryRangeSink::default());
+            let shell = DesktopShell::new_with_reliable_state_and_history_and_session_sinks(
+                &snapshot,
+                DesktopReliableStateProjection::unavailable(),
+                Rc::new(RejectingIntentSink),
+                sink.clone(),
+                Rc::new(RecordingSessionDetailSink::default()),
+                Rc::new(RecordingSessionPageSink::default()),
+            )
+            .expect("desktop shell");
+            shell
+                .apply_snapshot_for_epoch(DesktopSnapshotEpoch::new(1).expect("epoch"), &snapshot)
+                .expect("bind snapshot");
+            let window = shell.window();
+            window.invoke_select_route(SharedString::from("history"));
+            window.show().expect("show history window");
+            window
+                .window()
+                .dispatch_event(WindowEvent::WindowActiveChanged(true));
+            for _ in 0..tab_count {
+                dispatch_key(window, Key::Tab);
+            }
+            dispatch_key(window, key);
+            if sink
+                .intents
+                .borrow()
+                .first()
+                .is_some_and(|intent| intent.preset() == DesktopHistoryRangePreset::Recent1Day)
+            {
+                reachable_at = Some(tab_count);
+                break;
+            }
+        }
+        assert!(
+            reachable_at.is_some(),
+            "1 day must be reachable by Tab then {key:?}"
+        );
+    }
+}
+
+#[test]
+fn history_range_model_replacement_is_bounded_and_has_no_append_or_load_more_path() {
+    let ui = include_str!("../src/ui.rs");
+    let projection = ui
+        .split("pub(crate) fn apply_history_projection")
+        .nth(1)
+        .expect("history projection")
+        .split("fn format_history_range")
+        .next()
+        .expect("history projection body");
+    assert_eq!(
+        projection
+            .matches("window.set_history_day_rows(model(rows));")
+            .count(),
+        1
+    );
+    assert!(!projection.contains(".append("));
+    assert!(!projection.contains(".extend("));
+    assert!(!ui.contains("load-more-history"));
 }
 
 #[test]

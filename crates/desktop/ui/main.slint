@@ -67,6 +67,8 @@ export component MainWindow inherits Window {
     in property <string> history-total-tokens;
     in property <string> history-cost;
     in property <string> history-events;
+    in property <string> history-range-preset: "recent_30_days";
+    in property <bool> history-range-pending: false;
     in property <[ModelUsageRow]> model-usage-rows;
     in property <string> models-state;
     in property <string> models-reasons;
@@ -228,6 +230,9 @@ export component MainWindow inherits Window {
     callback move-command-palette-selection(int);
     callback activate-command-palette-selection();
     callback activate-command-palette-route(string);
+    callback request-history-range-1();
+    callback request-history-range-7();
+    callback request-history-range-30();
     callback select-session(int);
     callback request-session-page-next();
     callback request-session-page-newest();
@@ -385,6 +390,11 @@ export component MainWindow inherits Window {
                     total-tokens: root.history-total-tokens;
                     cost: root.history-cost;
                     events: root.history-events;
+                    range-preset: root.history-range-preset;
+                    range-pending: root.history-range-pending;
+                    request-range-1 => { root.request-history-range-1(); }
+                    request-range-7 => { root.request-history-range-7(); }
+                    request-range-30 => { root.request-history-range-30(); }
                 }
 
                 if root.sessions-visible: SessionsView {

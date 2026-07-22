@@ -2,7 +2,7 @@ import { HistoryDayRow } from "../models.slint";
 import { UiTokens } from "../tokens.slint";
 import { MetricValue } from "../components/metric-value.slint";
 import { SectionState } from "../components/section-state.slint";
-import { ScrollView } from "std-widgets.slint";
+import { Button, ScrollView } from "std-widgets.slint";
 
 component HistoryHeaderCard inherits Rectangle {
     in property <string> state;
@@ -17,9 +17,14 @@ component HistoryHeaderCard inherits Rectangle {
     in property <string> total-tokens;
     in property <string> cost;
     in property <string> events;
+    in property <string> range-preset;
+    in property <bool> range-pending;
+    callback request-range-1();
+    callback request-range-7();
+    callback request-range-30();
     in property <bool> narrow;
 
-    min-height: root.narrow ? 280px : 190px;
+    min-height: root.narrow ? 324px : 234px;
     background: UiTokens.surface;
     border-color: UiTokens.border;
     border-width: 1px;
@@ -44,6 +49,60 @@ component HistoryHeaderCard inherits Rectangle {
                 }
             }
             SectionState { state: root.state; reasons: root.reasons; }
+        }
+        range-1-focus := FocusScope {
+            width: 0px;
+            height: 0px;
+            focus-on-tab-navigation: !root.range-pending && root.range-preset != "recent_1_day";
+            forward-focus: recent-1-button;
+        }
+        range-7-focus := FocusScope {
+            width: 0px;
+            height: 0px;
+            focus-on-tab-navigation: !root.range-pending && root.range-preset != "recent_7_days";
+            forward-focus: recent-7-button;
+        }
+        range-30-focus := FocusScope {
+            width: 0px;
+            height: 0px;
+            focus-on-tab-navigation: !root.range-pending && root.range-preset != "recent_30_days";
+            forward-focus: recent-30-button;
+        }
+        HorizontalLayout {
+            spacing: UiTokens.space-sm;
+            recent-1-button := Button {
+                text: "1 day";
+                accessible-label: "History range 1 day";
+                enabled: !root.range-pending && root.range-preset != "recent_1_day";
+                clicked => {
+                    recent-1-button.focus();
+                    root.request-range-1();
+                }
+            }
+            recent-7-button := Button {
+                text: "7 days";
+                accessible-label: "History range 7 days";
+                enabled: !root.range-pending && root.range-preset != "recent_7_days";
+                clicked => {
+                    recent-7-button.focus();
+                    root.request-range-7();
+                }
+            }
+            recent-30-button := Button {
+                text: "30 days";
+                accessible-label: "History range 30 days";
+                enabled: !root.range-pending && root.range-preset != "recent_30_days";
+                clicked => {
+                    recent-30-button.focus();
+                    root.request-range-30();
+                }
+            }
+            Text {
+                text: root.range-pending ? "Loading history…" : "Selected range";
+                color: UiTokens.text-secondary;
+                font-size: 11px;
+                horizontal-stretch: 1;
+            }
         }
         Text { text: root.evidence-label; color: UiTokens.text-secondary; font-size: 11px; }
         HorizontalLayout {
@@ -210,6 +269,11 @@ export component HistoryView inherits Rectangle {
     in property <string> total-tokens;
     in property <string> cost;
     in property <string> events;
+    in property <string> range-preset: "recent_30_days";
+    in property <bool> range-pending: false;
+    callback request-range-1();
+    callback request-range-7();
+    callback request-range-30();
     out property <bool> narrow: root.width < 760px;
     out property <string> layout-mode: root.narrow ? "narrow" : "wide";
 
@@ -234,6 +298,11 @@ export component HistoryView inherits Rectangle {
                 total-tokens: root.total-tokens;
                 cost: root.cost;
                 events: root.events;
+                range-preset: root.range-preset;
+                range-pending: root.range-pending;
+                request-range-1 => { root.request-range-1(); }
+                request-range-7 => { root.request-range-7(); }
+                request-range-30 => { root.request-range-30(); }
                 narrow: root.narrow;
             }
             HistoryTrendCard { rows: root.rows; state: root.state; reasons: root.reasons; }
