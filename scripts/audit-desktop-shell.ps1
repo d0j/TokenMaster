@@ -1025,6 +1025,20 @@ $controllerProductionText = if ($controllerTestModule.Success) {
     $controllerText
 }
 $controllerExecutableText = Remove-DisabledRustBlocks -Text $controllerProductionText
+$controllerProductionSyntax = ConvertTo-ExecutableText -Text $controllerProductionText
+$historyDefinitionPatterns = @(
+    '(?m)^\s*pub\s+enum\s+DesktopHistoryRangePreset\s*\{',
+    '(?m)^\s*impl\s+DesktopHistoryRangePreset\s*\{',
+    '(?m)^\s*(?:const\s+)?fn\s+history_request\b',
+    '(?m)^\s*(?:const\s+)?fn\s+history_range_is_current\b',
+    '(?m)^\s*(?:const\s+)?fn\s+history_range_generation_is_current\b',
+    '(?m)^\s*(?:const\s+)?fn\s+history_range_publication_action\b'
+)
+foreach ($historyDefinitionPattern in $historyDefinitionPatterns) {
+    if ([regex]::Matches($controllerProductionSyntax, $historyDefinitionPattern).Count -ne 1) {
+        throw 'TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION: each audited History definition must occur exactly once in production syntax'
+    }
+}
 $historyPresetText = Get-ExecutableBracedText -Text $controllerExecutableText -Pattern '(?m)^\s*pub\s+enum\s+DesktopHistoryRangePreset\s*\{' -FailureCode 'TM-DESKTOP-HISTORY-RANGE-PRESETS'
 $historyPresetImplText = Get-ExecutableBracedText -Text $controllerExecutableText -Pattern '(?m)^\s*impl\s+DesktopHistoryRangePreset\s*\{' -FailureCode 'TM-DESKTOP-HISTORY-RANGE-PRESETS'
 $historyRequestText = Get-RustFunctionText -Text $controllerExecutableText -Name 'history_request'
@@ -1065,8 +1079,8 @@ if ($historyRangeStateFields -notmatch 'published_history_preset:\s*DesktopHisto
     $allHistoryStateFields -match '(?i)\b(?:Vec|VecDeque|HashMap|BTreeMap|BinaryHeap|Queue|[A-Za-z_][A-Za-z0-9_]*(?:cache|queue))\b') {
     throw 'TM-DESKTOP-HISTORY-RANGE-STATE: history ranges must retain one scalar high-water mark and active/latest-pending slots only'
 }
-if ([regex]::Matches($desktopControllerText, '(?m)^\s*\w*history\w*\s*:\s*TerminalHistoryRangeNotifier').Count -ne 1 -or
-    [regex]::Matches($desktopControllerText, 'terminal_navigation_notifier:\s*TerminalNavigationNotifier').Count -ne 1) {
+if ([regex]::Matches($desktopControllerText, '(?m)^\s*\w+\s*:\s*TerminalHistoryRangeNotifier\s*,').Count -ne 1 -or
+    [regex]::Matches($desktopControllerText, '(?m)^\s*\w+\s*:\s*TerminalNavigationNotifier\s*,').Count -ne 1) {
     throw 'TM-DESKTOP-HISTORY-RANGE-CONTROLLER-SLOT: controller must retain one distinct History terminal slot without displacing Sessions'
 }
 $historyCurrentText = Get-RustFunctionText -Text $controllerExecutableText -Name 'history_range_is_current'
@@ -1082,11 +1096,24 @@ if ($historyCurrentText -notmatch 'context\.snapshot_epoch\.load\(Ordering::Acqu
     $historyCommitText -notmatch 'return\s+RefreshOutcome::Completed') {
     throw 'TM-DESKTOP-HISTORY-RANGE-FENCES: range publication must fence exact epoch, product generation, and attempt before reducer mutation'
 }
+$historyCurrentNormalized = Normalize-ExecutableStructure -Text $historyCurrentText
+$historyGenerationNormalized = Normalize-ExecutableStructure -Text $historyGenerationText
+if ($historyCurrentNormalized -notmatch 'ifcontext\.snapshot_epoch\.load\(Ordering::Acquire\)!=intent\.snapshot_epoch\(\)\.get\(\)\{returnfalse;\}' -or
+    $historyCurrentNormalized -notmatch 'current\.intent==intent&&history_range_generation_is_current\(current,attempt,reducer\.snapshot\(\)\.generation\(\),\)' -or
+    $historyGenerationNormalized -notmatch 'current\.attempt==attempt&&current\.rebound_product_generation\.unwrap_or\(current\.intent\.product_generation\(\)\)==product_generation') {
+    throw 'TM-DESKTOP-HISTORY-RANGE-FENCES: exact epoch, intent, attempt, and product checks must directly control the validity return'
+}
 $historyPublicationActionText = Get-RustFunctionText -Text $controllerExecutableText -Name 'history_range_publication_action'
 if ($historyPublicationActionText -notmatch 'ProductPublishOutcome::Accepted\s+if\s+successful\s*=>\s*\{\s*HistoryRangePublicationAction::PublishAndAdvancePreset' -or
     $historyPublicationActionText -notmatch 'ProductPublishOutcome::Accepted\s*=>\s*\{\s*HistoryRangePublicationAction::PublishWithoutPresetAdvance' -or
     $historyPublicationActionText -notmatch 'ProductPublishOutcome::Coalesced[\s\S]*ProductPublishOutcome::RejectedOlder[\s\S]*ProductPublishOutcome::RejectedIncompatible\s*=>\s*\{\s*HistoryRangePublicationAction::TerminalRollback') {
     throw 'TM-DESKTOP-HISTORY-RANGE-ACCEPTANCE: only reducer-accepted History publications may advance or replace shared projections'
+}
+$historyRollbackIndex = $historyCommitText.IndexOf('HistoryRangePublicationAction::TerminalRollback => return RefreshOutcome::Completed')
+$historySnapshotIndex = $historyCommitText.IndexOf('let snapshot = reducer.snapshot();')
+if ($historyCommitText -notmatch 'match\s+history_range_publication_action\(outcome,\s*successful\)' -or
+    $historyRollbackIndex -lt 0 -or $historySnapshotIndex -le $historyRollbackIndex) {
+    throw 'TM-DESKTOP-HISTORY-RANGE-ACCEPTANCE: commit must apply TerminalRollback before snapshot publication'
 }
 $historyRebindText = Get-RustFunctionText -Text $controllerExecutableText -Name 'rebind_history_range_after_refresh'
 if ($historyRebindText -notmatch 'current\.prerequisite_attempt\s*==\s*Some\(refresh_attempt\)' -or
@@ -1693,9 +1720,9 @@ $terminalNavigationRouteCount = [int](
 if ($terminalNavigationRouteCount -ne 1) {
     throw 'TM-DESKTOP-SESSIONS-TERMINAL-RECOVERY: executable terminal navigation route count must remain one'
 }
-$historyBridgeSlotCount = [regex]::Matches($bridgeInnerText, 'history_terminal_intent:\s*std::sync::Mutex<Option<DesktopHistoryRangeIntent>>').Count
+$historyBridgeSlotCount = [regex]::Matches($bridgeInnerText, '(?m)^\s*\w+\s*:\s*std::sync::Mutex<Option<DesktopHistoryRangeIntent>>\s*,').Count
 if ($historyBridgeSlotCount -ne 1 -or
-    [regex]::Matches($bridgeInnerText, 'terminal_intent:\s*std::sync::Mutex<Option<DesktopSessionPageIntent>>').Count -ne 1) {
+    [regex]::Matches($bridgeInnerText, '(?m)^\s*\w+\s*:\s*std::sync::Mutex<Option<DesktopSessionPageIntent>>\s*,').Count -ne 1) {
     throw 'TM-DESKTOP-HISTORY-RANGE-BRIDGE-SLOT: History terminal state must own one distinct latest-only bridge slot without displacing Sessions'
 }
 $sessionDetailBounds = [ordered]@{

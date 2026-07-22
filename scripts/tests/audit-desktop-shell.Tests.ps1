@@ -378,6 +378,46 @@ Describe "TokenMaster production desktop audit" {
             Should -Throw "*TM-DESKTOP-HISTORY-RANGE-PRESETS*"
     }
 
+    It "rejects a feature-cfg duplicate audited History definition" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-feature-cfg-duplicate-definition"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $replacement = @'
+#[cfg(feature = "decoy")]
+pub enum DesktopHistoryRangePreset {
+    Decoy,
+}
+
+#[cfg(test)]
+'@
+        $text = [regex]::Replace($original, '(?m)^#\[cfg\(test\)\](?=\r?$)', $replacement, 1)
+        $text | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION*"
+    }
+
+    It "rejects a feature-cfg duplicate History generation fence definition" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-feature-cfg-duplicate-generation-fence"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $replacement = @'
+#[cfg(feature = "decoy")]
+fn history_range_generation_is_current() -> bool {
+    false
+}
+
+#[cfg(test)]
+'@
+        $text = [regex]::Replace($original, '(?m)^#\[cfg\(test\)\](?=\r?$)', $replacement, 1)
+        $text | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION*"
+    }
+
     It "rejects retaining history range work in a vector" {
         $fixture = New-DesktopAuditFixture -Name "history-range-vector-state"
         $path = Join-Path $fixture "crates\desktop\src\controller.rs"
@@ -565,6 +605,58 @@ Describe "TokenMaster production desktop audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-FENCES*"
     }
 
+    It "rejects an unused History intent equality anchor outside the validity predicate" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-unused-intent-anchor"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'current.intent == intent',
+            'true && { let _ = current.intent == intent; true }'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-RANGE-FENCES*"
+    }
+
+    It "rejects an unused History attempt equality anchor outside the validity predicate" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-unused-attempt-anchor"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'current.attempt == attempt',
+            'true && { let _ = current.attempt == attempt; true }'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-RANGE-FENCES*"
+    }
+
+    It "rejects an unused History product equality anchor outside the validity predicate" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-unused-product-anchor"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            '== product_generation',
+            '!= product_generation && { let _ = current.intent.product_generation() == product_generation; true }'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-RANGE-FENCES*"
+    }
+
+    It "rejects bypassing the History publication action helper in commit" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-commit-helper-bypass"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace(
+            'match history_range_publication_action(outcome, successful) {',
+            'let _ = history_range_publication_action(outcome, successful); match HistoryRangePublicationAction::PublishWithoutPresetAdvance {'
+        )
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-DESKTOP-HISTORY-RANGE-ACCEPTANCE*"
+    }
+
     It "rejects duplicate History bridge slot without displacing Sessions" {
         $fixture = New-DesktopAuditFixture -Name "history-range-duplicate-bridge-slot"
         $path = Join-Path $fixture "crates\desktop\src\bridge.rs"
@@ -573,10 +665,26 @@ Describe "TokenMaster production desktop audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-BRIDGE-SLOT*"
     }
 
+    It "rejects a renamed duplicate History bridge slot" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-renamed-duplicate-bridge-slot"
+        $path = Join-Path $fixture "crates\desktop\src\bridge.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('history_terminal_intent: std::sync::Mutex<Option<DesktopHistoryRangeIntent>>,', "history_terminal_intent: std::sync::Mutex<Option<DesktopHistoryRangeIntent>>,`r`n    latest_terminal: std::sync::Mutex<Option<DesktopHistoryRangeIntent>>,")
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-BRIDGE-SLOT*"
+    }
+
     It "rejects duplicate History controller slot without displacing Sessions" {
         $fixture = New-DesktopAuditFixture -Name "history-range-duplicate-controller-slot"
         $path = Join-Path $fixture "crates\desktop\src\controller.rs"
         $text = [regex]::Replace([System.IO.File]::ReadAllText($path), '(?s)(pub struct DesktopController\s*\{.*?terminal_history_range_notifier: TerminalHistoryRangeNotifier,)', '${1}' + "`r`n    extra_history_terminal_notifier: TerminalHistoryRangeNotifier,", 1)
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-CONTROLLER-SLOT*"
+    }
+
+    It "rejects a renamed duplicate History controller slot" {
+        $fixture = New-DesktopAuditFixture -Name "history-range-renamed-duplicate-controller-slot"
+        $path = Join-Path $fixture "crates\desktop\src\controller.rs"
+        $text = [regex]::Replace([System.IO.File]::ReadAllText($path), '(?s)(pub struct DesktopController\s*\{.*?terminal_history_range_notifier: TerminalHistoryRangeNotifier,)', '${1}' + "`r`n    current_terminal: TerminalHistoryRangeNotifier,", 1)
         [System.IO.File]::WriteAllText($path, $text)
         { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-CONTROLLER-SLOT*"
     }

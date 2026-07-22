@@ -87,6 +87,21 @@ Describe "TokenMaster application composition audit" {
             Should -Throw "*TM-APP-HISTORY-RANGE-TERMINAL*"
     }
 
+    It "rejects a helper-located second history range terminal notifier attachment" {
+        $fixture = New-AppAuditFixture -Name "history-range-terminal-helper-duplicate"
+        $path = Join-Path $fixture "crates\app\src\application.rs"
+        $text = [System.IO.File]::ReadAllText($path) + @'
+
+fn attach_history_range_terminal_decoy(controller: &mut DesktopController, live_bridge: &DesktopBridge) {
+    let _ = controller.attach_terminal_history_range_notifier(live_bridge.terminal_history_range_notifier());
+}
+'@
+        [System.IO.File]::WriteAllText($path, $text)
+
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } |
+            Should -Throw "*TM-APP-HISTORY-RANGE-TERMINAL*"
+    }
+
     It "rejects removing the typed session-detail router" {
         $fixture = New-AppAuditFixture -Name "session-detail-router"
         $path = Join-Path $fixture "crates\app\src\application.rs"

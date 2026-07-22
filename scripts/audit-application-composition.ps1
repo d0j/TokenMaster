@@ -205,7 +205,13 @@ function Get-AppTopLevelStatements {
 }
 
 $applicationText = [System.IO.File]::ReadAllText((Join-Path $appSource 'application.rs'))
-$applicationExecutableText = Remove-AppDisabledRustBlocks -Text $applicationText
+$applicationTestModule = [regex]::Match($applicationText, '(?ms)^\s*#\[cfg\(test\)\]\s*\r?\n\s*mod\s+tests\s*\{')
+$applicationProductionText = if ($applicationTestModule.Success) {
+    $applicationText.Substring(0, $applicationTestModule.Index)
+} else {
+    $applicationText
+}
+$applicationExecutableText = Remove-AppDisabledRustBlocks -Text $applicationProductionText
 $finishLiveBundleExecutableText = Get-AppExecutableFunctionText -Text $applicationExecutableText -Name 'finish_live_bundle'
 $finishLiveBundleTopLevelStatements = @(Get-AppTopLevelStatements -FunctionText $finishLiveBundleExecutableText)
 $dataRootText = [System.IO.File]::ReadAllText((Join-Path $appSource 'data_root.rs'))
@@ -481,6 +487,10 @@ if ($sessionPageTerminalAttachmentCount -ne 1 -or $sessionTerminalSequenceCount 
 }
 if ($historyRangeTerminalAttachmentCount -ne 1 -or $historyRangeTerminalSequenceCount -ne 1) {
     throw 'TM-APP-HISTORY-RANGE-TERMINAL: live History ranges must attach one terminal rollback route before refresh ingress'
+}
+$historyRangeGlobalAttachmentCount = [regex]::Matches($applicationExecutableText, '\.attach_terminal_history_range_notifier\(').Count
+if ($historyRangeGlobalAttachmentCount -ne 1) {
+    throw 'TM-APP-HISTORY-RANGE-TERMINAL: production application composition must attach the History terminal notifier exactly once'
 }
 
 $historyRangeSinkText = [regex]::Match(
