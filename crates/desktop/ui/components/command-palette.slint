@@ -16,7 +16,7 @@ export component RoutePalette inherits Rectangle {
     visible: root.palette-open;
     background: #00000080;
     accessible-role: groupbox;
-    accessible-label: "Route palette";
+    accessible-label: @tr("Route palette");
 
     changed palette-open => {
         if (root.palette-open) {
@@ -46,7 +46,7 @@ export component RoutePalette inherits Rectangle {
             VerticalLayout {
                 padding: UiTokens.space;
                 spacing: UiTokens.space-sm;
-                Text { text: "Go to route"; color: UiTokens.text-primary; font-size: 16px; font-weight: 700; }
+                Text { text: @tr("Go to route"); color: UiTokens.text-primary; font-size: 16px; font-weight: 700; }
                 search-focus := FocusScope {
                     height: 32px;
                     forward-focus: search;
@@ -54,15 +54,15 @@ export component RoutePalette inherits Rectangle {
                         width: parent.width;
                         height: parent.height;
                         text <=> root.query;
-                        placeholder-text: "Filter routes";
-                        accessible-label: "Filter routes";
+                        placeholder-text: @tr("Filter routes");
+                        accessible-label: @tr("Filter routes");
                         changed text => { root.query-edited(self.text); }
                     }
                 }
                 if root.rows.length == 0: Text {
-                    text: "No matching routes";
+                    text: @tr("No matching routes");
                     color: UiTokens.text-secondary;
-                    accessible-label: "No matching routes";
+                    accessible-label: @tr("No matching routes");
                 }
                 for route[index] in root.rows: Rectangle {
                     height: 32px;
@@ -82,7 +82,7 @@ export component RoutePalette inherits Rectangle {
                     TouchArea { clicked => { root.activate-route(route.key); } }
                 }
                 Rectangle { vertical-stretch: 1; background: transparent; }
-                Text { text: "Up/Down to select · Enter to open · Escape to dismiss"; color: UiTokens.text-secondary; font-size: 11px; }
+                Text { text: @tr("Up/Down to select · Enter to open · Escape to dismiss"); color: UiTokens.text-secondary; font-size: 11px; }
             }
         }
 

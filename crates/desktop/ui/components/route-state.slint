@@ -22,18 +22,18 @@ export component RouteState inherits Rectangle {
             font-weight: 700;
         }
         Text {
-            text: "State: " + root.state;
+            text: @tr("State: ") + root.state;
             color: root.state == "ready" ? UiTokens.ready : root.state == "degraded" ? UiTokens.degraded : root.state == "waiting" ? UiTokens.waiting : UiTokens.unavailable;
             font-size: 16px;
         }
         Text {
-            text: root.reasons == "" ? "No blocking reasons" : "Reasons: " + root.reasons;
+            text: root.reasons == "" ? @tr("No blocking reasons") : @tr("Reasons: ") + root.reasons;
             color: UiTokens.text-secondary;
             wrap: word-wrap;
         }
         Rectangle { vertical-stretch: 1; background: transparent; }
         Text {
-            text: "Product generation " + root.generation;
+            text: @tr("Product generation ") + root.generation;
             color: UiTokens.text-secondary;
             font-size: 12px;
         }

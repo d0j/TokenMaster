@@ -13,21 +13,21 @@ export component RecoveryBanner inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-sm;
     accessible-role: text;
-    accessible-label: "Recovery mode status";
+    accessible-label: @tr("Recovery mode status");
 
     Text {
         x: UiTokens.space;
         width: parent.width - 2 * UiTokens.space;
         height: parent.height;
         text: root.safe-mode
-            ? "Safe mode is active. Usage data remains offline while recovery controls stay available."
+            ? @tr("Safe mode is active. Usage data remains offline while recovery controls stay available.")
             : root.recovery-kind == "authoritative_source"
                 ? (root.non-reconstructible-domains-lost
-                    ? "Usage was rebuilt from local Codex sources. Previous quota, reset-credit, reminder, and Git history is unavailable."
-                    : "Usage was rebuilt from local Codex sources.")
+                    ? @tr("Usage was rebuilt from local Codex sources. Previous quota, reset-credit, reminder, and Git history is unavailable.")
+                    : @tr("Usage was rebuilt from local Codex sources."))
                 : root.recovery-kind == "verified_backup"
-                    ? "Data recovery completed from a verified backup."
-                    : "Data recovery requires attention.";
+                    ? @tr("Data recovery completed from a verified backup.")
+                    : @tr("Data recovery requires attention.");
         color: UiTokens.text-primary;
         vertical-alignment: center;
         wrap: word-wrap;

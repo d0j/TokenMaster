@@ -101,3 +101,90 @@ msgstr "［Þšêûðõ ···］"
 
 msgid "Presentation language"
 msgstr "［Þřêšêñţåţîõñ ļåñğûåğê ·······］"
+
+msgid "Review"
+msgstr "［Řêṽîêŵ ···］"
+
+msgid "Review restore point "
+msgstr "［Řêṽîêŵ řêšţõřê þõîñţ ···］"
+
+msgid "Route palette"
+msgstr "［Řõûţê þåļêţţê ·····］"
+
+msgid "Filter routes"
+msgstr "［Fîļţêř řõûţêš ·····］"
+
+msgid "No matching routes"
+msgstr "［Ñõ ɱåţçĥîñğ řõûţêš ·······］"
+
+msgid "Up/Down to select · Enter to open · Escape to dismiss"
+msgstr "［Ûþ/Ðõŵñ ţõ šêļêçţ · Êñţêř ţõ õþêñ · Êšçåþê ţõ ðîšɱîšš ·······］"
+
+msgid "Expiry notifications. "
+msgstr "［Êxþîřÿ ñõţîƒîçåţîõñš ···］"
+
+msgid ". Open Notifications for current inventory and reminder policy."
+msgstr "［Õþêñ Ñõţîƒîçåţîõñš ƒõř çûřřêñţ îñṽêñţõřÿ åñð řêɱîñðêř þõļîçÿ ·······］"
+
+msgid "Expiry reminder"
+msgstr "［Êxþîřÿ řêɱîñðêř ···］"
+
+msgid "Dismiss"
+msgstr "［Ðîšɱîšš ···］"
+
+msgid "Dismiss expiry notifications"
+msgstr "［Ðîšɱîšš êxþîřÿ ñõţîƒîçåţîõñš ·····］"
+
+msgid "These reminders were applied in TokenMaster. Open Notifications for the complete current inventory."
+msgstr "［Ţĥêšê řêɱîñðêřš ŵêřê åþþļîêð îñ ŢõķêñMåšţêř. Õþêñ Ñõţîƒîçåţîõñš ƒõř ţĥê çõɱþļêţê çûřřêñţ îñṽêñţõřÿ ·······］"
+
+msgid "Qty "
+msgstr "［Qţÿ ···］"
+
+msgid "Reliable state operation "
+msgstr "［Řêļîåβļê šţåţê õþêřåţîõñ ···］"
+
+msgid "Retry"
+msgstr "［Řêţřÿ ···］"
+
+msgid "Retry reliable state operation"
+msgstr "［Řêţřÿ řêļîåβļê šţåţê õþêřåţîõñ ·····］"
+
+msgid "Cancel"
+msgstr "［Çåñçêļ ···］"
+
+msgid "Cancel reliable state operation"
+msgstr "［Çåñçêļ řêļîåβļê šţåţê õþêřåţîõñ ·····］"
+
+msgid "Recovery mode status"
+msgstr "［Řêçõṽêřÿ ɱõðê šţåţûš ·····］"
+
+msgid "Safe mode is active. Usage data remains offline while recovery controls stay available."
+msgstr "［Šåƒê ɱõðê îš åçţîṽê. Ûšåğê ðåţå řêɱåîñš õƒƒļîñê ŵĥîļê řêçõṽêřÿ çõñţřõļš šţåÿ åṽåîļåβļê ·······］"
+
+msgid "Usage was rebuilt from local Codex sources. Previous quota, reset-credit, reminder, and Git history is unavailable."
+msgstr "［Ûšåğê ŵåš řêβûîļţ ƒřõɱ ļõçåļ Çõðêx šõûřçêš. Þřêṽîõûš ǫûõţå, řêšêţ-çřêðîţ, řêɱîñðêř, åñð Ĝîţ ĥîšţõřÿ îš ûñåṽåîļåβļê ·······］"
+
+msgid "Usage was rebuilt from local Codex sources."
+msgstr "［Ûšåğê ŵåš řêβûîļţ ƒřõɱ ļõçåļ Çõðêx šõûřçêš ·····］"
+
+msgid "Data recovery completed from a verified backup."
+msgstr "［Ðåţå řêçõṽêřÿ çõɱþļêţêð ƒřõɱ å ṽêřîƒîêð βåçķûþ ·······］"
+
+msgid "Data recovery requires attention."
+msgstr "［Ðåţå řêçõṽêřÿ řêǫûîřêš åţţêñţîõñ ·····］"
+
+msgid "State: "
+msgstr "［Šţåţê ···］"
+
+msgid "No blocking reasons"
+msgstr "［Ñõ βļõçķîñğ řêåšõñš ·····］"
+
+msgid "Reasons: "
+msgstr "［Řêåšõñš ···］"
+
+msgid "Product generation "
+msgstr "［Þřõðûçţ ğêñêřåţîõñ ···］"
+
+msgid ": "
+msgstr "［: ···］"

@@ -15,7 +15,7 @@ export component SectionState inherits Rectangle {
     border-width: 1px;
     border-radius: 12px;
     accessible-role: text;
-    accessible-label: root.reasons == "" ? root.state : root.state + ": " + root.reasons;
+    accessible-label: root.reasons == "" ? root.state : root.state + @tr(": ") + root.reasons;
 
     Text {
         text: root.state;

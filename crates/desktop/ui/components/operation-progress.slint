@@ -16,7 +16,7 @@ export component OperationProgress inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-sm;
     accessible-role: groupbox;
-    accessible-label: "Reliable state operation " + root.operation-kind + " " + root.operation-phase;
+    accessible-label: @tr("Reliable state operation ") + root.operation-kind + " " + root.operation-phase;
 
     HorizontalLayout {
         padding-left: UiTokens.space-sm;
@@ -35,15 +35,15 @@ export component OperationProgress inherits Rectangle {
             vertical-alignment: center;
         }
         Button {
-            text: "Retry";
+            text: @tr("Retry");
             enabled: root.operation-phase == "failed";
-            accessible-label: "Retry reliable state operation";
+            accessible-label: @tr("Retry reliable state operation");
             clicked => { root.retry(); }
         }
         Button {
-            text: "Cancel";
+            text: @tr("Cancel");
             enabled: root.cancel-enabled && root.operation-phase != "atomic_promotion";
-            accessible-label: "Cancel reliable state operation";
+            accessible-label: @tr("Cancel reliable state operation");
             clicked => { root.cancel(); }
         }
     }

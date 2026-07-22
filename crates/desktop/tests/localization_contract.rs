@@ -47,6 +47,38 @@ const SHELL_MSGIDS: [&str; 33] = [
     "Presentation language",
 ];
 
+const COMPONENT_MSGIDS: [&str; 29] = [
+    "Review",
+    "Review restore point ",
+    "Route palette",
+    "Filter routes",
+    "No matching routes",
+    "Up/Down to select · Enter to open · Escape to dismiss",
+    "Expiry notifications. ",
+    ". Open Notifications for current inventory and reminder policy.",
+    "Expiry reminder",
+    "Dismiss",
+    "Dismiss expiry notifications",
+    "These reminders were applied in TokenMaster. Open Notifications for the complete current inventory.",
+    "Qty ",
+    "Reliable state operation ",
+    "Retry",
+    "Retry reliable state operation",
+    "Cancel",
+    "Cancel reliable state operation",
+    "Recovery mode status",
+    "Safe mode is active. Usage data remains offline while recovery controls stay available.",
+    "Usage was rebuilt from local Codex sources. Previous quota, reset-credit, reminder, and Git history is unavailable.",
+    "Usage was rebuilt from local Codex sources.",
+    "Data recovery completed from a verified backup.",
+    "Data recovery requires attention.",
+    "State: ",
+    "No blocking reasons",
+    "Reasons: ",
+    "Product generation ",
+    ": ",
+];
+
 struct RecordingIntentSink {
     selection: Cell<Option<DesktopPresentationSelection>>,
 }
@@ -82,8 +114,11 @@ fn hot_locale_shell_requires_compile_time_bundles() {
 }
 
 #[test]
-fn shell_catalogs_are_complete_and_preserve_placeholders() {
-    let expected = SHELL_MSGIDS.into_iter().collect::<BTreeSet<_>>();
+fn shell_and_component_catalogs_are_complete_and_preserve_placeholders() {
+    let expected = SHELL_MSGIDS
+        .into_iter()
+        .chain(COMPONENT_MSGIDS)
+        .collect::<BTreeSet<_>>();
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
             Path::new(TRANSLATION_ROOT)
@@ -97,16 +132,67 @@ fn shell_catalogs_are_complete_and_preserve_placeholders() {
         assert_eq!(
             entries.keys().copied().collect::<BTreeSet<_>>(),
             expected,
-            "{locale} must translate exactly the G2a1 shell key set"
+            "{locale} must translate exactly the G2a1 shell and Task 2a2 component key set"
         );
-        for msgid in SHELL_MSGIDS {
+        assert_eq!(
+            po_entry_count(&catalog),
+            expected.len(),
+            "{locale} must not contain duplicate msgids"
+        );
+        for msgid in expected.iter().copied() {
             let msgstr = entries.get(msgid).expect("catalog completeness");
+            assert!(
+                !msgstr.is_empty(),
+                "{locale} must not have empty translations"
+            );
             assert_eq!(
                 placeholders(msgstr),
                 placeholders(msgid),
                 "{locale} must preserve placeholders for {msgid:?}"
             );
         }
+    }
+}
+
+#[test]
+fn shared_components_use_only_the_closed_translation_key_set() {
+    let components = [
+        include_str!("../ui/components/backup-row.slint"),
+        include_str!("../ui/components/command-palette.slint"),
+        include_str!("../ui/components/in-app-notification-panel.slint"),
+        include_str!("../ui/components/operation-progress.slint"),
+        include_str!("../ui/components/recovery-banner.slint"),
+        include_str!("../ui/components/route-state.slint"),
+        include_str!("../ui/components/section-state.slint"),
+        include_str!("../ui/components/route-nav-item.slint"),
+        include_str!("../ui/components/quota-row.slint"),
+    ];
+
+    for msgid in COMPONENT_MSGIDS {
+        assert!(
+            components
+                .iter()
+                .any(|component| component.contains(&format!("@tr(\"{msgid}\""))),
+            "missing component @tr for {msgid:?}"
+        );
+    }
+    for raw in [
+        "text: \"Review\"",
+        "accessible-label: \"Route palette\"",
+        "placeholder-text: \"Filter routes\"",
+        "text: \"No matching routes\"",
+        "text: \"Expiry reminder\"",
+        "text: \"Retry\"",
+        "text: \"Cancel\"",
+        "accessible-label: \"Recovery mode status\"",
+        "text: \"State: \" + root.state",
+        "? \"No blocking reasons\" : \"Reasons: \" + root.reasons",
+        "text: \"Product generation \" + root.generation",
+    ] {
+        assert!(
+            !components.iter().any(|component| component.contains(raw)),
+            "unwrapped component literal {raw:?}"
+        );
     }
 }
 
@@ -199,6 +285,15 @@ fn po_entries(catalog: &str) -> std::collections::BTreeMap<&str, &str> {
         }
     }
     entries
+}
+
+fn po_entry_count(catalog: &str) -> usize {
+    catalog
+        .lines()
+        .filter_map(|line| line.strip_prefix("msgid "))
+        .filter_map(unquote)
+        .filter(|msgid| !msgid.is_empty())
+        .count()
 }
 
 fn unquote(value: &str) -> Option<&str> {

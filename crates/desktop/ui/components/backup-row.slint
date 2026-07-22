@@ -41,8 +41,8 @@ export component BackupRow inherits Rectangle {
             vertical-alignment: center;
         }
         Button {
-            text: "Review";
-            accessible-label: "Review restore point " + root.created-label;
+            text: @tr("Review");
+            accessible-label: @tr("Review restore point ") + root.created-label;
             clicked => { root.preview(root.row-index); }
         }
     }

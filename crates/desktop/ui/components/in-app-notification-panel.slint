@@ -12,7 +12,7 @@ export component InAppNotificationPanel inherits Rectangle {
     border-width: 2px;
     border-radius: UiTokens.radius-lg;
     accessible-role: groupbox;
-    accessible-label: "Expiry notifications. " + root.count-label + ". Open Notifications for current inventory and reminder policy.";
+    accessible-label: @tr("Expiry notifications. ") + root.count-label + @tr(". Open Notifications for current inventory and reminder policy.");
 
     VerticalLayout {
         padding: UiTokens.space;
@@ -25,7 +25,7 @@ export component InAppNotificationPanel inherits Rectangle {
                 spacing: UiTokens.space-xs;
                 horizontal-stretch: 1;
                 Text {
-                    text: "Expiry reminder";
+                    text: @tr("Expiry reminder");
                     color: UiTokens.text-primary;
                     font-size: 17px;
                     font-weight: 800;
@@ -38,15 +38,15 @@ export component InAppNotificationPanel inherits Rectangle {
                 }
             }
             Button {
-                text: "Dismiss";
-                accessible-label: "Dismiss expiry notifications";
+                text: @tr("Dismiss");
+                accessible-label: @tr("Dismiss expiry notifications");
                 clicked => { root.dismiss(); }
             }
         }
 
         Text {
             height: 32px;
-            text: "These reminders were applied in TokenMaster. Open Notifications for the complete current inventory.";
+            text: @tr("These reminders were applied in TokenMaster. Open Notifications for the complete current inventory.");
             color: UiTokens.text-secondary;
             font-size: 11px;
             wrap: word-wrap;
@@ -83,7 +83,7 @@ export component InAppNotificationPanel inherits Rectangle {
                                 overflow: elide;
                             }
                             Text {
-                                text: "Qty " + notification.quantity-label;
+                                text: @tr("Qty ") + notification.quantity-label;
                                 color: UiTokens.accent;
                                 font-size: 11px;
                                 font-weight: 700;

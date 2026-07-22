@@ -101,3 +101,90 @@ msgstr "Псевдо"
 
 msgid "Presentation language"
 msgstr "Язык интерфейса"
+
+msgid "Review"
+msgstr "Просмотреть"
+
+msgid "Review restore point "
+msgstr "Просмотреть точку восстановления "
+
+msgid "Route palette"
+msgstr "Палитра разделов"
+
+msgid "Filter routes"
+msgstr "Фильтр разделов"
+
+msgid "No matching routes"
+msgstr "Нет подходящих разделов"
+
+msgid "Up/Down to select · Enter to open · Escape to dismiss"
+msgstr "Вверх/вниз — выбрать · Enter — открыть · Escape — закрыть"
+
+msgid "Expiry notifications. "
+msgstr "Уведомления об истечении. "
+
+msgid ". Open Notifications for current inventory and reminder policy."
+msgstr ". Откройте «Уведомления» для текущего списка и правил напоминаний."
+
+msgid "Expiry reminder"
+msgstr "Напоминание об истечении"
+
+msgid "Dismiss"
+msgstr "Закрыть"
+
+msgid "Dismiss expiry notifications"
+msgstr "Закрыть уведомления об истечении"
+
+msgid "These reminders were applied in TokenMaster. Open Notifications for the complete current inventory."
+msgstr "Эти напоминания применены в TokenMaster. Откройте «Уведомления» для полного текущего списка."
+
+msgid "Qty "
+msgstr "Кол-во "
+
+msgid "Reliable state operation "
+msgstr "Операция надёжного состояния "
+
+msgid "Retry"
+msgstr "Повторить"
+
+msgid "Retry reliable state operation"
+msgstr "Повторить операцию надёжного состояния"
+
+msgid "Cancel"
+msgstr "Отменить"
+
+msgid "Cancel reliable state operation"
+msgstr "Отменить операцию надёжного состояния"
+
+msgid "Recovery mode status"
+msgstr "Состояние режима восстановления"
+
+msgid "Safe mode is active. Usage data remains offline while recovery controls stay available."
+msgstr "Безопасный режим активен. Данные об использовании остаются офлайн, пока доступны средства восстановления."
+
+msgid "Usage was rebuilt from local Codex sources. Previous quota, reset-credit, reminder, and Git history is unavailable."
+msgstr "Использование восстановлено из локальных источников Codex. Предыдущая история квот, кредитов сброса, напоминаний и Git недоступна."
+
+msgid "Usage was rebuilt from local Codex sources."
+msgstr "Использование восстановлено из локальных источников Codex."
+
+msgid "Data recovery completed from a verified backup."
+msgstr "Восстановление данных завершено из проверенной резервной копии."
+
+msgid "Data recovery requires attention."
+msgstr "Восстановление данных требует внимания."
+
+msgid "State: "
+msgstr "Состояние: "
+
+msgid "No blocking reasons"
+msgstr "Нет блокирующих причин"
+
+msgid "Reasons: "
+msgstr "Причины: "
+
+msgid "Product generation "
+msgstr "Поколение продукта "
+
+msgid ": "
+msgstr ": "
