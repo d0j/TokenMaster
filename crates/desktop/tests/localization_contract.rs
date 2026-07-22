@@ -403,6 +403,24 @@ fn sessions_and_dashboard_catalogs_are_complete_before_view_conversion() {
 }
 
 #[test]
+fn sessions_and_dashboard_use_the_closed_translation_key_set() {
+    let sessions = include_str!("../ui/views/sessions-view.slint");
+    let dashboard = include_str!("../ui/views/dashboard-view.slint");
+
+    for msgid in SESSIONS_DASHBOARD_MSGIDS {
+        assert!(
+            sessions.contains(&format!("@tr(\"{msgid}\""))
+                || dashboard.contains(&format!("@tr(\"{msgid}\"")),
+            "missing Task 2b4 @tr for {msgid:?}"
+        );
+    }
+    assert!(
+        sessions.contains("text: @tr(\"Next page\")"),
+        "Task 2b4 must translate the visible Next page control"
+    );
+}
+
+#[test]
 fn projects_and_compact_widget_use_the_closed_translation_key_set() {
     let projects = include_str!("../ui/views/projects-view.slint");
     let compact = include_str!("../ui/views/compact-widget-view.slint");
