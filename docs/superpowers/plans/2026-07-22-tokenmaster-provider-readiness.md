@@ -4,7 +4,7 @@
 
 **Goal:** Allow a second built-in provider to supply usage and quota/benefit data through provider-neutral runtime modules without changing TokenMaster storage, query, product, desktop, or UI consumers.
 
-**Architecture:** Keep Codex as the native default adapter, but move provider choice to the application composition root. The shared runtime consumes boxed provider-neutral usage and quota ports; SQLite retains exact opaque adapter checkpoints alongside a store-owned bounded source-progress projection, while legacy Codex rows remain readable. External Wasm hosting, package installation, permissions, and SDK work remain deferred to 1.1.
+**Architecture:** Keep Codex as the native default adapter, but move provider choice to the application composition root. The shared runtime consumes boxed provider-neutral usage and quota ports. Existing SQLite source-progress columns remain unchanged: their bounded `resume_payload` is provider-owned opaque resume state, while the concrete descriptor-bound reader alone reconstructs its complete `AdapterCheckpoint`. External Wasm hosting, package installation, permissions, and SDK work remain deferred to 1.1.
 
 **Tech Stack:** Rust 1.97, bundled SQLite through rusqlite, existing synchronous engine ports, focused contract tests, PowerShell release audits.
 
@@ -21,15 +21,13 @@
 
 ---
 
-### Task 1: Persist opaque provider checkpoints without Codex archive authority
+### Task 1: Restore provider checkpoints without Codex archive authority
 
 **Files:**
 - Modify: `crates/engine/src/values.rs`
 - Modify: `crates/engine/src/batch.rs`
 - Modify: `crates/engine/src/ports.rs`
 - Modify: `crates/store/src/usage/types.rs`
-- Modify: `crates/store/src/usage/schema.rs`
-- Modify: `crates/store/src/usage/migration.rs`
 - Modify: `crates/store/src/usage/read.rs`
 - Modify: `crates/store/src/usage/incremental.rs`
 - Modify: `crates/store/src/usage/replay.rs`
@@ -40,11 +38,11 @@
 
 **Interfaces:**
 - Consumes: existing `AdapterCheckpoint`, `SourceIdentity`, `AdapterBatch`, `StoredCheckpoint`, and schema-v13 source generations.
-- Produces: `AdapterSourceProgress`, an exact opaque checkpoint field on new source generations, and archive operations that never decode a current provider checkpoint.
+- Produces: `AdapterSourceProgress` with bounded provider-owned opaque resume state and archive operations that never decode or construct a provider checkpoint.
 
 - [ ] **Step 1: Write the failing non-Codex checkpoint contract**
 
-Create a real-store runtime contract whose synthetic adapter returns a checkpoint beginning with `synthetic-provider-v1`, plus a valid bounded `AdapterSourceProgress`. Prove full rebuild, process-style store reopen, and one incremental append return the exact opaque bytes to the synthetic adapter. Assert the persisted/debug/query surfaces do not expose those bytes.
+Create a real-store runtime contract whose synthetic adapter returns a checkpoint beginning with `synthetic-provider-v1`, plus a valid bounded `AdapterSourceProgress` containing the provider-owned resume bytes needed to reconstruct it. Prove full rebuild, process-style store reopen, and one incremental append return the exact opaque checkpoint to the synthetic reader. Assert debug/query surfaces do not expose those bytes.
 
 ```rust
 let checkpoint = AdapterCheckpoint::new(b"synthetic-provider-v1\0page-0001".to_vec().into_boxed_slice())?;
@@ -59,6 +57,7 @@ let progress = AdapterSourceProgress::new(AdapterSourceProgressParts {
     anchor_start: 0,
     anchor_len: 0,
     anchor_sha256: [0; 32],
+    provider_resume: b"page-0001".to_vec().into_boxed_slice(),
     discarding_oversized_record: false,
     incomplete_tail: false,
     verification: AdapterVerification::Full,
@@ -69,11 +68,11 @@ let progress = AdapterSourceProgress::new(AdapterSourceProgressParts {
 
 Run: `cargo +1.97.0 test -p tokenmaster-runtime --test provider_checkpoint_contract --locked`
 
-Expected: compilation or assertion failure because the source-progress API and opaque SQLite checkpoint persistence do not exist and `StoreArchive` attempts `CodexCheckpointV1::decode`.
+Expected: compilation or assertion failure because the source-progress API and descriptor-bound checkpoint restoration do not exist and `StoreArchive` constructs `CodexCheckpointV1` itself.
 
 - [ ] **Step 3: Add the provider-neutral progress value**
 
-Add validated, non-serializable, redacted `AdapterSourceProgress` and `AdapterVerification` engine values. Carry the progress beside `AdapterCheckpoint` in initial source discovery and every `AdapterBatch`/`CanonicalBatch`. Validate logical identity, offsets/extents, anchors, incomplete/discard state, and fixed bounds in the constructor.
+Add validated, non-serializable, redacted `AdapterSourceProgress` and `AdapterVerification` engine values. Carry the progress beside `AdapterCheckpoint` in initial source discovery and every `AdapterBatch`/`CanonicalBatch`. Validate logical identity, offsets/extents, anchors, incomplete/discard state, provider resume at the existing 32-KiB bound, and fixed bounds in the constructor.
 
 ```rust
 pub struct AdapterSourceState {
@@ -91,27 +90,26 @@ impl AdapterSourceState {
 }
 ```
 
-Change `SourceSink` and replay source callbacks to receive this complete state rather than an unpaired checkpoint. The opaque bytes must never be interpreted by engine or archive code.
+Change `SourceSink` and replay source callbacks to receive this complete state rather than an unpaired checkpoint. Extend the descriptor-bound `SourceBatchReader` with `restore_checkpoint(&AdapterSourceProgress, &OperationControl) -> Result<AdapterCheckpoint, PortError>`. The default must fail closed; only the concrete provider reader interprets `provider_resume` and constructs its checkpoint. Engine and archive code never interpret those bytes.
 
-- [ ] **Step 4: Add exact bounded checkpoint persistence and migration**
+- [ ] **Step 4: Map progress through the existing store schema**
 
-Bump the usage schema by one version. Add an `adapter_checkpoint BLOB` capped at 32 KiB to source-generation state. Existing schema-v13 rows migrate with `NULL` only as an explicit legacy marker; every newly registered or advanced generation stores a non-null exact checkpoint. `StoredCheckpoint` carries `Option<Box<[u8]>>` only for migration compatibility, redacts it in `Debug`, and validates the byte cap before SQL.
+Do not change `USAGE_SCHEMA_VERSION` or canonical SQLite SQL. Map `AdapterSourceProgress.provider_resume` to the existing bounded `StoredCheckpoint.resume` / `usage_generation.resume_payload` column and map the remaining common progress fields exactly. `StoreArchive` reads and writes only this provider-neutral progress projection.
 
-`StoreArchive` must translate `AdapterSourceProgress` into store-owned columns and persist the opaque bytes unchanged. It may reconstruct a Codex checkpoint only for a migrated legacy row lacking `adapter_checkpoint`; after the first successful Codex advance, the exact opaque field is populated. No new provider path may call a Codex codec.
+Move checkpoint reconstruction to the concrete `SourceBatchReader`. `CodexSourceBatchReader` reconstructs `CodexCheckpointV1` from the stored progress; a synthetic reader reconstructs its arbitrary checkpoint from the same common progress plus opaque resume. Remove all `tokenmaster_codex` checkpoint imports and encode/decode helpers from `StoreArchive`. No schema migration or legacy fallback is introduced.
 
 - [ ] **Step 5: Adapt Codex and verify GREEN**
 
-Have `CodexAdapter` project its existing reader checkpoint into `AdapterSourceProgress` and keep `CodexCheckpointV1` encoding/decoding private to the adapter plus the isolated legacy migration fallback. Run:
+Have `CodexAdapter` project its existing reader checkpoint into `AdapterSourceProgress` and keep `CodexCheckpointV1` encoding/decoding private to the adapter/reader. Run:
 
 ```powershell
 cargo +1.97.0 test -p tokenmaster-runtime --test provider_checkpoint_contract --locked
 cargo +1.97.0 test -p tokenmaster-engine --locked
-cargo +1.97.0 test -p tokenmaster-store --test usage_schema_contract --locked
 cargo +1.97.0 test -p tokenmaster-store --test incremental_replay_contract --locked
 cargo +1.97.0 test -p tokenmaster-runtime --test incremental_contract --locked
 ```
 
-Expected: all pass, including exact opaque-byte restart evidence and existing Codex checkpoint/replay behavior.
+Expected: all pass, including exact synthetic checkpoint restoration, unchanged schema-v13 evidence, and existing Codex checkpoint/replay behavior.
 
 - [ ] **Step 6: Commit**
 
@@ -307,4 +305,3 @@ Expected: exact baseline passes once after focused corrections. Do not rerun a l
 git add spec docs CHANGELOG.md
 git commit -m "docs: record provider-ready runtime contracts"
 ```
-
