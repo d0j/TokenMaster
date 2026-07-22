@@ -488,13 +488,54 @@ Describe "TokenMaster production desktop audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-CFG*"
     }
 
-    It "allows a test-only cfg History fixture outside production topology" {
-        $fixture = New-DesktopAuditFixture -Name "history-test-only-cfg-fixture"
+    It "rejects an all-source dashboard cfg helper" {
+        $fixture = New-DesktopAuditFixture -Name "history-global-dashboard-cfg-helper"
+        $path = Join-Path $fixture "crates\desktop\src\dashboard.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $mutated = $original + "`r`nconst DASHBOARD_CFG_HELPER: usize = if cfg! { 30 } else { 31 };`r`n"
+        $mutated | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $mutated)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-CFG*"
+    }
+
+    It "rejects a production cfg helper after a test module" {
+        $fixture = New-DesktopAuditFixture -Name "history-post-test-production-cfg-helper"
+        $path = Join-Path $fixture "crates\desktop\src\presentation.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $mutated = $original + "`r`nconst POST_TEST_CFG_HELPER: usize = if cfg! { 30 } else { 31 };`r`n"
+        $mutated | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $mutated)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-CFG*"
+    }
+
+    It "allows a prepended top-level test-only cfg module" {
+        $fixture = New-DesktopAuditFixture -Name "history-prepended-test-only-cfg-module"
         $path = Join-Path $fixture "crates\desktop\src\history.rs"
-        $text = [System.IO.File]::ReadAllText($path)
-        $text = [regex]::Replace($text, '(?m)^#\[cfg\(test\)\]', "#[cfg(test)]`r`nmod cfg_fixture { const _: bool = cfg! { true }; }`r`n#[cfg(test)]", 1)
-        [System.IO.File]::WriteAllText($path, $text)
+        $original = [System.IO.File]::ReadAllText($path)
+        $mutated = "#[cfg(test)]`r`nmod cfg_fixture { const _: bool = cfg! { true }; }`r`n" + $original
+        $mutated | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $mutated)
         { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Not -Throw
+    }
+
+    It "allows a test-only associated cfg method" {
+        $fixture = New-DesktopAuditFixture -Name "history-test-only-associated-cfg-method"
+        $path = Join-Path $fixture "crates\desktop\src\history.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $mutated = $original.Replace('impl DesktopHistoryProjection {', "impl DesktopHistoryProjection {`r`n    #[cfg(test)]`r`n    fn cfg_fixture() {}")
+        $mutated | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $mutated)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Not -Throw
+    }
+
+    It "rejects a third native tray platform cfg item" {
+        $fixture = New-DesktopAuditFixture -Name "history-native-tray-third-platform-cfg"
+        $path = Join-Path $fixture "crates\desktop\src\native_tray.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $mutated = $original + "`r`n#[cfg(target_os = ""windows"")]`r`nmod extra_platform_cfg {}`r`n"
+        $mutated | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $mutated)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-CFG*"
     }
 
     It "handles an empty extracted History body before its semantic gate" {

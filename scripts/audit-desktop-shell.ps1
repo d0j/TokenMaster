@@ -227,10 +227,24 @@ function Test-ContainsExecutableCfg {
 function Get-ProductionRustSyntax {
     param([Parameter(Mandatory = $true)][string]$Text)
 
-    $testModule = [regex]::Match($Text, '(?ms)^\s*#\[cfg\(test\)\]\s*\r?\n\s*(?:#\[[^\r\n]+\]\s*\r?\n\s*)*mod\s+tests\s*\{')
-    if ($testModule.Success) { $Text = $Text.Substring(0, $testModule.Index) }
-    $Text = [regex]::Replace($Text, '(?m)^\s*#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]\s*\r?\n', '')
-    return ConvertTo-ExecutableText -Text $Text
+    $syntax = ConvertTo-ExecutableText -Text $Text
+    $testAttribute = [regex]::new('(?m)^\s*#\[\s*cfg\s*\(\s*test\s*\)\s*\]\s*\r?\n(?:\s*#\[[^\r\n]+\]\s*\r?\n)*')
+    while (($match = $testAttribute.Match($syntax)).Success) {
+        $itemStart = $match.Index + $match.Length
+        $brace = $syntax.IndexOf('{', $itemStart)
+        $semicolon = $syntax.IndexOf(';', $itemStart)
+        $itemEnd = if ($semicolon -ge 0 -and ($brace -lt 0 -or $semicolon -lt $brace)) { $semicolon } else { -1 }
+        if ($itemEnd -lt 0 -and $brace -ge 0) {
+            $depth = 0
+            for ($index = $brace; $index -lt $syntax.Length; $index++) {
+                if ($syntax[$index] -eq '{') { $depth++ }
+                elseif ($syntax[$index] -eq '}') { $depth--; if ($depth -eq 0) { $itemEnd = $index; break } }
+            }
+        }
+        if ($itemEnd -lt 0) { break }
+        $syntax = $syntax.Remove($match.Index, $itemEnd - $match.Index + 1).Insert($match.Index, ' ' * ($itemEnd - $match.Index + 1))
+    }
+    return $syntax
 }
 
 function Normalize-ExecutableStructure { param([Parameter(Mandatory = $true)][string]$Text); return [regex]::Replace($Text, '\s+', '') }
@@ -1054,9 +1068,7 @@ if ($trayIconHash -ne '1782E746EFBB423DF3252FD76B9E9E7135416DA966DF0C5652588AC29
 }
 $historyPath = Join-Path $sourceRoot 'history.rs'
 $historyText = [System.IO.File]::ReadAllText($historyPath)
-$historyProductionText = $historyText.Substring(0, [Math]::Max(0, $historyText.IndexOf('#[cfg(test)]', [System.StringComparison]::Ordinal)))
-if ($historyText.IndexOf('#[cfg(test)]', [System.StringComparison]::Ordinal) -lt 0) { $historyProductionText = $historyText }
-$historyProductionSyntax = ConvertTo-ExecutableText -Text $historyProductionText
+$historyProductionSyntax = Get-ProductionRustSyntax -Text $historyText
 $historyProjectionDefinition = '(?m)^\s*pub(?:\s*\([^)]*\))?\s+fn\s+from_snapshot_with_range\s*\('
 $historyBoundSymbolCount = [regex]::Matches($historyProductionSyntax, '(?m)^\s*pub\s+const\s+MAX_HISTORY_DAYS\b').Count
 $historyBoundConstantCount = [regex]::Matches($historyProductionSyntax, '(?m)^\s*pub\s+const\s+MAX_HISTORY_DAYS\s*:\s*usize\s*=\s*30\s*;').Count
@@ -2112,8 +2124,16 @@ if ($productionText -match '\b(QuotaRow|SessionRow|ChartPoint|quota-targets|char
     throw 'TM-DESKTOP-MOCK-DATA: production shell contains probe data models'
 }
 
-$historyTopologyPaths = @($controllerPath, $historyPath, (Join-Path $sourceRoot 'presentation.rs'), $bridgePath, $uiRustPath)
-$historyTopologySyntax = ($historyTopologyPaths | ForEach-Object { Get-ProductionRustSyntax -Text ([System.IO.File]::ReadAllText($_)) }) -join "`n"
+$nativeTrayPath = Join-Path $sourceRoot 'native_tray.rs'
+$nativeTraySyntax = Get-ProductionRustSyntax -Text ([System.IO.File]::ReadAllText($nativeTrayPath))
+$nativeTrayCfgPattern = '#\[\s*cfg\s*\(\s*(?:not\s*\(\s*)?target_os\s*=\s*\)?\s*\)\s*\]'
+if ([regex]::Matches($nativeTraySyntax, $nativeTrayCfgPattern).Count -ne 2) {
+    throw 'TM-DESKTOP-HISTORY-RANGE-CFG: native tray platform cfg allowlist drifted'
+}
+$nativeTraySyntax = [regex]::Replace($nativeTraySyntax, $nativeTrayCfgPattern, '')
+$historyTopologySyntax = ($rustFiles | ForEach-Object {
+    if ($_.FullName -eq $nativeTrayPath) { $nativeTraySyntax } else { Get-ProductionRustSyntax -Text ([System.IO.File]::ReadAllText($_.FullName)) }
+}) -join "`n"
 if (Test-ContainsExecutableCfg -Text $historyTopologySyntax) {
     throw 'TM-DESKTOP-HISTORY-RANGE-CFG: production History topology must not contain cfg attributes or cfg! branches'
 }
