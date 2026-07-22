@@ -1019,6 +1019,7 @@ $historyProductionSyntax = ConvertTo-ExecutableText -Text $historyProductionText
 $historyProjectionDefinition = '(?m)^\s*pub(?:\s*\([^)]*\))?\s+fn\s+from_snapshot_with_range\s*\('
 $historyBoundSymbolCount = [regex]::Matches($historyProductionSyntax, '(?m)^\s*pub\s+const\s+MAX_HISTORY_DAYS\b').Count
 $historyBoundConstantCount = [regex]::Matches($historyProductionSyntax, '(?m)^\s*pub\s+const\s+MAX_HISTORY_DAYS\s*:\s*usize\s*=\s*30\s*;').Count
+$historyBoundDeclaration = [regex]::Match($historyProductionSyntax, '(?m)(?:^\s*#\[[^\r\n]+\]\s*\r?\n)*^\s*pub\s+const\s+MAX_HISTORY_DAYS\b[^\r\n]*;')
 $historyProjectionDefinitionCount = [regex]::Matches($historyProductionSyntax, $historyProjectionDefinition).Count
 if ($historyBoundSymbolCount -gt 1 -or $historyProjectionDefinitionCount -gt 1) {
     throw 'TM-DESKTOP-HISTORY-RANGE-UNIQUE-DEFINITION: raw production History symbols must occur exactly once'
@@ -1029,6 +1030,9 @@ if ($historyBoundConstantCount -ne 1 -or
     throw 'TM-DESKTOP-HISTORY-BOUND: history projection must retain at most thirty daily rows'
 }
 if ($historyProjectionText -match '#\[\s*cfg\b|\bcfg!\s*\(') {
+    throw 'TM-DESKTOP-HISTORY-RANGE-CFG: audited History definitions must not contain cfg attributes or cfg! branches'
+}
+if ($historyBoundDeclaration.Success -and $historyBoundDeclaration.Value -match '#\[\s*cfg(?:_attr)?\b') {
     throw 'TM-DESKTOP-HISTORY-RANGE-CFG: audited History definitions must not contain cfg attributes or cfg! branches'
 }
 $controllerTestModule = [regex]::Match($controllerText, '(?ms)^\s*#\[cfg\(test\)\]\s*\r?\n\s*mod\s+tests\s*\{')
