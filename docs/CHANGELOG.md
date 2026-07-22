@@ -11,6 +11,7 @@ All notable changes are recorded here.
   envelope. Exact epoch/product/range fences, accepted-only publication, terminal
   rollback, refresh rebind, bounded replacement, and path/private-content guards are
   covered by the recorded focused, Desktop, application, and parser-audit receipts.
+  The final strict workspace baseline passes with serialized Windows GNU linking.
   This does not claim P4/P5/P6/M0/package/signing/soak/release acceptance.
 
 - Added P3-D.2c bounded Sessions navigation. `Next page` and `Back to newest` route

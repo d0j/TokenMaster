@@ -1020,7 +1020,10 @@ developer evidence: fixed 1/7/30, default/max 30, one worker/slot, shared
 History/Models/Projects envelope, exact epoch/product/range fences, accepted-only
 publication, terminal rollback, and refresh rebind. Task 2/3/4 receipts are recorded
 in `docs/CURRENT_STATE.md`; cfg-focused parser checks are 28/28 and Desktop
-source-only passes. This does not claim P4/P5/P6/M0/package/signing/soak/release.
+source-only passes. Clean-root/fmt/strict workspace Clippy pass; after one known
+concurrent blank-stderr MinGW linker exit, the isolated 8/8 target and the complete
+locked workspace test/doctest suite pass with `CARGO_BUILD_JOBS=1`. This does not
+claim P4/P5/P6/M0/package/signing/soak/release.
 Keep the fixed archive path and writer sidecar; never copy only the live main file or
 treat busy/disk/access/schema-newer as corruption authority. Keep automatic recovery
 data only; device-local settings never move. Do not relax the state boundary into path,

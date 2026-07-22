@@ -11,8 +11,11 @@ projection 5/5, bridge 1/1, and application 79/79; Task 4 UI passed 4/4 includin
 the real 10,000-replacement contract and full Desktop coverage. The final pre-parser-
 fix receipt was Desktop 302/302 (741.68s), Application 110/110 (51.53s), and three
 audits exit 0; localized parser fixes then passed cfg-focused 28/28 and Desktop
-source-only. This is developer evidence only; P4/P5/P6/M0/package/signing/soak/release
-acceptance remain open.
+source-only. Clean-root/fmt/strict workspace Clippy passed in 3.82/2.60/67.71 seconds.
+The known concurrent blank-stderr MinGW linker failure reproduced successfully as an
+isolated 8/8 target; the serialized locked workspace test/doctest suite then passed in
+1,152.2 seconds. This is developer evidence only; P4/P5/P6/M0/package/signing/soak/
+release acceptance remain open.
 
 ## 2026-07-21 — P3-E packaged interactive acceptance contract
 

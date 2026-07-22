@@ -160,7 +160,11 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   UI passes 4/4 including real 10,000-replacement and full Desktop coverage. The last
   pre-parser-fix receipt was Desktop 302/302 (741.68s), Application 110/110 (51.53s),
   and three audits exit 0; localized parser fixes then pass cfg-focused 28/28 and
-  Desktop source-only. This is not P4/P5/P6/M0/package/signing/soak/release acceptance.
+  Desktop source-only. Final clean-root/fmt/strict workspace Clippy pass in
+  3.82/2.60/67.71 seconds. One concurrent blank-stderr MinGW linker exit reproduced
+  successfully as the isolated 8/8 target; the serialized locked workspace
+  test/doctest suite then passes in 1,152.2 seconds. This is not P4/P5/P6/M0/package/
+  signing/soak/release acceptance.
 - P3-D.2a bounded Sessions list: the existing desktop query plan requests one all-time
   newest-first page capped at 64 while Dashboard keeps its 12-row summary. A separate
   identity-free projection and responsive Slint route render last activity, duration,
