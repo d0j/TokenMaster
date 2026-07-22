@@ -977,7 +977,7 @@ fn presentation_execution_persists_and_projects_the_confirmed_operation() {
     assert_eq!(projection.operation(), Some(completion));
     let persisted = store.load().expect("settings after presentation save");
     assert_eq!(persisted.generation(), Some(1));
-    assert_eq!(SETTINGS_SCHEMA_VERSION, 4);
+    assert_eq!(SETTINGS_SCHEMA_VERSION, 5);
     assert_eq!(
         persisted.value().portable().presentation(),
         &PresentationSettings::new(

@@ -378,14 +378,14 @@ export component DashboardView inherits Rectangle {
             HorizontalLayout {
                 spacing: UiTokens.space;
                 CodeOutputCard { section: root.sections[1]; commits: root.code-commits; added: root.code-added; removed: root.code-removed; net: root.code-net; efficiency: root.code-efficiency; evidence: root.code-evidence; horizontal-stretch: 1; }
-                TrendCard { section: root.sections[2]; points: root.trend; horizontal-stretch: 1; }
                 SessionsCard { section: root.sections[3]; rows: root.sessions; horizontal-stretch: 1; }
             }
             HorizontalLayout {
                 spacing: UiTokens.space;
-                ActivityCard { section: root.sections[4]; rows: root.activity; horizontal-stretch: 1; }
+                TrendCard { section: root.sections[2]; points: root.trend; horizontal-stretch: 1; }
                 ModelsCard { section: root.sections[5]; rows: root.models; horizontal-stretch: 1; }
             }
+            ActivityCard { section: root.sections[4]; rows: root.activity; }
         }
     }
 }

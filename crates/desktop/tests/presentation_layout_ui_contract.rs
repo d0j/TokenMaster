@@ -15,9 +15,9 @@ struct RecordingSink {
     selection: Cell<Option<DesktopPresentationSelection>>,
 }
 
-fn card_x(window: &tokenmaster_desktop::MainWindow, label: &str) -> f32 {
+fn card_geometry(window: &tokenmaster_desktop::MainWindow, label: &str) -> (f32, f32, f32) {
     let label = label.to_owned();
-    ElementQuery::from_root(window)
+    let element = ElementQuery::from_root(window)
         .match_accessible_role(AccessibleRole::Groupbox)
         .match_predicate(move |element| {
             element.accessible_label().as_deref() == Some(label.as_str())
@@ -25,9 +25,14 @@ fn card_x(window: &tokenmaster_desktop::MainWindow, label: &str) -> f32 {
         .find_all()
         .into_iter()
         .next()
-        .expect("visible Dashboard card")
-        .absolute_position()
-        .x
+        .expect("visible Dashboard card");
+    let position = element.absolute_position();
+    let size = element.size();
+    (position.x, position.y, size.width)
+}
+
+fn card_x(window: &tokenmaster_desktop::MainWindow, label: &str) -> f32 {
+    card_geometry(window, label).0
 }
 
 impl DesktopIntentSink for RecordingSink {
@@ -84,8 +89,19 @@ fn layout_selector_submits_the_complete_selection_and_changes_wide_geometry() {
 
     window.invoke_select_presentation_layout(2);
     assert_eq!(window.get_dashboard_layout_preset(), "workbench");
-    assert!(card_x(window, "Usage and Cost Trend") > card_x(window, "Code Output"));
-    assert!(card_x(window, "Sessions") > card_x(window, "Usage and Cost Trend"));
+    let plan = card_geometry(window, "Plan Usage");
+    let code = card_geometry(window, "Code Output");
+    let sessions = card_geometry(window, "Sessions");
+    let trend = card_geometry(window, "Usage and Cost Trend");
+    let models = card_geometry(window, "Model Usage");
+    let activity = card_geometry(window, "Activity");
+    assert_eq!(code.1, sessions.1);
+    assert!(sessions.0 > code.0);
+    assert_eq!(trend.1, models.1);
+    assert!(models.0 > trend.0);
+    assert!(activity.1 > trend.1);
+    assert_eq!(activity.0, plan.0);
+    assert_eq!(activity.2, plan.2);
 
     let selection = sink.selection.get();
     let revision = window.get_presentation_revision();
