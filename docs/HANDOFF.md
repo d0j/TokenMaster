@@ -9,14 +9,15 @@
 
 ## Current implementation boundary
 
-P4-C durable built-in skins are developer-complete as one bounded sub-contour. Settings
-schema v3 persists one complete density+skin pair, strict v1/v2 migrate in memory
-without a startup write, and typed packages bind the declared source schema. One
-`DesktopPresentationStyle` owner, one root palette, exact Refined/Graphite/Ember
-15-role palettes, complete admission-first persistence/restore, and compiled-UI plus
-application 10,000-switch contracts are source/mutation audited without adding
-timer/worker/query/window/retained authority. Do not claim layouts/color
-schemes/locales/languages, remaining density typography/row-size behavior,
+P4-D independent color schemes are developer-complete as one bounded sub-contour.
+Settings schema v4 persists one complete density+skin+scheme triple, strict v1-v3
+migrate to Dark without a startup write, fresh settings default to System, and typed
+packages bind the declared source schema. One `DesktopPresentationStyle` owner, one
+root palette, six exact Refined/Graphite/Ember Light/Dark palettes, reactive system
+observation without revision/persistence churn, complete admission-first persistence/
+restore, and compiled-UI plus application 10,000-switch 27-combination contracts are
+source/mutation audited without adding timer/worker/query/window/retained authority.
+Do not claim layouts/locales/languages, remaining density typography/row-size behavior,
 accessibility/DPI/paint/resource verification, P5/P6, M0,
 interactive/package/sign/signing/soak, or release acceptance.
 
@@ -1056,7 +1057,10 @@ imply activation authority.
 
 Root delivery guard: the History-range audit entered `AUDIT_HARDENING_LOOP` after
 repeated audit-only review/correction rounds displaced product work. The loop is
-closed. Apply the mandatory root governance in `AGENTS.md`: normally one review plus
+closed. The P4-D cycle changed product behavior and closed required schema, palette,
+migration, and receipt evidence; one bounded stale-anchor correction pass did not
+trigger a new loop. Apply the mandatory root governance in `AGENTS.md`: normally one
+review plus
 one final re-review, focused corrections followed by one aggregate, and an immediate
 stop after two audit-only rounds or 60 audit-only minutes. The next cycle must report
 product state, audit/evidence state, release blockers, and Git state separately before
@@ -1299,3 +1303,16 @@ refined/graphite/ember with exact Rust-owned 15-role palettes. One presentation 
 applies palette before metadata after admission; persistence/restore and coalescing
 never split axes. This is still partial developer evidence; all non-skin P4 and release
 gates remain open.
+
+P4-D supersedes the current presentation contract: schema v4 carries the complete
+density+skin+requested-scheme triple; v1-v3 preserve legacy Dark and fresh defaults use
+System. Effective scheme observation is ephemeral and cannot persist or advance
+revision. Six exact Rust-owned palettes cover all skin/scheme pairs, while one existing
+owner and one-active/one-latest-pending worker cover all 27 complete combinations.
+
+Handoff truth: product state is P4-D developer-complete; audit/evidence state is focused
+Rust/UI tests plus application and desktop source/mutation receipts green; release
+blockers are layout, locale, remaining typography/accessibility/DPI/paint/resource,
+P5, P6, M0, package/signing/soak and external interactive receipts; Git must be clean
+on the feature branch before the next cycle. The shortest release-critical next slice
+is P4 layout, not another audit-hardening round.

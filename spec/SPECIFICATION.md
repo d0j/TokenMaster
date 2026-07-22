@@ -433,7 +433,7 @@ signing, public-download attribution, and release identity remain P6 receipt tru
 
 ### TM-UI-002 — Reactive presentation boundary
 
-Skin, layout, locale, selection, and range changes MUST update bounded presentation
+Skin, color-scheme, layout, locale, selection, and range changes MUST update bounded presentation
 state without mutating the archive or initiating an unbounded source scan. An older
 asynchronous result MUST NOT overwrite a newer UI generation.
 Restore confirmation MUST authorize the exact generation/ordinal identity reviewed by
@@ -635,4 +635,17 @@ Presentation is one complete `{ density, skin }` selection. The only skin identi
 aliases one palette value. One desktop owner admits a complete request before mutation,
 persists/restores both axes together, and reuses the latest-wins worker. Layout, colour
 scheme, locale, typography, interactive DPI/accessibility/paint/resource, P5/P6/M0,
+package/signing/soak, and release acceptance remain open.
+
+## P4-D independent color schemes (partial)
+
+Presentation is one complete `{ density, skin, color_scheme }` selection. The only
+requested color-scheme identities are `system`, `light`, and `dark`; `system` resolves
+to an observed effective Light or Dark scheme and falls back to Dark when observation
+is unavailable. Fresh defaults use System, while schemas v1 through v3 migrate in
+memory to Dark so an upgrade preserves the prior appearance. A system observation
+MUST change only the effective palette: it MUST NOT advance the presentation revision,
+persist settings, enqueue work, poll, or add a watcher thread. Rust owns the six exact
+skin/scheme palettes and Slint receives one palette value. Layout, locale, remaining
+typography/row-size behavior, interactive DPI/accessibility/paint/resource, P5/P6/M0,
 package/signing/soak, and release acceptance remain open.

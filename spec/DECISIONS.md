@@ -2143,3 +2143,24 @@ Rationale: folding a 12-event page would fabricate time-distribution parity, whi
 minute-series payload or new query owner would grow memory and state. Fixed rollup
 distributions deliver the useful WhereMyTokens rhythm surface with constant frontend
 memory and ccusage-style aggregate truth without raw events, costs, or new authority.
+
+## ADR-088 — Keep requested and effective color schemes independent and bounded
+
+Decision: schema v4 extends the complete presentation selection with exactly System,
+Light, or Dark. Fresh settings default to System; v1-v3 migrate to Dark so upgrades do
+not silently change the established dark appearance. Desktop separately retains the
+ephemeral system observation as Unknown, Light, or Dark. Unknown resolves to Dark.
+Observation can replace only the effective palette and cannot advance revision,
+submit an application command, persist settings, or retain history.
+
+Rust owns exactly six immutable 15-role palettes: one Light and one Dark palette for
+each Refined, Graphite, and Ember skin. Slint receives one palette and contains no
+cross-product table. The existing presentation worker still retains one active and one
+latest pending complete triple; the application maps the three axes independently.
+No registry reader, watcher thread, timer, polling loop, queue, channel, filesystem,
+network, SQL, shell, or unsafe authority is added.
+
+Rationale: requested System is durable user intent while the effective OS scheme is
+transient environment state. Separating them prevents persistence churn and preserves
+constant memory; independent typed axis mapping avoids a growing 27-arm product/API
+surface while retaining exhaustive test coverage.

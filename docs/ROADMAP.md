@@ -2,12 +2,12 @@
 
 ## M0 — native architecture proof
 
-P4-C durable built-in skins are developer-complete as a bounded sub-contour: schema v3
-persists one complete density+skin pair; Rust owns exact Refined, Graphite, and Ember
-15-role palettes; one Desktop/Slint owner applies the palette before metadata; and
-admission-first atomic persistence plus application/compiled-UI 10,000-cycle contracts
-are source/mutation audited. P4 remains open for layouts, color schemes,
-locales/languages, remaining density typography/row-size behavior, accessibility/DPI/paint/resource
+P4-D independent color schemes are developer-complete as a bounded sub-contour: schema
+v4 persists one complete density+skin+scheme triple; strict v1-v3 migrate to Dark;
+fresh defaults use System; Rust owns six exact skin/scheme palettes; reactive effective
+system observation creates no revision or persistence churn; and application/compiled-
+UI 10,000-cycle 27-combination contracts are source/mutation audited. P4 remains open
+for layouts, locales/languages, remaining density typography/row-size behavior, accessibility/DPI/paint/resource
 verification, and terminal interactive evidence. P5/P6, M0 acceptance,
 package/sign/signing/soak, and release remain open.
 
@@ -459,3 +459,12 @@ Slint palette input, one owner, complete latest-wins payload, persistence, and r
 P4 remains partial: layout, colour scheme, locale, typography, interactive DPI,
 accessibility, paint/resource evidence and all P5/P6/M0/package/signing/soak/release
 work are still open.
+
+### P4-D complete
+
+Developer contract coverage now includes durable requested System/Light/Dark, separate
+effective Light/Dark resolution with Unknown-to-Dark fallback, strict schema-v4 complete
+triples and legacy-Dark migration, six exact Rust palettes, no observer authority or
+persistence churn, and one latest-wins 27-combination payload. P4 remains partial:
+layout, locale, typography, interactive DPI/accessibility, paint/resource evidence and
+all P5/P6/M0/package/signing/soak/release work are still open.

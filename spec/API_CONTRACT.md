@@ -1224,3 +1224,14 @@ timer, cache, filesystem, network, SQL, window, or unsafe authority is introduce
 Settings admission is exactly schema v1 through v3: v1 becomes Comfortable+Refined,
 v2 retains density and defaults skin to Refined, and v3 retains the complete pair.
 Canonical writes are v3; schema 0 and schema 4+ reject.
+
+## P4-D presentation API
+
+`UpdatePresentation` accepts one typed complete density+skin+color-scheme value only;
+no per-axis application command exists. The sole operation coordinator still retains
+at most one active and one latest pending complete payload. Settings admission is
+exactly v1 through v4; v1-v3 migrate to Dark and canonical writes are v4. Desktop
+system-color observation accepts only the closed Unknown/Light/Dark enum and updates
+the effective palette without submitting an application intent, changing revision, or
+persisting settings. The six skin/scheme combinations map through typed axis matches,
+not a growing cross-product command surface.

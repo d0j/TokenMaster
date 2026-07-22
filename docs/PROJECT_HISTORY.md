@@ -1,5 +1,17 @@
 # TokenMaster project history
 
+## 2026-07-22 — P4-D independent color schemes
+
+Extended the complete presentation contract to schema v4 with requested System,
+Light, or Dark. Fresh settings default to System; strict v1-v3 migrate to Dark without
+a startup write so upgrades preserve appearance. Desktop keeps requested and effective
+schemes separate, resolves Unknown to Dark, and reacts to system observations without
+revision or persistence churn. Rust owns six exact 15-role palettes; the existing
+one-active/one-latest-pending worker remains bounded across all 27 density/skin/scheme
+combinations. Focused state, desktop, application, source-audit, and mutation tests pass.
+The cycle used one required-evidence stale-anchor correction pass and did not enter
+`AUDIT_HARDENING_LOOP`. Layout is the next release-critical P4 slice.
+
 ## 2026-07-22 — P3-D bounded full rhythm aggregation
 
 Implemented the rollup-only rhythm projection: 24 hourly and seven Monday-Sunday

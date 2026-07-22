@@ -840,10 +840,10 @@ and does not reexport generic record/file authority or accept a path. The author
 audit permits exactly the original bounded record/platform import and one exact
 `ValidatedLocalDirectory` import for that typed constructor, while retaining all six
 fixed-child and alias-reuse gates. Its historical schema v1 wire is a strict legacy
-subset capped at 1 MiB. Current strict schema v3 carries only the fixed complete
-`presentation.{density,skin}` pair in addition to the prior portable fields. v1 migrates
-in memory to Comfortable+Refined without a startup write; v2 retains density and
-defaults skin to Refined; schema 0 and schema 4 or newer reject. Unknown, duplicate,
+subset capped at 1 MiB. Current strict schema v4 carries only the fixed complete
+`presentation.{density,skin,color_scheme}` triple in addition to the prior portable
+fields. v1-v3 migrate in memory without a startup write and select Dark to preserve
+the prior appearance; schema 0 and schema 5 or newer reject. Unknown, duplicate,
 unsupported, invalid
 enum/range/relationship, and forbidden-state fields fail before publication. Portable
 input cannot contain or overwrite the device-local route. Errors, `Debug`, previews,
@@ -1326,6 +1326,13 @@ P4-C retains that boundary. The palette is fixed Rust data (15 semantic RGB role
 skin), not a file/provider/theme authority. One admitted complete presentation payload
 is persisted/restored atomically; no partial axis, event-loop yield before metadata, or
 window show before the first Rust palette application is permitted.
+
+P4-D adds no OS-registry reader, file/provider/theme input, timer, polling loop, watcher
+thread, channel, SQL, network, shell, or unsafe authority. Requested System/Light/Dark
+is a closed typed value; observed Unknown/Light/Dark is ephemeral and path-free. Rust
+owns six exact immutable 15-role palettes. System observation can only replace the
+effective palette in the existing window and cannot create persistence intent or
+retained history.
 
 ### P3-D interactive History range boundary
 

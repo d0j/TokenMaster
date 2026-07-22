@@ -8,14 +8,15 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
 
 ## Implemented
 
-- P4-C durable built-in skins are developer-complete as a bounded sub-contour: settings
-  schema v3 persists one complete density+skin pair, migrates strict v1/v2 in memory
-  without a startup write, and binds the source schema through typed packages. One
-  `DesktopPresentationStyle` owner publishes one root Slint palette plus density/skin
-  callbacks, seven exact spacing/radius token tables, and exact 15-role Refined,
-  Graphite, and Ember palettes. Admission-first atomic persistence/restore, exact
-  application mapping, compiled-UI 10,000 mixed-axis switching, and source mutations
-  reject split axes or added authority. Layouts, color schemes, locales/languages,
+- P4-D independent color schemes are developer-complete as a bounded sub-contour:
+  settings schema v4 persists one complete density+skin+scheme triple, migrates strict
+  v1-v3 to legacy Dark without a startup write, defaults fresh settings to System, and
+  binds the source schema through typed packages. One `DesktopPresentationStyle` owner
+  publishes one root Slint palette, requested/effective scheme metadata, and exact
+  15-role Light/Dark palettes for Refined, Graphite, and Ember. System observation is
+  reactive but creates no revision or persistence intent. Admission-first atomic
+  persistence/restore, exact application mapping, compiled-UI 10,000 27-combination
+  switching, and source mutations reject split axes or added authority. Layouts, locales/languages,
   remaining density typography/row-size behavior, accessibility/DPI/paint/resource verification, P5/P6, M0,
   interactive/package/sign/signing/soak, and release remain open.
 
@@ -1596,7 +1597,9 @@ actions and package provenance remain deferred until P6 supplies the producer/ma
 exact packaged production executable, and a disposable Windows host. No live HKCU,
 Explorer, sign-in, lock, sleep, hotkey, or GUI mutation was performed.
 Interactive History ranges are now complete as a bounded replacement of the existing
-History section rather than a new frontend query owner. Interactive
+History section rather than a new frontend query owner. P4-D density, skin, and color
+scheme are developer-complete; P4 layout is the next release-critical product slice.
+Interactive
 Windows, P4 presentation, P5 CLI/MCP, activation, M0, packaging, signing, soak, and
 product release remain unclaimed.
 
@@ -1771,7 +1774,7 @@ suite. The canonical release command still executes all 64 warm-up and 256 measu
 cycles and remains the only valid resource receipt.
 
 The ignored local P3-D.0 receipt is historical schema-1 evidence and does not identify
-the current schema-3 tree or executable. A new clean exact-commit receipt remains open;
+the current schema-4 tree or executable. A new clean exact-commit receipt remains open;
 the historical file must not be used to authorize packaging or a release claim.
 
 ## P4-B durable density verification (historical boundary)
@@ -1791,3 +1794,14 @@ immutable 15-role palettes and the Desktop has one owner, complete admission-fir
 payload, atomic persist/restore, and existing latest-wins worker. No new authority was
 added. Layout/scheme/locale/typography/interactive DPI/accessibility/paint/resource,
 P5/P6/M0/package/signing/soak/release remain open.
+
+## P4-D — partial independent color schemes
+
+Schema v4 persists the complete density+skin+color-scheme triple. Fresh defaults use
+System; v1-v3 migrate to Dark to preserve the previous appearance. Requested System,
+Light, or Dark remains independent from the effective Light/Dark palette. Unknown
+system state resolves to Dark; observations update only the palette and never revision
+or persistence. Rust owns six exact 15-role palettes, one existing owner applies them,
+and the latest-only worker remains capped at one active plus one pending complete
+payload across all 27 combinations. Layout/locale/typography/interactive DPI/
+accessibility/paint/resource, P5/P6/M0/package/signing/soak/release remain open.
