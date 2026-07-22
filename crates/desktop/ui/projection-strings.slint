@@ -64,6 +64,7 @@ export global ProjectionStrings {
         return @tr("{0} used", value);
     }
     public pure function quota-units(used: string, capacity: string, unit: string) -> string { return @tr("{0} / {1} {2}", used, capacity, unit); }
+    public pure function quota-units-remaining-capacity(remaining: string, capacity: string, unit: string) -> string { return @tr("{0} / {1} {2} remaining", remaining, capacity, unit); }
     public pure function quota-units-used(used: string, unit: string) -> string { return @tr("{0} {1} used", used, unit); }
     public pure function quota-units-remaining(remaining: string, unit: string) -> string { return @tr("{0} {1} remaining", remaining, unit); }
     public pure function quota-units-capacity(capacity: string, unit: string) -> string { return @tr("{0} {1} capacity", capacity, unit); }

@@ -2369,7 +2369,7 @@ fn format_dashboard_quota_units(window: &MainWindow, row: &crate::DesktopQuotaRo
             )
             .to_string(),
         (_, Some(remaining), Some(capacity)) => strings
-            .invoke_quota_units(
+            .invoke_quota_units_remaining_capacity(
                 format_integer(remaining).into(),
                 format_integer(capacity).into(),
                 unit.into(),
