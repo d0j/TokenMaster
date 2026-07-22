@@ -279,6 +279,38 @@ const DATA_HEALTH_MSGIDS: [&str; 27] = [
     " · Latest failure {0}",
 ];
 
+const HELP_ABOUT_MSGIDS: [&str; 29] = [
+    "About and licenses. TokenMaster is MIT licensed. WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies. The interface is made with Slint under the selected Royalty-free License 2.0 attribution route.",
+    "About and licenses",
+    "TokenMaster · MIT",
+    "WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies.",
+    "TokenMaster Help and About. Version {0}. Local-first usage intelligence with explicit data-source, privacy, health, automation, and license truth.",
+    "TokenMaster version {0}. Fast local-first Codex usage, quota, expiry, and recovery visibility with bounded memory and explicit unavailable truth.",
+    "TokenMaster",
+    "Version {0} · local-first Windows desktop",
+    "Fast Codex usage, quota, expiry, and recovery visibility with bounded memory and explicit unavailable truth.",
+    "Start here",
+    "Dashboard is the quota-first overview. History, Sessions, Models, Projects, and Activity explain usage. Notifications shows current expiry safety.",
+    "Data Health owns backup, verification, restore, rebuild, and recovery truth. Settings owns backup policy and portable configuration.",
+    "Every missing or stale fact stays explicit — never fabricated as zero.",
+    "Data sources and truth",
+    "Usage is derived from bounded local Codex history. Plan usage is separate provider evidence from the installed official machine interface when available.",
+    "Local tokens never become a guessed provider allowance. Unsupported, stale, partial, or unavailable evidence remains labelled.",
+    "No browser session reuse or private endpoint replay.",
+    "Privacy by design",
+    "No prompts, responses, reasoning, commands, source contents, credentials, or raw absolute paths are retained or exposed.",
+    "Frontend rows carry bounded aggregate facts and stable reason codes, not provider, account, workspace, source, session, lot, or delivery identity.",
+    "Local-first archive · no listener · no telemetry surface.",
+    "Health and recovery",
+    "Open Data Health for database health and every backup, verification, restore, rebuild, and recovery operation.",
+    "Settings owns backup policy and portable configuration import/export. Stable failure codes omit paths and raw operating-system messages.",
+    "Recovery is verified, bounded, and local.",
+    "Automation status",
+    "CLI and stdio MCP are not available in the current build. No local server or listener is active.",
+    "P5 will add strict bounded read-only JSON and stdio MCP for Hermes and other clients. Browser/session automation and automatic benefit activation are not implied.",
+    "Current automation authority: none.",
+];
+
 const COMPONENT_RAW_LITERAL_ALLOWLIST: [&str; 11] = [
     "", " ", " · ", ", ", "ready", "degraded", "waiting", "●", "▲", "…", "×",
 ];
@@ -327,6 +359,7 @@ fn shell_component_and_settings_reminder_backup_catalogs_are_complete_and_preser
         .chain(PROJECTS_COMPACT_MSGIDS)
         .chain(SESSIONS_DASHBOARD_MSGIDS)
         .chain(DATA_HEALTH_MSGIDS)
+        .chain(HELP_ABOUT_MSGIDS)
         .collect::<BTreeSet<_>>();
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -377,6 +410,7 @@ fn projects_and_compact_widget_catalogs_are_complete_before_view_conversion() {
         .chain(PROJECTS_COMPACT_MSGIDS)
         .chain(SESSIONS_DASHBOARD_MSGIDS)
         .chain(DATA_HEALTH_MSGIDS)
+        .chain(HELP_ABOUT_MSGIDS)
         .collect::<BTreeSet<_>>();
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -405,8 +439,9 @@ fn sessions_and_dashboard_catalogs_are_complete_before_view_conversion() {
         .chain(PROJECTS_COMPACT_MSGIDS)
         .chain(SESSIONS_DASHBOARD_MSGIDS)
         .chain(DATA_HEALTH_MSGIDS)
+        .chain(HELP_ABOUT_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 246, "Task 2b5a exact catalog inventory");
+    assert_eq!(expected.len(), 274, "Task 2b5b exact catalog inventory");
 
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -422,7 +457,7 @@ fn sessions_and_dashboard_catalogs_are_complete_before_view_conversion() {
             expected,
             "{locale} must translate exactly the closed Task 2b4 Sessions and Dashboard key set"
         );
-        assert_eq!(po_entry_count(&catalog), 246, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 274, "{locale} exact key count");
         for msgid in SESSIONS_DASHBOARD_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b4 catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -445,8 +480,9 @@ fn data_health_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(PROJECTS_COMPACT_MSGIDS)
         .chain(SESSIONS_DASHBOARD_MSGIDS)
         .chain(DATA_HEALTH_MSGIDS)
+        .chain(HELP_ABOUT_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 246, "Task 2b5a exact catalog inventory");
+    assert_eq!(expected.len(), 274, "Task 2b5b exact catalog inventory");
 
     let data_health = include_str!("../ui/views/data-health-view.slint");
     for msgid in DATA_HEALTH_MSGIDS {
@@ -470,9 +506,54 @@ fn data_health_catalog_and_source_use_the_closed_translation_key_set() {
             expected,
             "{locale} must translate exactly the closed Task 2b5a Data Health key set"
         );
-        assert_eq!(po_entry_count(&catalog), 246, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 274, "{locale} exact key count");
         for msgid in DATA_HEALTH_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b5a catalog completeness");
+            assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
+            assert_eq!(placeholders(msgstr), placeholders(msgid));
+        }
+    }
+}
+
+#[test]
+fn help_about_catalog_and_source_use_the_closed_translation_key_set() {
+    let expected = SHELL_MSGIDS
+        .into_iter()
+        .chain(COMPONENT_MSGIDS)
+        .chain(SETTINGS_REMINDER_BACKUP_MSGIDS)
+        .chain(SETTINGS_STARTUP_CONFIG_BOARD_FOOTER_MSGIDS)
+        .chain(PROJECTS_COMPACT_MSGIDS)
+        .chain(SESSIONS_DASHBOARD_MSGIDS)
+        .chain(DATA_HEALTH_MSGIDS)
+        .chain(HELP_ABOUT_MSGIDS)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(expected.len(), 274, "Task 2b5b exact catalog inventory");
+
+    let help_about = include_str!("../ui/views/help-about-view.slint");
+    for msgid in HELP_ABOUT_MSGIDS {
+        assert!(
+            help_about.contains(&format!("@tr(\"{msgid}\"")),
+            "missing Task 2b5b Help/About @tr for {msgid:?}"
+        );
+    }
+
+    for locale in ["ru", "pseudo"] {
+        let catalog = std::fs::read_to_string(
+            Path::new(TRANSLATION_ROOT)
+                .join(locale)
+                .join("LC_MESSAGES")
+                .join("tokenmaster-desktop.po"),
+        )
+        .expect("bundled catalog");
+        let entries = po_entries(&catalog);
+        assert_eq!(
+            entries.keys().copied().collect::<BTreeSet<_>>(),
+            expected,
+            "{locale} must translate exactly the closed Task 2b5b Help/About key set"
+        );
+        assert_eq!(po_entry_count(&catalog), 274, "{locale} exact key count");
+        for msgid in HELP_ABOUT_MSGIDS {
+            let msgstr = entries.get(msgid).expect("Task 2b5b catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
             assert_eq!(placeholders(msgstr), placeholders(msgid));
         }

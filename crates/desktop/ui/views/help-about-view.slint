@@ -53,25 +53,25 @@ component AttributionCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: region;
-    accessible-label: "About and licenses. TokenMaster is MIT licensed. WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies. The interface is made with Slint under the selected Royalty-free License 2.0 attribution route.";
+    accessible-label: @tr("About and licenses. TokenMaster is MIT licensed. WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies. The interface is made with Slint under the selected Royalty-free License 2.0 attribution route.");
 
     VerticalLayout {
         padding: UiTokens.space;
         spacing: UiTokens.space-xs;
         Text {
-            text: "About and licenses";
+            text: @tr("About and licenses");
             color: UiTokens.text-primary;
             font-size: 15px;
             font-weight: 750;
         }
         Text {
-            text: "TokenMaster · MIT";
+            text: @tr("TokenMaster · MIT");
             color: UiTokens.text-primary;
             font-size: 11px;
             font-weight: 700;
         }
         Text {
-            text: "WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies.";
+            text: @tr("WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies.");
             color: UiTokens.text-secondary;
             font-size: 10px;
             wrap: word-wrap;
@@ -91,7 +91,7 @@ export component HelpAboutView inherits Rectangle {
 
     background: UiTokens.background;
     accessible-role: region;
-    accessible-label: "TokenMaster Help and About. Version " + root.product-version + ". Local-first usage intelligence with explicit data-source, privacy, health, automation, and license truth.";
+    accessible-label: @tr("TokenMaster Help and About. Version {0}. Local-first usage intelligence with explicit data-source, privacy, health, automation, and license truth.", root.product-version);
 
     ScrollView {
         viewport-width: self.width;
@@ -107,24 +107,24 @@ export component HelpAboutView inherits Rectangle {
                 border-width: 1px;
                 border-radius: UiTokens.radius-lg;
                 accessible-role: region;
-                accessible-label: "TokenMaster version " + root.product-version + ". Fast local-first Codex usage, quota, expiry, and recovery visibility with bounded memory and explicit unavailable truth.";
+                accessible-label: @tr("TokenMaster version {0}. Fast local-first Codex usage, quota, expiry, and recovery visibility with bounded memory and explicit unavailable truth.", root.product-version);
                 VerticalLayout {
                     padding: UiTokens.space;
                     spacing: UiTokens.space-sm;
                     Text {
-                        text: "TokenMaster";
+                        text: @tr("TokenMaster");
                         color: UiTokens.text-primary;
                         font-size: 24px;
                         font-weight: 800;
                     }
                     Text {
-                        text: "Version " + root.product-version + " · local-first Windows desktop";
+                        text: @tr("Version {0} · local-first Windows desktop", root.product-version);
                         color: UiTokens.accent;
                         font-size: 11px;
                         font-weight: 700;
                     }
                     Text {
-                        text: "Fast Codex usage, quota, expiry, and recovery visibility with bounded memory and explicit unavailable truth.";
+                        text: @tr("Fast Codex usage, quota, expiry, and recovery visibility with bounded memory and explicit unavailable truth.");
                         color: UiTokens.text-secondary;
                         font-size: 11px;
                         wrap: word-wrap;
@@ -144,50 +144,50 @@ export component HelpAboutView inherits Rectangle {
                     y: 0px;
                     width: section-grid.card-width;
                     height: section-grid.card-height;
-                    title: "Start here";
-                    summary: "Dashboard is the quota-first overview. History, Sessions, Models, Projects, and Activity explain usage. Notifications shows current expiry safety.";
-                    detail: "Data Health owns backup, verification, restore, rebuild, and recovery truth. Settings owns backup policy and portable configuration.";
-                    status: "Every missing or stale fact stays explicit — never fabricated as zero.";
+                    title: @tr("Start here");
+                    summary: @tr("Dashboard is the quota-first overview. History, Sessions, Models, Projects, and Activity explain usage. Notifications shows current expiry safety.");
+                    detail: @tr("Data Health owns backup, verification, restore, rebuild, and recovery truth. Settings owns backup policy and portable configuration.");
+                    status: @tr("Every missing or stale fact stays explicit — never fabricated as zero.");
                 }
                 HelpSectionCard {
                     x: root.narrow ? 0px : section-grid.card-width + section-grid.gap;
                     y: root.narrow ? section-grid.card-height + section-grid.gap : 0px;
                     width: section-grid.card-width;
                     height: section-grid.card-height;
-                    title: "Data sources and truth";
-                    summary: "Usage is derived from bounded local Codex history. Plan usage is separate provider evidence from the installed official machine interface when available.";
-                    detail: "Local tokens never become a guessed provider allowance. Unsupported, stale, partial, or unavailable evidence remains labelled.";
-                    status: "No browser session reuse or private endpoint replay.";
+                    title: @tr("Data sources and truth");
+                    summary: @tr("Usage is derived from bounded local Codex history. Plan usage is separate provider evidence from the installed official machine interface when available.");
+                    detail: @tr("Local tokens never become a guessed provider allowance. Unsupported, stale, partial, or unavailable evidence remains labelled.");
+                    status: @tr("No browser session reuse or private endpoint replay.");
                 }
                 HelpSectionCard {
                     x: 0px;
                     y: root.narrow ? 2 * (section-grid.card-height + section-grid.gap) : section-grid.card-height + section-grid.gap;
                     width: section-grid.card-width;
                     height: section-grid.card-height;
-                    title: "Privacy by design";
-                    summary: "No prompts, responses, reasoning, commands, source contents, credentials, or raw absolute paths are retained or exposed.";
-                    detail: "Frontend rows carry bounded aggregate facts and stable reason codes, not provider, account, workspace, source, session, lot, or delivery identity.";
-                    status: "Local-first archive · no listener · no telemetry surface.";
+                    title: @tr("Privacy by design");
+                    summary: @tr("No prompts, responses, reasoning, commands, source contents, credentials, or raw absolute paths are retained or exposed.");
+                    detail: @tr("Frontend rows carry bounded aggregate facts and stable reason codes, not provider, account, workspace, source, session, lot, or delivery identity.");
+                    status: @tr("Local-first archive · no listener · no telemetry surface.");
                 }
                 HelpSectionCard {
                     x: root.narrow ? 0px : section-grid.card-width + section-grid.gap;
                     y: root.narrow ? 3 * (section-grid.card-height + section-grid.gap) : section-grid.card-height + section-grid.gap;
                     width: section-grid.card-width;
                     height: section-grid.card-height;
-                    title: "Health and recovery";
-                    summary: "Open Data Health for database health and every backup, verification, restore, rebuild, and recovery operation.";
-                    detail: "Settings owns backup policy and portable configuration import/export. Stable failure codes omit paths and raw operating-system messages.";
-                    status: "Recovery is verified, bounded, and local.";
+                    title: @tr("Health and recovery");
+                    summary: @tr("Open Data Health for database health and every backup, verification, restore, rebuild, and recovery operation.");
+                    detail: @tr("Settings owns backup policy and portable configuration import/export. Stable failure codes omit paths and raw operating-system messages.");
+                    status: @tr("Recovery is verified, bounded, and local.");
                 }
                 HelpSectionCard {
                     x: 0px;
                     y: root.narrow ? 4 * (section-grid.card-height + section-grid.gap) : 2 * (section-grid.card-height + section-grid.gap);
                     width: section-grid.card-width;
                     height: section-grid.card-height;
-                    title: "Automation status";
-                    summary: "CLI and stdio MCP are not available in the current build. No local server or listener is active.";
-                    detail: "P5 will add strict bounded read-only JSON and stdio MCP for Hermes and other clients. Browser/session automation and automatic benefit activation are not implied.";
-                    status: "Current automation authority: none.";
+                    title: @tr("Automation status");
+                    summary: @tr("CLI and stdio MCP are not available in the current build. No local server or listener is active.");
+                    detail: @tr("P5 will add strict bounded read-only JSON and stdio MCP for Hermes and other clients. Browser/session automation and automatic benefit activation are not implied.");
+                    status: @tr("Current automation authority: none.");
                 }
                 AttributionCard {
                     x: root.narrow ? 0px : section-grid.card-width + section-grid.gap;
