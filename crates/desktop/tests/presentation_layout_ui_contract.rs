@@ -77,6 +77,7 @@ fn layout_selector_submits_the_complete_selection_and_changes_wide_geometry() {
             DesktopSkin::Refined,
             DesktopColorScheme::System,
             DesktopLayout::ControlCenter,
+            tokenmaster_desktop::DesktopLocale::English,
         ))
     );
     assert_eq!(window.get_presentation_layout_key(), "control_center");

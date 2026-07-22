@@ -204,6 +204,7 @@ fn presentation_settings_project_complete_quadruple_and_legacy_defaults_are_safe
             DesktopSkin::Graphite,
             tokenmaster_desktop::DesktopColorScheme::Light,
             tokenmaster_desktop::DesktopLayout::Workbench,
+            tokenmaster_desktop::DesktopLocale::English,
         ),
         None,
         None,
@@ -289,6 +290,7 @@ fn shell_hydrates_workbench_and_retains_it_when_density_submits_complete_selecti
             DesktopSkin::Graphite,
             tokenmaster_desktop::DesktopColorScheme::Dark,
             tokenmaster_desktop::DesktopLayout::Workbench,
+            tokenmaster_desktop::DesktopLocale::English,
         ),
         None,
         None,
@@ -331,6 +333,7 @@ fn shell_hydrates_workbench_and_retains_it_when_density_submits_complete_selecti
             DesktopSkin::Graphite,
             tokenmaster_desktop::DesktopColorScheme::Dark,
             tokenmaster_desktop::DesktopLayout::Workbench,
+            tokenmaster_desktop::DesktopLocale::English,
         ))
     );
     assert_eq!(address, shell.window() as *const _);

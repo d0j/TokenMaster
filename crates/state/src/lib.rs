@@ -67,10 +67,10 @@ pub use settings::{
     BOARD_SECTION_COUNT, BackupPolicy, BoardPreferences, BoardSectionKey, BoardSectionPreference,
     DeviceRoute, DeviceSettings, PortableSettings, PortableSettingsCandidate,
     PortableSettingsDigest, PortableSettingsTarget, PreparedSettingsRestore,
-    PresentationColorScheme, PresentationDensity, PresentationLayout, PresentationSettings,
-    PresentationSkin, ReminderPolicy, SETTINGS_SCHEMA_VERSION, SettingsChangeCategory,
-    SettingsCommitReceipt, SettingsHealthCode, SettingsImportPreview, SettingsLoad,
-    SettingsLoadOutcome, SettingsStore, SettingsValue,
+    PresentationColorScheme, PresentationDensity, PresentationLayout, PresentationLocale,
+    PresentationSettings, PresentationSkin, ReminderPolicy, SETTINGS_SCHEMA_VERSION,
+    SettingsChangeCategory, SettingsCommitReceipt, SettingsHealthCode, SettingsImportPreview,
+    SettingsLoad, SettingsLoadOutcome, SettingsStore, SettingsValue,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

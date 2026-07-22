@@ -45,7 +45,7 @@ pub use presentation::{
 pub use presentation_style::{
     DESKTOP_BOARD_SECTION_COUNT, DesktopBoardPreferences, DesktopBoardSectionKey,
     DesktopBoardSectionPreference, DesktopColorScheme, DesktopDensity, DesktopEffectiveColorScheme,
-    DesktopLayout, DesktopPresentationApplyOutcome, DesktopPresentationPersistence,
+    DesktopLayout, DesktopLocale, DesktopPresentationApplyOutcome, DesktopPresentationPersistence,
     DesktopPresentationRevision, DesktopPresentationSelection, DesktopPresentationStyle,
     DesktopSystemColorScheme,
 };

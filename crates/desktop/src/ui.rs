@@ -3699,7 +3699,7 @@ mod duration_tests {
     };
     use crate::{
         DesktopBackupPolicy, DesktopBenefitExpiry, DesktopColorScheme, DesktopDensity,
-        DesktopIntent, DesktopIntentAdmission, DesktopIntentSink, DesktopLayout,
+        DesktopIntent, DesktopIntentAdmission, DesktopIntentSink, DesktopLayout, DesktopLocale,
         DesktopOperationKind, DesktopOperationPhase, DesktopOperationSnapshot,
         DesktopPresentationSelection, DesktopPresentationSettings, DesktopPresentationStyle,
         DesktopReliableStateHealth, DesktopReliableStateInput, DesktopReliableStateSummary,
@@ -3772,6 +3772,7 @@ mod duration_tests {
                 skin,
                 DesktopColorScheme::System,
                 DesktopLayout::Refined,
+                DesktopLocale::English,
             ),
             None,
             None,
@@ -3828,6 +3829,7 @@ mod duration_tests {
                 DesktopSkin::Refined,
                 DesktopColorScheme::System,
                 DesktopLayout::Refined,
+                DesktopLocale::English,
             ),
         )));
         let initial_style = *style.lock().map_err(|_| String::from("initial style"))?;
@@ -3852,6 +3854,7 @@ mod duration_tests {
                 DesktopSkin::Refined,
                 DesktopColorScheme::System,
                 DesktopLayout::Refined,
+                DesktopLocale::English,
             )
         );
         assert_eq!(reentrant_style.revision().get(), 1);

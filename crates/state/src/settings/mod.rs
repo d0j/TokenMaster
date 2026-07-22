@@ -19,6 +19,6 @@ pub use value::{
     BACKUP_RETENTION_DEFAULT_BYTES, BACKUP_RETENTION_MAX_BYTES, BACKUP_RETENTION_MIN_BYTES,
     BOARD_SECTION_COUNT, BackupPolicy, BoardPreferences, BoardSectionKey, BoardSectionPreference,
     DeviceRoute, DeviceSettings, PortableSettings, PresentationColorScheme, PresentationDensity,
-    PresentationLayout, PresentationSettings, PresentationSkin, ReminderPolicy,
+    PresentationLayout, PresentationLocale, PresentationSettings, PresentationSkin, ReminderPolicy,
     SETTINGS_SCHEMA_VERSION, SettingsValue,
 };

@@ -80,6 +80,7 @@ fn reliable_state_with_presentation_and_operation(
             skin,
             tokenmaster_desktop::DesktopColorScheme::System,
             tokenmaster_desktop::DesktopLayout::Refined,
+            tokenmaster_desktop::DesktopLocale::English,
         ),
         None,
         None,
@@ -123,6 +124,7 @@ fn density_selector_submits_the_current_non_default_skin_without_a_skin_callback
             DesktopSkin::Graphite,
             tokenmaster_desktop::DesktopColorScheme::System,
             tokenmaster_desktop::DesktopLayout::Refined,
+            tokenmaster_desktop::DesktopLocale::English,
         ))
     );
 }

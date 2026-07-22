@@ -6,12 +6,12 @@ use super::command::{
 };
 use tokenmaster_desktop::{
     DesktopBoardPreferences, DesktopBoardSectionKey, DesktopBoardSectionPreference,
-    DesktopColorScheme, DesktopDensity, DesktopIntent, DesktopLayout, DesktopPresentationSelection,
-    DesktopSkin,
+    DesktopColorScheme, DesktopDensity, DesktopIntent, DesktopLayout, DesktopLocale,
+    DesktopPresentationSelection, DesktopSkin,
 };
 
 #[test]
-fn presentation_payload_is_complete_redacted_and_maps_all_eighty_one_combinations() {
+fn presentation_payload_is_complete_redacted_and_maps_all_two_hundred_forty_three_combinations() {
     let densities = [
         (
             DesktopDensity::Comfortable,
@@ -68,31 +68,50 @@ fn presentation_payload_is_complete_redacted_and_maps_all_eighty_one_combination
             tokenmaster_state::PresentationLayout::Workbench,
         ),
     ];
+    let locales = [
+        (
+            DesktopLocale::English,
+            tokenmaster_state::PresentationLocale::English,
+        ),
+        (
+            DesktopLocale::Russian,
+            tokenmaster_state::PresentationLocale::Russian,
+        ),
+        (
+            DesktopLocale::Pseudo,
+            tokenmaster_state::PresentationLocale::Pseudo,
+        ),
+    ];
     for (desktop_density, state_density) in densities {
         for (desktop_skin, state_skin) in skins {
             for (desktop_scheme, state_scheme) in schemes {
                 for (desktop_layout, state_layout) in layouts {
-                    let selection = DesktopPresentationSelection::new(
-                        desktop_density,
-                        desktop_skin,
-                        desktop_scheme,
-                        desktop_layout,
-                    );
-                    let (_, payload) =
-                        ApplicationOperationRequest::update_presentation(selection).into_parts();
-                    let ApplicationOperationPayload::Presentation(update) = payload else {
-                        panic!("complete presentation payload")
-                    };
-                    assert_eq!(update.selection(), selection);
-                    let state = update.into_state_presentation();
-                    assert_eq!(state.density(), state_density);
-                    assert_eq!(state.skin(), state_skin);
-                    assert_eq!(state.color_scheme(), state_scheme);
-                    assert_eq!(state.layout(), state_layout);
-                    assert_eq!(
-                        format!("{update:?}"),
-                        "ApplicationPresentationUpdate([redacted])"
-                    );
+                    for (desktop_locale, state_locale) in locales {
+                        let selection = DesktopPresentationSelection::new(
+                            desktop_density,
+                            desktop_skin,
+                            desktop_scheme,
+                            desktop_layout,
+                            desktop_locale,
+                        );
+                        let (_, payload) =
+                            ApplicationOperationRequest::update_presentation(selection)
+                                .into_parts();
+                        let ApplicationOperationPayload::Presentation(update) = payload else {
+                            panic!("complete presentation payload")
+                        };
+                        assert_eq!(update.selection(), selection);
+                        let state = update.into_state_presentation();
+                        assert_eq!(state.density(), state_density);
+                        assert_eq!(state.skin(), state_skin);
+                        assert_eq!(state.color_scheme(), state_scheme);
+                        assert_eq!(state.layout(), state_layout);
+                        assert_eq!(state.locale(), state_locale);
+                        assert_eq!(
+                            format!("{update:?}"),
+                            "ApplicationPresentationUpdate([redacted])"
+                        );
+                    }
                 }
             }
         }
@@ -115,6 +134,7 @@ fn presentation_payload_preserves_each_custom_board_row() {
         DesktopSkin::Ember,
         DesktopColorScheme::Light,
         DesktopLayout::Workbench,
+        DesktopLocale::English,
     )
     .with_board(board);
     let (_, payload) = ApplicationOperationRequest::update_presentation(selection).into_parts();

@@ -242,6 +242,17 @@ impl ApplicationPresentationUpdate {
                 tokenmaster_state::PresentationLayout::Workbench
             }
         };
+        let locale = match self.selection.locale() {
+            tokenmaster_desktop::DesktopLocale::English => {
+                tokenmaster_state::PresentationLocale::English
+            }
+            tokenmaster_desktop::DesktopLocale::Russian => {
+                tokenmaster_state::PresentationLocale::Russian
+            }
+            tokenmaster_desktop::DesktopLocale::Pseudo => {
+                tokenmaster_state::PresentationLocale::Pseudo
+            }
+        };
         let rows = self.selection.board().rows().map(|row| {
             let key = match row.key() {
                 tokenmaster_desktop::DesktopBoardSectionKey::PlanUsage => {
@@ -269,7 +280,7 @@ impl ApplicationPresentationUpdate {
             Ok(board) => board,
             Err(_) => unreachable!("Desktop board preferences are validated before mapping"),
         };
-        tokenmaster_state::PresentationSettings::new(density, skin, color_scheme, layout)
+        tokenmaster_state::PresentationSettings::new(density, skin, color_scheme, layout, locale)
             .with_board(board)
     }
 }

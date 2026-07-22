@@ -843,6 +843,7 @@ fn presentation_intent_routes_to_the_exact_typed_operation() {
                 tokenmaster_desktop::DesktopSkin::Graphite,
                 tokenmaster_desktop::DesktopColorScheme::Dark,
                 tokenmaster_desktop::DesktopLayout::Refined,
+                tokenmaster_desktop::DesktopLocale::Russian,
             ),
         )),
         DesktopIntentAdmission::Started
@@ -861,6 +862,7 @@ fn presentation_intent_routes_to_the_exact_typed_operation() {
             tokenmaster_desktop::DesktopSkin::Graphite,
             tokenmaster_desktop::DesktopColorScheme::Dark,
             tokenmaster_desktop::DesktopLayout::Refined,
+            tokenmaster_desktop::DesktopLocale::Russian,
         )
     );
     assert_eq!(
@@ -870,6 +872,7 @@ fn presentation_intent_routes_to_the_exact_typed_operation() {
             tokenmaster_state::PresentationSkin::Graphite,
             tokenmaster_state::PresentationColorScheme::Dark,
             tokenmaster_state::PresentationLayout::Refined,
+            tokenmaster_state::PresentationLocale::Russian,
         )
     );
     assert_eq!(
@@ -971,6 +974,7 @@ fn presentation_execution_persists_and_projects_the_confirmed_operation() {
             tokenmaster_desktop::DesktopSkin::Ember,
             tokenmaster_desktop::DesktopColorScheme::Light,
             tokenmaster_desktop::DesktopLayout::Refined,
+            tokenmaster_desktop::DesktopLocale::Pseudo,
         )
         .with_board(board),
     )
@@ -1008,11 +1012,15 @@ fn presentation_execution_persists_and_projects_the_confirmed_operation() {
         projection.presentation().color_scheme(),
         tokenmaster_desktop::DesktopColorScheme::Light
     );
+    assert_eq!(
+        projection.presentation().locale(),
+        tokenmaster_desktop::DesktopLocale::Pseudo
+    );
     assert_eq!(projection.presentation().board(), board);
     assert_eq!(projection.operation(), Some(completion));
     let persisted = store.load().expect("settings after presentation save");
     assert_eq!(persisted.generation(), Some(1));
-    assert_eq!(SETTINGS_SCHEMA_VERSION, 6);
+    assert_eq!(SETTINGS_SCHEMA_VERSION, 7);
     assert_eq!(
         persisted.value().portable().presentation(),
         &PresentationSettings::new(
@@ -1020,6 +1028,7 @@ fn presentation_execution_persists_and_projects_the_confirmed_operation() {
             PresentationSkin::Ember,
             tokenmaster_state::PresentationColorScheme::Light,
             PresentationLayout::Refined,
+            tokenmaster_state::PresentationLocale::Pseudo,
         )
         .with_board(
             tokenmaster_state::BoardPreferences::new([
@@ -1080,6 +1089,7 @@ fn presentation_save_failure_keeps_the_exact_old_value_generation_and_failed_pro
                 PresentationSkin::Graphite,
                 tokenmaster_state::PresentationColorScheme::System,
                 PresentationLayout::Refined,
+                tokenmaster_state::PresentationLocale::English,
             ),
             || {},
         )
@@ -1104,6 +1114,7 @@ fn presentation_save_failure_keeps_the_exact_old_value_generation_and_failed_pro
             PresentationSkin::Ember,
             tokenmaster_state::PresentationColorScheme::System,
             PresentationLayout::Refined,
+            tokenmaster_state::PresentationLocale::English,
         ),
         || {
             callback_count.set(callback_count.get() + 1);

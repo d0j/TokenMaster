@@ -211,6 +211,43 @@ impl DesktopDensity {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopLocale {
+    English,
+    Russian,
+    Pseudo,
+}
+
+impl DesktopLocale {
+    #[must_use]
+    pub const fn stable_key(self) -> &'static str {
+        match self {
+            Self::English => "en",
+            Self::Russian => "ru",
+            Self::Pseudo => "pseudo",
+        }
+    }
+
+    #[must_use]
+    pub const fn slint_index(self) -> i32 {
+        match self {
+            Self::English => 0,
+            Self::Russian => 1,
+            Self::Pseudo => 2,
+        }
+    }
+
+    #[must_use]
+    pub const fn from_slint_index(index: i32) -> Option<Self> {
+        match index {
+            0 => Some(Self::English),
+            1 => Some(Self::Russian),
+            2 => Some(Self::Pseudo),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DesktopLayout {
     Refined,
     ControlCenter,
@@ -348,6 +385,7 @@ pub struct DesktopPresentationSelection {
     skin: DesktopSkin,
     color_scheme: DesktopColorScheme,
     layout: DesktopLayout,
+    locale: DesktopLocale,
     board: DesktopBoardPreferences,
 }
 
@@ -358,12 +396,14 @@ impl DesktopPresentationSelection {
         skin: DesktopSkin,
         color_scheme: DesktopColorScheme,
         layout: DesktopLayout,
+        locale: DesktopLocale,
     ) -> Self {
         Self {
             density,
             skin,
             color_scheme,
             layout,
+            locale,
             board: DesktopBoardPreferences::canonical(),
         }
     }
@@ -389,6 +429,11 @@ impl DesktopPresentationSelection {
     }
 
     #[must_use]
+    pub const fn locale(self) -> DesktopLocale {
+        self.locale
+    }
+
+    #[must_use]
     pub const fn board(self) -> DesktopBoardPreferences {
         self.board
     }
@@ -400,19 +445,58 @@ impl DesktopPresentationSelection {
     }
 
     const fn with_density(self, density: DesktopDensity) -> Self {
-        Self::new(density, self.skin, self.color_scheme, self.layout).with_board(self.board)
+        Self::new(
+            density,
+            self.skin,
+            self.color_scheme,
+            self.layout,
+            self.locale,
+        )
+        .with_board(self.board)
     }
 
     const fn with_skin(self, skin: DesktopSkin) -> Self {
-        Self::new(self.density, skin, self.color_scheme, self.layout).with_board(self.board)
+        Self::new(
+            self.density,
+            skin,
+            self.color_scheme,
+            self.layout,
+            self.locale,
+        )
+        .with_board(self.board)
     }
 
     const fn with_color_scheme(self, color_scheme: DesktopColorScheme) -> Self {
-        Self::new(self.density, self.skin, color_scheme, self.layout).with_board(self.board)
+        Self::new(
+            self.density,
+            self.skin,
+            color_scheme,
+            self.layout,
+            self.locale,
+        )
+        .with_board(self.board)
     }
 
     const fn with_layout(self, layout: DesktopLayout) -> Self {
-        Self::new(self.density, self.skin, self.color_scheme, layout).with_board(self.board)
+        Self::new(
+            self.density,
+            self.skin,
+            self.color_scheme,
+            layout,
+            self.locale,
+        )
+        .with_board(self.board)
+    }
+
+    const fn with_locale(self, locale: DesktopLocale) -> Self {
+        Self::new(
+            self.density,
+            self.skin,
+            self.color_scheme,
+            self.layout,
+            locale,
+        )
+        .with_board(self.board)
     }
 }
 
@@ -516,6 +600,11 @@ impl DesktopPresentationStyle {
     }
 
     #[must_use]
+    pub const fn locale(self) -> DesktopLocale {
+        self.selection.locale()
+    }
+
+    #[must_use]
     pub const fn effective_color_scheme(self) -> DesktopEffectiveColorScheme {
         self.color_scheme().resolve(self.system_color_scheme)
     }
@@ -562,6 +651,13 @@ impl DesktopPresentationStyle {
         self.select(self.selection.with_layout(layout), false, |_| true)
     }
 
+    pub fn select_locale_index(&mut self, index: i32) -> DesktopPresentationApplyOutcome {
+        let Some(locale) = DesktopLocale::from_slint_index(index) else {
+            return DesktopPresentationApplyOutcome::Rejected;
+        };
+        self.select(self.selection.with_locale(locale), false, |_| true)
+    }
+
     pub fn select_density_index_if_admitted(
         &mut self,
         index: i32,
@@ -604,6 +700,17 @@ impl DesktopPresentationStyle {
             return DesktopPresentationApplyOutcome::Rejected;
         };
         self.select(self.selection.with_layout(layout), true, admit)
+    }
+
+    pub fn select_locale_index_if_admitted(
+        &mut self,
+        index: i32,
+        admit: impl FnOnce(DesktopPresentationSelection) -> bool,
+    ) -> DesktopPresentationApplyOutcome {
+        let Some(locale) = DesktopLocale::from_slint_index(index) else {
+            return DesktopPresentationApplyOutcome::Rejected;
+        };
+        self.select(self.selection.with_locale(locale), true, admit)
     }
 
     pub fn move_board_section_if_admitted(
@@ -783,7 +890,41 @@ mod tests {
         DesktopDensity, DesktopPresentationApplyOutcome, DesktopPresentationPersistence,
         DesktopPresentationRevision, DesktopPresentationSelection, DesktopPresentationStyle,
     };
-    use crate::{DesktopColorScheme, DesktopLayout, DesktopSkin, DesktopSystemColorScheme};
+    use crate::{
+        DesktopColorScheme, DesktopLayout, DesktopLocale, DesktopSkin, DesktopSystemColorScheme,
+    };
+
+    #[test]
+    fn locale_index_admission_is_closed_and_preserves_the_complete_selection() {
+        let selection = DesktopPresentationSelection::new(
+            DesktopDensity::Comfortable,
+            DesktopSkin::Refined,
+            DesktopColorScheme::System,
+            DesktopLayout::Refined,
+            DesktopLocale::English,
+        );
+        let mut style = DesktopPresentationStyle::from_persisted(selection);
+
+        assert_eq!(DesktopLocale::English.stable_key(), "en");
+        assert_eq!(DesktopLocale::Russian.stable_key(), "ru");
+        assert_eq!(DesktopLocale::Pseudo.stable_key(), "pseudo");
+        assert_eq!(
+            style.select_locale_index(1),
+            DesktopPresentationApplyOutcome::Applied
+        );
+        assert_eq!(style.locale(), DesktopLocale::Russian);
+        assert_eq!(style.selection().board(), selection.board());
+        let before_rejected = style;
+        assert_eq!(
+            style.select_locale_index(-1),
+            DesktopPresentationApplyOutcome::Rejected
+        );
+        assert_eq!(
+            style.select_locale_index(3),
+            DesktopPresentationApplyOutcome::Rejected
+        );
+        assert_eq!(style, before_rejected);
+    }
 
     #[test]
     fn board_edits_preserve_axes_and_reject_hiding_the_last_visible_section() {
@@ -792,6 +933,7 @@ mod tests {
             DesktopSkin::Refined,
             DesktopColorScheme::System,
             DesktopLayout::Refined,
+            DesktopLocale::English,
         );
         let mut style = DesktopPresentationStyle::from_persisted(selection);
 
@@ -869,6 +1011,7 @@ mod tests {
             DesktopSkin::Refined,
             DesktopColorScheme::System,
             DesktopLayout::Refined,
+            DesktopLocale::English,
         );
         let mut style = DesktopPresentationStyle {
             selection,
@@ -893,6 +1036,7 @@ mod tests {
             DesktopSkin::Refined,
             DesktopColorScheme::System,
             DesktopLayout::Refined,
+            DesktopLocale::English,
         );
         let mut style = DesktopPresentationStyle {
             selection,
@@ -909,6 +1053,7 @@ mod tests {
                 DesktopSkin::Graphite,
                 DesktopColorScheme::Light,
                 DesktopLayout::ControlCenter,
+                DesktopLocale::English,
             )),
             DesktopPresentationApplyOutcome::RevisionExhausted
         );
@@ -922,6 +1067,7 @@ mod tests {
             DesktopSkin::Refined,
             DesktopColorScheme::System,
             DesktopLayout::Refined,
+            DesktopLocale::English,
         );
         let mut style = DesktopPresentationStyle {
             selection,
@@ -938,6 +1084,7 @@ mod tests {
                 DesktopSkin::Graphite,
                 DesktopColorScheme::Dark,
                 DesktopLayout::Workbench,
+                DesktopLocale::English,
             )),
             DesktopPresentationApplyOutcome::RevisionExhausted
         );

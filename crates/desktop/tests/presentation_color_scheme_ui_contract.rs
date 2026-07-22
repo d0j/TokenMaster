@@ -63,6 +63,7 @@ fn system_observation_repaints_without_persistence_and_selector_submits_complete
             DesktopSkin::Refined,
             DesktopColorScheme::Dark,
             tokenmaster_desktop::DesktopLayout::Refined,
+            tokenmaster_desktop::DesktopLocale::English,
         ))
     );
     assert_eq!(window.get_presentation_color_scheme_key(), "dark");
@@ -153,6 +154,7 @@ fn ten_thousand_compiled_ui_switches_cover_all_eighty_one_complete_combinations(
                     1 => tokenmaster_desktop::DesktopLayout::ControlCenter,
                     _ => tokenmaster_desktop::DesktopLayout::Workbench,
                 },
+                tokenmaster_desktop::DesktopLocale::English,
             )),
             "compiled UI submission {index} must retain one complete quadruple"
         );

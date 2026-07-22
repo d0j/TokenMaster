@@ -9,18 +9,21 @@ const REFINED_COMFORTABLE: DesktopPresentationSelection = DesktopPresentationSel
     DesktopSkin::Refined,
     DesktopColorScheme::System,
     DesktopLayout::Refined,
+    tokenmaster_desktop::DesktopLocale::English,
 );
 const GRAPHITE_COMPACT: DesktopPresentationSelection = DesktopPresentationSelection::new(
     DesktopDensity::Compact,
     DesktopSkin::Graphite,
     DesktopColorScheme::Light,
     DesktopLayout::Refined,
+    tokenmaster_desktop::DesktopLocale::English,
 );
 const EMBER_ULTRA_COMPACT: DesktopPresentationSelection = DesktopPresentationSelection::new(
     DesktopDensity::UltraCompact,
     DesktopSkin::Ember,
     DesktopColorScheme::Dark,
     DesktopLayout::Refined,
+    tokenmaster_desktop::DesktopLocale::English,
 );
 
 #[test]
@@ -41,6 +44,7 @@ fn selection_is_complete_checked_and_revisioned_across_all_axes() {
             DesktopSkin::Refined,
             DesktopColorScheme::System,
             DesktopLayout::Refined,
+            tokenmaster_desktop::DesktopLocale::English,
         )
     );
     assert_eq!(style.revision().get(), 1);
@@ -55,6 +59,7 @@ fn selection_is_complete_checked_and_revisioned_across_all_axes() {
             DesktopSkin::Graphite,
             DesktopColorScheme::System,
             DesktopLayout::Refined,
+            tokenmaster_desktop::DesktopLocale::English,
         )
     );
     assert_eq!(style.revision().get(), 2);
@@ -138,6 +143,7 @@ fn admission_receives_one_complete_selection_and_same_not_saved_value_retries() 
         DesktopSkin::Graphite,
         DesktopColorScheme::System,
         DesktopLayout::Refined,
+        tokenmaster_desktop::DesktopLocale::English,
     );
     assert_eq!(admitted, Some(graphite_comfortable));
     assert_eq!(style.selection(), graphite_comfortable);

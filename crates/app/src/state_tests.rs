@@ -20,8 +20,9 @@ use tokenmaster_platform::{
 use tokenmaster_state::{
     BackupCompression, BackupPackage, BackupPassphrase, BackupPolicy, BootstrapOutcome,
     ConfigPackage, EncryptedBackupPackage, MAX_CONFIG_PACKAGE_BYTES, PortableSettings,
-    PortableSettingsCandidate, PresentationDensity, PresentationLayout, PresentationSettings,
-    PresentationSkin, ReminderPolicy, SettingsChangeCategory, SettingsStore, SettingsValue,
+    PortableSettingsCandidate, PresentationDensity, PresentationLayout, PresentationLocale,
+    PresentationSettings, PresentationSkin, ReminderPolicy, SettingsChangeCategory, SettingsStore,
+    SettingsValue,
 };
 use tokenmaster_store::UsageStore;
 
@@ -138,6 +139,7 @@ fn changed_portable_settings() -> PortableSettingsCandidate {
             PresentationSkin::Refined,
             tokenmaster_state::PresentationColorScheme::System,
             PresentationLayout::Refined,
+            PresentationLocale::English,
         ),
     ))
     .expect("portable candidate")
@@ -1167,6 +1169,7 @@ fn presentation_update_preserves_every_other_settings_class() {
                 PresentationSkin::Refined,
                 tokenmaster_state::PresentationColorScheme::System,
                 PresentationLayout::Refined,
+                PresentationLocale::English,
             ),
             || {},
         )
@@ -1205,6 +1208,7 @@ fn presentation_update_preserves_every_other_settings_class() {
                 PresentationSkin::Ember,
                 tokenmaster_state::PresentationColorScheme::System,
                 PresentationLayout::Workbench,
+                PresentationLocale::English,
             ),
             || {},
         )
@@ -1242,6 +1246,7 @@ fn presentation_update_replaces_all_axes_atomically() {
                 PresentationSkin::Graphite,
                 tokenmaster_state::PresentationColorScheme::System,
                 PresentationLayout::Refined,
+                PresentationLocale::English,
             ),
         ),
         current.value().device().clone(),
@@ -1256,6 +1261,7 @@ fn presentation_update_replaces_all_axes_atomically() {
                 PresentationSkin::Ember,
                 tokenmaster_state::PresentationColorScheme::System,
                 PresentationLayout::ControlCenter,
+                PresentationLocale::English,
             ),
             || {},
         )
@@ -1292,6 +1298,7 @@ fn presentation_save_rejects_wrong_or_cancelled_permits_and_is_idempotent_only_f
                 PresentationSkin::Graphite,
                 tokenmaster_state::PresentationColorScheme::System,
                 PresentationLayout::Refined,
+                PresentationLocale::English,
             ),
             || callback_count += 1,
         )
@@ -1317,6 +1324,7 @@ fn presentation_save_rejects_wrong_or_cancelled_permits_and_is_idempotent_only_f
                 PresentationSkin::Graphite,
                 tokenmaster_state::PresentationColorScheme::System,
                 PresentationLayout::Refined,
+                PresentationLocale::English,
             ),
             || {
                 callback_count += 1;
@@ -1337,6 +1345,7 @@ fn presentation_save_rejects_wrong_or_cancelled_permits_and_is_idempotent_only_f
                 PresentationSkin::Refined,
                 tokenmaster_state::PresentationColorScheme::System,
                 PresentationLayout::Refined,
+                PresentationLocale::English,
             ),
             || callback_count += 1,
         )
@@ -1355,6 +1364,7 @@ fn presentation_save_rejects_wrong_or_cancelled_permits_and_is_idempotent_only_f
                 PresentationSkin::Graphite,
                 tokenmaster_state::PresentationColorScheme::System,
                 PresentationLayout::Refined,
+                PresentationLocale::English,
             ),
             || callback_count += 1,
         )

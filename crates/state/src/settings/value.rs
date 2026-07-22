@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use crate::StateError;
 use crate::record::{RecordValue, RecordValueError};
 
-pub const SETTINGS_SCHEMA_VERSION: u16 = 6;
+pub const SETTINGS_SCHEMA_VERSION: u16 = 7;
 pub(crate) const MIN_SUPPORTED_SETTINGS_SCHEMA_VERSION: u16 = 1;
 pub const MAX_REMINDER_THRESHOLDS: usize = 8;
 pub const REMINDER_LEAD_MIN_SECONDS: u32 = 60;
@@ -295,6 +295,28 @@ pub enum PresentationLayout {
     Workbench,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PresentationLocale {
+    #[serde(rename = "en")]
+    English,
+    #[serde(rename = "ru")]
+    Russian,
+    #[serde(rename = "pseudo")]
+    Pseudo,
+}
+
+impl PresentationLocale {
+    #[must_use]
+    pub const fn stable_key(self) -> &'static str {
+        match self {
+            Self::English => "en",
+            Self::Russian => "ru",
+            Self::Pseudo => "pseudo",
+        }
+    }
+}
+
 pub const BOARD_SECTION_COUNT: usize = 6;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -478,6 +500,7 @@ pub struct PresentationSettings {
     skin: PresentationSkin,
     color_scheme: PresentationColorScheme,
     layout: PresentationLayout,
+    locale: PresentationLocale,
     board: BoardPreferences,
 }
 
@@ -488,12 +511,14 @@ impl PresentationSettings {
         skin: PresentationSkin,
         color_scheme: PresentationColorScheme,
         layout: PresentationLayout,
+        locale: PresentationLocale,
     ) -> Self {
         Self {
             density,
             skin,
             color_scheme,
             layout,
+            locale,
             board: BoardPreferences::canonical(),
         }
     }
@@ -505,6 +530,7 @@ impl PresentationSettings {
             PresentationSkin::Refined,
             PresentationColorScheme::System,
             PresentationLayout::Refined,
+            PresentationLocale::English,
         )
     }
 
@@ -515,6 +541,7 @@ impl PresentationSettings {
             skin,
             PresentationColorScheme::Dark,
             PresentationLayout::Refined,
+            PresentationLocale::English,
         )
     }
 
@@ -536,6 +563,11 @@ impl PresentationSettings {
     #[must_use]
     pub const fn layout(self) -> PresentationLayout {
         self.layout
+    }
+
+    #[must_use]
+    pub const fn locale(self) -> PresentationLocale {
+        self.locale
     }
 
     #[must_use]

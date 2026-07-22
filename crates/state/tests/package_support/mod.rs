@@ -167,8 +167,8 @@ pub fn package_with_settings_source_schema(
 
     let settings: serde_json::Value =
         serde_json::from_slice(settings_json).expect("strict settings JSON fixture");
-    assert!(matches!(settings_schema_version, 1..=6));
-    assert!(matches!(settings["schema_version"].as_u64(), Some(1..=6)));
+    assert!(matches!(settings_schema_version, 1..=7));
+    assert!(matches!(settings["schema_version"].as_u64(), Some(1..=7)));
     assert!(!settings_json.is_empty());
 
     let (kind, entry_count, database_schema_version, backup_purpose) = match database {

@@ -61,6 +61,7 @@ fn reliable_state(
             skin,
             tokenmaster_desktop::DesktopColorScheme::System,
             tokenmaster_desktop::DesktopLayout::Refined,
+            tokenmaster_desktop::DesktopLocale::English,
         ),
         None,
         None,
@@ -104,6 +105,7 @@ fn skin_selector_applies_all_fifteen_exact_palette_roles_after_admission() {
             DesktopSkin::Graphite,
             tokenmaster_desktop::DesktopColorScheme::System,
             tokenmaster_desktop::DesktopLayout::Refined,
+            tokenmaster_desktop::DesktopLocale::English,
         ))
     );
     assert_eq!(window.get_presentation_skin_key(), "graphite");
@@ -161,6 +163,7 @@ fn density_and_skin_selectors_submit_complete_pairs_and_keep_one_window_models_g
             DesktopSkin::Refined,
             tokenmaster_desktop::DesktopColorScheme::System,
             tokenmaster_desktop::DesktopLayout::Refined,
+            tokenmaster_desktop::DesktopLocale::English,
         ))
     );
     window.invoke_select_presentation_skin(2);
@@ -171,6 +174,7 @@ fn density_and_skin_selectors_submit_complete_pairs_and_keep_one_window_models_g
             DesktopSkin::Ember,
             tokenmaster_desktop::DesktopColorScheme::System,
             tokenmaster_desktop::DesktopLayout::Refined,
+            tokenmaster_desktop::DesktopLocale::English,
         ))
     );
 
@@ -193,6 +197,7 @@ fn density_and_skin_selectors_submit_complete_pairs_and_keep_one_window_models_g
                 skin,
                 tokenmaster_desktop::DesktopColorScheme::System,
                 tokenmaster_desktop::DesktopLayout::Refined,
+                tokenmaster_desktop::DesktopLocale::English,
             )),
             "density submission {index} must retain the immediately current skin"
         );

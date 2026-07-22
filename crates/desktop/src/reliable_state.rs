@@ -3,7 +3,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::presentation_style::{
-    DesktopBoardPreferences, DesktopColorScheme, DesktopDensity, DesktopPresentationSelection,
+    DesktopBoardPreferences, DesktopColorScheme, DesktopDensity, DesktopLocale,
+    DesktopPresentationSelection,
 };
 use crate::skin::DesktopSkin;
 
@@ -116,6 +117,7 @@ pub struct DesktopPresentationSettings {
     skin: DesktopSkin,
     color_scheme: DesktopColorScheme,
     layout: crate::DesktopLayout,
+    locale: DesktopLocale,
     board: DesktopBoardPreferences,
 }
 
@@ -126,12 +128,14 @@ impl DesktopPresentationSettings {
         skin: DesktopSkin,
         color_scheme: DesktopColorScheme,
         layout: crate::DesktopLayout,
+        locale: DesktopLocale,
     ) -> Self {
         Self {
             density,
             skin,
             color_scheme,
             layout,
+            locale,
             board: DesktopBoardPreferences::canonical(),
         }
     }
@@ -143,6 +147,7 @@ impl DesktopPresentationSettings {
             DesktopSkin::Refined,
             DesktopColorScheme::System,
             crate::DesktopLayout::Refined,
+            DesktopLocale::English,
         )
     }
 
@@ -167,6 +172,11 @@ impl DesktopPresentationSettings {
     }
 
     #[must_use]
+    pub const fn locale(self) -> DesktopLocale {
+        self.locale
+    }
+
+    #[must_use]
     pub const fn board(self) -> DesktopBoardPreferences {
         self.board
     }
@@ -179,8 +189,14 @@ impl DesktopPresentationSettings {
 
     #[must_use]
     pub const fn selection(self) -> DesktopPresentationSelection {
-        DesktopPresentationSelection::new(self.density, self.skin, self.color_scheme, self.layout)
-            .with_board(self.board)
+        DesktopPresentationSelection::new(
+            self.density,
+            self.skin,
+            self.color_scheme,
+            self.layout,
+            self.locale,
+        )
+        .with_board(self.board)
     }
 }
 

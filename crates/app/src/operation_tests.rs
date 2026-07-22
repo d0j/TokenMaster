@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use tempfile::tempdir;
 use tokenmaster_desktop::{
-    DesktopDensity, DesktopLayout, DesktopPresentationSelection, DesktopSkin,
+    DesktopDensity, DesktopLayout, DesktopLocale, DesktopPresentationSelection, DesktopSkin,
 };
 use tokenmaster_platform::{
     ControlledFileDialog, FileDialogFileType, FileDialogResult, FileDialogSelector,
@@ -140,6 +140,7 @@ fn bare_presentation_command_is_rejected_before_worker_or_coordinator_mutation()
                     DesktopSkin::Graphite,
                     tokenmaster_desktop::DesktopColorScheme::System,
                     DesktopLayout::Refined,
+                    DesktopLocale::English,
                 ),
             )),
         ApplicationCommandAdmission::Started(_)
@@ -593,6 +594,7 @@ fn presentation_follow_up_replaces_only_the_pending_complete_payload() {
             DesktopSkin::Refined,
             tokenmaster_desktop::DesktopColorScheme::System,
             DesktopLayout::Refined,
+            DesktopLocale::English,
         )),
     ) else {
         panic!("first density save must start");
@@ -606,6 +608,7 @@ fn presentation_follow_up_replaces_only_the_pending_complete_payload() {
                 DesktopSkin::Refined,
                 tokenmaster_desktop::DesktopColorScheme::System,
                 DesktopLayout::Refined,
+                DesktopLocale::English,
             )
         )
     );
@@ -619,6 +622,7 @@ fn presentation_follow_up_replaces_only_the_pending_complete_payload() {
             DesktopSkin::Graphite,
             tokenmaster_desktop::DesktopColorScheme::System,
             DesktopLayout::Refined,
+            DesktopLocale::English,
         ),
     ))
     else {
@@ -632,6 +636,7 @@ fn presentation_follow_up_replaces_only_the_pending_complete_payload() {
                 DesktopSkin::Ember,
                 tokenmaster_desktop::DesktopColorScheme::System,
                 DesktopLayout::Refined,
+                DesktopLocale::English,
             ),
         )),
         ApplicationCommandAdmission::Coalesced {
@@ -653,6 +658,7 @@ fn presentation_follow_up_replaces_only_the_pending_complete_payload() {
                 DesktopSkin::Ember,
                 tokenmaster_desktop::DesktopColorScheme::System,
                 DesktopLayout::Refined,
+                DesktopLocale::English,
             )
         )
     );
@@ -669,12 +675,14 @@ fn presentation_follow_up_replaces_only_the_pending_complete_payload() {
                 DesktopSkin::Refined,
                 tokenmaster_desktop::DesktopColorScheme::System,
                 DesktopLayout::Refined,
+                DesktopLocale::English,
             ),
             DesktopPresentationSelection::new(
                 DesktopDensity::Comfortable,
                 DesktopSkin::Ember,
                 tokenmaster_desktop::DesktopColorScheme::System,
                 DesktopLayout::Refined,
+                DesktopLocale::English,
             )
         ]
     );
@@ -711,6 +719,7 @@ fn ten_thousand_presentation_updates_keep_one_latest_payload() {
                 DesktopSkin::Refined,
                 tokenmaster_desktop::DesktopColorScheme::System,
                 DesktopLayout::Refined,
+                DesktopLocale::English,
             ),
         )),
         ApplicationCommandAdmission::Started(_)
@@ -722,6 +731,7 @@ fn ten_thousand_presentation_updates_keep_one_latest_payload() {
             DesktopSkin::Refined,
             tokenmaster_desktop::DesktopColorScheme::System,
             DesktopLayout::Refined,
+            DesktopLocale::English,
         )
     );
 
@@ -730,6 +740,7 @@ fn ten_thousand_presentation_updates_keep_one_latest_payload() {
         DesktopSkin::Refined,
         tokenmaster_desktop::DesktopColorScheme::System,
         DesktopLayout::Refined,
+        DesktopLocale::English,
     );
     for index in 0..10_000 {
         let density = match index % 3 {
@@ -752,7 +763,13 @@ fn ten_thousand_presentation_updates_keep_one_latest_payload() {
             1 => DesktopLayout::ControlCenter,
             _ => DesktopLayout::Workbench,
         };
-        final_selection = DesktopPresentationSelection::new(density, skin, color_scheme, layout);
+        let locale = match (index / 81) % 3 {
+            0 => DesktopLocale::English,
+            1 => DesktopLocale::Russian,
+            _ => DesktopLocale::Pseudo,
+        };
+        final_selection =
+            DesktopPresentationSelection::new(density, skin, color_scheme, layout, locale);
         assert!(matches!(
             submitter.submit_request(ApplicationOperationRequest::update_presentation(
                 final_selection,
@@ -780,6 +797,7 @@ fn ten_thousand_presentation_updates_keep_one_latest_payload() {
                 DesktopSkin::Refined,
                 tokenmaster_desktop::DesktopColorScheme::System,
                 DesktopLayout::Refined,
+                DesktopLocale::English,
             ),
             final_selection
         ]

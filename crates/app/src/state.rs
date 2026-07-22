@@ -28,12 +28,12 @@ use tokenmaster_state::{
     BootstrapReport, CatalogHealth, CatalogSelectionBinding, ConfigPackage, EncryptedBackupPackage,
     MAX_CONFIG_PACKAGE_BYTES, MaintenanceExecution, MaintenancePermit, MaintenanceSourceState,
     PendingMigration, PortableSettings, PreparedBootstrap, PresentationColorScheme,
-    PresentationDensity, PresentationLayout, PresentationSettings, PresentationSkin,
-    RecoveryBoundary, RecoveryCoordinator, RecoveryJournalLoad, RecoveryJournalStore,
-    RecoveryLaunchDecision, RecoveryPhase, RecoveryReceipt, RestoreMode, RestoreSafety,
-    RetentionAdmission, RetentionPolicy, RunSession, RunStateStore, SettingsCommitReceipt,
-    SettingsImportPreview, SettingsStore, SettingsValue, StateBootstrap, StateErrorCode,
-    SystemMaintenanceClock,
+    PresentationDensity, PresentationLayout, PresentationLocale, PresentationSettings,
+    PresentationSkin, RecoveryBoundary, RecoveryCoordinator, RecoveryJournalLoad,
+    RecoveryJournalStore, RecoveryLaunchDecision, RecoveryPhase, RecoveryReceipt, RestoreMode,
+    RestoreSafety, RetentionAdmission, RetentionPolicy, RunSession, RunStateStore,
+    SettingsCommitReceipt, SettingsImportPreview, SettingsStore, SettingsValue, StateBootstrap,
+    StateErrorCode, SystemMaintenanceClock,
 };
 
 #[cfg(test)]
@@ -292,6 +292,11 @@ impl ApplicationStateOwner {
             PresentationLayout::ControlCenter => tokenmaster_desktop::DesktopLayout::ControlCenter,
             PresentationLayout::Workbench => tokenmaster_desktop::DesktopLayout::Workbench,
         };
+        let locale = match state_presentation.locale() {
+            PresentationLocale::English => tokenmaster_desktop::DesktopLocale::English,
+            PresentationLocale::Russian => tokenmaster_desktop::DesktopLocale::Russian,
+            PresentationLocale::Pseudo => tokenmaster_desktop::DesktopLocale::Pseudo,
+        };
         let rows = state_presentation.board().rows().map(|row| {
             let key = match row.key() {
                 tokenmaster_state::BoardSectionKey::PlanUsage => DesktopBoardSectionKey::PlanUsage,
@@ -310,7 +315,8 @@ impl ApplicationStateOwner {
             None => unreachable!("state board preferences are validated before projection"),
         };
         let presentation =
-            DesktopPresentationSettings::new(density, skin, color_scheme, layout).with_board(board);
+            DesktopPresentationSettings::new(density, skin, color_scheme, layout, locale)
+                .with_board(board);
         let summary = DesktopReliableStateSummary::new_with_settings(
             health,
             matches!(

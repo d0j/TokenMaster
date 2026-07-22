@@ -20,7 +20,7 @@ use package_support::{
 const PACKAGE_TIME: i64 = 1_721_234_567_890;
 
 #[test]
-fn v6_config_golden_vector_is_deterministic_typed_and_round_trips() {
+fn v7_config_golden_vector_is_deterministic_typed_and_round_trips() {
     let settings = settings();
     let (first, first_receipt) = config_bytes_at(PACKAGE_TIME);
     let (second, second_receipt) = config_bytes_at(PACKAGE_TIME);
@@ -35,7 +35,7 @@ fn v6_config_golden_vector_is_deterministic_typed_and_round_trips() {
     assert_eq!(&first[32..40], b"TMMNF001");
     assert_eq!(u16::from_le_bytes(first[40..42].try_into().unwrap()), 1);
     assert_eq!(u16::from_le_bytes(first[42..44].try_into().unwrap()), 40);
-    assert_eq!(u16::from_le_bytes(first[46..48].try_into().unwrap()), 6);
+    assert_eq!(u16::from_le_bytes(first[46..48].try_into().unwrap()), 7);
     assert_eq!(
         i64::from_le_bytes(first[52..60].try_into().unwrap()),
         PACKAGE_TIME
@@ -63,7 +63,7 @@ fn v6_config_golden_vector_is_deterministic_typed_and_round_trips() {
 }
 
 #[test]
-fn container_v1_v2_previews_retain_source_versions_and_migrate_to_v6_dark_refined() {
+fn container_v1_v2_previews_retain_source_versions_and_migrate_to_v7_english_locale() {
     for (source_version, settings_json, expected_density) in [
         (1_u16, legacy_v1_portable_json(), "comfortable"),
         (2_u16, legacy_v2_portable_json(), "compact"),
@@ -81,7 +81,7 @@ fn container_v1_v2_previews_retain_source_versions_and_migrate_to_v6_dark_refine
                 .expect("canonical settings"),
         )
         .expect("canonical settings JSON");
-        assert_eq!(canonical["schema_version"], 6);
+        assert_eq!(canonical["schema_version"], 7);
         assert_eq!(
             canonical["portable"]["presentation"]["density"],
             expected_density
@@ -92,6 +92,7 @@ fn container_v1_v2_previews_retain_source_versions_and_migrate_to_v6_dark_refine
             "dark"
         );
         assert_eq!(canonical["portable"]["presentation"]["layout"], "refined");
+        assert_eq!(canonical["portable"]["presentation"]["locale"], "en");
         assert_eq!(
             canonical["portable"]["presentation"]["board"],
             serde_json::json!([
@@ -106,7 +107,7 @@ fn container_v1_v2_previews_retain_source_versions_and_migrate_to_v6_dark_refine
     }
 
     let (current, _) = config_bytes_at(PACKAGE_TIME);
-    assert_eq!(u16::from_le_bytes(current[46..48].try_into().unwrap()), 6);
+    assert_eq!(u16::from_le_bytes(current[46..48].try_into().unwrap()), 7);
     assert!(read_config_bytes(&current).is_ok());
 }
 
@@ -124,7 +125,7 @@ fn legacy_backup_retains_database_and_metadata_while_settings_migrate() {
             .expect("canonical settings"),
     )
     .expect("canonical settings JSON");
-    assert_eq!(canonical["schema_version"], 6);
+    assert_eq!(canonical["schema_version"], 7);
     assert_eq!(
         canonical["portable"]["presentation"]["density"],
         "comfortable"
@@ -135,6 +136,7 @@ fn legacy_backup_retains_database_and_metadata_while_settings_migrate() {
         "dark"
     );
     assert_eq!(canonical["portable"]["presentation"]["layout"], "refined");
+    assert_eq!(canonical["portable"]["presentation"]["locale"], "en");
     assert_eq!(
         canonical["portable"]["presentation"]["board"][0]["key"],
         "plan_usage"
