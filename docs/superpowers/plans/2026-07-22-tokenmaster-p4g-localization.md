@@ -19,22 +19,37 @@ presentation DTOs and their focused tests.
    methods.
 4. Re-run focused state/app/desktop tests and commit.
 
-## Task 2: Complete production UI localization
+## Task 2a: Hot locale shell and shared controls
 
 **Scope:** `crates/desktop/build.rs`, `crates/desktop/translations/**`,
-`crates/desktop/ui/**`, `crates/desktop/src/ui.rs`, focused desktop UI contracts.
+`crates/desktop/ui/main.slint`, `crates/desktop/ui/components/**`, the Settings
+presentation strip, `crates/desktop/src/ui.rs`, and focused desktop UI contracts.
 
 1. Add failing contracts for bundled locale switching, catalog completeness,
    placeholder preservation, callback wiring, and absence of unwrapped visible
-   production literals.
-2. Enable bundled translations and convert all fixed visible/accessibility strings
-   to `@tr`, including formatted text.
-3. Add complete Russian and deterministic pseudo catalogs.
-4. Localize Rust-generated display labels at the desktop projection boundary; keep
-   stable keys/codes/source values byte-identical.
-5. Wire the Settings selector through the existing presentation callback and prove
+   literals in the named shell/control scope.
+2. Enable bundled translations and convert the bounded shell/control scope to
+   `@tr`, with complete Russian and deterministic pseudo catalogs.
+3. Wire the Settings selector through the existing presentation callback and prove
    hot switching without a new worker or owner.
-6. Run focused desktop and app tests and commit.
+4. Run focused desktop and app tests and commit. Record this as partial localization,
+   never as unified production-window completion.
+
+## Task 2b: Complete views and projection localization
+
+**Scope:** remaining `crates/desktop/ui/views/**`, the remaining Settings content,
+the catalogs, `crates/desktop/src/ui.rs`, a narrow closed display-label resolver,
+and focused desktop contracts.
+
+1. Add failing per-surface catalog/source contracts and classify Rust literals into
+   translatable display labels versus invariant keys, codes, evidence, paths,
+   timestamps, numbers, and source data.
+2. Convert every remaining fixed visible/accessibility string to `@tr` and complete
+   the Russian and deterministic pseudo catalogs with placeholder equality.
+3. Localize only the closed Rust display-label set at the existing projection
+   boundary; prove invariant fields remain byte-identical.
+4. Run focused desktop contracts, existing presentation UI contracts, and strict
+   desktop Clippy; commit only when no production view remains mixed-language.
 
 ## Task 3: Integration and release evidence
 
