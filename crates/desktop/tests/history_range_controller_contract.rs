@@ -3,7 +3,7 @@ mod support;
 use rusqlite::Connection;
 use std::{
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
         mpsc::{Receiver, SyncSender, sync_channel},
     },
@@ -28,7 +28,7 @@ use tokenmaster_query::{
     BenefitOverviewEnvelope, BenefitOverviewRequest, BenefitOverviewSnapshot, GitEnvelope,
     GitOutputRequest, GitOutputSnapshot, LatestActivityPage, LatestActivityRequest,
     ProductDataStatusEnvelope, QueryEnvelope, QueryError, QuotaCurrentSnapshot, QuotaEnvelope,
-    UsageAnalytics, UsageAnalyticsRequest, UsageSessionDetailResult, UsageSessionKey,
+    UsageAnalytics, UsageAnalyticsRequest, UsageRange, UsageSessionDetailResult, UsageSessionKey,
     UsageSessionPage, UsageSessionPageRequest,
 };
 
@@ -363,6 +363,67 @@ impl DesktopQuerySource for BlockingNavigationSource {
     }
 }
 
+struct RecordingHistorySource {
+    inner: QueryService<FixedClock>,
+    requests: Arc<Mutex<Vec<UsageAnalyticsRequest>>>,
+}
+
+impl DesktopQuerySource for RecordingHistorySource {
+    fn product_data_status(&mut self) -> Result<ProductDataStatusEnvelope, QueryError> {
+        self.inner.product_data_status()
+    }
+
+    fn usage_analytics(
+        &mut self,
+        request: UsageAnalyticsRequest,
+    ) -> Result<QueryEnvelope<UsageAnalytics>, QueryError> {
+        self.requests
+            .lock()
+            .expect("request lock")
+            .push(request.clone());
+        self.inner.usage_analytics(request)
+    }
+
+    fn quota_overview(&mut self) -> Result<QuotaEnvelope<QuotaCurrentSnapshot>, QueryError> {
+        self.inner.quota_overview()
+    }
+
+    fn benefit_overview(
+        &mut self,
+        request: BenefitOverviewRequest,
+    ) -> Result<BenefitOverviewEnvelope<BenefitOverviewSnapshot>, QueryError> {
+        self.inner.benefit_overview(request)
+    }
+
+    fn git_output(
+        &mut self,
+        request: GitOutputRequest,
+    ) -> Result<GitEnvelope<GitOutputSnapshot>, QueryError> {
+        self.inner.git_output(request)
+    }
+
+    fn latest_activity(
+        &mut self,
+        request: LatestActivityRequest,
+    ) -> Result<QueryEnvelope<LatestActivityPage>, QueryError> {
+        self.inner.latest_activity(request)
+    }
+
+    fn usage_sessions(
+        &mut self,
+        request: UsageSessionPageRequest,
+    ) -> Result<QueryEnvelope<UsageSessionPage>, QueryError> {
+        self.inner.usage_sessions(request)
+    }
+
+    fn usage_session_detail(
+        &mut self,
+        key: UsageSessionKey,
+    ) -> Result<QueryEnvelope<UsageSessionDetailResult>, QueryError> {
+        self.inner.usage_session_detail(key)
+    }
+}
+
 struct RecordingHistoryTerminalNotifier {
     sender: SyncSender<DesktopHistoryRangeIntent>,
 }
@@ -451,6 +512,19 @@ fn history_range_admission_rejects_stale_same_and_non_newer_intents() {
         controller
             .request_history_range(stale_epoch)
             .expect_err("stale epoch")
+            .stable_code(),
+        "stale_history_range"
+    );
+    let stale_product = DesktopHistoryRangeIntent::new(
+        epoch,
+        ProductGeneration::INITIAL,
+        DesktopHistoryRangeGeneration::new(1).expect("generation"),
+        DesktopHistoryRangePreset::Recent1Day,
+    );
+    assert_eq!(
+        controller
+            .request_history_range(stale_product)
+            .expect_err("stale product generation")
             .stable_code(),
         "stale_history_range"
     );
@@ -1005,6 +1079,12 @@ fn accepted_success_advances_preset_and_accepted_failure_retains_it() {
         .take_snapshot()
         .expect("mailbox")
         .expect("initial snapshot");
+    let initial_history = Arc::clone(
+        initial
+            .history()
+            .payload()
+            .expect("default history payload"),
+    );
     let success = DesktopHistoryRangeIntent::new(
         epoch,
         initial.generation(),
@@ -1032,6 +1112,17 @@ fn accepted_success_advances_preset_and_accepted_failure_retains_it() {
         .take_snapshot()
         .expect("mailbox")
         .expect("successful range snapshot");
+    let successful_history = Arc::clone(
+        published
+            .history()
+            .payload()
+            .expect("successful history payload"),
+    );
+    assert!(
+        !Arc::ptr_eq(&initial_history, &successful_history),
+        "accepted range replaces the default history payload"
+    );
+    assert_eq!(successful_history.payload().series().len(), 1);
     let same_preset = DesktopHistoryRangeIntent::new(
         epoch,
         published.generation(),
@@ -1060,6 +1151,15 @@ fn accepted_success_advances_preset_and_accepted_failure_retains_it() {
         .take_snapshot()
         .expect("mailbox")
         .expect("accepted failure publishes degraded snapshot");
+    let retained_history = degraded
+        .history()
+        .payload()
+        .expect("degraded history retains prior payload");
+    assert!(degraded.history().retains_payload());
+    assert!(
+        Arc::ptr_eq(&successful_history, retained_history),
+        "accepted failure retains the exact successful range payload"
+    );
     let retained_preset = DesktopHistoryRangeIntent::new(
         epoch,
         degraded.generation(),
@@ -1074,6 +1174,95 @@ fn accepted_success_advances_preset_and_accepted_failure_retains_it() {
         "stale_history_range"
     );
     controller.shutdown().expect("shutdown");
+}
+
+#[test]
+fn ordinary_refresh_reuses_each_successful_history_preset_and_payload() {
+    for (preset, day_count) in [
+        (DesktopHistoryRangePreset::Recent1Day, 1_u16),
+        (DesktopHistoryRangePreset::Recent7Days, 7_u16),
+    ] {
+        let directory = TempDir::new().expect("temporary directory");
+        let path = directory
+            .path()
+            .join("history-range-refresh-preset.sqlite3");
+        seed(&path);
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+        let mut controller = DesktopController::spawn(
+            RecordingHistorySource {
+                inner: QueryService::open(&path, FixedClock).expect("query service"),
+                requests: Arc::clone(&requests),
+            },
+            DesktopQueryPlan::overview().expect("plan"),
+        )
+        .expect("controller");
+        controller.bind_snapshot_epoch(epoch).expect("bind epoch");
+        controller
+            .refresh(DesktopRefreshUrgency::Interactive)
+            .expect("initial refresh");
+        let _ = wait_for_completion(&controller);
+        let initial = controller
+            .take_snapshot()
+            .expect("mailbox")
+            .expect("initial snapshot");
+        requests.lock().expect("request lock").clear();
+        controller
+            .request_history_range(DesktopHistoryRangeIntent::new(
+                epoch,
+                initial.generation(),
+                DesktopHistoryRangeGeneration::new(1).expect("range generation"),
+                preset,
+            ))
+            .expect("range admission");
+        let _ = wait_for_completion(&controller);
+        let selected = controller
+            .take_snapshot()
+            .expect("mailbox")
+            .expect("selected range snapshot");
+        let selected_history = Arc::clone(
+            selected
+                .history()
+                .payload()
+                .expect("selected history payload"),
+        );
+        assert_eq!(
+            selected_history.payload().series().len(),
+            usize::from(day_count)
+        );
+        requests.lock().expect("request lock").clear();
+
+        controller
+            .refresh(DesktopRefreshUrgency::Interactive)
+            .expect("ordinary refresh");
+        let _ = wait_for_completion(&controller);
+        let refreshed = controller
+            .take_snapshot()
+            .expect("mailbox")
+            .expect("refreshed snapshot");
+        let refreshed_history = refreshed
+            .history()
+            .payload()
+            .expect("refreshed history payload");
+        assert_eq!(
+            refreshed_history.payload().series().len(),
+            usize::from(day_count)
+        );
+        assert_eq!(refreshed_history.payload(), selected_history.payload());
+        let history_requests = requests
+            .lock()
+            .expect("request lock")
+            .iter()
+            .filter(|request| request.range().stable_code() == "recent_days")
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(history_requests.len(), 1);
+        assert_eq!(
+            history_requests[0].range(),
+            &UsageRange::recent_days(day_count).expect("bounded history range")
+        );
+        controller.shutdown().expect("shutdown");
+    }
 }
 
 #[test]

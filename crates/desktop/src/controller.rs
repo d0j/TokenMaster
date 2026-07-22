@@ -1099,6 +1099,7 @@ impl DesktopController {
         &self,
         intent: DesktopHistoryRangeIntent,
     ) -> Result<DesktopRefreshAdmission, DesktopControllerError> {
+        let mut work = lock_work(&self.work)?;
         if self.snapshot_epoch() != Some(intent.snapshot_epoch())
             || *lock_published_generation(&self.publication.published_generation)?
                 != Some(intent.product_generation())
@@ -1107,7 +1108,6 @@ impl DesktopController {
                 DesktopControllerErrorCode::StaleHistoryRange,
             ));
         }
-        let mut work = lock_work(&self.work)?;
         if session_interaction_is_active(&work) {
             return Err(DesktopControllerError::new(
                 DesktopControllerErrorCode::Busy,
@@ -2559,20 +2559,25 @@ mod tests {
 
     #[test]
     fn history_request_is_a_fixed_system_zone_daily_model_project_shape() {
-        let request = DesktopQueryPlan::history_request(DesktopHistoryRangePreset::Recent7Days)
-            .expect("history request");
-        assert_eq!(
-            request.range(),
-            &UsageRange::recent_days(7).expect("bounded recent range")
-        );
-        assert_eq!(request.time_zone(), &UsageTimeZone::system());
-        assert_eq!(request.week_start(), WeekStart::Monday);
-        assert_eq!(request.series(), UsageSeriesSelection::Daily);
-        assert!(request.scopes().is_empty());
-        assert_eq!(
-            request.breakdowns(),
-            [UsageBreakdownKind::Model, UsageBreakdownKind::Project]
-        );
+        for (preset, day_count) in [
+            (DesktopHistoryRangePreset::Recent1Day, 1),
+            (DesktopHistoryRangePreset::Recent7Days, 7),
+            (DesktopHistoryRangePreset::Recent30Days, 30),
+        ] {
+            let request = DesktopQueryPlan::history_request(preset).expect("history request");
+            assert_eq!(
+                request.range(),
+                &UsageRange::recent_days(day_count).expect("bounded recent range")
+            );
+            assert_eq!(request.time_zone(), &UsageTimeZone::system());
+            assert_eq!(request.week_start(), WeekStart::Monday);
+            assert_eq!(request.series(), UsageSeriesSelection::Daily);
+            assert!(request.scopes().is_empty());
+            assert_eq!(
+                request.breakdowns(),
+                [UsageBreakdownKind::Model, UsageBreakdownKind::Project]
+            );
+        }
     }
 
     #[test]
@@ -2685,6 +2690,103 @@ mod tests {
                 .map(|snapshot| snapshot.generation()),
             Some(expected_generation)
         );
+    }
+
+    #[test]
+    fn history_range_admission_rechecks_product_generation_after_waiting_for_work() {
+        let clock = Arc::new(ManualClock::new(0));
+        let controller_clock: Arc<dyn Clock> = clock.clone();
+        let mut controller = DesktopController::spawn_with_clock(
+            DeadlineSource { clock },
+            DesktopQueryPlan::overview().expect("overview plan"),
+            controller_clock,
+        )
+        .expect("controller starts");
+        let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+        controller.bind_snapshot_epoch(epoch).expect("bind epoch");
+        *lock_published_generation(&controller.publication.published_generation)
+            .expect("published generation") = Some(ProductGeneration::INITIAL);
+        let page = DesktopSessionPageIntent::new(
+            epoch,
+            ProductGeneration::INITIAL,
+            DesktopSessionNavigationGeneration::new(1).expect("navigation generation"),
+            DesktopSessionPageDirection::Newest,
+        );
+        {
+            let mut work = lock_work(&controller.work).expect("work lock");
+            work.current_navigation = Some(ActiveDesktopSessionPage {
+                attempt: 1,
+                prerequisite_attempt: None,
+                intent: page,
+            });
+        }
+        let range = DesktopHistoryRangeIntent::new(
+            epoch,
+            ProductGeneration::INITIAL,
+            DesktopHistoryRangeGeneration::new(1).expect("range generation"),
+            DesktopHistoryRangePreset::Recent1Day,
+        );
+        let (commit_locked_sender, commit_locked_receiver) = sync_channel(1);
+        let (commit_release_sender, commit_release_receiver) = sync_channel(1);
+        let (range_sender, range_receiver) = sync_channel(1);
+        thread::scope(|scope| {
+            let controller_ref = &controller;
+            scope.spawn(move || {
+                let plan = DesktopQueryPlan::overview().expect("plan");
+                let snapshot_epoch = AtomicU64::new(epoch.get());
+                let clock = ManualClock::new(0);
+                let context = DesktopExecutionContext {
+                    plan: &plan,
+                    clock: &clock,
+                    publication: &controller_ref.publication,
+                    snapshot_epoch: &snapshot_epoch,
+                    work: &controller_ref.work,
+                };
+                let mut reducer = ProductReducer::new();
+                assert_eq!(
+                    commit_session_page_with_hook(
+                        &mut reducer,
+                        &context,
+                        ProductAttemptGeneration::new(1).expect("attempt"),
+                        1,
+                        page,
+                        Err(QueryErrorCode::InvalidValue),
+                        || {
+                            commit_locked_sender.send(()).expect("commit holds work");
+                            commit_release_receiver.recv().expect("commit release");
+                        },
+                    ),
+                    RefreshOutcome::Completed
+                );
+            });
+            commit_locked_receiver
+                .recv_timeout(Duration::from_secs(2))
+                .expect("page commit holds work");
+            let controller_ref = &controller;
+            scope.spawn(move || {
+                range_sender
+                    .send(controller_ref.request_history_range(range))
+                    .expect("range result send");
+            });
+            assert!(
+                range_receiver.try_recv().is_err(),
+                "range is blocked behind page commit work lock"
+            );
+            commit_release_sender.send(()).expect("release page commit");
+            assert_eq!(
+                range_receiver
+                    .recv_timeout(Duration::from_secs(2))
+                    .expect("range result")
+                    .expect_err("new publication makes stale range synchronous")
+                    .stable_code(),
+                "stale_history_range"
+            );
+        });
+        let state = lock_work(&controller.work).expect("work lock");
+        assert!(state.history_range_high_water.is_none());
+        assert!(state.current_history_range.is_none());
+        drop(state);
+        controller.shutdown().expect("controller stops");
     }
 
     struct ReentrantWorkNotifier {
