@@ -1363,3 +1363,14 @@ Board edits reuse the existing owner, worker, window, route models, and bounded
 Dashboard inputs; they add no worker, query, timer, queue, cache, or dynamic authority.
 All six payloads remain present when rows are hidden or collapsed. Narrow width is
 environment-derived and stores no alternate geometry.
+
+## Provider-ready authority boundary
+
+Injected providers use one bounded factory/adapter and the existing single
+worker/scheduler/watcher/archive/lease/publication ownership. Repository hints are
+transient and capability-gated. Provider quota/health values are capped at 32 windows;
+benefit data is optional, provider I/O precedes lease admission, and failures remain
+stable provider-neutral codes. Synthetic providers prove real-store/query/product
+publication without Codex checkpoint or path exposure. External `.tmplugin`, WIT,
+Wasmtime host, signing/installation/registry, and multi-provider scheduling remain
+planned 1.1 work.

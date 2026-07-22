@@ -267,7 +267,7 @@ git commit -m "refactor(runtime): generalize provider quota polling"
 - Modify: `docs/HANDOFF.md`
 - Modify: `docs/ROADMAP.md`
 - Modify: `docs/PROJECT_HISTORY.md`
-- Modify: `CHANGELOG.md`
+- Modify: `docs/CHANGELOG.md`
 
 **Interfaces:**
 - Consumes: verified implementation and receipts from Tasks 1-3.
@@ -302,6 +302,6 @@ Expected: exact baseline passes once after focused corrections. Do not rerun a l
 - [ ] **Step 4: Commit**
 
 ```powershell
-git add spec docs CHANGELOG.md
+git add spec docs
 git commit -m "docs: record provider-ready runtime contracts"
 ```

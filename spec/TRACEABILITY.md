@@ -128,3 +128,12 @@ schema-v4 complete presentation, strict legacy-Dark migration, independent reque
 and effective color schemes, six exact palettes, no observation persistence churn, and
 27-combination latest-only stress. The same two source/Pester rails remain the required
 developer receipt; layout/locale and interactive/release traceability remain open.
+
+Provider-readiness trace: opaque provider resume persistence and descriptor-bound
+reconstruction are implemented on schema v13; injected usage providers and the
+provider-neutral quota/health path are implemented with bounded runtime ownership.
+Provider checkpoint, live-provider, and provider-quota focused receipts are green;
+synthetic real-store/query/product proof is present. External plugin-host ABI,
+package/signing/installation/registry, and multi-provider scheduler remain planned
+for 1.1. No new textual audit category was added; the audit-hardening loop was not
+triggered because production architecture/correctness changed.

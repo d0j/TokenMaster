@@ -2196,3 +2196,14 @@ retains all six projection/payload models; hidden rows compact and collapsed row
 bounded labelled cards. No drag-and-drop, arbitrary geometry, new worker/query/timer,
 queue, cache, or per-row command is introduced. This closes board reorder/hide/
 collapse while preserving P4-E canonical geometry and its remaining release blockers.
+
+## ADR-091 — Keep provider readiness behind one injected bounded runtime seam
+
+Schema v13 remains unchanged. Existing bounded `resume_payload` bytes are the sole
+portable provider resume state; descriptor-bound readers reconstruct provider-specific
+checkpoints, while `StoreArchive` remains Codex-agnostic. `LiveRuntime` accepts one
+injected usage-provider factory/adapter and retains one worker, scheduler, watcher,
+archive, lease, and publication. Provider-owned quota polling is capped at 32 windows,
+benefits are optional, and provider I/O precedes lease admission. Codex remains the
+built-in adapter; external host/package/registry/signing and multi-provider scheduling
+are deferred to 1.1.

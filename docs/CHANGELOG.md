@@ -2,6 +2,11 @@
 
 All notable changes are recorded here.
 
+- Provider-ready internal runtime seam: schema-v13 opaque resume payloads with
+  descriptor-bound reconstruction, injected providers, one bounded live ownership
+  path, and provider-owned quota/health polling capped at 32 windows. Codex remains
+  built in; external plugin hosting and packaging remain planned 1.1 work.
+
 ## Unreleased
 
 ### Added

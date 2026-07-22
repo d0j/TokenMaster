@@ -1,5 +1,18 @@
 # TokenMaster handoff
 
+## Provider-readiness handoff (2026-07-22)
+
+Product state: internal provider-ready seam developer-complete; schema remains v13 and
+Codex remains the built-in adapter. Audit/evidence: provider checkpoint 2, provider
+live 3, provider quota 4, runtime/product aggregates, app 80, isolated quota resource 16+48 handles/
+142 threads/4 private bytes 4,026,368..6,541,312, focused fmt/Clippy/diff green;
+final workspace baseline pending. Release blockers: 1.1 external host/package/
+signing/installation/registry and multi-provider scheduling plus existing Windows,
+M0, soak, and release gates. Git state: clean feature worktree. Audit-hardening loop
+not triggered: production architecture/correctness changed and no textual audit was added.
+The shortest release-critical next slice remains the unfinished P4 product surface,
+not the deferred 1.1 external plugin host and not another audit-hardening round.
+
 ## First five minutes
 
 1. Read `AGENTS.md`, then the `spec/` files in its declared order.

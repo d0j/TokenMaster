@@ -1,5 +1,11 @@
 # TokenMaster roadmap
 
+Provider-ready internal runtime seam is implemented ahead of 1.1: opaque bounded
+resume payloads, descriptor-bound reconstruction, injected usage providers, and
+provider-owned quota/health (at most 32 windows, optional benefits) reuse one bounded
+LiveRuntime ownership path. External host/package/signing/installation/registry and
+multi-provider scheduler work remains 1.1.
+
 ## M0 — native architecture proof
 
 P4-F board preferences are developer-complete as a bounded sub-contour: schema v6

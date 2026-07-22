@@ -1,5 +1,16 @@
 # TokenMaster current state
 
+## 2026-07-22 — provider-ready runtime seam
+
+Provider readiness is developer-complete for the internal seam: schema remains v13;
+opaque provider resume uses bounded `resume_payload` with descriptor-bound reader
+reconstruction; `StoreArchive` has no Codex checkpoint authority. `LiveRuntime` accepts
+one injected `UsageProviderFactory`/`LiveProviderAdapter`, capability-gated repository
+hints, and one worker/scheduler/watcher/archive/lease/publication. Provider quota/health
+supports at most 32 windows, optional benefits, and provider I/O before lease admission.
+Codex remains built in; external plugin host/package/signing/installation/registry and
+multi-provider scheduling remain planned 1.1. This is not M0, RC, or release acceptance.
+
 ## Product identity
 
 TokenMaster is the sole product. It is an original Rust/Slint/SQLite implementation

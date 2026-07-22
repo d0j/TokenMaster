@@ -1,5 +1,16 @@
 # TokenMaster project history
 
+## 2026-07-22 — provider-ready runtime seam
+
+Internal provider readiness completed without changing schema v13. Bounded opaque
+resume payloads reconstruct checkpoints only in descriptor-bound readers; StoreArchive
+has no Codex checkpoint authority. LiveRuntime accepts one injected usage provider with
+capability-gated hints and one worker/scheduler/watcher/archive/lease/publication.
+Provider quota/health is capped at 32 windows, benefits are optional, and I/O precedes
+lease admission. Synthetic real-store/query/product proof and focused receipts are
+green; external host/package/signing/installation/registry and multi-provider scheduling
+remain planned 1.1.
+
 ## 2026-07-22 — P4-F durable board preferences
 
 Completed the developer P4-F board slice. Settings schema v6 now persists the four

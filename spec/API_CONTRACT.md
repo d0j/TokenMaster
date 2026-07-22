@@ -1246,3 +1246,14 @@ queue, timer, cache, query, or persistence authority. Settings admission is exac
 v1..=v6; v1-v5 migrate to the canonical visible, noncollapsed board and canonical
 writes are v6. Settings uses accessible Up/Down, Visible, Collapse, and Reset actions;
 Dashboard keeps all six projection/payload models while compacting hidden rows.
+
+## Provider-ready runtime seam (implemented)
+
+The archive persists schema-v13 provider progress as bounded opaque `resume_payload`
+bytes. `StoreArchive` never constructs or decodes a provider checkpoint; the concrete
+provider reader reconstructs it from descriptor-bound progress. `LiveRuntime` accepts
+one injected `UsageProviderFactory`/`LiveProviderAdapter`; repository hints are
+capability-gated and one worker, scheduler, watcher, archive, lease, and publication
+path remains authoritative. `ProviderQuotaSource`/`ProviderQuotaPoll` provide the
+provider-owned health path, capped at 32 windows with optional benefits and provider
+I/O before lease admission. Codex remains the built-in adapter.

@@ -1174,3 +1174,11 @@ visible row. Fresh settings and strict v1-v5 migration use canonical order, all
 visible, and noncollapsed rows without a startup write. Admission is exactly v1..=v6
 and canonical writes are v6. Hidden/collapsed rows retain all six Dashboard payloads;
 the existing atomic complete-presentation owner remains authoritative.
+
+## Provider-ready persistence boundary
+
+Schema remains v13. Provider resume state uses only the existing bounded opaque
+`resume_payload`; descriptor-bound readers reconstruct provider checkpoints, while
+`StoreArchive` remains Codex-agnostic. Synthetic provider full-rebuild, reopen,
+incremental-append, query, and product projections use the real store path without
+exposing checkpoint bytes.
