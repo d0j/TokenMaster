@@ -19,11 +19,11 @@ presentation DTOs and their focused tests.
    methods.
 4. Re-run focused state/app/desktop tests and commit.
 
-## Task 2a: Hot locale shell and shared controls
+## Task 2a1: Hot locale shell and Settings presentation strip
 
 **Scope:** `crates/desktop/build.rs`, `crates/desktop/translations/**`,
-`crates/desktop/ui/main.slint`, `crates/desktop/ui/components/**`, the Settings
-presentation strip, `crates/desktop/src/ui.rs`, and focused desktop UI contracts.
+`crates/desktop/ui/main.slint`, the Settings presentation strip,
+`crates/desktop/src/ui.rs`, and focused desktop UI contracts.
 
 1. Add failing contracts for bundled locale switching, catalog completeness,
    placeholder preservation, callback wiring, and absence of unwrapped visible
@@ -34,6 +34,19 @@ presentation strip, `crates/desktop/src/ui.rs`, and focused desktop UI contracts
    hot switching without a new worker or owner.
 4. Run focused desktop and app tests and commit. Record this as partial localization,
    never as unified production-window completion.
+
+## Task 2a2: Shared component localization
+
+**Scope:** the nine production files under `crates/desktop/ui/components/**`, the
+existing bundled catalogs, and focused component/catalog source contracts.
+
+1. Add a failing scoped contract that inventories every fixed visible/accessibility
+   component literal and requires complete Russian/pseudo entries with equal
+   placeholders.
+2. Convert only the nine shared components to `@tr` and extend both catalogs with
+   human Russian and deterministic visibly-expanded pseudo translations.
+3. Run the localization contract, affected component/UI contracts, and strict
+   desktop Clippy; commit and continue to Task 2b without claiming unified locale.
 
 ## Task 2b: Complete views and projection localization
 
