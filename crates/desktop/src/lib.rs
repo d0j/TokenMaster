@@ -43,7 +43,7 @@ pub use presentation::{
     DesktopSessionSelectionError, DesktopSnapshotEpoch, DesktopState,
 };
 pub use presentation_style::{
-    DesktopColorScheme, DesktopDensity, DesktopEffectiveColorScheme,
+    DesktopColorScheme, DesktopDensity, DesktopEffectiveColorScheme, DesktopLayout,
     DesktopPresentationApplyOutcome, DesktopPresentationPersistence, DesktopPresentationRevision,
     DesktopPresentationSelection, DesktopPresentationStyle, DesktopSystemColorScheme,
 };

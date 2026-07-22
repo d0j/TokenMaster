@@ -5,7 +5,9 @@ use std::thread::{self, ThreadId};
 use std::time::{Duration, Instant};
 
 use tempfile::tempdir;
-use tokenmaster_desktop::{DesktopDensity, DesktopPresentationSelection, DesktopSkin};
+use tokenmaster_desktop::{
+    DesktopDensity, DesktopLayout, DesktopPresentationSelection, DesktopSkin,
+};
 use tokenmaster_platform::{
     ControlledFileDialog, FileDialogFileType, FileDialogResult, FileDialogSelector,
     ValidatedLocalDirectory,
@@ -136,7 +138,8 @@ fn bare_presentation_command_is_rejected_before_worker_or_coordinator_mutation()
                 DesktopPresentationSelection::new(
                     DesktopDensity::Compact,
                     DesktopSkin::Graphite,
-                    tokenmaster_desktop::DesktopColorScheme::System
+                    tokenmaster_desktop::DesktopColorScheme::System,
+                    DesktopLayout::Refined,
                 ),
             )),
         ApplicationCommandAdmission::Started(_)
@@ -589,6 +592,7 @@ fn presentation_follow_up_replaces_only_the_pending_complete_payload() {
             DesktopDensity::Compact,
             DesktopSkin::Refined,
             tokenmaster_desktop::DesktopColorScheme::System,
+            DesktopLayout::Refined,
         )),
     ) else {
         panic!("first density save must start");
@@ -600,7 +604,8 @@ fn presentation_follow_up_replaces_only_the_pending_complete_payload() {
             DesktopPresentationSelection::new(
                 DesktopDensity::Compact,
                 DesktopSkin::Refined,
-                tokenmaster_desktop::DesktopColorScheme::System
+                tokenmaster_desktop::DesktopColorScheme::System,
+                DesktopLayout::Refined,
             )
         )
     );
@@ -613,6 +618,7 @@ fn presentation_follow_up_replaces_only_the_pending_complete_payload() {
             DesktopDensity::UltraCompact,
             DesktopSkin::Graphite,
             tokenmaster_desktop::DesktopColorScheme::System,
+            DesktopLayout::Refined,
         ),
     ))
     else {
@@ -624,7 +630,8 @@ fn presentation_follow_up_replaces_only_the_pending_complete_payload() {
             DesktopPresentationSelection::new(
                 DesktopDensity::Comfortable,
                 DesktopSkin::Ember,
-                tokenmaster_desktop::DesktopColorScheme::System
+                tokenmaster_desktop::DesktopColorScheme::System,
+                DesktopLayout::Refined,
             ),
         )),
         ApplicationCommandAdmission::Coalesced {
@@ -644,7 +651,8 @@ fn presentation_follow_up_replaces_only_the_pending_complete_payload() {
             DesktopPresentationSelection::new(
                 DesktopDensity::Comfortable,
                 DesktopSkin::Ember,
-                tokenmaster_desktop::DesktopColorScheme::System
+                tokenmaster_desktop::DesktopColorScheme::System,
+                DesktopLayout::Refined,
             )
         )
     );
@@ -659,12 +667,14 @@ fn presentation_follow_up_replaces_only_the_pending_complete_payload() {
             DesktopPresentationSelection::new(
                 DesktopDensity::Compact,
                 DesktopSkin::Refined,
-                tokenmaster_desktop::DesktopColorScheme::System
+                tokenmaster_desktop::DesktopColorScheme::System,
+                DesktopLayout::Refined,
             ),
             DesktopPresentationSelection::new(
                 DesktopDensity::Comfortable,
                 DesktopSkin::Ember,
-                tokenmaster_desktop::DesktopColorScheme::System
+                tokenmaster_desktop::DesktopColorScheme::System,
+                DesktopLayout::Refined,
             )
         ]
     );
@@ -699,7 +709,8 @@ fn ten_thousand_presentation_updates_keep_one_latest_payload() {
             DesktopPresentationSelection::new(
                 DesktopDensity::Compact,
                 DesktopSkin::Refined,
-                tokenmaster_desktop::DesktopColorScheme::System
+                tokenmaster_desktop::DesktopColorScheme::System,
+                DesktopLayout::Refined,
             ),
         )),
         ApplicationCommandAdmission::Started(_)
@@ -709,7 +720,8 @@ fn ten_thousand_presentation_updates_keep_one_latest_payload() {
         DesktopPresentationSelection::new(
             DesktopDensity::Compact,
             DesktopSkin::Refined,
-            tokenmaster_desktop::DesktopColorScheme::System
+            tokenmaster_desktop::DesktopColorScheme::System,
+            DesktopLayout::Refined,
         )
     );
 
@@ -717,6 +729,7 @@ fn ten_thousand_presentation_updates_keep_one_latest_payload() {
         DesktopDensity::Comfortable,
         DesktopSkin::Refined,
         tokenmaster_desktop::DesktopColorScheme::System,
+        DesktopLayout::Refined,
     );
     for index in 0..10_000 {
         let density = match index % 3 {
@@ -734,7 +747,12 @@ fn ten_thousand_presentation_updates_keep_one_latest_payload() {
             1 => tokenmaster_desktop::DesktopColorScheme::Light,
             _ => tokenmaster_desktop::DesktopColorScheme::Dark,
         };
-        final_selection = DesktopPresentationSelection::new(density, skin, color_scheme);
+        let layout = match (index / 27) % 3 {
+            0 => DesktopLayout::Refined,
+            1 => DesktopLayout::ControlCenter,
+            _ => DesktopLayout::Workbench,
+        };
+        final_selection = DesktopPresentationSelection::new(density, skin, color_scheme, layout);
         assert!(matches!(
             submitter.submit_request(ApplicationOperationRequest::update_presentation(
                 final_selection,
@@ -760,7 +778,8 @@ fn ten_thousand_presentation_updates_keep_one_latest_payload() {
             DesktopPresentationSelection::new(
                 DesktopDensity::Compact,
                 DesktopSkin::Refined,
-                tokenmaster_desktop::DesktopColorScheme::System
+                tokenmaster_desktop::DesktopColorScheme::System,
+                DesktopLayout::Refined,
             ),
             final_selection
         ]

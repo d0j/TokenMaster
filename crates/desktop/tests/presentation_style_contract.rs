@@ -1,5 +1,5 @@
 use tokenmaster_desktop::{
-    DesktopColorScheme, DesktopDensity, DesktopPresentationApplyOutcome,
+    DesktopColorScheme, DesktopDensity, DesktopLayout, DesktopPresentationApplyOutcome,
     DesktopPresentationPersistence, DesktopPresentationSelection, DesktopPresentationStyle,
     DesktopSkin,
 };
@@ -8,20 +8,23 @@ const REFINED_COMFORTABLE: DesktopPresentationSelection = DesktopPresentationSel
     DesktopDensity::Comfortable,
     DesktopSkin::Refined,
     DesktopColorScheme::System,
+    DesktopLayout::Refined,
 );
 const GRAPHITE_COMPACT: DesktopPresentationSelection = DesktopPresentationSelection::new(
     DesktopDensity::Compact,
     DesktopSkin::Graphite,
     DesktopColorScheme::Light,
+    DesktopLayout::Refined,
 );
 const EMBER_ULTRA_COMPACT: DesktopPresentationSelection = DesktopPresentationSelection::new(
     DesktopDensity::UltraCompact,
     DesktopSkin::Ember,
     DesktopColorScheme::Dark,
+    DesktopLayout::Refined,
 );
 
 #[test]
-fn selection_is_complete_checked_and_revisioned_across_both_axes() {
+fn selection_is_complete_checked_and_revisioned_across_all_axes() {
     let mut style = DesktopPresentationStyle::from_persisted(REFINED_COMFORTABLE);
     assert_eq!(style.selection(), REFINED_COMFORTABLE);
     assert_eq!(style.persisted_selection(), REFINED_COMFORTABLE);
@@ -37,6 +40,7 @@ fn selection_is_complete_checked_and_revisioned_across_both_axes() {
             DesktopDensity::Compact,
             DesktopSkin::Refined,
             DesktopColorScheme::System,
+            DesktopLayout::Refined,
         )
     );
     assert_eq!(style.revision().get(), 1);
@@ -50,6 +54,7 @@ fn selection_is_complete_checked_and_revisioned_across_both_axes() {
             DesktopDensity::Compact,
             DesktopSkin::Graphite,
             DesktopColorScheme::System,
+            DesktopLayout::Refined,
         )
     );
     assert_eq!(style.revision().get(), 2);
@@ -59,6 +64,12 @@ fn selection_is_complete_checked_and_revisioned_across_both_axes() {
     );
     assert_eq!(style.selection(), GRAPHITE_COMPACT);
     assert_eq!(style.revision().get(), 3);
+    assert_eq!(
+        style.select_layout_index(2),
+        DesktopPresentationApplyOutcome::Applied
+    );
+    assert_eq!(style.layout(), DesktopLayout::Workbench);
+    assert_eq!(style.revision().get(), 4);
     assert_eq!(
         style.select_skin_index(1),
         DesktopPresentationApplyOutcome::Unchanged
@@ -73,6 +84,10 @@ fn selection_is_complete_checked_and_revisioned_across_both_axes() {
         style.select_skin_index(3),
         DesktopPresentationApplyOutcome::Rejected
     );
+    assert_eq!(
+        style.select_layout_index(-1),
+        DesktopPresentationApplyOutcome::Rejected
+    );
     assert_eq!(style, before_rejection);
 }
 
@@ -85,6 +100,14 @@ fn density_and_skin_keys_and_slint_indices_are_fixed() {
     ] {
         assert_eq!(density.stable_key(), stable_key);
         assert_eq!(density.slint_index(), slint_index);
+    }
+    for (layout, stable_key, slint_index) in [
+        (DesktopLayout::Refined, "refined", 0),
+        (DesktopLayout::ControlCenter, "control_center", 1),
+        (DesktopLayout::Workbench, "workbench", 2),
+    ] {
+        assert_eq!(layout.stable_key(), stable_key);
+        assert_eq!(layout.slint_index(), slint_index);
     }
 }
 
@@ -114,6 +137,7 @@ fn admission_receives_one_complete_selection_and_same_not_saved_value_retries() 
         DesktopDensity::Comfortable,
         DesktopSkin::Graphite,
         DesktopColorScheme::System,
+        DesktopLayout::Refined,
     );
     assert_eq!(admitted, Some(graphite_comfortable));
     assert_eq!(style.selection(), graphite_comfortable);

@@ -113,6 +113,7 @@ pub struct DesktopPresentationSettings {
     density: DesktopDensity,
     skin: DesktopSkin,
     color_scheme: DesktopColorScheme,
+    layout: crate::DesktopLayout,
 }
 
 impl DesktopPresentationSettings {
@@ -121,11 +122,13 @@ impl DesktopPresentationSettings {
         density: DesktopDensity,
         skin: DesktopSkin,
         color_scheme: DesktopColorScheme,
+        layout: crate::DesktopLayout,
     ) -> Self {
         Self {
             density,
             skin,
             color_scheme,
+            layout,
         }
     }
 
@@ -135,6 +138,7 @@ impl DesktopPresentationSettings {
             DesktopDensity::Comfortable,
             DesktopSkin::Refined,
             DesktopColorScheme::System,
+            crate::DesktopLayout::Refined,
         )
     }
 
@@ -154,8 +158,13 @@ impl DesktopPresentationSettings {
     }
 
     #[must_use]
+    pub const fn layout(self) -> crate::DesktopLayout {
+        self.layout
+    }
+
+    #[must_use]
     pub const fn selection(self) -> DesktopPresentationSelection {
-        DesktopPresentationSelection::new(self.density, self.skin, self.color_scheme)
+        DesktopPresentationSelection::new(self.density, self.skin, self.color_scheme, self.layout)
     }
 }
 

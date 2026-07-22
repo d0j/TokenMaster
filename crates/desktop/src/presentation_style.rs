@@ -7,6 +7,42 @@ pub enum DesktopDensity {
     UltraCompact,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopLayout {
+    Refined,
+    ControlCenter,
+    Workbench,
+}
+
+impl DesktopLayout {
+    #[must_use]
+    pub const fn stable_key(self) -> &'static str {
+        match self {
+            Self::Refined => "refined",
+            Self::ControlCenter => "control_center",
+            Self::Workbench => "workbench",
+        }
+    }
+
+    #[must_use]
+    pub const fn slint_index(self) -> i32 {
+        match self {
+            Self::Refined => 0,
+            Self::ControlCenter => 1,
+            Self::Workbench => 2,
+        }
+    }
+
+    const fn from_slint_index(index: i32) -> Option<Self> {
+        match index {
+            0 => Some(Self::Refined),
+            1 => Some(Self::ControlCenter),
+            2 => Some(Self::Workbench),
+            _ => None,
+        }
+    }
+}
+
 impl DesktopDensity {
     #[must_use]
     pub const fn stable_key(self) -> &'static str {
@@ -137,6 +173,7 @@ pub struct DesktopPresentationSelection {
     density: DesktopDensity,
     skin: DesktopSkin,
     color_scheme: DesktopColorScheme,
+    layout: DesktopLayout,
 }
 
 impl DesktopPresentationSelection {
@@ -145,11 +182,13 @@ impl DesktopPresentationSelection {
         density: DesktopDensity,
         skin: DesktopSkin,
         color_scheme: DesktopColorScheme,
+        layout: DesktopLayout,
     ) -> Self {
         Self {
             density,
             skin,
             color_scheme,
+            layout,
         }
     }
 
@@ -168,16 +207,25 @@ impl DesktopPresentationSelection {
         self.color_scheme
     }
 
+    #[must_use]
+    pub const fn layout(self) -> DesktopLayout {
+        self.layout
+    }
+
     const fn with_density(self, density: DesktopDensity) -> Self {
-        Self::new(density, self.skin, self.color_scheme)
+        Self::new(density, self.skin, self.color_scheme, self.layout)
     }
 
     const fn with_skin(self, skin: DesktopSkin) -> Self {
-        Self::new(self.density, skin, self.color_scheme)
+        Self::new(self.density, skin, self.color_scheme, self.layout)
     }
 
     const fn with_color_scheme(self, color_scheme: DesktopColorScheme) -> Self {
-        Self::new(self.density, self.skin, color_scheme)
+        Self::new(self.density, self.skin, color_scheme, self.layout)
+    }
+
+    const fn with_layout(self, layout: DesktopLayout) -> Self {
+        Self::new(self.density, self.skin, self.color_scheme, layout)
     }
 }
 
@@ -276,6 +324,11 @@ impl DesktopPresentationStyle {
     }
 
     #[must_use]
+    pub const fn layout(self) -> DesktopLayout {
+        self.selection.layout()
+    }
+
+    #[must_use]
     pub const fn effective_color_scheme(self) -> DesktopEffectiveColorScheme {
         self.color_scheme().resolve(self.system_color_scheme)
     }
@@ -315,6 +368,13 @@ impl DesktopPresentationStyle {
         )
     }
 
+    pub fn select_layout_index(&mut self, index: i32) -> DesktopPresentationApplyOutcome {
+        let Some(layout) = DesktopLayout::from_slint_index(index) else {
+            return DesktopPresentationApplyOutcome::Rejected;
+        };
+        self.select(self.selection.with_layout(layout), false, |_| true)
+    }
+
     pub fn select_density_index_if_admitted(
         &mut self,
         index: i32,
@@ -346,6 +406,17 @@ impl DesktopPresentationStyle {
             return DesktopPresentationApplyOutcome::Rejected;
         };
         self.select(self.selection.with_color_scheme(color_scheme), true, admit)
+    }
+
+    pub fn select_layout_index_if_admitted(
+        &mut self,
+        index: i32,
+        admit: impl FnOnce(DesktopPresentationSelection) -> bool,
+    ) -> DesktopPresentationApplyOutcome {
+        let Some(layout) = DesktopLayout::from_slint_index(index) else {
+            return DesktopPresentationApplyOutcome::Rejected;
+        };
+        self.select(self.selection.with_layout(layout), true, admit)
     }
 
     pub fn observe_system_color_scheme(
@@ -477,7 +548,7 @@ mod tests {
         DesktopDensity, DesktopPresentationApplyOutcome, DesktopPresentationPersistence,
         DesktopPresentationRevision, DesktopPresentationSelection, DesktopPresentationStyle,
     };
-    use crate::{DesktopColorScheme, DesktopSkin, DesktopSystemColorScheme};
+    use crate::{DesktopColorScheme, DesktopLayout, DesktopSkin, DesktopSystemColorScheme};
 
     #[test]
     fn revision_exhaustion_preserves_every_complete_style_field() {
@@ -485,6 +556,7 @@ mod tests {
             DesktopDensity::Comfortable,
             DesktopSkin::Refined,
             DesktopColorScheme::System,
+            DesktopLayout::Refined,
         );
         let mut style = DesktopPresentationStyle {
             selection,
@@ -508,6 +580,7 @@ mod tests {
             DesktopDensity::Comfortable,
             DesktopSkin::Refined,
             DesktopColorScheme::System,
+            DesktopLayout::Refined,
         );
         let mut style = DesktopPresentationStyle {
             selection,
@@ -523,6 +596,7 @@ mod tests {
                 DesktopDensity::Compact,
                 DesktopSkin::Graphite,
                 DesktopColorScheme::Light,
+                DesktopLayout::ControlCenter,
             )),
             DesktopPresentationApplyOutcome::RevisionExhausted
         );
@@ -535,6 +609,7 @@ mod tests {
             DesktopDensity::Comfortable,
             DesktopSkin::Refined,
             DesktopColorScheme::System,
+            DesktopLayout::Refined,
         );
         let mut style = DesktopPresentationStyle {
             selection,
@@ -550,6 +625,7 @@ mod tests {
                 DesktopDensity::Compact,
                 DesktopSkin::Graphite,
                 DesktopColorScheme::Dark,
+                DesktopLayout::Workbench,
             )),
             DesktopPresentationApplyOutcome::RevisionExhausted
         );

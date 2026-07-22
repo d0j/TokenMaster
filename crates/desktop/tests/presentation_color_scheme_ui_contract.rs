@@ -62,6 +62,7 @@ fn system_observation_repaints_without_persistence_and_selector_submits_complete
             DesktopDensity::Comfortable,
             DesktopSkin::Refined,
             DesktopColorScheme::Dark,
+            tokenmaster_desktop::DesktopLayout::Refined,
         ))
     );
     assert_eq!(window.get_presentation_color_scheme_key(), "dark");
@@ -145,6 +146,7 @@ fn ten_thousand_compiled_ui_switches_cover_all_complete_presentation_combination
                     1 => DesktopColorScheme::Light,
                     _ => DesktopColorScheme::Dark,
                 },
+                tokenmaster_desktop::DesktopLayout::Refined,
             )),
             "compiled UI submission {index} must retain one complete triple"
         );

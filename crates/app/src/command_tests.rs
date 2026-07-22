@@ -5,11 +5,12 @@ use super::command::{
     ApplicationOperationRequest, ApplicationReminderPolicyUpdate,
 };
 use tokenmaster_desktop::{
-    DesktopColorScheme, DesktopDensity, DesktopIntent, DesktopPresentationSelection, DesktopSkin,
+    DesktopColorScheme, DesktopDensity, DesktopIntent, DesktopLayout, DesktopPresentationSelection,
+    DesktopSkin,
 };
 
 #[test]
-fn presentation_payload_is_complete_redacted_and_maps_all_twenty_seven_combinations() {
+fn presentation_payload_is_complete_redacted_and_maps_all_eighty_one_combinations() {
     let densities = [
         (
             DesktopDensity::Comfortable,
@@ -52,28 +53,46 @@ fn presentation_payload_is_complete_redacted_and_maps_all_twenty_seven_combinati
             tokenmaster_state::PresentationColorScheme::Dark,
         ),
     ];
+    let layouts = [
+        (
+            DesktopLayout::Refined,
+            tokenmaster_state::PresentationLayout::Refined,
+        ),
+        (
+            DesktopLayout::ControlCenter,
+            tokenmaster_state::PresentationLayout::ControlCenter,
+        ),
+        (
+            DesktopLayout::Workbench,
+            tokenmaster_state::PresentationLayout::Workbench,
+        ),
+    ];
     for (desktop_density, state_density) in densities {
         for (desktop_skin, state_skin) in skins {
             for (desktop_scheme, state_scheme) in schemes {
-                let selection = DesktopPresentationSelection::new(
-                    desktop_density,
-                    desktop_skin,
-                    desktop_scheme,
-                );
-                let (_, payload) =
-                    ApplicationOperationRequest::update_presentation(selection).into_parts();
-                let ApplicationOperationPayload::Presentation(update) = payload else {
-                    panic!("complete presentation payload")
-                };
-                assert_eq!(update.selection(), selection);
-                let state = update.into_state_presentation();
-                assert_eq!(state.density(), state_density);
-                assert_eq!(state.skin(), state_skin);
-                assert_eq!(state.color_scheme(), state_scheme);
-                assert_eq!(
-                    format!("{update:?}"),
-                    "ApplicationPresentationUpdate([redacted])"
-                );
+                for (desktop_layout, state_layout) in layouts {
+                    let selection = DesktopPresentationSelection::new(
+                        desktop_density,
+                        desktop_skin,
+                        desktop_scheme,
+                        desktop_layout,
+                    );
+                    let (_, payload) =
+                        ApplicationOperationRequest::update_presentation(selection).into_parts();
+                    let ApplicationOperationPayload::Presentation(update) = payload else {
+                        panic!("complete presentation payload")
+                    };
+                    assert_eq!(update.selection(), selection);
+                    let state = update.into_state_presentation();
+                    assert_eq!(state.density(), state_density);
+                    assert_eq!(state.skin(), state_skin);
+                    assert_eq!(state.color_scheme(), state_scheme);
+                    assert_eq!(state.layout(), state_layout);
+                    assert_eq!(
+                        format!("{update:?}"),
+                        "ApplicationPresentationUpdate([redacted])"
+                    );
+                }
             }
         }
     }

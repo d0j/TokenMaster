@@ -60,6 +60,7 @@ fn reliable_state(
             density,
             skin,
             tokenmaster_desktop::DesktopColorScheme::System,
+            tokenmaster_desktop::DesktopLayout::Refined,
         ),
         None,
         None,
@@ -101,7 +102,8 @@ fn skin_selector_applies_all_fifteen_exact_palette_roles_after_admission() {
         Some(DesktopPresentationSelection::new(
             DesktopDensity::Comfortable,
             DesktopSkin::Graphite,
-            tokenmaster_desktop::DesktopColorScheme::System
+            tokenmaster_desktop::DesktopColorScheme::System,
+            tokenmaster_desktop::DesktopLayout::Refined,
         ))
     );
     assert_eq!(window.get_presentation_skin_key(), "graphite");
@@ -157,7 +159,8 @@ fn density_and_skin_selectors_submit_complete_pairs_and_keep_one_window_models_g
         Some(DesktopPresentationSelection::new(
             DesktopDensity::Compact,
             DesktopSkin::Refined,
-            tokenmaster_desktop::DesktopColorScheme::System
+            tokenmaster_desktop::DesktopColorScheme::System,
+            tokenmaster_desktop::DesktopLayout::Refined,
         ))
     );
     window.invoke_select_presentation_skin(2);
@@ -166,7 +169,8 @@ fn density_and_skin_selectors_submit_complete_pairs_and_keep_one_window_models_g
         Some(DesktopPresentationSelection::new(
             DesktopDensity::Compact,
             DesktopSkin::Ember,
-            tokenmaster_desktop::DesktopColorScheme::System
+            tokenmaster_desktop::DesktopColorScheme::System,
+            tokenmaster_desktop::DesktopLayout::Refined,
         ))
     );
 
@@ -188,6 +192,7 @@ fn density_and_skin_selectors_submit_complete_pairs_and_keep_one_window_models_g
                 },
                 skin,
                 tokenmaster_desktop::DesktopColorScheme::System,
+                tokenmaster_desktop::DesktopLayout::Refined,
             )),
             "density submission {index} must retain the immediately current skin"
         );

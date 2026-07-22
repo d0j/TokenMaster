@@ -27,11 +27,12 @@ use tokenmaster_state::{
     BootstrapReport, CatalogHealth, CatalogSelectionBinding, ConfigPackage, EncryptedBackupPackage,
     MAX_CONFIG_PACKAGE_BYTES, MaintenanceExecution, MaintenancePermit, MaintenanceSourceState,
     PendingMigration, PortableSettings, PreparedBootstrap, PresentationColorScheme,
-    PresentationDensity, PresentationSettings, PresentationSkin, RecoveryBoundary,
-    RecoveryCoordinator, RecoveryJournalLoad, RecoveryJournalStore, RecoveryLaunchDecision,
-    RecoveryPhase, RecoveryReceipt, RestoreMode, RestoreSafety, RetentionAdmission,
-    RetentionPolicy, RunSession, RunStateStore, SettingsCommitReceipt, SettingsImportPreview,
-    SettingsStore, SettingsValue, StateBootstrap, StateErrorCode, SystemMaintenanceClock,
+    PresentationDensity, PresentationLayout, PresentationSettings, PresentationSkin,
+    RecoveryBoundary, RecoveryCoordinator, RecoveryJournalLoad, RecoveryJournalStore,
+    RecoveryLaunchDecision, RecoveryPhase, RecoveryReceipt, RestoreMode, RestoreSafety,
+    RetentionAdmission, RetentionPolicy, RunSession, RunStateStore, SettingsCommitReceipt,
+    SettingsImportPreview, SettingsStore, SettingsValue, StateBootstrap, StateErrorCode,
+    SystemMaintenanceClock,
 };
 
 #[cfg(test)]
@@ -285,7 +286,12 @@ impl ApplicationStateOwner {
             PresentationColorScheme::Light => tokenmaster_desktop::DesktopColorScheme::Light,
             PresentationColorScheme::Dark => tokenmaster_desktop::DesktopColorScheme::Dark,
         };
-        let presentation = DesktopPresentationSettings::new(density, skin, color_scheme);
+        let layout = match state_presentation.layout() {
+            PresentationLayout::Refined => tokenmaster_desktop::DesktopLayout::Refined,
+            PresentationLayout::ControlCenter => tokenmaster_desktop::DesktopLayout::ControlCenter,
+            PresentationLayout::Workbench => tokenmaster_desktop::DesktopLayout::Workbench,
+        };
+        let presentation = DesktopPresentationSettings::new(density, skin, color_scheme, layout);
         let summary = DesktopReliableStateSummary::new_with_settings(
             health,
             matches!(

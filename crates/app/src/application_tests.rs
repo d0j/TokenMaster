@@ -23,9 +23,9 @@ use tokenmaster_product::{
 use tokenmaster_state::{
     BackupCatalog, BackupMaintenanceRuntime, BackupPolicy, BackupPurpose, BootstrapOutcome,
     ConfigPackage, MAX_CONFIG_PACKAGE_BYTES, MaintenanceExecution, MaintenanceSourceState,
-    PortableSettings, PortableSettingsCandidate, PresentationDensity, PresentationSettings,
-    PresentationSkin, PriorRunCondition, ReminderPolicy, RestoreMode, RunStateStore,
-    SETTINGS_SCHEMA_VERSION, SettingsStore, SettingsValue, SystemMaintenanceClock,
+    PortableSettings, PortableSettingsCandidate, PresentationDensity, PresentationLayout,
+    PresentationSettings, PresentationSkin, PriorRunCondition, ReminderPolicy, RestoreMode,
+    RunStateStore, SETTINGS_SCHEMA_VERSION, SettingsStore, SettingsValue, SystemMaintenanceClock,
 };
 use tokenmaster_store::{USAGE_SCHEMA_VERSION, UsageStore};
 
@@ -841,7 +841,8 @@ fn presentation_intent_routes_to_the_exact_typed_operation() {
             tokenmaster_desktop::DesktopPresentationSelection::new(
                 tokenmaster_desktop::DesktopDensity::UltraCompact,
                 tokenmaster_desktop::DesktopSkin::Graphite,
-                tokenmaster_desktop::DesktopColorScheme::Dark
+                tokenmaster_desktop::DesktopColorScheme::Dark,
+                tokenmaster_desktop::DesktopLayout::Refined,
             ),
         )),
         DesktopIntentAdmission::Started
@@ -858,7 +859,8 @@ fn presentation_intent_routes_to_the_exact_typed_operation() {
         tokenmaster_desktop::DesktopPresentationSelection::new(
             tokenmaster_desktop::DesktopDensity::UltraCompact,
             tokenmaster_desktop::DesktopSkin::Graphite,
-            tokenmaster_desktop::DesktopColorScheme::Dark
+            tokenmaster_desktop::DesktopColorScheme::Dark,
+            tokenmaster_desktop::DesktopLayout::Refined,
         )
     );
     assert_eq!(
@@ -866,7 +868,8 @@ fn presentation_intent_routes_to_the_exact_typed_operation() {
         tokenmaster_state::PresentationSettings::new(
             tokenmaster_state::PresentationDensity::UltraCompact,
             tokenmaster_state::PresentationSkin::Graphite,
-            tokenmaster_state::PresentationColorScheme::Dark
+            tokenmaster_state::PresentationColorScheme::Dark,
+            tokenmaster_state::PresentationLayout::Refined,
         )
     );
     assert_eq!(
@@ -934,6 +937,7 @@ fn presentation_execution_persists_and_projects_the_confirmed_operation() {
             tokenmaster_desktop::DesktopDensity::Compact,
             tokenmaster_desktop::DesktopSkin::Ember,
             tokenmaster_desktop::DesktopColorScheme::Light,
+            tokenmaster_desktop::DesktopLayout::Refined,
         ),
     )
     .into_parts();
@@ -979,7 +983,8 @@ fn presentation_execution_persists_and_projects_the_confirmed_operation() {
         &PresentationSettings::new(
             PresentationDensity::Compact,
             PresentationSkin::Ember,
-            tokenmaster_state::PresentationColorScheme::Light
+            tokenmaster_state::PresentationColorScheme::Light,
+            PresentationLayout::Refined,
         )
     );
 }
@@ -1004,6 +1009,7 @@ fn presentation_save_failure_keeps_the_exact_old_value_generation_and_failed_pro
                 PresentationDensity::UltraCompact,
                 PresentationSkin::Graphite,
                 tokenmaster_state::PresentationColorScheme::System,
+                PresentationLayout::Refined,
             ),
             || {},
         )
@@ -1027,6 +1033,7 @@ fn presentation_save_failure_keeps_the_exact_old_value_generation_and_failed_pro
             PresentationDensity::Compact,
             PresentationSkin::Ember,
             tokenmaster_state::PresentationColorScheme::System,
+            PresentationLayout::Refined,
         ),
         || {
             callback_count.set(callback_count.get() + 1);

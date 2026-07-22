@@ -192,7 +192,7 @@ fn legacy_reliable_state_summary_uses_unavailable_reminder_fallback() {
 }
 
 #[test]
-fn presentation_settings_project_complete_triple_and_legacy_default_is_system() {
+fn presentation_settings_project_complete_quadruple_and_legacy_defaults_are_safe() {
     let summary = DesktopReliableStateSummary::new_with_settings(
         DesktopReliableStateHealth::Healthy,
         false,
@@ -203,6 +203,7 @@ fn presentation_settings_project_complete_triple_and_legacy_default_is_system() 
             DesktopDensity::UltraCompact,
             DesktopSkin::Graphite,
             tokenmaster_desktop::DesktopColorScheme::Light,
+            tokenmaster_desktop::DesktopLayout::Workbench,
         ),
         None,
         None,
@@ -227,6 +228,10 @@ fn presentation_settings_project_complete_triple_and_legacy_default_is_system() 
     assert_eq!(
         projection.presentation().color_scheme(),
         tokenmaster_desktop::DesktopColorScheme::Light
+    );
+    assert_eq!(
+        projection.presentation().layout(),
+        tokenmaster_desktop::DesktopLayout::Workbench
     );
 
     let legacy = DesktopReliableStateSummary::new_with_reminder_policy(
@@ -283,6 +288,7 @@ fn shell_initial_owner_retains_graphite_when_density_callback_submits_complete_s
             DesktopDensity::UltraCompact,
             DesktopSkin::Graphite,
             tokenmaster_desktop::DesktopColorScheme::Dark,
+            tokenmaster_desktop::DesktopLayout::Refined,
         ),
         None,
         None,
@@ -323,6 +329,7 @@ fn shell_initial_owner_retains_graphite_when_density_callback_submits_complete_s
             DesktopDensity::Compact,
             DesktopSkin::Graphite,
             tokenmaster_desktop::DesktopColorScheme::Dark,
+            tokenmaster_desktop::DesktopLayout::Refined,
         ))
     );
     assert_eq!(address, shell.window() as *const _);

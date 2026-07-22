@@ -20,8 +20,8 @@ use tokenmaster_platform::{
 use tokenmaster_state::{
     BackupCompression, BackupPackage, BackupPassphrase, BackupPolicy, BootstrapOutcome,
     ConfigPackage, EncryptedBackupPackage, MAX_CONFIG_PACKAGE_BYTES, PortableSettings,
-    PortableSettingsCandidate, PresentationDensity, PresentationSettings, PresentationSkin,
-    ReminderPolicy, SettingsChangeCategory, SettingsStore, SettingsValue,
+    PortableSettingsCandidate, PresentationDensity, PresentationLayout, PresentationSettings,
+    PresentationSkin, ReminderPolicy, SettingsChangeCategory, SettingsStore, SettingsValue,
 };
 use tokenmaster_store::UsageStore;
 
@@ -137,6 +137,7 @@ fn changed_portable_settings() -> PortableSettingsCandidate {
             PresentationDensity::UltraCompact,
             PresentationSkin::Refined,
             tokenmaster_state::PresentationColorScheme::System,
+            PresentationLayout::Refined,
         ),
     ))
     .expect("portable candidate")
@@ -1165,6 +1166,7 @@ fn presentation_update_preserves_every_other_settings_class() {
                 PresentationDensity::UltraCompact,
                 PresentationSkin::Refined,
                 tokenmaster_state::PresentationColorScheme::System,
+                PresentationLayout::Refined,
             ),
             || {},
         )
@@ -1202,6 +1204,7 @@ fn presentation_update_preserves_every_other_settings_class() {
                 PresentationDensity::Compact,
                 PresentationSkin::Ember,
                 tokenmaster_state::PresentationColorScheme::System,
+                PresentationLayout::Workbench,
             ),
             || {},
         )
@@ -1215,13 +1218,17 @@ fn presentation_update_preserves_every_other_settings_class() {
         after.value().portable().presentation().skin(),
         PresentationSkin::Ember
     );
+    assert_eq!(
+        after.value().portable().presentation().layout(),
+        PresentationLayout::Workbench
+    );
     assert_eq!(after.value().portable().reminders(), &before_reminders);
     assert_eq!(after.value().portable().backup(), &before_backup);
     assert_eq!(after.value().device(), &before_device);
 }
 
 #[test]
-fn presentation_update_replaces_both_axes_atomically() {
+fn presentation_update_replaces_all_axes_atomically() {
     let (_temporary, root) = fixture();
     let owner = ApplicationStateOwner::open(&root).expect("state owner");
     let store = SettingsStore::new(root.reliable_state()).expect("settings store");
@@ -1234,6 +1241,7 @@ fn presentation_update_replaces_both_axes_atomically() {
                 PresentationDensity::Comfortable,
                 PresentationSkin::Graphite,
                 tokenmaster_state::PresentationColorScheme::System,
+                PresentationLayout::Refined,
             ),
         ),
         current.value().device().clone(),
@@ -1247,6 +1255,7 @@ fn presentation_update_replaces_both_axes_atomically() {
                 PresentationDensity::Compact,
                 PresentationSkin::Ember,
                 tokenmaster_state::PresentationColorScheme::System,
+                PresentationLayout::ControlCenter,
             ),
             || {},
         )
@@ -1260,6 +1269,10 @@ fn presentation_update_replaces_both_axes_atomically() {
     assert_eq!(
         saved.value().portable().presentation().skin(),
         PresentationSkin::Ember
+    );
+    assert_eq!(
+        saved.value().portable().presentation().layout(),
+        PresentationLayout::ControlCenter
     );
 }
 
@@ -1278,6 +1291,7 @@ fn presentation_save_rejects_wrong_or_cancelled_permits_and_is_idempotent_only_f
                 PresentationDensity::Compact,
                 PresentationSkin::Graphite,
                 tokenmaster_state::PresentationColorScheme::System,
+                PresentationLayout::Refined,
             ),
             || callback_count += 1,
         )
@@ -1302,6 +1316,7 @@ fn presentation_save_rejects_wrong_or_cancelled_permits_and_is_idempotent_only_f
                 PresentationDensity::Compact,
                 PresentationSkin::Graphite,
                 tokenmaster_state::PresentationColorScheme::System,
+                PresentationLayout::Refined,
             ),
             || {
                 callback_count += 1;
@@ -1321,6 +1336,7 @@ fn presentation_save_rejects_wrong_or_cancelled_permits_and_is_idempotent_only_f
                 PresentationDensity::Comfortable,
                 PresentationSkin::Refined,
                 tokenmaster_state::PresentationColorScheme::System,
+                PresentationLayout::Refined,
             ),
             || callback_count += 1,
         )
@@ -1338,6 +1354,7 @@ fn presentation_save_rejects_wrong_or_cancelled_permits_and_is_idempotent_only_f
                 PresentationDensity::Comfortable,
                 PresentationSkin::Graphite,
                 tokenmaster_state::PresentationColorScheme::System,
+                PresentationLayout::Refined,
             ),
             || callback_count += 1,
         )

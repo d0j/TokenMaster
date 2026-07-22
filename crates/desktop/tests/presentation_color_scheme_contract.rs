@@ -1,5 +1,5 @@
 use tokenmaster_desktop::{
-    DesktopColorScheme, DesktopDensity, DesktopEffectiveColorScheme,
+    DesktopColorScheme, DesktopDensity, DesktopEffectiveColorScheme, DesktopLayout,
     DesktopPresentationApplyOutcome, DesktopPresentationPersistence, DesktopPresentationSelection,
     DesktopPresentationStyle, DesktopSkin, DesktopSystemColorScheme,
 };
@@ -8,6 +8,7 @@ const SYSTEM_REFINED: DesktopPresentationSelection = DesktopPresentationSelectio
     DesktopDensity::Comfortable,
     DesktopSkin::Refined,
     DesktopColorScheme::System,
+    DesktopLayout::Refined,
 );
 
 #[test]
@@ -71,6 +72,7 @@ fn selector_admits_one_complete_triple_before_apply() {
         DesktopDensity::Comfortable,
         DesktopSkin::Refined,
         DesktopColorScheme::Light,
+        DesktopLayout::Refined,
     );
     assert_eq!(admitted, Some(light));
     assert_eq!(style.selection(), light);
@@ -113,6 +115,7 @@ fn system_observation_changes_only_effective_scheme_without_revision_or_persiste
         DesktopDensity::Comfortable,
         DesktopSkin::Refined,
         DesktopColorScheme::Dark,
+        DesktopLayout::Refined,
     );
     let mut style = DesktopPresentationStyle::from_persisted(explicit_dark);
     assert_eq!(

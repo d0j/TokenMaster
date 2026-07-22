@@ -3471,13 +3471,14 @@ mod duration_tests {
     };
     use crate::{
         DesktopBackupPolicy, DesktopBenefitExpiry, DesktopColorScheme, DesktopDensity,
-        DesktopIntent, DesktopIntentAdmission, DesktopIntentSink, DesktopOperationKind,
-        DesktopOperationPhase, DesktopOperationSnapshot, DesktopPresentationSelection,
-        DesktopPresentationSettings, DesktopPresentationStyle, DesktopReliableStateHealth,
-        DesktopReliableStateInput, DesktopReliableStateSummary, DesktopReminderPolicy,
-        DesktopReminderSyncState, DesktopSessionPageIntent, DesktopSessionPageIntentAdmission,
-        DesktopSessionPageIntentSink, DesktopSkin, UnavailableDesktopIntentSink,
-        UnavailableDesktopSessionDetailIntentSink, UnavailableDesktopSessionPageIntentSink,
+        DesktopIntent, DesktopIntentAdmission, DesktopIntentSink, DesktopLayout,
+        DesktopOperationKind, DesktopOperationPhase, DesktopOperationSnapshot,
+        DesktopPresentationSelection, DesktopPresentationSettings, DesktopPresentationStyle,
+        DesktopReliableStateHealth, DesktopReliableStateInput, DesktopReliableStateSummary,
+        DesktopReminderPolicy, DesktopReminderSyncState, DesktopSessionPageIntent,
+        DesktopSessionPageIntentAdmission, DesktopSessionPageIntentSink, DesktopSkin,
+        UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
+        UnavailableDesktopSessionPageIntentSink,
     };
     use tokenmaster_product::ProductReducer;
 
@@ -3538,7 +3539,12 @@ mod duration_tests {
             "healthy",
             DesktopBackupPolicy::disabled(),
             DesktopReminderPolicy::unavailable(),
-            DesktopPresentationSettings::new(density, skin, DesktopColorScheme::System),
+            DesktopPresentationSettings::new(
+                density,
+                skin,
+                DesktopColorScheme::System,
+                DesktopLayout::Refined,
+            ),
             None,
             None,
             None,
@@ -3593,6 +3599,7 @@ mod duration_tests {
                 DesktopDensity::Comfortable,
                 DesktopSkin::Refined,
                 DesktopColorScheme::System,
+                DesktopLayout::Refined,
             ),
         )));
         let initial_style = *style.lock().map_err(|_| String::from("initial style"))?;
@@ -3616,6 +3623,7 @@ mod duration_tests {
                 DesktopDensity::Comfortable,
                 DesktopSkin::Refined,
                 DesktopColorScheme::System,
+                DesktopLayout::Refined,
             )
         );
         assert_eq!(reentrant_style.revision().get(), 1);

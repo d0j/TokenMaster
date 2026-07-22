@@ -231,7 +231,18 @@ impl ApplicationPresentationUpdate {
                 tokenmaster_state::PresentationColorScheme::Dark
             }
         };
-        tokenmaster_state::PresentationSettings::new(density, skin, color_scheme)
+        let layout = match self.selection.layout() {
+            tokenmaster_desktop::DesktopLayout::Refined => {
+                tokenmaster_state::PresentationLayout::Refined
+            }
+            tokenmaster_desktop::DesktopLayout::ControlCenter => {
+                tokenmaster_state::PresentationLayout::ControlCenter
+            }
+            tokenmaster_desktop::DesktopLayout::Workbench => {
+                tokenmaster_state::PresentationLayout::Workbench
+            }
+        };
+        tokenmaster_state::PresentationSettings::new(density, skin, color_scheme, layout)
     }
 }
 
