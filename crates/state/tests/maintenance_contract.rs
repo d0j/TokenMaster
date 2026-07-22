@@ -535,6 +535,12 @@ fn runtime_owns_one_worker_and_scheduler_and_catches_up_after_resume() {
             .expect("resume catch-up"),
         MaintenancePurpose::Periodic
     );
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while runtime.snapshot().scheduler().submitted_count() == 0
+        && std::time::Instant::now() < deadline
+    {
+        std::thread::yield_now();
+    }
     assert!(runtime.snapshot().scheduler().submitted_count() >= 1);
     runtime.shutdown().expect("shutdown runtime");
 }
