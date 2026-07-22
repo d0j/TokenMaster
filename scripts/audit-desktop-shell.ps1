@@ -225,15 +225,23 @@ function Test-ContainsExecutableCfg {
 }
 
 function Get-ProductionRustSyntax {
-    param([Parameter(Mandatory = $true)][string]$Text)
+    param([Parameter(Mandatory = $true)][string]$Text, [switch]$PreserveLiteralText)
 
-    $syntax = ConvertTo-ExecutableText -Text $Text
+    $syntax = ConvertTo-ExecutableText -Text $Text -PreserveLiteralText:$PreserveLiteralText
     $testAttribute = [regex]::new('(?m)^\s*#\[\s*cfg\s*\(\s*test\s*\)\s*\]\s*\r?\n(?:\s*#\[[^\r\n]+\]\s*\r?\n)*')
     while (($match = $testAttribute.Match($syntax)).Success) {
         $itemStart = $match.Index + $match.Length
-        $brace = $syntax.IndexOf('{', $itemStart)
-        $semicolon = $syntax.IndexOf(';', $itemStart)
-        $itemEnd = if ($semicolon -ge 0 -and ($brace -lt 0 -or $semicolon -lt $brace)) { $semicolon } else { -1 }
+        $brace = -1; $semicolon = -1; $round = 0; $square = 0
+        for ($scan = $itemStart; $scan -lt $syntax.Length; $scan++) {
+            $character = $syntax[$scan]
+            if ($character -eq '(') { $round++ }
+            elseif ($character -eq ')') { if ($round -gt 0) { $round-- } }
+            elseif ($character -eq '[') { $square++ }
+            elseif ($character -eq ']') { if ($square -gt 0) { $square-- } }
+            elseif ($character -eq '{' -and $round -eq 0 -and $square -eq 0) { $brace = $scan; break }
+            elseif ($character -eq ';' -and $round -eq 0 -and $square -eq 0) { $semicolon = $scan; break }
+        }
+        $itemEnd = $semicolon
         if ($itemEnd -lt 0 -and $brace -ge 0) {
             $depth = 0
             for ($index = $brace; $index -lt $syntax.Length; $index++) {
@@ -2125,12 +2133,13 @@ if ($productionText -match '\b(QuotaRow|SessionRow|ChartPoint|quota-targets|char
 }
 
 $nativeTrayPath = Join-Path $sourceRoot 'native_tray.rs'
-$nativeTraySyntax = Get-ProductionRustSyntax -Text ([System.IO.File]::ReadAllText($nativeTrayPath))
-$nativeTrayCfgPattern = '#\[\s*cfg\s*\(\s*(?:not\s*\(\s*)?target_os\s*=\s*\)?\s*\)\s*\]'
-if ([regex]::Matches($nativeTraySyntax, $nativeTrayCfgPattern).Count -ne 2) {
+$nativeTraySyntax = Get-ProductionRustSyntax -Text ([System.IO.File]::ReadAllText($nativeTrayPath)) -PreserveLiteralText
+$nativeTrayWindowsCfg = '#\[\s*cfg\s*\(\s*target_os\s*=\s*"windows"\s*\)\s*\]'
+$nativeTrayNonWindowsCfg = '#\[\s*cfg\s*\(\s*not\s*\(\s*target_os\s*=\s*"windows"\s*\)\s*\)\s*\]'
+if ([regex]::Matches($nativeTraySyntax, $nativeTrayWindowsCfg).Count -ne 1 -or [regex]::Matches($nativeTraySyntax, $nativeTrayNonWindowsCfg).Count -ne 1) {
     throw 'TM-DESKTOP-HISTORY-RANGE-CFG: native tray platform cfg allowlist drifted'
 }
-$nativeTraySyntax = [regex]::Replace($nativeTraySyntax, $nativeTrayCfgPattern, '')
+$nativeTraySyntax = [regex]::Replace($nativeTraySyntax, "$nativeTrayWindowsCfg|$nativeTrayNonWindowsCfg", '')
 $historyTopologySyntax = ($rustFiles | ForEach-Object {
     if ($_.FullName -eq $nativeTrayPath) { $nativeTraySyntax } else { Get-ProductionRustSyntax -Text ([System.IO.File]::ReadAllText($_.FullName)) }
 }) -join "`n"

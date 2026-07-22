@@ -538,6 +538,26 @@ Describe "TokenMaster production desktop audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-CFG*"
     }
 
+    It "rejects native tray platform cfg literal drift" {
+        $fixture = New-DesktopAuditFixture -Name "history-native-tray-platform-literal-drift"
+        $path = Join-Path $fixture "crates\desktop\src\native_tray.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $mutated = $original.Replace('target_os = "windows"', 'target_os = "linux"')
+        $mutated | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $mutated)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-CFG*"
+    }
+
+    It "allows a delimiter-aware test-only cfg method signature" {
+        $fixture = New-DesktopAuditFixture -Name "history-test-only-cfg-array-signature"
+        $path = Join-Path $fixture "crates\desktop\src\history.rs"
+        $original = [System.IO.File]::ReadAllText($path)
+        $mutated = $original.Replace('impl DesktopHistoryProjection {', "impl DesktopHistoryProjection {`r`n    #[cfg(test)]`r`n    fn cfg_array_fixture(_: [u8; 1]) { const _: bool = cfg! { true }; }")
+        $mutated | Should -Not -Be $original
+        [System.IO.File]::WriteAllText($path, $mutated)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Not -Throw
+    }
+
     It "handles an empty extracted History body before its semantic gate" {
         $fixture = New-DesktopAuditFixture -Name "history-empty-extracted-body"
         $path = Join-Path $fixture "crates\desktop\src\presentation.rs"
