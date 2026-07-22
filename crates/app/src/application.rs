@@ -10,17 +10,19 @@ use slint::ComponentHandle;
 use tokenmaster_codex::{CodexRootInput, ConfiguredCodexRoot, build_discovery_request};
 use tokenmaster_desktop::{
     DesktopBridgeFactory, DesktopController, DesktopCurrentUserStartupPresenter,
-    DesktopCurrentUserStartupStatus, DesktopIntent, DesktopIntentAdmission, DesktopIntentRouter,
-    DesktopIntentSink, DesktopLifecycleIntent, DesktopLifecycleIntentAdmission,
-    DesktopLifecycleIntentRouter, DesktopLifecycleIntentSink, DesktopOperationKind,
-    DesktopOperationPhase, DesktopOperationSnapshot, DesktopQueryPlan, DesktopRefreshAdmission,
-    DesktopRefreshIngress, DesktopRefreshUrgency, DesktopReliableStateNotifier,
-    DesktopReliableStateProjection, DesktopReminderPolicy, DesktopReminderSyncState,
-    DesktopRestoreSelection, DesktopRuntimeObservation, DesktopSessionDetailIntent,
-    DesktopSessionDetailIntentAdmission, DesktopSessionDetailIntentRouter,
-    DesktopSessionDetailIntentSink, DesktopSessionPageIntent, DesktopSessionPageIntentAdmission,
-    DesktopSessionPageIntentRouter, DesktopSessionPageIntentSink, DesktopShell,
-    DesktopSnapshotBridge, MainWindow, select_production_renderer,
+    DesktopCurrentUserStartupStatus, DesktopHistoryRangeIntent, DesktopHistoryRangeIntentAdmission,
+    DesktopHistoryRangeIntentRouter, DesktopHistoryRangeIntentSink, DesktopIntent,
+    DesktopIntentAdmission, DesktopIntentRouter, DesktopIntentSink, DesktopLifecycleIntent,
+    DesktopLifecycleIntentAdmission, DesktopLifecycleIntentRouter, DesktopLifecycleIntentSink,
+    DesktopOperationKind, DesktopOperationPhase, DesktopOperationSnapshot, DesktopQueryPlan,
+    DesktopRefreshAdmission, DesktopRefreshIngress, DesktopRefreshUrgency,
+    DesktopReliableStateNotifier, DesktopReliableStateProjection, DesktopReminderPolicy,
+    DesktopReminderSyncState, DesktopRestoreSelection, DesktopRuntimeObservation,
+    DesktopSessionDetailIntent, DesktopSessionDetailIntentAdmission,
+    DesktopSessionDetailIntentRouter, DesktopSessionDetailIntentSink, DesktopSessionPageIntent,
+    DesktopSessionPageIntentAdmission, DesktopSessionPageIntentRouter,
+    DesktopSessionPageIntentSink, DesktopShell, DesktopSnapshotBridge, MainWindow,
+    select_production_renderer,
 };
 use tokenmaster_engine::{
     RefreshOutcome, RefreshUrgency, WorkerCompletion, WorkerCompletionNotifier,
@@ -196,24 +198,27 @@ impl Application {
             .unwrap_or_else(|_| DesktopReliableStateProjection::unavailable());
         let bundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
         let intent_router = Rc::new(DesktopIntentRouter::new());
+        let history_range_router = Rc::new(DesktopHistoryRangeIntentRouter::new());
         let session_detail_router = Rc::new(DesktopSessionDetailIntentRouter::new());
         let session_page_router = Rc::new(DesktopSessionPageIntentRouter::new());
         let lifecycle_router = Rc::new(DesktopLifecycleIntentRouter::new());
         #[cfg(not(test))]
-        let shell = DesktopShell::new_with_reliable_state_and_all_session_sinks(
+        let shell = DesktopShell::new_with_reliable_state_and_all_history_and_session_sinks(
             &initial,
             reliable_state,
             intent_router.clone(),
+            history_range_router.clone(),
             session_detail_router.clone(),
             session_page_router.clone(),
             lifecycle_router.clone(),
         )
         .map_err(|_| ApplicationError::ui_unavailable())?;
         #[cfg(test)]
-        let shell = DesktopShell::new_with_reliable_state_and_session_sinks(
+        let shell = DesktopShell::new_with_reliable_state_and_history_and_session_sinks(
             &initial,
             reliable_state,
             intent_router.clone(),
+            history_range_router.clone(),
             session_detail_router.clone(),
             session_page_router.clone(),
         )
@@ -315,6 +320,11 @@ impl Application {
                 commands.submitter(),
                 current_user_startup_port,
                 current_user_startup_presenter,
+            )))
+            .map_err(|_| ApplicationError::internal())?;
+        history_range_router
+            .install(Rc::new(ApplicationHistoryRangeIntentSink::new(
+                Arc::downgrade(&bundle),
             )))
             .map_err(|_| ApplicationError::internal())?;
         session_detail_router
@@ -904,6 +914,10 @@ struct ApplicationSessionDetailIntentSink {
     bundle: Weak<Mutex<ApplicationBundleSlot>>,
 }
 
+struct ApplicationHistoryRangeIntentSink {
+    bundle: Weak<Mutex<ApplicationBundleSlot>>,
+}
+
 struct ApplicationSessionPageIntentSink {
     bundle: Weak<Mutex<ApplicationBundleSlot>>,
 }
@@ -969,6 +983,22 @@ impl ApplicationSessionDetailIntentSink {
     }
 }
 
+impl ApplicationHistoryRangeIntentSink {
+    fn new(bundle: Weak<Mutex<ApplicationBundleSlot>>) -> Self {
+        Self { bundle }
+    }
+
+    fn request(&self, intent: DesktopHistoryRangeIntent) -> Result<DesktopRefreshAdmission, ()> {
+        let bundle = self.bundle.upgrade().ok_or(())?;
+        let slot = bundle.try_lock().map_err(|_| ())?;
+        let bundle = slot.as_ref().ok_or(())?;
+        bundle
+            .controller
+            .request_history_range(intent)
+            .map_err(|_| ())
+    }
+}
+
 impl ApplicationSessionPageIntentSink {
     fn new(bundle: Weak<Mutex<ApplicationBundleSlot>>) -> Self {
         Self { bundle }
@@ -1002,6 +1032,19 @@ impl DesktopSessionDetailIntentSink for ApplicationSessionDetailIntentSink {
             ) => DesktopSessionDetailIntentAdmission::Accepted,
             Ok(DesktopRefreshAdmission::DeadlineExceeded { .. }) | Err(_) => {
                 DesktopSessionDetailIntentAdmission::Rejected
+            }
+        }
+    }
+}
+
+impl DesktopHistoryRangeIntentSink for ApplicationHistoryRangeIntentSink {
+    fn submit(&self, intent: DesktopHistoryRangeIntent) -> DesktopHistoryRangeIntentAdmission {
+        match self.request(intent) {
+            Ok(
+                DesktopRefreshAdmission::Started { .. } | DesktopRefreshAdmission::Coalesced { .. },
+            ) => DesktopHistoryRangeIntentAdmission::Accepted,
+            Ok(DesktopRefreshAdmission::DeadlineExceeded { .. }) | Err(_) => {
+                DesktopHistoryRangeIntentAdmission::Rejected
             }
         }
     }
@@ -1654,6 +1697,9 @@ fn finish_live_bundle(
         .map_err(|_| ApplicationError::controller())?;
     controller
         .attach_terminal_navigation_notifier(live_bridge.terminal_navigation_notifier())
+        .map_err(|_| ApplicationError::controller())?;
+    controller
+        .attach_terminal_history_range_notifier(live_bridge.terminal_history_range_notifier())
         .map_err(|_| ApplicationError::controller())?;
     let refresh_ingress = controller.refresh_ingress();
     let notification_presentation = match reminder.owner() {

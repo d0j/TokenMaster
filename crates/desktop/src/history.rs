@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use tokenmaster_product::ProductSnapshot;
 
@@ -6,13 +6,75 @@ use crate::dashboard::{
     add_evidence_state, base_section, map_cost, map_freshness, map_quality, map_tokens,
 };
 use crate::{
-    DesktopCostValue, DesktopDashboardSectionState, DesktopFreshness, DesktopQuality,
-    DesktopSectionReasonCodes, DesktopTokenValue,
+    DesktopCostValue, DesktopDashboardSectionState, DesktopFreshness, DesktopHistoryRangeIntent,
+    DesktopHistoryRangePreset, DesktopQuality, DesktopSectionReasonCodes, DesktopTokenValue,
 };
 
 pub const MAX_HISTORY_DAYS: usize = 30;
 pub type DesktopCalendarDate = (i16, u8, u8);
 pub type DesktopHistoryRange = (DesktopCalendarDate, DesktopCalendarDate);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopHistoryRangeIntentAdmission {
+    Accepted,
+    Rejected,
+}
+
+pub trait DesktopHistoryRangeIntentSink {
+    fn submit(&self, intent: DesktopHistoryRangeIntent) -> DesktopHistoryRangeIntentAdmission;
+}
+
+#[derive(Default)]
+pub struct DesktopHistoryRangeIntentRouter {
+    sink: RefCell<Option<Rc<dyn DesktopHistoryRangeIntentSink>>>,
+}
+
+impl DesktopHistoryRangeIntentRouter {
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            sink: RefCell::new(None),
+        }
+    }
+
+    pub fn install(
+        &self,
+        sink: Rc<dyn DesktopHistoryRangeIntentSink>,
+    ) -> Result<(), DesktopHistoryRangeIntentRouterError> {
+        let mut slot = self
+            .sink
+            .try_borrow_mut()
+            .map_err(|_| DesktopHistoryRangeIntentRouterError)?;
+        if slot.is_some() {
+            return Err(DesktopHistoryRangeIntentRouterError);
+        }
+        *slot = Some(sink);
+        Ok(())
+    }
+}
+
+impl DesktopHistoryRangeIntentSink for DesktopHistoryRangeIntentRouter {
+    fn submit(&self, intent: DesktopHistoryRangeIntent) -> DesktopHistoryRangeIntentAdmission {
+        let Ok(slot) = self.sink.try_borrow() else {
+            return DesktopHistoryRangeIntentAdmission::Rejected;
+        };
+        slot.as_ref()
+            .map_or(DesktopHistoryRangeIntentAdmission::Rejected, |sink| {
+                sink.submit(intent)
+            })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DesktopHistoryRangeIntentRouterError;
+
+pub(crate) struct UnavailableDesktopHistoryRangeIntentSink;
+
+impl DesktopHistoryRangeIntentSink for UnavailableDesktopHistoryRangeIntentSink {
+    fn submit(&self, _intent: DesktopHistoryRangeIntent) -> DesktopHistoryRangeIntentAdmission {
+        DesktopHistoryRangeIntentAdmission::Rejected
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DesktopHistoryRow {
@@ -72,6 +134,8 @@ impl DesktopHistoryRow {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DesktopHistoryProjection {
+    range_preset: DesktopHistoryRangePreset,
+    range_pending: bool,
     state: DesktopDashboardSectionState,
     reason_codes: DesktopSectionReasonCodes,
     range_start: Option<(i16, u8, u8)>,
@@ -94,9 +158,18 @@ pub struct DesktopHistoryProjection {
 impl DesktopHistoryProjection {
     #[must_use]
     pub fn from_snapshot(snapshot: &ProductSnapshot) -> Self {
+        Self::from_snapshot_with_range(snapshot, DesktopHistoryRangePreset::Recent30Days, false)
+    }
+
+    #[must_use]
+    pub(crate) fn from_snapshot_with_range(
+        snapshot: &ProductSnapshot,
+        range_preset: DesktopHistoryRangePreset,
+        range_pending: bool,
+    ) -> Self {
         let mut section = base_section(snapshot.history());
         let Some(envelope) = snapshot.history().payload() else {
-            return Self::unavailable(section.state(), section.reason_codes());
+            return Self::unavailable(section.state(), section.reason_codes(), range_preset);
         };
 
         let payload = envelope.payload();
@@ -135,6 +208,8 @@ impl DesktopHistoryProjection {
         let end = range.end_date();
 
         Self {
+            range_preset,
+            range_pending,
             state: section.state(),
             reason_codes: section.reason_codes(),
             range_start: Some((start.year(), start.month(), start.day())),
@@ -155,11 +230,25 @@ impl DesktopHistoryProjection {
         }
     }
 
+    #[must_use]
+    pub(crate) fn with_range_state(
+        mut self,
+        range_preset: DesktopHistoryRangePreset,
+        range_pending: bool,
+    ) -> Self {
+        self.range_preset = range_preset;
+        self.range_pending = range_pending;
+        self
+    }
+
     fn unavailable(
         state: DesktopDashboardSectionState,
         reason_codes: DesktopSectionReasonCodes,
+        range_preset: DesktopHistoryRangePreset,
     ) -> Self {
         Self {
+            range_preset,
+            range_pending: false,
             state,
             reason_codes,
             range_start: None,
@@ -178,6 +267,16 @@ impl DesktopHistoryProjection {
             token_maximum: None,
             cost_maximum_micros: None,
         }
+    }
+
+    #[must_use]
+    pub const fn range_preset(&self) -> DesktopHistoryRangePreset {
+        self.range_preset
+    }
+
+    #[must_use]
+    pub const fn range_pending(&self) -> bool {
+        self.range_pending
     }
 
     #[must_use]

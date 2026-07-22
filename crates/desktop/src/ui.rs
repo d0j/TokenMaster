@@ -20,8 +20,8 @@ use crate::{
     DesktopActivityProjection, DesktopBenefitExpiry, DesktopCloseEffect, DesktopCostComposition,
     DesktopCostValue, DesktopCurrentUserStartupStatus, DesktopDashboardProjection,
     DesktopDashboardSectionKey, DesktopFreshness, DesktopHistoryProjection,
-    DesktopInAppNotificationBatch, DesktopInAppNotificationBridge, DesktopIntent,
-    DesktopIntentSink, DesktopLifecycleIntentSink, DesktopModelsProjection,
+    DesktopHistoryRangeIntentSink, DesktopInAppNotificationBatch, DesktopInAppNotificationBridge,
+    DesktopIntent, DesktopIntentSink, DesktopLifecycleIntentSink, DesktopModelsProjection,
     DesktopNotificationsProjection, DesktopOperationSnapshot, DesktopPresentationApplyOutcome,
     DesktopPresentationStyle, DesktopProjectsProjection, DesktopQuality,
     DesktopReliableStateProjection, DesktopReminderPolicy, DesktopRgb,
@@ -31,8 +31,9 @@ use crate::{
     DesktopSnapshotReceiver, DesktopTokenValue, DesktopTrayAvailability, DesktopValueAvailability,
     HistoryDayRow, InAppNotificationRow, MainWindow, ModelUsageRow, ProjectUsageRow,
     RecentActivityRow, ReminderCustomLeadRow, ReminderScopeRow, RestorePointRow, RouteRow,
-    SessionDetailBreakdownRow, SessionListRow, UiPalette, UnavailableDesktopIntentSink,
-    UnavailableDesktopSessionDetailIntentSink, UnavailableDesktopSessionPageIntentSink,
+    SessionDetailBreakdownRow, SessionListRow, UiPalette, UnavailableDesktopHistoryRangeIntentSink,
+    UnavailableDesktopIntentSink, UnavailableDesktopSessionDetailIntentSink,
+    UnavailableDesktopSessionPageIntentSink,
     in_app_notification::NotificationEpochState,
     native_tray::DesktopNativeTrayOwner,
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
@@ -41,6 +42,7 @@ use crate::{
 pub struct DesktopShell {
     window: MainWindow,
     _presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
+    _history_range_sink: Rc<dyn DesktopHistoryRangeIntentSink>,
     _session_page_sink: Rc<dyn DesktopSessionPageIntentSink>,
     tray: RefCell<Option<DesktopNativeTrayOwner>>,
     lifecycle_sink: Option<Rc<dyn DesktopLifecycleIntentSink>>,
@@ -467,6 +469,26 @@ impl DesktopShell {
             snapshot,
             reliable_state,
             intent_sink,
+            Rc::new(UnavailableDesktopHistoryRangeIntentSink),
+            session_sink,
+            session_page_sink,
+            None,
+        )
+    }
+
+    pub fn new_with_reliable_state_and_history_and_session_sinks(
+        snapshot: &ProductSnapshot,
+        reliable_state: DesktopReliableStateProjection,
+        intent_sink: Rc<dyn DesktopIntentSink>,
+        history_range_sink: Rc<dyn DesktopHistoryRangeIntentSink>,
+        session_sink: Rc<dyn DesktopSessionDetailIntentSink>,
+        session_page_sink: Rc<dyn DesktopSessionPageIntentSink>,
+    ) -> Result<Self, slint::PlatformError> {
+        Self::new_with_optional_lifecycle_sink(
+            snapshot,
+            reliable_state,
+            intent_sink,
+            history_range_sink,
             session_sink,
             session_page_sink,
             None,
@@ -502,6 +524,27 @@ impl DesktopShell {
             snapshot,
             reliable_state,
             intent_sink,
+            Rc::new(UnavailableDesktopHistoryRangeIntentSink),
+            session_sink,
+            session_page_sink,
+            Some(lifecycle_sink),
+        )
+    }
+
+    pub fn new_with_reliable_state_and_all_history_and_session_sinks(
+        snapshot: &ProductSnapshot,
+        reliable_state: DesktopReliableStateProjection,
+        intent_sink: Rc<dyn DesktopIntentSink>,
+        history_range_sink: Rc<dyn DesktopHistoryRangeIntentSink>,
+        session_sink: Rc<dyn DesktopSessionDetailIntentSink>,
+        session_page_sink: Rc<dyn DesktopSessionPageIntentSink>,
+        lifecycle_sink: Rc<dyn DesktopLifecycleIntentSink>,
+    ) -> Result<Self, slint::PlatformError> {
+        Self::new_with_optional_lifecycle_sink(
+            snapshot,
+            reliable_state,
+            intent_sink,
+            history_range_sink,
             session_sink,
             session_page_sink,
             Some(lifecycle_sink),
@@ -512,6 +555,7 @@ impl DesktopShell {
         snapshot: &ProductSnapshot,
         reliable_state: DesktopReliableStateProjection,
         intent_sink: Rc<dyn DesktopIntentSink>,
+        history_range_sink: Rc<dyn DesktopHistoryRangeIntentSink>,
         session_sink: Rc<dyn DesktopSessionDetailIntentSink>,
         session_page_sink: Rc<dyn DesktopSessionPageIntentSink>,
         lifecycle_sink: Option<Rc<dyn DesktopLifecycleIntentSink>>,
@@ -547,6 +591,7 @@ impl DesktopShell {
         Ok(Self {
             window,
             _presentation_style: presentation_style,
+            _history_range_sink: history_range_sink,
             _session_page_sink: session_page_sink,
             tray: RefCell::new(None),
             lifecycle_sink,
@@ -631,6 +676,35 @@ impl DesktopShell {
             refresh_command_palette_if_open(&self.window, &projection);
         }
         Ok(outcome)
+    }
+
+    pub fn request_history_range(
+        &self,
+        preset: crate::DesktopHistoryRangePreset,
+    ) -> Result<crate::DesktopHistoryRangeIntent, DesktopUiError> {
+        let intent = {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| DesktopUiError::state_unavailable())?;
+            let intent = state
+                .request_history_range(preset)
+                .map_err(|_| DesktopUiError::state_unavailable())?;
+            apply_history_projection(&self.window, state.projection().history());
+            intent
+        };
+        Ok(intent)
+    }
+
+    pub fn history_range_state(
+        &self,
+    ) -> Result<(crate::DesktopHistoryRangePreset, bool), DesktopUiError> {
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| DesktopUiError::state_unavailable())?;
+        let history = state.projection().history();
+        Ok((history.range_preset(), history.range_pending()))
     }
 
     pub fn apply_reliable_state(
@@ -1872,7 +1946,7 @@ fn apply_dashboard_projection(window: &MainWindow, dashboard: &DesktopDashboardP
     apply_models(window, dashboard);
 }
 
-fn apply_history_projection(window: &MainWindow, history: &DesktopHistoryProjection) {
+pub(crate) fn apply_history_projection(window: &MainWindow, history: &DesktopHistoryProjection) {
     window.set_history_state(history.state().stable_code().into());
     window.set_history_reasons(join_reasons(history.reason_codes().iter()).into());
     window.set_history_range_label(format_history_range(history).into());
@@ -3624,6 +3698,7 @@ mod duration_tests {
             &ProductReducer::new().snapshot(),
             DesktopReliableStateProjection::unavailable(),
             Rc::new(UnavailableDesktopIntentSink),
+            Rc::new(crate::history::UnavailableDesktopHistoryRangeIntentSink),
             Rc::new(UnavailableDesktopSessionDetailIntentSink),
             Rc::new(UnavailableDesktopSessionPageIntentSink),
             None,

@@ -6,9 +6,10 @@ use std::time::{Duration, Instant};
 use rusqlite::Connection;
 use tempfile::TempDir;
 use tokenmaster_desktop::{
-    DesktopRefreshAdmission, DesktopSessionNavigationGeneration, DesktopSessionPageDirection,
-    DesktopSessionPageIntent, DesktopSessionPageIntentAdmission, DesktopSessionPageIntentSink,
-    DesktopSnapshotEpoch,
+    DesktopHistoryRangeGeneration, DesktopHistoryRangeIntent, DesktopHistoryRangeIntentAdmission,
+    DesktopHistoryRangeIntentSink, DesktopHistoryRangePreset, DesktopRefreshAdmission,
+    DesktopSessionNavigationGeneration, DesktopSessionPageDirection, DesktopSessionPageIntent,
+    DesktopSessionPageIntentAdmission, DesktopSessionPageIntentSink, DesktopSnapshotEpoch,
 };
 use tokenmaster_engine::RefreshOutcome;
 use tokenmaster_platform::{
@@ -700,6 +701,40 @@ fn session_page_sink_rejects_missing_weak_and_busy_bundle_without_waiting() {
     drop(guard);
     worker.join().expect("session page admission worker");
     assert_eq!(timely, Ok(DesktopSessionPageIntentAdmission::Rejected));
+}
+
+#[test]
+fn history_range_sink_rejects_missing_weak_and_busy_bundle_without_waiting() {
+    let bundle: SharedBundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
+    let sink = ApplicationHistoryRangeIntentSink::new(Arc::downgrade(&bundle));
+    let intent = DesktopHistoryRangeIntent::new(
+        DesktopSnapshotEpoch::new(1).expect("epoch"),
+        ProductReducer::new().snapshot().generation(),
+        DesktopHistoryRangeGeneration::new(1).expect("range generation"),
+        DesktopHistoryRangePreset::Recent1Day,
+    );
+    assert_eq!(
+        sink.submit(intent),
+        DesktopHistoryRangeIntentAdmission::Rejected
+    );
+
+    let orphaned_bundle: SharedBundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
+    let orphaned_sink = ApplicationHistoryRangeIntentSink::new(Arc::downgrade(&orphaned_bundle));
+    drop(orphaned_bundle);
+    assert_eq!(
+        orphaned_sink.submit(intent),
+        DesktopHistoryRangeIntentAdmission::Rejected
+    );
+
+    let guard = bundle.lock().expect("busy bundle guard");
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    let worker = std::thread::spawn(move || {
+        let _ = sender.send(sink.submit(intent));
+    });
+    let timely = receiver.recv_timeout(Duration::from_millis(100));
+    drop(guard);
+    worker.join().expect("history range admission worker");
+    assert_eq!(timely, Ok(DesktopHistoryRangeIntentAdmission::Rejected));
 }
 
 fn page_intent(

@@ -7,7 +7,8 @@ use tokenmaster_product::{
 
 use crate::{
     DesktopActivityProjection, DesktopDashboardProjection, DesktopDashboardSectionState,
-    DesktopHistoryProjection, DesktopModelsProjection, DesktopNotificationsProjection,
+    DesktopHistoryProjection, DesktopHistoryRangeGeneration, DesktopHistoryRangeIntent,
+    DesktopHistoryRangePreset, DesktopModelsProjection, DesktopNotificationsProjection,
     DesktopProjectsProjection, DesktopSessionDetailIntent, DesktopSessionNavigationGeneration,
     DesktopSessionPageDirection, DesktopSessionPageIntent, DesktopSessionsProjection,
 };
@@ -237,13 +238,21 @@ pub struct DesktopProjection {
 impl DesktopProjection {
     #[must_use]
     pub fn from_snapshot(snapshot: &ProductSnapshot, selected: DesktopRouteKey) -> Self {
-        Self::from_snapshot_with_selection(snapshot, selected, None)
+        Self::from_snapshot_with_selection(
+            snapshot,
+            selected,
+            None,
+            DesktopHistoryRangePreset::Recent30Days,
+            false,
+        )
     }
 
     fn from_snapshot_with_selection(
         snapshot: &ProductSnapshot,
         selected: DesktopRouteKey,
         active_session_detail: Option<DesktopSessionDetailIntent>,
+        history_preset: DesktopHistoryRangePreset,
+        history_pending: bool,
     ) -> Self {
         Self {
             generation: snapshot.generation(),
@@ -252,7 +261,11 @@ impl DesktopProjection {
                 DesktopRouteProjection::from_status(snapshot.route(ProductRoute::ALL[index]))
             }),
             dashboard: DesktopDashboardProjection::from_snapshot(snapshot),
-            history: DesktopHistoryProjection::from_snapshot(snapshot),
+            history: DesktopHistoryProjection::from_snapshot_with_range(
+                snapshot,
+                history_preset,
+                history_pending,
+            ),
             models: DesktopModelsProjection::from_snapshot(snapshot),
             projects: DesktopProjectsProjection::from_snapshot(snapshot),
             sessions: DesktopSessionsProjection::from_snapshot_with_selection(
@@ -369,6 +382,9 @@ pub struct DesktopState {
     next_session_selection_generation: u64,
     active_session_navigation: Option<DesktopSessionPageIntent>,
     next_session_navigation_generation: u64,
+    published_history_preset: DesktopHistoryRangePreset,
+    active_history_range: Option<DesktopHistoryRangeIntent>,
+    next_history_range_generation: u64,
 }
 
 impl DesktopState {
@@ -381,6 +397,9 @@ impl DesktopState {
             next_session_selection_generation: 1,
             active_session_navigation: None,
             next_session_navigation_generation: 1,
+            published_history_preset: DesktopHistoryRangePreset::Recent30Days,
+            active_history_range: None,
+            next_history_range_generation: 1,
         }
     }
 
@@ -483,6 +502,43 @@ impl DesktopState {
         }
     }
 
+    pub fn request_history_range(
+        &mut self,
+        preset: DesktopHistoryRangePreset,
+    ) -> Result<DesktopHistoryRangeIntent, DesktopHistoryRangeSelectionError> {
+        let epoch = self
+            .snapshot_epoch
+            .ok_or(DesktopHistoryRangeSelectionError::Unavailable)?;
+        if self.active_history_range.is_some() {
+            return Err(DesktopHistoryRangeSelectionError::Pending);
+        }
+        if preset == self.published_history_preset {
+            return Err(DesktopHistoryRangeSelectionError::Unavailable);
+        }
+        let generation = DesktopHistoryRangeGeneration::new(self.next_history_range_generation)
+            .ok_or(DesktopHistoryRangeSelectionError::CapacityExceeded)?;
+        self.next_history_range_generation = self
+            .next_history_range_generation
+            .checked_add(1)
+            .unwrap_or(0);
+        let intent =
+            DesktopHistoryRangeIntent::new(epoch, self.projection.generation(), generation, preset);
+        self.active_history_range = Some(intent);
+        self.rebuild_projection();
+        Ok(intent)
+    }
+
+    pub fn reject_history_range(&mut self, intent: DesktopHistoryRangeIntent) {
+        if self.active_history_range == Some(intent) {
+            self.active_history_range = None;
+            self.rebuild_projection();
+        }
+    }
+
+    pub fn complete_history_range_terminal(&mut self, intent: DesktopHistoryRangeIntent) {
+        self.reject_history_range(intent);
+    }
+
     pub fn apply_snapshot(&mut self, snapshot: &ProductSnapshot) -> DesktopApplyOutcome {
         if self.snapshot_epoch.is_some() || snapshot.generation() <= self.projection.generation() {
             return DesktopApplyOutcome::IgnoredNotNewer;
@@ -515,6 +571,12 @@ impl DesktopState {
 
     fn replace_projection(&mut self, snapshot: &ProductSnapshot, replace_backend: bool) {
         self.active_session_navigation = None;
+        self.published_history_preset = if replace_backend {
+            DesktopHistoryRangePreset::Recent30Days
+        } else {
+            history_preset_from_snapshot(snapshot).unwrap_or(self.published_history_preset)
+        };
+        self.active_history_range = None;
         let active = if replace_backend {
             None
         } else {
@@ -528,6 +590,15 @@ impl DesktopState {
             snapshot,
             self.projection.selected(),
             active,
+            self.published_history_preset,
+            false,
+        );
+    }
+
+    fn rebuild_projection(&mut self) {
+        self.projection.history = self.projection.history.clone().with_range_state(
+            self.published_history_preset,
+            self.active_history_range.is_some(),
         );
     }
 
@@ -544,6 +615,38 @@ impl DesktopState {
         Ok(generation)
     }
 }
+
+fn history_preset_from_snapshot(snapshot: &ProductSnapshot) -> Option<DesktopHistoryRangePreset> {
+    match snapshot
+        .history()
+        .payload()
+        .map(|envelope| envelope.payload().series().len())
+    {
+        Some(1) => Some(DesktopHistoryRangePreset::Recent1Day),
+        Some(7) => Some(DesktopHistoryRangePreset::Recent7Days),
+        Some(30) => Some(DesktopHistoryRangePreset::Recent30Days),
+        _ => None,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DesktopHistoryRangeSelectionError {
+    Unavailable,
+    Pending,
+    CapacityExceeded,
+}
+
+impl fmt::Display for DesktopHistoryRangeSelectionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Unavailable => "history_range_unavailable",
+            Self::Pending => "history_range_pending",
+            Self::CapacityExceeded => "history_range_capacity_exceeded",
+        })
+    }
+}
+
+impl std::error::Error for DesktopHistoryRangeSelectionError {}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DesktopSessionPageNavigationError {

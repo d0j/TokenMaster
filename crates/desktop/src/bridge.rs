@@ -8,13 +8,14 @@ use tokenmaster_product::ProductSnapshot;
 use crate::{
     MainWindow,
     controller::{
-        DesktopSessionPageIntent, DesktopSnapshotNotifier, DesktopSnapshotReceiver,
+        DesktopHistoryRangeIntent, DesktopSessionPageIntent, DesktopSnapshotNotifier,
+        DesktopSnapshotReceiver, DesktopTerminalHistoryRangeNotifier,
         DesktopTerminalNavigationNotifier,
     },
     presentation::{DesktopApplyOutcome, DesktopSnapshotEpoch},
     ui::{
-        SharedDesktopState, apply_projection, apply_session_detail_projection,
-        apply_session_navigation_projection,
+        SharedDesktopState, apply_history_projection, apply_projection,
+        apply_session_detail_projection, apply_session_navigation_projection,
     },
 };
 
@@ -49,6 +50,10 @@ trait SnapshotDelivery: Send + Sync + 'static {
 
 trait TerminalNavigationDelivery: Send + Sync + 'static {
     fn deliver(&self, intent: DesktopSessionPageIntent) -> TerminalDeliveryOutcome;
+}
+
+trait TerminalHistoryRangeDelivery: Send + Sync + 'static {
+    fn deliver(&self, intent: DesktopHistoryRangeIntent) -> TerminalDeliveryOutcome;
 }
 
 struct SlintSnapshotDelivery {
@@ -95,6 +100,25 @@ impl TerminalNavigationDelivery for SlintTerminalNavigationDelivery {
     }
 }
 
+struct SlintTerminalHistoryRangeDelivery {
+    window: slint::Weak<MainWindow>,
+    state: SharedDesktopState,
+}
+
+impl TerminalHistoryRangeDelivery for SlintTerminalHistoryRangeDelivery {
+    fn deliver(&self, intent: DesktopHistoryRangeIntent) -> TerminalDeliveryOutcome {
+        let Some(window) = self.window.upgrade() else {
+            return TerminalDeliveryOutcome::WindowClosed;
+        };
+        let Ok(mut state) = self.state.lock() else {
+            return TerminalDeliveryOutcome::StateUnavailable;
+        };
+        state.complete_history_range_terminal(intent);
+        apply_history_projection(&window, state.projection().history());
+        TerminalDeliveryOutcome::Delivered
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DeliveryOutcome {
     Delivered(u64),
@@ -116,6 +140,16 @@ struct NoopTerminalNavigationDelivery;
 #[cfg(test)]
 impl TerminalNavigationDelivery for NoopTerminalNavigationDelivery {
     fn deliver(&self, _intent: DesktopSessionPageIntent) -> TerminalDeliveryOutcome {
+        TerminalDeliveryOutcome::Delivered
+    }
+}
+
+#[cfg(test)]
+struct NoopTerminalHistoryRangeDelivery;
+
+#[cfg(test)]
+impl TerminalHistoryRangeDelivery for NoopTerminalHistoryRangeDelivery {
+    fn deliver(&self, _intent: DesktopHistoryRangeIntent) -> TerminalDeliveryOutcome {
         TerminalDeliveryOutcome::Delivered
     }
 }
@@ -263,7 +297,9 @@ struct BridgeInner {
     scheduler: Arc<dyn EventScheduler>,
     delivery: Arc<dyn SnapshotDelivery>,
     terminal_delivery: Arc<dyn TerminalNavigationDelivery>,
+    history_terminal_delivery: Arc<dyn TerminalHistoryRangeDelivery>,
     terminal_intent: std::sync::Mutex<Option<DesktopSessionPageIntent>>,
+    history_terminal_intent: std::sync::Mutex<Option<DesktopHistoryRangeIntent>>,
     phase: AtomicU8,
     scheduled: AtomicBool,
     scheduled_count: AtomicU64,
@@ -281,13 +317,16 @@ impl BridgeInner {
         scheduler: Arc<dyn EventScheduler>,
         delivery: Arc<dyn SnapshotDelivery>,
         terminal_delivery: Arc<dyn TerminalNavigationDelivery>,
+        history_terminal_delivery: Arc<dyn TerminalHistoryRangeDelivery>,
     ) -> Arc<Self> {
         Arc::new(Self {
             receiver,
             scheduler,
             delivery,
             terminal_delivery,
+            history_terminal_delivery,
             terminal_intent: std::sync::Mutex::new(None),
+            history_terminal_intent: std::sync::Mutex::new(None),
             phase: AtomicU8::new(DesktopBridgePhase::Running.encoded()),
             scheduled: AtomicBool::new(false),
             scheduled_count: AtomicU64::new(0),
@@ -333,6 +372,21 @@ impl BridgeInner {
         if pending
             .is_none_or(|current| intent.navigation_generation() > current.navigation_generation())
         {
+            *pending = Some(intent);
+        }
+        drop(pending);
+        self.request();
+    }
+
+    fn request_history_terminal(self: &Arc<Self>, intent: DesktopHistoryRangeIntent) {
+        if self.phase() != DesktopBridgePhase::Running {
+            return;
+        }
+        let Ok(mut pending) = self.history_terminal_intent.lock() else {
+            self.fault(DesktopBridgeFailureCode::Internal);
+            return;
+        };
+        if pending.is_none_or(|current| intent.generation() > current.generation()) {
             *pending = Some(intent);
         }
         drop(pending);
@@ -394,11 +448,35 @@ impl BridgeInner {
             }
         }
 
+        let history_terminal = match self.history_terminal_intent.lock() {
+            Ok(mut pending) => pending.take(),
+            Err(_) => {
+                self.fault(DesktopBridgeFailureCode::Internal);
+                self.scheduled.store(false, Ordering::Release);
+                return;
+            }
+        };
+        if let Some(intent) = history_terminal {
+            match self.history_terminal_delivery.deliver(intent) {
+                TerminalDeliveryOutcome::Delivered => {}
+                TerminalDeliveryOutcome::WindowClosed => {
+                    self.close(DesktopBridgeFailureCode::WindowClosed);
+                }
+                TerminalDeliveryOutcome::StateUnavailable => {
+                    self.fault(DesktopBridgeFailureCode::StateUnavailable);
+                }
+            }
+        }
+
         self.scheduled.store(false, Ordering::Release);
         if self.phase() == DesktopBridgePhase::Running {
-            match (self.receiver.has_snapshot(), self.has_terminal()) {
-                (Ok(true), _) | (_, Ok(true)) => self.request(),
-                (Ok(false), Ok(false)) => {}
+            match (
+                self.receiver.has_snapshot(),
+                self.has_terminal(),
+                self.has_history_terminal(),
+            ) {
+                (Ok(true), _, _) | (_, Ok(true), _) | (_, _, Ok(true)) => self.request(),
+                (Ok(false), Ok(false), Ok(false)) => {}
                 _ => self.fault(DesktopBridgeFailureCode::Internal),
             }
         }
@@ -406,6 +484,13 @@ impl BridgeInner {
 
     fn has_terminal(&self) -> Result<bool, ()> {
         self.terminal_intent
+            .lock()
+            .map(|pending| pending.is_some())
+            .map_err(|_| ())
+    }
+
+    fn has_history_terminal(&self) -> Result<bool, ()> {
+        self.history_terminal_intent
             .lock()
             .map(|pending| pending.is_some())
             .map_err(|_| ())
@@ -485,6 +570,18 @@ impl DesktopTerminalNavigationNotifier for BridgeTerminalNavigationNotifier {
     }
 }
 
+struct BridgeTerminalHistoryRangeNotifier {
+    inner: Weak<BridgeInner>,
+}
+
+impl DesktopTerminalHistoryRangeNotifier for BridgeTerminalHistoryRangeNotifier {
+    fn history_range_terminal(&self, intent: DesktopHistoryRangeIntent) {
+        if let Some(inner) = self.inner.upgrade() {
+            inner.request_history_terminal(intent);
+        }
+    }
+}
+
 pub struct DesktopSnapshotBridge {
     epoch: DesktopSnapshotEpoch,
     inner: Arc<BridgeInner>,
@@ -518,7 +615,14 @@ impl DesktopSnapshotBridge {
                 window: window.clone(),
                 state: Arc::clone(&state),
             }),
-            Arc::new(SlintTerminalNavigationDelivery { window, state }),
+            Arc::new(SlintTerminalNavigationDelivery {
+                window: window.clone(),
+                state: Arc::clone(&state),
+            }),
+            Arc::new(SlintTerminalHistoryRangeDelivery {
+                window: window.clone(),
+                state: Arc::clone(&state),
+            }),
         )
     }
 
@@ -535,6 +639,7 @@ impl DesktopSnapshotBridge {
             scheduler,
             delivery,
             Arc::new(NoopTerminalNavigationDelivery),
+            Arc::new(NoopTerminalHistoryRangeDelivery),
         )
     }
 
@@ -544,10 +649,17 @@ impl DesktopSnapshotBridge {
         scheduler: Arc<dyn EventScheduler>,
         delivery: Arc<dyn SnapshotDelivery>,
         terminal_delivery: Arc<dyn TerminalNavigationDelivery>,
+        history_terminal_delivery: Arc<dyn TerminalHistoryRangeDelivery>,
     ) -> Self {
         Self {
             epoch,
-            inner: BridgeInner::new(receiver, scheduler, delivery, terminal_delivery),
+            inner: BridgeInner::new(
+                receiver,
+                scheduler,
+                delivery,
+                terminal_delivery,
+                history_terminal_delivery,
+            ),
         }
     }
 
@@ -566,6 +678,13 @@ impl DesktopSnapshotBridge {
     #[must_use]
     pub fn terminal_navigation_notifier(&self) -> Arc<dyn DesktopTerminalNavigationNotifier> {
         Arc::new(BridgeTerminalNavigationNotifier {
+            inner: Arc::downgrade(&self.inner),
+        })
+    }
+
+    #[must_use]
+    pub fn terminal_history_range_notifier(&self) -> Arc<dyn DesktopTerminalHistoryRangeNotifier> {
+        Arc::new(BridgeTerminalHistoryRangeNotifier {
             inner: Arc::downgrade(&self.inner),
         })
     }
@@ -704,6 +823,7 @@ mod tests {
                     TerminalDeliveryOutcome::Delivered
                 }),
             }),
+            Arc::new(NoopTerminalHistoryRangeDelivery),
         );
         let notifier = bridge.terminal_navigation_notifier();
         notifier.navigation_terminal(terminal_intent(2));
@@ -745,6 +865,7 @@ mod tests {
                     TerminalDeliveryOutcome::Delivered
                 }),
             }),
+            Arc::new(NoopTerminalHistoryRangeDelivery),
         );
         let mut reducer = ProductReducer::new();
         reducer

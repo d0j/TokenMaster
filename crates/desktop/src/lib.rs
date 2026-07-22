@@ -39,8 +39,8 @@ pub use in_app_notification::*;
 pub use models::*;
 pub use notifications::*;
 pub use presentation::{
-    DesktopApplyOutcome, DesktopRouteKey, DesktopSessionSelectionError, DesktopSnapshotEpoch,
-    DesktopState,
+    DesktopApplyOutcome, DesktopHistoryRangeSelectionError, DesktopRouteKey,
+    DesktopSessionSelectionError, DesktopSnapshotEpoch, DesktopState,
 };
 pub use presentation_style::{
     DesktopDensity, DesktopPresentationApplyOutcome, DesktopPresentationPersistence,
