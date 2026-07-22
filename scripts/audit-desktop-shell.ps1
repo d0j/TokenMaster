@@ -221,7 +221,16 @@ function Test-ContainsExecutableCfg {
 
     if ([string]::IsNullOrEmpty($Text)) { return $false }
     $executable = ConvertTo-ExecutableText -Text $Text
-    return $executable -match '#\s*\[\s*(?:r#)?cfg(?:_attr)?\b|\b(?:r#)?cfg\s*!\s*\('
+    return $executable -match '#\s*\[\s*(?:r#)?cfg(?:_attr)?\b|\b(?:r#)?cfg\s*!\s*[\(\[\{]'
+}
+
+function Get-ProductionRustSyntax {
+    param([Parameter(Mandatory = $true)][string]$Text)
+
+    $testModule = [regex]::Match($Text, '(?ms)^\s*#\[cfg\(test\)\]\s*\r?\n\s*(?:#\[[^\r\n]+\]\s*\r?\n\s*)*mod\s+tests\s*\{')
+    if ($testModule.Success) { $Text = $Text.Substring(0, $testModule.Index) }
+    $Text = [regex]::Replace($Text, '(?m)^\s*#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]\s*\r?\n', '')
+    return ConvertTo-ExecutableText -Text $Text
 }
 
 function Normalize-ExecutableStructure { param([Parameter(Mandatory = $true)][string]$Text); return [regex]::Replace($Text, '\s+', '') }
@@ -2101,6 +2110,12 @@ foreach ($requiredPattern in @(
 }
 if ($productionText -match '\b(QuotaRow|SessionRow|ChartPoint|quota-targets|chart-points)\b') {
     throw 'TM-DESKTOP-MOCK-DATA: production shell contains probe data models'
+}
+
+$historyTopologyPaths = @($controllerPath, $historyPath, (Join-Path $sourceRoot 'presentation.rs'), $bridgePath, $uiRustPath)
+$historyTopologySyntax = ($historyTopologyPaths | ForEach-Object { Get-ProductionRustSyntax -Text ([System.IO.File]::ReadAllText($_)) }) -join "`n"
+if (Test-ContainsExecutableCfg -Text $historyTopologySyntax) {
+    throw 'TM-DESKTOP-HISTORY-RANGE-CFG: production History topology must not contain cfg attributes or cfg! branches'
 }
 
 if ($SourceOnly) {

@@ -464,6 +464,39 @@ Describe "TokenMaster production desktop audit" {
         { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-CFG*"
     }
 
+    It "rejects a brace cfg branch in the History projection body" {
+        $fixture = New-DesktopAuditFixture -Name "history-bound-brace-cfg-branch"
+        $path = Join-Path $fixture "crates\desktop\src\history.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('.take(MAX_HISTORY_DAYS)', 'if cfg! { points.take(MAX_HISTORY_DAYS) } else { points.take(31) }')
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-CFG*"
+    }
+
+    It "rejects a bracket cfg branch in the History projection body" {
+        $fixture = New-DesktopAuditFixture -Name "history-bound-bracket-cfg-branch"
+        $path = Join-Path $fixture "crates\desktop\src\history.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('.take(MAX_HISTORY_DAYS)', 'if cfg![debug_assertions] { points.take(MAX_HISTORY_DAYS) } else { points.take(31) }')
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-CFG*"
+    }
+
+    It "rejects an indirect production cfg helper outside the History projection" {
+        $fixture = New-DesktopAuditFixture -Name "history-indirect-production-cfg-helper"
+        $path = Join-Path $fixture "crates\desktop\src\history.rs"
+        $text = [System.IO.File]::ReadAllText($path).Replace('pub const MAX_HISTORY_DAYS: usize = 30;', "const HISTORY_RELEASE_BOUND: usize = if cfg! { 30 } else { 31 };`r`npub const MAX_HISTORY_DAYS: usize = 30;")
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Throw "*TM-DESKTOP-HISTORY-RANGE-CFG*"
+    }
+
+    It "allows a test-only cfg History fixture outside production topology" {
+        $fixture = New-DesktopAuditFixture -Name "history-test-only-cfg-fixture"
+        $path = Join-Path $fixture "crates\desktop\src\history.rs"
+        $text = [System.IO.File]::ReadAllText($path)
+        $text = [regex]::Replace($text, '(?m)^#\[cfg\(test\)\]', "#[cfg(test)]`r`nmod cfg_fixture { const _: bool = cfg! { true }; }`r`n#[cfg(test)]", 1)
+        [System.IO.File]::WriteAllText($path, $text)
+        { & $Audit -RepositoryRoot $fixture -SourceOnly } | Should -Not -Throw
+    }
+
     It "handles an empty extracted History body before its semantic gate" {
         $fixture = New-DesktopAuditFixture -Name "history-empty-extracted-body"
         $path = Join-Path $fixture "crates\desktop\src\presentation.rs"
