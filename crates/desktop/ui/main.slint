@@ -1,5 +1,5 @@
 import {
-    RouteRow, DashboardSectionRow, DashboardQuotaRow, DashboardBenefitRow,
+    RouteRow, DashboardSectionRow, DashboardBoardSlotRow, DashboardBoardEditorRow, DashboardQuotaRow, DashboardBenefitRow,
     DashboardTrendPoint, DashboardSessionRow, DashboardActivityRow, DashboardModelRow,
     HistoryDayRow, ModelUsageRow, ProjectUsageRow, RecentActivityRow, ActivityRhythmRow, ReminderScopeRow, BenefitLotRow, SessionListRow, SessionDetailBreakdownRow, RestorePointRow, InAppNotificationRow
 } from "models.slint";
@@ -45,6 +45,8 @@ export component MainWindow inherits Window {
     in property <string> active-route-reasons;
     in property <string> product-generation;
     in property <[DashboardSectionRow]> dashboard-section-rows;
+    in property <[DashboardBoardSlotRow]> dashboard-board-visible-slots;
+    in property <[DashboardBoardEditorRow]> dashboard-board-editor-rows;
     in property <[DashboardQuotaRow]> dashboard-quota-rows;
     in property <[DashboardBenefitRow]> dashboard-benefit-rows;
     in property <[DashboardTrendPoint]> dashboard-trend-points;
@@ -278,6 +280,10 @@ export component MainWindow inherits Window {
     callback select-presentation-skin(int);
     callback select-presentation-color-scheme(int);
     callback select-presentation-layout(int);
+    callback move-dashboard-board-row(int, int);
+    callback set-dashboard-board-row-visible(int, bool);
+    callback set-dashboard-board-row-collapsed(int, bool);
+    callback reset-dashboard-board();
     callback system-color-scheme-observed(int);
     changed observed-system-color-scheme-id => { root.system-color-scheme-observed(root.observed-system-color-scheme-id); }
 
@@ -376,6 +382,7 @@ export component MainWindow inherits Window {
                     height: parent.height;
                     layout-id: root.presentation-layout-id;
                     sections: root.dashboard-section-rows;
+                    slots: root.dashboard-board-visible-slots;
                     quotas: root.dashboard-quota-rows;
                     benefits: root.dashboard-benefit-rows;
                     trend: root.dashboard-trend-points;
@@ -577,6 +584,7 @@ export component MainWindow inherits Window {
                     presentation-color-scheme-id: root.presentation-color-scheme-id;
                     presentation-layout-id: root.presentation-layout-id;
                     presentation-persistence-state: root.presentation-persistence-state;
+                    board-editor-rows: root.dashboard-board-editor-rows;
                     periodic-enabled: root.backup-periodic-enabled;
                     quiet-seconds: root.backup-quiet-seconds;
                     interval-seconds: root.backup-interval-seconds;
@@ -619,6 +627,10 @@ export component MainWindow inherits Window {
                     select-presentation-skin(index) => { root.select-presentation-skin(index); }
                     select-presentation-color-scheme(index) => { root.select-presentation-color-scheme(index); }
                     select-presentation-layout(index) => { root.select-presentation-layout(index); }
+                    move-dashboard-board-row(index, delta) => { root.move-dashboard-board-row(index, delta); }
+                    set-dashboard-board-row-visible(index, visible) => { root.set-dashboard-board-row-visible(index, visible); }
+                    set-dashboard-board-row-collapsed(index, collapsed) => { root.set-dashboard-board-row-collapsed(index, collapsed); }
+                    reset-dashboard-board => { root.reset-dashboard-board(); }
                     visible: root.settings-visible;
                 }
 

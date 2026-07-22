@@ -16,6 +16,21 @@ export struct DashboardSectionRow {
     has-data: bool,
 }
 
+export struct DashboardBoardSlotRow {
+    key: string,
+    collapsed: bool,
+}
+
+export struct DashboardBoardEditorRow {
+    key: string,
+    label: string,
+    visible: bool,
+    collapsed: bool,
+    can-move-up: bool,
+    can-move-down: bool,
+    can-hide: bool,
+}
+
 export struct DashboardQuotaRow {
     ordinal: int,
     label-key: string,

@@ -1,5 +1,5 @@
 import {
-    DashboardSectionRow, DashboardQuotaRow, DashboardBenefitRow, DashboardTrendPoint,
+    DashboardSectionRow, DashboardBoardSlotRow, DashboardQuotaRow, DashboardBenefitRow, DashboardTrendPoint,
     DashboardSessionRow, DashboardActivityRow, DashboardModelRow
 } from "../models.slint";
 import { UiTokens } from "../tokens.slint";
@@ -294,9 +294,62 @@ component ModelsCard inherits Rectangle {
     }
 }
 
+component CollapsedSectionCard inherits Rectangle {
+    in property <string> title;
+    in property <string> state;
+    in property <string> reasons;
+
+    min-height: 74px;
+    background: UiTokens.surface;
+    border-color: UiTokens.border;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: groupbox;
+    accessible-label: root.title + " collapsed";
+    VerticalLayout {
+        padding: UiTokens.space;
+        spacing: UiTokens.space-xs;
+        CardHeader { title: root.title + " (collapsed)"; state: root.state; reasons: root.reasons; }
+        Text { text: "Section collapsed; its data remains available."; color: UiTokens.text-secondary; font-size: 11px; }
+    }
+}
+
+component DashboardBoardSlot inherits Rectangle {
+    in property <DashboardBoardSlotRow> slot;
+    in property <[DashboardSectionRow]> sections;
+    in property <[DashboardQuotaRow]> quotas;
+    in property <[DashboardBenefitRow]> benefits;
+    in property <[DashboardTrendPoint]> trend;
+    in property <[DashboardSessionRow]> sessions;
+    in property <[DashboardActivityRow]> activity;
+    in property <[DashboardModelRow]> models;
+    in property <string> code-commits;
+    in property <string> code-added;
+    in property <string> code-removed;
+    in property <string> code-net;
+    in property <string> code-efficiency;
+    in property <string> code-evidence;
+    min-height: slot.collapsed ? 74px : (slot.key == "plan_usage" ? 190px : (slot.key == "code_output" || slot.key == "trend" ? 186px : (slot.key == "sessions" || slot.key == "activity" ? 210px : 170px)));
+
+    if slot.collapsed: CollapsedSectionCard {
+        width: parent.width;
+        height: parent.height;
+        title: slot.key == "plan_usage" ? "Plan Usage" : (slot.key == "code_output" ? "Code Output" : (slot.key == "trend" ? "Usage and Cost Trend" : (slot.key == "sessions" ? "Sessions" : (slot.key == "activity" ? "Activity" : "Model Usage"))));
+        state: slot.key == "plan_usage" ? root.sections[0].state : (slot.key == "code_output" ? root.sections[1].state : (slot.key == "trend" ? root.sections[2].state : (slot.key == "sessions" ? root.sections[3].state : (slot.key == "activity" ? root.sections[4].state : root.sections[5].state))));
+        reasons: slot.key == "plan_usage" ? root.sections[0].reasons : (slot.key == "code_output" ? root.sections[1].reasons : (slot.key == "trend" ? root.sections[2].reasons : (slot.key == "sessions" ? root.sections[3].reasons : (slot.key == "activity" ? root.sections[4].reasons : root.sections[5].reasons))));
+    }
+    if !slot.collapsed && slot.key == "plan_usage": PlanUsageCard { width: parent.width; height: parent.height; section: root.sections[0]; quotas: root.quotas; benefits: root.benefits; }
+    if !slot.collapsed && slot.key == "code_output": CodeOutputCard { width: parent.width; height: parent.height; section: root.sections[1]; commits: root.code-commits; added: root.code-added; removed: root.code-removed; net: root.code-net; efficiency: root.code-efficiency; evidence: root.code-evidence; }
+    if !slot.collapsed && slot.key == "trend": TrendCard { width: parent.width; height: parent.height; section: root.sections[2]; points: root.trend; }
+    if !slot.collapsed && slot.key == "sessions": SessionsCard { width: parent.width; height: parent.height; section: root.sections[3]; rows: root.sessions; }
+    if !slot.collapsed && slot.key == "activity": ActivityCard { width: parent.width; height: parent.height; section: root.sections[4]; rows: root.activity; }
+    if !slot.collapsed && slot.key == "models": ModelsCard { width: parent.width; height: parent.height; section: root.sections[5]; rows: root.models; }
+}
+
 export component DashboardView inherits Rectangle {
     in property <int> layout-id;
     in property <[DashboardSectionRow]> sections;
+    in property <[DashboardBoardSlotRow]> slots;
     in property <[DashboardQuotaRow]> quotas;
     in property <[DashboardBenefitRow]> benefits;
     in property <[DashboardTrendPoint]> trend;
@@ -326,47 +379,42 @@ export component DashboardView inherits Rectangle {
             padding: UiTokens.space;
             spacing: UiTokens.space;
             DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
-            PlanUsageCard { section: root.sections[0]; quotas: root.quotas; benefits: root.benefits; }
-            CodeOutputCard { section: root.sections[1]; commits: root.code-commits; added: root.code-added; removed: root.code-removed; net: root.code-net; efficiency: root.code-efficiency; evidence: root.code-evidence; }
-            TrendCard { section: root.sections[2]; points: root.trend; }
-            SessionsCard { section: root.sections[3]; rows: root.sessions; }
-            ActivityCard { section: root.sections[4]; rows: root.activity; }
-            ModelsCard { section: root.sections[5]; rows: root.models; }
+            for slot in root.slots: DashboardBoardSlot { slot: slot; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
         }
         if !root.narrow && root.layout-id == 0: VerticalLayout {
             width: parent.width;
             padding: UiTokens.space;
             spacing: UiTokens.space;
             DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
-            PlanUsageCard { section: root.sections[0]; quotas: root.quotas; benefits: root.benefits; }
-            HorizontalLayout {
+            if root.slots.length > 0: DashboardBoardSlot { slot: root.slots[0]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
+            if root.slots.length > 1: HorizontalLayout {
                 spacing: UiTokens.space;
-                CodeOutputCard { section: root.sections[1]; commits: root.code-commits; added: root.code-added; removed: root.code-removed; net: root.code-net; efficiency: root.code-efficiency; evidence: root.code-evidence; horizontal-stretch: 1; }
-                TrendCard { section: root.sections[2]; points: root.trend; horizontal-stretch: 1; }
+                DashboardBoardSlot { slot: root.slots[1]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
+                if root.slots.length > 2: DashboardBoardSlot { slot: root.slots[2]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
             }
-            HorizontalLayout {
+            if root.slots.length > 3: HorizontalLayout {
                 spacing: UiTokens.space;
-                SessionsCard { section: root.sections[3]; rows: root.sessions; horizontal-stretch: 1; }
-                ActivityCard { section: root.sections[4]; rows: root.activity; horizontal-stretch: 1; }
+                DashboardBoardSlot { slot: root.slots[3]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
+                if root.slots.length > 4: DashboardBoardSlot { slot: root.slots[4]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
             }
-            ModelsCard { section: root.sections[5]; rows: root.models; }
+            if root.slots.length > 5: DashboardBoardSlot { slot: root.slots[5]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
         }
         if !root.narrow && root.layout-id == 1: VerticalLayout {
             width: parent.width;
             padding: UiTokens.space;
             spacing: UiTokens.space;
             DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
-            HorizontalLayout {
+            if root.slots.length > 0: HorizontalLayout {
                 spacing: UiTokens.space;
-                PlanUsageCard { section: root.sections[0]; quotas: root.quotas; benefits: root.benefits; horizontal-stretch: 1; }
-                CodeOutputCard { section: root.sections[1]; commits: root.code-commits; added: root.code-added; removed: root.code-removed; net: root.code-net; efficiency: root.code-efficiency; evidence: root.code-evidence; horizontal-stretch: 1; }
+                DashboardBoardSlot { slot: root.slots[0]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
+                if root.slots.length > 1: DashboardBoardSlot { slot: root.slots[1]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
             }
-            TrendCard { section: root.sections[2]; points: root.trend; }
-            HorizontalLayout {
+            if root.slots.length > 2: DashboardBoardSlot { slot: root.slots[2]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
+            if root.slots.length > 3: HorizontalLayout {
                 spacing: UiTokens.space;
-                SessionsCard { section: root.sections[3]; rows: root.sessions; horizontal-stretch: 1; }
-                ActivityCard { section: root.sections[4]; rows: root.activity; horizontal-stretch: 1; }
-                ModelsCard { section: root.sections[5]; rows: root.models; horizontal-stretch: 1; }
+                DashboardBoardSlot { slot: root.slots[3]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
+                if root.slots.length > 4: DashboardBoardSlot { slot: root.slots[4]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
+                if root.slots.length > 5: DashboardBoardSlot { slot: root.slots[5]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
             }
         }
         if !root.narrow && root.layout-id == 2: VerticalLayout {
@@ -374,18 +422,18 @@ export component DashboardView inherits Rectangle {
             padding: UiTokens.space;
             spacing: UiTokens.space;
             DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
-            PlanUsageCard { section: root.sections[0]; quotas: root.quotas; benefits: root.benefits; }
-            HorizontalLayout {
+            if root.slots.length > 0: DashboardBoardSlot { slot: root.slots[0]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
+            if root.slots.length > 1: HorizontalLayout {
                 spacing: UiTokens.space;
-                CodeOutputCard { section: root.sections[1]; commits: root.code-commits; added: root.code-added; removed: root.code-removed; net: root.code-net; efficiency: root.code-efficiency; evidence: root.code-evidence; horizontal-stretch: 1; }
-                SessionsCard { section: root.sections[3]; rows: root.sessions; horizontal-stretch: 1; }
+                DashboardBoardSlot { slot: root.slots[1]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
+                if root.slots.length > 3: DashboardBoardSlot { slot: root.slots[3]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
             }
-            HorizontalLayout {
+            if root.slots.length > 2: HorizontalLayout {
                 spacing: UiTokens.space;
-                TrendCard { section: root.sections[2]; points: root.trend; horizontal-stretch: 1; }
-                ModelsCard { section: root.sections[5]; rows: root.models; horizontal-stretch: 1; }
+                DashboardBoardSlot { slot: root.slots[2]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
+                if root.slots.length > 5: DashboardBoardSlot { slot: root.slots[5]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
             }
-            ActivityCard { section: root.sections[4]; rows: root.activity; }
+            if root.slots.length > 4: DashboardBoardSlot { slot: root.slots[4]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
         }
     }
 }

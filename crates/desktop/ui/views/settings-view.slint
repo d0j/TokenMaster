@@ -1,5 +1,6 @@
 import { Button, CheckBox, ComboBox, ScrollView, SpinBox } from "std-widgets.slint";
 import { UiTokens } from "../tokens.slint";
+import { DashboardBoardEditorRow } from "../models.slint";
 
 export struct ReminderCustomLeadRow {
     enabled: bool,
@@ -13,6 +14,7 @@ export component SettingsView inherits Rectangle {
     in property <int> presentation-color-scheme-id;
     in property <int> presentation-layout-id;
     in property <string> presentation-persistence-state;
+    in property <[DashboardBoardEditorRow]> board-editor-rows;
     in property <bool> periodic-enabled;
     in property <int> quiet-seconds;
     in property <int> interval-seconds;
@@ -60,6 +62,10 @@ export component SettingsView inherits Rectangle {
     callback select-presentation-skin(int);
     callback select-presentation-color-scheme(int);
     callback select-presentation-layout(int);
+    callback move-dashboard-board-row(int, int);
+    callback set-dashboard-board-row-visible(int, bool);
+    callback set-dashboard-board-row-collapsed(int, bool);
+    callback reset-dashboard-board();
 
     background: UiTokens.background;
     accessible-role: groupbox;
@@ -169,6 +175,62 @@ export component SettingsView inherits Rectangle {
 
         Text { text: "Settings"; color: UiTokens.text-primary; font-size: 24px; font-weight: 700; }
         Text { text: "Settings health: " + root.settings-health; color: UiTokens.text-secondary; }
+
+        board-card := Rectangle {
+            background: UiTokens.surface;
+            border-color: UiTokens.border;
+            border-width: root.high-contrast ? 2px : 1px;
+            border-radius: UiTokens.radius;
+            accessible-role: groupbox;
+            accessible-label: "Dashboard board";
+
+            VerticalLayout {
+                padding: UiTokens.space;
+                spacing: UiTokens.space-sm;
+                HorizontalLayout {
+                    Text { text: "Dashboard board"; color: UiTokens.text-primary; font-size: 17px; font-weight: 650; horizontal-stretch: 1; }
+                    Button {
+                        text: "Reset board";
+                        accessible-label: "Reset dashboard board";
+                        clicked => { root.reset-dashboard-board(); }
+                    }
+                }
+                Text {
+                    text: "Order, visibility, and collapse are saved with the current presentation.";
+                    color: UiTokens.text-secondary;
+                    wrap: word-wrap;
+                }
+                for row[index] in root.board-editor-rows: Rectangle {
+                    min-height: root.settings-layout-mode == "narrow" ? 84px : 36px;
+                    background: UiTokens.surface-subtle;
+                    border-radius: UiTokens.radius-sm;
+                    accessible-role: groupbox;
+                    accessible-label: "Dashboard board section " + row.label;
+                    if root.settings-layout-mode == "narrow": VerticalLayout {
+                        padding: UiTokens.space-xs;
+                        spacing: UiTokens.space-xs;
+                        Text { text: row.label; color: UiTokens.text-primary; font-weight: 650; }
+                        HorizontalLayout {
+                            spacing: UiTokens.space-xs;
+                            Button { text: "Up"; enabled: row.can-move-up; accessible-label: "Move " + row.label + " up"; clicked => { root.move-dashboard-board-row(index, -1); } }
+                            Button { text: "Down"; enabled: row.can-move-down; accessible-label: "Move " + row.label + " down"; clicked => { root.move-dashboard-board-row(index, 1); } }
+                            CheckBox { text: "Visible"; checked: row.visible; enabled: row.visible || row.can-hide; accessible-label: "Show " + row.label + " on dashboard"; toggled => { root.set-dashboard-board-row-visible(index, self.checked); } }
+                            CheckBox { text: "Collapsed"; checked: row.collapsed; accessible-label: "Collapse " + row.label + " on dashboard"; toggled => { root.set-dashboard-board-row-collapsed(index, self.checked); } }
+                        }
+                    }
+                    if root.settings-layout-mode == "wide": HorizontalLayout {
+                        padding-left: UiTokens.space-sm;
+                        padding-right: UiTokens.space-sm;
+                        spacing: UiTokens.space-sm;
+                        Text { text: row.label; color: UiTokens.text-primary; font-weight: 650; horizontal-stretch: 1; vertical-alignment: center; }
+                        Button { text: "Up"; enabled: row.can-move-up; accessible-label: "Move " + row.label + " up"; clicked => { root.move-dashboard-board-row(index, -1); } }
+                        Button { text: "Down"; enabled: row.can-move-down; accessible-label: "Move " + row.label + " down"; clicked => { root.move-dashboard-board-row(index, 1); } }
+                        CheckBox { text: "Visible"; checked: row.visible; enabled: row.visible || row.can-hide; accessible-label: "Show " + row.label + " on dashboard"; toggled => { root.set-dashboard-board-row-visible(index, self.checked); } }
+                        CheckBox { text: "Collapsed"; checked: row.collapsed; accessible-label: "Collapse " + row.label + " on dashboard"; toggled => { root.set-dashboard-board-row-collapsed(index, self.checked); } }
+                    }
+                }
+            }
+        }
 
         reminder-card := Rectangle {
             background: UiTokens.surface;

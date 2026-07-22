@@ -15,14 +15,15 @@ use slint::{Color, ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use tokenmaster_product::ProductSnapshot;
 
 use crate::{
-    ActivityRhythmRow, BenefitLotRow, DashboardActivityRow, DashboardBenefitRow, DashboardModelRow,
-    DashboardQuotaRow, DashboardSectionRow, DashboardSessionRow, DashboardTrendPoint,
-    DesktopActivityKey, DesktopActivityProjection, DesktopBenefitExpiry, DesktopCloseEffect,
-    DesktopCostComposition, DesktopCostValue, DesktopCurrentUserStartupStatus,
-    DesktopDashboardProjection, DesktopDashboardSectionKey, DesktopFreshness,
-    DesktopHistoryProjection, DesktopHistoryRangeIntentAdmission, DesktopHistoryRangeIntentSink,
-    DesktopInAppNotificationBatch, DesktopInAppNotificationBridge, DesktopIntent,
-    DesktopIntentSink, DesktopLifecycleIntentSink, DesktopModelsProjection,
+    ActivityRhythmRow, BenefitLotRow, DashboardActivityRow, DashboardBenefitRow,
+    DashboardBoardEditorRow, DashboardBoardSlotRow, DashboardModelRow, DashboardQuotaRow,
+    DashboardSectionRow, DashboardSessionRow, DashboardTrendPoint, DesktopActivityKey,
+    DesktopActivityProjection, DesktopBenefitExpiry, DesktopBoardPreferences,
+    DesktopBoardSectionKey, DesktopCloseEffect, DesktopCostComposition, DesktopCostValue,
+    DesktopCurrentUserStartupStatus, DesktopDashboardProjection, DesktopDashboardSectionKey,
+    DesktopFreshness, DesktopHistoryProjection, DesktopHistoryRangeIntentAdmission,
+    DesktopHistoryRangeIntentSink, DesktopInAppNotificationBatch, DesktopInAppNotificationBridge,
+    DesktopIntent, DesktopIntentSink, DesktopLifecycleIntentSink, DesktopModelsProjection,
     DesktopNotificationsProjection, DesktopOperationSnapshot, DesktopPresentationApplyOutcome,
     DesktopPresentationStyle, DesktopProjectsProjection, DesktopQuality,
     DesktopReliableStateProjection, DesktopReminderPolicy, DesktopRgb,
@@ -599,7 +600,12 @@ impl DesktopShell {
             Arc::clone(&presentation_style),
             intent_sink.clone(),
         );
-        wire_presentation_layout(&window, Arc::clone(&presentation_style), intent_sink);
+        wire_presentation_layout(
+            &window,
+            Arc::clone(&presentation_style),
+            intent_sink.clone(),
+        );
+        wire_dashboard_board(&window, Arc::clone(&presentation_style), intent_sink);
         wire_system_color_scheme_observation(&window, Arc::clone(&presentation_style));
         Ok(Self {
             window,
@@ -786,9 +792,49 @@ fn apply_presentation_style(window: &MainWindow, style: DesktopPresentationStyle
     window.set_presentation_density_id(style.density().slint_index());
     window.set_presentation_color_scheme_id(style.color_scheme().slint_index());
     window.set_presentation_layout_id(style.layout().slint_index());
+    apply_dashboard_board_preferences(window, style.selection().board());
     window.set_presentation_effective_color_scheme_id(style.effective_color_scheme().slint_index());
     window.set_presentation_revision(style.revision().get().to_string().into());
     window.set_presentation_persistence_state(style.persistence().stable_code().into());
+}
+
+fn apply_dashboard_board_preferences(window: &MainWindow, board: DesktopBoardPreferences) {
+    let rows = board.rows();
+    let visible_count = rows.iter().filter(|row| row.visible()).count();
+    let editor_rows = rows
+        .iter()
+        .enumerate()
+        .map(|(index, row)| DashboardBoardEditorRow {
+            key: row.key().stable_key().into(),
+            label: board_section_label(row.key()).into(),
+            visible: row.visible(),
+            collapsed: row.collapsed(),
+            can_move_up: index > 0,
+            can_move_down: index + 1 < rows.len(),
+            can_hide: !row.visible() || visible_count > 1,
+        })
+        .collect::<Vec<_>>();
+    let visible_slots = rows
+        .iter()
+        .filter(|row| row.visible())
+        .map(|row| DashboardBoardSlotRow {
+            key: row.key().stable_key().into(),
+            collapsed: row.collapsed(),
+        })
+        .collect::<Vec<_>>();
+    window.set_dashboard_board_editor_rows(model(editor_rows));
+    window.set_dashboard_board_visible_slots(model(visible_slots));
+}
+
+const fn board_section_label(key: DesktopBoardSectionKey) -> &'static str {
+    match key {
+        DesktopBoardSectionKey::PlanUsage => "Plan Usage",
+        DesktopBoardSectionKey::CodeOutput => "Code Output",
+        DesktopBoardSectionKey::Trend => "Usage and Cost Trend",
+        DesktopBoardSectionKey::Sessions => "Sessions",
+        DesktopBoardSectionKey::Activity => "Activity",
+        DesktopBoardSectionKey::Models => "Model Usage",
+    }
 }
 
 fn ui_palette(
@@ -951,6 +997,117 @@ fn wire_presentation_layout(
             apply_presentation_style(&window, next_style);
         }
     });
+}
+
+fn wire_dashboard_board(
+    window: &MainWindow,
+    presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
+    intent_sink: Rc<dyn DesktopIntentSink>,
+) {
+    let weak_window = window.as_weak();
+    let move_style = Arc::clone(&presentation_style);
+    let move_sink = Rc::clone(&intent_sink);
+    let move_window = weak_window.clone();
+    window.on_move_dashboard_board_row(move |index, delta| {
+        let Ok(index) = usize::try_from(index) else {
+            return;
+        };
+        if let Some(next_style) =
+            update_board_if_admitted(&move_style, &move_sink, |style, sink| {
+                style.move_board_section_if_admitted(index, delta, |selection| {
+                    presentation_admitted(sink, selection)
+                })
+            })
+        {
+            if let Some(window) = move_window.upgrade() {
+                apply_presentation_style(&window, next_style);
+            }
+        }
+    });
+
+    let visible_style = Arc::clone(&presentation_style);
+    let visible_sink = Rc::clone(&intent_sink);
+    let visible_window = weak_window.clone();
+    window.on_set_dashboard_board_row_visible(move |index, visible| {
+        let Ok(index) = usize::try_from(index) else {
+            return;
+        };
+        if let Some(next_style) =
+            update_board_if_admitted(&visible_style, &visible_sink, |style, sink| {
+                style.set_board_section_visible_if_admitted(index, visible, |selection| {
+                    presentation_admitted(sink, selection)
+                })
+            })
+        {
+            if let Some(window) = visible_window.upgrade() {
+                apply_presentation_style(&window, next_style);
+            }
+        }
+    });
+
+    let collapsed_style = Arc::clone(&presentation_style);
+    let collapsed_sink = Rc::clone(&intent_sink);
+    let collapsed_window = weak_window.clone();
+    window.on_set_dashboard_board_row_collapsed(move |index, collapsed| {
+        let Ok(index) = usize::try_from(index) else {
+            return;
+        };
+        if let Some(next_style) =
+            update_board_if_admitted(&collapsed_style, &collapsed_sink, |style, sink| {
+                style.set_board_section_collapsed_if_admitted(index, collapsed, |selection| {
+                    presentation_admitted(sink, selection)
+                })
+            })
+        {
+            if let Some(window) = collapsed_window.upgrade() {
+                apply_presentation_style(&window, next_style);
+            }
+        }
+    });
+
+    window.on_reset_dashboard_board(move || {
+        if let Some(next_style) =
+            update_board_if_admitted(&presentation_style, &intent_sink, |style, sink| {
+                style.reset_board_if_admitted(|selection| presentation_admitted(sink, selection))
+            })
+        {
+            if let Some(window) = weak_window.upgrade() {
+                apply_presentation_style(&window, next_style);
+            }
+        }
+    });
+}
+
+fn presentation_admitted(
+    intent_sink: &Rc<dyn DesktopIntentSink>,
+    selection: crate::DesktopPresentationSelection,
+) -> bool {
+    matches!(
+        intent_sink.submit(DesktopIntent::UpdatePresentation(selection)),
+        crate::DesktopIntentAdmission::Started
+            | crate::DesktopIntentAdmission::Queued
+            | crate::DesktopIntentAdmission::Coalesced
+    )
+}
+
+fn update_board_if_admitted(
+    presentation_style: &Arc<Mutex<DesktopPresentationStyle>>,
+    intent_sink: &Rc<dyn DesktopIntentSink>,
+    update: impl FnOnce(
+        &mut DesktopPresentationStyle,
+        &Rc<dyn DesktopIntentSink>,
+    ) -> DesktopPresentationApplyOutcome,
+) -> Option<DesktopPresentationStyle> {
+    let captured = *presentation_style.lock().ok()?;
+    let mut selected = captured;
+    if update(&mut selected, intent_sink) != DesktopPresentationApplyOutcome::Applied {
+        return None;
+    }
+    let mut current = presentation_style.lock().ok()?;
+    if *current == captured {
+        *current = selected;
+    }
+    Some(*current)
 }
 
 fn wire_system_color_scheme_observation(
