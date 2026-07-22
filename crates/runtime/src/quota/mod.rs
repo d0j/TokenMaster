@@ -17,5 +17,5 @@ pub use health::{
     ProviderQuotaRefreshStage, ProviderQuotaRetryMode, ProviderQuotaRuntimePhase,
     ProviderQuotaRuntimeSnapshot, ProviderQuotaScheduleSnapshot,
 };
-pub use runtime::CodexQuotaRuntime;
-pub type ProviderQuotaRuntime = CodexQuotaRuntime;
+pub use runtime::ProviderQuotaRuntime;
+pub type CodexQuotaRuntime = ProviderQuotaRuntime;

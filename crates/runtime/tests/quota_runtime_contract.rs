@@ -4,11 +4,10 @@ mod windows {
     use std::time::{Duration, Instant};
 
     use tempfile::TempDir;
-    use tokenmaster_codex::CodexQuotaErrorCode;
     use tokenmaster_engine::RefreshOutcome;
     use tokenmaster_runtime::{
-        CodexQuotaRefreshFailure, CodexQuotaRefreshStage, CodexQuotaRuntime,
-        CodexQuotaRuntimeConfig, CodexQuotaRuntimePhase,
+        CodexQuotaRuntimeConfig, ProviderPollErrorCode, ProviderQuotaRefreshFailure,
+        ProviderQuotaRefreshStage, ProviderQuotaRuntime, ProviderQuotaRuntimePhase,
     };
 
     fn harmless_non_codex_executable() -> PathBuf {
@@ -28,7 +27,7 @@ mod windows {
             .expect("fixed executable")
             .with_transport_timeout(Duration::from_secs(1))
             .expect("transport timeout");
-        let mut runtime = CodexQuotaRuntime::start(config).expect("quota runtime");
+        let mut runtime = ProviderQuotaRuntime::start(config).expect("quota runtime");
 
         let deadline = Instant::now() + Duration::from_secs(5);
         let completion = loop {
@@ -44,15 +43,15 @@ mod windows {
         ));
 
         let snapshot = runtime.snapshot().expect("runtime snapshot");
-        assert_eq!(snapshot.phase(), CodexQuotaRuntimePhase::Running);
+        assert_eq!(snapshot.phase(), ProviderQuotaRuntimePhase::Running);
         let failure = snapshot.refresh().failure().expect("transport failure");
-        assert_eq!(failure.stage(), CodexQuotaRefreshStage::Transport);
+        assert_eq!(failure.stage(), ProviderQuotaRefreshStage::Transport);
         assert!(matches!(
             failure,
-            CodexQuotaRefreshFailure::Transport(
-                CodexQuotaErrorCode::ProcessExited
-                    | CodexQuotaErrorCode::ProtocolError
-                    | CodexQuotaErrorCode::DeadlineExceeded
+            ProviderQuotaRefreshFailure::Transport(
+                ProviderPollErrorCode::ProcessExited
+                    | ProviderPollErrorCode::ProtocolError
+                    | ProviderPollErrorCode::DeadlineExceeded
             )
         ));
         assert!(
@@ -67,7 +66,7 @@ mod windows {
 
         assert_eq!(
             runtime.shutdown().expect("shutdown"),
-            CodexQuotaRuntimePhase::Stopped
+            ProviderQuotaRuntimePhase::Stopped
         );
     }
 }

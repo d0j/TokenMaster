@@ -338,7 +338,7 @@ fn reminder_failure_maps_to_owned_code_and_pending_metadata_is_bounded() {
 #[cfg(windows)]
 #[test]
 fn quota_transport_failure_is_copied_without_executable_or_archive_identity() {
-    use tokenmaster_runtime::{CodexQuotaRuntime, CodexQuotaRuntimeConfig};
+    use tokenmaster_runtime::{CodexQuotaRuntimeConfig, ProviderQuotaRuntime};
 
     let directory = TempDir::new().expect("temporary directory");
     let path = directory.path().join("quota.sqlite3");
@@ -352,7 +352,7 @@ fn quota_transport_failure_is_copied_without_executable_or_archive_identity() {
         .expect("fixed executable")
         .with_transport_timeout(Duration::from_secs(1))
         .expect("transport timeout");
-    let mut quota = CodexQuotaRuntime::start(config).expect("quota runtime");
+    let mut quota = ProviderQuotaRuntime::start(config).expect("quota runtime");
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         if quota.try_completion().expect("completion").is_some() {

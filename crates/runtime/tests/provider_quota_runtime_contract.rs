@@ -14,8 +14,8 @@ use tokenmaster_domain::{
 };
 use tokenmaster_engine::RefreshOutcome;
 use tokenmaster_runtime::{
-    ProviderPollErrorCode, ProviderQuotaObservation, ProviderQuotaPoll, ProviderQuotaRuntime,
-    ProviderQuotaSource,
+    ProviderPollErrorCode, ProviderQuotaObservation, ProviderQuotaPoll,
+    ProviderQuotaRefreshFailure, ProviderQuotaRuntime, ProviderQuotaSource,
 };
 use tokenmaster_store::{BenefitOverviewQuery, QuotaOverviewQuery, UsageReadStore};
 
@@ -221,6 +221,12 @@ fn provider_failure_is_stable_and_does_not_expose_provider_error_text() {
 
     assert_eq!(wait(&runtime).outcome(), RefreshOutcome::Failed);
     let snapshot = runtime.snapshot().expect("snapshot");
+    assert_eq!(
+        snapshot.refresh().failure(),
+        Some(ProviderQuotaRefreshFailure::Transport(
+            ProviderPollErrorCode::Unavailable
+        ))
+    );
     assert_eq!(
         snapshot.refresh().failure().expect("failure").stable_code(),
         "unavailable"

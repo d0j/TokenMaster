@@ -2,15 +2,15 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use tokenmaster_codex::CodexQuotaErrorCode;
 use tokenmaster_engine::{
     Clock, OperationControl, PortErrorCode, RefreshOutcome, RefreshPermit, WriterLease,
 };
 use tokenmaster_store::{BenefitApplyStatus, QuotaApplyStatus, StoreErrorCode, UsageStore};
 
 use super::{
-    CodexExecutableDiscoveryErrorCode, CodexQuotaClockErrorCode, CodexQuotaPublicationErrorCode,
-    CodexQuotaRefreshFailure, CodexQuotaRefreshSnapshot, CodexQuotaRetryMode,
+    CodexExecutableDiscoveryErrorCode, ProviderQuotaClockErrorCode,
+    ProviderQuotaPublicationErrorCode, ProviderQuotaRefreshFailure, ProviderQuotaRefreshSnapshot,
+    ProviderQuotaRetryMode,
 };
 use crate::provider_quota::{
     MAX_PROVIDER_QUOTA_WINDOWS, ProviderPollErrorCode, ProviderQuotaPoll, ProviderQuotaSource,
@@ -18,21 +18,21 @@ use crate::provider_quota::{
 use crate::{RuntimeError, RuntimeWriterLease};
 
 pub(super) trait CodexQuotaWallClock: Send + Sync + 'static {
-    fn now_millis(&self) -> Result<i64, CodexQuotaClockErrorCode>;
+    fn now_millis(&self) -> Result<i64, ProviderQuotaClockErrorCode>;
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 pub(super) struct SystemCodexQuotaWallClock;
 
 impl CodexQuotaWallClock for SystemCodexQuotaWallClock {
-    fn now_millis(&self) -> Result<i64, CodexQuotaClockErrorCode> {
+    fn now_millis(&self) -> Result<i64, ProviderQuotaClockErrorCode> {
         let millis = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map_err(|_| CodexQuotaClockErrorCode::Unavailable)?
+            .map_err(|_| ProviderQuotaClockErrorCode::Unavailable)?
             .as_millis();
-        let millis = i64::try_from(millis).map_err(|_| CodexQuotaClockErrorCode::InvalidTime)?;
+        let millis = i64::try_from(millis).map_err(|_| ProviderQuotaClockErrorCode::InvalidTime)?;
         if millis <= 0 {
-            return Err(CodexQuotaClockErrorCode::InvalidTime);
+            return Err(ProviderQuotaClockErrorCode::InvalidTime);
         }
         Ok(millis)
     }
@@ -51,7 +51,10 @@ pub(super) struct QuotaPublicationSummary {
 }
 
 impl QuotaPublicationSummary {
-    fn record(&mut self, status: QuotaApplyStatus) -> Result<(), CodexQuotaPublicationErrorCode> {
+    fn record(
+        &mut self,
+        status: QuotaApplyStatus,
+    ) -> Result<(), ProviderQuotaPublicationErrorCode> {
         increment(&mut self.processed_count)?;
         match status {
             QuotaApplyStatus::Started => {
@@ -94,7 +97,7 @@ impl BenefitPublicationSummary {
         status: BenefitApplyStatus,
         lot_change_count: u16,
         pending_due_count: u16,
-    ) -> Result<(), CodexQuotaPublicationErrorCode> {
+    ) -> Result<(), ProviderQuotaPublicationErrorCode> {
         increment_u8(&mut self.processed_count)?;
         match status {
             BenefitApplyStatus::Duplicate => increment_u8(&mut self.duplicate_count)?,
@@ -114,8 +117,8 @@ impl BenefitPublicationSummary {
 pub(super) struct QuotaPublicationReport {
     quota: QuotaPublicationSummary,
     benefit: BenefitPublicationSummary,
-    quota_failure: Option<CodexQuotaPublicationErrorCode>,
-    benefit_failure: Option<CodexQuotaPublicationErrorCode>,
+    quota_failure: Option<ProviderQuotaPublicationErrorCode>,
+    benefit_failure: Option<ProviderQuotaPublicationErrorCode>,
 }
 
 impl QuotaPublicationReport {
@@ -136,19 +139,19 @@ impl QuotaPublicationReport {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct QuotaPublicationError {
-    code: CodexQuotaPublicationErrorCode,
+    code: ProviderQuotaPublicationErrorCode,
     report: QuotaPublicationReport,
 }
 
 impl QuotaPublicationError {
     const fn with_report(
-        code: CodexQuotaPublicationErrorCode,
+        code: ProviderQuotaPublicationErrorCode,
         report: QuotaPublicationReport,
     ) -> Self {
         Self { code, report }
     }
 
-    pub(super) const fn code(self) -> CodexQuotaPublicationErrorCode {
+    pub(super) const fn code(self) -> ProviderQuotaPublicationErrorCode {
         self.code
     }
 
@@ -210,8 +213,8 @@ impl QuotaPublisher for StoreQuotaPublisher {
                     let code = store_publication_code(error.code());
                     if matches!(
                         code,
-                        CodexQuotaPublicationErrorCode::Cancelled
-                            | CodexQuotaPublicationErrorCode::DeadlineExceeded
+                        ProviderQuotaPublicationErrorCode::Cancelled
+                            | ProviderQuotaPublicationErrorCode::DeadlineExceeded
                     ) {
                         return Err(QuotaPublicationError::with_report(code, report));
                     }
@@ -239,8 +242,8 @@ impl QuotaPublisher for StoreQuotaPublisher {
                     let code = store_publication_code(error.code());
                     if matches!(
                         code,
-                        CodexQuotaPublicationErrorCode::Cancelled
-                            | CodexQuotaPublicationErrorCode::DeadlineExceeded
+                        ProviderQuotaPublicationErrorCode::Cancelled
+                            | ProviderQuotaPublicationErrorCode::DeadlineExceeded
                     ) {
                         return Err(QuotaPublicationError::with_report(code, report));
                     }
@@ -267,7 +270,7 @@ where
     wall_clock: C,
     source: S,
     publisher: P,
-    latest: Arc<Mutex<CodexQuotaRefreshSnapshot>>,
+    latest: Arc<Mutex<ProviderQuotaRefreshSnapshot>>,
 }
 
 impl<C, S, P> ProviderQuotaExecution<C, S, P>
@@ -281,7 +284,7 @@ where
         wall_clock: C,
         source: S,
         publisher: P,
-        latest: Arc<Mutex<CodexQuotaRefreshSnapshot>>,
+        latest: Arc<Mutex<ProviderQuotaRefreshSnapshot>>,
     ) -> Self {
         Self {
             monotonic_clock,
@@ -312,7 +315,7 @@ where
             Ok(_) => {
                 return self.finish(
                     started_at,
-                    AttemptResult::clock(CodexQuotaClockErrorCode::InvalidTime),
+                    AttemptResult::clock(ProviderQuotaClockErrorCode::InvalidTime),
                 );
             }
             Err(error) => return self.finish(started_at, AttemptResult::clock(error)),
@@ -410,7 +413,7 @@ where
         } else {
             latest.last_benefit_success_observed_at_ms
         };
-        *latest = CodexQuotaRefreshSnapshot {
+        *latest = ProviderQuotaRefreshSnapshot {
             attempt_sequence,
             outcome: Some(result.outcome),
             failure: result.failure,
@@ -446,8 +449,8 @@ where
 
 struct AttemptResult {
     outcome: RefreshOutcome,
-    failure: Option<CodexQuotaRefreshFailure>,
-    retry_mode: CodexQuotaRetryMode,
+    failure: Option<ProviderQuotaRefreshFailure>,
+    retry_mode: ProviderQuotaRetryMode,
     observation_count: u16,
     report: QuotaPublicationReport,
     observed_at_ms: Option<i64>,
@@ -464,7 +467,7 @@ impl AttemptResult {
         Self {
             outcome: RefreshOutcome::Completed,
             failure: None,
-            retry_mode: CodexQuotaRetryMode::Normal,
+            retry_mode: ProviderQuotaRetryMode::Normal,
             observation_count,
             report,
             observed_at_ms: Some(observed_at_ms),
@@ -474,11 +477,11 @@ impl AttemptResult {
         }
     }
 
-    fn clock(error: CodexQuotaClockErrorCode) -> Self {
+    fn clock(error: ProviderQuotaClockErrorCode) -> Self {
         Self {
             outcome: RefreshOutcome::Failed,
-            failure: Some(CodexQuotaRefreshFailure::Clock(error)),
-            retry_mode: CodexQuotaRetryMode::Normal,
+            failure: Some(ProviderQuotaRefreshFailure::Clock(error)),
+            retry_mode: ProviderQuotaRetryMode::Normal,
             observation_count: 0,
             report: QuotaPublicationReport::default(),
             observed_at_ms: None,
@@ -491,8 +494,8 @@ impl AttemptResult {
         if let Some(error) = provider_discovery_error(error) {
             return Self {
                 outcome: RefreshOutcome::Failed,
-                failure: Some(CodexQuotaRefreshFailure::Discovery(error)),
-                retry_mode: CodexQuotaRetryMode::Normal,
+                failure: Some(ProviderQuotaRefreshFailure::Discovery(error)),
+                retry_mode: ProviderQuotaRetryMode::Normal,
                 observation_count: 0,
                 report: QuotaPublicationReport::default(),
                 observed_at_ms: Some(observed_at_ms),
@@ -500,10 +503,9 @@ impl AttemptResult {
                 benefit_succeeded: false,
             };
         }
-        let error = provider_transport_error(error);
         Self {
             outcome: transport_outcome(error),
-            failure: Some(CodexQuotaRefreshFailure::Transport(error)),
+            failure: Some(ProviderQuotaRefreshFailure::Transport(error)),
             retry_mode: transport_retry_mode(error),
             observation_count: 0,
             report: QuotaPublicationReport::default(),
@@ -520,10 +522,10 @@ impl AttemptResult {
     ) -> Self {
         Self {
             outcome: RefreshOutcome::Failed,
-            failure: Some(CodexQuotaRefreshFailure::Transport(
-                CodexQuotaErrorCode::CapacityExceeded,
+            failure: Some(ProviderQuotaRefreshFailure::Transport(
+                ProviderPollErrorCode::CapacityExceeded,
             )),
-            retry_mode: CodexQuotaRetryMode::Normal,
+            retry_mode: ProviderQuotaRetryMode::Normal,
             observation_count,
             report,
             observed_at_ms: Some(observed_at_ms),
@@ -543,8 +545,8 @@ impl AttemptResult {
             publication_successes(report, observation_count, publication_attempted);
         Self {
             outcome: control_outcome(error),
-            failure: Some(CodexQuotaRefreshFailure::Control(error)),
-            retry_mode: CodexQuotaRetryMode::Normal,
+            failure: Some(ProviderQuotaRefreshFailure::Control(error)),
+            retry_mode: ProviderQuotaRetryMode::Normal,
             observation_count,
             report,
             observed_at_ms,
@@ -566,14 +568,14 @@ impl AttemptResult {
         }
         mark_unpublished_domains_failed(&mut report, observation_count, code);
         match code {
-            CodexQuotaPublicationErrorCode::Cancelled => Self::control(
+            ProviderQuotaPublicationErrorCode::Cancelled => Self::control(
                 PortErrorCode::Cancelled,
                 report,
                 observation_count,
                 Some(observed_at_ms),
                 true,
             ),
-            CodexQuotaPublicationErrorCode::DeadlineExceeded => Self::control(
+            ProviderQuotaPublicationErrorCode::DeadlineExceeded => Self::control(
                 PortErrorCode::DeadlineExceeded,
                 report,
                 observation_count,
@@ -585,7 +587,7 @@ impl AttemptResult {
                     publication_successes(report, observation_count, true);
                 Self {
                     outcome: publication_outcome(code),
-                    failure: Some(CodexQuotaRefreshFailure::Publication(code)),
+                    failure: Some(ProviderQuotaRefreshFailure::Publication(code)),
                     retry_mode: publication_retry_mode(code),
                     observation_count,
                     report,
@@ -605,11 +607,11 @@ impl AttemptResult {
         let (outcome, retry_mode) = domain_publication_classification(report);
         let failure = report
             .quota_failure
-            .map(CodexQuotaRefreshFailure::QuotaPublication)
+            .map(ProviderQuotaRefreshFailure::QuotaPublication)
             .or_else(|| {
                 report
                     .benefit_failure
-                    .map(CodexQuotaRefreshFailure::BenefitPublication)
+                    .map(ProviderQuotaRefreshFailure::BenefitPublication)
             });
         let (quota_succeeded, benefit_succeeded) =
             publication_successes(report, observation_count, true);
@@ -626,23 +628,23 @@ impl AttemptResult {
     }
 }
 
-const fn increment(value: &mut u16) -> Result<(), CodexQuotaPublicationErrorCode> {
+const fn increment(value: &mut u16) -> Result<(), ProviderQuotaPublicationErrorCode> {
     match value.checked_add(1) {
         Some(next) => {
             *value = next;
             Ok(())
         }
-        None => Err(CodexQuotaPublicationErrorCode::CapacityExceeded),
+        None => Err(ProviderQuotaPublicationErrorCode::CapacityExceeded),
     }
 }
 
-const fn increment_u8(value: &mut u8) -> Result<(), CodexQuotaPublicationErrorCode> {
+const fn increment_u8(value: &mut u8) -> Result<(), ProviderQuotaPublicationErrorCode> {
     match value.checked_add(1) {
         Some(next) => {
             *value = next;
             Ok(())
         }
-        None => Err(CodexQuotaPublicationErrorCode::CapacityExceeded),
+        None => Err(ProviderQuotaPublicationErrorCode::CapacityExceeded),
     }
 }
 
@@ -665,7 +667,7 @@ fn publication_successes(
 fn mark_unpublished_domains_failed(
     report: &mut QuotaPublicationReport,
     observation_count: u16,
-    code: CodexQuotaPublicationErrorCode,
+    code: ProviderQuotaPublicationErrorCode,
 ) {
     if report.quota_failure.is_none() && report.quota.processed_count < observation_count {
         report.quota_failure = Some(code);
@@ -725,42 +727,42 @@ fn mark_inconsistent_domains_failed(
     benefit_observation_count: u8,
 ) {
     if !quota_report_is_consistent(*report, quota_observation_count) {
-        report.quota_failure = Some(CodexQuotaPublicationErrorCode::InvalidData);
+        report.quota_failure = Some(ProviderQuotaPublicationErrorCode::InvalidData);
     }
     if !benefit_report_is_consistent(*report, benefit_observation_count) {
         report.benefit.observation_count = benefit_observation_count;
-        report.benefit_failure = Some(CodexQuotaPublicationErrorCode::InvalidData);
+        report.benefit_failure = Some(ProviderQuotaPublicationErrorCode::InvalidData);
     }
 }
 
 fn domain_publication_classification(
     report: QuotaPublicationReport,
-) -> (RefreshOutcome, CodexQuotaRetryMode) {
+) -> (RefreshOutcome, ProviderQuotaRetryMode) {
     let quota = report.quota_failure;
     let benefit = report.benefit_failure;
-    let outcome = if quota == Some(CodexQuotaPublicationErrorCode::Cancelled)
-        || benefit == Some(CodexQuotaPublicationErrorCode::Cancelled)
+    let outcome = if quota == Some(ProviderQuotaPublicationErrorCode::Cancelled)
+        || benefit == Some(ProviderQuotaPublicationErrorCode::Cancelled)
     {
         RefreshOutcome::Cancelled
-    } else if quota == Some(CodexQuotaPublicationErrorCode::DeadlineExceeded)
-        || benefit == Some(CodexQuotaPublicationErrorCode::DeadlineExceeded)
+    } else if quota == Some(ProviderQuotaPublicationErrorCode::DeadlineExceeded)
+        || benefit == Some(ProviderQuotaPublicationErrorCode::DeadlineExceeded)
     {
         RefreshOutcome::DeadlineExceeded
-    } else if quota == Some(CodexQuotaPublicationErrorCode::Busy)
-        || benefit == Some(CodexQuotaPublicationErrorCode::Busy)
+    } else if quota == Some(ProviderQuotaPublicationErrorCode::Busy)
+        || benefit == Some(ProviderQuotaPublicationErrorCode::Busy)
     {
         RefreshOutcome::Busy
     } else {
         RefreshOutcome::Failed
     };
     let retry_mode = if quota
-        .is_some_and(|code| publication_retry_mode(code) == CodexQuotaRetryMode::Accelerated)
+        .is_some_and(|code| publication_retry_mode(code) == ProviderQuotaRetryMode::Accelerated)
         || benefit
-            .is_some_and(|code| publication_retry_mode(code) == CodexQuotaRetryMode::Accelerated)
+            .is_some_and(|code| publication_retry_mode(code) == ProviderQuotaRetryMode::Accelerated)
     {
-        CodexQuotaRetryMode::Accelerated
+        ProviderQuotaRetryMode::Accelerated
     } else {
-        CodexQuotaRetryMode::Normal
+        ProviderQuotaRetryMode::Normal
     };
     (outcome, retry_mode)
 }
@@ -779,43 +781,10 @@ const fn control_outcome(error: PortErrorCode) -> RefreshOutcome {
     }
 }
 
-const fn transport_outcome(error: CodexQuotaErrorCode) -> RefreshOutcome {
+const fn transport_outcome(error: ProviderPollErrorCode) -> RefreshOutcome {
     match error {
-        CodexQuotaErrorCode::DeadlineExceeded => RefreshOutcome::DeadlineExceeded,
-        CodexQuotaErrorCode::InvalidData
-        | CodexQuotaErrorCode::CapacityExceeded
-        | CodexQuotaErrorCode::AccountIdentityUnavailable
-        | CodexQuotaErrorCode::InvalidTime
-        | CodexQuotaErrorCode::Unavailable
-        | CodexQuotaErrorCode::InvalidCommand
-        | CodexQuotaErrorCode::SpawnFailed
-        | CodexQuotaErrorCode::ProtocolError
-        | CodexQuotaErrorCode::UnsupportedVersion
-        | CodexQuotaErrorCode::RpcError
-        | CodexQuotaErrorCode::ProcessExited
-        | CodexQuotaErrorCode::ProcessCleanupFailed => RefreshOutcome::Failed,
-    }
-}
-
-const fn provider_transport_error(error: ProviderPollErrorCode) -> CodexQuotaErrorCode {
-    match error {
-        ProviderPollErrorCode::DiscoveryUnavailable => CodexQuotaErrorCode::Unavailable,
-        ProviderPollErrorCode::DiscoveryCapacityExceeded => CodexQuotaErrorCode::CapacityExceeded,
-        ProviderPollErrorCode::Unavailable => CodexQuotaErrorCode::Unavailable,
-        ProviderPollErrorCode::SpawnFailed => CodexQuotaErrorCode::SpawnFailed,
-        ProviderPollErrorCode::ProcessExited => CodexQuotaErrorCode::ProcessExited,
-        ProviderPollErrorCode::ProcessCleanupFailed => CodexQuotaErrorCode::ProcessCleanupFailed,
-        ProviderPollErrorCode::InvalidData => CodexQuotaErrorCode::InvalidData,
-        ProviderPollErrorCode::AccountIdentityUnavailable => {
-            CodexQuotaErrorCode::AccountIdentityUnavailable
-        }
-        ProviderPollErrorCode::InvalidTime => CodexQuotaErrorCode::InvalidTime,
-        ProviderPollErrorCode::InvalidCommand => CodexQuotaErrorCode::InvalidCommand,
-        ProviderPollErrorCode::ProtocolError => CodexQuotaErrorCode::ProtocolError,
-        ProviderPollErrorCode::UnsupportedVersion => CodexQuotaErrorCode::UnsupportedVersion,
-        ProviderPollErrorCode::RpcError => CodexQuotaErrorCode::RpcError,
-        ProviderPollErrorCode::DeadlineExceeded => CodexQuotaErrorCode::DeadlineExceeded,
-        ProviderPollErrorCode::CapacityExceeded => CodexQuotaErrorCode::CapacityExceeded,
+        ProviderPollErrorCode::DeadlineExceeded => RefreshOutcome::DeadlineExceeded,
+        _ => RefreshOutcome::Failed,
     }
 }
 
@@ -833,43 +802,38 @@ const fn provider_discovery_error(
     }
 }
 
-const fn transport_retry_mode(error: CodexQuotaErrorCode) -> CodexQuotaRetryMode {
+const fn transport_retry_mode(error: ProviderPollErrorCode) -> ProviderQuotaRetryMode {
     match error {
-        CodexQuotaErrorCode::Unavailable
-        | CodexQuotaErrorCode::SpawnFailed
-        | CodexQuotaErrorCode::DeadlineExceeded
-        | CodexQuotaErrorCode::ProcessExited
-        | CodexQuotaErrorCode::ProcessCleanupFailed => CodexQuotaRetryMode::Accelerated,
-        CodexQuotaErrorCode::InvalidData
-        | CodexQuotaErrorCode::CapacityExceeded
-        | CodexQuotaErrorCode::AccountIdentityUnavailable
-        | CodexQuotaErrorCode::InvalidTime
-        | CodexQuotaErrorCode::InvalidCommand
-        | CodexQuotaErrorCode::ProtocolError
-        | CodexQuotaErrorCode::UnsupportedVersion
-        | CodexQuotaErrorCode::RpcError => CodexQuotaRetryMode::Normal,
+        ProviderPollErrorCode::Unavailable
+        | ProviderPollErrorCode::SpawnFailed
+        | ProviderPollErrorCode::DeadlineExceeded
+        | ProviderPollErrorCode::ProcessExited
+        | ProviderPollErrorCode::ProcessCleanupFailed => ProviderQuotaRetryMode::Accelerated,
+        _ => ProviderQuotaRetryMode::Normal,
     }
 }
 
-const fn publication_outcome(error: CodexQuotaPublicationErrorCode) -> RefreshOutcome {
+const fn publication_outcome(error: ProviderQuotaPublicationErrorCode) -> RefreshOutcome {
     match error {
-        CodexQuotaPublicationErrorCode::Busy => RefreshOutcome::Busy,
-        CodexQuotaPublicationErrorCode::Cancelled => RefreshOutcome::Cancelled,
-        CodexQuotaPublicationErrorCode::DeadlineExceeded => RefreshOutcome::DeadlineExceeded,
-        CodexQuotaPublicationErrorCode::StoreUnavailable
-        | CodexQuotaPublicationErrorCode::InvalidData
-        | CodexQuotaPublicationErrorCode::CapacityExceeded => RefreshOutcome::Failed,
+        ProviderQuotaPublicationErrorCode::Busy => RefreshOutcome::Busy,
+        ProviderQuotaPublicationErrorCode::Cancelled => RefreshOutcome::Cancelled,
+        ProviderQuotaPublicationErrorCode::DeadlineExceeded => RefreshOutcome::DeadlineExceeded,
+        ProviderQuotaPublicationErrorCode::StoreUnavailable
+        | ProviderQuotaPublicationErrorCode::InvalidData
+        | ProviderQuotaPublicationErrorCode::CapacityExceeded => RefreshOutcome::Failed,
     }
 }
 
-const fn publication_retry_mode(error: CodexQuotaPublicationErrorCode) -> CodexQuotaRetryMode {
+const fn publication_retry_mode(
+    error: ProviderQuotaPublicationErrorCode,
+) -> ProviderQuotaRetryMode {
     match error {
-        CodexQuotaPublicationErrorCode::Busy => CodexQuotaRetryMode::Accelerated,
-        CodexQuotaPublicationErrorCode::Cancelled
-        | CodexQuotaPublicationErrorCode::DeadlineExceeded
-        | CodexQuotaPublicationErrorCode::StoreUnavailable
-        | CodexQuotaPublicationErrorCode::InvalidData
-        | CodexQuotaPublicationErrorCode::CapacityExceeded => CodexQuotaRetryMode::Normal,
+        ProviderQuotaPublicationErrorCode::Busy => ProviderQuotaRetryMode::Accelerated,
+        ProviderQuotaPublicationErrorCode::Cancelled
+        | ProviderQuotaPublicationErrorCode::DeadlineExceeded
+        | ProviderQuotaPublicationErrorCode::StoreUnavailable
+        | ProviderQuotaPublicationErrorCode::InvalidData
+        | ProviderQuotaPublicationErrorCode::CapacityExceeded => ProviderQuotaRetryMode::Normal,
     }
 }
 
@@ -878,15 +842,15 @@ const fn control_publication_error(
     report: QuotaPublicationReport,
 ) -> QuotaPublicationError {
     let code = match error {
-        PortErrorCode::Cancelled => CodexQuotaPublicationErrorCode::Cancelled,
-        PortErrorCode::DeadlineExceeded => CodexQuotaPublicationErrorCode::DeadlineExceeded,
-        PortErrorCode::Busy => CodexQuotaPublicationErrorCode::Busy,
-        PortErrorCode::CapacityExceeded => CodexQuotaPublicationErrorCode::CapacityExceeded,
+        PortErrorCode::Cancelled => ProviderQuotaPublicationErrorCode::Cancelled,
+        PortErrorCode::DeadlineExceeded => ProviderQuotaPublicationErrorCode::DeadlineExceeded,
+        PortErrorCode::Busy => ProviderQuotaPublicationErrorCode::Busy,
+        PortErrorCode::CapacityExceeded => ProviderQuotaPublicationErrorCode::CapacityExceeded,
         PortErrorCode::InvalidData | PortErrorCode::StaleState | PortErrorCode::RebuildRequired => {
-            CodexQuotaPublicationErrorCode::InvalidData
+            ProviderQuotaPublicationErrorCode::InvalidData
         }
         PortErrorCode::Unavailable | PortErrorCode::Failed => {
-            CodexQuotaPublicationErrorCode::StoreUnavailable
+            ProviderQuotaPublicationErrorCode::StoreUnavailable
         }
     };
     QuotaPublicationError::with_report(code, report)
@@ -906,11 +870,11 @@ const fn store_publication_error(
     QuotaPublicationError::with_report(store_publication_code(error), report)
 }
 
-const fn store_publication_code(error: StoreErrorCode) -> CodexQuotaPublicationErrorCode {
+const fn store_publication_code(error: StoreErrorCode) -> ProviderQuotaPublicationErrorCode {
     match error {
-        StoreErrorCode::CapacityExceeded => CodexQuotaPublicationErrorCode::CapacityExceeded,
-        StoreErrorCode::DeadlineExceeded => CodexQuotaPublicationErrorCode::DeadlineExceeded,
-        StoreErrorCode::Cancelled => CodexQuotaPublicationErrorCode::Cancelled,
+        StoreErrorCode::CapacityExceeded => ProviderQuotaPublicationErrorCode::CapacityExceeded,
+        StoreErrorCode::DeadlineExceeded => ProviderQuotaPublicationErrorCode::DeadlineExceeded,
+        StoreErrorCode::Cancelled => ProviderQuotaPublicationErrorCode::Cancelled,
         StoreErrorCode::InvalidValue
         | StoreErrorCode::InvalidStoredValue
         | StoreErrorCode::AccountingVersionMismatch
@@ -928,9 +892,9 @@ const fn store_publication_code(error: StoreErrorCode) -> CodexQuotaPublicationE
         | StoreErrorCode::BackupForeignKeyCorrupt
         | StoreErrorCode::BackupCountCorrupt
         | StoreErrorCode::BackupGenerationCorrupt
-        | StoreErrorCode::BackupSemanticCorrupt => CodexQuotaPublicationErrorCode::InvalidData,
+        | StoreErrorCode::BackupSemanticCorrupt => ProviderQuotaPublicationErrorCode::InvalidData,
         StoreErrorCode::ScanInProgress | StoreErrorCode::Busy => {
-            CodexQuotaPublicationErrorCode::Busy
+            ProviderQuotaPublicationErrorCode::Busy
         }
         StoreErrorCode::Database
         | StoreErrorCode::BackupIo
@@ -939,7 +903,7 @@ const fn store_publication_code(error: StoreErrorCode) -> CodexQuotaPublicationE
         | StoreErrorCode::SchemaTooNew
         | StoreErrorCode::SchemaMismatch
         | StoreErrorCode::PolicyMismatch
-        | StoreErrorCode::RebuildRequired => CodexQuotaPublicationErrorCode::StoreUnavailable,
+        | StoreErrorCode::RebuildRequired => ProviderQuotaPublicationErrorCode::StoreUnavailable,
     }
 }
 
@@ -952,7 +916,7 @@ mod tests {
 
     use serde_json::json;
     use tempfile::TempDir;
-    use tokenmaster_codex::{CodexQuotaErrorCode, CodexQuotaNormalizer};
+    use tokenmaster_codex::CodexQuotaNormalizer;
     use tokenmaster_engine::{
         Clock, MonotonicTime, OperationControl, PortErrorCode, RefreshAdmission,
         RefreshCoordinator, RefreshDeadline, RefreshOutcome, RefreshUrgency, WriterLease,
@@ -966,8 +930,8 @@ mod tests {
     use crate::RuntimeWriterLease;
     use crate::provider_quota::{ProviderPollErrorCode, ProviderQuotaPoll, ProviderQuotaSource};
     use crate::quota::{
-        CodexQuotaClockErrorCode, CodexQuotaPublicationErrorCode, CodexQuotaRefreshFailure,
-        CodexQuotaRefreshSnapshot, CodexQuotaRetryMode,
+        ProviderQuotaClockErrorCode, ProviderQuotaPublicationErrorCode,
+        ProviderQuotaRefreshFailure, ProviderQuotaRefreshSnapshot, ProviderQuotaRetryMode,
     };
 
     const OBSERVED_AT_MS: i64 = 1_700_000_000_000;
@@ -1012,10 +976,10 @@ mod tests {
     }
 
     #[derive(Clone, Copy)]
-    struct FixedWallClock(Result<i64, CodexQuotaClockErrorCode>);
+    struct FixedWallClock(Result<i64, ProviderQuotaClockErrorCode>);
 
     impl CodexQuotaWallClock for FixedWallClock {
-        fn now_millis(&self) -> Result<i64, CodexQuotaClockErrorCode> {
+        fn now_millis(&self) -> Result<i64, ProviderQuotaClockErrorCode> {
             self.0
         }
     }
@@ -1154,7 +1118,7 @@ mod tests {
     fn source_completes_before_publication_and_success_health_is_bounded() {
         let events = Arc::new(Mutex::new(Vec::new()));
         let calls = Arc::new(AtomicUsize::new(0));
-        let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
+        let latest = Arc::new(Mutex::new(ProviderQuotaRefreshSnapshot::not_run()));
         let monotonic = Arc::new(FakeMonotonicClock::default());
         monotonic.set(10);
         let source = FakeSource {
@@ -1186,7 +1150,7 @@ mod tests {
         assert_eq!(snapshot.attempt_sequence(), 1);
         assert_eq!(snapshot.outcome(), Some(RefreshOutcome::Completed));
         assert_eq!(snapshot.failure(), None);
-        assert_eq!(snapshot.retry_mode(), CodexQuotaRetryMode::Normal);
+        assert_eq!(snapshot.retry_mode(), ProviderQuotaRetryMode::Normal);
         assert_eq!(snapshot.observation_count(), 2);
         assert_eq!(snapshot.processed_count(), 2);
         assert_eq!(snapshot.changed_count(), 2);
@@ -1218,7 +1182,7 @@ mod tests {
     fn cancellation_after_source_completion_performs_no_publication() {
         let events = Arc::new(Mutex::new(Vec::new()));
         let calls = Arc::new(AtomicUsize::new(0));
-        let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
+        let latest = Arc::new(Mutex::new(ProviderQuotaRefreshSnapshot::not_run()));
         let monotonic = Arc::new(FakeMonotonicClock::default());
         let (coordinator, permit) = permit(None);
         let coordinator = Arc::new(Mutex::new(coordinator));
@@ -1254,7 +1218,9 @@ mod tests {
         let snapshot = *latest.lock().test_value("latest");
         assert_eq!(
             snapshot.failure(),
-            Some(CodexQuotaRefreshFailure::Control(PortErrorCode::Cancelled))
+            Some(ProviderQuotaRefreshFailure::Control(
+                PortErrorCode::Cancelled
+            ))
         );
         assert_eq!(snapshot.observation_count(), 2);
         assert_eq!(snapshot.processed_count(), 0);
@@ -1279,7 +1245,7 @@ mod tests {
         let error = publisher
             .publish(&normalized(OBSERVED_AT_MS), &control)
             .test_error("writer contention");
-        assert_eq!(error.code(), CodexQuotaPublicationErrorCode::Busy);
+        assert_eq!(error.code(), ProviderQuotaPublicationErrorCode::Busy);
         assert_eq!(error.report().quota, QuotaPublicationSummary::default());
         assert_eq!(error.report().benefit.observation_count, 1);
         assert!(!archive.exists(), "busy publication must not open SQLite");
@@ -1328,7 +1294,7 @@ mod tests {
     #[test]
     fn quota_success_and_benefit_failure_publish_separate_health_without_false_atomic_success() {
         let events = Arc::new(Mutex::new(Vec::new()));
-        let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
+        let latest = Arc::new(Mutex::new(ProviderQuotaRefreshSnapshot::not_run()));
         let report = QuotaPublicationReport {
             quota: completed_summary(),
             benefit: BenefitPublicationSummary {
@@ -1336,7 +1302,7 @@ mod tests {
                 ..BenefitPublicationSummary::default()
             },
             quota_failure: None,
-            benefit_failure: Some(CodexQuotaPublicationErrorCode::InvalidData),
+            benefit_failure: Some(ProviderQuotaPublicationErrorCode::InvalidData),
         };
         let source = FakeSource {
             events: Arc::clone(&events),
@@ -1361,8 +1327,8 @@ mod tests {
         let snapshot = *latest.lock().test_value("latest");
         assert_eq!(
             snapshot.failure(),
-            Some(CodexQuotaRefreshFailure::BenefitPublication(
-                CodexQuotaPublicationErrorCode::InvalidData
+            Some(ProviderQuotaRefreshFailure::BenefitPublication(
+                ProviderQuotaPublicationErrorCode::InvalidData
             ))
         );
         assert_eq!(snapshot.quota_failure_count(), 0);
@@ -1372,7 +1338,7 @@ mod tests {
         assert_eq!(snapshot.benefit_failure_count(), 1);
         assert_eq!(
             snapshot.benefit_failure(),
-            Some(CodexQuotaPublicationErrorCode::InvalidData)
+            Some(ProviderQuotaPublicationErrorCode::InvalidData)
         );
         assert_eq!(snapshot.benefit_processed_count(), 0);
         assert_eq!(snapshot.last_success_observed_at_ms(), None);
@@ -1385,7 +1351,7 @@ mod tests {
 
     #[test]
     fn benefit_contention_keeps_quota_success_and_selects_accelerated_retry() {
-        let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
+        let latest = Arc::new(Mutex::new(ProviderQuotaRefreshSnapshot::not_run()));
         let report = QuotaPublicationReport {
             quota: completed_summary(),
             benefit: BenefitPublicationSummary {
@@ -1393,7 +1359,7 @@ mod tests {
                 ..BenefitPublicationSummary::default()
             },
             quota_failure: None,
-            benefit_failure: Some(CodexQuotaPublicationErrorCode::Busy),
+            benefit_failure: Some(ProviderQuotaPublicationErrorCode::Busy),
         };
         let source = FakeSource {
             events: Arc::new(Mutex::new(Vec::new())),
@@ -1416,11 +1382,11 @@ mod tests {
 
         assert_eq!(execution.run(&permit), RefreshOutcome::Busy);
         let snapshot = *latest.lock().test_value("latest");
-        assert_eq!(snapshot.retry_mode(), CodexQuotaRetryMode::Accelerated);
+        assert_eq!(snapshot.retry_mode(), ProviderQuotaRetryMode::Accelerated);
         assert_eq!(
             snapshot.failure(),
-            Some(CodexQuotaRefreshFailure::BenefitPublication(
-                CodexQuotaPublicationErrorCode::Busy
+            Some(ProviderQuotaRefreshFailure::BenefitPublication(
+                ProviderQuotaPublicationErrorCode::Busy
             ))
         );
         assert_eq!(
@@ -1432,7 +1398,7 @@ mod tests {
 
     #[test]
     fn benefit_success_remains_visible_when_quota_publication_fails() {
-        let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
+        let latest = Arc::new(Mutex::new(ProviderQuotaRefreshSnapshot::not_run()));
         let report = QuotaPublicationReport {
             quota: QuotaPublicationSummary::default(),
             benefit: BenefitPublicationSummary {
@@ -1443,7 +1409,7 @@ mod tests {
                 pending_due_count: 5,
                 ..BenefitPublicationSummary::default()
             },
-            quota_failure: Some(CodexQuotaPublicationErrorCode::InvalidData),
+            quota_failure: Some(ProviderQuotaPublicationErrorCode::InvalidData),
             benefit_failure: None,
         };
         let source = FakeSource {
@@ -1469,8 +1435,8 @@ mod tests {
         let snapshot = *latest.lock().test_value("latest");
         assert_eq!(
             snapshot.failure(),
-            Some(CodexQuotaRefreshFailure::QuotaPublication(
-                CodexQuotaPublicationErrorCode::InvalidData
+            Some(ProviderQuotaRefreshFailure::QuotaPublication(
+                ProviderQuotaPublicationErrorCode::InvalidData
             ))
         );
         assert_eq!(snapshot.quota_failure_count(), 1);
@@ -1487,7 +1453,7 @@ mod tests {
 
     #[test]
     fn inconsistent_publisher_report_fails_closed_without_advancing_success() {
-        let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
+        let latest = Arc::new(Mutex::new(ProviderQuotaRefreshSnapshot::not_run()));
         let report = QuotaPublicationReport {
             quota: QuotaPublicationSummary {
                 processed_count: 2,
@@ -1526,17 +1492,17 @@ mod tests {
         let snapshot = *latest.lock().test_value("latest");
         assert_eq!(
             snapshot.failure(),
-            Some(CodexQuotaRefreshFailure::QuotaPublication(
-                CodexQuotaPublicationErrorCode::InvalidData
+            Some(ProviderQuotaRefreshFailure::QuotaPublication(
+                ProviderQuotaPublicationErrorCode::InvalidData
             ))
         );
         assert_eq!(
             snapshot.quota_failure(),
-            Some(CodexQuotaPublicationErrorCode::InvalidData)
+            Some(ProviderQuotaPublicationErrorCode::InvalidData)
         );
         assert_eq!(
             snapshot.benefit_failure(),
-            Some(CodexQuotaPublicationErrorCode::InvalidData)
+            Some(ProviderQuotaPublicationErrorCode::InvalidData)
         );
         assert_eq!(snapshot.last_success_observed_at_ms(), None);
         assert_eq!(snapshot.last_quota_success_observed_at_ms(), None);
@@ -1550,24 +1516,24 @@ mod tests {
                 Err(ProviderPollErrorCode::UnsupportedVersion),
                 None,
                 RefreshOutcome::Failed,
-                CodexQuotaRetryMode::Normal,
-                Some(CodexQuotaRefreshFailure::Transport(
-                    CodexQuotaErrorCode::UnsupportedVersion,
+                ProviderQuotaRetryMode::Normal,
+                Some(ProviderQuotaRefreshFailure::Transport(
+                    ProviderPollErrorCode::UnsupportedVersion,
                 )),
             ),
             (
                 Err(ProviderPollErrorCode::DeadlineExceeded),
                 None,
                 RefreshOutcome::DeadlineExceeded,
-                CodexQuotaRetryMode::Accelerated,
-                Some(CodexQuotaRefreshFailure::Transport(
-                    CodexQuotaErrorCode::DeadlineExceeded,
+                ProviderQuotaRetryMode::Accelerated,
+                Some(ProviderQuotaRefreshFailure::Transport(
+                    ProviderPollErrorCode::DeadlineExceeded,
                 )),
             ),
             (
                 Ok(normalized(OBSERVED_AT_MS)),
                 Some(QuotaPublicationError::with_report(
-                    CodexQuotaPublicationErrorCode::InvalidData,
+                    ProviderQuotaPublicationErrorCode::InvalidData,
                     QuotaPublicationReport {
                         quota: QuotaPublicationSummary {
                             processed_count: 1,
@@ -1583,16 +1549,16 @@ mod tests {
                     },
                 )),
                 RefreshOutcome::Failed,
-                CodexQuotaRetryMode::Normal,
-                Some(CodexQuotaRefreshFailure::Publication(
-                    CodexQuotaPublicationErrorCode::InvalidData,
+                ProviderQuotaRetryMode::Normal,
+                Some(ProviderQuotaRefreshFailure::Publication(
+                    ProviderQuotaPublicationErrorCode::InvalidData,
                 )),
             ),
         ];
 
         for (source_result, publication_error, outcome, retry_mode, failure) in cases {
             let events = Arc::new(Mutex::new(Vec::new()));
-            let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
+            let latest = Arc::new(Mutex::new(ProviderQuotaRefreshSnapshot::not_run()));
             let monotonic = Arc::new(FakeMonotonicClock::default());
             let publisher_result =
                 publication_error.map_or_else(|| Ok(QuotaPublicationReport::default()), Err);
@@ -1621,8 +1587,8 @@ mod tests {
             assert_eq!(snapshot.retry_mode(), retry_mode);
             assert_eq!(snapshot.failure(), failure);
             if failure
-                == Some(CodexQuotaRefreshFailure::Publication(
-                    CodexQuotaPublicationErrorCode::InvalidData,
+                == Some(ProviderQuotaRefreshFailure::Publication(
+                    ProviderQuotaPublicationErrorCode::InvalidData,
                 ))
             {
                 assert_eq!(snapshot.processed_count(), 1);
@@ -1635,7 +1601,7 @@ mod tests {
     fn invalid_wall_clock_and_post_poll_deadline_fail_before_publication() {
         let events = Arc::new(Mutex::new(Vec::new()));
         let calls = Arc::new(AtomicUsize::new(0));
-        let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
+        let latest = Arc::new(Mutex::new(ProviderQuotaRefreshSnapshot::not_run()));
         let monotonic = Arc::new(FakeMonotonicClock::default());
         let source = FakeSource {
             events: Arc::clone(&events),
@@ -1650,7 +1616,7 @@ mod tests {
         let monotonic_clock: Arc<dyn Clock> = monotonic.clone();
         let mut execution = ProviderQuotaExecution::new(
             monotonic_clock,
-            FixedWallClock(Err(CodexQuotaClockErrorCode::InvalidTime)),
+            FixedWallClock(Err(ProviderQuotaClockErrorCode::InvalidTime)),
             source,
             publisher,
             Arc::clone(&latest),
@@ -1660,12 +1626,12 @@ mod tests {
         assert_eq!(calls.load(Ordering::Acquire), 0);
         assert_eq!(
             latest.lock().test_value("latest").failure(),
-            Some(CodexQuotaRefreshFailure::Clock(
-                CodexQuotaClockErrorCode::InvalidTime
+            Some(ProviderQuotaRefreshFailure::Clock(
+                ProviderQuotaClockErrorCode::InvalidTime
             ))
         );
 
-        let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
+        let latest = Arc::new(Mutex::new(ProviderQuotaRefreshSnapshot::not_run()));
         let calls = Arc::new(AtomicUsize::new(0));
         let advance = Arc::clone(&monotonic);
         let source = FakeSource {
@@ -1691,7 +1657,7 @@ mod tests {
         assert_eq!(calls.load(Ordering::Acquire), 0);
         assert_eq!(
             latest.lock().test_value("latest").failure(),
-            Some(CodexQuotaRefreshFailure::Control(
+            Some(ProviderQuotaRefreshFailure::Control(
                 PortErrorCode::DeadlineExceeded
             ))
         );

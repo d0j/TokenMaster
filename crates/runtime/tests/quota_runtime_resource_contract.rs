@@ -18,12 +18,12 @@ use serde_json::Value;
 #[cfg(windows)]
 use tempfile::TempDir;
 #[cfg(windows)]
-use tokenmaster_codex::CodexQuotaErrorCode;
 #[cfg(windows)]
 use tokenmaster_engine::{RefreshOutcome, WriterLease};
 #[cfg(windows)]
 use tokenmaster_runtime::{
-    CodexQuotaRefreshFailure, CodexQuotaRuntime, CodexQuotaRuntimeConfig, RuntimeWriterLease,
+    CodexQuotaRuntimeConfig, ProviderPollErrorCode, ProviderQuotaRefreshFailure,
+    ProviderQuotaRuntime, RuntimeWriterLease,
 };
 
 #[cfg(windows)]
@@ -106,8 +106,8 @@ impl FixtureSet {
         assert_eq!(wait_completion(&rpc).outcome(), RefreshOutcome::Failed);
         assert_eq!(
             rpc.snapshot().expect("RPC snapshot").refresh().failure(),
-            Some(CodexQuotaRefreshFailure::Transport(
-                CodexQuotaErrorCode::RpcError
+            Some(ProviderQuotaRefreshFailure::Transport(
+                ProviderPollErrorCode::RpcError
             ))
         );
         rpc.shutdown().expect("RPC shutdown");
@@ -127,8 +127,8 @@ impl FixtureSet {
                 .expect("timeout snapshot")
                 .refresh()
                 .failure(),
-            Some(CodexQuotaRefreshFailure::Transport(
-                CodexQuotaErrorCode::DeadlineExceeded
+            Some(ProviderQuotaRefreshFailure::Transport(
+                ProviderPollErrorCode::DeadlineExceeded
             ))
         );
         timeout.shutdown().expect("timeout shutdown");
@@ -176,18 +176,18 @@ fn copy_fixture(temp: &TempDir, mode: &str) -> PathBuf {
 }
 
 #[cfg(windows)]
-fn start_runtime(archive: &Path, executable: &Path, timeout: Duration) -> CodexQuotaRuntime {
+fn start_runtime(archive: &Path, executable: &Path, timeout: Duration) -> ProviderQuotaRuntime {
     let config = CodexQuotaRuntimeConfig::new(archive.to_path_buf())
         .expect("runtime config")
         .with_executable(executable.to_path_buf())
         .expect("runtime fixture executable")
         .with_transport_timeout(timeout)
         .expect("runtime fixture timeout");
-    CodexQuotaRuntime::start(config).expect("start quota runtime")
+    ProviderQuotaRuntime::start(config).expect("start quota runtime")
 }
 
 #[cfg(windows)]
-fn wait_completion(runtime: &CodexQuotaRuntime) -> tokenmaster_engine::WorkerCompletion {
+fn wait_completion(runtime: &ProviderQuotaRuntime) -> tokenmaster_engine::WorkerCompletion {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         if let Some(completion) = runtime.try_completion().expect("runtime completion") {

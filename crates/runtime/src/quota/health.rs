@@ -1,16 +1,17 @@
-use tokenmaster_codex::{CodexQuotaErrorCode, MAX_CODEX_QUOTA_WINDOWS};
+use tokenmaster_codex::MAX_CODEX_QUOTA_WINDOWS;
 use tokenmaster_engine::{PortErrorCode, RefreshOutcome, WorkerSnapshot};
 
+use crate::ProviderPollErrorCode;
 use crate::SchedulerPhase;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CodexQuotaClockErrorCode {
+pub enum ProviderQuotaClockErrorCode {
     Unavailable,
     InvalidTime,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CodexQuotaPublicationErrorCode {
+pub enum ProviderQuotaPublicationErrorCode {
     Busy,
     Cancelled,
     DeadlineExceeded,
@@ -20,7 +21,7 @@ pub enum CodexQuotaPublicationErrorCode {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CodexQuotaRefreshStage {
+pub enum ProviderQuotaRefreshStage {
     Discovery,
     Clock,
     Transport,
@@ -31,27 +32,27 @@ pub enum CodexQuotaRefreshStage {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CodexQuotaRefreshFailure {
+pub enum ProviderQuotaRefreshFailure {
     Discovery(super::CodexExecutableDiscoveryErrorCode),
-    Clock(CodexQuotaClockErrorCode),
-    Transport(CodexQuotaErrorCode),
-    Publication(CodexQuotaPublicationErrorCode),
-    QuotaPublication(CodexQuotaPublicationErrorCode),
-    BenefitPublication(CodexQuotaPublicationErrorCode),
+    Clock(ProviderQuotaClockErrorCode),
+    Transport(ProviderPollErrorCode),
+    Publication(ProviderQuotaPublicationErrorCode),
+    QuotaPublication(ProviderQuotaPublicationErrorCode),
+    BenefitPublication(ProviderQuotaPublicationErrorCode),
     Control(PortErrorCode),
 }
 
-impl CodexQuotaRefreshFailure {
+impl ProviderQuotaRefreshFailure {
     #[must_use]
-    pub const fn stage(self) -> CodexQuotaRefreshStage {
+    pub const fn stage(self) -> ProviderQuotaRefreshStage {
         match self {
-            Self::Discovery(_) => CodexQuotaRefreshStage::Discovery,
-            Self::Clock(_) => CodexQuotaRefreshStage::Clock,
-            Self::Transport(_) => CodexQuotaRefreshStage::Transport,
-            Self::Publication(_) => CodexQuotaRefreshStage::Publication,
-            Self::QuotaPublication(_) => CodexQuotaRefreshStage::QuotaPublication,
-            Self::BenefitPublication(_) => CodexQuotaRefreshStage::BenefitPublication,
-            Self::Control(_) => CodexQuotaRefreshStage::Control,
+            Self::Discovery(_) => ProviderQuotaRefreshStage::Discovery,
+            Self::Clock(_) => ProviderQuotaRefreshStage::Clock,
+            Self::Transport(_) => ProviderQuotaRefreshStage::Transport,
+            Self::Publication(_) => ProviderQuotaRefreshStage::Publication,
+            Self::QuotaPublication(_) => ProviderQuotaRefreshStage::QuotaPublication,
+            Self::BenefitPublication(_) => ProviderQuotaRefreshStage::BenefitPublication,
+            Self::Control(_) => ProviderQuotaRefreshStage::Control,
         }
     }
 
@@ -59,46 +60,32 @@ impl CodexQuotaRefreshFailure {
     pub const fn stable_code(self) -> &'static str {
         match self {
             Self::Discovery(_) => "unavailable",
-            Self::Clock(CodexQuotaClockErrorCode::Unavailable) => "unavailable",
-            Self::Clock(CodexQuotaClockErrorCode::InvalidTime) => "invalid_time",
-            Self::Transport(error) => match error {
-                CodexQuotaErrorCode::DeadlineExceeded => "deadline_exceeded",
-                CodexQuotaErrorCode::CapacityExceeded => "capacity_exceeded",
-                CodexQuotaErrorCode::Unavailable
-                | CodexQuotaErrorCode::SpawnFailed
-                | CodexQuotaErrorCode::ProcessExited
-                | CodexQuotaErrorCode::ProcessCleanupFailed => "unavailable",
-                CodexQuotaErrorCode::InvalidData
-                | CodexQuotaErrorCode::AccountIdentityUnavailable
-                | CodexQuotaErrorCode::InvalidTime
-                | CodexQuotaErrorCode::InvalidCommand
-                | CodexQuotaErrorCode::ProtocolError
-                | CodexQuotaErrorCode::UnsupportedVersion
-                | CodexQuotaErrorCode::RpcError => "invalid_data",
-            },
-            Self::Publication(CodexQuotaPublicationErrorCode::Busy)
-            | Self::QuotaPublication(CodexQuotaPublicationErrorCode::Busy)
-            | Self::BenefitPublication(CodexQuotaPublicationErrorCode::Busy)
+            Self::Clock(ProviderQuotaClockErrorCode::Unavailable) => "unavailable",
+            Self::Clock(ProviderQuotaClockErrorCode::InvalidTime) => "invalid_time",
+            Self::Transport(error) => error.stable_code(),
+            Self::Publication(ProviderQuotaPublicationErrorCode::Busy)
+            | Self::QuotaPublication(ProviderQuotaPublicationErrorCode::Busy)
+            | Self::BenefitPublication(ProviderQuotaPublicationErrorCode::Busy)
             | Self::Control(PortErrorCode::Busy) => "busy",
-            Self::Publication(CodexQuotaPublicationErrorCode::Cancelled)
-            | Self::QuotaPublication(CodexQuotaPublicationErrorCode::Cancelled)
-            | Self::BenefitPublication(CodexQuotaPublicationErrorCode::Cancelled)
+            Self::Publication(ProviderQuotaPublicationErrorCode::Cancelled)
+            | Self::QuotaPublication(ProviderQuotaPublicationErrorCode::Cancelled)
+            | Self::BenefitPublication(ProviderQuotaPublicationErrorCode::Cancelled)
             | Self::Control(PortErrorCode::Cancelled) => "cancelled",
-            Self::Publication(CodexQuotaPublicationErrorCode::DeadlineExceeded)
-            | Self::QuotaPublication(CodexQuotaPublicationErrorCode::DeadlineExceeded)
-            | Self::BenefitPublication(CodexQuotaPublicationErrorCode::DeadlineExceeded)
+            Self::Publication(ProviderQuotaPublicationErrorCode::DeadlineExceeded)
+            | Self::QuotaPublication(ProviderQuotaPublicationErrorCode::DeadlineExceeded)
+            | Self::BenefitPublication(ProviderQuotaPublicationErrorCode::DeadlineExceeded)
             | Self::Control(PortErrorCode::DeadlineExceeded) => "deadline_exceeded",
-            Self::Publication(CodexQuotaPublicationErrorCode::StoreUnavailable)
-            | Self::QuotaPublication(CodexQuotaPublicationErrorCode::StoreUnavailable)
-            | Self::BenefitPublication(CodexQuotaPublicationErrorCode::StoreUnavailable)
+            Self::Publication(ProviderQuotaPublicationErrorCode::StoreUnavailable)
+            | Self::QuotaPublication(ProviderQuotaPublicationErrorCode::StoreUnavailable)
+            | Self::BenefitPublication(ProviderQuotaPublicationErrorCode::StoreUnavailable)
             | Self::Control(PortErrorCode::Unavailable) => "unavailable",
-            Self::Publication(CodexQuotaPublicationErrorCode::CapacityExceeded)
-            | Self::QuotaPublication(CodexQuotaPublicationErrorCode::CapacityExceeded)
-            | Self::BenefitPublication(CodexQuotaPublicationErrorCode::CapacityExceeded)
+            Self::Publication(ProviderQuotaPublicationErrorCode::CapacityExceeded)
+            | Self::QuotaPublication(ProviderQuotaPublicationErrorCode::CapacityExceeded)
+            | Self::BenefitPublication(ProviderQuotaPublicationErrorCode::CapacityExceeded)
             | Self::Control(PortErrorCode::CapacityExceeded) => "capacity_exceeded",
-            Self::Publication(CodexQuotaPublicationErrorCode::InvalidData)
-            | Self::QuotaPublication(CodexQuotaPublicationErrorCode::InvalidData)
-            | Self::BenefitPublication(CodexQuotaPublicationErrorCode::InvalidData)
+            Self::Publication(ProviderQuotaPublicationErrorCode::InvalidData)
+            | Self::QuotaPublication(ProviderQuotaPublicationErrorCode::InvalidData)
+            | Self::BenefitPublication(ProviderQuotaPublicationErrorCode::InvalidData)
             | Self::Control(PortErrorCode::InvalidData)
             | Self::Control(PortErrorCode::StaleState)
             | Self::Control(PortErrorCode::RebuildRequired)
@@ -108,13 +95,13 @@ impl CodexQuotaRefreshFailure {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CodexQuotaRetryMode {
+pub enum ProviderQuotaRetryMode {
     Normal,
     Accelerated,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CodexQuotaRuntimePhase {
+pub enum ProviderQuotaRuntimePhase {
     Running,
     Paused,
     Stopping,
@@ -123,22 +110,22 @@ pub enum CodexQuotaRuntimePhase {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct CodexQuotaScheduleSnapshot {
+pub struct ProviderQuotaScheduleSnapshot {
     pub(super) phase: SchedulerPhase,
-    pub(super) retry_mode: CodexQuotaRetryMode,
+    pub(super) retry_mode: ProviderQuotaRetryMode,
     pub(super) refresh_pending: bool,
     pub(super) accepted_refresh_count: u64,
     pub(super) submitted_count: u64,
 }
 
-impl CodexQuotaScheduleSnapshot {
+impl ProviderQuotaScheduleSnapshot {
     #[must_use]
     pub const fn phase(self) -> SchedulerPhase {
         self.phase
     }
 
     #[must_use]
-    pub const fn retry_mode(self) -> CodexQuotaRetryMode {
+    pub const fn retry_mode(self) -> ProviderQuotaRetryMode {
         self.retry_mode
     }
 
@@ -159,11 +146,11 @@ impl CodexQuotaScheduleSnapshot {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct CodexQuotaRefreshSnapshot {
+pub struct ProviderQuotaRefreshSnapshot {
     pub(super) attempt_sequence: u64,
     pub(super) outcome: Option<RefreshOutcome>,
-    pub(super) failure: Option<CodexQuotaRefreshFailure>,
-    pub(super) retry_mode: CodexQuotaRetryMode,
+    pub(super) failure: Option<ProviderQuotaRefreshFailure>,
+    pub(super) retry_mode: ProviderQuotaRetryMode,
     pub(super) observation_count: u16,
     pub(super) processed_count: u16,
     pub(super) changed_count: u16,
@@ -173,7 +160,7 @@ pub struct CodexQuotaRefreshSnapshot {
     pub(super) stale_count: u16,
     pub(super) allowance_change_count: u16,
     pub(super) reset_count: u16,
-    pub(super) quota_failure: Option<CodexQuotaPublicationErrorCode>,
+    pub(super) quota_failure: Option<ProviderQuotaPublicationErrorCode>,
     pub(super) benefit_observation_count: u8,
     pub(super) benefit_processed_count: u8,
     pub(super) benefit_changed_count: u8,
@@ -182,7 +169,7 @@ pub struct CodexQuotaRefreshSnapshot {
     pub(super) benefit_stale_count: u8,
     pub(super) benefit_lot_change_count: u16,
     pub(super) benefit_pending_due_count: u16,
-    pub(super) benefit_failure: Option<CodexQuotaPublicationErrorCode>,
+    pub(super) benefit_failure: Option<ProviderQuotaPublicationErrorCode>,
     pub(super) observed_at_ms: Option<i64>,
     pub(super) elapsed_millis: u64,
     pub(super) last_success_observed_at_ms: Option<i64>,
@@ -190,13 +177,13 @@ pub struct CodexQuotaRefreshSnapshot {
     pub(super) last_benefit_success_observed_at_ms: Option<i64>,
 }
 
-impl CodexQuotaRefreshSnapshot {
+impl ProviderQuotaRefreshSnapshot {
     pub(crate) const fn not_run() -> Self {
         Self {
             attempt_sequence: 0,
             outcome: None,
             failure: None,
-            retry_mode: CodexQuotaRetryMode::Normal,
+            retry_mode: ProviderQuotaRetryMode::Normal,
             observation_count: 0,
             processed_count: 0,
             changed_count: 0,
@@ -235,12 +222,12 @@ impl CodexQuotaRefreshSnapshot {
     }
 
     #[must_use]
-    pub const fn failure(self) -> Option<CodexQuotaRefreshFailure> {
+    pub const fn failure(self) -> Option<ProviderQuotaRefreshFailure> {
         self.failure
     }
 
     #[must_use]
-    pub const fn retry_mode(self) -> CodexQuotaRetryMode {
+    pub const fn retry_mode(self) -> ProviderQuotaRetryMode {
         self.retry_mode
     }
 
@@ -310,7 +297,7 @@ impl CodexQuotaRefreshSnapshot {
     }
 
     #[must_use]
-    pub const fn quota_failure(self) -> Option<CodexQuotaPublicationErrorCode> {
+    pub const fn quota_failure(self) -> Option<ProviderQuotaPublicationErrorCode> {
         self.quota_failure
     }
 
@@ -360,7 +347,7 @@ impl CodexQuotaRefreshSnapshot {
     }
 
     #[must_use]
-    pub const fn benefit_failure(self) -> Option<CodexQuotaPublicationErrorCode> {
+    pub const fn benefit_failure(self) -> Option<ProviderQuotaPublicationErrorCode> {
         self.benefit_failure
     }
 
@@ -391,21 +378,21 @@ impl CodexQuotaRefreshSnapshot {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct CodexQuotaRuntimeSnapshot {
-    pub(super) phase: CodexQuotaRuntimePhase,
-    pub(super) schedule: CodexQuotaScheduleSnapshot,
+pub struct ProviderQuotaRuntimeSnapshot {
+    pub(super) phase: ProviderQuotaRuntimePhase,
+    pub(super) schedule: ProviderQuotaScheduleSnapshot,
     pub(super) worker: WorkerSnapshot,
-    pub(super) refresh: CodexQuotaRefreshSnapshot,
+    pub(super) refresh: ProviderQuotaRefreshSnapshot,
 }
 
-impl CodexQuotaRuntimeSnapshot {
+impl ProviderQuotaRuntimeSnapshot {
     #[must_use]
-    pub const fn phase(self) -> CodexQuotaRuntimePhase {
+    pub const fn phase(self) -> ProviderQuotaRuntimePhase {
         self.phase
     }
 
     #[must_use]
-    pub const fn schedule(self) -> CodexQuotaScheduleSnapshot {
+    pub const fn schedule(self) -> ProviderQuotaScheduleSnapshot {
         self.schedule
     }
 
@@ -415,19 +402,19 @@ impl CodexQuotaRuntimeSnapshot {
     }
 
     #[must_use]
-    pub const fn refresh(self) -> CodexQuotaRefreshSnapshot {
+    pub const fn refresh(self) -> ProviderQuotaRefreshSnapshot {
         self.refresh
     }
 }
 
 const _: () = assert!(MAX_CODEX_QUOTA_WINDOWS <= u16::MAX as usize);
 
-pub type ProviderQuotaClockErrorCode = CodexQuotaClockErrorCode;
-pub type ProviderQuotaPublicationErrorCode = CodexQuotaPublicationErrorCode;
-pub type ProviderQuotaRefreshFailure = CodexQuotaRefreshFailure;
-pub type ProviderQuotaRefreshSnapshot = CodexQuotaRefreshSnapshot;
-pub type ProviderQuotaRefreshStage = CodexQuotaRefreshStage;
-pub type ProviderQuotaRetryMode = CodexQuotaRetryMode;
-pub type ProviderQuotaRuntimePhase = CodexQuotaRuntimePhase;
-pub type ProviderQuotaRuntimeSnapshot = CodexQuotaRuntimeSnapshot;
-pub type ProviderQuotaScheduleSnapshot = CodexQuotaScheduleSnapshot;
+pub type CodexQuotaClockErrorCode = ProviderQuotaClockErrorCode;
+pub type CodexQuotaPublicationErrorCode = ProviderQuotaPublicationErrorCode;
+pub type CodexQuotaRefreshFailure = ProviderQuotaRefreshFailure;
+pub type CodexQuotaRefreshSnapshot = ProviderQuotaRefreshSnapshot;
+pub type CodexQuotaRefreshStage = ProviderQuotaRefreshStage;
+pub type CodexQuotaRetryMode = ProviderQuotaRetryMode;
+pub type CodexQuotaRuntimePhase = ProviderQuotaRuntimePhase;
+pub type CodexQuotaRuntimeSnapshot = ProviderQuotaRuntimeSnapshot;
+pub type CodexQuotaScheduleSnapshot = ProviderQuotaScheduleSnapshot;

@@ -9,8 +9,8 @@ use tokenmaster_platform::PowerLifecycleEvent;
 
 use super::execution::{ProviderQuotaExecution, StoreQuotaPublisher, SystemCodexQuotaWallClock};
 use super::{
-    CodexQuotaRefreshSnapshot, CodexQuotaRetryMode, CodexQuotaRuntimeConfig,
-    CodexQuotaRuntimePhase, CodexQuotaRuntimeSnapshot, CodexQuotaScheduleSnapshot,
+    CodexQuotaRuntimeConfig, ProviderQuotaRefreshSnapshot, ProviderQuotaRetryMode,
+    ProviderQuotaRuntimePhase, ProviderQuotaRuntimeSnapshot, ProviderQuotaScheduleSnapshot,
 };
 use crate::provider_quota::{CodexQuotaSource, ProviderQuotaSource};
 use crate::{
@@ -18,15 +18,15 @@ use crate::{
     SchedulerErrorCode, SchedulerPhase, SystemClock, WatcherHealth,
 };
 
-pub struct CodexQuotaRuntime {
-    phase: CodexQuotaRuntimePhase,
+pub struct ProviderQuotaRuntime {
+    phase: ProviderQuotaRuntimePhase,
     scheduler: RefreshScheduler,
     worker: Arc<RefreshWorker>,
     admission_open: Arc<Mutex<bool>>,
-    latest: Arc<Mutex<CodexQuotaRefreshSnapshot>>,
+    latest: Arc<Mutex<ProviderQuotaRefreshSnapshot>>,
 }
 
-impl CodexQuotaRuntime {
+impl ProviderQuotaRuntime {
     pub fn start(config: CodexQuotaRuntimeConfig) -> Result<Self, RuntimeError> {
         Self::start_with_notifier(config, None)
     }
@@ -67,7 +67,7 @@ impl CodexQuotaRuntime {
         notifier: Option<Arc<dyn WorkerCompletionNotifier>>,
     ) -> Result<Self, RuntimeError> {
         let clock: Arc<dyn Clock> = SystemClock::shared();
-        let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
+        let latest = Arc::new(Mutex::new(ProviderQuotaRefreshSnapshot::not_run()));
         let publisher = StoreQuotaPublisher::new(archive_path)?;
         let mut execution = ProviderQuotaExecution::new(
             Arc::clone(&clock),
@@ -84,7 +84,7 @@ impl CodexQuotaRuntime {
     #[cfg(test)]
     fn start_with_runner<F>(
         clock: Arc<dyn Clock>,
-        latest: Arc<Mutex<CodexQuotaRefreshSnapshot>>,
+        latest: Arc<Mutex<ProviderQuotaRefreshSnapshot>>,
         execute: F,
     ) -> Result<Self, RuntimeError>
     where
@@ -95,7 +95,7 @@ impl CodexQuotaRuntime {
 
     fn start_with_runner_notified<F>(
         clock: Arc<dyn Clock>,
-        latest: Arc<Mutex<CodexQuotaRefreshSnapshot>>,
+        latest: Arc<Mutex<ProviderQuotaRefreshSnapshot>>,
         notifier: Option<Arc<dyn WorkerCompletionNotifier>>,
         mut execute: F,
     ) -> Result<Self, RuntimeError>
@@ -112,8 +112,8 @@ impl CodexQuotaRuntime {
                 Err(_) => return RefreshOutcome::Failed,
             };
             let health = match retry_mode {
-                CodexQuotaRetryMode::Normal => WatcherHealth::Healthy,
-                CodexQuotaRetryMode::Accelerated => WatcherHealth::Degraded,
+                ProviderQuotaRetryMode::Normal => WatcherHealth::Healthy,
+                ProviderQuotaRetryMode::Accelerated => WatcherHealth::Degraded,
             };
             let cadence = match execution_cadence.lock() {
                 Ok(cadence) => cadence,
@@ -157,7 +157,7 @@ impl CodexQuotaRuntime {
         scheduler.resume().map_err(runtime_scheduler_error)?;
 
         Ok(Self {
-            phase: CodexQuotaRuntimePhase::Running,
+            phase: ProviderQuotaRuntimePhase::Running,
             scheduler,
             worker,
             admission_open,
@@ -170,13 +170,13 @@ impl CodexQuotaRuntime {
     }
 
     fn refresh_with_urgency(&self, urgency: RefreshUrgency) -> Result<(), RuntimeError> {
-        if self.phase != CodexQuotaRuntimePhase::Running {
+        if self.phase != ProviderQuotaRuntimePhase::Running {
             return Err(RuntimeError::new(match self.phase {
-                CodexQuotaRuntimePhase::Faulted => RuntimeErrorCode::Faulted,
-                CodexQuotaRuntimePhase::Running => RuntimeErrorCode::Internal,
-                CodexQuotaRuntimePhase::Paused
-                | CodexQuotaRuntimePhase::Stopping
-                | CodexQuotaRuntimePhase::Stopped => RuntimeErrorCode::Closed,
+                ProviderQuotaRuntimePhase::Faulted => RuntimeErrorCode::Faulted,
+                ProviderQuotaRuntimePhase::Running => RuntimeErrorCode::Internal,
+                ProviderQuotaRuntimePhase::Paused
+                | ProviderQuotaRuntimePhase::Stopping
+                | ProviderQuotaRuntimePhase::Stopped => RuntimeErrorCode::Closed,
             }));
         }
         if self.scheduler.hints().force_reconcile(urgency) {
@@ -190,7 +190,7 @@ impl CodexQuotaRuntime {
         self.worker.try_completion().map_err(runtime_worker_error)
     }
 
-    pub fn snapshot(&self) -> Result<CodexQuotaRuntimeSnapshot, RuntimeError> {
+    pub fn snapshot(&self) -> Result<ProviderQuotaRuntimeSnapshot, RuntimeError> {
         let scheduler = self.scheduler.snapshot();
         let worker = self.worker.snapshot().map_err(runtime_worker_error)?;
         let refresh = *self
@@ -200,17 +200,17 @@ impl CodexQuotaRuntime {
         let phase = if scheduler.phase() == SchedulerPhase::Faulted
             || worker.phase() == WorkerPhase::Faulted
         {
-            CodexQuotaRuntimePhase::Faulted
+            ProviderQuotaRuntimePhase::Faulted
         } else {
             self.phase
         };
         let retry_mode = match scheduler.watcher_health() {
-            WatcherHealth::Healthy => CodexQuotaRetryMode::Normal,
-            WatcherHealth::Degraded => CodexQuotaRetryMode::Accelerated,
+            WatcherHealth::Healthy => ProviderQuotaRetryMode::Normal,
+            WatcherHealth::Degraded => ProviderQuotaRetryMode::Accelerated,
         };
-        Ok(CodexQuotaRuntimeSnapshot {
+        Ok(ProviderQuotaRuntimeSnapshot {
             phase,
-            schedule: CodexQuotaScheduleSnapshot {
+            schedule: ProviderQuotaScheduleSnapshot {
                 phase: scheduler.phase(),
                 retry_mode,
                 refresh_pending: scheduler.dirty() || scheduler.force_reconcile(),
@@ -222,33 +222,33 @@ impl CodexQuotaRuntime {
         })
     }
 
-    pub fn pause(&mut self) -> Result<CodexQuotaRuntimePhase, RuntimeError> {
+    pub fn pause(&mut self) -> Result<ProviderQuotaRuntimePhase, RuntimeError> {
         match self.phase {
-            CodexQuotaRuntimePhase::Paused => return Ok(CodexQuotaRuntimePhase::Paused),
-            CodexQuotaRuntimePhase::Running => {}
-            CodexQuotaRuntimePhase::Faulted => {
+            ProviderQuotaRuntimePhase::Paused => return Ok(ProviderQuotaRuntimePhase::Paused),
+            ProviderQuotaRuntimePhase::Running => {}
+            ProviderQuotaRuntimePhase::Faulted => {
                 return Err(RuntimeError::new(RuntimeErrorCode::Faulted));
             }
-            CodexQuotaRuntimePhase::Stopping | CodexQuotaRuntimePhase::Stopped => {
+            ProviderQuotaRuntimePhase::Stopping | ProviderQuotaRuntimePhase::Stopped => {
                 return Err(RuntimeError::new(RuntimeErrorCode::Closed));
             }
         }
         let mut admission = match self.admission_open.lock() {
             Ok(admission) => admission,
             Err(_) => {
-                self.phase = CodexQuotaRuntimePhase::Faulted;
+                self.phase = ProviderQuotaRuntimePhase::Faulted;
                 return Err(RuntimeError::new(RuntimeErrorCode::Internal));
             }
         };
         *admission = false;
         if let Err(error) = self.scheduler.pause() {
-            self.phase = CodexQuotaRuntimePhase::Faulted;
+            self.phase = ProviderQuotaRuntimePhase::Faulted;
             return Err(runtime_scheduler_error(error));
         }
         let snapshot = match self.worker.snapshot() {
             Ok(snapshot) => snapshot,
             Err(error) => {
-                self.phase = CodexQuotaRuntimePhase::Faulted;
+                self.phase = ProviderQuotaRuntimePhase::Faulted;
                 return Err(runtime_worker_error(error));
             }
         };
@@ -256,48 +256,48 @@ impl CodexQuotaRuntime {
             && let Err(error) = self.worker.cancel(active)
             && error.code() != WorkerErrorCode::StaleRequest
         {
-            self.phase = CodexQuotaRuntimePhase::Faulted;
+            self.phase = ProviderQuotaRuntimePhase::Faulted;
             return Err(runtime_worker_error(error));
         }
-        self.phase = CodexQuotaRuntimePhase::Paused;
+        self.phase = ProviderQuotaRuntimePhase::Paused;
         Ok(self.phase)
     }
 
-    pub fn resume(&mut self) -> Result<CodexQuotaRuntimePhase, RuntimeError> {
+    pub fn resume(&mut self) -> Result<ProviderQuotaRuntimePhase, RuntimeError> {
         match self.phase {
-            CodexQuotaRuntimePhase::Running => return Ok(CodexQuotaRuntimePhase::Running),
-            CodexQuotaRuntimePhase::Paused => {}
-            CodexQuotaRuntimePhase::Faulted => {
+            ProviderQuotaRuntimePhase::Running => return Ok(ProviderQuotaRuntimePhase::Running),
+            ProviderQuotaRuntimePhase::Paused => {}
+            ProviderQuotaRuntimePhase::Faulted => {
                 return Err(RuntimeError::new(RuntimeErrorCode::Faulted));
             }
-            CodexQuotaRuntimePhase::Stopping | CodexQuotaRuntimePhase::Stopped => {
+            ProviderQuotaRuntimePhase::Stopping | ProviderQuotaRuntimePhase::Stopped => {
                 return Err(RuntimeError::new(RuntimeErrorCode::Closed));
             }
         }
         let mut admission = match self.admission_open.lock() {
             Ok(admission) => admission,
             Err(_) => {
-                self.phase = CodexQuotaRuntimePhase::Faulted;
+                self.phase = ProviderQuotaRuntimePhase::Faulted;
                 return Err(RuntimeError::new(RuntimeErrorCode::Internal));
             }
         };
         *admission = true;
         if let Err(error) = self.scheduler.resume() {
             *admission = false;
-            self.phase = CodexQuotaRuntimePhase::Faulted;
+            self.phase = ProviderQuotaRuntimePhase::Faulted;
             return Err(runtime_scheduler_error(error));
         }
-        self.phase = CodexQuotaRuntimePhase::Running;
+        self.phase = ProviderQuotaRuntimePhase::Running;
         Ok(self.phase)
     }
 
     pub fn apply_power_event(
         &mut self,
         event: PowerLifecycleEvent,
-    ) -> Result<CodexQuotaRuntimePhase, RuntimeError> {
+    ) -> Result<ProviderQuotaRuntimePhase, RuntimeError> {
         match event {
             PowerLifecycleEvent::Suspend => self.pause(),
-            PowerLifecycleEvent::Resume if self.phase == CodexQuotaRuntimePhase::Running => {
+            PowerLifecycleEvent::Resume if self.phase == ProviderQuotaRuntimePhase::Running => {
                 self.refresh_with_urgency(RefreshUrgency::Recovery)?;
                 Ok(self.phase)
             }
@@ -305,11 +305,11 @@ impl CodexQuotaRuntime {
         }
     }
 
-    pub fn shutdown(&mut self) -> Result<CodexQuotaRuntimePhase, RuntimeError> {
-        if self.phase == CodexQuotaRuntimePhase::Stopped {
+    pub fn shutdown(&mut self) -> Result<ProviderQuotaRuntimePhase, RuntimeError> {
+        if self.phase == ProviderQuotaRuntimePhase::Stopped {
             return Ok(self.phase);
         }
-        self.phase = CodexQuotaRuntimePhase::Stopping;
+        self.phase = ProviderQuotaRuntimePhase::Stopping;
         let mut failed = false;
         match self.admission_open.lock() {
             Ok(mut admission) => *admission = false,
@@ -342,25 +342,25 @@ impl CodexQuotaRuntime {
             || scheduler_phase == SchedulerPhase::Faulted
             || worker_phase == WorkerPhase::Faulted
         {
-            self.phase = CodexQuotaRuntimePhase::Faulted;
+            self.phase = ProviderQuotaRuntimePhase::Faulted;
             Err(RuntimeError::new(RuntimeErrorCode::Internal))
         } else {
-            self.phase = CodexQuotaRuntimePhase::Stopped;
+            self.phase = ProviderQuotaRuntimePhase::Stopped;
             Ok(self.phase)
         }
     }
 }
 
-impl fmt::Debug for CodexQuotaRuntime {
+impl fmt::Debug for ProviderQuotaRuntime {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
-            .debug_struct("CodexQuotaRuntime")
+            .debug_struct("ProviderQuotaRuntime")
             .field("snapshot", &self.snapshot().ok())
             .finish()
     }
 }
 
-impl Drop for CodexQuotaRuntime {
+impl Drop for ProviderQuotaRuntime {
     fn drop(&mut self) {
         let _ = self.shutdown();
     }
@@ -404,7 +404,7 @@ mod tests {
     };
     use tokenmaster_platform::PowerLifecycleEvent;
 
-    use super::CodexQuotaRuntime;
+    use super::ProviderQuotaRuntime;
     use crate::RuntimeErrorCode;
 
     trait TestResultExt<T, E> {
@@ -427,7 +427,9 @@ mod tests {
             }
         }
     }
-    use crate::quota::{CodexQuotaRefreshSnapshot, CodexQuotaRetryMode, CodexQuotaRuntimePhase};
+    use crate::quota::{
+        ProviderQuotaRefreshSnapshot, ProviderQuotaRetryMode, ProviderQuotaRuntimePhase,
+    };
 
     #[derive(Default)]
     struct FakeClock {
@@ -460,9 +462,9 @@ mod tests {
     }
 
     fn record(
-        latest: &Arc<Mutex<CodexQuotaRefreshSnapshot>>,
+        latest: &Arc<Mutex<ProviderQuotaRefreshSnapshot>>,
         outcome: RefreshOutcome,
-        retry_mode: CodexQuotaRetryMode,
+        retry_mode: ProviderQuotaRetryMode,
     ) {
         let mut snapshot = latest.lock().test_value("latest");
         snapshot.attempt_sequence = snapshot.attempt_sequence.saturating_add(1);
@@ -474,16 +476,16 @@ mod tests {
     #[test]
     fn startup_runs_one_recovery_refresh_and_publishes_separate_health() {
         let clock = Arc::new(FakeClock::default());
-        let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
+        let latest = Arc::new(Mutex::new(ProviderQuotaRefreshSnapshot::not_run()));
         let execution_latest = Arc::clone(&latest);
         let (sender, receiver) = channel();
         let mut runtime =
-            CodexQuotaRuntime::start_with_runner(clock, Arc::clone(&latest), move |permit| {
+            ProviderQuotaRuntime::start_with_runner(clock, Arc::clone(&latest), move |permit| {
                 sender.send(permit.urgency()).test_value("record urgency");
                 record(
                     &execution_latest,
                     RefreshOutcome::Completed,
-                    CodexQuotaRetryMode::Normal,
+                    ProviderQuotaRetryMode::Normal,
                 );
                 RefreshOutcome::Completed
             })
@@ -504,7 +506,7 @@ mod tests {
             std::thread::yield_now();
         }
         let snapshot = runtime.snapshot().test_value("runtime snapshot");
-        assert_eq!(snapshot.phase(), CodexQuotaRuntimePhase::Running);
+        assert_eq!(snapshot.phase(), ProviderQuotaRuntimePhase::Running);
         assert_eq!(
             snapshot.refresh().outcome(),
             Some(RefreshOutcome::Completed)
@@ -512,25 +514,25 @@ mod tests {
         assert_eq!(snapshot.schedule().submitted_count(), 1);
         assert_eq!(
             snapshot.schedule().retry_mode(),
-            CodexQuotaRetryMode::Normal
+            ProviderQuotaRetryMode::Normal
         );
         assert_no_refresh(&receiver);
         assert_eq!(
             runtime.shutdown().test_value("quota shutdown"),
-            CodexQuotaRuntimePhase::Stopped
+            ProviderQuotaRuntimePhase::Stopped
         );
     }
 
     #[test]
     fn manual_refresh_burst_retains_only_one_worker_follow_up() {
         let clock = Arc::new(FakeClock::default());
-        let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
+        let latest = Arc::new(Mutex::new(ProviderQuotaRefreshSnapshot::not_run()));
         let execution_latest = Arc::clone(&latest);
         let (started_sender, started_receiver) = channel();
         let (release_sender, release_receiver) = channel();
         let calls = Arc::new(AtomicUsize::new(0));
         let execution_calls = Arc::clone(&calls);
-        let mut runtime = CodexQuotaRuntime::start_with_runner(clock, latest, move |permit| {
+        let mut runtime = ProviderQuotaRuntime::start_with_runner(clock, latest, move |permit| {
             let call = execution_calls.fetch_add(1, Ordering::AcqRel);
             started_sender
                 .send(permit.urgency())
@@ -543,7 +545,7 @@ mod tests {
             record(
                 &execution_latest,
                 RefreshOutcome::Completed,
-                CodexQuotaRetryMode::Normal,
+                ProviderQuotaRetryMode::Normal,
             );
             RefreshOutcome::Completed
         })
@@ -577,19 +579,19 @@ mod tests {
     #[test]
     fn transient_failure_uses_accelerated_period_then_success_returns_to_normal() {
         let clock = Arc::new(FakeClock::default());
-        let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
+        let latest = Arc::new(Mutex::new(ProviderQuotaRefreshSnapshot::not_run()));
         let execution_latest = Arc::clone(&latest);
         let execution_count = Arc::new(AtomicUsize::new(0));
         let calls = Arc::clone(&execution_count);
         let (sender, receiver) = channel();
         let mut runtime =
-            CodexQuotaRuntime::start_with_runner(clock.clone(), latest, move |permit| {
+            ProviderQuotaRuntime::start_with_runner(clock.clone(), latest, move |permit| {
                 let call = calls.fetch_add(1, Ordering::AcqRel);
                 sender.send(permit.urgency()).test_value("record execution");
                 let (outcome, retry) = if call == 0 {
-                    (RefreshOutcome::Failed, CodexQuotaRetryMode::Accelerated)
+                    (RefreshOutcome::Failed, ProviderQuotaRetryMode::Accelerated)
                 } else {
-                    (RefreshOutcome::Completed, CodexQuotaRetryMode::Normal)
+                    (RefreshOutcome::Completed, ProviderQuotaRetryMode::Normal)
                 };
                 record(&execution_latest, outcome, retry);
                 outcome
@@ -604,7 +606,7 @@ mod tests {
                 .test_value("snapshot")
                 .schedule()
                 .retry_mode()
-                == CodexQuotaRetryMode::Accelerated
+                == ProviderQuotaRetryMode::Accelerated
             {
                 break;
             }
@@ -616,7 +618,7 @@ mod tests {
                 .test_value("snapshot")
                 .schedule()
                 .retry_mode(),
-            CodexQuotaRetryMode::Accelerated
+            ProviderQuotaRetryMode::Accelerated
         );
 
         clock.set(crate::DEGRADED_POLL_MILLIS - 1);
@@ -633,7 +635,7 @@ mod tests {
                 .test_value("snapshot")
                 .schedule()
                 .retry_mode()
-                == CodexQuotaRetryMode::Normal
+                == ProviderQuotaRetryMode::Normal
             {
                 break;
             }
@@ -645,7 +647,7 @@ mod tests {
                 .test_value("snapshot")
                 .schedule()
                 .retry_mode(),
-            CodexQuotaRetryMode::Normal
+            ProviderQuotaRetryMode::Normal
         );
         assert_eq!(execution_count.load(Ordering::Acquire), 2);
         runtime.shutdown().test_value("quota shutdown");
@@ -654,15 +656,15 @@ mod tests {
     #[test]
     fn pause_resume_power_and_shutdown_are_bounded_and_idempotent() {
         let clock = Arc::new(FakeClock::default());
-        let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
+        let latest = Arc::new(Mutex::new(ProviderQuotaRefreshSnapshot::not_run()));
         let execution_latest = Arc::clone(&latest);
         let (sender, receiver) = channel();
-        let mut runtime = CodexQuotaRuntime::start_with_runner(clock, latest, move |permit| {
+        let mut runtime = ProviderQuotaRuntime::start_with_runner(clock, latest, move |permit| {
             sender.send(permit.urgency()).test_value("record execution");
             record(
                 &execution_latest,
                 RefreshOutcome::Completed,
-                CodexQuotaRetryMode::Normal,
+                ProviderQuotaRetryMode::Normal,
             );
             RefreshOutcome::Completed
         })
@@ -671,7 +673,7 @@ mod tests {
 
         assert_eq!(
             runtime.pause().test_value("pause"),
-            CodexQuotaRuntimePhase::Paused
+            ProviderQuotaRuntimePhase::Paused
         );
         assert_eq!(
             runtime.refresh_now().test_error("paused refresh").code(),
@@ -681,22 +683,22 @@ mod tests {
             runtime
                 .apply_power_event(PowerLifecycleEvent::Suspend)
                 .test_value("idempotent suspend"),
-            CodexQuotaRuntimePhase::Paused
+            ProviderQuotaRuntimePhase::Paused
         );
         assert_eq!(
             runtime
                 .apply_power_event(PowerLifecycleEvent::Resume)
                 .test_value("resume"),
-            CodexQuotaRuntimePhase::Running
+            ProviderQuotaRuntimePhase::Running
         );
         assert_eq!(receive(&receiver), RefreshUrgency::Recovery);
         assert_eq!(
             runtime.shutdown().test_value("shutdown"),
-            CodexQuotaRuntimePhase::Stopped
+            ProviderQuotaRuntimePhase::Stopped
         );
         assert_eq!(
             runtime.shutdown().test_value("idempotent shutdown"),
-            CodexQuotaRuntimePhase::Stopped
+            ProviderQuotaRuntimePhase::Stopped
         );
     }
 
@@ -735,8 +737,8 @@ mod tests {
             .engine();
 
         let clock = Arc::new(FakeClock::default());
-        let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
-        let runtime = CodexQuotaRuntime::start_with_runner(clock, latest, |_permit| {
+        let latest = Arc::new(Mutex::new(ProviderQuotaRefreshSnapshot::not_run()));
+        let runtime = ProviderQuotaRuntime::start_with_runner(clock, latest, |_permit| {
             panic!("private quota runner panic")
         })
         .test_value("quota runtime");
@@ -749,7 +751,7 @@ mod tests {
             std::thread::yield_now();
         }
         let snapshot = runtime.snapshot().test_value("snapshot");
-        assert_eq!(snapshot.phase(), CodexQuotaRuntimePhase::Faulted);
+        assert_eq!(snapshot.phase(), ProviderQuotaRuntimePhase::Faulted);
         assert_eq!(snapshot.worker().phase(), WorkerPhase::Faulted);
         assert!(!format!("{runtime:?}").contains("private quota runner panic"));
         assert_eq!(
@@ -767,16 +769,19 @@ mod tests {
     #[test]
     fn runner_observes_only_bounded_permit_metadata() {
         let clock = Arc::new(FakeClock::default());
-        let latest = Arc::new(Mutex::new(CodexQuotaRefreshSnapshot::not_run()));
+        let latest = Arc::new(Mutex::new(ProviderQuotaRefreshSnapshot::not_run()));
         let (sender, receiver) = channel::<(RefreshUrgency, bool)>();
-        let mut runtime =
-            CodexQuotaRuntime::start_with_runner(clock, latest, move |permit: &RefreshPermit| {
+        let mut runtime = ProviderQuotaRuntime::start_with_runner(
+            clock,
+            latest,
+            move |permit: &RefreshPermit| {
                 sender
                     .send((permit.urgency(), permit.deadline().is_some()))
                     .test_value("permit metadata");
                 RefreshOutcome::Completed
-            })
-            .test_value("quota runtime");
+            },
+        )
+        .test_value("quota runtime");
         assert_eq!(
             receiver.recv_timeout(Duration::from_secs(2)),
             Ok((RefreshUrgency::Recovery, false))
