@@ -19,7 +19,7 @@ hardening.
 **Files:**
 - Modify: `crates/state/src/settings/value.rs`
 - Modify: `crates/state/src/settings/migration.rs`
-- Modify: `crates/state/src/settings/package.rs`
+- Modify: `crates/state/src/package.rs`
 - Modify: `crates/state/src/lib.rs`
 - Modify: `crates/state/tests/settings_contract.rs`
 
