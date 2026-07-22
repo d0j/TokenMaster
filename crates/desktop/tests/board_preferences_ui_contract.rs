@@ -89,6 +89,17 @@ fn board_editor_exposes_six_accessible_rows_and_canonical_visible_slots() {
             .len(),
         1
     );
+    assert_eq!(
+        ElementQuery::from_root(window)
+            .match_accessible_role(AccessibleRole::Groupbox)
+            .match_predicate(|element| {
+                element.accessible_label().as_deref() == Some("Dashboard board section Plan Usage")
+            })
+            .find_all()
+            .len(),
+        1,
+        "the compiled Settings board row must retain its dynamic label through the localized format key"
+    );
 }
 
 #[test]

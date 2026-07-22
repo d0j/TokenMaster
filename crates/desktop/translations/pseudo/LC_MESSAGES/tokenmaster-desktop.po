@@ -296,3 +296,126 @@ msgstr "［Šåṽê βåçķûþ þõļîçÿ ·····］"
 
 msgid "Save automatic backup policy"
 msgstr "［Šåṽê åûţõɱåţîç βåçķûþ þõļîçÿ ·······］"
+
+msgid "Start with Windows"
+msgstr "［Šţåřţ ŵîţĥ Ŵîñðõŵš ·····］"
+
+msgid "Disabled. TokenMaster will not start when you sign in."
+msgstr "［Ðîšåβļêð. ŢõķêñMåšţêř ŵîļļ ñõţ šţåřţ ŵĥêñ ÿõû šîğñ îñ. ·······］"
+
+msgid "Enabled and verified for this executable."
+msgstr "［Êñåβļêð åñð ṽêřîƒîêð ƒõř ţĥîš êxêçûţåβļê. ·····］"
+
+msgid "The registration points to a previous TokenMaster location. Repair or remove it explicitly."
+msgstr "［Ţĥê řêğîšţřåţîõñ þõîñţš ţõ å þřêṽîõûš ŢõķêñMåšţêř ļõçåţîõñ. Řêþåîř õř řêɱõṽê îţ êxþļîçîţļÿ. ·······］"
+
+msgid "A conflicting startup value is present. TokenMaster will not overwrite it."
+msgstr "［Å çõñƒļîçţîñğ šţåřţûþ ṽåļûê îš þřêšêñţ. ŢõķêñMåšţêř ŵîļļ ñõţ õṽêřŵřîţê îţ. ·······］"
+
+msgid "Windows denied access to the current-user startup value."
+msgstr "［Ŵîñðõŵš ðêñîêð åççêšš ţõ ţĥê çûřřêñţ-ûšêř šţåřţûþ ṽåļûê. ·······］"
+
+msgid "Current-user startup is unavailable on this system."
+msgstr "［Çûřřêñţ-ûšêř šţåřţûþ îš ûñåṽåîļåβļê õñ ţĥîš šÿšţêɱ. ·······］"
+
+msgid "Current-user startup status {0}"
+msgstr "［Çûřřêñţ-ûšêř šţåřţûþ šţåţûš {0} ·····］"
+
+msgid "Enable at sign-in"
+msgstr "［Êñåβļê åţ šîğñ-îñ ·····］"
+
+msgid "Enable TokenMaster at Windows sign-in"
+msgstr "［Êñåβļê ŢõķêñMåšţêř åţ Ŵîñðõŵš šîğñ-îñ ·······］"
+
+msgid "Disable at sign-in"
+msgstr "［Ðîšåβļê åţ šîğñ-îñ ·····］"
+
+msgid "Disable TokenMaster at Windows sign-in"
+msgstr "［Ðîšåβļê ŢõķêñMåšţêř åţ Ŵîñðõŵš šîğñ-îñ ·······］"
+
+msgid "Repair registration"
+msgstr "［Řêþåîř řêğîšţřåţîõñ ·····］"
+
+msgid "Repair TokenMaster startup registration"
+msgstr "［Řêþåîř ŢõķêñMåšţêř šţåřţûþ řêğîšţřåţîõñ ·······］"
+
+msgid "Remove old registration"
+msgstr "［Řêɱõṽê õļð řêğîšţřåţîõñ ·····］"
+
+msgid "Remove old TokenMaster startup registration"
+msgstr "［Řêɱõṽê õļð ŢõķêñMåšţêř šţåřţûþ řêğîšţřåţîõñ ·······］"
+
+msgid "Portable configuration"
+msgstr "［Þõřţåβļê çõñƒîğûřåţîõñ ·····］"
+
+msgid "Export configuration"
+msgstr "［Êxþõřţ çõñƒîğûřåţîõñ ·····］"
+
+msgid "Export TokenMaster configuration"
+msgstr "［Êxþõřţ ŢõķêñMåšţêř çõñƒîğûřåţîõñ ·······］"
+
+msgid "Import configuration"
+msgstr "［Îɱþõřţ çõñƒîğûřåţîõñ ·····］"
+
+msgid "Import TokenMaster configuration"
+msgstr "［Îɱþõřţ ŢõķêñMåšţêř çõñƒîğûřåţîõñ ·······］"
+
+msgid "Import review · {0} · {1} · {2}"
+msgstr "［Îɱþõřţ řêṽîêŵ · {0} · {1} · {2} ·······］"
+
+msgid "Apply"
+msgstr "［Åþþļÿ ···］"
+
+msgid "Apply reviewed configuration import"
+msgstr "［Åþþļÿ řêṽîêŵêð çõñƒîğûřåţîõñ îɱþõřţ ·······］"
+
+msgid "Discard"
+msgstr "［Ðîšçåřð ···］"
+
+msgid "Discard reviewed configuration import"
+msgstr "［Ðîšçåřð řêṽîêŵêð çõñƒîğûřåţîõñ îɱþõřţ ·······］"
+
+msgid "Dashboard board"
+msgstr "［Ðåšĥβõåřð βõåřð ·····］"
+
+msgid "Reset board"
+msgstr "［Řêšêţ βõåřð ·····］"
+
+msgid "Reset dashboard board"
+msgstr "［Řêšêţ ðåšĥβõåřð βõåřð ·····］"
+
+msgid "Order, visibility, and collapse are saved with the current presentation."
+msgstr "［Õřðêř, ṽîšîβîļîţÿ, åñð çõļļåþšê åřê šåṽêð ŵîţĥ ţĥê çûřřêñţ þřêšêñţåţîõñ. ·······］"
+
+msgid "Dashboard board section {0}"
+msgstr "［Ðåšĥβõåřð βõåřð šêçţîõñ {0} ·····］"
+
+msgid "Up"
+msgstr "［Ûþ ···］"
+
+msgid "Move {0} up"
+msgstr "［Mõṽê {0} ûþ ·····］"
+
+msgid "Down"
+msgstr "［Ðõŵñ ···］"
+
+msgid "Move {0} down"
+msgstr "［Mõṽê {0} ðõŵñ ·····］"
+
+msgid "Visible"
+msgstr "［Vîšîβļê ···］"
+
+msgid "Show {0} on dashboard"
+msgstr "［Šĥõŵ {0} õñ ðåšĥβõåřð ·····］"
+
+msgid "Collapsed"
+msgstr "［Çõļļåþšêð ···］"
+
+msgid "Collapse {0} on dashboard"
+msgstr "［Çõļļåþšê {0} õñ ðåšĥβõåřð ·····］"
+
+msgid "Reduced motion enabled"
+msgstr "［Řêðûçêð ɱõţîõñ êñåβļêð ·····］"
+
+msgid "Reduced motion ready"
+msgstr "［Řêðûçêð ɱõţîõñ řêåðÿ ·····］"

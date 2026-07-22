@@ -269,39 +269,39 @@ export component SettingsView inherits Rectangle {
             VerticalLayout {
                 padding: UiTokens.space;
                 spacing: UiTokens.space-sm;
-                Text { text: "Start with Windows"; color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
+                Text { text: @tr("Start with Windows"); color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
                 Text {
-                    text: root.current-user-startup-status == "disabled" ? "Disabled. TokenMaster will not start when you sign in."
-                        : root.current-user-startup-status == "enabled_verified" ? "Enabled and verified for this executable."
-                        : root.current-user-startup-status == "stale_relocation" ? "The registration points to a previous TokenMaster location. Repair or remove it explicitly."
-                        : root.current-user-startup-status == "conflict" ? "A conflicting startup value is present. TokenMaster will not overwrite it."
-                        : root.current-user-startup-status == "access_denied" ? "Windows denied access to the current-user startup value."
-                        : "Current-user startup is unavailable on this system.";
+                    text: root.current-user-startup-status == "disabled" ? @tr("Disabled. TokenMaster will not start when you sign in.")
+                        : root.current-user-startup-status == "enabled_verified" ? @tr("Enabled and verified for this executable.")
+                        : root.current-user-startup-status == "stale_relocation" ? @tr("The registration points to a previous TokenMaster location. Repair or remove it explicitly.")
+                        : root.current-user-startup-status == "conflict" ? @tr("A conflicting startup value is present. TokenMaster will not overwrite it.")
+                        : root.current-user-startup-status == "access_denied" ? @tr("Windows denied access to the current-user startup value.")
+                        : @tr("Current-user startup is unavailable on this system.");
                     color: root.current-user-startup-status == "enabled_verified" ? UiTokens.ready : root.current-user-startup-status == "disabled" ? UiTokens.text-secondary : UiTokens.degraded;
                     wrap: word-wrap;
                     horizontal-stretch: 1;
-                    accessible-label: "Current-user startup status " + root.current-user-startup-status;
+                    accessible-label: @tr("Current-user startup status {0}", root.current-user-startup-status);
                 }
                 HorizontalLayout {
                     spacing: UiTokens.space-sm;
                     if root.current-user-startup-can-enable: Button {
-                        text: "Enable at sign-in";
-                        accessible-label: "Enable TokenMaster at Windows sign-in";
+                        text: @tr("Enable at sign-in");
+                        accessible-label: @tr("Enable TokenMaster at Windows sign-in");
                         clicked => { root.enable-current-user-startup(); }
                     }
                     if root.current-user-startup-can-disable && !root.current-user-startup-can-repair: Button {
-                        text: "Disable at sign-in";
-                        accessible-label: "Disable TokenMaster at Windows sign-in";
+                        text: @tr("Disable at sign-in");
+                        accessible-label: @tr("Disable TokenMaster at Windows sign-in");
                         clicked => { root.disable-current-user-startup(); }
                     }
                     if root.current-user-startup-can-repair: Button {
-                        text: "Repair registration";
-                        accessible-label: "Repair TokenMaster startup registration";
+                        text: @tr("Repair registration");
+                        accessible-label: @tr("Repair TokenMaster startup registration");
                         clicked => { root.repair-current-user-startup(); }
                     }
                     if root.current-user-startup-can-repair: Button {
-                        text: "Remove old registration";
-                        accessible-label: "Remove old TokenMaster startup registration";
+                        text: @tr("Remove old registration");
+                        accessible-label: @tr("Remove old TokenMaster startup registration");
                         clicked => { root.disable-current-user-startup(); }
                     }
                 }
@@ -317,22 +317,22 @@ export component SettingsView inherits Rectangle {
             VerticalLayout {
                 padding: UiTokens.space;
                 spacing: UiTokens.space-sm;
-                Text { text: "Portable configuration"; color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
+                Text { text: @tr("Portable configuration"); color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
                 HorizontalLayout {
                     spacing: UiTokens.space-sm;
-                    Button { text: "Export configuration"; accessible-label: "Export TokenMaster configuration"; clicked => { root.export-config(); } }
-                    Button { text: "Import configuration"; accessible-label: "Import TokenMaster configuration"; clicked => { root.import-config(); } }
+                    Button { text: @tr("Export configuration"); accessible-label: @tr("Export TokenMaster configuration"); clicked => { root.export-config(); } }
+                    Button { text: @tr("Import configuration"); accessible-label: @tr("Import TokenMaster configuration"); clicked => { root.import-config(); } }
                 }
                 if root.config-import-preview-visible: HorizontalLayout {
                     spacing: UiTokens.space-sm;
                     Text {
-                        text: "Import review · " + root.config-import-created-label + " · " + root.config-import-bytes-label + " · " + root.config-import-changes-label;
+                        text: @tr("Import review · {0} · {1} · {2}", root.config-import-created-label, root.config-import-bytes-label, root.config-import-changes-label);
                         color: UiTokens.degraded;
                         horizontal-stretch: 1;
                         wrap: word-wrap;
                     }
-                    Button { text: "Apply"; accessible-label: "Apply reviewed configuration import"; clicked => { root.confirm-config-import(); } }
-                    Button { text: "Discard"; accessible-label: "Discard reviewed configuration import"; clicked => { root.cancel-config-import(); } }
+                    Button { text: @tr("Apply"); accessible-label: @tr("Apply reviewed configuration import"); clicked => { root.confirm-config-import(); } }
+                    Button { text: @tr("Discard"); accessible-label: @tr("Discard reviewed configuration import"); clicked => { root.cancel-config-import(); } }
                 }
             }
         }
@@ -343,21 +343,21 @@ export component SettingsView inherits Rectangle {
             border-width: root.high-contrast ? 2px : 1px;
             border-radius: UiTokens.radius;
             accessible-role: groupbox;
-            accessible-label: "Dashboard board";
+            accessible-label: @tr("Dashboard board");
 
             VerticalLayout {
                 padding: UiTokens.space;
                 spacing: UiTokens.space-sm;
                 HorizontalLayout {
-                    Text { text: "Dashboard board"; color: UiTokens.text-primary; font-size: 17px; font-weight: 650; horizontal-stretch: 1; }
+                    Text { text: @tr("Dashboard board"); color: UiTokens.text-primary; font-size: 17px; font-weight: 650; horizontal-stretch: 1; }
                     Button {
-                        text: "Reset board";
-                        accessible-label: "Reset dashboard board";
+                        text: @tr("Reset board");
+                        accessible-label: @tr("Reset dashboard board");
                         clicked => { root.reset-dashboard-board(); }
                     }
                 }
                 Text {
-                    text: "Order, visibility, and collapse are saved with the current presentation.";
+                    text: @tr("Order, visibility, and collapse are saved with the current presentation.");
                     color: UiTokens.text-secondary;
                     wrap: word-wrap;
                 }
@@ -366,17 +366,17 @@ export component SettingsView inherits Rectangle {
                     background: UiTokens.surface-subtle;
                     border-radius: UiTokens.radius-sm;
                     accessible-role: groupbox;
-                    accessible-label: "Dashboard board section " + row.label;
+                    accessible-label: @tr("Dashboard board section {0}", row.label);
                     if root.settings-layout-mode == "narrow": VerticalLayout {
                         padding: UiTokens.space-xs;
                         spacing: UiTokens.space-xs;
                         Text { text: row.label; color: UiTokens.text-primary; font-weight: 650; }
                         HorizontalLayout {
                             spacing: UiTokens.space-xs;
-                            Button { text: "Up"; enabled: row.can-move-up; accessible-label: "Move " + row.label + " up"; clicked => { root.move-dashboard-board-row(index, -1); } }
-                            Button { text: "Down"; enabled: row.can-move-down; accessible-label: "Move " + row.label + " down"; clicked => { root.move-dashboard-board-row(index, 1); } }
-                            CheckBox { text: "Visible"; checked: row.visible; enabled: row.visible || row.can-hide; accessible-label: "Show " + row.label + " on dashboard"; toggled => { root.set-dashboard-board-row-visible(index, self.checked); } }
-                            CheckBox { text: "Collapsed"; checked: row.collapsed; accessible-label: "Collapse " + row.label + " on dashboard"; toggled => { root.set-dashboard-board-row-collapsed(index, self.checked); } }
+                            Button { text: @tr("Up"); enabled: row.can-move-up; accessible-label: @tr("Move {0} up", row.label); clicked => { root.move-dashboard-board-row(index, -1); } }
+                            Button { text: @tr("Down"); enabled: row.can-move-down; accessible-label: @tr("Move {0} down", row.label); clicked => { root.move-dashboard-board-row(index, 1); } }
+                            CheckBox { text: @tr("Visible"); checked: row.visible; enabled: row.visible || row.can-hide; accessible-label: @tr("Show {0} on dashboard", row.label); toggled => { root.set-dashboard-board-row-visible(index, self.checked); } }
+                            CheckBox { text: @tr("Collapsed"); checked: row.collapsed; accessible-label: @tr("Collapse {0} on dashboard", row.label); toggled => { root.set-dashboard-board-row-collapsed(index, self.checked); } }
                         }
                     }
                     if root.settings-layout-mode == "wide": HorizontalLayout {
@@ -384,15 +384,15 @@ export component SettingsView inherits Rectangle {
                         padding-right: UiTokens.space-sm;
                         spacing: UiTokens.space-sm;
                         Text { text: row.label; color: UiTokens.text-primary; font-weight: 650; horizontal-stretch: 1; vertical-alignment: center; }
-                        Button { text: "Up"; enabled: row.can-move-up; accessible-label: "Move " + row.label + " up"; clicked => { root.move-dashboard-board-row(index, -1); } }
-                        Button { text: "Down"; enabled: row.can-move-down; accessible-label: "Move " + row.label + " down"; clicked => { root.move-dashboard-board-row(index, 1); } }
-                        CheckBox { text: "Visible"; checked: row.visible; enabled: row.visible || row.can-hide; accessible-label: "Show " + row.label + " on dashboard"; toggled => { root.set-dashboard-board-row-visible(index, self.checked); } }
-                        CheckBox { text: "Collapsed"; checked: row.collapsed; accessible-label: "Collapse " + row.label + " on dashboard"; toggled => { root.set-dashboard-board-row-collapsed(index, self.checked); } }
+                        Button { text: @tr("Up"); enabled: row.can-move-up; accessible-label: @tr("Move {0} up", row.label); clicked => { root.move-dashboard-board-row(index, -1); } }
+                        Button { text: @tr("Down"); enabled: row.can-move-down; accessible-label: @tr("Move {0} down", row.label); clicked => { root.move-dashboard-board-row(index, 1); } }
+                        CheckBox { text: @tr("Visible"); checked: row.visible; enabled: row.visible || row.can-hide; accessible-label: @tr("Show {0} on dashboard", row.label); toggled => { root.set-dashboard-board-row-visible(index, self.checked); } }
+                        CheckBox { text: @tr("Collapsed"); checked: row.collapsed; accessible-label: @tr("Collapse {0} on dashboard", row.label); toggled => { root.set-dashboard-board-row-collapsed(index, self.checked); } }
                     }
                 }
             }
         }
-        Text { text: root.reduced-motion ? "Reduced motion enabled" : "Reduced motion ready"; color: UiTokens.text-secondary; font-size: 12px; }
+        Text { text: root.reduced-motion ? @tr("Reduced motion enabled") : @tr("Reduced motion ready"); color: UiTokens.text-secondary; font-size: 12px; }
         Rectangle { vertical-stretch: 1; background: transparent; }
         }
     }

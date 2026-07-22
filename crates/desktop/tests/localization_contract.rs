@@ -118,6 +118,50 @@ const SETTINGS_REMINDER_BACKUP_MSGIDS: [&str; 36] = [
     "Save automatic backup policy",
 ];
 
+const SETTINGS_STARTUP_CONFIG_BOARD_FOOTER_MSGIDS: [&str; 41] = [
+    "Start with Windows",
+    "Disabled. TokenMaster will not start when you sign in.",
+    "Enabled and verified for this executable.",
+    "The registration points to a previous TokenMaster location. Repair or remove it explicitly.",
+    "A conflicting startup value is present. TokenMaster will not overwrite it.",
+    "Windows denied access to the current-user startup value.",
+    "Current-user startup is unavailable on this system.",
+    "Current-user startup status {0}",
+    "Enable at sign-in",
+    "Enable TokenMaster at Windows sign-in",
+    "Disable at sign-in",
+    "Disable TokenMaster at Windows sign-in",
+    "Repair registration",
+    "Repair TokenMaster startup registration",
+    "Remove old registration",
+    "Remove old TokenMaster startup registration",
+    "Portable configuration",
+    "Export configuration",
+    "Export TokenMaster configuration",
+    "Import configuration",
+    "Import TokenMaster configuration",
+    "Import review · {0} · {1} · {2}",
+    "Apply",
+    "Apply reviewed configuration import",
+    "Discard",
+    "Discard reviewed configuration import",
+    "Dashboard board",
+    "Reset board",
+    "Reset dashboard board",
+    "Order, visibility, and collapse are saved with the current presentation.",
+    "Dashboard board section {0}",
+    "Up",
+    "Move {0} up",
+    "Down",
+    "Move {0} down",
+    "Visible",
+    "Show {0} on dashboard",
+    "Collapsed",
+    "Collapse {0} on dashboard",
+    "Reduced motion enabled",
+    "Reduced motion ready",
+];
+
 const COMPONENT_RAW_LITERAL_ALLOWLIST: [&str; 11] = [
     "", " ", " · ", ", ", "ready", "degraded", "waiting", "●", "▲", "…", "×",
 ];
@@ -162,6 +206,7 @@ fn shell_component_and_settings_reminder_backup_catalogs_are_complete_and_preser
         .into_iter()
         .chain(COMPONENT_MSGIDS)
         .chain(SETTINGS_REMINDER_BACKUP_MSGIDS)
+        .chain(SETTINGS_STARTUP_CONFIG_BOARD_FOOTER_MSGIDS)
         .collect::<BTreeSet<_>>();
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -176,7 +221,7 @@ fn shell_component_and_settings_reminder_backup_catalogs_are_complete_and_preser
         assert_eq!(
             entries.keys().copied().collect::<BTreeSet<_>>(),
             expected,
-            "{locale} must translate exactly the G2a1 shell, Task 2a2 component, and Task 2b1 Settings reminder/backup key set"
+            "{locale} must translate exactly the G2a1 shell, Task 2a2 component, Task 2b1 Settings reminder/backup, and Task 2b2 Settings startup/config/board/footer key sets"
         );
         assert_eq!(
             po_entry_count(&catalog),
@@ -200,6 +245,35 @@ fn shell_component_and_settings_reminder_backup_catalogs_are_complete_and_preser
             "{locale} must not retain unsupported Slint %1 placeholders"
         );
     }
+}
+
+#[test]
+fn settings_startup_config_board_and_footer_use_only_the_closed_translation_key_set() {
+    let settings = include_str!("../ui/views/settings-view.slint");
+
+    for msgid in SETTINGS_STARTUP_CONFIG_BOARD_FOOTER_MSGIDS {
+        assert!(
+            settings.contains(&format!("@tr(\"{msgid}\"")),
+            "missing Task 2b2 Settings @tr for {msgid:?}"
+        );
+    }
+
+    for raw in [
+        "text: \"Start with Windows\"",
+        "text: \"Portable configuration\"",
+        "text: \"Dashboard board\"",
+        "text: \"Reduced motion enabled\"",
+        "text: \"Reduced motion ready\"",
+    ] {
+        assert!(
+            !settings.contains(raw),
+            "unwrapped Task 2b2 literal {raw:?}"
+        );
+    }
+    assert!(
+        !settings.contains("%1"),
+        "Task 2b2 Settings source must use Slint format placeholders, not literal %1"
+    );
 }
 
 #[test]
