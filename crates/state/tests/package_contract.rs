@@ -20,7 +20,7 @@ use package_support::{
 const PACKAGE_TIME: i64 = 1_721_234_567_890;
 
 #[test]
-fn v3_config_golden_vector_is_deterministic_typed_and_round_trips() {
+fn v4_config_golden_vector_is_deterministic_typed_and_round_trips() {
     let settings = settings();
     let (first, first_receipt) = config_bytes_at(PACKAGE_TIME);
     let (second, second_receipt) = config_bytes_at(PACKAGE_TIME);
@@ -35,7 +35,7 @@ fn v3_config_golden_vector_is_deterministic_typed_and_round_trips() {
     assert_eq!(&first[32..40], b"TMMNF001");
     assert_eq!(u16::from_le_bytes(first[40..42].try_into().unwrap()), 1);
     assert_eq!(u16::from_le_bytes(first[42..44].try_into().unwrap()), 40);
-    assert_eq!(u16::from_le_bytes(first[46..48].try_into().unwrap()), 3);
+    assert_eq!(u16::from_le_bytes(first[46..48].try_into().unwrap()), 4);
     assert_eq!(
         i64::from_le_bytes(first[52..60].try_into().unwrap()),
         PACKAGE_TIME
@@ -63,7 +63,7 @@ fn v3_config_golden_vector_is_deterministic_typed_and_round_trips() {
 }
 
 #[test]
-fn container_v1_v2_previews_retain_source_versions_and_migrate_to_v3() {
+fn container_v1_v2_previews_retain_source_versions_and_migrate_to_v4_dark() {
     for (source_version, settings_json, expected_density) in [
         (1_u16, legacy_v1_portable_json(), "comfortable"),
         (2_u16, legacy_v2_portable_json(), "compact"),
@@ -81,16 +81,20 @@ fn container_v1_v2_previews_retain_source_versions_and_migrate_to_v3() {
                 .expect("canonical settings"),
         )
         .expect("canonical settings JSON");
-        assert_eq!(canonical["schema_version"], 3);
+        assert_eq!(canonical["schema_version"], 4);
         assert_eq!(
             canonical["portable"]["presentation"]["density"],
             expected_density
         );
         assert_eq!(canonical["portable"]["presentation"]["skin"], "refined");
+        assert_eq!(
+            canonical["portable"]["presentation"]["color_scheme"],
+            "dark"
+        );
     }
 
     let (current, _) = config_bytes_at(PACKAGE_TIME);
-    assert_eq!(u16::from_le_bytes(current[46..48].try_into().unwrap()), 3);
+    assert_eq!(u16::from_le_bytes(current[46..48].try_into().unwrap()), 4);
     assert!(read_config_bytes(&current).is_ok());
 }
 
@@ -108,12 +112,16 @@ fn legacy_backup_retains_database_and_metadata_while_settings_migrate() {
             .expect("canonical settings"),
     )
     .expect("canonical settings JSON");
-    assert_eq!(canonical["schema_version"], 3);
+    assert_eq!(canonical["schema_version"], 4);
     assert_eq!(
         canonical["portable"]["presentation"]["density"],
         "comfortable"
     );
     assert_eq!(canonical["portable"]["presentation"]["skin"], "refined");
+    assert_eq!(
+        canonical["portable"]["presentation"]["color_scheme"],
+        "dark"
+    );
     assert_eq!(verified.database_schema_version(), 13);
     assert_eq!(verified.database_len(), database.len() as u64);
     assert_eq!(verified.database_sha256(), &digest(database));
@@ -123,7 +131,7 @@ fn legacy_backup_retains_database_and_metadata_while_settings_migrate() {
 }
 
 #[test]
-fn v3_config_and_backup_round_trip_graphite_and_ember_without_data_loss() {
+fn v3_config_and_backup_migrate_graphite_and_ember_to_v4_dark_without_data_loss() {
     let database = b"SQLite format 3\0v3 skin package database payload";
     for skin in ["graphite", "ember"] {
         let settings_json = v3_portable_json(skin);
@@ -141,6 +149,10 @@ fn v3_config_and_backup_round_trip_graphite_and_ember_without_data_loss() {
                     )
                     .expect("v3 settings JSON");
                     assert_eq!(canonical["portable"]["presentation"]["skin"], skin);
+                    assert_eq!(
+                        canonical["portable"]["presentation"]["color_scheme"],
+                        "dark"
+                    );
                 }
                 Some(expected_database) => {
                     let (verified, restored) = read_backup_bytes(&package).expect("v3 backup");
@@ -152,6 +164,10 @@ fn v3_config_and_backup_round_trip_graphite_and_ember_without_data_loss() {
                     )
                     .expect("v3 settings JSON");
                     assert_eq!(canonical["portable"]["presentation"]["skin"], skin);
+                    assert_eq!(
+                        canonical["portable"]["presentation"]["color_scheme"],
+                        "dark"
+                    );
                     assert_eq!(restored, expected_database);
                 }
             }

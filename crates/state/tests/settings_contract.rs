@@ -10,9 +10,10 @@ use tokenmaster_state::{
     BACKUP_INTERVAL_DEFAULT_SECONDS, BACKUP_INTERVAL_MAX_SECONDS, BACKUP_QUIET_DEFAULT_SECONDS,
     BACKUP_QUIET_MIN_SECONDS, BACKUP_RETENTION_DEFAULT_BYTES, BACKUP_RETENTION_MAX_BYTES,
     BACKUP_RETENTION_MIN_BYTES, DeviceRoute, DeviceSettings, PortableSettings,
-    PortableSettingsCandidate, PortableSettingsTarget, PresentationDensity, PresentationSettings,
-    PresentationSkin, ReminderPolicy, SETTINGS_SCHEMA_VERSION, SettingsChangeCategory,
-    SettingsHealthCode, SettingsLoadOutcome, SettingsStore, SettingsValue, StateErrorCode,
+    PortableSettingsCandidate, PortableSettingsTarget, PresentationColorScheme,
+    PresentationDensity, PresentationSettings, PresentationSkin, ReminderPolicy,
+    SETTINGS_SCHEMA_VERSION, SettingsChangeCategory, SettingsHealthCode, SettingsLoadOutcome,
+    SettingsStore, SettingsValue, StateErrorCode,
 };
 
 const HEADER_BYTES: usize = 64;
@@ -81,6 +82,23 @@ fn legacy_v2_settings_json(route: &str, density: &str) -> Value {
     })
 }
 
+fn legacy_v3_settings_json(route: &str, density: &str, skin: &str) -> Value {
+    json!({
+        "schema_version": 3,
+        "portable": {
+            "reminders": { "enabled": true, "lead_seconds": [3600] },
+            "backup": {
+                "periodic_enabled": false,
+                "quiet_seconds": 300,
+                "interval_seconds": 21600,
+                "retention_budget_bytes": BACKUP_RETENTION_DEFAULT_BYTES
+            },
+            "presentation": { "density": density, "skin": skin }
+        },
+        "device": { "last_route": route }
+    })
+}
+
 #[test]
 fn presentation_skin_serialization_contract() {
     assert_eq!(
@@ -102,17 +120,40 @@ fn presentation_skin_serialization_contract() {
 }
 
 #[test]
-fn settings_schema_v3_contract() {
-    assert_eq!(SETTINGS_SCHEMA_VERSION, 3);
+fn presentation_color_scheme_serialization_and_default_contract() {
+    for (scheme, key) in [
+        (PresentationColorScheme::System, "system"),
+        (PresentationColorScheme::Light, "light"),
+        (PresentationColorScheme::Dark, "dark"),
+    ] {
+        assert_eq!(
+            serde_json::to_value(scheme).expect("color scheme key"),
+            json!(key)
+        );
+    }
+    for invalid in [json!("future"), json!(1), Value::Null] {
+        assert!(serde_json::from_value::<PresentationColorScheme>(invalid).is_err());
+    }
+
+    assert_eq!(
+        PresentationSettings::refined().color_scheme(),
+        PresentationColorScheme::System
+    );
+}
+
+#[test]
+fn settings_schema_v4_contract() {
+    assert_eq!(SETTINGS_SCHEMA_VERSION, 4);
     let refined = PresentationSettings::refined();
     assert_eq!(refined.density(), PresentationDensity::Comfortable);
     assert_eq!(refined.skin(), PresentationSkin::Refined);
+    assert_eq!(refined.color_scheme(), PresentationColorScheme::System);
 
     let encoded = serde_json::to_value(SettingsValue::safe_defaults()).expect("encode settings");
     assert_eq!(
         encoded,
         json!({
-            "schema_version": 3,
+            "schema_version": 4,
             "portable": {
                 "reminders": {
                     "enabled": true,
@@ -124,17 +165,21 @@ fn settings_schema_v3_contract() {
                     "interval_seconds": BACKUP_INTERVAL_DEFAULT_SECONDS,
                     "retention_budget_bytes": BACKUP_RETENTION_DEFAULT_BYTES
                 },
-                "presentation": { "density": "comfortable", "skin": "refined" }
+                "presentation": {
+                    "density": "comfortable",
+                    "skin": "refined",
+                    "color_scheme": "system"
+                }
             },
             "device": { "last_route": "dashboard" }
         })
     );
 
     for payload in [
-        br#"{"schema_version":3,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable"}},"device":{"last_route":"dashboard"}}"#.as_slice(),
-        br#"{"schema_version":3,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"future"}},"device":{"last_route":"dashboard"}}"#.as_slice(),
-        br#"{"schema_version":3,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined","skin":"ember"}},"device":{"last_route":"dashboard"}}"#.as_slice(),
-        br#"{"schema_version":3,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":1}},"device":{"last_route":"dashboard"}}"#.as_slice(),
+        br#"{"schema_version":4,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined"}},"device":{"last_route":"dashboard"}}"#.as_slice(),
+        br#"{"schema_version":4,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"future","color_scheme":"system"}},"device":{"last_route":"dashboard"}}"#.as_slice(),
+        br#"{"schema_version":4,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined","color_scheme":"system","color_scheme":"dark"}},"device":{"last_route":"dashboard"}}"#.as_slice(),
+        br#"{"schema_version":4,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined","color_scheme":1}},"device":{"last_route":"dashboard"}}"#.as_slice(),
     ] {
         assert!(serde_json::from_slice::<SettingsValue>(payload).is_err());
     }
@@ -160,10 +205,10 @@ fn encode_record(generation: u64, payload: &[u8]) -> Vec<u8> {
 }
 
 #[test]
-fn settings_schema_v3_serializes_only_owned_portable_presentation() {
+fn settings_schema_v4_serializes_only_owned_portable_presentation() {
     let value = SettingsValue::safe_defaults();
     let encoded = serde_json::to_value(&value).expect("encode settings");
-    assert_eq!(encoded["schema_version"], 3);
+    assert_eq!(encoded["schema_version"], 4);
     assert_eq!(
         encoded["portable"],
         json!({
@@ -177,7 +222,11 @@ fn settings_schema_v3_serializes_only_owned_portable_presentation() {
                 "interval_seconds": BACKUP_INTERVAL_DEFAULT_SECONDS,
                 "retention_budget_bytes": BACKUP_RETENTION_DEFAULT_BYTES
             },
-            "presentation": { "density": "comfortable", "skin": "refined" }
+            "presentation": {
+                "density": "comfortable",
+                "skin": "refined",
+                "color_scheme": "system"
+            }
         })
     );
 
@@ -190,7 +239,7 @@ fn settings_schema_v3_serializes_only_owned_portable_presentation() {
 }
 
 #[test]
-fn schema_v1_v2_v3_dispatch_migrates_in_memory_and_explicit_save_writes_v3() {
+fn schema_v1_v2_v3_dispatch_migrates_dark_and_explicit_save_writes_v4() {
     let (root, directory) = fixture();
     let payload =
         serde_json::to_vec(&legacy_v1_settings_json("projects")).expect("legacy settings");
@@ -217,12 +266,16 @@ fn schema_v1_v2_v3_dispatch_migrates_in_memory_and_explicit_save_writes_v3() {
         PresentationSkin::Refined
     );
     assert_eq!(
+        loaded.value().portable().presentation().color_scheme(),
+        PresentationColorScheme::Dark
+    );
+    assert_eq!(
         fs::read(root.path().join("settings-a.tms")).unwrap(),
         record
     );
     assert!(!root.path().join("settings-b.tms").exists());
-    store.save(loaded.value()).expect("explicit v3 save");
-    let newest = store.load().expect("v3 reread");
+    store.save(loaded.value()).expect("explicit v4 save");
+    let newest = store.load().expect("v4 reread");
     assert_eq!(newest.generation(), Some(8));
     assert_eq!(newest.value(), loaded.value());
 
@@ -249,10 +302,40 @@ fn schema_v1_v2_v3_dispatch_migrates_in_memory_and_explicit_save_writes_v3() {
         PresentationSkin::Refined
     );
     assert_eq!(
+        loaded.value().portable().presentation().color_scheme(),
+        PresentationColorScheme::Dark
+    );
+    assert_eq!(
         fs::read(root.path().join("settings-a.tms")).unwrap(),
         record
     );
     assert!(!root.path().join("settings-b.tms").exists());
+
+    let (root, directory) = fixture();
+    let v3 = serde_json::to_vec(&legacy_v3_settings_json(
+        "settings",
+        "ultra_compact",
+        "ember",
+    ))
+    .expect("v3 settings");
+    let record = encode_record(10, &v3);
+    fs::write(root.path().join("settings-a.tms"), &record).expect("v3 record");
+    let loaded = SettingsStore::new(&directory)
+        .expect("settings store")
+        .load()
+        .expect("v3 migrated load");
+    assert_eq!(
+        *loaded.value().portable().presentation(),
+        PresentationSettings::new(
+            PresentationDensity::UltraCompact,
+            PresentationSkin::Ember,
+            PresentationColorScheme::Dark,
+        )
+    );
+    assert_eq!(
+        fs::read(root.path().join("settings-a.tms")).unwrap(),
+        record
+    );
 }
 
 #[test]
@@ -318,16 +401,27 @@ fn legacy_migration_retains_non_default_reminder_and_backup_values() {
 }
 
 #[test]
-fn portable_v1_migration_has_canonical_v3_digest_and_preview_category() {
+fn portable_v1_migration_preserves_dark_appearance_in_v4() {
     let (_root, directory) = fixture();
     let store = SettingsStore::new(&directory).expect("settings store");
     let legacy = serde_json::to_vec(&legacy_v1_portable_json()).expect("legacy portable");
     let migrated = store.preview_import(&legacy).expect("legacy preview");
-    assert_eq!(migrated.changed_category_count(), 0);
+    assert_eq!(
+        migrated.categories(),
+        &[SettingsChangeCategory::Presentation]
+    );
     let receipt = store.commit_import(&migrated).expect("migrated commit");
-    let canonical =
-        PortableSettingsCandidate::new(SettingsValue::safe_defaults().portable().clone())
-            .expect("canonical current candidate");
+    let defaults = SettingsValue::safe_defaults();
+    let canonical = PortableSettingsCandidate::new(PortableSettings::new(
+        defaults.portable().reminders().clone(),
+        defaults.portable().backup().clone(),
+        PresentationSettings::new(
+            PresentationDensity::Comfortable,
+            PresentationSkin::Refined,
+            PresentationColorScheme::Dark,
+        ),
+    ))
+    .expect("canonical migrated candidate");
     assert_eq!(receipt.portable_digest(), canonical.digest());
 
     let candidate = PortableSettingsCandidate::new(PortableSettings::new(
@@ -336,7 +430,11 @@ fn portable_v1_migration_has_canonical_v3_digest_and_preview_category() {
             .reminders()
             .clone(),
         SettingsValue::safe_defaults().portable().backup().clone(),
-        PresentationSettings::new(PresentationDensity::Compact, PresentationSkin::Refined),
+        PresentationSettings::new(
+            PresentationDensity::Compact,
+            PresentationSkin::Refined,
+            PresentationColorScheme::System,
+        ),
     ))
     .expect("compact candidate");
     let preview = store.preview_candidate(candidate).expect("preview");
@@ -355,7 +453,11 @@ fn portable_v1_migration_has_canonical_v3_digest_and_preview_category() {
             BACKUP_RETENTION_MIN_BYTES,
         )
         .expect("backup policy"),
-        PresentationSettings::new(PresentationDensity::UltraCompact, PresentationSkin::Refined),
+        PresentationSettings::new(
+            PresentationDensity::UltraCompact,
+            PresentationSkin::Refined,
+            PresentationColorScheme::System,
+        ),
     ))
     .expect("four-category candidate");
     let preview = store
@@ -378,16 +480,16 @@ fn candidate_and_record_versions_and_presentation_are_strict() {
     let defaults = SettingsValue::safe_defaults();
     let current_record = serde_json::to_value(&defaults).expect("current record");
     let current_candidate = json!({
-        "schema_version": 3,
+        "schema_version": 4,
         "portable": current_record["portable"].clone(),
     });
-    let duplicate_presentation = br#"{"schema_version":3,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined"},"presentation":{"density":"compact","skin":"refined"}}}"#;
-    let duplicate_record_presentation = br#"{"schema_version":3,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined"},"presentation":{"density":"compact","skin":"refined"}},"device":{"last_route":"dashboard"}}"#;
+    let duplicate_presentation = br#"{"schema_version":4,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined","color_scheme":"system"},"presentation":{"density":"compact","skin":"refined","color_scheme":"dark"}}}"#;
+    let duplicate_record_presentation = br#"{"schema_version":4,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined","color_scheme":"system"},"presentation":{"density":"compact","skin":"refined","color_scheme":"dark"}},"device":{"last_route":"dashboard"}}"#;
 
     let mut version_zero_candidate = current_candidate.clone();
     version_zero_candidate["schema_version"] = json!(0);
-    let mut version_four_candidate = current_candidate.clone();
-    version_four_candidate["schema_version"] = json!(4);
+    let mut version_five_candidate = current_candidate.clone();
+    version_five_candidate["schema_version"] = json!(5);
     let mut missing_presentation_candidate = current_candidate.clone();
     missing_presentation_candidate["portable"]
         .as_object_mut()
@@ -399,16 +501,25 @@ fn candidate_and_record_versions_and_presentation_are_strict() {
     invalid_density_candidate["portable"]["presentation"]["density"] = json!("spacious");
     let mut wrong_density_type_candidate = current_candidate.clone();
     wrong_density_type_candidate["portable"]["presentation"]["density"] = json!(1);
+    let mut missing_scheme_candidate = current_candidate.clone();
+    missing_scheme_candidate["portable"]["presentation"]
+        .as_object_mut()
+        .expect("presentation object")
+        .remove("color_scheme");
+    let mut unknown_scheme_candidate = current_candidate.clone();
+    unknown_scheme_candidate["portable"]["presentation"]["color_scheme"] = json!("future");
 
     let (_root, directory) = fixture();
     let store = SettingsStore::new(&directory).expect("settings store");
     for (candidate, expected) in [
         (version_zero_candidate, StateErrorCode::UnsupportedVersion),
-        (version_four_candidate, StateErrorCode::UnsupportedVersion),
+        (version_five_candidate, StateErrorCode::UnsupportedVersion),
         (missing_presentation_candidate, StateErrorCode::InvalidInput),
         (unknown_skin_candidate, StateErrorCode::InvalidInput),
         (invalid_density_candidate, StateErrorCode::InvalidInput),
         (wrong_density_type_candidate, StateErrorCode::InvalidInput),
+        (missing_scheme_candidate, StateErrorCode::InvalidInput),
+        (unknown_scheme_candidate, StateErrorCode::InvalidInput),
     ] {
         let bytes = serde_json::to_vec(&candidate).expect("candidate bytes");
         assert_eq!(
@@ -439,7 +550,7 @@ fn candidate_and_record_versions_and_presentation_are_strict() {
         (
             {
                 let mut value = current_record.clone();
-                value["schema_version"] = json!(4);
+                value["schema_version"] = json!(5);
                 value
             },
             true,
@@ -875,7 +986,7 @@ fn unsupported_or_malformed_import_never_writes_slots() {
 
     for (bytes, expected) in [
         (
-            br#"{"schema_version":4,"portable":{}}"#.as_slice(),
+            br#"{"schema_version":5,"portable":{}}"#.as_slice(),
             StateErrorCode::UnsupportedVersion,
         ),
         (
@@ -916,7 +1027,7 @@ fn valid_record_with_unsupported_settings_version_is_never_defaults_or_overwritt
             .expect("current peer");
         }
         let mut newer = serde_json::to_value(&current).expect("newer settings value");
-        newer["schema_version"] = json!(4);
+        newer["schema_version"] = json!(5);
         let newer_record = encode_record(
             2,
             &serde_json::to_vec(&newer).expect("newer settings payload"),

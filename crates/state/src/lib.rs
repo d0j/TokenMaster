@@ -65,10 +65,11 @@ pub use settings::{
     BACKUP_QUIET_DEFAULT_SECONDS, BACKUP_QUIET_MAX_SECONDS, BACKUP_QUIET_MIN_SECONDS,
     BACKUP_RETENTION_DEFAULT_BYTES, BACKUP_RETENTION_MAX_BYTES, BACKUP_RETENTION_MIN_BYTES,
     BackupPolicy, DeviceRoute, DeviceSettings, PortableSettings, PortableSettingsCandidate,
-    PortableSettingsDigest, PortableSettingsTarget, PreparedSettingsRestore, PresentationDensity,
-    PresentationSettings, PresentationSkin, ReminderPolicy, SETTINGS_SCHEMA_VERSION,
-    SettingsChangeCategory, SettingsCommitReceipt, SettingsHealthCode, SettingsImportPreview,
-    SettingsLoad, SettingsLoadOutcome, SettingsStore, SettingsValue,
+    PortableSettingsDigest, PortableSettingsTarget, PreparedSettingsRestore,
+    PresentationColorScheme, PresentationDensity, PresentationSettings, PresentationSkin,
+    ReminderPolicy, SETTINGS_SCHEMA_VERSION, SettingsChangeCategory, SettingsCommitReceipt,
+    SettingsHealthCode, SettingsImportPreview, SettingsLoad, SettingsLoadOutcome, SettingsStore,
+    SettingsValue,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

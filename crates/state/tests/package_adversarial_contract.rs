@@ -70,7 +70,7 @@ fn resealed_supported_manifest_timestamp_remains_readable() {
 
 #[test]
 fn resealed_unsupported_manifest_settings_schemas_are_rejected() {
-    for schema_version in [0_u16, 4_u16] {
+    for schema_version in [0_u16, 5_u16] {
         let mut package = config_bytes();
         package[46..48].copy_from_slice(&schema_version.to_le_bytes());
         reseal_descriptors_and_package(&mut package);
@@ -79,6 +79,21 @@ fn resealed_unsupported_manifest_settings_schemas_are_rejected() {
                 .expect_err("unsupported manifest settings schema")
                 .code(),
             StateErrorCode::UnsupportedVersion
+        );
+    }
+}
+
+#[test]
+fn v4_settings_entries_reject_missing_duplicate_and_unknown_color_schemes() {
+    for settings_json in [
+        br#"{"schema_version":4,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined"}}}"#.as_slice(),
+        br#"{"schema_version":4,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined","color_scheme":"system","color_scheme":"dark"}}}"#.as_slice(),
+        br#"{"schema_version":4,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined","color_scheme":"future"}}}"#.as_slice(),
+    ] {
+        let package = package_with_settings_source_schema(4, settings_json, None);
+        assert!(
+            read_config_bytes(&package).is_err(),
+            "invalid v4 color scheme entry"
         );
     }
 }

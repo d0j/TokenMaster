@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use crate::StateError;
 use crate::record::{RecordValue, RecordValueError};
 
-pub const SETTINGS_SCHEMA_VERSION: u16 = 3;
+pub const SETTINGS_SCHEMA_VERSION: u16 = 4;
 pub(crate) const MIN_SUPPORTED_SETTINGS_SCHEMA_VERSION: u16 = 1;
 pub const MAX_REMINDER_THRESHOLDS: usize = 8;
 pub const REMINDER_LEAD_MIN_SECONDS: u32 = 60;
@@ -280,21 +280,47 @@ pub enum PresentationSkin {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PresentationColorScheme {
+    System,
+    Light,
+    Dark,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PresentationSettings {
     density: PresentationDensity,
     skin: PresentationSkin,
+    color_scheme: PresentationColorScheme,
 }
 
 impl PresentationSettings {
     #[must_use]
-    pub const fn new(density: PresentationDensity, skin: PresentationSkin) -> Self {
-        Self { density, skin }
+    pub const fn new(
+        density: PresentationDensity,
+        skin: PresentationSkin,
+        color_scheme: PresentationColorScheme,
+    ) -> Self {
+        Self {
+            density,
+            skin,
+            color_scheme,
+        }
     }
 
     #[must_use]
     pub const fn refined() -> Self {
-        Self::new(PresentationDensity::Comfortable, PresentationSkin::Refined)
+        Self::new(
+            PresentationDensity::Comfortable,
+            PresentationSkin::Refined,
+            PresentationColorScheme::System,
+        )
+    }
+
+    #[must_use]
+    pub(crate) const fn legacy_dark(density: PresentationDensity, skin: PresentationSkin) -> Self {
+        Self::new(density, skin, PresentationColorScheme::Dark)
     }
 
     #[must_use]
@@ -305,6 +331,11 @@ impl PresentationSettings {
     #[must_use]
     pub const fn skin(self) -> PresentationSkin {
         self.skin
+    }
+
+    #[must_use]
+    pub const fn color_scheme(self) -> PresentationColorScheme {
+        self.color_scheme
     }
 }
 
