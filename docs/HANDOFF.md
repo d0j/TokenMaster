@@ -1,5 +1,29 @@
 # TokenMaster handoff
 
+## P4-G localization cycle (2026-07-23)
+
+Product state: settings schema v7 and the existing complete presentation operation
+now own a closed `en`/`ru`/`pseudo` locale axis. The production shell, Settings
+presentation strip, and shared components hot-switch through bundled catalogs; the
+remaining views and Rust-generated display labels are still intentionally English,
+so unified localization is not complete and no release claim is made.
+
+Audit/evidence state: Task 1 and the shell slice received clean independent reviews.
+The component product change passes localization 5/5, recovery UI 4/4, formatting,
+strict Desktop Clippy, and diff checks. `AUDIT_HARDENING_LOOP` triggered after two
+consecutive correction/review rounds concerned only the scoped source parser/tests/
+plan: the second re-review proposed another multiline textual-parser mutation but no
+production correctness, security, data-loss, or required release-receipt defect.
+Disposition: stop component audit children, retain the last verified product state,
+record the bounded evidence limitation (the source guard is line-oriented), reject
+further speculative parser hardening, and return to the shortest release-critical
+product slice: remaining views plus closed Rust display-label localization.
+
+Release blockers: remaining unified locale coverage, typography/row-size,
+accessibility/DPI/paint/resource/live Windows acceptance, per-scope editing,
+reminder OS/tray delivery, usage alerts, P5/P6, M0, packaging/signing, and soak.
+Git state: feature branch; verify live HEAD/worktree rather than relying on this file.
+
 ## Provider-readiness handoff (2026-07-22)
 
 Product state: internal provider-ready seam developer-complete; schema remains v13 and
