@@ -66,10 +66,10 @@ pub use settings::{
     BACKUP_RETENTION_DEFAULT_BYTES, BACKUP_RETENTION_MAX_BYTES, BACKUP_RETENTION_MIN_BYTES,
     BackupPolicy, DeviceRoute, DeviceSettings, PortableSettings, PortableSettingsCandidate,
     PortableSettingsDigest, PortableSettingsTarget, PreparedSettingsRestore,
-    PresentationColorScheme, PresentationDensity, PresentationSettings, PresentationSkin,
-    ReminderPolicy, SETTINGS_SCHEMA_VERSION, SettingsChangeCategory, SettingsCommitReceipt,
-    SettingsHealthCode, SettingsImportPreview, SettingsLoad, SettingsLoadOutcome, SettingsStore,
-    SettingsValue,
+    PresentationColorScheme, PresentationDensity, PresentationLayout, PresentationSettings,
+    PresentationSkin, ReminderPolicy, SETTINGS_SCHEMA_VERSION, SettingsChangeCategory,
+    SettingsCommitReceipt, SettingsHealthCode, SettingsImportPreview, SettingsLoad,
+    SettingsLoadOutcome, SettingsStore, SettingsValue,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

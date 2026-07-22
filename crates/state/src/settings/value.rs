@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use crate::StateError;
 use crate::record::{RecordValue, RecordValueError};
 
-pub const SETTINGS_SCHEMA_VERSION: u16 = 4;
+pub const SETTINGS_SCHEMA_VERSION: u16 = 5;
 pub(crate) const MIN_SUPPORTED_SETTINGS_SCHEMA_VERSION: u16 = 1;
 pub const MAX_REMINDER_THRESHOLDS: usize = 8;
 pub const REMINDER_LEAD_MIN_SECONDS: u32 = 60;
@@ -288,11 +288,20 @@ pub enum PresentationColorScheme {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PresentationLayout {
+    Refined,
+    ControlCenter,
+    Workbench,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PresentationSettings {
     density: PresentationDensity,
     skin: PresentationSkin,
     color_scheme: PresentationColorScheme,
+    layout: PresentationLayout,
 }
 
 impl PresentationSettings {
@@ -301,11 +310,13 @@ impl PresentationSettings {
         density: PresentationDensity,
         skin: PresentationSkin,
         color_scheme: PresentationColorScheme,
+        layout: PresentationLayout,
     ) -> Self {
         Self {
             density,
             skin,
             color_scheme,
+            layout,
         }
     }
 
@@ -315,12 +326,18 @@ impl PresentationSettings {
             PresentationDensity::Comfortable,
             PresentationSkin::Refined,
             PresentationColorScheme::System,
+            PresentationLayout::Refined,
         )
     }
 
     #[must_use]
     pub(crate) const fn legacy_dark(density: PresentationDensity, skin: PresentationSkin) -> Self {
-        Self::new(density, skin, PresentationColorScheme::Dark)
+        Self::new(
+            density,
+            skin,
+            PresentationColorScheme::Dark,
+            PresentationLayout::Refined,
+        )
     }
 
     #[must_use]
@@ -336,6 +353,11 @@ impl PresentationSettings {
     #[must_use]
     pub const fn color_scheme(self) -> PresentationColorScheme {
         self.color_scheme
+    }
+
+    #[must_use]
+    pub const fn layout(self) -> PresentationLayout {
+        self.layout
     }
 }
 

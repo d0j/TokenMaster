@@ -11,9 +11,9 @@ use tokenmaster_state::{
     BACKUP_QUIET_MIN_SECONDS, BACKUP_RETENTION_DEFAULT_BYTES, BACKUP_RETENTION_MAX_BYTES,
     BACKUP_RETENTION_MIN_BYTES, DeviceRoute, DeviceSettings, PortableSettings,
     PortableSettingsCandidate, PortableSettingsTarget, PresentationColorScheme,
-    PresentationDensity, PresentationSettings, PresentationSkin, ReminderPolicy,
-    SETTINGS_SCHEMA_VERSION, SettingsChangeCategory, SettingsHealthCode, SettingsLoadOutcome,
-    SettingsStore, SettingsValue, StateErrorCode,
+    PresentationDensity, PresentationLayout, PresentationSettings, PresentationSkin,
+    ReminderPolicy, SETTINGS_SCHEMA_VERSION, SettingsChangeCategory, SettingsHealthCode,
+    SettingsLoadOutcome, SettingsStore, SettingsValue, StateErrorCode,
 };
 
 const HEADER_BYTES: usize = 64;
@@ -99,6 +99,27 @@ fn legacy_v3_settings_json(route: &str, density: &str, skin: &str) -> Value {
     })
 }
 
+fn legacy_v4_settings_json(route: &str, density: &str, skin: &str, color_scheme: &str) -> Value {
+    json!({
+        "schema_version": 4,
+        "portable": {
+            "reminders": { "enabled": true, "lead_seconds": [3600] },
+            "backup": {
+                "periodic_enabled": false,
+                "quiet_seconds": 300,
+                "interval_seconds": 21600,
+                "retention_budget_bytes": BACKUP_RETENTION_DEFAULT_BYTES
+            },
+            "presentation": {
+                "density": density,
+                "skin": skin,
+                "color_scheme": color_scheme
+            }
+        },
+        "device": { "last_route": route }
+    })
+}
+
 #[test]
 fn presentation_skin_serialization_contract() {
     assert_eq!(
@@ -142,18 +163,68 @@ fn presentation_color_scheme_serialization_and_default_contract() {
 }
 
 #[test]
-fn settings_schema_v4_contract() {
-    assert_eq!(SETTINGS_SCHEMA_VERSION, 4);
+fn presentation_layout_serialization_and_default_contract() {
+    for (layout, key) in [
+        (PresentationLayout::Refined, "refined"),
+        (PresentationLayout::ControlCenter, "control_center"),
+        (PresentationLayout::Workbench, "workbench"),
+    ] {
+        assert_eq!(
+            serde_json::to_value(layout).expect("layout key"),
+            json!(key)
+        );
+    }
+    for invalid in [json!("future"), json!(1), Value::Null] {
+        assert!(serde_json::from_value::<PresentationLayout>(invalid).is_err());
+    }
+
+    assert_eq!(
+        PresentationSettings::refined().layout(),
+        PresentationLayout::Refined
+    );
+}
+
+#[test]
+fn settings_schema_v5_requires_one_complete_layout_axis() {
+    assert_eq!(SETTINGS_SCHEMA_VERSION, 5);
+    let encoded = serde_json::to_value(SettingsValue::safe_defaults()).expect("encode settings");
+    assert_eq!(encoded["schema_version"], 5);
+    assert_eq!(
+        encoded["portable"]["presentation"],
+        json!({
+            "density": "comfortable",
+            "skin": "refined",
+            "color_scheme": "system",
+            "layout": "refined"
+        })
+    );
+
+    let mut missing = encoded.clone();
+    missing["portable"]["presentation"]
+        .as_object_mut()
+        .expect("presentation object")
+        .remove("layout");
+    assert!(serde_json::from_value::<SettingsValue>(missing).is_err());
+
+    let mut unknown = encoded;
+    unknown["portable"]["presentation"]["layout"] = json!("future");
+    assert!(serde_json::from_value::<SettingsValue>(unknown).is_err());
+}
+
+#[test]
+fn settings_schema_v5_contract() {
+    assert_eq!(SETTINGS_SCHEMA_VERSION, 5);
     let refined = PresentationSettings::refined();
     assert_eq!(refined.density(), PresentationDensity::Comfortable);
     assert_eq!(refined.skin(), PresentationSkin::Refined);
     assert_eq!(refined.color_scheme(), PresentationColorScheme::System);
+    assert_eq!(refined.layout(), PresentationLayout::Refined);
 
     let encoded = serde_json::to_value(SettingsValue::safe_defaults()).expect("encode settings");
     assert_eq!(
         encoded,
         json!({
-            "schema_version": 4,
+            "schema_version": 5,
             "portable": {
                 "reminders": {
                     "enabled": true,
@@ -168,7 +239,8 @@ fn settings_schema_v4_contract() {
                 "presentation": {
                     "density": "comfortable",
                     "skin": "refined",
-                    "color_scheme": "system"
+                    "color_scheme": "system",
+                    "layout": "refined"
                 }
             },
             "device": { "last_route": "dashboard" }
@@ -176,10 +248,10 @@ fn settings_schema_v4_contract() {
     );
 
     for payload in [
-        br#"{"schema_version":4,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined"}},"device":{"last_route":"dashboard"}}"#.as_slice(),
-        br#"{"schema_version":4,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"future","color_scheme":"system"}},"device":{"last_route":"dashboard"}}"#.as_slice(),
-        br#"{"schema_version":4,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined","color_scheme":"system","color_scheme":"dark"}},"device":{"last_route":"dashboard"}}"#.as_slice(),
-        br#"{"schema_version":4,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined","color_scheme":1}},"device":{"last_route":"dashboard"}}"#.as_slice(),
+        br#"{"schema_version":5,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined","color_scheme":"system"}},"device":{"last_route":"dashboard"}}"#.as_slice(),
+        br#"{"schema_version":5,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"future","color_scheme":"system","layout":"refined"}},"device":{"last_route":"dashboard"}}"#.as_slice(),
+        br#"{"schema_version":5,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined","color_scheme":"system","color_scheme":"dark","layout":"refined"}},"device":{"last_route":"dashboard"}}"#.as_slice(),
+        br#"{"schema_version":5,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined","color_scheme":1,"layout":"refined"}},"device":{"last_route":"dashboard"}}"#.as_slice(),
     ] {
         assert!(serde_json::from_slice::<SettingsValue>(payload).is_err());
     }
@@ -205,10 +277,10 @@ fn encode_record(generation: u64, payload: &[u8]) -> Vec<u8> {
 }
 
 #[test]
-fn settings_schema_v4_serializes_only_owned_portable_presentation() {
+fn settings_schema_v5_serializes_only_owned_portable_presentation() {
     let value = SettingsValue::safe_defaults();
     let encoded = serde_json::to_value(&value).expect("encode settings");
-    assert_eq!(encoded["schema_version"], 4);
+    assert_eq!(encoded["schema_version"], 5);
     assert_eq!(
         encoded["portable"],
         json!({
@@ -225,7 +297,8 @@ fn settings_schema_v4_serializes_only_owned_portable_presentation() {
             "presentation": {
                 "density": "comfortable",
                 "skin": "refined",
-                "color_scheme": "system"
+                "color_scheme": "system",
+                "layout": "refined"
             }
         })
     );
@@ -239,7 +312,7 @@ fn settings_schema_v4_serializes_only_owned_portable_presentation() {
 }
 
 #[test]
-fn schema_v1_v2_v3_dispatch_migrates_dark_and_explicit_save_writes_v4() {
+fn schema_v1_v2_v3_dispatch_migrates_dark_and_explicit_save_writes_v5() {
     let (root, directory) = fixture();
     let payload =
         serde_json::to_vec(&legacy_v1_settings_json("projects")).expect("legacy settings");
@@ -274,8 +347,8 @@ fn schema_v1_v2_v3_dispatch_migrates_dark_and_explicit_save_writes_v4() {
         record
     );
     assert!(!root.path().join("settings-b.tms").exists());
-    store.save(loaded.value()).expect("explicit v4 save");
-    let newest = store.load().expect("v4 reread");
+    store.save(loaded.value()).expect("explicit v5 save");
+    let newest = store.load().expect("v5 reread");
     assert_eq!(newest.generation(), Some(8));
     assert_eq!(newest.value(), loaded.value());
 
@@ -330,12 +403,43 @@ fn schema_v1_v2_v3_dispatch_migrates_dark_and_explicit_save_writes_v4() {
             PresentationDensity::UltraCompact,
             PresentationSkin::Ember,
             PresentationColorScheme::Dark,
+            PresentationLayout::Refined,
         )
     );
     assert_eq!(
         fs::read(root.path().join("settings-a.tms")).unwrap(),
         record
     );
+}
+
+#[test]
+fn schema_v4_preserves_complete_legacy_style_and_defaults_layout_to_refined() {
+    let (root, directory) = fixture();
+    let payload = serde_json::to_vec(&legacy_v4_settings_json(
+        "settings", "compact", "graphite", "light",
+    ))
+    .expect("v4 settings");
+    let record = encode_record(11, &payload);
+    fs::write(root.path().join("settings-a.tms"), &record).expect("v4 record");
+
+    let loaded = SettingsStore::new(&directory)
+        .expect("settings store")
+        .load()
+        .expect("v4 migrated load");
+    assert_eq!(
+        *loaded.value().portable().presentation(),
+        PresentationSettings::new(
+            PresentationDensity::Compact,
+            PresentationSkin::Graphite,
+            PresentationColorScheme::Light,
+            PresentationLayout::Refined,
+        )
+    );
+    assert_eq!(
+        fs::read(root.path().join("settings-a.tms")).expect("v4 evidence"),
+        record
+    );
+    assert!(!root.path().join("settings-b.tms").exists());
 }
 
 #[test]
@@ -401,7 +505,7 @@ fn legacy_migration_retains_non_default_reminder_and_backup_values() {
 }
 
 #[test]
-fn portable_v1_migration_preserves_dark_appearance_in_v4() {
+fn portable_v1_migration_preserves_dark_appearance_in_v5() {
     let (_root, directory) = fixture();
     let store = SettingsStore::new(&directory).expect("settings store");
     let legacy = serde_json::to_vec(&legacy_v1_portable_json()).expect("legacy portable");
@@ -419,6 +523,7 @@ fn portable_v1_migration_preserves_dark_appearance_in_v4() {
             PresentationDensity::Comfortable,
             PresentationSkin::Refined,
             PresentationColorScheme::Dark,
+            PresentationLayout::Refined,
         ),
     ))
     .expect("canonical migrated candidate");
@@ -434,6 +539,7 @@ fn portable_v1_migration_preserves_dark_appearance_in_v4() {
             PresentationDensity::Compact,
             PresentationSkin::Refined,
             PresentationColorScheme::System,
+            PresentationLayout::Refined,
         ),
     ))
     .expect("compact candidate");
@@ -457,6 +563,7 @@ fn portable_v1_migration_preserves_dark_appearance_in_v4() {
             PresentationDensity::UltraCompact,
             PresentationSkin::Refined,
             PresentationColorScheme::System,
+            PresentationLayout::Refined,
         ),
     ))
     .expect("four-category candidate");
@@ -480,16 +587,16 @@ fn candidate_and_record_versions_and_presentation_are_strict() {
     let defaults = SettingsValue::safe_defaults();
     let current_record = serde_json::to_value(&defaults).expect("current record");
     let current_candidate = json!({
-        "schema_version": 4,
+        "schema_version": 5,
         "portable": current_record["portable"].clone(),
     });
-    let duplicate_presentation = br#"{"schema_version":4,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined","color_scheme":"system"},"presentation":{"density":"compact","skin":"refined","color_scheme":"dark"}}}"#;
-    let duplicate_record_presentation = br#"{"schema_version":4,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined","color_scheme":"system"},"presentation":{"density":"compact","skin":"refined","color_scheme":"dark"}},"device":{"last_route":"dashboard"}}"#;
+    let duplicate_presentation = br#"{"schema_version":5,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined","color_scheme":"system","layout":"refined"},"presentation":{"density":"compact","skin":"refined","color_scheme":"dark","layout":"workbench"}}}"#;
+    let duplicate_record_presentation = br#"{"schema_version":5,"portable":{"reminders":{"enabled":true,"lead_seconds":[3600]},"backup":{"periodic_enabled":true,"quiet_seconds":300,"interval_seconds":21600,"retention_budget_bytes":2147483648},"presentation":{"density":"comfortable","skin":"refined","color_scheme":"system","layout":"refined"},"presentation":{"density":"compact","skin":"refined","color_scheme":"dark","layout":"workbench"}},"device":{"last_route":"dashboard"}}"#;
 
     let mut version_zero_candidate = current_candidate.clone();
     version_zero_candidate["schema_version"] = json!(0);
-    let mut version_five_candidate = current_candidate.clone();
-    version_five_candidate["schema_version"] = json!(5);
+    let mut version_six_candidate = current_candidate.clone();
+    version_six_candidate["schema_version"] = json!(6);
     let mut missing_presentation_candidate = current_candidate.clone();
     missing_presentation_candidate["portable"]
         .as_object_mut()
@@ -513,7 +620,7 @@ fn candidate_and_record_versions_and_presentation_are_strict() {
     let store = SettingsStore::new(&directory).expect("settings store");
     for (candidate, expected) in [
         (version_zero_candidate, StateErrorCode::UnsupportedVersion),
-        (version_five_candidate, StateErrorCode::UnsupportedVersion),
+        (version_six_candidate, StateErrorCode::UnsupportedVersion),
         (missing_presentation_candidate, StateErrorCode::InvalidInput),
         (unknown_skin_candidate, StateErrorCode::InvalidInput),
         (invalid_density_candidate, StateErrorCode::InvalidInput),
@@ -550,7 +657,7 @@ fn candidate_and_record_versions_and_presentation_are_strict() {
         (
             {
                 let mut value = current_record.clone();
-                value["schema_version"] = json!(5);
+                value["schema_version"] = json!(6);
                 value
             },
             true,
@@ -986,7 +1093,7 @@ fn unsupported_or_malformed_import_never_writes_slots() {
 
     for (bytes, expected) in [
         (
-            br#"{"schema_version":5,"portable":{}}"#.as_slice(),
+            br#"{"schema_version":6,"portable":{}}"#.as_slice(),
             StateErrorCode::UnsupportedVersion,
         ),
         (
@@ -1027,7 +1134,7 @@ fn valid_record_with_unsupported_settings_version_is_never_defaults_or_overwritt
             .expect("current peer");
         }
         let mut newer = serde_json::to_value(&current).expect("newer settings value");
-        newer["schema_version"] = json!(5);
+        newer["schema_version"] = json!(6);
         let newer_record = encode_record(
             2,
             &serde_json::to_vec(&newer).expect("newer settings payload"),

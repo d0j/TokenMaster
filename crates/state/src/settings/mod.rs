@@ -18,6 +18,6 @@ pub use value::{
     BACKUP_QUIET_DEFAULT_SECONDS, BACKUP_QUIET_MAX_SECONDS, BACKUP_QUIET_MIN_SECONDS,
     BACKUP_RETENTION_DEFAULT_BYTES, BACKUP_RETENTION_MAX_BYTES, BACKUP_RETENTION_MIN_BYTES,
     BackupPolicy, DeviceRoute, DeviceSettings, PortableSettings, PresentationColorScheme,
-    PresentationDensity, PresentationSettings, PresentationSkin, ReminderPolicy,
-    SETTINGS_SCHEMA_VERSION, SettingsValue,
+    PresentationDensity, PresentationLayout, PresentationSettings, PresentationSkin,
+    ReminderPolicy, SETTINGS_SCHEMA_VERSION, SettingsValue,
 };
