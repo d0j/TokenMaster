@@ -10,6 +10,9 @@ hints, and one worker/scheduler/watcher/archive/lease/publication. Provider quot
 supports at most 32 windows, optional benefits, and provider I/O before lease admission.
 Codex remains built in; external plugin host/package/signing/installation/registry and
 multi-provider scheduling remain planned 1.1. This is not M0, RC, or release acceptance.
+The final developer baseline passes clean-root, formatting, warnings-as-errors locked
+workspace Clippy, and the complete locked workspace test/doctest gate in 648.6 seconds.
+This receipt does not authorize package, M0, RC, or stable-release acceptance.
 
 ## Product identity
 

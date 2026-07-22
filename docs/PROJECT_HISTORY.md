@@ -11,6 +11,13 @@ lease admission. Synthetic real-store/query/product proof and focused receipts a
 green; external host/package/signing/installation/registry and multi-provider scheduling
 remain planned 1.1.
 
+The final provider-readiness developer baseline passes clean-root, formatting,
+warnings-as-errors locked workspace Clippy, and the complete locked workspace
+test/doctest gate in 648.6 seconds. An initial run exposed an immediate scheduler-count
+assertion racing its already-observed callback; the test now waits boundedly for that
+receipt, passes in isolation, and passes in the complete rerun. No release acceptance
+is inferred.
+
 ## 2026-07-22 — P4-F durable board preferences
 
 Completed the developer P4-F board slice. Settings schema v6 now persists the four

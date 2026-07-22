@@ -5,13 +5,17 @@
 Product state: internal provider-ready seam developer-complete; schema remains v13 and
 Codex remains the built-in adapter. Audit/evidence: provider checkpoint 2, provider
 live 3, provider quota 4, runtime/product aggregates, app 80, isolated quota resource 16+48 handles/
-142 threads/4 private bytes 4,026,368..6,541,312, focused fmt/Clippy/diff green;
-final workspace baseline pending. Release blockers: 1.1 external host/package/
+142 threads/4 private bytes 4,026,368..6,541,312, focused fmt/Clippy/diff green. The final
+developer baseline passed clean-root, fmt, warnings-as-errors locked workspace Clippy,
+and the complete locked workspace test/doctest gate in 648.6 seconds. Release blockers:
+1.1 external host/package/
 signing/installation/registry and multi-provider scheduling plus existing Windows,
 M0, soak, and release gates. Git state: clean feature worktree. Audit-hardening loop
 not triggered: production architecture/correctness changed and no textual audit was added.
 The shortest release-critical next slice remains the unfinished P4 product surface,
 not the deferred 1.1 external plugin host and not another audit-hardening round.
+The first baseline attempt exposed a test-only scheduler receipt race; a bounded wait
+replaced the immediate assertion, the focused test passed, and the complete rerun passed.
 
 ## First five minutes
 
