@@ -17,7 +17,7 @@ component NotificationsHeaderCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: region;
-    accessible-label: "Notifications expiry reminders " + root.loaded-label + " " + root.completeness-label + " " + root.evidence-label;
+    accessible-label: @tr("Notifications expiry reminders {0} {1} {2}", root.loaded-label, root.completeness-label, root.evidence-label);
 
     VerticalLayout {
         padding: UiTokens.space;
@@ -27,8 +27,8 @@ component NotificationsHeaderCard inherits Rectangle {
             VerticalLayout {
                 spacing: UiTokens.space-xs;
                 horizontal-stretch: 1;
-                Text { text: "Notifications"; color: UiTokens.text-primary; font-size: 19px; font-weight: 800; }
-                Text { text: "Expiry reminders · effective in-app coverage"; color: UiTokens.text-secondary; font-size: 11px; overflow: elide; }
+                Text { text: @tr("Notifications"); color: UiTokens.text-primary; font-size: 19px; font-weight: 800; }
+                Text { text: @tr("Expiry reminders · effective in-app coverage"); color: UiTokens.text-secondary; font-size: 11px; overflow: elide; }
             }
             SectionState { state: root.state; reasons: root.reasons; }
         }
@@ -57,14 +57,14 @@ component ReminderProfilesCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: table;
-    accessible-label: "Effective reminder profiles and truthful delivery coverage";
+    accessible-label: @tr("Effective reminder profiles and truthful delivery coverage");
 
     VerticalLayout {
         padding: UiTokens.space;
         spacing: 0px;
-        Text { text: "Reminder profiles"; color: UiTokens.text-primary; font-size: 15px; font-weight: 750; height: 32px; }
+        Text { text: @tr("Reminder profiles"); color: UiTokens.text-primary; font-size: 15px; font-weight: 750; height: 32px; }
         if root.rows.length == 0: Text {
-            text: root.state == "waiting" ? "Waiting for reminder profiles" : (root.state == "ready" ? "No reminder profiles" : "Reminder profiles unavailable");
+            text: root.state == "waiting" ? @tr("Waiting for reminder profiles") : (root.state == "ready" ? @tr("No reminder profiles") : @tr("Reminder profiles unavailable"));
             color: UiTokens.text-secondary;
             font-size: 12px;
             height: 34px;
@@ -74,7 +74,7 @@ component ReminderProfilesCard inherits Rectangle {
             background: mod(i, 2) == 0 ? UiTokens.surface-subtle : transparent;
             border-radius: UiTokens.radius-sm;
             accessible-role: list-item;
-            accessible-label: scope.scope-label + " " + scope.lot-count-label + " coverage " + scope.coverage-label + " policy " + scope.source-label + " leads " + scope.leads-label + " " + scope.next-due-label + " " + scope.nearest-expiry-label + " " + scope.completeness-label + " " + scope.evidence-label + " " + scope.warning-label;
+            accessible-label: @tr("{0} {1} coverage {2} policy {3} leads {4} {5} {6} {7} {8} {9}", scope.scope-label, scope.lot-count-label, scope.coverage-label, scope.source-label, scope.leads-label, scope.next-due-label, scope.nearest-expiry-label, scope.completeness-label, scope.evidence-label, scope.warning-label);
             VerticalLayout {
                 padding-left: UiTokens.space-sm;
                 padding-right: UiTokens.space-sm;
@@ -89,7 +89,7 @@ component ReminderProfilesCard inherits Rectangle {
                     Text { text: scope.lot-count-label; color: UiTokens.text-primary; font-size: 11px; horizontal-stretch: 1; }
                     Text { text: scope.completeness-label + " · " + scope.evidence-label; color: UiTokens.text-secondary; font-size: 10px; width: root.narrow ? 0px : 184px; visible: !root.narrow; horizontal-alignment: right; }
                 }
-                Text { text: "Leads · " + scope.leads-label; color: UiTokens.accent; font-size: 10px; overflow: elide; }
+                Text { text: @tr("Leads · {0}", scope.leads-label); color: UiTokens.accent; font-size: 10px; overflow: elide; }
                 Text { text: scope.next-due-label + " · " + scope.nearest-expiry-label; color: UiTokens.text-secondary; font-size: 10px; overflow: elide; }
                 if root.narrow: Text { text: scope.completeness-label + " · " + scope.evidence-label; color: UiTokens.text-secondary; font-size: 10px; overflow: elide; }
                 if scope.warning-label != "": Text { text: scope.warning-label; color: UiTokens.degraded; font-size: 10px; overflow: elide; }
@@ -109,14 +109,14 @@ component BenefitLotsCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: table;
-    accessible-label: "Current separate benefit lots with expiry precision and evidence";
+    accessible-label: @tr("Current separate benefit lots with expiry precision and evidence");
 
     VerticalLayout {
         padding: UiTokens.space;
         spacing: 0px;
-        Text { text: "Current benefits"; color: UiTokens.text-primary; font-size: 15px; font-weight: 750; height: 32px; }
+        Text { text: @tr("Current benefits"); color: UiTokens.text-primary; font-size: 15px; font-weight: 750; height: 32px; }
         if root.rows.length == 0: Text {
-            text: root.state == "waiting" ? "Waiting for benefit inventory" : (root.state == "ready" ? "No current benefits" : "Benefit inventory unavailable");
+            text: root.state == "waiting" ? @tr("Waiting for benefit inventory") : (root.state == "ready" ? @tr("No current benefits") : @tr("Benefit inventory unavailable"));
             color: UiTokens.text-secondary;
             font-size: 12px;
             height: 34px;
@@ -124,19 +124,19 @@ component BenefitLotsCard inherits Rectangle {
         if !root.narrow && root.rows.length > 0: HorizontalLayout {
             height: 26px;
             spacing: UiTokens.space-sm;
-            Text { text: "Scope"; color: UiTokens.text-secondary; font-size: 10px; width: 66px; }
-            Text { text: "Benefit"; color: UiTokens.text-secondary; font-size: 10px; width: 170px; }
-            Text { text: "Quantity"; color: UiTokens.text-secondary; font-size: 10px; width: 56px; horizontal-alignment: right; }
-            Text { text: "State"; color: UiTokens.text-secondary; font-size: 10px; width: 94px; }
-            Text { text: "Expiry"; color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; }
-            Text { text: "Evidence"; color: UiTokens.text-secondary; font-size: 10px; width: 210px; horizontal-alignment: right; }
+            Text { text: @tr("Scope"); color: UiTokens.text-secondary; font-size: 10px; width: 66px; }
+            Text { text: @tr("Benefit"); color: UiTokens.text-secondary; font-size: 10px; width: 170px; }
+            Text { text: @tr("Quantity"); color: UiTokens.text-secondary; font-size: 10px; width: 56px; horizontal-alignment: right; }
+            Text { text: @tr("State"); color: UiTokens.text-secondary; font-size: 10px; width: 94px; }
+            Text { text: @tr("Expiry"); color: UiTokens.text-secondary; font-size: 10px; horizontal-stretch: 1; }
+            Text { text: @tr("Evidence"); color: UiTokens.text-secondary; font-size: 10px; width: 210px; horizontal-alignment: right; }
         }
         for lot[i] in root.rows: Rectangle {
             height: root.narrow ? 92px : 58px;
             background: mod(i, 2) == 0 ? UiTokens.surface-subtle : transparent;
             border-radius: UiTokens.radius-sm;
             accessible-role: list-item;
-            accessible-label: lot.scope-label + " " + lot.kind-label + " " + lot.benefit-label + " quantity " + lot.quantity-label + " state " + lot.state-label + " " + lot.expiry-label + " " + lot.granted-label + " " + lot.evidence-label;
+            accessible-label: @tr("{0} {1} {2} quantity {3} state {4} {5} {6} {7}", lot.scope-label, lot.kind-label, lot.benefit-label, lot.quantity-label, lot.state-label, lot.expiry-label, lot.granted-label, lot.evidence-label);
             if root.narrow: VerticalLayout {
                 padding-left: UiTokens.space-sm;
                 padding-right: UiTokens.space-sm;

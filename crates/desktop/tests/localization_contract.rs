@@ -382,6 +382,31 @@ const HISTORY_MSGIDS: [&str; 28] = [
     " tokens ",
 ];
 
+const NOTIFICATIONS_MSGIDS: [&str; 22] = [
+    "Notifications expiry reminders {0} {1} {2}",
+    "Notifications",
+    "Expiry reminders · effective in-app coverage",
+    "Effective reminder profiles and truthful delivery coverage",
+    "Reminder profiles",
+    "Waiting for reminder profiles",
+    "No reminder profiles",
+    "Reminder profiles unavailable",
+    "{0} {1} coverage {2} policy {3} leads {4} {5} {6} {7} {8} {9}",
+    "Leads · {0}",
+    "Current separate benefit lots with expiry precision and evidence",
+    "Current benefits",
+    "Waiting for benefit inventory",
+    "No current benefits",
+    "Benefit inventory unavailable",
+    "Scope",
+    "Benefit",
+    "Quantity",
+    "State",
+    "Expiry",
+    "Evidence",
+    "{0} {1} {2} quantity {3} state {4} {5} {6} {7}",
+];
+
 const COMPONENT_RAW_LITERAL_ALLOWLIST: [&str; 11] = [
     "", " ", " · ", ", ", "ready", "degraded", "waiting", "●", "▲", "…", "×",
 ];
@@ -433,6 +458,7 @@ fn shell_component_and_settings_reminder_backup_catalogs_are_complete_and_preser
         .chain(HELP_ABOUT_MSGIDS)
         .chain(ACTIVITY_MODELS_MSGIDS)
         .chain(HISTORY_MSGIDS)
+        .chain(NOTIFICATIONS_MSGIDS)
         .collect::<BTreeSet<_>>();
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -486,6 +512,7 @@ fn projects_and_compact_widget_catalogs_are_complete_before_view_conversion() {
         .chain(HELP_ABOUT_MSGIDS)
         .chain(ACTIVITY_MODELS_MSGIDS)
         .chain(HISTORY_MSGIDS)
+        .chain(NOTIFICATIONS_MSGIDS)
         .collect::<BTreeSet<_>>();
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -517,8 +544,9 @@ fn sessions_and_dashboard_catalogs_are_complete_before_view_conversion() {
         .chain(HELP_ABOUT_MSGIDS)
         .chain(ACTIVITY_MODELS_MSGIDS)
         .chain(HISTORY_MSGIDS)
+        .chain(NOTIFICATIONS_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 322, "Task 2b7a exact catalog inventory");
+    assert_eq!(expected.len(), 344, "Task 2b7b exact catalog inventory");
 
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -534,7 +562,7 @@ fn sessions_and_dashboard_catalogs_are_complete_before_view_conversion() {
             expected,
             "{locale} must translate exactly the closed Task 2b4 Sessions and Dashboard key set"
         );
-        assert_eq!(po_entry_count(&catalog), 322, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 344, "{locale} exact key count");
         for msgid in SESSIONS_DASHBOARD_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b4 catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -560,8 +588,9 @@ fn data_health_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(HELP_ABOUT_MSGIDS)
         .chain(ACTIVITY_MODELS_MSGIDS)
         .chain(HISTORY_MSGIDS)
+        .chain(NOTIFICATIONS_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 322, "Task 2b7a exact catalog inventory");
+    assert_eq!(expected.len(), 344, "Task 2b7b exact catalog inventory");
 
     let data_health = include_str!("../ui/views/data-health-view.slint");
     for msgid in DATA_HEALTH_MSGIDS {
@@ -585,7 +614,7 @@ fn data_health_catalog_and_source_use_the_closed_translation_key_set() {
             expected,
             "{locale} must translate exactly the closed Task 2b5a Data Health key set"
         );
-        assert_eq!(po_entry_count(&catalog), 322, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 344, "{locale} exact key count");
         for msgid in DATA_HEALTH_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b5a catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -607,8 +636,9 @@ fn help_about_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(HELP_ABOUT_MSGIDS)
         .chain(ACTIVITY_MODELS_MSGIDS)
         .chain(HISTORY_MSGIDS)
+        .chain(NOTIFICATIONS_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 322, "Task 2b7a exact catalog inventory");
+    assert_eq!(expected.len(), 344, "Task 2b7b exact catalog inventory");
 
     let help_about = include_str!("../ui/views/help-about-view.slint");
     for msgid in HELP_ABOUT_MSGIDS {
@@ -632,7 +662,7 @@ fn help_about_catalog_and_source_use_the_closed_translation_key_set() {
             expected,
             "{locale} must translate exactly the closed Task 2b5b Help/About key set"
         );
-        assert_eq!(po_entry_count(&catalog), 322, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 344, "{locale} exact key count");
         for msgid in HELP_ABOUT_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b5b catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -654,8 +684,9 @@ fn activity_and_models_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(HELP_ABOUT_MSGIDS)
         .chain(ACTIVITY_MODELS_MSGIDS)
         .chain(HISTORY_MSGIDS)
+        .chain(NOTIFICATIONS_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 322, "Task 2b7a exact catalog inventory");
+    assert_eq!(expected.len(), 344, "Task 2b7b exact catalog inventory");
 
     let activity = include_str!("../ui/views/activity-view.slint");
     let models = include_str!("../ui/views/models-view.slint");
@@ -677,7 +708,7 @@ fn activity_and_models_catalog_and_source_use_the_closed_translation_key_set() {
         .expect("bundled catalog");
         let entries = po_entries(&catalog);
         assert_eq!(entries.keys().copied().collect::<BTreeSet<_>>(), expected);
-        assert_eq!(po_entry_count(&catalog), 322, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 344, "{locale} exact key count");
         for msgid in ACTIVITY_MODELS_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b6 catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -712,8 +743,9 @@ fn history_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(HELP_ABOUT_MSGIDS)
         .chain(ACTIVITY_MODELS_MSGIDS)
         .chain(HISTORY_MSGIDS)
+        .chain(NOTIFICATIONS_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 322, "Task 2b7a exact catalog inventory");
+    assert_eq!(expected.len(), 344, "Task 2b7b exact catalog inventory");
 
     let history = include_str!("../ui/views/history-view.slint");
     for msgid in HISTORY_MSGIDS {
@@ -733,9 +765,64 @@ fn history_catalog_and_source_use_the_closed_translation_key_set() {
         .expect("bundled catalog");
         let entries = po_entries(&catalog);
         assert_eq!(entries.keys().copied().collect::<BTreeSet<_>>(), expected);
-        assert_eq!(po_entry_count(&catalog), 322, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 344, "{locale} exact key count");
         for msgid in HISTORY_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b7a catalog completeness");
+            assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
+            assert_eq!(placeholders(msgstr), placeholders(msgid));
+        }
+    }
+}
+
+#[test]
+fn notifications_catalog_and_source_use_the_closed_translation_key_set() {
+    let expected = SHELL_MSGIDS
+        .into_iter()
+        .chain(COMPONENT_MSGIDS)
+        .chain(SETTINGS_REMINDER_BACKUP_MSGIDS)
+        .chain(SETTINGS_STARTUP_CONFIG_BOARD_FOOTER_MSGIDS)
+        .chain(PROJECTS_COMPACT_MSGIDS)
+        .chain(SESSIONS_DASHBOARD_MSGIDS)
+        .chain(DATA_HEALTH_MSGIDS)
+        .chain(HELP_ABOUT_MSGIDS)
+        .chain(ACTIVITY_MODELS_MSGIDS)
+        .chain(HISTORY_MSGIDS)
+        .chain(NOTIFICATIONS_MSGIDS)
+        .collect::<BTreeSet<_>>();
+
+    let notifications = include_str!("../ui/views/notifications-view.slint");
+    for msgid in NOTIFICATIONS_MSGIDS {
+        assert!(
+            notifications.contains(&format!("@tr(\"{msgid}\"")),
+            "missing Task 2b7b Notifications @tr for {msgid:?}"
+        );
+    }
+    for raw in [
+        "text: \"Notifications\"",
+        "text: \"Reminder profiles\"",
+        "text: \"Current benefits\"",
+        "accessible-label: \"Notifications expiry reminders ",
+        "accessible-label: \"Effective reminder profiles and truthful delivery coverage\"",
+        "accessible-label: \"Current separate benefit lots with expiry precision and evidence\"",
+    ] {
+        assert!(
+            !notifications.contains(raw),
+            "unwrapped Task 2b7b Notifications literal {raw:?}"
+        );
+    }
+
+    for locale in ["ru", "pseudo"] {
+        let catalog = std::fs::read_to_string(
+            Path::new(TRANSLATION_ROOT)
+                .join(locale)
+                .join("LC_MESSAGES")
+                .join("tokenmaster-desktop.po"),
+        )
+        .expect("bundled catalog");
+        let entries = po_entries(&catalog);
+        assert_eq!(entries.keys().copied().collect::<BTreeSet<_>>(), expected);
+        for msgid in NOTIFICATIONS_MSGIDS {
+            let msgstr = entries.get(msgid).expect("Task 2b7b catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
             assert_eq!(placeholders(msgstr), placeholders(msgid));
         }
