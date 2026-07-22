@@ -684,6 +684,19 @@ fn activity_and_models_catalog_and_source_use_the_closed_translation_key_set() {
             assert_eq!(placeholders(msgstr), placeholders(msgid));
         }
     }
+
+    let ru_catalog = std::fs::read_to_string(
+        Path::new(TRANSLATION_ROOT)
+            .join("ru")
+            .join("LC_MESSAGES")
+            .join("tokenmaster-desktop.po"),
+    )
+    .expect("bundled Russian catalog");
+    assert_eq!(
+        po_entries(&ru_catalog).get("In {0} · Cache {1} · Out {2} · Reason {3} · {4} events"),
+        Some(&"Ввод {0} · Кэш {1} · Вывод {2} · Рассуждения {3} · {4} событий"),
+        "Russian narrow Models copy must keep the event count before its noun"
+    );
 }
 
 #[test]
