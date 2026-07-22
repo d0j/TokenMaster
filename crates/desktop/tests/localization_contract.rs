@@ -249,6 +249,36 @@ const SESSIONS_DASHBOARD_MSGIDS: [&str; 47] = [
     "Section collapsed; its data remains available.",
 ];
 
+const DATA_HEALTH_MSGIDS: [&str; 27] = [
+    "Data health and recovery",
+    "Data & Recovery",
+    "Last success {0} · Last attempt {1} · {2} successful · {3} failed · {4}",
+    "Backup",
+    "Create normal backup",
+    "Compact export",
+    "Export maximum compact backup",
+    "Verify",
+    "Verify all backups",
+    "Rebuild",
+    "Rebuild local usage data",
+    "Encryption passphrase",
+    "Confirm passphrase",
+    "Confirm encryption passphrase",
+    "Encrypted export",
+    "Export encrypted backup",
+    "Use 12–128 Unicode characters. Values are cleared after admission.",
+    "Restore points",
+    "Confirm destructive restore",
+    "Restore review · {0}",
+    "Data only",
+    "Confirm restore data only",
+    "Data + settings",
+    "Confirm restore data and portable settings",
+    "Cancel restore review",
+    "Generation {0}",
+    " · Latest failure {0}",
+];
+
 const COMPONENT_RAW_LITERAL_ALLOWLIST: [&str; 11] = [
     "", " ", " · ", ", ", "ready", "degraded", "waiting", "●", "▲", "…", "×",
 ];
@@ -296,6 +326,7 @@ fn shell_component_and_settings_reminder_backup_catalogs_are_complete_and_preser
         .chain(SETTINGS_STARTUP_CONFIG_BOARD_FOOTER_MSGIDS)
         .chain(PROJECTS_COMPACT_MSGIDS)
         .chain(SESSIONS_DASHBOARD_MSGIDS)
+        .chain(DATA_HEALTH_MSGIDS)
         .collect::<BTreeSet<_>>();
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -345,6 +376,7 @@ fn projects_and_compact_widget_catalogs_are_complete_before_view_conversion() {
         .chain(SETTINGS_STARTUP_CONFIG_BOARD_FOOTER_MSGIDS)
         .chain(PROJECTS_COMPACT_MSGIDS)
         .chain(SESSIONS_DASHBOARD_MSGIDS)
+        .chain(DATA_HEALTH_MSGIDS)
         .collect::<BTreeSet<_>>();
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -372,8 +404,9 @@ fn sessions_and_dashboard_catalogs_are_complete_before_view_conversion() {
         .chain(SETTINGS_STARTUP_CONFIG_BOARD_FOOTER_MSGIDS)
         .chain(PROJECTS_COMPACT_MSGIDS)
         .chain(SESSIONS_DASHBOARD_MSGIDS)
+        .chain(DATA_HEALTH_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 219, "Task 2b4 exact catalog inventory");
+    assert_eq!(expected.len(), 246, "Task 2b5a exact catalog inventory");
 
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -389,7 +422,7 @@ fn sessions_and_dashboard_catalogs_are_complete_before_view_conversion() {
             expected,
             "{locale} must translate exactly the closed Task 2b4 Sessions and Dashboard key set"
         );
-        assert_eq!(po_entry_count(&catalog), 219, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 246, "{locale} exact key count");
         for msgid in SESSIONS_DASHBOARD_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b4 catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -398,6 +431,50 @@ fn sessions_and_dashboard_catalogs_are_complete_before_view_conversion() {
                 placeholders(msgid),
                 "{locale} must preserve placeholders for {msgid:?}"
             );
+        }
+    }
+}
+
+#[test]
+fn data_health_catalog_and_source_use_the_closed_translation_key_set() {
+    let expected = SHELL_MSGIDS
+        .into_iter()
+        .chain(COMPONENT_MSGIDS)
+        .chain(SETTINGS_REMINDER_BACKUP_MSGIDS)
+        .chain(SETTINGS_STARTUP_CONFIG_BOARD_FOOTER_MSGIDS)
+        .chain(PROJECTS_COMPACT_MSGIDS)
+        .chain(SESSIONS_DASHBOARD_MSGIDS)
+        .chain(DATA_HEALTH_MSGIDS)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(expected.len(), 246, "Task 2b5a exact catalog inventory");
+
+    let data_health = include_str!("../ui/views/data-health-view.slint");
+    for msgid in DATA_HEALTH_MSGIDS {
+        assert!(
+            data_health.contains(&format!("@tr(\"{msgid}\"")),
+            "missing Task 2b5a Data Health @tr for {msgid:?}"
+        );
+    }
+
+    for locale in ["ru", "pseudo"] {
+        let catalog = std::fs::read_to_string(
+            Path::new(TRANSLATION_ROOT)
+                .join(locale)
+                .join("LC_MESSAGES")
+                .join("tokenmaster-desktop.po"),
+        )
+        .expect("bundled catalog");
+        let entries = po_entries(&catalog);
+        assert_eq!(
+            entries.keys().copied().collect::<BTreeSet<_>>(),
+            expected,
+            "{locale} must translate exactly the closed Task 2b5a Data Health key set"
+        );
+        assert_eq!(po_entry_count(&catalog), 246, "{locale} exact key count");
+        for msgid in DATA_HEALTH_MSGIDS {
+            let msgstr = entries.get(msgid).expect("Task 2b5a catalog completeness");
+            assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
+            assert_eq!(placeholders(msgstr), placeholders(msgid));
         }
     }
 }

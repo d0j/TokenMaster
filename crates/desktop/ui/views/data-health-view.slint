@@ -42,7 +42,7 @@ export component DataHealthView inherits Rectangle {
 
     background: UiTokens.background;
     accessible-role: groupbox;
-    accessible-label: "Data health and recovery";
+    accessible-label: @tr("Data health and recovery");
 
     VerticalLayout {
         padding: UiTokens.space;
@@ -57,12 +57,12 @@ export component DataHealthView inherits Rectangle {
 
         HorizontalLayout {
             spacing: UiTokens.space;
-            Text { text: "Data & Recovery"; color: UiTokens.text-primary; font-size: 24px; font-weight: 700; horizontal-stretch: 1; }
+            Text { text: @tr("Data & Recovery"); color: UiTokens.text-primary; font-size: 24px; font-weight: 700; horizontal-stretch: 1; }
             Text { text: root.health; color: root.health == "healthy" ? UiTokens.ready : root.health == "degraded" ? UiTokens.degraded : UiTokens.unavailable; vertical-alignment: center; }
         }
 
         Text {
-            text: "Last success " + root.latest-success-label + " · Last attempt " + root.latest-attempt-label + " · " + root.successful-count-label + " successful · " + root.failure-count-label + " failed · " + root.published-bytes-label;
+            text: @tr("Last success {0} · Last attempt {1} · {2} successful · {3} failed · {4}", root.latest-success-label, root.latest-attempt-label, root.successful-count-label, root.failure-count-label, root.published-bytes-label);
             color: UiTokens.text-secondary;
             wrap: word-wrap;
         }
@@ -78,10 +78,10 @@ export component DataHealthView inherits Rectangle {
 
         HorizontalLayout {
             spacing: UiTokens.space-sm;
-            Button { text: "Backup"; accessible-label: "Create normal backup"; clicked => { root.backup-normal(); } }
-            Button { text: "Compact export"; accessible-label: "Export maximum compact backup"; clicked => { root.backup-compact(); } }
-            Button { text: "Verify"; accessible-label: "Verify all backups"; clicked => { root.verify-backups(); } }
-            Button { text: "Rebuild"; accessible-label: "Rebuild local usage data"; clicked => { root.rebuild-data(); } }
+            Button { text: @tr("Backup"); accessible-label: @tr("Create normal backup"); clicked => { root.backup-normal(); } }
+            Button { text: @tr("Compact export"); accessible-label: @tr("Export maximum compact backup"); clicked => { root.backup-compact(); } }
+            Button { text: @tr("Verify"); accessible-label: @tr("Verify all backups"); clicked => { root.verify-backups(); } }
+            Button { text: @tr("Rebuild"); accessible-label: @tr("Rebuild local usage data"); clicked => { root.rebuild-data(); } }
         }
 
         Rectangle {
@@ -96,11 +96,11 @@ export component DataHealthView inherits Rectangle {
                 spacing: UiTokens.space-xs;
                 HorizontalLayout {
                     spacing: UiTokens.space-sm;
-                    passphrase := LineEdit { placeholder-text: "Encryption passphrase"; input-type: password; accessible-label: "Encryption passphrase"; }
-                    confirmation := LineEdit { placeholder-text: "Confirm passphrase"; input-type: password; accessible-label: "Confirm encryption passphrase"; }
+                    passphrase := LineEdit { placeholder-text: @tr("Encryption passphrase"); input-type: password; accessible-label: @tr("Encryption passphrase"); }
+                    confirmation := LineEdit { placeholder-text: @tr("Confirm passphrase"); input-type: password; accessible-label: @tr("Confirm encryption passphrase"); }
                     Button {
-                        text: "Encrypted export";
-                        accessible-label: "Export encrypted backup";
+                        text: @tr("Encrypted export");
+                        accessible-label: @tr("Export encrypted backup");
                         clicked => {
                             root.backup-encrypted(passphrase.text, confirmation.text);
                             passphrase.text = "";
@@ -108,11 +108,11 @@ export component DataHealthView inherits Rectangle {
                         }
                     }
                 }
-                Text { text: "Use 12–128 Unicode characters. Values are cleared after admission."; color: UiTokens.text-secondary; font-size: 12px; }
+                Text { text: @tr("Use 12–128 Unicode characters. Values are cleared after admission."); color: UiTokens.text-secondary; font-size: 12px; }
             }
         }
 
-        Text { text: "Restore points"; color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
+        Text { text: @tr("Restore points"); color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
         if root.restore-confirmation-visible: Rectangle {
             height: 78px;
             background: UiTokens.surface-raised;
@@ -120,14 +120,14 @@ export component DataHealthView inherits Rectangle {
             border-width: root.high-contrast ? 2px : 1px;
             border-radius: UiTokens.radius-sm;
             accessible-role: groupbox;
-            accessible-label: "Confirm destructive restore";
+            accessible-label: @tr("Confirm destructive restore");
             HorizontalLayout {
                 padding: UiTokens.space-sm;
                 spacing: UiTokens.space-sm;
-                Text { text: "Restore review · " + root.restore-confirmation-detail; color: UiTokens.text-primary; wrap: word-wrap; horizontal-stretch: 1; }
-                Button { text: "Data only"; accessible-label: "Confirm restore data only"; clicked => { root.confirm-restore(root.restore-confirmation-row, false); } }
-                Button { text: "Data + settings"; accessible-label: "Confirm restore data and portable settings"; clicked => { root.confirm-restore(root.restore-confirmation-row, true); } }
-                Button { text: "Cancel"; accessible-label: "Cancel restore review"; clicked => { root.dismiss-restore-confirmation(); } }
+                Text { text: @tr("Restore review · {0}", root.restore-confirmation-detail); color: UiTokens.text-primary; wrap: word-wrap; horizontal-stretch: 1; }
+                Button { text: @tr("Data only"); accessible-label: @tr("Confirm restore data only"); clicked => { root.confirm-restore(root.restore-confirmation-row, false); } }
+                Button { text: @tr("Data + settings"); accessible-label: @tr("Confirm restore data and portable settings"); clicked => { root.confirm-restore(root.restore-confirmation-row, true); } }
+                Button { text: @tr("Cancel"); accessible-label: @tr("Cancel restore review"); clicked => { root.dismiss-restore-confirmation(); } }
             }
         }
         ScrollView {
@@ -146,6 +146,6 @@ export component DataHealthView inherits Rectangle {
                 }
             }
         }
-        Text { text: "Generation " + root.generation + (root.latest-failure-code == "" ? "" : " · Latest failure " + root.latest-failure-code); color: UiTokens.text-secondary; font-size: 12px; }
+        Text { text: @tr("Generation {0}", root.generation) + (root.latest-failure-code == "" ? "" : @tr(" · Latest failure {0}", root.latest-failure-code)); color: UiTokens.text-secondary; font-size: 12px; }
     }
 }
