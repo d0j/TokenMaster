@@ -84,8 +84,8 @@ msgstr "Сохранение…"
 msgid "Not saved — choose the current presentation again to retry"
 msgstr "Не сохранено — выберите текущее представление ещё раз для повтора"
 
-msgid "Presentation persistence %1"
-msgstr "Состояние сохранения интерфейса: %1"
+msgid "Presentation persistence {0}"
+msgstr "Состояние сохранения интерфейса: {0}"
 
 msgid "Language"
 msgstr "Язык"
@@ -188,3 +188,111 @@ msgstr "Поколение продукта "
 
 msgid ": "
 msgstr ": "
+
+msgid "Settings"
+msgstr "Настройки"
+
+msgid "Settings health: {0}"
+msgstr "Состояние настроек: {0}"
+
+msgid "Expiry reminders"
+msgstr "Напоминания об истечении"
+
+msgid "Sync state: {0}"
+msgstr "Состояние синхронизации: {0}"
+
+msgid "Reminder synchronization state {0}"
+msgstr "Состояние синхронизации напоминаний {0}"
+
+msgid "Enable expiry reminders"
+msgstr "Включить напоминания об истечении"
+
+msgid "Recommended lead times"
+msgstr "Рекомендуемые сроки"
+
+msgid "7 days"
+msgstr "7 дней"
+
+msgid "24 hours"
+msgstr "24 часа"
+
+msgid "12 hours"
+msgstr "12 часов"
+
+msgid "6 hours"
+msgstr "6 часов"
+
+msgid "1 hour"
+msgstr "1 час"
+
+msgid "Reminder lead time {0}"
+msgstr "Срок напоминания: {0}"
+
+msgid "Custom lead times"
+msgstr "Настраиваемые сроки"
+
+msgid "Custom lead"
+msgstr "Настраиваемый срок"
+
+msgid "Enable custom reminder lead row {0}"
+msgstr "Включить строку настраиваемого срока напоминания {0}"
+
+msgid "Custom reminder lead value row {0}"
+msgstr "Значение настраиваемого срока напоминания, строка {0}"
+
+msgid "seconds"
+msgstr "секунды"
+
+msgid "minutes"
+msgstr "минуты"
+
+msgid "hours"
+msgstr "часы"
+
+msgid "days"
+msgstr "дни"
+
+msgid "Custom reminder lead unit row {0}"
+msgstr "Единица настраиваемого срока напоминания, строка {0}"
+
+msgid "Save reminder profile"
+msgstr "Сохранить профиль напоминаний"
+
+msgid "Reset to recommended"
+msgstr "Сбросить к рекомендуемому"
+
+msgid "Reset reminder profile to recommended"
+msgstr "Сбросить профиль напоминаний к рекомендуемому"
+
+msgid "Reminder editor feedback {0}"
+msgstr "Обратная связь редактора напоминаний: {0}"
+
+msgid "Automatic backup policy"
+msgstr "Политика автоматического резервного копирования"
+
+msgid "Enable periodic backups"
+msgstr "Включить периодические резервные копии"
+
+msgid "Quiet seconds"
+msgstr "Секунды простоя"
+
+msgid "Backup quiet period in seconds"
+msgstr "Период простоя резервного копирования в секундах"
+
+msgid "Interval seconds"
+msgstr "Интервал в секундах"
+
+msgid "Backup interval in seconds"
+msgstr "Интервал резервного копирования в секундах"
+
+msgid "Budget MiB"
+msgstr "Бюджет МиБ"
+
+msgid "Backup retention budget in mebibytes"
+msgstr "Бюджет хранения резервных копий в мебибайтах"
+
+msgid "Save backup policy"
+msgstr "Сохранить политику резервного копирования"
+
+msgid "Save automatic backup policy"
+msgstr "Сохранить политику автоматического резервного копирования"

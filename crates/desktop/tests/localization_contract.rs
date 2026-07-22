@@ -39,7 +39,7 @@ const SHELL_MSGIDS: [&str; 33] = [
     "Saved",
     "Saving…",
     "Not saved — choose the current presentation again to retry",
-    "Presentation persistence %1",
+    "Presentation persistence {0}",
     "Language",
     "English",
     "Russian",
@@ -77,6 +77,45 @@ const COMPONENT_MSGIDS: [&str; 29] = [
     "Reasons: ",
     "Product generation ",
     ": ",
+];
+
+const SETTINGS_REMINDER_BACKUP_MSGIDS: [&str; 36] = [
+    "Settings",
+    "Settings health: {0}",
+    "Expiry reminders",
+    "Sync state: {0}",
+    "Reminder synchronization state {0}",
+    "Enable expiry reminders",
+    "Recommended lead times",
+    "7 days",
+    "24 hours",
+    "12 hours",
+    "6 hours",
+    "1 hour",
+    "Reminder lead time {0}",
+    "Custom lead times",
+    "Custom lead",
+    "Enable custom reminder lead row {0}",
+    "Custom reminder lead value row {0}",
+    "seconds",
+    "minutes",
+    "hours",
+    "days",
+    "Custom reminder lead unit row {0}",
+    "Save reminder profile",
+    "Reset to recommended",
+    "Reset reminder profile to recommended",
+    "Reminder editor feedback {0}",
+    "Automatic backup policy",
+    "Enable periodic backups",
+    "Quiet seconds",
+    "Backup quiet period in seconds",
+    "Interval seconds",
+    "Backup interval in seconds",
+    "Budget MiB",
+    "Backup retention budget in mebibytes",
+    "Save backup policy",
+    "Save automatic backup policy",
 ];
 
 const COMPONENT_RAW_LITERAL_ALLOWLIST: [&str; 11] = [
@@ -118,10 +157,11 @@ fn hot_locale_shell_requires_compile_time_bundles() {
 }
 
 #[test]
-fn shell_and_component_catalogs_are_complete_and_preserve_placeholders() {
+fn shell_component_and_settings_reminder_backup_catalogs_are_complete_and_preserve_placeholders() {
     let expected = SHELL_MSGIDS
         .into_iter()
         .chain(COMPONENT_MSGIDS)
+        .chain(SETTINGS_REMINDER_BACKUP_MSGIDS)
         .collect::<BTreeSet<_>>();
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -136,7 +176,7 @@ fn shell_and_component_catalogs_are_complete_and_preserve_placeholders() {
         assert_eq!(
             entries.keys().copied().collect::<BTreeSet<_>>(),
             expected,
-            "{locale} must translate exactly the G2a1 shell and Task 2a2 component key set"
+            "{locale} must translate exactly the G2a1 shell, Task 2a2 component, and Task 2b1 Settings reminder/backup key set"
         );
         assert_eq!(
             po_entry_count(&catalog),
@@ -155,7 +195,41 @@ fn shell_and_component_catalogs_are_complete_and_preserve_placeholders() {
                 "{locale} must preserve placeholders for {msgid:?}"
             );
         }
+        assert!(
+            !catalog.contains("%1"),
+            "{locale} must not retain unsupported Slint %1 placeholders"
+        );
     }
+}
+
+#[test]
+fn settings_reminder_backup_uses_only_the_closed_translation_key_set() {
+    let settings = include_str!("../ui/views/settings-view.slint");
+
+    for msgid in SETTINGS_REMINDER_BACKUP_MSGIDS {
+        assert!(
+            settings.contains(&format!("@tr(\"{msgid}\"")),
+            "missing Task 2b1 Settings @tr for {msgid:?}"
+        );
+    }
+
+    for raw in [
+        "text: \"Settings\"",
+        "text: \"Expiry reminders\"",
+        "text: \"Automatic backup policy\"",
+        "model: [\"seconds\", \"minutes\", \"hours\", \"days\"]",
+        "text: \"Save reminder profile\"",
+        "text: \"Save backup policy\"",
+    ] {
+        assert!(
+            !settings.contains(raw),
+            "unwrapped Task 2b1 literal {raw:?}"
+        );
+    }
+    assert!(
+        !settings.contains("%1"),
+        "Task 2b1 Settings source must use Slint format placeholders, not literal %1"
+    );
 }
 
 #[test]
@@ -356,8 +430,16 @@ fn unquote(value: &str) -> Option<&str> {
 }
 
 fn placeholders(value: &str) -> Vec<&str> {
-    value
-        .split_whitespace()
-        .filter(|part| part.starts_with('%'))
-        .collect()
+    let mut placeholders = Vec::new();
+    let mut cursor = 0;
+    while let Some(relative_start) = value[cursor..].find('{') {
+        let start = cursor + relative_start;
+        let Some(relative_end) = value[start..].find('}') else {
+            break;
+        };
+        let end = start + relative_end + 1;
+        placeholders.push(&value[start..end]);
+        cursor = end;
+    }
+    placeholders
 }

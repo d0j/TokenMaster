@@ -84,8 +84,8 @@ msgstr "［Šåṽîñğ… ···］"
 msgid "Not saved — choose the current presentation again to retry"
 msgstr "［Ñõţ šåṽêð — çĥõõšê ţĥê çûřřêñţ þřêšêñţåţîõñ åğåîñ ţõ řêţřÿ ·······］"
 
-msgid "Presentation persistence %1"
-msgstr "［Þřêšêñţåţîõñ þêřšîšţêñçê %1 ·······］"
+msgid "Presentation persistence {0}"
+msgstr "［Þřêšêñţåţîõñ þêřšîšţêñçê {0} ·······］"
 
 msgid "Language"
 msgstr "［Ŀåñğûåğê ···］"
@@ -188,3 +188,111 @@ msgstr "［Þřõðûçţ ğêñêřåţîõñ ···］"
 
 msgid ": "
 msgstr "［: ···］"
+
+msgid "Settings"
+msgstr "［Šêţţîñğš ···］"
+
+msgid "Settings health: {0}"
+msgstr "［Šêţţîñğš ĥêåļţĥ: {0} ·····］"
+
+msgid "Expiry reminders"
+msgstr "［Êxþîřÿ řêɱîñðêřš ·····］"
+
+msgid "Sync state: {0}"
+msgstr "［Šÿñç šţåţê: {0} ·····］"
+
+msgid "Reminder synchronization state {0}"
+msgstr "［Řêɱîñðêř šÿñçĥřõñîžåţîõñ šţåţê {0} ·······］"
+
+msgid "Enable expiry reminders"
+msgstr "［Êñåβļê êxþîřÿ řêɱîñðêřš ·····］"
+
+msgid "Recommended lead times"
+msgstr "［Řêçõɱɱêñðêð ļêåð ţîɱêš ·····］"
+
+msgid "7 days"
+msgstr "［7 ðåÿš ···］"
+
+msgid "24 hours"
+msgstr "［24 ĥõûřš ···］"
+
+msgid "12 hours"
+msgstr "［12 ĥõûřš ···］"
+
+msgid "6 hours"
+msgstr "［6 ĥõûřš ···］"
+
+msgid "1 hour"
+msgstr "［1 ĥõûř ···］"
+
+msgid "Reminder lead time {0}"
+msgstr "［Řêɱîñðêř ļêåð ţîɱê {0} ·····］"
+
+msgid "Custom lead times"
+msgstr "［Çûšţõɱ ļêåð ţîɱêš ·····］"
+
+msgid "Custom lead"
+msgstr "［Çûšţõɱ ļêåð ···］"
+
+msgid "Enable custom reminder lead row {0}"
+msgstr "［Êñåβļê çûšţõɱ řêɱîñðêř ļêåð řõŵ {0} ·······］"
+
+msgid "Custom reminder lead value row {0}"
+msgstr "［Çûšţõɱ řêɱîñðêř ļêåð ṽåļûê řõŵ {0} ·······］"
+
+msgid "seconds"
+msgstr "［šêçõñðš ···］"
+
+msgid "minutes"
+msgstr "［ɱîñûţêš ···］"
+
+msgid "hours"
+msgstr "［ĥõûřš ···］"
+
+msgid "days"
+msgstr "［ðåÿš ···］"
+
+msgid "Custom reminder lead unit row {0}"
+msgstr "［Çûšţõɱ řêɱîñðêř ļêåð ûñîţ řõŵ {0} ·······］"
+
+msgid "Save reminder profile"
+msgstr "［Šåṽê řêɱîñðêř þřõƒîļê ·····］"
+
+msgid "Reset to recommended"
+msgstr "［Řêšêţ ţõ řêçõɱɱêñðêð ·····］"
+
+msgid "Reset reminder profile to recommended"
+msgstr "［Řêšêţ řêɱîñðêř þřõƒîļê ţõ řêçõɱɱêñðêð ·······］"
+
+msgid "Reminder editor feedback {0}"
+msgstr "［Řêɱîñðêř êðîţõř ƒêêðβåçķ {0} ·····］"
+
+msgid "Automatic backup policy"
+msgstr "［Åûţõɱåţîç βåçķûþ þõļîçÿ ·····］"
+
+msgid "Enable periodic backups"
+msgstr "［Êñåβļê þêřîõðîç βåçķûþš ·····］"
+
+msgid "Quiet seconds"
+msgstr "［Qûîêţ šêçõñðš ···］"
+
+msgid "Backup quiet period in seconds"
+msgstr "［βåçķûþ ǫûîêţ þêřîõð îñ šêçõñðš ·······］"
+
+msgid "Interval seconds"
+msgstr "［Îñţêřṽåļ šêçõñðš ···］"
+
+msgid "Backup interval in seconds"
+msgstr "［βåçķûþ îñţêřṽåļ îñ šêçõñðš ·······］"
+
+msgid "Budget MiB"
+msgstr "［βûðğêţ Mîβ ···］"
+
+msgid "Backup retention budget in mebibytes"
+msgstr "［βåçķûþ řêţêñţîõñ βûðğêţ îñ ɱêβîβÿţêš ·······］"
+
+msgid "Save backup policy"
+msgstr "［Šåṽê βåçķûþ þõļîçÿ ·····］"
+
+msgid "Save automatic backup policy"
+msgstr "［Šåṽê åûţõɱåţîç βåçķûþ þõļîçÿ ·······］"

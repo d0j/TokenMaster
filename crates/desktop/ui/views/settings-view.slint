@@ -163,7 +163,7 @@ export component SettingsView inherits Rectangle {
                 : root.presentation-persistence-state == "saving" ? @tr("Saving…")
                 : @tr("Not saved — choose the current presentation again to retry");
             color: UiTokens.text-secondary;
-            accessible-label: @tr("Presentation persistence %1", self.text);
+            accessible-label: @tr("Presentation persistence {0}", self.text);
         }
         locale-label := Text {
             x: 8px;
@@ -194,8 +194,8 @@ export component SettingsView inherits Rectangle {
         padding: UiTokens.space;
         spacing: UiTokens.space;
 
-        Text { text: "Settings"; color: UiTokens.text-primary; font-size: 24px; font-weight: 700; }
-        Text { text: "Settings health: " + root.settings-health; color: UiTokens.text-secondary; }
+        Text { text: @tr("Settings"); color: UiTokens.text-primary; font-size: 24px; font-weight: 700; }
+        Text { text: @tr("Settings health: {0}", root.settings-health); color: UiTokens.text-secondary; }
 
         reminder-card := Rectangle {
             background: UiTokens.surface;
@@ -206,31 +206,31 @@ export component SettingsView inherits Rectangle {
             reminder-content := VerticalLayout {
                 padding: UiTokens.space;
                 spacing: UiTokens.space-sm;
-                Text { text: "Expiry reminders"; color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
-                Text { text: "Sync state: " + root.reminder-sync-state; color: UiTokens.text-secondary; accessible-label: "Reminder synchronization state " + root.reminder-sync-state; }
-                reminder-enabled-control := CheckBox { text: "Enable expiry reminders"; checked: root.reminder-enabled; accessible-label: "Enable expiry reminders"; toggled => { root.reminder-enabled-edited(self.checked); } }
-                Text { text: "Recommended lead times"; color: UiTokens.text-secondary; }
+                Text { text: @tr("Expiry reminders"); color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
+                Text { text: @tr("Sync state: {0}", root.reminder-sync-state); color: UiTokens.text-secondary; accessible-label: @tr("Reminder synchronization state {0}", root.reminder-sync-state); }
+                reminder-enabled-control := CheckBox { text: @tr("Enable expiry reminders"); checked: root.reminder-enabled; accessible-label: @tr("Enable expiry reminders"); toggled => { root.reminder-enabled-edited(self.checked); } }
+                Text { text: @tr("Recommended lead times"); color: UiTokens.text-secondary; }
                 presets := VerticalLayout {
                     spacing: 2px;
-                    CheckBox { text: "7 days"; checked: root.reminder-preset-seven-days; accessible-label: "Reminder lead time 7 days"; toggled => { root.reminder-preset-edited(0, self.checked); } }
-                    CheckBox { text: "24 hours"; checked: root.reminder-preset-twenty-four-hours; accessible-label: "Reminder lead time 24 hours"; toggled => { root.reminder-preset-edited(1, self.checked); } }
-                    CheckBox { text: "12 hours"; checked: root.reminder-preset-twelve-hours; accessible-label: "Reminder lead time 12 hours"; toggled => { root.reminder-preset-edited(2, self.checked); } }
-                    CheckBox { text: "6 hours"; checked: root.reminder-preset-six-hours; accessible-label: "Reminder lead time 6 hours"; toggled => { root.reminder-preset-edited(3, self.checked); } }
-                    CheckBox { text: "1 hour"; checked: root.reminder-preset-one-hour; accessible-label: "Reminder lead time 1 hour"; toggled => { root.reminder-preset-edited(4, self.checked); } }
+                    CheckBox { text: @tr("7 days"); checked: root.reminder-preset-seven-days; accessible-label: @tr("Reminder lead time {0}", self.text); toggled => { root.reminder-preset-edited(0, self.checked); } }
+                    CheckBox { text: @tr("24 hours"); checked: root.reminder-preset-twenty-four-hours; accessible-label: @tr("Reminder lead time {0}", self.text); toggled => { root.reminder-preset-edited(1, self.checked); } }
+                    CheckBox { text: @tr("12 hours"); checked: root.reminder-preset-twelve-hours; accessible-label: @tr("Reminder lead time {0}", self.text); toggled => { root.reminder-preset-edited(2, self.checked); } }
+                    CheckBox { text: @tr("6 hours"); checked: root.reminder-preset-six-hours; accessible-label: @tr("Reminder lead time {0}", self.text); toggled => { root.reminder-preset-edited(3, self.checked); } }
+                    CheckBox { text: @tr("1 hour"); checked: root.reminder-preset-one-hour; accessible-label: @tr("Reminder lead time {0}", self.text); toggled => { root.reminder-preset-edited(4, self.checked); } }
                 }
-                Text { text: "Custom lead times"; color: UiTokens.text-secondary; }
+                Text { text: @tr("Custom lead times"); color: UiTokens.text-secondary; }
                 for row[index] in root.reminder-custom-lead-rows: HorizontalLayout {
                     spacing: UiTokens.space-sm;
-                    row-enabled := CheckBox { text: "Custom lead"; checked: row.enabled; accessible-label: "Enable custom reminder lead row " + (index + 1); toggled => { root.reminder-custom-lead-edited(index, self.checked, value.value, unit.current-index); } }
-                    value := SpinBox { minimum: 1; maximum: 2147483647; value: row.value; accessible-label: "Custom reminder lead value row " + (index + 1); edited(v) => { root.reminder-custom-lead-edited(index, row-enabled.checked, v, unit.current-index); } }
-                    unit := ComboBox { model: ["seconds", "minutes", "hours", "days"]; current-index: row.unit-index; accessible-label: "Custom reminder lead unit row " + (index + 1); selected(_) => { root.reminder-custom-lead-edited(index, row-enabled.checked, value.value, self.current-index); } }
+                    row-enabled := CheckBox { text: @tr("Custom lead"); checked: row.enabled; accessible-label: @tr("Enable custom reminder lead row {0}", index + 1); toggled => { root.reminder-custom-lead-edited(index, self.checked, value.value, unit.current-index); } }
+                    value := SpinBox { minimum: 1; maximum: 2147483647; value: row.value; accessible-label: @tr("Custom reminder lead value row {0}", index + 1); edited(v) => { root.reminder-custom-lead-edited(index, row-enabled.checked, v, unit.current-index); } }
+                    unit := ComboBox { model: [@tr("seconds"), @tr("minutes"), @tr("hours"), @tr("days")]; current-index: row.unit-index; accessible-label: @tr("Custom reminder lead unit row {0}", index + 1); selected(_) => { root.reminder-custom-lead-edited(index, row-enabled.checked, value.value, self.current-index); } }
                 }
                 HorizontalLayout {
                     spacing: UiTokens.space-sm;
-                    Button { text: "Save reminder profile"; accessible-label: "Save reminder profile"; clicked => { root.save-reminder-policy(); } }
-                    Button { text: "Reset to recommended"; accessible-label: "Reset reminder profile to recommended"; clicked => { root.reset-reminder-recommended(); } }
+                    Button { text: @tr("Save reminder profile"); accessible-label: @tr("Save reminder profile"); clicked => { root.save-reminder-policy(); } }
+                    Button { text: @tr("Reset to recommended"); accessible-label: @tr("Reset reminder profile to recommended"); clicked => { root.reset-reminder-recommended(); } }
                 }
-                Text { text: root.reminder-feedback; color: UiTokens.text-secondary; accessible-label: "Reminder editor feedback " + root.reminder-feedback; }
+                Text { text: root.reminder-feedback; color: UiTokens.text-secondary; accessible-label: @tr("Reminder editor feedback {0}", root.reminder-feedback); }
             }
         }
 
@@ -244,18 +244,18 @@ export component SettingsView inherits Rectangle {
             VerticalLayout {
                 padding: UiTokens.space;
                 spacing: UiTokens.space-sm;
-                Text { text: "Automatic backup policy"; color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
-                enabled := CheckBox { text: "Enable periodic backups"; checked: root.periodic-enabled; accessible-label: "Enable periodic backups"; }
+                Text { text: @tr("Automatic backup policy"); color: UiTokens.text-primary; font-size: 17px; font-weight: 650; }
+                enabled := CheckBox { text: @tr("Enable periodic backups"); checked: root.periodic-enabled; accessible-label: @tr("Enable periodic backups"); }
                 GridLayout {
                     spacing: UiTokens.space-sm;
-                    Text { row: 0; col: 0; text: "Quiet seconds"; color: UiTokens.text-secondary; vertical-alignment: center; }
-                    quiet := SpinBox { row: 0; col: 1; minimum: 300; maximum: 3600; value: root.quiet-seconds; accessible-label: "Backup quiet period in seconds"; }
-                    Text { row: root.settings-layout-mode == "wide" ? 0 : 1; col: root.settings-layout-mode == "wide" ? 2 : 0; text: "Interval seconds"; color: UiTokens.text-secondary; vertical-alignment: center; }
-                    interval := SpinBox { row: root.settings-layout-mode == "wide" ? 0 : 1; col: root.settings-layout-mode == "wide" ? 3 : 1; minimum: 21600; maximum: 604800; value: root.interval-seconds; accessible-label: "Backup interval in seconds"; }
-                    Text { row: root.settings-layout-mode == "wide" ? 0 : 2; col: root.settings-layout-mode == "wide" ? 4 : 0; text: "Budget MiB"; color: UiTokens.text-secondary; vertical-alignment: center; }
-                    budget := SpinBox { row: root.settings-layout-mode == "wide" ? 0 : 2; col: root.settings-layout-mode == "wide" ? 5 : 1; minimum: 256; maximum: 65536; value: root.retention-budget-mib; accessible-label: "Backup retention budget in mebibytes"; }
+                    Text { row: 0; col: 0; text: @tr("Quiet seconds"); color: UiTokens.text-secondary; vertical-alignment: center; }
+                    quiet := SpinBox { row: 0; col: 1; minimum: 300; maximum: 3600; value: root.quiet-seconds; accessible-label: @tr("Backup quiet period in seconds"); }
+                    Text { row: root.settings-layout-mode == "wide" ? 0 : 1; col: root.settings-layout-mode == "wide" ? 2 : 0; text: @tr("Interval seconds"); color: UiTokens.text-secondary; vertical-alignment: center; }
+                    interval := SpinBox { row: root.settings-layout-mode == "wide" ? 0 : 1; col: root.settings-layout-mode == "wide" ? 3 : 1; minimum: 21600; maximum: 604800; value: root.interval-seconds; accessible-label: @tr("Backup interval in seconds"); }
+                    Text { row: root.settings-layout-mode == "wide" ? 0 : 2; col: root.settings-layout-mode == "wide" ? 4 : 0; text: @tr("Budget MiB"); color: UiTokens.text-secondary; vertical-alignment: center; }
+                    budget := SpinBox { row: root.settings-layout-mode == "wide" ? 0 : 2; col: root.settings-layout-mode == "wide" ? 5 : 1; minimum: 256; maximum: 65536; value: root.retention-budget-mib; accessible-label: @tr("Backup retention budget in mebibytes"); }
                 }
-                Button { text: "Save backup policy"; accessible-label: "Save automatic backup policy"; clicked => { root.update-backup-policy(enabled.checked, quiet.value, interval.value, budget.value); } }
+                Button { text: @tr("Save backup policy"); accessible-label: @tr("Save automatic backup policy"); clicked => { root.update-backup-policy(enabled.checked, quiet.value, interval.value, budget.value); } }
             }
         }
 
