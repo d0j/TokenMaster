@@ -1,5 +1,21 @@
 # TokenMaster current state
 
+## 2026-07-23 — P4-G unified localization developer-complete
+
+P4-G closes the bounded en/ru/pseudo locale axis on settings schema v7. All Slint
+shell/settings/components/views and Rust-composed Dashboard/shared/History/Models/
+Projects/Activity/retained Notifications/Sessions list+detail labels hot-reproject;
+direct, persisted, and notifier locale changes reapply. The command palette searches
+localized display labels plus stable keys and English labels. Stable IDs, codes,
+provider/model/project/time/numeric payloads remain unchanged; Russian count forms are
+count-neutral and pseudo preserves product/dependency names and placeholders. The
+in-app overlay owns one Shell lifetime `Option<DesktopInAppNotificationBatch>`, at most
+256 safe DTO rows; failed bridge delivery retains the visible batch, locale re-renders
+only that batch, and dismiss clears both UI and slot. Focused receipts pass in-app 2/2,
+localization 22/22, UI 16/16, format, strict Desktop Clippy, and diff checks. Full
+desktop aggregate attempts timed out/lost and are not claimed; final workspace baseline
+is still pending. This is P4-G developer evidence, not M0, RC, or release acceptance.
+
 ## 2026-07-22 — provider-ready runtime seam
 
 Provider readiness is developer-complete for the internal seam: schema remains v13;
@@ -30,7 +46,7 @@ usage-analysis reference; both remain external, MIT-pinned provenance only.
   Focused compiled evidence is board UI 5/5 including 10,000 edits and layout 4/4;
   state 24/24, package 9/9, and app 80+1+7+57 remain green. TM-FUNC-004 overall is
   still partial: per-scope editing, reminder OS/tray delivery, usage alerts, and
-  remaining presentation are open. Locale/language, typography/row-size,
+  remaining presentation are open. Typography/row-size,
   accessibility/DPI/paint/resource and live Windows acceptance, P5 CLI/MCP, P6
   package/signing/soak, M0, and release acceptance remain blockers. This is not M0,
   a package, release candidate, or stable release.

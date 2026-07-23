@@ -392,7 +392,10 @@ only after visible row-count verification. One condition-variable receipt worker
 acknowledges off the UI thread and retries acknowledgement only for Busy/StoreUnavailable
 at 60 seconds. A failed presentation is released and re-pumped on the same bounded
 worker; a terminal acknowledgement error is released without automatic re-presentation. Desktop
-clears bridge-busy state before invoking a receipt. Runtime acknowledgement panics are
+clears bridge-busy state before invoking a receipt. The app-owned overlay keeps exactly one Shell-lifetime
+`Option<DesktopInAppNotificationBatch>` containing at most 256 safe DTO rows; bridge
+drop retains the visible batch, locale changes re-render only that batch, and dismiss
+clears both the UI model and the slot. Runtime acknowledgement panics are
 redacted and roll `Acknowledging` back to `Leased`; app release clears local
 backpressure only after a confirmed runtime transition, recovers the outer mutex poison
 for this narrow release path, and joins before reminder shutdown.

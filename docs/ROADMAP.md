@@ -6,6 +6,15 @@ provider-owned quota/health (at most 32 windows, optional benefits) reuse one bo
 LiveRuntime ownership path. External host/package/signing/installation/registry and
 multi-provider scheduler work remains 1.1.
 
+P4-G unified localization is developer-complete: schema v7 closes the en/ru/pseudo
+axis across Slint and Rust-composed labels, with hot re-projection for direct,
+persisted, and notifier changes. Focused in-app 2/2, localization 22/22, UI 16/16,
+format, strict Desktop Clippy, and diff receipts pass. Full desktop aggregate attempts
+timed out/lost and final workspace baseline remains pending. External live Windows/
+interactive locale/accessibility, typography/row-size, DPI/paint/resource, per-scope
+settings, OS/tray reminder delivery, usage alerts, P5/P6, M0, package/signing/soak,
+and release acceptance remain open.
+
 ## M0 — native architecture proof
 
 P4-F board preferences are developer-complete as a bounded sub-contour: schema v6

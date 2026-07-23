@@ -11,6 +11,14 @@ All notable changes are recorded here.
 
 ### Added
 
+- Added P4-G unified en/ru/pseudo localization on schema v7 across Slint views and
+  Rust-composed labels. Direct, persisted, and notifier changes hot-reproject while
+  stable payloads remain unchanged. In-app presentation keeps one Shell-lifetime
+  `Option<DesktopInAppNotificationBatch>` capped at 256 safe DTO rows; focused in-app
+  2/2, localization 22/22, UI 16/16, format, strict Desktop Clippy, and diff checks
+  pass. Full desktop aggregate attempts timed out/lost; workspace baseline and live
+  Windows/interactive acceptance remain pending. This is not M0, RC, or release.
+
 - Added P4-F durable board preferences: schema v6 extends complete presentation with
   a strict fixed six-key manifest (`plan_usage`, `code_output`, `trend`, `sessions`,
   `activity`, `models`), in-memory v1-v5 canonical migration without startup write,

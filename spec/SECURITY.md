@@ -323,7 +323,11 @@ only the narrow fallback release recovers outer runtime-mutex poison. A false or
 release retains local backpressure. Its one worker is condition-variable driven,
 re-pumps a released failed presentation without an unrelated completion, releases a
 terminal acknowledgement error without automatic re-presentation, retains no batch, and never blocks the UI
-thread. Desktop clears its bridge-busy flag before receipt invocation.
+thread. Desktop clears its bridge-busy flag before receipt invocation. The app-owned
+overlay retains exactly one Shell-lifetime `Option<DesktopInAppNotificationBatch>` with
+at most 256 safe DTO rows; bridge drop retains the visible batch, locale reprojection
+touches only that bounded batch, and dismiss clears both UI and slot. No locale operation
+adds provider, path, credential, SQL, or retained-history authority.
 
 P3-D.7 Help/About adds only fixed compiled English fallback text, the compile-time
 Cargo package version, responsive geometry, and exactly one pinned standard

@@ -1,5 +1,18 @@
 # TokenMaster project history
 
+## 2026-07-23 — P4-G unified localization
+
+Closed the schema-v7 en/ru/pseudo locale axis across Slint and Rust-composed display
+labels. Direct, persisted, and notifier changes hot-reproject; command-palette queries
+accept localized display labels plus stable/English labels without changing payloads.
+Stable IDs/codes/provider/model/project/time/numeric facts remain invariant; Russian
+count forms are count-neutral and pseudo preserves product/dependency names/placeholders.
+The app-owned in-app overlay retains one Shell-lifetime optional batch capped at 256 safe
+DTO rows, with visible-batch retention on bridge drop, locale-only re-render, and dismiss
+clearing UI plus slot. Focused in-app 2/2, localization 22/22, UI 16/16, format,
+strict Desktop Clippy, and diff checks pass. Full desktop aggregate attempts timed out/
+lost and are not claimed; final workspace baseline and live acceptance remain pending.
+
 ## 2026-07-22 — provider-ready runtime seam
 
 Internal provider readiness completed without changing schema v13. Bounded opaque
