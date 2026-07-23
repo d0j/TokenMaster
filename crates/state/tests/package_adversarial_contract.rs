@@ -70,7 +70,7 @@ fn resealed_supported_manifest_timestamp_remains_readable() {
 
 #[test]
 fn resealed_unsupported_manifest_settings_schemas_are_rejected() {
-    for schema_version in [0_u16, 7_u16] {
+    for schema_version in [0_u16, 8_u16] {
         let mut package = config_bytes();
         package[46..48].copy_from_slice(&schema_version.to_le_bytes());
         reseal_descriptors_and_package(&mut package);
