@@ -1,6 +1,6 @@
 # TokenMaster project history
 
-## 2026-07-23 — M0 latest-only completion contract
+## 2026-07-23 — M0 receipt stabilization
 
 One GitHub Windows M0 run timed out in the History controller contract after a blocked
 navigation admitted one coalesced follow-up. Root-cause tracing confirmed that the
@@ -19,14 +19,20 @@ The first aggregate M0 attempt also exposed a Windows GNU linker exit at an unre
 desktop target. The exact target passed 11/11 with ample resources, matching the
 repository's recorded concurrent-linker pattern. `verify-m0.ps1` now sets
 `CARGO_BUILD_JOBS=1` before every Cargo invocation; its focused Pester contract passes
-21/21. The final serial aggregate remains required before this becomes local M0 evidence.
+21/21.
 
 That serial aggregate found a second acceptance-evidence defect in the query resource
 binary: two repeated allocator troughs per warm-up window could be mistaken for a lower
 retained private-bytes plateau. A deterministic RED vector now makes that phase reject
 and continue bounded warm-up. The real resource binary and complete `tokenmaster-query`
-crate pass with the original resource budgets and structural limits unchanged. The final
-serial aggregate is still required on the clean commit containing this correction.
+crate pass with the original resource budgets and structural limits unchanged. The
+complete serial M0 verifier then passed its release build and both stress receipts.
+
+The deliberate serial GNU receipt path has a documented clean baseline longer than the
+M0 workflow's former 30-minute ceiling. The workflow now allows 60 minutes and a new
+focused Pester contract was RED at 30 then passes 22/22 at 60. This changes only CI
+receipt time, not product behavior, permissions, triggers, or release status; a new
+clean-head local receipt and remote M0 run remain necessary.
 
 ## 2026-07-23 — trusted GitHub artifact-attestation path
 

@@ -31,6 +31,11 @@ Describe "TokenMaster M0 script contracts" {
         $Workflow | Should -Match '(?m)^\s+-\s+"\.github/workflows/\*\*"\s*$'
     }
 
+    It "allows the serialized Windows M0 receipt sufficient wall time" {
+        $Workflow = Get-Content -LiteralPath (Join-Path $RepositoryRoot ".github\workflows\tokenmaster-m0-windows.yml") -Raw
+        $Workflow | Should -Match '(?m)^\s+timeout-minutes:\s+60\s*$'
+    }
+
     It "verification uses the root locked workspace and labels external gates" {
         $Text = Get-Content -LiteralPath (Join-Path $ScriptsRoot "verify-m0.ps1") -Raw
         $Text | Should -Match 'RequiredPesterVersion = \[version\]"5\.7\.1"'

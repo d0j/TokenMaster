@@ -1,9 +1,10 @@
 # TokenMaster handoff
 
-## M0 latest-only completion contract (2026-07-23)
+## M0 receipt stabilization (2026-07-23)
 
-Product state: unchanged. The correction changes only a desktop integration test; it
-does not change worker capacity, navigation behavior, UI, package content, or signing.
+Product state: unchanged. The slice corrects a desktop integration test, resource
+evidence, and CI receipt budget; it does not change worker capacity, navigation
+behavior, UI, package content, or signing.
 
 Audit/evidence state: a GitHub Windows M0 failure proved that the test demanded two
 pollable completion receipts after coalesced navigation, despite the intentional
@@ -18,25 +19,31 @@ The first aggregate M0 attempt had one Windows GNU linker exit at an unrelated d
 target, while its exact target passed 11/11 in isolation with ample host resources.
 `verify-m0.ps1` now sets the established `CARGO_BUILD_JOBS=1` policy before any Cargo
 command, preventing overlapping GNU linker jobs in the receipt process; its focused
-Pester contract passes 21/21. A full serial aggregate for the new clean commit is still
-required and the failed aggregate is not evidence.
+Pester contract passes 21/21. The failed aggregate is not evidence.
 
 The serial aggregate then found a second, independent resource-evidence defect: repeated
 allocator troughs in both warm-up windows could lower the retained private-bytes
 baseline. A deterministic RED vector now forces such a phase to continue bounded
 warm-up instead. The real resource binary and complete `tokenmaster-query` crate pass;
-the resource budgets and structural limits are unchanged. The final serial aggregate
-must run for the resulting clean commit.
+the resource budgets and structural limits are unchanged. One complete serial M0 run
+then reports `PASS`, including release build and both stress receipts; it is local
+developer evidence only.
 
-Release blockers: a green remote M0 run for the exact clean commit is now the immediate
-receipt. Public-download Slint attribution, trusted remote attestation verification,
-signing, authenticated clean-room/P3-E/P4 Windows evidence, exact MSVC comparison, and
-soak remain open. Per operator direction, do not start the 24-hour M0 soak until
-explicitly requested.
+The serial GNU receipt path has a recorded clean baseline longer than the workflow's
+former 30-minute cap. The M0 workflow now reserves 60 minutes, with a focused contract
+that was RED at 30 and passes 22/22 at 60. This is a receipt-budget correction only:
+permissions, triggers, external boundaries, package content, and product behavior do
+not change.
 
-Git state: commit this test/docs slice intentionally, then regenerate the ignored
-producer and secret-scan receipts for that exact clean HEAD before pushing. Do not treat
-the prior failed remote M0 or a local baseline as M0 acceptance; do not reopen P4 or
+Release blockers: regenerate the local M0 receipt and obtain a green remote M0 run for
+the exact clean workflow commit. Public-download Slint attribution, trusted remote
+attestation verification, signing, authenticated clean-room/P3-E/P4 Windows evidence,
+exact MSVC comparison, and soak remain open. Per operator direction, do not start the
+24-hour M0 soak until explicitly requested.
+
+Git state: commit this workflow/test/docs slice intentionally, then regenerate ignored
+M0, producer, and secret-scan receipts for that exact clean HEAD before pushing. Do not
+treat a local baseline or remote workflow setup as M0 acceptance; do not reopen P4 or
 desktop textual-audit hardening.
 
 ## Trusted GitHub artifact-attestation path (2026-07-23)

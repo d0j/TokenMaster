@@ -1271,7 +1271,8 @@ All notable changes are recorded here.
   completion of a coalesced navigation instead of requiring two independently pollable
   receipts, and made `verify-m0.ps1` serialize Windows GNU Cargo linking with
   `CARGO_BUILD_JOBS=1`. Query resource warm-up also rejects repeated allocator troughs
-  instead of accepting a falsely low retained baseline. This stabilizes required CI
+  instead of accepting a falsely low retained baseline. The M0 workflow now reserves
+  60 minutes for that deliberately serial receipt path. This stabilizes required CI
   evidence without changing product behavior or resource budgets.
 - Pinned every GitHub Actions `uses:` reference to a reviewed full commit and added a
   bounded fail-closed immutable-action validator to the M0 verification chain.

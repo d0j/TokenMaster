@@ -16,6 +16,9 @@ The Windows GNU M0 receipt process sets `CARGO_BUILD_JOBS=1` before Cargo work s
 overlapping linker jobs cannot turn an otherwise valid target into a transient failure.
 Query resource warm-up treats repeated allocator troughs as an unstable phase; it must
 not lower the retained private-bytes baseline or weaken the established resource budget.
+The matching GitHub M0 job allows 60 minutes because that serial clean Windows receipt
+can exceed the former 30-minute ceiling; the larger budget is not an acceptance claim
+and does not expand workflow permissions, triggers, or product authority.
 
 The canonical Windows 1.0 artifact is a signed `x86_64-pc-windows-msvc` portable ZIP.
 The existing GNU target is a development and M0 evidence lane only until P6 completes

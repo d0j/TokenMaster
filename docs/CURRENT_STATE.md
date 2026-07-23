@@ -1,10 +1,10 @@
 # TokenMaster current state
 
-## 2026-07-23 — M0 latest-only completion contract
+## 2026-07-23 — M0 receipt stabilization
 
 Product state: unchanged. The desktop worker, navigation arbitration, package contents,
-and release candidate behavior are unchanged; this is a test-only correction to a
-required Windows acceptance receipt.
+and release candidate behavior are unchanged; this slice corrects required desktop,
+resource-evidence, and CI-receipt contracts only.
 
 Evidence state: one GitHub-hosted M0 run exposed that the History controller contract
 waited for two individually retrievable completions after a coalesced navigation. The
@@ -19,23 +19,31 @@ The first aggregate gate then hit a Windows GNU linker exit while linking an unr
 desktop target; the exact target immediately passed 11/11 with ample disk and memory.
 `verify-m0.ps1` now owns the repository's established `CARGO_BUILD_JOBS=1` policy before
 any Cargo invocation, preventing overlapping GNU linker jobs inside the receipt process.
-Its focused Pester contract passes 21/21. The final serial aggregate is still required;
-the earlier failed aggregate is not accepted as evidence.
+Its focused Pester contract passes 21/21. The earlier failed aggregate is not accepted
+as evidence.
 
 That serial aggregate then exposed a separate resource-evidence defect: two repeated
 Windows allocator troughs in each warm-up window could still be accepted as a low
 retained baseline. The plateau selector now rejects that phase and continues bounded
 warm-up; a deterministic RED vector proves the interleaving. The real resource binary
 and the complete `tokenmaster-query` crate pass after the correction. Its 1/2 MiB
-budgets and structural handle/thread/GUI limits are unchanged; a final serial aggregate
-for the resulting clean commit remains required.
+budgets and structural handle/thread/GUI limits are unchanged. A complete serial M0
+run then reports `PASS` with its release build and both stress receipts; it remains
+developer evidence, not M0 or product-release acceptance.
 
-The next required evidence is a green remote M0 run for the clean commit containing
-this correction. All other release blockers are unchanged: public-download attribution,
-remote attestation verification, signing, authenticated clean-room/interactive Windows
-evidence, exact MSVC comparison, and the explicitly deferred 24-hour soak. New P4 work
-remains frozen. `AUDIT_HARDENING_LOOP` did not trigger: the slice corrects a required
-acceptance contract and adds no audit rule or production behavior.
+The clean Windows M0 path deliberately serializes Cargo work and historical full
+baselines have exceeded the workflow's former 30-minute ceiling. The M0 job therefore
+now allows 60 minutes; a focused workflow contract first failed at 30 and passes
+22/22 at 60. This changes only the receipt budget, not permissions, triggers, product
+behavior, or release claims.
+
+The next required evidence is a regenerated local M0 receipt and a green remote M0 run
+for the clean commit containing this workflow correction. All other release blockers
+are unchanged: public-download attribution, remote attestation verification, signing,
+authenticated clean-room/interactive Windows evidence, exact MSVC comparison, and the
+explicitly deferred 24-hour soak. New P4 work remains frozen. `AUDIT_HARDENING_LOOP`
+did not trigger: the slice corrects required acceptance evidence and adds no audit rule
+or production behavior.
 
 ## 2026-07-23 — trusted GitHub artifact-attestation path
 
