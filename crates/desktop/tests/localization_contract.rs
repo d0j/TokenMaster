@@ -1348,10 +1348,18 @@ fn locale_switch_localizes_closed_activity_projection_atoms() {
 
     window.invoke_select_presentation_locale(1);
     assert_eq!(strings.invoke_activity_context_label(), "Метки времени UTC");
-    assert_eq!(
-        strings.invoke_activity_loaded_label("2".into(), false),
-        "Загружено событий: 2"
-    );
+    for (count, singular) in [("1", true), ("21", false), ("2", false), ("5", false)] {
+        assert_eq!(
+            strings.invoke_activity_loaded_label(count.into(), singular),
+            format!("Загружено: {count}"),
+            "Russian Activity loaded labels must stay count-neutral for {count}"
+        );
+        assert_eq!(
+            strings.invoke_event_count(count.into(), singular),
+            format!("Событий: {count}"),
+            "Russian Activity event labels must stay count-neutral for {count}"
+        );
+    }
     assert_eq!(strings.invoke_weekday_label("monday".into()), "Понедельник");
     assert_eq!(
         strings.invoke_weekday_label("provider_weekday".into()),

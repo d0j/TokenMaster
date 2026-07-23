@@ -432,6 +432,17 @@ fn populated_usage_projection_payloads_survive_hot_locale_switch() {
     let history_before = window.get_history_day_rows().iter().collect::<Vec<_>>();
     let models_before = window.get_model_usage_rows().iter().collect::<Vec<_>>();
     let projects_before = window.get_project_usage_rows().iter().collect::<Vec<_>>();
+    let activity_before = window.get_recent_activity_rows().iter().collect::<Vec<_>>();
+    let hour_before = window
+        .get_activity_rhythm_hour_rows()
+        .iter()
+        .collect::<Vec<_>>();
+    let weekday_before = window
+        .get_activity_rhythm_weekday_rows()
+        .iter()
+        .collect::<Vec<_>>();
+    let activity_state = window.get_activity_state();
+    let activity_reasons = window.get_activity_reasons();
     assert!(!history_before.is_empty());
     assert!(!models_before.is_empty());
     assert!(!projects_before.is_empty());
@@ -441,6 +452,15 @@ fn populated_usage_projection_payloads_survive_hot_locale_switch() {
     let history_after = window.get_history_day_rows().iter().collect::<Vec<_>>();
     let models_after = window.get_model_usage_rows().iter().collect::<Vec<_>>();
     let projects_after = window.get_project_usage_rows().iter().collect::<Vec<_>>();
+    let activity_after = window.get_recent_activity_rows().iter().collect::<Vec<_>>();
+    let hour_after = window
+        .get_activity_rhythm_hour_rows()
+        .iter()
+        .collect::<Vec<_>>();
+    let weekday_after = window
+        .get_activity_rhythm_weekday_rows()
+        .iter()
+        .collect::<Vec<_>>();
     assert_eq!(history_after.len(), history_before.len());
     assert_eq!(models_after.len(), models_before.len());
     assert_eq!(projects_after.len(), projects_before.len());
@@ -502,6 +522,38 @@ fn populated_usage_projection_payloads_survive_hot_locale_switch() {
             after.efficiency_label.split(" / ").next(),
             before.efficiency_label.split(" / ").next()
         );
+    }
+    assert_eq!(window.get_activity_state(), activity_state);
+    assert_eq!(window.get_activity_reasons(), activity_reasons);
+    assert_eq!(activity_after.len(), activity_before.len());
+    assert_eq!(hour_after.len(), hour_before.len());
+    assert_eq!(weekday_after.len(), weekday_before.len());
+    assert_eq!(window.get_activity_context_label(), "Метки времени UTC");
+    assert_eq!(window.get_activity_loaded_label(), "Загружено: 1");
+    for (before, after) in activity_before.iter().zip(&activity_after) {
+        assert_eq!(after.time_label, before.time_label);
+        assert_eq!(after.model_label, before.model_label);
+        assert_eq!(after.input_availability, before.input_availability);
+        assert_eq!(after.input_label, before.input_label);
+        assert_eq!(after.cached_availability, before.cached_availability);
+        assert_eq!(after.cached_label, before.cached_label);
+        assert_eq!(after.output_availability, before.output_availability);
+        assert_eq!(after.output_label, before.output_label);
+        assert_eq!(after.reasoning_availability, before.reasoning_availability);
+        assert_eq!(after.reasoning_label, before.reasoning_label);
+        assert_eq!(after.total_availability, before.total_availability);
+        assert_eq!(after.total_label, before.total_label);
+    }
+    for (before, after) in hour_before.iter().zip(&hour_after) {
+        assert_eq!(after.label, before.label);
+        assert_eq!(after.tokens_label, before.tokens_label);
+        assert_eq!(after.exposure_label, before.exposure_label);
+        assert_eq!(after.ratio, before.ratio);
+    }
+    for (before, after) in weekday_before.iter().zip(&weekday_after) {
+        assert_eq!(after.tokens_label, before.tokens_label);
+        assert_eq!(after.exposure_label, before.exposure_label);
+        assert_eq!(after.ratio, before.ratio);
     }
 
     window.invoke_select_presentation_locale(0);

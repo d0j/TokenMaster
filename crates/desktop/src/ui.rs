@@ -3228,9 +3228,10 @@ fn apply_activity_route_projection(window: &MainWindow, activity: &DesktopActivi
         .map(|row| ActivityRhythmRow {
             label: format!("{:02}", row.hour()).into(),
             tokens_label: format_tokens(row.total_tokens()).into(),
-            events_label: window
-                .global::<ProjectionStrings>()
-                .invoke_event_count(row.event_count().to_string().into(), row.event_count() == 1),
+            events_label: window.global::<ProjectionStrings>().invoke_event_count(
+                format_integer(row.event_count()).into(),
+                row.event_count() == 1,
+            ),
             exposure_label: format!("{}m/{}x", row.elapsed_minutes(), row.occurrence_count())
                 .into(),
             ratio: ratio(row.total_tokens(), hour_maximum),
@@ -3244,9 +3245,10 @@ fn apply_activity_route_projection(window: &MainWindow, activity: &DesktopActivi
                 .global::<ProjectionStrings>()
                 .invoke_weekday_label(row.weekday().stable_code().into()),
             tokens_label: format_tokens(row.total_tokens()).into(),
-            events_label: window
-                .global::<ProjectionStrings>()
-                .invoke_event_count(row.event_count().to_string().into(), row.event_count() == 1),
+            events_label: window.global::<ProjectionStrings>().invoke_event_count(
+                format_integer(row.event_count()).into(),
+                row.event_count() == 1,
+            ),
             exposure_label: format!("{}m/{}x", row.elapsed_minutes(), row.occurrence_count())
                 .into(),
             ratio: ratio(row.total_tokens(), weekday_maximum),
