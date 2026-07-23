@@ -301,6 +301,52 @@ fn more_than_256_files_use_the_disk_backed_manifest_and_bounded_pages() {
     assert_eq!(result.max_event_page, 256);
 }
 
+#[test]
+fn long_conflicted_session_rebuild_stays_bounded() {
+    let directory = TempDir::new().expect("temporary directory");
+    let root = directory.path().join("conflicted-session-root");
+    fs::create_dir(&root).expect("create conflicted-session root");
+    let mut content = String::from(
+        "{\"type\":\"session_meta\",\"payload\":{\"id\":\"child\",\"forked_from_id\":\"parent\"}}\n",
+    );
+    for ordinal in 1..=6_400_u64 {
+        let line = serde_json::json!({
+            "timestamp": 1_720_700_000_u64 + ordinal,
+            "type": "event_msg",
+            "payload": {
+                "type": "token_count",
+                "session_id": "parent",
+                "info": {
+                    "last_token_usage": {
+                        "input_tokens": ordinal,
+                        "output_tokens": 1,
+                        "total_tokens": ordinal + 1
+                    }
+                }
+            }
+        });
+        content.push_str(&line.to_string());
+        content.push('\n');
+    }
+    fs::write(root.join("session.jsonl"), content).expect("write conflicted-session fixture");
+    let database = directory.path().join("conflicted-session.sqlite3");
+
+    let result = run_pipeline(
+        &root,
+        &database,
+        PipelineOptions {
+            collect_event_ids: false,
+            ..PipelineOptions::default()
+        },
+    )
+    .expect("conflicted-session pipeline must promote");
+
+    assert_eq!(result.registered_files, 1);
+    assert_eq!(result.visible_events, 0);
+    assert_eq!(result.quality.conflict(), 6_400);
+    assert_eq!(result.quality.total(), 6_400);
+}
+
 #[cfg(windows)]
 fn atomic_replace(replaced: &Path, replacement: &Path) {
     use std::os::windows::ffi::OsStrExt;

@@ -286,6 +286,8 @@ pub fn parse_line(
     let metadata_line = metadata.has_updates();
     let tool = tool_update(&raw, diagnostics);
     if !usage_positive {
+        let session_id = resolved_session_id(context, state, &metadata);
+        normalize_lineage_conflict(state, &mut metadata, &session_id);
         apply_metadata(state, metadata);
         if metadata_line {
             diagnostics.record_metadata_line();
@@ -450,16 +452,16 @@ fn normalize_lineage_conflict(
     metadata: &mut effects::MetadataUpdate,
     session_id: &UsageSessionId,
 ) {
-    let Some(parent) = metadata.parent_session_id.as_ref() else {
-        metadata.lineage_conflict |= state.lineage_conflict;
-        return;
-    };
-    metadata.lineage_conflict |= parent == session_id
-        || state.lineage_conflict
-        || state
-            .parent_session_id
-            .as_ref()
-            .is_some_and(|existing| existing != parent);
+    let incoming_parent = metadata.parent_session_id.as_ref();
+    let effective_parent = incoming_parent.or(state.parent_session_id.as_ref());
+    metadata.lineage_conflict |= state.lineage_conflict
+        || effective_parent.is_some_and(|parent| parent == session_id)
+        || incoming_parent.is_some_and(|parent| {
+            state
+                .parent_session_id
+                .as_ref()
+                .is_some_and(|existing| existing != parent)
+        });
 }
 
 fn session_relation_draft(

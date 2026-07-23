@@ -1,5 +1,35 @@
 # TokenMaster handoff
 
+## Release-path replay correction (2026-07-23)
+
+Product state: large Codex full rebuilds no longer falsely stall when replay
+continuation advances only maintenance work. Late parent/session identity conflicts,
+including zero-usage input, remain resumable and conflict-qualified. Invalid `cwd`
+clears only the transient repository hint and cannot block valid usage. Staging replay
+avoids per-batch whole-database FK scans and short-circuits irreversible conflict work
+without changing visible accounting truth.
+
+Audit/evidence state: the permanent 6,400-event conflict fixture completes in 2.8-3.3
+seconds, reports 6,400 conflicts, and publishes zero visible events. Focused lineage,
+pipeline, store replay/rollback, bootstrap, and repository-hint tests pass. A clean
+portable MSVC run against the real local archive was responsive by about 39 seconds,
+staged 164,480 observations by about 58 seconds and 240,499 by about 98 seconds
+(about 2,534/second over the second interval), with 36-37.5 MiB private and 63-65 MiB
+working-set memory. PID 40816 was stopped and the task-owned portable marker/data were
+removed. The final clean-root/fmt/strict workspace Clippy/full locked workspace
+test-doctest gate exits zero in 935.9 seconds using serial test linking.
+`AUDIT_HARDENING_LOOP` was not triggered; no audit parser/rule changed.
+
+Release blockers: regenerate and validate the deterministic unsigned package after
+the clean commit. Signing identity/signature verification, external supply-chain and
+attestation receipts, authenticated clean-room and interactive Windows/DPI/
+accessibility checks, uninterrupted soak, M0, RC, and stable release acceptance remain
+open. Do not reopen P4 or speculative replay/audit hardening before those receipts.
+
+Git state: implementation and evidence documents are intentionally modified on
+`cx/tokenmaster-product-architecture`; create one clean commit, then regenerate the
+ignored package bound to that commit and verify the final live worktree/HEAD.
+
 ## Deterministic unsigned product package (2026-07-23)
 
 Product state: no P4 functionality changed. The release app remains the validated x64

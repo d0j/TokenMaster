@@ -113,6 +113,68 @@ fn late_ancestry_is_emitted_separately_and_applies_to_later_ordinals() {
 }
 
 #[test]
+fn later_session_identity_matching_retained_parent_stays_resumable_and_conflicted() {
+    let mut state = ParserState::new();
+    let mut diagnostics = ParserDiagnostics::new();
+    let initial = relation(
+        &mut state,
+        &mut diagnostics,
+        br#"{"type":"session_meta","payload":{"id":"child","forked_from_id":"parent"}}"#,
+    );
+    assert!(!initial.declared_conflict());
+
+    let identity_update = parse_line(
+        &context(),
+        &mut state,
+        &mut diagnostics,
+        20,
+        br#"{"type":"session_meta","payload":{"id":"parent"}}"#,
+    );
+    assert!(matches!(identity_update, ParseOutcome::MetadataOnly));
+    ParserState::from_resume(state.snapshot())
+        .expect("a late self-parenting identity must remain resumable");
+
+    let event = usage(
+        &mut state,
+        &mut diagnostics,
+        30,
+        br#"{"timestamp":1700000001,"model":"gpt-test","usage":{"input_tokens":11,"output_tokens":3,"total_tokens":14}}"#,
+    );
+    assert!(event.lineage_conflict());
+}
+
+#[test]
+fn zero_usage_identity_matching_retained_parent_stays_resumable_and_conflicted() {
+    let mut state = ParserState::new();
+    let mut diagnostics = ParserDiagnostics::new();
+    let initial = relation(
+        &mut state,
+        &mut diagnostics,
+        br#"{"type":"session_meta","payload":{"id":"child","forked_from_id":"parent"}}"#,
+    );
+    assert!(!initial.declared_conflict());
+
+    let zero_usage = parse_line(
+        &context(),
+        &mut state,
+        &mut diagnostics,
+        20,
+        br#"{"timestamp":1700000001,"type":"event_msg","payload":{"type":"token_count","session_id":"parent","info":{"last_token_usage":{"input_tokens":0,"output_tokens":0,"total_tokens":0}}}}"#,
+    );
+    assert!(matches!(zero_usage, ParseOutcome::Skipped));
+    let mut restored = ParserState::from_resume(state.snapshot())
+        .expect("a zero-usage self-parenting identity must remain resumable");
+
+    let event = usage(
+        &mut restored,
+        &mut diagnostics,
+        30,
+        br#"{"timestamp":1700000002,"model":"gpt-test","usage":{"input_tokens":11,"output_tokens":3,"total_tokens":14}}"#,
+    );
+    assert!(event.lineage_conflict());
+}
+
+#[test]
 fn cumulative_snapshot_and_invalid_ancestry_remain_explicit_and_private() {
     let mut state = ParserState::new();
     let mut diagnostics = ParserDiagnostics::new();

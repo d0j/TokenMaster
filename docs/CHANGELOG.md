@@ -1246,6 +1246,17 @@ All notable changes are recorded here.
 
 ### Fixed
 
+- Fixed late Codex session-identity conflict normalization, including zero-usage
+  records, so valid rebuilds remain resumable and conflict-qualified.
+- Kept invalid `cwd` diagnostics repository-hint-only instead of rejecting valid
+  usage replay.
+- Fixed false `ContinuationStalled` failures when replay maintenance advances the
+  durable epoch without classifying an observation.
+- Removed per-source whole-database FK rescans and short-circuited irreversible
+  staging conflicts. A 6,400-event contract improved from about 11.5 to 2.8-3.3
+  seconds with exact conflict/visibility truth; a clean portable MSVC live run
+  sustained about 2,534 observations/second over the measured interval with bounded
+  memory.
 - Aligned Workbench with its accepted wide layout: Plan Usage remains full width,
   Code Output pairs with Sessions, Trend pairs with Model Usage, and Activity remains
   full width. Geometry contracts now verify row pairing and full-width behavior.

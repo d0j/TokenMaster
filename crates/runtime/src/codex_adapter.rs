@@ -596,7 +596,6 @@ fn map_batch_diagnostics(
         ParserDiagnosticCode::InvalidTimestamp,
         ParserDiagnosticCode::InvalidModel,
         ParserDiagnosticCode::InvalidMetadata,
-        ParserDiagnosticCode::InvalidPath,
     ]
     .into_iter()
     .any(|code| batch.parser_diagnostics().count(code) > 0);
@@ -605,6 +604,7 @@ fn map_batch_diagnostics(
         ParserDiagnosticCode::ZeroUsage,
         ParserDiagnosticCode::ModelFallback,
         ParserDiagnosticCode::MetadataTruncated,
+        ParserDiagnosticCode::InvalidPath,
         ParserDiagnosticCode::ToolCapacity,
     ]
     .into_iter()

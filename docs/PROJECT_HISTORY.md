@@ -1,5 +1,27 @@
 # TokenMaster project history
 
+## 2026-07-23 — release-path replay correctness and throughput
+
+Corrected three production release blockers found by real-archive acceptance. Parser
+lineage now preserves resumability when a later session identity matches the retained
+parent, including zero-usage lines. Invalid `cwd` is repository-hint-only and no longer
+turns a valid usage batch into malformed input. Replay continuation now recognizes
+durable epoch progress even when no observation was classified in that continuation.
+
+Removed two per-source whole-database FK rescans while retaining SQLite mutation
+enforcement and replay-boundary integrity checks. Added an irreversible-conflict
+staging fast path and transition-only child scan. The 6,400-event regression improved
+from about 11.5 to 2.8-3.3 seconds while retaining exact conflict/visibility truth. A
+clean portable MSVC live run was responsive by about 39 seconds and advanced from
+164,480 to 240,499 observations over the measured interval at about 2,534/second with
+36-37.5 MiB private memory. The exact process and portable data were cleaned.
+
+Focused contracts and the single final clean-root/fmt/strict workspace Clippy/full
+locked workspace test-doctest gate pass; the aggregate took 935.9 seconds with serial
+test linking. The cycle changed production correctness and performance, added no audit
+rule, and did not trigger `AUDIT_HARDENING_LOOP`. Package regeneration, signing,
+external/interactive receipts, soak, M0, RC, and stable release remain open.
+
 ## 2026-07-23 — deterministic unsigned product package
 
 Added the clean-commit product package producer and validator for the canonical MSVC

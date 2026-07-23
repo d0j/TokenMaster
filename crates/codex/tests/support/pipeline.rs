@@ -648,12 +648,13 @@ fn apply_reader_batch(
 
 fn finish_replay(store: &mut UsageStore, state: &mut PipelineState) -> Result<(), PipelineError> {
     for _ in 0..CONTINUATION_LIMIT {
+        let prior_epoch = state.epoch;
         let continuation = store.continue_replay(state.revision_id, state.epoch)?;
         state.epoch = continuation.epoch();
         if !continuation.remaining_work() {
             return Ok(());
         }
-        if continuation.processed_count() == 0 {
+        if continuation.processed_count() == 0 && state.epoch == prior_epoch {
             return Err(PipelineError::ContinuationStalled);
         }
     }

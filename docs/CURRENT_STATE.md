@@ -1,5 +1,38 @@
 # TokenMaster current state
 
+## 2026-07-23 — release-path replay correctness and first-import throughput
+
+The Codex full-rebuild path now handles late session identity that matches a retained
+parent without losing resumability, including zero-usage lines. Invalid `cwd` remains
+a nonblocking repository-hint diagnostic and cannot reject otherwise valid usage.
+Replay continuation accepts zero-observation maintenance progress only when the durable
+epoch advances, preventing a false `ContinuationStalled` failure near the end of a
+large rebuild.
+
+The staging store no longer performs a whole-database foreign-key scan per source or
+per replay append; SQLite still enforces every foreign-key mutation and complete
+integrity remains checked at replay boundaries. Irreversible session conflict bypasses
+unneeded ancestry/classification/selection work, while child reclassification is
+queued on the conflict transition. The permanent 6,400-event conflicted-session
+contract promotes successfully with exactly 6,400 conflict observations and zero
+visible usage in 2.8-3.3 seconds instead of about 11.5 seconds.
+
+A clean portable MSVC run over the real local Codex archive was responsive by about
+39 seconds, reached 164,480 staged observations by about 58 seconds and 240,499 by
+about 98 seconds (about 2,534 observations/second over the second interval), while
+private memory remained 36-37.5 MiB and working set 63-65 MiB. The exact test process
+was stopped and its portable marker/data removed. This is bounded local acceptance,
+not uninterrupted soak or authenticated interactive acceptance.
+
+Focused lineage, pipeline, replay rollback/atomicity, bootstrap, and repository-hint
+contracts pass. The final clean-root, format, warnings-as-errors workspace Clippy, and
+complete locked workspace test/doctest gate passes in 935.9 seconds with serial test
+linking. `AUDIT_HARDENING_LOOP` was not triggered: this cycle changed production
+correctness and first-import throughput, and added no textual audit rule. The unsigned
+package must be regenerated after the new clean commit; signing, external supply-chain
+receipts, interactive Windows/DPI/accessibility evidence, uninterrupted soak, M0, RC,
+and stable release remain open.
+
 ## 2026-07-23 — deterministic unsigned product package
 
 The release-driven P6 package-provenance sub-slice is implemented. A clean-commit

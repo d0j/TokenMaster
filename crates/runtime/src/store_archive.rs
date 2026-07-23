@@ -495,16 +495,19 @@ impl Archive for StoreArchive {
             .store
             .continue_replay(revision, store_epoch(replay.epoch())?)
             .map_err(|error| store_port_error(&error))?;
-        if continuation.remaining_work() && continuation.processed_count() == 0 {
+        let next = archive_replay(revision, continuation.epoch())?;
+        if continuation.remaining_work()
+            && continuation.processed_count() == 0
+            && next.epoch() == replay.epoch()
+        {
             return Err(PortError::new(PortErrorCode::StaleState));
         }
-        let replay = archive_replay(revision, continuation.epoch())?;
         let state = if continuation.remaining_work() {
             ReplayContinuationState::Pending
         } else {
             ReplayContinuationState::Complete
         };
-        Ok(ReplayContinuation::new(replay, state))
+        Ok(ReplayContinuation::new(next, state))
     }
 
     fn seal_replay(&mut self, replay: ArchiveReplay) -> Result<ArchiveReplay, PortError> {

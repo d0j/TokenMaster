@@ -60,7 +60,8 @@ Repository paths are excluded from parser resume, adapter checkpoints, observati
 canonical batches, SQLite, query values, diagnostics, logs, and errors. A consumer
 MUST take the side-channel hint immediately after its source batch; a later read may
 replace it. Explicit invalid `cwd` clears prior transient association rather than
-reusing an older repository.
+reusing an older repository. Invalid `cwd` is not usage-authority failure: otherwise
+valid usage events and replay progress remain admissible.
 
 The Git runtime may retain at most 32 latest canonical candidates only in process
 memory. Each candidate has one checked sequence and at most one raw-head frontier.
@@ -178,6 +179,13 @@ overlay, relation/session state, replay selection, work queue, chunks, checkpoin
 source completion state, and evidence epoch are committed atomically. The epoch
 advances exactly once for the entire batch, never once per relation. A failure after
 event work or after relation work leaves the exact pre-batch state.
+
+SQLite enforces foreign keys on every staging mutation. Whole-archive foreign-key
+validation occurs at replay begin, continuation/seal, and promotion boundaries; it is
+not a per-source or per-append full-database scan. Replay continuation may report zero
+classified observations while still making durable maintenance progress, but only an
+advanced epoch proves that progress. An unchanged epoch with remaining work fails
+closed as stalled.
 
 Steady-state refresh is revision- and archive-generation-aware. An exact complete
 scan may advance freshness for the same current revision and provision new path-

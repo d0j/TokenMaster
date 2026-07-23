@@ -137,3 +137,53 @@ fn codex_adapter_transports_one_private_hint_beside_usage_batches() {
     );
     assert!(!format!("{hint:?}").contains("PRIVATE_RUNTIME_PARENT"));
 }
+
+#[test]
+fn invalid_cwd_does_not_block_usage_replay_or_reuse_a_repository_hint() {
+    let directory = TempDir::new().expect("temporary directory");
+    let root = directory.path().join("codex-root");
+    std::fs::create_dir(&root).expect("Codex root");
+    let content = format!(
+        "{}\n{}\n",
+        serde_json::json!({
+            "timestamp": "2026-07-10T08:00:00Z",
+            "type": "session_meta",
+            "payload": {
+                "id": "session-runtime",
+                "cwd": "relative/private/path",
+                "requested_model": "gpt-test"
+            }
+        }),
+        serde_json::json!({
+            "timestamp": "2026-07-10T08:01:00Z",
+            "usage": {"total_tokens": 1}
+        })
+    );
+    std::fs::write(root.join("session.jsonl"), content).expect("source");
+
+    let mut coordinator = RefreshCoordinator::new();
+    let RefreshAdmission::Started(permit) = coordinator
+        .submit(
+            RefreshUrgency::Recovery,
+            None,
+            MonotonicTime::from_millis(0),
+        )
+        .expect("refresh")
+    else {
+        panic!("refresh starts");
+    };
+    let control = OperationControl::new(&permit, &FixedClock);
+    let mut adapter = adapter(&root);
+    let mut scopes = ScopeCollector::default();
+    adapter
+        .visit_scopes(&control, &mut scopes)
+        .expect("visit scopes");
+    let mut hints = HintCollector {
+        control: &control,
+        latest: None,
+    };
+    adapter
+        .visit_replay_sources(&scopes.scopes[0], &control, &mut hints)
+        .expect("invalid cwd is a non-blocking side-channel diagnostic");
+    assert!(hints.latest.is_none());
+}

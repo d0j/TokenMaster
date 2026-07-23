@@ -387,54 +387,72 @@ impl UsageStore {
                 event,
                 next_epoch,
             )?;
-            let parent = load_parent_facts(
-                &transaction,
-                replay_parts.revision_id,
-                event,
-                revision.versions,
-            )?;
-            let parent_missing = event.lineage().parent_session_id().is_some() && parent.is_none();
-            let parent_ordinal = match parent.as_ref() {
-                Some(parent) => ParentOrdinal::Present(parent.as_facts()),
-                None if event.lineage().parent_session_id().is_some() => ParentOrdinal::MissingOpen,
-                None => ParentOrdinal::NotApplicable,
-            };
-            let traversal = replay_traversal(
-                &transaction,
-                replay_parts.revision_id,
-                event,
-                relation.relation_conflict,
-            )?;
-            let classification = ReplayClassifier::new().classify(ReplayClassificationInput::new(
-                relation.prior_state,
-                ReplayEventFacts::from_event(event),
-                parent_ordinal,
-                traversal.facts,
-            ));
+            let (disposition, next_state, parent_missing, depth_exhausted) =
+                if relation.relation_conflict {
+                    (
+                        ReplayDisposition::Conflict,
+                        SessionReplayState::Conflict,
+                        false,
+                        false,
+                    )
+                } else {
+                    let parent = load_parent_facts(
+                        &transaction,
+                        replay_parts.revision_id,
+                        event,
+                        revision.versions,
+                    )?;
+                    let parent_missing =
+                        event.lineage().parent_session_id().is_some() && parent.is_none();
+                    let parent_ordinal = match parent.as_ref() {
+                        Some(parent) => ParentOrdinal::Present(parent.as_facts()),
+                        None if event.lineage().parent_session_id().is_some() => {
+                            ParentOrdinal::MissingOpen
+                        }
+                        None => ParentOrdinal::NotApplicable,
+                    };
+                    let traversal =
+                        replay_traversal(&transaction, replay_parts.revision_id, event, false)?;
+                    let classification =
+                        ReplayClassifier::new().classify(ReplayClassificationInput::new(
+                            relation.prior_state,
+                            ReplayEventFacts::from_event(event),
+                            parent_ordinal,
+                            traversal.facts,
+                        ));
+                    (
+                        classification.disposition(),
+                        classification.next_state(),
+                        parent_missing,
+                        traversal.depth_exhausted,
+                    )
+                };
             upsert_replay_observation(
                 &transaction,
                 replay_parts.revision_id,
                 append.source_key,
                 append.expected_generation,
                 event,
-                classification.disposition(),
+                disposition,
                 next_epoch,
             )?;
             update_session_classification(
                 &transaction,
                 replay_parts.revision_id,
                 event,
-                classification.next_state(),
+                next_state,
                 next_epoch,
             )?;
-            refresh_replay_selection(
-                &transaction,
-                replay_parts.revision_id,
-                event.fingerprint().as_bytes(),
-            )?;
-            if parent_missing && classification.disposition() == ReplayDisposition::Pending {
+            if disposition != ReplayDisposition::Conflict {
+                refresh_replay_selection(
+                    &transaction,
+                    replay_parts.revision_id,
+                    event.fingerprint().as_bytes(),
+                )?;
+            }
+            if parent_missing && disposition == ReplayDisposition::Pending {
                 enqueue_missing_parent(&transaction, replay_parts.revision_id, event, next_epoch)?;
-            } else if traversal.depth_exhausted {
+            } else if depth_exhausted {
                 enqueue_classification(
                     &transaction,
                     replay_parts.revision_id,
@@ -446,13 +464,15 @@ impl UsageStore {
                     next_epoch,
                 )?;
             }
-            if replay_session_has_children(
-                &transaction,
-                replay_parts.revision_id,
-                event.provider_id().as_str(),
-                event.profile_id().as_str(),
-                event.session_id().as_str(),
-            )? {
+            if (!relation.relation_conflict || relation.conflict_changed)
+                && replay_session_has_children(
+                    &transaction,
+                    replay_parts.revision_id,
+                    event.provider_id().as_str(),
+                    event.profile_id().as_str(),
+                    event.session_id().as_str(),
+                )?
+            {
                 enqueue_child_scan(
                     &transaction,
                     replay_parts.revision_id,
@@ -538,13 +558,8 @@ impl UsageStore {
         if revision_updated != 1 {
             return Err(StoreError::new(StoreErrorCode::StaleRevision));
         }
-        let foreign_key_failures: i64 =
-            transaction.query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |row| {
-                row.get(0)
-            })?;
-        if foreign_key_failures != 0 {
-            return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
-        }
+        // SQLite enforces each FK mutation here; full-manifest FK integrity is
+        // revalidated at replay boundaries instead of rescanning the growing DB per batch.
         transaction.commit()?;
         Ok(next_epoch)
     }
@@ -919,13 +934,8 @@ impl UsageStore {
         )?;
         synchronize_work_epochs(&transaction, revision_id, next_epoch)?;
         advance_revision_epoch(&transaction, revision_id, expected_epoch, next_epoch)?;
-        let foreign_key_failures: i64 =
-            transaction.query_row("SELECT count(*) FROM pragma_foreign_key_check", [], |row| {
-                row.get(0)
-            })?;
-        if foreign_key_failures != 0 {
-            return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
-        }
+        // This changes no FK columns. Replay boundaries retain the full FK integrity check,
+        // avoiding one whole-database scan for every source during a large rebuild.
         transaction.commit()?;
         Ok(next_epoch)
     }
@@ -2292,6 +2302,7 @@ fn observation_matches(
 struct SessionRelation {
     prior_state: SessionReplayState,
     relation_conflict: bool,
+    conflict_changed: bool,
 }
 
 fn reconcile_session_relation(
@@ -2329,7 +2340,8 @@ fn reconcile_session_relation(
         .optional()?;
     let declared_conflict = event.lineage().declared_conflict();
     let incoming_identity = (source_key, event.source_offset());
-    let (stored_parent, relation_conflict, state, first_identity) = match existing {
+    let (stored_parent, relation_conflict, state, first_identity, conflict_changed) = match existing
+    {
         None => {
             let conflict = declared_conflict || parent == Some(session);
             let state = if conflict {
@@ -2340,10 +2352,11 @@ fn reconcile_session_relation(
                 SessionReplayState::Root
             };
             let first = (parent.is_some() || declared_conflict).then_some(incoming_identity);
-            (parent.map(str::to_owned), conflict, state, first)
+            (parent.map(str::to_owned), conflict, state, first, conflict)
         }
         Some((stored_parent, stored_conflict, stored_state, first_key, first_offset)) => {
-            let mut conflict = stored_bool(stored_conflict)? || declared_conflict;
+            let was_conflict = stored_bool(stored_conflict)?;
+            let mut conflict = was_conflict || declared_conflict;
             let stored_identity = match (first_key, first_offset) {
                 (Some(key), Some(offset)) => Some((
                     SourceKey::from_bytes(stored_digest(&key)?),
@@ -2388,7 +2401,13 @@ fn reconcile_session_relation(
             } else {
                 stored_identity
             };
-            (resolved_parent, conflict, state, first)
+            (
+                resolved_parent,
+                conflict,
+                state,
+                first,
+                !was_conflict && conflict,
+            )
         }
     };
     let first_key = first_identity.map(|identity| *identity.0.as_bytes());
@@ -2422,6 +2441,7 @@ fn reconcile_session_relation(
     Ok(SessionRelation {
         prior_state: state,
         relation_conflict,
+        conflict_changed,
     })
 }
 
