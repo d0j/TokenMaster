@@ -1,5 +1,21 @@
 # TokenMaster project history
 
+## 2026-07-23 — Apache-2.0 and bounded secret scan
+
+Changed TokenMaster's own license metadata, canonical license text, package input, and
+Help/About truth from MIT to Apache-2.0 while preserving the two external MIT
+references and Slint attribution. Added a pinned official Gitleaks 8.30.1 Windows x64
+bootstrap plus a clean-commit gate over committed Git history and the validated closed
+product ZIP. Archive/executable hashes, redaction, time/file/archive bounds, pre/post
+state binding, and automatic temporary-report removal keep the scan reproducible and
+privacy-bounded.
+
+TDD first failed on the absent tooling and old MIT product metadata. Focused
+PowerShell contracts pass 5/5 and desktop localization passes 22/22. This is a required
+TM-REL-003 receipt, not speculative audit hardening; runtime behavior and package shape
+remain unchanged. The 24-hour M0 soak remains explicitly deferred to an operator
+command.
+
 ## 2026-07-23 — dependency supply-chain policy
 
 Added a pinned `cargo-deny` 0.20.2 Windows bootstrap and a declarative all-features

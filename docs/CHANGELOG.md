@@ -11,6 +11,13 @@ All notable changes are recorded here.
 
 ### Added
 
+- Changed TokenMaster's own product license to Apache-2.0 while preserving external
+  MIT and Slint attribution, and added a SHA-pinned Gitleaks 8.30.1 gate over one clean
+  committed Git history plus the validated closed Windows ZIP. Redacted temporary
+  reports are deleted; the bounded receipt retains only commit/tool/package identities
+  and fixed scan modes. This closes the TM-REL-003 secret-scan item, not signing,
+  attestation, interactive Windows evidence, or soak.
+
 - Added a pinned `cargo-deny` 0.20.2 Windows bootstrap and a locked all-features MSVC
   dependency policy. Advisory, reviewed-license, and crates.io-only source checks pass;
   no advisory is ignored. Pre/post commit, worktree, tool, policy, and lock hashes

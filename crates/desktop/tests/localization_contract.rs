@@ -283,9 +283,9 @@ const DATA_HEALTH_MSGIDS: [&str; 27] = [
 ];
 
 const HELP_ABOUT_MSGIDS: [&str; 29] = [
-    "About and licenses. TokenMaster is MIT licensed. WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies. The interface is made with Slint under the selected Royalty-free License 2.0 attribution route.",
+    "About and licenses. TokenMaster is Apache-2.0 licensed. WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies. The interface is made with Slint under the selected Royalty-free License 2.0 attribution route.",
     "About and licenses",
-    "TokenMaster · MIT",
+    "TokenMaster · Apache-2.0",
     "WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies.",
     "TokenMaster Help and About. Version {0}. Local-first usage intelligence with explicit data-source, privacy, health, automation, and license truth.",
     "TokenMaster version {0}. Fast local-first Codex usage, quota, expiry, and recovery visibility with bounded memory and explicit unavailable truth.",
@@ -1065,7 +1065,10 @@ fn pseudo_help_about_preserves_product_dependency_and_license_names() {
     let entries = po_entries(&catalog);
     let protected = [
         ("TokenMaster", &["TokenMaster"][..]),
-        ("TokenMaster · MIT", &["TokenMaster", "MIT"][..]),
+        (
+            "TokenMaster · Apache-2.0",
+            &["TokenMaster", "Apache-2.0"][..],
+        ),
         (
             "WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies.",
             &["WhereMyTokens", "ccusage", "MIT"][..],
@@ -1079,10 +1082,10 @@ fn pseudo_help_about_preserves_product_dependency_and_license_names() {
             &["TokenMaster"][..],
         ),
         (
-            "About and licenses. TokenMaster is MIT licensed. WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies. The interface is made with Slint under the selected Royalty-free License 2.0 attribution route.",
+            "About and licenses. TokenMaster is Apache-2.0 licensed. WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies. The interface is made with Slint under the selected Royalty-free License 2.0 attribution route.",
             &[
                 "TokenMaster",
-                "MIT",
+                "Apache-2.0",
                 "WhereMyTokens",
                 "ccusage",
                 "Slint",

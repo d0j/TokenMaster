@@ -4,6 +4,9 @@ TokenMaster is a Windows-first, portable, local-first usage monitor for Codex. I
 being built as an original Rust application with a responsive Slint desktop UI and a
 bounded SQLite archive.
 
+TokenMaster's original code is licensed under Apache-2.0. WhereMyTokens and ccusage
+remain separately attributed external MIT references.
+
 Global reminder settings synchronization is implemented: portable settings are the
 desired-state authority, `N` maps to global profile revision `N + 1`, and startup,
 explicit Save, and confirmed import share one retryable synchronizer. Settings edits
@@ -62,6 +65,7 @@ scan, attestation, signing, and release remain absent.
 cargo +1.97.0 test --workspace --locked
 pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
 pwsh -NoProfile -File scripts\verify-dependency-policy.ps1 -RepositoryRoot (Get-Location).Path
+pwsh -NoProfile -File scripts\verify-secret-scan.ps1 -RepositoryRoot (Get-Location).Path -PackagePath dist\TokenMaster-0.1.0-windows-x64-unsigned.zip
 pwsh -NoProfile -File scripts\verify-m0.ps1 -RepositoryRoot (Get-Location).Path
 ```
 

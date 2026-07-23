@@ -1,5 +1,27 @@
 # TokenMaster current state
 
+## 2026-07-23 — Apache-2.0 product license and secret scan
+
+TokenMaster's original code, Cargo package metadata, packaged `LICENSE`, and in-product
+Help/About identity now use Apache-2.0. The pinned WhereMyTokens/ccusage MIT notices
+and Slint Royalty-free License 2.0 attribution remain separate and unchanged.
+
+The release secret gate bootstraps the official Gitleaks 8.30.1 Windows x64 asset from
+its fixed closed archive, verifies both archive and executable SHA-256, scans committed
+Git history, and scans the independently validated closed Windows ZIP at one archive
+level. Full redaction, fixed timeout/file bounds, task-owned temporary reports, and
+pre/post commit/worktree/tool/package identity prevent secret retention and receipt
+TOCTOU. The bounded receipt contains only identities, hashes, fixed modes, and pass
+state. Focused PowerShell contracts pass 5/5; desktop localization passes 22/22.
+
+The gate is implemented; the TM-REL-003 secret-scan item closes only after the
+exact-clean-commit ZIP is regenerated, validated, scanned, and its receipt reviewed.
+This changes only license presentation, not runtime behavior. Public-download
+attribution, artifact attestation, signing,
+authenticated clean-room/interactive Windows evidence, exact MSVC comparison, and soak
+remain release blockers. The 24-hour M0 soak is explicitly deferred until the operator
+requests it. New P4 work remains frozen, and `AUDIT_HARDENING_LOOP` was not triggered.
+
 ## 2026-07-23 — dependency advisory, license, and source policy gate
 
 The canonical all-features `x86_64-pc-windows-msvc` dependency graph now passes

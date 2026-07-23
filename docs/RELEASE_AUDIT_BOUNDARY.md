@@ -52,8 +52,15 @@ or lockfile drift. Transitive unmaintained findings remain upstream-visible unde
 workspace-only policy and are not vulnerability claims. The receipt uses the current
 fetched RustSec database and does not promise immutable historical replay.
 
-These gates do not satisfy the remaining public-download attribution, secret,
-attestation, signing, interactive, performance, or soak items.
+The secret-scan item is implemented with the reviewed official Gitleaks 8.30.1
+Windows x64 archive and executable pinned by SHA-256. It scans one clean commit as Git
+history and the separately validated closed product ZIP at one archive level with
+redacted, bounded temporary reports. The bounded receipt binds the same commit,
+worktree, tool, and package before and after the scan and retains no findings, local
+paths, command output, or source content.
+
+These gates do not satisfy the remaining public-download attribution, attestation,
+signing, interactive, performance, or soak items.
 
 The current P2-B developer reference gate covers deterministic current and immutable-
 legacy million-event fixtures, rebuild throughput and page p95, cold/cached/full

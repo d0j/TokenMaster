@@ -1732,7 +1732,7 @@ foreach ($requiredText in @(
     'CLI and stdio MCP are not available',
     'No browser session reuse or private endpoint replay',
     'Data Health owns backup, verification, restore, rebuild, and recovery truth. Settings owns backup policy and portable configuration.',
-    'TokenMaster · MIT',
+    'TokenMaster · Apache-2.0',
     $fixedUpstreamAttribution
 )) {
     if (-not $helpAboutViewText.Contains($requiredText, [System.StringComparison]::Ordinal)) {

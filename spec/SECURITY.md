@@ -840,6 +840,22 @@ validated task-owned child before deletion. This gate does not replace secret
 scanning, artifact attestation, signing, or immutable historical advisory-database
 retention.
 
+### Release secret-scan boundary
+
+The release secret scan uses only the reviewed official Gitleaks 8.30.1 Windows x64
+asset. The closed three-entry archive and extracted executable are pinned by SHA-256.
+One clean commit is scanned as committed Git history, and the independently validated
+closed product ZIP is scanned with exactly one archive traversal level. Both commands
+use full redaction, fixed time and file-size bounds, and temporary reports under the
+repository target root.
+
+The receipt contains only commit, clean-state, tool/version/hash, package hash, and
+fixed scan-mode identifiers. It retains no finding, output, command argument, local
+path, source content, or secret candidate. Commit, worktree, tool, and package hashes
+must remain identical before and after both scans; any finding, validation failure, or
+input drift prevents receipt publication. This gate does not attest the artifact,
+authenticate a publisher, sign the package, or replace interactive and soak evidence.
+
 ## TM-SEC-008 — Backup and recovery containment
 
 Configuration, backup packages, encrypted envelopes, catalogs, SQLite candidates,

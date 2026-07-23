@@ -53,7 +53,7 @@ component AttributionCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: region;
-    accessible-label: @tr("About and licenses. TokenMaster is MIT licensed. WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies. The interface is made with Slint under the selected Royalty-free License 2.0 attribution route.");
+    accessible-label: @tr("About and licenses. TokenMaster is Apache-2.0 licensed. WhereMyTokens and ccusage are pinned external MIT references, not runtime dependencies. The interface is made with Slint under the selected Royalty-free License 2.0 attribution route.");
 
     VerticalLayout {
         padding: UiTokens.space;
@@ -65,7 +65,7 @@ component AttributionCard inherits Rectangle {
             font-weight: 750;
         }
         Text {
-            text: @tr("TokenMaster · MIT");
+            text: @tr("TokenMaster · Apache-2.0");
             color: UiTokens.text-primary;
             font-size: 11px;
             font-weight: 700;
