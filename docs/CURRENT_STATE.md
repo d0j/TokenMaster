@@ -1,5 +1,21 @@
 # TokenMaster current state
 
+## 2026-07-23 — P3-E package-provenance preflight binding
+
+The P3-E interactive preflight now requires the deterministic product ZIP and producer
+receipt in addition to the operator receipt and exact tested executable. It validates
+the existing closed nine-file stage, bounded ZIP shape, manifest, build identity,
+package/EXE hashes, clean HEAD, and equality of the packaged, tested, producer-receipt,
+and operator-receipt executable identities. Temporary extraction is always removed.
+
+Executable Pester evidence passes 31/31, including package, receipt, tested-EXE, strict
+type, dirty-worktree, hostile-Git, privacy, scenario, rollback, and resource drift;
+the unchanged product-package contracts pass 5/5. This closes the local P6 provenance
+binding required by `P3E_ACCEPTANCE.md`. It does not authenticate an operator or prove
+interactive actions. A disposable Windows host/user receipt, signing, accessibility/
+DPI/paint evidence, uninterrupted soak, M0, RC, and release remain open. No UI/runtime
+behavior or audit parser changed, so `AUDIT_HARDENING_LOOP` was not triggered.
+
 ## 2026-07-23 — release-path replay correctness and first-import throughput
 
 The Codex full-rebuild path now handles late session identity that matches a retained

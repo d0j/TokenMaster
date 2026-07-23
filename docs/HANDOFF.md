@@ -1,5 +1,26 @@
 # TokenMaster handoff
 
+## P3-E package-provenance binding (2026-07-23)
+
+Product state: no UI/runtime behavior changed. The deterministic unsigned package
+candidate remains the release artifact.
+
+Audit/evidence state: `validate-p3e-interactive.ps1` now requires and binds the P6 ZIP,
+producer receipt, clean HEAD, package BUILDINFO/manifest, exact packaged executable,
+exact tested executable, and operator receipt. ZIP input and extraction are bounded,
+closed-stage validation is reused, and temporary files are removed. Focused P3-E
+contracts pass 31/31 and product-package contracts pass 5/5. This is required
+acceptance evidence, not audit-only hardening; no source-text audit rule changed.
+
+Release blockers: obtain a truthful reviewed `interactive-p3e.json` from a disposable
+Windows user/VM covering the fixed eleven scenarios and resource window. Signing,
+P4 accessibility/DPI/paint receipts, uninterrupted soak, M0, RC, and stable release
+remain open. Do not fabricate or locally self-attest the external receipt.
+
+Git state: implementation/evidence docs are modified on the feature branch. Run the
+single final baseline, create one clean commit, then regenerate the ignored package so
+its receipt binds the new HEAD.
+
 ## Release-path replay correction (2026-07-23)
 
 Product state: large Codex full rebuilds no longer falsely stall when replay

@@ -1246,6 +1246,10 @@ All notable changes are recorded here.
 
 ### Fixed
 
+- Bound P3-E interactive preflight to the deterministic P6 ZIP and producer receipt.
+  Clean HEAD, BUILDINFO, closed manifest, package/EXE hashes, packaged executable,
+  exact tested executable, and operator receipt must now identify the same artifact;
+  ZIP expansion is bounded and temporary extraction is removed.
 - Fixed late Codex session-identity conflict normalization, including zero-usage
   records, so valid rebuilds remain resumable and conflict-qualified.
 - Kept invalid `cwd` diagnostics repository-hint-only instead of rejecting valid

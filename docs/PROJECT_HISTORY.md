@@ -1,5 +1,17 @@
 # TokenMaster project history
 
+## 2026-07-23 — P3-E package-provenance binding
+
+Closed the local provenance gap between the fixed P3-E operator receipt and the P6
+package. The preflight now consumes the deterministic ZIP and producer receipt, reuses
+closed-stage/manifest validation, bounds ZIP expansion, and requires one identity
+across clean HEAD, BUILDINFO, package receipt, ZIP executable, tested executable, and
+interactive receipt. It still cannot authenticate the external operator or actions.
+
+TDD first produced the expected missing-parameter RED. The completed focused evidence
+is 31/31 P3-E tests plus 5/5 product-package tests, including strict package-receipt
+types and provenance drift. No product behavior or textual audit rule changed.
+
 ## 2026-07-23 — release-path replay correctness and throughput
 
 Corrected three production release blockers found by real-archive acceptance. Parser

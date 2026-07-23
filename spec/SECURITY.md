@@ -801,6 +801,17 @@ be retried blindly or reported as success. Browser scraping, synthetic clicks, s
 cookies, private endpoint replay, raw response storage, and secret-bearing diagnostics
 are forbidden.
 
+### P3-E package evidence boundary
+
+Interactive P3-E evidence is accepted locally only when one clean Git commit, the
+deterministic product ZIP, its strict producer receipt, closed package manifest and
+BUILDINFO, the packaged executable, the exact tested executable, and the operator
+receipt carry the same bounded identities. ZIP entry count and expanded bytes are
+bounded before extraction; unsafe or duplicate entries, schema/type drift, hash or
+commit mismatch, and dirty state fail closed. Temporary extraction is deleted on every
+outcome. This local binding does not authenticate the external operator, prove an
+interactive action, or replace code signing and reviewed external evidence.
+
 ## TM-SEC-008 — Backup and recovery containment
 
 Configuration, backup packages, encrypted envelopes, catalogs, SQLite candidates,

@@ -5,6 +5,7 @@ Describe 'P3-E interactive receipt validator' {
     BeforeAll {
         $ScriptsRoot = Split-Path -Parent $PSScriptRoot
         $Validator = Join-Path $ScriptsRoot 'validate-p3e-interactive.ps1'
+        . (Join-Path $ScriptsRoot 'product-package-lib.ps1')
         $ScenarioNames = @(
             'tray_show_hide_quit', 'explorer_restart', 'secondary_activation', 'hotkey_registered',
             'hotkey_conflict', 'startup_enable_readback_signin_disable',
@@ -28,7 +29,69 @@ Describe 'P3-E interactive receipt validator' {
                 & git.exe commit --quiet -m 'fixture'
             }
             finally { Pop-Location }
-            [pscustomobject]@{ Root = $root; Executable = (Join-Path $root 'tokenmaster.exe'); Receipt = Join-Path ([IO.Path]::GetTempPath()) ('tokenmaster-p3e-' + [Guid]::NewGuid().ToString('N') + '.json') }
+            $commit = (& git.exe -C $root rev-parse HEAD).Trim()
+            $packageRoot = Join-Path ([IO.Path]::GetTempPath()) (
+                'tokenmaster-p3e-package-' + [Guid]::NewGuid().ToString('N')
+            )
+            $stage = Join-Path $packageRoot 'TokenMaster-0.1.0-windows-x64'
+            New-Item -ItemType Directory -Path $stage -Force | Out-Null
+            $executable = Join-Path $root 'tokenmaster.exe'
+            Copy-Item -LiteralPath $executable -Destination (Join-Path $stage 'TokenMaster.exe')
+            [IO.File]::WriteAllBytes((Join-Path $stage 'tokenmaster.portable'), [byte[]]@())
+            foreach ($name in @('README.md', 'README_RU.md', 'LICENSE')) {
+                Set-Content -LiteralPath (Join-Path $stage $name) -Value $name -NoNewline
+            }
+            Set-Content -LiteralPath (Join-Path $stage 'THIRD_PARTY_NOTICES.txt') `
+                -Value 'dependency 1.0 | MIT | https://example.invalid/dependency' -NoNewline
+            $executableHash = (Get-FileHash -LiteralPath $executable -Algorithm SHA256).
+                Hash.ToLowerInvariant()
+            [ordered]@{
+                schemaVersion = 1
+                status = 'unsigned package candidate'
+                version = '0.1.0'
+                commit = $commit
+                target = 'x86_64-pc-windows-msvc'
+                executableSha256 = $executableHash
+            } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $stage 'BUILDINFO.json') `
+                -Encoding utf8NoBOM
+            [ordered]@{
+                bomFormat = 'CycloneDX'
+                specVersion = '1.6'
+                version = 1
+                components = @([ordered]@{
+                    type = 'library'
+                    name = 'dependency'
+                    version = '1.0'
+                    licenses = @([ordered]@{ expression = 'MIT' })
+                    purl = 'pkg:cargo/dependency@1.0'
+                })
+            } | ConvertTo-Json -Depth 8 | Set-Content `
+                -LiteralPath (Join-Path $stage 'SBOM.cdx.json') -Encoding utf8NoBOM
+            Write-ProductChecksums -StagePath $stage
+            $package = Join-Path $packageRoot 'TokenMaster-0.1.0-windows-x64-unsigned.zip'
+            New-DeterministicZip -StagePath $stage -DestinationPath $package
+            $packageReceipt = Join-Path $packageRoot `
+                'TokenMaster-0.1.0-windows-x64-unsigned.receipt.json'
+            [ordered]@{
+                schemaVersion = 1
+                status = 'unsigned package candidate'
+                version = '0.1.0'
+                commit = $commit
+                executableSha256 = $executableHash
+                packageSha256 = (Get-FileHash -LiteralPath $package -Algorithm SHA256).
+                    Hash.ToLowerInvariant()
+                packageFile = [IO.Path]::GetFileName($package)
+            } | ConvertTo-Json | Set-Content -LiteralPath $packageReceipt -Encoding utf8NoBOM
+            [pscustomobject]@{
+                Root = $root
+                Executable = $executable
+                Receipt = Join-Path ([IO.Path]::GetTempPath()) (
+                    'tokenmaster-p3e-' + [Guid]::NewGuid().ToString('N') + '.json'
+                )
+                PackageRoot = $packageRoot
+                Package = $package
+                PackageReceipt = $packageReceipt
+            }
         }
 
         function New-ValidReceipt([object]$Fixture) {
@@ -52,13 +115,22 @@ Describe 'P3-E interactive receipt validator' {
 
         function Invoke-P3eValidator([object]$Fixture, [object]$Receipt) {
             $Receipt | ConvertTo-Json -Depth 8 -Compress | Set-Content -LiteralPath $Fixture.Receipt -Encoding utf8NoBOM
-            $output = & $Validator -RepositoryRoot $Fixture.Root -ReceiptPath $Fixture.Receipt -ExecutablePath $Fixture.Executable
+            $output = & $Validator -RepositoryRoot $Fixture.Root `
+                -ReceiptPath $Fixture.Receipt `
+                -ExecutablePath $Fixture.Executable `
+                -PackagePath $Fixture.Package `
+                -PackageReceiptPath $Fixture.PackageReceipt
             [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output -join "`n") }
         }
     }
 
     AfterEach {
-        if ($script:fixture) { Remove-Item -LiteralPath $script:fixture.Root -Recurse -Force; Remove-Item -LiteralPath $script:fixture.Receipt -Force -ErrorAction SilentlyContinue; $script:fixture = $null }
+        if ($script:fixture) {
+            Remove-Item -LiteralPath $script:fixture.Root -Recurse -Force
+            Remove-Item -LiteralPath $script:fixture.PackageRoot -Recurse -Force
+            Remove-Item -LiteralPath $script:fixture.Receipt -Force -ErrorAction SilentlyContinue
+            $script:fixture = $null
+        }
     }
 
     It 'preflights the exact clean operator-attested receipt without paths' {
@@ -67,6 +139,29 @@ Describe 'P3-E interactive receipt validator' {
         $result.ExitCode | Should -Be 0
         $result.Output | Should -Be '{"result":"preflight-pass","schema":"tokenmaster.p3e.interactive.v1"}'
         $result.Output | Should -Not -Match '(?i)[a-z]:[\\/]|\\\\'
+    }
+
+    It 'rejects package, package receipt, or tested executable provenance drift' -TestCases @(
+        @{ Mutation = { param($f) Add-Content -LiteralPath $f.Package -Value 'drift' } }
+        @{ Mutation = {
+            param($f)
+            $value = Get-Content -LiteralPath $f.PackageReceipt -Raw | ConvertFrom-Json
+            $value.packageSha256 = '0' * 64
+            $value | ConvertTo-Json | Set-Content -LiteralPath $f.PackageReceipt -Encoding utf8NoBOM
+        } }
+        @{ Mutation = {
+            param($f)
+            $value = Get-Content -LiteralPath $f.PackageReceipt -Raw | ConvertFrom-Json
+            $value.schemaVersion = '1'
+            $value | ConvertTo-Json | Set-Content -LiteralPath $f.PackageReceipt -Encoding utf8NoBOM
+        } }
+        @{ Mutation = { param($f) [IO.File]::WriteAllBytes($f.Executable, [byte[]](9, 9, 9)) } }
+    ) {
+        param($Mutation)
+        $script:fixture = New-P3eFixture
+        & $Mutation $script:fixture
+        (Invoke-P3eValidator $script:fixture (New-ValidReceipt $script:fixture)).ExitCode |
+            Should -Be 1
     }
 
     It 'rejects dirty worktrees and identity or executable hash mismatches' -TestCases @(
@@ -124,7 +219,11 @@ Describe 'P3-E interactive receipt validator' {
         $script:fixture = New-P3eFixture
         if ($null -ne $Raw) {
             Set-Content -LiteralPath $script:fixture.Receipt -Value $Raw -Encoding utf8NoBOM
-            $output = & $Validator -RepositoryRoot $script:fixture.Root -ReceiptPath $script:fixture.Receipt -ExecutablePath $script:fixture.Executable
+            $output = & $Validator -RepositoryRoot $script:fixture.Root `
+                -ReceiptPath $script:fixture.Receipt `
+                -ExecutablePath $script:fixture.Executable `
+                -PackagePath $script:fixture.Package `
+                -PackageReceiptPath $script:fixture.PackageReceipt
             $result = [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output -join "`n") }
         }
         else {
@@ -149,12 +248,20 @@ Describe 'P3-E interactive receipt validator' {
             $raw = $receipt | ConvertTo-Json -Depth 8 -Compress
             $raw = $raw -replace '^\{"schema"', '{"result":"fail","schema"'
             Set-Content -LiteralPath $script:fixture.Receipt -Value $raw -Encoding utf8NoBOM
-            $output = & $Validator -RepositoryRoot $script:fixture.Root -ReceiptPath $script:fixture.Receipt -ExecutablePath $script:fixture.Executable
+            $output = & $Validator -RepositoryRoot $script:fixture.Root `
+                -ReceiptPath $script:fixture.Receipt `
+                -ExecutablePath $script:fixture.Executable `
+                -PackagePath $script:fixture.Package `
+                -PackageReceiptPath $script:fixture.PackageReceipt
             $result = [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output -join "`n") }
         }
         elseif ($Kind -eq 'oversized') {
             Set-Content -LiteralPath $script:fixture.Receipt -Value (' ' * 32769) -Encoding utf8NoBOM
-            $output = & $Validator -RepositoryRoot $script:fixture.Root -ReceiptPath $script:fixture.Receipt -ExecutablePath $script:fixture.Executable
+            $output = & $Validator -RepositoryRoot $script:fixture.Root `
+                -ReceiptPath $script:fixture.Receipt `
+                -ExecutablePath $script:fixture.Executable `
+                -PackagePath $script:fixture.Package `
+                -PackageReceiptPath $script:fixture.PackageReceipt
             $result = [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output -join "`n") }
         }
         elseif ($Kind -eq 'fractional') {
@@ -222,7 +329,11 @@ Describe 'P3-E interactive receipt validator' {
         $nested = Join-Path $script:fixture.Root 'nested'
         New-Item -ItemType Directory -Path $nested | Out-Null
         $receipt | ConvertTo-Json -Depth 8 -Compress | Set-Content -LiteralPath $script:fixture.Receipt -Encoding utf8NoBOM
-        $output = & $Validator -RepositoryRoot $nested -ReceiptPath $script:fixture.Receipt -ExecutablePath $script:fixture.Executable
+        $output = & $Validator -RepositoryRoot $nested `
+            -ReceiptPath $script:fixture.Receipt `
+            -ExecutablePath $script:fixture.Executable `
+            -PackagePath $script:fixture.Package `
+            -PackageReceiptPath $script:fixture.PackageReceipt
         $LASTEXITCODE | Should -Be 1
         ($output -join "`n") | Should -Not -Match '(?i)[a-z]:[\\/]|\\\\'
     }

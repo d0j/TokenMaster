@@ -1,9 +1,9 @@
 # TokenMaster P3-E interactive acceptance
 
-**Status: contract and strict receipt preflight implemented; authenticated packaged-
-production evidence and its P6 provenance binding are absent. P3-E developer
-implementation is complete, but P3-E interactive acceptance, P6, M0, packaging,
-signing, soak, and release are not accepted.**
+**Status: contract, strict receipt preflight, and local P6 package-provenance binding
+are implemented. Authenticated external interactive evidence is absent. P3-E developer
+implementation is complete, but P3-E interactive acceptance, signing, M0, soak, RC,
+and release are not accepted.**
 
 ## Boundary
 
@@ -14,11 +14,12 @@ package, launch, automate, or mutate TokenMaster, the registry,
 Explorer, power state, or the operator's session. The interactive run must use a
 disposable Windows user profile or disposable VM and must restore its exact pre-state.
 
-The preflight is intentionally available before P6 so the evidence format is fixed and
-testable without creating circular authority. Its pass is necessary but never sufficient
-for acceptance. P6 must add authenticated producer/package-manifest provenance before a
-receipt can close this gate. A pre-package binary, the isolated `tokenmaster-m0` probe,
-or a dirty tree remains forbidden.
+The preflight requires the deterministic P6 ZIP and its producer receipt. It validates
+the closed package stage and binds package hash, build identity, clean Git commit,
+packaged executable hash, exact tested executable, and interactive receipt. Its pass is
+necessary but never sufficient for acceptance: it does not authenticate the external
+operator or prove the interactive actions. A pre-package binary, the isolated
+`tokenmaster-m0` probe, a forged operator claim, or a dirty tree remains forbidden.
 
 ## Required receipt
 
@@ -58,14 +59,16 @@ raw OS error, registry data, identity, prompt, response, reasoning, or source co
 pwsh -NoProfile -File scripts\validate-p3e-interactive.ps1 `
   -RepositoryRoot (Get-Location).Path `
   -ReceiptPath reports\interactive-p3e.json `
-  -ExecutablePath <exact-packaged-tokenmaster.exe>
+  -ExecutablePath <exact-tested-packaged-tokenmaster.exe> `
+  -PackagePath dist\TokenMaster-0.1.0-windows-x64-unsigned.zip `
+  -PackageReceiptPath dist\TokenMaster-0.1.0-windows-x64-unsigned.receipt.json
 ```
 
-The preflight is read-only and fail-closed for receipt shape and local identity checks.
-It rejects oversized or ambiguous JSON, schema drift, unknown fields, missing or
-duplicate scenarios, unsafe/unclean claims, failed rollback claims, insufficient cycles,
-resource overage claims, Git identity mismatch, wrong executable name, and SHA-256
-mismatch. It emits only `preflight-pass`; it cannot authenticate package provenance or
-the truth of external actions. A future P6 producer/manifest validator plus reviewed
-external evidence is required to close P3-E. P4 visual/accessibility/DPI/paint evidence,
-M0, soak, signing, and release remain independent.
+The preflight is read-only and fail-closed for receipt shape, local identity, and
+package provenance. It rejects oversized or ambiguous JSON/ZIP input, schema drift,
+unknown fields, missing or duplicate scenarios, unsafe/unclean claims, failed rollback
+claims, insufficient cycles, resource overages, Git/build/package/executable identity
+drift, unsafe package entries, and checksum/manifest mismatch. It emits only
+`preflight-pass`; it cannot authenticate the operator or truth of external actions.
+Reviewed external evidence is still required to close P3-E. P4 visual/accessibility/
+DPI/paint evidence, M0, soak, signing, and release remain independent.

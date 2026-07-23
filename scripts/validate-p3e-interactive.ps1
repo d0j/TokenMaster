@@ -4,11 +4,18 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$ReceiptPath,
     [Parameter(Mandatory = $true)]
-    [string]$ExecutablePath
+    [string]$ExecutablePath,
+    [Parameter(Mandatory = $true)]
+    [string]$PackagePath,
+    [Parameter(Mandatory = $true)]
+    [string]$PackageReceiptPath
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'product-package-lib.ps1')
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 function Write-Failure([string]$Code) {
     [ordered]@{ result = 'fail'; code = $Code } | ConvertTo-Json -Compress
@@ -86,7 +93,13 @@ function Invoke-IsolatedGit([string[]]$Arguments) {
 }
 
 try {
-    if (-not (Test-Path -LiteralPath $RepositoryRoot -PathType Container) -or -not (Test-Path -LiteralPath $ReceiptPath -PathType Leaf) -or -not (Test-Path -LiteralPath $ExecutablePath -PathType Leaf)) { throw 'TM-P3E-INPUT' }
+    if (-not (Test-Path -LiteralPath $RepositoryRoot -PathType Container) -or
+        -not (Test-Path -LiteralPath $ReceiptPath -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $ExecutablePath -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $PackagePath -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $PackageReceiptPath -PathType Leaf)) {
+        throw 'TM-P3E-INPUT'
+    }
     if ((Get-Item -LiteralPath $ReceiptPath).Length -gt 32768) { throw 'TM-P3E-JSON' }
     $json = [IO.File]::ReadAllText($ReceiptPath)
     try {
@@ -139,6 +152,136 @@ try {
     if ([IO.Path]::GetFileName($ExecutablePath) -cne 'tokenmaster.exe') { throw 'TM-P3E-IDENTITY' }
     $sha256 = (Get-FileHash -LiteralPath $ExecutablePath -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($receipt.executableSha256 -cne $sha256) { throw 'TM-P3E-IDENTITY' }
+
+    if ((Get-Item -LiteralPath $PackageReceiptPath).Length -gt 32768) {
+        throw 'TM-P3E-PROVENANCE'
+    }
+    try {
+        $packageReceiptJson = [IO.File]::ReadAllText($PackageReceiptPath)
+        $packageReceiptDocument = [System.Text.Json.JsonDocument]::Parse($packageReceiptJson)
+        try {
+            Assert-NoDuplicateJsonProperties $packageReceiptDocument.RootElement
+        }
+        finally {
+            $packageReceiptDocument.Dispose()
+        }
+        $packageReceipt = $packageReceiptJson | ConvertFrom-Json -Depth 4
+    }
+    catch {
+        throw 'TM-P3E-PROVENANCE'
+    }
+    Require-ExactProperties $packageReceipt @(
+        'schemaVersion',
+        'status',
+        'version',
+        'commit',
+        'executableSha256',
+        'packageSha256',
+        'packageFile'
+    )
+    Require-Integer $packageReceipt.schemaVersion
+    foreach ($name in @(
+        'status',
+        'version',
+        'commit',
+        'executableSha256',
+        'packageSha256',
+        'packageFile'
+    )) {
+        Require-String $packageReceipt.$name
+    }
+    if ($packageReceipt.schemaVersion -ne 1 -or
+        $packageReceipt.status -cne 'unsigned package candidate' -or
+        $packageReceipt.version -notmatch '^\d+\.\d+\.\d+$' -or
+        $packageReceipt.commit -cne $head -or
+        $packageReceipt.executableSha256 -cne $sha256 -or
+        $packageReceipt.packageSha256 -notmatch '^[0-9a-f]{64}$' -or
+        $packageReceipt.packageFile -cne [IO.Path]::GetFileName($PackagePath)) {
+        throw 'TM-P3E-PROVENANCE'
+    }
+    $packageHash = (Get-FileHash -LiteralPath $PackagePath -Algorithm SHA256).
+        Hash.ToLowerInvariant()
+    if ($packageReceipt.packageSha256 -cne $packageHash) {
+        throw 'TM-P3E-PROVENANCE'
+    }
+
+    if ((Get-Item -LiteralPath $PackagePath).Length -gt 536870912) {
+        throw 'TM-P3E-PROVENANCE'
+    }
+    $packageInput = [IO.File]::Open(
+        $PackagePath,
+        [IO.FileMode]::Open,
+        [IO.FileAccess]::Read,
+        [IO.FileShare]::Read
+    )
+    try {
+        $packageArchive = [IO.Compression.ZipArchive]::new(
+            $packageInput,
+            [IO.Compression.ZipArchiveMode]::Read,
+            $false
+        )
+        try {
+            if ($packageArchive.Entries.Count -ne 9) {
+                throw 'TM-P3E-PROVENANCE'
+            }
+            $packageRootName = $null
+            $expandedBytes = 0L
+            $entryNames = [Collections.Generic.HashSet[string]]::new(
+                [StringComparer]::Ordinal
+            )
+            foreach ($entry in $packageArchive.Entries) {
+                $segments = $entry.FullName.Split('/')
+                if ($segments.Count -ne 2 -or
+                    $segments[0] -notmatch '^TokenMaster-\d+\.\d+\.\d+-windows-x64$' -or
+                    [string]::IsNullOrEmpty($segments[1]) -or
+                    $entry.FullName.Contains('\') -or
+                    -not $entryNames.Add($entry.FullName)) {
+                    throw 'TM-P3E-PROVENANCE'
+                }
+                if ($null -eq $packageRootName) {
+                    $packageRootName = $segments[0]
+                }
+                elseif ($packageRootName -cne $segments[0]) {
+                    throw 'TM-P3E-PROVENANCE'
+                }
+                $expandedBytes += $entry.Length
+                if ($expandedBytes -lt 0 -or $expandedBytes -gt 536870912) {
+                    throw 'TM-P3E-PROVENANCE'
+                }
+            }
+        }
+        finally {
+            $packageArchive.Dispose()
+        }
+    }
+    finally {
+        $packageInput.Dispose()
+    }
+
+    $temporaryRoot = [IO.Directory]::CreateTempSubdirectory(
+        'tokenmaster-p3e-package-'
+    ).FullName
+    try {
+        [IO.Compression.ZipFile]::ExtractToDirectory($PackagePath, $temporaryRoot)
+        $packageStage = Join-Path $temporaryRoot $packageRootName
+        Assert-ProductPackageStage -StagePath $packageStage
+        $buildInfo = Get-Content -LiteralPath (Join-Path $packageStage 'BUILDINFO.json') `
+            -Raw | ConvertFrom-Json
+        $packagedExecutableHash = (Get-FileHash `
+            -LiteralPath (Join-Path $packageStage 'TokenMaster.exe') `
+            -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($buildInfo.commit -cne $head -or
+            $buildInfo.version -cne $packageReceipt.version -or
+            $buildInfo.executableSha256 -cne $sha256 -or
+            $packagedExecutableHash -cne $sha256) {
+            throw 'TM-P3E-PROVENANCE'
+        }
+    }
+    finally {
+        if ([IO.Directory]::Exists($temporaryRoot)) {
+            [IO.Directory]::Delete($temporaryRoot, $true)
+        }
+    }
 
     [ordered]@{ result = 'preflight-pass'; schema = 'tokenmaster.p3e.interactive.v1' } | ConvertTo-Json -Compress
     exit 0
