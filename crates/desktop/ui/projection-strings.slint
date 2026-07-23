@@ -156,6 +156,20 @@ export global ProjectionStrings {
         if (code == "unavailable") { return @tr("Page status unavailable"); }
         return code;
     }
+    public pure function session-detail-status-label(code: string, truncated: bool) -> string {
+        if (code == "idle") { return @tr("No selection"); }
+        if (code == "loading") { return @tr("Loading"); }
+        if (code == "ready") {
+            if (truncated) { return @tr("Ready · breakdown limited to 32 models and 32 projects"); }
+            return @tr("Ready");
+        }
+        if (code == "missing") { return @tr("Not found"); }
+        if (code == "unavailable") { return @tr("Unavailable"); }
+        return code;
+    }
+    public pure function session-detail-unavailable-label(reason: string) -> string {
+        return @tr("Unavailable · {0}", reason);
+    }
     public pure function weekday-label(code: string) -> string {
         if (code == "monday") { return @tr("Monday"); }
         if (code == "tuesday") { return @tr("Tuesday"); }

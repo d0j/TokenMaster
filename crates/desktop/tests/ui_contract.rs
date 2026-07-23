@@ -772,6 +772,186 @@ fn populated_sessions_projection_payloads_survive_hot_locale_switch() {
     window.invoke_select_presentation_locale(0);
 }
 
+#[test]
+fn populated_session_detail_projection_payloads_survive_hot_locale_switch() {
+    i_slint_backend_testing::init_no_event_loop();
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory
+        .path()
+        .join("session-detail-locale-invariants.sqlite3");
+    let mut reducer = ready_reducer(&path, 0);
+    let snapshot = reducer.snapshot();
+    let detail_sink = Rc::new(RecordingSessionDetailSink::default());
+    let shell = DesktopShell::new_with_reliable_state_and_session_sink(
+        &snapshot,
+        DesktopReliableStateProjection::unavailable(),
+        Rc::new(AcceptingIntentSink),
+        detail_sink.clone(),
+    )
+    .expect("desktop shell");
+    let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+    shell
+        .apply_snapshot_for_epoch(epoch, &snapshot)
+        .expect("bind snapshot");
+    let window = shell.window();
+
+    window.invoke_select_session(0);
+    let selection = detail_sink
+        .intents
+        .borrow()
+        .last()
+        .copied()
+        .expect("selection intent")
+        .selection();
+    let mut service = QueryService::open(&path, FixedClock).expect("query service");
+    let sessions = service
+        .usage_sessions(
+            UsageSessionPageRequest::first(PageSize::new(1).expect("page size"), Vec::new())
+                .expect("session request"),
+        )
+        .expect("sessions");
+    let detail = service
+        .usage_session_detail(sessions.payload().sessions()[0].key().clone())
+        .expect("session detail");
+    reducer
+        .publish_session_detail(
+            ProductAttemptGeneration::new(2).expect("attempt"),
+            selection,
+            detail,
+        )
+        .expect("publish detail");
+    shell
+        .apply_snapshot_for_epoch(epoch, &reducer.snapshot())
+        .expect("apply detail");
+
+    let rows_before = window
+        .get_session_detail_breakdown_rows()
+        .iter()
+        .collect::<Vec<_>>();
+    let selected_row = window.get_sessions_selected_row();
+    let state = window.get_session_detail_state();
+    let period_label = window.get_session_detail_period_label();
+    let duration_label = window.get_session_detail_duration_label();
+    let event_label = window.get_session_detail_event_label();
+    let input_availability = window.get_session_detail_input_availability();
+    let input_label = window.get_session_detail_input_label();
+    let cached_availability = window.get_session_detail_cached_availability();
+    let cached_label = window.get_session_detail_cached_label();
+    let output_availability = window.get_session_detail_output_availability();
+    let output_label = window.get_session_detail_output_label();
+    let reasoning_availability = window.get_session_detail_reasoning_availability();
+    let reasoning_label = window.get_session_detail_reasoning_label();
+    let total_availability = window.get_session_detail_total_availability();
+    let total_label = window.get_session_detail_total_label();
+    let cost_availability = window.get_session_detail_cost_availability();
+    let cost_label = window.get_session_detail_cost_label();
+
+    assert_eq!(selected_row, 0);
+    assert_eq!(state, "ready");
+    assert_eq!(window.get_session_detail_status_label(), "Ready");
+    assert_eq!(
+        window.get_session_detail_evidence_label(),
+        "Fresh · Authoritative"
+    );
+    assert!(!rows_before.is_empty());
+
+    window.invoke_select_presentation_locale(1);
+
+    let rows_after = window
+        .get_session_detail_breakdown_rows()
+        .iter()
+        .collect::<Vec<_>>();
+    assert_eq!(window.get_sessions_selected_row(), selected_row);
+    assert_eq!(window.get_session_detail_state(), state);
+    assert_eq!(window.get_session_detail_status_label(), "Готово");
+    assert_eq!(
+        window.get_session_detail_evidence_label(),
+        "Свежие · Авторитетные"
+    );
+    assert_eq!(window.get_session_detail_period_label(), period_label);
+    assert_eq!(window.get_session_detail_duration_label(), duration_label);
+    assert_eq!(window.get_session_detail_event_label(), event_label);
+    assert_eq!(
+        window.get_session_detail_input_availability(),
+        input_availability
+    );
+    assert_eq!(window.get_session_detail_input_label(), input_label);
+    assert_eq!(
+        window.get_session_detail_cached_availability(),
+        cached_availability
+    );
+    assert_eq!(window.get_session_detail_cached_label(), cached_label);
+    assert_eq!(
+        window.get_session_detail_output_availability(),
+        output_availability
+    );
+    assert_eq!(window.get_session_detail_output_label(), output_label);
+    assert_eq!(
+        window.get_session_detail_reasoning_availability(),
+        reasoning_availability
+    );
+    assert_eq!(window.get_session_detail_reasoning_label(), reasoning_label);
+    assert_eq!(
+        window.get_session_detail_total_availability(),
+        total_availability
+    );
+    assert_eq!(window.get_session_detail_total_label(), total_label);
+    assert_eq!(
+        window.get_session_detail_cost_availability(),
+        cost_availability
+    );
+    assert_eq!(window.get_session_detail_cost_label(), cost_label);
+    assert_eq!(rows_after.len(), rows_before.len());
+    for (before, after) in rows_before.iter().zip(&rows_after) {
+        assert_eq!(after.kind, before.kind);
+        assert_eq!(after.label, before.label);
+        assert_eq!(after.event_label, before.event_label);
+        assert_eq!(after.input_availability, before.input_availability);
+        assert_eq!(after.input_label, before.input_label);
+        assert_eq!(after.cached_availability, before.cached_availability);
+        assert_eq!(after.cached_label, before.cached_label);
+        assert_eq!(after.output_availability, before.output_availability);
+        assert_eq!(after.output_label, before.output_label);
+        assert_eq!(after.reasoning_availability, before.reasoning_availability);
+        assert_eq!(after.reasoning_label, before.reasoning_label);
+        assert_eq!(after.total_availability, before.total_availability);
+        assert_eq!(after.total_label, before.total_label);
+        assert_eq!(after.cost_availability, before.cost_availability);
+        assert_eq!(after.cost_label, before.cost_label);
+    }
+
+    window.invoke_select_presentation_locale(2);
+    assert_ne!(window.get_session_detail_status_label(), "Ready");
+    assert_eq!(
+        window.get_session_detail_breakdown_rows().row_count(),
+        rows_before.len()
+    );
+    window.invoke_select_presentation_locale(0);
+
+    let empty_shell = DesktopShell::new_with_reliable_state(
+        &ProductReducer::new().snapshot(),
+        DesktopReliableStateProjection::unavailable(),
+        Rc::new(AcceptingIntentSink),
+    )
+    .expect("empty shell");
+    let empty_window = empty_shell.window();
+    assert_eq!(empty_window.get_session_detail_state(), "idle");
+    assert_eq!(empty_window.get_session_detail_input_label(), "Unavailable");
+    empty_window.invoke_select_presentation_locale(1);
+    for label in [
+        empty_window.get_session_detail_input_label(),
+        empty_window.get_session_detail_cached_label(),
+        empty_window.get_session_detail_output_label(),
+        empty_window.get_session_detail_reasoning_label(),
+        empty_window.get_session_detail_total_label(),
+        empty_window.get_session_detail_cost_label(),
+    ] {
+        assert_eq!(label, "Недоступно");
+    }
+    assert_eq!(empty_window.get_session_detail_status_label(), "Нет выбора");
+    empty_window.invoke_select_presentation_locale(0);
+}
+
 fn assert_compiled_command_palette_is_bounded_and_routes_through_desktop_state(
     window: &tokenmaster_desktop::MainWindow,
 ) {

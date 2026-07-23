@@ -1270,3 +1270,21 @@ msgstr "Новейшие сеансы · статус недоступен"
 
 msgid "Older sessions · Status unavailable"
 msgstr "Более ранние сеансы · статус недоступен"
+
+msgid "No selection"
+msgstr "Нет выбора"
+
+msgid "Loading"
+msgstr "Загрузка"
+
+msgid "Ready"
+msgstr "Готово"
+
+msgid "Ready · breakdown limited to 32 models and 32 projects"
+msgstr "Готово · разбивка ограничена 32 моделями и 32 проектами"
+
+msgid "Not found"
+msgstr "Не найдено"
+
+msgid "Unavailable · {0}"
+msgstr "Недоступно · {0}"

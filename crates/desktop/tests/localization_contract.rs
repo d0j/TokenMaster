@@ -410,7 +410,7 @@ const NOTIFICATIONS_MSGIDS: [&str; 22] = [
     "{0} {1} {2} quantity {3} state {4} {5} {6} {7}",
 ];
 
-const PROJECTION_MSGIDS: [&str; 90] = [
+const PROJECTION_MSGIDS: [&str; 96] = [
     "{0} · {1}",
     "{0} {1} capacity",
     "{0} {1} remaining",
@@ -501,6 +501,12 @@ const PROJECTION_MSGIDS: [&str; 90] = [
     "Older sessions · Oldest sessions loaded",
     "Newest page · Status unavailable",
     "Older sessions · Status unavailable",
+    "No selection",
+    "Loading",
+    "Ready",
+    "Ready · breakdown limited to 32 models and 32 projects",
+    "Not found",
+    "Unavailable · {0}",
 ];
 
 const ACTIVITY_PROJECTION_MSGIDS: [&str; 14] = [
@@ -726,7 +732,7 @@ fn sessions_and_dashboard_catalogs_are_complete_before_view_conversion() {
         .chain(ACTIVITY_PROJECTION_MSGIDS)
         .chain(NOTIFICATIONS_PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 494, "projection catalog exact inventory");
+    assert_eq!(expected.len(), 500, "projection catalog exact inventory");
 
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -742,7 +748,7 @@ fn sessions_and_dashboard_catalogs_are_complete_before_view_conversion() {
             expected,
             "{locale} must translate exactly the closed Task 2b4 Sessions and Dashboard key set"
         );
-        assert_eq!(po_entry_count(&catalog), 494, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 500, "{locale} exact key count");
         for msgid in SESSIONS_DASHBOARD_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b4 catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -773,7 +779,7 @@ fn data_health_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(ACTIVITY_PROJECTION_MSGIDS)
         .chain(NOTIFICATIONS_PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 494, "projection catalog exact inventory");
+    assert_eq!(expected.len(), 500, "projection catalog exact inventory");
 
     let data_health = include_str!("../ui/views/data-health-view.slint");
     for msgid in DATA_HEALTH_MSGIDS {
@@ -797,7 +803,7 @@ fn data_health_catalog_and_source_use_the_closed_translation_key_set() {
             expected,
             "{locale} must translate exactly the closed Task 2b5a Data Health key set"
         );
-        assert_eq!(po_entry_count(&catalog), 494, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 500, "{locale} exact key count");
         for msgid in DATA_HEALTH_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b5a catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -824,7 +830,7 @@ fn help_about_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(ACTIVITY_PROJECTION_MSGIDS)
         .chain(NOTIFICATIONS_PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 494, "projection catalog exact inventory");
+    assert_eq!(expected.len(), 500, "projection catalog exact inventory");
 
     let help_about = include_str!("../ui/views/help-about-view.slint");
     for msgid in HELP_ABOUT_MSGIDS {
@@ -848,7 +854,7 @@ fn help_about_catalog_and_source_use_the_closed_translation_key_set() {
             expected,
             "{locale} must translate exactly the closed Task 2b5b Help/About key set"
         );
-        assert_eq!(po_entry_count(&catalog), 494, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 500, "{locale} exact key count");
         for msgid in HELP_ABOUT_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b5b catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -875,7 +881,7 @@ fn activity_and_models_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(ACTIVITY_PROJECTION_MSGIDS)
         .chain(NOTIFICATIONS_PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 494, "projection catalog exact inventory");
+    assert_eq!(expected.len(), 500, "projection catalog exact inventory");
 
     let activity = include_str!("../ui/views/activity-view.slint");
     let models = include_str!("../ui/views/models-view.slint");
@@ -897,7 +903,7 @@ fn activity_and_models_catalog_and_source_use_the_closed_translation_key_set() {
         .expect("bundled catalog");
         let entries = po_entries(&catalog);
         assert_eq!(entries.keys().copied().collect::<BTreeSet<_>>(), expected);
-        assert_eq!(po_entry_count(&catalog), 494, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 500, "{locale} exact key count");
         for msgid in ACTIVITY_MODELS_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b6 catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -937,7 +943,7 @@ fn history_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(ACTIVITY_PROJECTION_MSGIDS)
         .chain(NOTIFICATIONS_PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 494, "projection catalog exact inventory");
+    assert_eq!(expected.len(), 500, "projection catalog exact inventory");
 
     let history = include_str!("../ui/views/history-view.slint");
     for msgid in HISTORY_MSGIDS {
@@ -957,7 +963,7 @@ fn history_catalog_and_source_use_the_closed_translation_key_set() {
         .expect("bundled catalog");
         let entries = po_entries(&catalog);
         assert_eq!(entries.keys().copied().collect::<BTreeSet<_>>(), expected);
-        assert_eq!(po_entry_count(&catalog), 494, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 500, "{locale} exact key count");
         for msgid in HISTORY_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b7a catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -1445,6 +1451,75 @@ fn locale_switch_localizes_closed_activity_projection_atoms() {
         strings.invoke_activity_loaded_label("2".into(), false),
         "2 events loaded"
     );
+}
+
+#[test]
+fn locale_switch_localizes_session_detail_status_atoms_without_mutating_unknown_codes() {
+    let _locale_guard = LOCALE_SWITCH_LOCK.lock().expect("locale switch lock");
+    i_slint_backend_testing::init_no_event_loop();
+    let sink = Rc::new(RecordingIntentSink {
+        selection: Cell::new(None),
+    });
+    let shell = DesktopShell::new_with_reliable_state(
+        &ProductReducer::new().snapshot(),
+        DesktopReliableStateProjection::unavailable(),
+        sink,
+    )
+    .expect("shell");
+    let window = shell.window();
+    let strings = window.global::<ProjectionStrings>();
+
+    assert_eq!(
+        strings.invoke_session_detail_status_label("ready".into(), false),
+        "Ready"
+    );
+    assert_eq!(
+        strings.invoke_session_detail_unavailable_label("Request Rejected".into()),
+        "Unavailable · Request Rejected"
+    );
+    assert_eq!(
+        strings.invoke_session_detail_status_label("provider_state".into(), false),
+        "provider_state"
+    );
+
+    window.invoke_select_presentation_locale(1);
+    for (code, truncated, expected) in [
+        ("idle", false, "Нет выбора"),
+        ("loading", false, "Загрузка"),
+        ("ready", false, "Готово"),
+        (
+            "ready",
+            true,
+            "Готово · разбивка ограничена 32 моделями и 32 проектами",
+        ),
+        ("missing", false, "Не найдено"),
+        ("unavailable", false, "Недоступно"),
+    ] {
+        assert_eq!(
+            strings.invoke_session_detail_status_label(code.into(), truncated),
+            expected
+        );
+    }
+    assert_eq!(
+        strings.invoke_session_detail_unavailable_label("Request Rejected".into()),
+        "Недоступно · Request Rejected",
+        "the existing humanized failure suffix remains unchanged"
+    );
+    assert_eq!(
+        strings.invoke_session_detail_status_label("provider_state".into(), false),
+        "provider_state"
+    );
+
+    window.invoke_select_presentation_locale(2);
+    assert_ne!(
+        strings.invoke_session_detail_status_label("ready".into(), false),
+        "Ready"
+    );
+    assert_eq!(
+        strings.invoke_session_detail_status_label("provider_state".into(), false),
+        "provider_state"
+    );
+    window.invoke_select_presentation_locale(0);
 }
 
 #[test]

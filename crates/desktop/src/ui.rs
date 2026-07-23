@@ -3689,23 +3689,22 @@ pub(crate) fn apply_session_detail_projection(
     sessions: &DesktopSessionsProjection,
 ) {
     let detail = sessions.detail();
+    let strings = window.global::<ProjectionStrings>();
     window.set_sessions_selected_row(detail.selected_ordinal().map_or(-1, i32::from));
     window.set_session_detail_state(detail.state().stable_code().into());
     window.set_session_detail_evidence_label(
-        format_evidence(detail.freshness(), detail.quality()).into(),
+        projection_evidence_label(window, detail.freshness(), detail.quality()).into(),
     );
-    let status = match detail.state() {
-        crate::DesktopSessionDetailState::Idle => "No selection".to_owned(),
-        crate::DesktopSessionDetailState::Loading => "Loading".to_owned(),
-        crate::DesktopSessionDetailState::Ready if detail.truncated() => {
-            "Ready · breakdown limited to 32 models and 32 projects".to_owned()
-        }
-        crate::DesktopSessionDetailState::Ready => "Ready".to_owned(),
-        crate::DesktopSessionDetailState::Missing => "Not found".to_owned(),
-        crate::DesktopSessionDetailState::Unavailable => detail.failure_code().map_or_else(
-            || "Unavailable".to_owned(),
-            |code| format!("Unavailable · {}", humanize_key(code)),
-        ),
+    let status = match detail.failure_code() {
+        Some(code) if detail.state() == crate::DesktopSessionDetailState::Unavailable => strings
+            .invoke_session_detail_unavailable_label(humanize_key(code).into())
+            .to_string(),
+        _ => strings
+            .invoke_session_detail_status_label(
+                detail.state().stable_code().into(),
+                detail.truncated(),
+            )
+            .to_string(),
     };
     window.set_session_detail_status_label(status.into());
     if let Some(summary) = detail.summary() {
@@ -3756,17 +3755,17 @@ pub(crate) fn apply_session_detail_projection(
         window.set_session_detail_duration_label("".into());
         window.set_session_detail_event_label("".into());
         window.set_session_detail_input_availability("unavailable".into());
-        window.set_session_detail_input_label("Unavailable".into());
+        window.set_session_detail_input_label(strings.invoke_unavailable());
         window.set_session_detail_cached_availability("unavailable".into());
-        window.set_session_detail_cached_label("Unavailable".into());
+        window.set_session_detail_cached_label(strings.invoke_unavailable());
         window.set_session_detail_output_availability("unavailable".into());
-        window.set_session_detail_output_label("Unavailable".into());
+        window.set_session_detail_output_label(strings.invoke_unavailable());
         window.set_session_detail_reasoning_availability("unavailable".into());
-        window.set_session_detail_reasoning_label("Unavailable".into());
+        window.set_session_detail_reasoning_label(strings.invoke_unavailable());
         window.set_session_detail_total_availability("unavailable".into());
-        window.set_session_detail_total_label("Unavailable".into());
+        window.set_session_detail_total_label(strings.invoke_unavailable());
         window.set_session_detail_cost_availability("unavailable".into());
-        window.set_session_detail_cost_label("Unavailable".into());
+        window.set_session_detail_cost_label(strings.invoke_unavailable());
     }
     let rows = detail
         .breakdown_rows()
@@ -4098,17 +4097,6 @@ fn humanize_key(value: &str) -> String {
         "Quota window".to_owned()
     } else {
         result
-    }
-}
-
-fn format_evidence(freshness: Option<DesktopFreshness>, quality: Option<DesktopQuality>) -> String {
-    match freshness.zip(quality) {
-        Some((freshness, quality)) => format!(
-            "{} · {}",
-            freshness_label(freshness),
-            quality_label(quality)
-        ),
-        None => "Evidence unavailable".to_owned(),
     }
 }
 
