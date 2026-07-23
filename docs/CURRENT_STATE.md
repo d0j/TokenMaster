@@ -14,13 +14,22 @@ pre/post commit/worktree/tool/package identity prevent secret retention and rece
 TOCTOU. The bounded receipt contains only identities, hashes, fixed modes, and pass
 state. Focused PowerShell contracts pass 5/5; desktop localization passes 22/22.
 
-The gate is implemented; the TM-REL-003 secret-scan item closes only after the
-exact-clean-commit ZIP is regenerated, validated, scanned, and its receipt reviewed.
-This changes only license presentation, not runtime behavior. Public-download
-attribution, artifact attestation, signing,
+The exact-clean-commit MSVC ZIP, package validator, committed-history scan, archive
+scan, and bounded receipt pass; the package and scan receipt SHA-256 identities match.
+This closes the TM-REL-003 secret-scan item and changes only license presentation, not
+runtime behavior. Public-download attribution, artifact attestation, signing,
 authenticated clean-room/interactive Windows evidence, exact MSVC comparison, and soak
 remain release blockers. The 24-hour M0 soak is explicitly deferred until the operator
 requests it. New P4 work remains frozen, and `AUDIT_HARDENING_LOOP` was not triggered.
+
+The single Sol High review found three Important required-evidence defects: premature
+closure wording, ambient Gitleaks config/ignore authority, and a missing source-history
+file-size bound. One correction bound a reviewed default-extending config and empty
+ignore policy by CLI and SHA-256, applied the same size bound to both scans, and added
+a hostile-environment executable test; no re-review was opened. The single final
+clean-root, format, serial warnings-as-errors workspace Clippy, and complete locked
+workspace test/doctest gate passes in about 33 minutes 47 seconds with 221 successful
+test-result blocks and zero failure markers.
 
 ## 2026-07-23 — dependency advisory, license, and source policy gate
 

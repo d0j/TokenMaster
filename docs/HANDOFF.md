@@ -12,21 +12,28 @@ are SHA-pinned. One clean commit and the validated closed ZIP are scanned with
 redaction and fixed resource bounds. Temporary reports are deleted, while the bounded
 receipt binds commit, clean state, tool, config, ignore policy, package, and fixed
 modes without findings, output, source content, or local paths. Focused secret
-contracts pass 5/5 and desktop localization passes 22/22. The gate is implemented,
-but required TM-REL-003 evidence closes only after the exact-clean-commit ZIP and
-receipt pass; this is not an audit-only hardening contour.
+contracts pass 5/5 and desktop localization passes 22/22. The exact-clean-commit
+MSVC package validates, both scans pass, and the scan/package receipt hashes match.
+This closes the required TM-REL-003 secret-scan item; it is not an audit-only
+hardening contour.
+
+The single Sol High review found three Important required-evidence defects: premature
+closure wording, ambient config/ignore authority, and a missing source-history
+file-size bound. One bounded correction closed all three with commit-owned policy
+hashes, explicit CLI binding, equal bounds, and a hostile-environment executable test.
+No re-review was opened. The single final baseline passes clean-root, format, serial
+warnings-as-errors workspace Clippy, and the complete locked workspace tests/doctests
+in about 33 minutes 47 seconds; 221 test-result blocks report zero failures.
 
 Release blockers: public-download Slint attribution, artifact attestation, code
 signing, authenticated clean-room and P3-E/P4 Windows evidence, exact MSVC performance
 comparison, and soak remain. Per operator direction, do not start the 24-hour M0 soak
 until explicitly requested.
 
-Git state: implementation and evidence documents are modified on
-`cx/tokenmaster-product-architecture`. Run one independent release-slice review, the
-single final workspace baseline, commit once, regenerate the ignored ZIP for that
-exact HEAD, then run package validation and the secret scan. Do not reopen P4 or
-desktop textual audit hardening; the known presentation-owner count remains recorded
-under the existing `AUDIT_HARDENING_LOOP`.
+Git state: committed and clean on `cx/tokenmaster-product-architecture`; the ignored
+ZIP, producer receipt, and secret receipt are regenerated for the exact final HEAD.
+Do not reopen P4 or desktop textual audit hardening; the known presentation-owner
+count remains recorded under the existing `AUDIT_HARDENING_LOOP`.
 
 ## Dependency policy gate (2026-07-23)
 

@@ -16,6 +16,20 @@ TM-REL-003 receipt, not speculative audit hardening; runtime behavior and packag
 remain unchanged. The 24-hour M0 soak remains explicitly deferred to an operator
 command.
 
+The single Sol High review found three Important evidence defects: closure was claimed
+before the exact receipt, ambient config/ignore variables could change the rules, and
+the source-history invocation lacked its file-size bound. One bounded correction added
+commit-owned default-extending config and no-ignore policy files, CLI/hash binding,
+equal source/package bounds, and a hostile-environment executable test. No second
+review was opened.
+
+The final clean-root, format, serial warnings-as-errors workspace Clippy, and complete
+locked workspace test/doctest gate passes in about 33 minutes 47 seconds with 221
+successful test-result blocks and zero failure markers. The canonical MSVC producer
+then built and validated the closed ZIP; Gitleaks passed committed history and package
+contents, and the package SHA-256 matches the producer receipt. This closes the
+TM-REL-003 secret-scan item only.
+
 ## 2026-07-23 — dependency supply-chain policy
 
 Added a pinned `cargo-deny` 0.20.2 Windows bootstrap and a declarative all-features
