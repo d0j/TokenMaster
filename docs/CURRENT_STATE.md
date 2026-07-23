@@ -10,7 +10,7 @@ localized display labels plus stable keys and English labels. Stable IDs, codes,
 provider/model/project/time/numeric payloads remain unchanged; Russian count forms are
 count-neutral and pseudo preserves product/dependency names and placeholders. The
 in-app overlay owns one Shell lifetime `Option<DesktopInAppNotificationBatch>`, at most
-256 safe DTO rows; failed bridge delivery retains the visible batch, locale re-renders
+256 safe DTO rows; bridge drop retains the visible batch, locale re-renders
 only that batch, and dismiss clears both UI and slot. Focused receipts pass in-app 2/2,
 localization 22/22, UI 16/16, format, strict Desktop Clippy, and diff checks. Full
 desktop aggregate attempts timed out/lost and are not claimed; final workspace baseline
@@ -1648,9 +1648,9 @@ actions and package provenance remain deferred until P6 supplies the producer/ma
 exact packaged production executable, and a disposable Windows host. No live HKCU,
 Explorer, sign-in, lock, sleep, hotkey, or GUI mutation was performed.
 Interactive History ranges are now complete as a bounded replacement of the existing
-History section rather than a new frontend query owner. P4-E density, skin, color
-scheme, and durable layout presets are developer-complete; board customization,
-locale, and the remaining presentation acceptance work are still open.
+History section rather than a new frontend query owner. P4-G density, skin, color
+scheme, durable layout/board preferences, and unified localization are developer-
+complete; the remaining presentation acceptance work is still open.
 Interactive
 Windows, remaining P4 presentation, P5 CLI/MCP, activation, M0, packaging, signing, soak, and
 product release remain unclaimed.
