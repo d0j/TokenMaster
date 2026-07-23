@@ -2608,7 +2608,7 @@ fn complete_history_range_terminal() {}
 
         $receipt = & $Audit -RepositoryRoot $fixture -SourceOnly | ConvertFrom-Json
         $receipt.rust_source_file_count | Should -Be 18
-        $receipt.slint_source_file_count | Should -Be 24
+        $receipt.slint_source_file_count | Should -Be 25
         $receipt.density_variant_count | Should -Be 3
         $receipt.density_stable_key_arm_count | Should -Be 3
         $receipt.density_slint_index_arm_count | Should -Be 3

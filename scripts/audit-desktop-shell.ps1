@@ -40,8 +40,8 @@ if ($productionManifestText -match '\btokenmaster-(store|provider|runtime|codex|
 $rustFiles = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter '*.rs')
 $uiFiles = @(Get-ChildItem -LiteralPath $uiRoot -Recurse -File -Filter '*.slint')
 $productionFiles = @($rustFiles + $uiFiles)
-if ($rustFiles.Count -ne 18 -or $uiFiles.Count -ne 24) {
-    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain eighteen Rust and twenty-four Slint files'
+if ($rustFiles.Count -ne 18 -or $uiFiles.Count -ne 25) {
+    throw 'TM-DESKTOP-FILE-COUNT: production desktop boundary must contain eighteen Rust and twenty-five Slint files'
 }
 $uiText = ($uiFiles | ForEach-Object {
     [System.IO.File]::ReadAllText($_.FullName)

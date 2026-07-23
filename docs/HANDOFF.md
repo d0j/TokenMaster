@@ -18,6 +18,15 @@ lost and are not claimed; final workspace baseline is pending. `AUDIT_HARDENING_
 remains recorded from the earlier parser-only rounds; this cycle changed product
 behavior and required evidence and did not retrigger it. Task 1 and the shell slice
 received clean independent reviews.
+
+The final desktop source-audit pass retriggered `AUDIT_HARDENING_LOOP`: after the
+required 24-to-25 Slint file-count correction, the next run stopped on the stale
+textual presentation-owner count because schema-v7 locale added established
+presentation callbacks. No compiling/runtime product defect was demonstrated.
+Disposition: retain the exact file-count correction, stop desktop audit/Pester
+correction rounds, leave that source receipt explicitly failing, and continue only
+the required clean-root/format/workspace-Clippy/workspace-test baseline. Do not adjust
+the presentation-owner regex/count in this cycle without a concrete product defect.
 The component product change passes localization 5/5, recovery UI 4/4, formatting,
 strict Desktop Clippy, and diff checks. `AUDIT_HARDENING_LOOP` triggered after two
 consecutive correction/review rounds concerned only the scoped source parser/tests/
