@@ -87,7 +87,9 @@ Describe "TokenMaster M0 script contracts" {
         $Text | Should -Match 'm0-scripts\.Tests\.ps1'
         $Text | Should -Match 'm0-soak-lib\.Tests\.ps1'
         $Text | Should -Match 'immutable-actions\.Tests\.ps1'
+        $Text | Should -Match 'dependency-policy\.Tests\.ps1'
         $Text | Should -Match 'validate-immutable-actions\.ps1'
+        $Text | Should -Match 'verify-dependency-policy\.ps1'
     }
 
     It "packaging rejects a dirty tree and never claims a release" {

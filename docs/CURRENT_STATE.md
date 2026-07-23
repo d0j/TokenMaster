@@ -1,5 +1,28 @@
 # TokenMaster current state
 
+## 2026-07-23 — dependency advisory, license, and source policy gate
+
+The canonical all-features `x86_64-pc-windows-msvc` dependency graph now passes
+`cargo-deny` 0.20.2 advisories, licenses, and sources checks. The Windows bootstrap
+pins both the official release archive and extracted executable by reviewed SHA-256,
+requires the closed five-entry archive, and uses the system tar explicitly. The policy
+denies unknown registries and Git sources, permits only reviewed licenses, contains no
+advisory ignores, and treats unmaintained crates as errors only when they are direct
+workspace dependencies. Four currently unavoidable transitive unmaintained advisories
+remain upstream-visible through Slint/image and age; no vulnerability advisory is
+present.
+
+Focused evidence passes 24/24 plus the live three-check gate. Scratch metadata and the
+RustSec database are removed after each run, including read-only Git pack files. The
+receipt binds tool, policy, lockfile, worktree state, and commit both before and after
+the check, closing the review-found concurrent-checkout TOCTOU. This closes the
+TM-REL-003 advisory/source/license item only. Secret scanning, public-download
+attribution, artifact attestation, signing, external interactive/accessibility
+evidence, and soak remain open. Product behavior did not change and
+`AUDIT_HARDENING_LOOP` was not triggered. The final clean-root, focused policy,
+live advisory/license/source, format, serial warnings-as-errors workspace Clippy, and
+complete locked workspace test/doctest aggregate passes in 2,778.6 seconds.
+
 ## 2026-07-23 — immutable GitHub Actions supply-chain gate
 
 Every remote `uses:` reference in `.github/workflows` is now pinned to a reviewed

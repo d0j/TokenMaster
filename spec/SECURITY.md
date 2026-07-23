@@ -821,6 +821,25 @@ each file to 1 MiB before bounded read. Version comments are documentation only 
 never authority. This gate does not authenticate the pinned action source or replace
 dependency review, artifact attestation, signing, or protected release policy.
 
+### Dependency policy boundary
+
+The release dependency gate uses only the reviewed `cargo-deny` 0.20.2 Windows asset.
+Both its closed archive and extracted executable are pinned by SHA-256. The locked
+all-features `x86_64-pc-windows-msvc` graph MUST pass advisories, licenses, and sources
+checks; unknown registries and Git sources fail closed, and advisory ignores are
+empty. Unmaintained findings fail for direct workspace dependencies and remain
+upstream evidence for transitive dependencies; they are not reported as vulnerability
+findings.
+
+The gate captures commit, dirty state, tool hash, policy hash, and lockfile hash before
+metadata/check execution and again afterward. Any difference prevents receipt
+publication. The receipt contains only bounded identifiers and hashes, never command
+arguments, output, source paths, or advisory contents. Tool and RustSec scratch remain
+under the repository target root; read-only files are normalized only inside the
+validated task-owned child before deletion. This gate does not replace secret
+scanning, artifact attestation, signing, or immutable historical advisory-database
+retention.
+
 ## TM-SEC-008 — Backup and recovery containment
 
 Configuration, backup packages, encrypted envelopes, catalogs, SQLite candidates,

@@ -11,6 +11,13 @@ All notable changes are recorded here.
 
 ### Added
 
+- Added a pinned `cargo-deny` 0.20.2 Windows bootstrap and a locked all-features MSVC
+  dependency policy. Advisory, reviewed-license, and crates.io-only source checks pass;
+  no advisory is ignored. Pre/post commit, worktree, tool, policy, and lock hashes
+  prevent a concurrent-checkout receipt TOCTOU, and task-owned RustSec scratch cleanup
+  handles read-only Git packs. This closes only the TM-REL-003 advisory/source/license
+  item; secret scan, attestation, signing, interactive evidence, and soak remain.
+
 - Added P4-G unified en/ru/pseudo localization on schema v7 across Slint views and
   Rust-composed labels. Direct, persisted, and notifier changes hot-reproject while
   stable payloads remain unchanged. In-app presentation keeps one Shell-lifetime

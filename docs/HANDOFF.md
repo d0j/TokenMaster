@@ -1,5 +1,32 @@
 # TokenMaster handoff
 
+## Dependency policy gate (2026-07-23)
+
+Product state: no UI/runtime behavior changed. The deterministic unsigned package
+candidate remains the release artifact.
+
+Audit/evidence state: pinned `cargo-deny` 0.20.2 checks exactly advisories, licenses,
+and sources for the locked all-features MSVC graph. Unknown registry/Git sources fail,
+the reviewed license allowlist passes, and there are no advisory ignores. Transitive
+unmaintained crates remain upstream evidence but do not impersonate vulnerabilities or
+block the workspace-only policy. Focused evidence passes 24/24 and the live gate
+reports all three checks `ok`. The sole Important review finding, a commit/input TOCTOU
+between check and receipt, is closed by identical pre/post snapshots with a mutation
+regression. Scratch cleanup handles RustSec read-only pack files.
+
+Release blockers: secret scan, public-download attribution, artifact attestation,
+signing, external P3-E/P4 interactive evidence, and uninterrupted soak remain. The
+advisory database revision is not retained, so this receipt proves the current fetched
+database rather than an immutable historical replay. Do not turn that bounded
+limitation into speculative hardening unless release policy requires a pinned DB.
+
+Git state: implementation and evidence documents are modified on
+`cx/tokenmaster-product-architecture`. The final clean-root, focused/live policy,
+format, serial warnings-as-errors workspace Clippy, and complete locked workspace
+test/doctest aggregate passes in 2,778.6 seconds. Commit once, rerun the dependency
+gate on the clean exact HEAD, then regenerate the ignored package. No second reviewer
+or audit round is authorized. `AUDIT_HARDENING_LOOP` was not triggered.
+
 ## Immutable CI action gate (2026-07-23)
 
 Product state: no UI/runtime behavior changed. The Windows M0 workflow now resolves

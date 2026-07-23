@@ -1,5 +1,23 @@
 # TokenMaster project history
 
+## 2026-07-23 — dependency supply-chain policy
+
+Added a pinned `cargo-deny` 0.20.2 Windows bootstrap and a declarative all-features
+MSVC policy for advisories, licenses, and sources. TDD first failed on the absent
+policy/tooling, then a real RustSec fetch exposed read-only Git pack cleanup; a bounded
+task-directory helper and fixture closed it. The live check found four transitive
+unmaintained advisories with no safe upgrade and no vulnerability, license, or source
+failure, so policy uses the official workspace-only unmaintained boundary without
+advisory ignores.
+
+The single Sol High review found one Important receipt TOCTOU. Pre/post commit,
+worktree, tool, policy, and lockfile snapshots plus a concurrent-lockfile mutation test
+closed it. Focused evidence is 24/24 and the live three-check gate passes. This closes
+required TM-REL-003 evidence without changing product behavior or starting an
+audit-hardening loop. The single final clean-root, focused/live policy, format, serial
+warnings-as-errors workspace Clippy, and complete locked workspace test/doctest
+aggregate passes in 2,778.6 seconds.
+
 ## 2026-07-23 — immutable GitHub Actions references
 
 Replaced mutable v7 action tags in the Windows M0 workflow with exact official tag

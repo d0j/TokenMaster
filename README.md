@@ -51,20 +51,24 @@ only by the fixed HKCU Run value. Live Windows shell acceptance, OS/tray reminde
 delivery, per-scope editing, snooze, quiet hours, usage alerts, benefit activation,
 later-page Sessions/History controls, P4 presentation/localization, automation,
 interactive evidence, packaging, signing, and release remain. The P3-E packaged shell
-receipt contract and strict local preflight are fixed in `P3E_ACCEPTANCE.md`; authenticated
-Local P6 package provenance and immutable CI action binding are implemented; external
-interactive evidence, remaining supply-chain receipts, signing, and release remain absent.
+receipt contract and strict local preflight are fixed in `P3E_ACCEPTANCE.md`. Local P6
+package provenance, immutable CI action binding, and the advisory/license/source
+dependency policy are implemented; authenticated external interactive evidence, secret
+scan, attestation, signing, and release remain absent.
 
 ## Build and verify
 
 ```powershell
 cargo +1.97.0 test --workspace --locked
 pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
+pwsh -NoProfile -File scripts\verify-dependency-policy.ps1 -RepositoryRoot (Get-Location).Path
 pwsh -NoProfile -File scripts\verify-m0.ps1 -RepositoryRoot (Get-Location).Path
 ```
 
-The last command requires Pester 5.7.1 and a validated Windows GNU linker. It records
-developer evidence only; it does not claim release acceptance.
+The dependency command bootstraps the exact reviewed `cargo-deny` 0.20.2 Windows
+binary and requires network access to the current RustSec database. The last command
+also requires Pester 5.7.1 and a validated Windows GNU linker. Both record developer
+evidence only; neither claims release acceptance.
 
 ## Run the M0 probe
 

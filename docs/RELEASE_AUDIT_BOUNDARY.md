@@ -44,8 +44,16 @@ uninterrupted release-candidate soak.
 The immutable CI action item is implemented: every current remote workflow action is
 bound to a full reviewed commit, and the M0 verifier rejects mutable tags, branches,
 expressions, abbreviated hashes, ambiguous references, and unsafe local-action paths.
-This does not satisfy the remaining advisory, policy, secret, attestation, signing,
-interactive, performance, or soak items.
+The dependency-policy item is also implemented for the locked all-features canonical
+MSVC graph: the exact reviewed `cargo-deny` 0.20.2 binary runs advisories, licenses,
+and sources with no advisory ignores, reviewed license terms, and crates.io as the sole
+registry. Pre/post state snapshots reject concurrent commit, worktree, tool, policy,
+or lockfile drift. Transitive unmaintained findings remain upstream-visible under the
+workspace-only policy and are not vulnerability claims. The receipt uses the current
+fetched RustSec database and does not promise immutable historical replay.
+
+These gates do not satisfy the remaining public-download attribution, secret,
+attestation, signing, interactive, performance, or soak items.
 
 The current P2-B developer reference gate covers deterministic current and immutable-
 legacy million-event fixtures, rebuild throughput and page p95, cold/cached/full
