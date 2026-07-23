@@ -13,8 +13,13 @@ in-app overlay owns one Shell lifetime `Option<DesktopInAppNotificationBatch>`, 
 256 safe DTO rows; bridge drop retains the visible batch, locale re-renders
 only that batch, and dismiss clears both UI and slot. Focused receipts pass in-app 2/2,
 localization 22/22, UI 16/16, format, strict Desktop Clippy, and diff checks. Full
-desktop aggregate attempts timed out/lost and are not claimed; final workspace baseline
-is still pending. This is P4-G developer evidence, not M0, RC, or release acceptance.
+desktop aggregate attempts timed out/lost and are not claimed. The final required
+baseline passes clean-root, format, warnings-as-errors workspace Clippy in 62.6 seconds,
+and the complete locked workspace test/doctest gate in 641.2 seconds after the stale
+future-schema adversarial fixture was corrected from v7 to v8. The desktop source audit
+remains explicitly failing at its stale presentation-owner textual count under the
+recorded `AUDIT_HARDENING_LOOP`. This is P4-G developer evidence, not M0, RC, or release
+acceptance.
 
 ## 2026-07-22 — provider-ready runtime seam
 

@@ -10,7 +10,10 @@ P4-G unified localization is developer-complete: schema v7 closes the en/ru/pseu
 axis across Slint and Rust-composed labels, with hot re-projection for direct,
 persisted, and notifier changes. Focused in-app 2/2, localization 22/22, UI 16/16,
 format, strict Desktop Clippy, and diff receipts pass. Full desktop aggregate attempts
-timed out/lost and final workspace baseline remains pending. External live Windows/
+timed out/lost and are not claimed. The final clean-root, format, warnings-as-errors
+workspace Clippy, and complete locked workspace test/doctest baseline passes; the
+desktop textual source audit remains open under the recorded `AUDIT_HARDENING_LOOP`.
+External live Windows/
 interactive locale/accessibility, typography/row-size, DPI/paint/resource, per-scope
 settings, OS/tray reminder delivery, usage alerts, P5/P6, M0, package/signing/soak,
 and release acceptance remain open.

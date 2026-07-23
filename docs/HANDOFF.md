@@ -13,8 +13,13 @@ DTO rows; bridge drop retains the visible batch, locale re-renders only that bat
 and dismiss clears UI and slot. No release claim is made.
 
 Audit/evidence state: focused in-app 2/2, localization 22/22, UI 16/16, formatting,
-strict Desktop Clippy, and diff checks pass. Full desktop aggregate attempts timed out/
-lost and are not claimed; final workspace baseline is pending. `AUDIT_HARDENING_LOOP`
+strict Desktop Clippy, and diff checks pass. Earlier desktop-package aggregate attempts
+timed out/lost and are not claimed. The final required baseline passes clean-root,
+format, warnings-as-errors workspace Clippy in 62.6 seconds, and the complete locked
+workspace test/doctest gate in 641.2 seconds. Its first run exposed a stale adversarial
+fixture that still treated current settings schema v7 as unsupported; the focused
+target passed 16/16 after changing the future version to v8, and the full rerun passed.
+`AUDIT_HARDENING_LOOP`
 remains recorded from the earlier parser-only rounds; this cycle changed product
 behavior and required evidence and did not retrigger it. Task 1 and the shell slice
 received clean independent reviews.
@@ -35,7 +40,8 @@ production correctness, security, data-loss, or required release-receipt defect.
 Disposition: stop component audit children, retain the last verified product state,
 record the bounded evidence limitation (the source guard is line-oriented), reject
 further speculative parser hardening, and return to the shortest release-critical
-product slice: final workspace baseline plus live Windows/interactive acceptance.
+product slice: the remaining typography/accessibility/DPI/paint/resource work plus
+live Windows/interactive acceptance.
 
 Release blockers: external live Windows/interactive locale and accessibility acceptance,
 typography/row-size, DPI/paint/resource and per-scope settings, reminder OS/tray delivery,

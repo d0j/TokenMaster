@@ -16,8 +16,11 @@ All notable changes are recorded here.
   stable payloads remain unchanged. In-app presentation keeps one Shell-lifetime
   `Option<DesktopInAppNotificationBatch>` capped at 256 safe DTO rows; focused in-app
   2/2, localization 22/22, UI 16/16, format, strict Desktop Clippy, and diff checks
-  pass. Full desktop aggregate attempts timed out/lost; workspace baseline and live
-  Windows/interactive acceptance remain pending. This is not M0, RC, or release.
+  pass. Full desktop aggregate attempts timed out/lost, but the final clean-root,
+  format, warnings-as-errors workspace Clippy, and complete locked workspace test/
+  doctest baseline passes after correcting a stale future-schema test from v7 to v8.
+  The desktop textual source audit remains open under `AUDIT_HARDENING_LOOP`; live
+  Windows/interactive acceptance remains pending. This is not M0, RC, or release.
 
 - Added P4-F durable board preferences: schema v6 extends complete presentation with
   a strict fixed six-key manifest (`plan_usage`, `code_output`, `trend`, `sessions`,
