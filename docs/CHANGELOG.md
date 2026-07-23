@@ -1267,6 +1267,9 @@ All notable changes are recorded here.
 
 ### Fixed
 
+- Fixed the Windows M0 History controller contract to await the terminal latest-only
+  completion of a coalesced navigation instead of requiring two independently pollable
+  receipts. This stabilizes required CI evidence without changing product behavior.
 - Pinned every GitHub Actions `uses:` reference to a reviewed full commit and added a
   bounded fail-closed immutable-action validator to the M0 verification chain.
 - Bound P3-E interactive preflight to the deterministic P6 ZIP and producer receipt.

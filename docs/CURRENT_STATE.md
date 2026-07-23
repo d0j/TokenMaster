@@ -1,5 +1,27 @@
 # TokenMaster current state
 
+## 2026-07-23 — M0 latest-only completion contract
+
+Product state: unchanged. The desktop worker, navigation arbitration, package contents,
+and release candidate behavior are unchanged; this is a test-only correction to a
+required Windows acceptance receipt.
+
+Evidence state: one GitHub-hosted M0 run exposed that the History controller contract
+waited for two individually retrievable completions after a coalesced navigation. The
+worker deliberately keeps a capacity-one latest-result receipt, so a valid follow-up
+can replace the first receipt before the test polls it. The corrected contract instead
+waits for the terminal completion (`follow_up_started == false`) and asserts its
+successful outcome. TDD recorded the absent helper RED; the focused desktop regression
+passes 1/1 and its 13-test target passes, while the engine latest-only contract passes
+1/1. Formatting and one independent Sol High review also pass.
+
+The next required evidence is a green remote M0 run for the clean commit containing
+this correction. All other release blockers are unchanged: public-download attribution,
+remote attestation verification, signing, authenticated clean-room/interactive Windows
+evidence, exact MSVC comparison, and the explicitly deferred 24-hour soak. New P4 work
+remains frozen. `AUDIT_HARDENING_LOOP` did not trigger: the slice corrects a required
+acceptance contract and adds no audit rule or production behavior.
+
 ## 2026-07-23 — trusted GitHub artifact-attestation path
 
 Product state: unchanged. The deterministic canonical unsigned MSVC ZIP remains the

@@ -760,8 +760,12 @@ fn active_and_pending_navigation_reject_range_without_displacement() {
         "busy"
     );
     release_sender.send(()).expect("release navigation");
-    let _ = wait_for_completion(&controller);
-    let _ = wait_for_completion(&controller);
+    let terminal = wait_for_terminal_completion(&controller);
+    assert_eq!(
+        terminal.outcome(),
+        tokenmaster_desktop::DesktopRefreshOutcome::Completed
+    );
+    assert!(!terminal.follow_up_started());
     controller.shutdown().expect("shutdown");
 }
 
@@ -1445,5 +1449,23 @@ fn wait_for_completion(
         }
         assert!(std::time::Instant::now() < deadline, "completion timed out");
         thread::yield_now();
+    }
+}
+
+fn wait_for_terminal_completion(
+    controller: &DesktopController,
+) -> tokenmaster_desktop::DesktopRefreshCompletion {
+    let deadline = std::time::Instant::now() + Duration::from_secs(3);
+    loop {
+        if let Some(completion) = controller.try_completion().expect("worker healthy")
+            && !completion.follow_up_started()
+        {
+            return completion;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "terminal completion timed out"
+        );
+        thread::sleep(Duration::from_millis(1));
     }
 }

@@ -1,5 +1,20 @@
 # TokenMaster project history
 
+## 2026-07-23 — M0 latest-only completion contract
+
+One GitHub Windows M0 run timed out in the History controller contract after a blocked
+navigation admitted one coalesced follow-up. Root-cause tracing confirmed that the
+engine intentionally stores only the latest completion in a capacity-one result slot:
+the follow-up may replace the first receipt before the test polls it. Two executions
+remain correct; two pollable receipts are not guaranteed.
+
+The test now waits for a successful terminal completion rather than insisting on a
+receipt count. TDD first recorded the missing helper; the focused regression passes
+1/1, the complete 13-test History target passes, and the engine latest-only contract
+passes 1/1. A single Sol High review found no scoped defect. This corrected required
+release evidence without changing product behavior or creating an audit-hardening loop;
+the next gate is a green remote M0 run for the clean commit.
+
 ## 2026-07-23 — trusted GitHub artifact-attestation path
 
 Added one isolated Windows release-artifact workflow rather than extending the GNU M0

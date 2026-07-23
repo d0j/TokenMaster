@@ -1,5 +1,30 @@
 # TokenMaster handoff
 
+## M0 latest-only completion contract (2026-07-23)
+
+Product state: unchanged. The correction changes only a desktop integration test; it
+does not change worker capacity, navigation behavior, UI, package content, or signing.
+
+Audit/evidence state: a GitHub Windows M0 failure proved that the test demanded two
+pollable completion receipts after coalesced navigation, despite the intentional
+capacity-one latest-result worker contract. The test now waits for the terminal
+completion rather than a receipt count and requires a successful terminal outcome.
+The TDD RED was the absent helper; root-owned focused desktop evidence is 1/1 plus
+13/13, the engine latest-only contract is 1/1, formatting passes, and one Sol High
+review reports no scoped finding. This is a required acceptance-evidence correction,
+not a production or audit-hardening change.
+
+Release blockers: a green remote M0 run for the exact clean commit is now the immediate
+receipt. Public-download Slint attribution, trusted remote attestation verification,
+signing, authenticated clean-room/P3-E/P4 Windows evidence, exact MSVC comparison, and
+soak remain open. Per operator direction, do not start the 24-hour M0 soak until
+explicitly requested.
+
+Git state: commit this test/docs slice intentionally, then regenerate the ignored
+producer and secret-scan receipts for that exact clean HEAD before pushing. Do not treat
+the prior failed remote M0 or a local baseline as M0 acceptance; do not reopen P4 or
+desktop textual-audit hardening.
+
 ## Trusted GitHub artifact-attestation path (2026-07-23)
 
 Product state: unchanged. The release candidate remains the deterministic unsigned
