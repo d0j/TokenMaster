@@ -15,6 +15,13 @@ successful outcome. TDD recorded the absent helper RED; the focused desktop regr
 passes 1/1 and its 13-test target passes, while the engine latest-only contract passes
 1/1. Formatting and one independent Sol High review also pass.
 
+The first aggregate gate then hit a Windows GNU linker exit while linking an unrelated
+desktop target; the exact target immediately passed 11/11 with ample disk and memory.
+`verify-m0.ps1` now owns the repository's established `CARGO_BUILD_JOBS=1` policy before
+any Cargo invocation, preventing overlapping GNU linker jobs inside the receipt process.
+Its focused Pester contract passes 21/21. The final serial aggregate is still required;
+the earlier failed aggregate is not accepted as evidence.
+
 The next required evidence is a green remote M0 run for the clean commit containing
 this correction. All other release blockers are unchanged: public-download attribution,
 remote attestation verification, signing, authenticated clean-room/interactive Windows

@@ -59,6 +59,11 @@ Describe "TokenMaster M0 script contracts" {
         $Text | Should -Not -Match 'Get-Command "x86_64-w64-mingw32-gcc\.exe"'
     }
 
+    It "serializes Cargo work for deterministic Windows GNU linking" {
+        $Text = Get-Content -LiteralPath (Join-Path $ScriptsRoot "verify-m0.ps1") -Raw
+        $Text | Should -Match '\$env:CARGO_BUILD_JOBS = "1"'
+    }
+
     It "uses immutable commits for the current Node 24 GitHub Actions majors" {
         $Workflow = Get-Content -LiteralPath (Join-Path $RepositoryRoot ".github\workflows\tokenmaster-m0-windows.yml") -Raw
         $Workflow | Should -Match 'actions/checkout@[0-9a-f]{40} # v7'

@@ -14,6 +14,13 @@ The TDD RED was the absent helper; root-owned focused desktop evidence is 1/1 pl
 review reports no scoped finding. This is a required acceptance-evidence correction,
 not a production or audit-hardening change.
 
+The first aggregate M0 attempt had one Windows GNU linker exit at an unrelated desktop
+target, while its exact target passed 11/11 in isolation with ample host resources.
+`verify-m0.ps1` now sets the established `CARGO_BUILD_JOBS=1` policy before any Cargo
+command, preventing overlapping GNU linker jobs in the receipt process; its focused
+Pester contract passes 21/21. A full serial aggregate for the new clean commit is still
+required and the failed aggregate is not evidence.
+
 Release blockers: a green remote M0 run for the exact clean commit is now the immediate
 receipt. Public-download Slint attribution, trusted remote attestation verification,
 signing, authenticated clean-room/P3-E/P4 Windows evidence, exact MSVC comparison, and

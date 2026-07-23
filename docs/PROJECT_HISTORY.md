@@ -15,6 +15,12 @@ passes 1/1. A single Sol High review found no scoped defect. This corrected requ
 release evidence without changing product behavior or creating an audit-hardening loop;
 the next gate is a green remote M0 run for the clean commit.
 
+The first aggregate M0 attempt also exposed a Windows GNU linker exit at an unrelated
+desktop target. The exact target passed 11/11 with ample resources, matching the
+repository's recorded concurrent-linker pattern. `verify-m0.ps1` now sets
+`CARGO_BUILD_JOBS=1` before every Cargo invocation; its focused Pester contract passes
+21/21. The final serial aggregate remains required before this becomes local M0 evidence.
+
 ## 2026-07-23 — trusted GitHub artifact-attestation path
 
 Added one isolated Windows release-artifact workflow rather than extending the GNU M0

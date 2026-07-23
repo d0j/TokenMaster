@@ -53,6 +53,8 @@ if (-not $MingwRoot) {
 $MingwBin = Join-Path $MingwRoot "bin"
 $env:Path = "$MingwBin$([IO.Path]::PathSeparator)${env:Path}"
 $env:CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = $MingwLinker
+# Avoid known concurrent Windows MinGW linker exits in the receipt process.
+$env:CARGO_BUILD_JOBS = "1"
 $MingwVersionOutput = @(& $MingwLinker --version)
 $MingwExitCode = $LASTEXITCODE
 $MingwVersion = $MingwVersionOutput | Select-Object -First 1

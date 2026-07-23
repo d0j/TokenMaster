@@ -12,6 +12,8 @@ mismatched-executable evidence fails closed.
 M0 controller contracts must wait for terminal worker state, not a count of pollable
 completion receipts: the shared worker intentionally retains only its latest result.
 Any test that assumes every coalesced completion remains readable is invalid evidence.
+The Windows GNU M0 receipt process sets `CARGO_BUILD_JOBS=1` before Cargo work so
+overlapping linker jobs cannot turn an otherwise valid target into a transient failure.
 
 The canonical Windows 1.0 artifact is a signed `x86_64-pc-windows-msvc` portable ZIP.
 The existing GNU target is a development and M0 evidence lane only until P6 completes
