@@ -144,7 +144,7 @@ export global ProjectionStrings {
         if (value == "") { return @tr("Time zone unavailable"); }
         return value;
     }
-    public pure function sessions-loaded-label(count: string) -> string { return @tr("{0} sessions loaded", count); }
+    public pure function sessions-loaded-label(count: string) -> string { return @tr("{0} loaded", count); }
     public pure function sessions-page-status-label(code: string) -> string {
         if (code == "loading") { return @tr("Loading sessions…"); }
         if (code == "newest_more") { return @tr("Newest page · More sessions available"); }

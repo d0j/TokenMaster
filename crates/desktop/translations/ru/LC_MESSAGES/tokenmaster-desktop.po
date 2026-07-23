@@ -1250,23 +1250,23 @@ msgstr "Метки времени UTC"
 msgid "Wednesday"
 msgstr "Среда"
 
-msgid "{0} sessions loaded"
-msgstr "Сессий загружено: {0}"
+msgid "{0} loaded"
+msgstr "Сеансов загружено: {0}"
 
 msgid "Newest page · More sessions available"
-msgstr "Новая страница · есть ещё сессии"
+msgstr "Новейшие сеансы · доступно больше сеансов"
 
 msgid "Newest page · All sessions loaded"
-msgstr "Новая страница · все сессии загружены"
+msgstr "Новейшие сеансы · все сеансы загружены"
 
 msgid "Older sessions · More sessions available"
-msgstr "Старые сессии · есть ещё сессии"
+msgstr "Более ранние сеансы · доступно больше сеансов"
 
 msgid "Older sessions · Oldest sessions loaded"
-msgstr "Старые сессии · достигнуты самые старые"
+msgstr "Более ранние сеансы · загружены самые ранние сеансы"
 
 msgid "Newest page · Status unavailable"
-msgstr "Новая страница · статус недоступен"
+msgstr "Новейшие сеансы · статус недоступен"
 
 msgid "Older sessions · Status unavailable"
-msgstr "Старые сессии · статус недоступен"
+msgstr "Более ранние сеансы · статус недоступен"

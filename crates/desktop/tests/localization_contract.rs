@@ -494,7 +494,7 @@ const PROJECTION_MSGIDS: [&str; 90] = [
     "{0} / 100 added product-code lines",
     "{0} repository",
     "{0} repositories",
-    "{0} sessions loaded",
+    "{0} loaded",
     "Newest page · More sessions available",
     "Newest page · All sessions loaded",
     "Older sessions · More sessions available",

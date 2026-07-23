@@ -714,7 +714,7 @@ fn populated_sessions_projection_payloads_survive_hot_locale_switch() {
     let next_enabled = window.get_sessions_next_enabled();
     let back_to_newest_enabled = window.get_sessions_back_to_newest_enabled();
     assert_eq!(rows_before.len(), 64);
-    assert_eq!(window.get_sessions_loaded_label(), "64 sessions loaded");
+    assert_eq!(window.get_sessions_loaded_label(), "64 loaded");
     assert_eq!(
         window.get_sessions_page_status_label(),
         "Newest page · More sessions available"
@@ -731,10 +731,10 @@ fn populated_sessions_projection_payloads_survive_hot_locale_switch() {
         window.get_sessions_back_to_newest_enabled(),
         back_to_newest_enabled
     );
-    assert_eq!(window.get_sessions_loaded_label(), "Сессий загружено: 64");
+    assert_eq!(window.get_sessions_loaded_label(), "Сеансов загружено: 64");
     assert_eq!(
         window.get_sessions_page_status_label(),
-        "Новая страница · есть ещё сессии"
+        "Новейшие сеансы · доступно больше сеансов"
     );
     assert_eq!(
         window.get_sessions_evidence_label(),
@@ -2618,7 +2618,7 @@ fn assert_compiled_sessions_render_one_bounded_page_without_recreating_the_windo
     assert!(!window.get_history_visible());
     assert_eq!(window.get_active_route_state(), "ready");
     assert_eq!(window.get_sessions_state(), "ready");
-    assert_eq!(window.get_sessions_loaded_label(), "64 sessions loaded");
+    assert_eq!(window.get_sessions_loaded_label(), "64 loaded");
     assert_eq!(
         window.get_sessions_page_status_label(),
         "Newest page · More sessions available"

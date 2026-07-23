@@ -1250,8 +1250,8 @@ msgstr "［ÛŢÇ ţîɱêšţåɱþš ···］"
 msgid "Wednesday"
 msgstr "［Ŵêðñêšðåÿ ···］"
 
-msgid "{0} sessions loaded"
-msgstr "［{0} šêššîõñš ļõåðêð ···］"
+msgid "{0} loaded"
+msgstr "［{0} ļõåðêð ···］"
 
 msgid "Newest page · More sessions available"
 msgstr "［Ñêŵêšţ þåĝê · Mõřê šêššîõñš åṽåîļåβļê ···］"
