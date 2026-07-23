@@ -1249,3 +1249,24 @@ msgstr "Метки времени UTC"
 
 msgid "Wednesday"
 msgstr "Среда"
+
+msgid "{0} sessions loaded"
+msgstr "Сессий загружено: {0}"
+
+msgid "Newest page · More sessions available"
+msgstr "Новая страница · есть ещё сессии"
+
+msgid "Newest page · All sessions loaded"
+msgstr "Новая страница · все сессии загружены"
+
+msgid "Older sessions · More sessions available"
+msgstr "Старые сессии · есть ещё сессии"
+
+msgid "Older sessions · Oldest sessions loaded"
+msgstr "Старые сессии · достигнуты самые старые"
+
+msgid "Newest page · Status unavailable"
+msgstr "Новая страница · статус недоступен"
+
+msgid "Older sessions · Status unavailable"
+msgstr "Старые сессии · статус недоступен"

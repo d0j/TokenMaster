@@ -1249,3 +1249,24 @@ msgstr "［ÛŢÇ ţîɱêšţåɱþš ···］"
 
 msgid "Wednesday"
 msgstr "［Ŵêðñêšðåÿ ···］"
+
+msgid "{0} sessions loaded"
+msgstr "［{0} šêššîõñš ļõåðêð ···］"
+
+msgid "Newest page · More sessions available"
+msgstr "［Ñêŵêšţ þåĝê · Mõřê šêššîõñš åṽåîļåβļê ···］"
+
+msgid "Newest page · All sessions loaded"
+msgstr "［Ñêŵêšţ þåĝê · Åļļ šêššîõñš ļõåðêð ···］"
+
+msgid "Older sessions · More sessions available"
+msgstr "［Õļðêř šêššîõñš · Mõřê šêššîõñš åṽåîļåβļê ···］"
+
+msgid "Older sessions · Oldest sessions loaded"
+msgstr "［Õļðêř šêššîõñš · Õļðêšţ šêššîõñš ļõåðêð ···］"
+
+msgid "Newest page · Status unavailable"
+msgstr "［Ñêŵêšţ þåĝê · Šţåţûš ûñåṽåîļåβļê ···］"
+
+msgid "Older sessions · Status unavailable"
+msgstr "［Õļðêř šêššîõñš · Šţåţûš ûñåṽåîļåβļê ···］"

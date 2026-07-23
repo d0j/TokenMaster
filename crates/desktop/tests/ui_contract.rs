@@ -686,6 +686,92 @@ fn populated_usage_projection_payloads_survive_hot_locale_switch() {
     window.invoke_select_presentation_locale(0);
 }
 
+#[test]
+fn populated_sessions_projection_payloads_survive_hot_locale_switch() {
+    i_slint_backend_testing::init_no_event_loop();
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let path = directory.path().join("sessions-locale-invariants.sqlite3");
+    let reducer = ready_reducer_with_usage(&path, 0, 64);
+    let snapshot = reducer.snapshot();
+    let shell = DesktopShell::new_with_reliable_state_and_session_sink(
+        &snapshot,
+        DesktopReliableStateProjection::unavailable(),
+        Rc::new(AcceptingIntentSink),
+        Rc::new(RecordingSessionDetailSink::default()),
+    )
+    .expect("desktop shell");
+    let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+    shell
+        .apply_snapshot_for_epoch(epoch, &snapshot)
+        .expect("bind snapshot");
+    let window = shell.window();
+    window.invoke_select_route(SharedString::from("sessions"));
+
+    let rows_before = window.get_session_list_rows().iter().collect::<Vec<_>>();
+    let state = window.get_sessions_state();
+    let reasons = window.get_sessions_reasons();
+    let navigation_pending = window.get_sessions_navigation_pending();
+    let next_enabled = window.get_sessions_next_enabled();
+    let back_to_newest_enabled = window.get_sessions_back_to_newest_enabled();
+    assert_eq!(rows_before.len(), 64);
+    assert_eq!(window.get_sessions_loaded_label(), "64 sessions loaded");
+    assert_eq!(
+        window.get_sessions_page_status_label(),
+        "Newest page · More sessions available"
+    );
+
+    window.invoke_select_presentation_locale(1);
+
+    let rows_after = window.get_session_list_rows().iter().collect::<Vec<_>>();
+    assert_eq!(window.get_sessions_state(), state);
+    assert_eq!(window.get_sessions_reasons(), reasons);
+    assert_eq!(window.get_sessions_navigation_pending(), navigation_pending);
+    assert_eq!(window.get_sessions_next_enabled(), next_enabled);
+    assert_eq!(
+        window.get_sessions_back_to_newest_enabled(),
+        back_to_newest_enabled
+    );
+    assert_eq!(window.get_sessions_loaded_label(), "Сессий загружено: 64");
+    assert_eq!(
+        window.get_sessions_page_status_label(),
+        "Новая страница · есть ещё сессии"
+    );
+    assert_eq!(
+        window.get_sessions_evidence_label(),
+        "Свежие · Авторитетные"
+    );
+    assert_eq!(rows_after.len(), rows_before.len());
+    for (before, after) in rows_before.iter().zip(&rows_after) {
+        assert_eq!(after.row_index, before.row_index);
+        assert_eq!(after.first_label, before.first_label);
+        assert_eq!(after.last_label, before.last_label);
+        assert_eq!(after.duration_label, before.duration_label);
+        assert_eq!(after.event_label, before.event_label);
+        assert_eq!(after.input_availability, before.input_availability);
+        assert_eq!(after.input_label, before.input_label);
+        assert_eq!(after.cached_availability, before.cached_availability);
+        assert_eq!(after.cached_label, before.cached_label);
+        assert_eq!(after.output_availability, before.output_availability);
+        assert_eq!(after.output_label, before.output_label);
+        assert_eq!(after.reasoning_availability, before.reasoning_availability);
+        assert_eq!(after.reasoning_label, before.reasoning_label);
+        assert_eq!(after.total_availability, before.total_availability);
+        assert_eq!(after.total_label, before.total_label);
+        assert_eq!(after.cost_availability, before.cost_availability);
+        assert_eq!(after.cost_label, before.cost_label);
+    }
+    window.invoke_select_presentation_locale(2);
+    assert_ne!(window.get_sessions_loaded_label(), "64 loaded");
+    assert_eq!(window.get_session_list_rows().row_count(), 64);
+    assert_eq!(window.get_sessions_navigation_pending(), navigation_pending);
+    assert_eq!(window.get_sessions_next_enabled(), next_enabled);
+    assert_eq!(
+        window.get_sessions_back_to_newest_enabled(),
+        back_to_newest_enabled
+    );
+    window.invoke_select_presentation_locale(0);
+}
+
 fn assert_compiled_command_palette_is_bounded_and_routes_through_desktop_state(
     window: &tokenmaster_desktop::MainWindow,
 ) {
@@ -2532,7 +2618,7 @@ fn assert_compiled_sessions_render_one_bounded_page_without_recreating_the_windo
     assert!(!window.get_history_visible());
     assert_eq!(window.get_active_route_state(), "ready");
     assert_eq!(window.get_sessions_state(), "ready");
-    assert_eq!(window.get_sessions_loaded_label(), "64 loaded");
+    assert_eq!(window.get_sessions_loaded_label(), "64 sessions loaded");
     assert_eq!(
         window.get_sessions_page_status_label(),
         "Newest page · More sessions available"

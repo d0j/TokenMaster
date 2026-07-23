@@ -144,6 +144,18 @@ export global ProjectionStrings {
         if (value == "") { return @tr("Time zone unavailable"); }
         return value;
     }
+    public pure function sessions-loaded-label(count: string) -> string { return @tr("{0} sessions loaded", count); }
+    public pure function sessions-page-status-label(code: string) -> string {
+        if (code == "loading") { return @tr("Loading sessions…"); }
+        if (code == "newest_more") { return @tr("Newest page · More sessions available"); }
+        if (code == "newest_complete") { return @tr("Newest page · All sessions loaded"); }
+        if (code == "older_more") { return @tr("Older sessions · More sessions available"); }
+        if (code == "older_complete") { return @tr("Older sessions · Oldest sessions loaded"); }
+        if (code == "newest_unavailable") { return @tr("Newest page · Status unavailable"); }
+        if (code == "older_unavailable") { return @tr("Older sessions · Status unavailable"); }
+        if (code == "unavailable") { return @tr("Page status unavailable"); }
+        return code;
+    }
     public pure function weekday-label(code: string) -> string {
         if (code == "monday") { return @tr("Monday"); }
         if (code == "tuesday") { return @tr("Tuesday"); }

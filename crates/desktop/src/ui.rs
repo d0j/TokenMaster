@@ -3591,14 +3591,21 @@ fn apply_sessions_projection(window: &MainWindow, sessions: &DesktopSessionsProj
     window.set_sessions_state(sessions.state().stable_code().into());
     window.set_sessions_reasons(join_reasons(sessions.reason_codes().iter()).into());
     window.set_sessions_evidence_label(
-        format_evidence(sessions.freshness(), sessions.quality()).into(),
+        projection_evidence_label(window, sessions.freshness(), sessions.quality()).into(),
     );
     window.set_sessions_loaded_label(
         sessions
             .has_more()
             .map_or_else(
-                || "Unavailable".to_owned(),
-                |_| format!("{} loaded", format_integer(sessions.rows().len() as u64)),
+                || projection_unavailable(window),
+                |_| {
+                    window
+                        .global::<ProjectionStrings>()
+                        .invoke_sessions_loaded_label(
+                            format_integer(sessions.rows().len() as u64).into(),
+                        )
+                        .to_string()
+                },
             )
             .into(),
     );
@@ -3655,29 +3662,24 @@ pub(crate) fn apply_session_navigation_projection(
         !pending && (continuation || retained_unavailable_page),
     );
     let status = if pending {
-        "Loading sessions…"
+        window
+            .global::<ProjectionStrings>()
+            .invoke_sessions_page_status_label("loading".into())
+            .to_string()
     } else {
-        match (sessions.page_kind(), sessions.has_more()) {
-            (Some(crate::DesktopSessionPageKind::Newest), Some(true)) => {
-                "Newest page · More sessions available"
-            }
-            (Some(crate::DesktopSessionPageKind::Newest), Some(false)) => {
-                "Newest page · All sessions loaded"
-            }
-            (Some(crate::DesktopSessionPageKind::Continuation), Some(true)) => {
-                "Older sessions · More sessions available"
-            }
-            (Some(crate::DesktopSessionPageKind::Continuation), Some(false)) => {
-                "Older sessions · Oldest sessions loaded"
-            }
-            (Some(crate::DesktopSessionPageKind::Newest), None) => {
-                "Newest page · Status unavailable"
-            }
-            (Some(crate::DesktopSessionPageKind::Continuation), None) => {
-                "Older sessions · Status unavailable"
-            }
-            (None, _) => "Page status unavailable",
-        }
+        let code = match (sessions.page_kind(), sessions.has_more()) {
+            (Some(crate::DesktopSessionPageKind::Newest), Some(true)) => "newest_more",
+            (Some(crate::DesktopSessionPageKind::Newest), Some(false)) => "newest_complete",
+            (Some(crate::DesktopSessionPageKind::Continuation), Some(true)) => "older_more",
+            (Some(crate::DesktopSessionPageKind::Continuation), Some(false)) => "older_complete",
+            (Some(crate::DesktopSessionPageKind::Newest), None) => "newest_unavailable",
+            (Some(crate::DesktopSessionPageKind::Continuation), None) => "older_unavailable",
+            (None, _) => "unavailable",
+        };
+        window
+            .global::<ProjectionStrings>()
+            .invoke_sessions_page_status_label(code.into())
+            .to_string()
     };
     window.set_sessions_page_status_label(status.into());
 }
