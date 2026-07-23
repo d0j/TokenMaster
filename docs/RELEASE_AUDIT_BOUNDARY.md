@@ -14,6 +14,12 @@ The existing GNU target is a development and M0 evidence lane only until P6 comp
 an explicit dual-lane functional/resource/package comparison. The release build does
 not inherit a workspace-global target implicitly.
 
+Before packaging, the executable must be the exact canonical MSVC release output and
+pass executable inspection for x64 machine type, Windows GUI subsystem, and absence of
+dynamic Visual C++/Universal CRT imports. This binary-portability receipt does not prove
+package provenance, deterministic contents, signing, clean-room behavior, or release
+acceptance.
+
 The 1.0 package audit requires:
 
 - exact clean commit, executable hash, package hash, and deterministic content list;

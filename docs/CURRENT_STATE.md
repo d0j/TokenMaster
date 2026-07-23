@@ -1,22 +1,26 @@
 # TokenMaster current state
 
-## 2026-07-23 — release-driven P6 preflight
+## 2026-07-23 — P6 MSVC binary portability
 
-The first release-driven cycle changed no product behavior and added no P4 feature.
-The production `TokenMaster.exe` builds in the established GNU release lane and starts
-from an isolated portable stage with an empty provider home. The eight-second smoke
-created only the stage-local data root and SQLite archive; the running process measured
-36,188,160 private bytes, 65,957,888 working-set bytes, 338 handles, and 23 threads
-before exact task-owned termination. The executable was 63,819,454 bytes. This closes
-only the local GNU production-build and isolated-launch preflight.
+Visual Studio Build Tools 2022 17.14 and Windows SDK 10.0.26100 are installed without
+a pending reboot, so the canonical explicit `x86_64-pc-windows-msvc` release build now
+completes. The release application is a Windows GUI executable and uses the target-
+specific static C runtime; debug builds retain their console diagnostics and the GNU
+development lane remains unchanged. The canonical 35,405,824-byte executable has SHA-256
+`d076da6c25921bdd5b8a99f6bd17dd2e6af89913653df52acae72625424ccde0` and is not signed.
 
-Canonical P6 remains blocked on the absent MSVC/Windows SDK/signing environment:
-the Rust MSVC target is installed, but `cl.exe`, the MSVC linker, Windows SDK tools,
-and `signtool.exe` are unavailable. No package, signature, clean-room receipt,
-interactive acceptance, soak acceptance, M0, RC, or release is claimed. No textual
-audit/parser work was performed. The next release-critical decision is environment
-provisioning for the canonical MSVC lane, followed by deterministic package provenance;
-new P4 improvements remain frozen.
+The executable-level validator binds evidence to the exact canonical target path and
+requires x64, Windows GUI, and no dynamic Visual C++/Universal CRT import. A GNU negative
+control is rejected and the MSVC artifact passes. One independent review found one
+required-evidence binding defect; one bounded correction closed it. No second review or
+audit-only parser round was opened. Focused app formatting, warnings-as-errors Clippy,
+and tests pass. The final clean-root, format, workspace Clippy, and complete locked
+workspace test/doctest gate passes; the workspace test gate took 786.4 seconds.
+
+This closes only the MSVC binary portability sub-slice. No package, signature,
+clean-room receipt, interactive acceptance, soak acceptance, M0, RC, or release is
+claimed. The shortest release-critical outcome is now a deterministic unsigned portable
+package with manifest, notices, and SBOM provenance. New P4 improvements remain frozen.
 
 ## 2026-07-23 — P4-G unified localization developer-complete
 

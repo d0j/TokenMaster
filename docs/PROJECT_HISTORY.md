@@ -1,5 +1,19 @@
 # TokenMaster project history
 
+## 2026-07-23 — P6 MSVC binary portability
+
+Provisioned Visual Studio Build Tools 2022 17.14 and Windows SDK 10.0.26100, then
+completed the first explicit canonical MSVC production build. Executable inspection
+exposed two package-correctness defects: a console subsystem and dynamic Visual C++/
+Universal CRT dependencies. Release builds now use the Windows GUI subsystem and the
+MSVC target uses a static C runtime; debug console behavior and the GNU lane remain
+unchanged. The exact-path validator requires x64, Windows GUI, and no dynamic runtime
+imports. One review identified one evidence-binding defect, which one bounded correction
+closed without another review or audit-hardening round. Focused app checks and the
+single final clean-root/format/workspace-Clippy/workspace-test gate pass. The artifact
+is unsigned; deterministic packaging, provenance, signing, interactive receipts, soak,
+M0, RC, and release remain open.
+
 ## 2026-07-23 — release-driven P6 preflight
 
 Froze new P4 work and switched the root delivery rail to release blockers. The existing

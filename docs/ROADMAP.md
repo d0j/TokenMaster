@@ -2,10 +2,11 @@
 
 The active delivery mode is release-driven: new P4 improvements are frozen. The
 production GNU release binary builds and passes one isolated portable-stage launch
-smoke, closing only the local build/launch preflight. Canonical P6 remains blocked on
-host provisioning because the Rust MSVC target is installed but the MSVC compiler,
-Windows SDK/signing tools, deterministic product package provenance, interactive
-receipts, and soak evidence are absent.
+smoke, closing only the local build/launch preflight. The canonical MSVC toolchain is
+now provisioned and its x64 release binary passes exact-path, Windows-GUI, and static-
+runtime validation. P6 remains open for deterministic product package provenance,
+notices/SBOM, signing, clean-room and interactive receipts, and soak evidence. The
+next release-critical slice is the deterministic unsigned portable package producer.
 
 Provider-ready internal runtime seam is implemented ahead of 1.1: opaque bounded
 resume payloads, descriptor-bound reconstruction, injected usage providers, and

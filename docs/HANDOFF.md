@@ -1,27 +1,32 @@
 # TokenMaster handoff
 
-## Release-driven P6 preflight (2026-07-23)
+## P6 MSVC binary portability (2026-07-23)
 
-Product state: unchanged from P4-G developer completion. New P4 work is frozen.
+Product state: the canonical MSVC release application now builds as an x64 Windows GUI
+executable with a target-specific static C runtime. Debug console behavior and the GNU
+development lane remain intact. No P4 functionality was added; new P4 work stays frozen.
 
-Audit/evidence state: the production app builds successfully in the existing locked
-GNU release lane. An isolated portable-stage launch with an empty provider home stayed
-alive for eight seconds, created only its stage-local data/SQLite state, measured
-36,188,160 private bytes, 65,957,888 working-set bytes, 338 handles, and 23 threads,
-and was terminated by its exact verified PID. The executable was 63,819,454 bytes.
-This is a local build/launch preflight, not package or acceptance evidence. No source
-audit/parser was changed and no additional review round was opened.
+Audit/evidence state: Visual Studio Build Tools 2022 17.14 and Windows SDK 10.0.26100
+are complete with no pending reboot. The exact canonical executable is 35,405,824 bytes,
+has SHA-256 `d076da6c25921bdd5b8a99f6bd17dd2e6af89913653df52acae72625424ccde0`,
+is not signed, and passes the executable validator for exact path, x64 machine, Windows
+GUI subsystem, and absence of dynamic Visual C++/Universal CRT imports. The validator
+rejects the GNU output. One review found one required-evidence binding defect; one
+bounded correction closed it, with no re-review or audit-parser expansion. Focused app
+format/Clippy/tests pass. The single final aggregate passes clean-root, format,
+warnings-as-errors workspace Clippy, and the complete locked workspace test/doctest
+gate; the workspace test gate took 786.4 seconds.
 
-Release blockers: the Rust MSVC target exists, but the host has no `cl.exe`, MSVC
-linker, Windows SDK tools, or `signtool.exe`; therefore the canonical MSVC build,
-GNU/MSVC comparison, signing, deterministic portable package, authenticated
-interactive receipts, soak, M0, RC, and release remain open. The shortest next slice
-is provisioning the canonical MSVC build environment, not product functionality.
+Release blockers: deterministic package content and manifest provenance, generated
+third-party notices/SBOM, signing identity and signature, clean-room package launch,
+authenticated interactive Windows receipts, resource comparison/soak, M0, RC, and
+release acceptance remain open. The shortest next slice is the deterministic unsigned
+portable package producer, not product functionality or audit hardening.
 
-Git state: the release-driven rule is tracked; verify live HEAD/worktree. The
-task-owned smoke process is stopped. Its disposable stage was moved outside the
-worktree to temporary quarantine because local policy rejected deletion; it is not
-release evidence and may be removed safely.
+Git state: implementation and release governance are tracked; verify live HEAD/worktree.
+No task-owned smoke or build process should remain. The prior disposable smoke stage is
+outside the worktree in temporary quarantine because local policy rejected deletion; it
+is not release evidence and may be removed safely.
 
 ## P4-G localization cycle (2026-07-23)
 
