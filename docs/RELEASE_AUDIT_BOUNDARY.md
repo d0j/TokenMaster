@@ -59,8 +59,16 @@ redacted, bounded temporary reports. The bounded receipt binds the same commit,
 worktree, tool, and package before and after the scan and retains no findings, local
 paths, command output, or source content.
 
-These gates do not satisfy the remaining public-download attribution, attestation,
-signing, interactive, performance, or soak items.
+The artifact-attestation producer path is implemented as a separate pinned Windows
+workflow. It builds the canonical MSVC ZIP only from a `v*` tag or a default-branch
+manual run, attests exactly that unsigned ZIP with OIDC, and then uploads the ZIP and
+producer receipt. It has no OCI or artifact-metadata storage authority. This local
+workflow is not a receipt: a trusted remote run, matching downloaded ZIP, and
+independent `gh attestation verify` evidence remain required before attestation can be
+marked complete.
+
+These gates do not satisfy the remaining public-download attribution, remote
+attestation verification, signing, interactive, performance, or soak items.
 
 The current P2-B developer reference gate covers deterministic current and immutable-
 legacy million-event fixtures, rebuild throughput and page p95, cold/cached/full

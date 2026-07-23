@@ -26,6 +26,11 @@ Describe "TokenMaster M0 script contracts" {
         $Workflow | Should -Match 'Install-Module Pester -RequiredVersion 5\.7\.1'
     }
 
+    It "runs the baseline when any GitHub workflow changes" {
+        $Workflow = Get-Content -LiteralPath (Join-Path $RepositoryRoot ".github\workflows\tokenmaster-m0-windows.yml") -Raw
+        $Workflow | Should -Match '(?m)^\s+-\s+"\.github/workflows/\*\*"\s*$'
+    }
+
     It "verification uses the root locked workspace and labels external gates" {
         $Text = Get-Content -LiteralPath (Join-Path $ScriptsRoot "verify-m0.ps1") -Raw
         $Text | Should -Match 'RequiredPesterVersion = \[version\]"5\.7\.1"'
@@ -87,6 +92,7 @@ Describe "TokenMaster M0 script contracts" {
         $Text | Should -Match 'm0-scripts\.Tests\.ps1'
         $Text | Should -Match 'm0-soak-lib\.Tests\.ps1'
         $Text | Should -Match 'immutable-actions\.Tests\.ps1'
+        $Text | Should -Match 'release-artifact-workflow\.Tests\.ps1'
         $Text | Should -Match 'dependency-policy\.Tests\.ps1'
         $Text | Should -Match 'validate-immutable-actions\.ps1'
         $Text | Should -Match 'verify-dependency-policy\.ps1'

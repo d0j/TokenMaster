@@ -9,7 +9,7 @@ on:
       - "scripts/**"
       - "spec/**"
       - "docs/**"
-      - ".github/workflows/tokenmaster-m0-windows.yml"
+      - ".github/workflows/**"
   pull_request:
     paths:
       - "Cargo.toml"
@@ -18,7 +18,7 @@ on:
       - "scripts/**"
       - "spec/**"
       - "docs/**"
-      - ".github/workflows/tokenmaster-m0-windows.yml"
+      - ".github/workflows/**"
 
 permissions:
   contents: read

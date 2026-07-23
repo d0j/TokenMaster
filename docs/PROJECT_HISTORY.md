@@ -1,5 +1,22 @@
 # TokenMaster project history
 
+## 2026-07-23 — trusted GitHub artifact-attestation path
+
+Added one isolated Windows release-artifact workflow rather than extending the GNU M0
+developer workflow. It is limited to `v*` tag pushes or default-branch manual runs,
+uses full immutable action commits and minimal read/OIDC/attestation permissions, and
+builds the canonical MSVC ZIP before attesting exactly that unsigned ZIP. OCI push and
+artifact-metadata storage records are explicitly disabled; the ZIP and producer receipt
+are uploaded only after the provenance step. M0 now reruns its baseline whenever any
+workflow changes.
+
+TDD first demonstrated the absent workflow and absent baseline hook. The finished
+focused suite passes 29/29 with the live immutable-action validator. One independent
+Sol High review found no scoped defect. This closes a local path-to-receipt gap but not
+the attestation item itself: no remote run, uploaded artifact, attestation URL, or
+downloaded-ZIP verification exists. Product behavior did not change, P4 remains frozen,
+and `AUDIT_HARDENING_LOOP` did not trigger.
+
 ## 2026-07-23 — Apache-2.0 and bounded secret scan
 
 Changed TokenMaster's own license metadata, canonical license text, package input, and

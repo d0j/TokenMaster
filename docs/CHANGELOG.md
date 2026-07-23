@@ -11,6 +11,13 @@ All notable changes are recorded here.
 
 ### Added
 
+- Added an isolated trusted GitHub workflow for the canonical unsigned Windows ZIP:
+  default-branch manual dispatch or `v*` tag push only, immutable action commits,
+  minimal OIDC/attestation permissions, explicit no-OCI/no-storage-record behavior,
+  and package → attestation → ZIP/receipt upload ordering. It prepares the artifact
+  provenance receipt path but does not claim an attestation until a trusted remote run
+  is downloaded and independently verified.
+
 - Changed TokenMaster's own product license to Apache-2.0 while preserving external
   MIT and Slint attribution, and added a SHA-pinned Gitleaks 8.30.1 gate over one clean
   committed Git history plus the validated closed Windows ZIP. Redacted temporary

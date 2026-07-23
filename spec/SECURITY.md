@@ -821,6 +821,26 @@ each file to 1 MiB before bounded read. Version comments are documentation only 
 never authority. This gate does not authenticate the pinned action source or replace
 dependency review, artifact attestation, signing, or protected release policy.
 
+### Artifact-attestation CI boundary
+
+The canonical unsigned ZIP MAY be attested only by the isolated release-artifact
+workflow after `package-product.ps1` has validated its closed MSVC package. The
+workflow accepts only `v*` tag pushes or manual dispatch on the repository default
+branch; it MUST NOT run on pull requests. Its attestation job has only `contents: read`,
+`id-token: write`, and `attestations: write`, and each remote action is an immutable
+full commit. The subject is the exact generated unsigned ZIP, never an unbounded
+directory, a signed-name placeholder, or a separate developer/M0 artifact. Package,
+attestation, and upload remain in that order.
+
+OCI registry push and artifact-metadata storage records are explicitly disabled, so the
+job has neither registry nor artifact-metadata authority. A local workflow definition,
+static test, or a successful package producer is not artifact provenance. Only a
+trusted remote run whose downloaded ZIP verifies against the returned GitHub
+attestation may satisfy that receipt; branch/tag protection, GitHub token policy, and
+remote runner execution remain external boundaries. This gate does not sign the
+package, publish a download, authenticate a clean-room user, or replace interactive
+and soak evidence.
+
 ### Dependency policy boundary
 
 The release dependency gate uses only the reviewed `cargo-deny` 0.20.2 Windows asset.

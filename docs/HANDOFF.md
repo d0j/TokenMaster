@@ -1,5 +1,32 @@
 # TokenMaster handoff
 
+## Trusted GitHub artifact-attestation path (2026-07-23)
+
+Product state: unchanged. The release candidate remains the deterministic unsigned
+`x86_64-pc-windows-msvc` ZIP; no UI/runtime/P4 behavior, package content, signing, or
+release claim changed.
+
+Audit/evidence state: `.github/workflows/tokenmaster-release-artifact.yml` isolates a
+canonical package-and-attest job from M0. Only `v*` tag pushes or manual dispatches on
+the default branch can run it; pull requests cannot produce provenance. The job has
+only `contents: read`, `id-token: write`, and `attestations: write`, uses full pinned
+action commits, disables OCI/storage-record paths, packages before it attests the exact
+unsigned ZIP, and uploads that ZIP with its producer receipt afterward. The M0
+workflow watches every workflow change, `verify-m0.ps1` includes the focused contract,
+29/29 focused Pester tests and the immutable-action validator pass, and one independent
+Sol High review found no scoped defect. A local YAML parser/actionlint is unavailable;
+the first trusted GitHub run is also the required syntax and platform validation.
+
+Release blockers: public-download Slint attribution, a trusted remote attestation
+receipt verified against the downloaded ZIP, code signing, authenticated clean-room and
+P3-E/P4 Windows evidence, exact MSVC performance comparison, and soak remain. Per
+operator direction, do not start the 24-hour M0 soak until explicitly requested.
+
+Git state: the tracked workflow/docs slice must be one clean commit; then regenerate
+the ignored producer/secret receipts for that exact HEAD. Do not represent the local
+workflow as a remote provenance receipt or reopen P4/desktop textual audit hardening;
+the known presentation-owner count remains under the existing `AUDIT_HARDENING_LOOP`.
+
 ## Apache-2.0 and secret-scan gate (2026-07-23)
 
 Product state: TokenMaster's original code and Help/About license identity are now

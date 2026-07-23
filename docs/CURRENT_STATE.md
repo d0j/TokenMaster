@@ -1,5 +1,31 @@
 # TokenMaster current state
 
+## 2026-07-23 — trusted GitHub artifact-attestation path
+
+Product state: unchanged. The deterministic canonical unsigned MSVC ZIP remains the
+only product candidate; this slice adds no runtime, UI, package-content, signing, or
+P4 behavior.
+
+Evidence state: a separate `TokenMaster Release Artifact` workflow now builds the
+canonical package only from a `v*` tag push or a manual run on the repository default
+branch. It uses pinned `checkout`, `attest`, and upload actions; grants only
+`contents: read`, `id-token: write`, and `attestations: write`; disables OCI push and
+artifact-metadata storage records; and attests exactly the generated unsigned ZIP
+before uploading it with its producer receipt. The developer M0 workflow remains
+separate and now runs its baseline when any workflow changes. Focused contracts pass
+29/29, the immutable-action validator passes, and one independent Sol High review
+found no scoped defect.
+
+This is a local executable release path, not an attestation receipt: no remote workflow
+run, uploaded artifact, attestation URL, or independently verified provenance exists
+yet. The next trusted default-branch or `v*` tag run must be downloaded and verified
+against the matching ZIP before TM-REL-003 can treat artifact attestation as closed.
+Public-download attribution, remote attestation evidence, signing, authenticated
+clean-room/interactive Windows evidence, exact MSVC comparison, and soak remain
+release blockers. The 24-hour M0 soak remains explicitly deferred; new P4 work stays
+frozen. `AUDIT_HARDENING_LOOP` did not trigger: this one bounded slice advances a
+required release receipt path, not a parser or audit rule.
+
 ## 2026-07-23 — Apache-2.0 product license and secret scan
 
 TokenMaster's original code, Cargo package metadata, packaged `LICENSE`, and in-product
