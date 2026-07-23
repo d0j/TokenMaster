@@ -430,6 +430,19 @@ fn private_warmup_accepts_one_transient_allocator_trough() {
     assert_eq!(plateau.private_floor, 6_750_000);
 }
 
+fn private_warmup_rejects_repeated_allocator_troughs() {
+    let mut samples = Vec::new();
+    samples.extend((0..16).map(|offset| ResourceCounts {
+        private_bytes: if offset % 8 < 2 { 5_390_000 } else { 6_750_000 },
+        handles: 112,
+        threads: 1,
+        user_objects: 1,
+        gdi_objects: 0,
+    }));
+
+    assert!(stable_warmup_plateau(&samples, 8, 1_048_576).is_none());
+}
+
 fn private_return_windows_reject_sustained_retained_growth() {
     let baseline = [4_800_000, 4_700_000, 4_900_000, 4_750_000];
     let measured = [
@@ -504,19 +517,19 @@ struct StableWarmupPlateau<'a> {
     private_floor: usize,
 }
 
-fn retained_private_floor(values: impl IntoIterator<Item = usize>) -> Option<usize> {
-    let mut values = values.into_iter();
-    let mut lowest = values.next()?;
-    let mut second_lowest = None;
-    for value in values {
-        if value < lowest {
-            second_lowest = Some(lowest);
-            lowest = value;
-        } else if second_lowest.is_none_or(|current| value < current) {
-            second_lowest = Some(value);
-        }
+fn retained_private_floor(
+    values: impl IntoIterator<Item = usize>,
+    private_budget: usize,
+) -> Option<usize> {
+    let mut values = values.into_iter().collect::<Vec<_>>();
+    values.sort_unstable();
+    let lowest = *values.first()?;
+    let floor = *values.get(1).unwrap_or(&lowest);
+    let median = values[values.len() / 2];
+    if median > floor.saturating_add(private_budget) {
+        return None;
     }
-    Some(second_lowest.unwrap_or(lowest))
+    Some(floor)
 }
 
 fn stable_warmup_plateau<'a>(
@@ -539,10 +552,14 @@ fn stable_warmup_plateau<'a>(
         return None;
     }
     let (previous_window, current_window) = candidate.split_at(window_size);
-    let previous_floor =
-        retained_private_floor(previous_window.iter().map(|sample| sample.private_bytes))?;
-    let current_floor =
-        retained_private_floor(current_window.iter().map(|sample| sample.private_bytes))?;
+    let previous_floor = retained_private_floor(
+        previous_window.iter().map(|sample| sample.private_bytes),
+        private_budget,
+    )?;
+    let current_floor = retained_private_floor(
+        current_window.iter().map(|sample| sample.private_bytes),
+        private_budget,
+    )?;
     if current_floor > previous_floor.saturating_add(private_budget) {
         return None;
     }
@@ -734,6 +751,7 @@ fn repeated_aggregate_session_and_resumable_rebuild_cycles_stay_on_a_resource_pl
 fn main() {
     private_return_windows_accept_transient_allocator_spikes();
     private_warmup_accepts_one_transient_allocator_trough();
+    private_warmup_rejects_repeated_allocator_troughs();
     private_return_windows_reject_sustained_retained_growth();
     private_warmup_restarts_after_topology_and_allocator_phase_changes();
     repeated_open_query_drop_returns_resources_to_a_stable_plateau();

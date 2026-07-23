@@ -1270,8 +1270,9 @@ All notable changes are recorded here.
 - Fixed the Windows M0 History controller contract to await the terminal latest-only
   completion of a coalesced navigation instead of requiring two independently pollable
   receipts, and made `verify-m0.ps1` serialize Windows GNU Cargo linking with
-  `CARGO_BUILD_JOBS=1`. This stabilizes required CI evidence without changing product
-  behavior.
+  `CARGO_BUILD_JOBS=1`. Query resource warm-up also rejects repeated allocator troughs
+  instead of accepting a falsely low retained baseline. This stabilizes required CI
+  evidence without changing product behavior or resource budgets.
 - Pinned every GitHub Actions `uses:` reference to a reviewed full commit and added a
   bounded fail-closed immutable-action validator to the M0 verification chain.
 - Bound P3-E interactive preflight to the deterministic P6 ZIP and producer receipt.

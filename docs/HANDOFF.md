@@ -21,6 +21,13 @@ command, preventing overlapping GNU linker jobs in the receipt process; its focu
 Pester contract passes 21/21. A full serial aggregate for the new clean commit is still
 required and the failed aggregate is not evidence.
 
+The serial aggregate then found a second, independent resource-evidence defect: repeated
+allocator troughs in both warm-up windows could lower the retained private-bytes
+baseline. A deterministic RED vector now forces such a phase to continue bounded
+warm-up instead. The real resource binary and complete `tokenmaster-query` crate pass;
+the resource budgets and structural limits are unchanged. The final serial aggregate
+must run for the resulting clean commit.
+
 Release blockers: a green remote M0 run for the exact clean commit is now the immediate
 receipt. Public-download Slint attribution, trusted remote attestation verification,
 signing, authenticated clean-room/P3-E/P4 Windows evidence, exact MSVC comparison, and

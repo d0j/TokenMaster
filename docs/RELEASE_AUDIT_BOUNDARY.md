@@ -14,6 +14,8 @@ completion receipts: the shared worker intentionally retains only its latest res
 Any test that assumes every coalesced completion remains readable is invalid evidence.
 The Windows GNU M0 receipt process sets `CARGO_BUILD_JOBS=1` before Cargo work so
 overlapping linker jobs cannot turn an otherwise valid target into a transient failure.
+Query resource warm-up treats repeated allocator troughs as an unstable phase; it must
+not lower the retained private-bytes baseline or weaken the established resource budget.
 
 The canonical Windows 1.0 artifact is a signed `x86_64-pc-windows-msvc` portable ZIP.
 The existing GNU target is a development and M0 evidence lane only until P6 completes

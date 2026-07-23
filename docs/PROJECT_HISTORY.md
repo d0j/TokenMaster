@@ -21,6 +21,13 @@ repository's recorded concurrent-linker pattern. `verify-m0.ps1` now sets
 `CARGO_BUILD_JOBS=1` before every Cargo invocation; its focused Pester contract passes
 21/21. The final serial aggregate remains required before this becomes local M0 evidence.
 
+That serial aggregate found a second acceptance-evidence defect in the query resource
+binary: two repeated allocator troughs per warm-up window could be mistaken for a lower
+retained private-bytes plateau. A deterministic RED vector now makes that phase reject
+and continue bounded warm-up. The real resource binary and complete `tokenmaster-query`
+crate pass with the original resource budgets and structural limits unchanged. The final
+serial aggregate is still required on the clean commit containing this correction.
+
 ## 2026-07-23 — trusted GitHub artifact-attestation path
 
 Added one isolated Windows release-artifact workflow rather than extending the GNU M0

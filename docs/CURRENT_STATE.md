@@ -22,6 +22,14 @@ any Cargo invocation, preventing overlapping GNU linker jobs inside the receipt 
 Its focused Pester contract passes 21/21. The final serial aggregate is still required;
 the earlier failed aggregate is not accepted as evidence.
 
+That serial aggregate then exposed a separate resource-evidence defect: two repeated
+Windows allocator troughs in each warm-up window could still be accepted as a low
+retained baseline. The plateau selector now rejects that phase and continues bounded
+warm-up; a deterministic RED vector proves the interleaving. The real resource binary
+and the complete `tokenmaster-query` crate pass after the correction. Its 1/2 MiB
+budgets and structural handle/thread/GUI limits are unchanged; a final serial aggregate
+for the resulting clean commit remains required.
+
 The next required evidence is a green remote M0 run for the clean commit containing
 this correction. All other release blockers are unchanged: public-download attribution,
 remote attestation verification, signing, authenticated clean-room/interactive Windows
