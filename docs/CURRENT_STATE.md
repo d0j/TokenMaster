@@ -1,5 +1,23 @@
 # TokenMaster current state
 
+## 2026-07-23 — release-driven P6 preflight
+
+The first release-driven cycle changed no product behavior and added no P4 feature.
+The production `TokenMaster.exe` builds in the established GNU release lane and starts
+from an isolated portable stage with an empty provider home. The eight-second smoke
+created only the stage-local data root and SQLite archive; the running process measured
+36,188,160 private bytes, 65,957,888 working-set bytes, 338 handles, and 23 threads
+before exact task-owned termination. The executable was 63,819,454 bytes. This closes
+only the local GNU production-build and isolated-launch preflight.
+
+Canonical P6 remains blocked on the absent MSVC/Windows SDK/signing environment:
+the Rust MSVC target is installed, but `cl.exe`, the MSVC linker, Windows SDK tools,
+and `signtool.exe` are unavailable. No package, signature, clean-room receipt,
+interactive acceptance, soak acceptance, M0, RC, or release is claimed. No textual
+audit/parser work was performed. The next release-critical decision is environment
+provisioning for the canonical MSVC lane, followed by deterministic package provenance;
+new P4 improvements remain frozen.
+
 ## 2026-07-23 — P4-G unified localization developer-complete
 
 P4-G closes the bounded en/ru/pseudo locale axis on settings schema v7. All Slint

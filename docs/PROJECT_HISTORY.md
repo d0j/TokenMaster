@@ -1,5 +1,18 @@
 # TokenMaster project history
 
+## 2026-07-23 — release-driven P6 preflight
+
+Froze new P4 work and switched the root delivery rail to release blockers. The existing
+locked GNU lane produced the 63,819,454-byte production `TokenMaster.exe`; an isolated
+portable-stage smoke with an empty provider home stayed alive for eight seconds,
+created only local staged SQLite state, measured 36,188,160 private bytes, 65,957,888
+working-set bytes, 338 handles, and 23 threads, then stopped by exact verified PID.
+No product behavior or textual audit/parser changed. This closes only a GNU
+production-build and isolated-launch preflight. The host still lacks `cl.exe`, the
+MSVC linker, Windows SDK tools, and `signtool.exe`, so GNU/MSVC comparison, signing,
+deterministic package provenance, interactive/soak receipts, M0, RC, and release remain
+open.
+
 ## 2026-07-23 — P4-G unified localization
 
 Closed the schema-v7 en/ru/pseudo locale axis across Slint and Rust-composed display

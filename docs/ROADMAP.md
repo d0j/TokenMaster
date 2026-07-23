@@ -1,5 +1,12 @@
 # TokenMaster roadmap
 
+The active delivery mode is release-driven: new P4 improvements are frozen. The
+production GNU release binary builds and passes one isolated portable-stage launch
+smoke, closing only the local build/launch preflight. Canonical P6 remains blocked on
+host provisioning because the Rust MSVC target is installed but the MSVC compiler,
+Windows SDK/signing tools, deterministic product package provenance, interactive
+receipts, and soak evidence are absent.
+
 Provider-ready internal runtime seam is implemented ahead of 1.1: opaque bounded
 resume payloads, descriptor-bound reconstruction, injected usage providers, and
 provider-owned quota/health (at most 32 windows, optional benefits) reuse one bounded

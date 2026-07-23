@@ -1,5 +1,28 @@
 # TokenMaster handoff
 
+## Release-driven P6 preflight (2026-07-23)
+
+Product state: unchanged from P4-G developer completion. New P4 work is frozen.
+
+Audit/evidence state: the production app builds successfully in the existing locked
+GNU release lane. An isolated portable-stage launch with an empty provider home stayed
+alive for eight seconds, created only its stage-local data/SQLite state, measured
+36,188,160 private bytes, 65,957,888 working-set bytes, 338 handles, and 23 threads,
+and was terminated by its exact verified PID. The executable was 63,819,454 bytes.
+This is a local build/launch preflight, not package or acceptance evidence. No source
+audit/parser was changed and no additional review round was opened.
+
+Release blockers: the Rust MSVC target exists, but the host has no `cl.exe`, MSVC
+linker, Windows SDK tools, or `signtool.exe`; therefore the canonical MSVC build,
+GNU/MSVC comparison, signing, deterministic portable package, authenticated
+interactive receipts, soak, M0, RC, and release remain open. The shortest next slice
+is provisioning the canonical MSVC build environment, not product functionality.
+
+Git state: the release-driven rule is tracked; verify live HEAD/worktree. The
+task-owned smoke process is stopped. Its disposable stage was moved outside the
+worktree to temporary quarantine because local policy rejected deletion; it is not
+release evidence and may be removed safely.
+
 ## P4-G localization cycle (2026-07-23)
 
 Product state: settings schema v7 and the existing complete presentation operation
