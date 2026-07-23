@@ -1288,3 +1288,27 @@ msgstr "［Ñõţ ƒõûñð ···］"
 
 msgid "Unavailable · {0}"
 msgstr "［Ûñåṽåîļåβļê · {0} ···］"
+
+msgid "{0} expiry reminder"
+msgstr "［{0} êxþîřÿ řêɱîñðêř ···］"
+
+msgid "{0} expiry reminders"
+msgstr "［{0} êxþîřÿ řêɱîñðêřš ···］"
+
+msgid "Banked rate-limit reset"
+msgstr "［Ɓåñķêð řåţê-ļîɱîţ řêšêţ ···］"
+
+msgid "Banked Reset"
+msgstr "［Ɓåñķêð Řêšêţ ···］"
+
+msgid "Reminder due {0} before expiry"
+msgstr "［Řêɱîñðêř ðûê {0} βêƒõřê êxþîřÿ ···］"
+
+msgid "Due {0}"
+msgstr "［Ðûê {0} ···］"
+
+msgid "Queued {0}"
+msgstr "［Ǫûêûêð {0} ···］"
+
+msgid "{0}. {1}, quantity {2}. {3}. {4}. {5}. {6}."
+msgstr "［{0}. {1}, ǫûåñţîţÿ {2}. {3}. {4}. {5}. {6}. ···］"

@@ -36,7 +36,7 @@ use crate::{
     RouteRow, SessionDetailBreakdownRow, SessionListRow, UiPalette,
     UnavailableDesktopHistoryRangeIntentSink, UnavailableDesktopIntentSink,
     UnavailableDesktopSessionDetailIntentSink, UnavailableDesktopSessionPageIntentSink,
-    in_app_notification::NotificationEpochState,
+    in_app_notification::{NotificationEpochState, SharedInAppNotificationBatch},
     native_tray::DesktopNativeTrayOwner,
     presentation::{DesktopApplyOutcome, DesktopProjection, DesktopRouteKey, DesktopState},
 };
@@ -53,6 +53,7 @@ pub struct DesktopShell {
     reliable_state: SharedReliableState,
     snapshot_epochs: Arc<AtomicU64>,
     notification_epochs: Arc<NotificationEpochState>,
+    in_app_notification_batch: SharedInAppNotificationBatch,
 }
 
 pub(crate) type SharedDesktopState = Arc<Mutex<DesktopState>>;
@@ -106,6 +107,7 @@ pub struct DesktopBridgeFactory {
     state: SharedDesktopState,
     snapshot_epochs: Arc<AtomicU64>,
     notification_epochs: Arc<NotificationEpochState>,
+    in_app_notification_batch: SharedInAppNotificationBatch,
 }
 
 impl DesktopBridgeFactory {
@@ -139,6 +141,7 @@ impl DesktopBridgeFactory {
         DesktopInAppNotificationBridge::new(
             Arc::clone(&self.notification_epochs),
             self.window.clone(),
+            Arc::clone(&self.in_app_notification_batch),
         )
         .map_err(|_| DesktopUiError::state_unavailable())
     }
@@ -149,6 +152,7 @@ struct ReliableStateNotifierInner {
     desktop_state: SharedDesktopState,
     state: SharedReliableState,
     presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
+    in_app_notification_batch: SharedInAppNotificationBatch,
     latest: Mutex<Option<ReliableStateDelivery>>,
     next_delivery_id: AtomicU64,
     scheduled: AtomicBool,
@@ -352,7 +356,12 @@ impl ReliableStateNotifierInner {
                 return false;
             }
             if locale_changed {
-                reapply_localized_projection(&window, &self.desktop_state, &self.state);
+                reapply_localized_projection(
+                    &window,
+                    &self.desktop_state,
+                    &self.state,
+                    &self.in_app_notification_batch,
+                );
             } else {
                 apply_reliable_state_projection(&window, &delivery.projection);
             }
@@ -590,6 +599,7 @@ impl DesktopShell {
         apply_reliable_state_projection(&window, &reliable_state);
         let state = Arc::new(Mutex::new(initial_state));
         let reliable_state = Arc::new(Mutex::new(reliable_state));
+        let in_app_notification_batch = Arc::new(Mutex::new(None));
         let compact_window_mode = Rc::new(RefCell::new(CompactWindowMode::default()));
         wire_route_selection(&window, state.clone(), compact_window_mode.clone());
         wire_command_palette(&window, state.clone(), compact_window_mode);
@@ -597,7 +607,7 @@ impl DesktopShell {
         wire_history_range_intents(&window, state.clone(), history_range_sink.clone());
         wire_session_detail_intents(&window, state.clone(), session_sink);
         wire_session_page_intents(&window, state.clone(), session_page_sink.clone());
-        wire_in_app_notification_dismissal(&window);
+        wire_in_app_notification_dismissal(&window, Arc::clone(&in_app_notification_batch));
         wire_presentation_density(
             &window,
             Arc::clone(&presentation_style),
@@ -623,6 +633,7 @@ impl DesktopShell {
             Arc::clone(&presentation_style),
             state.clone(),
             reliable_state.clone(),
+            Arc::clone(&in_app_notification_batch),
             intent_sink.clone(),
         );
         wire_dashboard_board(&window, Arc::clone(&presentation_style), intent_sink);
@@ -639,6 +650,7 @@ impl DesktopShell {
             reliable_state,
             snapshot_epochs: Arc::new(AtomicU64::new(1)),
             notification_epochs: Arc::new(NotificationEpochState::new()),
+            in_app_notification_batch,
         })
     }
 
@@ -763,7 +775,12 @@ impl DesktopShell {
             return Err(DesktopUiError::state_unavailable());
         }
         if locale_changed {
-            reapply_localized_projection(&self.window, &self.state, &self.reliable_state);
+            reapply_localized_projection(
+                &self.window,
+                &self.state,
+                &self.reliable_state,
+                &self.in_app_notification_batch,
+            );
         } else {
             apply_reliable_state_projection(&self.window, &projection);
         }
@@ -782,6 +799,7 @@ impl DesktopShell {
                 desktop_state: Arc::clone(&self.state),
                 state: Arc::clone(&self.reliable_state),
                 presentation_style: Arc::clone(&self._presentation_style),
+                in_app_notification_batch: Arc::clone(&self.in_app_notification_batch),
                 latest: Mutex::new(None),
                 next_delivery_id: AtomicU64::new(1),
                 scheduled: AtomicBool::new(false),
@@ -811,6 +829,7 @@ impl DesktopShell {
             state: self.state_handle(),
             snapshot_epochs: Arc::clone(&self.snapshot_epochs),
             notification_epochs: Arc::clone(&self.notification_epochs),
+            in_app_notification_batch: Arc::clone(&self.in_app_notification_batch),
         }
     }
 }
@@ -1060,6 +1079,7 @@ fn wire_presentation_locale(
     presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
     state: SharedDesktopState,
     reliable_state: SharedReliableState,
+    in_app_notification_batch: SharedInAppNotificationBatch,
     intent_sink: Rc<dyn DesktopIntentSink>,
 ) {
     let weak_window = window.as_weak();
@@ -1072,7 +1092,12 @@ fn wire_presentation_locale(
         if let Some(window) = weak_window.upgrade()
             && apply_presentation_style(&window, next_style)
         {
-            reapply_localized_projection(&window, &state, &reliable_state);
+            reapply_localized_projection(
+                &window,
+                &state,
+                &reliable_state,
+                &in_app_notification_batch,
+            );
         }
     });
 }
@@ -1081,6 +1106,7 @@ fn reapply_localized_projection(
     window: &MainWindow,
     state: &SharedDesktopState,
     reliable_state: &SharedReliableState,
+    in_app_notification_batch: &SharedInAppNotificationBatch,
 ) {
     let projection = state.lock().ok().map(|state| state.projection().clone());
     let reliable_projection = reliable_state.lock().ok().map(|state| state.clone());
@@ -1091,6 +1117,16 @@ fn reapply_localized_projection(
     }
     if let Some(reliable_projection) = reliable_projection.as_ref() {
         apply_reliable_state_projection(window, reliable_projection);
+    }
+    if !window.get_in_app_notification_visible() {
+        return;
+    }
+    let batch = in_app_notification_batch
+        .lock()
+        .ok()
+        .and_then(|batch| batch.clone());
+    if let Some(batch) = batch.as_ref() {
+        let _ = apply_in_app_notification_batch(window, batch);
     }
 }
 
@@ -1346,13 +1382,19 @@ fn select_presentation_layout_if_admitted(
     Some(*current)
 }
 
-fn wire_in_app_notification_dismissal(window: &MainWindow) {
+fn wire_in_app_notification_dismissal(
+    window: &MainWindow,
+    in_app_notification_batch: SharedInAppNotificationBatch,
+) {
     let weak = window.as_weak();
     window.on_dismiss_in_app_notifications(move || {
         if let Some(window) = weak.upgrade() {
             window.set_in_app_notification_visible(false);
             window.set_in_app_notification_count_label(SharedString::default());
             window.set_in_app_notification_rows(model(Vec::new()));
+            if let Ok(mut batch) = in_app_notification_batch.lock() {
+                *batch = None;
+            }
         }
     });
 }
@@ -3426,32 +3468,55 @@ pub(crate) fn apply_in_app_notification_batch(
     window: &MainWindow,
     batch: &DesktopInAppNotificationBatch,
 ) -> bool {
+    let strings = window.global::<ProjectionStrings>();
     let rows = batch
         .rows()
         .iter()
         .map(|notification| {
-            let benefit_label = humanize_key(notification.label_key());
-            let kind_label = notification.kind().display_label();
+            let localized_benefit_label = strings
+                .invoke_in_app_notification_benefit_label(notification.label_key().into())
+                .to_string();
+            let benefit_label = if localized_benefit_label == notification.label_key() {
+                humanize_key(notification.label_key())
+            } else {
+                localized_benefit_label
+            };
+            let kind_label = strings
+                .invoke_in_app_notification_kind_label(notification.kind().stable_code().into())
+                .to_string();
             let quantity_label = format_integer(notification.quantity());
-            let lead_label = format!(
-                "Reminder due {} before expiry",
-                format_reminder_lead(notification.lead_seconds())
-            );
-            let due_label = format!(
-                "Due {}",
-                format_precise_timestamp_ms(notification.due_at_ms())
-            );
-            let expiry_label = format!(
-                "Expires {}",
-                format_precise_timestamp_ms(notification.expiry_at_ms())
-            );
-            let delivered_label = format!(
-                "Queued {}",
-                format_precise_timestamp_ms(notification.delivered_at_ms())
-            );
-            let accessible_label = format!(
-                "{benefit_label}. {kind_label}, quantity {quantity_label}. {lead_label}. {due_label}. {expiry_label}. {delivered_label}."
-            );
+            let lead_label = strings
+                .invoke_in_app_reminder_lead_label(
+                    format_reminder_lead(notification.lead_seconds()).into(),
+                )
+                .to_string();
+            let due_label = strings
+                .invoke_in_app_reminder_due_label(
+                    notification_precise_timestamp_ms(window, notification.due_at_ms()).into(),
+                )
+                .to_string();
+            let expiry_label = strings
+                .invoke_in_app_reminder_expiry_label(
+                    notification_precise_timestamp_ms(window, notification.expiry_at_ms()).into(),
+                )
+                .to_string();
+            let delivered_label = strings
+                .invoke_in_app_reminder_queued_label(
+                    notification_precise_timestamp_ms(window, notification.delivered_at_ms())
+                        .into(),
+                )
+                .to_string();
+            let accessible_label = strings
+                .invoke_in_app_reminder_accessible_label(
+                    benefit_label.clone().into(),
+                    kind_label.clone().into(),
+                    quantity_label.clone().into(),
+                    lead_label.clone().into(),
+                    due_label.clone().into(),
+                    expiry_label.clone().into(),
+                    delivered_label.clone().into(),
+                )
+                .to_string();
             InAppNotificationRow {
                 benefit_label: benefit_label.into(),
                 kind_label: kind_label.into(),
@@ -3464,11 +3529,12 @@ pub(crate) fn apply_in_app_notification_batch(
             }
         })
         .collect::<Vec<_>>();
-    let count_label = if batch.len() == 1 {
-        "1 expiry reminder".to_owned()
-    } else {
-        format!("{} expiry reminders", batch.len())
-    };
+    let count_label = strings
+        .invoke_in_app_notification_count(
+            format_integer(u64::try_from(batch.len()).unwrap_or(u64::MAX)).into(),
+            batch.len() == 1,
+        )
+        .to_string();
     window.set_in_app_notification_rows(model(rows));
     window.set_in_app_notification_count_label(count_label.into());
     window.set_in_app_notification_visible(true);
@@ -4168,6 +4234,7 @@ fn notification_timestamp_ms(window: &MainWindow, value: i64) -> String {
     )
 }
 
+#[cfg(test)]
 fn format_precise_timestamp_ms(value: i64) -> String {
     DateTime::<Utc>::from_timestamp_millis(value).map_or_else(
         || "at an unknown time".to_owned(),

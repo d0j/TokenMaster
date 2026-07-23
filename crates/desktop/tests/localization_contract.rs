@@ -584,6 +584,21 @@ const NOTIFICATIONS_PROJECTION_MSGIDS: [&str; 55] = [
     "OS scheduled unavailable",
 ];
 
+const IN_APP_NOTIFICATION_PROJECTION_MSGIDS: [&str; 12] = [
+    "{0} expiry reminder",
+    "{0} expiry reminders",
+    "Banked rate-limit reset",
+    "Usage credit",
+    "Temporary usage",
+    "Benefit",
+    "Banked Reset",
+    "Reminder due {0} before expiry",
+    "Due {0}",
+    "Expires {0}",
+    "Queued {0}",
+    "{0}. {1}, quantity {2}. {3}. {4}. {5}. {6}.",
+];
+
 const COMPONENT_RAW_LITERAL_ALLOWLIST: [&str; 11] = [
     "", " ", " · ", ", ", "ready", "degraded", "waiting", "●", "▲", "…", "×",
 ];
@@ -639,6 +654,7 @@ fn shell_component_and_settings_reminder_backup_catalogs_are_complete_and_preser
         .chain(PROJECTION_MSGIDS)
         .chain(ACTIVITY_PROJECTION_MSGIDS)
         .chain(NOTIFICATIONS_PROJECTION_MSGIDS)
+        .chain(IN_APP_NOTIFICATION_PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -696,6 +712,7 @@ fn projects_and_compact_widget_catalogs_are_complete_before_view_conversion() {
         .chain(PROJECTION_MSGIDS)
         .chain(ACTIVITY_PROJECTION_MSGIDS)
         .chain(NOTIFICATIONS_PROJECTION_MSGIDS)
+        .chain(IN_APP_NOTIFICATION_PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -731,8 +748,9 @@ fn sessions_and_dashboard_catalogs_are_complete_before_view_conversion() {
         .chain(PROJECTION_MSGIDS)
         .chain(ACTIVITY_PROJECTION_MSGIDS)
         .chain(NOTIFICATIONS_PROJECTION_MSGIDS)
+        .chain(IN_APP_NOTIFICATION_PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 500, "projection catalog exact inventory");
+    assert_eq!(expected.len(), 508, "projection catalog exact inventory");
 
     for locale in ["ru", "pseudo"] {
         let catalog = std::fs::read_to_string(
@@ -748,7 +766,7 @@ fn sessions_and_dashboard_catalogs_are_complete_before_view_conversion() {
             expected,
             "{locale} must translate exactly the closed Task 2b4 Sessions and Dashboard key set"
         );
-        assert_eq!(po_entry_count(&catalog), 500, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 508, "{locale} exact key count");
         for msgid in SESSIONS_DASHBOARD_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b4 catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -778,8 +796,9 @@ fn data_health_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(PROJECTION_MSGIDS)
         .chain(ACTIVITY_PROJECTION_MSGIDS)
         .chain(NOTIFICATIONS_PROJECTION_MSGIDS)
+        .chain(IN_APP_NOTIFICATION_PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 500, "projection catalog exact inventory");
+    assert_eq!(expected.len(), 508, "projection catalog exact inventory");
 
     let data_health = include_str!("../ui/views/data-health-view.slint");
     for msgid in DATA_HEALTH_MSGIDS {
@@ -803,7 +822,7 @@ fn data_health_catalog_and_source_use_the_closed_translation_key_set() {
             expected,
             "{locale} must translate exactly the closed Task 2b5a Data Health key set"
         );
-        assert_eq!(po_entry_count(&catalog), 500, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 508, "{locale} exact key count");
         for msgid in DATA_HEALTH_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b5a catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -829,8 +848,9 @@ fn help_about_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(PROJECTION_MSGIDS)
         .chain(ACTIVITY_PROJECTION_MSGIDS)
         .chain(NOTIFICATIONS_PROJECTION_MSGIDS)
+        .chain(IN_APP_NOTIFICATION_PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 500, "projection catalog exact inventory");
+    assert_eq!(expected.len(), 508, "projection catalog exact inventory");
 
     let help_about = include_str!("../ui/views/help-about-view.slint");
     for msgid in HELP_ABOUT_MSGIDS {
@@ -854,7 +874,7 @@ fn help_about_catalog_and_source_use_the_closed_translation_key_set() {
             expected,
             "{locale} must translate exactly the closed Task 2b5b Help/About key set"
         );
-        assert_eq!(po_entry_count(&catalog), 500, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 508, "{locale} exact key count");
         for msgid in HELP_ABOUT_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b5b catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -880,8 +900,9 @@ fn activity_and_models_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(PROJECTION_MSGIDS)
         .chain(ACTIVITY_PROJECTION_MSGIDS)
         .chain(NOTIFICATIONS_PROJECTION_MSGIDS)
+        .chain(IN_APP_NOTIFICATION_PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 500, "projection catalog exact inventory");
+    assert_eq!(expected.len(), 508, "projection catalog exact inventory");
 
     let activity = include_str!("../ui/views/activity-view.slint");
     let models = include_str!("../ui/views/models-view.slint");
@@ -903,7 +924,7 @@ fn activity_and_models_catalog_and_source_use_the_closed_translation_key_set() {
         .expect("bundled catalog");
         let entries = po_entries(&catalog);
         assert_eq!(entries.keys().copied().collect::<BTreeSet<_>>(), expected);
-        assert_eq!(po_entry_count(&catalog), 500, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 508, "{locale} exact key count");
         for msgid in ACTIVITY_MODELS_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b6 catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -942,8 +963,9 @@ fn history_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(PROJECTION_MSGIDS)
         .chain(ACTIVITY_PROJECTION_MSGIDS)
         .chain(NOTIFICATIONS_PROJECTION_MSGIDS)
+        .chain(IN_APP_NOTIFICATION_PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
-    assert_eq!(expected.len(), 500, "projection catalog exact inventory");
+    assert_eq!(expected.len(), 508, "projection catalog exact inventory");
 
     let history = include_str!("../ui/views/history-view.slint");
     for msgid in HISTORY_MSGIDS {
@@ -963,7 +985,7 @@ fn history_catalog_and_source_use_the_closed_translation_key_set() {
         .expect("bundled catalog");
         let entries = po_entries(&catalog);
         assert_eq!(entries.keys().copied().collect::<BTreeSet<_>>(), expected);
-        assert_eq!(po_entry_count(&catalog), 500, "{locale} exact key count");
+        assert_eq!(po_entry_count(&catalog), 508, "{locale} exact key count");
         for msgid in HISTORY_MSGIDS {
             let msgstr = entries.get(msgid).expect("Task 2b7a catalog completeness");
             assert!(!msgstr.is_empty(), "{locale} must translate {msgid:?}");
@@ -989,6 +1011,7 @@ fn notifications_catalog_and_source_use_the_closed_translation_key_set() {
         .chain(PROJECTION_MSGIDS)
         .chain(ACTIVITY_PROJECTION_MSGIDS)
         .chain(NOTIFICATIONS_PROJECTION_MSGIDS)
+        .chain(IN_APP_NOTIFICATION_PROJECTION_MSGIDS)
         .collect::<BTreeSet<_>>();
 
     let notifications = include_str!("../ui/views/notifications-view.slint");
@@ -1664,6 +1687,12 @@ fn shell_and_presentation_strip_use_only_the_closed_translation_key_set() {
         assert!(
             projection_strings.contains(&format!("@tr(\"{msgid}\"")),
             "missing Notifications ProjectionStrings @tr for {msgid:?}"
+        );
+    }
+    for msgid in IN_APP_NOTIFICATION_PROJECTION_MSGIDS {
+        assert!(
+            projection_strings.contains(&format!("@tr(\"{msgid}\"")),
+            "missing in-app notification ProjectionStrings @tr for {msgid:?}"
         );
     }
     for raw in [

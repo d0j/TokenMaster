@@ -1,6 +1,7 @@
 use std::{
+    rc::Rc,
     sync::{
-        Arc,
+        Arc, Mutex, Once,
         atomic::{AtomicU64, Ordering},
     },
     thread,
@@ -9,10 +10,26 @@ use std::{
 
 use slint::Model;
 use tokenmaster_desktop::{
-    DesktopInAppNotification, DesktopInAppNotificationBatch, DesktopNotificationKind,
-    DesktopNotificationPresentationReceipt, DesktopShell, MAX_DESKTOP_IN_APP_NOTIFICATIONS,
+    DesktopInAppNotification, DesktopInAppNotificationBatch, DesktopIntent, DesktopIntentAdmission,
+    DesktopIntentSink, DesktopNotificationKind, DesktopNotificationPresentationReceipt,
+    DesktopReliableStateProjection, DesktopShell, MAX_DESKTOP_IN_APP_NOTIFICATIONS,
 };
 use tokenmaster_product::ProductReducer;
+
+static LOCALE_SWITCH_LOCK: Mutex<()> = Mutex::new(());
+static PLATFORM_INIT: Once = Once::new();
+
+fn init_test_platform() {
+    PLATFORM_INIT.call_once(i_slint_backend_testing::init_integration_test_with_system_time);
+}
+
+struct AcceptingIntentSink;
+
+impl DesktopIntentSink for AcceptingIntentSink {
+    fn submit(&self, _intent: DesktopIntent) -> DesktopIntentAdmission {
+        DesktopIntentAdmission::Started
+    }
+}
 
 #[derive(Default)]
 struct RecordingReceipt {
@@ -41,11 +58,15 @@ impl DesktopNotificationPresentationReceipt for RecordingReceipt {
 }
 
 fn notification(index: usize) -> DesktopInAppNotification {
+    notification_with_label(index, "benefit.codex.banked_reset")
+}
+
+fn notification_with_label(index: usize, label_key: &str) -> DesktopInAppNotification {
     let offset = i64::try_from(index).expect("test index fits i64");
     DesktopInAppNotification::new(
         DesktopNotificationKind::BankedRateLimitReset,
         u64::try_from(index + 1).expect("test quantity fits u64"),
-        "benefit.codex.banked_reset",
+        label_key,
         86_400,
         1_800_000_000_000 + offset,
         1_800_086_400_000 + offset,
@@ -128,8 +149,14 @@ fn notification_values_fail_closed_at_exact_bounds() {
 
 #[test]
 fn real_event_loop_applies_every_row_before_presentation_receipt_and_dismisses() {
-    i_slint_backend_testing::init_integration_test_with_system_time();
-    let shell = DesktopShell::new(&ProductReducer::new().snapshot()).expect("desktop shell");
+    let _locale_guard = LOCALE_SWITCH_LOCK.lock().expect("locale switch lock");
+    init_test_platform();
+    let shell = DesktopShell::new_with_reliable_state(
+        &ProductReducer::new().snapshot(),
+        DesktopReliableStateProjection::unavailable(),
+        Rc::new(AcceptingIntentSink),
+    )
+    .expect("desktop shell");
     let stale_bridge = shell
         .bridge_factory()
         .in_app_notification_bridge()
@@ -145,9 +172,10 @@ fn real_event_loop_applies_every_row_before_presentation_receipt_and_dismisses()
         .in_app_notification_bridge()
         .expect("notification bridge");
     let receipt = Arc::new(RecordingReceipt::default());
-    let rows = (0..MAX_DESKTOP_IN_APP_NOTIFICATIONS)
+    let mut rows = (0..MAX_DESKTOP_IN_APP_NOTIFICATIONS)
         .map(notification)
         .collect::<Vec<_>>();
+    rows[1] = notification_with_label(1, "benefit.provider.custom_label");
     bridge
         .present(
             DesktopInAppNotificationBatch::new(rows).expect("maximum batch"),
@@ -211,8 +239,70 @@ fn real_event_loop_applies_every_row_before_presentation_receipt_and_dismisses()
     assert!(first.accessible_label.contains("Banked Reset"));
     assert!(first.accessible_label.contains("Banked rate-limit reset"));
     assert!(first.accessible_label.contains("Expires"));
+    assert_eq!(
+        shell
+            .window()
+            .get_in_app_notification_rows()
+            .row_data(1)
+            .expect("unknown label notification")
+            .benefit_label,
+        "Custom Label"
+    );
+    drop(bridge);
 
-    shell.window().invoke_dismiss_in_app_notifications();
-    assert!(!shell.window().get_in_app_notification_visible());
-    assert_eq!(shell.window().get_in_app_notification_rows().row_count(), 0);
+    let window = shell.window();
+    window.invoke_select_presentation_locale(1);
+    let russian = window
+        .get_in_app_notification_rows()
+        .row_data(0)
+        .expect("Russian visible notification");
+    assert_eq!(
+        window.get_in_app_notification_count_label(),
+        "Напоминание об истечении: 256"
+    );
+    assert_eq!(russian.benefit_label, "Сброшенный лимит");
+    assert_eq!(russian.kind_label, "Сброшенный лимит запросов");
+    assert!(
+        russian
+            .accessible_label
+            .contains("Напоминание за 24h до истечения")
+    );
+    assert_eq!(
+        window
+            .get_in_app_notification_rows()
+            .row_data(1)
+            .expect("unknown Russian label notification")
+            .benefit_label,
+        "Custom Label"
+    );
+    assert!(window.get_in_app_notification_visible());
+    assert_eq!(window.get_in_app_notification_rows().row_count(), 256);
+
+    window.invoke_select_presentation_locale(2);
+    let pseudo = window
+        .get_in_app_notification_rows()
+        .row_data(0)
+        .expect("pseudo visible notification");
+    assert_ne!(
+        window.get_in_app_notification_count_label(),
+        "256 expiry reminders"
+    );
+    assert_ne!(pseudo.kind_label, "Banked rate-limit reset");
+    assert_eq!(
+        window
+            .get_in_app_notification_rows()
+            .row_data(1)
+            .expect("unknown pseudo label notification")
+            .benefit_label,
+        "Custom Label"
+    );
+    assert_eq!(window.get_in_app_notification_rows().row_count(), 256);
+
+    window.invoke_dismiss_in_app_notifications();
+    assert!(!window.get_in_app_notification_visible());
+    assert_eq!(window.get_in_app_notification_rows().row_count(), 0);
+    window.invoke_select_presentation_locale(1);
+    assert!(!window.get_in_app_notification_visible());
+    assert_eq!(window.get_in_app_notification_rows().row_count(), 0);
+    window.invoke_select_presentation_locale(0);
 }

@@ -1,7 +1,7 @@
 use std::{
     fmt,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering},
     },
 };
@@ -147,6 +147,8 @@ impl fmt::Debug for DesktopInAppNotification {
 pub struct DesktopInAppNotificationBatch {
     rows: Box<[DesktopInAppNotification]>,
 }
+
+pub(crate) type SharedInAppNotificationBatch = Arc<Mutex<Option<DesktopInAppNotificationBatch>>>;
 
 impl DesktopInAppNotificationBatch {
     pub fn new(rows: Vec<DesktopInAppNotification>) -> Result<Self, DesktopNotificationError> {
@@ -449,6 +451,7 @@ struct SlintNotificationDelivery {
     epoch: u64,
     epochs: Arc<NotificationEpochState>,
     window: slint::Weak<MainWindow>,
+    latest_batch: SharedInAppNotificationBatch,
 }
 
 impl NotificationDelivery for SlintNotificationDelivery {
@@ -459,11 +462,14 @@ impl NotificationDelivery for SlintNotificationDelivery {
         let Some(window) = self.window.upgrade() else {
             return NotificationDeliveryOutcome::WindowClosed;
         };
-        if apply_in_app_notification_batch(&window, batch) {
-            NotificationDeliveryOutcome::Presented
-        } else {
-            NotificationDeliveryOutcome::StateUnavailable
+        let Ok(mut latest_batch) = self.latest_batch.lock() else {
+            return NotificationDeliveryOutcome::StateUnavailable;
+        };
+        if !apply_in_app_notification_batch(&window, batch) {
+            return NotificationDeliveryOutcome::StateUnavailable;
         }
+        *latest_batch = Some(batch.clone());
+        NotificationDeliveryOutcome::Presented
     }
 }
 
@@ -634,12 +640,14 @@ impl DesktopInAppNotificationBridge {
     pub(crate) fn new(
         epochs: Arc<NotificationEpochState>,
         window: slint::Weak<MainWindow>,
+        latest_batch: SharedInAppNotificationBatch,
     ) -> Result<Self, DesktopNotificationError> {
         let epoch = epochs.activate()?;
         let delivery = Arc::new(SlintNotificationDelivery {
             epoch,
             epochs: Arc::clone(&epochs),
             window,
+            latest_batch,
         });
         Ok(Self {
             epoch,

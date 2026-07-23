@@ -1288,3 +1288,27 @@ msgstr "Не найдено"
 
 msgid "Unavailable · {0}"
 msgstr "Недоступно · {0}"
+
+msgid "{0} expiry reminder"
+msgstr "Напоминание об истечении: {0}"
+
+msgid "{0} expiry reminders"
+msgstr "Напоминание об истечении: {0}"
+
+msgid "Banked rate-limit reset"
+msgstr "Сброшенный лимит запросов"
+
+msgid "Banked Reset"
+msgstr "Сброшенный лимит"
+
+msgid "Reminder due {0} before expiry"
+msgstr "Напоминание за {0} до истечения"
+
+msgid "Due {0}"
+msgstr "Срок {0}"
+
+msgid "Queued {0}"
+msgstr "В очереди {0}"
+
+msgid "{0}. {1}, quantity {2}. {3}. {4}. {5}. {6}."
+msgstr "{0}. {1}, количество {2}. {3}. {4}. {5}. {6}."

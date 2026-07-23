@@ -293,4 +293,27 @@ export global ProjectionStrings {
         if (code == "os_scheduled_unavailable") { return @tr("OS scheduled unavailable"); }
         return code;
     }
+
+    public pure function in-app-notification-count(count: string, singular: bool) -> string {
+        if (singular) { return @tr("{0} expiry reminder", count); }
+        return @tr("{0} expiry reminders", count);
+    }
+    public pure function in-app-notification-kind-label(code: string) -> string {
+        if (code == "banked_rate_limit_reset") { return @tr("Banked rate-limit reset"); }
+        if (code == "usage_credit") { return @tr("Usage credit"); }
+        if (code == "temporary_usage") { return @tr("Temporary usage"); }
+        if (code == "unknown") { return @tr("Benefit"); }
+        return code;
+    }
+    public pure function in-app-notification-benefit-label(key: string) -> string {
+        if (key == "benefit.codex.banked_reset") { return @tr("Banked Reset"); }
+        return key;
+    }
+    public pure function in-app-reminder-lead-label(value: string) -> string { return @tr("Reminder due {0} before expiry", value); }
+    public pure function in-app-reminder-due-label(value: string) -> string { return @tr("Due {0}", value); }
+    public pure function in-app-reminder-expiry-label(value: string) -> string { return @tr("Expires {0}", value); }
+    public pure function in-app-reminder-queued-label(value: string) -> string { return @tr("Queued {0}", value); }
+    public pure function in-app-reminder-accessible-label(benefit: string, kind: string, quantity: string, lead: string, due: string, expiry: string, queued: string) -> string {
+        return @tr("{0}. {1}, quantity {2}. {3}. {4}. {5}. {6}.", benefit, kind, quantity, lead, due, expiry, queued);
+    }
 }
