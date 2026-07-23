@@ -129,4 +129,29 @@ export global ProjectionStrings {
         if (complete) { return @tr("Complete"); }
         return @tr("Incomplete");
     }
+    public pure function activity-context-label() -> string { return @tr("UTC timestamps"); }
+    public pure function activity-loaded-label(count: string, singular: bool) -> string {
+        if (singular) { return @tr("{0} event loaded", count); }
+        return @tr("{0} events loaded", count);
+    }
+    public pure function activity-page-status-label(code: string) -> string {
+        if (code == "unavailable") { return @tr("Page status unavailable"); }
+        if (code == "more") { return @tr("More activity available"); }
+        if (code == "complete") { return @tr("First page complete"); }
+        return code;
+    }
+    public pure function activity-time-zone-label(value: string) -> string {
+        if (value == "") { return @tr("Time zone unavailable"); }
+        return value;
+    }
+    public pure function weekday-label(code: string) -> string {
+        if (code == "monday") { return @tr("Monday"); }
+        if (code == "tuesday") { return @tr("Tuesday"); }
+        if (code == "wednesday") { return @tr("Wednesday"); }
+        if (code == "thursday") { return @tr("Thursday"); }
+        if (code == "friday") { return @tr("Friday"); }
+        if (code == "saturday") { return @tr("Saturday"); }
+        if (code == "sunday") { return @tr("Sunday"); }
+        return code;
+    }
 }

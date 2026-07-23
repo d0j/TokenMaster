@@ -1042,3 +1042,45 @@ msgstr "［{0} řêþõšîţõřÿ ···］"
 
 msgid "{0} repositories"
 msgstr "［{0} řêþõšîţõřîêš ···］"
+
+msgid "{0} event loaded"
+msgstr "［{0} êṽêñţ ļõåðêð ···］"
+
+msgid "{0} events loaded"
+msgstr "［{0} êṽêñţš ļõåðêð ···］"
+
+msgid "First page complete"
+msgstr "［Fîřšţ þåğê çõɱþļêţê ···］"
+
+msgid "Friday"
+msgstr "［Fřîðåÿ ···］"
+
+msgid "Monday"
+msgstr "［Mõñðåÿ ···］"
+
+msgid "More activity available"
+msgstr "［Mõřê åçţîṽîţÿ åṽåîļåβļê ···］"
+
+msgid "Page status unavailable"
+msgstr "［Þåğê šţåţûš ûñåṽåîļåβļê ···］"
+
+msgid "Saturday"
+msgstr "［Šåţûřðåÿ ···］"
+
+msgid "Sunday"
+msgstr "［Šûñðåÿ ···］"
+
+msgid "Thursday"
+msgstr "［Ţĥûřšðåÿ ···］"
+
+msgid "Time zone unavailable"
+msgstr "［Ţîɱê žõñê ûñåṽåîļåβļê ···］"
+
+msgid "Tuesday"
+msgstr "［Ţûêšðåÿ ···］"
+
+msgid "UTC timestamps"
+msgstr "［ÛŢÇ ţîɱêšţåɱþš ···］"
+
+msgid "Wednesday"
+msgstr "［Ŵêðñêšðåÿ ···］"

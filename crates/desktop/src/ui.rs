@@ -3139,60 +3139,69 @@ fn format_project_reason(window: &MainWindow, reason: &str) -> String {
 fn apply_activity_route_projection(window: &MainWindow, activity: &DesktopActivityProjection) {
     window.set_activity_state(activity.state().stable_code().into());
     window.set_activity_reasons(join_reasons(activity.reason_codes().iter()).into());
-    window.set_activity_context_label("UTC timestamps".into());
+    window.set_activity_context_label(
+        window
+            .global::<ProjectionStrings>()
+            .invoke_activity_context_label(),
+    );
     window.set_activity_page_available(activity.has_more().is_some());
     window.set_activity_evidence_label(
-        format_evidence(activity.freshness(), activity.quality()).into(),
+        projection_evidence_label(window, activity.freshness(), activity.quality()).into(),
     );
     window.set_activity_loaded_label(
         activity
             .has_more()
             .map_or_else(
-                || "Unavailable".to_owned(),
+                || projection_unavailable(window),
                 |_| {
-                    format_counted(
-                        activity.rows().len() as u64,
-                        "event loaded",
-                        "events loaded",
-                    )
+                    window
+                        .global::<ProjectionStrings>()
+                        .invoke_activity_loaded_label(
+                            (activity.rows().len() as u64).to_string().into(),
+                            activity.rows().len() == 1,
+                        )
+                        .to_string()
                 },
             )
             .into(),
     );
     window.set_activity_page_status_label(
-        activity
-            .has_more()
-            .map_or("Page status unavailable", |has_more| {
-                if has_more {
-                    "More activity available"
-                } else {
-                    "First page complete"
-                }
-            })
-            .into(),
+        window
+            .global::<ProjectionStrings>()
+            .invoke_activity_page_status_label(
+                activity
+                    .has_more()
+                    .map_or(
+                        "unavailable",
+                        |has_more| if has_more { "more" } else { "complete" },
+                    )
+                    .into(),
+            ),
     );
     let rhythm = activity.rhythm();
     window.set_activity_rhythm_state(rhythm.state().stable_code().into());
     window.set_activity_rhythm_reasons(join_reasons(rhythm.reason_codes().iter()).into());
     window.set_activity_rhythm_evidence_label(
-        format_evidence(rhythm.freshness(), rhythm.quality()).into(),
+        projection_evidence_label(window, rhythm.freshness(), rhythm.quality()).into(),
     );
     window.set_activity_rhythm_time_zone_label(
-        rhythm
-            .time_zone_id()
-            .unwrap_or("Time zone unavailable")
-            .into(),
+        window
+            .global::<ProjectionStrings>()
+            .invoke_activity_time_zone_label(rhythm.time_zone_id().unwrap_or("").into()),
     );
     window.set_activity_rhythm_range_label(
         rhythm
             .range()
             .map_or_else(
-                || "Range unavailable".to_owned(),
+                || projection_range_unavailable(window),
                 |(start, end)| {
-                    format!(
-                        "{:04}-{:02}-{:02} – before {:04}-{:02}-{:02}",
-                        start.0, start.1, start.2, end.0, end.1, end.2
-                    )
+                    window
+                        .global::<ProjectionStrings>()
+                        .invoke_range_before(
+                            format!("{:04}-{:02}-{:02}", start.0, start.1, start.2).into(),
+                            format!("{:04}-{:02}-{:02}", end.0, end.1, end.2).into(),
+                        )
+                        .to_string()
                 },
             )
             .into(),
@@ -3219,7 +3228,9 @@ fn apply_activity_route_projection(window: &MainWindow, activity: &DesktopActivi
         .map(|row| ActivityRhythmRow {
             label: format!("{:02}", row.hour()).into(),
             tokens_label: format_tokens(row.total_tokens()).into(),
-            events_label: format_counted(row.event_count(), "event", "events").into(),
+            events_label: window
+                .global::<ProjectionStrings>()
+                .invoke_event_count(row.event_count().to_string().into(), row.event_count() == 1),
             exposure_label: format!("{}m/{}x", row.elapsed_minutes(), row.occurrence_count())
                 .into(),
             ratio: ratio(row.total_tokens(), hour_maximum),
@@ -3229,9 +3240,13 @@ fn apply_activity_route_projection(window: &MainWindow, activity: &DesktopActivi
         .weekday_rows()
         .iter()
         .map(|row| ActivityRhythmRow {
-            label: humanize_key(row.weekday().stable_code()).into(),
+            label: window
+                .global::<ProjectionStrings>()
+                .invoke_weekday_label(row.weekday().stable_code().into()),
             tokens_label: format_tokens(row.total_tokens()).into(),
-            events_label: format_counted(row.event_count(), "event", "events").into(),
+            events_label: window
+                .global::<ProjectionStrings>()
+                .invoke_event_count(row.event_count().to_string().into(), row.event_count() == 1),
             exposure_label: format!("{}m/{}x", row.elapsed_minutes(), row.occurrence_count())
                 .into(),
             ratio: ratio(row.total_tokens(), weekday_maximum),
@@ -4043,6 +4058,40 @@ fn format_evidence(freshness: Option<DesktopFreshness>, quality: Option<DesktopQ
         ),
         None => "Evidence unavailable".to_owned(),
     }
+}
+
+fn projection_evidence_label(
+    window: &MainWindow,
+    freshness: Option<DesktopFreshness>,
+    quality: Option<DesktopQuality>,
+) -> String {
+    let Some((freshness, quality)) = freshness.zip(quality) else {
+        return window
+            .global::<ProjectionStrings>()
+            .invoke_evidence_unavailable()
+            .to_string();
+    };
+    let freshness = match freshness {
+        DesktopFreshness::Fresh => "fresh",
+        DesktopFreshness::Aging => "aging",
+        DesktopFreshness::Stale => "stale",
+        DesktopFreshness::Unavailable => "unavailable",
+    };
+    let quality = match quality {
+        DesktopQuality::Authoritative => "authoritative",
+        DesktopQuality::Derived => "derived",
+        DesktopQuality::Estimated => "estimated",
+        DesktopQuality::Partial => "partial",
+        DesktopQuality::Conflict => "conflict",
+        DesktopQuality::Unknown => "unknown",
+    };
+    let strings = window.global::<ProjectionStrings>();
+    strings
+        .invoke_evidence_label(
+            strings.invoke_freshness_label(freshness.into()),
+            strings.invoke_quality_label(quality.into()),
+        )
+        .to_string()
 }
 
 const fn freshness_label(value: DesktopFreshness) -> &'static str {

@@ -1042,3 +1042,45 @@ msgstr "{0} репозиторий"
 
 msgid "{0} repositories"
 msgstr "Репозитории: {0}"
+
+msgid "{0} event loaded"
+msgstr "Загружено событие: {0}"
+
+msgid "{0} events loaded"
+msgstr "Загружено событий: {0}"
+
+msgid "First page complete"
+msgstr "Первая страница полная"
+
+msgid "Friday"
+msgstr "Пятница"
+
+msgid "Monday"
+msgstr "Понедельник"
+
+msgid "More activity available"
+msgstr "Доступна дополнительная активность"
+
+msgid "Page status unavailable"
+msgstr "Статус страницы недоступен"
+
+msgid "Saturday"
+msgstr "Суббота"
+
+msgid "Sunday"
+msgstr "Воскресенье"
+
+msgid "Thursday"
+msgstr "Четверг"
+
+msgid "Time zone unavailable"
+msgstr "Часовой пояс недоступен"
+
+msgid "Tuesday"
+msgstr "Вторник"
+
+msgid "UTC timestamps"
+msgstr "Метки времени UTC"
+
+msgid "Wednesday"
+msgstr "Среда"
