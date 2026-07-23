@@ -3284,79 +3284,102 @@ fn apply_notifications_projection(
     window.set_notifications_state(notifications.state().stable_code().into());
     window.set_notifications_reasons(join_reasons(notifications.reason_codes().iter()).into());
     window.set_notifications_evidence_label(
-        format_evidence(notifications.freshness(), notifications.quality()).into(),
+        projection_evidence_label(window, notifications.freshness(), notifications.quality())
+            .into(),
     );
     let state = notifications.state().stable_code();
+    let strings = window.global::<ProjectionStrings>();
     window.set_notifications_loaded_label(
-        if state == "waiting" {
-            "Waiting".to_owned()
-        } else if state == "unavailable" {
-            "Unavailable".to_owned()
+        if matches!(state, "waiting" | "unavailable") {
+            strings
+                .invoke_notifications_loaded_state_label(state.into())
+                .to_string()
         } else {
-            format!(
-                "{} · {}",
-                format_counted(
-                    notifications.scopes().len() as u64,
-                    "reminder profile",
-                    "reminder profiles",
-                ),
-                format_counted(
-                    notifications.lots().len() as u64,
-                    "current benefit",
-                    "current benefits",
-                ),
-            )
+            strings
+                .invoke_notifications_loaded_label(
+                    format_integer(notifications.scopes().len() as u64).into(),
+                    notifications.scopes().len() == 1,
+                    format_integer(notifications.lots().len() as u64).into(),
+                    notifications.lots().len() == 1,
+                )
+                .to_string()
         }
         .into(),
     );
+    let completeness = if state == "waiting" {
+        "waiting"
+    } else if state == "unavailable" {
+        "unavailable"
+    } else if notifications.scopes_truncated() || notifications.lots_truncated() {
+        "bounded"
+    } else if !notifications.reason_codes().is_empty() {
+        "warnings"
+    } else if notifications.lots().is_empty() {
+        "empty"
+    } else {
+        "complete"
+    };
     window.set_notifications_completeness_label(
-        if state == "waiting" {
-            "Waiting for benefit inventory"
-        } else if state == "unavailable" {
-            "Inventory unavailable"
-        } else if notifications.scopes_truncated() || notifications.lots_truncated() {
-            "Bounded inventory · more data omitted"
-        } else if !notifications.reason_codes().is_empty() {
-            "Current inventory · warnings present"
-        } else if notifications.lots().is_empty() {
-            "No current benefits"
-        } else {
-            "Current inventory complete"
-        }
-        .into(),
+        strings.invoke_notifications_completeness_label(completeness.into()),
     );
 
     let scope_rows = notifications
         .scopes()
         .iter()
         .map(|scope| ReminderScopeRow {
-            scope_label: format!("Scope {}", scope.ordinal()).into(),
-            lot_count_label: format_counted(
-                u64::from(scope.current_lot_count()),
-                "benefit",
-                "benefits",
-            )
-            .into(),
-            coverage_label: notification_coverage_label(scope.reminder_coverage()).into(),
-            source_label: humanize_code(scope.profile_source()).into(),
-            leads_label: format_reminder_leads(scope.lead_seconds()).into(),
+            scope_label: strings
+                .invoke_notification_scope_label(scope.ordinal().to_string().into()),
+            lot_count_label: strings.invoke_notification_benefit_count(
+                format_integer(u64::from(scope.current_lot_count())).into(),
+                scope.current_lot_count() == 1,
+            ),
+            coverage_label: strings
+                .invoke_notification_coverage_label(scope.reminder_coverage().into()),
+            source_label: strings
+                .invoke_notification_profile_source_label(scope.profile_source().into()),
+            leads_label: format_reminder_leads(window, scope.lead_seconds()).into(),
             next_due_label: scope
                 .nearest_due_at_ms()
                 .map_or_else(
-                    || "Next reminder unavailable".to_owned(),
-                    |value| format!("Next reminder {}", format_timestamp_ms(value)),
+                    || {
+                        strings
+                            .invoke_notification_next_due_unavailable()
+                            .to_string()
+                    },
+                    |value| {
+                        strings
+                            .invoke_notification_next_due_label(format_timestamp_ms(value).into())
+                            .to_string()
+                    },
                 )
                 .into(),
             nearest_expiry_label: scope
                 .nearest_expiry_at_ms()
                 .map_or_else(
-                    || "Nearest expiry unavailable".to_owned(),
-                    |value| format!("Nearest expiry {}", format_timestamp_ms(value)),
+                    || {
+                        strings
+                            .invoke_notification_nearest_expiry_unavailable()
+                            .to_string()
+                    },
+                    |value| {
+                        strings
+                            .invoke_notification_nearest_expiry_label(
+                                format_timestamp_ms(value).into(),
+                            )
+                            .to_string()
+                    },
                 )
                 .into(),
-            evidence_label: format_evidence(Some(scope.freshness()), Some(scope.quality())).into(),
-            warning_label: join_humanized_codes(scope.warning_codes().iter()).into(),
-            completeness_label: humanize_code(scope.completeness()).into(),
+            evidence_label: projection_evidence_label(
+                window,
+                Some(scope.freshness()),
+                Some(scope.quality()),
+            )
+            .into(),
+            warning_label: join_notification_warning_codes(window, scope.warning_codes().iter())
+                .into(),
+            completeness_label: strings
+                .invoke_notification_completeness_label(scope.completeness().into()),
         })
         .collect::<Vec<_>>();
     window.set_reminder_scope_rows(model(scope_rows));
@@ -3365,24 +3388,29 @@ fn apply_notifications_projection(
         .lots()
         .iter()
         .map(|lot| BenefitLotRow {
-            scope_label: format!("Scope {}", lot.scope_ordinal()).into(),
+            scope_label: strings
+                .invoke_notification_scope_label(lot.scope_ordinal().to_string().into()),
             benefit_label: humanize_key(lot.label_key()).into(),
-            kind_label: humanize_code(lot.kind()).into(),
+            kind_label: strings.invoke_notification_kind_label(lot.kind().into()),
             quantity_label: format_integer(lot.quantity()).into(),
-            state_label: humanize_code(lot.state()).into(),
-            expiry_label: format_benefit_expiry(lot.expiry(), lot.state()).into(),
+            state_label: strings.invoke_notification_state_label(lot.state().into()),
+            expiry_label: format_benefit_expiry(window, lot.expiry(), lot.state()).into(),
             granted_label: lot
                 .granted_at_ms()
                 .map_or_else(
-                    || "Grant time unavailable".to_owned(),
-                    |value| format!("Granted {}", format_timestamp_ms(value)),
+                    || strings.invoke_notification_grant_unavailable().to_string(),
+                    |value| {
+                        strings
+                            .invoke_notification_granted_label(format_timestamp_ms(value).into())
+                            .to_string()
+                    },
                 )
                 .into(),
             evidence_label: format!(
                 "{} · {} · {}",
-                humanize_code(lot.evidence_source()),
-                humanize_code(lot.confidence()),
-                humanize_code(lot.detail_kind()),
+                strings.invoke_notification_evidence_source_label(lot.evidence_source().into()),
+                strings.invoke_notification_confidence_label(lot.confidence().into()),
+                strings.invoke_notification_detail_kind_label(lot.detail_kind().into()),
             )
             .into(),
         })
@@ -3444,17 +3472,12 @@ pub(crate) fn apply_in_app_notification_batch(
         && window.get_in_app_notification_rows().row_count() == batch.len()
 }
 
-fn notification_coverage_label(value: &str) -> &'static str {
-    match value {
-        "in_app_only" => "In-app only",
-        "disabled" => "Disabled",
-        _ => "Unavailable",
-    }
-}
-
-fn format_reminder_leads(values: &[u32]) -> String {
+fn format_reminder_leads(window: &MainWindow, values: &[u32]) -> String {
     if values.is_empty() {
-        return "Disabled".to_owned();
+        return window
+            .global::<ProjectionStrings>()
+            .invoke_reminders_disabled()
+            .to_string();
     }
     values
         .iter()
@@ -3478,36 +3501,42 @@ fn format_reminder_lead(seconds: u32) -> String {
     }
 }
 
-fn join_humanized_codes<'a>(codes: impl Iterator<Item = &'a str>) -> String {
-    codes.map(humanize_code).collect::<Vec<_>>().join(" · ")
+fn join_notification_warning_codes<'a>(
+    window: &MainWindow,
+    codes: impl Iterator<Item = &'a str>,
+) -> String {
+    let strings = window.global::<ProjectionStrings>();
+    codes
+        .map(|code| {
+            strings
+                .invoke_notification_warning_label(code.into())
+                .to_string()
+        })
+        .collect::<Vec<_>>()
+        .join(" · ")
 }
 
-fn humanize_code(value: &str) -> String {
-    let mut result = value.replace(['_', '-'], " ");
-    if let Some(first) = result.get_mut(0..1) {
-        first.make_ascii_uppercase();
-    }
-    result
-}
-
-fn format_benefit_expiry(expiry: &DesktopBenefitExpiry, state: &str) -> String {
-    let prefix = if state == "expired" {
-        "Expired"
-    } else {
-        "Expires"
-    };
+fn format_benefit_expiry(
+    window: &MainWindow,
+    expiry: &DesktopBenefitExpiry,
+    state: &str,
+) -> String {
+    let strings = window.global::<ProjectionStrings>();
+    let expired = state == "expired";
     match expiry {
-        DesktopBenefitExpiry::ExactUtc { at_ms } => {
-            format!("{prefix} {}", format_precise_timestamp_ms(*at_ms))
-        }
+        DesktopBenefitExpiry::ExactUtc { at_ms } => strings
+            .invoke_notification_expiry_exact(format_precise_timestamp_ms(*at_ms).into(), expired)
+            .to_string(),
         DesktopBenefitExpiry::BoundedUtc {
             earliest_at_ms,
             latest_at_ms,
-        } => format!(
-            "{prefix} between {} and {}",
-            format_precise_timestamp_ms(*earliest_at_ms),
-            format_precise_timestamp_ms(*latest_at_ms),
-        ),
+        } => strings
+            .invoke_notification_expiry_between(
+                format_precise_timestamp_ms(*earliest_at_ms).into(),
+                format_precise_timestamp_ms(*latest_at_ms).into(),
+                expired,
+            )
+            .to_string(),
         DesktopBenefitExpiry::ProviderLocal {
             year,
             month,
@@ -3517,25 +3546,37 @@ fn format_benefit_expiry(expiry: &DesktopBenefitExpiry, state: &str) -> String {
             second,
             millisecond,
             time_zone,
-        } => format!(
-            "{prefix} {:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03} {} (provider local)",
-            year, month, day, hour, minute, second, millisecond, time_zone,
-        ),
+        } => strings
+            .invoke_notification_expiry_provider_local(
+                format!(
+                    "{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03} {}",
+                    year, month, day, hour, minute, second, millisecond, time_zone,
+                )
+                .into(),
+                expired,
+            )
+            .to_string(),
         DesktopBenefitExpiry::ProviderDate {
             year,
             month,
             day,
             time_zone,
-        } => format!(
-            "{prefix} {:04}-{:02}-{:02}{} (provider date)",
-            year,
-            month,
-            day,
-            time_zone
-                .as_deref()
-                .map_or_else(String::new, |zone| format!(" {zone}")),
-        ),
-        DesktopBenefitExpiry::Unknown => "Expiry unknown".to_owned(),
+        } => strings
+            .invoke_notification_expiry_provider_date(
+                format!(
+                    "{:04}-{:02}-{:02}{}",
+                    year,
+                    month,
+                    day,
+                    time_zone
+                        .as_deref()
+                        .map_or_else(String::new, |zone| format!(" {zone}")),
+                )
+                .into(),
+                expired,
+            )
+            .to_string(),
+        DesktopBenefitExpiry::Unknown => strings.invoke_notification_expiry_unknown().to_string(),
     }
 }
 
@@ -4170,12 +4211,12 @@ mod duration_tests {
 
     use super::{
         DesktopReliableStateProjection, DesktopShell, MainWindow, apply_presentation_style,
-        format_benefit_expiry, format_session_duration, format_timestamp_utc,
+        format_precise_timestamp_ms, format_session_duration, format_timestamp_utc,
         wire_presentation_density,
     };
     use crate::{
-        DesktopBackupPolicy, DesktopBenefitExpiry, DesktopColorScheme, DesktopDensity,
-        DesktopIntent, DesktopIntentAdmission, DesktopIntentSink, DesktopLayout, DesktopLocale,
+        DesktopBackupPolicy, DesktopColorScheme, DesktopDensity, DesktopIntent,
+        DesktopIntentAdmission, DesktopIntentSink, DesktopLayout, DesktopLocale,
         DesktopOperationKind, DesktopOperationPhase, DesktopOperationSnapshot,
         DesktopPresentationSelection, DesktopPresentationSettings, DesktopPresentationStyle,
         DesktopReliableStateHealth, DesktopReliableStateInput, DesktopReliableStateSummary,
@@ -4535,23 +4576,12 @@ mod duration_tests {
     #[test]
     fn notification_expiry_preserves_exact_millisecond_endpoints() {
         assert_eq!(
-            format_benefit_expiry(
-                &DesktopBenefitExpiry::ExactUtc {
-                    at_ms: 1_784_203_200_001,
-                },
-                "available",
-            ),
-            "Expires 2026-07-16 12:00:00.001 UTC"
+            format_precise_timestamp_ms(1_784_203_200_001),
+            "2026-07-16 12:00:00.001 UTC"
         );
         assert_eq!(
-            format_benefit_expiry(
-                &DesktopBenefitExpiry::BoundedUtc {
-                    earliest_at_ms: 1_784_203_200_001,
-                    latest_at_ms: 1_784_203_200_002,
-                },
-                "available",
-            ),
-            "Expires between 2026-07-16 12:00:00.001 UTC and 2026-07-16 12:00:00.002 UTC"
+            format_precise_timestamp_ms(1_784_203_200_002),
+            "2026-07-16 12:00:00.002 UTC"
         );
     }
 

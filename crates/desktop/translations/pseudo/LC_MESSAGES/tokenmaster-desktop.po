@@ -1070,6 +1070,171 @@ msgstr "［Šåţûřðåÿ ···］"
 msgid "Sunday"
 msgstr "［Šûñðåÿ ···］"
 
+msgid "Waiting"
+msgstr "［Ŵåîţîñĝ ···］"
+
+msgid "Inventory unavailable"
+msgstr "［Îñvêñţõřÿ ûñåvåîļåƀļê ···］"
+
+msgid "Bounded inventory · more data omitted"
+msgstr "［Ɓõûñðêð îñvêñţõřÿ · ɱõřê ðåţå õɱîţţêð ···］"
+
+msgid "Current inventory · warnings present"
+msgstr "［Çûřřêñţ îñvêñţõřÿ · ŵåřñîñĝš þřêšêñţ ···］"
+
+msgid "Current inventory complete"
+msgstr "［Çûřřêñţ îñvêñţõřÿ çõɱþļêţê ···］"
+
+msgid "{0} reminder profile · {1} current benefit"
+msgstr "［{0} řêɱîñðêř þřõƒîļê · {1} çûřřêñţ ƀêñêƒîţ ···］"
+
+msgid "{0} reminder profile · {1} current benefits"
+msgstr "［{0} řêɱîñðêř þřõƒîļê · {1} çûřřêñţ ƀêñêƒîţš ···］"
+
+msgid "{0} reminder profiles · {1} current benefit"
+msgstr "［{0} řêɱîñðêř þřõƒîļêš · {1} çûřřêñţ ƀêñêƒîţ ···］"
+
+msgid "{0} reminder profiles · {1} current benefits"
+msgstr "［{0} řêɱîñðêř þřõƒîļêš · {1} çûřřêñţ ƀêñêƒîţš ···］"
+
+msgid "Scope {0}"
+msgstr "［Šçõþê {0} ···］"
+
+msgid "{0} benefit"
+msgstr "［{0} ƀêñêƒîţ ···］"
+
+msgid "{0} benefits"
+msgstr "［{0} ƀêñêƒîţš ···］"
+
+msgid "In-app only"
+msgstr "［Îñ-åþþ õñļÿ ···］"
+
+msgid "Disabled"
+msgstr "［Ðîšåƀļêð ···］"
+
+msgid "Inherited"
+msgstr "［Îñĥêřîţêð ···］"
+
+msgid "Override"
+msgstr "［Õvêřřîðê ···］"
+
+msgid "Complete quantity, partial details"
+msgstr "［Çõɱþļêţê ǫûåñţîţÿ, þåřţîåļ ðêţåîļš ···］"
+
+msgid "Next reminder unavailable"
+msgstr "［Ñêxţ řêɱîñðêř ûñåvåîļåƀļê ···］"
+
+msgid "Next reminder {0}"
+msgstr "［Ñêxţ řêɱîñðêř {0} ···］"
+
+msgid "Nearest expiry unavailable"
+msgstr "［Ñêåřêšţ êxþîřÿ ûñåvåîļåƀļê ···］"
+
+msgid "Nearest expiry {0}"
+msgstr "［Ñêåřêšţ êxþîřÿ {0} ···］"
+
+msgid "Banked rate limit reset"
+msgstr "［Ɓåñķêð řåţê ļîɱîţ řêšêţ ···］"
+
+msgid "Usage credit"
+msgstr "［Ûšåĝê çřêðîţ ···］"
+
+msgid "Temporary usage"
+msgstr "［Ţêɱþõřåřÿ ûšåĝê ···］"
+
+msgid "Available"
+msgstr "［Åvåîļåƀļê ···］"
+
+msgid "Activation pending"
+msgstr "［Åçţîvåţîõñ þêñðîñĝ ···］"
+
+msgid "Activated"
+msgstr "［Åçţîvåţêð ···］"
+
+msgid "Expired"
+msgstr "［Êxþîřêð ···］"
+
+msgid "Revoked"
+msgstr "［Řêvõķêð ···］"
+
+msgid "Ambiguous"
+msgstr "［Åɱƀîĝûõûš ···］"
+
+msgid "Expired {0}"
+msgstr "［Êxþîřêð {0} ···］"
+
+msgid "Expired between {0} and {1}"
+msgstr "［Êxþîřêð ƀêţŵêêñ {0} åñð {1} ···］"
+
+msgid "Expires between {0} and {1}"
+msgstr "［Êxþîřêš ƀêţŵêêñ {0} åñð {1} ···］"
+
+msgid "Expired {0} (provider local)"
+msgstr "［Êxþîřêð {0} (þřõvîðêř ļõçåļ) ···］"
+
+msgid "Expires {0} (provider local)"
+msgstr "［Êxþîřêš {0} (þřõvîðêř ļõçåļ) ···］"
+
+msgid "Expired {0} (provider date)"
+msgstr "［Êxþîřêð {0} (þřõvîðêř ðåţê) ···］"
+
+msgid "Expires {0} (provider date)"
+msgstr "［Êxþîřêš {0} (þřõvîðêř ðåţê) ···］"
+
+msgid "Expiry unknown"
+msgstr "［Êxþîřÿ ûñķñõŵñ ···］"
+
+msgid "Granted {0}"
+msgstr "［Ĝřåñţêð {0} ···］"
+
+msgid "Grant time unavailable"
+msgstr "［Ĝřåñţ ţîɱê ûñåvåîļåƀļê ···］"
+
+msgid "Provider official"
+msgstr "［Þřõvîðêř õƒƒîçîåļ ···］"
+
+msgid "Provider local"
+msgstr "［Þřõvîðêř ļõçåļ ···］"
+
+msgid "Manual"
+msgstr "［Måñûåļ ···］"
+
+msgid "High"
+msgstr "［Ĥîĝĥ ···］"
+
+msgid "Medium"
+msgstr "［Mêðîûɱ ···］"
+
+msgid "Low"
+msgstr "［Ļõŵ ···］"
+
+msgid "Provider detail"
+msgstr "［Þřõvîðêř ðêţåîļ ···］"
+
+msgid "Provider aggregate"
+msgstr "［Þřõvîðêř åĝĝřêĝåţê ···］"
+
+msgid "Inventory absent"
+msgstr "［Îñvêñţõřÿ åƀšêñţ ···］"
+
+msgid "Partial inventory"
+msgstr "［Þåřţîåļ îñvêñţõřÿ ···］"
+
+msgid "Quantity partial details"
+msgstr "［Ǫûåñţîţÿ þåřţîåļ ðêţåîļš ···］"
+
+msgid "Unknown expiry"
+msgstr "［Ûñķñõŵñ êxþîřÿ ···］"
+
+msgid "Unknown evidence"
+msgstr "［Ûñķñõŵñ êvîðêñçê ···］"
+
+msgid "Clock discontinuity"
+msgstr "［Çļõçķ ðîšçõñţîñûîţÿ ···］"
+
+msgid "OS scheduled unavailable"
+msgstr "［ÕŠ šçĥêðûļêð ûñåvåîļåƀļê ···］"
+
 msgid "Thursday"
 msgstr "［Ţĥûřšðåÿ ···］"
 

@@ -1070,6 +1070,171 @@ msgstr "Суббота"
 msgid "Sunday"
 msgstr "Воскресенье"
 
+msgid "Waiting"
+msgstr "Ожидание"
+
+msgid "Inventory unavailable"
+msgstr "Инвентарь недоступен"
+
+msgid "Bounded inventory · more data omitted"
+msgstr "Ограниченный инвентарь · часть данных опущена"
+
+msgid "Current inventory · warnings present"
+msgstr "Текущий инвентарь · есть предупреждения"
+
+msgid "Current inventory complete"
+msgstr "Текущий инвентарь полный"
+
+msgid "{0} reminder profile · {1} current benefit"
+msgstr "Профиль напоминаний: {0} · Текущее преимущество: {1}"
+
+msgid "{0} reminder profile · {1} current benefits"
+msgstr "Профиль напоминаний: {0} · Текущих преимуществ: {1}"
+
+msgid "{0} reminder profiles · {1} current benefit"
+msgstr "Профилей напоминаний: {0} · Текущее преимущество: {1}"
+
+msgid "{0} reminder profiles · {1} current benefits"
+msgstr "Профилей напоминаний: {0} · Текущих преимуществ: {1}"
+
+msgid "Scope {0}"
+msgstr "Область {0}"
+
+msgid "{0} benefit"
+msgstr "Преимущество: {0}"
+
+msgid "{0} benefits"
+msgstr "Преимуществ: {0}"
+
+msgid "In-app only"
+msgstr "Только в приложении"
+
+msgid "Disabled"
+msgstr "Отключено"
+
+msgid "Inherited"
+msgstr "Унаследован"
+
+msgid "Override"
+msgstr "Переопределён"
+
+msgid "Complete quantity, partial details"
+msgstr "Полное количество, частичные детали"
+
+msgid "Next reminder unavailable"
+msgstr "Следующее напоминание недоступно"
+
+msgid "Next reminder {0}"
+msgstr "Следующее напоминание: {0}"
+
+msgid "Nearest expiry unavailable"
+msgstr "Ближайшее истечение недоступно"
+
+msgid "Nearest expiry {0}"
+msgstr "Ближайшее истечение: {0}"
+
+msgid "Banked rate limit reset"
+msgstr "Сброшенный лимит запросов"
+
+msgid "Usage credit"
+msgstr "Кредит использования"
+
+msgid "Temporary usage"
+msgstr "Временное использование"
+
+msgid "Available"
+msgstr "Доступно"
+
+msgid "Activation pending"
+msgstr "Ожидает активации"
+
+msgid "Activated"
+msgstr "Активировано"
+
+msgid "Expired"
+msgstr "Истёк"
+
+msgid "Revoked"
+msgstr "Отозвано"
+
+msgid "Ambiguous"
+msgstr "Неоднозначно"
+
+msgid "Expired {0}"
+msgstr "Истёк {0}"
+
+msgid "Expired between {0} and {1}"
+msgstr "Истёк между {0} и {1}"
+
+msgid "Expires between {0} and {1}"
+msgstr "Истекает между {0} и {1}"
+
+msgid "Expired {0} (provider local)"
+msgstr "Истёк {0} (локальное время поставщика)"
+
+msgid "Expires {0} (provider local)"
+msgstr "Истекает {0} (локальное время поставщика)"
+
+msgid "Expired {0} (provider date)"
+msgstr "Истёк {0} (дата поставщика)"
+
+msgid "Expires {0} (provider date)"
+msgstr "Истекает {0} (дата поставщика)"
+
+msgid "Expiry unknown"
+msgstr "Истечение неизвестно"
+
+msgid "Granted {0}"
+msgstr "Выдано {0}"
+
+msgid "Grant time unavailable"
+msgstr "Время выдачи недоступно"
+
+msgid "Provider official"
+msgstr "Официальный поставщик"
+
+msgid "Provider local"
+msgstr "Локальные данные поставщика"
+
+msgid "Manual"
+msgstr "Вручную"
+
+msgid "High"
+msgstr "Высокая"
+
+msgid "Medium"
+msgstr "Средняя"
+
+msgid "Low"
+msgstr "Низкая"
+
+msgid "Provider detail"
+msgstr "Подробность поставщика"
+
+msgid "Provider aggregate"
+msgstr "Сводка поставщика"
+
+msgid "Inventory absent"
+msgstr "Инвентарь отсутствует"
+
+msgid "Partial inventory"
+msgstr "Частичный инвентарь"
+
+msgid "Quantity partial details"
+msgstr "Количество с частичными деталями"
+
+msgid "Unknown expiry"
+msgstr "Неизвестное истечение"
+
+msgid "Unknown evidence"
+msgstr "Неизвестное подтверждение"
+
+msgid "Clock discontinuity"
+msgstr "Скачок часов"
+
+msgid "OS scheduled unavailable"
+msgstr "Планировщик ОС недоступен"
+
 msgid "Thursday"
 msgstr "Четверг"
 

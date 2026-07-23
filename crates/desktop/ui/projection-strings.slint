@@ -154,4 +154,117 @@ export global ProjectionStrings {
         if (code == "sunday") { return @tr("Sunday"); }
         return code;
     }
+
+    public pure function notifications-loaded-label(profile-count: string, one-profile: bool, benefit-count: string, one-benefit: bool) -> string {
+        if (one-profile) {
+            if (one-benefit) { return @tr("{0} reminder profile · {1} current benefit", profile-count, benefit-count); }
+            return @tr("{0} reminder profile · {1} current benefits", profile-count, benefit-count);
+        }
+        if (one-benefit) { return @tr("{0} reminder profiles · {1} current benefit", profile-count, benefit-count); }
+        return @tr("{0} reminder profiles · {1} current benefits", profile-count, benefit-count);
+    }
+    public pure function notifications-loaded-state-label(code: string) -> string {
+        if (code == "waiting") { return @tr("Waiting"); }
+        if (code == "unavailable") { return @tr("Unavailable"); }
+        return code;
+    }
+    public pure function notifications-completeness-label(code: string) -> string {
+        if (code == "waiting") { return @tr("Waiting for benefit inventory"); }
+        if (code == "unavailable") { return @tr("Inventory unavailable"); }
+        if (code == "bounded") { return @tr("Bounded inventory · more data omitted"); }
+        if (code == "warnings") { return @tr("Current inventory · warnings present"); }
+        if (code == "empty") { return @tr("No current benefits"); }
+        if (code == "complete") { return @tr("Current inventory complete"); }
+        return code;
+    }
+    public pure function notification-scope-label(ordinal: string) -> string { return @tr("Scope {0}", ordinal); }
+    public pure function notification-benefit-count(count: string, singular: bool) -> string {
+        if (singular) { return @tr("{0} benefit", count); }
+        return @tr("{0} benefits", count);
+    }
+    public pure function notification-coverage-label(code: string) -> string {
+        if (code == "in_app_only") { return @tr("In-app only"); }
+        if (code == "disabled") { return @tr("Disabled"); }
+        return code;
+    }
+    public pure function notification-profile-source-label(code: string) -> string {
+        if (code == "inherited") { return @tr("Inherited"); }
+        if (code == "override") { return @tr("Override"); }
+        return code;
+    }
+    public pure function notification-completeness-label(code: string) -> string {
+        if (code == "complete") { return @tr("Complete"); }
+        if (code == "complete_quantity_partial_details") { return @tr("Complete quantity, partial details"); }
+        if (code == "partial") { return @tr("Partial"); }
+        return code;
+    }
+    public pure function notification-next-due-label(value: string) -> string { return @tr("Next reminder {0}", value); }
+    public pure function notification-next-due-unavailable() -> string { return @tr("Next reminder unavailable"); }
+    public pure function notification-nearest-expiry-label(value: string) -> string { return @tr("Nearest expiry {0}", value); }
+    public pure function notification-nearest-expiry-unavailable() -> string { return @tr("Nearest expiry unavailable"); }
+    public pure function notification-kind-label(code: string) -> string {
+        if (code == "banked_rate_limit_reset") { return @tr("Banked rate limit reset"); }
+        if (code == "usage_credit") { return @tr("Usage credit"); }
+        if (code == "temporary_usage") { return @tr("Temporary usage"); }
+        if (code == "unknown") { return @tr("Unknown"); }
+        return code;
+    }
+    public pure function notification-state-label(code: string) -> string {
+        if (code == "available") { return @tr("Available"); }
+        if (code == "activation_pending") { return @tr("Activation pending"); }
+        if (code == "activated") { return @tr("Activated"); }
+        if (code == "expired") { return @tr("Expired"); }
+        if (code == "revoked") { return @tr("Revoked"); }
+        if (code == "ambiguous") { return @tr("Ambiguous"); }
+        return code;
+    }
+    public pure function notification-expiry-exact(value: string, expired: bool) -> string {
+        if (expired) { return @tr("Expired {0}", value); }
+        return @tr("Expires {0}", value);
+    }
+    public pure function notification-expiry-between(first: string, second: string, expired: bool) -> string {
+        if (expired) { return @tr("Expired between {0} and {1}", first, second); }
+        return @tr("Expires between {0} and {1}", first, second);
+    }
+    public pure function notification-expiry-provider-local(value: string, expired: bool) -> string {
+        if (expired) { return @tr("Expired {0} (provider local)", value); }
+        return @tr("Expires {0} (provider local)", value);
+    }
+    public pure function notification-expiry-provider-date(value: string, expired: bool) -> string {
+        if (expired) { return @tr("Expired {0} (provider date)", value); }
+        return @tr("Expires {0} (provider date)", value);
+    }
+    public pure function notification-expiry-unknown() -> string { return @tr("Expiry unknown"); }
+    public pure function notification-granted-label(value: string) -> string { return @tr("Granted {0}", value); }
+    public pure function notification-grant-unavailable() -> string { return @tr("Grant time unavailable"); }
+    public pure function notification-evidence-source-label(code: string) -> string {
+        if (code == "provider_official") { return @tr("Provider official"); }
+        if (code == "provider_local") { return @tr("Provider local"); }
+        if (code == "manual") { return @tr("Manual"); }
+        if (code == "unknown") { return @tr("Unknown"); }
+        return code;
+    }
+    public pure function notification-confidence-label(code: string) -> string {
+        if (code == "high") { return @tr("High"); }
+        if (code == "medium") { return @tr("Medium"); }
+        if (code == "low") { return @tr("Low"); }
+        if (code == "unknown") { return @tr("Unknown"); }
+        return code;
+    }
+    public pure function notification-detail-kind-label(code: string) -> string {
+        if (code == "provider_detail") { return @tr("Provider detail"); }
+        if (code == "provider_aggregate") { return @tr("Provider aggregate"); }
+        if (code == "manual") { return @tr("Manual"); }
+        return code;
+    }
+    public pure function notification-warning-label(code: string) -> string {
+        if (code == "inventory_absent") { return @tr("Inventory absent"); }
+        if (code == "partial_inventory") { return @tr("Partial inventory"); }
+        if (code == "quantity_partial_details") { return @tr("Quantity partial details"); }
+        if (code == "unknown_expiry") { return @tr("Unknown expiry"); }
+        if (code == "unknown_evidence") { return @tr("Unknown evidence"); }
+        if (code == "clock_discontinuity") { return @tr("Clock discontinuity"); }
+        if (code == "os_scheduled_unavailable") { return @tr("OS scheduled unavailable"); }
+        return code;
+    }
 }

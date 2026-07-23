@@ -441,6 +441,8 @@ fn populated_usage_projection_payloads_survive_hot_locale_switch() {
         .get_activity_rhythm_weekday_rows()
         .iter()
         .collect::<Vec<_>>();
+    let notification_scopes_before = window.get_reminder_scope_rows().iter().collect::<Vec<_>>();
+    let notification_lots_before = window.get_benefit_lot_rows().iter().collect::<Vec<_>>();
     let activity_state = window.get_activity_state();
     let activity_reasons = window.get_activity_reasons();
     assert!(!history_before.is_empty());
@@ -461,6 +463,8 @@ fn populated_usage_projection_payloads_survive_hot_locale_switch() {
         .get_activity_rhythm_weekday_rows()
         .iter()
         .collect::<Vec<_>>();
+    let notification_scopes_after = window.get_reminder_scope_rows().iter().collect::<Vec<_>>();
+    let notification_lots_after = window.get_benefit_lot_rows().iter().collect::<Vec<_>>();
     assert_eq!(history_after.len(), history_before.len());
     assert_eq!(models_after.len(), models_before.len());
     assert_eq!(projects_after.len(), projects_before.len());
@@ -544,6 +548,47 @@ fn populated_usage_projection_payloads_survive_hot_locale_switch() {
     );
     assert_eq!(weekday_after[0].label, "Понедельник");
     assert_eq!(weekday_after[0].events_label, "Событий: 0");
+    assert_eq!(
+        window.get_notifications_evidence_label(),
+        "Свежие · Авторитетные"
+    );
+    assert_eq!(
+        window.get_notifications_loaded_label(),
+        "Профиль напоминаний: 1 · Текущих преимуществ: 4"
+    );
+    assert_eq!(
+        window.get_notifications_completeness_label(),
+        "Текущий инвентарь · есть предупреждения"
+    );
+    assert_eq!(
+        notification_scopes_after.len(),
+        notification_scopes_before.len()
+    );
+    assert_eq!(
+        notification_lots_after.len(),
+        notification_lots_before.len()
+    );
+    assert_eq!(notification_scopes_after[0].scope_label, "Область 1");
+    assert_eq!(
+        notification_scopes_after[0].lot_count_label,
+        "Преимуществ: 4"
+    );
+    assert_eq!(
+        notification_scopes_after[0].coverage_label,
+        "Только в приложении"
+    );
+    assert_eq!(notification_scopes_after[0].source_label, "Унаследован");
+    assert_eq!(notification_scopes_after[0].completeness_label, "Полные");
+    assert_eq!(notification_lots_after[0].scope_label, "Область 1");
+    assert_eq!(
+        notification_lots_after[0].kind_label,
+        "Сброшенный лимит запросов"
+    );
+    assert_eq!(notification_lots_after[0].state_label, "Истёк");
+    assert_eq!(
+        notification_lots_after[0].evidence_label,
+        "Официальный поставщик · Высокая · Подробность поставщика"
+    );
     for (before, after) in activity_before.iter().zip(&activity_after) {
         assert_eq!(after.time_label, before.time_label);
         assert_eq!(after.model_label, before.model_label);
@@ -569,6 +614,45 @@ fn populated_usage_projection_payloads_survive_hot_locale_switch() {
         assert_eq!(after.exposure_label, before.exposure_label);
         assert_eq!(after.ratio, before.ratio);
     }
+    for (before, after) in notification_scopes_before
+        .iter()
+        .zip(&notification_scopes_after)
+    {
+        assert_eq!(after.leads_label, before.leads_label);
+    }
+    assert_eq!(
+        notification_scopes_after[0].warning_label,
+        "Неизвестное истечение"
+    );
+    for (before, after) in notification_lots_before
+        .iter()
+        .zip(&notification_lots_after)
+    {
+        assert_eq!(after.benefit_label, before.benefit_label);
+        assert_eq!(after.quantity_label, before.quantity_label);
+    }
+
+    window.invoke_select_presentation_locale(2);
+    assert_ne!(
+        window.get_notifications_loaded_label(),
+        "1 reminder profile · 4 current benefits"
+    );
+    assert_ne!(
+        window
+            .get_reminder_scope_rows()
+            .row_data(0)
+            .expect("scope")
+            .scope_label,
+        "Scope 1"
+    );
+    assert_ne!(
+        window
+            .get_benefit_lot_rows()
+            .row_data(0)
+            .expect("benefit lot")
+            .kind_label,
+        "Banked rate limit reset"
+    );
 
     window.invoke_select_presentation_locale(0);
 }
