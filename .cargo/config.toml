@@ -1,5 +1,8 @@
 [build]
 target = "x86_64-pc-windows-gnu"
 
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
 [env]
 SLINT_BACKEND = { value = "winit-software", force = false }
