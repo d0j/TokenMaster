@@ -22,6 +22,25 @@ Describe "TokenMaster product package contracts" {
 
         (Get-FileHash -LiteralPath $FirstZip -Algorithm SHA256).Hash |
             Should -Be (Get-FileHash -LiteralPath $SecondZip -Algorithm SHA256).Hash
+
+        Add-Type -AssemblyName System.IO.Compression
+        $Input = [IO.File]::OpenRead($FirstZip)
+        try {
+            $Archive = [IO.Compression.ZipArchive]::new(
+                $Input,
+                [IO.Compression.ZipArchiveMode]::Read
+            )
+            try {
+                Test-DeterministicZipTimestamp -Timestamp $Archive.Entries[0].LastWriteTime |
+                    Should -BeTrue
+            }
+            finally {
+                $Archive.Dispose()
+            }
+        }
+        finally {
+            $Input.Dispose()
+        }
     }
 
     It "writes a sorted SHA-256 manifest without a self-referential entry" {

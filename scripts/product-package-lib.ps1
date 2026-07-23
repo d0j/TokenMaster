@@ -18,6 +18,20 @@ function Write-Utf8NoBomFile {
     )
 }
 
+function Test-DeterministicZipTimestamp {
+    param(
+        [Parameter(Mandatory)]
+        [DateTimeOffset]$Timestamp
+    )
+
+    return $Timestamp.Year -eq 1980 -and
+        $Timestamp.Month -eq 1 -and
+        $Timestamp.Day -eq 1 -and
+        $Timestamp.Hour -eq 0 -and
+        $Timestamp.Minute -eq 0 -and
+        $Timestamp.Second -eq 0
+}
+
 function Get-ProductStageRelativeFiles {
     param(
         [Parameter(Mandatory)]

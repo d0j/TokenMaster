@@ -71,8 +71,8 @@ try {
                 if (-not $Seen.Add($Name)) {
                     throw "product ZIP contains duplicate entries"
                 }
-                if ($Entry.LastWriteTime.ToUniversalTime() -ne
-                    [DateTimeOffset]::new(1980, 1, 1, 0, 0, 0, [TimeSpan]::Zero)) {
+                if (-not (Test-DeterministicZipTimestamp `
+                    -Timestamp $Entry.LastWriteTime)) {
                     throw "product ZIP entry timestamp is not deterministic"
                 }
                 $Names.Add($Name)
