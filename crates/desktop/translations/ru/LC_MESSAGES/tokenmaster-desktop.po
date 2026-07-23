@@ -952,3 +952,93 @@ msgid "Unavailable"
 msgstr "Недоступно"
 msgid "Unknown"
 msgstr "Неизвестно"
+
+msgid "Range unavailable"
+msgstr "Диапазон недоступен"
+
+msgid "{0} – before {1}"
+msgstr "{0} – до {1}"
+
+msgid "{0} model loaded"
+msgstr "Загружена {0} модель"
+
+msgid "{0} models loaded"
+msgstr "Загружено {0} моделей"
+
+msgid "Completeness unavailable"
+msgstr "Полнота данных недоступна"
+
+msgid "More models available"
+msgstr "Доступны ещё модели"
+
+msgid "Complete range"
+msgstr "Полный диапазон"
+
+msgid "{0} project loaded"
+msgstr "Загружен {0} проект"
+
+msgid "{0} projects loaded"
+msgstr "Загружено {0} проектов"
+
+msgid "More projects available"
+msgstr "Доступны ещё проекты"
+
+msgid "Repositories unavailable"
+msgstr "Репозитории недоступны"
+
+msgid "{0} repository loaded"
+msgstr "Загружен {0} репозиторий"
+
+msgid "{0} repositories loaded"
+msgstr "Загружено {0} репозиториев"
+
+msgid "Code completeness unavailable"
+msgstr "Полнота кода недоступна"
+
+msgid "Incomplete code range"
+msgstr "Неполный диапазон кода"
+
+msgid "Complete code range"
+msgstr "Полный диапазон кода"
+
+msgid "Complete code"
+msgstr "Код полный"
+
+msgid "Incomplete code"
+msgstr "Код неполный"
+
+msgid "Code unavailable"
+msgstr "Код недоступен"
+
+msgid "Git unavailable"
+msgstr "Git недоступен"
+
+msgid "Not linked"
+msgstr "Не связано"
+
+msgid "Unassociated project"
+msgstr "Несвязанный проект"
+
+msgid "Known"
+msgstr "Известно"
+
+msgid "Zero"
+msgstr "Ноль"
+
+msgid "calculated"
+msgstr "рассчитано"
+
+msgid "reported"
+msgstr "сообщено"
+
+msgid "mixed"
+msgstr "смешано"
+
+msgid "{0} / 100 added product-code lines"
+msgstr "{0} / 100 добавленных строк кода продукта"
+
+msgid "{0} repository"
+msgstr "{0} репозиторий"
+
+msgid "{0} repositories"
+msgstr "{0} репозиториев"

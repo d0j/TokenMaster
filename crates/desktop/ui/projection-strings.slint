@@ -78,6 +78,53 @@ export global ProjectionStrings {
     public pure function reminder-state-unavailable() -> string { return @tr("Reminder state unavailable"); }
     public pure function efficiency-unavailable() -> string { return @tr("Efficiency unavailable"); }
     public pure function per-hundred-lines(value: string) -> string { return @tr("{0} / 100 lines", value); }
+    public pure function range-unavailable() -> string { return @tr("Range unavailable"); }
+    public pure function range-before(start: string, end: string) -> string { return @tr("{0} – before {1}", start, end); }
+    public pure function loaded-label(count: string, kind: string, singular: bool) -> string {
+        if (kind == "model") {
+            if (singular) { return @tr("{0} model loaded", count); }
+            return @tr("{0} models loaded", count);
+        }
+        if (kind == "project") {
+            if (singular) { return @tr("{0} project loaded", count); }
+            return @tr("{0} projects loaded", count);
+        }
+        if (kind == "repository") {
+            if (singular) { return @tr("{0} repository loaded", count); }
+            return @tr("{0} repositories loaded", count);
+        }
+        return count;
+    }
+    public pure function repository-label(count: string, singular: bool) -> string {
+        if (singular) { return @tr("{0} repository", count); }
+        return @tr("{0} repositories", count);
+    }
+    public pure function completeness-unavailable() -> string { return @tr("Completeness unavailable"); }
+    public pure function more-models-available() -> string { return @tr("More models available"); }
+    public pure function complete-range() -> string { return @tr("Complete range"); }
+    public pure function more-projects-available() -> string { return @tr("More projects available"); }
+    public pure function repositories-unavailable() -> string { return @tr("Repositories unavailable"); }
+    public pure function code-completeness-unavailable() -> string { return @tr("Code completeness unavailable"); }
+    public pure function incomplete-code-range() -> string { return @tr("Incomplete code range"); }
+    public pure function complete-code-range() -> string { return @tr("Complete code range"); }
+    public pure function complete-code() -> string { return @tr("Complete code"); }
+    public pure function incomplete-code() -> string { return @tr("Incomplete code"); }
+    public pure function code-unavailable() -> string { return @tr("Code unavailable"); }
+    public pure function git-unavailable() -> string { return @tr("Git unavailable"); }
+    public pure function not-linked() -> string { return @tr("Not linked"); }
+    public pure function unassociated-project() -> string { return @tr("Unassociated project"); }
+    public pure function value-availability-label(code: string) -> string {
+        if (code == "known") { return @tr("Known"); }
+        if (code == "zero") { return @tr("Zero"); }
+        return code;
+    }
+    public pure function cost-provenance-label(code: string) -> string {
+        if (code == "calculated") { return @tr("calculated"); }
+        if (code == "reported") { return @tr("reported"); }
+        if (code == "mixed") { return @tr("mixed"); }
+        return code;
+    }
+    public pure function per-hundred-added-product-code-lines(value: string) -> string { return @tr("{0} / 100 added product-code lines", value); }
     public pure function completeness(complete: bool) -> string {
         if (complete) { return @tr("Complete"); }
         return @tr("Incomplete");

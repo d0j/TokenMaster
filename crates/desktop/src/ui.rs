@@ -2469,6 +2469,186 @@ fn projection_per_hundred_lines(window: &MainWindow, value: String) -> String {
         .to_string()
 }
 
+fn projection_range_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_range_unavailable()
+        .to_string()
+}
+
+fn projection_range_before(window: &MainWindow, start: String, end: String) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_range_before(start.into(), end.into())
+        .to_string()
+}
+
+fn projection_optional_events(window: &MainWindow, value: Option<u64>) -> String {
+    value.map_or_else(
+        || "—".to_owned(),
+        |count| {
+            window
+                .global::<ProjectionStrings>()
+                .invoke_event_count(format_integer(count).into(), count == 1)
+                .to_string()
+        },
+    )
+}
+
+fn projection_loaded_label(window: &MainWindow, count: u64, kind: &str) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_loaded_label(format_integer(count).into(), kind.into(), count == 1)
+        .to_string()
+}
+
+fn projection_repository_label(window: &MainWindow, count: u64) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_repository_label(format_integer(count).into(), count == 1)
+        .to_string()
+}
+
+fn projection_completeness_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_completeness_unavailable()
+        .to_string()
+}
+
+fn projection_more_models_available(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_more_models_available()
+        .to_string()
+}
+
+fn projection_complete_range(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_complete_range()
+        .to_string()
+}
+
+fn projection_more_projects_available(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_more_projects_available()
+        .to_string()
+}
+
+fn projection_repositories_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_repositories_unavailable()
+        .to_string()
+}
+
+fn projection_code_completeness_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_code_completeness_unavailable()
+        .to_string()
+}
+
+fn projection_incomplete_code_range(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_incomplete_code_range()
+        .to_string()
+}
+
+fn projection_complete_code_range(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_complete_code_range()
+        .to_string()
+}
+
+fn projection_complete_code(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_complete_code()
+        .to_string()
+}
+
+fn projection_incomplete_code(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_incomplete_code()
+        .to_string()
+}
+
+fn projection_code_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_code_unavailable()
+        .to_string()
+}
+
+fn projection_git_unavailable(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_git_unavailable()
+        .to_string()
+}
+
+fn projection_not_linked(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_not_linked()
+        .to_string()
+}
+
+fn projection_unassociated_project(window: &MainWindow) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_unassociated_project()
+        .to_string()
+}
+
+fn projection_per_hundred_added_product_code_lines(window: &MainWindow, value: String) -> String {
+    window
+        .global::<ProjectionStrings>()
+        .invoke_per_hundred_added_product_code_lines(value.into())
+        .to_string()
+}
+
+fn projection_cost_evidence(window: &MainWindow, value: DesktopCostValue) -> String {
+    let availability = match value.availability() {
+        DesktopValueAvailability::Unavailable => projection_unavailable(window),
+        DesktopValueAvailability::Known => window
+            .global::<ProjectionStrings>()
+            .invoke_value_availability_label("known".into())
+            .to_string(),
+        DesktopValueAvailability::Partial => {
+            projection_quality_label(window, DesktopQuality::Partial)
+        }
+        DesktopValueAvailability::Complete => projection_completeness(window, true),
+        DesktopValueAvailability::LegitimateZero => window
+            .global::<ProjectionStrings>()
+            .invoke_value_availability_label("zero".into())
+            .to_string(),
+    };
+    let provenance = match value.composition() {
+        None | Some(DesktopCostComposition::None) => None,
+        Some(DesktopCostComposition::Calculated) => Some("calculated"),
+        Some(DesktopCostComposition::Reported) => Some("reported"),
+        Some(DesktopCostComposition::Mixed) => Some("mixed"),
+    };
+    provenance.map_or(availability.clone(), |code| {
+        window
+            .global::<ProjectionStrings>()
+            .invoke_evidence_label(
+                availability.into(),
+                window
+                    .global::<ProjectionStrings>()
+                    .invoke_cost_provenance_label(code.into()),
+            )
+            .to_string()
+    })
+}
+
 fn projection_completeness(window: &MainWindow, complete: bool) -> String {
     window
         .global::<ProjectionStrings>()
@@ -2603,17 +2783,23 @@ fn apply_history_snapshot_projection(window: &MainWindow, history: &DesktopHisto
     apply_history_range_state(window, history);
     window.set_history_state(history.state().stable_code().into());
     window.set_history_reasons(join_reasons(history.reason_codes().iter()).into());
-    window.set_history_range_label(format_history_range(history).into());
-    window.set_history_time_zone_label(history.time_zone_id().unwrap_or("Unavailable").into());
-    window
-        .set_history_evidence_label(format_evidence(history.freshness(), history.quality()).into());
+    window.set_history_range_label(format_history_range(window, history).into());
+    window.set_history_time_zone_label(
+        history
+            .time_zone_id()
+            .map_or_else(|| projection_unavailable(window), ToOwned::to_owned)
+            .into(),
+    );
+    window.set_history_evidence_label(
+        format_dashboard_evidence(window, history.freshness(), history.quality()).into(),
+    );
     window.set_history_input_tokens(format_tokens(history.input()).into());
     window.set_history_cached_tokens(format_tokens(history.cached()).into());
     window.set_history_output_tokens(format_tokens(history.output()).into());
     window.set_history_reasoning_tokens(format_tokens(history.reasoning()).into());
     window.set_history_total_tokens(format_tokens(history.total_tokens()).into());
     window.set_history_cost(format_cost(history.cost()).into());
-    window.set_history_events(format_optional_events(history.event_count()).into());
+    window.set_history_events(projection_optional_events(window, history.event_count()).into());
 
     let rows = history
         .rows()
@@ -2648,7 +2834,7 @@ fn apply_history_range_state(window: &MainWindow, history: &DesktopHistoryProjec
     window.set_history_range_pending(history.range_pending());
 }
 
-fn format_history_range(history: &DesktopHistoryProjection) -> String {
+fn format_history_range(window: &MainWindow, history: &DesktopHistoryProjection) -> String {
     if let (Some(oldest), Some(newest)) = (history.rows().last(), history.rows().first()) {
         let (start_year, start_month, start_day) = oldest.date();
         let (end_year, end_month, end_day) = newest.date();
@@ -2659,12 +2845,12 @@ fn format_history_range(history: &DesktopHistoryProjection) -> String {
         );
     }
     history.range().map_or_else(
-        || "Range unavailable".to_owned(),
+        || projection_range_unavailable(window),
         |(start, end)| {
-            format!(
-                "{} – before {}",
+            projection_range_before(
+                window,
                 format_date(start.0, start.1, start.2),
-                format_date(end.0, end.1, end.2)
+                format_date(end.0, end.1, end.2),
             )
         },
     )
@@ -2677,33 +2863,40 @@ fn format_date(year: i16, month: u8, day: u8) -> String {
 fn apply_models_projection(window: &MainWindow, models: &DesktopModelsProjection) {
     window.set_models_state(models.state().stable_code().into());
     window.set_models_reasons(join_reasons(models.reason_codes().iter()).into());
-    window.set_models_range_label(format_models_range(models).into());
-    window.set_models_time_zone_label(models.time_zone_id().unwrap_or("Unavailable").into());
-    window.set_models_evidence_label(format_evidence(models.freshness(), models.quality()).into());
+    window.set_models_range_label(format_models_range(window, models).into());
+    window.set_models_time_zone_label(
+        models
+            .time_zone_id()
+            .map_or_else(|| projection_unavailable(window), ToOwned::to_owned)
+            .into(),
+    );
+    window.set_models_evidence_label(
+        format_dashboard_evidence(window, models.freshness(), models.quality()).into(),
+    );
     window.set_models_total_tokens(format_tokens(models.total_tokens()).into());
     window.set_models_total_availability(
         availability_code(models.total_tokens().availability()).into(),
     );
     window.set_models_cost(format_cost(models.cost()).into());
     window.set_models_cost_availability(availability_code(models.cost().availability()).into());
-    window.set_models_cost_evidence_label(format_cost_evidence(models.cost()).into());
-    window.set_models_events(format_optional_events(models.event_count()).into());
+    window.set_models_cost_evidence_label(projection_cost_evidence(window, models.cost()).into());
+    window.set_models_events(projection_optional_events(window, models.event_count()).into());
     window.set_models_loaded_label(
         models
             .event_count()
             .map_or_else(
-                || "Unavailable".to_owned(),
-                |_| format_counted(models.rows().len() as u64, "model loaded", "models loaded"),
+                || projection_unavailable(window),
+                |_| projection_loaded_label(window, models.rows().len() as u64, "model"),
             )
             .into(),
     );
     window.set_models_completeness_label(
         if models.event_count().is_none() {
-            "Completeness unavailable"
+            projection_completeness_unavailable(window)
         } else if models.truncated() {
-            "More models available"
+            projection_more_models_available(window)
         } else {
-            "Complete range"
+            projection_complete_range(window)
         }
         .into(),
     );
@@ -2726,21 +2919,21 @@ fn apply_models_projection(window: &MainWindow, models: &DesktopModelsProjection
             total_label: format_tokens(row.total_tokens()).into(),
             cost_availability: availability_code(row.cost().availability()).into(),
             cost_label: format_cost(row.cost()).into(),
-            cost_evidence_label: format_cost_evidence(row.cost()).into(),
+            cost_evidence_label: projection_cost_evidence(window, row.cost()).into(),
             token_ratio: ratio(row.total_tokens().known_sum(), models.token_maximum()),
         })
         .collect::<Vec<_>>();
     window.set_model_usage_rows(model(rows));
 }
 
-fn format_models_range(models: &DesktopModelsProjection) -> String {
+fn format_models_range(window: &MainWindow, models: &DesktopModelsProjection) -> String {
     models.range().map_or_else(
-        || "Range unavailable".to_owned(),
+        || projection_range_unavailable(window),
         |(start, end)| {
-            format!(
-                "{} – before {}",
+            projection_range_before(
+                window,
                 format_date(start.0, start.1, start.2),
-                format_date(end.0, end.1, end.2)
+                format_date(end.0, end.1, end.2),
             )
         },
     )
@@ -2749,22 +2942,30 @@ fn format_models_range(models: &DesktopModelsProjection) -> String {
 fn apply_projects_projection(window: &MainWindow, projects: &DesktopProjectsProjection) {
     window.set_projects_state(projects.state().stable_code().into());
     window.set_projects_reasons(join_reasons(projects.reason_codes().iter()).into());
-    window.set_projects_usage_range_label(format_optional_range(projects.usage_range()).into());
+    window.set_projects_usage_range_label(
+        format_optional_range(window, projects.usage_range()).into(),
+    );
     window.set_projects_usage_time_zone_label(
         projects
             .usage_time_zone_id()
-            .unwrap_or("Unavailable")
+            .map_or_else(|| projection_unavailable(window), ToOwned::to_owned)
             .into(),
     );
     window.set_projects_usage_evidence_label(
-        format_evidence(projects.usage_freshness(), projects.usage_quality()).into(),
+        format_dashboard_evidence(window, projects.usage_freshness(), projects.usage_quality())
+            .into(),
     );
-    window.set_projects_code_range_label(format_optional_range(projects.code_range()).into());
+    window
+        .set_projects_code_range_label(format_optional_range(window, projects.code_range()).into());
     window.set_projects_code_time_zone_label(
-        projects.code_time_zone_id().unwrap_or("Unavailable").into(),
+        projects
+            .code_time_zone_id()
+            .map_or_else(|| projection_unavailable(window), ToOwned::to_owned)
+            .into(),
     );
     window.set_projects_code_evidence_label(
-        format_evidence(projects.code_freshness(), projects.code_quality()).into(),
+        format_dashboard_evidence(window, projects.code_freshness(), projects.code_quality())
+            .into(),
     );
     window.set_projects_total_tokens(format_tokens(projects.total_tokens()).into());
     window.set_projects_total_availability(
@@ -2772,30 +2973,25 @@ fn apply_projects_projection(window: &MainWindow, projects: &DesktopProjectsProj
     );
     window.set_projects_cost(format_cost(projects.cost()).into());
     window.set_projects_cost_availability(availability_code(projects.cost().availability()).into());
-    window.set_projects_cost_evidence_label(format_cost_evidence(projects.cost()).into());
-    window.set_projects_events(format_optional_events(projects.event_count()).into());
+    window
+        .set_projects_cost_evidence_label(projection_cost_evidence(window, projects.cost()).into());
+    window.set_projects_events(projection_optional_events(window, projects.event_count()).into());
     window.set_projects_loaded_label(
         projects
             .event_count()
             .map_or_else(
-                || "Unavailable".to_owned(),
-                |_| {
-                    format_counted(
-                        projects.rows().len() as u64,
-                        "project loaded",
-                        "projects loaded",
-                    )
-                },
+                || projection_unavailable(window),
+                |_| projection_loaded_label(window, projects.rows().len() as u64, "project"),
             )
             .into(),
     );
     window.set_projects_completeness_label(
         if projects.event_count().is_none() {
-            "Completeness unavailable"
+            projection_completeness_unavailable(window)
         } else if projects.usage_truncated() {
-            "More projects available"
+            projection_more_projects_available(window)
         } else {
-            "Complete range"
+            projection_complete_range(window)
         }
         .into(),
     );
@@ -2803,20 +2999,18 @@ fn apply_projects_projection(window: &MainWindow, projects: &DesktopProjectsProj
         projects
             .loaded_repository_count()
             .map_or_else(
-                || "Repositories unavailable".to_owned(),
-                |count| {
-                    format_counted(u64::from(count), "repository loaded", "repositories loaded")
-                },
+                || projection_repositories_unavailable(window),
+                |count| projection_loaded_label(window, u64::from(count), "repository"),
             )
             .into(),
     );
     window.set_projects_code_completeness_label(
         if projects.loaded_repository_count().is_none() {
-            "Code completeness unavailable"
+            projection_code_completeness_unavailable(window)
         } else if projects.code_truncated() || !projects.code_complete() {
-            "Incomplete code range"
+            projection_incomplete_code_range(window)
         } else {
-            "Complete code range"
+            projection_complete_code_range(window)
         }
         .into(),
     );
@@ -2840,12 +3034,12 @@ fn apply_projects_projection(window: &MainWindow, projects: &DesktopProjectsProj
             total_label: format_tokens(row.total_tokens()).into(),
             cost_availability: availability_code(row.cost().availability()).into(),
             cost_label: format_cost(row.cost()).into(),
-            cost_evidence_label: format_cost_evidence(row.cost()).into(),
+            cost_evidence_label: projection_cost_evidence(window, row.cost()).into(),
             token_ratio: ratio(row.total_tokens().known_sum(), projects.token_maximum()),
             code_available: row.code_available(),
             code_complete: row.code_complete(),
-            code_status_label: format_project_code_status(row).into(),
-            repository_label: format_project_repository_label(row).into(),
+            code_status_label: format_project_code_status(window, row).into(),
+            repository_label: format_project_repository_label(window, row).into(),
             commits_label: format_optional_integer(row.commits()).into(),
             added_label: format_optional_prefixed(row.added_lines(), "+").into(),
             removed_label: format_optional_prefixed(row.removed_lines(), "-").into(),
@@ -2858,31 +3052,36 @@ fn apply_projects_projection(window: &MainWindow, projects: &DesktopProjectsProj
                 .map_or_else(
                     || "—".to_owned(),
                     |value| {
-                        format!(
-                            "{} / 100 added product-code lines",
-                            format_usd_micros(value)
+                        projection_per_hundred_added_product_code_lines(
+                            window,
+                            format_usd_micros(value),
                         )
                     },
                 )
                 .into(),
             efficiency_reason_label: row
                 .efficiency_unavailable_reason()
-                .map_or_else(String::new, humanize_key)
+                .map_or_else(String::new, |reason| format_project_reason(window, reason))
                 .into(),
-            code_evidence_label: format_evidence(row.code_freshness(), row.code_quality()).into(),
+            code_evidence_label: format_dashboard_evidence(
+                window,
+                row.code_freshness(),
+                row.code_quality(),
+            )
+            .into(),
         })
         .collect::<Vec<_>>();
     window.set_project_usage_rows(model(rows));
 }
 
-fn format_optional_range(range: Option<crate::DesktopHistoryRange>) -> String {
+fn format_optional_range(window: &MainWindow, range: Option<crate::DesktopHistoryRange>) -> String {
     range.map_or_else(
-        || "Range unavailable".to_owned(),
+        || projection_range_unavailable(window),
         |(start, end)| {
-            format!(
-                "{} – before {}",
+            projection_range_before(
+                window,
                 format_date(start.0, start.1, start.2),
-                format_date(end.0, end.1, end.2)
+                format_date(end.0, end.1, end.2),
             )
         },
     )
@@ -2899,39 +3098,40 @@ fn format_optional_prefixed(value: Option<u64>, prefix: &str) -> String {
     )
 }
 
-fn format_project_code_status(row: &crate::DesktopProjectUsageRow) -> String {
+fn format_project_code_status(window: &MainWindow, row: &crate::DesktopProjectUsageRow) -> String {
     if row.code_available() {
         if row.code_complete() {
-            "Complete code".to_owned()
+            projection_complete_code(window)
         } else {
-            "Incomplete code".to_owned()
+            projection_incomplete_code(window)
         }
     } else {
-        row.efficiency_unavailable_reason()
-            .map_or_else(|| "Code unavailable".to_owned(), format_project_reason)
+        row.efficiency_unavailable_reason().map_or_else(
+            || projection_code_unavailable(window),
+            |reason| format_project_reason(window, reason),
+        )
     }
 }
 
-fn format_project_repository_label(row: &crate::DesktopProjectUsageRow) -> String {
+fn format_project_repository_label(
+    window: &MainWindow,
+    row: &crate::DesktopProjectUsageRow,
+) -> String {
     if row.code_available() {
-        format_counted(
-            u64::from(row.repository_count()),
-            "repository",
-            "repositories",
-        )
+        projection_repository_label(window, u64::from(row.repository_count()))
     } else {
         row.efficiency_unavailable_reason().map_or_else(
-            || "Repositories unavailable".to_owned(),
-            format_project_reason,
+            || projection_repositories_unavailable(window),
+            |reason| format_project_reason(window, reason),
         )
     }
 }
 
-fn format_project_reason(reason: &str) -> String {
+fn format_project_reason(window: &MainWindow, reason: &str) -> String {
     match reason {
-        "git_unavailable" => "Git unavailable".to_owned(),
-        "repository_not_linked" => "Not linked".to_owned(),
-        "unassociated_project" => "Unassociated project".to_owned(),
+        "git_unavailable" => projection_git_unavailable(window),
+        "repository_not_linked" => projection_not_linked(window),
+        "unassociated_project" => projection_unassociated_project(window),
         _ => humanize_key(reason),
     }
 }
@@ -3755,33 +3955,6 @@ fn format_cost(value: DesktopCostValue) -> String {
     value
         .micros()
         .map_or_else(|| "—".to_owned(), format_usd_micros)
-}
-
-fn format_cost_evidence(value: DesktopCostValue) -> String {
-    let availability = match value.availability() {
-        DesktopValueAvailability::Unavailable => "Unavailable",
-        DesktopValueAvailability::Known => "Known",
-        DesktopValueAvailability::Partial => "Partial",
-        DesktopValueAvailability::Complete => "Complete",
-        DesktopValueAvailability::LegitimateZero => "Zero",
-    };
-    let provenance = match value.composition() {
-        None | Some(DesktopCostComposition::None) => None,
-        Some(DesktopCostComposition::Calculated) => Some("calculated"),
-        Some(DesktopCostComposition::Reported) => Some("reported"),
-        Some(DesktopCostComposition::Mixed) => Some("mixed"),
-    };
-    provenance.map_or_else(
-        || availability.to_owned(),
-        |provenance| format!("{availability} · {provenance}"),
-    )
-}
-
-fn format_optional_events(value: Option<u64>) -> String {
-    value.map_or_else(
-        || "—".to_owned(),
-        |count| format_counted(count, "event", "events"),
-    )
 }
 
 fn format_counted(value: u64, singular: &str, plural: &str) -> String {

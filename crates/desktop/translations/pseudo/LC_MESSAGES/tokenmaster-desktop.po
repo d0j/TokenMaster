@@ -952,3 +952,93 @@ msgid "Unavailable"
 msgstr "［Ûñåṽåîļåβļê ···］"
 msgid "Unknown"
 msgstr "［Ûñķñõŵñ ···］"
+
+msgid "Range unavailable"
+msgstr "［Řåñğê ûñåṽåîļåβļê ···］"
+
+msgid "{0} – before {1}"
+msgstr "［{0} – βêƒõřê {1} ···］"
+
+msgid "{0} model loaded"
+msgstr "［{0} ɱõðêļ ļõåðêð ···］"
+
+msgid "{0} models loaded"
+msgstr "［{0} ɱõðêļš ļõåðêð ···］"
+
+msgid "Completeness unavailable"
+msgstr "［Çõɱþļêţêñêšš ûñåṽåîļåβļê ···］"
+
+msgid "More models available"
+msgstr "［Mõřê ɱõðêļš åṽåîļåβļê ···］"
+
+msgid "Complete range"
+msgstr "［Çõɱþļêţê řåñğê ···］"
+
+msgid "{0} project loaded"
+msgstr "［{0} þřõĵêçţ ļõåðêð ···］"
+
+msgid "{0} projects loaded"
+msgstr "［{0} þřõĵêçţš ļõåðêð ···］"
+
+msgid "More projects available"
+msgstr "［Mõřê þřõĵêçţš åṽåîļåβļê ···］"
+
+msgid "Repositories unavailable"
+msgstr "［Řêþõšîţõřîêš ûñåṽåîļåβļê ···］"
+
+msgid "{0} repository loaded"
+msgstr "［{0} řêþõšîţõřÿ ļõåðêð ···］"
+
+msgid "{0} repositories loaded"
+msgstr "［{0} řêþõšîţõřîêš ļõåðêð ···］"
+
+msgid "Code completeness unavailable"
+msgstr "［Çõðê çõɱþļêţêñêšš ûñåṽåîļåβļê ···］"
+
+msgid "Incomplete code range"
+msgstr "［Îñçõɱþļêţê çõðê řåñğê ···］"
+
+msgid "Complete code range"
+msgstr "［Çõɱþļêţê çõðê řåñğê ···］"
+
+msgid "Complete code"
+msgstr "［Çõɱþļêţê çõðê ···］"
+
+msgid "Incomplete code"
+msgstr "［Îñçõɱþļêţê çõðê ···］"
+
+msgid "Code unavailable"
+msgstr "［Çõðê ûñåṽåîļåβļê ···］"
+
+msgid "Git unavailable"
+msgstr "［Ĝîţ ûñåṽåîļåβļê ···］"
+
+msgid "Not linked"
+msgstr "［Ñõţ ļîñķêð ···］"
+
+msgid "Unassociated project"
+msgstr "［Ûñåššõçîåţêð þřõĵêçţ ···］"
+
+msgid "Known"
+msgstr "［Ķñõŵñ ···］"
+
+msgid "Zero"
+msgstr "［Žêřõ ···］"
+
+msgid "calculated"
+msgstr "［çåļçûļåţêð ···］"
+
+msgid "reported"
+msgstr "［řêþõřţêð ···］"
+
+msgid "mixed"
+msgstr "［ɱîxêð ···］"
+
+msgid "{0} / 100 added product-code lines"
+msgstr "［{0} / 100 åððêð þřõðûçţ-çõðê ļîñêš ···］"
+
+msgid "{0} repository"
+msgstr "［{0} řêþõšîţõřÿ ···］"
+
+msgid "{0} repositories"
+msgstr "［{0} řêþõšîţõřîêš ···］"
