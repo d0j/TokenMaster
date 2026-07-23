@@ -3348,7 +3348,9 @@ fn apply_notifications_projection(
                     },
                     |value| {
                         strings
-                            .invoke_notification_next_due_label(format_timestamp_ms(value).into())
+                            .invoke_notification_next_due_label(
+                                notification_timestamp_ms(window, value).into(),
+                            )
                             .to_string()
                     },
                 )
@@ -3364,7 +3366,7 @@ fn apply_notifications_projection(
                     |value| {
                         strings
                             .invoke_notification_nearest_expiry_label(
-                                format_timestamp_ms(value).into(),
+                                notification_timestamp_ms(window, value).into(),
                             )
                             .to_string()
                     },
@@ -3401,7 +3403,9 @@ fn apply_notifications_projection(
                     || strings.invoke_notification_grant_unavailable().to_string(),
                     |value| {
                         strings
-                            .invoke_notification_granted_label(format_timestamp_ms(value).into())
+                            .invoke_notification_granted_label(
+                                notification_timestamp_ms(window, value).into(),
+                            )
                             .to_string()
                     },
                 )
@@ -3525,15 +3529,18 @@ fn format_benefit_expiry(
     let expired = state == "expired";
     match expiry {
         DesktopBenefitExpiry::ExactUtc { at_ms } => strings
-            .invoke_notification_expiry_exact(format_precise_timestamp_ms(*at_ms).into(), expired)
+            .invoke_notification_expiry_exact(
+                notification_precise_timestamp_ms(window, *at_ms).into(),
+                expired,
+            )
             .to_string(),
         DesktopBenefitExpiry::BoundedUtc {
             earliest_at_ms,
             latest_at_ms,
         } => strings
             .invoke_notification_expiry_between(
-                format_precise_timestamp_ms(*earliest_at_ms).into(),
-                format_precise_timestamp_ms(*latest_at_ms).into(),
+                notification_precise_timestamp_ms(window, *earliest_at_ms).into(),
+                notification_precise_timestamp_ms(window, *latest_at_ms).into(),
                 expired,
             )
             .to_string(),
@@ -4164,9 +4171,23 @@ fn format_timestamp_ms(value: i64) -> String {
     )
 }
 
+fn notification_timestamp_ms(window: &MainWindow, value: i64) -> String {
+    DateTime::<Utc>::from_timestamp_millis(value).map_or_else(
+        || projection_time_unavailable(window),
+        |value| value.format("%Y-%m-%d %H:%M UTC").to_string(),
+    )
+}
+
 fn format_precise_timestamp_ms(value: i64) -> String {
     DateTime::<Utc>::from_timestamp_millis(value).map_or_else(
         || "at an unknown time".to_owned(),
+        |value| value.format("%Y-%m-%d %H:%M:%S%.3f UTC").to_string(),
+    )
+}
+
+fn notification_precise_timestamp_ms(window: &MainWindow, value: i64) -> String {
+    DateTime::<Utc>::from_timestamp_millis(value).map_or_else(
+        || projection_time_unavailable(window),
         |value| value.format("%Y-%m-%d %H:%M:%S%.3f UTC").to_string(),
     )
 }
@@ -4212,7 +4233,7 @@ mod duration_tests {
     use super::{
         DesktopReliableStateProjection, DesktopShell, MainWindow, apply_presentation_style,
         format_precise_timestamp_ms, format_session_duration, format_timestamp_utc,
-        wire_presentation_density,
+        notification_timestamp_ms, wire_presentation_density,
     };
     use crate::{
         DesktopBackupPolicy, DesktopColorScheme, DesktopDensity, DesktopIntent,
@@ -4583,6 +4604,40 @@ mod duration_tests {
             format_precise_timestamp_ms(1_784_203_200_002),
             "2026-07-16 12:00:00.002 UTC"
         );
+    }
+
+    #[test]
+    fn notification_timestamp_uses_the_localizable_unavailable_atom_for_out_of_range_values()
+    -> Result<(), String> {
+        i_slint_backend_testing::init_no_event_loop();
+        let shell = DesktopShell::new_with_reliable_state(
+            &ProductReducer::new().snapshot(),
+            reliable_state_with_presentation_and_operation(
+                DesktopDensity::Comfortable,
+                DesktopSkin::Refined,
+                None,
+            ),
+            Rc::new(AcceptingPresentationSink),
+        )
+        .map_err(|_| String::from("desktop shell"))?;
+        let window = shell.window();
+
+        assert_eq!(
+            notification_timestamp_ms(window, i64::MAX),
+            "Time unavailable"
+        );
+        window.invoke_select_presentation_locale(1);
+        assert_eq!(
+            notification_timestamp_ms(window, i64::MAX),
+            "Время недоступно"
+        );
+        window.invoke_select_presentation_locale(2);
+        assert_ne!(
+            notification_timestamp_ms(window, i64::MAX),
+            "at an unknown time"
+        );
+        window.invoke_select_presentation_locale(0);
+        Ok(())
     }
 
     #[test]

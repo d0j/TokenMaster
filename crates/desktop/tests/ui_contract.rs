@@ -119,6 +119,13 @@ fn ready_reducer(path: &std::path::Path, additional_quota_windows: u8) -> Produc
     ready_reducer_with_usage(path, additional_quota_windows, 0)
 }
 
+fn timestamp_payload(label: &str) -> &str {
+    let start = label
+        .find(|character: char| character.is_ascii_digit())
+        .expect("timestamp payload");
+    &label[start..]
+}
+
 fn ready_reducer_with_usage(
     path: &std::path::Path,
     additional_quota_windows: u8,
@@ -445,6 +452,8 @@ fn populated_usage_projection_payloads_survive_hot_locale_switch() {
     let notification_lots_before = window.get_benefit_lot_rows().iter().collect::<Vec<_>>();
     let activity_state = window.get_activity_state();
     let activity_reasons = window.get_activity_reasons();
+    let notifications_state = window.get_notifications_state();
+    let notifications_reasons = window.get_notifications_reasons();
     assert!(!history_before.is_empty());
     assert!(!models_before.is_empty());
     assert!(!projects_before.is_empty());
@@ -529,6 +538,8 @@ fn populated_usage_projection_payloads_survive_hot_locale_switch() {
     }
     assert_eq!(window.get_activity_state(), activity_state);
     assert_eq!(window.get_activity_reasons(), activity_reasons);
+    assert_eq!(window.get_notifications_state(), notifications_state);
+    assert_eq!(window.get_notifications_reasons(), notifications_reasons);
     assert_eq!(activity_after.len(), activity_before.len());
     assert_eq!(hour_after.len(), hour_before.len());
     assert_eq!(weekday_after.len(), weekday_before.len());
@@ -619,6 +630,14 @@ fn populated_usage_projection_payloads_survive_hot_locale_switch() {
         .zip(&notification_scopes_after)
     {
         assert_eq!(after.leads_label, before.leads_label);
+        assert_eq!(
+            timestamp_payload(&after.next_due_label),
+            timestamp_payload(&before.next_due_label)
+        );
+        assert_eq!(
+            timestamp_payload(&after.nearest_expiry_label),
+            timestamp_payload(&before.nearest_expiry_label)
+        );
     }
     assert_eq!(
         notification_scopes_after[0].warning_label,
@@ -630,6 +649,16 @@ fn populated_usage_projection_payloads_survive_hot_locale_switch() {
     {
         assert_eq!(after.benefit_label, before.benefit_label);
         assert_eq!(after.quantity_label, before.quantity_label);
+        if before.expiry_label.contains(" UTC") {
+            assert_eq!(
+                timestamp_payload(&after.expiry_label),
+                timestamp_payload(&before.expiry_label)
+            );
+        }
+        assert_eq!(
+            timestamp_payload(&after.granted_label),
+            timestamp_payload(&before.granted_label)
+        );
     }
 
     window.invoke_select_presentation_locale(2);
