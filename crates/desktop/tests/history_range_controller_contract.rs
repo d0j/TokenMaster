@@ -124,6 +124,45 @@ impl DesktopQuerySource for UnavailableSource {
     }
 }
 
+struct WorkerReleaseGuard {
+    sender: Option<SyncSender<()>>,
+}
+
+impl WorkerReleaseGuard {
+    fn new(sender: SyncSender<()>) -> Self {
+        Self {
+            sender: Some(sender),
+        }
+    }
+
+    fn release(&mut self) {
+        self.sender
+            .take()
+            .expect("worker release sender")
+            .send(())
+            .expect("release worker");
+    }
+}
+
+impl Drop for WorkerReleaseGuard {
+    fn drop(&mut self) {
+        if let Some(sender) = self.sender.take() {
+            let _ = sender.send(());
+        }
+    }
+}
+
+#[test]
+fn worker_release_guard_releases_on_drop() {
+    let (sender, receiver) = sync_channel(1);
+    {
+        let _release = WorkerReleaseGuard::new(sender);
+    }
+    receiver
+        .recv_timeout(Duration::from_secs(2))
+        .expect("drop releases worker");
+}
+
 struct BlockingDetailSource {
     inner: QueryService<FixedClock>,
     entered: Option<SyncSender<()>>,
@@ -555,30 +594,66 @@ fn history_range_admission_rejects_stale_same_and_non_newer_intents() {
 
 #[test]
 fn range_and_sessions_admissions_are_mutually_exclusive_without_displacement() {
-    let (mut controller, epoch, generation) = ready_controller();
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("history-range-blocks-page.sqlite3");
+    seed(&path);
+    let range_armed = Arc::new(AtomicBool::new(false));
+    let (entered_sender, entered_receiver) = sync_channel(1);
+    let (release_sender, release_receiver) = sync_channel(1);
+    let epoch = DesktopSnapshotEpoch::new(1).expect("epoch");
+    let mut controller = DesktopController::spawn(
+        BlockingDetailSource {
+            inner: QueryService::open(&path, FixedClock).expect("query service"),
+            entered: None,
+            release: None,
+            range_armed: Arc::clone(&range_armed),
+            range_entered: Some(entered_sender),
+            range_release: Some(release_receiver),
+            drift_armed: Arc::new(AtomicBool::new(false)),
+            drift: None,
+            range_failure: Arc::new(AtomicBool::new(false)),
+        },
+        DesktopQueryPlan::overview().expect("plan"),
+    )
+    .expect("controller");
+    let mut range_release = WorkerReleaseGuard::new(release_sender);
+    controller.bind_snapshot_epoch(epoch).expect("bind epoch");
+    controller
+        .refresh(DesktopRefreshUrgency::Interactive)
+        .expect("initial refresh");
+    let _ = wait_for_completion(&controller);
+    let initial = controller
+        .take_snapshot()
+        .expect("mailbox")
+        .expect("initial snapshot");
+
+    range_armed.store(true, Ordering::Release);
     let range = DesktopHistoryRangeIntent::new(
         epoch,
-        generation,
+        initial.generation(),
         DesktopHistoryRangeGeneration::new(1).expect("generation"),
         DesktopHistoryRangePreset::Recent1Day,
     );
     controller
         .request_history_range(range)
         .expect("range admission");
+    entered_receiver
+        .recv_timeout(Duration::from_secs(2))
+        .expect("range query entered");
     let page = DesktopSessionPageIntent::new(
         epoch,
-        generation,
+        initial.generation(),
         DesktopSessionNavigationGeneration::new(1).expect("generation"),
         DesktopSessionPageDirection::Newest,
     );
+    let page_result = controller.request_session_page(page);
+    range_release.release();
+    let _ = wait_for_completion(&controller);
+    controller.shutdown().expect("shutdown");
     assert_eq!(
-        controller
-            .request_session_page(page)
-            .expect_err("range blocks page")
-            .stable_code(),
+        page_result.expect_err("range blocks page").stable_code(),
         "busy"
     );
-    controller.shutdown().expect("shutdown");
 
     let (mut controller, epoch, generation) = ready_controller();
     let selection = ProductSessionDetailSelection::new(

@@ -1,5 +1,36 @@
 # TokenMaster handoff
 
+## History range remote M0 contract stabilization (2026-07-23)
+
+Product state: unchanged. This is a test-only repair of M0 acceptance evidence; it does
+not alter controller arbitration, UI, data, providers, package content, signing, or
+release claims.
+
+Audit/evidence state: the earlier remote M0 run exposed a fixture race in the
+range/session mutual-exclusion contract. The instant-failing source could publish a
+new generation and clear an accepted range before page admission, so the old page
+intent correctly returned `stale_navigation` instead of the intended active-range
+`busy`. The controller already orders `busy` before product-generation validation. The
+test now holds the existing bounded range source at a rendezvous, observes page
+admission, then releases and drains it. One scoped Sol High review found a genuine
+failure-path CI risk: a panic before release could block worker Drop indefinitely. A
+test-only RAII sender declared after the controller now releases the worker during
+unwind; the page result is asserted only after release, completion drain, and shutdown.
+Root evidence: focused 1/1, complete History range contract 14/14, format, and diff
+check pass. This is required acceptance evidence, not audit-only hardening.
+
+Release blockers: obtain exactly one serial local M0 receipt and one successor remote
+M0 run for the clean committed slice. Then the existing blockers remain: public-download
+Slint attribution, trusted remote attestation verification, signing, authenticated
+clean-room/P3-E/P4 Windows evidence, exact MSVC comparison, and soak. Per operator
+direction, do not start the 24-hour M0 soak until explicitly requested.
+
+Git state: commit this test/docs slice intentionally. Then regenerate the ignored M0,
+producer, and secret-scan receipts for that exact clean HEAD, push, and observe one
+remote M0 run. Do not start another reviewer or P4/audit-hardening contour unless a
+focused reproducer demonstrates a product, security, data-loss, or required-receipt
+defect.
+
 ## M0 receipt stabilization (2026-07-23)
 
 Product state: unchanged. The slice corrects a desktop integration test, resource

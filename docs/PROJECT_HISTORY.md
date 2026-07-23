@@ -4192,3 +4192,24 @@ The corrected full receipt passes 242/242 Desktop and 105/105 application mutati
 clean-root 4.675 seconds, formatting 1.928 seconds, strict workspace Clippy 36.025
 seconds, and the complete locked workspace test/doctest suite. No release acceptance is
 inferred.
+
+## 2026-07-23 — History range M0 contract stabilization
+
+A remote Windows M0 receipt exposed a test race, not a controller behavior regression.
+The range/session mutual-exclusion test used an immediate failing source, so the worker
+could publish a new product generation and clear the active range before the original
+page intent was admitted. The controller then correctly returned `stale_navigation`;
+the intended `busy` assertion was only valid while the range remained active.
+
+The test now uses the existing bounded query fixture: it waits until the range worker
+has entered the query, submits the page intent, then releases and drains the worker.
+One scoped independent review found that a failure before release could make controller
+Drop join the held worker forever. A test-only RAII release owner is declared after the
+controller, releases during unwind, and the admission result is checked only after
+release, terminal drain, and shutdown. No production controller, UI, provider, data,
+package, or audit rule changed.
+
+The corrected focused contract passes 1/1 and the complete History range target passes
+14/14 with formatting and diff checks clean. One exact-clean local M0 receipt and one
+replacement remote M0 receipt remain required; this historical entry does not claim
+M0, package, release-candidate, or stable-release acceptance.

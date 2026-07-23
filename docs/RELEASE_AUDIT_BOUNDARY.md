@@ -20,6 +20,14 @@ The matching GitHub M0 job allows 60 minutes because that serial clean Windows r
 can exceed the former 30-minute ceiling; the larger budget is not an acceptance claim
 and does not expand workflow permissions, triggers, or product authority.
 
+An active History range/session admission contract must hold the accepted range through
+the page-admission observation. An instant fixture can publish a new generation and
+clear the range before that observation, yielding correctly stale navigation rather
+than disproving `busy` precedence. The bounded fixture therefore rendezvouses the range
+worker, observes `busy`, releases and drains it, and owns an unwind-safe release so a
+failed assertion cannot turn into an unbounded worker join. This is test evidence, not
+a controller behavior or release-acceptance change.
+
 The canonical Windows 1.0 artifact is a signed `x86_64-pc-windows-msvc` portable ZIP.
 The existing GNU target is a development and M0 evidence lane only until P6 completes
 an explicit dual-lane functional/resource/package comparison. The release build does

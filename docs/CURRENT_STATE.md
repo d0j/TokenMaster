@@ -1,5 +1,34 @@
 # TokenMaster current state
 
+## 2026-07-23 — History range remote M0 contract stabilization
+
+Product state: unchanged. The controller's range/session arbitration, UI, data,
+provider boundaries, package contents, and release candidate behavior are unchanged.
+This slice repairs one required Windows M0 acceptance contract only.
+
+Evidence state: the prior remote M0 run reached the corrected latest-only navigation
+contract, then found that `range_and_sessions_admissions_are_mutually_exclusive_without_displacement`
+could race its instant-failing source. The source could complete the range, publish a
+new product generation, and clear the active range before the page admission; the old
+page intent then correctly returned `stale_navigation`, not the contract's intended
+active-range `busy`. The controller already checks an active range before product
+generation. The test now uses the existing bounded source fixture to hold the range
+query through the page admission, then releases and drains it before shutdown.
+
+One scoped independent review found that a failed entry wait or assertion could leave
+the held worker blocked while controller Drop joined it. A test-only RAII release guard
+now runs before controller Drop, and the result is asserted only after release, drain,
+and shutdown. Root focused evidence passes 1/1 and the full History range controller
+target passes 14/14, with formatting and diff checks clean. No production code or new
+audit rule changed. `AUDIT_HARDENING_LOOP` did not trigger: this corrects a demonstrated
+CI timeout/evidence risk rather than extending parser or textual auditing.
+
+The next required receipts are one exact-clean-HEAD serial local M0 run followed by one
+replacement remote M0 run. Public-download attribution, trusted remote attestation
+verification, signing, authenticated clean-room/interactive Windows evidence, exact
+MSVC comparison, and the explicitly deferred 24-hour soak remain open. New P4 work
+remains frozen.
+
 ## 2026-07-23 — M0 receipt stabilization
 
 Product state: unchanged. The desktop worker, navigation arbitration, package contents,

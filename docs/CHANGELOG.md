@@ -9,6 +9,16 @@ All notable changes are recorded here.
 
 ## Unreleased
 
+### Fixed
+
+- Stabilized the Windows M0 History range/session admission contract. The former
+  immediate-failure fixture could publish a new snapshot before page admission, making
+  its old page intent correctly stale while the test expected `busy`. The fixture now
+  holds the range query until page admission, then releases and drains it before the
+  assertion; an unwind-safe guard prevents a failed assertion from leaving the worker
+  blocked. This changes acceptance evidence only, not controller, UI, data, or package
+  behavior.
+
 ### Added
 
 - Added an isolated trusted GitHub workflow for the canonical unsigned Windows ZIP:
