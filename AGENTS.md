@@ -55,6 +55,21 @@ Root owns architecture, critical path, delegation, integration, stop conditions,
 final acceptance. Children return bounded evidence; they never extend scope or create
 an indefinite review queue. Keep the critical-path decision local to root.
 
+Until the first accepted release, every autonomous cycle is release-driven:
+
+- Freeze new P4 improvements. Work only on the shortest open Windows acceptance,
+  package, signing, soak, M0, or release blocker.
+- Run at most two child agents concurrently. Use one reviewer only after a complete
+  release-critical slice; do not run reviewer-of-reviewer rounds without a
+  demonstrated Critical production, security, or data-loss defect.
+- Use focused tests while implementing and run the full workspace gate once before
+  the milestone, not after every micro-slice.
+- Change textual audits or parsers only for a demonstrated production defect or a
+  required release receipt.
+- Update cycle documentation once at slice closeout.
+- If 60 minutes do not close a product or release blocker, stop the current path,
+  preserve verified state, and reconsider the shortest path before continuing.
+
 Audit and proof work must remain subordinate to product delivery:
 
 - Classify each finding as a production correctness/security/data-loss defect, a
