@@ -1194,6 +1194,18 @@ fn locale_switch_reprojects_shared_route_labels_without_mutating_route_payload()
             .invoke_quota_units_remaining_capacity("700".into(), "1,000".into(), "tokens".into()),
         "Осталось 700 из 1,000 tokens"
     );
+    window.invoke_open_command_palette();
+    window.invoke_command_palette_query_edited("история".into());
+    let localized_palette_rows = window.get_command_palette_rows();
+    assert_eq!(localized_palette_rows.row_count(), 1);
+    assert_eq!(
+        localized_palette_rows
+            .row_data(0)
+            .expect("localized History route")
+            .label,
+        "История"
+    );
+    window.invoke_dismiss_command_palette();
 
     window.invoke_select_presentation_locale(2);
     let pseudo_dashboard = window

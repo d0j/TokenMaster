@@ -146,6 +146,7 @@ impl DesktopBridgeFactory {
 
 struct ReliableStateNotifierInner {
     window: slint::Weak<MainWindow>,
+    desktop_state: SharedDesktopState,
     state: SharedReliableState,
     presentation_style: Arc<Mutex<DesktopPresentationStyle>>,
     latest: Mutex<Option<ReliableStateDelivery>>,
@@ -345,8 +346,17 @@ impl ReliableStateNotifierInner {
             };
             *state = delivery.projection.clone();
             drop(state);
-            apply_reliable_state_projection(&window, &delivery.projection);
-            apply_presentation_style(&window, style)
+            let locale_changed =
+                window.get_presentation_locale_key() != style.locale().stable_key();
+            if !apply_presentation_style(&window, style) {
+                return false;
+            }
+            if locale_changed {
+                reapply_localized_projection(&window, &self.desktop_state, &self.state);
+            } else {
+                apply_reliable_state_projection(&window, &delivery.projection);
+            }
+            true
         });
         if let Some(acknowledgement) = delivery.and_then(|delivery| delivery.acknowledgement) {
             let _ = acknowledgement.send(if delivered {
@@ -747,9 +757,15 @@ impl DesktopShell {
             .map_err(|_| DesktopUiError::state_unavailable())?;
         *reliable_state = projection.clone();
         drop(reliable_state);
-        apply_reliable_state_projection(&self.window, &projection);
+        let locale_changed =
+            self.window.get_presentation_locale_key() != style.locale().stable_key();
         if !apply_presentation_style(&self.window, style) {
             return Err(DesktopUiError::state_unavailable());
+        }
+        if locale_changed {
+            reapply_localized_projection(&self.window, &self.state, &self.reliable_state);
+        } else {
+            apply_reliable_state_projection(&self.window, &projection);
         }
         Ok(())
     }
@@ -763,6 +779,7 @@ impl DesktopShell {
         DesktopReliableStateNotifier {
             inner: Arc::new(ReliableStateNotifierInner {
                 window: self.window.as_weak(),
+                desktop_state: Arc::clone(&self.state),
                 state: Arc::clone(&self.reliable_state),
                 presentation_style: Arc::clone(&self._presentation_style),
                 latest: Mutex::new(None),
@@ -1788,8 +1805,9 @@ fn apply_command_palette_rows(
     let mut rows = projection
         .routes()
         .iter()
-        .filter(|route| {
-            normalized_query.is_empty()
+        .filter_map(|route| {
+            let label = route_label(window, route.key());
+            (normalized_query.is_empty()
                 || route
                     .key()
                     .stable_key()
@@ -1800,14 +1818,15 @@ fn apply_command_palette_rows(
                     .english_label()
                     .to_lowercase()
                     .contains(&normalized_query)
-        })
-        .map(|route| RouteRow {
-            key: route.key().stable_key().into(),
-            label_key: route.key().label_key().into(),
-            label: route_label(window, route.key()).into(),
-            state: route.state().stable_code().into(),
-            reasons: join_reasons(route.reason_codes().iter()).into(),
-            selected: false,
+                || label.to_lowercase().contains(&normalized_query))
+            .then(|| RouteRow {
+                key: route.key().stable_key().into(),
+                label_key: route.key().label_key().into(),
+                label: label.into(),
+                state: route.state().stable_code().into(),
+                reasons: join_reasons(route.reason_codes().iter()).into(),
+                selected: false,
+            })
         })
         .collect::<Vec<_>>();
     let selected = selected_key
@@ -3994,6 +4013,20 @@ mod duration_tests {
         skin: DesktopSkin,
         operation: Option<DesktopOperationSnapshot>,
     ) -> DesktopReliableStateProjection {
+        reliable_state_with_presentation_locale_and_operation(
+            density,
+            skin,
+            DesktopLocale::English,
+            operation,
+        )
+    }
+
+    fn reliable_state_with_presentation_locale_and_operation(
+        density: DesktopDensity,
+        skin: DesktopSkin,
+        locale: DesktopLocale,
+        operation: Option<DesktopOperationSnapshot>,
+    ) -> DesktopReliableStateProjection {
         let summary = DesktopReliableStateSummary::new_with_settings(
             DesktopReliableStateHealth::Healthy,
             false,
@@ -4005,7 +4038,7 @@ mod duration_tests {
                 skin,
                 DesktopColorScheme::System,
                 DesktopLayout::Refined,
-                DesktopLocale::English,
+                locale,
             ),
             None,
             None,
@@ -4213,9 +4246,10 @@ mod duration_tests {
             let notifier = shell.reliable_state_notifier();
             publish_from_worker(
                 notifier.clone(),
-                reliable_state_with_presentation_and_operation(
+                reliable_state_with_presentation_locale_and_operation(
                     DesktopDensity::UltraCompact,
                     DesktopSkin::Graphite,
+                    DesktopLocale::Russian,
                     Some(DesktopOperationSnapshot::new(
                         kind,
                         DesktopOperationPhase::Succeeded,
@@ -4226,9 +4260,10 @@ mod duration_tests {
             )?;
             publish_from_worker(
                 notifier.clone(),
-                reliable_state_with_presentation_and_operation(
+                reliable_state_with_presentation_locale_and_operation(
                     DesktopDensity::UltraCompact,
                     DesktopSkin::Graphite,
+                    DesktopLocale::Russian,
                     Some(DesktopOperationSnapshot::new(
                         DesktopOperationKind::Backup,
                         DesktopOperationPhase::Running,
@@ -4241,9 +4276,35 @@ mod duration_tests {
             notifier.inner.deliver_latest();
 
             assert_eq!(window.get_presentation_density_key(), "ultra_compact");
+            assert_eq!(window.get_active_route_label(), "Панель управления");
             assert_eq!(window.get_presentation_persistence_state(), "saved");
             assert_eq!(window.get_reliable_operation_kind(), "backup");
         }
+
+        let shell = DesktopShell::new_with_reliable_state(
+            &ProductReducer::new().snapshot(),
+            reliable_state_with_presentation_and_operation(
+                DesktopDensity::Comfortable,
+                DesktopSkin::Refined,
+                None,
+            ),
+            Rc::new(AcceptingPresentationSink),
+        )
+        .map_err(|_| String::from("desktop shell"))?;
+        shell
+            .apply_reliable_state(reliable_state_with_presentation_locale_and_operation(
+                DesktopDensity::Comfortable,
+                DesktopSkin::Refined,
+                DesktopLocale::Russian,
+                Some(DesktopOperationSnapshot::new(
+                    DesktopOperationKind::ApplyConfig,
+                    DesktopOperationPhase::Succeeded,
+                    false,
+                    None,
+                )),
+            ))
+            .map_err(|_| String::from("direct reliable state apply"))?;
+        assert_eq!(shell.window().get_active_route_label(), "Панель управления");
         Ok(())
     }
 
