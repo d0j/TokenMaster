@@ -530,6 +530,20 @@ fn populated_usage_projection_payloads_survive_hot_locale_switch() {
     assert_eq!(weekday_after.len(), weekday_before.len());
     assert_eq!(window.get_activity_context_label(), "Метки времени UTC");
     assert_eq!(window.get_activity_loaded_label(), "Загружено: 1");
+    assert_eq!(
+        window.get_activity_page_status_label(),
+        "Первая страница полная"
+    );
+    assert_eq!(
+        window.get_activity_evidence_label(),
+        "Свежие · Авторитетные"
+    );
+    assert_eq!(
+        window.get_activity_rhythm_evidence_label(),
+        "Свежие · Авторитетные"
+    );
+    assert_eq!(weekday_after[0].label, "Понедельник");
+    assert_eq!(weekday_after[0].events_label, "Событий: 0");
     for (before, after) in activity_before.iter().zip(&activity_after) {
         assert_eq!(after.time_label, before.time_label);
         assert_eq!(after.model_label, before.model_label);
