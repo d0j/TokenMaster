@@ -1,5 +1,24 @@
 # TokenMaster handoff
 
+## Immutable CI action gate (2026-07-23)
+
+Product state: no UI/runtime behavior changed. The Windows M0 workflow now resolves
+both external actions by exact reviewed commits rather than mutable v7 tags.
+
+Audit/evidence state: `validate-immutable-actions.ps1` bounds workflow discovery/size,
+allows safe repository-local actions, and requires every remote action to use a full
+40-hex SHA. It rejects tags, branches, expressions, abbreviations, ambiguous lines, and
+unsafe local paths. `verify-m0.ps1` executes the validator and its tests. Focused
+evidence passes 25/25 and the live repository reports `immutable-actions-pass`.
+
+Release blockers: dependency advisory/source/license policy, secret scan, artifact
+attestation, signing, external P3-E/P4 interactive evidence, and uninterrupted soak
+remain. Do not broaden this validator into a general YAML parser without a demonstrated
+release defect.
+
+Git state: implementation/evidence docs are modified on the feature branch. Run the
+single final baseline, commit once, and regenerate the ignored package for the new HEAD.
+
 ## P3-E package-provenance binding (2026-07-23)
 
 Product state: no UI/runtime behavior changed. The deterministic unsigned package

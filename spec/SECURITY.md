@@ -812,6 +812,15 @@ commit mismatch, and dirty state fail closed. Temporary extraction is deleted on
 outcome. This local binding does not authenticate the external operator, prove an
 interactive action, or replace code signing and reviewed external evidence.
 
+### Immutable CI action boundary
+
+Every remote GitHub Actions `uses:` reference MUST be a full 40-lowercase-hex commit.
+Mutable tags, branches, expressions, abbreviated hashes, ambiguous syntax, and unsafe
+repository-local paths fail closed. Workflow enumeration is limited to 64 files and
+each file to 1 MiB before bounded read. Version comments are documentation only and
+never authority. This gate does not authenticate the pinned action source or replace
+dependency review, artifact attestation, signing, or protected release policy.
+
 ## TM-SEC-008 — Backup and recovery containment
 
 Configuration, backup packages, encrypted envelopes, catalogs, SQLite candidates,

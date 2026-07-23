@@ -1246,6 +1246,8 @@ All notable changes are recorded here.
 
 ### Fixed
 
+- Pinned every GitHub Actions `uses:` reference to a reviewed full commit and added a
+  bounded fail-closed immutable-action validator to the M0 verification chain.
 - Bound P3-E interactive preflight to the deterministic P6 ZIP and producer receipt.
   Clean HEAD, BUILDINFO, closed manifest, package/EXE hashes, packaged executable,
   exact tested executable, and operator receipt must now identify the same artifact;

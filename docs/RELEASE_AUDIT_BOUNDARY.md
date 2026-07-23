@@ -41,6 +41,12 @@ The 1.0 package audit requires:
 - clean-room launch, Windows interactive matrix, performance reference run, and
 uninterrupted release-candidate soak.
 
+The immutable CI action item is implemented: every current remote workflow action is
+bound to a full reviewed commit, and the M0 verifier rejects mutable tags, branches,
+expressions, abbreviated hashes, ambiguous references, and unsafe local-action paths.
+This does not satisfy the remaining advisory, policy, secret, attestation, signing,
+interactive, performance, or soak items.
+
 The current P2-B developer reference gate covers deterministic current and immutable-
 legacy million-event fixtures, rebuild throughput and page p95, cold/cached/full
 analytics, 32-scope and session-page latency, main+WAL+SHM amplification, privacy, and

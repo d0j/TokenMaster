@@ -1,5 +1,21 @@
 # TokenMaster current state
 
+## 2026-07-23 — immutable GitHub Actions supply-chain gate
+
+Every remote `uses:` reference in `.github/workflows` is now pinned to a reviewed
+40-hex commit. The current Node 24 actions are `actions/checkout` v7 at
+`3d3c42e5aac5ba805825da76410c181273ba90b1` and `actions/upload-artifact` v7 at
+`043fb46d1a93c77aae656e7c1c64a875d1fc6a0a`; the SHAs were resolved from their official
+Git tags. A bounded validator rejects tags, branches, expressions, abbreviated hashes,
+unsafe local paths, ambiguous syntax, oversized workflows, and missing remote actions.
+`verify-m0.ps1` runs both the validator and its executable contracts.
+
+Focused evidence passes 25/25 plus the live repository validator. This closes only the
+TM-REL-003 immutable-action-reference item. Advisory/source/license policy, secret scan,
+artifact attestation, signing, external interactive/accessibility evidence, and soak
+remain open. No product runtime or textual product audit changed; `AUDIT_HARDENING_LOOP`
+was not triggered.
+
 ## 2026-07-23 — P3-E package-provenance preflight binding
 
 The P3-E interactive preflight now requires the deterministic product ZIP and producer

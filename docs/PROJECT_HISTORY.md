@@ -1,5 +1,14 @@
 # TokenMaster project history
 
+## 2026-07-23 — immutable GitHub Actions references
+
+Replaced mutable v7 action tags in the Windows M0 workflow with exact official tag
+commits and added a bounded executable validator to the M0 verification chain. TDD
+first failed on the absent validator and tagged workflow. The first green attempt
+exposed a lazy `ReadLines` handle retained through Pester cleanup; bounded `ReadAllLines`
+closed it. Focused evidence is 25/25 plus a live repository pass. This closes one
+TM-REL-003 supply-chain item without changing product behavior or adding an audit loop.
+
 ## 2026-07-23 — P3-E package-provenance binding
 
 Closed the local provenance gap between the fixed P3-E operator receipt and the P6

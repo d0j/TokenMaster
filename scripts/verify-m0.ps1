@@ -19,6 +19,11 @@ if (-not $PesterModule) {
 }
 Import-Module Pester -RequiredVersion $RequiredPesterVersion -Force
 & (Join-Path $PSScriptRoot "audit-clean-root.ps1") -RepositoryRoot $RepositoryRoot
+& (Join-Path $PSScriptRoot "validate-immutable-actions.ps1") `
+    -RepositoryRoot $RepositoryRoot
+if ($LASTEXITCODE -ne 0) {
+    throw "GitHub Actions references are not immutable"
+}
 
 $MingwRoot = $null
 $MingwLinker = $null
@@ -85,6 +90,7 @@ function Invoke-PesterChecked {
 $Stamp = [DateTimeOffset]::UtcNow.ToString("yyyyMMdd-HHmmssfff")
 Invoke-PesterChecked (Join-Path $PSScriptRoot "tests\m0-soak-lib.Tests.ps1")
 Invoke-PesterChecked (Join-Path $PSScriptRoot "tests\m0-scripts.Tests.ps1")
+Invoke-PesterChecked (Join-Path $PSScriptRoot "tests\immutable-actions.Tests.ps1")
 Invoke-Checked $Cargo @("+1.97.0", "fmt", "--manifest-path", $Manifest, "--all", "--", "--check")
 $PreviousRustFlags = $env:RUSTFLAGS
 try {

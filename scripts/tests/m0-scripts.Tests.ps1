@@ -54,10 +54,10 @@ Describe "TokenMaster M0 script contracts" {
         $Text | Should -Not -Match 'Get-Command "x86_64-w64-mingw32-gcc\.exe"'
     }
 
-    It "uses the current Node 24 GitHub Actions majors" {
+    It "uses immutable commits for the current Node 24 GitHub Actions majors" {
         $Workflow = Get-Content -LiteralPath (Join-Path $RepositoryRoot ".github\workflows\tokenmaster-m0-windows.yml") -Raw
-        $Workflow | Should -Match 'actions/checkout@v7'
-        $Workflow | Should -Match 'actions/upload-artifact@v7'
+        $Workflow | Should -Match 'actions/checkout@[0-9a-f]{40} # v7'
+        $Workflow | Should -Match 'actions/upload-artifact@[0-9a-f]{40} # v7'
         $Workflow | Should -Not -Match 'actions/(checkout|upload-artifact)@v4'
     }
 
@@ -86,6 +86,8 @@ Describe "TokenMaster M0 script contracts" {
         $Text = Get-Content -LiteralPath (Join-Path $ScriptsRoot "verify-m0.ps1") -Raw
         $Text | Should -Match 'm0-scripts\.Tests\.ps1'
         $Text | Should -Match 'm0-soak-lib\.Tests\.ps1'
+        $Text | Should -Match 'immutable-actions\.Tests\.ps1'
+        $Text | Should -Match 'validate-immutable-actions\.ps1'
     }
 
     It "packaging rejects a dirty tree and never claims a release" {

@@ -52,7 +52,8 @@ delivery, per-scope editing, snooze, quiet hours, usage alerts, benefit activati
 later-page Sessions/History controls, P4 presentation/localization, automation,
 interactive evidence, packaging, signing, and release remain. The P3-E packaged shell
 receipt contract and strict local preflight are fixed in `P3E_ACCEPTANCE.md`; authenticated
-P6 provenance and external evidence remain absent.
+Local P6 package provenance and immutable CI action binding are implemented; external
+interactive evidence, remaining supply-chain receipts, signing, and release remain absent.
 
 ## Build and verify
 
