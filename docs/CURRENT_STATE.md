@@ -1,5 +1,41 @@
 # TokenMaster current state
 
+## 2026-07-23 — deterministic unsigned product package
+
+The release-driven P6 package-provenance sub-slice is implemented. A clean-commit
+producer builds the exact canonical MSVC target in the repository-owned target
+directory, validates its x64 Windows-GUI/static-runtime properties, generates one
+closed nine-file portable stage, and writes a deterministically ordered ZIP. The stage
+contains the executable, empty portable marker, English/Russian readmes, product
+license, build identity, SHA-256 content manifest, generated third-party notices with
+license texts and pinned adapted references, and a CycloneDX 1.6 SBOM covering the 450
+locked non-application MSVC dependency components.
+
+Two consecutive producer runs at one clean commit produced byte-identical package
+hashes. A hostile external `CARGO_TARGET_DIR` cannot redirect the packaged executable.
+The package validator rejects unsafe/duplicate/unordered ZIP entries, noncanonical
+timestamps or roots, extra/missing content, links/reparse points, nonempty portable
+markers, invalid identities/SBOM, absolute Windows paths, checksum drift, commit drift,
+and divergence from the canonical inspected MSVC executable. A bounded isolated launch
+from the extracted unsigned ZIP stayed alive for eight seconds with an empty provider
+home; it measured 31,338,496 private bytes, 59,363,328 working-set bytes, 323 handles,
+and 24 threads before exact termination. This is local package smoke, not interactive
+acceptance.
+
+Focused product-package Pester contracts pass 5/5. The sole independent review found
+one Important required-evidence defect: `CARGO_TARGET_DIR` could redirect Cargo while
+the producer read a stale repository target. One bounded correction fixed the target
+binding and passed the hostile-environment reproducer; no re-review or audit-only round
+was opened. The single final clean-root, format, warnings-as-errors workspace Clippy,
+and complete locked workspace test/doctest baseline passes; the test gate took 762.5
+seconds.
+
+This is an unsigned package candidate, not a signed package, M0, RC, or release.
+Signing identity/signature verification, advisory/source/license/secret and immutable-
+action checks, provenance/attestation, authenticated clean-room and interactive Windows
+receipts, exact MSVC performance comparison, and uninterrupted soak remain release
+blockers. New P4 work remains frozen.
+
 ## 2026-07-23 — P6 MSVC binary portability
 
 Visual Studio Build Tools 2022 17.14 and Windows SDK 10.0.26100 are installed without

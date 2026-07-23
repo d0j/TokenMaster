@@ -1,5 +1,23 @@
 # TokenMaster project history
 
+## 2026-07-23 — deterministic unsigned product package
+
+Added the clean-commit product package producer and validator for the canonical MSVC
+binary. The producer creates one closed nine-file portable stage with build identity,
+empty portable marker, product/readme licenses, generated dependency notices/license
+texts, CycloneDX 1.6 SBOM, and canonical SHA-256 content manifest, then writes a
+deterministically ordered ZIP. Two runs were byte-identical and an extracted package
+survived an eight-second isolated launch. Focused package contracts pass 5/5.
+
+The sole independent review demonstrated one Important provenance defect: an external
+`CARGO_TARGET_DIR` could redirect the new build while packaging a stale repository
+target. One bounded correction now passes an explicit repository-owned `--target-dir`;
+the hostile-environment reproducer passes. No re-review or audit-only hardening round
+was opened. The single final clean-root/format/workspace-Clippy/workspace-test baseline
+passes, with the complete test gate taking 762.5 seconds. Signing, external supply-chain
+receipts, authenticated interactive/clean-room evidence, performance/soak, M0, RC, and
+release remain open.
+
 ## 2026-07-23 — P6 MSVC binary portability
 
 Provisioned Visual Studio Build Tools 2022 17.14 and Windows SDK 10.0.26100, then

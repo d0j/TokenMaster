@@ -1,5 +1,34 @@
 # TokenMaster handoff
 
+## Deterministic unsigned product package (2026-07-23)
+
+Product state: no P4 functionality changed. The release app remains the validated x64
+Windows-GUI/static-runtime MSVC binary. A clean-commit producer now creates one
+deterministic unsigned portable ZIP with an empty portable marker, build identity,
+closed SHA-256 manifest, generated notices/license texts, and CycloneDX 1.6 SBOM.
+
+Audit/evidence state: the package is closed to nine files and the SBOM covers 450 locked
+non-application MSVC dependency components. Two producer runs at one clean commit were
+byte-identical. Focused package contracts pass 5/5. A hostile `CARGO_TARGET_DIR`
+reproducer proves the producer still builds and packages only the repository-owned
+canonical target. The sole review found that target-binding defect as Important; one
+bounded correction closed it and no re-review/audit-parser round followed. An extracted
+package stayed alive for eight seconds with an isolated empty provider home and was
+stopped by exact PID; this is local smoke only. The single final aggregate passes
+clean-root, format, warnings-as-errors workspace Clippy, and the complete locked
+workspace test/doctest gate in 762.5 seconds.
+
+Release blockers: the candidate is unsigned. Signing identity and signature
+verification, advisory/source/license/secret and immutable-action checks, artifact
+provenance/attestation, authenticated clean-room and interactive Windows/DPI/
+accessibility receipts, exact package-bound performance comparison, uninterrupted
+soak, M0, RC, and stable acceptance remain open. New P4, CLI/MCP, external providers,
+installer, and updater are not the next release-critical work.
+
+Git state: implementation and evidence documentation are tracked; verify live
+HEAD/worktree. The ignored `dist` artifact and receipt must be regenerated after any
+commit and are never authoritative for a different HEAD.
+
 ## P6 MSVC binary portability (2026-07-23)
 
 Product state: the canonical MSVC release application now builds as an x64 Windows GUI

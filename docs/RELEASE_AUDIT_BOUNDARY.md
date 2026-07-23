@@ -20,6 +20,13 @@ dynamic Visual C++/Universal CRT imports. This binary-portability receipt does n
 package provenance, deterministic contents, signing, clean-room behavior, or release
 acceptance.
 
+The unsigned package producer now binds a clean commit to the repository-owned canonical
+MSVC target, a closed nine-file portable stage, deterministic ZIP ordering/timestamps,
+per-file SHA-256 manifest, generated dependency notices/license texts, and CycloneDX
+SBOM. Its local extracted-package smoke is development evidence only. The ignored
+artifact and receipt must be regenerated after every commit; neither is signing,
+authenticated clean-room, interactive, attestation, RC, or stable-release evidence.
+
 The 1.0 package audit requires:
 
 - exact clean commit, executable hash, package hash, and deterministic content list;

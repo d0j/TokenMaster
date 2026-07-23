@@ -4,9 +4,12 @@ The active delivery mode is release-driven: new P4 improvements are frozen. The
 production GNU release binary builds and passes one isolated portable-stage launch
 smoke, closing only the local build/launch preflight. The canonical MSVC toolchain is
 now provisioned and its x64 release binary passes exact-path, Windows-GUI, and static-
-runtime validation. P6 remains open for deterministic product package provenance,
-notices/SBOM, signing, clean-room and interactive receipts, and soak evidence. The
-next release-critical slice is the deterministic unsigned portable package producer.
+runtime validation. The deterministic unsigned portable package producer is now
+implemented with a closed content manifest, generated notices/license texts, CycloneDX
+SBOM, clean-commit/canonical-target binding, and local extracted-package smoke. P6
+remains open for signing, supply-chain provenance/attestation, authenticated clean-room
+and interactive receipts, exact release performance comparison, and soak evidence.
+The next release-critical slice is signing/supply-chain preflight, not new P4 work.
 
 Provider-ready internal runtime seam is implemented ahead of 1.1: opaque bounded
 resume payloads, descriptor-bound reconstruction, injected usage providers, and
