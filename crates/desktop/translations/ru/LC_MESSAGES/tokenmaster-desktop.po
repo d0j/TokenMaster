@@ -963,7 +963,7 @@ msgid "{0} model loaded"
 msgstr "Загружена {0} модель"
 
 msgid "{0} models loaded"
-msgstr "Загружено {0} моделей"
+msgstr "Моделей загружено: {0}"
 
 msgid "Completeness unavailable"
 msgstr "Полнота данных недоступна"
@@ -978,7 +978,7 @@ msgid "{0} project loaded"
 msgstr "Загружен {0} проект"
 
 msgid "{0} projects loaded"
-msgstr "Загружено {0} проектов"
+msgstr "Проектов загружено: {0}"
 
 msgid "More projects available"
 msgstr "Доступны ещё проекты"
@@ -990,7 +990,7 @@ msgid "{0} repository loaded"
 msgstr "Загружен {0} репозиторий"
 
 msgid "{0} repositories loaded"
-msgstr "Загружено {0} репозиториев"
+msgstr "Репозиториев загружено: {0}"
 
 msgid "Code completeness unavailable"
 msgstr "Полнота кода недоступна"
@@ -1041,4 +1041,4 @@ msgid "{0} repository"
 msgstr "{0} репозиторий"
 
 msgid "{0} repositories"
-msgstr "{0} репозиториев"
+msgstr "Репозитории: {0}"

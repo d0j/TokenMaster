@@ -36,6 +36,14 @@ impl DesktopIntentSink for RejectingIntentSink {
     }
 }
 
+struct AcceptingIntentSink;
+
+impl DesktopIntentSink for AcceptingIntentSink {
+    fn submit(&self, _intent: DesktopIntent) -> DesktopIntentAdmission {
+        DesktopIntentAdmission::Started
+    }
+}
+
 #[derive(Default)]
 struct RecordingHistoryRangeSink {
     intents: RefCell<Vec<DesktopHistoryRangeIntent>>,
@@ -407,6 +415,96 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert_compiled_session_selection_is_immediate_correlated_and_bounded_in_place();
     assert_open_command_palette_refreshes_from_accepted_snapshot();
     assert_compiled_compact_widget_reuses_quota_snapshot_and_restores_window();
+}
+
+#[test]
+fn populated_usage_projection_payloads_survive_hot_locale_switch() {
+    i_slint_backend_testing::init_no_event_loop();
+    let directory = tempfile::TempDir::new().expect("temporary directory");
+    let reducer = ready_reducer(&directory.path().join("locale-invariants.sqlite3"), 0);
+    let shell = DesktopShell::new_with_reliable_state(
+        &reducer.snapshot(),
+        DesktopReliableStateProjection::unavailable(),
+        Rc::new(AcceptingIntentSink),
+    )
+    .expect("desktop shell");
+    let window = shell.window();
+    let history_before = window.get_history_day_rows().iter().collect::<Vec<_>>();
+    let models_before = window.get_model_usage_rows().iter().collect::<Vec<_>>();
+    let projects_before = window.get_project_usage_rows().iter().collect::<Vec<_>>();
+    assert!(!history_before.is_empty());
+    assert!(!models_before.is_empty());
+    assert!(!projects_before.is_empty());
+
+    window.invoke_select_presentation_locale(1);
+
+    let history_after = window.get_history_day_rows().iter().collect::<Vec<_>>();
+    let models_after = window.get_model_usage_rows().iter().collect::<Vec<_>>();
+    let projects_after = window.get_project_usage_rows().iter().collect::<Vec<_>>();
+    assert_eq!(history_after.len(), history_before.len());
+    assert_eq!(models_after.len(), models_before.len());
+    assert_eq!(projects_after.len(), projects_before.len());
+    for (before, after) in history_before.iter().zip(&history_after) {
+        assert_eq!(after.date_label, before.date_label);
+        assert_eq!(after.event_label, before.event_label);
+        assert_eq!(after.input_availability, before.input_availability);
+        assert_eq!(after.input_label, before.input_label);
+        assert_eq!(after.cached_availability, before.cached_availability);
+        assert_eq!(after.cached_label, before.cached_label);
+        assert_eq!(after.output_availability, before.output_availability);
+        assert_eq!(after.output_label, before.output_label);
+        assert_eq!(after.reasoning_availability, before.reasoning_availability);
+        assert_eq!(after.reasoning_label, before.reasoning_label);
+        assert_eq!(after.total_availability, before.total_availability);
+        assert_eq!(after.total_label, before.total_label);
+        assert_eq!(after.cost_availability, before.cost_availability);
+        assert_eq!(after.cost_label, before.cost_label);
+    }
+    for (before, after) in models_before.iter().zip(&models_after) {
+        assert_eq!(after.model_label, before.model_label);
+        assert_eq!(after.event_label, before.event_label);
+        assert_eq!(after.input_availability, before.input_availability);
+        assert_eq!(after.input_label, before.input_label);
+        assert_eq!(after.cached_availability, before.cached_availability);
+        assert_eq!(after.cached_label, before.cached_label);
+        assert_eq!(after.output_availability, before.output_availability);
+        assert_eq!(after.output_label, before.output_label);
+        assert_eq!(after.reasoning_availability, before.reasoning_availability);
+        assert_eq!(after.reasoning_label, before.reasoning_label);
+        assert_eq!(after.total_availability, before.total_availability);
+        assert_eq!(after.total_label, before.total_label);
+        assert_eq!(after.cost_availability, before.cost_availability);
+        assert_eq!(after.cost_label, before.cost_label);
+    }
+    for (before, after) in projects_before.iter().zip(&projects_after) {
+        assert_eq!(after.project_label, before.project_label);
+        assert_eq!(after.unassociated, before.unassociated);
+        assert_eq!(after.event_label, before.event_label);
+        assert_eq!(after.input_availability, before.input_availability);
+        assert_eq!(after.input_label, before.input_label);
+        assert_eq!(after.cached_availability, before.cached_availability);
+        assert_eq!(after.cached_label, before.cached_label);
+        assert_eq!(after.output_availability, before.output_availability);
+        assert_eq!(after.output_label, before.output_label);
+        assert_eq!(after.reasoning_availability, before.reasoning_availability);
+        assert_eq!(after.reasoning_label, before.reasoning_label);
+        assert_eq!(after.total_availability, before.total_availability);
+        assert_eq!(after.total_label, before.total_label);
+        assert_eq!(after.cost_availability, before.cost_availability);
+        assert_eq!(after.cost_label, before.cost_label);
+        assert_eq!(after.code_available, before.code_available);
+        assert_eq!(after.code_complete, before.code_complete);
+        assert_eq!(after.commits_label, before.commits_label);
+        assert_eq!(after.added_label, before.added_label);
+        assert_eq!(after.removed_label, before.removed_label);
+        assert_eq!(after.net_label, before.net_label);
+        assert_eq!(
+            after.efficiency_label.split(" / ").next(),
+            before.efficiency_label.split(" / ").next()
+        );
+    }
+
+    window.invoke_select_presentation_locale(0);
 }
 
 fn assert_compiled_command_palette_is_bounded_and_routes_through_desktop_state(

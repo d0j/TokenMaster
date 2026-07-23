@@ -1243,7 +1243,29 @@ fn locale_switch_reprojects_closed_history_models_and_projects_projection_labels
         window
             .global::<ProjectionStrings>()
             .invoke_loaded_label("2".into(), "model".into(), false),
-        "Загружено 2 моделей"
+        "Моделей загружено: 2"
+    );
+    assert_eq!(
+        window.global::<ProjectionStrings>().invoke_loaded_label(
+            "21".into(),
+            "project".into(),
+            false
+        ),
+        "Проектов загружено: 21"
+    );
+    assert_eq!(
+        window.global::<ProjectionStrings>().invoke_loaded_label(
+            "22".into(),
+            "repository".into(),
+            false
+        ),
+        "Репозиториев загружено: 22"
+    );
+    assert_eq!(
+        window
+            .global::<ProjectionStrings>()
+            .invoke_repository_label("21".into(), false),
+        "Репозитории: 21"
     );
     assert_eq!(
         window
