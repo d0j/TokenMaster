@@ -105,8 +105,9 @@ try {
     if ($BuildInfo.commit -cne $Commit) {
         throw "product package commit does not match the clean validation commit"
     }
-    $CanonicalExecutable = Join-Path $Repository `
-        "target\x86_64-pc-windows-msvc\release\TokenMaster.exe"
+    $TargetDirectory = Get-CanonicalProductTargetDirectory -RepositoryRoot $Repository
+    $CanonicalExecutable = Join-Path $TargetDirectory `
+        "x86_64-pc-windows-msvc\release\TokenMaster.exe"
     if (-not (Test-Path -LiteralPath $CanonicalExecutable -PathType Leaf)) {
         throw "canonical MSVC build is unavailable"
     }

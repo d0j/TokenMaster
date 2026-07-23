@@ -1,5 +1,14 @@
 Set-StrictMode -Version Latest
 
+function Get-CanonicalProductTargetDirectory {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RepositoryRoot
+    )
+
+    return [IO.Path]::GetFullPath((Join-Path $RepositoryRoot "target"))
+}
+
 function Write-Utf8NoBomFile {
     param(
         [Parameter(Mandatory)]

@@ -119,6 +119,7 @@ Describe "TokenMaster product package contracts" {
         $Producer = Get-Content -LiteralPath $ProducerPath -Raw
         $Producer | Should -Match 'git status --porcelain'
         $Producer | Should -Match 'x86_64-pc-windows-msvc'
+        $Producer | Should -Match '--target-dir \$TargetDirectory'
         $Producer | Should -Match '--edges "normal,build"'
         $Producer | Should -Match 'validate-msvc-product-binary\.ps1'
         $Producer | Should -Match 'New-DeterministicZip'
@@ -130,5 +131,18 @@ Describe "TokenMaster product package contracts" {
         $Validator | Should -Match 'Assert-ProductPackageStage'
         $Validator | Should -Match 'validate-msvc-product-binary\.ps1'
         $Validator | Should -Match 'executable hash does not match canonical MSVC build'
+    }
+
+    It "does not let CARGO_TARGET_DIR redirect the canonical package artifact" {
+        $RepositoryRoot = [IO.Path]::GetFullPath((Join-Path $TestDrive "repository"))
+        $Previous = $env:CARGO_TARGET_DIR
+        try {
+            $env:CARGO_TARGET_DIR = Join-Path $TestDrive "hostile-target"
+            Get-CanonicalProductTargetDirectory -RepositoryRoot $RepositoryRoot |
+                Should -Be (Join-Path $RepositoryRoot "target")
+        }
+        finally {
+            $env:CARGO_TARGET_DIR = $Previous
+        }
     }
 }

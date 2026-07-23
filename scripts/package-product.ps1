@@ -76,13 +76,14 @@ try {
     Enter-VsDevShell -VsInstallPath $VsInstall -SkipAutomaticLocation `
         -DevCmdArguments "-arch=x64 -host_arch=x64" | Out-Null
 
+    $TargetDirectory = Get-CanonicalProductTargetDirectory -RepositoryRoot $Repository
     Invoke-Checked {
         cargo +1.97.0 build -p tokenmaster-app --release --locked `
-            --target x86_64-pc-windows-msvc
+            --target x86_64-pc-windows-msvc --target-dir $TargetDirectory
     } "canonical MSVC product build failed"
 
-    $Executable = Join-Path $Repository `
-        "target\x86_64-pc-windows-msvc\release\TokenMaster.exe"
+    $Executable = Join-Path $TargetDirectory `
+        "x86_64-pc-windows-msvc\release\TokenMaster.exe"
     & (Join-Path $PSScriptRoot "validate-msvc-product-binary.ps1") `
         -ExecutablePath $Executable
     if ($LASTEXITCODE -ne 0) {
