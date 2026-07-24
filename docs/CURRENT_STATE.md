@@ -12,9 +12,9 @@ safe import, then importing local history. It explains that charts and totals fo
 first safe import; it has no separate splash window, staging aggregates, invented
 percentage/ETA, source count, local path, source content, or credentials.
 The debug application binary retains the console subsystem required for opaque Slint
-paint in this environment, then hides only its own console host; release remains a
+paint in this environment, then detaches itself from that console; release remains a
 Windows-subsystem binary. This avoids both a visible console and the transparent-window
-regression.
+regression without hiding a terminal that launched the app.
 
 Every direct route ScrollView now has an explicit viewport and content-derived minimum
 height, so the lower content remains reachable rather than being clipped below the

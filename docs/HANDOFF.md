@@ -83,8 +83,9 @@ order, and keeps the transaction bounded. Intermediate continuation commits rely
 SQLite foreign-key enforcement; the full foreign-key verification remains at seal and
 promotion. Work carries only a durable session/ordinal cursor, so a later revision may
 reuse older work after recomputing current facts; impossible future-epoch work still
-fails closed. The debug binary keeps the opaque console-subsystem paint path and hides
-its own console host instead of making the Slint window transparent.
+fails closed. The debug binary keeps the opaque console-subsystem paint path and detaches
+from its console instead of making the Slint window transparent or hiding a caller's
+terminal.
 
 Audit/evidence state: focused replay archive contracts (47), incremental replay
 contracts (7), formatting, and strict store Clippy pass. A release binary was exercised

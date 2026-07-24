@@ -3,20 +3,17 @@
 use std::process::ExitCode;
 
 #[cfg(all(windows, debug_assertions))]
-fn hide_debug_console() {
-    use windows::Win32::{
-        System::Console::GetConsoleWindow,
-        UI::WindowsAndMessaging::{SW_HIDE, ShowWindow},
-    };
+fn detach_debug_console() {
+    use windows::Win32::System::Console::FreeConsole;
 
     unsafe {
-        let _ = ShowWindow(GetConsoleWindow(), SW_HIDE);
+        let _ = FreeConsole();
     }
 }
 
 fn main() -> ExitCode {
     #[cfg(all(windows, debug_assertions))]
-    hide_debug_console();
+    detach_debug_console();
 
     match tokenmaster_app::run() {
         Ok(()) => ExitCode::SUCCESS,
