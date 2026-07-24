@@ -1,5 +1,19 @@
 # TokenMaster project history
 
+## 2026-07-24 — CRLF-safe M0 pre-commit receipt guard
+
+Remote M0 `30083467226` passed the preceding application recovery scope and first
+failed an existing store guard before it could check its intended invariant. The guard
+used an LF-only source delimiter, while the Windows checkout exposed CRLF line endings;
+the resulting `global mutator end source` panic was a test portability failure, not a
+store transaction failure.
+
+The guard now normalizes only its included test string to LF before preserving its
+existing conversion-before-final-commit check. Focused evidence, all 72 store library
+tests, strict store Clippy, and formatting pass locally. This final bounded
+required-receipt repair adds no new audit rule or product behavior. One replacement
+exact remote M0 remains required.
+
 ## 2026-07-24 — Reminder recovery contract process isolation
 
 The first exact remote M0 after same-session reminder recovery, `30080747299`, compiled

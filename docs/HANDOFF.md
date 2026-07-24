@@ -1,5 +1,35 @@
 # TokenMaster handoff
 
+## CRLF-safe M0 pre-commit receipt guard (2026-07-24)
+
+Product state: unchanged. Only an existing test-local source string is normalized from
+CRLF to LF before its existing order check; no executable product code, persistence,
+reminder policy, package, signing, or UI behavior changed.
+
+Audit/evidence state: exact remote M0 `30083467226` reached `tokenmaster-store` and
+first failed `profile_result_count_conversion_precedes_the_final_commit` at its
+LF-specific end delimiter. Windows checkout line ending conversion made the guard
+panic before it checked the conversion-before-commit invariant. The same guard now
+normalizes its test input without widening scope or adding a rule. Its focused test and
+the full 72-test store library pass locally; strict store Clippy and formatting pass.
+This is a required receipt compatibility repair, not a store product defect.
+
+`AUDIT_HARDENING_LOOP` remains stopped. Root permits this single demonstrated
+cross-platform receipt repair, but no further audit/parser/test hardening, review, or
+P4 scope expansion. The next action is one replacement exact-head remote M0; do not
+start package or secret scanning unless it is green.
+
+Release blockers: exact remote M0, then an exact-clean MSVC package and secret-scan
+pair only on green. Public-download attribution, trusted remote attestation
+verification, signing, authenticated clean-room/P3-E/P4 Windows evidence, exact MSVC
+comparison, and the explicitly deferred 24-hour soak remain.
+
+Git state: stage only `crates/store/src/usage/benefit_write.rs` and these required
+state/traceability/history documents, commit and push one bounded receipt repair, then
+start one successor M0. Do not create a later docs-only commit for remote status. No
+child agents are active; no reviewer is justified without a Critical product, security,
+data-loss, or new required-receipt defect.
+
 ## Same-session reminder recovery and Git M0 receipt stabilization (2026-07-24)
 
 Product state: changed. A startup-only missing reminder runtime with

@@ -1,5 +1,30 @@
 # TokenMaster current state
 
+## 2026-07-24 — CRLF-safe M0 pre-commit receipt guard
+
+Product state: unchanged. This slice changes only a required M0 test guard; no store
+transaction, reminder profile behavior, data schema, package, signing, or UI behavior
+changed.
+
+Evidence state: exact remote M0 `30083467226` compiled the workspace and its first
+causal failure was the existing `profile_result_count_conversion_precedes_the_final_commit`
+store test. The guard parsed its own source with an LF-only delimiter and therefore
+failed under the CI Windows CRLF checkout before testing the pre-commit conversion
+invariant. The source string is now normalized only inside that test before its existing
+bounded parse. The focused guard passes and the complete `tokenmaster-store` library is
+green 72/72 with strict target Clippy and formatting. This is a demonstrated
+required-receipt repair, not a production store defect or a new audit category.
+
+`AUDIT_HARDENING_LOOP` remains stopped: this is the final bounded compatibility repair
+needed to obtain the existing M0 receipt. No audit scope, parser rule, reviewer queue,
+or P4 work was added. The next release-critical action is exactly one replacement
+remote M0 at this clean head; package and secret receipts remain conditional on green.
+
+Remaining release blockers: exact remote M0, then exact-clean MSVC package and secret
+receipts if green; public-download Slint attribution, trusted remote attestation
+verification, signing, authenticated clean-room/P3-E/P4 Windows evidence, exact MSVC
+comparison, and the explicitly deferred 24-hour soak. New P4 work remains frozen.
+
 ## 2026-07-24 — Same-session reminder recovery and Git M0 receipt stabilization
 
 Product state: changed. If startup archive contention left the optional reminder

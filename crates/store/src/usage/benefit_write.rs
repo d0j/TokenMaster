@@ -1731,7 +1731,7 @@ mod tests {
 
     #[test]
     fn profile_result_count_conversion_precedes_the_final_commit() {
-        let source = include_str!("benefit_write.rs");
+        let source = include_str!("benefit_write.rs").replace("\r\n", "\n");
         let Some((_, override_after_start)) =
             source.split_once("pub fn set_benefit_reminder_override")
         else {
