@@ -1,5 +1,33 @@
 # TokenMaster current state
 
+## 2026-07-24 — M0 timeout stage receipt observability
+
+Product state: unchanged. This slice changes only M0 verification progress evidence;
+no product, SQLite, reminder, UI, package, signing, timeout, permissions, or release
+behavior changed.
+
+Evidence state: exact remote M0 `30086621386` on the clean pushed head reached its
+60-minute Windows job limit and was cancelled without a test failure. Its only uploaded
+receipt is a clean exact-head dependency-policy pass, so it proves the timeout occurred
+after that early gate but cannot identify the active later stage. The verifier now emits
+only fixed `TM-M0-STAGE-BEGIN`/`TM-M0-STAGE-PASS` labels around each bounded existing
+stage. It logs neither commands, arguments, paths, source contents, credentials, nor
+new test outcomes. The focused Pester contract was RED 22/1 before those markers and
+is green 23/23 after them. This is a demonstrated required-receipt observability
+repair, not a product defect or a new audit rule.
+
+`AUDIT_HARDENING_LOOP` remains stopped. Root permits this one bounded repair because
+the existing required M0 receipt expired without causal evidence; no parser scope,
+reviewer queue, P4 work, or timeout expansion was added. The next release-critical
+action is exactly one diagnostic replacement remote M0 at the clean head. Its terminal
+marker, not speculation, determines any next repair.
+
+Remaining release blockers: an exact remote M0 receipt, then exact-clean MSVC package
+and secret receipts if green; public-download Slint attribution, trusted remote
+attestation verification, signing, authenticated clean-room/P3-E/P4 Windows evidence,
+exact MSVC comparison, and the explicitly deferred 24-hour soak. New P4 work remains
+frozen.
+
 ## 2026-07-24 — CRLF-safe M0 pre-commit receipt guard
 
 Product state: unchanged. This slice changes only a required M0 test guard; no store

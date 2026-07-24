@@ -19,6 +19,10 @@ not lower the retained private-bytes baseline or weaken the established resource
 The matching GitHub M0 job allows 60 minutes because that serial clean Windows receipt
 can exceed the former 30-minute ceiling; the larger budget is not an acceptance claim
 and does not expand workflow permissions, triggers, or product authority.
+Every existing M0 stage emits only a fixed begin/pass log label, so a cancellation can
+identify the active receipt stage without logging commands, arguments, paths, source
+contents, credentials, or test payloads. Those labels are troubleshooting evidence,
+not a new audit category or an acceptance receipt.
 
 An active History range/session admission contract must hold the accepted range through
 the page-admission observation. An instant fixture can publish a new generation and

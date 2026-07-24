@@ -1,5 +1,34 @@
 # TokenMaster handoff
 
+## M0 timeout stage receipt observability (2026-07-24)
+
+Product state: unchanged. The M0 verifier now writes only fixed stage begin/pass labels
+to its transient CI log. It does not change product execution, data, tests, timeout,
+workflow permissions, package, signing, or release authority.
+
+Audit/evidence state: exact remote M0 `30086621386` consumed its full 60-minute Windows
+job budget and was cancelled rather than failing a test. The uploaded exact-head
+dependency-policy receipt is green, but no later per-stage progress survived the
+cancellation. The verifier now marks every existing preflight, Pester, Cargo, and
+stress stage with bounded fixed IDs while excluding commands, arguments, paths,
+contents, and credentials. The focused source contract was red 22/1 and passes 23/23
+after the change. This is a required receipt observability repair, not audit expansion.
+
+`AUDIT_HARDENING_LOOP` remains stopped: this one repair is permitted because the
+required receipt ended without a causal stage. Keep the 60-minute budget and all
+existing checks. Do not add a reviewer, P4 work, parser rule, or timeout expansion.
+Run exactly one replacement M0 and classify its terminal stage before any other change.
+
+Release blockers: exact remote M0, then the exact-clean MSVC package and secret-scan
+pair only on green. Public-download attribution, trusted remote attestation
+verification, signing, authenticated clean-room/P3-E/P4 Windows evidence, exact MSVC
+comparison, and the explicitly deferred 24-hour soak remain.
+
+Git state: stage only `scripts/verify-m0.ps1`, its focused contract, and the required
+state/traceability/history/release-boundary documents. Commit and push once, then run
+one successor M0. The M0 monitoring heartbeat was deleted after its terminal result;
+do not leave a background monitor running. No child agents are active.
+
 ## CRLF-safe M0 pre-commit receipt guard (2026-07-24)
 
 Product state: unchanged. Only an existing test-local source string is normalized from

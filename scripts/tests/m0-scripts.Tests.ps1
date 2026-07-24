@@ -53,6 +53,13 @@ Describe "TokenMaster M0 script contracts" {
         $Text | Should -Not -Match "cargo test --workspace"
     }
 
+    It "verification emits bounded stage progress without command details" {
+        $Text = Get-Content -LiteralPath (Join-Path $ScriptsRoot "verify-m0.ps1") -Raw
+        $Text | Should -Match "TM-M0-STAGE-BEGIN"
+        $Text | Should -Match "TM-M0-STAGE-PASS"
+        $Text | Should -Not -Match 'Write-Host.*\$Arguments'
+    }
+
     It "verification preflights the external GNU linker and Windows import library" {
         $Text = Get-Content -LiteralPath (Join-Path $ScriptsRoot "verify-m0.ps1") -Raw
         $Text | Should -Match 'x86_64-w64-mingw32-gcc\.exe'

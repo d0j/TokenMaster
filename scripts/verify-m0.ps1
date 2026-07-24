@@ -18,17 +18,34 @@ if (-not $PesterModule) {
     throw "Pester $RequiredPesterVersion is required. Install-Module Pester -RequiredVersion $RequiredPesterVersion -Scope CurrentUser"
 }
 Import-Module Pester -RequiredVersion $RequiredPesterVersion -Force
+
+function Write-M0StageBegin {
+    param([string]$Id)
+    Write-Host "TM-M0-STAGE-BEGIN $Id"
+}
+
+function Write-M0StagePass {
+    param([string]$Id)
+    Write-Host "TM-M0-STAGE-PASS $Id"
+}
+
+Write-M0StageBegin "clean-root"
 & (Join-Path $PSScriptRoot "audit-clean-root.ps1") -RepositoryRoot $RepositoryRoot
+Write-M0StagePass "clean-root"
+Write-M0StageBegin "immutable-actions"
 & (Join-Path $PSScriptRoot "validate-immutable-actions.ps1") `
     -RepositoryRoot $RepositoryRoot
 if ($LASTEXITCODE -ne 0) {
     throw "GitHub Actions references are not immutable"
 }
+Write-M0StagePass "immutable-actions"
+Write-M0StageBegin "dependency-policy"
 & (Join-Path $PSScriptRoot "verify-dependency-policy.ps1") `
     -RepositoryRoot $RepositoryRoot
 if ($LASTEXITCODE -ne 0) {
     throw "Dependency policy did not pass"
 }
+Write-M0StagePass "dependency-policy"
 
 $MingwRoot = $null
 $MingwLinker = $null
@@ -55,17 +72,20 @@ $env:Path = "$MingwBin$([IO.Path]::PathSeparator)${env:Path}"
 $env:CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = $MingwLinker
 # Avoid known concurrent Windows MinGW linker exits in the receipt process.
 $env:CARGO_BUILD_JOBS = "1"
+Write-M0StageBegin "gnu-linker"
 $MingwVersionOutput = @(& $MingwLinker --version)
 $MingwExitCode = $LASTEXITCODE
 $MingwVersion = $MingwVersionOutput | Select-Object -First 1
 if ($MingwExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($MingwVersion)) {
     throw "The validated GNU linker did not report a version"
 }
+Write-M0StagePass "gnu-linker"
 
 $Cargo = (Get-Command cargo.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1).Name
 
 function Invoke-Checked {
-    param([string]$File, [string[]]$Arguments)
+    param([string]$Id, [string]$File, [string[]]$Arguments)
+    Write-M0StageBegin $Id
     $Started = [DateTimeOffset]::UtcNow
     & $File @Arguments
     $ExitCode = $LASTEXITCODE
@@ -77,10 +97,12 @@ function Invoke-Checked {
     if ($ExitCode -ne 0) {
         throw "$File failed with exit code $ExitCode"
     }
+    Write-M0StagePass $Id
 }
 
 function Invoke-PesterChecked {
-    param([string]$Path)
+    param([string]$Id, [string]$Path)
+    Write-M0StageBegin $Id
     $Started = [DateTimeOffset]::UtcNow
     $Result = Invoke-Pester $Path -PassThru
     $ExitCode = if ($Result.FailedCount -eq 0) { 0 } else { 1 }
@@ -92,20 +114,21 @@ function Invoke-PesterChecked {
     if ($ExitCode -ne 0) {
         throw "Invoke-Pester failed for $Path"
     }
+    Write-M0StagePass $Id
 }
 
 $Stamp = [DateTimeOffset]::UtcNow.ToString("yyyyMMdd-HHmmssfff")
-Invoke-PesterChecked (Join-Path $PSScriptRoot "tests\m0-soak-lib.Tests.ps1")
-Invoke-PesterChecked (Join-Path $PSScriptRoot "tests\m0-scripts.Tests.ps1")
-Invoke-PesterChecked (Join-Path $PSScriptRoot "tests\immutable-actions.Tests.ps1")
-Invoke-PesterChecked (Join-Path $PSScriptRoot "tests\release-artifact-workflow.Tests.ps1")
-Invoke-PesterChecked (Join-Path $PSScriptRoot "tests\dependency-policy.Tests.ps1")
-Invoke-PesterChecked (Join-Path $PSScriptRoot "tests\secret-scan.Tests.ps1")
-Invoke-Checked $Cargo @("+1.97.0", "fmt", "--manifest-path", $Manifest, "--all", "--", "--check")
+Invoke-PesterChecked "pester-soak-lib" (Join-Path $PSScriptRoot "tests\m0-soak-lib.Tests.ps1")
+Invoke-PesterChecked "pester-m0-scripts" (Join-Path $PSScriptRoot "tests\m0-scripts.Tests.ps1")
+Invoke-PesterChecked "pester-immutable-actions" (Join-Path $PSScriptRoot "tests\immutable-actions.Tests.ps1")
+Invoke-PesterChecked "pester-release-artifact-workflow" (Join-Path $PSScriptRoot "tests\release-artifact-workflow.Tests.ps1")
+Invoke-PesterChecked "pester-dependency-policy" (Join-Path $PSScriptRoot "tests\dependency-policy.Tests.ps1")
+Invoke-PesterChecked "pester-secret-scan" (Join-Path $PSScriptRoot "tests\secret-scan.Tests.ps1")
+Invoke-Checked "fmt" $Cargo @("+1.97.0", "fmt", "--manifest-path", $Manifest, "--all", "--", "--check")
 $PreviousRustFlags = $env:RUSTFLAGS
 try {
     $env:RUSTFLAGS = "$PreviousRustFlags -Dwarnings".Trim()
-    Invoke-Checked $Cargo @("+1.97.0", "clippy", "--manifest-path", $Manifest, "--workspace", "--all-targets", "--locked")
+    Invoke-Checked "clippy" $Cargo @("+1.97.0", "clippy", "--manifest-path", $Manifest, "--workspace", "--all-targets", "--locked")
 }
 finally {
     if ($null -eq $PreviousRustFlags) {
@@ -114,16 +137,16 @@ finally {
         $env:RUSTFLAGS = $PreviousRustFlags
     }
 }
-Invoke-Checked $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "-p", "tokenmaster-gates", "--test", "budget_contract", "--locked")
-Invoke-Checked $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "-p", "tokenmaster-m0", "--test", "metrics_contract", "--locked")
-Invoke-Checked $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "-p", "tokenmaster-m0", "--test", "stress_contract", "--locked")
-Invoke-Checked $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "-p", "tokenmaster-store", "--test", "sqlite_contract", "--locked", "--", "one_million_rows_remain_page_bounded", "--ignored", "--exact")
-Invoke-Checked $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "--workspace", "--locked")
-Invoke-Checked $Cargo @("+1.97.0", "build", "--manifest-path", $Manifest, "-p", "tokenmaster-m0", "--release", "--locked")
+Invoke-Checked "budget-contract" $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "-p", "tokenmaster-gates", "--test", "budget_contract", "--locked")
+Invoke-Checked "metrics-contract" $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "-p", "tokenmaster-m0", "--test", "metrics_contract", "--locked")
+Invoke-Checked "stress-contract" $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "-p", "tokenmaster-m0", "--test", "stress_contract", "--locked")
+Invoke-Checked "sqlite-one-million" $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "-p", "tokenmaster-store", "--test", "sqlite_contract", "--locked", "--", "one_million_rows_remain_page_bounded", "--ignored", "--exact")
+Invoke-Checked "workspace-tests" $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "--workspace", "--locked")
+Invoke-Checked "m0-release-build" $Cargo @("+1.97.0", "build", "--manifest-path", $Manifest, "-p", "tokenmaster-m0", "--release", "--locked")
 
 $Executable = Join-Path $RepositoryRoot "target\x86_64-pc-windows-gnu\release\tokenmaster-m0.exe"
-Invoke-Checked $Executable @("--stress", "switches", "--iterations", "100", "--duration-seconds", "2", "--rows", "1000", "--report", "reports/verify-switches-$Stamp.json")
-Invoke-Checked $Executable @("--stress", "routes", "--iterations", "100", "--duration-seconds", "2", "--rows", "1000", "--report", "reports/verify-routes-$Stamp.json")
+Invoke-Checked "stress-switches" $Executable @("--stress", "switches", "--iterations", "100", "--duration-seconds", "2", "--rows", "1000", "--report", "reports/verify-switches-$Stamp.json")
+Invoke-Checked "stress-routes" $Executable @("--stress", "routes", "--iterations", "100", "--duration-seconds", "2", "--rows", "1000", "--report", "reports/verify-routes-$Stamp.json")
 
 $Summary = [ordered]@{
     schemaVersion = 1

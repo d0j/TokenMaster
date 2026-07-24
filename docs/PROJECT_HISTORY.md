@@ -1,5 +1,19 @@
 # TokenMaster project history
 
+## 2026-07-24 — M0 timeout stage receipt observability
+
+Exact remote M0 `30086621386` reached the 60-minute Windows job limit and was
+cancelled without a failed test result. Its uploaded dependency-policy receipt is
+valid for the exact clean head, establishing that the timeout was later in the M0
+sequence, but the cancelled job contained no surviving per-stage progress evidence.
+
+The verifier now emits fixed begin/pass labels around its already-required preflight,
+Pester, Cargo, and stress stages. The labels deliberately contain no commands,
+arguments, paths, source contents, credentials, or result payloads. A focused contract
+was red before those labels and passes 23/23 after them. This changes receipt
+observability only; it keeps the 60-minute budget and every verification obligation.
+One diagnostic successor M0 remains required.
+
 ## 2026-07-24 — CRLF-safe M0 pre-commit receipt guard
 
 Remote M0 `30083467226` passed the preceding application recovery scope and first
