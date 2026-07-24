@@ -1,5 +1,34 @@
 # TokenMaster current state
 
+## 2026-07-24 — Same-session reminder recovery and Git M0 receipt stabilization
+
+Product state: changed. If startup archive contention left the optional reminder
+runtime absent with `StoreUnavailable`, the next successful global-policy
+synchronization now makes one bounded in-session runtime/presentation restart attempt.
+Desired settings remain the sole authority: there is no timer, polling, automatic retry,
+new command, or additional persistence mutation. A failed restart stays unavailable until
+a later synchronization or process start. This is a user-visible resilience correction,
+not audit hardening.
+
+Evidence state: the new application contract was RED with no reminder owner after a
+successful synchronization and is green 1/1 after the implementation. Exact remote M0
+`30064419854` did not fail that broad reminder contract; it passed it and first failed
+the Git sibling-isolation test because concurrent startup recovery and explicit refresh
+can legitimately increment cumulative `unavailable_count` twice. That test now asserts
+the durable result instead: the valid sibling publishes one `Complete` Git projection,
+while at least one unavailable scan is observed. Its focused Windows GNU contract is
+green 1/1. No retry, sleep, scheduler, parser, or production Git change was made.
+
+`AUDIT_HARDENING_LOOP` remains recorded for the prior two test-only corrections. This
+slice deliberately exits that loop through a bounded product-behavior recovery plus a
+demonstrated required-receipt correction; no new audit work or reviewer queue was opened.
+The next release-critical action is one exact-head remote M0 after the clean commit.
+
+Remaining release blockers: exact remote M0, then exact-clean MSVC package and secret
+receipts if green; public-download Slint attribution, trusted remote attestation
+verification, signing, authenticated clean-room/P3-E/P4 Windows evidence, exact MSVC
+comparison, and the explicitly deferred 24-hour soak. New P4 work remains frozen.
+
 ## 2026-07-24 — Reminder startup receipt contract
 
 Product state: unchanged. This is a test-only repair of required Windows M0 evidence;

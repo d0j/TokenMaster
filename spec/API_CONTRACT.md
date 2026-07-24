@@ -10,6 +10,12 @@ and up to eight normalized custom leads only. Per-scope editing, snooze, quiet h
 Reminder OS/tray delivery, usage alerts, activation, CLI/MCP, and release APIs remain
 absent.
 
+When startup left only the optional reminder runtime unavailable with
+`StoreUnavailable`, a later successful policy synchronization may make exactly one
+in-process runtime and presentation restart attempt. It has no public command, timer,
+polling, retry, or persistence surface; failure remains unavailable until a later
+synchronizer call or process restart.
+
 ## Internal desktop lifecycle
 
 The production tray is not a public automation API. Desktop may emit exactly five

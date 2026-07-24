@@ -1845,6 +1845,12 @@ durable desired state and remains visibly retryable as Pending. At startup, opti
 reminder runtime health may independently report StoreUnavailable, but it cannot
 replace the exact enabled/leads desired-state projection with Unavailable.
 
+If that startup-only StoreUnavailable left no reminder runtime owner, the next
+successful synchronization makes one bounded in-session restart attempt using the
+existing application notifier and presentation factory. It does not retry on a timer,
+poll, mutate desired settings, or expose a new command; a failed restart remains
+unavailable until a later synchronizer call or process start.
+
 The store replaces only the global profile in one immediate transaction, rebuilding
 inherited due rows while preserving scope overrides, deliveries, acknowledgements, and
 provider evidence. It admits 32 inheriting scopes, 64 current lots per scope, and 256

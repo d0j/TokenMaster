@@ -1728,13 +1728,13 @@ fn finish_live_bundle(
             quota,
             reminder,
             notification_presentation,
+            reminder_presentation_factory: Some(bridge_factory.clone()),
             controller,
             refresh_ingress,
             maintenance,
+            notifier: Arc::clone(&started.notifier),
             #[cfg(test)]
             reminder_sync_counters: Arc::new(ReminderSyncCounters::default()),
-            #[cfg(test)]
-            notifier: Arc::clone(&started.notifier),
         });
     }
     started
@@ -1751,12 +1751,19 @@ fn start_optional_reminder_runtime(
     notifier_port: Arc<dyn WorkerCompletionNotifier>,
 ) -> OptionalReminderRuntime {
     match state.synchronize_reminder_profile(data_root) {
-        Ok(_) => OptionalReminderRuntime::start(
-            BenefitReminderRuntimeConfig::new(archive_path)
-                .and_then(|config| BenefitReminderRuntime::start_notified(config, notifier_port)),
-        ),
+        Ok(_) => start_synchronized_reminder_runtime(archive_path, notifier_port),
         Err(_) => OptionalReminderRuntime::failed(RuntimeErrorCode::StoreUnavailable),
     }
+}
+
+fn start_synchronized_reminder_runtime(
+    archive_path: std::path::PathBuf,
+    notifier_port: Arc<dyn WorkerCompletionNotifier>,
+) -> OptionalReminderRuntime {
+    OptionalReminderRuntime::start(
+        BenefitReminderRuntimeConfig::new(archive_path)
+            .and_then(|config| BenefitReminderRuntime::start_notified(config, notifier_port)),
+    )
 }
 
 fn begin_bundle_generation(bundle: &SharedBundle) -> Result<u64, ApplicationError> {
@@ -1969,10 +1976,42 @@ fn synchronize_reminder_policy_after_settings(
         return Ok(());
     }
     let (reminder, ingress) = {
-        let slot = bundle.lock().map_err(|_| ApplicationError::internal())?;
-        let Some(bundle) = slot.as_ref() else {
+        let mut slot = bundle.lock().map_err(|_| ApplicationError::internal())?;
+        let Some(bundle) = slot.as_mut() else {
             return Ok(());
         };
+        if bundle.reminder.owner().is_none()
+            && bundle.reminder.failure == Some(RuntimeErrorCode::StoreUnavailable)
+            && let Some(factory) = bundle.reminder_presentation_factory.as_ref()
+        {
+            let notifier_port: Arc<dyn WorkerCompletionNotifier> = bundle.notifier.clone();
+            let mut restarted = start_synchronized_reminder_runtime(
+                data_root.archive_path().to_path_buf(),
+                notifier_port,
+            );
+            if let Some(runtime) = restarted.owner().cloned() {
+                let presentation =
+                    factory
+                        .in_app_notification_bridge()
+                        .ok()
+                        .and_then(|presenter| {
+                            ReminderPresentationCoordinator::start(
+                                Arc::new(RuntimeReminderPresentationPort::new(runtime.clone())),
+                                Arc::new(presenter),
+                            )
+                            .ok()
+                        });
+                if let Some(presentation) = presentation {
+                    bundle.notification_presentation = Some(presentation);
+                } else {
+                    if let Ok(mut runtime) = runtime.lock() {
+                        let _ = runtime.shutdown();
+                    }
+                    restarted = OptionalReminderRuntime::failed(RuntimeErrorCode::StoreUnavailable);
+                }
+            }
+            bundle.reminder = restarted;
+        }
         (
             bundle.reminder.owner().cloned(),
             bundle.refresh_ingress.clone(),
@@ -2457,13 +2496,13 @@ struct ApplicationBundle {
     quota: OptionalRuntime<ProviderQuotaRuntime>,
     reminder: OptionalReminderRuntime,
     notification_presentation: Option<ReminderPresentationCoordinator>,
+    reminder_presentation_factory: Option<DesktopBridgeFactory>,
     controller: DesktopController,
     refresh_ingress: DesktopRefreshIngress,
     maintenance: BackupMaintenanceRuntime,
+    notifier: Arc<ApplicationRuntimeNotifier>,
     #[cfg(test)]
     reminder_sync_counters: Arc<ReminderSyncCounters>,
-    #[cfg(test)]
-    notifier: Arc<ApplicationRuntimeNotifier>,
 }
 
 #[cfg(test)]

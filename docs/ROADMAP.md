@@ -53,6 +53,8 @@ Global reminder settings synchronization/editor is complete as developer evidenc
 portable desired state projects generation-bound global reminders on startup, Save, and
 confirmed import. Startup archive contention preserves the exact desired policy as
 retryable Pending while optional runtime health reports StoreUnavailable separately.
+The next successful synchronization makes one bounded same-session restart attempt
+only for that missing startup-contended runtime; it adds no polling or retry loop.
 Per-scope editing, snooze, quiet hours, reminder OS/tray delivery, usage
 alerts, activation, P4/P5/P6, M0 acceptance, package/signing/soak, and release remain
 open.

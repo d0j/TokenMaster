@@ -242,7 +242,7 @@ fn one_broken_repository_does_not_block_a_valid_sibling_publication() {
     let invalid = temporary.path().join("not-a-repository");
     fs::create_dir(&invalid).expect("invalid candidate directory");
     let archive = temporary.path().join("git-runtime-isolation.sqlite3");
-    let config = GitRuntimeConfig::new(archive)
+    let config = GitRuntimeConfig::new(archive.clone())
         .expect("runtime config")
         .with_executable(git_executable())
         .expect("explicit Git")
@@ -258,9 +258,30 @@ fn one_broken_repository_does_not_block_a_valid_sibling_publication() {
     runtime.refresh_now().expect("force refresh");
     wait_for_publications(&runtime, 1);
     let snapshot = runtime.snapshot().expect("isolation snapshot");
-    assert_eq!(snapshot.refresh().published_count(), 1);
-    assert_eq!(snapshot.refresh().unavailable_count(), 1);
-    assert_eq!(snapshot.refresh().scanned_count(), 1);
+    assert!(snapshot.refresh().published_count() >= 1);
+    assert!(snapshot.refresh().unavailable_count() >= 1);
+    assert!(snapshot.refresh().scanned_count() >= 1);
+
+    let now_day = i32::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_secs()
+            / 86_400,
+    )
+    .expect("day index");
+    let mut reader = UsageReadStore::open(&archive).expect("read isolated Git projection");
+    let capture = reader
+        .capture_git_output(
+            GitOutputQuery::new(now_day - 1, now_day, 32, Duration::from_secs(2))
+                .expect("Git query"),
+        )
+        .expect("Git capture");
+    assert_eq!(capture.repositories().len(), 1);
+    assert_eq!(
+        capture.repositories()[0].quality(),
+        GitOutputQuality::Complete
+    );
     runtime.shutdown().expect("shutdown");
 }
 

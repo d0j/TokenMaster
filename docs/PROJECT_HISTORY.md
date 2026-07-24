@@ -1,5 +1,25 @@
 # TokenMaster project history
 
+## 2026-07-24 — Same-session reminder recovery and Git M0 receipt stabilization
+
+The product previously preserved a lawful `Pending` desired reminder policy after a
+startup archive Busy condition, but an optional runtime left unavailable in that state
+could not recover until a later process start. The selected recovery rule is deliberately
+narrow: after the next successful existing policy synchronization, the application makes
+one in-session attempt to recreate only a missing `StoreUnavailable` reminder runtime
+and its existing presentation bridge. It adds no timer, polling, retry loop, desired
+state mutation, public command, or new authority. TDD first proved the missing owner
+after a successful synchronization; the focused recovery contract now passes.
+
+The exact remote M0 `30064419854` passed the broad reminder contract and instead exposed
+a test-only Git receipt race: startup recovery and an explicit refresh can process the
+broken hint more than once, so cumulative unavailable/scanned counters cannot specify
+one attempt. The test now proves the actual product outcome, a single durable Complete
+projection for the valid sibling while an unavailable scan is observed. The focused
+runtime contract passes. This slice changes reminder recovery behavior and corrects one
+required receipt assertion; it does not claim a green successor M0, package, signing,
+soak, or release acceptance.
+
 ## 2026-07-24 — Reminder startup receipt contract and loop stop
 
 Remote Windows M0 `30061416775` reached the app library and rejected a lawful

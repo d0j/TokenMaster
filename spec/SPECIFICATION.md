@@ -14,6 +14,11 @@ Pending is visible before durable settings mutation and Synchronized follows onl
 successful atomic global-profile store commit; archive Busy/unavailable leaves the
 durable desired state retryable as Pending. The fixed Settings editor supports
 enable/disable, five recommended leads, and at most eight normalized custom leads.
+If the optional reminder runtime was unavailable only because startup could not open
+the archive, the next successful synchronization makes one same-session restart
+attempt. It creates no timer, retry loop, or additional desired-state mutation; a
+failed attempt remains independently unavailable until the next synchronizer call or
+process start.
 Per-scope editing, snooze, quiet hours, reminder OS/tray delivery, usage alerts, activation,
 P4/P5/P6, M0 acceptance, package/signing/soak, and release remain incomplete.
 

@@ -1,5 +1,40 @@
 # TokenMaster handoff
 
+## Same-session reminder recovery and Git M0 receipt stabilization (2026-07-24)
+
+Product state: changed. A startup-only missing reminder runtime with
+`StoreUnavailable` now gets exactly one restart attempt after the next successful
+global-policy synchronization. The attempt uses existing application-owned notifier
+and presentation owners. It never polls, schedules a retry, changes desired settings,
+or adds command/store/Desktop authority. Failure remains unavailable until a later
+synchronizer call or process start.
+
+Audit/evidence state: the focused application recovery contract was correctly RED
+before the product implementation and green 1/1 after it. Exact remote M0
+`30064419854` passed the broad reminder startup test; its first causal failure was
+`one_broken_repository_does_not_block_a_valid_sibling_publication`, whose exact
+`unavailable_count == 1` assumption was invalid under concurrent startup recovery plus
+the explicit test refresh. The repaired contract preserves the isolation assertion by
+requiring a durable single `Complete` valid-sibling projection and minimum observed
+scan/publication/unavailable outcomes. Its focused Windows GNU test is green 1/1. No
+Git production behavior changed. The prior `AUDIT_HARDENING_LOOP` remains documented;
+this product recovery plus required-receipt correction adds no audit-only work and no
+new reviewer round.
+
+Release blockers: commit and push this bounded slice, then obtain one exact-head remote
+M0. Only if it is green, obtain the exact-clean MSVC package and secret-scan pair. Then
+remain public-download attribution, trusted remote attestation verification, signing,
+authenticated clean-room/P3-E/P4 Windows evidence, exact MSVC comparison, and soak.
+Do not start the 24-hour soak until explicitly requested. P4 remains frozen.
+
+Git state: stage only `crates/app/src/application.rs`,
+`crates/app/src/application_tests.rs`,
+`crates/runtime/tests/git_runtime_contract.rs`, and the source-of-truth/state documents
+changed by this slice. Run one final formatting/static focused review before commit; do
+not create a later docs-only commit merely to mirror generated remote receipts. No child
+agents are active and no reviewer is required absent a demonstrated Critical product,
+security, data-loss, or required-receipt defect.
+
 ## Reminder startup receipt contract (2026-07-24)
 
 Product state: unchanged. The slice corrects only an M0 integration assertion; it

@@ -1364,6 +1364,48 @@ fn startup_busy_reminder_store_keeps_the_durable_policy_pending_and_retryable() 
         .expect("pending profile remains retryable after contention");
 }
 
+fn assert_successful_reminder_policy_sync_restarts_unavailable_runtime_in_current_session(
+    application: &mut Application,
+) {
+    let (previous_reminder, previous_presentation) = {
+        let mut slot = application.bundle.lock().expect("application bundle");
+        let bundle = slot.as_mut().expect("live bundle");
+        (
+            std::mem::replace(
+                &mut bundle.reminder,
+                OptionalReminderRuntime::failed(RuntimeErrorCode::StoreUnavailable),
+            ),
+            bundle.notification_presentation.take(),
+        )
+    };
+    if let Some(mut presentation) = previous_presentation {
+        presentation
+            .shutdown()
+            .expect("previous presentation shutdown");
+    }
+    if let Some(runtime) = previous_reminder.owner() {
+        runtime
+            .lock()
+            .expect("previous reminder runtime")
+            .shutdown()
+            .expect("previous reminder shutdown");
+    }
+
+    synchronize_reminder_policy_after_settings(
+        &application.state,
+        &application.data_root,
+        &application.bundle,
+    )
+    .expect("successful reminder profile synchronization");
+
+    let slot = application.bundle.lock().expect("recovered bundle");
+    let bundle = slot.as_ref().expect("recovered live bundle");
+    assert!(bundle.reminder.owner().is_some());
+    assert_eq!(bundle.reminder.failure, None);
+    assert!(bundle.notification_presentation.is_some());
+    drop(slot);
+}
+
 fn assert_no_backup_rebuild_preserves_corrupt_truth_and_completes_authoritative_reconciliation() {
     let temporary = TempDir::new().expect("rebuild temporary directory");
     let environment = application_environment(&temporary);
@@ -1718,6 +1760,7 @@ fn real_bundle_joins_live_health_and_independent_optional_failures_then_shuts_do
             owner: None,
             failure: Some(RuntimeErrorCode::StoreUnavailable),
         },
+        reminder_presentation_factory: None,
         notification_presentation: None,
         controller,
         refresh_ingress,
@@ -1800,6 +1843,9 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     let root = DataRoot::resolve(&environment).expect("data root");
     assert!(root.archive_path().exists());
     assert_reminder_policy_config_import_worker_sync_lifecycle(&mut application, &temporary);
+    assert_successful_reminder_policy_sync_restarts_unavailable_runtime_in_current_session(
+        &mut application,
+    );
     let crate::command::ApplicationCommandAdmission::Started(manual) = application
         .commands
         .submit(crate::command::ApplicationCommand::Backup)

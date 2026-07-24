@@ -10,6 +10,10 @@ policy payload. Desktop returns one bounded acknowledgement only after applying 
 Pending/atomic-promotion projection; a failure prevents the durable settings mutation.
 Startup archive contention preserves that exact durable Pending policy while optional
 runtime health reports StoreUnavailable separately; health is not settings authority.
+After one successful already-authorized synchronization, the application may restart a
+missing reminder runtime once only when its prior failure was StoreUnavailable. That
+reuses the existing runtime and presentation owners and adds no desktop authority,
+timer, polling, retry loop, command, store mutation, or external surface.
 The global projection validates returned aggregate counts before commit and preserves
 scope overrides, deliveries, acknowledgements, and provider evidence. Per-scope editing, snooze, quiet hours,
 reminder OS/tray delivery, usage alerts, activation, P5 automation, and P6 release controls
