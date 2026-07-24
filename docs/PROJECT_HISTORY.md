@@ -4400,7 +4400,9 @@ to their viewport and content minimum height.
 Focused application/controller/UI contracts pass. The UI contract dispatches a real
 wheel event and proves the Sessions content moves; en/ru/pseudo localization passes
 22/22. Root formatting and strict workspace Clippy pass. The attempted serial full
-workspace suite was stopped at the release-driven 60-minute limit while it was still
-compiling later large Windows contract binaries, without a failed test; it is not
-claimed as a complete baseline. This is a product correction, not audit hardening, and
-does not claim M0, package, release candidate, or stable release.
+workspace suite was still compiling later large Windows contract binaries when its
+monitor failed to return at the release-driven 60-minute limit; root stopped the exact
+task-owned process on the delayed observation. It emitted no failed test but is not a
+complete baseline, and no repeat is allowed without an external hard watchdog. This is a
+product correction, not audit hardening, and does not claim M0, package, release
+candidate, or stable release.

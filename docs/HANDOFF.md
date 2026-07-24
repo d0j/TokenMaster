@@ -17,11 +17,13 @@ proves the live loader and dispatches an actual pointer-wheel event that moves S
 content. The en/ru/pseudo localization contract passes 22/22. Root format and strict
 workspace Clippy pass. A Windows smoke observed the produced executable's named main
 window responding after 15 seconds and then closed only that task-owned process. The
-serial workspace suite exceeded the 60-minute release-driven limit while compiling
-later large Windows contract binaries, with no test failure emitted; it was stopped and
-is not a full receipt. The ordinary parallel GNU suite has prior nondeterministic linker
-failures and is likewise not claimed. No child agent or reviewer ran;
-`AUDIT_HARDENING_LOOP` is not active.
+serial workspace suite was still compiling later large Windows contract binaries when
+its monitor failed to return at the 60-minute release-driven limit; root stopped the
+exact task-owned process on the delayed observation. No test failure was emitted, but
+this is not a full receipt and the command must not be repeated without an external hard
+watchdog. The ordinary parallel GNU suite has prior nondeterministic linker failures and
+is likewise not claimed. No child agent or reviewer ran; `AUDIT_HARDENING_LOOP` is not
+active.
 
 Release blockers: local user acceptance of the now-responsive window and the remaining
 bounded local verification must precede any remote work. After an intentional commit and

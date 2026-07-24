@@ -22,10 +22,12 @@ and proves that the Sessions content moves. The en/ru/pseudo localization contra
 passes 22/22. A Windows smoke launched the produced executable, observed the named
 main window responding after 15 seconds, and closed that exact task-owned process.
 Root formatting and strict workspace Clippy pass. The final serial workspace suite was
-deliberately stopped after the 60-minute release-driven limit while it was still
-compiling further large Windows test binaries; it produced neither a test failure nor a
-complete workspace receipt. The ordinary parallel GNU path remains nondeterministically
-linker-unstable and is not claimed as a pass.
+still compiling later large Windows test binaries when its monitor failed to return at
+the 60-minute release-driven limit; root stopped the exact task-owned process as soon as
+the delayed monitor result was observed. It produced neither a test failure nor a
+complete workspace receipt. Do not repeat that command without an external hard
+watchdog. The ordinary parallel GNU path remains nondeterministically linker-unstable
+and is not claimed as a pass.
 
 This is a bounded product-behavior correction, not audit hardening.
 `AUDIT_HARDENING_LOOP` is not active. An approximate remaining-time display remains
