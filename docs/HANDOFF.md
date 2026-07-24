@@ -1,34 +1,39 @@
 # TokenMaster handoff
 
-## First safe-import status (2026-07-24)
+## Responsive first safe-import UX (2026-07-24)
 
-Product state: changed. On an empty archive, the live runtime now publishes only the
-truthful state `FullRebuild` with no terminal outcome. The product projection carries
-that state to the Dashboard, which shows a localized accessible import card. The card
-states that charts and totals appear after the first safe import completes; it does not
-show partial statistics, an invented ETA, source metadata, paths, source contents, or
-credentials. Completion or failure replaces the in-progress state through the existing
-worker-completion publication path.
+Product state: changed. The actual main window is shown before the expensive archive
+prepare/live-start work. It stays responsive while that work proceeds on the bounded
+startup workers, then the already-visible shell receives the live controller and
+projections. The Dashboard presents a localized in-app card, “Loading local usage
+history…”, until one safe archive snapshot exists; it has no standalone splash, fake
+progress/ETA, source metadata, paths, source content, or credentials. All direct route
+ScrollViews bind their viewports to the available route area and their heights to their
+content minima, so the lower panels are reachable by the mouse wheel.
 
-Audit/evidence state: this is one product correction, not a parser, audit, or test-only
-receipt repair. Runtime library evidence is 24/24; the exact compiled desktop-shell
-contract that toggles and observes the accessible card is 1/1; the en/ru/pseudo locale
-contract is 22/22. The broad 16-test desktop UI target exceeded the local 120-second
-command limit, so it is explicitly not claimed as a completed receipt. No reviewer or
-child agent ran, and `AUDIT_HARDENING_LOOP` is not active.
+Audit/evidence state: this is product behavior, not a parser/audit/test-only repair.
+Focused application-startup and controller contracts pass; the compiled UI contract
+proves the live loader and dispatches an actual pointer-wheel event that moves Sessions
+content. The en/ru/pseudo localization contract passes 22/22. Root format and strict
+workspace Clippy pass. A Windows smoke observed the produced executable's named main
+window responding after 15 seconds and then closed only that task-owned process. The
+serial workspace suite exceeded the 60-minute release-driven limit while compiling
+later large Windows contract binaries, with no test failure emitted; it was stopped and
+is not a full receipt. The ordinary parallel GNU suite has prior nondeterministic linker
+failures and is likewise not claimed. No child agent or reviewer ran;
+`AUDIT_HARDENING_LOOP` is not active.
 
-Release blockers: prior M0, MSVC package, and secret-scan evidence belongs to the
-predecessor build and is stale for this change. Commit and push this bounded slice, run
-one exact-head 75-minute M0, and only on green run the exact-clean MSVC package and
-secret-scan pair. Public-download attribution, trusted remote attestation verification,
-signing, authenticated clean-room/P3-E/P4 Windows evidence, exact MSVC comparison, and
-the explicitly deferred 24-hour soak remain open. Do not start the soak without operator
-direction; P4 remains frozen.
+Release blockers: local user acceptance of the now-responsive window and the remaining
+bounded local verification must precede any remote work. After an intentional commit and
+push, one exact-head 75-minute M0 is permitted; only a green result permits exact-clean
+MSVC package and secret-scan receipts. Public-download attribution, trusted remote
+attestation verification, signing, authenticated clean-room/P3-E/P4 Windows evidence,
+exact MSVC comparison, and the explicitly deferred 24-hour soak remain. Do not start
+the soak without operator direction; P4 remains frozen.
 
-Git state: stage only the import-status runtime/product/desktop code, its focused tests,
-and these closeout documents. Commit and push once. Do not create a later docs-only
-commit for generated remote receipts, and do not claim a package, M0, or release before
-the exact-head gates complete. No task-owned UI process or child agent is active.
+Git state: stage only this startup/UI/localization slice, its focused tests, and these
+closeout documents. No task-owned UI, Cargo, compiler, or child-agent process is active.
+Do not claim a package, M0, or release before the exact-head gates complete.
 
 ## Evidence-based M0 receipt budget (2026-07-24)
 

@@ -73,7 +73,7 @@ component InitialImportCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: groupbox;
-    accessible-label: @tr("Importing local usage history. Charts and totals will appear after the first safe import completes.");
+    accessible-label: @tr("Loading local usage history. Charts and totals will appear after the first safe import completes.");
 
     HorizontalLayout {
         padding: UiTokens.space;
@@ -81,7 +81,7 @@ component InitialImportCard inherits Rectangle {
         Text { text: "●"; color: UiTokens.accent; font-size: 14px; vertical-alignment: center; }
         VerticalLayout {
             spacing: UiTokens.space-xs;
-            Text { text: @tr("Importing local usage history…"); color: UiTokens.text-primary; font-size: 13px; font-weight: 750; }
+            Text { text: @tr("Loading local usage history…"); color: UiTokens.text-primary; font-size: 13px; font-weight: 750; }
             Text { text: @tr("Charts and totals will appear after the first safe import completes."); color: UiTokens.text-secondary; font-size: 11px; wrap: word-wrap; }
         }
     }
@@ -395,7 +395,11 @@ export component DashboardView inherits Rectangle {
     background: UiTokens.background;
 
     ScrollView {
+        width: parent.width;
+        height: parent.height;
         viewport-width: self.width;
+        content := VerticalLayout {
+        width: parent.width;
         if root.narrow: VerticalLayout {
             width: parent.width;
             padding: UiTokens.space;
@@ -461,5 +465,7 @@ export component DashboardView inherits Rectangle {
             }
             if root.slots.length > 5: DashboardBoardSlot { slot: root.slots[5]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
         }
+        }
+        viewport-height: max(self.height, content.min-height);
     }
 }

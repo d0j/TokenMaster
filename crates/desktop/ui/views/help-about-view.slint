@@ -94,8 +94,10 @@ export component HelpAboutView inherits Rectangle {
     accessible-label: @tr("TokenMaster Help and About. Version {0}. Local-first usage intelligence with explicit data-source, privacy, health, automation, and license truth.", root.product-version);
 
     ScrollView {
+        width: parent.width;
+        height: parent.height;
         viewport-width: self.width;
-        VerticalLayout {
+        content := VerticalLayout {
             width: parent.width;
             padding: UiTokens.space;
             spacing: UiTokens.space;
@@ -197,5 +199,6 @@ export component HelpAboutView inherits Rectangle {
                 }
             }
         }
+        viewport-height: max(self.height, content.min-height);
     }
 }

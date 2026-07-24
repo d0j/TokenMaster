@@ -375,11 +375,47 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
         .match_predicate(|element| {
             element.accessible_label().is_some_and(|label| {
                 label
-                    == "Importing local usage history. Charts and totals will appear after the first safe import completes."
+                    == "Loading local usage history. Charts and totals will appear after the first safe import completes."
             })
         })
         .find_all();
     assert_eq!(import_status.len(), 1);
+    window
+        .window()
+        .set_size(slint::PhysicalSize::new(1_120, 720));
+    let import_card = &import_status[0];
+    let import_position = import_card.absolute_position();
+    let import_size = import_card.size();
+    assert!(import_size.width > 0.0 && import_size.height > 0.0);
+    assert!(import_position.y >= 58.0);
+    assert!(import_position.y + import_size.height <= 720.0);
+    let sessions_before = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::Groupbox)
+        .match_predicate(|element| {
+            element
+                .accessible_label()
+                .is_some_and(|label| label == "Sessions")
+        })
+        .find_all();
+    assert_eq!(sessions_before.len(), 1);
+    let sessions_y_before = sessions_before[0].absolute_position().y;
+    window
+        .window()
+        .dispatch_event(WindowEvent::PointerScrolled {
+            position: slint::LogicalPosition::new(900.0, 640.0),
+            delta_x: 0.0,
+            delta_y: -480.0,
+        });
+    let sessions_after = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::Groupbox)
+        .match_predicate(|element| {
+            element
+                .accessible_label()
+                .is_some_and(|label| label == "Sessions")
+        })
+        .find_all();
+    assert_eq!(sessions_after.len(), 1);
+    assert!(sessions_after[0].absolute_position().y < sessions_y_before);
 
     assert_compiled_command_palette_is_bounded_and_routes_through_desktop_state(window);
 

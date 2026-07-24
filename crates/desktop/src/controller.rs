@@ -626,6 +626,7 @@ type TerminalNavigationNotifier = Arc<Mutex<Option<Arc<dyn DesktopTerminalNaviga
 type TerminalHistoryRangeNotifier =
     Arc<Mutex<Option<Arc<dyn DesktopTerminalHistoryRangeNotifier>>>>;
 type PublishedProductGeneration = Arc<Mutex<Option<ProductGeneration>>>;
+type SharedProductReducer = Arc<Mutex<ProductReducer>>;
 type RuntimeObservationSlot = Arc<Mutex<RuntimeObservationState>>;
 type DesktopWorkSlot = Arc<Mutex<DesktopWorkState>>;
 
@@ -834,6 +835,7 @@ impl DesktopSnapshotReceiver {
 pub struct DesktopController {
     clock: Arc<dyn Clock>,
     worker: RefreshWorker,
+    reducer: SharedProductReducer,
     publication: DesktopPublication,
     snapshot_epoch: Arc<AtomicU64>,
     work: DesktopWorkSlot,
@@ -931,7 +933,8 @@ impl DesktopController {
         let worker_snapshot_epoch = Arc::clone(&snapshot_epoch);
         let worker_work = Arc::clone(&work);
         let execute_clock = clock.clone();
-        let mut reducer = ProductReducer::new();
+        let reducer = Arc::new(Mutex::new(ProductReducer::new()));
+        let worker_reducer = Arc::clone(&reducer);
         let worker = RefreshWorker::spawn_notified(
             worker_clock,
             Arc::new(DesktopWorkCompletionNotifier {
@@ -947,6 +950,9 @@ impl DesktopController {
                     snapshot_epoch: &worker_snapshot_epoch,
                     work: &worker_work,
                 };
+                let Ok(mut reducer) = worker_reducer.lock() else {
+                    return RefreshOutcome::Failed;
+                };
                 execute_work(&mut source, &mut reducer, permit, &context)
             },
         )
@@ -954,6 +960,7 @@ impl DesktopController {
         Ok(Self {
             clock,
             worker,
+            reducer,
             publication,
             snapshot_epoch,
             work,
@@ -1171,6 +1178,22 @@ impl DesktopController {
             .is_some_and(|generation| observation.generation() <= generation)
         {
             return Ok(DesktopRuntimeObservationOutcome::IgnoredNotNewer);
+        }
+        if lock_published_generation(&self.publication.published_generation)?.is_none() {
+            let mut reducer = self
+                .reducer
+                .lock()
+                .map_err(|_| DesktopControllerError::new(DesktopControllerErrorCode::Internal))?;
+            apply_runtime_observation(&mut reducer, observation)
+                .map_err(|_| DesktopControllerError::new(DesktopControllerErrorCode::Internal))?;
+            if publish_snapshot(reducer.snapshot(), &self.publication) != RefreshOutcome::Completed
+            {
+                return Err(DesktopControllerError::new(
+                    DesktopControllerErrorCode::Internal,
+                ));
+            }
+            state.latest_generation = Some(observation.generation());
+            return Ok(DesktopRuntimeObservationOutcome::Accepted);
         }
         state.latest_generation = Some(observation.generation());
         state.pending = Some(observation);

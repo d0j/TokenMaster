@@ -4385,3 +4385,22 @@ The strict focused target and the complete runtime library target pass 23/23. Th
 run for the predecessor commit was cancelled as superseded. This corrects required M0
 evidence only; it does not claim a successor remote M0, package, release candidate, or
 stable release.
+
+## 2026-07-24 — Responsive first safe-import window and route scrolling
+
+Local user acceptance exposed two production UX failures in the initial-import path: the
+first desktop window could remain non-responsive while archive startup ran, and lower
+route content could be clipped without wheel scrolling. Startup now creates the real
+Slint shell first and performs archive preparation/live start on bounded workers before
+attaching the prepared live bundle to that same shell. The Dashboard renders a localized
+in-app “Loading local usage history…” card until the first safe archive snapshot exists;
+it deliberately has no fabricated percentage or ETA. Direct route ScrollViews now bind
+to their viewport and content minimum height.
+
+Focused application/controller/UI contracts pass. The UI contract dispatches a real
+wheel event and proves the Sessions content moves; en/ru/pseudo localization passes
+22/22. Root formatting and strict workspace Clippy pass. The attempted serial full
+workspace suite was stopped at the release-driven 60-minute limit while it was still
+compiling later large Windows contract binaries, without a failed test; it is not
+claimed as a complete baseline. This is a product correction, not audit hardening, and
+does not claim M0, package, release candidate, or stable release.

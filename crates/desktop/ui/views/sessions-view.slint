@@ -354,8 +354,10 @@ export component SessionsView inherits Rectangle {
     background: UiTokens.background;
 
     ScrollView {
+        width: parent.width;
+        height: parent.height;
         viewport-width: self.width;
-        VerticalLayout {
+        content := VerticalLayout {
             width: parent.width;
             padding: UiTokens.space;
             spacing: UiTokens.space;
@@ -402,5 +404,6 @@ export component SessionsView inherits Rectangle {
                 narrow: root.narrow;
             }
         }
+        viewport-height: max(self.height, content.min-height);
     }
 }

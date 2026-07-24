@@ -190,8 +190,10 @@ export component NotificationsView inherits Rectangle {
     background: UiTokens.background;
 
     ScrollView {
+        width: parent.width;
+        height: parent.height;
         viewport-width: self.width;
-        VerticalLayout {
+        content := VerticalLayout {
             width: parent.width;
             padding: UiTokens.space;
             spacing: UiTokens.space;
@@ -206,5 +208,6 @@ export component NotificationsView inherits Rectangle {
             ReminderProfilesCard { rows: root.scope-rows; state: root.state; narrow: root.narrow; }
             BenefitLotsCard { rows: root.lot-rows; state: root.state; narrow: root.narrow; }
         }
+        viewport-height: max(self.height, content.min-height);
     }
 }

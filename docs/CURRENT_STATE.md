@@ -1,30 +1,43 @@
 # TokenMaster current state
 
-## 2026-07-24 — First safe-import status
+## 2026-07-24 — Responsive first safe-import UX
 
-Product state: changed. A new portable archive now immediately identifies an active
-first full rebuild as local-history import. The Dashboard displays a compact status card
-until one complete archive snapshot is promoted; it then disappears and the normal
-authoritative totals and charts become visible. It never displays staging aggregates,
-an invented percentage/ETA, source count, local path, source content, or credentials.
+Product state: changed. The real Slint main window and Dashboard now appear before
+archive validation, recovery, migration, and first live import complete. Those startup
+steps run in the existing bounded background path; the same early window receives the
+prepared live bundle when it is ready. Until one complete archive snapshot is promoted,
+the Dashboard has a localized in-app status card: “Loading local usage history…”, with
+the truthful explanation that charts and totals follow the first safe import. It has no
+separate splash window, staging aggregates, invented percentage/ETA, source count,
+local path, source content, or credentials.
 
-Evidence state: `tokenmaster-runtime` library passes 24/24, including the empty-archive
-status contract. The compiled desktop shell verifies the card is initially absent and
-is exposed as an accessible status only when the projected property is true. The closed
-en/ru/pseudo localization contract passes 22/22. The broad `ui_contract` suite has not
-been claimed as a receipt: its complete 16-test execution exceeded the local 120-second
-command limit, while the exact affected shell contract passes 1/1.
+Every direct route ScrollView now has an explicit viewport and content-derived minimum
+height, so the lower content remains reachable rather than being clipped below the
+window. The Dashboard uses the same bounded geometry while retaining its conditional
+loading card.
 
-This is a bounded product-behavior correction, not audit hardening. `AUDIT_HARDENING_LOOP`
-is not active. An approximate remaining-time display remains intentionally open: it
-requires a separate source-discovery and throughput contract, rather than a false number
-at startup.
+Evidence state: focused application startup, desktop controller, compiled shell, and
+wheel-scroll contracts pass; the shell contract dispatches a real pointer-wheel event
+and proves that the Sessions content moves. The en/ru/pseudo localization contract
+passes 22/22. A Windows smoke launched the produced executable, observed the named
+main window responding after 15 seconds, and closed that exact task-owned process.
+Root formatting and strict workspace Clippy pass. The final serial workspace suite was
+deliberately stopped after the 60-minute release-driven limit while it was still
+compiling further large Windows test binaries; it produced neither a test failure nor a
+complete workspace receipt. The ordinary parallel GNU path remains nondeterministically
+linker-unstable and is not claimed as a pass.
 
-Remaining release blockers: the predecessor M0/package/secret receipts do not apply to
-this product change. Obtain one exact-head remote M0, then exact-clean MSVC package and
-secret receipts if green; public-download Slint attribution, trusted remote attestation
-verification, signing, authenticated clean-room/P3-E/P4 Windows evidence, exact MSVC
-comparison, and the explicitly deferred 24-hour soak remain. New P4 work remains frozen.
+This is a bounded product-behavior correction, not audit hardening.
+`AUDIT_HARDENING_LOOP` is not active. An approximate remaining-time display remains
+intentionally open: it requires a separate source-discovery and throughput contract,
+rather than a false number at startup.
+
+Remaining release blockers: complete the bounded local verification without retrying the
+same over-budget workspace path, then create fresh exact-head M0/package/secret
+receipts only when local user acceptance permits it. Public-download Slint attribution,
+trusted remote attestation verification, signing, authenticated clean-room/P3-E/P4
+Windows evidence, exact MSVC comparison, and the explicitly deferred 24-hour soak
+remain. New P4 work remains frozen.
 
 ## 2026-07-24 — Evidence-based M0 receipt budget
 

@@ -316,6 +316,8 @@ export component MainWindow inherits Window {
         }
 
     VerticalLayout {
+        width: parent.width;
+        height: parent.height;
         visible: !root.compact-widget-visible;
         Rectangle {
             height: 58px;
@@ -357,6 +359,7 @@ export component MainWindow inherits Window {
 
         HorizontalLayout {
             spacing: 0px;
+            vertical-stretch: 1;
 
             Rectangle {
                 width: 250px;

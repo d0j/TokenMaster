@@ -220,8 +220,10 @@ export component ProjectsView inherits Rectangle {
     background: UiTokens.background;
 
     ScrollView {
+        width: parent.width;
+        height: parent.height;
         viewport-width: self.width;
-        VerticalLayout {
+        content := VerticalLayout {
             width: parent.width;
             padding: UiTokens.space;
             spacing: UiTokens.space;
@@ -248,5 +250,6 @@ export component ProjectsView inherits Rectangle {
             }
             ProjectsTableCard { rows: root.rows; narrow: root.narrow; state: root.state; }
         }
+        viewport-height: max(self.height, content.min-height);
     }
 }

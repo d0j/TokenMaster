@@ -344,6 +344,37 @@ fn unavailable_runtime_observation(value: u64) -> DesktopRuntimeObservation {
 }
 
 #[test]
+fn first_runtime_observation_is_published_before_archive_queries() {
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let mut controller = DesktopController::spawn(
+        UnavailableSource {
+            calls: Arc::clone(&calls),
+        },
+        DesktopQueryPlan::overview().expect("overview plan"),
+    )
+    .expect("controller starts");
+
+    assert_eq!(
+        controller
+            .observe_runtime(unavailable_runtime_observation(1))
+            .expect("first runtime observation"),
+        DesktopRuntimeObservationOutcome::Accepted
+    );
+
+    let snapshot = controller
+        .take_snapshot()
+        .expect("snapshot mailbox")
+        .expect("runtime snapshot is published without a query");
+    assert_eq!(
+        snapshot.runtime().usage().observation_error(),
+        Some(ProductRuntimeObservationError::StoreUnavailable)
+    );
+    assert!(calls.lock().expect("call log").is_empty());
+
+    controller.shutdown().expect("controller stops");
+}
+
+#[test]
 fn runtime_observations_are_capacity_one_generation_ordered_and_joined_on_refresh() {
     let calls = Arc::new(Mutex::new(Vec::new()));
     let mut controller = DesktopController::spawn(

@@ -1,9 +1,11 @@
+use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 use std::sync::{
     Arc, Mutex, Weak,
     atomic::{AtomicBool, AtomicU64, Ordering},
 };
+use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use slint::ComponentHandle;
@@ -101,6 +103,86 @@ impl ApplicationBundleSlot {
     }
 }
 
+struct PreparedApplicationStart {
+    environment: ApplicationEnvironment,
+    data_root: DataRoot,
+    state: Arc<ApplicationStateOwner>,
+    preflight: ApplicationPreflight,
+}
+
+struct PreparedApplicationLiveStart {
+    prepared: PreparedApplicationStart,
+    live: Option<PreparedLiveBundle>,
+}
+
+struct ApplicationDesktopUi {
+    shell: DesktopShell,
+    intent_router: Rc<DesktopIntentRouter>,
+    history_range_router: Rc<DesktopHistoryRangeIntentRouter>,
+    session_detail_router: Rc<DesktopSessionDetailIntentRouter>,
+    session_page_router: Rc<DesktopSessionPageIntentRouter>,
+    lifecycle_router: Option<Rc<DesktopLifecycleIntentRouter>>,
+    bundle: SharedBundle,
+}
+
+struct ApplicationStartupSession {
+    ui: Option<ApplicationDesktopUi>,
+    current_session: Option<CurrentSessionPrimary>,
+    application: Option<Application>,
+    error: Option<ApplicationError>,
+}
+
+thread_local! {
+    static APPLICATION_STARTUP_SESSION: RefCell<Option<ApplicationStartupSession>> = const { RefCell::new(None) };
+}
+
+impl ApplicationDesktopUi {
+    fn new(reliable_state: DesktopReliableStateProjection) -> Result<Self, ApplicationError> {
+        let initial = ProductReducer::new().snapshot();
+        let intent_router = Rc::new(DesktopIntentRouter::new());
+        let history_range_router = Rc::new(DesktopHistoryRangeIntentRouter::new());
+        let session_detail_router = Rc::new(DesktopSessionDetailIntentRouter::new());
+        let session_page_router = Rc::new(DesktopSessionPageIntentRouter::new());
+        #[cfg(not(test))]
+        let lifecycle_router = Some(Rc::new(DesktopLifecycleIntentRouter::new()));
+        #[cfg(test)]
+        let lifecycle_router: Option<Rc<DesktopLifecycleIntentRouter>> = None;
+        #[cfg(not(test))]
+        let shell = DesktopShell::new_with_reliable_state_and_all_history_and_session_sinks(
+            &initial,
+            reliable_state,
+            intent_router.clone(),
+            history_range_router.clone(),
+            session_detail_router.clone(),
+            session_page_router.clone(),
+            lifecycle_router
+                .as_ref()
+                .cloned()
+                .ok_or_else(ApplicationError::internal)?,
+        )
+        .map_err(|_| ApplicationError::ui_unavailable())?;
+        #[cfg(test)]
+        let shell = DesktopShell::new_with_reliable_state_and_history_and_session_sinks(
+            &initial,
+            reliable_state,
+            intent_router.clone(),
+            history_range_router.clone(),
+            session_detail_router.clone(),
+            session_page_router.clone(),
+        )
+        .map_err(|_| ApplicationError::ui_unavailable())?;
+        Ok(Self {
+            shell,
+            intent_router,
+            history_range_router,
+            session_detail_router,
+            session_page_router,
+            lifecycle_router,
+            bundle: Arc::new(Mutex::new(ApplicationBundleSlot::new())),
+        })
+    }
+}
+
 pub fn run() -> Result<(), ApplicationError> {
     let claim = CurrentSessionIntegration::claim()
         .map_err(|_| ApplicationError::current_session_unavailable())?;
@@ -110,12 +192,137 @@ pub fn run() -> Result<(), ApplicationError> {
             select_production_renderer().map_err(|_| ApplicationError::ui_unavailable())?;
             let environment =
                 ApplicationEnvironment::capture().map_err(|_| ApplicationError::data())?;
-            let mut application =
-                Application::start_with_current_session(&environment, current_session)?;
-            let event_result = application.run_event_loop();
-            let shutdown_result = application.shutdown();
-            event_result.and(shutdown_result)
+            run_startup_event_loop(environment, current_session)
         }
+    }
+}
+
+fn run_startup_event_loop(
+    environment: ApplicationEnvironment,
+    current_session: CurrentSessionPrimary,
+) -> Result<(), ApplicationError> {
+    let startup_ui = ApplicationDesktopUi::new(DesktopReliableStateProjection::unavailable())?;
+    startup_ui
+        .shell
+        .window()
+        .set_dashboard_initial_import_in_progress(true);
+    startup_ui
+        .shell
+        .window()
+        .show()
+        .map_err(|_| ApplicationError::ui_unavailable())?;
+    APPLICATION_STARTUP_SESSION.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        if slot.is_some() {
+            return Err(ApplicationError::internal());
+        }
+        *slot = Some(ApplicationStartupSession {
+            ui: Some(startup_ui),
+            current_session: Some(current_session),
+            application: None,
+            error: None,
+        });
+        Ok(())
+    })?;
+
+    let startup_environment = environment.clone();
+    if thread::Builder::new()
+        .name("tokenmaster-startup".to_owned())
+        .spawn(move || {
+            let prepared = Application::prepare_start(&startup_environment);
+            let _ = slint::invoke_from_event_loop(move || complete_startup(prepared));
+        })
+        .is_err()
+    {
+        let _ = APPLICATION_STARTUP_SESSION.with(|slot| {
+            slot.borrow_mut()
+                .take()
+                .and_then(|session| session.ui.map(|ui| ui.shell.window().hide()))
+        });
+        return Err(ApplicationError::internal());
+    }
+
+    let event_result =
+        slint::run_event_loop_until_quit().map_err(|_| ApplicationError::event_loop());
+    let mut session = APPLICATION_STARTUP_SESSION
+        .with(|slot| slot.borrow_mut().take())
+        .ok_or_else(ApplicationError::internal)?;
+    let shutdown_result = session
+        .application
+        .as_mut()
+        .map_or(Ok(()), Application::shutdown);
+    event_result?;
+    shutdown_result?;
+    session.error.map_or(Ok(()), Err)
+}
+
+fn complete_startup(prepared: Result<PreparedApplicationStart, ApplicationError>) {
+    let should_quit = APPLICATION_STARTUP_SESSION.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let Some(session) = slot.as_mut() else {
+            return true;
+        };
+        let result = prepared.and_then(|prepared| {
+            let bundle = session
+                .ui
+                .as_ref()
+                .map(|ui| Arc::clone(&ui.bundle))
+                .ok_or_else(ApplicationError::internal)?;
+            thread::Builder::new()
+                .name("tokenmaster-live-startup".to_owned())
+                .spawn(move || {
+                    let live = Application::prepare_live_start_with_observer(
+                        prepared,
+                        &bundle,
+                        |_| Ok(()),
+                    );
+                    let _ = slint::invoke_from_event_loop(move || complete_live_startup(live));
+                })
+                .map(|_| ())
+                .map_err(|_| ApplicationError::internal())
+        });
+        if let Err(error) = result {
+            session.error = Some(error);
+            true
+        } else {
+            false
+        }
+    });
+    if should_quit {
+        let _ = slint::quit_event_loop();
+    }
+}
+
+fn complete_live_startup(started: Result<PreparedApplicationLiveStart, ApplicationError>) {
+    let should_quit = APPLICATION_STARTUP_SESSION.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let Some(session) = slot.as_mut() else {
+            return true;
+        };
+        let result = started
+            .and_then(|started| {
+                let ui = session.ui.take().ok_or_else(ApplicationError::internal)?;
+                let current_session = session
+                    .current_session
+                    .take()
+                    .ok_or_else(ApplicationError::internal)?;
+                Application::finish_prepared_live_start(started, ui, Some(current_session))
+            })
+            .and_then(|application| {
+                application.show_window()?;
+                session.application = Some(application);
+                Ok(())
+            });
+        match result {
+            Ok(()) => false,
+            Err(error) => {
+                session.error = Some(error);
+                true
+            }
+        }
+    });
+    if should_quit {
+        let _ = slint::quit_event_loop();
     }
 }
 
@@ -159,15 +366,18 @@ impl Application {
         Self::start_with_observer(environment, |_| Ok(()))
     }
 
-    fn start_with_current_session(
+    fn prepare_start(
         environment: &ApplicationEnvironment,
-        current_session: CurrentSessionPrimary,
-    ) -> Result<Self, ApplicationError> {
-        Self::start_with_observer_and_current_session(
-            environment,
-            |_| Ok(()),
-            Some(current_session),
-        )
+    ) -> Result<PreparedApplicationStart, ApplicationError> {
+        let data_root = DataRoot::resolve(environment).map_err(|_| ApplicationError::data())?;
+        let state = Arc::new(ApplicationStateOwner::open(&data_root)?);
+        let preflight = state.prepare(&data_root)?;
+        Ok(PreparedApplicationStart {
+            environment: environment.clone(),
+            data_root,
+            state,
+            preflight,
+        })
     }
 
     #[cfg(test)]
@@ -181,66 +391,107 @@ impl Application {
         Self::start_with_observer_and_current_session(environment, observer, None)
     }
 
+    #[cfg(test)]
     fn start_with_observer_and_current_session<F>(
         environment: &ApplicationEnvironment,
-        mut observer: F,
-        mut session_owner: Option<CurrentSessionPrimary>,
+        observer: F,
+        session_owner: Option<CurrentSessionPrimary>,
     ) -> Result<Self, ApplicationError>
     where
         F: FnMut(ApplicationStartBoundary) -> Result<(), ApplicationError>,
     {
-        let data_root = DataRoot::resolve(environment).map_err(|_| ApplicationError::data())?;
-        let state = Arc::new(ApplicationStateOwner::open(&data_root)?);
-        let mut preflight = state.prepare(&data_root)?;
-        let initial = ProductReducer::new().snapshot();
-        let reliable_state = state
-            .reliable_state_projection_for_outcome(preflight.effective_outcome(), None)
+        let prepared = Self::prepare_start(environment)?;
+        Self::start_prepared_with_observer_and_current_session(prepared, observer, session_owner)
+    }
+
+    #[cfg(test)]
+    fn start_prepared_with_observer_and_current_session<F>(
+        prepared: PreparedApplicationStart,
+        observer: F,
+        session_owner: Option<CurrentSessionPrimary>,
+    ) -> Result<Self, ApplicationError>
+    where
+        F: FnMut(ApplicationStartBoundary) -> Result<(), ApplicationError>,
+    {
+        let reliable_state = prepared
+            .state
+            .reliable_state_projection_for_outcome(prepared.preflight.effective_outcome(), None)
             .unwrap_or_else(|_| DesktopReliableStateProjection::unavailable());
-        let bundle = Arc::new(Mutex::new(ApplicationBundleSlot::new()));
-        let intent_router = Rc::new(DesktopIntentRouter::new());
-        let history_range_router = Rc::new(DesktopHistoryRangeIntentRouter::new());
-        let session_detail_router = Rc::new(DesktopSessionDetailIntentRouter::new());
-        let session_page_router = Rc::new(DesktopSessionPageIntentRouter::new());
-        let lifecycle_router = Rc::new(DesktopLifecycleIntentRouter::new());
-        #[cfg(not(test))]
-        let shell = DesktopShell::new_with_reliable_state_and_all_history_and_session_sinks(
-            &initial,
-            reliable_state,
-            intent_router.clone(),
-            history_range_router.clone(),
-            session_detail_router.clone(),
-            session_page_router.clone(),
-            lifecycle_router.clone(),
-        )
-        .map_err(|_| ApplicationError::ui_unavailable())?;
-        #[cfg(test)]
-        let shell = DesktopShell::new_with_reliable_state_and_history_and_session_sinks(
-            &initial,
-            reliable_state,
-            intent_router.clone(),
-            history_range_router.clone(),
-            session_detail_router.clone(),
-            session_page_router.clone(),
-        )
-        .map_err(|_| ApplicationError::ui_unavailable())?;
-        let bridge_factory = shell.bridge_factory();
-        let outcome = preflight.report().outcome();
+        let ui = ApplicationDesktopUi::new(reliable_state)?;
+        let started = Self::prepare_live_start_with_observer(prepared, &ui.bundle, observer)?;
+        Self::finish_prepared_live_start(started, ui, session_owner)
+    }
+
+    fn prepare_live_start_with_observer<F>(
+        mut prepared: PreparedApplicationStart,
+        bundle: &SharedBundle,
+        mut observer: F,
+    ) -> Result<PreparedApplicationLiveStart, ApplicationError>
+    where
+        F: FnMut(ApplicationStartBoundary) -> Result<(), ApplicationError>,
+    {
+        let outcome = prepared.preflight.report().outcome();
         let may_start_live = matches!(
             outcome,
             BootstrapOutcome::Healthy
                 | BootstrapOutcome::FirstInstall
                 | BootstrapOutcome::MigrationRequired
         );
-        let (live_started, bridge) = if may_start_live {
-            match start_live_bundle(
-                environment,
-                &data_root,
-                &state,
-                &mut preflight,
-                &bridge_factory,
-                &bundle,
+        let live = if may_start_live {
+            match prepare_live_bundle(
+                &prepared.environment,
+                &prepared.data_root,
+                &prepared.state,
+                &mut prepared.preflight,
+                bundle,
                 outcome,
                 &mut observer,
+            ) {
+                Ok(live) => Some(live),
+                Err(_) => {
+                    prepared.preflight.release_startup_guard();
+                    discard_bundle(bundle)?;
+                    None
+                }
+            }
+        } else {
+            prepared.preflight.release_startup_guard();
+            None
+        };
+        Ok(PreparedApplicationLiveStart { prepared, live })
+    }
+
+    fn finish_prepared_live_start(
+        started: PreparedApplicationLiveStart,
+        ui: ApplicationDesktopUi,
+        mut session_owner: Option<CurrentSessionPrimary>,
+    ) -> Result<Self, ApplicationError> {
+        let PreparedApplicationLiveStart { prepared, live } = started;
+        let PreparedApplicationStart {
+            environment,
+            data_root,
+            state,
+            mut preflight,
+        } = prepared;
+        let ApplicationDesktopUi {
+            shell,
+            intent_router,
+            history_range_router,
+            session_detail_router,
+            session_page_router,
+            lifecycle_router,
+            bundle,
+        } = ui;
+        let bridge_factory = shell.bridge_factory();
+        let (live_started, bridge) = match live {
+            Some(live) => match finish_live_bundle(
+                &data_root,
+                &state,
+                &bridge_factory,
+                &bundle,
+                live.started,
+                live.maintenance,
+                live.maintenance_source,
             ) {
                 Ok(bridge) => {
                     preflight.session_mut().authorize_healthy_launch();
@@ -251,16 +502,29 @@ impl Application {
                     discard_bundle(&bundle)?;
                     (false, None)
                 }
-            }
-        } else {
-            preflight.release_startup_guard();
-            (false, None)
+            },
+            None => (false, None),
         };
 
         let bridge = Arc::new(Mutex::new(bridge));
         let preflight = Arc::new(Mutex::new(preflight));
         let live_started = Arc::new(AtomicBool::new(live_started));
         let reliable_notifier = shell.reliable_state_notifier();
+        let reliable_state = state
+            .reliable_state_projection_for_outcome(
+                preflight
+                    .lock()
+                    .map_err(|_| ApplicationError::internal())?
+                    .effective_outcome(),
+                None,
+            )
+            .unwrap_or_else(|_| DesktopReliableStateProjection::unavailable());
+        let _ = reliable_notifier.publish(reliable_state);
+        if !live_started.load(Ordering::Acquire) {
+            shell
+                .window()
+                .set_dashboard_initial_import_in_progress(false);
+        }
         #[cfg(test)]
         let reliable_publish_count = Arc::new(AtomicU64::new(0));
         let command_environment = environment.clone();
@@ -337,11 +601,13 @@ impl Application {
                 Arc::downgrade(&bundle),
             )))
             .map_err(|_| ApplicationError::internal())?;
-        lifecycle_router
-            .install(Rc::new(ApplicationDesktopLifecycleSink::new(
-                shell.window().as_weak(),
-            )))
-            .map_err(|_| ApplicationError::internal())?;
+        if let Some(lifecycle_router) = lifecycle_router {
+            lifecycle_router
+                .install(Rc::new(ApplicationDesktopLifecycleSink::new(
+                    shell.window().as_weak(),
+                )))
+                .map_err(|_| ApplicationError::internal())?;
+        }
 
         let current_session_activation = if let Some(owner) = session_owner.as_mut() {
             let activation = ApplicationSessionActivationBridge::new(
@@ -380,7 +646,7 @@ impl Application {
         Ok(application)
     }
 
-    fn run_event_loop(&self) -> Result<(), ApplicationError> {
+    fn show_window(&self) -> Result<(), ApplicationError> {
         self.shell
             .window()
             .show()
@@ -389,7 +655,7 @@ impl Application {
         if let Some(activation) = self.current_session_activation.as_ref() {
             activation.flush();
         }
-        slint::run_event_loop_until_quit().map_err(|_| ApplicationError::event_loop())
+        Ok(())
     }
 
     #[cfg_attr(
@@ -1402,33 +1668,32 @@ fn application_operation_completion(
     )
 }
 
+struct PreparedLiveBundle {
+    started: GuardedLiveStart,
+    maintenance: Option<BackupMaintenanceRuntime>,
+    maintenance_source: MaintenanceSourceState,
+}
+
 #[allow(clippy::too_many_arguments)]
-fn start_live_bundle(
+fn prepare_live_bundle(
     environment: &ApplicationEnvironment,
     data_root: &DataRoot,
     state: &ApplicationStateOwner,
     preflight: &mut ApplicationPreflight,
-    bridge_factory: &DesktopBridgeFactory,
     bundle: &SharedBundle,
     outcome: BootstrapOutcome,
     observer: &mut dyn FnMut(ApplicationStartBoundary) -> Result<(), ApplicationError>,
-) -> Result<DesktopSnapshotBridge, ApplicationError> {
+) -> Result<PreparedLiveBundle, ApplicationError> {
     if preflight.requires_source_reconciliation() {
         if outcome != BootstrapOutcome::Healthy {
             return Err(ApplicationError::state());
         }
         observer(ApplicationStartBoundary::BeforeReconstructionReconciliation)?;
         let startup_guard = preflight.take_startup_guard()?;
-        let bridge = start_reconstructed_bundle(
-            environment,
-            data_root,
-            state,
-            bridge_factory,
-            bundle,
-            startup_guard,
-        )?;
+        let live =
+            prepare_reconstructed_live_bundle(environment, data_root, bundle, startup_guard)?;
         preflight.mark_live_healthy();
-        return Ok(bridge);
+        return Ok(live);
     }
     let mut pending_migration = preflight.report().prior_run().pending_migration();
     if let Some(pending) = pending_migration {
@@ -1480,15 +1745,11 @@ fn start_live_bundle(
         BootstrapOutcome::MigrationRequired => MaintenanceSourceState::Healthy,
         _ => return Err(ApplicationError::internal()),
     };
-    finish_live_bundle(
-        data_root,
-        state,
-        bridge_factory,
-        bundle,
+    Ok(PreparedLiveBundle {
         started,
         maintenance,
         maintenance_source,
-    )
+    })
 }
 
 fn start_current_bundle(
@@ -1558,21 +1819,35 @@ fn start_reconstructed_bundle(
     bundle: &SharedBundle,
     guard: ExclusiveFileLeaseGuard,
 ) -> Result<DesktopSnapshotBridge, ApplicationError> {
+    let prepared = prepare_reconstructed_live_bundle(environment, data_root, bundle, guard)?;
+    finish_live_bundle(
+        data_root,
+        state,
+        bridge_factory,
+        bundle,
+        prepared.started,
+        prepared.maintenance,
+        prepared.maintenance_source,
+    )
+}
+
+fn prepare_reconstructed_live_bundle(
+    environment: &ApplicationEnvironment,
+    data_root: &DataRoot,
+    bundle: &SharedBundle,
+    guard: ExclusiveFileLeaseGuard,
+) -> Result<PreparedLiveBundle, ApplicationError> {
     let started = start_guarded_live(environment, data_root, bundle, guard)?;
     started
         .live
         .refresh_now(RefreshUrgency::Recovery)
         .map_err(|_| ApplicationError::live_runtime())?;
     wait_for_reconstructed_reconciliation(&started.live)?;
-    finish_live_bundle(
-        data_root,
-        state,
-        bridge_factory,
-        bundle,
+    Ok(PreparedLiveBundle {
         started,
-        None,
-        MaintenanceSourceState::Healthy,
-    )
+        maintenance: None,
+        maintenance_source: MaintenanceSourceState::Healthy,
+    })
 }
 
 fn wait_for_reconstructed_reconciliation(live: &LiveRuntime) -> Result<(), ApplicationError> {
