@@ -1,5 +1,21 @@
 # TokenMaster project history
 
+## 2026-07-24 — Reminder startup receipt contract and loop stop
+
+Remote Windows M0 `30061416775` reached the app library and rejected a lawful
+startup reminder projection: `Pending` rather than an unconditional `Synchronized`.
+The established product contract says archive Busy/unavailable retains the portable
+desired policy as retryable Pending and separately degrades the optional reminder
+runtime to StoreUnavailable. Production already followed that rule. The integration
+test now verifies the exact two allowed cases—Synchronized, or
+Pending/no-owner/StoreUnavailable—and rejects an invented Unavailable policy. The
+focused Windows GNU test passes 1/1; format and strict focused Clippy pass.
+
+This was the second consecutive test-only receipt repair after the quota timing repair,
+so root declared `AUDIT_HARDENING_LOOP`, stopped further hardening, and fixed the next
+step to one clean commit followed by one successor remote M0. No product behavior,
+security boundary, data contract, or release claim changed.
+
 ## 2026-07-23 — M0 receipt stabilization
 
 One GitHub Windows M0 run timed out in the History controller contract after a blocked

@@ -1,5 +1,42 @@
 # TokenMaster handoff
 
+## Reminder startup receipt contract (2026-07-24)
+
+Product state: unchanged. The slice corrects only an M0 integration assertion; it
+changes no reminder settings authority, runtime behavior, UI, data, provider, package,
+signing, or release behavior.
+
+Audit/evidence state: remote M0 `30061416775` reached the app library and observed
+`Pending` where the broad startup test required `Synchronized`. This is a lawful
+startup result, not a product failure: the source-of-truth contract requires archive
+Busy/unavailable to retain the exact durable desired policy as retryable Pending while
+the optional reminder runtime separately reports StoreUnavailable. The application
+already implements that path. The test now permits only either `Synchronized` or the
+exact Pending/no-reminder-owner/StoreUnavailable correlation, and rejects an invented
+Unavailable state. Windows GNU focused evidence is 1/1; format and strict focused
+Clippy pass. Do not weaken the Pending correlation, add sleeps or retries, or alter
+production startup ordering without a focused production reproducer.
+
+`AUDIT_HARDENING_LOOP` is declared: quota and this reminder receipt repair are two
+consecutive test-only corrections without a final exact receipt. Root stopped all
+audit/hardening work and has no active children. The fixed disposition is one clean
+commit, one successor remote M0, then package/secret receipts only on green. Any new
+red result must be classified from its first causal failure; do not add another
+speculative test repair or reviewer round.
+
+Release blockers: obtain the exact-head remote M0 result, then one exact-clean MSVC
+package and secret-scan receipt pair if it is green. The remaining product-release
+blockers are unchanged: public-download Slint attribution, trusted remote attestation
+verification, signing, authenticated clean-room/P3-E/P4 Windows evidence, exact MSVC
+comparison, and soak. Per operator direction, do not start the 24-hour M0 soak until
+explicitly requested.
+
+Git state: stage only `crates/app/src/application_tests.rs` and these required state
+documents, commit and push once. The previous local M0 is evidence for its predecessor,
+not this exact clean HEAD. Do not create a later docs-only commit to mirror generated
+receipts. No reviewer is warranted absent a demonstrated Critical product, security,
+data-loss, or required-receipt defect.
+
 ## Quota startup receipt synchronization (2026-07-24)
 
 Product state: unchanged. The slice repairs only a test ordering assumption in required

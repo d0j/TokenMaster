@@ -1,5 +1,34 @@
 # TokenMaster current state
 
+## 2026-07-24 — Reminder startup receipt contract
+
+Product state: unchanged. This is a test-only repair of required Windows M0 evidence;
+it changes no reminder policy, runtime, controller, UI, data, provider, package,
+signing, or release behavior.
+
+Evidence state: exact remote M0 `30061416775` reached the application library and
+failed one startup assertion because the reminder policy projected `Pending` rather
+than unconditionally `Synchronized`. The source-of-truth contract explicitly permits
+startup archive Busy/unavailable to retain the durable desired policy as retryable
+`Pending` while the optional runtime independently reports `StoreUnavailable`. The
+implementation already follows that contract. The integration test now accepts only
+the normal `Synchronized` state or that exact Pending/no-owner/StoreUnavailable
+correlation; it does not mask an invented `Unavailable` policy. Windows GNU focused
+evidence passes 1/1, formatting passes, and strict focused Clippy completes without
+diagnostics. The earlier local full M0 passed before this test-only correction and is
+not an exact-head receipt for it.
+
+`AUDIT_HARDENING_LOOP` is declared and stopped here: this is the second consecutive
+test-only receipt correction without an exact final receipt. No audit children remain
+active, no further parser/audit/test hardening is authorized in this cycle, and the
+product state is preserved. The next action is exactly one successor remote M0 after
+the clean commit; package and secret receipts follow only if that gate is green.
+
+The remaining product-release blockers are unchanged: public-download attribution,
+trusted remote attestation verification, signing, authenticated clean-room/interactive
+Windows evidence, exact MSVC comparison, and the explicitly deferred 24-hour soak.
+New P4 work remains frozen.
+
 ## 2026-07-24 — Quota startup receipt synchronization
 
 Product state: unchanged. This is a test-only repair of required Windows M0 evidence;

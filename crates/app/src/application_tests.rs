@@ -1771,27 +1771,31 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
         1,
         "initial live bundle publishes one current reliable projection"
     );
-    assert_eq!(
-        application
-            .state
-            .reliable_state_projection_for_outcome(BootstrapOutcome::Healthy, None)
-            .expect("initial reliable projection")
-            .reminder_policy()
-            .sync_state(),
-        tokenmaster_desktop::DesktopReminderSyncState::Synchronized
-    );
-    assert!(
-        application
-            .bundle
-            .lock()
-            .expect("initial bundle")
-            .as_ref()
-            .expect("initial live bundle")
-            .reminder
-            .owner()
-            .is_some(),
-        "synchronization completes before the optional reminder starts"
-    );
+    let initial_reminder_sync = application
+        .state
+        .reliable_state_projection_for_outcome(BootstrapOutcome::Healthy, None)
+        .expect("initial reliable projection")
+        .reminder_policy()
+        .sync_state();
+    let (initial_reminder_started, initial_reminder_failure) = {
+        let bundle = application.bundle.lock().expect("initial bundle");
+        let reminder = &bundle.as_ref().expect("initial live bundle").reminder;
+        (reminder.owner().is_some(), reminder.failure)
+    };
+    match initial_reminder_sync {
+        tokenmaster_desktop::DesktopReminderSyncState::Synchronized => {}
+        tokenmaster_desktop::DesktopReminderSyncState::Pending => {
+            assert!(!initial_reminder_started);
+            assert_eq!(
+                initial_reminder_failure,
+                Some(RuntimeErrorCode::StoreUnavailable),
+                "startup contention retains the durable desired policy as Pending"
+            );
+        }
+        tokenmaster_desktop::DesktopReminderSyncState::Unavailable => {
+            panic!("state owner must not fabricate an unavailable reminder policy")
+        }
+    }
 
     let root = DataRoot::resolve(&environment).expect("data root");
     assert!(root.archive_path().exists());
