@@ -512,6 +512,7 @@ mod imp {
         use std::{
             ffi::c_void,
             mem::size_of,
+            process::Command,
             sync::{
                 Arc,
                 atomic::{AtomicU64, Ordering},
@@ -542,6 +543,8 @@ mod imp {
             user_objects: u32,
             gdi_objects: u32,
         }
+
+        const RESOURCE_CONTRACT_CHILD: &str = "TOKENMASTER_CURRENT_SESSION_RESOURCE_CONTRACT_CHILD";
 
         fn resource_counts() -> ResourceCounts {
             let process = unsafe { GetCurrentProcess() };
@@ -657,17 +660,16 @@ mod imp {
             assert_eq!(hotkey_modifiers(), MOD_CONTROL | MOD_ALT | MOD_NOREPEAT);
         }
 
-        #[test]
-        fn repeated_owner_cycles_return_native_resources() {
+        fn assert_repeated_owner_cycles_return_native_resources() {
             exercise_joined_owner_cycle();
             let before = resource_counts();
             for _ in 0..4_096 {
                 exercise_joined_owner_cycle();
             }
             let after = resource_counts();
-            // The library test harness runs unrelated tests in this process in parallel.
-            // A fixed eight-handle envelope absorbs their startup/teardown overlap. The
-            // gate rejects growth above eight handles across the complete 4,096 cycles.
+            // This exact child test process has no unrelated library tests changing its
+            // process-wide sample. The gate rejects growth above eight handles across the
+            // complete 4,096 cycles.
             assert!(
                 after.handles <= before.handles.saturating_add(8),
                 "current-session handles grew: before={before:?}, after={after:?}"
@@ -680,6 +682,29 @@ mod imp {
                 after.user_objects <= before.user_objects.saturating_add(1)
                     && after.gdi_objects <= before.gdi_objects.saturating_add(1),
                 "current-session GUI objects grew: before={before:?}, after={after:?}"
+            );
+        }
+
+        #[test]
+        fn repeated_owner_cycles_return_native_resources() {
+            if std::env::var_os(RESOURCE_CONTRACT_CHILD).is_some() {
+                assert_repeated_owner_cycles_return_native_resources();
+                return;
+            }
+
+            let status = Command::new(std::env::current_exe().expect("current test executable"))
+                .args([
+                    "--exact",
+                    "current_session::imp::tests::repeated_owner_cycles_return_native_resources",
+                    "--nocapture",
+                    "--test-threads=1",
+                ])
+                .env(RESOURCE_CONTRACT_CHILD, "1")
+                .status()
+                .expect("run isolated current-session resource contract");
+            assert!(
+                status.success(),
+                "isolated current-session resource contract failed: {status}"
             );
         }
     }

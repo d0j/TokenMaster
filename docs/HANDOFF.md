@@ -1,5 +1,35 @@
 # TokenMaster handoff
 
+## Current-session native resource contract isolation (2026-07-23)
+
+Product state: unchanged. The slice only makes the Windows current-session resource
+receipt deterministic; it changes no production owner, controller, UI, provider, data,
+package content, signing, or release claim.
+
+Audit/evidence state: a replacement remote M0 passed the repaired History contract but
+then observed process-wide handles 119 -> 132 in
+`repeated_owner_cycles_return_native_resources`, while threads fell 8 -> 5 and USER/GDI
+were unchanged. The contract was sampling unrelated parallel platform tests, matching
+the documented historical validator flaw rather than proving a linear owner leak. The
+test now invokes exactly itself in a namespaced-marker child process with one test thread;
+the child retains the existing 4,096-cycle and +8/+1 limits, exposes failure output, and
+propagates nonzero status. Root passes focused 1/1, complete platform lib 31/31, format,
+strict platform Clippy, and diff check. One scoped Sol High review is PASS; do not open a
+second review without a demonstrated Critical production/security/data-loss defect.
+
+Release blockers: commit this narrow test/docs slice, then obtain one exact-clean serial
+local M0 receipt, one exact-clean MSVC package and secret-scan receipt pair, and one
+successor remote M0 result. The remaining product-release blockers are unchanged:
+public-download Slint attribution, trusted remote attestation verification, signing,
+authenticated clean-room/P3-E/P4 Windows evidence, exact MSVC comparison, and soak.
+Per operator direction, do not start the 24-hour M0 soak until explicitly requested.
+
+Git state: stage only the current-session test and these required documents, commit and
+push once, then generate receipts for that exact clean HEAD. Do not create a later
+docs-only commit solely to mirror generated receipt status; report its exact result in
+the handoff response. Do not reopen P4 or audit-hardening work unless a focused
+reproducer proves a product, security, data-loss, or required-receipt defect.
+
 ## History range remote M0 contract stabilization (2026-07-23)
 
 Product state: unchanged. This is a test-only repair of M0 acceptance evidence; it does

@@ -28,6 +28,13 @@ worker, observes `busy`, releases and drains it, and owns an unwind-safe release
 failed assertion cannot turn into an unbounded worker join. This is test evidence, not
 a controller behavior or release-acceptance change.
 
+The current-session owner resource contract samples process-wide native counts, so it
+must run its exact 4,096-cycle sample in an exact single-test child process rather than
+beside unrelated libtest teardown. The child marker prevents recursion, one test thread
+removes harness overlap, its failure output remains visible, and a nonzero child status
+fails the parent. The existing +8 handle and +1 thread/USER/GDI bounds remain mandatory;
+raising them to absorb unrelated process churn is invalid evidence.
+
 The canonical Windows 1.0 artifact is a signed `x86_64-pc-windows-msvc` portable ZIP.
 The existing GNU target is a development and M0 evidence lane only until P6 completes
 an explicit dual-lane functional/resource/package comparison. The release build does

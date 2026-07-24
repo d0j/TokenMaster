@@ -4213,3 +4213,21 @@ The corrected focused contract passes 1/1 and the complete History range target 
 14/14 with formatting and diff checks clean. One exact-clean local M0 receipt and one
 replacement remote M0 receipt remain required; this historical entry does not claim
 M0, package, release-candidate, or stable-release acceptance.
+
+## 2026-07-23 — Current-session resource contract isolation
+
+The replacement remote Windows M0 run passed the repaired History contract and then
+failed the current-session 4,096-cycle resource test. Its process-wide handles rose by
+13 while the sampled thread count fell and USER/GDI counts were unchanged. That profile
+matched the known validator-only concurrency flaw: the test sampled its entire libtest
+process while unrelated platform tests were starting or tearing down, so it could not
+attribute those handles to the joined owner.
+
+The contract now launches exactly itself in a namespaced-marker child test process and
+runs that child with one test thread. The child retains the existing 4,096 cycles and
+all +8 handle/+1 thread/USER/GDI ceilings; it merely removes unrelated process activity
+from the measurement. A child failure remains visible and fails the parent. Focused
+platform evidence and the complete platform library target pass with formatting and
+strict focused Clippy. One independent scoped review found no defect. This corrects
+required M0 evidence only; it does not claim a green replacement remote M0, package,
+release candidate, or stable release.

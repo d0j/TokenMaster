@@ -1,5 +1,33 @@
 # TokenMaster current state
 
+## 2026-07-23 — Current-session native resource contract isolation
+
+Product state: unchanged. This is a test-only repair of required Windows M0 evidence;
+it changes no current-session production owner, UI, data, provider, package, signing,
+or release behavior.
+
+Evidence state: the replacement remote M0 reached the corrected History contract, then
+failed `repeated_owner_cycles_return_native_resources` after 4,096 joined owner cycles.
+The process-wide sample rose from 119 to 132 handles while its thread count fell from
+eight to five and USER/GDI counts stayed unchanged. That is the established concurrent-
+harness profile, not evidence of a per-cycle retained owner. The same contract passes in
+an exact isolated local invocation and the complete 31-test platform library target.
+It now runs its unchanged 4,096-cycle and handle/thread/USER/GDI bounds in an exact
+single-test child process; a namespaced child marker prevents recursion, the child is
+serial, `--nocapture` preserves diagnostics, and a nonzero child status fails its parent.
+Root focused platform evidence, format, strict platform Clippy, and diff check pass; one
+scoped Sol High review found no defect. `AUDIT_HARDENING_LOOP` did not trigger: this fixes
+a demonstrated required remote receipt failure without widening a resource budget or
+adding an audit rule.
+
+The clean commit containing this slice must receive one serial local M0 receipt, one
+exact-clean MSVC package/secret receipt pair, and one successor remote M0 result. The
+tracked record deliberately states the durable contract rather than adding a later
+docs-only commit merely to restate a generated receipt. Public-download attribution,
+trusted remote attestation verification, signing, authenticated clean-room/interactive
+Windows evidence, exact MSVC comparison, and the explicitly deferred 24-hour soak remain
+open. New P4 work remains frozen.
+
 ## 2026-07-23 — History range remote M0 contract stabilization
 
 Product state: unchanged. The controller's range/session arbitration, UI, data,
