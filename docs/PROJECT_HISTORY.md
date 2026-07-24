@@ -4260,3 +4260,16 @@ pinned module install. The direct contract demonstrated the original omission (2
 1 fail) and then passed 22/22 with immutable-action validation. This is a required M0
 infrastructure repair only; it does not claim a successor remote M0, package, release
 candidate, or stable release.
+
+## 2026-07-24 — Quota startup receipt synchronization
+
+The next serial local M0 reached the full workspace test and exposed a timing assumption
+in the startup quota contract. A worker can publish its completed outcome after admission
+but before the scheduler records its post-callback submission count. The test formerly
+waited only for the outcome and could therefore read the correct transient count of zero
+as though startup had submitted nothing. It now waits through the existing bounded
+deadline for both outcome and count one, then retains the exact one-recovery assertion.
+The strict focused target and the complete runtime library target pass 23/23. The remote
+run for the predecessor commit was cancelled as superseded. This corrects required M0
+evidence only; it does not claim a successor remote M0, package, release candidate, or
+stable release.

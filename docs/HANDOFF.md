@@ -1,5 +1,39 @@
 # TokenMaster handoff
 
+## Quota startup receipt synchronization (2026-07-24)
+
+Product state: unchanged. The slice repairs only a test ordering assumption in required
+M0 evidence; it changes no quota execution, scheduler, worker, provider, data, package,
+signing, or release behavior.
+
+Audit/evidence state: the local M0 for the prior workflow commit reached the full
+workspace test and saw the quota startup test observe a completed worker outcome before
+the scheduler's post-submission `submitted_count` increment. The scheduler contract is
+correct: it records submission after the callback returns. The former test waited only
+for outcome and could therefore assert zero too early. Its existing bounded two-second
+wait now requires both the completed outcome and count one, then preserves the exact
+single-recovery assertion. Strict target-focused evidence passes and the full
+`tokenmaster-runtime` library target is 23/23. The ignored local verification summary
+from the preceding successful commit is stale for this HEAD and must not be used. Remote
+M0 `30059341196` was cancelled because it was tied to the superseded prior commit, not
+because of a new product failure. This is required receipt repair, not audit-only
+hardening. Do not weaken the count assertion, add a sleep, or alter production scheduler
+ordering.
+
+Release blockers: commit this narrow test/docs slice, then obtain one exact-clean serial
+local M0 receipt, one exact-clean MSVC package and secret-scan receipt pair, and one
+successor remote M0 result. The remaining product-release blockers are unchanged:
+public-download Slint attribution, trusted remote attestation verification, signing,
+authenticated clean-room/P3-E/P4 Windows evidence, exact MSVC comparison, and soak. Per
+operator direction, do not start the 24-hour M0 soak until explicitly requested.
+
+Git state: the old local M0 failed on the shown test race and is invalid for this commit;
+the exact remote run for its predecessor was cancelled as superseded. Stage only the
+runtime test and required state documentation, commit and push once, then run one serial
+exact-head M0. Do not create a later docs-only commit solely to mirror generated receipt
+status. No second reviewer is warranted unless a new Critical product, security,
+data-loss, or required-receipt defect is demonstrated.
+
 ## Windows M0 Pester source bootstrap (2026-07-24)
 
 Product state: unchanged. The slice repairs only the remote M0 bootstrap path; it

@@ -494,12 +494,8 @@ mod tests {
         assert_eq!(receive(&receiver), RefreshUrgency::Recovery);
         let deadline = std::time::Instant::now() + Duration::from_secs(2);
         while std::time::Instant::now() < deadline {
-            if runtime
-                .snapshot()
-                .test_value("runtime snapshot")
-                .refresh()
-                .outcome()
-                .is_some()
+            let snapshot = runtime.snapshot().test_value("runtime snapshot");
+            if snapshot.refresh().outcome().is_some() && snapshot.schedule().submitted_count() == 1
             {
                 break;
             }

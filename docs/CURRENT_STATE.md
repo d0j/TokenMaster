@@ -1,5 +1,30 @@
 # TokenMaster current state
 
+## 2026-07-24 — Quota startup receipt synchronization
+
+Product state: unchanged. This is a test-only repair of required Windows M0 evidence;
+it changes no quota execution, scheduler, worker, provider, data, package, signing, or
+release behavior.
+
+Evidence state: the serial local M0 for the preceding workflow slice reached the full
+workspace Rust test and found a startup quota assertion race. The worker can publish its
+completed outcome after admission but before the scheduler increments `submitted_count`;
+the former test waited only for the outcome, so a snapshot with the correct transient
+count of zero could fail its exact-one assertion. The test now uses its existing bounded
+two-second wait until both the completed outcome and scheduler submission count are
+visible, then preserves the exact one-recovery assertion. Strict target-focused evidence
+passes and the complete `tokenmaster-runtime` library target passes 23/23. The prior
+ignored local verification summary remains a receipt for an earlier clean commit and is
+not evidence for this slice. The superseded remote M0 for that prior commit was cancelled
+instead of spending CI time on a non-exact result. `AUDIT_HARDENING_LOOP` did not trigger:
+this corrects a demonstrated required-receipt race, not an audit rule or product behavior.
+
+The clean commit containing this test repair must receive one serial local M0 receipt,
+one exact-clean MSVC package/secret receipt pair, and one successor remote M0 result.
+Public-download attribution, trusted remote attestation verification, signing,
+authenticated clean-room/interactive Windows evidence, exact MSVC comparison, and the
+explicitly deferred 24-hour soak remain open. New P4 work remains frozen.
+
 ## 2026-07-24 — Windows M0 Pester source bootstrap
 
 Product state: unchanged. This is a workflow-only repair of required Windows M0
