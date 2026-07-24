@@ -4411,3 +4411,24 @@ task-owned process on the delayed observation. It emitted no failed test but is 
 complete baseline, and no repeat is allowed without an external hard watchdog. This is a
 product correction, not audit hardening, and does not claim M0, package, release
 candidate, or stable release.
+
+## 2026-07-24 — Real first-import replay boundary
+
+Local acceptance on a large existing Codex history showed that the responsive shell was
+not enough: durable replay observations can exist in staging while no archive snapshot is
+eligible for Dashboard publication. The resulting blank charts are contract-correct but
+not acceptable product behavior. The data was present and the release binary painted
+normally; the defect is first-import completion/publication, not a transparent window or
+an unsupported input format.
+
+The replay hot path now batches bounded session/ordinal work, avoids a full foreign-key
+scan on every intermediate continuation, avoids duplicate selection refresh within one
+ordinal, and retains only a future-work epoch rejection because each continuation
+re-evaluates its durable cursor against the current revision. Final seal/promotion
+integrity checks remain. Focused replay and incremental contracts plus strict store
+Clippy pass. A release run remained memory-bounded but did not reach acceptable
+real-history throughput, so root stopped further micro-optimizing under the 60-minute
+rule. The next product slice is a truthful published partial first-import snapshot or
+equivalent resumable architecture; it must not expose staging as canonical data. This is
+a product correctness/UX blocker, not an audit-hardening loop, and it does not claim M0,
+package, release candidate, or stable release.

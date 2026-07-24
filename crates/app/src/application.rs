@@ -274,6 +274,13 @@ fn complete_startup(prepared: Result<PreparedApplicationStart, ApplicationError>
                 .shell
                 .window()
                 .set_dashboard_initial_import_stage(1);
+            session
+                .ui
+                .as_ref()
+                .ok_or_else(ApplicationError::internal)?
+                .shell
+                .window()
+                .set_dashboard_initial_import_stage(2);
             let bundle = session
                 .ui
                 .as_ref()

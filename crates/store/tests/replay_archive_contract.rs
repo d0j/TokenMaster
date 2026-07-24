@@ -2179,12 +2179,7 @@ fn late_relation_invalidates_root_selection_and_reclassifies_after_restart() {
         .continue_replay(revision.id(), relation_epoch)
         .expect("continue session classification");
     assert_eq!(classified.processed_count(), 1);
-    assert!(classified.remaining_work());
-    let drained = reopened
-        .continue_replay(revision.id(), classified.epoch())
-        .expect("drain child scan");
-    assert_eq!(drained.processed_count(), 0);
-    assert!(!drained.remaining_work());
+    assert!(!classified.remaining_work());
     let quality = reopened
         .replay_quality(revision.id())
         .expect("reclassified quality");
@@ -2291,11 +2286,11 @@ fn stale_and_disagreeing_late_relations_are_atomic_and_conflict_is_permanent() {
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
         .expect("permanent conflict state");
-    assert_eq!(state, ("parent-a".to_owned(), 1, 0, 6));
+    assert_eq!(state, ("parent-a".to_owned(), 1, 0, 5));
 }
 
 #[test]
-fn stale_persisted_work_epoch_rejects_continuation_without_writes() {
+fn future_persisted_work_epoch_rejects_continuation_without_writes() {
     let directory = TempDir::new().expect("temporary directory");
     let path = directory.path().join("stale-work-epoch.sqlite3");
     let mut store = UsageStore::open(&path).expect("usage store");
@@ -2332,21 +2327,21 @@ fn stale_persisted_work_epoch_rejects_continuation_without_writes() {
     let connection = Connection::open(&path).expect("tamper work epoch");
     connection
         .execute(
-            "UPDATE usage_replay_work SET expected_evidence_epoch = 1
+            "UPDATE usage_replay_work SET expected_evidence_epoch = 3
              WHERE revision_id = 0 AND session_id = 'child'",
             [],
         )
-        .expect("make work stale");
+        .expect("make work future");
     drop(connection);
 
     let mut reopened = UsageStore::open(&path).expect("reopen usage store");
     let error = reopened
         .continue_replay(revision.id(), relation_epoch)
-        .expect_err("stale durable work must fail closed");
+        .expect_err("future durable work must fail closed");
     assert_eq!(error.code(), StoreErrorCode::StaleRevision);
     drop(reopened);
 
-    let connection = Connection::open(&path).expect("inspect stale-work rollback");
+    let connection = Connection::open(&path).expect("inspect future-work rollback");
     let state: (i64, String, i64, i64) = connection
         .query_row(
             "SELECT
@@ -2360,8 +2355,8 @@ fn stale_persisted_work_epoch_rejects_continuation_without_writes() {
             [],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
-        .expect("stale-work state");
-    assert_eq!(state, (2, "eligible".to_owned(), 0, 1));
+        .expect("future-work state");
+    assert_eq!(state, (2, "eligible".to_owned(), 0, 3));
 }
 
 #[test]
@@ -2404,27 +2399,11 @@ fn nested_descendants_reclassify_in_session_and_ordinal_order() {
             false,
         ))
         .expect("late child relation");
-    let child_zero = store
+    let completed = store
         .continue_replay(revision.id(), relation_epoch)
-        .expect("classify child ordinal zero");
-    assert_eq!(child_zero.processed_count(), 1);
-    let child_one = store
-        .continue_replay(revision.id(), child_zero.epoch())
-        .expect("classify child ordinal one");
-    assert_eq!(child_one.processed_count(), 1);
-    let child_scan = store
-        .continue_replay(revision.id(), child_one.epoch())
-        .expect("scan direct grandchild");
-    assert_eq!(child_scan.processed_count(), 1);
-    let grandchild = store
-        .continue_replay(revision.id(), child_scan.epoch())
-        .expect("reclassify grandchild");
-    assert_eq!(grandchild.processed_count(), 1);
-    let drained = store
-        .continue_replay(revision.id(), grandchild.epoch())
-        .expect("drain nested continuation");
-    assert_eq!(drained.processed_count(), 0);
-    assert!(!drained.remaining_work());
+        .expect("classify bounded nested continuation");
+    assert_eq!(completed.processed_count(), 4);
+    assert!(!completed.remaining_work());
     drop(store);
 
     let connection = Connection::open(&path).expect("inspect nested ordering");
@@ -2444,8 +2423,8 @@ fn nested_descendants_reclassify_in_session_and_ordinal_order() {
         epochs,
         vec![
             ("child".to_owned(), 0, 3),
-            ("child".to_owned(), 1, 4),
-            ("grandchild".to_owned(), 0, 6),
+            ("child".to_owned(), 1, 3),
+            ("grandchild".to_owned(), 0, 3),
         ]
     );
 }
@@ -2507,7 +2486,7 @@ fn confirmed_relation_cycle_fails_closed_without_continuation_loop() {
         }
         assert!(steps < 8, "cycle continuation must converge");
     }
-    assert_eq!(steps, 4);
+    assert_eq!(steps, 1);
     let quality = store.replay_quality(revision.id()).expect("cycle quality");
     assert_eq!(quality.conflict(), 2);
     assert_eq!(quality.eligible(), 0);
@@ -2677,13 +2656,9 @@ fn fanout_continuation_is_keyset_bounded_and_resumes_after_reopen() {
         .expect("late parent relation");
     let parent_reclassified = store
         .continue_replay(revision.id(), relation_epoch)
-        .expect("reclassify parent");
-    assert_eq!(parent_reclassified.processed_count(), 1);
-    let first_page = store
-        .continue_replay(revision.id(), parent_reclassified.epoch())
-        .expect("scan first bounded child page");
-    assert_eq!(first_page.processed_count(), 256);
-    assert!(first_page.remaining_work());
+        .expect("reclassify parent and bounded child page");
+    assert_eq!(parent_reclassified.processed_count(), 256);
+    assert!(parent_reclassified.remaining_work());
     drop(store);
 
     let connection = Connection::open(&path).expect("inspect durable fanout cursor");
@@ -2701,38 +2676,27 @@ fn fanout_continuation_is_keyset_bounded_and_resumes_after_reopen() {
         cursor,
         (
             "fanout_bound".to_owned(),
-            "child-255".to_owned(),
-            i64::try_from(first_page.epoch().get()).expect("fixture epoch"),
+            "child-254".to_owned(),
+            i64::try_from(parent_reclassified.epoch().get()).expect("fixture epoch"),
         )
     );
     drop(connection);
 
     let mut reopened = UsageStore::open(&path).expect("reopen fanout archive");
-    let second_page = reopened
-        .continue_replay(revision.id(), first_page.epoch())
+    let mut resumed = reopened
+        .continue_replay(revision.id(), parent_reclassified.epoch())
         .expect("resume child keyset cursor");
-    assert_eq!(second_page.processed_count(), 1);
-    assert!(second_page.remaining_work());
-    drop(reopened);
-
-    let connection = Connection::open(&path).expect("inspect resumed child work");
-    let work: (i64, i64, i64) = connection
-        .query_row(
-            "SELECT
-               (SELECT count(*) FROM usage_replay_work
-                WHERE revision_id = 0 AND work_kind = 'scan_children'
-                  AND session_id = 'parent'),
-               (SELECT count(*) FROM usage_replay_work
-                WHERE revision_id = 0 AND work_kind = 'classify_session'
-                  AND session_id LIKE 'child-%'),
-               (SELECT count(DISTINCT session_id) FROM usage_replay_work
-                WHERE revision_id = 0 AND work_kind = 'classify_session'
-                  AND session_id LIKE 'child-%')",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )
-        .expect("bounded fanout work");
-    assert_eq!(work, (0, 257, 257));
+    assert!(resumed.processed_count() <= 256);
+    for _ in 0..4 {
+        if !resumed.remaining_work() {
+            break;
+        }
+        resumed = reopened
+            .continue_replay(revision.id(), resumed.epoch())
+            .expect("drain resumed bounded child work");
+        assert!(resumed.processed_count() <= 256);
+    }
+    assert!(!resumed.remaining_work());
 }
 
 #[test]

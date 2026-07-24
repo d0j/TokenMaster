@@ -69,6 +69,45 @@ required state/traceability/history/release-boundary documents. Commit and push 
 then start one successor M0. No monitor is active; create one only for that successor
 and delete it on its terminal result. No child agents are active.
 
+## First-import real-data blocker and bounded replay batching (2026-07-24)
+
+Product state: the release binary renders an opaque responsive window and shows the
+in-window import state without a visible console. The local archive contains a large
+staging replay, but no published archive snapshot yet exists, so charts and totals must
+remain blank by the data contract. This is not a parser-format absence: the staged
+replay has durable observations. It is not acceptable first-import product behavior.
+
+Product correction completed in this slice: replay now coalesces up to 256 observed
+events and 256 work actions per transaction, retains deterministic session/ordinal
+order, and keeps the transaction bounded. Intermediate continuation commits rely on
+SQLite foreign-key enforcement; the full foreign-key verification remains at seal and
+promotion. Work carries only a durable session/ordinal cursor, so a later revision may
+reuse older work after recomputing current facts; impossible future-epoch work still
+fails closed. The debug binary keeps the opaque console-subsystem paint path and hides
+its own console host instead of making the Slint window transparent.
+
+Audit/evidence state: focused replay archive contracts (47), incremental replay
+contracts (7), formatting, and strict store Clippy pass. A release binary was exercised
+against the existing staging archive: it retained roughly 32 MiB private memory and
+made durable replay progress, but sustained first-import throughput remains far below
+the product target. The former full foreign-key scan and redundant per-ordinal selection
+refresh were removed from the continuation hot path; this did not close the real-data
+throughput blocker. No reviewer or child agent ran. `AUDIT_HARDENING_LOOP` is not
+active; root stopped this product-performance path after the 60-minute reassessment
+rule rather than opening speculative micro-optimizations.
+
+Release blockers: the shortest unresolved product slice is a source-of-truth-safe
+published partial first-import snapshot (explicitly incomplete, never a staging
+projection) or an equally safe resumable first-import architecture. It must expose
+truthful progress and let charts appear from a published partial state without treating
+unresolved lineage as canonical. Do not run M0/package work until this user-visible
+first-import blocker is closed. The existing 24-hour soak remains explicitly deferred.
+
+Git state: this slice has uncommitted code and required closeout documents on the
+feature branch. The local release test process will be closed at slice end; no
+task-owned Cargo/compiler/UI process should remain. Do not delete the user archive,
+WAL, or staging data manually.
+
 ## M0 timeout stage receipt observability (2026-07-24)
 
 Product state: unchanged. The M0 verifier now writes only fixed stage begin/pass labels

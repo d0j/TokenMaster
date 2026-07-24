@@ -11,8 +11,10 @@ activity dots and only truthful startup phases: checking local history, starting
 safe import, then importing local history. It explains that charts and totals follow the
 first safe import; it has no separate splash window, staging aggregates, invented
 percentage/ETA, source count, local path, source content, or credentials.
-The Windows application binary uses the GUI subsystem in both debug and release builds,
-so a local product launch does not create a console window.
+The debug application binary retains the console subsystem required for opaque Slint
+paint in this environment, then hides only its own console host; release remains a
+Windows-subsystem binary. This avoids both a visible console and the transparent-window
+regression.
 
 Every direct route ScrollView now has an explicit viewport and content-derived minimum
 height, so the lower content remains reachable rather than being clipped below the
@@ -2424,6 +2426,27 @@ immutable 15-role palettes and the Desktop has one owner, complete admission-fir
 payload, atomic persist/restore, and existing latest-wins worker. No new authority was
 added. Layout/scheme/locale/typography/interactive DPI/accessibility/paint/resource,
 P5/P6/M0/package/signing/soak/release remain open.
+
+## 2026-07-24 — Real first-import throughput boundary
+
+Local acceptance found that the responsive initial-import shell can still remain blank
+for an unacceptable time when the first archive is large. The archive contains durable
+staging observations, but it has no promoted snapshot, and the data contract correctly
+forbids rendering staging totals as canonical charts. Release execution proved that this
+is not a transparent-window, parser-format, or missing-data issue.
+
+Replay continuation now batches bounded observed events/work actions, removes a full
+database foreign-key scan from every intermediate continuation, avoids repeated
+selection refresh for duplicate observations in one ordinal, and no longer rewrites all
+durable work epochs after each batch. Final seal/promotion foreign-key validation and
+future-work rejection remain. Focused store tests and strict Clippy pass, but the
+real-data rate is still below the product target. This stops the micro-optimization path
+under the 60-minute reassessment rule.
+
+The next release-critical product contour is an explicitly incomplete published
+first-import snapshot with truthful progress, or an equivalent resumable design. It may
+not expose staging as current truth, fabricate progress/ETA, or weaken lineage/conflict
+rules. M0, packaging, signing, and soak remain blocked by this user-visible defect.
 
 ## P4-F — durable board preferences
 

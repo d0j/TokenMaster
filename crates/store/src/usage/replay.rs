@@ -819,7 +819,6 @@ impl UsageStore {
             return Err(StoreError::new(StoreErrorCode::StaleRevision));
         }
         current_append_fault(fault, CurrentAppendFault::AfterCheckpoint)?;
-        synchronize_work_epochs(&transaction, current_parts.revision_id, next_epoch)?;
         advance_current_revision_epoch(
             &transaction,
             current_parts.revision_id,
@@ -932,7 +931,6 @@ impl UsageStore {
             checkpoint,
             "staging",
         )?;
-        synchronize_work_epochs(&transaction, revision_id, next_epoch)?;
         advance_revision_epoch(&transaction, revision_id, expected_epoch, next_epoch)?;
         // This changes no FK columns. Replay boundaries retain the full FK integrity check,
         // avoiding one whole-database scan for every source during a large rebuild.
@@ -963,7 +961,6 @@ impl UsageStore {
         }
         let next_epoch = next_replay_epoch(revision.epoch)?;
         apply_replay_relation_in_transaction(&transaction, relation, next_epoch)?;
-        synchronize_work_epochs(&transaction, relation.revision_id, next_epoch)?;
         advance_revision_epoch(
             &transaction,
             relation.revision_id,
@@ -985,14 +982,15 @@ impl UsageStore {
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         let revision = load_staging_revision(&transaction, revision_id)?;
         validate_replay_revision(&revision, expected_epoch, AccountingVersions::compiled())?;
-        reject_stale_work(&transaction, revision_id, expected_epoch)?;
+        reject_future_work_epoch(&transaction, revision_id, expected_epoch)?;
         let manifest_complete = replay_manifest_sources_closed(
             &transaction,
             revision_id,
             revision.expected_source_count,
             revision.scan_set_id,
         )?;
-        let Some(work) = load_next_actionable_work(&transaction, revision_id, manifest_complete)?
+        let Some(mut work) =
+            load_next_actionable_work(&transaction, revision_id, manifest_complete)?
         else {
             let remaining_work = replay_work_exists(&transaction, revision_id)?;
             return Ok(ReplayContinuationResult {
@@ -1002,26 +1000,55 @@ impl UsageStore {
             });
         };
         let next_epoch = next_replay_epoch(revision.epoch)?;
-        let processed_count = match work.kind.as_str() {
-            "classify_session" => process_session_classification(
-                &transaction,
-                revision_id,
-                revision.versions,
-                &work,
-                next_epoch,
-                manifest_complete,
-                false,
-            )?,
-            "scan_children" => process_child_scan(&transaction, revision_id, &work, next_epoch)?,
-            _ => return Err(StoreError::new(StoreErrorCode::InvalidStoredValue)),
-        };
-        synchronize_work_epochs(&transaction, revision_id, next_epoch)?;
+        let mut processed_count = 0_usize;
+        for _ in 0..MAX_REPLAY_FANOUT {
+            let progress = match work.kind.as_str() {
+                "classify_session" => process_session_classification(
+                    &transaction,
+                    revision_id,
+                    &work,
+                    ReplaySessionClassificationContext {
+                        versions: revision.versions,
+                        epoch: next_epoch,
+                        manifest_complete,
+                        materialize_current: false,
+                        max_processed: MAX_REPLAY_FANOUT
+                            .checked_sub(processed_count)
+                            .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?,
+                    },
+                )?,
+                "scan_children" => process_child_scan(
+                    &transaction,
+                    revision_id,
+                    &work,
+                    next_epoch,
+                    MAX_REPLAY_FANOUT
+                        .checked_sub(processed_count)
+                        .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?,
+                )?,
+                _ => return Err(StoreError::new(StoreErrorCode::InvalidStoredValue)),
+            };
+            processed_count = processed_count
+                .checked_add(usize::from(progress.processed_count))
+                .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?;
+            if processed_count > MAX_REPLAY_FANOUT || progress.reached_capacity {
+                break;
+            }
+            let Some(next_work) =
+                load_next_actionable_work(&transaction, revision_id, manifest_complete)?
+            else {
+                break;
+            };
+            work = next_work;
+        }
         advance_revision_epoch(&transaction, revision_id, expected_epoch, next_epoch)?;
         let remaining_work = replay_work_exists(&transaction, revision_id)?;
-        validate_foreign_keys(&transaction)?;
+        // SQLite enforces each mutation's foreign keys. The full database check is
+        // reserved for sealing and promotion, where a completed snapshot is published.
         transaction.commit()?;
         Ok(ReplayContinuationResult {
-            processed_count,
+            processed_count: u16::try_from(processed_count)
+                .map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))?,
             remaining_work,
             epoch: next_epoch,
         })
@@ -1059,7 +1086,7 @@ impl UsageStore {
         {
             return Err(StoreError::new(StoreErrorCode::ArchiveModeMismatch));
         }
-        reject_stale_work(&transaction, revision_id, expected_epoch)?;
+        reject_future_work_epoch(&transaction, revision_id, expected_epoch)?;
         let scan_set_id = revision
             .scan_set_id
             .ok_or_else(|| StoreError::new(StoreErrorCode::IncompleteManifest))?;
@@ -1097,25 +1124,49 @@ impl UsageStore {
                 .checked_add(1)
                 .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?,
         )?;
-        let processed_count = match work {
-            Some(work) => match work.kind.as_str() {
-                "classify_session" => process_session_classification(
-                    &transaction,
-                    revision_id,
-                    revision.versions,
-                    &work,
-                    next_epoch,
-                    manifest_complete,
-                    true,
-                )?,
-                "scan_children" => {
-                    process_child_scan(&transaction, revision_id, &work, next_epoch)?
+        let mut processed_count = 0_usize;
+        if let Some(mut work) = work {
+            for _ in 0..MAX_REPLAY_FANOUT {
+                let progress = match work.kind.as_str() {
+                    "classify_session" => process_session_classification(
+                        &transaction,
+                        revision_id,
+                        &work,
+                        ReplaySessionClassificationContext {
+                            versions: revision.versions,
+                            epoch: next_epoch,
+                            manifest_complete,
+                            materialize_current: true,
+                            max_processed: MAX_REPLAY_FANOUT
+                                .checked_sub(processed_count)
+                                .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?,
+                        },
+                    )?,
+                    "scan_children" => process_child_scan(
+                        &transaction,
+                        revision_id,
+                        &work,
+                        next_epoch,
+                        MAX_REPLAY_FANOUT
+                            .checked_sub(processed_count)
+                            .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?,
+                    )?,
+                    _ => return Err(StoreError::new(StoreErrorCode::InvalidStoredValue)),
+                };
+                processed_count = processed_count
+                    .checked_add(usize::from(progress.processed_count))
+                    .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?;
+                if processed_count > MAX_REPLAY_FANOUT || progress.reached_capacity {
+                    break;
                 }
-                _ => return Err(StoreError::new(StoreErrorCode::InvalidStoredValue)),
-            },
-            None => 0,
-        };
-        synchronize_work_epochs(&transaction, revision_id, next_epoch)?;
+                let Some(next_work) =
+                    load_next_actionable_work(&transaction, revision_id, manifest_complete)?
+                else {
+                    break;
+                };
+                work = next_work;
+            }
+        }
         advance_current_revision_epoch(&transaction, revision_id, expected_epoch, next_epoch)?;
         let remaining_work = replay_work_exists(&transaction, revision_id)?;
         let pending_sources: i64 = transaction.query_row(
@@ -1144,10 +1195,12 @@ impl UsageStore {
         if publication_updated != 1 {
             return Err(StoreError::new(StoreErrorCode::StaleRevision));
         }
-        validate_foreign_keys(&transaction)?;
+        // SQLite enforces each mutation's foreign keys. The full database check is
+        // reserved for sealing and promotion, where a completed snapshot is published.
         transaction.commit()?;
         Ok(CurrentReplayCommit {
-            processed_count,
+            processed_count: u16::try_from(processed_count)
+                .map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))?,
             remaining_work,
             epoch: next_epoch,
             archive_generation: next_archive_generation,
@@ -2989,27 +3042,17 @@ fn enqueue_child_scan(
     Ok(())
 }
 
-fn synchronize_work_epochs(
+fn reject_future_work_epoch(
     transaction: &Transaction<'_>,
     revision_id: ReplayRevisionId,
     epoch: ReplayEpoch,
 ) -> Result<(), StoreError> {
-    transaction.execute(
-        "UPDATE usage_replay_work SET expected_evidence_epoch = ?1
-         WHERE revision_id = ?2",
-        params![epoch.as_sql()?, revision_id.as_sql()?],
-    )?;
-    Ok(())
-}
-
-fn reject_stale_work(
-    transaction: &Transaction<'_>,
-    revision_id: ReplayRevisionId,
-    epoch: ReplayEpoch,
-) -> Result<(), StoreError> {
+    // Work items contain only durable identity and ordinal cursors, so an older
+    // item is re-evaluated against the current revision transaction. A future
+    // item cannot have been produced by this revision and fails closed.
     let stale: i64 = transaction.query_row(
         "SELECT count(*) FROM usage_replay_work
-         WHERE revision_id = ?1 AND expected_evidence_epoch <> ?2",
+         WHERE revision_id = ?1 AND expected_evidence_epoch > ?2",
         params![revision_id.as_sql()?, epoch.as_sql()?],
         |row| row.get(0),
     )?;
@@ -3026,6 +3069,19 @@ struct ReplayWork {
     session: String,
     next_ordinal: u64,
     child_cursor: Option<String>,
+}
+
+struct ReplayWorkProgress {
+    processed_count: u16,
+    reached_capacity: bool,
+}
+
+struct ReplaySessionClassificationContext {
+    versions: AccountingVersions,
+    epoch: ReplayEpoch,
+    manifest_complete: bool,
+    materialize_current: bool,
+    max_processed: usize,
 }
 
 fn load_next_actionable_work(
@@ -3126,73 +3182,10 @@ struct StoredReplayObservation {
 fn process_session_classification(
     transaction: &Transaction<'_>,
     revision_id: ReplayRevisionId,
-    versions: AccountingVersions,
     work: &ReplayWork,
-    epoch: ReplayEpoch,
-    manifest_complete: bool,
-    materialize_current: bool,
-) -> Result<u16, StoreError> {
+    context: ReplaySessionClassificationContext,
+) -> Result<ReplayWorkProgress, StoreError> {
     let session = load_replay_session(transaction, revision_id, work)?;
-    let next_ordinal = transaction
-        .query_row(
-            "SELECT min(session_ordinal) FROM usage_replay_observation
-             WHERE revision_id = ?1 AND provider_id = ?2 AND profile_id = ?3
-               AND session_id = ?4 AND session_ordinal >= ?5",
-            params![
-                revision_id.as_sql()?,
-                work.provider,
-                work.profile,
-                work.session,
-                sql_u64(work.next_ordinal)?,
-            ],
-            |row| row.get::<_, Option<i64>>(0),
-        )?
-        .map(stored_nonnegative)
-        .transpose()?;
-    let Some(ordinal) = next_ordinal else {
-        delete_work(transaction, revision_id, work)?;
-        enqueue_child_scan(
-            transaction,
-            revision_id,
-            &work.provider,
-            &work.profile,
-            &work.session,
-            epoch,
-        )?;
-        return Ok(0);
-    };
-    let observations = load_replay_ordinal(transaction, revision_id, work, ordinal)?;
-    if observations.len() > MAX_REPLAY_FANOUT {
-        return Err(StoreError::with_limit(
-            StoreErrorCode::CapacityExceeded,
-            MAX_REPLAY_FANOUT as u64,
-        ));
-    }
-    let traversal = traversal_for_session(
-        transaction,
-        revision_id,
-        &work.provider,
-        &work.profile,
-        &work.session,
-        session.parent.as_deref(),
-        session.conflict,
-    )?;
-    let parent = load_parent_facts_for_session(
-        transaction,
-        revision_id,
-        versions,
-        &work.provider,
-        &work.profile,
-        session.parent.as_deref(),
-        ordinal,
-    )?;
-    let missing_parent = session.parent.is_some() && parent.is_none();
-    let parent_ordinal = match parent.as_ref() {
-        Some(parent) => ParentOrdinal::Present(parent.as_facts()),
-        None if session.parent.is_some() && manifest_complete => ParentOrdinal::MissingComplete,
-        None if session.parent.is_some() => ParentOrdinal::MissingOpen,
-        None => ParentOrdinal::NotApplicable,
-    };
     let mut state = if session.conflict {
         SessionReplayState::Conflict
     } else if session.state == SessionReplayState::Diverged {
@@ -3202,71 +3195,186 @@ fn process_session_classification(
     } else {
         SessionReplayState::Root
     };
-    for observation in &observations {
-        if observation.versions != versions
-            || observation.provider != work.provider
-            || observation.profile != work.profile
-            || observation.session != work.session
+    let mut next_ordinal = work.next_ordinal;
+    let mut processed_count = 0_usize;
+    loop {
+        let ordinal = load_next_replay_ordinal(transaction, revision_id, work, next_ordinal)?;
+        let Some(ordinal) = ordinal else {
+            delete_work(transaction, revision_id, work)?;
+            enqueue_child_scan(
+                transaction,
+                revision_id,
+                &work.provider,
+                &work.profile,
+                &work.session,
+                context.epoch,
+            )?;
+            return replay_work_progress(processed_count, false);
+        };
+        let observations = load_replay_ordinal(transaction, revision_id, work, ordinal)?;
+        if observations.len() > MAX_REPLAY_FANOUT {
+            return Err(StoreError::with_limit(
+                StoreErrorCode::CapacityExceeded,
+                MAX_REPLAY_FANOUT as u64,
+            ));
+        }
+        if observations.len()
+            > context
+                .max_processed
+                .checked_sub(processed_count)
+                .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?
         {
-            return Err(StoreError::new(StoreErrorCode::AccountingVersionMismatch));
+            if processed_count != 0 {
+                update_work_position(transaction, revision_id, work, "parent_changed", ordinal)?;
+            }
+            return replay_work_progress(processed_count, true);
         }
-        let child = ReplayEventFacts::new(
-            &observation.provider,
-            &observation.profile,
-            &observation.session,
-            session.parent.as_deref(),
-            observation.ordinal,
-            &observation.signature,
-            observation.evidence,
-            observation.declared_conflict,
-        );
-        let classification = ReplayClassifier::new().classify(ReplayClassificationInput::new(
-            state,
-            child,
-            parent_ordinal,
-            traversal.facts,
-        ));
-        state = merge_session_state(state, classification.next_state());
-        update_persisted_classification(
-            transaction,
-            revision_id,
-            observation,
-            session.parent.as_deref(),
-            classification.disposition(),
-            epoch,
-        )?;
-        refresh_replay_selection(transaction, revision_id, &observation.fingerprint)?;
-        if materialize_current {
-            materialize_current_fingerprint(transaction, revision_id, &observation.fingerprint)?;
-        }
-    }
-    update_persisted_session_state(transaction, revision_id, work, state, ordinal, epoch)?;
-    if missing_parent && !manifest_complete && state != SessionReplayState::Conflict {
-        update_work_position(transaction, revision_id, work, "missing_parent", ordinal)?;
-    } else if traversal.depth_exhausted {
-        update_work_position(transaction, revision_id, work, "depth_bound", ordinal)?;
-    } else if replay_ordinal_exists_after(transaction, revision_id, work, ordinal)? {
-        update_work_position(
-            transaction,
-            revision_id,
-            work,
-            "parent_changed",
-            ordinal
-                .checked_add(1)
-                .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?,
-        )?;
-    } else {
-        delete_work(transaction, revision_id, work)?;
-        enqueue_child_scan(
+        let traversal = traversal_for_session(
             transaction,
             revision_id,
             &work.provider,
             &work.profile,
             &work.session,
-            epoch,
+            session.parent.as_deref(),
+            session.conflict,
         )?;
+        let parent = load_parent_facts_for_session(
+            transaction,
+            revision_id,
+            context.versions,
+            &work.provider,
+            &work.profile,
+            session.parent.as_deref(),
+            ordinal,
+        )?;
+        let missing_parent = session.parent.is_some() && parent.is_none();
+        let parent_ordinal = match parent.as_ref() {
+            Some(parent) => ParentOrdinal::Present(parent.as_facts()),
+            None if session.parent.is_some() && context.manifest_complete => {
+                ParentOrdinal::MissingComplete
+            }
+            None if session.parent.is_some() => ParentOrdinal::MissingOpen,
+            None => ParentOrdinal::NotApplicable,
+        };
+        let mut fingerprints = Vec::with_capacity(observations.len());
+        for observation in &observations {
+            if observation.versions != context.versions
+                || observation.provider != work.provider
+                || observation.profile != work.profile
+                || observation.session != work.session
+            {
+                return Err(StoreError::new(StoreErrorCode::AccountingVersionMismatch));
+            }
+            let child = ReplayEventFacts::new(
+                &observation.provider,
+                &observation.profile,
+                &observation.session,
+                session.parent.as_deref(),
+                observation.ordinal,
+                &observation.signature,
+                observation.evidence,
+                observation.declared_conflict,
+            );
+            let classification = ReplayClassifier::new().classify(ReplayClassificationInput::new(
+                state,
+                child,
+                parent_ordinal,
+                traversal.facts,
+            ));
+            state = merge_session_state(state, classification.next_state());
+            update_persisted_classification(
+                transaction,
+                revision_id,
+                observation,
+                session.parent.as_deref(),
+                classification.disposition(),
+                context.epoch,
+            )?;
+            if !fingerprints.contains(&observation.fingerprint) {
+                fingerprints.push(observation.fingerprint);
+            }
+        }
+        for fingerprint in fingerprints {
+            refresh_replay_selection(transaction, revision_id, &fingerprint)?;
+            if context.materialize_current {
+                materialize_current_fingerprint(transaction, revision_id, &fingerprint)?;
+            }
+        }
+        processed_count = processed_count
+            .checked_add(observations.len())
+            .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?;
+        update_persisted_session_state(
+            transaction,
+            revision_id,
+            work,
+            state,
+            ordinal,
+            context.epoch,
+        )?;
+        if missing_parent && !context.manifest_complete && state != SessionReplayState::Conflict {
+            update_work_position(transaction, revision_id, work, "missing_parent", ordinal)?;
+            return replay_work_progress(processed_count, false);
+        }
+        if traversal.depth_exhausted {
+            update_work_position(transaction, revision_id, work, "depth_bound", ordinal)?;
+            return replay_work_progress(processed_count, false);
+        }
+        let Some(next) = ordinal.checked_add(1) else {
+            return Err(StoreError::new(StoreErrorCode::CapacityExceeded));
+        };
+        if !replay_ordinal_exists_after(transaction, revision_id, work, ordinal)? {
+            delete_work(transaction, revision_id, work)?;
+            enqueue_child_scan(
+                transaction,
+                revision_id,
+                &work.provider,
+                &work.profile,
+                &work.session,
+                context.epoch,
+            )?;
+            return replay_work_progress(processed_count, processed_count == context.max_processed);
+        }
+        if processed_count == context.max_processed {
+            update_work_position(transaction, revision_id, work, "parent_changed", next)?;
+            return replay_work_progress(processed_count, true);
+        }
+        next_ordinal = next;
     }
-    u16::try_from(observations.len()).map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))
+}
+
+fn replay_work_progress(
+    processed_count: usize,
+    reached_capacity: bool,
+) -> Result<ReplayWorkProgress, StoreError> {
+    Ok(ReplayWorkProgress {
+        processed_count: u16::try_from(processed_count)
+            .map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))?,
+        reached_capacity,
+    })
+}
+
+fn load_next_replay_ordinal(
+    transaction: &Transaction<'_>,
+    revision_id: ReplayRevisionId,
+    work: &ReplayWork,
+    next_ordinal: u64,
+) -> Result<Option<u64>, StoreError> {
+    transaction
+        .query_row(
+            "SELECT min(session_ordinal) FROM usage_replay_observation
+             WHERE revision_id = ?1 AND provider_id = ?2 AND profile_id = ?3
+               AND session_id = ?4 AND session_ordinal >= ?5",
+            params![
+                revision_id.as_sql()?,
+                work.provider,
+                work.profile,
+                work.session,
+                sql_u64(next_ordinal)?,
+            ],
+            |row| row.get::<_, Option<i64>>(0),
+        )?
+        .map(stored_nonnegative)
+        .transpose()
 }
 
 struct StoredReplaySession {
@@ -3670,13 +3778,20 @@ fn process_child_scan(
     revision_id: ReplayRevisionId,
     work: &ReplayWork,
     epoch: ReplayEpoch,
-) -> Result<u16, StoreError> {
+    max_processed: usize,
+) -> Result<ReplayWorkProgress, StoreError> {
+    let query_limit = i64::try_from(
+        max_processed
+            .checked_add(1)
+            .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?,
+    )
+    .map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))?;
     let mut statement = transaction.prepare(
         "SELECT session_id, state FROM usage_replay_session
          WHERE revision_id = ?1 AND provider_id = ?2 AND profile_id = ?3
            AND parent_session_id = ?4
            AND (?5 IS NULL OR session_id > ?5)
-         ORDER BY session_id LIMIT 257",
+         ORDER BY session_id LIMIT ?6",
     )?;
     let children = statement
         .query_map(
@@ -3686,12 +3801,13 @@ fn process_child_scan(
                 work.profile,
                 work.session,
                 work.child_cursor.as_deref(),
+                query_limit,
             ],
             |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
         )?
         .collect::<Result<Vec<_>, _>>()?;
-    let has_more = children.len() > MAX_REPLAY_FANOUT;
-    let page = &children[..children.len().min(MAX_REPLAY_FANOUT)];
+    let has_more = children.len() > max_processed;
+    let page = &children[..children.len().min(max_processed)];
     for (child, state) in page {
         validate_replay_text(child, 512)?;
         if session_state_from_sql(state)? == SessionReplayState::Conflict {
@@ -3738,7 +3854,7 @@ fn process_child_scan(
     } else {
         delete_work(transaction, revision_id, work)?;
     }
-    u16::try_from(page.len()).map_err(|_| StoreError::new(StoreErrorCode::CapacityExceeded))
+    replay_work_progress(page.len(), page.len() == max_processed)
 }
 
 fn checkpoint_is_complete(checkpoint: &StoredCheckpoint) -> bool {

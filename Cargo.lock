@@ -6095,6 +6095,7 @@ dependencies = [
  "tokenmaster-runtime",
  "tokenmaster-state",
  "tokenmaster-store",
+ "windows",
 ]
 
 [[package]]

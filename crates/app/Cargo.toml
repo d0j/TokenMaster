@@ -20,6 +20,7 @@ tokenmaster-product = { path = "../product" }
 tokenmaster-runtime = { path = "../runtime" }
 tokenmaster-state = { path = "../state" }
 tokenmaster-store = { path = "../store" }
+windows.workspace = true
 
 [dev-dependencies]
 i-slint-backend-testing = { version = "=1.17.1", features = ["renderer-software"] }
