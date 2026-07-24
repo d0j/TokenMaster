@@ -66,6 +66,27 @@ component DashboardHeaderCard inherits Rectangle {
     }
 }
 
+component InitialImportCard inherits Rectangle {
+    min-height: 62px;
+    background: UiTokens.surface-raised;
+    border-color: UiTokens.accent;
+    border-width: 1px;
+    border-radius: UiTokens.radius-lg;
+    accessible-role: groupbox;
+    accessible-label: @tr("Importing local usage history. Charts and totals will appear after the first safe import completes.");
+
+    HorizontalLayout {
+        padding: UiTokens.space;
+        spacing: UiTokens.space-sm;
+        Text { text: "●"; color: UiTokens.accent; font-size: 14px; vertical-alignment: center; }
+        VerticalLayout {
+            spacing: UiTokens.space-xs;
+            Text { text: @tr("Importing local usage history…"); color: UiTokens.text-primary; font-size: 13px; font-weight: 750; }
+            Text { text: @tr("Charts and totals will appear after the first safe import completes."); color: UiTokens.text-secondary; font-size: 11px; wrap: word-wrap; }
+        }
+    }
+}
+
 component PlanUsageCard inherits Rectangle {
     in property <DashboardSectionRow> section;
     in property <[DashboardQuotaRow]> quotas;
@@ -360,6 +381,7 @@ export component DashboardView inherits Rectangle {
     in property <string> header-cost;
     in property <string> header-events;
     in property <string> header-evidence;
+    in property <bool> initial-import-in-progress;
     in property <string> code-commits;
     in property <string> code-added;
     in property <string> code-removed;
@@ -378,6 +400,7 @@ export component DashboardView inherits Rectangle {
             width: parent.width;
             padding: UiTokens.space;
             spacing: UiTokens.space;
+            if root.initial-import-in-progress: InitialImportCard { }
             DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
             for slot in root.slots: DashboardBoardSlot { slot: slot; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
         }
@@ -385,6 +408,7 @@ export component DashboardView inherits Rectangle {
             width: parent.width;
             padding: UiTokens.space;
             spacing: UiTokens.space;
+            if root.initial-import-in-progress: InitialImportCard { }
             DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
             if root.slots.length > 0: DashboardBoardSlot { slot: root.slots[0]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
             if root.slots.length > 1: HorizontalLayout {
@@ -403,6 +427,7 @@ export component DashboardView inherits Rectangle {
             width: parent.width;
             padding: UiTokens.space;
             spacing: UiTokens.space;
+            if root.initial-import-in-progress: InitialImportCard { }
             DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
             if root.slots.length > 0: HorizontalLayout {
                 spacing: UiTokens.space;
@@ -421,6 +446,7 @@ export component DashboardView inherits Rectangle {
             width: parent.width;
             padding: UiTokens.space;
             spacing: UiTokens.space;
+            if root.initial-import-in-progress: InitialImportCard { }
             DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
             if root.slots.length > 0: DashboardBoardSlot { slot: root.slots[0]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
             if root.slots.length > 1: HorizontalLayout {

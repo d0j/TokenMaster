@@ -2751,6 +2751,7 @@ fn apply_dashboard_projection(window: &MainWindow, dashboard: &DesktopDashboardP
     window.set_dashboard_header_evidence(
         format_dashboard_evidence(window, header.freshness(), header.quality()).into(),
     );
+    window.set_dashboard_initial_import_in_progress(dashboard.initial_import_in_progress());
 
     let quota_rows = dashboard
         .quota_rows()

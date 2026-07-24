@@ -34,6 +34,14 @@ impl LiveRefreshSnapshot {
         }
     }
 
+    pub(crate) const fn in_progress(kind: LiveRefreshKind) -> Self {
+        Self {
+            kind,
+            outcome: None,
+            error: None,
+        }
+    }
+
     pub(crate) const fn result(
         kind: LiveRefreshKind,
         outcome: RefreshOutcome,

@@ -161,6 +161,7 @@ impl LiveRuntime {
 
         let initial_publication = archive_snapshot_candidate(archive.store())
             .map_err(|()| RuntimeError::new(RuntimeErrorCode::StoreUnavailable))?;
+        let initial_refresh = initial_refresh_snapshot(initial_publication.quality);
         let engine_publication = Arc::new(Mutex::new(EnginePublicationState::seed(
             initial_publication,
         )));
@@ -175,7 +176,7 @@ impl LiveRuntime {
         let execution_watcher = Arc::clone(&watcher_slot);
         let execution_reset = Arc::clone(&reset_watcher);
         let execution_clock = Arc::clone(&clock);
-        let latest_refresh = Arc::new(Mutex::new(LiveRefreshSnapshot::not_run()));
+        let latest_refresh = Arc::new(Mutex::new(initial_refresh));
         let execution_refresh = Arc::clone(&latest_refresh);
         let execution_publication = Arc::clone(&engine_publication);
         let repository_hints =
@@ -676,6 +677,17 @@ fn archive_snapshot_candidate(store: &UsageStore) -> Result<ArchiveSnapshotCandi
     })
 }
 
+const fn initial_refresh_snapshot(quality: EnginePublicationQuality) -> LiveRefreshSnapshot {
+    match quality {
+        EnginePublicationQuality::Empty => {
+            LiveRefreshSnapshot::in_progress(LiveRefreshKind::FullRebuild)
+        }
+        EnginePublicationQuality::Complete
+        | EnginePublicationQuality::Partial
+        | EnginePublicationQuality::RecoveryPending => LiveRefreshSnapshot::not_run(),
+    }
+}
+
 struct PreAcquiredLease {
     guard: Option<Box<dyn WriterLeaseGuard>>,
 }
@@ -746,4 +758,28 @@ fn runtime_scheduler_error(error: SchedulerError) -> RuntimeError {
         | SchedulerErrorCode::Unavailable
         | SchedulerErrorCode::Internal => RuntimeErrorCode::Internal,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn initial_import_status_is_reserved_for_an_empty_archive() {
+        let importing = initial_refresh_snapshot(EnginePublicationQuality::Empty);
+        assert_eq!(importing.kind(), LiveRefreshKind::FullRebuild);
+        assert_eq!(importing.outcome(), None);
+        assert_eq!(importing.error(), None);
+
+        for quality in [
+            EnginePublicationQuality::Complete,
+            EnginePublicationQuality::Partial,
+            EnginePublicationQuality::RecoveryPending,
+        ] {
+            let existing = initial_refresh_snapshot(quality);
+            assert_eq!(existing.kind(), LiveRefreshKind::None);
+            assert_eq!(existing.outcome(), None);
+            assert_eq!(existing.error(), None);
+        }
+    }
 }

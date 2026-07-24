@@ -26,6 +26,13 @@ identify the active receipt stage without logging commands, arguments, paths, so
 contents, credentials, or test payloads. Those labels are troubleshooting evidence,
 not a new audit category or an acceptance receipt.
 
+The first-safe-import Dashboard card is status-only. It is permitted only while an
+empty archive has an in-progress full rebuild and must disappear on the existing terminal
+publication path. It must not surface staging aggregates, source counts, file paths,
+source contents, credentials, a fabricated progress percentage, or an unmeasured ETA.
+An elapsed-time estimate requires a separate bounded discovery/throughput contract and
+is not implied by the card.
+
 An active History range/session admission contract must hold the accepted range through
 the page-admission observation. An instant fixture can publish a new generation and
 clear the range before that observation, yielding correctly stale navigation rather

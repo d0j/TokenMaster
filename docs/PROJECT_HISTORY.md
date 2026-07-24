@@ -1,5 +1,21 @@
 # TokenMaster project history
 
+## 2026-07-24 — First safe-import status
+
+Fresh portable launches could spend their first full archive replay behind the atomic
+publication boundary, leaving an apparently empty Dashboard even though the import was
+working. The correction seeds the live runtime with an explicit in-progress full-rebuild
+snapshot only when the archive publication is empty. That state crosses the existing
+immutable product and Desktop projections to one localized, accessible Dashboard card.
+
+The card is deliberately status-only: it does not expose staging analytics or source
+metadata, and it does not invent a percentage or time remaining. Normal charts and
+totals remain invisible until the existing complete-snapshot promotion. The runtime
+library passes 24/24, the focused compiled shell contract passes 1/1, and closed
+en/ru/pseudo localization passes 22/22. The full 16-test desktop target was not claimed
+after exceeding the local 120-second command limit. This changes product behavior; it
+does not close M0/package/signing/interactive/soak release evidence.
+
 ## 2026-07-24 — Evidence-based M0 receipt budget
 
 The diagnostic M0 run `30090536271` established that the 60-minute job limit was too

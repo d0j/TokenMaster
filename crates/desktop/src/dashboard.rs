@@ -704,6 +704,7 @@ impl DesktopModelRow {
 pub struct DesktopDashboardProjection {
     sections: [DesktopDashboardSectionProjection; DESKTOP_DASHBOARD_SECTION_COUNT],
     header: DesktopHeaderProjection,
+    initial_import_in_progress: bool,
     quota_rows: Arc<[DesktopQuotaRow]>,
     benefit_scopes: Arc<[DesktopBenefitScope]>,
     code_output: DesktopCodeOutputProjection,
@@ -724,6 +725,11 @@ impl DesktopDashboardProjection {
         let (quota_rows, benefit_scopes, plan_state) = map_plan_usage(snapshot);
         let (code_output, code_state) = map_code_output(snapshot);
         let (sessions, sessions_truncated, sessions_state) = map_sessions(snapshot);
+        let initial_import_in_progress = snapshot
+            .runtime()
+            .usage()
+            .health()
+            .is_some_and(|health| health.initial_import_in_progress());
         let sections = [
             plan_state,
             code_state,
@@ -747,6 +753,7 @@ impl DesktopDashboardProjection {
         Self {
             sections,
             header: analytics.header,
+            initial_import_in_progress,
             quota_rows,
             benefit_scopes,
             code_output,
@@ -777,6 +784,10 @@ impl DesktopDashboardProjection {
     #[must_use]
     pub const fn header(&self) -> DesktopHeaderProjection {
         self.header
+    }
+    #[must_use]
+    pub const fn initial_import_in_progress(&self) -> bool {
+        self.initial_import_in_progress
     }
     #[must_use]
     pub const fn quota_rows(&self) -> &Arc<[DesktopQuotaRow]> {

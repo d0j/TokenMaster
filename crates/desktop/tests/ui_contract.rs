@@ -368,6 +368,18 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert_eq!(window.get_dashboard_session_rows().row_count(), 0);
     assert_eq!(window.get_dashboard_activity_rows().row_count(), 8);
     assert_eq!(window.get_dashboard_model_rows().row_count(), 0);
+    assert!(!window.get_dashboard_initial_import_in_progress());
+    window.set_dashboard_initial_import_in_progress(true);
+    let import_status = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::Groupbox)
+        .match_predicate(|element| {
+            element.accessible_label().is_some_and(|label| {
+                label
+                    == "Importing local usage history. Charts and totals will appear after the first safe import completes."
+            })
+        })
+        .find_all();
+    assert_eq!(import_status.len(), 1);
 
     assert_compiled_command_palette_is_bounded_and_routes_through_desktop_state(window);
 

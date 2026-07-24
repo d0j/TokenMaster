@@ -3,10 +3,11 @@ use std::num::NonZeroU64;
 use tokenmaster_engine::{RefreshOutcome, WorkerPhase, WorkerSnapshot};
 use tokenmaster_runtime::{
     BenefitReminderFailure, BenefitReminderRetryMode, BenefitReminderRuntimePhase,
-    BenefitReminderRuntimeSnapshot, BenefitReminderSchedulePhase, GitRefreshFailure,
-    GitRuntimePhase, GitRuntimeSnapshot, LivePhase, LiveRefreshKind, LiveRuntimeSnapshot,
-    ProviderQuotaRefreshStage, ProviderQuotaRetryMode, ProviderQuotaRuntimePhase,
-    ProviderQuotaRuntimeSnapshot, RuntimeErrorCode, SchedulerPhase, WatcherHealth,
+    BenefitReminderRuntimeSnapshot, BenefitReminderSchedulePhase, EnginePublicationQuality,
+    GitRefreshFailure, GitRuntimePhase, GitRuntimeSnapshot, LivePhase, LiveRefreshKind,
+    LiveRuntimeSnapshot, ProviderQuotaRefreshStage, ProviderQuotaRetryMode,
+    ProviderQuotaRuntimePhase, ProviderQuotaRuntimeSnapshot, RuntimeErrorCode, SchedulerPhase,
+    WatcherHealth,
 };
 
 use crate::ProductSectionKind;
@@ -195,6 +196,7 @@ pub struct ProductUsageRuntimeHealth {
     refresh_kind: ProductUsageRefreshKind,
     outcome: Option<ProductRefreshOutcome>,
     failure: Option<ProductRuntimeFailureCode>,
+    initial_import_in_progress: bool,
     completed_refresh_count: u64,
     busy_refresh_count: u64,
     cancelled_refresh_count: u64,
@@ -267,6 +269,11 @@ impl ProductUsageRuntimeHealth {
     #[must_use]
     pub const fn failure(self) -> Option<ProductRuntimeFailureCode> {
         self.failure
+    }
+
+    #[must_use]
+    pub const fn initial_import_in_progress(self) -> bool {
+        self.initial_import_in_progress
     }
 
     #[must_use]
@@ -343,6 +350,10 @@ impl From<LiveRuntimeSnapshot> for ProductUsageRuntimeHealth {
             failure: refresh
                 .error()
                 .map(|_| ProductRuntimeFailureCode::UsageRefresh),
+            initial_import_in_progress: refresh.kind() == LiveRefreshKind::FullRebuild
+                && refresh.outcome().is_none()
+                && refresh.error().is_none()
+                && value.engine().quality() == EnginePublicationQuality::Empty,
             completed_refresh_count: diagnostics.completed_refreshes(),
             busy_refresh_count: diagnostics.busy_refreshes(),
             cancelled_refresh_count: diagnostics.cancelled_refreshes(),

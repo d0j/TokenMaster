@@ -1,5 +1,31 @@
 # TokenMaster current state
 
+## 2026-07-24 — First safe-import status
+
+Product state: changed. A new portable archive now immediately identifies an active
+first full rebuild as local-history import. The Dashboard displays a compact status card
+until one complete archive snapshot is promoted; it then disappears and the normal
+authoritative totals and charts become visible. It never displays staging aggregates,
+an invented percentage/ETA, source count, local path, source content, or credentials.
+
+Evidence state: `tokenmaster-runtime` library passes 24/24, including the empty-archive
+status contract. The compiled desktop shell verifies the card is initially absent and
+is exposed as an accessible status only when the projected property is true. The closed
+en/ru/pseudo localization contract passes 22/22. The broad `ui_contract` suite has not
+been claimed as a receipt: its complete 16-test execution exceeded the local 120-second
+command limit, while the exact affected shell contract passes 1/1.
+
+This is a bounded product-behavior correction, not audit hardening. `AUDIT_HARDENING_LOOP`
+is not active. An approximate remaining-time display remains intentionally open: it
+requires a separate source-discovery and throughput contract, rather than a false number
+at startup.
+
+Remaining release blockers: the predecessor M0/package/secret receipts do not apply to
+this product change. Obtain one exact-head remote M0, then exact-clean MSVC package and
+secret receipts if green; public-download Slint attribution, trusted remote attestation
+verification, signing, authenticated clean-room/P3-E/P4 Windows evidence, exact MSVC
+comparison, and the explicitly deferred 24-hour soak remain. New P4 work remains frozen.
+
 ## 2026-07-24 — Evidence-based M0 receipt budget
 
 Product state: unchanged. This slice changes only the maximum wall-clock budget for an
