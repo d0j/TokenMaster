@@ -4249,3 +4249,14 @@ guard to make assertion unwind safe; root added it without opening a second revi
 complete History range target passes 14/14 with focused strict Clippy. This corrects
 required M0 evidence only; it does not claim a successor remote M0, package, release
 candidate, or stable release.
+
+## 2026-07-24 — Windows M0 Pester source bootstrap
+
+The successor Windows M0 run failed before Rust or receipt work because its hosted
+`windows-2025` worker had no registered PowerShell repository, so the already pinned
+Pester 5.7.1 module could not be resolved. The workflow now restores the default
+PSGallery registration only when the named repository is absent and retains the exact
+pinned module install. The direct contract demonstrated the original omission (21 pass,
+1 fail) and then passed 22/22 with immutable-action validation. This is a required M0
+infrastructure repair only; it does not claim a successor remote M0, package, release
+candidate, or stable release.

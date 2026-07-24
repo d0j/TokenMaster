@@ -21,8 +21,10 @@ Describe "TokenMaster M0 script contracts" {
         $Text | Should -Not -Match '"[^"\r\n]*\$[A-Za-z_][A-Za-z0-9_]*:'
     }
 
-    It "pins the Pester version used by GitHub Actions" {
+    It "pins and bootstraps the Pester source used by GitHub Actions" {
         $Workflow = Get-Content -LiteralPath (Join-Path $RepositoryRoot ".github\workflows\tokenmaster-m0-windows.yml") -Raw
+        $Workflow | Should -Match 'Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue'
+        $Workflow | Should -Match 'Register-PSRepository -Default'
         $Workflow | Should -Match 'Install-Module Pester -RequiredVersion 5\.7\.1'
     }
 

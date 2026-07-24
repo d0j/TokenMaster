@@ -1,5 +1,27 @@
 # TokenMaster current state
 
+## 2026-07-24 — Windows M0 Pester source bootstrap
+
+Product state: unchanged. This is a workflow-only repair of required Windows M0
+evidence; it changes no application, controller, data, provider, package, signing, or
+release behavior.
+
+Evidence state: successor remote M0 `30059157760` stopped before Rust, source audits,
+or receipt generation because its `windows-2025` worker had no registered PowerShell
+repository and therefore could not resolve the already pinned Pester 5.7.1 module. The
+workflow now conditionally restores only the standard PSGallery registration when the
+named repository is absent, then keeps the exact Pester version and existing immutable
+action policy. The focused contract first reproduced the missing bootstrap (21 pass,
+1 fail), then passes 22/22 with immutable-action validation. This is a demonstrated
+required-receipt repair, not audit-only hardening; `AUDIT_HARDENING_LOOP` did not
+trigger.
+
+The clean commit containing this workflow repair must receive one serial local M0
+receipt, one exact-clean MSVC package/secret receipt pair, and one successor remote M0
+result. Public-download attribution, trusted remote attestation verification, signing,
+authenticated clean-room/interactive Windows evidence, exact MSVC comparison, and the
+explicitly deferred 24-hour soak remain open. New P4 work remains frozen.
+
 ## 2026-07-24 — History range active-detail admission stabilization
 
 Product state: unchanged. This is a test-only repair of required Windows M0 evidence;

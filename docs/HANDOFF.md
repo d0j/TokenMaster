@@ -1,5 +1,35 @@
 # TokenMaster handoff
 
+## Windows M0 Pester source bootstrap (2026-07-24)
+
+Product state: unchanged. The slice repairs only the remote M0 bootstrap path; it
+changes no product, UI, controller, provider, data, package, signing, or release
+behavior.
+
+Audit/evidence state: successor M0 run `30059157760` ended before the Rust suite because
+its `windows-2025` runner had no registered PowerShell repository, so the existing
+pinned Pester 5.7.1 install could not resolve a module. The workflow now tests whether
+the named PSGallery repository is absent, restores only the standard default repository
+when necessary, and then installs the same exact Pester version. The direct M0-script
+contract red state was 21/1 and green is 22/22; immutable-action validation passes. This
+is a required receipt repair, not audit-only hardening. Do not add retries, substitute
+an unpinned Pester version, or reopen product/P4 work for this infrastructure failure.
+
+Release blockers: commit this narrow workflow/test/docs slice, then obtain one
+exact-clean serial local M0 receipt, one exact-clean MSVC package and secret-scan receipt
+pair, and one successor remote M0 result. The remaining product-release blockers are
+unchanged: public-download Slint attribution, trusted remote attestation verification,
+signing, authenticated clean-room/P3-E/P4 Windows evidence, exact MSVC comparison, and
+soak. Per operator direction, do not start the 24-hour M0 soak until explicitly
+requested.
+
+Git state: the stopped local M0 from the preceding test-only commit is intentionally
+superseded by this workflow repair and cannot be used as an exact-head receipt. Stage
+only this workflow, its direct regression contract, and required state documentation;
+commit and push once, then run one serial exact-head M0. Do not create a later docs-only
+commit solely to mirror generated receipt status. No second reviewer is warranted unless
+a new Critical product, security, data-loss, or required-receipt defect is demonstrated.
+
 ## History range active-detail admission stabilization (2026-07-24)
 
 Product state: unchanged. The slice removes an invalid timing assumption from required
