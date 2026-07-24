@@ -12,6 +12,8 @@ snapshot exists; it has no standalone splash, fake progress/ETA, source metadata
 source content, or credentials. All direct route
 ScrollViews bind their viewports to the available route area and their heights to their
 content minima, so the lower panels are reachable by the mouse wheel.
+The Windows binary uses the GUI subsystem for both debug and release builds; a local
+product launch must not create a console window.
 
 Audit/evidence state: this is product behavior, not a parser/audit/test-only repair.
 Focused application-startup and controller contracts pass; the compiled UI contract

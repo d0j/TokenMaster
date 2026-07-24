@@ -4398,6 +4398,9 @@ in-app status with reduced-motion-aware animated activity dots and actual startu
 snapshot exists; it deliberately has no fabricated percentage or ETA. Direct route
 ScrollViews now bind to their viewport and content minimum height.
 
+The debug application binary now uses the same Windows GUI subsystem as release, so a
+local product launch does not create a console host window.
+
 Focused application/controller/UI contracts pass. The UI contract dispatches a real
 wheel event, proves the phase transition, and proves the Sessions content moves;
 en/ru/pseudo localization passes 22/22. Root formatting and strict app/desktop Clippy

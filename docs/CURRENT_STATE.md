@@ -11,6 +11,8 @@ activity dots and only truthful startup phases: checking local history, starting
 safe import, then importing local history. It explains that charts and totals follow the
 first safe import; it has no separate splash window, staging aggregates, invented
 percentage/ETA, source count, local path, source content, or credentials.
+The Windows application binary uses the GUI subsystem in both debug and release builds,
+so a local product launch does not create a console window.
 
 Every direct route ScrollView now has an explicit viewport and content-derived minimum
 height, so the lower content remains reachable rather than being clipped below the
