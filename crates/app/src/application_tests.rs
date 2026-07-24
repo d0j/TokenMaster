@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 use std::fs;
+use std::process::Command;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
@@ -1364,9 +1365,14 @@ fn startup_busy_reminder_store_keeps_the_durable_policy_pending_and_retryable() 
         .expect("pending profile remains retryable after contention");
 }
 
-fn assert_successful_reminder_policy_sync_restarts_unavailable_runtime_in_current_session(
-    application: &mut Application,
-) {
+const REMINDER_RECOVERY_CONTRACT_CHILD: &str = "TOKENMASTER_REMINDER_RECOVERY_CONTRACT_CHILD";
+
+fn assert_successful_reminder_policy_sync_restarts_unavailable_runtime_in_current_session() {
+    let temporary = TempDir::new().expect("temporary directory");
+    let environment = application_environment(&temporary);
+    let mut application = Application::start(&environment).expect("application startup");
+    wait_for_initial_live_refresh(&application);
+
     let (previous_reminder, previous_presentation) = {
         let mut slot = application.bundle.lock().expect("application bundle");
         let bundle = slot.as_mut().expect("live bundle");
@@ -1404,6 +1410,30 @@ fn assert_successful_reminder_policy_sync_restarts_unavailable_runtime_in_curren
     assert_eq!(bundle.reminder.failure, None);
     assert!(bundle.notification_presentation.is_some());
     drop(slot);
+    application.shutdown().expect("application shutdown");
+}
+
+#[test]
+fn successful_reminder_policy_sync_restarts_unavailable_runtime_in_current_session() {
+    if std::env::var_os(REMINDER_RECOVERY_CONTRACT_CHILD).is_some() {
+        assert_successful_reminder_policy_sync_restarts_unavailable_runtime_in_current_session();
+        return;
+    }
+
+    let status = Command::new(std::env::current_exe().expect("current test executable"))
+        .args([
+            "--exact",
+            "application::tests::successful_reminder_policy_sync_restarts_unavailable_runtime_in_current_session",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(REMINDER_RECOVERY_CONTRACT_CHILD, "1")
+        .status()
+        .expect("run isolated reminder recovery contract");
+    assert!(
+        status.success(),
+        "isolated reminder recovery contract failed: {status}"
+    );
 }
 
 fn assert_no_backup_rebuild_preserves_corrupt_truth_and_completes_authoritative_reconciliation() {
@@ -1843,9 +1873,6 @@ fn application_bootstraps_live_and_safe_mode_then_marks_clean_after_joined_shutd
     let root = DataRoot::resolve(&environment).expect("data root");
     assert!(root.archive_path().exists());
     assert_reminder_policy_config_import_worker_sync_lifecycle(&mut application, &temporary);
-    assert_successful_reminder_policy_sync_restarts_unavailable_runtime_in_current_session(
-        &mut application,
-    );
     let crate::command::ApplicationCommandAdmission::Started(manual) = application
         .commands
         .submit(crate::command::ApplicationCommand::Backup)

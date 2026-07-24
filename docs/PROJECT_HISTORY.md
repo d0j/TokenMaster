@@ -1,5 +1,24 @@
 # TokenMaster project history
 
+## 2026-07-24 — Reminder recovery contract process isolation
+
+The first exact remote M0 after same-session reminder recovery, `30080747299`, compiled
+the full workspace and reached the application library. The recovery itself did not
+fail; instead, putting its profile-change assertion inside the pre-existing giant
+lifecycle test introduced one additional legitimate controller refresh and exposed that
+test's unrelated late history-publication timing assumption. The remote failure was
+`restarted published history generation is initialized`, after all earlier app tests
+had passed.
+
+The recovery contract now follows the established exact-child-process pattern used for
+process-global measurements. Its parent starts one clean libtest child with one test
+thread; only the child starts the application and performs the temporary unavailable
+runtime replacement. That prevents Slint process-global setup and the unrelated
+lifecycle ordering from becoming test authority. The isolated contract passes 1/1 and
+the full 81-test application library passes locally. This is a required M0 evidence
+repair only; it changes no reminder behavior or release claim. One replacement exact
+remote M0 remains required.
+
 ## 2026-07-24 — Same-session reminder recovery and Git M0 receipt stabilization
 
 The product previously preserved a lawful `Pending` desired reminder policy after a

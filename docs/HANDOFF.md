@@ -21,19 +21,29 @@ Git production behavior changed. The prior `AUDIT_HARDENING_LOOP` remains docume
 this product recovery plus required-receipt correction adds no audit-only work and no
 new reviewer round.
 
-Release blockers: commit and push this bounded slice, then obtain one exact-head remote
-M0. Only if it is green, obtain the exact-clean MSVC package and secret-scan pair. Then
-remain public-download attribution, trusted remote attestation verification, signing,
-authenticated clean-room/P3-E/P4 Windows evidence, exact MSVC comparison, and soak.
-Do not start the 24-hour soak until explicitly requested. P4 remains frozen.
+Exact remote M0 `30080747299` then compiled the complete workspace and failed the
+pre-existing giant application lifecycle test, not the recovery behavior. The recovery
+assertion had been embedded in that lifecycle, creating one real profile-change refresh
+and exposing its unrelated late history-publication timing assumption. The contract now
+uses the established exact-child-process pattern: the child starts the app in a clean
+Slint/libtest process, while the parent lifecycle test retains its original ordering.
+Focused parent/child evidence is 1/1 and the full application library is 81/81. This is
+required receipt isolation only; no production behavior, retry, scheduler, or UI
+authority changed.
 
-Git state: stage only `crates/app/src/application.rs`,
-`crates/app/src/application_tests.rs`,
-`crates/runtime/tests/git_runtime_contract.rs`, and the source-of-truth/state documents
-changed by this slice. Run one final formatting/static focused review before commit; do
-not create a later docs-only commit merely to mirror generated remote receipts. No child
-agents are active and no reviewer is required absent a demonstrated Critical product,
-security, data-loss, or required-receipt defect.
+Release blockers: commit and push the receipt-isolation follow-up, then obtain one
+replacement exact-head remote M0. Only if it is green, obtain the exact-clean MSVC
+package and secret-scan pair. Then remain public-download attribution, trusted remote
+attestation verification, signing, authenticated clean-room/P3-E/P4 Windows evidence,
+exact MSVC comparison, and soak. Do not start the 24-hour soak until explicitly
+requested. P4 remains frozen.
+
+Git state: the product/recovery commit is already pushed. Stage only
+`crates/app/src/application_tests.rs` and this slice's state/traceability/history
+documents, then push one receipt-isolation follow-up. Run one final formatting/static
+focused review before commit; do not create a later docs-only commit merely to mirror
+generated remote receipts. No child agents are active and no reviewer is required absent
+a demonstrated Critical product, security, data-loss, or required-receipt defect.
 
 ## Reminder startup receipt contract (2026-07-24)
 

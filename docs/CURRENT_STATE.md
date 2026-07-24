@@ -19,10 +19,20 @@ the durable result instead: the valid sibling publishes one `Complete` Git proje
 while at least one unavailable scan is observed. Its focused Windows GNU contract is
 green 1/1. No retry, sleep, scheduler, parser, or production Git change was made.
 
+The successor exact remote M0 `30080747299` compiled the complete workspace and then
+failed a pre-existing large application lifecycle test. The new recovery assertion had
+been embedded in that test, adding a real profile-change refresh and exposing its
+unrelated late history-publication timing assumption. The recovery contract now runs in
+one exact child libtest process, following the existing native-resource isolation
+pattern; the parent preserves the original lifecycle sequence. Focused parent/child
+evidence is green 1/1 and the full application library is green 81/81. This changes
+required test isolation only, not product behavior.
+
 `AUDIT_HARDENING_LOOP` remains recorded for the prior two test-only corrections. This
 slice deliberately exits that loop through a bounded product-behavior recovery plus a
-demonstrated required-receipt correction; no new audit work or reviewer queue was opened.
-The next release-critical action is one exact-head remote M0 after the clean commit.
+demonstrated required-receipt correction; no audit work or reviewer queue was opened.
+The next release-critical action is one replacement exact-head remote M0 after the
+clean receipt-isolation commit.
 
 Remaining release blockers: exact remote M0, then exact-clean MSVC package and secret
 receipts if green; public-download Slint attribution, trusted remote attestation
