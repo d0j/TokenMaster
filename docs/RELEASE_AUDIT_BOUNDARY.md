@@ -16,8 +16,10 @@ The Windows GNU M0 receipt process sets `CARGO_BUILD_JOBS=1` before Cargo work s
 overlapping linker jobs cannot turn an otherwise valid target into a transient failure.
 Query resource warm-up treats repeated allocator troughs as an unstable phase; it must
 not lower the retained private-bytes baseline or weaken the established resource budget.
-The matching GitHub M0 job allows 60 minutes because that serial clean Windows receipt
-can exceed the former 30-minute ceiling; the larger budget is not an acceptance claim
+The matching GitHub M0 job allows 75 minutes because the serial clean Windows receipt
+exceeded the former 60-minute ceiling while its required workspace test was still
+active. This is the one fixed evidence-based budget increase; another timeout requires
+splitting the receipt path, not increasing the budget. It is not an acceptance claim
 and does not expand workflow permissions, triggers, or product authority.
 Every existing M0 stage emits only a fixed begin/pass log label, so a cancellation can
 identify the active receipt stage without logging commands, arguments, paths, source

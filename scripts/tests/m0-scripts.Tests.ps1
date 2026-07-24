@@ -35,7 +35,7 @@ Describe "TokenMaster M0 script contracts" {
 
     It "allows the serialized Windows M0 receipt sufficient wall time" {
         $Workflow = Get-Content -LiteralPath (Join-Path $RepositoryRoot ".github\workflows\tokenmaster-m0-windows.yml") -Raw
-        $Workflow | Should -Match '(?m)^\s+timeout-minutes:\s+60\s*$'
+        $Workflow | Should -Match '(?m)^\s+timeout-minutes:\s+75\s*$'
     }
 
     It "verification uses the root locked workspace and labels external gates" {

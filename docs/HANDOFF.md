@@ -1,5 +1,32 @@
 # TokenMaster handoff
 
+## Evidence-based M0 receipt budget (2026-07-24)
+
+Product state: unchanged. The M0 job timeout is 75 minutes; no product, test set,
+runtime, package, signing, permissions, or release authority changed.
+
+Audit/evidence state: diagnostic M0 `30090536271` proves the complete workspace test
+was still active after 21 minutes 45 seconds of successful preflight/Clippy work and
+37 minutes 26 seconds of workspace execution, when the 60-minute Windows job limit
+cancelled it. There was no failed test or hang. The 75-minute value is the smallest
+bounded allowance over that demonstrated sequence. Its focused workflow contract was
+red 22/1 and is green 23/23.
+
+This is the final receipt-budget adjustment: if the exact 75-minute M0 does not finish,
+do not raise it again. Split the required receipt path and preserve the fixed checks.
+`AUDIT_HARDENING_LOOP` remains stopped; no new parser/test category, review, P4, or
+product change is authorized.
+
+Release blockers: run one exact-head 75-minute M0. Only if it is green, run the
+exact-clean MSVC package and secret-scan pair. Public-download attribution, trusted
+remote attestation verification, signing, authenticated clean-room/P3-E/P4 Windows
+evidence, exact MSVC comparison, and the explicitly deferred 24-hour soak remain.
+
+Git state: stage only the M0 workflow timeout, its focused source contract, and these
+required state/traceability/history/release-boundary documents. Commit and push once,
+then start one successor M0. No monitor is active; create one only for that successor
+and delete it on its terminal result. No child agents are active.
+
 ## M0 timeout stage receipt observability (2026-07-24)
 
 Product state: unchanged. The M0 verifier now writes only fixed stage begin/pass labels

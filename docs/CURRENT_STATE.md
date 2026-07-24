@@ -1,5 +1,30 @@
 # TokenMaster current state
 
+## 2026-07-24 — Evidence-based M0 receipt budget
+
+Product state: unchanged. This slice changes only the maximum wall-clock budget for an
+existing clean Windows M0 receipt; no product, test scope, SQLite, UI, package,
+signing, permissions, or release authority changed.
+
+Evidence state: diagnostic M0 `30090536271` confirmed that the required full workspace
+test stage began at `12:05:58Z` after 21 minutes 45 seconds of successful preflight and
+Clippy gates, remained active for 37 minutes 26 seconds, and was cancelled exactly at
+the 60-minute job limit without a failed test. The evidence proves the required serial
+path exceeds 60 minutes; it is not a hang or a product failure. The fixed M0 budget is
+now 75 minutes, the smallest bounded allowance above the measured path. The timeout
+contract was RED 22/1 and is green 23/23 after the workflow update.
+
+This is one required-receipt correction with a fixed stop condition: if the 75-minute
+M0 does not complete, root must split the receipt path rather than raise its timeout
+again. `AUDIT_HARDENING_LOOP` remains stopped; no parser, review, P4, or product scope
+was added. The next release-critical action is exactly one 75-minute remote M0.
+
+Remaining release blockers: an exact remote M0 receipt, then exact-clean MSVC package
+and secret receipts if green; public-download Slint attribution, trusted remote
+attestation verification, signing, authenticated clean-room/P3-E/P4 Windows evidence,
+exact MSVC comparison, and the explicitly deferred 24-hour soak. New P4 work remains
+frozen.
+
 ## 2026-07-24 — M0 timeout stage receipt observability
 
 Product state: unchanged. This slice changes only M0 verification progress evidence;

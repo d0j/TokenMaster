@@ -1,5 +1,18 @@
 # TokenMaster project history
 
+## 2026-07-24 — Evidence-based M0 receipt budget
+
+The diagnostic M0 run `30090536271` established that the 60-minute job limit was too
+short for the mandatory serial clean Windows receipt, not that a test was failing or
+hung. All preflight and Clippy work finished in 21 minutes 45 seconds; the full
+workspace test then ran another 37 minutes 26 seconds before GitHub cancelled the job.
+
+The fixed budget is now 75 minutes, the smallest bounded allowance above the observed
+path. Its focused timeout contract was red before the workflow update and passes 23/23
+afterward. This is the last budget increase: a future 75-minute timeout requires
+splitting the receipt path, never a further increase. Product behavior and release
+claims remain unchanged; one exact successor M0 remains required.
+
 ## 2026-07-24 — M0 timeout stage receipt observability
 
 Exact remote M0 `30086621386` reached the 60-minute Windows job limit and was
