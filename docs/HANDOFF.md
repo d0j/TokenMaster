@@ -5,18 +5,21 @@
 Product state: changed. The actual main window is shown before the expensive archive
 prepare/live-start work. It stays responsive while that work proceeds on the bounded
 startup workers, then the already-visible shell receives the live controller and
-projections. The Dashboard presents a localized in-app card, “Loading local usage
-history…”, until one safe archive snapshot exists; it has no standalone splash, fake
-progress/ETA, source metadata, paths, source content, or credentials. All direct route
+projections. The Dashboard presents a localized in-app card with visible,
+reduced-motion-aware activity dots and actual startup phases: checking local history,
+starting safe import, then importing local history. It remains until one safe archive
+snapshot exists; it has no standalone splash, fake progress/ETA, source metadata, paths,
+source content, or credentials. All direct route
 ScrollViews bind their viewports to the available route area and their heights to their
 content minima, so the lower panels are reachable by the mouse wheel.
 
 Audit/evidence state: this is product behavior, not a parser/audit/test-only repair.
 Focused application-startup and controller contracts pass; the compiled UI contract
-proves the live loader and dispatches an actual pointer-wheel event that moves Sessions
-content. The en/ru/pseudo localization contract passes 22/22. Root format and strict
-workspace Clippy pass. A Windows smoke observed the produced executable's named main
-window responding after 15 seconds and then closed only that task-owned process. The
+proves the live phase-changing loader and dispatches an actual pointer-wheel event that
+moves Sessions content. The en/ru/pseudo localization contract passes 22/22. Root
+format and strict app/desktop Clippy pass. A Windows smoke observed the produced
+executable's named main window responding after 15 seconds and then closed only that
+task-owned process. The
 serial workspace suite was still compiling later large Windows contract binaries when
 its monitor failed to return at the 60-minute release-driven limit; root stopped the
 exact task-owned process on the delayed observation. No test failure was emitted, but

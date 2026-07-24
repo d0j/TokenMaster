@@ -209,6 +209,10 @@ fn run_startup_event_loop(
     startup_ui
         .shell
         .window()
+        .set_dashboard_initial_import_stage(0);
+    startup_ui
+        .shell
+        .window()
         .show()
         .map_err(|_| ApplicationError::ui_unavailable())?;
     APPLICATION_STARTUP_SESSION.with(|slot| {
@@ -263,6 +267,13 @@ fn complete_startup(prepared: Result<PreparedApplicationStart, ApplicationError>
             return true;
         };
         let result = prepared.and_then(|prepared| {
+            session
+                .ui
+                .as_ref()
+                .ok_or_else(ApplicationError::internal)?
+                .shell
+                .window()
+                .set_dashboard_initial_import_stage(1);
             let bundle = session
                 .ui
                 .as_ref()
@@ -302,6 +313,7 @@ fn complete_live_startup(started: Result<PreparedApplicationLiveStart, Applicati
         let result = started
             .and_then(|started| {
                 let ui = session.ui.take().ok_or_else(ApplicationError::internal)?;
+                ui.shell.window().set_dashboard_initial_import_stage(2);
                 let current_session = session
                     .current_session
                     .take()

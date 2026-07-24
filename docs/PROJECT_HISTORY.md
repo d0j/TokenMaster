@@ -4393,13 +4393,15 @@ first desktop window could remain non-responsive while archive startup ran, and 
 route content could be clipped without wheel scrolling. Startup now creates the real
 Slint shell first and performs archive preparation/live start on bounded workers before
 attaching the prepared live bundle to that same shell. The Dashboard renders a localized
-in-app “Loading local usage history…” card until the first safe archive snapshot exists;
-it deliberately has no fabricated percentage or ETA. Direct route ScrollViews now bind
-to their viewport and content minimum height.
+in-app status with reduced-motion-aware animated activity dots and actual startup phases
+(checking history, starting safe import, importing history) until the first safe archive
+snapshot exists; it deliberately has no fabricated percentage or ETA. Direct route
+ScrollViews now bind to their viewport and content minimum height.
 
 Focused application/controller/UI contracts pass. The UI contract dispatches a real
-wheel event and proves the Sessions content moves; en/ru/pseudo localization passes
-22/22. Root formatting and strict workspace Clippy pass. The attempted serial full
+wheel event, proves the phase transition, and proves the Sessions content moves;
+en/ru/pseudo localization passes 22/22. Root formatting and strict app/desktop Clippy
+pass. The attempted serial full
 workspace suite was still compiling later large Windows contract binaries when its
 monitor failed to return at the release-driven 60-minute limit; root stopped the exact
 task-owned process on the delayed observation. It emitted no failed test but is not a

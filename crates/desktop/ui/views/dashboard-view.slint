@@ -66,22 +66,41 @@ component DashboardHeaderCard inherits Rectangle {
     }
 }
 
+component ImportActivityDot inherits Rectangle {
+    in property <bool> reduced-motion;
+    in property <float> phase;
+
+    width: 7px;
+    height: 7px;
+    background: UiTokens.accent;
+    border-radius: 4px;
+    opacity: root.reduced-motion ? 1.0 : 0.25 + 0.75 * abs(sin(360deg * (animation-tick() / 1.2s + root.phase)));
+}
+
 component InitialImportCard inherits Rectangle {
+    in property <string> phase-label;
+    in property <bool> reduced-motion;
+
     min-height: 62px;
     background: UiTokens.surface-raised;
     border-color: UiTokens.accent;
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: groupbox;
-    accessible-label: @tr("Loading local usage history. Charts and totals will appear after the first safe import completes.");
+    accessible-label: root.phase-label + " " + @tr("Charts and totals will appear after the first safe import completes.");
 
     HorizontalLayout {
         padding: UiTokens.space;
         spacing: UiTokens.space-sm;
-        Text { text: "●"; color: UiTokens.accent; font-size: 14px; vertical-alignment: center; }
+        VerticalLayout {
+            spacing: 3px;
+            ImportActivityDot { reduced-motion: root.reduced-motion; phase: 0.0; }
+            ImportActivityDot { reduced-motion: root.reduced-motion; phase: 0.33; }
+            ImportActivityDot { reduced-motion: root.reduced-motion; phase: 0.66; }
+        }
         VerticalLayout {
             spacing: UiTokens.space-xs;
-            Text { text: @tr("Loading local usage history…"); color: UiTokens.text-primary; font-size: 13px; font-weight: 750; }
+            Text { text: root.phase-label; color: UiTokens.text-primary; font-size: 13px; font-weight: 750; }
             Text { text: @tr("Charts and totals will appear after the first safe import completes."); color: UiTokens.text-secondary; font-size: 11px; wrap: word-wrap; }
         }
     }
@@ -382,6 +401,8 @@ export component DashboardView inherits Rectangle {
     in property <string> header-events;
     in property <string> header-evidence;
     in property <bool> initial-import-in-progress;
+    in property <int> initial-import-stage;
+    in property <bool> reduced-motion;
     in property <string> code-commits;
     in property <string> code-added;
     in property <string> code-removed;
@@ -389,6 +410,7 @@ export component DashboardView inherits Rectangle {
     in property <string> code-efficiency;
     in property <string> code-evidence;
     out property <bool> narrow: root.width < 760px;
+    out property <string> initial-import-phase-label: root.initial-import-stage >= 2 ? @tr("Importing local usage history…") : (root.initial-import-stage == 1 ? @tr("Starting safe import…") : @tr("Checking local usage history…"));
     out property <string> layout-mode: root.narrow ? "narrow" : "wide";
     out property <string> layout-preset: root.layout-id == 2 ? "workbench" : (root.layout-id == 1 ? "control_center" : "refined");
 
@@ -404,7 +426,10 @@ export component DashboardView inherits Rectangle {
             width: parent.width;
             padding: UiTokens.space;
             spacing: UiTokens.space;
-            if root.initial-import-in-progress: InitialImportCard { }
+            if root.initial-import-in-progress: InitialImportCard {
+                phase-label: root.initial-import-phase-label;
+                reduced-motion: root.reduced-motion;
+            }
             DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
             for slot in root.slots: DashboardBoardSlot { slot: slot; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
         }
@@ -412,7 +437,10 @@ export component DashboardView inherits Rectangle {
             width: parent.width;
             padding: UiTokens.space;
             spacing: UiTokens.space;
-            if root.initial-import-in-progress: InitialImportCard { }
+            if root.initial-import-in-progress: InitialImportCard {
+                phase-label: root.initial-import-phase-label;
+                reduced-motion: root.reduced-motion;
+            }
             DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
             if root.slots.length > 0: DashboardBoardSlot { slot: root.slots[0]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
             if root.slots.length > 1: HorizontalLayout {
@@ -431,7 +459,10 @@ export component DashboardView inherits Rectangle {
             width: parent.width;
             padding: UiTokens.space;
             spacing: UiTokens.space;
-            if root.initial-import-in-progress: InitialImportCard { }
+            if root.initial-import-in-progress: InitialImportCard {
+                phase-label: root.initial-import-phase-label;
+                reduced-motion: root.reduced-motion;
+            }
             DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
             if root.slots.length > 0: HorizontalLayout {
                 spacing: UiTokens.space;
@@ -450,7 +481,10 @@ export component DashboardView inherits Rectangle {
             width: parent.width;
             padding: UiTokens.space;
             spacing: UiTokens.space;
-            if root.initial-import-in-progress: InitialImportCard { }
+            if root.initial-import-in-progress: InitialImportCard {
+                phase-label: root.initial-import-phase-label;
+                reduced-motion: root.reduced-motion;
+            }
             DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
             if root.slots.length > 0: DashboardBoardSlot { slot: root.slots[0]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
             if root.slots.length > 1: HorizontalLayout {

@@ -6,10 +6,11 @@ Product state: changed. The real Slint main window and Dashboard now appear befo
 archive validation, recovery, migration, and first live import complete. Those startup
 steps run in the existing bounded background path; the same early window receives the
 prepared live bundle when it is ready. Until one complete archive snapshot is promoted,
-the Dashboard has a localized in-app status card: “Loading local usage history…”, with
-the truthful explanation that charts and totals follow the first safe import. It has no
-separate splash window, staging aggregates, invented percentage/ETA, source count,
-local path, source content, or credentials.
+the Dashboard has a localized in-app status card with visible, reduced-motion-aware
+activity dots and only truthful startup phases: checking local history, starting the
+safe import, then importing local history. It explains that charts and totals follow the
+first safe import; it has no separate splash window, staging aggregates, invented
+percentage/ETA, source count, local path, source content, or credentials.
 
 Every direct route ScrollView now has an explicit viewport and content-derived minimum
 height, so the lower content remains reachable rather than being clipped below the
@@ -17,11 +18,12 @@ window. The Dashboard uses the same bounded geometry while retaining its conditi
 loading card.
 
 Evidence state: focused application startup, desktop controller, compiled shell, and
-wheel-scroll contracts pass; the shell contract dispatches a real pointer-wheel event
-and proves that the Sessions content moves. The en/ru/pseudo localization contract
-passes 22/22. A Windows smoke launched the produced executable, observed the named
-main window responding after 15 seconds, and closed that exact task-owned process.
-Root formatting and strict workspace Clippy pass. The final serial workspace suite was
+wheel-scroll contracts pass; the shell contract dispatches a real pointer-wheel event,
+proves that the Sessions content moves, and checks the visible startup phase transition.
+The en/ru/pseudo localization contract passes 22/22. A Windows smoke launched the
+produced executable, observed the named main window responding after 15 seconds, and
+closed that exact task-owned process. Root formatting and strict app/desktop Clippy
+pass. The final serial workspace suite was
 still compiling later large Windows test binaries when its monitor failed to return at
 the 60-minute release-driven limit; root stopped the exact task-owned process as soon as
 the delayed monitor result was observed. It produced neither a test failure nor a

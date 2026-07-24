@@ -370,12 +370,13 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert_eq!(window.get_dashboard_model_rows().row_count(), 0);
     assert!(!window.get_dashboard_initial_import_in_progress());
     window.set_dashboard_initial_import_in_progress(true);
+    assert_eq!(window.get_dashboard_initial_import_stage(), 0);
     let import_status = ElementQuery::from_root(window)
         .match_accessible_role(AccessibleRole::Groupbox)
         .match_predicate(|element| {
             element.accessible_label().is_some_and(|label| {
                 label
-                    == "Loading local usage history. Charts and totals will appear after the first safe import completes."
+                    == "Checking local usage history… Charts and totals will appear after the first safe import completes."
             })
         })
         .find_all();
@@ -389,6 +390,17 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert!(import_size.width > 0.0 && import_size.height > 0.0);
     assert!(import_position.y >= 58.0);
     assert!(import_position.y + import_size.height <= 720.0);
+    window.set_dashboard_initial_import_stage(2);
+    let importing_status = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::Groupbox)
+        .match_predicate(|element| {
+            element.accessible_label().is_some_and(|label| {
+                label
+                    == "Importing local usage history… Charts and totals will appear after the first safe import completes."
+            })
+        })
+        .find_all();
+    assert_eq!(importing_status.len(), 1);
     let sessions_before = ElementQuery::from_root(window)
         .match_accessible_role(AccessibleRole::Groupbox)
         .match_predicate(|element| {
