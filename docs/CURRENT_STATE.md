@@ -1,5 +1,35 @@
 # TokenMaster current state
 
+## 2026-07-24 — History range active-detail admission stabilization
+
+Product state: unchanged. This is a test-only repair of required Windows M0 evidence;
+it changes no controller ordering, UI, data, provider, package, signing, or release
+behavior.
+
+Evidence state: the latest replacement remote M0 reached the earlier range and
+current-session contracts, then found a second timing assumption inside the combined
+range/session test. Its detail query used the instant `UnavailableSource`, so it could
+finish and publish before the range request; the resulting `stale_history_range` was
+correct after terminal completion, not a product arbitration regression. The range-to-
+page half retains its bounded active-range rendezvous. The inverse detail-to-range rule
+remains directly and more strongly covered by the adjacent blocking-detail contract,
+which observes the active detail before requiring `busy` and then verifies recovery.
+The redundant instant-source assertion is removed rather than widening a timing window.
+One scoped Sol High review found that the retained blocking-detail test also needed its
+release sender guarded during unwind; it now uses the existing RAII guard before
+controller Drop. Root format, focused strict Clippy, and the complete History range
+target 14/14 pass. `AUDIT_HARDENING_LOOP` did not trigger: this corrects a demonstrated
+remote required-receipt failure without adding an audit rule or changing production
+behavior.
+
+The clean commit containing this slice must receive one serial local M0 receipt, one
+exact-clean MSVC package/secret receipt pair, and one successor remote M0 result. The
+tracked record states the durable test contract rather than adding a later docs-only
+commit merely to restate generated receipts. Public-download attribution, trusted remote
+attestation verification, signing, authenticated clean-room/interactive Windows evidence,
+exact MSVC comparison, and the explicitly deferred 24-hour soak remain open. New P4 work
+remains frozen.
+
 ## 2026-07-23 — Current-session native resource contract isolation
 
 Product state: unchanged. This is a test-only repair of required Windows M0 evidence;

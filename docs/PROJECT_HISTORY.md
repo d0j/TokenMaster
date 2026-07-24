@@ -4231,3 +4231,21 @@ platform evidence and the complete platform library target pass with formatting 
 strict focused Clippy. One independent scoped review found no defect. This corrects
 required M0 evidence only; it does not claim a green replacement remote M0, package,
 release candidate, or stable release.
+
+## 2026-07-24 — History range active-detail admission stabilization
+
+The next remote Windows M0 run passed the earlier active-range repair and then exposed a
+second test-only race in the combined range/session contract. Its inverse detail-to-range
+subcase used an immediate unavailable source, so the detail worker could complete and
+publish before the range request. The range intent then correctly failed as stale; it did
+not prove that an active detail fails to block a range.
+
+The invalid duplicate assertion was removed. The range-to-page direction remains held by
+its bounded active-range source. The inverse direction is already covered by the adjacent
+stronger contract, which holds the real detail query, observes its entry, requires
+`busy`, releases and drains it, then proves a current-generation range can recover. The
+one scoped review found that this retained blocking test needed the existing RAII release
+guard to make assertion unwind safe; root added it without opening a second review. The
+complete History range target passes 14/14 with focused strict Clippy. This corrects
+required M0 evidence only; it does not claim a successor remote M0, package, release
+candidate, or stable release.

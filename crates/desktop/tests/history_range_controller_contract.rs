@@ -654,31 +654,6 @@ fn range_and_sessions_admissions_are_mutually_exclusive_without_displacement() {
         page_result.expect_err("range blocks page").stable_code(),
         "busy"
     );
-
-    let (mut controller, epoch, generation) = ready_controller();
-    let selection = ProductSessionDetailSelection::new(
-        ProductSessionDetailSelectionGeneration::new(1).expect("generation"),
-        0,
-    );
-    controller
-        .request_session_detail(DesktopSessionDetailIntent::new(
-            epoch, generation, selection,
-        ))
-        .expect("detail admission");
-    let range = DesktopHistoryRangeIntent::new(
-        epoch,
-        generation,
-        DesktopHistoryRangeGeneration::new(1).expect("generation"),
-        DesktopHistoryRangePreset::Recent1Day,
-    );
-    assert_eq!(
-        controller
-            .request_history_range(range)
-            .expect_err("detail blocks range")
-            .stable_code(),
-        "busy"
-    );
-    controller.shutdown().expect("shutdown");
 }
 
 #[test]
@@ -704,6 +679,7 @@ fn active_detail_query_keeps_history_range_busy_until_terminal_completion() {
         DesktopQueryPlan::overview().expect("plan"),
     )
     .expect("controller");
+    let mut detail_release = WorkerReleaseGuard::new(release_sender);
     controller.bind_snapshot_epoch(epoch).expect("bind epoch");
     controller
         .refresh(DesktopRefreshUrgency::Interactive)
@@ -740,7 +716,7 @@ fn active_detail_query_keeps_history_range_busy_until_terminal_completion() {
             .stable_code(),
         "busy"
     );
-    release_sender.send(()).expect("release detail");
+    detail_release.release();
     let _ = wait_for_completion(&controller);
     let detail = controller
         .take_snapshot()

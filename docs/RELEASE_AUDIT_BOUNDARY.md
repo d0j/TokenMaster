@@ -28,6 +28,13 @@ worker, observes `busy`, releases and drains it, and owns an unwind-safe release
 failed assertion cannot turn into an unbounded worker join. This is test evidence, not
 a controller behavior or release-acceptance change.
 
+The inverse session-detail/range assertion is valid only while the detail is active. It
+must rendezvous a bounded detail query before requiring `busy`; after terminal detail
+publication, `stale_history_range` is correct evidence. The direct blocking-detail
+contract owns this direction, including unwind-safe release, drain, and recovery. An
+instant-source duplicate that races terminal publication is invalid evidence and must
+not be retained or replaced by a widened timing allowance.
+
 The current-session owner resource contract samples process-wide native counts, so it
 must run its exact 4,096-cycle sample in an exact single-test child process rather than
 beside unrelated libtest teardown. The child marker prevents recursion, one test thread

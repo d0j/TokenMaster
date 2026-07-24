@@ -1,5 +1,37 @@
 # TokenMaster handoff
 
+## History range active-detail admission stabilization (2026-07-24)
+
+Product state: unchanged. The slice removes an invalid timing assumption from required
+Windows M0 evidence; it changes no controller, UI, provider, data, package, signing, or
+release behavior.
+
+Audit/evidence state: remote M0 run `30056084510` passed the prior fixed range path and
+then saw the combined range/session test expect `busy` after an instant detail query had
+already terminally published. The controller correctly returned `stale_history_range`.
+The range-to-page direction remains held by its existing bounded range rendezvous. The
+inverse detail-to-range direction is already covered by the adjacent stronger test that
+holds the detail query, observes entry, requires `busy`, releases, drains, and proves
+recovery. One scoped Sol High review found that its release sender needed the existing
+unwind-safe `WorkerReleaseGuard`; root corrected it without another review. The racing
+duplicate assertion is removed; format, focused strict Clippy, and focused History range
+evidence are 14/14. This is required receipt repair, not audit-only hardening. Do not
+widen a timing window or restore the instant-source assertion.
+
+Release blockers: commit this narrow test/docs slice, then obtain one exact-clean serial
+local M0 receipt, one exact-clean MSVC package and secret-scan receipt pair, and one
+successor remote M0 result. The remaining product-release blockers are unchanged:
+public-download Slint attribution, trusted remote attestation verification, signing,
+authenticated clean-room/P3-E/P4 Windows evidence, exact MSVC comparison, and soak.
+Per operator direction, do not start the 24-hour M0 soak until explicitly requested.
+
+Git state: the previous exact-clean local M0 pass is superseded by this required test
+slice. Stage only its test and required documentation, commit and push once, then
+regenerate receipts for that exact clean HEAD. Do not create a later docs-only commit
+solely to mirror generated receipt status; report its exact result in the handoff
+response. Do not reopen P4 or audit-hardening work unless a focused reproducer proves a
+product, security, data-loss, or required-receipt defect.
+
 ## Current-session native resource contract isolation (2026-07-23)
 
 Product state: unchanged. The slice only makes the Windows current-session resource
