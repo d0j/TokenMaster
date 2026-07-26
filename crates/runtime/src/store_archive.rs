@@ -75,16 +75,21 @@ impl StoreArchive {
             .store
             .archive_publication()
             .map_err(|error| store_port_error(&error))?;
-        if publication.quality() != ArchivePublicationQuality::Empty
-            || publication.current_revision().is_some()
-        {
-            return Ok(None);
-        }
         let revision = store_revision_id(replay.revision_id())?;
-        match self
-            .store
-            .publish_initial_replay_partial(revision, store_epoch(replay.epoch())?)
+        let published = if publication.quality() == ArchivePublicationQuality::Empty
+            && publication.current_revision().is_none()
         {
+            self.store
+                .publish_initial_replay_partial(revision, store_epoch(replay.epoch())?)
+        } else if publication.quality() == ArchivePublicationQuality::RecoveryPending
+            && publication.current_revision() != Some(revision)
+        {
+            self.store
+                .publish_replacement_replay_partial(revision, store_epoch(replay.epoch())?)
+        } else {
+            return Ok(None);
+        };
+        match published {
             Ok(snapshot) => archive_replay(snapshot.id(), snapshot.epoch()).map(Some),
             Err(error) if error.code() == StoreErrorCode::PendingContinuation => Ok(None),
             Err(error) => Err(store_port_error(&error)),
@@ -555,17 +560,26 @@ impl Archive for StoreArchive {
         {
             let reusable = staging.status() == ReplayRevisionStatus::Staging
                 && staging.versions() == AccountingVersions::compiled()
-                && !staging.sealed()
-                && self
+                && !staging.sealed();
+            if reusable {
+                let exact = self
                     .store
                     .staging_replay_matches_scan_set(staging.id(), scan_set)
                     .map_err(|error| store_port_error(&error))?;
-            if reusable {
-                let rebound = self
+                if exact {
+                    let rebound = self
+                        .store
+                        .rebind_staging_replay_to_scan_set(staging.id(), staging.epoch(), scan_set)
+                        .map_err(|error| store_port_error(&error))?;
+                    return archive_replay(rebound.id(), rebound.epoch());
+                }
+                if let Some(extended) = self
                     .store
-                    .rebind_staging_replay_to_scan_set(staging.id(), staging.epoch(), scan_set)
-                    .map_err(|error| store_port_error(&error))?;
-                return archive_replay(rebound.id(), rebound.epoch());
+                    .try_extend_staging_replay_to_scan_set(staging.id(), staging.epoch(), scan_set)
+                    .map_err(|error| store_port_error(&error))?
+                {
+                    return archive_replay(extended.id(), extended.epoch());
+                }
             }
             self.store
                 .discard_replay_revision(staging.id(), staging.epoch())

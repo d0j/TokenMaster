@@ -569,8 +569,9 @@ the usage TTL. On the reference machine, one quota write, duplicate poll, 32-win
 current snapshot, and 256-row history page MUST each complete below one second.
 On the reference machine, aggregate-ready append p95 MUST remain below 25 ms for the
 normal one-event path, 50 ms for 32-event catch-up, and 250 ms for the maximum
-256-event catch-up, and MUST NOT exceed 1.5 times the matching aggregate-unavailable
-baseline.
+256-event catch-up, and MUST NOT exceed the matching aggregate-unavailable baseline
+by more than 25 ms. The additive guard prevents a faster baseline from turning fixed
+transaction/setup cost into a false regression while preserving the absolute caps.
 One-million-event current and immutable-legacy fixtures MUST also meet the following
 reference-machine gates: rebuild throughput at least 5,000 events/s, rebuild-page p95
 below 500 ms, cold open plus overview below one second, cached overview p95 below

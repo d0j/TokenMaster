@@ -1918,6 +1918,325 @@ fn initial_replay_publishes_eligible_events_as_explicit_partial() {
 }
 
 #[test]
+fn staging_replay_extends_for_a_strict_scan_superset_without_losing_progress() {
+    let mut store = UsageStore::in_memory().expect("usage store");
+    store
+        .register_source(&registration(1))
+        .expect("register first source");
+    store
+        .register_source(&registration(2))
+        .expect("register second source");
+    let first_scan = finish_codex_scan(
+        &mut store,
+        &[SourceKey::from_bytes([1; 32])],
+        ScanOutcome::Complete,
+        1_000,
+    );
+    let revision = store
+        .begin_replay_revision_for_scan_set(first_scan)
+        .expect("begin replay");
+    let progressed_epoch = store
+        .apply_replay_append_batch(&replay_append(
+            1,
+            revision.id(),
+            revision.epoch(),
+            vec![replay_event(1, "root", None, 0, 0, None, false)],
+        ))
+        .expect("complete first source");
+    let first_before = store
+        .replay_generation_snapshot(revision.id(), SourceKey::from_bytes([1; 32]))
+        .expect("first source progress");
+
+    let superset_scan = finish_codex_scan(
+        &mut store,
+        &[
+            SourceKey::from_bytes([1; 32]),
+            SourceKey::from_bytes([2; 32]),
+        ],
+        ScanOutcome::Complete,
+        2_000,
+    );
+    let extended = store
+        .try_extend_staging_replay_to_scan_set(revision.id(), progressed_epoch, superset_scan)
+        .expect("extend staging replay")
+        .expect("strict superset must extend");
+
+    assert_eq!(extended.id(), revision.id());
+    assert_eq!(extended.expected_source_count(), 2);
+    assert_eq!(extended.scan_set_id(), Some(superset_scan));
+    assert!(extended.epoch().get() > progressed_epoch.get());
+    assert_eq!(
+        store
+            .replay_generation_snapshot(revision.id(), SourceKey::from_bytes([1; 32]))
+            .expect("preserved first source"),
+        first_before
+    );
+    let second = store
+        .replay_generation_snapshot(revision.id(), SourceKey::from_bytes([2; 32]))
+        .expect("new pending source");
+    assert_eq!(second.status(), GenerationStatus::Staging);
+    assert_eq!(second.checkpoint().committed_offset(), 0);
+    assert!(
+        store
+            .staging_replay_matches_scan_set(revision.id(), superset_scan)
+            .expect("exact extended manifest")
+    );
+
+    store
+        .register_source(&registration(3))
+        .expect("register third source");
+    store
+        .register_source(&registration(4))
+        .expect("register fourth source");
+    let incompatible_scan = finish_codex_scan(
+        &mut store,
+        &[
+            SourceKey::from_bytes([2; 32]),
+            SourceKey::from_bytes([3; 32]),
+            SourceKey::from_bytes([4; 32]),
+        ],
+        ScanOutcome::Complete,
+        3_000,
+    );
+    let before_incompatible = store
+        .staging_replay_revision()
+        .expect("staging query")
+        .expect("staging before incompatible scan");
+    assert!(
+        store
+            .try_extend_staging_replay_to_scan_set(
+                revision.id(),
+                extended.epoch(),
+                incompatible_scan,
+            )
+            .expect("classify incompatible scan")
+            .is_none()
+    );
+    assert_eq!(
+        store
+            .staging_replay_revision()
+            .expect("staging query")
+            .expect("staging after incompatible scan"),
+        before_incompatible
+    );
+}
+
+#[test]
+fn recovery_pending_replacement_can_publish_a_better_explicit_partial() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("replacement-partial-private.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    store
+        .register_source(&registration(1))
+        .expect("register first source");
+    let initial_scan = finish_codex_scan(
+        &mut store,
+        &[SourceKey::from_bytes([1; 32])],
+        ScanOutcome::Complete,
+        1_000,
+    );
+    let initial = store
+        .begin_replay_revision_for_scan_set(initial_scan)
+        .expect("begin initial replay");
+    let initial_epoch = store
+        .apply_replay_append_batch(&replay_append(
+            1,
+            initial.id(),
+            initial.epoch(),
+            vec![replay_event(1, "initial", None, 0, 0, None, false)],
+        ))
+        .expect("append initial event");
+    let sealed = store
+        .seal_replay_revision(initial.id(), initial_epoch)
+        .expect("seal initial replay");
+    store
+        .promote_replay_revision(initial.id(), sealed.epoch())
+        .expect("promote initial replay");
+    let publication = store.archive_publication().expect("initial publication");
+    store
+        .mark_current_rebuild_required(initial.id(), publication.generation())
+        .expect("mark recovery pending");
+
+    store
+        .register_source(&registration(2))
+        .expect("register second source");
+    let replacement_scan = finish_codex_scan(
+        &mut store,
+        &[
+            SourceKey::from_bytes([1; 32]),
+            SourceKey::from_bytes([2; 32]),
+        ],
+        ScanOutcome::Complete,
+        2_000,
+    );
+    let replacement = store
+        .begin_replay_revision_for_scan_set(replacement_scan)
+        .expect("begin replacement");
+    let replacement_epoch = store
+        .apply_replay_append_batch(&replay_append_generation(
+            1,
+            replacement.id(),
+            replacement.epoch(),
+            2,
+            vec![replay_event(1, "replacement", None, 0, 10, None, false)],
+            100,
+        ))
+        .expect("append replacement event");
+    drop(store);
+    let connection = Connection::open(&path).expect("open staging projection");
+    connection
+        .execute(
+            "DELETE FROM usage_replay_selection WHERE revision_id = ?1",
+            [i64::try_from(replacement.id().get()).expect("revision id fits SQLite")],
+        )
+        .expect("simulate a lagging derived staging selection");
+    drop(connection);
+    let mut store = UsageStore::open(&path).expect("reopen lagging staging projection");
+
+    let published = store
+        .publish_replacement_replay_partial(replacement.id(), replacement_epoch)
+        .expect("publish replacement partial");
+
+    assert_eq!(published.id(), replacement.id());
+    assert_eq!(published.status(), ReplayRevisionStatus::Current);
+    assert!(published.sealed());
+    assert!(published.promoted());
+    assert_eq!(
+        store
+            .archive_publication()
+            .expect("partial publication")
+            .quality(),
+        ArchivePublicationQuality::Partial
+    );
+    assert_eq!(
+        store
+            .archive_publication()
+            .expect("partial publication")
+            .current_revision(),
+        Some(replacement.id())
+    );
+    assert!(
+        store
+            .staging_replay_revision()
+            .expect("staging query")
+            .is_none()
+    );
+    assert_eq!(
+        store.event_page_before(None, 16).expect("event page").len(),
+        2,
+        "prior safe truth is retained while the replacement remains partial"
+    );
+    drop(store);
+    let connection = Connection::open(&path).expect("inspect partial source evidence");
+    let incremental_sources: i64 = connection
+        .query_row(
+            "SELECT count(*) FROM usage_source
+             WHERE current_generation IS NOT NULL
+               AND verification_level = 'incremental'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("pending source verification count");
+    assert_eq!(incremental_sources, 1);
+}
+
+#[test]
+fn replacement_partial_retains_prior_event_while_lineage_is_unresolved() {
+    let directory = TempDir::new().expect("temporary directory");
+    let path = directory.path().join("replacement-lineage-private.sqlite3");
+    let mut store = UsageStore::open(&path).expect("usage store");
+    store
+        .register_source(&registration(7))
+        .expect("register source");
+    let initial_scan = finish_codex_scan(
+        &mut store,
+        &[SourceKey::from_bytes([7; 32])],
+        ScanOutcome::Complete,
+        1_000,
+    );
+    let initial = store
+        .begin_replay_revision_for_scan_set(initial_scan)
+        .expect("begin initial replay");
+    let prior_child = replay_event(7, "child", None, 0, 10, Some(100), false);
+    let prior_child_id = prior_child.id().as_str().to_owned();
+    let initial_epoch = store
+        .apply_replay_append_batch(&replay_append(
+            7,
+            initial.id(),
+            initial.epoch(),
+            vec![prior_child],
+        ))
+        .expect("append prior child");
+    let sealed = store
+        .seal_replay_revision(initial.id(), initial_epoch)
+        .expect("seal initial replay");
+    store
+        .promote_replay_revision(initial.id(), sealed.epoch())
+        .expect("promote initial replay");
+    let publication = store.archive_publication().expect("initial publication");
+    store
+        .mark_current_rebuild_required(initial.id(), publication.generation())
+        .expect("mark recovery pending");
+
+    let replacement_scan = finish_codex_scan(
+        &mut store,
+        &[SourceKey::from_bytes([7; 32])],
+        ScanOutcome::Complete,
+        2_000,
+    );
+    let replacement = store
+        .begin_replay_revision_for_scan_set(replacement_scan)
+        .expect("begin replacement");
+    let unrelated = replay_event(7, "unrelated", None, 0, 20, Some(300), false);
+    let unrelated_id = unrelated.id().as_str().to_owned();
+    let replacement_epoch = store
+        .apply_replay_append_batch(&replay_append_generation(
+            7,
+            replacement.id(),
+            replacement.epoch(),
+            2,
+            vec![
+                unrelated,
+                replay_event(
+                    7,
+                    "parent",
+                    Some("missing-grandparent"),
+                    0,
+                    30,
+                    Some(100),
+                    false,
+                ),
+                replay_event(7, "child", Some("parent"), 0, 40, Some(100), false),
+            ],
+            100,
+        ))
+        .expect("append unresolved replacement lineage");
+    let quality = store
+        .replay_quality(replacement.id())
+        .expect("replacement quality");
+    assert_eq!(quality.eligible(), 1);
+    assert_eq!(quality.replay(), 1);
+    assert_eq!(quality.pending(), 1);
+
+    store
+        .publish_replacement_replay_partial(replacement.id(), replacement_epoch)
+        .expect("publish safe replacement partial");
+    drop(store);
+
+    let connection = Connection::open(&path).expect("inspect partial projection");
+    let rows: Vec<(String, i64)> = connection
+        .prepare("SELECT event_id, retained FROM usage_event ORDER BY event_id")
+        .expect("prepare partial events")
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .expect("query partial events")
+        .collect::<Result<_, _>>()
+        .expect("collect partial events");
+    assert_eq!(rows.len(), 2);
+    assert!(rows.contains(&(prior_child_id, 1)));
+    assert!(rows.contains(&(unrelated_id, 0)));
+}
+
+#[test]
 fn proven_noop_end_of_file_closes_a_pending_current_source() {
     let mut store = UsageStore::in_memory().expect("usage store");
     store

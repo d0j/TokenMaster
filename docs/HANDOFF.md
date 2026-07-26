@@ -1,5 +1,35 @@
 # TokenMaster handoff
 
+## Large-history replay release slice (2026-07-26)
+
+Product state: UI is frozen. The import/runtime path now uses schema-v14 full-key
+time-rollup triggers, exact indexed replay-parent reads, a fixed 64-statement cache,
+disposition-only classification refresh, restart-safe strict-superset staging, private
+replacement until atomic promotion, and cancellation between bounded transactions.
+
+Audit/evidence state: focused migration/replay/recovery/runtime/schema/backup,
+query-plan, parser, and performance contracts pass. The measured
+256-observation transaction improved from 74,592 ms to 291 ms; the synthetic parser
+reached 4,112 events/s and runtime cold import completed 4,096 events in 770 ms. A
+consistent copy of the real approximately 5.0 GiB history advanced 8,121 events in
+120 seconds and shut down cleanly in 122.30 seconds. The one permitted Sol review
+found a stale current-open validator; it was corrected to exact schema v14. No
+reviewer-of-reviewer or audit-only round is allowed.
+
+Release blockers: commit this slice, then create the exact-commit
+package/secret-scan receipts. The complete gate and MSVC build are green; a stale
+test-only v12 fixture was corrected to restore exact
+legacy triggers before its migration receipt, and the deterministic complete gate
+passes. Signing and authenticated disposable-host DPI/accessibility acceptance remain
+external. The 24-hour soak remains operator-deferred. Do not start UI work before the
+backend commit is clean, and do not describe partial real-history progress as a
+complete cold import.
+
+Git state: finish one intentional commit on
+`cx/tokenmaster-product-architecture`, leave the worktree clean, do not push, and do
+not record its hash in tracked documents. Remove the task-owned diagnostic database
+copies and leave no TokenMaster/test/visual-control process running.
+
 ## WMT density correction; startup shortcut rejected (2026-07-26)
 
 Product state: the current slice narrows the shell navigation from 250 px

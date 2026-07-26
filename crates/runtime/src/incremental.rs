@@ -152,7 +152,7 @@ pub fn refresh_incremental(
         );
     }
     if publication.quality() == ArchivePublicationQuality::Partial {
-        let settled = settle_current(archive, &mut cursor)?;
+        let settled = settle_current(archive, &mut cursor, control)?;
         if !settled {
             let outcome =
                 match run_tail_passes(adapter, archive, control, &scopes, &mut cursor, &mut counts)
@@ -310,7 +310,7 @@ fn run_tail_passes(
             return Ok(IncrementalRefreshOutcome::Partial);
         }
     }
-    if settle_current(archive, cursor)? {
+    if settle_current(archive, cursor, control)? {
         Ok(IncrementalRefreshOutcome::Complete)
     } else {
         Ok(IncrementalRefreshOutcome::Partial)
@@ -320,8 +320,10 @@ fn run_tail_passes(
 fn settle_current(
     archive: &mut StoreArchive,
     cursor: &mut CurrentCursor,
+    control: &OperationControl<'_>,
 ) -> Result<bool, PortError> {
     for _ in 0..MAX_REPLAY_CONTINUATIONS_PER_RUN {
+        control.check()?;
         let quality = archive
             .store()
             .archive_publication()
@@ -438,7 +440,7 @@ impl ReplaySourceSink for ApplySink<'_> {
                             )?;
                         self.cursor = next_cursor;
                         if remaining_work {
-                            let _ = settle_current(self.archive, &mut self.cursor)?;
+                            let _ = settle_current(self.archive, &mut self.cursor, self.control)?;
                         }
                         break;
                     }
@@ -474,7 +476,7 @@ impl ReplaySourceSink for ApplySink<'_> {
                 };
                 self.cursor = next_cursor;
                 if remaining_work {
-                    let _ = settle_current(self.archive, &mut self.cursor)?;
+                    let _ = settle_current(self.archive, &mut self.cursor, self.control)?;
                 }
                 break;
             }
@@ -489,7 +491,7 @@ impl ReplaySourceSink for ApplySink<'_> {
             self.cursor = next_cursor;
             self.counts.batches_committed = checked_add(self.counts.batches_committed, 1)?;
             if remaining_work {
-                let _ = settle_current(self.archive, &mut self.cursor)?;
+                let _ = settle_current(self.archive, &mut self.cursor, self.control)?;
             }
             if state == BatchState::SnapshotEnd {
                 if !source_caught_up {

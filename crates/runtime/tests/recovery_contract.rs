@@ -395,7 +395,7 @@ fn startup_preserves_staging_rebuild_before_revalidating_a_current_publication()
 }
 
 #[test]
-fn startup_reuses_complete_staging_rebuild_and_promotes_it_after_an_exact_scan() {
+fn startup_resumes_a_published_replacement_partial_after_failure() {
     let source_root = TempDir::new().expect("source root");
     std::fs::write(
         source_root.path().join("session.jsonl"),
@@ -443,15 +443,22 @@ fn startup_reuses_complete_staging_rebuild_and_promotes_it_after_an_exact_scan()
         store
             .staging_replay_revision()
             .expect("staging query")
-            .is_some()
+            .is_none()
+    );
+    assert_eq!(
+        store
+            .archive_publication()
+            .expect("partial replacement")
+            .quality(),
+        ArchivePublicationQuality::Partial
     );
     drop(store);
 
     let mut runtime = LiveRuntime::start(&archive_path, request(source_root.path()))
-        .expect("resume staging rebuild");
+        .expect("resume replacement partial");
     assert_eq!(
         runtime.startup_recovery().staging(),
-        StagingRecoveryOutcome::Preserved
+        StagingRecoveryOutcome::None
     );
     let deadline = Instant::now() + Duration::from_secs(10);
     let completion = loop {

@@ -238,6 +238,105 @@ END;
     )
 }
 
+pub(super) fn v14_price_time_delete_trigger() -> Option<&'static str> {
+    static TRIGGER: OnceLock<String> = OnceLock::new();
+    Some(
+        TRIGGER
+            .get_or_init(|| {
+                format!(
+                    r#"CREATE TRIGGER usage_event_price_time_after_delete
+AFTER DELETE ON usage_event
+WHEN (SELECT state FROM usage_aggregate_state WHERE singleton_id = 1) = 'ready'
+BEGIN
+  SELECT CASE WHEN
+    (SELECT count(*) FROM usage_price_time_rollup
+     WHERE aggregate_generation =
+           (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)
+       AND dataset_kind = 'current' AND bucket_width = 'minute'
+       AND bucket_start_seconds =
+           OLD.timestamp_seconds - (((OLD.timestamp_seconds % 60) + 60) % 60)
+       AND provider_id = OLD.provider_id AND profile_id = OLD.profile_id
+       AND model = OLD.model AND project_key = coalesce(OLD.project_alias, '')
+       AND service_tier = {OLD_TIER} AND long_context = OLD.long_context
+       AND reported_state = CASE WHEN OLD.reported_cost_usd_micros IS NULL THEN 'missing' ELSE 'present' END)
+    +
+    (SELECT count(*) FROM usage_price_time_rollup
+     WHERE aggregate_generation =
+           (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)
+       AND dataset_kind = 'current' AND bucket_width = 'hour'
+       AND bucket_start_seconds =
+           OLD.timestamp_seconds - (((OLD.timestamp_seconds % 3600) + 3600) % 3600)
+       AND provider_id = OLD.provider_id AND profile_id = OLD.profile_id
+       AND model = OLD.model AND project_key = coalesce(OLD.project_alias, '')
+       AND service_tier = {OLD_TIER} AND long_context = OLD.long_context
+       AND reported_state = CASE WHEN OLD.reported_cost_usd_micros IS NULL THEN 'missing' ELSE 'present' END)
+    <> 2 THEN RAISE(ABORT, 'price time rows unavailable') END;
+  DELETE FROM usage_price_time_rollup
+  WHERE aggregate_generation =
+        (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)
+    AND dataset_kind = 'current' AND bucket_width = 'minute'
+    AND bucket_start_seconds =
+        OLD.timestamp_seconds - (((OLD.timestamp_seconds % 60) + 60) % 60)
+    AND provider_id = OLD.provider_id AND profile_id = OLD.profile_id
+    AND model = OLD.model AND project_key = coalesce(OLD.project_alias, '')
+    AND service_tier = {OLD_TIER} AND long_context = OLD.long_context
+    AND reported_state = CASE WHEN OLD.reported_cost_usd_micros IS NULL THEN 'missing' ELSE 'present' END
+    AND event_count = 1;
+  DELETE FROM usage_price_time_rollup
+  WHERE aggregate_generation =
+        (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)
+    AND dataset_kind = 'current' AND bucket_width = 'hour'
+    AND bucket_start_seconds =
+        OLD.timestamp_seconds - (((OLD.timestamp_seconds % 3600) + 3600) % 3600)
+    AND provider_id = OLD.provider_id AND profile_id = OLD.profile_id
+    AND model = OLD.model AND project_key = coalesce(OLD.project_alias, '')
+    AND service_tier = {OLD_TIER} AND long_context = OLD.long_context
+    AND reported_state = CASE WHEN OLD.reported_cost_usd_micros IS NULL THEN 'missing' ELSE 'present' END
+    AND event_count = 1;
+  UPDATE usage_price_time_rollup
+  SET event_count = event_count - 1,
+      calculable_event_count = calculable_event_count - CASE WHEN {OLD_CALCULABLE} THEN 1 ELSE 0 END,
+      uncached_input_sum = uncached_input_sum - CASE WHEN {OLD_CALCULABLE} THEN OLD.input_tokens - OLD.cached_tokens ELSE 0 END,
+      cached_input_sum = cached_input_sum - CASE WHEN {OLD_CALCULABLE} THEN OLD.cached_tokens ELSE 0 END,
+      billable_output_sum = billable_output_sum - CASE WHEN {OLD_CALCULABLE} THEN CASE WHEN OLD.total_tokens IS NOT NULL THEN OLD.total_tokens - OLD.input_tokens ELSE OLD.output_tokens + OLD.reasoning_tokens END ELSE 0 END,
+      reported_cost_count = reported_cost_count - CASE WHEN OLD.reported_cost_usd_micros IS NULL THEN 0 ELSE 1 END,
+      reported_cost_sum = reported_cost_sum - coalesce(OLD.reported_cost_usd_micros, 0)
+  WHERE aggregate_generation =
+        (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)
+    AND dataset_kind = 'current' AND bucket_width = 'minute'
+    AND bucket_start_seconds =
+        OLD.timestamp_seconds - (((OLD.timestamp_seconds % 60) + 60) % 60)
+    AND provider_id = OLD.provider_id AND profile_id = OLD.profile_id
+    AND model = OLD.model AND project_key = coalesce(OLD.project_alias, '')
+    AND service_tier = {OLD_TIER} AND long_context = OLD.long_context
+    AND reported_state = CASE WHEN OLD.reported_cost_usd_micros IS NULL THEN 'missing' ELSE 'present' END
+    AND event_count > 1;
+  UPDATE usage_price_time_rollup
+  SET event_count = event_count - 1,
+      calculable_event_count = calculable_event_count - CASE WHEN {OLD_CALCULABLE} THEN 1 ELSE 0 END,
+      uncached_input_sum = uncached_input_sum - CASE WHEN {OLD_CALCULABLE} THEN OLD.input_tokens - OLD.cached_tokens ELSE 0 END,
+      cached_input_sum = cached_input_sum - CASE WHEN {OLD_CALCULABLE} THEN OLD.cached_tokens ELSE 0 END,
+      billable_output_sum = billable_output_sum - CASE WHEN {OLD_CALCULABLE} THEN CASE WHEN OLD.total_tokens IS NOT NULL THEN OLD.total_tokens - OLD.input_tokens ELSE OLD.output_tokens + OLD.reasoning_tokens END ELSE 0 END,
+      reported_cost_count = reported_cost_count - CASE WHEN OLD.reported_cost_usd_micros IS NULL THEN 0 ELSE 1 END,
+      reported_cost_sum = reported_cost_sum - coalesce(OLD.reported_cost_usd_micros, 0)
+  WHERE aggregate_generation =
+        (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)
+    AND dataset_kind = 'current' AND bucket_width = 'hour'
+    AND bucket_start_seconds =
+        OLD.timestamp_seconds - (((OLD.timestamp_seconds % 3600) + 3600) % 3600)
+    AND provider_id = OLD.provider_id AND profile_id = OLD.profile_id
+    AND model = OLD.model AND project_key = coalesce(OLD.project_alias, '')
+    AND service_tier = {OLD_TIER} AND long_context = OLD.long_context
+    AND reported_state = CASE WHEN OLD.reported_cost_usd_micros IS NULL THEN 'missing' ELSE 'present' END
+    AND event_count > 1;
+END;
+"#
+                )
+            })
+            .as_str(),
+    )
+}
+
 pub(super) fn price_session_delete_trigger() -> Option<&'static str> {
     static TRIGGER: OnceLock<String> = OnceLock::new();
     Some(
@@ -312,6 +411,19 @@ pub(super) fn price_time_update_trigger() -> Option<&'static str> {
             combine_update(
                 "usage_event_price_time_after_update",
                 price_time_delete_trigger()?,
+                price_time_insert_trigger()?,
+            )
+        })
+        .as_deref()
+}
+
+pub(super) fn v14_price_time_update_trigger() -> Option<&'static str> {
+    static TRIGGER: OnceLock<Option<String>> = OnceLock::new();
+    TRIGGER
+        .get_or_init(|| {
+            combine_update(
+                "usage_event_price_time_after_update",
+                v14_price_time_delete_trigger()?,
                 price_time_insert_trigger()?,
             )
         })

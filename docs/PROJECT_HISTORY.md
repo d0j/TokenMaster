@@ -1,5 +1,23 @@
 # TokenMaster project history
 
+## 2026-07-26 — Replay cost detached from archive size
+
+Large-history diagnosis separated parser throughput from SQLite replay cost. Two
+families of partial-key time-rollup triggers and replay-parent queries whose
+deterministic ordering defeated the exact index made a bounded transaction perform
+whole-archive work. Schema v14 replaces those triggers atomically with full-key seeks;
+replay declares its parent index, caches at most 64 statements, avoids unchanged
+classification materialization, and observes cancellation between transactions.
+
+The measured 256-observation transaction improved from 74,592 ms to 291 ms. Synthetic
+receipts reached 4,112 parser events/s and 770 ms for a 4,096-event cold runtime. A
+consistent copy of the approximately 5.0 GiB local history advanced 8,121 events in
+120 seconds and shut down cleanly. Restart-safe staging, private replacement, migration
+rollback, and query-plan contracts preserve correctness. The only final-review High
+was a stale current-open schema validator; it was fixed without opening another review
+round. This closes the measured import stall, not complete cold-import, package,
+signing, external UI, or soak acceptance.
+
 ## 2026-07-26 — UI density improved; false performance closure rejected
 
 The shell rail was reduced to recover Dashboard width and Today now uses the dominant

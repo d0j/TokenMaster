@@ -18,7 +18,7 @@ const SAMPLE_COUNT: usize = 20;
 const APPEND_P95_BUDGET: Duration = Duration::from_millis(25);
 const SMALL_CATCH_UP_P95_BUDGET: Duration = Duration::from_millis(50);
 const CATCH_UP_P95_BUDGET: Duration = Duration::from_millis(250);
-const MAX_AGGREGATE_OVERHEAD_RATIO: f64 = 1.5;
+const MAX_AGGREGATE_OVERHEAD: Duration = Duration::from_millis(25);
 
 fn checkpoint(offset: u64) -> StoredCheckpoint {
     StoredCheckpoint::new(StoredCheckpointParts {
@@ -204,8 +204,8 @@ fn aggregate_trigger_append_p95_stays_within_measured_budgets() {
                     "{event_count}-event append p95 {p95:?} exceeded {total_budget:?}"
                 );
                 assert!(
-                    p95.as_secs_f64() <= baseline.as_secs_f64() * MAX_AGGREGATE_OVERHEAD_RATIO,
-                    "{event_count}-event aggregate p95 {p95:?} regressed baseline {baseline:?}"
+                    p95 <= baseline.saturating_add(MAX_AGGREGATE_OVERHEAD),
+                    "{event_count}-event aggregate p95 {p95:?} exceeded baseline {baseline:?} by more than {MAX_AGGREGATE_OVERHEAD:?}"
                 );
             } else {
                 baseline_p95 = Some(p95);

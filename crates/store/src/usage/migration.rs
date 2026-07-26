@@ -13,7 +13,7 @@ use super::git_schema::{
 use super::price_schema::{
     V9_PRICE_ROLLUP_SCHEMA, price_session_delete_trigger, price_session_insert_trigger,
     price_session_update_trigger, price_time_delete_trigger, price_time_insert_trigger,
-    price_time_update_trigger,
+    price_time_update_trigger, v14_price_time_delete_trigger, v14_price_time_update_trigger,
 };
 use super::quota_schema::{
     V10_QUOTA_INDEX_CONTRACTS, V10_QUOTA_SCHEMA, V10_QUOTA_TABLE_CONTRACTS,
@@ -38,7 +38,8 @@ use super::schema::{
     V9_INDEX_CONTRACTS, V9_LEGACY_EVENT_CONTRACT, V9_OBSERVATION_CONTRACT,
     V9_PRICE_SESSION_ROLLUP_CONTRACT, V9_PRICE_TIME_ROLLUP_CONTRACT, V9_REPORTED_COST_TABLE_SCHEMA,
     V9_SCHEMA_VERSION, V9_USAGE_EVENT_CONTRACT, V10_SCHEMA_VERSION, V11_SCHEMA_VERSION,
-    V12_SCHEMA_VERSION, v8_session_update_trigger, v8_time_update_trigger,
+    V12_SCHEMA_VERSION, V13_SCHEMA_VERSION, v8_session_update_trigger, v8_time_update_trigger,
+    v14_time_delete_trigger, v14_time_update_trigger,
 };
 use super::{
     MAX_QUOTA_EPOCHS_PER_WINDOW, MAX_QUOTA_SAMPLES_PER_WINDOW, MAX_QUOTA_TRANSITIONS_PER_WINDOW,
@@ -133,13 +134,18 @@ pub(super) fn migrate_schema(connection: &mut Connection) -> Result<(), StoreErr
         V10_SCHEMA_VERSION => migrate_v10_then_current(connection),
         V11_SCHEMA_VERSION => {
             migrate_v11(connection)?;
-            migrate_v12(connection)
+            migrate_v12(connection)?;
+            migrate_v13(connection)
         }
-        V12_SCHEMA_VERSION => migrate_v12(connection),
+        V12_SCHEMA_VERSION => {
+            migrate_v12(connection)?;
+            migrate_v13(connection)
+        }
+        V13_SCHEMA_VERSION => migrate_v13(connection),
         USAGE_SCHEMA_VERSION => {
             let transaction =
                 connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-            validate_v13(&transaction)?;
+            validate_v14(&transaction)?;
             transaction.commit()?;
             Ok(())
         }
@@ -432,6 +438,11 @@ pub(super) fn validate_v12(connection: &Connection) -> Result<(), StoreError> {
 }
 
 pub(super) fn validate_v13(connection: &Connection) -> Result<(), StoreError> {
+    validate_extended_schema_only(connection, true, true, true, true)?;
+    validate_current_semantics(connection)
+}
+
+pub(super) fn validate_v14(connection: &Connection) -> Result<(), StoreError> {
     validate_current_schema_only(connection)?;
     validate_current_semantics(connection)
 }
@@ -453,14 +464,35 @@ pub(crate) fn validate_archive_version(
         V10_SCHEMA_VERSION => validate_v10(connection),
         V11_SCHEMA_VERSION => validate_v11(connection),
         V12_SCHEMA_VERSION => validate_v12(connection),
-        USAGE_SCHEMA_VERSION => validate_v13(connection),
+        V13_SCHEMA_VERSION => validate_v13(connection),
+        USAGE_SCHEMA_VERSION => validate_v14(connection),
         _ if version > USAGE_SCHEMA_VERSION => Err(StoreError::new(StoreErrorCode::SchemaTooNew)),
         _ => Err(StoreError::new(StoreErrorCode::SchemaMismatch)),
     }
 }
 
 pub(crate) fn validate_current_schema_only(connection: &Connection) -> Result<(), StoreError> {
-    validate_extended_schema_only(connection, true, true, true, true)
+    let time_delete =
+        v14_time_delete_trigger().ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+    let time_update =
+        v14_time_update_trigger().ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+    let price_time_delete = v14_price_time_delete_trigger()
+        .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+    let price_time_update = v14_price_time_update_trigger()
+        .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+    validate_extended_schema_only_with_time_triggers(
+        connection,
+        true,
+        true,
+        true,
+        true,
+        TimeTriggerContracts {
+            aggregate_delete: time_delete,
+            aggregate_update: time_update,
+            price_delete: price_time_delete,
+            price_update: price_time_update,
+        },
+    )
 }
 
 pub(crate) fn validate_current_semantics(connection: &Connection) -> Result<(), StoreError> {
@@ -509,21 +541,51 @@ fn validate_extended_schema_only(
     include_benefit_ack: bool,
     include_git: bool,
 ) -> Result<(), StoreError> {
-    let session_update = v8_session_update_trigger()
-        .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
     let time_update =
         v8_time_update_trigger().ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+    let price_time_delete = price_time_delete_trigger()
+        .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+    let price_time_update = price_time_update_trigger()
+        .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+    validate_extended_schema_only_with_time_triggers(
+        connection,
+        include_quota,
+        include_benefit,
+        include_benefit_ack,
+        include_git,
+        TimeTriggerContracts {
+            aggregate_delete: V8_TIME_DELETE_TRIGGER,
+            aggregate_update: time_update,
+            price_delete: price_time_delete,
+            price_update: price_time_update,
+        },
+    )
+}
+
+struct TimeTriggerContracts {
+    aggregate_delete: &'static str,
+    aggregate_update: &'static str,
+    price_delete: &'static str,
+    price_update: &'static str,
+}
+
+fn validate_extended_schema_only_with_time_triggers(
+    connection: &Connection,
+    include_quota: bool,
+    include_benefit: bool,
+    include_benefit_ack: bool,
+    include_git: bool,
+    time_triggers: TimeTriggerContracts,
+) -> Result<(), StoreError> {
+    let session_update = v8_session_update_trigger()
+        .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
     let price_session_delete = price_session_delete_trigger()
         .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
     let price_session_insert = price_session_insert_trigger()
         .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
     let price_session_update = price_session_update_trigger()
         .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
-    let price_time_delete = price_time_delete_trigger()
-        .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
     let price_time_insert = price_time_insert_trigger()
-        .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
-    let price_time_update = price_time_update_trigger()
         .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
     let mut trigger_contracts = vec![
         TriggerContract {
@@ -540,7 +602,7 @@ fn validate_extended_schema_only(
         },
         TriggerContract {
             name: "usage_event_aggregate_time_after_delete",
-            sql: V8_TIME_DELETE_TRIGGER,
+            sql: time_triggers.aggregate_delete,
         },
         TriggerContract {
             name: "usage_event_aggregate_time_after_insert",
@@ -548,7 +610,7 @@ fn validate_extended_schema_only(
         },
         TriggerContract {
             name: "usage_event_aggregate_time_after_update",
-            sql: time_update,
+            sql: time_triggers.aggregate_update,
         },
         TriggerContract {
             name: "usage_event_dataset_generation_after_delete",
@@ -576,7 +638,7 @@ fn validate_extended_schema_only(
         },
         TriggerContract {
             name: "usage_event_price_time_after_delete",
-            sql: price_time_delete,
+            sql: time_triggers.price_delete,
         },
         TriggerContract {
             name: "usage_event_price_time_after_insert",
@@ -584,7 +646,7 @@ fn validate_extended_schema_only(
         },
         TriggerContract {
             name: "usage_event_price_time_after_update",
-            sql: price_time_update,
+            sql: time_triggers.price_update,
         },
     ];
     trigger_contracts.extend(LEGACY_TRIGGER_CONTRACTS.iter().copied());
@@ -1054,6 +1116,8 @@ enum MigrationFault {
     AfterCreateBenefitAck,
     #[cfg(test)]
     AfterCreateGitSchema,
+    #[cfg(test)]
+    AfterReplaceTimeTriggers,
 }
 
 fn migrate_v2(connection: &mut Connection) -> Result<(), StoreError> {
@@ -1196,6 +1260,7 @@ enum MigrationBoundary {
     BenefitSchemaCreated,
     BenefitAckCreated,
     GitSchemaCreated,
+    TimeTriggersReplaced,
 }
 
 fn migration_fault(fault: MigrationFault, boundary: MigrationBoundary) -> Result<(), StoreError> {
@@ -1310,6 +1375,10 @@ fn migration_fault(fault: MigrationFault, boundary: MigrationBoundary) -> Result
                 MigrationFault::AfterCreateGitSchema,
                 MigrationBoundary::GitSchemaCreated
             )
+            | (
+                MigrationFault::AfterReplaceTimeTriggers,
+                MigrationBoundary::TimeTriggersReplaced
+            )
     );
     #[cfg(not(test))]
     let triggered = {
@@ -1371,7 +1440,8 @@ fn migrate_v10(connection: &mut Connection) -> Result<(), StoreError> {
 fn migrate_v10_then_current(connection: &mut Connection) -> Result<(), StoreError> {
     migrate_v10(connection)?;
     migrate_v11(connection)?;
-    migrate_v12(connection)
+    migrate_v12(connection)?;
+    migrate_v13(connection)
 }
 
 fn migrate_v11(connection: &mut Connection) -> Result<(), StoreError> {
@@ -1382,6 +1452,41 @@ fn migrate_v12(connection: &mut Connection) -> Result<(), StoreError> {
     migrate_v12_with_fault(connection, MigrationFault::None)
 }
 
+fn migrate_v13(connection: &mut Connection) -> Result<(), StoreError> {
+    migrate_v13_with_fault(connection, MigrationFault::None)
+}
+
+fn migrate_v13_with_fault(
+    connection: &mut Connection,
+    fault: MigrationFault,
+) -> Result<(), StoreError> {
+    validate_v13(connection)?;
+    let time_delete =
+        v14_time_delete_trigger().ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+    let time_update =
+        v14_time_update_trigger().ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+    let price_time_delete = v14_price_time_delete_trigger()
+        .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+    let price_time_update = v14_price_time_update_trigger()
+        .ok_or_else(|| StoreError::new(StoreErrorCode::SchemaMismatch))?;
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    transaction.execute_batch(
+        "DROP TRIGGER usage_event_aggregate_time_after_delete;
+         DROP TRIGGER usage_event_aggregate_time_after_update;
+         DROP TRIGGER usage_event_price_time_after_delete;
+         DROP TRIGGER usage_event_price_time_after_update;",
+    )?;
+    transaction.execute_batch(time_delete)?;
+    transaction.execute_batch(time_update)?;
+    transaction.execute_batch(price_time_delete)?;
+    transaction.execute_batch(price_time_update)?;
+    migration_fault(fault, MigrationBoundary::TimeTriggersReplaced)?;
+    transaction.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
+    validate_v14(&transaction)?;
+    transaction.commit()?;
+    Ok(())
+}
+
 fn migrate_v12_with_fault(
     connection: &mut Connection,
     fault: MigrationFault,
@@ -1390,7 +1495,7 @@ fn migrate_v12_with_fault(
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     transaction.execute_batch(V13_GIT_SCHEMA)?;
     migration_fault(fault, MigrationBoundary::GitSchemaCreated)?;
-    transaction.pragma_update(None, "user_version", USAGE_SCHEMA_VERSION)?;
+    transaction.pragma_update(None, "user_version", V13_SCHEMA_VERSION)?;
     validate_v13(&transaction)?;
     transaction.commit()?;
     Ok(())
@@ -2480,9 +2585,10 @@ mod tests {
         MigrationFault, migrate_schema, migrate_v2_revision_table, migrate_v2_with_fault,
         migrate_v3_with_fault, migrate_v4_with_fault, migrate_v5_with_fault, migrate_v6,
         migrate_v6_with_fault, migrate_v7_with_fault, migrate_v8_with_fault, migrate_v9_with_fault,
-        migrate_v10_with_fault, migrate_v11_with_fault, migrate_v12_with_fault, pragma_i64,
-        validate_v2, validate_v3, validate_v4, validate_v5, validate_v6, validate_v7, validate_v8,
-        validate_v9, validate_v10, validate_v11, validate_v12, validate_v13,
+        migrate_v10_with_fault, migrate_v11_with_fault, migrate_v12_with_fault,
+        migrate_v13_with_fault, pragma_i64, validate_v2, validate_v3, validate_v4, validate_v5,
+        validate_v6, validate_v7, validate_v8, validate_v9, validate_v10, validate_v11,
+        validate_v12, validate_v13, validate_v14,
     };
     use crate::{StoreErrorCode, usage::schema};
 
@@ -2822,7 +2928,7 @@ mod tests {
             )?,
             1
         );
-        validate_v13(&connection)?;
+        validate_v14(&connection)?;
         let temporary_names: i64 = connection.query_row(
             "SELECT count(*) FROM sqlite_schema
              WHERE instr(sql, 'usage_replay_revision_v3') > 0
@@ -2865,7 +2971,7 @@ mod tests {
                 )?,
                 i64::from(current_revision)
             );
-            validate_v13(&connection)?;
+            validate_v14(&connection)?;
         }
         Ok(())
     }
@@ -2996,7 +3102,7 @@ mod tests {
             )?,
             1
         );
-        validate_v13(&connection)?;
+        validate_v14(&connection)?;
         Ok(())
     }
 
@@ -3237,6 +3343,92 @@ mod tests {
             0
         );
         validate_v12(&connection)?;
+        Ok(())
+    }
+
+    #[test]
+    fn time_trigger_migration_replaces_v13_contract_atomically() -> TestResult {
+        let mut connection = exact_v9_fixture()?;
+        migrate_v9_with_fault(&mut connection, MigrationFault::None)?;
+        migrate_v10_with_fault(&mut connection, MigrationFault::None)?;
+        migrate_v11_with_fault(&mut connection, MigrationFault::None)?;
+        migrate_v12_with_fault(&mut connection, MigrationFault::None)?;
+        validate_v13(&connection)?;
+
+        let old_delete: String = connection.query_row(
+            "SELECT sql FROM sqlite_schema
+             WHERE type = 'trigger' AND name = 'usage_event_aggregate_time_after_delete'",
+            [],
+            |row| row.get(0),
+        )?;
+        let old_price_delete: String = connection.query_row(
+            "SELECT sql FROM sqlite_schema
+             WHERE type = 'trigger' AND name = 'usage_event_price_time_after_delete'",
+            [],
+            |row| row.get(0),
+        )?;
+
+        migrate_v13_with_fault(&mut connection, MigrationFault::None)?;
+
+        assert_eq!(
+            pragma_i64(&connection, "PRAGMA user_version")?,
+            schema::USAGE_SCHEMA_VERSION
+        );
+        let new_delete: String = connection.query_row(
+            "SELECT sql FROM sqlite_schema
+             WHERE type = 'trigger' AND name = 'usage_event_aggregate_time_after_delete'",
+            [],
+            |row| row.get(0),
+        )?;
+        let new_price_delete: String = connection.query_row(
+            "SELECT sql FROM sqlite_schema
+             WHERE type = 'trigger' AND name = 'usage_event_price_time_after_delete'",
+            [],
+            |row| row.get(0),
+        )?;
+        assert_ne!(new_delete, old_delete);
+        assert_ne!(new_price_delete, old_price_delete);
+        assert!(new_delete.contains("AND dimension_kind = 'project'"));
+        validate_v14(&connection)?;
+        Ok(())
+    }
+
+    #[test]
+    fn time_trigger_migration_fault_rolls_back_exact_v13_without_residue() -> TestResult {
+        let mut connection = exact_v9_fixture()?;
+        migrate_v9_with_fault(&mut connection, MigrationFault::None)?;
+        migrate_v10_with_fault(&mut connection, MigrationFault::None)?;
+        migrate_v11_with_fault(&mut connection, MigrationFault::None)?;
+        migrate_v12_with_fault(&mut connection, MigrationFault::None)?;
+        let before = fixture_snapshot(&connection)?;
+        let old_delete: String = connection.query_row(
+            "SELECT sql FROM sqlite_schema
+             WHERE type = 'trigger' AND name = 'usage_event_aggregate_time_after_delete'",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let error =
+            match migrate_v13_with_fault(&mut connection, MigrationFault::AfterReplaceTimeTriggers)
+            {
+                Ok(()) => return Err("faulted time trigger migration committed".into()),
+                Err(error) => error,
+            };
+
+        assert_eq!(error.code(), StoreErrorCode::Database);
+        assert_eq!(
+            pragma_i64(&connection, "PRAGMA user_version")?,
+            schema::V13_SCHEMA_VERSION
+        );
+        assert_eq!(fixture_snapshot(&connection)?, before);
+        let restored_delete: String = connection.query_row(
+            "SELECT sql FROM sqlite_schema
+             WHERE type = 'trigger' AND name = 'usage_event_aggregate_time_after_delete'",
+            [],
+            |row| row.get(0),
+        )?;
+        assert_eq!(restored_delete, old_delete);
+        validate_v13(&connection)?;
         Ok(())
     }
 

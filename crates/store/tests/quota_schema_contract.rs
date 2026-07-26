@@ -52,6 +52,7 @@ fn raw_connection(path: &Path) -> Connection {
 }
 
 fn strip_quota_schema_to_exact_v9(connection: &Connection) {
+    schema_v14::restore_v13_time_triggers(connection);
     git_schema_v13::strip_git_schema(connection);
     connection
         .execute_batch(
@@ -170,12 +171,12 @@ fn fresh_schema_has_exact_strict_bounded_quota_objects() {
     drop(UsageStore::open(&path).expect("create current schema"));
     let connection = raw_connection(&path);
 
-    assert_eq!(USAGE_SCHEMA_VERSION, 13);
+    assert_eq!(USAGE_SCHEMA_VERSION, 14);
     assert_eq!(
         connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
             .expect("user version"),
-        13
+        USAGE_SCHEMA_VERSION
     );
     assert_eq!(
         connection
@@ -420,7 +421,7 @@ fn exact_v9_migration_adds_empty_quota_state_without_touching_usage_or_prices() 
         connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
             .expect("user version"),
-        13
+        USAGE_SCHEMA_VERSION
     );
     let after = connection
         .query_row(
@@ -621,4 +622,8 @@ fn allowance_change_requires_complete_units_and_matching_direction() {
 }
 mod git_schema_v13 {
     include!("support/git_schema_v13.rs");
+}
+
+mod schema_v14 {
+    include!("support/schema_v14.rs");
 }

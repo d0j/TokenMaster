@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-pub const USAGE_SCHEMA_VERSION: i64 = 13;
+pub const USAGE_SCHEMA_VERSION: i64 = 14;
 pub(super) const V1_SCHEMA_VERSION: i64 = 1;
 pub(super) const V2_SCHEMA_VERSION: i64 = 2;
 pub(super) const V3_SCHEMA_VERSION: i64 = 3;
@@ -13,6 +13,7 @@ pub(super) const V9_SCHEMA_VERSION: i64 = 9;
 pub(super) const V10_SCHEMA_VERSION: i64 = 10;
 pub(super) const V11_SCHEMA_VERSION: i64 = 11;
 pub(super) const V12_SCHEMA_VERSION: i64 = 12;
+pub(super) const V13_SCHEMA_VERSION: i64 = 13;
 
 #[derive(Clone, Copy)]
 pub(super) struct TableContract {
@@ -1763,6 +1764,115 @@ pub(super) fn v8_time_update_trigger() -> Option<&'static str> {
             combine_aggregate_update_trigger(
                 "usage_event_aggregate_time_after_update",
                 V8_TIME_DELETE_TRIGGER,
+                V8_TIME_INSERT_TRIGGER,
+            )
+        })
+        .as_deref()
+}
+
+const V14_TIME_ROLLUP_KEYS: [&str; 6] = [
+    "bucket_width = 'minute' AND bucket_start_seconds = OLD.timestamp_seconds - (((OLD.timestamp_seconds % 60) + 60) % 60) AND dimension_kind = 'all' AND dimension_value = ''",
+    "bucket_width = 'minute' AND bucket_start_seconds = OLD.timestamp_seconds - (((OLD.timestamp_seconds % 60) + 60) % 60) AND dimension_kind = 'model' AND dimension_value = OLD.model",
+    "bucket_width = 'minute' AND bucket_start_seconds = OLD.timestamp_seconds - (((OLD.timestamp_seconds % 60) + 60) % 60) AND dimension_kind = 'project' AND dimension_value = coalesce(OLD.project_alias, '')",
+    "bucket_width = 'hour' AND bucket_start_seconds = OLD.timestamp_seconds - (((OLD.timestamp_seconds % 3600) + 3600) % 3600) AND dimension_kind = 'all' AND dimension_value = ''",
+    "bucket_width = 'hour' AND bucket_start_seconds = OLD.timestamp_seconds - (((OLD.timestamp_seconds % 3600) + 3600) % 3600) AND dimension_kind = 'model' AND dimension_value = OLD.model",
+    "bucket_width = 'hour' AND bucket_start_seconds = OLD.timestamp_seconds - (((OLD.timestamp_seconds % 3600) + 3600) % 3600) AND dimension_kind = 'project' AND dimension_value = coalesce(OLD.project_alias, '')",
+];
+
+const V14_TIME_ROLLUP_DECREMENT_SET: &str = r#"SET event_count = event_count - 1,
+      input_known_count = input_known_count -
+        CASE WHEN OLD.input_tokens IS NULL THEN 0 ELSE 1 END,
+      input_known_sum = input_known_sum - coalesce(OLD.input_tokens, 0),
+      cached_known_count = cached_known_count -
+        CASE WHEN OLD.cached_tokens IS NULL THEN 0 ELSE 1 END,
+      cached_known_sum = cached_known_sum - coalesce(OLD.cached_tokens, 0),
+      output_known_count = output_known_count -
+        CASE WHEN OLD.output_tokens IS NULL THEN 0 ELSE 1 END,
+      output_known_sum = output_known_sum - coalesce(OLD.output_tokens, 0),
+      reasoning_known_count = reasoning_known_count -
+        CASE WHEN OLD.reasoning_tokens IS NULL THEN 0 ELSE 1 END,
+      reasoning_known_sum = reasoning_known_sum - coalesce(OLD.reasoning_tokens, 0),
+      total_known_count = total_known_count -
+        CASE WHEN OLD.total_tokens IS NULL THEN 0 ELSE 1 END,
+      total_known_sum = total_known_sum - coalesce(OLD.total_tokens, 0),
+      fallback_model_count = fallback_model_count - OLD.fallback_model,
+      long_context_yes_count = long_context_yes_count -
+        CASE WHEN OLD.long_context = 'yes' THEN 1 ELSE 0 END,
+      long_context_no_count = long_context_no_count -
+        CASE WHEN OLD.long_context = 'no' THEN 1 ELSE 0 END,
+      long_context_unavailable_count = long_context_unavailable_count -
+        CASE WHEN OLD.long_context = 'unavailable' THEN 1 ELSE 0 END,
+      activity_read = activity_read - OLD.activity_read,
+      activity_edit_write = activity_edit_write - OLD.activity_edit_write,
+      activity_search = activity_search - OLD.activity_search,
+      activity_git = activity_git - OLD.activity_git,
+      activity_build_test = activity_build_test - OLD.activity_build_test,
+      activity_web = activity_web - OLD.activity_web,
+      activity_subagents = activity_subagents - OLD.activity_subagents,
+      activity_terminal = activity_terminal - OLD.activity_terminal
+"#;
+
+pub(super) fn v14_time_delete_trigger() -> Option<&'static str> {
+    static TRIGGER: OnceLock<String> = OnceLock::new();
+    Some(
+        TRIGGER
+            .get_or_init(|| {
+                let mut trigger = String::from(
+                    "CREATE TRIGGER usage_event_aggregate_time_after_delete\n\
+                     AFTER DELETE ON usage_event\n\
+                     WHEN (SELECT state FROM usage_aggregate_state WHERE singleton_id = 1) = 'ready'\n\
+                     BEGIN\n\
+                       SELECT CASE WHEN (\n",
+                );
+                for (index, key) in V14_TIME_ROLLUP_KEYS.iter().enumerate() {
+                    if index > 0 {
+                        trigger.push_str(" +\n");
+                    }
+                    trigger.push_str(&format!(
+                        "    (SELECT count(*) FROM usage_time_rollup\n\
+                         \x20    WHERE aggregate_generation = (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)\n\
+                         \x20      AND dataset_kind = 'current'\n\
+                         \x20      AND provider_id = OLD.provider_id AND profile_id = OLD.profile_id\n\
+                         \x20      AND {key})"
+                    ));
+                }
+                trigger.push_str(
+                    "\n  ) <> 6 THEN RAISE(ABORT, 'aggregate time rows unavailable') END;\n",
+                );
+                for key in V14_TIME_ROLLUP_KEYS {
+                    trigger.push_str(&format!(
+                        "  DELETE FROM usage_time_rollup\n\
+                         \x20 WHERE aggregate_generation = (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)\n\
+                         \x20   AND dataset_kind = 'current'\n\
+                         \x20   AND provider_id = OLD.provider_id AND profile_id = OLD.profile_id\n\
+                         \x20   AND event_count = 1\n\
+                         \x20   AND {key};\n"
+                    ));
+                }
+                for key in V14_TIME_ROLLUP_KEYS {
+                    trigger.push_str(&format!(
+                        "  UPDATE usage_time_rollup\n  {V14_TIME_ROLLUP_DECREMENT_SET}\
+                         \x20 WHERE aggregate_generation = (SELECT active_aggregate_generation FROM usage_aggregate_state WHERE singleton_id = 1)\n\
+                         \x20   AND dataset_kind = 'current'\n\
+                         \x20   AND provider_id = OLD.provider_id AND profile_id = OLD.profile_id\n\
+                         \x20   AND event_count > 1\n\
+                         \x20   AND {key};\n"
+                    ));
+                }
+                trigger.push_str("END;\n");
+                trigger
+            })
+            .as_str(),
+    )
+}
+
+pub(super) fn v14_time_update_trigger() -> Option<&'static str> {
+    static TRIGGER: OnceLock<Option<String>> = OnceLock::new();
+    TRIGGER
+        .get_or_init(|| {
+            combine_aggregate_update_trigger(
+                "usage_event_aggregate_time_after_update",
+                v14_time_delete_trigger()?,
                 V8_TIME_INSERT_TRIGGER,
             )
         })

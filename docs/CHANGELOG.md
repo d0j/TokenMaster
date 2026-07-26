@@ -11,6 +11,12 @@ All notable changes are recorded here.
 
 ### Fixed
 
+- Removed archive-sized work from bounded replay transactions. Schema v14 uses exact
+  full-key time-rollup maintenance, replay parent reads declare their exact index, hot
+  statements use a fixed-capacity cache, unchanged classifications avoid redundant
+  materialization, restart-safe staging preserves atomic replacement, and runtime
+  shutdown observes cancellation between transactions.
+
 - Made first-use Dashboard loading truthful and visibly progressive with bounded
   completed/expected source counts, immediate durable-Partial recovery, and a faster
   current-replay append path that retains SQLite foreign-key enforcement without a

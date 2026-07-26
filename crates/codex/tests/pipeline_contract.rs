@@ -3,6 +3,7 @@ use std::fs;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
+use std::time::Instant;
 
 use tempfile::TempDir;
 use tokenmaster_accounting::Canonicalizer;
@@ -235,6 +236,54 @@ fn write_usage_lines(path: &Path, count: u64) {
         ));
     }
     fs::write(path, content).expect("write usage fixture");
+}
+
+#[test]
+#[ignore = "release-only synthetic ingestion benchmark"]
+fn synthetic_cold_pipeline_benchmark_receipt() {
+    const FILES: u64 = 48;
+    const EVENTS_PER_FILE: u64 = 1_024;
+
+    let directory = TempDir::new().expect("temporary directory");
+    let root = directory.path().join("benchmark-root");
+    fs::create_dir(&root).expect("create benchmark root");
+    for file in 0..FILES {
+        write_usage_lines(
+            &root.join(format!("session-{file:03}.jsonl")),
+            EVENTS_PER_FILE,
+        );
+    }
+    let database = directory.path().join("benchmark.sqlite3");
+    let started = Instant::now();
+    let result = run_pipeline(
+        &root,
+        &database,
+        PipelineOptions {
+            collect_event_ids: false,
+            ..PipelineOptions::default()
+        },
+    )
+    .expect("synthetic benchmark pipeline");
+    let elapsed = started.elapsed();
+    let expected_events = FILES * EVENTS_PER_FILE;
+    assert_eq!(result.visible_events, expected_events);
+    assert_eq!(result.visible_total_tokens, expected_events);
+    assert_eq!(result.quality.eligible(), expected_events);
+    assert_eq!(result.max_reader_batch, 256);
+    assert_eq!(result.max_event_page, 256);
+    let archive_bytes = [
+        database.clone(),
+        database.with_extension("sqlite3-wal"),
+        database.with_extension("sqlite3-shm"),
+    ]
+    .into_iter()
+    .map(|path| fs::metadata(path).map_or(0, |metadata| metadata.len()))
+    .sum::<u64>();
+    println!(
+        "TM-PARSER-BENCH|files={FILES}|events={expected_events}|elapsed_ms={:.3}|events_per_second={:.1}|archive_bytes={archive_bytes}",
+        elapsed.as_secs_f64() * 1_000.0,
+        expected_events as f64 / elapsed.as_secs_f64(),
+    );
 }
 
 #[test]

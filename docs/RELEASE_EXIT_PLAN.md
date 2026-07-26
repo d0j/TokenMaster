@@ -14,19 +14,25 @@ separate external acceptance boundaries.
 
 ## Shortest critical path
 
-1. Keep the current safe publication visible and make active recovery/import explicit.
-2. Prove a fresh portable launch reaches current local usage quickly with bounded memory.
-3. Close the existing restart-safe replay WIP and run focused contracts.
-4. Run the full workspace gate once.
-5. Commit one intentional clean release slice.
-6. Build and verify the deterministic unsigned portable package from that exact commit.
-7. Obtain one physical Windows UI confirmation on the packaged executable.
+1. Commit the green import/runtime slice as one intentional clean release commit.
+2. Build and verify the deterministic unsigned portable package from that exact commit.
+3. Run the pinned committed-history and closed-package secret scans.
+4. Obtain one physical Windows UI confirmation on the packaged executable.
 
 Do not start P4, provider-host, audit-parser, signing, M0, or remote receipt work before
 the preceding step is closed.
 
 ## Current evidence and open blockers
 
+- Schema v14, exact replay-parent index selection, and fixed-capacity statement caching
+  reduce one measured 256-observation transaction from 74,592 ms to 291 ms.
+- The synthetic 49,152-event parser reaches 4,112 events/s and the 4,096-event runtime
+  cold contract completes in 770 ms.
+- A consistent copy of the real approximately 5.0 GiB history advanced 8,121 events
+  during a 120-second bounded run and shut down cleanly in 122.30 seconds. This proves
+  progress and cancellation, not complete cold import.
+- Clean-root, format, warnings-as-errors workspace Clippy, the deterministic complete
+  locked workspace test/doc-test gate, and the final MSVC release build pass.
 - Fresh portable import is responsive and publishes current-day usage within the bounded
   local smoke window. Newest-first traversal is bounded per directory and does not change
   accounting authority.

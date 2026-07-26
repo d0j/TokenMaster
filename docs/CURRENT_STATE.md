@@ -1,5 +1,43 @@
 # TokenMaster current state
 
+## 2026-07-26 — Large-history replay blocker removed
+
+Product state: changed in the import/runtime critical path; UI is intentionally
+unchanged. Schema v14 replaces four broad usage/price time-rollup mutation triggers
+with exact full-key seeks. Replay parent reads now use their exact index, hot
+statements use a fixed 64-entry cache, unchanged classifications avoid redundant
+fingerprint materialization, strict-superset staging extends safely, and replacement
+publication remains private until atomic promotion. Shutdown/deadline cancellation is
+observed between bounded transactions.
+
+Correctness/performance state: focused migration, replay, recovery, runtime, schema,
+backup, query-plan, parser, and performance contracts pass. A measured
+256-observation replay transaction fell from 74,592 ms to 291 ms. The 49,152-event
+parser contract sustained 4,112 events/s; the 4,096-event runtime cold contract
+completed in 770 ms. On a consistent copy of the real approximately 5.0 GiB Codex
+history, a 120-second run migrated v13 to v14, advanced from 51,530 to 59,651 events,
+and exited cleanly in 122.30 seconds. The source archive and live product database
+were not modified by that acceptance.
+
+Audit/evidence state: the sole final Sol review found one High stale
+`open_current` v13 validator; it now requires v14 and has focused coverage. No second
+review round was opened. This slice changes production behavior and required evidence,
+not textual audit machinery; `AUDIT_HARDENING_LOOP` is not active. Clean-root, format,
+warnings-as-errors workspace Clippy, the complete locked workspace test/doc-test gate,
+and the final MSVC release build pass. The first aggregate run exposed a malformed
+test-only v12 archive that retained v14 triggers; the fixture now restores exact legacy
+triggers and its isolated bootstrap/migration test plus the deterministic full gate
+pass.
+
+Release blockers: commit the slice and produce exact-commit package/secret-scan
+receipts. Signing and authenticated disposable-host
+DPI/accessibility acceptance remain external. The operator-deferred 24-hour soak is
+excluded until explicitly requested. UI work remains frozen until this backend slice
+is committed cleanly.
+
+Git state: the integrated import/runtime slice is ready for one intentional commit on
+`cx/tokenmaster-product-architecture`. No commit hash is recorded in tracked documents.
+
 ## 2026-07-26 — WMT density correction and rejected startup shortcut
 
 Product state: changed only in presentation. The navigation rail is 184 px instead of

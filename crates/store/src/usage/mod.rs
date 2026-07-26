@@ -5,6 +5,8 @@ use rusqlite::{Connection, OpenFlags};
 
 use crate::{EXPECTED_SQLITE_VERSION, StoreError, StoreErrorCode};
 
+const PREPARED_STATEMENT_CACHE_CAPACITY: usize = 64;
+
 mod aggregate;
 mod benefit_maintenance;
 mod benefit_reminder;
@@ -198,6 +200,7 @@ impl UsageStore {
     }
 
     fn initialize(mut connection: Connection, in_memory: bool) -> Result<Self, StoreError> {
+        connection.set_prepared_statement_cache_capacity(PREPARED_STATEMENT_CACHE_CAPACITY);
         let actual: String =
             connection.query_row("SELECT sqlite_version()", [], |row| row.get(0))?;
         if actual != EXPECTED_SQLITE_VERSION {
@@ -214,6 +217,7 @@ impl UsageStore {
     }
 
     fn initialize_current(connection: Connection) -> Result<Self, StoreError> {
+        connection.set_prepared_statement_cache_capacity(PREPARED_STATEMENT_CACHE_CAPACITY);
         let actual: String =
             connection.query_row("SELECT sqlite_version()", [], |row| row.get(0))?;
         if actual != EXPECTED_SQLITE_VERSION {
@@ -225,7 +229,7 @@ impl UsageStore {
         if schema_version != USAGE_SCHEMA_VERSION {
             return Err(StoreError::new(StoreErrorCode::SchemaMismatch));
         }
-        migration::validate_v13(&connection)?;
+        migration::validate_v14(&connection)?;
         apply_runtime_policy(&connection, false)?;
 
         let store = Self {

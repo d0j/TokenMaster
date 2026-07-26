@@ -9,8 +9,8 @@ use rusqlite::Connection;
 use tempfile::tempdir;
 use tokenmaster_platform::ValidatedLocalDirectory;
 use tokenmaster_store::{
-    ArchiveVersionStatus, BackupControl, BackupSource, BackupStaging, UsageStore,
-    create_compact_snapshot, create_fresh_recovery_archive, create_online_snapshot,
+    ArchiveVersionStatus, BackupControl, BackupSource, BackupStaging, USAGE_SCHEMA_VERSION,
+    UsageStore, create_compact_snapshot, create_fresh_recovery_archive, create_online_snapshot,
     inspect_archive_version, verify_backup_candidate,
 };
 
@@ -181,7 +181,10 @@ fn online_snapshot_is_reopenable_and_verified_during_bounded_concurrent_writes()
         .map_err(|_| std::io::Error::other("backup panicked"))??;
 
     let verified = verify_backup_candidate(candidate, &control)?;
-    assert_eq!(verified.schema_version(), 13);
+    assert_eq!(
+        verified.schema_version(),
+        u32::try_from(USAGE_SCHEMA_VERSION)?
+    );
     assert!(!verified.is_empty());
     assert!(verified.integrity_verified());
     assert!(verified.foreign_keys_verified());
@@ -193,7 +196,7 @@ fn online_snapshot_is_reopenable_and_verified_during_bounded_concurrent_writes()
             [],
             |row| row.get(0)
         )?,
-        13
+        USAGE_SCHEMA_VERSION
     );
     Ok(())
 }
@@ -238,7 +241,7 @@ fn candidate_verifier_applies_the_complete_defensive_policy() -> TestResult {
 fn archive_version_inspection_is_non_mutating_for_supported_old_and_newer_versions() -> TestResult {
     for (version, expected) in [
         (12_i64, ArchiveVersionStatus::SupportedLegacy),
-        (14_i64, ArchiveVersionStatus::Newer),
+        (USAGE_SCHEMA_VERSION + 1, ArchiveVersionStatus::Newer),
     ] {
         let root = tempdir()?;
         let archive = root.path().join("tokenmaster.sqlite3");

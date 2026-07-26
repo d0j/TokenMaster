@@ -428,7 +428,7 @@ backstop when registration is unavailable.
 
 Decision: `tokenmaster-query` owns synchronous bounded frontend values, while
 `tokenmaster-store::UsageReadStore` owns one separate SQLite `READ_ONLY|NO_MUTEX`
-connection. It requires exact schema v13 and bundled SQLite, applies WAL/query-only/
+connection. It requires exact schema v14 and bundled SQLite, applies WAL/query-only/
 defensive/QPSG/no-checkpoint policy with trusted schema and DQS disabled, a 250 ms busy
 timeout, 4 MiB cache and zero mmap, and never migrates. One short deferred transaction
 captures publication generation, independent dataset identity, exact scan truth and a
@@ -2213,3 +2213,24 @@ archive, lease, and publication. Provider-owned quota polling is capped at 32 wi
 benefits are optional, and provider I/O precedes lease admission. Codex remains the
 built-in adapter; external host/package/registry/signing and multi-provider scheduling
 are deferred to 1.1.
+
+## ADR-092 — Make replay cost proportional to the bounded transaction
+
+Decision: schema v14 atomically replaces the four usage/price time-rollup
+delete/update triggers whose partial predicates allowed SQLite to scan unrelated
+rollups. Each new trigger seeks the complete old-row primary key. Replay parent reads
+must use the exact `usage_replay_observation_parent` index and retain deterministic
+ordering. Store connections cap their prepared-statement cache at 64, and replay
+refreshes a stored classification fingerprint only when its disposition changes.
+Runtime cancellation is observed between bounded replay transactions.
+
+The aggregate-ready append performance comparison uses the existing absolute
+one/32/256-event limits plus an additive maximum of 25 ms over its matching
+aggregate-unavailable baseline. A multiplicative guard is rejected because faster
+baseline work makes constant transaction/setup cost look like a regression.
+
+Rationale: measured replay work must scale with the admitted batch and exact parent
+facts rather than total archive or rollup size. Full-key triggers, an explicit planner
+contract, fixed cache capacity, and transaction-boundary cancellation preserve
+correctness, bounded memory, and clean shutdown without weakening fail-closed schema
+validation.

@@ -6111,6 +6111,7 @@ name = "tokenmaster-codex"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "memchr",
  "serde",
  "serde_json",
  "sha2 0.11.0",

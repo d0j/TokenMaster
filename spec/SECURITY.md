@@ -1,5 +1,17 @@
 # TokenMaster security contract
 
+## Schema-v14 replay maintenance boundary
+
+Schema v14 changes no public authority and stores no new private data. Its immediate,
+fault-tested v13-to-v14 migration replaces only four usage/price time-rollup
+delete/update triggers. Each replacement recomputes the exact full-primary-key bucket
+affected by the old row instead of scanning unrelated rollups. Exact schema validation
+remains fail closed for writable, current, backup, and read-only opens. Replay parent
+lookups use the declared exact parent index, and the connection retains a fixed
+64-statement cache; neither path retains history-sized Rust state. Runtime cancellation
+is checked between bounded atomic replay transactions, never inside a transaction that
+could expose a partial publication.
+
 ## Reminder settings authority boundary
 
 Only the application operation worker may persist and synchronize the portable global

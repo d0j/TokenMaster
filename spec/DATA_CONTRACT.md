@@ -283,7 +283,7 @@ keyset-paged at no more than 256 rows. Scan-history cleanup uses only scan-relat
 foreign-key checks rather than rescanning the complete usage-event archive.
 
 The query path uses a distinct `READ_ONLY|NO_MUTEX` connection and never calls the
-writable open/migration path. It requires exact schema v13 and bundled SQLite identity,
+writable open/migration path. It requires exact schema v14 and bundled SQLite identity,
 WAL, foreign keys, query-only and defensive modes, trusted-schema/DQS disabled,
 query-planner stability, no checkpoint on close, 250 ms busy timeout, 4 MiB cache,
 file-backed temporary storage, and zero mmap. Each result captures archive generation,
@@ -391,7 +391,7 @@ batch capped at 401 targets and 512 returned price keys. Breakdown and session b
 retain at most 256 targets and the same global 512-key detail cap with exact per-target
 omitted counts. No result issues one SQL query per visible point or session.
 
-The joined product status capture is one exact scalar read model over schema v13. One
+The joined product status capture is one exact scalar read model over schema v14. One
 short deferred transaction binds usage publication/dataset/aggregate state, independent
 quota and benefit revisions, and independent Git publication state. It returns only
 owned counts, checked revisions, quality/freshness inputs, aggregate progress, and

@@ -35,6 +35,7 @@ clap = { version = "=4.6.1", features = ["derive"] }
 jiff = "=0.2.32"
 libc = "=0.2.186"
 libsqlite3-sys = { version = "=0.38.1", features = ["bundled"] }
+memchr = "=2.8.3"
 notify = "=8.2.0"
 rusqlite = { version = "=0.40.1", features = ["backup", "bundled", "hooks", "limits"] }
 serde = { version = "=1.0.228", features = ["derive"] }

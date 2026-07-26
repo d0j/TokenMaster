@@ -358,7 +358,7 @@ enum ScanBoundBeginFault {
     AfterGenerations,
 }
 
-fn complete_scan_set_source_count(
+pub(super) fn complete_scan_set_source_count(
     connection: &Connection,
     scan_set_id: ScanSetId,
 ) -> Result<Option<u64>, StoreError> {

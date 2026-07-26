@@ -1,5 +1,6 @@
 use std::io::BufRead;
 
+use memchr::memchr;
 use sha2::{Digest, Sha256};
 use tokenmaster_domain::{ObservationDraft, ObservationVerification, SessionRelationDraft};
 
@@ -88,7 +89,7 @@ pub(super) fn read_lines(
             reached_snapshot_end = true;
             break;
         }
-        let newline = available.iter().position(|byte| *byte == b'\n');
+        let newline = memchr(b'\n', available);
         let content_len = newline.unwrap_or(available.len());
         let required = line.len().saturating_add(content_len);
         let oversized_completion = if discarding_oversized_line {

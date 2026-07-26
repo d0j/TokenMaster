@@ -367,7 +367,7 @@ pub(super) fn insert_observation(
     event: &CanonicalUsageEvent,
 ) -> Result<(), StoreError> {
     let activity = event.activity().as_array();
-    transaction.execute(
+    let mut statement = transaction.prepare_cached(
         "INSERT OR IGNORE INTO usage_observation(
            file_key, generation, source_offset, fingerprint, event_id, profile_id,
            session_id, source_id, timestamp_seconds, timestamp_nanos, model, raw_model,
@@ -381,43 +381,43 @@ pub(super) fn insert_observation(
            ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26,
            ?27, ?28, ?29, ?30, ?31
          )",
-        params![
-            source_key.as_bytes().as_slice(),
-            sql_u64(generation)?,
-            sql_u64(event.source_offset())?,
-            event.fingerprint().as_bytes().as_slice(),
-            event.id().as_str(),
-            event.profile_id().as_str(),
-            event.session_id().as_str(),
-            event.source_id().as_str(),
-            event.timestamp().unix_seconds(),
-            i64::from(event.timestamp().subsec_nanos()),
-            event.model().as_str(),
-            event.raw_model().map(|value| value.as_str()),
-            sql_token(event.usage().input())?,
-            sql_token(event.usage().cached())?,
-            sql_token(event.usage().output())?,
-            sql_token(event.usage().reasoning())?,
-            sql_token(event.usage().total())?,
-            sql_bool(event.fallback_model()),
-            long_context_sql(event.long_context()),
-            event.service_tier().map(|value| value.as_str()),
-            event.project().map(|value| value.as_str()),
-            event.originator().map(|value| value.as_str()),
-            sql_u64(activity[0])?,
-            sql_u64(activity[1])?,
-            sql_u64(activity[2])?,
-            sql_u64(activity[3])?,
-            sql_u64(activity[4])?,
-            sql_u64(activity[5])?,
-            sql_u64(activity[6])?,
-            sql_u64(activity[7])?,
-            event
-                .reported_cost()
-                .map(|cost| sql_u64(cost.get()))
-                .transpose()?,
-        ],
     )?;
+    statement.execute(params![
+        source_key.as_bytes().as_slice(),
+        sql_u64(generation)?,
+        sql_u64(event.source_offset())?,
+        event.fingerprint().as_bytes().as_slice(),
+        event.id().as_str(),
+        event.profile_id().as_str(),
+        event.session_id().as_str(),
+        event.source_id().as_str(),
+        event.timestamp().unix_seconds(),
+        i64::from(event.timestamp().subsec_nanos()),
+        event.model().as_str(),
+        event.raw_model().map(|value| value.as_str()),
+        sql_token(event.usage().input())?,
+        sql_token(event.usage().cached())?,
+        sql_token(event.usage().output())?,
+        sql_token(event.usage().reasoning())?,
+        sql_token(event.usage().total())?,
+        sql_bool(event.fallback_model()),
+        long_context_sql(event.long_context()),
+        event.service_tier().map(|value| value.as_str()),
+        event.project().map(|value| value.as_str()),
+        event.originator().map(|value| value.as_str()),
+        sql_u64(activity[0])?,
+        sql_u64(activity[1])?,
+        sql_u64(activity[2])?,
+        sql_u64(activity[3])?,
+        sql_u64(activity[4])?,
+        sql_u64(activity[5])?,
+        sql_u64(activity[6])?,
+        sql_u64(activity[7])?,
+        event
+            .reported_cost()
+            .map(|cost| sql_u64(cost.get()))
+            .transpose()?,
+    ])?;
     Ok(())
 }
 
@@ -425,11 +425,12 @@ fn refresh_canonical(
     transaction: &Transaction<'_>,
     fingerprint: &[u8; 32],
 ) -> Result<(), StoreError> {
-    transaction.execute(
-        "DELETE FROM usage_event WHERE fingerprint = ?1",
-        params![fingerprint.as_slice()],
-    )?;
-    let inserted = transaction.execute(REFRESH_CANONICAL_SQL, params![fingerprint.as_slice()])?;
+    transaction
+        .prepare_cached("DELETE FROM usage_event WHERE fingerprint = ?1")?
+        .execute(params![fingerprint.as_slice()])?;
+    let inserted = transaction
+        .prepare_cached(REFRESH_CANONICAL_SQL)?
+        .execute(params![fingerprint.as_slice()])?;
     if inserted != 1 {
         return Err(StoreError::new(StoreErrorCode::Database));
     }
@@ -440,7 +441,7 @@ fn validate_direct_projection(
     transaction: &Transaction<'_>,
     fingerprint: &[u8; 32],
 ) -> Result<(), StoreError> {
-    let valid: i64 = transaction.query_row(
+    let mut statement = transaction.prepare_cached(
         "SELECT count(*)
          FROM usage_event AS event
          JOIN usage_observation AS observation
@@ -462,9 +463,8 @@ fn validate_direct_projection(
                 SELECT revision_id FROM usage_replay_revision WHERE status = 'current'
               ))
            )",
-        [fingerprint.as_slice()],
-        |row| row.get(0),
     )?;
+    let valid: i64 = statement.query_row([fingerprint.as_slice()], |row| row.get(0))?;
     if valid != 1 {
         return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
     }

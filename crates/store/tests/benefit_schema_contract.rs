@@ -92,6 +92,7 @@ fn seed_one_delivery(store: &mut UsageStore) {
 }
 
 fn strip_benefit_schema_to_exact_v10(connection: &Connection) {
+    schema_v14::restore_v13_time_triggers(connection);
     git_schema_v13::strip_git_schema(connection);
     connection
         .execute_batch(
@@ -130,12 +131,12 @@ fn fresh_schema_has_strict_bounded_benefit_objects_and_recommended_profile() {
     drop(UsageStore::open(&path).expect("create current schema"));
     let connection = raw_connection(&path);
 
-    assert_eq!(USAGE_SCHEMA_VERSION, 13);
+    assert_eq!(USAGE_SCHEMA_VERSION, 14);
     assert_eq!(
         connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
             .expect("user version"),
-        13
+        USAGE_SCHEMA_VERSION
     );
     assert_eq!(
         connection
@@ -336,7 +337,7 @@ fn exact_v10_migration_adds_empty_benefits_without_touching_existing_facts() {
         connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
             .expect("current version"),
-        13
+        USAGE_SCHEMA_VERSION
     );
 }
 
@@ -350,6 +351,7 @@ fn exact_v11_migration_marks_legacy_delivery_receipts_acknowledged() {
     }
     {
         let connection = raw_connection(&path);
+        schema_v14::restore_v13_time_triggers(&connection);
         git_schema_v13::strip_git_schema(&connection);
         connection
             .execute_batch(
@@ -424,4 +426,8 @@ fn weakened_benefit_schema_is_rejected_on_reopen() {
 }
 mod git_schema_v13 {
     include!("support/git_schema_v13.rs");
+}
+
+mod schema_v14 {
+    include!("support/schema_v14.rs");
 }

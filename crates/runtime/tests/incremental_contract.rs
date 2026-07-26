@@ -5,6 +5,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicUsize, Ordering},
 };
+use std::time::Instant;
 
 use tempfile::TempDir;
 use tokenmaster_codex::{CodexRootInput, ConfiguredCodexRoot, build_discovery_request};
@@ -513,6 +514,59 @@ fn one_line_append_reads_and_commits_only_the_tail_then_restarts_cleanly() {
     assert_eq!(restart.bytes_read(), 0);
     assert_eq!(restart.events_observed(), 0);
     assert_eq!(restart.batches_committed(), 0);
+}
+
+#[test]
+#[ignore = "release-only synthetic incremental benchmark"]
+fn synthetic_warm_and_tail_benchmark_receipt() {
+    let directory = TempDir::new().expect("benchmark directory");
+    let root = directory.path().join("source");
+    std::fs::create_dir(&root).expect("source root");
+    let path = root.join("session.jsonl");
+    let baseline = (1..=4_096).map(usage_line).collect::<String>();
+    std::fs::write(&path, baseline).expect("write baseline");
+    let database = directory.path().join("benchmark.sqlite3");
+    let mut archive =
+        StoreArchive::new(UsageStore::open(&database).expect("file-backed benchmark store"));
+
+    let cold_started = Instant::now();
+    assert_bootstrapped(bootstrap(&root, &mut archive));
+    let cold = cold_started.elapsed();
+
+    let mut warm_samples = Vec::new();
+    for _ in 0..5 {
+        let started = Instant::now();
+        let report = incremental(&root, &mut archive);
+        warm_samples.push(started.elapsed());
+        assert_eq!(report.outcome(), IncrementalRefreshOutcome::Complete);
+        assert_eq!(report.bytes_read(), 0);
+        assert_eq!(report.batches_committed(), 0);
+    }
+    warm_samples.sort_unstable();
+
+    let mut next = 4_097_u64;
+    let mut tail_receipts = Vec::new();
+    for count in [1_u64, 32, 256] {
+        let tail = (next..next + count).map(usage_line).collect::<String>();
+        next += count;
+        append(&path, &tail);
+        let started = Instant::now();
+        let report = incremental(&root, &mut archive);
+        let elapsed = started.elapsed();
+        assert_eq!(report.outcome(), IncrementalRefreshOutcome::Complete);
+        assert_eq!(report.bytes_read(), tail.len() as u64);
+        assert_eq!(report.events_observed(), count);
+        tail_receipts.push((count, elapsed));
+    }
+
+    println!(
+        "TM-INCREMENTAL-BENCH|cold_ms={:.3}|warm_median_ms={:.3}|tail_1_ms={:.3}|tail_32_ms={:.3}|tail_256_ms={:.3}",
+        cold.as_secs_f64() * 1_000.0,
+        warm_samples[warm_samples.len() / 2].as_secs_f64() * 1_000.0,
+        tail_receipts[0].1.as_secs_f64() * 1_000.0,
+        tail_receipts[1].1.as_secs_f64() * 1_000.0,
+        tail_receipts[2].1.as_secs_f64() * 1_000.0,
+    );
 }
 
 #[test]

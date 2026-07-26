@@ -38,6 +38,7 @@ fn raw_connection(path: &Path) -> Connection {
 }
 
 fn strip_git_schema_to_exact_v12(connection: &Connection) {
+    schema_v14::restore_v13_time_triggers(connection);
     connection
         .execute_batch(
             "DROP TRIGGER IF EXISTS git_category_no_update;
@@ -70,12 +71,12 @@ fn fresh_v13_schema_has_private_strict_bounded_git_objects() {
     drop(UsageStore::open(&path).expect("create current schema"));
     let connection = raw_connection(&path);
 
-    assert_eq!(USAGE_SCHEMA_VERSION, 13);
+    assert_eq!(USAGE_SCHEMA_VERSION, 14);
     assert_eq!(
         connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
             .expect("user version"),
-        13
+        USAGE_SCHEMA_VERSION
     );
     assert_eq!(
         connection
@@ -218,8 +219,12 @@ fn exact_v12_migrates_transactionally_without_touching_existing_products() {
         connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
             .expect("user version"),
-        13
+        USAGE_SCHEMA_VERSION
     );
+}
+
+mod schema_v14 {
+    include!("support/schema_v14.rs");
 }
 
 #[test]
