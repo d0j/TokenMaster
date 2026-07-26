@@ -16,19 +16,19 @@ consistent copy of the real approximately 5.0 GiB history advanced 8,121 events 
 found a stale current-open validator; it was corrected to exact schema v14. No
 reviewer-of-reviewer or audit-only round is allowed.
 
-Release blockers: commit this slice, then create the exact-commit
-package/secret-scan receipts. The complete gate and MSVC build are green; a stale
-test-only v12 fixture was corrected to restore exact
+Release state: the complete gate and MSVC build are green; a stale test-only v12
+fixture was corrected to restore exact
 legacy triggers before its migration receipt, and the deterministic complete gate
-passes. Signing and authenticated disposable-host DPI/accessibility acceptance remain
-external. The 24-hour soak remains operator-deferred. Do not start UI work before the
-backend commit is clean, and do not describe partial real-history progress as a
-complete cold import.
+passes. The deterministic unsigned package, package validator, committed-history
+secret scan, and closed-ZIP secret scan pass for the clean closeout commit. Signing
+and authenticated disposable-host DPI/accessibility acceptance remain external. The
+24-hour soak remains operator-deferred. UI may proceed as a separate bounded slice;
+do not describe partial real-history progress as a complete cold import.
 
-Git state: finish one intentional commit on
-`cx/tokenmaster-product-architecture`, leave the worktree clean, do not push, and do
-not record its hash in tracked documents. Remove the task-owned diagnostic database
-copies and leave no TokenMaster/test/visual-control process running.
+Git state: implementation and evidence closeout are committed on
+`cx/tokenmaster-product-architecture`; the worktree is clean and unpushed. No commit
+hash is recorded in tracked documents. Task-owned diagnostic database copies are
+removed, and no TokenMaster/test/visual-control process remains.
 
 ## WMT density correction; startup shortcut rejected (2026-07-26)
 

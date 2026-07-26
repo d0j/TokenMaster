@@ -14,8 +14,8 @@ separate external acceptance boundaries.
 
 ## Shortest critical path
 
-1. Commit the green import/runtime slice as one intentional clean release commit.
-2. Build and verify the deterministic unsigned portable package from that exact commit.
+1. Start the next bounded UI correction from the verified import/package baseline.
+2. Build and verify the deterministic unsigned portable package after that UI commit.
 3. Run the pinned committed-history and closed-package secret scans.
 4. Obtain one physical Windows UI confirmation on the packaged executable.
 
@@ -33,6 +33,8 @@ the preceding step is closed.
   progress and cancellation, not complete cold import.
 - Clean-root, format, warnings-as-errors workspace Clippy, the deterministic complete
   locked workspace test/doc-test gate, and the final MSVC release build pass.
+- The deterministic unsigned package, package validator, committed-history Gitleaks
+  scan, and closed-ZIP Gitleaks scan pass for the clean closeout commit.
 - Fresh portable import is responsive and publishes current-day usage within the bounded
   local smoke window. Newest-first traversal is bounded per directory and does not change
   accounting authority.

@@ -29,14 +29,17 @@ test-only v12 archive that retained v14 triggers; the fixture now restores exact
 triggers and its isolated bootstrap/migration test plus the deterministic full gate
 pass.
 
-Release blockers: commit the slice and produce exact-commit package/secret-scan
-receipts. Signing and authenticated disposable-host
-DPI/accessibility acceptance remain external. The operator-deferred 24-hour soak is
-excluded until explicitly requested. UI work remains frozen until this backend slice
-is committed cleanly.
+Release state: the production slice is committed, and the deterministic unsigned MSVC
+package, closed-package validator, committed-history Gitleaks scan, and closed-ZIP
+Gitleaks scan pass for the clean closeout commit. Signing and authenticated
+disposable-host DPI/accessibility acceptance remain external. The operator-deferred
+24-hour soak is excluded until explicitly requested. UI work may start as a new
+bounded product slice; it must not reopen this verified import path without a
+production reproducer.
 
-Git state: the integrated import/runtime slice is ready for one intentional commit on
-`cx/tokenmaster-product-architecture`. No commit hash is recorded in tracked documents.
+Git state: the import/runtime implementation and its release-evidence closeout are
+committed on `cx/tokenmaster-product-architecture`; the worktree is clean. No commit
+hash is recorded in tracked documents.
 
 ## 2026-07-26 — WMT density correction and rejected startup shortcut
 

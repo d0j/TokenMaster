@@ -15,8 +15,10 @@ consistent copy of the approximately 5.0 GiB local history advanced 8,121 events
 120 seconds and shut down cleanly. Restart-safe staging, private replacement, migration
 rollback, and query-plan contracts preserve correctness. The only final-review High
 was a stale current-open schema validator; it was fixed without opening another review
-round. This closes the measured import stall, not complete cold-import, package,
-signing, external UI, or soak acceptance.
+round. The deterministic unsigned package, package validator, committed-history
+Gitleaks scan, and closed-ZIP scan pass for the clean closeout commit. This closes the
+measured import stall and local package receipt, not complete cold-import, signing,
+external UI, or soak acceptance.
 
 ## 2026-07-26 — UI density improved; false performance closure rejected
 
