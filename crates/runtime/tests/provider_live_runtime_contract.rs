@@ -105,6 +105,13 @@ fn observation(source: &DiscoveredSource) -> ObservationDraft {
 }
 
 fn batch(source: &DiscoveredSource) -> Result<AdapterBatch, PortError> {
+    batch_with_state(source, BatchState::SnapshotEnd)
+}
+
+fn batch_with_state(
+    source: &DiscoveredSource,
+    state: BatchState,
+) -> Result<AdapterBatch, PortError> {
     AdapterBatch::new(
         source.identity(),
         AdapterBatchParts {
@@ -118,7 +125,7 @@ fn batch(source: &DiscoveredSource) -> Result<AdapterBatch, PortError> {
             .map_err(PortError::from)?,
             next_checkpoint: checkpoint(NEXT_CHECKPOINT),
             next_progress: progress(source, 2, NEXT_RESUME),
-            state: BatchState::SnapshotEnd,
+            state,
             counters: AdapterCounters::new(1, 1, 1, 0).map_err(PortError::from)?,
             diagnostics: AdapterDiagnostics::default(),
         },
@@ -149,6 +156,7 @@ struct SyntheticFactory {
     record: Arc<SyntheticFactoryRecord>,
     partial_scopes: bool,
     partial_sources: bool,
+    fail_after_first_batch_once: Arc<AtomicBool>,
 }
 
 #[derive(Default)]
@@ -174,6 +182,7 @@ impl SyntheticFactory {
             record: Arc::clone(&record),
             partial_scopes: false,
             partial_sources: false,
+            fail_after_first_batch_once: Arc::new(AtomicBool::new(false)),
         };
         (factory, record)
     }
@@ -187,6 +196,12 @@ impl SyntheticFactory {
     fn stalled_after_one_source() -> Self {
         let (mut factory, _record) = Self::new(false);
         factory.partial_sources = true;
+        factory
+    }
+
+    fn fails_after_first_durable_batch_once() -> Self {
+        let (mut factory, _record) = Self::new(false);
+        factory.fail_after_first_batch_once = Arc::new(AtomicBool::new(true));
         factory
     }
 }
@@ -207,6 +222,7 @@ impl UsageProviderFactory for SyntheticFactory {
         Ok(Box::new(SyntheticAdapter {
             partial_scopes: self.partial_scopes,
             partial_sources: self.partial_sources,
+            fail_after_first_batch_once: self.fail_after_first_batch_once,
         }))
     }
 }
@@ -214,6 +230,7 @@ impl UsageProviderFactory for SyntheticFactory {
 struct SyntheticAdapter {
     partial_scopes: bool,
     partial_sources: bool,
+    fail_after_first_batch_once: Arc<AtomicBool>,
 }
 
 impl Adapter for SyntheticAdapter {
@@ -256,6 +273,8 @@ impl Adapter for SyntheticAdapter {
         let source = source();
         let mut reader = SyntheticReader {
             source: source.clone(),
+            fail_after_first_batch_once: Arc::clone(&self.fail_after_first_batch_once),
+            fail_on_next_batch: false,
         };
         let _ = sink.on_source(source.clone(), state(&source), &mut reader)?;
         completion(1)
@@ -270,6 +289,8 @@ impl LiveProviderAdapter for SyntheticAdapter {
 
 struct SyntheticReader {
     source: DiscoveredSource,
+    fail_after_first_batch_once: Arc<AtomicBool>,
+    fail_on_next_batch: bool,
 }
 
 impl SourceBatchReader for SyntheticReader {
@@ -309,8 +330,62 @@ impl SourceBatchReader for SyntheticReader {
         control: &OperationControl<'_>,
     ) -> Result<AdapterBatch, PortError> {
         control.check()?;
-        batch(&self.source)
+        if self.fail_on_next_batch {
+            self.fail_on_next_batch = false;
+            return Err(PortError::new(tokenmaster_engine::PortErrorCode::Failed));
+        }
+        if self
+            .fail_after_first_batch_once
+            .swap(false, Ordering::SeqCst)
+        {
+            self.fail_on_next_batch = true;
+            batch_with_state(&self.source, BatchState::More)
+        } else {
+            batch(&self.source)
+        }
     }
+}
+
+#[test]
+fn failed_initial_rebuild_with_durable_partial_progress_recovers_immediately_once() {
+    let temporary = TempDir::new().expect("temporary directory");
+    let archive = temporary.path().join("initial-partial-recovery.sqlite3");
+    let mut runtime = LiveRuntime::start_with_provider(
+        &archive,
+        Box::new(SyntheticFactory::fails_after_first_durable_batch_once()),
+    )
+    .expect("start synthetic provider");
+
+    let first = runtime
+        .wait_for_completion(Duration::from_secs(10))
+        .expect("first completion wait")
+        .expect("failed initial completion");
+    assert_eq!(first.outcome(), tokenmaster_engine::RefreshOutcome::Failed);
+    let recovered = runtime
+        .wait_for_completion(Duration::from_secs(10))
+        .expect("recovery completion wait")
+        .expect("immediate recovery completion");
+    assert_eq!(
+        recovered.outcome(),
+        tokenmaster_engine::RefreshOutcome::Completed
+    );
+    assert!(
+        runtime
+            .snapshot()
+            .expect("recovered runtime snapshot")
+            .scheduler()
+            .submitted_count()
+            >= 2
+    );
+    runtime.shutdown().expect("runtime shutdown");
+    assert_eq!(
+        UsageStore::open(&archive)
+            .expect("recovered store")
+            .archive_publication()
+            .expect("recovered publication")
+            .quality(),
+        tokenmaster_store::ArchivePublicationQuality::Complete
+    );
 }
 
 #[test]

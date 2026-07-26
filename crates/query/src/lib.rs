@@ -76,7 +76,7 @@ pub use status::{
     PRODUCT_DATA_STATUS_SCHEMA_VERSION, ProductAggregateProgress, ProductAggregateState,
     ProductAggregateStatus, ProductBenefitDataStatus, ProductComponentState,
     ProductDataStatusEnvelope, ProductDataStatusSnapshot, ProductDataWarningCode,
-    ProductGitDataStatus, ProductQuotaDataStatus, ProductUsageDataStatus,
+    ProductGitDataStatus, ProductImportProgress, ProductQuotaDataStatus, ProductUsageDataStatus,
 };
 pub use tokenmaster_pricing::{
     CostAvailability, CostComposition, CostCounters, CostMode, CostResult, MissingCost,

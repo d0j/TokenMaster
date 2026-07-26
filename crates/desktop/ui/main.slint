@@ -53,6 +53,10 @@ export component MainWindow inherits Window {
     in property <[DashboardQuotaRow]> dashboard-quota-rows;
     in property <[DashboardBenefitRow]> dashboard-benefit-rows;
     in property <[DashboardTrendPoint]> dashboard-trend-points;
+    in property <string> dashboard-trend-token-geometry;
+    in property <string> dashboard-trend-cost-geometry;
+    in property <string> dashboard-trend-token-axis;
+    in property <string> dashboard-trend-cost-axis;
     in property <[DashboardSessionRow]> dashboard-session-rows;
     in property <[DashboardActivityRow]> dashboard-activity-rows;
     in property <[DashboardModelRow]> dashboard-model-rows;
@@ -61,6 +65,9 @@ export component MainWindow inherits Window {
     in property <string> dashboard-header-events;
     in property <string> dashboard-header-evidence;
     in property <bool> dashboard-initial-import-in-progress;
+    in property <bool> dashboard-import-progress-known: false;
+    in property <string> dashboard-import-progress-label;
+    in property <float> dashboard-import-progress-ratio: 0;
     in property <bool> dashboard-startup-import-in-progress: false;
     in property <int> dashboard-initial-import-stage: 0;
     in property <string> dashboard-code-commits;
@@ -396,6 +403,10 @@ export component MainWindow inherits Window {
                     quotas: root.dashboard-quota-rows;
                     benefits: root.dashboard-benefit-rows;
                     trend: root.dashboard-trend-points;
+                    trend-token-geometry: root.dashboard-trend-token-geometry;
+                    trend-cost-geometry: root.dashboard-trend-cost-geometry;
+                    trend-token-axis: root.dashboard-trend-token-axis;
+                    trend-cost-axis: root.dashboard-trend-cost-axis;
                     sessions: root.dashboard-session-rows;
                     activity: root.dashboard-activity-rows;
                     models: root.dashboard-model-rows;
@@ -404,6 +415,9 @@ export component MainWindow inherits Window {
                     header-events: root.dashboard-header-events;
                     header-evidence: root.dashboard-header-evidence;
                     initial-import-in-progress: root.dashboard-initial-import-in-progress;
+                    import-progress-known: root.dashboard-import-progress-known;
+                    import-progress-label: root.dashboard-import-progress-label;
+                    import-progress-ratio: root.dashboard-import-progress-ratio;
                     startup-import-in-progress: root.dashboard-startup-import-in-progress;
                     initial-import-stage: root.dashboard-initial-import-stage;
                     reduced-motion: root.reduced-motion;

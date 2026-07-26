@@ -11,6 +11,14 @@ All notable changes are recorded here.
 
 ### Fixed
 
+- Made first-use Dashboard loading truthful and visibly progressive with bounded
+  completed/expected source counts, immediate durable-Partial recovery, and a faster
+  current-replay append path that retains SQLite foreign-key enforcement without a
+  global integrity scan per batch. Dashboard Trend now renders the existing bounded
+  recent token/cost history with axes, sparse markers, hover detail, compact dates,
+  readable Sessions columns, compact unavailable cards, and one full-height scroll
+  surface.
+
 - Stabilized the Windows M0 History range/session admission contract. The former
   immediate-failure fixture could publish a new snapshot before page admission, making
   its old page intent correctly stale while the test expected `busy`. The fixture now

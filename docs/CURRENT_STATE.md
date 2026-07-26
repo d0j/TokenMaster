@@ -1,5 +1,44 @@
 # TokenMaster current state
 
+## 2026-07-26 — WMT-quality Dashboard and progressing cold import
+
+Product state: changed. The Dashboard now exposes exact completed/expected source
+counts during a Partial import, keeps already safe data visible, and renders the
+existing bounded recent daily series as two token/cost lines with axes, sparse point
+markers, compact dates, and per-point hover details. Empty Plan Usage and Code Output
+cards no longer reserve most of the viewport, Sessions columns remain separated, and
+one Dashboard scroll owner reaches the lower cards. The replay hot path no longer runs
+a whole-database foreign-key scan after every current append batch; SQLite foreign-key
+enforcement remains mandatory and full integrity checks remain at publication
+boundaries.
+
+Correctness state: a first rebuild that durably publishes Partial data and then fails
+now schedules one immediate Recovery instead of waiting for the 15-minute healthy
+poll. Recovery requires an actual archive-generation advance, so stalled or unchanged
+input still quiesces. A focused injected failure proves first durable batch, failed
+receipt, immediate Recovery, and final Complete publication.
+
+Audit/evidence state: focused replay/status/runtime/Desktop contracts pass. A clean
+release EXE advanced from 33 to 162 of 3,998 sources while remaining responsive; at
+79 seconds it used 82.2 MiB working set and retained an 8.3 MiB WAL. Windows visual
+inspection confirmed real Today/Sessions/Model data, a dual-series graph, readable
+dates, a date/token/cost hover card, and the single compact scrollbar reaching Model
+Usage. The task-owned process and visual controller were closed. One independent Sol
+review returned `RELEASE_SLICE_ACCEPTED` with no Critical or High finding. Clean-root,
+format, warnings-as-errors workspace Clippy, and the complete locked workspace
+test/doc-test gate pass; the final deterministic test pass used one Cargo job and one
+test thread after classifying a Windows/Git concurrency flake. `AUDIT_HARDENING_LOOP`
+is not active.
+
+Release blockers: the new commit still needs the deterministic package/secret-scan
+receipt pair, signing, and authenticated disposable-host DPI/accessibility acceptance.
+The 24-hour soak remains explicitly deferred by the operator. This is verified product
+behavior, not a signed or stable release.
+
+Git state: this integrated Dashboard/import slice is intended for one feature-branch
+commit after the final documentation and clean-root checks. No current commit hash is
+recorded here.
+
 ## 2026-07-26 — Current-day first-use recovery
 
 Product state: changed. Recovery and partial publications now keep the safe current

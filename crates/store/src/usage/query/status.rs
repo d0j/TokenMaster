@@ -90,6 +90,24 @@ impl ProductAggregateStatus {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProductImportProgress {
+    completed_sources: u64,
+    expected_sources: u64,
+}
+
+impl ProductImportProgress {
+    #[must_use]
+    pub const fn completed_sources(self) -> u64 {
+        self.completed_sources
+    }
+
+    #[must_use]
+    pub const fn expected_sources(self) -> u64 {
+        self.expected_sources
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ProductUsageStatus {
     publication_generation: u64,
     dataset_identity: UsageQueryDatasetIdentity,
@@ -98,6 +116,7 @@ pub struct ProductUsageStatus {
     quality: ArchivePublicationQuality,
     scope_count: usize,
     replay_staging: bool,
+    import_progress: Option<ProductImportProgress>,
     aggregate: ProductAggregateStatus,
 }
 
@@ -135,6 +154,11 @@ impl ProductUsageStatus {
     #[must_use]
     pub const fn replay_staging(self) -> bool {
         self.replay_staging
+    }
+
+    #[must_use]
+    pub const fn import_progress(self) -> Option<ProductImportProgress> {
+        self.import_progress
     }
 
     #[must_use]
@@ -334,6 +358,8 @@ fn capture_product_data_status(
         load_status_scan_truth(&transaction, raw_publication.latest_complete_scan_set_id)?;
     let publication_generation = nonnegative(raw_publication.archive_generation)?;
     let quality = ArchivePublicationQuality::from_sql(&raw_publication.quality)?;
+    let import_progress =
+        load_import_progress(&transaction, quality, raw_publication.current_revision_id)?;
     after_publication()?;
     let replay_staging_count: i64 = map_sql(transaction.query_row(
         "SELECT count(*) FROM usage_replay_revision WHERE status = 'staging'",
@@ -357,12 +383,47 @@ fn capture_product_data_status(
             quality,
             scope_count,
             replay_staging: replay_staging_count == 1,
+            import_progress,
             aggregate,
         },
         quota,
         benefit,
         git,
     })
+}
+
+fn load_import_progress(
+    connection: &rusqlite::Connection,
+    quality: ArchivePublicationQuality,
+    current_revision_id: Option<i64>,
+) -> Result<Option<ProductImportProgress>, StoreError> {
+    if quality != ArchivePublicationQuality::Partial {
+        return Ok(None);
+    }
+    let revision_id =
+        current_revision_id.ok_or_else(|| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+    let raw: (i64, i64, i64) = map_sql(connection.query_row(
+        "SELECT revision.expected_source_count,
+                (SELECT count(*) FROM usage_replay_source AS source
+                 WHERE source.revision_id = revision.revision_id
+                   AND source.state = 'complete'),
+                (SELECT count(*) FROM usage_replay_source AS source
+                 WHERE source.revision_id = revision.revision_id)
+         FROM usage_replay_revision AS revision
+         WHERE revision.revision_id = ?1",
+        [revision_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    ))?;
+    let expected_sources = nonnegative(raw.0)?;
+    let completed_sources = nonnegative(raw.1)?;
+    let retained_sources = nonnegative(raw.2)?;
+    if retained_sources != expected_sources || completed_sources > expected_sources {
+        return Err(StoreError::new(StoreErrorCode::InvalidStoredValue));
+    }
+    Ok(Some(ProductImportProgress {
+        completed_sources,
+        expected_sources,
+    }))
 }
 
 fn load_status_scan_truth(
@@ -593,6 +654,37 @@ mod tests {
     use crate::UsageStore;
 
     type TestResult = Result<(), Box<dyn Error>>;
+
+    #[test]
+    fn partial_import_progress_is_exact_bounded_and_count_only() -> TestResult {
+        let connection = Connection::open_in_memory()?;
+        connection.execute_batch(
+            "CREATE TABLE usage_replay_revision (
+                 revision_id INTEGER PRIMARY KEY,
+                 expected_source_count INTEGER NOT NULL
+             );
+             CREATE TABLE usage_replay_source (
+                 revision_id INTEGER NOT NULL,
+                 state TEXT NOT NULL
+             );
+             INSERT INTO usage_replay_revision VALUES (7, 3);
+             INSERT INTO usage_replay_source VALUES
+                 (7, 'complete'), (7, 'pending'), (7, 'complete');",
+        )?;
+
+        let Some(progress) =
+            load_import_progress(&connection, ArchivePublicationQuality::Partial, Some(7))?
+        else {
+            return Err("partial progress unavailable".into());
+        };
+        assert_eq!(progress.completed_sources(), 2);
+        assert_eq!(progress.expected_sources(), 3);
+        assert_eq!(
+            load_import_progress(&connection, ArchivePublicationQuality::Complete, Some(7))?,
+            None
+        );
+        Ok(())
+    }
 
     #[test]
     fn capture_keeps_one_transaction_when_an_independent_revision_commits_mid_read() -> TestResult {

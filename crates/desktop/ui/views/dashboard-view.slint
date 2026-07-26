@@ -80,6 +80,9 @@ component ImportActivityDot inherits Rectangle {
 component InitialImportCard inherits Rectangle {
     in property <string> phase-label;
     in property <bool> reduced-motion;
+    in property <bool> progress-known;
+    in property <string> progress-label;
+    in property <float> progress-ratio;
 
     min-height: 62px;
     background: UiTokens.surface-raised;
@@ -101,7 +104,22 @@ component InitialImportCard inherits Rectangle {
         VerticalLayout {
             spacing: UiTokens.space-xs;
             Text { text: root.phase-label; color: UiTokens.text-primary; font-size: 13px; font-weight: 750; }
-            Text { text: @tr("TokenMaster keeps available safe data visible while it imports the rest."); color: UiTokens.text-secondary; font-size: 11px; wrap: word-wrap; }
+            if root.progress-known: HorizontalLayout {
+                spacing: UiTokens.space-sm;
+                Rectangle {
+                    height: 5px;
+                    horizontal-stretch: 1;
+                    background: UiTokens.surface;
+                    border-radius: 3px;
+                    Rectangle {
+                        width: max(2px, min(1.0, root.progress-ratio) * parent.width);
+                        background: UiTokens.accent;
+                        border-radius: 3px;
+                    }
+                }
+                Text { text: root.progress-label; color: UiTokens.text-secondary; font-size: 11px; width: 92px; horizontal-alignment: right; }
+            }
+            if !root.progress-known: Text { text: @tr("TokenMaster keeps available safe data visible while it imports the rest."); color: UiTokens.text-secondary; font-size: 11px; wrap: word-wrap; }
         }
     }
 }
@@ -195,6 +213,10 @@ component CodeOutputCard inherits Rectangle {
 component TrendCard inherits Rectangle {
     in property <DashboardSectionRow> section;
     in property <[DashboardTrendPoint]> points;
+    in property <string> token-geometry;
+    in property <string> cost-geometry;
+    in property <string> token-axis;
+    in property <string> cost-axis;
 
     min-height: 186px;
     background: UiTokens.surface;
@@ -208,27 +230,126 @@ component TrendCard inherits Rectangle {
         padding: UiTokens.space;
         spacing: UiTokens.space-sm;
         CardHeader { title: @tr("Usage and Cost Trend"); state: root.section.state; reasons: root.section.reasons; }
-        Rectangle {
+        if root.points.length == 1: Rectangle {
+            min-height: 112px;
+            background: UiTokens.surface-subtle;
+            border-radius: UiTokens.radius;
+            accessible-role: image;
+            accessible-label: root.points[0].date-label + " " + root.points[0].tokens-label + " " + root.points[0].cost-label;
+            HorizontalLayout {
+                padding: UiTokens.space;
+                spacing: UiTokens.space-lg;
+                VerticalLayout {
+                    spacing: UiTokens.space-xs;
+                    Text { text: @tr("Today"); color: UiTokens.text-secondary; font-size: 11px; }
+                    Text { text: root.points[0].date-label; color: UiTokens.text-primary; font-size: 12px; overflow: elide; }
+                }
+                MetricValue {
+                    label: @tr("Tokens");
+                    value: root.points[0].tokens-label;
+                    availability: root.points[0].tokens-availability;
+                    horizontal-stretch: 1;
+                }
+                MetricValue {
+                    label: @tr("Cost");
+                    value: root.points[0].cost-label;
+                    availability: root.points[0].cost-availability;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
+        if root.points.length > 1: Rectangle {
             min-height: 112px;
             background: UiTokens.surface-subtle;
             border-radius: UiTokens.radius;
             accessible-role: image;
             accessible-label: @tr("Daily token trend");
+            Rectangle { x: UiTokens.space-sm; y: parent.height * 0.25; width: parent.width - 2 * UiTokens.space-sm; height: 1px; background: UiTokens.border; }
+            Rectangle { x: UiTokens.space-sm; y: parent.height * 0.5; width: parent.width - 2 * UiTokens.space-sm; height: 1px; background: UiTokens.border; }
+            Rectangle { x: UiTokens.space-sm; y: parent.height * 0.75; width: parent.width - 2 * UiTokens.space-sm; height: 1px; background: UiTokens.border; }
+            Text { x: UiTokens.space-sm; y: 3px; text: root.token-axis; color: UiTokens.text-secondary; font-size: 9px; }
+            Text { x: parent.width - self.width - UiTokens.space-sm; y: 3px; text: root.cost-axis; color: UiTokens.text-secondary; font-size: 9px; }
+            Path {
+                x: UiTokens.space-sm;
+                y: 10px;
+                width: parent.width - 2 * UiTokens.space-sm;
+                height: parent.height - 22px;
+                commands: root.token-geometry;
+                viewbox-width: 1000;
+                viewbox-height: 100;
+                fit: fill;
+                clip: true;
+                stroke: UiTokens.accent;
+                stroke-width: 2px;
+                stroke-line-cap: round;
+                stroke-line-join: round;
+            }
+            Path {
+                x: UiTokens.space-sm;
+                y: 10px;
+                width: parent.width - 2 * UiTokens.space-sm;
+                height: parent.height - 22px;
+                commands: root.cost-geometry;
+                viewbox-width: 1000;
+                viewbox-height: 100;
+                fit: fill;
+                clip: true;
+                stroke: UiTokens.accent-secondary;
+                stroke-width: 2px;
+                stroke-line-cap: round;
+                stroke-line-join: round;
+            }
             HorizontalLayout {
-                padding-left: UiTokens.space-sm;
-                padding-right: UiTokens.space-sm;
-                padding-top: UiTokens.space-sm;
-                spacing: 1px;
-                for point in root.points: Rectangle {
-                    min-width: 1px;
+                x: UiTokens.space-sm;
+                y: 10px;
+                width: parent.width - 2 * UiTokens.space-sm;
+                height: parent.height - 10px;
+                spacing: 0px;
+                for point[i] in root.points: Rectangle {
                     horizontal-stretch: 1;
                     background: transparent;
-                    Rectangle {
-                        y: parent.height - self.height;
-                        width: parent.width;
-                        height: max(1px, point.tokens-ratio * parent.height);
-                        background: UiTokens.accent;
-                        border-radius: 1px;
+                    if mod(i, 3) == 0 || i == root.points.length - 1: Rectangle {
+                        x: parent.width / 2 - 3px;
+                        y: 0px + (1.0 - point.tokens-ratio) * (parent.height - 26px);
+                        width: 6px;
+                        height: 6px;
+                        border-radius: 3px;
+                        background: UiTokens.surface-subtle;
+                        border-color: UiTokens.accent;
+                        border-width: 2px;
+                    }
+                    if mod(i, 3) == 0 || i == root.points.length - 1: Rectangle {
+                        x: parent.width / 2 - 2px;
+                        y: 1px + (1.0 - point.cost-ratio) * (parent.height - 26px);
+                        width: 4px;
+                        height: 4px;
+                        border-radius: 2px;
+                        background: UiTokens.accent-secondary;
+                    }
+                    point-touch := TouchArea { }
+                    if point-touch.has-hover: Rectangle {
+                        z: 20;
+                        x: i > root.points.length / 2 ? -154px : 8px;
+                        y: 4px;
+                        width: 154px;
+                        height: 48px;
+                        background: UiTokens.surface-raised;
+                        border-color: UiTokens.border;
+                        border-width: 1px;
+                        border-radius: UiTokens.radius-sm;
+                        VerticalLayout {
+                            padding: UiTokens.space-xs;
+                            spacing: 1px;
+                            Text { text: point.date-label; color: UiTokens.text-primary; font-size: 10px; overflow: elide; }
+                            Text { text: point.tokens-label + " · " + point.cost-label; color: UiTokens.text-secondary; font-size: 10px; overflow: elide; }
+                        }
+                    }
+                    if i == 0 || i == root.points.length / 2 || i == root.points.length - 1: Text {
+                        y: parent.height - 15px;
+                        x: parent.width / 2 - self.width / 2;
+                        text: point.axis-label;
+                        color: UiTokens.text-secondary;
+                        font-size: 8px;
                     }
                 }
             }
@@ -261,9 +382,10 @@ component SessionsCard inherits Rectangle {
             HorizontalLayout {
                 padding-left: UiTokens.space-sm;
                 padding-right: UiTokens.space-sm;
+                spacing: UiTokens.space-sm;
                 Text { text: row.time-label; color: UiTokens.text-secondary; font-size: 11px; horizontal-stretch: 1; overflow: elide; }
-                Text { text: row.tokens-label; color: UiTokens.text-primary; font-size: 11px; }
-                Text { text: row.cost-label; color: UiTokens.text-secondary; font-size: 11px; }
+                Text { width: 72px; text: row.tokens-label; color: UiTokens.text-primary; font-size: 11px; horizontal-alignment: right; overflow: elide; }
+                Text { width: 82px; text: row.cost-label; color: UiTokens.text-secondary; font-size: 11px; horizontal-alignment: right; overflow: elide; }
             }
         }
     }
@@ -360,6 +482,10 @@ component DashboardBoardSlot inherits Rectangle {
     in property <[DashboardQuotaRow]> quotas;
     in property <[DashboardBenefitRow]> benefits;
     in property <[DashboardTrendPoint]> trend;
+    in property <string> trend-token-geometry;
+    in property <string> trend-cost-geometry;
+    in property <string> trend-token-axis;
+    in property <string> trend-cost-axis;
     in property <[DashboardSessionRow]> sessions;
     in property <[DashboardActivityRow]> activity;
     in property <[DashboardModelRow]> models;
@@ -369,7 +495,8 @@ component DashboardBoardSlot inherits Rectangle {
     in property <string> code-net;
     in property <string> code-efficiency;
     in property <string> code-evidence;
-    min-height: slot.collapsed ? 74px : (slot.key == "plan_usage" ? 190px : (slot.key == "code_output" || slot.key == "trend" ? 186px : (slot.key == "sessions" || slot.key == "activity" ? 210px : 170px)));
+    out property <DashboardSectionRow> active-section: slot.key == "plan_usage" ? root.sections[0] : (slot.key == "code_output" ? root.sections[1] : (slot.key == "trend" ? root.sections[2] : (slot.key == "sessions" ? root.sections[3] : (slot.key == "activity" ? root.sections[4] : root.sections[5]))));
+    min-height: slot.collapsed ? 74px : (!root.active-section.has-data && (slot.key == "plan_usage" || slot.key == "code_output") ? 96px : (slot.key == "plan_usage" ? 190px : (slot.key == "code_output" || slot.key == "trend" ? 186px : (slot.key == "sessions" || slot.key == "activity" ? 210px : 170px))));
 
     if slot.collapsed: CollapsedSectionCard {
         width: parent.width;
@@ -380,7 +507,16 @@ component DashboardBoardSlot inherits Rectangle {
     }
     if !slot.collapsed && slot.key == "plan_usage": PlanUsageCard { width: parent.width; height: parent.height; section: root.sections[0]; quotas: root.quotas; benefits: root.benefits; }
     if !slot.collapsed && slot.key == "code_output": CodeOutputCard { width: parent.width; height: parent.height; section: root.sections[1]; commits: root.code-commits; added: root.code-added; removed: root.code-removed; net: root.code-net; efficiency: root.code-efficiency; evidence: root.code-evidence; }
-    if !slot.collapsed && slot.key == "trend": TrendCard { width: parent.width; height: parent.height; section: root.sections[2]; points: root.trend; }
+    if !slot.collapsed && slot.key == "trend": TrendCard {
+        width: parent.width;
+        height: parent.height;
+        section: root.sections[2];
+        points: root.trend;
+        token-geometry: root.trend-token-geometry;
+        cost-geometry: root.trend-cost-geometry;
+        token-axis: root.trend-token-axis;
+        cost-axis: root.trend-cost-axis;
+    }
     if !slot.collapsed && slot.key == "sessions": SessionsCard { width: parent.width; height: parent.height; section: root.sections[3]; rows: root.sessions; }
     if !slot.collapsed && slot.key == "activity": ActivityCard { width: parent.width; height: parent.height; section: root.sections[4]; rows: root.activity; }
     if !slot.collapsed && slot.key == "models": ModelsCard { width: parent.width; height: parent.height; section: root.sections[5]; rows: root.models; }
@@ -393,6 +529,10 @@ export component DashboardView inherits Rectangle {
     in property <[DashboardQuotaRow]> quotas;
     in property <[DashboardBenefitRow]> benefits;
     in property <[DashboardTrendPoint]> trend;
+    in property <string> trend-token-geometry;
+    in property <string> trend-cost-geometry;
+    in property <string> trend-token-axis;
+    in property <string> trend-cost-axis;
     in property <[DashboardSessionRow]> sessions;
     in property <[DashboardActivityRow]> activity;
     in property <[DashboardModelRow]> models;
@@ -401,6 +541,9 @@ export component DashboardView inherits Rectangle {
     in property <string> header-events;
     in property <string> header-evidence;
     in property <bool> initial-import-in-progress;
+    in property <bool> import-progress-known;
+    in property <string> import-progress-label;
+    in property <float> import-progress-ratio;
     in property <bool> startup-import-in-progress;
     in property <int> initial-import-stage;
     in property <bool> reduced-motion;
@@ -431,9 +574,12 @@ export component DashboardView inherits Rectangle {
             if root.initial-import-visible: InitialImportCard {
                 phase-label: root.initial-import-phase-label;
                 reduced-motion: root.reduced-motion;
+                progress-known: root.import-progress-known;
+                progress-label: root.import-progress-label;
+                progress-ratio: root.import-progress-ratio;
             }
             DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
-            for slot in root.slots: DashboardBoardSlot { slot: slot; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
+            for slot in root.slots: DashboardBoardSlot { slot: slot; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
         }
         if !root.narrow && root.layout-id == 0: VerticalLayout {
             width: parent.width;
@@ -442,20 +588,23 @@ export component DashboardView inherits Rectangle {
             if root.initial-import-visible: InitialImportCard {
                 phase-label: root.initial-import-phase-label;
                 reduced-motion: root.reduced-motion;
+                progress-known: root.import-progress-known;
+                progress-label: root.import-progress-label;
+                progress-ratio: root.import-progress-ratio;
             }
             DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
-            if root.slots.length > 0: DashboardBoardSlot { slot: root.slots[0]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
+            if root.slots.length > 0: DashboardBoardSlot { slot: root.slots[0]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
             if root.slots.length > 1: HorizontalLayout {
                 spacing: UiTokens.space;
-                DashboardBoardSlot { slot: root.slots[1]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
-                if root.slots.length > 2: DashboardBoardSlot { slot: root.slots[2]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
+                DashboardBoardSlot { slot: root.slots[1]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
+                if root.slots.length > 2: DashboardBoardSlot { slot: root.slots[2]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
             }
             if root.slots.length > 3: HorizontalLayout {
                 spacing: UiTokens.space;
-                DashboardBoardSlot { slot: root.slots[3]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
-                if root.slots.length > 4: DashboardBoardSlot { slot: root.slots[4]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
+                DashboardBoardSlot { slot: root.slots[3]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
+                if root.slots.length > 4: DashboardBoardSlot { slot: root.slots[4]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
             }
-            if root.slots.length > 5: DashboardBoardSlot { slot: root.slots[5]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
+            if root.slots.length > 5: DashboardBoardSlot { slot: root.slots[5]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
         }
         if !root.narrow && root.layout-id == 1: VerticalLayout {
             width: parent.width;
@@ -464,19 +613,22 @@ export component DashboardView inherits Rectangle {
             if root.initial-import-visible: InitialImportCard {
                 phase-label: root.initial-import-phase-label;
                 reduced-motion: root.reduced-motion;
+                progress-known: root.import-progress-known;
+                progress-label: root.import-progress-label;
+                progress-ratio: root.import-progress-ratio;
             }
             DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
             if root.slots.length > 0: HorizontalLayout {
                 spacing: UiTokens.space;
-                DashboardBoardSlot { slot: root.slots[0]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
-                if root.slots.length > 1: DashboardBoardSlot { slot: root.slots[1]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
+                DashboardBoardSlot { slot: root.slots[0]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
+                if root.slots.length > 1: DashboardBoardSlot { slot: root.slots[1]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
             }
-            if root.slots.length > 2: DashboardBoardSlot { slot: root.slots[2]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
+            if root.slots.length > 2: DashboardBoardSlot { slot: root.slots[2]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
             if root.slots.length > 3: HorizontalLayout {
                 spacing: UiTokens.space;
-                DashboardBoardSlot { slot: root.slots[3]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
-                if root.slots.length > 4: DashboardBoardSlot { slot: root.slots[4]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
-                if root.slots.length > 5: DashboardBoardSlot { slot: root.slots[5]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
+                DashboardBoardSlot { slot: root.slots[3]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
+                if root.slots.length > 4: DashboardBoardSlot { slot: root.slots[4]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
+                if root.slots.length > 5: DashboardBoardSlot { slot: root.slots[5]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
             }
         }
         if !root.narrow && root.layout-id == 2: VerticalLayout {
@@ -486,20 +638,23 @@ export component DashboardView inherits Rectangle {
             if root.initial-import-visible: InitialImportCard {
                 phase-label: root.initial-import-phase-label;
                 reduced-motion: root.reduced-motion;
+                progress-known: root.import-progress-known;
+                progress-label: root.import-progress-label;
+                progress-ratio: root.import-progress-ratio;
             }
             DashboardHeaderCard { tokens: root.header-tokens; cost: root.header-cost; events: root.header-events; evidence: root.header-evidence; }
-            if root.slots.length > 0: DashboardBoardSlot { slot: root.slots[0]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
+            if root.slots.length > 0: DashboardBoardSlot { slot: root.slots[0]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
             if root.slots.length > 1: HorizontalLayout {
                 spacing: UiTokens.space;
-                DashboardBoardSlot { slot: root.slots[1]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
-                if root.slots.length > 2: DashboardBoardSlot { slot: root.slots[2]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
+                DashboardBoardSlot { slot: root.slots[1]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
+                if root.slots.length > 2: DashboardBoardSlot { slot: root.slots[2]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
             }
             if root.slots.length > 3: HorizontalLayout {
                 spacing: UiTokens.space;
-                DashboardBoardSlot { slot: root.slots[3]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
-                if root.slots.length > 4: DashboardBoardSlot { slot: root.slots[4]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
+                DashboardBoardSlot { slot: root.slots[3]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
+                if root.slots.length > 4: DashboardBoardSlot { slot: root.slots[4]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; horizontal-stretch: 1; }
             }
-            if root.slots.length > 5: DashboardBoardSlot { slot: root.slots[5]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
+            if root.slots.length > 5: DashboardBoardSlot { slot: root.slots[5]; sections: root.sections; quotas: root.quotas; benefits: root.benefits; trend: root.trend; trend-token-geometry: root.trend-token-geometry; trend-cost-geometry: root.trend-cost-geometry; trend-token-axis: root.trend-token-axis; trend-cost-axis: root.trend-cost-axis; sessions: root.sessions; activity: root.activity; models: root.models; code-commits: root.code-commits; code-added: root.code-added; code-removed: root.code-removed; code-net: root.code-net; code-efficiency: root.code-efficiency; code-evidence: root.code-evidence; }
         }
         }
         viewport-height: max(self.height, content.min-height);

@@ -1035,7 +1035,6 @@ impl UsageStore {
             return Err(StoreError::new(StoreErrorCode::StaleRevision));
         }
         current_append_fault(fault, CurrentAppendFault::AfterPublication)?;
-        validate_foreign_keys(&transaction)?;
         transaction.commit()?;
         Ok(CurrentReplayCommit {
             processed_count: u16::try_from(append.events.len())

@@ -705,6 +705,7 @@ pub struct DesktopDashboardProjection {
     sections: [DesktopDashboardSectionProjection; DESKTOP_DASHBOARD_SECTION_COUNT],
     header: DesktopHeaderProjection,
     initial_import_in_progress: bool,
+    import_progress: Option<(u64, u64)>,
     quota_rows: Arc<[DesktopQuotaRow]>,
     benefit_scopes: Arc<[DesktopBenefitScope]>,
     code_output: DesktopCodeOutputProjection,
@@ -730,6 +731,11 @@ impl DesktopDashboardProjection {
             .usage()
             .health()
             .is_some_and(|health| health.initial_import_in_progress());
+        let import_progress = snapshot
+            .data_status()
+            .payload()
+            .and_then(|status| status.payload().usage().import_progress())
+            .map(|progress| (progress.completed_sources(), progress.expected_sources()));
         let sections = [
             plan_state,
             code_state,
@@ -754,6 +760,7 @@ impl DesktopDashboardProjection {
             sections,
             header: analytics.header,
             initial_import_in_progress,
+            import_progress,
             quota_rows,
             benefit_scopes,
             code_output,
@@ -788,6 +795,11 @@ impl DesktopDashboardProjection {
     #[must_use]
     pub const fn initial_import_in_progress(&self) -> bool {
         self.initial_import_in_progress
+    }
+
+    #[must_use]
+    pub const fn import_progress(&self) -> Option<(u64, u64)> {
+        self.import_progress
     }
     #[must_use]
     pub const fn quota_rows(&self) -> &Arc<[DesktopQuotaRow]> {
@@ -849,6 +861,8 @@ struct MappedAnalytics {
 }
 
 fn map_analytics(snapshot: &ProductSnapshot) -> MappedAnalytics {
+    let (trend_section, trend, trend_max_tokens, trend_max_cost_micros) =
+        map_dashboard_trend(snapshot);
     let base = base_section(snapshot.analytics());
     let Some(envelope) = snapshot.analytics().payload() else {
         return MappedAnalytics {
@@ -860,12 +874,12 @@ fn map_analytics(snapshot: &ProductSnapshot) -> MappedAnalytics {
                 quality: None,
                 refresh_state: base.state,
             },
-            trend_section: base,
+            trend_section,
             activity_section: base,
             models_section: base,
-            trend_points: Arc::from(Vec::new()),
-            trend_max_tokens: None,
-            trend_max_cost_micros: None,
+            trend_points: Arc::from(trend),
+            trend_max_tokens,
+            trend_max_cost_micros,
             activity: empty_activity(),
             models: Arc::from(Vec::new()),
             models_truncated: false,
@@ -880,30 +894,6 @@ fn map_analytics(snapshot: &ProductSnapshot) -> MappedAnalytics {
         envelope.header().quality(),
         metrics.event_count() > 0,
     );
-    let trend = payload
-        .series()
-        .iter()
-        .take(MAX_DASHBOARD_TREND_POINTS)
-        .map(|point| DesktopTrendPoint {
-            start_year: point.start_date().year(),
-            start_month: point.start_date().month(),
-            start_day: point.start_date().day(),
-            end_year: point.end_date().year(),
-            end_month: point.end_date().month(),
-            end_day: point.end_date().day(),
-            tokens: map_tokens(point.metrics().total(), point.metrics().event_count()),
-            cost: map_cost(point.cost()),
-        })
-        .collect::<Vec<_>>();
-    let mut trend_section = common_state;
-    if payload.series().len() > MAX_DASHBOARD_TREND_POINTS {
-        degrade(&mut trend_section, "trend_truncated");
-    }
-    let trend_max_tokens = trend
-        .iter()
-        .filter_map(|point| point.tokens.known_sum)
-        .max();
-    let trend_max_cost_micros = trend.iter().filter_map(|point| point.cost.micros).max();
     let (models, models_truncated) = map_models(payload.breakdowns());
     let mut models_section = common_state;
     if models_truncated {
@@ -928,6 +918,56 @@ fn map_analytics(snapshot: &ProductSnapshot) -> MappedAnalytics {
         models,
         models_truncated,
     }
+}
+
+fn map_dashboard_trend(
+    snapshot: &ProductSnapshot,
+) -> (
+    DesktopDashboardSectionProjection,
+    Vec<DesktopTrendPoint>,
+    Option<u64>,
+    Option<u64>,
+) {
+    let source = if snapshot.history().payload().is_some() {
+        snapshot.history()
+    } else {
+        snapshot.analytics()
+    };
+    let mut section = base_section(source);
+    let Some(envelope) = source.payload() else {
+        return (section, Vec::new(), None, None);
+    };
+    let payload = envelope.payload();
+    add_evidence_state(
+        &mut section,
+        envelope.header().freshness(),
+        envelope.header().quality(),
+        payload.overview().event_count() > 0,
+    );
+    let trend = payload
+        .series()
+        .iter()
+        .take(MAX_DASHBOARD_TREND_POINTS)
+        .map(|point| DesktopTrendPoint {
+            start_year: point.start_date().year(),
+            start_month: point.start_date().month(),
+            start_day: point.start_date().day(),
+            end_year: point.end_date().year(),
+            end_month: point.end_date().month(),
+            end_day: point.end_date().day(),
+            tokens: map_tokens(point.metrics().total(), point.metrics().event_count()),
+            cost: map_cost(point.cost()),
+        })
+        .collect::<Vec<_>>();
+    if payload.series().len() > MAX_DASHBOARD_TREND_POINTS {
+        degrade(&mut section, "trend_truncated");
+    }
+    let trend_max_tokens = trend
+        .iter()
+        .filter_map(|point| point.tokens.known_sum)
+        .max();
+    let trend_max_cost_micros = trend.iter().filter_map(|point| point.cost.micros).max();
+    (section, trend, trend_max_tokens, trend_max_cost_micros)
 }
 
 fn map_plan_usage(

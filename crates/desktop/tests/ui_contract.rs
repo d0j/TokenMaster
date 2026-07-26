@@ -2677,8 +2677,31 @@ fn assert_compiled_dashboard_renders_real_bounded_models_and_switches_layout_in_
     );
 
     let trend = window.get_dashboard_trend_points();
-    assert_eq!(trend.row_count(), 1);
-    assert_eq!(trend.row_data(0).expect("trend").tokens_label, "140");
+    assert_eq!(trend.row_count(), 30);
+    assert_eq!(
+        trend.row_data(29).expect("latest trend").tokens_label,
+        "140"
+    );
+    assert!(!window.get_dashboard_trend_token_geometry().is_empty());
+    assert!(!window.get_dashboard_trend_cost_geometry().is_empty());
+    assert!(!window.get_dashboard_trend_token_axis().is_empty());
+    assert!(!window.get_dashboard_trend_cost_axis().is_empty());
+    window
+        .window()
+        .set_size(slint::PhysicalSize::new(1_120, 1_400));
+    let multi_day_trend = ElementQuery::from_root(window)
+        .match_accessible_role(AccessibleRole::Image)
+        .match_predicate(|element| {
+            element
+                .accessible_label()
+                .is_some_and(|label| label == "Daily token trend")
+        })
+        .find_all();
+    assert_eq!(
+        multi_day_trend.len(),
+        1,
+        "a multi-day Dashboard result must expose the bounded trend visualization"
+    );
     let sessions = window.get_dashboard_session_rows();
     assert_eq!(sessions.row_count(), 1);
     assert_eq!(sessions.row_data(0).expect("session").tokens_label, "140");

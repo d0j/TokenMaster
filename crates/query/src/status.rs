@@ -84,6 +84,24 @@ impl ProductAggregateStatus {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProductImportProgress {
+    completed_sources: u64,
+    expected_sources: u64,
+}
+
+impl ProductImportProgress {
+    #[must_use]
+    pub const fn completed_sources(self) -> u64 {
+        self.completed_sources
+    }
+
+    #[must_use]
+    pub const fn expected_sources(self) -> u64 {
+        self.expected_sources
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProductDataWarningCode {
     LegacyUnverified,
     Partial,
@@ -121,6 +139,7 @@ pub struct ProductUsageDataStatus {
     freshness: QueryFreshness,
     quality: QueryQuality,
     scope_count: usize,
+    import_progress: Option<ProductImportProgress>,
     aggregate: ProductAggregateStatus,
     warnings: Arc<[ProductDataWarningCode]>,
 }
@@ -154,6 +173,11 @@ impl ProductUsageDataStatus {
     #[must_use]
     pub const fn scope_count(&self) -> usize {
         self.scope_count
+    }
+
+    #[must_use]
+    pub const fn import_progress(&self) -> Option<ProductImportProgress> {
+        self.import_progress
     }
 
     #[must_use]
@@ -430,6 +454,12 @@ pub(crate) fn map_capture(
                 freshness,
                 quality,
                 scope_count: store_usage.scope_count(),
+                import_progress: store_usage.import_progress().map(|progress| {
+                    ProductImportProgress {
+                        completed_sources: progress.completed_sources(),
+                        expected_sources: progress.expected_sources(),
+                    }
+                }),
                 aggregate,
                 warnings: Arc::from(usage_warnings),
             },

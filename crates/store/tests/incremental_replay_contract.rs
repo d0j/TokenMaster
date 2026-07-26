@@ -226,6 +226,73 @@ fn current_tail_append_is_atomic_and_advances_both_cas_tokens() {
 }
 
 #[test]
+fn repeated_current_tail_batches_preserve_integrity_and_exact_cas() {
+    let (mut store, revision) = promoted_store();
+    let mut epoch = revision.epoch();
+    let mut generation = store.archive_publication().unwrap().generation();
+    let mut committed_offset = 100;
+    let mut prior_chunk = StoredSourceChunk::new(0, 100, [SEED + 3; 32]).unwrap();
+
+    for index in 0..32_u64 {
+        let next_offset = committed_offset + 100;
+        let next_digest = [SEED.wrapping_add(4 + index as u8); 32];
+        let batch = CurrentReplayAppendBatch::new(CurrentReplayAppendBatchParts {
+            revision_id: revision.id(),
+            expected_epoch: epoch,
+            expected_archive_generation: generation,
+            append_batch: append(
+                committed_offset,
+                next_offset,
+                vec![event(&format!("tail-{index}"), committed_offset + 10)],
+                Some(prior_chunk),
+                next_digest,
+                StoredVerification::Incremental,
+            ),
+            relations: Box::default(),
+        })
+        .unwrap();
+        let committed = store.apply_current_replay_append_batch(&batch).unwrap();
+        epoch = committed.epoch();
+        generation = committed.archive_generation();
+        committed_offset = next_offset;
+        prior_chunk =
+            StoredSourceChunk::new(0, u32::try_from(next_offset).unwrap(), next_digest).unwrap();
+    }
+
+    assert_eq!(store.event_page_before(None, 256).unwrap().len(), 33);
+    assert_eq!(
+        store
+            .archive_publication()
+            .unwrap()
+            .dataset_generation()
+            .get(),
+        33
+    );
+    let stale = CurrentReplayAppendBatch::new(CurrentReplayAppendBatchParts {
+        revision_id: revision.id(),
+        expected_epoch: revision.epoch(),
+        expected_archive_generation: ArchiveGeneration::new(1).unwrap(),
+        append_batch: append(
+            100,
+            200,
+            vec![event("stale", 110)],
+            Some(StoredSourceChunk::new(0, 100, [SEED + 3; 32]).unwrap()),
+            [SEED + 4; 32],
+            StoredVerification::Incremental,
+        ),
+        relations: Box::default(),
+    })
+    .unwrap();
+    assert!(matches!(
+        store
+            .apply_current_replay_append_batch(&stale)
+            .expect_err("stale batch must remain rejected")
+            .code(),
+        StoreErrorCode::StaleRevision | StoreErrorCode::StaleCheckpoint
+    ));
+}
+
+#[test]
 fn canonical_only_append_is_disabled_after_replay_promotion() {
     let (mut store, _) = promoted_store();
     let legacy_append = append(

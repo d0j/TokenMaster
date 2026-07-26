@@ -2752,6 +2752,30 @@ fn apply_dashboard_projection(window: &MainWindow, dashboard: &DesktopDashboardP
         format_dashboard_evidence(window, header.freshness(), header.quality()).into(),
     );
     window.set_dashboard_initial_import_in_progress(dashboard.initial_import_in_progress());
+    let import_progress = dashboard.import_progress();
+    window.set_dashboard_import_progress_known(import_progress.is_some());
+    window.set_dashboard_import_progress_label(
+        import_progress
+            .map(|(completed, expected)| {
+                format!(
+                    "{} / {}",
+                    format_integer(completed),
+                    format_integer(expected)
+                )
+            })
+            .unwrap_or_default()
+            .into(),
+    );
+    window.set_dashboard_import_progress_ratio(import_progress.map_or(
+        0.0,
+        |(completed, expected)| {
+            if expected == 0 {
+                0.0
+            } else {
+                (completed as f64 / expected as f64).clamp(0.0, 1.0) as f32
+            }
+        },
+    ));
 
     let quota_rows = dashboard
         .quota_rows()
@@ -3945,6 +3969,7 @@ fn apply_trend(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
                 date_label: format!(
                     "{start_year:04}-{start_month:02}-{start_day:02}–{end_year:04}-{end_month:02}-{end_day:02}"
                 ).into(),
+                axis_label: format!("{start_month:02}-{start_day:02}").into(),
                 tokens_availability: availability_code(point.tokens().availability()).into(),
                 tokens_label: format_tokens(point.tokens()).into(),
                 tokens_ratio: ratio(point.tokens().known_sum(), max_tokens),
@@ -3954,7 +3979,74 @@ fn apply_trend(window: &MainWindow, dashboard: &DesktopDashboardProjection) {
             }
         })
         .collect::<Vec<_>>();
+    window.set_dashboard_trend_token_geometry(dashboard_trend_path(&rows, true).into());
+    window.set_dashboard_trend_cost_geometry(dashboard_trend_path(&rows, false).into());
+    window.set_dashboard_trend_token_axis(
+        dashboard_trend_axis(&rows, true).unwrap_or_default().into(),
+    );
+    window.set_dashboard_trend_cost_axis(
+        dashboard_trend_axis(&rows, false)
+            .unwrap_or_default()
+            .into(),
+    );
     window.set_dashboard_trend_points(model(rows));
+}
+
+fn dashboard_trend_path(rows: &[DashboardTrendPoint], tokens: bool) -> String {
+    if rows.len() < 2 {
+        return String::new();
+    }
+    let mut path = String::with_capacity(rows.len().saturating_mul(20));
+    let denominator = (rows.len() - 1) as f64;
+    let mut segment_started = false;
+    for (index, row) in rows.iter().enumerate() {
+        let (availability, ratio) = if tokens {
+            (&row.tokens_availability, row.tokens_ratio)
+        } else {
+            (&row.cost_availability, row.cost_ratio)
+        };
+        if availability.as_str() == "unavailable" {
+            segment_started = false;
+            continue;
+        }
+        let x = 28.0 + (index as f64 / denominator) * 944.0;
+        let y = 10.0 + (1.0 - f64::from(ratio.clamp(0.0, 1.0))) * 70.0;
+        let command = if segment_started { 'L' } else { 'M' };
+        path.push_str(&format!("{command} {x:.2} {y:.2} "));
+        segment_started = true;
+    }
+    path
+}
+
+fn dashboard_trend_axis(rows: &[DashboardTrendPoint], tokens: bool) -> Option<String> {
+    rows.iter()
+        .filter(|row| {
+            if tokens {
+                row.tokens_availability.as_str() != "unavailable"
+            } else {
+                row.cost_availability.as_str() != "unavailable"
+            }
+        })
+        .max_by(|left, right| {
+            let left = if tokens {
+                left.tokens_ratio
+            } else {
+                left.cost_ratio
+            };
+            let right = if tokens {
+                right.tokens_ratio
+            } else {
+                right.cost_ratio
+            };
+            left.total_cmp(&right)
+        })
+        .map(|row| {
+            if tokens {
+                row.tokens_label.to_string()
+            } else {
+                row.cost_label.to_string()
+            }
+        })
 }
 
 fn apply_sessions(window: &MainWindow, dashboard: &DesktopDashboardProjection) {

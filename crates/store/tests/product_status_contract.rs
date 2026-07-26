@@ -28,6 +28,7 @@ fn fresh_archive_status_is_exact_empty_and_independently_zero_revisioned() {
     assert_eq!(usage.quality(), ArchivePublicationQuality::Empty);
     assert_eq!(usage.scope_count(), 0);
     assert!(!usage.replay_staging());
+    assert_eq!(usage.import_progress(), None);
     assert_eq!(usage.aggregate().state(), ProductAggregateState::Ready);
     assert_eq!(usage.aggregate().expected_dataset_generation(), 0);
     assert_eq!(usage.aggregate().active_generation(), 0);

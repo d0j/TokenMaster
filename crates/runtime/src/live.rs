@@ -639,6 +639,11 @@ impl LiveExecution {
         permit: &RefreshPermit,
         guard: Box<dyn WriterLeaseGuard>,
     ) -> LiveRefreshSnapshot {
+        let starting_generation = self
+            .archive
+            .current_cursor()
+            .ok()
+            .map(|cursor| cursor.archive_generation.get());
         let mut lease = PreAcquiredLease { guard: Some(guard) };
         let result = OneShotExecutor::new().run(
             permit,
@@ -647,11 +652,35 @@ impl LiveExecution {
             self.adapter.as_mut(),
             &mut self.archive,
         );
+        let current_generation = self
+            .archive
+            .current_cursor()
+            .ok()
+            .map(|cursor| cursor.archive_generation.get());
+        let publication_is_partial = self
+            .archive
+            .store()
+            .archive_publication()
+            .is_ok_and(|publication| publication.quality() == ArchivePublicationQuality::Partial);
+        if publication_is_partial
+            && durable_generation_advanced(starting_generation, current_generation)
+        {
+            self.schedule_recovery();
+        }
         LiveRefreshSnapshot::result(
             LiveRefreshKind::FullRebuild,
             result.outcome(),
             result.error(),
         )
+    }
+
+    fn schedule_recovery(&self) {
+        let Ok(schedule) = self.continuation_schedule.lock() else {
+            return;
+        };
+        let _ = schedule
+            .as_ref()
+            .is_some_and(|hints| hints.force_reconcile(RefreshUrgency::Recovery));
     }
 
     fn sync_watcher(&mut self, urgency: RefreshUrgency) {
@@ -675,6 +704,14 @@ impl LiveExecution {
         };
         self.watch_set_complete = root_count == roots.len();
         self.last_watch_roots = roots.to_vec();
+    }
+}
+
+fn durable_generation_advanced(starting: Option<u64>, current: Option<u64>) -> bool {
+    match (starting, current) {
+        (None, Some(_)) => true,
+        (Some(starting), Some(current)) => current > starting,
+        (None, None) | (Some(_), None) => false,
     }
 }
 
@@ -795,6 +832,16 @@ fn runtime_scheduler_error(error: SchedulerError) -> RuntimeError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recovery_requires_a_durable_full_rebuild_generation_advance() {
+        assert!(durable_generation_advanced(None, Some(1)));
+        assert!(durable_generation_advanced(Some(7), Some(8)));
+        assert!(!durable_generation_advanced(None, None));
+        assert!(!durable_generation_advanced(Some(7), None));
+        assert!(!durable_generation_advanced(Some(7), Some(7)));
+        assert!(!durable_generation_advanced(Some(8), Some(7)));
+    }
 
     #[test]
     fn startup_exposes_required_full_rebuild_until_the_archive_is_complete() {

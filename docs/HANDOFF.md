@@ -1,5 +1,42 @@
 # TokenMaster handoff
 
+## WMT-quality Dashboard and progressing cold import (2026-07-26)
+
+Product state: changed. Cold import shows an exact privacy-safe
+`completed / expected` source count while retaining safe partial metrics. Dashboard
+Trend consumes the already requested bounded recent daily history and presents token
+and cost lines, axes, sparse markers, short dates, and hover detail. Empty cards are
+compact, Sessions values are separated, and one right-side scroll surface reaches all
+lower cards. Current replay batches retain mandatory SQLite foreign-key enforcement
+without repeating a whole-database integrity scan on every append.
+
+Correctness state: a failed initial rebuild no longer leaves a durable Partial
+publication idle until the 15-minute poll. An immediate Recovery is coalesced only
+when the current archive generation advanced; no-progress Partial input remains
+quiescent. The injected first-batch failure contract proves Failed, one immediate
+Recovery, then Complete.
+
+Audit/evidence state: focused Store, Runtime, Dashboard projection, and compiled-shell
+contracts pass. A clean release run moved from 33 to 162 of 3,998 sources by 79 seconds,
+remained responsive at 82.2 MiB working set, and held WAL near 8.3 MiB. Direct Windows
+inspection verified populated cards, the dual graph, point hover, and full Dashboard
+scroll. One final Sol review accepted the slice with no Critical/High finding. The
+required clean-root, format, strict locked workspace Clippy, and complete locked
+workspace tests/doc-tests are green under the final deterministic one-job/one-test-
+thread run. The sole UI textual-audit correction renamed geometry properties rather
+than expanding the parser; no second audit-only round occurred and
+`AUDIT_HARDENING_LOOP` is not active.
+
+Release blockers: produce the deterministic package and pinned secret-scan receipts
+for the new clean commit, then signing and authenticated disposable-host
+DPI/accessibility acceptance. The operator-deferred 24-hour soak is not required until
+requested. Do not describe this developer-clean slice as signed or stable.
+
+Git state: commit the integrated task-owned files on
+`cx/tokenmaster-product-architecture`, verify clean status, and do not record the
+resulting hash in tracked documents. No TokenMaster UI or visual-control process should
+remain.
+
 ## Current-day first-use recovery (2026-07-26)
 
 Product state: changed. Active Partial/RecoveryPending recovery is now visible in the

@@ -55,8 +55,8 @@ pub use session::{
 };
 pub use status::{
     ProductAggregateProgress, ProductAggregateState, ProductAggregateStatus, ProductBenefitStatus,
-    ProductDataStatusCapture, ProductDataStatusQuery, ProductGitStatus, ProductQuotaStatus,
-    ProductUsageStatus,
+    ProductDataStatusCapture, ProductDataStatusQuery, ProductGitStatus, ProductImportProgress,
+    ProductQuotaStatus, ProductUsageStatus,
 };
 
 pub(crate) const READ_CACHE_SIZE_KIB: u64 = 4 * 1024;

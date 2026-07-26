@@ -1,5 +1,28 @@
 # TokenMaster project history
 
+## 2026-07-26 — WMT-quality Dashboard and bounded cold-import recovery
+
+The apparently empty first-use window had three separate causes: cold replay exposed no
+numeric progress, Dashboard Trend reused a one-point Today series, and a failed first
+rebuild could leave newly durable Partial data idle until the healthy 15-minute poll.
+The completed slice exposes count-only source progress, uses the existing bounded
+recent daily history for a dual token/cost graph with hover, and schedules immediate
+Recovery only after a real archive-generation advance.
+
+The replay hot path also stopped repeating a global foreign-key scan after each current
+batch; connection-level enforcement and publication-boundary integrity checks remain.
+A clean release run advanced 33 to 162 of 3,998 sources, stayed responsive near
+82.2 MiB working set, and kept WAL near 8.3 MiB. Direct Windows inspection confirmed
+populated data, readable graph axes/dates, hover details, and scrolling to Model Usage.
+
+Focused regressions, one independent Sol review, strict workspace Clippy, and the
+complete locked workspace tests/doc-tests pass. Parallel Windows linking and an
+internally parallel Git runtime test produced two non-product interruptions; the exact
+binary passed 8/8 and the final deterministic one-job/one-test-thread workspace run was
+fully green. One required UI audit identifier rename was made without changing its
+parser; no audit-hardening loop was opened. Package/secret receipts for the new commit,
+signing, authenticated external interaction, and the deferred soak remain.
+
 ## 2026-07-26 — Current-day first-use recovery
 
 The real archive was not empty or hung: TokenMaster retained a safe stale publication
