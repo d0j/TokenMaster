@@ -1,5 +1,13 @@
 # TokenMaster project history
 
+## 2026-07-26 — UI density improved; false performance closure rejected
+
+The shell rail was reduced to recover Dashboard width and Today now uses the dominant
+cost hierarchy visible in the WMT reference. A proposed asynchronous reconstruction
+startup published a bridge but failed to publish useful Partial data within the
+30-second focused contract. Root rejected the weakened test, reverted the entire app
+experiment, and retained the original runtime authority and backup behavior.
+
 ## 2026-07-26 — WMT-quality Dashboard and bounded cold-import recovery
 
 The apparently empty first-use window had three separate causes: cold replay exposed no

@@ -1,5 +1,20 @@
 # TokenMaster current state
 
+## 2026-07-26 — WMT density correction and rejected startup shortcut
+
+Product state: changed only in presentation. The navigation rail is 184 px instead of
+250 px, and Today gives cost the dominant WMT-style hierarchy while retaining truthful
+token/event values and an explicit accessible cost label. No provider data is invented.
+
+Performance state: still open. A reconstruction-start shortcut was tested against a
+focused Partial-publication reproducer and timed out after 30.89 seconds. Its app/test
+changes were fully reverted because publishing only the bridge did not prove faster
+useful data and introduced unverified lifecycle/backup transitions.
+
+Evidence state: compiled UI contract 16/16, format and diff checks, MSVC release build,
+and one read-only Critical/High review pass. Visual acceptance remains open because the
+operator stopped Computer Use before the updated frame was captured.
+
 ## 2026-07-26 — WMT-quality Dashboard and progressing cold import
 
 Product state: changed. The Dashboard now exposes exact completed/expected source

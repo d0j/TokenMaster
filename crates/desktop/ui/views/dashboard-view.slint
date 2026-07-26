@@ -35,8 +35,8 @@ component DashboardHeaderCard inherits Rectangle {
     in property <string> events;
     in property <string> evidence;
 
-    min-height: 102px;
-    background: UiTokens.surface;
+    min-height: 142px;
+    background: UiTokens.background;
     border-color: UiTokens.border;
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
@@ -59,8 +59,21 @@ component DashboardHeaderCard inherits Rectangle {
         }
         HorizontalLayout {
             spacing: UiTokens.space-lg;
+            VerticalLayout {
+                spacing: 2px;
+                horizontal-stretch: 2;
+                accessible-role: groupbox;
+                accessible-label: @tr("Cost {0}", root.cost);
+                Text { text: @tr("Cost"); color: UiTokens.text-secondary; font-size: 11px; letter-spacing: 1.2px; }
+                Text {
+                    text: root.cost;
+                    color: root.cost == "—" ? UiTokens.text-secondary : UiTokens.text-primary;
+                    font-size: 40px;
+                    font-weight: 800;
+                    overflow: elide;
+                }
+            }
             MetricValue { label: @tr("Tokens"); value: root.tokens; availability: root.tokens == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
-            MetricValue { label: @tr("Cost"); value: root.cost; availability: root.cost == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
             MetricValue { label: @tr("Events"); value: root.events; availability: root.events == "—" ? "unavailable" : "known"; horizontal-stretch: 1; }
         }
     }

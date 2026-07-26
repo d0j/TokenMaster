@@ -1,5 +1,21 @@
 # TokenMaster handoff
 
+## WMT density correction; startup shortcut rejected (2026-07-26)
+
+Product state: the current slice narrows the shell navigation from 250 px
+to 184 px and promotes Today cost to the main 40 px metric with an accessible combined
+label. This is a bounded density/hierarchy correction, not full WMT visual parity.
+
+Audit/evidence state: desktop `ui_contract` passes 16/16, `fmt` and `git diff --check`
+pass, the MSVC release app builds, and the sole review found no Critical/High defect.
+Computer Use was stopped by the operator before a new visual receipt; no interactive
+or TokenMaster process remains.
+
+Release blockers: WMT-level shell parity and cold time-to-first-useful-data remain.
+The attempted reconstruction startup shortcut failed its real Partial-publication
+reproducer at 30.89 seconds and was completely reverted rather than weakening startup
+authority or leaving an unverified backup transition.
+
 ## WMT-quality Dashboard and progressing cold import (2026-07-26)
 
 Product state: changed. Cold import shows an exact privacy-safe
