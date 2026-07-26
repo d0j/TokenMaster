@@ -77,6 +77,62 @@ fn wait_quiescent(runtime: &LiveRuntime) {
 }
 
 #[test]
+fn active_cold_import_publishes_partial_engine_truth_before_completion() {
+    let source_root = TempDir::new().expect("source root");
+    let archive_root = TempDir::new().expect("archive root");
+    let archive_path = archive_root.path().join("usage.sqlite3");
+    let source = source_root.path().join("session.jsonl");
+    let payload = (0..1_024)
+        .map(|index| {
+            let second = index % 60;
+            let input = u64::try_from(index).expect("input index") + 1;
+            usage_line(u8::try_from(second).expect("timestamp second"), input)
+        })
+        .collect::<String>();
+    std::fs::write(&source, payload).expect("cold import source");
+
+    let mut runtime =
+        LiveRuntime::start(&archive_path, request(source_root.path())).expect("live runtime");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let snapshot = runtime.snapshot().expect("active cold import snapshot");
+        if snapshot.engine().quality() == EnginePublicationQuality::Partial {
+            assert!(
+                snapshot.worker().active_request_id().is_some(),
+                "partial truth must be observable while the cold import is active"
+            );
+            break;
+        }
+        assert!(
+            runtime
+                .try_completion()
+                .expect("cold import completion")
+                .is_none(),
+            "cold import completed before publishing partial engine truth"
+        );
+        assert!(
+            Instant::now() < deadline,
+            "cold import did not publish partial engine truth"
+        );
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    assert_eq!(
+        wait_completion(&runtime).outcome(),
+        RefreshOutcome::Completed
+    );
+    wait_quiescent(&runtime);
+    assert_eq!(
+        runtime
+            .snapshot()
+            .expect("completed cold import snapshot")
+            .engine()
+            .quality(),
+        EnginePublicationQuality::Complete
+    );
+    runtime.shutdown().expect("shutdown");
+}
+
+#[test]
 fn immutable_engine_snapshot_tracks_exact_archive_publication() {
     let source_root = TempDir::new().expect("source root");
     let archive_root = TempDir::new().expect("archive root");

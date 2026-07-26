@@ -7,6 +7,8 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 
+#[cfg(windows)]
+use rusqlite::{Connection, OpenFlags};
 use tempfile::TempDir;
 use tokenmaster_codex::{CodexRootInput, ConfiguredCodexRoot, build_discovery_request};
 use tokenmaster_engine::{
@@ -539,6 +541,134 @@ fn startup_resumes_a_current_partial_publication_across_sources_without_duplicat
 }
 
 #[cfg(windows)]
+#[test]
+#[ignore = "release-only real Codex history cold-import acceptance"]
+fn real_codex_history_cold_import_completes_and_shuts_down_cleanly() {
+    let _serial = serial();
+    let source_root = std::env::var_os("TOKENMASTER_REAL_CODEX_HOME")
+        .map(std::path::PathBuf::from)
+        .expect("TOKENMASTER_REAL_CODEX_HOME");
+    assert!(
+        source_root.is_absolute() && source_root.is_dir(),
+        "real Codex root must be an existing absolute directory"
+    );
+    let timeout_seconds = std::env::var("TOKENMASTER_REAL_IMPORT_TIMEOUT_SECONDS")
+        .ok()
+        .map(|value| value.parse::<u64>().expect("real import timeout"))
+        .unwrap_or(3_600);
+    assert!(
+        (60..=3_600).contains(&timeout_seconds),
+        "real import timeout must remain between 60 and 3600 seconds"
+    );
+
+    let archive_root = TempDir::new().expect("real import archive root");
+    let archive_path = archive_root.path().join("usage.sqlite3");
+    let baseline_private_bytes = current_private_bytes();
+    let mut peak_private_bytes = baseline_private_bytes;
+    let started = Instant::now();
+    let deadline = started + Duration::from_secs(timeout_seconds);
+    let mut completion_count = 0_u64;
+    let mut runtime = LiveRuntime::start(&archive_path, request(&source_root))
+        .expect("start real import runtime");
+
+    let (elapsed, final_events, final_archive_bytes) = loop {
+        while let Some(completion) = runtime.try_completion().expect("real import completion") {
+            completion_count = completion_count.checked_add(1).expect("completion count");
+            eprintln!(
+                "TM-REAL-IMPORT-COMPLETION|count={completion_count}|outcome={:?}",
+                completion.outcome()
+            );
+        }
+        let snapshot = runtime.snapshot().expect("real import snapshot");
+        let store = UsageStore::open_current(&archive_path).expect("open real import archive");
+        let publication = store
+            .archive_publication()
+            .expect("real import publication");
+        let event_count = store
+            .counts()
+            .expect("real import counts")
+            .canonical_events();
+        drop(store);
+        let diagnostics = real_import_diagnostics(&archive_path);
+        peak_private_bytes = peak_private_bytes.max(current_private_bytes());
+        let archive_bytes = archive_footprint_bytes(&archive_path);
+        let elapsed = started.elapsed();
+        eprintln!(
+            "TM-REAL-IMPORT-PROGRESS|elapsed_s={}|quality={:?}|events={event_count}|archive_bytes={archive_bytes}|private_bytes={peak_private_bytes}|completions={completion_count}|sources_pending={}|sources_complete={}|observations={}|sessions={}|work_classify={}|work_children={}",
+            elapsed.as_secs(),
+            publication.quality(),
+            diagnostics.0,
+            diagnostics.1,
+            diagnostics.2,
+            diagnostics.3,
+            diagnostics.4,
+            diagnostics.5,
+        );
+
+        if publication.quality() == ArchivePublicationQuality::Complete {
+            break (elapsed, event_count, archive_bytes);
+        }
+        if Instant::now() >= deadline {
+            runtime.shutdown().expect("timeout shutdown");
+            panic!(
+                "real import did not complete within {timeout_seconds} seconds: quality={:?}, events={event_count}, archive_bytes={archive_bytes}, private_bytes={peak_private_bytes}, snapshot={snapshot:?}",
+                publication.quality()
+            );
+        }
+        std::thread::sleep(Duration::from_secs(15));
+    };
+
+    assert_eq!(
+        runtime.shutdown().expect("real import shutdown"),
+        LivePhase::Stopped
+    );
+    let store = UsageStore::open_current(&archive_path).expect("reopen completed real import");
+    assert_eq!(
+        store
+            .archive_publication()
+            .expect("final real import publication")
+            .quality(),
+        ArchivePublicationQuality::Complete
+    );
+    assert_eq!(
+        store
+            .counts()
+            .expect("final real import counts")
+            .canonical_events(),
+        final_events
+    );
+    drop(store);
+    let final_private_bytes = current_private_bytes();
+    println!(
+        "TM-REAL-IMPORT-RECEIPT|elapsed_ms={}|events={final_events}|archive_bytes={final_archive_bytes}|baseline_private_bytes={baseline_private_bytes}|peak_private_bytes={peak_private_bytes}|final_private_bytes={final_private_bytes}|completions={completion_count}",
+        elapsed.as_millis()
+    );
+}
+
+#[cfg(windows)]
+fn real_import_diagnostics(path: &Path) -> (u64, u64, u64, u64, u64, u64) {
+    let connection = Connection::open_with_flags(
+        path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .expect("open real import diagnostics");
+    let scalar = |sql| {
+        let value = connection
+            .query_row(sql, [], |row| row.get::<_, i64>(0))
+            .expect("read real import diagnostic");
+        u64::try_from(value).expect("non-negative real import diagnostic")
+    };
+    (
+        scalar("SELECT count(*) FROM usage_replay_source WHERE state = 'pending'"),
+        scalar("SELECT count(*) FROM usage_replay_source WHERE state = 'complete'"),
+        scalar("SELECT count(*) FROM usage_replay_observation"),
+        scalar("SELECT count(*) FROM usage_replay_session"),
+        scalar("SELECT count(*) FROM usage_replay_work WHERE work_kind = 'classify_session'"),
+        scalar("SELECT count(*) FROM usage_replay_work WHERE work_kind = 'scan_children'"),
+    )
+}
+
+#[cfg(windows)]
 fn assert_resources_return(baseline: (u32, u32)) {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
@@ -556,6 +686,44 @@ fn assert_resources_return(baseline: (u32, u32)) {
         );
         std::thread::sleep(Duration::from_millis(10));
     }
+}
+
+#[cfg(windows)]
+fn archive_footprint_bytes(archive_path: &Path) -> u64 {
+    ["", "-wal", "-shm"]
+        .into_iter()
+        .map(|suffix| {
+            let mut path = archive_path.as_os_str().to_os_string();
+            path.push(suffix);
+            std::fs::metadata(path).map_or(0, |metadata| metadata.len())
+        })
+        .sum()
+}
+
+#[cfg(windows)]
+fn current_private_bytes() -> usize {
+    use std::mem::size_of;
+
+    use windows::Win32::System::ProcessStatus::{
+        K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS, PROCESS_MEMORY_COUNTERS_EX,
+    };
+    use windows::Win32::System::Threading::GetCurrentProcess;
+
+    let mut memory = PROCESS_MEMORY_COUNTERS_EX {
+        cb: u32::try_from(size_of::<PROCESS_MEMORY_COUNTERS_EX>()).expect("counter size"),
+        ..Default::default()
+    };
+    // SAFETY: the pointer targets a live, correctly sized counters value and the
+    // current-process pseudo-handle remains valid for the duration of the call.
+    unsafe {
+        K32GetProcessMemoryInfo(
+            GetCurrentProcess(),
+            (&raw mut memory).cast::<PROCESS_MEMORY_COUNTERS>(),
+            memory.cb,
+        )
+    }
+    .expect("process memory");
+    memory.PrivateUsage
 }
 
 #[cfg(windows)]

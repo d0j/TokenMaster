@@ -1,5 +1,25 @@
 # TokenMaster project history
 
+## 2026-07-27 — Durable Partial truth reached the runtime snapshot
+
+Real-history diagnostics showed that TokenMaster was not hung: it was durably
+processing 4,007 sources and hundreds of thousands of replay observations, but
+`LiveRuntime` published a new immutable engine snapshot only after the worker returned.
+The store was already Partial while the runtime still told the product it was Empty.
+
+The runtime now observes each durable initial replay generation and advances the
+engine snapshot during the active rebuild. A deterministic 1,024-event contract sees
+Partial before worker completion and Complete afterward. A real 60-second receipt
+exposed 21,369 canonical events, 236 completed sources, engine archive generation
+1,146, and about 27.7 MiB peak private memory.
+
+The same diagnosis rejected five non-solutions: marker prefiltering, a larger soft
+reader batch, an extra replay-session index, eliding a duplicate verification query,
+and a 32 MiB SQLite cache. None changed completed-source throughput materially; the
+larger cache only raised memory. All were reverted. Full exact cold import remains a
+bulk-ingest architecture problem and UI work stays frozen until that backend boundary
+is accepted.
+
 ## 2026-07-26 — Replay cost detached from archive size
 
 Large-history diagnosis separated parser throughput from SQLite replay cost. Two

@@ -13,11 +13,11 @@ use tokenmaster_engine::{
 use tokenmaster_platform::ExclusiveFileLeaseGuard;
 use tokenmaster_platform::PowerLifecycleEvent;
 use tokenmaster_provider::DiscoveryRequest;
-use tokenmaster_store::{ArchiveMode, ArchivePublicationQuality, ScanOutcome, UsageStore};
+use tokenmaster_store::{ArchiveMode, ArchivePublicationQuality, UsageStore};
 
 use crate::lifecycle::{LivePhase, LiveRefreshKind, LiveRefreshSnapshot, LiveRuntimeSnapshot};
 use crate::publication::{
-    ArchiveSnapshotCandidate, EnginePublicationQuality, EnginePublicationState,
+    EnginePublicationQuality, EnginePublicationState, archive_snapshot_candidate,
 };
 use crate::recovery::{StagingRecoveryOutcome, StartupRecoveryReport, recover_startup};
 use crate::{
@@ -178,6 +178,7 @@ impl LiveRuntime {
         let engine_publication = Arc::new(Mutex::new(EnginePublicationState::seed(
             initial_publication,
         )));
+        archive.observe_progress_with(Arc::clone(&engine_publication));
         let git_config = GitRuntimeConfig::new(archive_path.to_path_buf())?;
         let git_runtime = match notifier.as_ref() {
             Some(notifier) => GitRuntime::start_notified(git_config, notifier.clone())?,
@@ -713,37 +714,6 @@ fn durable_generation_advanced(starting: Option<u64>, current: Option<u64>) -> b
         (Some(starting), Some(current)) => current > starting,
         (None, None) | (Some(_), None) => false,
     }
-}
-
-fn archive_snapshot_candidate(store: &UsageStore) -> Result<ArchiveSnapshotCandidate, ()> {
-    let publication = store.archive_publication().map_err(|_| ())?;
-    let data_through_ms = match publication.latest_complete_scan_set() {
-        Some(scan_set_id) => {
-            let scan_set = store.scan_set_snapshot(scan_set_id).map_err(|_| ())?;
-            match (scan_set.outcome(), scan_set.completed_at_ms()) {
-                (Some(ScanOutcome::Complete), Some(completed_at_ms)) => Some(completed_at_ms),
-                _ => return Err(()),
-            }
-        }
-        None => None,
-    };
-    let quality = match publication.quality() {
-        ArchivePublicationQuality::Empty => EnginePublicationQuality::Empty,
-        ArchivePublicationQuality::Complete => EnginePublicationQuality::Complete,
-        ArchivePublicationQuality::Partial => EnginePublicationQuality::Partial,
-        ArchivePublicationQuality::RecoveryPending => EnginePublicationQuality::RecoveryPending,
-    };
-    Ok(ArchiveSnapshotCandidate {
-        archive_generation: publication.generation().get(),
-        archive_revision: publication
-            .current_revision()
-            .map(|revision| revision.get()),
-        scan_set_id: publication
-            .latest_complete_scan_set()
-            .map(|scan| scan.get()),
-        data_through_ms,
-        quality,
-    })
 }
 
 const fn initial_refresh_snapshot(quality: EnginePublicationQuality) -> LiveRefreshSnapshot {

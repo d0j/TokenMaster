@@ -17,6 +17,7 @@ tokenmaster-platform = { path = "../platform" }
 tokenmaster-store = { path = "../store" }
 
 [dev-dependencies]
+rusqlite.workspace = true
 tempfile.workspace = true
 tokenmaster-state = { path = "../state" }
 

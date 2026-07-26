@@ -6276,6 +6276,7 @@ name = "tokenmaster-runtime"
 version = "0.1.0"
 dependencies = [
  "notify",
+ "rusqlite",
  "serde_json",
  "tempfile",
  "tokenmaster-codex",

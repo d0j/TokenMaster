@@ -1,5 +1,40 @@
 # TokenMaster handoff
 
+## Active partial publication and cold-import boundary (2026-07-27)
+
+Product state: UI remains frozen. `LiveRuntime` now publishes each durable initial
+Partial archive generation into the immutable engine snapshot while the full rebuild
+is still active. Safe data already committed by the store is therefore observable
+instead of the runtime continuing to report `Empty` until terminal completion.
+
+Audit/evidence state: the focused publication contract proves `Partial` while the
+worker is active and `Complete` after the same import finishes. The runtime
+publication/live/incremental/recovery set passes 31 tests with two release-only tests
+ignored. On the real 4,007-source local history, a 60-second bounded run published
+21,369 canonical events, completed 236 sources, retained about 27.7 MiB peak private
+memory, and exposed engine quality `Partial` at archive generation 1,146 before clean
+shutdown. Parser prefiltering, a larger reader soft batch, a replay-session index,
+skipping one verification read, and a 32 MiB SQLite cache produced no meaningful
+end-to-end improvement and were fully reverted. The cache experiment doubled memory
+without improving the 236-source result. The tuning branch is closed; no further
+parameter hardening is allowed.
+
+Release blockers: complete cold import remains too slow because the exact replay path
+durably retains hundreds of thousands of bounded observations across thousands of
+sources. The next backend slice must design and prove a transactional bulk-ingest path
+that preserves the 256-observation API bound, FULL durability, restart checkpoints,
+lineage classification, and bounded memory. UI work remains blocked by operator
+direction until that backend slice is accepted. The aggregate workspace command
+outlived its 10-minute wrapper and lost the final combined exit receipt; focused gates
+and the separately rerun product/query resource harnesses are green, but the combined
+workspace gate must be obtained after the next product change rather than repeated now.
+
+Git state: the runtime publication slice and its closeout evidence are committed on
+`cx/tokenmaster-product-architecture`; the worktree is clean and unpushed. No current
+commit hash is recorded. No interactive UI was opened.
+`AUDIT_HARDENING_LOOP` is not active; the unsuccessful performance-tuning path was
+stopped and reverted under the 60-minute anti-loop rule.
+
 ## Large-history replay release slice (2026-07-26)
 
 Product state: UI is frozen. The import/runtime path now uses schema-v14 full-key

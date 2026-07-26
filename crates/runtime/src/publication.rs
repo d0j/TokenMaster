@@ -1,4 +1,5 @@
 use tokenmaster_engine::RefreshOutcome;
+use tokenmaster_store::{ArchivePublicationQuality, ScanOutcome, UsageStore};
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct EngineSnapshotGeneration(u64);
@@ -152,6 +153,39 @@ pub(crate) struct ArchiveSnapshotCandidate {
     pub(crate) scan_set_id: Option<u64>,
     pub(crate) data_through_ms: Option<i64>,
     pub(crate) quality: EnginePublicationQuality,
+}
+
+pub(crate) fn archive_snapshot_candidate(
+    store: &UsageStore,
+) -> Result<ArchiveSnapshotCandidate, ()> {
+    let publication = store.archive_publication().map_err(|_| ())?;
+    let data_through_ms = match publication.latest_complete_scan_set() {
+        Some(scan_set_id) => {
+            let scan_set = store.scan_set_snapshot(scan_set_id).map_err(|_| ())?;
+            match (scan_set.outcome(), scan_set.completed_at_ms()) {
+                (Some(ScanOutcome::Complete), Some(completed_at_ms)) => Some(completed_at_ms),
+                _ => return Err(()),
+            }
+        }
+        None => None,
+    };
+    let quality = match publication.quality() {
+        ArchivePublicationQuality::Empty => EnginePublicationQuality::Empty,
+        ArchivePublicationQuality::Complete => EnginePublicationQuality::Complete,
+        ArchivePublicationQuality::Partial => EnginePublicationQuality::Partial,
+        ArchivePublicationQuality::RecoveryPending => EnginePublicationQuality::RecoveryPending,
+    };
+    Ok(ArchiveSnapshotCandidate {
+        archive_generation: publication.generation().get(),
+        archive_revision: publication
+            .current_revision()
+            .map(|revision| revision.get()),
+        scan_set_id: publication
+            .latest_complete_scan_set()
+            .map(|scan| scan.get()),
+        data_through_ms,
+        quality,
+    })
 }
 
 pub(crate) struct EnginePublicationState {

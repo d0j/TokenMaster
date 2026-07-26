@@ -14,10 +14,14 @@ separate external acceptance boundaries.
 
 ## Shortest critical path
 
-1. Start the next bounded UI correction from the verified import/package baseline.
-2. Build and verify the deterministic unsigned portable package after that UI commit.
-3. Run the pinned committed-history and closed-package secret scans.
-4. Obtain one physical Windows UI confirmation on the packaged executable.
+1. Keep UI frozen and close one bounded transactional bulk-ingest backend slice for
+   the real 4,007-source cold-import workload.
+2. Prove materially faster complete or resumable real-history progress without
+   weakening FULL durability, 256-observation batches, lineage truth, or bounded
+   memory.
+3. Run one complete workspace gate and then resume the bounded UI correction.
+4. Build and verify the deterministic unsigned portable package, run pinned secret
+   scans, and obtain one physical Windows UI confirmation.
 
 Do not start P4, provider-host, audit-parser, signing, M0, or remote receipt work before
 the preceding step is closed.
@@ -38,6 +42,13 @@ the preceding step is closed.
 - Fresh portable import is responsive and publishes current-day usage within the bounded
   local smoke window. Newest-first traversal is bounded per directory and does not change
   accounting authority.
+- Active initial replay now advances the immutable engine snapshot on each newer
+  durable Partial generation. A real 60-second run exposed 21,369 safe canonical
+  events from 236 of 4,007 completed sources at about 27.7 MiB peak private memory
+  instead of reporting false Empty state until terminal completion.
+- Complete cold import remains too slow. Five bounded parser/SQL/cache alternatives
+  produced no meaningful source-throughput gain and were reverted. Do not reopen
+  parameter tuning; the next backend work is transactional bulk ingest.
 - The startup Dashboard exposes a truthful in-app import state while retaining available
   safe data.
 - A software-rendered pixel contract proves the startup Dashboard frame is non-black and
@@ -86,7 +97,7 @@ renderer defect unless physical presentation or a real pixel buffer reproduces i
 | UI frame | software pixel buffer plus native packaged-window capture | green |
 | Core UI functions | compiled route/control contracts and packaged functional check | green |
 | Integrated correctness | focused replay/runtime/store contracts | green |
-| Workspace quality | clean-root, fmt, strict Clippy, full locked tests | green, 21m03s |
-| Git | intentional clean commit | green |
+| Workspace quality | clean-root, fmt, strict Clippy, full locked tests | focused and resource harnesses green; combined receipt open after wrapper timeout |
+| Git | intentional clean commit | green for current backend closeout |
 | Package | deterministic unsigned portable ZIP plus exact secret receipt | green |
 | Stable release | signing plus external acceptance and operator-started soak | deferred/external |

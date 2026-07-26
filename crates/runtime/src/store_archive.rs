@@ -1,3 +1,4 @@
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use tokenmaster_engine::{
@@ -17,12 +18,14 @@ use tokenmaster_store::{
 };
 
 use crate::error::store_port_error;
+use crate::publication::{EnginePublicationState, archive_snapshot_candidate};
 
 pub struct StoreArchive {
     store: UsageStore,
     last_timestamp_ms: i64,
     pending_discovered: Vec<SourceKey>,
     scan_kind: Option<ScanKind>,
+    progress_publication: Option<Arc<Mutex<EnginePublicationState>>>,
 }
 
 impl StoreArchive {
@@ -33,6 +36,26 @@ impl StoreArchive {
             last_timestamp_ms: 0,
             pending_discovered: Vec::new(),
             scan_kind: None,
+            progress_publication: None,
+        }
+    }
+
+    pub(crate) fn observe_progress_with(
+        &mut self,
+        publication: Arc<Mutex<EnginePublicationState>>,
+    ) {
+        self.progress_publication = Some(publication);
+    }
+
+    fn publish_progress(&self) {
+        let Some(publication) = self.progress_publication.as_ref() else {
+            return;
+        };
+        let Ok(candidate) = archive_snapshot_candidate(&self.store) else {
+            return;
+        };
+        if let Ok(mut publication) = publication.lock() {
+            publication.publish(candidate);
         }
     }
 
@@ -660,7 +683,9 @@ impl Archive for StoreArchive {
     ) -> Result<ArchiveReplay, PortError> {
         if let Some(cursor) = self.current_cursor_for_replay(replay)? {
             let (next, _, _) = self.append_current_batch(cursor, source, batch)?;
-            return archive_replay(store_revision_id(replay.revision_id())?, next.epoch);
+            let replay = archive_replay(store_revision_id(replay.revision_id())?, next.epoch)?;
+            self.publish_progress();
+            return Ok(replay);
         }
         let source_key = source_key(source);
         let revision = store_revision_id(replay.revision_id())?;
@@ -707,7 +732,9 @@ impl Archive for StoreArchive {
             .apply_replay_append_batch(&replay_batch)
             .map_err(|error| store_port_error(&error))?;
         let next = archive_replay(revision, next_epoch)?;
-        Ok(self.publish_initial_replay_partial(next)?.unwrap_or(next))
+        let replay = self.publish_initial_replay_partial(next)?.unwrap_or(next);
+        self.publish_progress();
+        Ok(replay)
     }
 
     fn continue_replay(&mut self, replay: ArchiveReplay) -> Result<ReplayContinuation, PortError> {

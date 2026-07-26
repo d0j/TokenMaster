@@ -1,5 +1,31 @@
 # TokenMaster current state
 
+## 2026-07-27 — Partial data is published during active cold import
+
+Product behavior changed in the runtime publication boundary; UI is unchanged and
+frozen. Every durable initial Partial generation can now advance the immutable engine
+snapshot while the worker remains active. This removes the false `Empty` runtime state
+that hid already safe store data until the full rebuild terminated.
+
+Focused runtime publication/live/incremental/recovery coverage passes 31 tests with
+two release-only tests ignored. A real 60-second run over 4,007 sources published
+21,369 canonical events from 236 completed sources, retained about 27.7 MiB peak
+private memory, and reported engine `Partial` at archive generation 1,146. The exact
+store progress remained bounded and the timeout shutdown joined cleanly.
+
+Complete cold-import throughput is still open. The run wrote 158,616 replay
+observations by 60 seconds, confirming that durable per-observation SQLite work—not
+JSON scanning, replay maintenance queue size, memory growth, or cache size—is the
+dominant cost. Five bounded alternatives showed no meaningful end-to-end benefit and
+were reverted. The next accepted backend work must be one contract-preserving
+bulk-ingest architecture slice; UI work does not resume first.
+
+Evidence state: focused and product/query Windows resource contracts are green. The
+combined workspace command exceeded its external 10-minute wrapper while a resource
+harness was still active; the orphaned Cargo process later terminated, but its final
+aggregate exit receipt was not recoverable. Do not label the full workspace gate green
+for this slice. `AUDIT_HARDENING_LOOP` is not active; speculative tuning is stopped.
+
 ## 2026-07-26 — Large-history replay blocker removed
 
 Product state: changed in the import/runtime critical path; UI is intentionally
