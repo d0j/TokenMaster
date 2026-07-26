@@ -1,4 +1,4 @@
-use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
+use rusqlite::{Connection, OptionalExtension, Transaction, TransactionBehavior, params};
 
 use crate::{StoreError, StoreErrorCode};
 
@@ -359,10 +359,10 @@ enum ScanBoundBeginFault {
 }
 
 fn complete_scan_set_source_count(
-    transaction: &Transaction<'_>,
+    connection: &Connection,
     scan_set_id: ScanSetId,
 ) -> Result<Option<u64>, StoreError> {
-    let state: Option<(String, i64, i64, i64, i64, i64, i64)> = transaction
+    let state: Option<(String, i64, i64, i64, i64, i64, i64)> = connection
         .query_row(
             "SELECT
                completion_state, expected_scope_count,
@@ -419,17 +419,17 @@ fn complete_scan_set_source_count(
     stored_count(state.4).map(Some)
 }
 
-fn scan_bound_manifest_matches(
-    transaction: &Transaction<'_>,
+pub(super) fn scan_bound_manifest_matches(
+    connection: &Connection,
     revision_id: ReplayRevisionId,
     scan_set_id: ScanSetId,
     expected_source_count: u64,
     generation_status: &str,
 ) -> Result<bool, StoreError> {
-    if complete_scan_set_source_count(transaction, scan_set_id)? != Some(expected_source_count) {
+    if complete_scan_set_source_count(connection, scan_set_id)? != Some(expected_source_count) {
         return Ok(false);
     }
-    let counts: (i64, i64, i64, i64) = transaction.query_row(
+    let counts: (i64, i64, i64, i64) = connection.query_row(
         "SELECT
            (SELECT count(*) FROM usage_replay_source WHERE revision_id = ?1),
            (SELECT count(*) FROM usage_replay_source AS replay

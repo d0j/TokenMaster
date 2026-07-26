@@ -135,9 +135,20 @@ fn completion(files_read: u64) -> Result<AdapterCompletion, PortError> {
     .map_err(PortError::from)
 }
 
+fn partial_completion() -> Result<AdapterCompletion, PortError> {
+    AdapterCompletion::new(
+        CompletionQuality::Partial,
+        AdapterCounters::default(),
+        AdapterDiagnostics::default(),
+    )
+    .map_err(PortError::from)
+}
+
 struct SyntheticFactory {
     descriptor: ProviderDescriptor,
     record: Arc<SyntheticFactoryRecord>,
+    partial_scopes: bool,
+    partial_sources: bool,
 }
 
 #[derive(Default)]
@@ -161,8 +172,22 @@ impl SyntheticFactory {
             )
             .expect("descriptor"),
             record: Arc::clone(&record),
+            partial_scopes: false,
+            partial_sources: false,
         };
         (factory, record)
+    }
+
+    fn stalled() -> Self {
+        let (mut factory, _record) = Self::new(false);
+        factory.partial_scopes = true;
+        factory
+    }
+
+    fn stalled_after_one_source() -> Self {
+        let (mut factory, _record) = Self::new(false);
+        factory.partial_sources = true;
+        factory
     }
 }
 
@@ -179,11 +204,17 @@ impl UsageProviderFactory for SyntheticFactory {
         self.record
             .received_repository_hints
             .store(repository_hints.is_some(), Ordering::SeqCst);
-        Ok(Box::new(SyntheticAdapter))
+        Ok(Box::new(SyntheticAdapter {
+            partial_scopes: self.partial_scopes,
+            partial_sources: self.partial_sources,
+        }))
     }
 }
 
-struct SyntheticAdapter;
+struct SyntheticAdapter {
+    partial_scopes: bool,
+    partial_sources: bool,
+}
 
 impl Adapter for SyntheticAdapter {
     fn visit_scopes(
@@ -192,6 +223,9 @@ impl Adapter for SyntheticAdapter {
         sink: &mut dyn ScopeSink,
     ) -> Result<AdapterCompletion, PortError> {
         control.check()?;
+        if self.partial_scopes {
+            return partial_completion();
+        }
         let _ = sink.on_scope(source().identity().scope().clone())?;
         completion(0)
     }
@@ -205,7 +239,11 @@ impl Adapter for SyntheticAdapter {
         control.check()?;
         let source = source();
         let _ = sink.on_source(source.clone(), state(&source))?;
-        completion(1)
+        if self.partial_sources {
+            partial_completion()
+        } else {
+            completion(1)
+        }
     }
 
     fn visit_replay_sources(
@@ -273,6 +311,115 @@ impl SourceBatchReader for SyntheticReader {
         control.check()?;
         batch(&self.source)
     }
+}
+
+#[test]
+fn stalled_partial_provider_quiesces_without_an_immediate_refresh_loop() {
+    let temporary = TempDir::new().expect("temporary directory");
+    let archive = temporary.path().join("stalled.sqlite3");
+    let (initial_factory, _record) = SyntheticFactory::new(false);
+    let mut initial = LiveRuntime::start_with_provider(&archive, Box::new(initial_factory))
+        .expect("start initial complete runtime");
+    initial
+        .wait_for_completion(Duration::from_secs(10))
+        .expect("initial completion wait")
+        .expect("initial partial completion");
+    initial.shutdown().expect("initial shutdown");
+    assert_eq!(
+        UsageStore::open(&archive)
+            .expect("complete store")
+            .archive_publication()
+            .expect("complete publication")
+            .quality(),
+        tokenmaster_store::ArchivePublicationQuality::Complete
+    );
+
+    let mut resumed =
+        LiveRuntime::start_with_provider(&archive, Box::new(SyntheticFactory::stalled()))
+            .expect("resume stalled runtime");
+    resumed
+        .wait_for_completion(Duration::from_secs(10))
+        .expect("resumed completion wait")
+        .expect("resumed partial completion");
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    let submitted_at_quiescence = loop {
+        let snapshot = resumed.snapshot().expect("stalled runtime snapshot");
+        if !snapshot.scheduler().dirty()
+            && !snapshot.scheduler().force_reconcile()
+            && snapshot.worker().pending_count() == 0
+            && snapshot.worker().active_request_id().is_none()
+        {
+            break snapshot.scheduler().submitted_count();
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "zero-progress partial input never became quiescent"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    std::thread::sleep(Duration::from_millis(500));
+    let snapshot = resumed.snapshot().expect("stable stalled runtime snapshot");
+    assert_eq!(
+        snapshot.scheduler().submitted_count(),
+        submitted_at_quiescence,
+        "zero-progress partial input must not immediately resubmit itself"
+    );
+    assert!(!snapshot.scheduler().dirty());
+    assert!(!snapshot.scheduler().force_reconcile());
+    assert_eq!(snapshot.worker().pending_count(), 0);
+    assert!(snapshot.worker().active_request_id().is_none());
+    resumed.shutdown().expect("resumed shutdown");
+}
+
+#[test]
+fn unchanged_source_partial_provider_quiesces_without_an_immediate_refresh_loop() {
+    let temporary = TempDir::new().expect("temporary directory");
+    let archive = temporary.path().join("unchanged-stalled.sqlite3");
+    let (initial_factory, _record) = SyntheticFactory::new(false);
+    let mut initial = LiveRuntime::start_with_provider(&archive, Box::new(initial_factory))
+        .expect("start initial complete runtime");
+    initial
+        .wait_for_completion(Duration::from_secs(10))
+        .expect("initial completion wait")
+        .expect("initial complete publication");
+    initial.shutdown().expect("initial shutdown");
+
+    let mut resumed = LiveRuntime::start_with_provider(
+        &archive,
+        Box::new(SyntheticFactory::stalled_after_one_source()),
+    )
+    .expect("resume unchanged partial runtime");
+    resumed
+        .wait_for_completion(Duration::from_secs(10))
+        .expect("resumed completion wait")
+        .expect("resumed partial completion");
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    let submitted_at_quiescence = loop {
+        let snapshot = resumed.snapshot().expect("unchanged partial snapshot");
+        if !snapshot.scheduler().dirty()
+            && !snapshot.scheduler().force_reconcile()
+            && snapshot.worker().pending_count() == 0
+            && snapshot.worker().active_request_id().is_none()
+        {
+            break snapshot.scheduler().submitted_count();
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "unchanged-source partial input never became quiescent"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    std::thread::sleep(Duration::from_millis(500));
+    assert_eq!(
+        resumed
+            .snapshot()
+            .expect("stable unchanged partial snapshot")
+            .scheduler()
+            .submitted_count(),
+        submitted_at_quiescence,
+        "unchanged-source partial input must not immediately resubmit itself"
+    );
+    resumed.shutdown().expect("resumed shutdown");
 }
 
 #[test]

@@ -369,14 +369,18 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
     assert_eq!(window.get_dashboard_activity_rows().row_count(), 8);
     assert_eq!(window.get_dashboard_model_rows().row_count(), 0);
     assert!(!window.get_dashboard_initial_import_in_progress());
-    window.set_dashboard_initial_import_in_progress(true);
+    window.set_dashboard_startup_import_in_progress(true);
+    assert!(
+        !window.get_dashboard_initial_import_in_progress(),
+        "the startup status must remain visible when the first dashboard projection is empty"
+    );
     assert_eq!(window.get_dashboard_initial_import_stage(), 0);
     let import_status = ElementQuery::from_root(window)
         .match_accessible_role(AccessibleRole::Groupbox)
         .match_predicate(|element| {
             element.accessible_label().is_some_and(|label| {
                 label
-                    == "Checking local usage history… Charts and totals will appear after the first safe import completes."
+                    == "Checking local usage history… TokenMaster keeps available safe data visible while it imports the rest."
             })
         })
         .find_all();
@@ -396,7 +400,7 @@ fn compiled_shell_renders_exact_route_model_and_switches_in_place() {
         .match_predicate(|element| {
             element.accessible_label().is_some_and(|label| {
                 label
-                    == "Importing local usage history… Charts and totals will appear after the first safe import completes."
+                    == "Importing local usage history… TokenMaster keeps available safe data visible while it imports the rest."
             })
         })
         .find_all();

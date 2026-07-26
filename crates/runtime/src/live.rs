@@ -19,7 +19,7 @@ use crate::lifecycle::{LivePhase, LiveRefreshKind, LiveRefreshSnapshot, LiveRunt
 use crate::publication::{
     ArchiveSnapshotCandidate, EnginePublicationQuality, EnginePublicationState,
 };
-use crate::recovery::{StartupRecoveryReport, recover_startup};
+use crate::recovery::{StagingRecoveryOutcome, StartupRecoveryReport, recover_startup};
 use crate::{
     BoundedFilesystemWatcher, CodexUsageProviderFactory, GitRuntime, GitRuntimeConfig,
     IncrementalRefreshOutcome, LiveProviderAdapter, RefreshHintSink, RefreshScheduler,
@@ -157,6 +157,19 @@ impl LiveRuntime {
             .map_err(|_| RuntimeError::new(RuntimeErrorCode::StoreUnavailable))?;
         let mut archive = StoreArchive::new(store);
         let startup_recovery = recover_startup(&mut archive).map_err(startup_port_error)?;
+        if startup_recovery.staging() == StagingRecoveryOutcome::Discarded
+            && archive
+                .store()
+                .archive_publication()
+                .map_err(|_| RuntimeError::new(RuntimeErrorCode::StoreUnavailable))?
+                .quality()
+                == ArchivePublicationQuality::RecoveryPending
+        {
+            let cursor = archive.current_cursor().map_err(startup_port_error)?;
+            archive
+                .restore_partial_after_abandoned_rebuild(cursor)
+                .map_err(startup_port_error)?;
+        }
         drop(startup_guard);
 
         let initial_publication = archive_snapshot_candidate(archive.store())
@@ -181,6 +194,7 @@ impl LiveRuntime {
         let execution_publication = Arc::clone(&engine_publication);
         let repository_hints =
             crate::provider::repository_hints_for(&*factory, git_runtime.ingress());
+        let continuation_schedule = Arc::new(Mutex::new(None::<RefreshHintSink>));
         let mut execution = LiveExecution {
             clock: Arc::clone(&clock),
             lease,
@@ -192,6 +206,7 @@ impl LiveRuntime {
             watch_set_complete: false,
             latest_refresh: execution_refresh,
             engine_publication: execution_publication,
+            continuation_schedule: Arc::clone(&continuation_schedule),
         };
         let worker = Arc::new(
             match notifier {
@@ -219,6 +234,9 @@ impl LiveRuntime {
                 .map_err(|_| ())
         })
         .map_err(runtime_scheduler_error)?;
+        *continuation_schedule
+            .lock()
+            .map_err(|_| RuntimeError::new(RuntimeErrorCode::Internal))? = Some(scheduler.hints());
         let watcher = BoundedFilesystemWatcher::new(scheduler.hints())
             .map_err(|_| RuntimeError::new(RuntimeErrorCode::Internal))?;
         let last_watcher_snapshot = watcher.snapshot();
@@ -505,6 +523,7 @@ struct LiveExecution {
     watch_set_complete: bool,
     latest_refresh: Arc<Mutex<LiveRefreshSnapshot>>,
     engine_publication: Arc<Mutex<EnginePublicationState>>,
+    continuation_schedule: Arc<Mutex<Option<RefreshHintSink>>>,
 }
 
 impl LiveExecution {
@@ -584,7 +603,8 @@ impl LiveExecution {
                 Ok(report) if report.outcome() == IncrementalRefreshOutcome::RebuildRequired => {
                     self.full_rebuild(permit, guard)
                 }
-                Ok(_report) => {
+                Ok(report) => {
+                    self.schedule_partial_continuation(report);
                     drop(guard);
                     LiveRefreshSnapshot::result(
                         LiveRefreshKind::Incremental,
@@ -600,6 +620,18 @@ impl LiveExecution {
         } else {
             self.full_rebuild(permit, guard)
         }
+    }
+
+    fn schedule_partial_continuation(&self, report: crate::IncrementalRefreshReport) {
+        if report.outcome() != IncrementalRefreshOutcome::Partial || !report.made_progress() {
+            return;
+        }
+        let Ok(schedule) = self.continuation_schedule.lock() else {
+            return;
+        };
+        let _ = schedule
+            .as_ref()
+            .is_some_and(|hints| hints.force_reconcile(RefreshUrgency::Recovery));
     }
 
     fn full_rebuild(
@@ -679,12 +711,12 @@ fn archive_snapshot_candidate(store: &UsageStore) -> Result<ArchiveSnapshotCandi
 
 const fn initial_refresh_snapshot(quality: EnginePublicationQuality) -> LiveRefreshSnapshot {
     match quality {
-        EnginePublicationQuality::Empty => {
+        EnginePublicationQuality::Empty
+        | EnginePublicationQuality::Partial
+        | EnginePublicationQuality::RecoveryPending => {
             LiveRefreshSnapshot::in_progress(LiveRefreshKind::FullRebuild)
         }
-        EnginePublicationQuality::Complete
-        | EnginePublicationQuality::Partial
-        | EnginePublicationQuality::RecoveryPending => LiveRefreshSnapshot::not_run(),
+        EnginePublicationQuality::Complete => LiveRefreshSnapshot::not_run(),
     }
 }
 
@@ -765,21 +797,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn initial_import_status_is_reserved_for_an_empty_archive() {
-        let importing = initial_refresh_snapshot(EnginePublicationQuality::Empty);
-        assert_eq!(importing.kind(), LiveRefreshKind::FullRebuild);
-        assert_eq!(importing.outcome(), None);
-        assert_eq!(importing.error(), None);
-
+    fn startup_exposes_required_full_rebuild_until_the_archive_is_complete() {
         for quality in [
-            EnginePublicationQuality::Complete,
+            EnginePublicationQuality::Empty,
             EnginePublicationQuality::Partial,
             EnginePublicationQuality::RecoveryPending,
         ] {
-            let existing = initial_refresh_snapshot(quality);
-            assert_eq!(existing.kind(), LiveRefreshKind::None);
-            assert_eq!(existing.outcome(), None);
-            assert_eq!(existing.error(), None);
+            let rebuilding = initial_refresh_snapshot(quality);
+            assert_eq!(rebuilding.kind(), LiveRefreshKind::FullRebuild);
+            assert_eq!(rebuilding.outcome(), None);
+            assert_eq!(rebuilding.error(), None);
         }
+
+        let complete = initial_refresh_snapshot(EnginePublicationQuality::Complete);
+        assert_eq!(complete.kind(), LiveRefreshKind::None);
+        assert_eq!(complete.outcome(), None);
+        assert_eq!(complete.error(), None);
     }
 }

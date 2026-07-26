@@ -435,13 +435,15 @@ fn live_replacement_and_truncation_rebuild_without_losing_prior_truth() {
 }
 
 #[test]
-fn startup_resumes_a_current_partial_publication_without_duplicates() {
+fn startup_resumes_a_current_partial_publication_across_sources_without_duplicates() {
     let _serial = serial();
     let source_root = TempDir::new().expect("source root");
     let archive_root = TempDir::new().expect("archive root");
     let archive_path = archive_root.path().join("usage.sqlite3");
     let source = source_root.path().join("session.jsonl");
+    let second_source = source_root.path().join("second-session.jsonl");
     std::fs::write(&source, indexed_usage_line(1)).expect("baseline source");
+    std::fs::write(&second_source, indexed_usage_line(2)).expect("second baseline source");
 
     let mut archive = StoreArchive::new(UsageStore::open(&archive_path).expect("archive"));
     let mut lease = RuntimeWriterLease::new(&archive_path).expect("writer lease");
@@ -460,6 +462,10 @@ fn startup_resumes_a_current_partial_publication_without_duplicates() {
     append(
         &source,
         &(2..302).map(indexed_usage_line).collect::<String>(),
+    );
+    append(
+        &second_source,
+        &(302..602).map(indexed_usage_line).collect::<String>(),
     );
     let expired = Arc::new(AtomicBool::new(false));
     let reads = Arc::new(AtomicUsize::new(0));
@@ -493,7 +499,7 @@ fn startup_resumes_a_current_partial_publication_without_duplicates() {
         .counts()
         .expect("partial counts")
         .canonical_events();
-    assert!(partial_events > 1 && partial_events < 301);
+    assert!(partial_events > 2 && partial_events < 602);
     drop(archive);
     drop(lease);
 
@@ -504,6 +510,15 @@ fn startup_resumes_a_current_partial_publication_without_duplicates() {
         RefreshOutcome::Completed
     );
     wait_quiescent(&runtime);
+    assert!(
+        runtime
+            .snapshot()
+            .expect("resumed scheduler snapshot")
+            .scheduler()
+            .submitted_count()
+            >= 2,
+        "partial refresh must schedule a coalesced continuation"
+    );
     assert_eq!(
         runtime
             .snapshot()
@@ -520,7 +535,7 @@ fn startup_resumes_a_current_partial_publication_without_duplicates() {
         store.archive_publication().expect("publication").quality(),
         ArchivePublicationQuality::Complete
     );
-    assert_eq!(store.counts().expect("counts").canonical_events(), 301);
+    assert_eq!(store.counts().expect("counts").canonical_events(), 602);
 }
 
 #[cfg(windows)]

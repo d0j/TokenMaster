@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 use tempfile::TempDir;
 use tokenmaster_codex::{CodexRootInput, ConfiguredCodexRoot, build_discovery_request};
@@ -131,9 +132,9 @@ fn permit() -> (RefreshCoordinator, tokenmaster_engine::RefreshPermit) {
     (coordinator, permit)
 }
 use tokenmaster_store::{
-    ArchiveMode, ScanCounters, ScanOutcome, ScanScope, ScanSetManifest, SourceKey, SourceKind,
-    SourceRegistration, SourceRegistrationParts, StoredCheckpoint, StoredCheckpointParts,
-    StoredVerification, UsageStore,
+    ArchiveMode, ArchivePublicationQuality, ScanCounters, ScanOutcome, ScanScope, ScanSetManifest,
+    SourceKey, SourceKind, SourceRegistration, SourceRegistrationParts, StoredCheckpoint,
+    StoredCheckpointParts, StoredVerification, UsageStore,
 };
 
 fn request(root: &Path) -> DiscoveryRequest {
@@ -339,7 +340,154 @@ fn startup_resumes_exact_zero_source_staging_and_discards_incomplete_staging() {
 }
 
 #[test]
-fn startup_resumes_nonempty_staging_after_exact_replay_append() {
+fn startup_preserves_staging_rebuild_before_revalidating_a_current_publication() {
+    let source_root = TempDir::new().expect("source root");
+    std::fs::write(
+        source_root.path().join("session.jsonl"),
+        "{\"timestamp\":\"2026-07-15T00:00:01Z\",\"model\":\"gpt-5\",\"usage\":{\"input_tokens\":3,\"output_tokens\":2,\"total_tokens\":5}}\n",
+    )
+    .expect("source fixture");
+    let archive_root = TempDir::new().expect("archive root");
+    let archive_path = archive_root.path().join("usage.sqlite3");
+    let mut archive = StoreArchive::new(UsageStore::open(&archive_path).expect("open store"));
+    let (_coordinator, permit) = permit();
+    let completed = OneShotExecutor::new().run(
+        &permit,
+        &FixedClock,
+        &mut OpenLease,
+        &mut CodexAdapter::new(request(source_root.path())).expect("adapter"),
+        &mut archive,
+    );
+    assert_eq!(completed.outcome(), RefreshOutcome::Completed);
+    let mut store = archive.into_store();
+    let publication = store.archive_publication().expect("publication");
+    let current = store
+        .current_replay_revision()
+        .expect("current revision query")
+        .expect("current revision");
+    store
+        .mark_current_rebuild_required(current.id(), publication.generation())
+        .expect("mark recovery pending");
+    complete_scan(&mut store, None, 20);
+    drop(store);
+
+    let mut runtime = LiveRuntime::start(&archive_path, request(source_root.path()))
+        .expect("start with a resumable staging revision");
+    assert_eq!(
+        runtime.startup_recovery().staging(),
+        StagingRecoveryOutcome::Preserved
+    );
+    runtime.shutdown().expect("shutdown");
+    let reopened = UsageStore::open(&archive_path).expect("reopen");
+    assert!(
+        reopened
+            .staging_replay_revision()
+            .expect("staging query")
+            .is_some()
+    );
+    assert_eq!(
+        reopened
+            .archive_publication()
+            .expect("publication")
+            .quality(),
+        ArchivePublicationQuality::RecoveryPending
+    );
+}
+
+#[test]
+fn startup_reuses_complete_staging_rebuild_and_promotes_it_after_an_exact_scan() {
+    let source_root = TempDir::new().expect("source root");
+    std::fs::write(
+        source_root.path().join("session.jsonl"),
+        "{\"timestamp\":\"2026-07-15T00:00:01Z\",\"model\":\"gpt-5\",\"usage\":{\"input_tokens\":3,\"output_tokens\":2,\"total_tokens\":5}}\n",
+    )
+    .expect("source fixture");
+    let archive_root = TempDir::new().expect("archive root");
+    let archive_path = archive_root.path().join("usage.sqlite3");
+    let mut archive = StoreArchive::new(UsageStore::open(&archive_path).expect("open store"));
+    let (_coordinator, initial_permit) = permit();
+    let initial = OneShotExecutor::new().run(
+        &initial_permit,
+        &FixedClock,
+        &mut OpenLease,
+        &mut CodexAdapter::new(request(source_root.path())).expect("initial adapter"),
+        &mut archive,
+    );
+    assert_eq!(initial.outcome(), RefreshOutcome::Completed);
+
+    let mut store = archive.into_store();
+    let publication = store.archive_publication().expect("publication");
+    let current = store
+        .current_replay_revision()
+        .expect("current revision query")
+        .expect("current revision");
+    store
+        .mark_current_rebuild_required(current.id(), publication.generation())
+        .expect("mark recovery pending");
+    let mut preserved = PreserveCompleteStaging {
+        inner: StoreArchive::new(store),
+        fail_continuation: true,
+    };
+    let (_coordinator, rebuild_permit) = permit();
+    let interrupted = OneShotExecutor::new().run(
+        &rebuild_permit,
+        &FixedClock,
+        &mut OpenLease,
+        &mut CodexAdapter::new(request(source_root.path())).expect("rebuild adapter"),
+        &mut preserved,
+    );
+    assert_eq!(interrupted.outcome(), RefreshOutcome::Failed);
+    assert_eq!(interrupted.cleanup(), ReplayCleanup::Failed);
+    let store = preserved.inner.into_store();
+    assert!(
+        store
+            .staging_replay_revision()
+            .expect("staging query")
+            .is_some()
+    );
+    drop(store);
+
+    let mut runtime = LiveRuntime::start(&archive_path, request(source_root.path()))
+        .expect("resume staging rebuild");
+    assert_eq!(
+        runtime.startup_recovery().staging(),
+        StagingRecoveryOutcome::Preserved
+    );
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let completion = loop {
+        if let Some(completion) = runtime.try_completion().expect("completion") {
+            break completion;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "resumed rebuild did not complete"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    };
+    assert_eq!(
+        completion.outcome(),
+        RefreshOutcome::Completed,
+        "resume snapshot: {:?}",
+        runtime.snapshot()
+    );
+    runtime.shutdown().expect("shutdown");
+
+    let store = UsageStore::open(&archive_path).expect("reopen");
+    assert!(
+        store
+            .staging_replay_revision()
+            .expect("staging query")
+            .is_none()
+    );
+    assert_eq!(
+        store.archive_publication().expect("publication").quality(),
+        ArchivePublicationQuality::Complete
+    );
+    assert_eq!(store.counts().expect("counts").canonical_events(), 1);
+}
+
+#[test]
+fn initial_replay_publishes_partial_before_a_later_recovery_failure() {
     let source_root = TempDir::new().expect("source root");
     std::fs::write(
         source_root.path().join("session.jsonl"),
@@ -366,16 +514,20 @@ fn startup_resumes_nonempty_staging_after_exact_replay_append() {
     drop(preserved);
 
     let mut runtime = LiveRuntime::start(&archive_path, request(source_root.path()))
-        .expect("resume nonempty staging");
+        .expect("open partial publication");
     assert_eq!(
         runtime.startup_recovery().staging(),
-        StagingRecoveryOutcome::Resumed
+        StagingRecoveryOutcome::None
     );
     runtime.shutdown().expect("shutdown");
     let store = UsageStore::open(&archive_path).expect("reopen resumed archive");
     assert_eq!(
         store.archive_state().expect("archive state").mode(),
         ArchiveMode::ReplayVerified
+    );
+    assert_eq!(
+        store.archive_publication().expect("publication").quality(),
+        ArchivePublicationQuality::Partial
     );
     assert_eq!(store.counts().expect("counts").canonical_events(), 1);
 }

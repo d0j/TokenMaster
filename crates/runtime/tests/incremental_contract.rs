@@ -50,6 +50,15 @@ struct InterruptAfterFirstBatch {
     reads: Arc<AtomicUsize>,
 }
 
+struct InvalidReplayAdapter {
+    inner: CodexAdapter,
+}
+
+struct ResumeRepairAdapter {
+    inner: CodexAdapter,
+    nonzero_restores: Arc<AtomicUsize>,
+}
+
 impl Adapter for InterruptAfterFirstBatch {
     fn visit_scopes(
         &mut self,
@@ -84,6 +93,69 @@ impl Adapter for InterruptAfterFirstBatch {
     }
 }
 
+impl Adapter for InvalidReplayAdapter {
+    fn visit_scopes(
+        &mut self,
+        control: &OperationControl<'_>,
+        sink: &mut dyn ScopeSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        self.inner.visit_scopes(control, sink)
+    }
+
+    fn visit_sources(
+        &mut self,
+        scope: &ScopeIdentity,
+        control: &OperationControl<'_>,
+        sink: &mut dyn SourceSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        self.inner.visit_sources(scope, control, sink)
+    }
+
+    fn visit_replay_sources(
+        &mut self,
+        _scope: &ScopeIdentity,
+        _control: &OperationControl<'_>,
+        _sink: &mut dyn ReplaySourceSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        Err(PortError::new(
+            tokenmaster_engine::PortErrorCode::InvalidData,
+        ))
+    }
+}
+
+impl Adapter for ResumeRepairAdapter {
+    fn visit_scopes(
+        &mut self,
+        control: &OperationControl<'_>,
+        sink: &mut dyn ScopeSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        self.inner.visit_scopes(control, sink)
+    }
+
+    fn visit_sources(
+        &mut self,
+        scope: &ScopeIdentity,
+        control: &OperationControl<'_>,
+        sink: &mut dyn SourceSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        self.inner.visit_sources(scope, control, sink)
+    }
+
+    fn visit_replay_sources(
+        &mut self,
+        scope: &ScopeIdentity,
+        control: &OperationControl<'_>,
+        sink: &mut dyn ReplaySourceSink,
+    ) -> Result<AdapterCompletion, PortError> {
+        let mut repairing = ResumeRepairSink {
+            inner: sink,
+            nonzero_restores: Arc::clone(&self.nonzero_restores),
+        };
+        self.inner
+            .visit_replay_sources(scope, control, &mut repairing)
+    }
+}
+
 struct InterruptingSink<'a> {
     inner: &'a mut dyn ReplaySourceSink,
     expired: Arc<AtomicBool>,
@@ -104,6 +176,27 @@ impl ReplaySourceSink for InterruptingSink<'_> {
         };
         self.inner
             .on_source(source, initial_checkpoint, &mut interrupting)
+    }
+}
+
+struct ResumeRepairSink<'a> {
+    inner: &'a mut dyn ReplaySourceSink,
+    nonzero_restores: Arc<AtomicUsize>,
+}
+
+impl ReplaySourceSink for ResumeRepairSink<'_> {
+    fn on_source(
+        &mut self,
+        source: DiscoveredSource,
+        initial_checkpoint: AdapterSourceState,
+        reader: &mut dyn SourceBatchReader,
+    ) -> Result<SinkControl, PortError> {
+        let mut repairing = ResumeRepairReader {
+            inner: reader,
+            nonzero_restores: Arc::clone(&self.nonzero_restores),
+        };
+        self.inner
+            .on_source(source, initial_checkpoint, &mut repairing)
     }
 }
 
@@ -138,6 +231,47 @@ impl SourceBatchReader for InterruptingReader<'_> {
         if self.reads.fetch_add(1, Ordering::AcqRel) != 0 {
             self.expired.store(true, Ordering::Release);
         }
+        self.inner.read_batch(checkpoint, control)
+    }
+}
+
+struct ResumeRepairReader<'a> {
+    inner: &'a mut dyn SourceBatchReader,
+    nonzero_restores: Arc<AtomicUsize>,
+}
+
+impl SourceBatchReader for ResumeRepairReader<'_> {
+    fn restore_checkpoint(
+        &mut self,
+        progress: &AdapterSourceProgress,
+        control: &OperationControl<'_>,
+    ) -> Result<AdapterCheckpoint, PortError> {
+        if progress.committed_offset() != 0
+            && self
+                .nonzero_restores
+                .fetch_add(1, Ordering::AcqRel)
+                .is_multiple_of(2)
+        {
+            return Err(PortError::new(
+                tokenmaster_engine::PortErrorCode::InvalidData,
+            ));
+        }
+        self.inner.restore_checkpoint(progress, control)
+    }
+
+    fn validate_checkpoint(
+        &mut self,
+        checkpoint: &AdapterCheckpoint,
+        control: &OperationControl<'_>,
+    ) -> Result<(), PortError> {
+        self.inner.validate_checkpoint(checkpoint, control)
+    }
+
+    fn read_batch(
+        &mut self,
+        checkpoint: &AdapterCheckpoint,
+        control: &OperationControl<'_>,
+    ) -> Result<AdapterBatch, PortError> {
         self.inner.read_batch(checkpoint, control)
     }
 }
@@ -211,9 +345,16 @@ fn bootstrap_with_adapter(adapter: &mut dyn Adapter, archive: &mut StoreArchive)
 }
 
 fn incremental(root: &Path, archive: &mut StoreArchive) -> IncrementalRefreshReport {
+    incremental_with_adapter(&mut adapter(root), archive)
+}
+
+fn incremental_with_adapter(
+    adapter: &mut dyn Adapter,
+    archive: &mut StoreArchive,
+) -> IncrementalRefreshReport {
     let (_coordinator, permit) = permit();
     let control = OperationControl::new(&permit, &FixedClock);
-    refresh_incremental(&mut adapter(root), archive, &control).expect("incremental refresh")
+    refresh_incremental(adapter, archive, &control).expect("incremental refresh")
 }
 
 fn usage_line(index: u64) -> String {
@@ -296,6 +437,41 @@ fn unchanged_refresh_reads_no_payload_and_only_advances_freshness() {
     assert_eq!(report.batches_committed(), 0);
     assert_eq!(report.diagnostics(), 0);
     assert_eq!(report.archive_generation(), before.generation().get() + 1);
+    assert_eq!(
+        archive.store().counts().expect("counts").canonical_events(),
+        1
+    );
+    assert_eq!(
+        archive
+            .store()
+            .archive_publication()
+            .expect("publication")
+            .quality(),
+        ArchivePublicationQuality::Complete
+    );
+}
+
+#[test]
+fn caught_up_source_with_invalid_resume_is_repaired_without_replaying_history() {
+    let root = TempDir::new().expect("source root");
+    let path = root.path().join("session.jsonl");
+    std::fs::write(&path, usage_line(1)).expect("write source");
+    let mut archive = StoreArchive::new(UsageStore::in_memory().expect("store"));
+    assert_bootstrapped(bootstrap(root.path(), &mut archive));
+    std::fs::write(root.path().join("empty.jsonl"), "").expect("write empty source");
+    let restores = Arc::new(AtomicUsize::new(0));
+    let mut repairing = ResumeRepairAdapter {
+        inner: adapter(root.path()),
+        nonzero_restores: Arc::clone(&restores),
+    };
+
+    let report = incremental_with_adapter(&mut repairing, &mut archive);
+
+    assert_eq!(report.outcome(), IncrementalRefreshOutcome::Complete);
+    assert_eq!(report.bytes_read(), 0);
+    assert_eq!(report.events_observed(), 0);
+    assert!(restores.load(Ordering::Acquire) >= 4);
+    assert_eq!(archive.store().counts().expect("counts").sources(), 2);
     assert_eq!(
         archive.store().counts().expect("counts").canonical_events(),
         1
@@ -706,5 +882,57 @@ fn deadline_after_first_batch_leaves_resumable_partial_state_without_duplicates(
             .expect("publication")
             .quality(),
         ArchivePublicationQuality::Complete
+    );
+}
+
+#[test]
+fn invalid_checkpoint_while_resuming_partial_requests_a_safe_rebuild() {
+    let root = TempDir::new().expect("source root");
+    let path = root.path().join("session.jsonl");
+    std::fs::write(&path, usage_line(1)).expect("write source");
+    let mut archive = StoreArchive::new(UsageStore::in_memory().expect("store"));
+    assert_bootstrapped(bootstrap(root.path(), &mut archive));
+    append(&path, &(2..302).map(usage_line).collect::<String>());
+    let expired = Arc::new(AtomicBool::new(false));
+    let reads = Arc::new(AtomicUsize::new(0));
+    let mut interrupted = InterruptAfterFirstBatch {
+        inner: adapter(root.path()),
+        expired: Arc::clone(&expired),
+        reads,
+    };
+    let (_coordinator, permit) = deadline_permit();
+    let clock = PhaseClock { expired };
+    let control = OperationControl::new(&permit, &clock);
+    let error = refresh_incremental(&mut interrupted, &mut archive, &control)
+        .expect_err("deadline leaves a partial replay");
+    assert_eq!(
+        error.code(),
+        tokenmaster_engine::PortErrorCode::DeadlineExceeded
+    );
+    assert_eq!(
+        archive
+            .store()
+            .archive_publication()
+            .expect("partial publication")
+            .quality(),
+        ArchivePublicationQuality::Partial
+    );
+
+    let mut invalid = InvalidReplayAdapter {
+        inner: adapter(root.path()),
+    };
+    let report = incremental_with_adapter(&mut invalid, &mut archive);
+
+    assert_eq!(report.outcome(), IncrementalRefreshOutcome::RebuildRequired);
+    assert_eq!(report.files_examined(), 0);
+    assert_eq!(report.bytes_read(), 0);
+    assert_eq!(report.batches_committed(), 0);
+    assert_eq!(
+        archive
+            .store()
+            .archive_publication()
+            .expect("rebuild publication")
+            .quality(),
+        ArchivePublicationQuality::RecoveryPending
     );
 }

@@ -1623,6 +1623,38 @@ fn assert_reconstruction_reconciliation_survives_restart_and_retries_without_reb
         .expect("reconciliation retry shutdown");
 }
 
+#[test]
+fn partial_reconstruction_never_clears_the_durable_reconciliation_obligation() {
+    assert!(!reconstructed_reconciliation_ready(
+        tokenmaster_runtime::EnginePublicationQuality::Partial,
+        false,
+        false,
+        false,
+        0,
+    ));
+    assert!(!reconstructed_reconciliation_ready(
+        tokenmaster_runtime::EnginePublicationQuality::Complete,
+        false,
+        false,
+        true,
+        0,
+    ));
+    assert!(!reconstructed_reconciliation_ready(
+        tokenmaster_runtime::EnginePublicationQuality::Complete,
+        false,
+        false,
+        false,
+        1,
+    ));
+    assert!(reconstructed_reconciliation_ready(
+        tokenmaster_runtime::EnginePublicationQuality::Complete,
+        false,
+        false,
+        false,
+        0,
+    ));
+}
+
 fn assert_reconstruction_safe_mode_keeps_explicit_reconciliation_retry() {
     let temporary = TempDir::new().expect("reconciliation safe-mode temporary directory");
     let environment = application_environment(&temporary);

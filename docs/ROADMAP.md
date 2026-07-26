@@ -1,5 +1,14 @@
 # TokenMaster roadmap
 
+The active release rail is `docs/RELEASE_EXIT_PLAN.md`. New P4 work remains frozen. The
+immediate milestone is a locally accepted deterministic unsigned Windows x64 portable
+0.1.0 candidate under Apache-2.0, not a stable or signed release. Current-day first-use
+recovery, integrated replay validation, the single independent review, and the final
+workspace gate are green. The shortest remaining path is a clean commit, deterministic
+package/secret validation, and physical inspection of the packaged UI. Signing and
+authenticated external acceptance remain separate, and the 24-hour soak is deferred
+until the operator explicitly starts it.
+
 The active delivery mode is release-driven: new P4 improvements are frozen. The
 production GNU release binary builds and passes one isolated portable-stage launch
 smoke, closing only the local build/launch preflight. The canonical MSVC toolchain is
@@ -9,7 +18,8 @@ implemented with a closed content manifest, generated notices/license texts, Cyc
 SBOM, clean-commit/canonical-target binding, and local extracted-package smoke. P6
 remains open for signing, supply-chain provenance/attestation, authenticated clean-room
 and interactive receipts, exact release performance comparison, and soak evidence.
-The next release-critical slice is signing/supply-chain preflight, not new P4 work.
+Signing/supply-chain preflight follows the local package/UI milestone; it is not the
+current slice.
 
 Provider-ready internal runtime seam is implemented ahead of 1.1: opaque bounded
 resume payloads, descriptor-bound reconstruction, injected usage providers, and

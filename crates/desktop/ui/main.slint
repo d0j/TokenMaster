@@ -61,6 +61,7 @@ export component MainWindow inherits Window {
     in property <string> dashboard-header-events;
     in property <string> dashboard-header-evidence;
     in property <bool> dashboard-initial-import-in-progress;
+    in property <bool> dashboard-startup-import-in-progress: false;
     in property <int> dashboard-initial-import-stage: 0;
     in property <string> dashboard-code-commits;
     in property <string> dashboard-code-added;
@@ -403,6 +404,7 @@ export component MainWindow inherits Window {
                     header-events: root.dashboard-header-events;
                     header-evidence: root.dashboard-header-evidence;
                     initial-import-in-progress: root.dashboard-initial-import-in-progress;
+                    startup-import-in-progress: root.dashboard-startup-import-in-progress;
                     initial-import-stage: root.dashboard-initial-import-stage;
                     reduced-motion: root.reduced-motion;
                     code-commits: root.dashboard-code-commits;

@@ -10,11 +10,12 @@ use tokenmaster_domain::{
     TokenUsage, UsageProfileId, UsageProviderId, UsageSessionId, UsageSourceId, UtcTimestamp,
 };
 use tokenmaster_store::{
-    AppendBatch, AppendBatchParts, ArchiveMode, GenerationStatus, MAX_APPEND_RELATIONS,
-    ReplayAppendBatch, ReplayAppendBatchParts, ReplayManifest, ReplayRelation,
-    ReplayRevisionStatus, ScanCounters, ScanOutcome, ScanScope, ScanSetId, ScanSetManifest,
-    SourceKey, SourceKind, SourceRegistration, SourceRegistrationParts, StoreErrorCode,
-    StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk, StoredVerification, UsageStore,
+    AppendBatch, AppendBatchParts, ArchiveMode, ArchivePublicationQuality,
+    CurrentReplaySourceExpectation, GenerationStatus, MAX_APPEND_RELATIONS, ReplayAppendBatch,
+    ReplayAppendBatchParts, ReplayManifest, ReplayRelation, ReplayRevisionStatus, ScanCounters,
+    ScanOutcome, ScanScope, ScanSetId, ScanSetManifest, SourceKey, SourceKind, SourceRegistration,
+    SourceRegistrationParts, StoreErrorCode, StoredCheckpoint, StoredCheckpointParts,
+    StoredSourceChunk, StoredVerification, UsageStore,
 };
 
 fn registration(seed: u8) -> SourceRegistration {
@@ -1852,6 +1853,134 @@ fn replay_append_derives_root_eligibility_and_keeps_staging_invisible() {
     assert_eq!(
         store.counts().expect("counts after stale append"),
         counts_before_stale
+    );
+}
+
+#[test]
+fn initial_replay_publishes_eligible_events_as_explicit_partial() {
+    let mut store = UsageStore::in_memory().expect("usage store");
+    store
+        .register_source(&registration(1))
+        .expect("register first source");
+    store
+        .register_source(&registration(2))
+        .expect("register second source");
+    let scan_set = finish_codex_scan(
+        &mut store,
+        &[
+            SourceKey::from_bytes([1; 32]),
+            SourceKey::from_bytes([2; 32]),
+        ],
+        ScanOutcome::Complete,
+        1_000,
+    );
+    let revision = store
+        .begin_replay_revision_for_scan_set(scan_set)
+        .expect("begin replay");
+    let appended = store
+        .apply_replay_append_batch(&replay_append(
+            1,
+            revision.id(),
+            revision.epoch(),
+            vec![replay_event(1, "root", None, 0, 0, None, false)],
+        ))
+        .expect("append eligible replay observation");
+
+    let published = store
+        .publish_initial_replay_partial(revision.id(), appended)
+        .expect("publish initial partial");
+    assert_eq!(published.status(), ReplayRevisionStatus::Current);
+    assert!(published.sealed());
+    assert!(published.promoted());
+    let publication = store.archive_publication().expect("publication");
+    assert_eq!(publication.current_revision(), Some(revision.id()));
+    assert_eq!(publication.quality(), ArchivePublicationQuality::Partial);
+    assert_eq!(
+        store.event_page_before(None, 16).expect("event page").len(),
+        1
+    );
+    assert_eq!(
+        store
+            .generation_snapshot(SourceKey::from_bytes([1; 32]))
+            .expect("first generation")
+            .expect("first current generation")
+            .status(),
+        GenerationStatus::Current
+    );
+    assert_eq!(
+        store
+            .generation_snapshot(SourceKey::from_bytes([2; 32]))
+            .expect("second generation")
+            .expect("second current generation")
+            .status(),
+        GenerationStatus::Current
+    );
+}
+
+#[test]
+fn proven_noop_end_of_file_closes_a_pending_current_source() {
+    let mut store = UsageStore::in_memory().expect("usage store");
+    store
+        .register_source(&registration(1))
+        .expect("register first source");
+    store
+        .register_source(&registration(2))
+        .expect("register second source");
+    let scan_set = finish_codex_scan(
+        &mut store,
+        &[
+            SourceKey::from_bytes([1; 32]),
+            SourceKey::from_bytes([2; 32]),
+        ],
+        ScanOutcome::Complete,
+        1_000,
+    );
+    let revision = store
+        .begin_replay_revision_for_scan_set(scan_set)
+        .expect("begin replay");
+    let appended = store
+        .apply_replay_append_batch(&replay_append(
+            1,
+            revision.id(),
+            revision.epoch(),
+            vec![replay_event(1, "root", None, 0, 0, None, false)],
+        ))
+        .expect("append eligible replay observation");
+    let published = store
+        .publish_initial_replay_partial(revision.id(), appended)
+        .expect("publish initial partial");
+    let publication = store.archive_publication().expect("partial publication");
+    let pending = store
+        .generation_snapshot(SourceKey::from_bytes([2; 32]))
+        .expect("second generation")
+        .expect("second current generation");
+
+    let settled = store
+        .complete_current_replay_source(
+            CurrentReplaySourceExpectation::new(
+                published.id(),
+                published.epoch(),
+                publication.generation(),
+                pending.source_key(),
+                pending.generation(),
+            ),
+            pending.checkpoint(),
+        )
+        .expect("settle verified no-op source");
+
+    assert_eq!(settled.processed_count(), 0);
+    assert!(!settled.remaining_work());
+    assert_eq!(settled.quality(), ArchivePublicationQuality::Complete);
+    assert_eq!(
+        store
+            .archive_publication()
+            .expect("complete publication")
+            .quality(),
+        ArchivePublicationQuality::Complete
+    );
+    assert_eq!(
+        store.event_page_before(None, 16).expect("event page").len(),
+        1
     );
 }
 

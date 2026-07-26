@@ -1,4 +1,5 @@
-use std::fs::{self, ReadDir};
+use std::cmp::Reverse;
+use std::fs::{self, DirEntry, ReadDir};
 use std::path::{Component, Path};
 use std::sync::Arc;
 use std::time::{Duration, UNIX_EPOCH};
@@ -12,6 +13,8 @@ use super::{
 };
 use crate::file_identity::{filename_session_hint, hashed_session_hint};
 use crate::path_policy::{is_reparse_point, path_byte_len, validate_local_root_namespace};
+
+const MAX_SORTED_DIRECTORY_ENTRIES: usize = 256;
 
 pub(super) enum WalkControl {
     Continue,
@@ -36,8 +39,56 @@ impl WalkIdentity {
 }
 
 struct DirectoryFrame {
-    entries: ReadDir,
+    entries: DirectoryEntries,
     depth: usize,
+}
+
+enum DirectoryEntries {
+    Sorted(std::vec::IntoIter<DirEntry>),
+    Streaming {
+        buffered: std::vec::IntoIter<DirEntry>,
+        remaining: Box<ReadDir>,
+    },
+}
+
+impl DirectoryEntries {
+    fn next(&mut self, state: &mut EnumerationState) -> Option<DirEntry> {
+        match self {
+            Self::Sorted(entries) => entries.next(),
+            Self::Streaming {
+                buffered,
+                remaining,
+            } => buffered.next().or_else(|| {
+                loop {
+                    match remaining.next()? {
+                        Ok(entry) => return Some(entry),
+                        Err(_) => state.degrade(EnumerationDiagnosticCode::UnreadableEntry),
+                    }
+                }
+            }),
+        }
+    }
+}
+
+fn ordered_directory_entries(
+    mut entries: ReadDir,
+    state: &mut EnumerationState,
+) -> DirectoryEntries {
+    let mut buffered = Vec::with_capacity(MAX_SORTED_DIRECTORY_ENTRIES.saturating_add(1));
+    while buffered.len() <= MAX_SORTED_DIRECTORY_ENTRIES {
+        match entries.next() {
+            Some(Ok(entry)) => buffered.push(entry),
+            Some(Err(_)) => state.degrade(EnumerationDiagnosticCode::UnreadableEntry),
+            None => {
+                buffered.sort_unstable_by_key(|entry| Reverse(entry.file_name()));
+                return DirectoryEntries::Sorted(buffered.into_iter());
+            }
+        }
+    }
+    DirectoryEntries::Streaming {
+        buffered: buffered.into_iter(),
+        remaining: Box::new(entries),
+    }
 }
 
 pub(super) fn validate_root(root: &Path) -> Result<(), EnumerationError> {
@@ -71,6 +122,7 @@ pub(super) fn walk_source(
     let root = source.path();
     let entries =
         fs::read_dir(root).map_err(|_| EnumerationError::new(EnumerationErrorCode::InvalidRoot))?;
+    let entries = ordered_directory_entries(entries, state);
     let mut frames = Vec::with_capacity(MAX_ENUMERATION_DEPTH.saturating_add(1));
     frames.push(DirectoryFrame { entries, depth: 0 });
     state.record(EnumerationDiagnosticCode::VisitedDirectory);
@@ -82,19 +134,12 @@ pub(super) fn walk_source(
         }
 
         let (next, depth) = match frames.last_mut() {
-            Some(frame) => (frame.entries.next(), frame.depth),
+            Some(frame) => (frame.entries.next(state), frame.depth),
             None => break,
         };
-        let Some(entry_result) = next else {
+        let Some(entry) = next else {
             frames.pop();
             continue;
-        };
-        let entry = match entry_result {
-            Ok(value) => value,
-            Err(_) => {
-                state.degrade(EnumerationDiagnosticCode::UnreadableEntry);
-                continue;
-            }
         };
         let absolute_path = entry.path();
         if path_byte_len(&absolute_path) > MAX_PATH_BYTES {
@@ -110,7 +155,7 @@ pub(super) fn walk_source(
                 match fs::read_dir(&absolute_path) {
                     Ok(entries) => {
                         frames.push(DirectoryFrame {
-                            entries,
+                            entries: ordered_directory_entries(entries, state),
                             depth: depth.saturating_add(1),
                         });
                         state.record(EnumerationDiagnosticCode::VisitedDirectory);

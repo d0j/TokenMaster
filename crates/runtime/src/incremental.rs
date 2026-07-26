@@ -1,8 +1,9 @@
 use tokenmaster_engine::{
-    Adapter, AdapterCompletion, AdapterCounters, AdapterDiagnostics, Archive, BatchState,
-    CompletionQuality, DiscoveredSource, MAX_REPLAY_CONTINUATIONS_PER_RUN, OperationControl,
-    PortError, PortErrorCode, ReplaySourceSink, ScopeIdentity, ScopeManifest, ScopeSink,
-    SinkControl, SourceBatchReader, SourceSink, canonicalize_batch,
+    Adapter, AdapterCompletion, AdapterCounters, AdapterDiagnostics, AdapterSourceProgress,
+    AdapterSourceProgressParts, Archive, BatchState, CompletionQuality, DiscoveredSource,
+    MAX_REPLAY_CONTINUATIONS_PER_RUN, OperationControl, PortError, PortErrorCode, ReplaySourceSink,
+    ScopeIdentity, ScopeManifest, ScopeSink, SinkControl, SourceBatchReader, SourceSink,
+    canonicalize_batch,
 };
 use tokenmaster_store::{ArchivePublicationQuality, MAX_SCAN_SCOPES};
 
@@ -24,6 +25,8 @@ pub struct IncrementalRefreshReport {
     events_observed: u64,
     batches_committed: u64,
     diagnostics: u64,
+    starting_current_generation: u64,
+    current_generation: u64,
     archive_generation: u64,
 }
 
@@ -62,6 +65,11 @@ impl IncrementalRefreshReport {
     pub const fn archive_generation(self) -> u64 {
         self.archive_generation
     }
+
+    #[must_use]
+    pub const fn made_progress(self) -> bool {
+        self.current_generation > self.starting_current_generation
+    }
 }
 
 #[derive(Default)]
@@ -73,17 +81,56 @@ struct RefreshCounts {
     diagnostics: u64,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::{IncrementalRefreshOutcome, IncrementalRefreshReport};
+
+    #[test]
+    fn only_durable_archive_generation_advance_counts_as_continuation_progress() {
+        let stalled = IncrementalRefreshReport {
+            outcome: IncrementalRefreshOutcome::Partial,
+            files_examined: 0,
+            bytes_read: 0,
+            events_observed: 0,
+            batches_committed: 0,
+            diagnostics: 1,
+            starting_current_generation: 7,
+            current_generation: 7,
+            archive_generation: 7,
+        };
+        assert!(!stalled.made_progress());
+        assert!(
+            !IncrementalRefreshReport {
+                files_examined: 1,
+                bytes_read: 1,
+                events_observed: 1,
+                ..stalled
+            }
+            .made_progress()
+        );
+        assert!(
+            IncrementalRefreshReport {
+                current_generation: 8,
+                ..stalled
+            }
+            .made_progress()
+        );
+    }
+}
+
 pub fn refresh_incremental(
     adapter: &mut dyn Adapter,
     archive: &mut StoreArchive,
     control: &OperationControl<'_>,
 ) -> Result<IncrementalRefreshReport, PortError> {
     control.check()?;
+    let starting_current_generation = archive.current_cursor()?.archive_generation.get();
     let mut scope_sink = ScopeCollector::default();
     let scope_completion = adapter.visit_scopes(control, &mut scope_sink)?;
     if scope_completion.quality() != CompletionQuality::Complete || scope_sink.scopes.is_empty() {
         return report(
             archive,
+            starting_current_generation,
             IncrementalRefreshOutcome::Partial,
             RefreshCounts::default(),
         );
@@ -97,16 +144,34 @@ pub fn refresh_incremental(
     let mut cursor = archive.current_cursor()?;
 
     if publication.quality() == ArchivePublicationQuality::RecoveryPending {
-        return report(archive, IncrementalRefreshOutcome::RebuildRequired, counts);
+        return report(
+            archive,
+            starting_current_generation,
+            IncrementalRefreshOutcome::RebuildRequired,
+            counts,
+        );
     }
     if publication.quality() == ArchivePublicationQuality::Partial {
         let settled = settle_current(archive, &mut cursor)?;
         if !settled {
             let outcome =
-                run_tail_passes(adapter, archive, control, &scopes, &mut cursor, &mut counts)?;
-            return report(archive, outcome, counts);
+                match run_tail_passes(adapter, archive, control, &scopes, &mut cursor, &mut counts)
+                {
+                    Ok(outcome) => outcome,
+                    Err(error) if requires_rebuild(error.code()) => {
+                        archive.mark_rebuild_required(cursor)?;
+                        IncrementalRefreshOutcome::RebuildRequired
+                    }
+                    Err(error) => return Err(error),
+                };
+            return report(archive, starting_current_generation, outcome, counts);
         }
-        return report(archive, IncrementalRefreshOutcome::Complete, counts);
+        return report(
+            archive,
+            starting_current_generation,
+            IncrementalRefreshOutcome::Complete,
+            counts,
+        );
     }
     if publication.quality() != ArchivePublicationQuality::Complete {
         return Err(PortError::new(PortErrorCode::StaleState));
@@ -138,7 +203,12 @@ pub fn refresh_incremental(
                         quality_for_error(error.code()),
                     );
                     archive.mark_rebuild_required(cursor)?;
-                    return report(archive, IncrementalRefreshOutcome::RebuildRequired, counts);
+                    return report(
+                        archive,
+                        starting_current_generation,
+                        IncrementalRefreshOutcome::RebuildRequired,
+                        counts,
+                    );
                 }
                 Err(error) => {
                     close_scan(
@@ -168,18 +238,28 @@ pub fn refresh_incremental(
     if scan_quality != CompletionQuality::Complete
         || finished_quality != CompletionQuality::Complete
     {
-        return report(archive, IncrementalRefreshOutcome::Partial, counts);
+        return report(
+            archive,
+            starting_current_generation,
+            IncrementalRefreshOutcome::Partial,
+            counts,
+        );
     }
     cursor = match archive.publish_current_scan(scan_set) {
         Ok(cursor) => cursor,
         Err(error) if error.code() == PortErrorCode::RebuildRequired => {
             archive.mark_rebuild_required(cursor)?;
-            return report(archive, IncrementalRefreshOutcome::RebuildRequired, counts);
+            return report(
+                archive,
+                starting_current_generation,
+                IncrementalRefreshOutcome::RebuildRequired,
+                counts,
+            );
         }
         Err(error) => return Err(error),
     };
     let outcome = run_tail_passes(adapter, archive, control, &scopes, &mut cursor, &mut counts)?;
-    report(archive, outcome, counts)
+    report(archive, starting_current_generation, outcome, counts)
 }
 
 fn run_tail_passes(
@@ -312,8 +392,7 @@ impl ReplaySourceSink for PreflightSink<'_> {
     ) -> Result<SinkControl, PortError> {
         validate_checkpoint_pair(reader, &initial_state, self.control)?;
         let progress = self.archive.current_progress(source.identity())?;
-        let checkpoint = reader.restore_checkpoint(&progress, self.control)?;
-        reader.validate_checkpoint(&checkpoint, self.control)?;
+        validate_current_checkpoint(reader, &initial_state, &progress, self.control)?;
         self.files_examined = checked_add(self.files_examined, 1)?;
         Ok(SinkControl::Continue)
     }
@@ -337,7 +416,35 @@ impl ReplaySourceSink for ApplySink<'_> {
         loop {
             self.control.check()?;
             let progress = self.archive.current_progress(source.identity())?;
-            let checkpoint = reader.restore_checkpoint(&progress, self.control)?;
+            let (checkpoint, fresh_start_repair) = match reader
+                .restore_checkpoint(&progress, self.control)
+            {
+                Ok(checkpoint) => (checkpoint, None),
+                Err(error) if error.code() == PortErrorCode::InvalidData => {
+                    if is_uninitialized_replay_start(&progress) {
+                        reader.validate_checkpoint(initial_state.checkpoint(), self.control)?;
+                        let repair =
+                            reset_resume_progress(reader, &initial_state, &progress, self.control)
+                                .ok();
+                        (initial_state.checkpoint().clone(), repair)
+                    } else {
+                        let repaired =
+                            reset_resume_progress(reader, &initial_state, &progress, self.control)?;
+                        let (next_cursor, remaining_work) =
+                            self.archive.repair_current_source_resume(
+                                self.cursor,
+                                source.identity(),
+                                &repaired,
+                            )?;
+                        self.cursor = next_cursor;
+                        if remaining_work {
+                            let _ = settle_current(self.archive, &mut self.cursor)?;
+                        }
+                        break;
+                    }
+                }
+                Err(error) => return Err(error),
+            };
             let batch = reader.read_batch(&checkpoint, self.control)?;
             let restored_next = reader.restore_checkpoint(batch.next_progress(), self.control)?;
             if restored_next != *batch.next_checkpoint() {
@@ -355,6 +462,20 @@ impl ReplaySourceSink for ApplySink<'_> {
                 && counters.events_observed() == 0
                 && counters.diagnostics() == 0;
             if unchanged {
+                let (next_cursor, remaining_work) = if let Some(repaired) = fresh_start_repair {
+                    self.archive.repair_current_source_resume(
+                        self.cursor,
+                        source.identity(),
+                        &repaired,
+                    )?
+                } else {
+                    self.archive
+                        .complete_current_source(self.cursor, source.identity())?
+                };
+                self.cursor = next_cursor;
+                if remaining_work {
+                    let _ = settle_current(self.archive, &mut self.cursor)?;
+                }
                 break;
             }
             self.counts.bytes_read = checked_add(self.counts.bytes_read, counters.bytes_read())?;
@@ -393,6 +514,82 @@ fn validate_checkpoint_pair(
     Ok(())
 }
 
+fn validate_current_checkpoint(
+    reader: &mut dyn SourceBatchReader,
+    initial_state: &tokenmaster_engine::AdapterSourceState,
+    progress: &AdapterSourceProgress,
+    control: &OperationControl<'_>,
+) -> Result<(), PortError> {
+    match reader.restore_checkpoint(progress, control) {
+        Ok(checkpoint) => reader.validate_checkpoint(&checkpoint, control),
+        Err(error) if error.code() == PortErrorCode::InvalidData => {
+            if is_uninitialized_replay_start(progress) {
+                return Ok(());
+            }
+            let _ = reset_resume_progress(reader, initial_state, progress, control)?;
+            Ok(())
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn is_uninitialized_replay_start(progress: &AdapterSourceProgress) -> bool {
+    progress.committed_offset() == 0
+        && progress.scan_offset() == 0
+        && progress.observed_extent() == 0
+        && progress.anchor_start() == 0
+        && progress.anchor_len() == 0
+        && progress.anchor_sha256() == &[0; 32]
+        && progress.provider_resume().is_empty()
+        && !progress.discarding_oversized_record()
+        && !progress.incomplete_tail()
+}
+
+fn reset_resume_progress(
+    reader: &mut dyn SourceBatchReader,
+    initial_state: &tokenmaster_engine::AdapterSourceState,
+    progress: &AdapterSourceProgress,
+    control: &OperationControl<'_>,
+) -> Result<AdapterSourceProgress, PortError> {
+    let initial = initial_state.progress();
+    if progress.schema_version() != initial.schema_version()
+        || progress.physical_identity() != initial.physical_identity()
+        || progress.logical_identity() != initial.logical_identity()
+        || progress.observed_extent() != initial.observed_extent()
+        || progress.modified_time_ns() != initial.modified_time_ns()
+        || !progress_is_caught_up(progress)
+    {
+        return Err(PortError::new(PortErrorCode::InvalidData));
+    }
+    let repaired = AdapterSourceProgress::new(AdapterSourceProgressParts {
+        schema_version: progress.schema_version(),
+        physical_identity: progress.physical_identity().copied(),
+        logical_identity: *progress.logical_identity(),
+        committed_offset: progress.committed_offset(),
+        scan_offset: progress.scan_offset(),
+        observed_extent: progress.observed_extent(),
+        modified_time_ns: progress.modified_time_ns(),
+        anchor_start: progress.anchor_start(),
+        anchor_len: progress.anchor_len(),
+        anchor_sha256: *progress.anchor_sha256(),
+        provider_resume: initial.provider_resume().to_vec().into_boxed_slice(),
+        discarding_oversized_record: progress.discarding_oversized_record(),
+        incomplete_tail: progress.incomplete_tail(),
+        verification: progress.verification(),
+    })
+    .map_err(PortError::from)?;
+    let checkpoint = reader.restore_checkpoint(&repaired, control)?;
+    reader.validate_checkpoint(&checkpoint, control)?;
+    Ok(repaired)
+}
+
+fn progress_is_caught_up(progress: &AdapterSourceProgress) -> bool {
+    !progress.discarding_oversized_record()
+        && !progress.incomplete_tail()
+        && progress.committed_offset() == progress.scan_offset()
+        && progress.scan_offset() == progress.observed_extent()
+}
+
 fn close_scan(
     archive: &mut StoreArchive,
     scan_set: tokenmaster_engine::ArchiveScanSetId,
@@ -425,8 +622,16 @@ fn quality_for_error(code: PortErrorCode) -> CompletionQuality {
     }
 }
 
+const fn requires_rebuild(code: PortErrorCode) -> bool {
+    matches!(
+        code,
+        PortErrorCode::InvalidData | PortErrorCode::StaleState | PortErrorCode::RebuildRequired
+    )
+}
+
 fn report(
     archive: &StoreArchive,
+    starting_current_generation: u64,
     outcome: IncrementalRefreshOutcome,
     counts: RefreshCounts,
 ) -> Result<IncrementalRefreshReport, PortError> {
@@ -436,6 +641,7 @@ fn report(
         .map_err(|_| PortError::new(PortErrorCode::Unavailable))?
         .generation()
         .get();
+    let current_generation = archive.current_cursor()?.archive_generation.get();
     Ok(IncrementalRefreshReport {
         outcome,
         files_examined: counts.files_examined,
@@ -443,6 +649,8 @@ fn report(
         events_observed: counts.events_observed,
         batches_committed: counts.batches_committed,
         diagnostics: counts.diagnostics,
+        starting_current_generation,
+        current_generation,
         archive_generation: generation,
     })
 }

@@ -346,6 +346,48 @@ impl UsageStore {
         raw.validate(source_key)
     }
 
+    pub fn replay_source_state(
+        &self,
+        revision_id: ReplayRevisionId,
+        source_key: SourceKey,
+    ) -> Result<ReplaySourceState, StoreError> {
+        let state: String = self
+            .connection
+            .query_row(
+                "SELECT replay.state
+                 FROM usage_replay_revision AS revision
+                 JOIN usage_replay_source AS replay
+                   ON replay.revision_id = revision.revision_id
+                 WHERE revision.revision_id = ?1 AND revision.status = 'staging'
+                   AND revision.sealed = 0 AND replay.file_key = ?2",
+                params![revision_id.as_sql()?, source_key.as_bytes().as_slice()],
+                |row| row.get(0),
+            )
+            .optional()?
+            .ok_or_else(|| StoreError::new(StoreErrorCode::StaleRevision))?;
+        ReplaySourceState::from_sql(&state)
+    }
+
+    pub fn staging_replay_matches_scan_set(
+        &self,
+        revision_id: ReplayRevisionId,
+        scan_set_id: ScanSetId,
+    ) -> Result<bool, StoreError> {
+        let Some(snapshot) = self.staging_replay_revision()? else {
+            return Ok(false);
+        };
+        if snapshot.id() != revision_id || snapshot.sealed() {
+            return Ok(false);
+        }
+        super::replay_manifest::scan_bound_manifest_matches(
+            &self.connection,
+            revision_id,
+            scan_set_id,
+            snapshot.expected_source_count(),
+            "staging",
+        )
+    }
+
     pub fn source_chunk(
         &self,
         source_key: SourceKey,

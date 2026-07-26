@@ -23,7 +23,7 @@ windows.workspace = true
 slint-build.workspace = true
 
 [dev-dependencies]
-i-slint-backend-testing = "=1.17.1"
+i-slint-backend-testing = { version = "=1.17.1", features = ["renderer-software"] }
 rusqlite.workspace = true
 tempfile.workspace = true
 tokenmaster-git = { path = "../git" }

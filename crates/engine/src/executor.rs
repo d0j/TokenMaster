@@ -5,8 +5,8 @@ use crate::{
     ArchiveRevisionId, ArchiveScanSetId, BatchState, CanonicalBatch, CanonicalBatchParts, Clock,
     CompletionQuality, DiscoveredSource, EngineError, EngineErrorCode, MAX_SCOPE_MANIFEST_ENTRIES,
     OperationControl, PortError, PortErrorCode, RefreshOutcome, RefreshPermit, RefreshRequestId,
-    ReplayContinuationState, ReplaySourceSink, ScopeIdentity, ScopeManifest, ScopeSink,
-    SinkControl, SourceBatchReader, SourceSink, WriterLease,
+    ReplayContinuationState, ReplaySourceSink, ReplaySourceStart, ScopeIdentity, ScopeManifest,
+    ScopeSink, SinkControl, SourceBatchReader, SourceSink, WriterLease,
 };
 
 pub const MAX_REPLAY_CONTINUATIONS_PER_RUN: usize = 4_096;
@@ -390,16 +390,34 @@ impl OneShotExecutor {
         state: &mut ExecutionState,
     ) -> Result<(), PortError> {
         control.check()?;
-        let restored_initial = reader.restore_checkpoint(initial_state.progress(), control)?;
-        if restored_initial != *initial_state.checkpoint() {
+        let current = state.replay.ok_or_else(stale_error)?;
+        let (progress, initial_checkpoint, prepare) =
+            match archive.replay_source_start(current, source)? {
+                ReplaySourceStart::Fresh => (
+                    initial_state.progress().clone(),
+                    Some(initial_state.checkpoint().clone()),
+                    true,
+                ),
+                ReplaySourceStart::Resume(progress) => (progress, None, false),
+                ReplaySourceStart::Complete(progress) => {
+                    let restored = reader.restore_checkpoint(&progress, control)?;
+                    reader.validate_checkpoint(&restored, control)?;
+                    return Ok(());
+                }
+            };
+        let restored_initial = reader.restore_checkpoint(&progress, control)?;
+        if initial_checkpoint.is_some_and(|checkpoint| restored_initial != checkpoint) {
             return Err(PortError::new(PortErrorCode::InvalidData));
         }
-        let current = state.replay.ok_or_else(stale_error)?;
-        let replay = validate_replay_transition(
-            current,
-            archive.prepare_replay_source(current, source, &initial_state)?,
-        )?;
-        state.replay = Some(replay);
+        if prepare {
+            let replay = validate_replay_transition(
+                current,
+                archive.prepare_replay_source(current, source, &initial_state)?,
+            )?;
+            state.replay = Some(replay);
+        } else {
+            reader.validate_checkpoint(&restored_initial, control)?;
+        }
         let mut checkpoint = restored_initial;
 
         loop {

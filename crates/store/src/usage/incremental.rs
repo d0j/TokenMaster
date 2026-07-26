@@ -153,6 +153,109 @@ impl UsageStore {
         Ok(next_generation)
     }
 
+    /// Restores a sealed current revision to partial only after an interrupted replacement
+    /// revision has been discarded by startup recovery.
+    ///
+    /// This does not claim the source checkpoints are valid. Callers must immediately run the
+    /// normal adapter preflight; a failed preflight returns the archive to recovery-pending.
+    pub fn restore_current_partial_after_abandoned_rebuild(
+        &mut self,
+        revision_id: ReplayRevisionId,
+        expected_archive_generation: ArchiveGeneration,
+    ) -> Result<ArchiveGeneration, StoreError> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let revision: (i64, i64, i64, i64, Option<i64>) = transaction
+            .query_row(
+                "SELECT canonicalizer_version, fingerprint_version,
+                        replay_signature_version, expected_source_count, scan_set_id
+                 FROM usage_replay_revision
+                 WHERE revision_id = ?1 AND status = 'current' AND sealed = 1 AND promoted = 1",
+                [revision_id.as_sql()?],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .optional()?
+            .ok_or_else(|| StoreError::new(StoreErrorCode::StaleRevision))?;
+        if AccountingVersions::from_stored(revision.0, revision.1, revision.2)?
+            != AccountingVersions::compiled()
+            || revision.4.is_none()
+        {
+            return Err(StoreError::new(StoreErrorCode::ArchiveModeMismatch));
+        }
+        let expected_sources = u64::try_from(revision.3)
+            .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?;
+        let state: (i64, Option<i64>, String) = transaction.query_row(
+            "SELECT archive_generation, current_revision_id, incremental_state
+             FROM usage_archive_state WHERE singleton_id = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        if ArchiveGeneration::from_stored(state.0)? != expected_archive_generation
+            || state.1 != Some(revision_id.as_sql()?)
+            || state.2 != "recovery_pending"
+        {
+            return Err(StoreError::new(StoreErrorCode::StaleRevision));
+        }
+        let integrity: (i64, i64, i64) = transaction.query_row(
+            "SELECT
+               (SELECT count(*) FROM usage_replay_revision WHERE status = 'staging'),
+               (SELECT count(*) FROM usage_replay_source WHERE revision_id = ?1),
+               (SELECT count(*)
+                FROM usage_replay_source AS replay
+                JOIN usage_generation AS generation
+                  ON generation.file_key = replay.file_key
+                 AND generation.generation = replay.generation
+                 AND generation.status = 'current'
+                JOIN usage_source AS source
+                  ON source.file_key = replay.file_key
+                 AND source.current_generation = replay.generation
+                WHERE replay.revision_id = ?1)",
+            [revision_id.as_sql()?],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        if integrity.0 != 0
+            || u64::try_from(integrity.1)
+                .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?
+                != expected_sources
+            || u64::try_from(integrity.2)
+                .map_err(|_| StoreError::new(StoreErrorCode::InvalidStoredValue))?
+                != expected_sources
+        {
+            return Err(StoreError::new(StoreErrorCode::PendingContinuation));
+        }
+        let next_generation = ArchiveGeneration::new(
+            expected_archive_generation
+                .get()
+                .checked_add(1)
+                .ok_or_else(|| StoreError::new(StoreErrorCode::CapacityExceeded))?,
+        )?;
+        let restored = transaction.execute(
+            "UPDATE usage_archive_state SET
+               archive_generation = ?1, incremental_state = 'partial'
+             WHERE singleton_id = 1 AND archive_generation = ?2
+               AND current_revision_id = ?3 AND incremental_state = 'recovery_pending'",
+            params![
+                next_generation.as_sql()?,
+                expected_archive_generation.as_sql()?,
+                revision_id.as_sql()?,
+            ],
+        )?;
+        if restored != 1 {
+            return Err(StoreError::new(StoreErrorCode::StaleRevision));
+        }
+        transaction.commit()?;
+        Ok(next_generation)
+    }
+
     pub fn register_scan_discovered_source(
         &mut self,
         scan_id: ScanId,

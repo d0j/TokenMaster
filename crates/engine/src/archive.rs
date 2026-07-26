@@ -1,6 +1,7 @@
 use crate::{
-    AdapterCompletion, AdapterSourceState, CanonicalBatch, CompletionQuality, DiscoveredSource,
-    EngineError, EngineErrorCode, PortError, ScopeIdentity, ScopeManifest, SourceIdentity,
+    AdapterCompletion, AdapterSourceProgress, AdapterSourceState, CanonicalBatch,
+    CompletionQuality, DiscoveredSource, EngineError, EngineErrorCode, PortError, ScopeIdentity,
+    ScopeManifest, SourceIdentity,
 };
 
 macro_rules! nonzero_archive_id {
@@ -80,6 +81,13 @@ impl ReplayContinuation {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ReplaySourceStart {
+    Fresh,
+    Resume(AdapterSourceProgress),
+    Complete(AdapterSourceProgress),
+}
+
 pub trait Archive: Send {
     fn begin_scan_set(&mut self, manifest: &ScopeManifest) -> Result<ArchiveScanSetId, PortError>;
 
@@ -103,6 +111,14 @@ pub trait Archive: Send {
     ) -> Result<CompletionQuality, PortError>;
 
     fn begin_replay(&mut self, scan_set: ArchiveScanSetId) -> Result<ArchiveReplay, PortError>;
+
+    fn replay_source_start(
+        &mut self,
+        _replay: ArchiveReplay,
+        _source: &DiscoveredSource,
+    ) -> Result<ReplaySourceStart, PortError> {
+        Ok(ReplaySourceStart::Fresh)
+    }
 
     fn prepare_replay_source(
         &mut self,

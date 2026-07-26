@@ -12,6 +12,7 @@ use crate::store_archive::archive_replay;
 pub enum StagingRecoveryOutcome {
     None,
     Resumed,
+    Preserved,
     Discarded,
 }
 
@@ -111,6 +112,10 @@ fn recover_staging(archive: &mut StoreArchive) -> Result<StagingRecoveryOutcome,
         return Ok(StagingRecoveryOutcome::None);
     };
     let replay = archive_replay(snapshot.id(), snapshot.epoch())?;
+    let publication = archive
+        .store()
+        .archive_publication()
+        .map_err(|error| store_port_error(&error))?;
     if snapshot.status() != ReplayRevisionStatus::Staging
         || snapshot.versions() != AccountingVersions::compiled()
         || snapshot.scan_set_id().is_none()
@@ -118,6 +123,18 @@ fn recover_staging(archive: &mut StoreArchive) -> Result<StagingRecoveryOutcome,
     {
         archive.discard_replay(replay)?;
         return Ok(StagingRecoveryOutcome::Discarded);
+    }
+    if publication.current_revision().is_some() {
+        // The current revision remains visible while a replacement is in progress. Keep a
+        // structurally valid staging revision so the next exact scan can decide whether its
+        // source checkpoints still match and resume it without losing completed work.
+        return Ok(StagingRecoveryOutcome::Preserved);
+    }
+    if let Some(partial) = archive.publish_initial_replay_partial(replay)? {
+        if partial.revision_id() != replay.revision_id() || partial.epoch() < replay.epoch() {
+            return Err(PortError::new(PortErrorCode::InvalidData));
+        }
+        return Ok(StagingRecoveryOutcome::Resumed);
     }
     if snapshot.sealed() {
         return promote_or_discard(archive, replay);

@@ -249,7 +249,7 @@ const SESSIONS_DASHBOARD_MSGIDS: [&str; 51] = [
     "Checking local usage history…",
     "Starting safe import…",
     "Importing local usage history…",
-    "Charts and totals will appear after the first safe import completes.",
+    "TokenMaster keeps available safe data visible while it imports the rest.",
     "Model Usage",
     "{0} collapsed",
     "{0} (collapsed)",

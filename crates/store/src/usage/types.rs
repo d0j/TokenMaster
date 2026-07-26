@@ -886,6 +886,22 @@ impl GenerationStatus {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReplaySourceState {
+    Pending,
+    Complete,
+}
+
+impl ReplaySourceState {
+    pub(super) fn from_sql(value: &str) -> Result<Self, StoreError> {
+        match value {
+            "pending" => Ok(Self::Pending),
+            "complete" => Ok(Self::Complete),
+            _ => Err(StoreError::new(StoreErrorCode::InvalidStoredValue)),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GenerationSnapshot {
     pub(super) source_key: SourceKey,
@@ -1142,6 +1158,34 @@ impl fmt::Debug for CurrentReplayAppendBatch {
             .field("append_batch", &self.parts.append_batch)
             .field("relation_count", &self.parts.relations.len())
             .finish()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CurrentReplaySourceExpectation {
+    pub(crate) revision_id: ReplayRevisionId,
+    pub(crate) expected_epoch: ReplayEpoch,
+    pub(crate) expected_archive_generation: ArchiveGeneration,
+    pub(crate) source_key: SourceKey,
+    pub(crate) expected_generation: u64,
+}
+
+impl CurrentReplaySourceExpectation {
+    #[must_use]
+    pub const fn new(
+        revision_id: ReplayRevisionId,
+        expected_epoch: ReplayEpoch,
+        expected_archive_generation: ArchiveGeneration,
+        source_key: SourceKey,
+        expected_generation: u64,
+    ) -> Self {
+        Self {
+            revision_id,
+            expected_epoch,
+            expected_archive_generation,
+            source_key,
+            expected_generation,
+        }
     }
 }
 

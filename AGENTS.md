@@ -21,7 +21,8 @@ Read in this order before changing behavior:
 6. `spec/DECISIONS.md`
 7. `docs/CURRENT_STATE.md`
 8. `docs/HANDOFF.md`
-9. `docs/ROADMAP.md`
+9. `docs/RELEASE_EXIT_PLAN.md`
+10. `docs/ROADMAP.md`
 
 ## Workflow
 

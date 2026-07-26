@@ -205,7 +205,7 @@ fn run_startup_event_loop(
     startup_ui
         .shell
         .window()
-        .set_dashboard_initial_import_in_progress(true);
+        .set_dashboard_startup_import_in_progress(true);
     startup_ui
         .shell
         .window()
@@ -539,6 +539,9 @@ impl Application {
             )
             .unwrap_or_else(|_| DesktopReliableStateProjection::unavailable());
         let _ = reliable_notifier.publish(reliable_state);
+        shell
+            .window()
+            .set_dashboard_startup_import_in_progress(false);
         if !live_started.load(Ordering::Acquire) {
             shell
                 .window()
@@ -1881,10 +1884,13 @@ fn wait_for_reconstructed_reconciliation(live: &LiveRuntime) -> Result<(), Appli
             && refresh.outcome() == Some(RefreshOutcome::Completed)
             && refresh.error().is_none()
             && snapshot.engine().diagnostics().completed_refreshes() > 0
-            && !snapshot.scheduler().dirty()
-            && !snapshot.scheduler().force_reconcile()
-            && snapshot.worker().active_request_id().is_none()
-            && snapshot.worker().pending_count() == 0
+            && reconstructed_reconciliation_ready(
+                snapshot.engine().quality(),
+                snapshot.scheduler().dirty(),
+                snapshot.scheduler().force_reconcile(),
+                snapshot.worker().active_request_id().is_some(),
+                snapshot.worker().pending_count(),
+            )
         {
             return Ok(());
         }
@@ -1903,6 +1909,20 @@ fn wait_for_reconstructed_reconciliation(live: &LiveRuntime) -> Result<(), Appli
         }
         observed_completion = true;
     }
+}
+
+fn reconstructed_reconciliation_ready(
+    quality: tokenmaster_runtime::EnginePublicationQuality,
+    scheduler_dirty: bool,
+    scheduler_force_reconcile: bool,
+    worker_active: bool,
+    worker_pending_count: usize,
+) -> bool {
+    quality == tokenmaster_runtime::EnginePublicationQuality::Complete
+        && !scheduler_dirty
+        && !scheduler_force_reconcile
+        && !worker_active
+        && worker_pending_count == 0
 }
 
 struct GuardedLiveStart {

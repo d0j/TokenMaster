@@ -59,7 +59,7 @@ mod worker;
 
 pub use archive::{
     Archive, ArchiveEpoch, ArchiveReplay, ArchiveRevisionId, ArchiveScanSetId, ReplayContinuation,
-    ReplayContinuationState,
+    ReplayContinuationState, ReplaySourceStart,
 };
 pub use batch::{
     AdapterBatch, AdapterBatchParts, BatchState, CanonicalBatch, CanonicalBatchParts,

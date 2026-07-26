@@ -1,5 +1,89 @@
 # TokenMaster current state
 
+## 2026-07-26 — Current-day first-use recovery
+
+Product state: changed. Recovery and partial publications now keep the safe current
+Dashboard visible while explicitly reporting the active full rebuild. Codex source
+enumeration orders normal date-shaped directories newest-first with a fixed 256-entry
+per-directory buffer; larger directories fall back to streaming, so no whole-history
+path list is retained. Ordering affects time to useful partial data only and remains
+outside accounting authority.
+
+A clean task-owned portable MSVC launch stayed responsive for 45 seconds. Private memory
+rose from 30.6 MiB to 41.7 MiB and working set from 57.2 MiB to 69.4 MiB. It completed 70
+of 3,987 sources, staged 35,765 observations, and published 269 events / 33,789,698
+tokens, including an event at 2026-07-26T00:24:18Z. The exact process and portable data
+were removed.
+
+Evidence state: newest-first enumeration was red before the change and is green together
+with all 16 file-enumeration contracts. Startup Partial/RecoveryPending visibility,
+compiled Dashboard/localization, strict affected-library MSVC Clippy, fresh MSVC release
+build, and a new software-pixel contract pass. The pixel contract proves a non-black,
+non-uniform startup frame. The available Windows window-capture API still returns black,
+so physical paint remains unconfirmed; this is no longer evidence that the Slint frame
+itself is black.
+
+One independent release-slice review found four production-correctness issues: a
+reconstructed Partial archive could be marked Healthy, Partial continuation could spin
+without durable progress, the in-app import state could disappear before continuation
+quiesced, and normal startup submitted one redundant refresh. The slice now requires
+complete reconciliation before Healthy, counts only durable replay-generation advance
+as continuation progress, keeps incomplete work visible while pending or active, and
+submits the normal startup refresh once. Focused regressions pass. The final workspace
+gate passed clean-root, formatting, warnings-as-errors locked workspace Clippy, and all
+locked workspace tests in 21 minutes 3 seconds.
+
+Release blockers: create an intentional clean commit, produce and validate the
+deterministic unsigned portable 0.1.0 candidate and its secret-scan receipt, and
+physically confirm the packaged UI. Signing and authenticated external acceptance remain
+separate. The 24-hour soak is explicitly deferred by the operator.
+
+Git state: the feature branch is ahead of its upstream and intentionally dirty with the
+integrated replay/startup/import slice pending its one release commit. No task-owned
+TokenMaster, Cargo, compiler, test, or temporary portable process remains after the
+completed gate. The two observed `pythonw.exe` processes are unrelated user processes
+and were not touched.
+
+## 2026-07-25 — Restart-safe staged rebuild continuation
+
+Product state: changed. A restart no longer throws away a structurally valid staging
+rebuild merely because a safe current publication is still visible. After the next
+complete source scan, TokenMaster reuses that staging revision only when its exact
+source membership still matches, atomically rebinds it to the new scan authority, skips
+already completed sources, and resumes unfinished checkpoints. The current publication
+remains visible until the replacement is sealed and promoted. A mismatch discards only
+the staging replacement and starts a fresh rebuild; it never promotes stale data.
+
+Evidence state: the direct restart-to-empty reproducer was RED, then the new preservation
+and exact-scan promotion contracts passed. Focused checks are green: runtime recovery
+8/8, engine one-shot lifecycle 23/23, store replay archive 49/49, the repaired
+300-logical-source bootstrap regression 1/1, and formatting. One baseline workspace
+gate was run: clean-root, format, and strict Clippy passed, then its first causal
+failure was that bootstrap regression. It was repaired with the focused contract; this
+is not a green workspace receipt and must not be presented as one. This is a production
+correctness repair, not audit hardening. No child agent or reviewer was used;
+`AUDIT_HARDENING_LOOP` is not active.
+
+Visual acceptance is now a distinct release blocker. Fresh GNU and canonical MSVC
+release binaries both produced a fully black client surface in the available Windows
+capture path. The same result occurred for a minimal red Slint window using standard
+software paint, line-by-line software paint, and FemtoVG. That rules out archive data,
+the TokenMaster layout, and the GNU/MSVC choice as demonstrated causes, but does not
+prove whether this Windows capture environment or physical presentation is at fault.
+It supersedes earlier local claims of an opaque painted shell. Do not add renderer,
+parser, P4, or audit changes without a new physical-paint reproducer.
+
+Remaining release blockers: obtain one trustworthy physical Windows paint result for
+the fresh canonical MSVC binary, then decide a compatible GUI-platform path only if it
+also reproduces outside capture. A later green full workspace receipt is required after
+the final product change; do not rerun it speculatively now. Only after local visual
+acceptance may the separate exact-head M0/package/secret receipt path resume. Public
+attribution, trusted attestation, signing, clean-room/P3-E/P4 evidence, and the
+explicitly deferred 24-hour soak remain.
+
+Git state: the worktree contains pre-existing WIP plus this uncommitted product fix and
+its tests/docs. No task-owned UI, compiler, test, or child-agent process is active.
+
 ## 2026-07-24 — Responsive first safe-import UX
 
 Product state: changed. The real Slint main window and Dashboard now appear before
@@ -2485,3 +2569,30 @@ durable selection. The existing presentation owner and one-active/one-latest wor
 cover all 81 combinations, including a compiled 10,000-switch UI proof. Board section
 reorder/hide/collapse, locale/language, typography/accessibility/DPI/paint/resource,
 P5/P6/M0/package/signing/soak/release remain open.
+
+## 2026-07-25 — partial-replay import unblock
+
+Local large-history acceptance isolated a production import deadlock, not a rendering
+or audit problem. Once a partial current replay received an event that queued session
+classification work, the store rejected every later known source merely because the
+work queue was non-empty. The resulting archive could remain partial indefinitely and
+the desktop could have no current rows to present. The runtime also needed an exact
+safe path for a zero-offset replay-start checkpoint, a proven no-op EOF source, and a
+caught-up checkpoint whose opaque resume payload alone no longer validated.
+
+The store now admits a later member of the exact current replay manifest while deferred
+work exists; it closes a proven no-op source and processes the queued classification
+once the source states permit it. Resume repair is limited to a caught-up checkpoint
+whose identity, extent, timestamp, anchor, offsets, verification, and flags are exact;
+only the resume payload may change. Startup discards stale staging before a published
+current revision rather than attempting a doomed continuation. No staging data is
+published as canonical truth.
+
+Focused evidence passes: store incremental 10/10, replay archive 49/49, runtime
+incremental 14/14, and recovery 7/7. A GNU Windows release binary builds with
+warnings denied. The clean-root, formatting, and strict Clippy stages completed; the
+full workspace test process finished after the shell receipt limit, so its terminal
+status is deliberately recorded as unavailable rather than green. The local archive
+retains its prior current revision and remains `recovery_pending` after a separately
+detected live-source mismatch; it requires a safe full rebuild receipt before any
+release claim. M0, packaging, signing, and soak remain open.

@@ -3,11 +3,10 @@ use std::num::NonZeroU64;
 use tokenmaster_engine::{RefreshOutcome, WorkerPhase, WorkerSnapshot};
 use tokenmaster_runtime::{
     BenefitReminderFailure, BenefitReminderRetryMode, BenefitReminderRuntimePhase,
-    BenefitReminderRuntimeSnapshot, BenefitReminderSchedulePhase, EnginePublicationQuality,
-    GitRefreshFailure, GitRuntimePhase, GitRuntimeSnapshot, LivePhase, LiveRefreshKind,
-    LiveRuntimeSnapshot, ProviderQuotaRefreshStage, ProviderQuotaRetryMode,
-    ProviderQuotaRuntimePhase, ProviderQuotaRuntimeSnapshot, RuntimeErrorCode, SchedulerPhase,
-    WatcherHealth,
+    BenefitReminderRuntimeSnapshot, BenefitReminderSchedulePhase, GitRefreshFailure,
+    GitRuntimePhase, GitRuntimeSnapshot, LivePhase, LiveRefreshKind, LiveRuntimeSnapshot,
+    ProviderQuotaRefreshStage, ProviderQuotaRetryMode, ProviderQuotaRuntimePhase,
+    ProviderQuotaRuntimeSnapshot, RuntimeErrorCode, SchedulerPhase, WatcherHealth,
 };
 
 use crate::ProductSectionKind;
@@ -328,13 +327,23 @@ impl From<LiveRuntimeSnapshot> for ProductUsageRuntimeHealth {
         let worker = value.worker();
         let refresh = value.refresh();
         let diagnostics = value.engine().diagnostics();
+        let engine_quality = value.engine().quality();
+        let recovery_pending = scheduler.dirty() || scheduler.force_reconcile();
+        let pending_work_count = pending_work(worker);
+        let initial_import_in_progress = usage_import_in_progress(
+            engine_quality,
+            refresh.kind(),
+            refresh.outcome().is_none() && refresh.error().is_none(),
+            recovery_pending,
+            pending_work_count,
+        );
         Self {
             core: ProductRuntimeCore {
                 lifecycle: map_live_lifecycle(value.phase()),
                 scheduler: map_scheduler(scheduler.phase()),
                 worker: map_worker(worker.phase()),
-                recovery_pending: scheduler.dirty() || scheduler.force_reconcile(),
-                pending_work_count: pending_work(worker),
+                recovery_pending,
+                pending_work_count,
                 accepted_request_count: scheduler.accepted_hint_count(),
                 submitted_count: scheduler.submitted_count(),
             },
@@ -350,10 +359,7 @@ impl From<LiveRuntimeSnapshot> for ProductUsageRuntimeHealth {
             failure: refresh
                 .error()
                 .map(|_| ProductRuntimeFailureCode::UsageRefresh),
-            initial_import_in_progress: refresh.kind() == LiveRefreshKind::FullRebuild
-                && refresh.outcome().is_none()
-                && refresh.error().is_none()
-                && value.engine().quality() == EnginePublicationQuality::Empty,
+            initial_import_in_progress,
             completed_refresh_count: diagnostics.completed_refreshes(),
             busy_refresh_count: diagnostics.busy_refreshes(),
             cancelled_refresh_count: diagnostics.cancelled_refreshes(),
@@ -361,6 +367,71 @@ impl From<LiveRuntimeSnapshot> for ProductUsageRuntimeHealth {
             failed_refresh_count: diagnostics.failed_refreshes(),
             counter_overflowed: diagnostics.counter_overflowed(),
         }
+    }
+}
+
+fn usage_import_in_progress(
+    quality: tokenmaster_runtime::EnginePublicationQuality,
+    refresh_kind: LiveRefreshKind,
+    refresh_unfinished: bool,
+    recovery_pending: bool,
+    pending_work_count: usize,
+) -> bool {
+    let incomplete = matches!(
+        quality,
+        tokenmaster_runtime::EnginePublicationQuality::Empty
+            | tokenmaster_runtime::EnginePublicationQuality::Partial
+            | tokenmaster_runtime::EnginePublicationQuality::RecoveryPending
+    );
+    incomplete
+        && ((refresh_kind == LiveRefreshKind::FullRebuild && refresh_unfinished)
+            || recovery_pending
+            || pending_work_count > 0)
+}
+
+#[cfg(test)]
+mod usage_import_tests {
+    use tokenmaster_runtime::EnginePublicationQuality;
+
+    use super::{LiveRefreshKind, usage_import_in_progress};
+
+    #[test]
+    fn incomplete_publication_stays_visible_while_continuation_is_pending_or_active() {
+        assert!(usage_import_in_progress(
+            EnginePublicationQuality::Partial,
+            LiveRefreshKind::Incremental,
+            false,
+            true,
+            0,
+        ));
+        assert!(usage_import_in_progress(
+            EnginePublicationQuality::Partial,
+            LiveRefreshKind::Incremental,
+            false,
+            false,
+            1,
+        ));
+        assert!(usage_import_in_progress(
+            EnginePublicationQuality::Empty,
+            LiveRefreshKind::FullRebuild,
+            true,
+            false,
+            0,
+        ));
+        assert!(!usage_import_in_progress(
+            EnginePublicationQuality::Partial,
+            LiveRefreshKind::Incremental,
+            false,
+            false,
+            0,
+        ));
+        assert!(!usage_import_in_progress(
+            EnginePublicationQuality::Complete,
+            LiveRefreshKind::FullRebuild,
+            true,
+            true,
+            1,
+        ));
     }
 }
 

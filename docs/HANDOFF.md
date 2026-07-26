@@ -1,5 +1,75 @@
 # TokenMaster handoff
 
+## Current-day first-use recovery (2026-07-26)
+
+Product state: changed. Active Partial/RecoveryPending recovery is now visible in the
+Dashboard without hiding the last safe publication. Codex enumeration prefers newest
+normal date directories first using at most 257 buffered entries per directory and a
+streaming fallback for larger directories. This changes time to useful data, not source
+identity, accounting, replay selection, or final totals.
+
+Audit/evidence state: focused newest-first enumeration, all 16 enumeration contracts,
+startup refresh visibility, compiled UI/localization, affected-library strict MSVC
+Clippy, a fresh canonical MSVC release build, and a software-pixel startup-frame contract
+pass. A clean portable 45-second run remained responsive, stabilized near 42 MiB private
+memory, and published current-day data after 70 of 3,987 sources. The Windows capture API
+still returns a black image, while the actual software frame is proven non-black and
+non-uniform; treat physical presentation as open evidence, not a demonstrated renderer
+defect.
+
+The single independent release-slice review found and closed four correctness defects:
+Healthy could be published after only Partial reconstruction; Partial continuation could
+resubmit without durable replay progress; the import state could disappear with
+continuation pending; and normal startup requested one redundant refresh. Focused
+reproductions now require complete reconciliation, use durable replay-generation advance
+for continuation, retain truthful pending/active visibility, and prove quiescence for
+unchanged and stalled sources. The one final workspace gate passed clean-root, format,
+warnings-as-errors locked workspace Clippy, and all locked workspace tests in 21 minutes
+3 seconds. No audit parser or P4 feature changed. `AUDIT_HARDENING_LOOP` is not active.
+
+Release blockers: commit cleanly, build/validate the deterministic unsigned portable
+0.1.0 candidate and secret-scan receipt, and physically inspect that packaged
+executable. Signing and external interactive acceptance remain open; the operator
+deferred the 24-hour soak.
+
+Git state: preserve the dirty integrated slice until its one intentional release commit;
+do not split or revert its prior replay work. The task-owned UI, gate, and portable smoke
+processes/data were stopped or completed and removed as applicable. Follow
+`docs/RELEASE_EXIT_PLAN.md` at every cycle.
+
+## Restart-safe staged rebuild continuation (2026-07-25)
+
+Product state: changed. The user-visible current archive is no longer treated as a reason
+to discard a valid replacement rebuild at startup. Startup preserves that staging work.
+The next full scan accepts it only if the exact source membership matches, atomically
+rebinds its scan authority, validates completed-source checkpoints before skipping them,
+and continues unfinished sources from their durable checkpoints. The current revision is
+replaced only by the existing atomic seal/promote path. An incompatible staging revision
+is discarded without touching the current publication.
+
+Audit/evidence state: this closes a demonstrated production restart-to-empty defect.
+The original focused recovery contract was red; preservation and exact-scan promotion
+now pass. Focused results: runtime recovery 8/8, engine one-shot 23/23, store replay
+archive 49/49, repaired 300-logical-source bootstrap 1/1, and formatting green. One
+workspace baseline reached clean-root/format/strict Clippy, then failed first at that
+bootstrap test; the focused repair is green, but there is no green full-workspace
+receipt. No reviewer, parser change, P4 work, or audit-only round was opened;
+`AUDIT_HARDENING_LOOP` is not active.
+
+Release blockers: visual acceptance is blocked before data acceptance. Fresh GNU and
+canonical MSVC releases, plus minimal Slint red-window probes across standard software,
+line-by-line software, and FemtoVG paint paths, were black in the available Windows
+capture. This excludes the archive and TokenMaster layout as demonstrated causes but
+does not distinguish capture failure from physical-paint failure. Do not reopen
+renderer/audit/P4 scope; first obtain trustworthy physical paint evidence for the fresh
+MSVC binary, then choose a compatible GUI-platform path only if it reproduces. A later
+green full workspace receipt is required after the final product change. M0,
+package/secret receipts, attribution, attestation, signing, clean-room/P3-E/P4
+acceptance, and the explicitly deferred soak remain open.
+
+Git state: preserve the dirty worktree; it includes prior WIP. Do not stage or revert
+unrelated files. No task-owned process or child agent remains.
+
 ## Responsive first safe-import UX (2026-07-24)
 
 Product state: changed. The actual main window is shown before the expensive archive
@@ -2121,3 +2191,28 @@ the unchanged `tokenmaster-git` `process_contract` with its middle failure body 
 output truncation; the exact target immediately passed 9/9 in isolation and the full
 rerun passed without source changes. Treat this as a disclosed, non-reproduced transient,
 not a fixed product defect and not release evidence.
+
+## 2026-07-25 — import unblock handoff
+
+Product state: a real partial-replay deadlock is corrected. A queued session-work row
+no longer prevents the next source already admitted to the exact replay manifest from
+being imported. Proven no-op EOF and strictly resume-only caught-up checkpoint repair
+close the remaining source-state paths; stale staging is discarded ahead of a published
+current revision. The local archive retains its prior current revision but is currently
+`recovery_pending` after a live-source mismatch, so it must take the normal safe rebuild
+path rather than exposing inferred data.
+
+Audit/evidence state: this changed product correctness; `AUDIT_HARDENING_LOOP` did not
+trigger. Focused contracts passed: store incremental 10/10, replay archive 49/49,
+runtime incremental 14/14, and recovery 7/7. `audit-clean-root`, format, and strict
+workspace Clippy completed. The full workspace test command exceeded the shell receipt
+limit and later exited without a captured status; it is **not** a green baseline. The
+GNU release build completed with `RUSTFLAGS=-Dwarnings`.
+
+Release blockers: one safe local full-rebuild/launch acceptance receipt is still needed
+to prove the retained archive becomes visible while real history advances. M0
+interactive/accessibility evidence, package/signing, and soak remain separate blockers.
+Git state: the feature branch contains the existing import-recovery WIP plus this slice;
+it is not clean and must not be represented as committed or release-ready. No task-owned
+interactive UI, Cargo, or Rust compiler process remains. The shortest next action is
+the bounded local rebuild/launch acceptance, not further parser or audit work.

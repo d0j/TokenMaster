@@ -1,5 +1,49 @@
 # TokenMaster project history
 
+## 2026-07-26 — Current-day first-use recovery
+
+The real archive was not empty or hung: TokenMaster retained a safe stale publication
+while rebuilding almost 4,000 sources in filesystem order, which placed new July data
+behind old history and hid the active rebuild state. The fix makes Partial and
+RecoveryPending startup truthful and orders normal bounded directory traversal
+newest-first without retaining a whole-history vector.
+
+Focused contracts, strict affected-library MSVC Clippy, a fresh canonical release build,
+and a non-black/non-uniform software-pixel contract pass. A task-owned portable launch
+remained responsive for 45 seconds with about 42 MiB private memory and published 269
+current-day events after completing 70 sources. The exact process and portable data were
+cleaned.
+
+The one independent review then exposed four production defects in reconciliation,
+Partial continuation, import-state lifetime, and duplicate startup submission. Their
+focused regressions pass after correction, including quiescence when a source makes no
+durable replay-generation progress. The final clean-root/format/strict-Clippy/all-tests
+workspace gate passed in 21 minutes 3 seconds. This was production time-to-first-use and
+recovery correctness work, not audit hardening; the clean commit, unsigned package
+candidate, secret-scan receipt, and physical packaged-UI confirmation remain.
+
+## 2026-07-25 — Restart-safe replacement replay
+
+The first large local import exposed a product defect: restarting while a partial current
+publication existed caused startup to discard a valid replacement staging replay, so work
+began again from zero. The repair keeps the current publication visible, preserves valid
+staging work, accepts it only after a new exact source scan, atomically rebinds its scan
+authority, skips completed sources, and resumes unfinished checkpoints. An incompatible
+replacement is discarded without affecting current data.
+
+The regression was first red and is now covered by restart-preservation and
+complete-staging exact-scan promotion contracts. Runtime recovery 8/8, engine one-shot
+23/23, store replay archive 49/49, repaired 300-logical-source bootstrap 1/1, and
+formatting pass. One workspace baseline passed clean-root/format/strict Clippy before
+the bootstrap regression failed; it is not a green full-workspace receipt.
+
+The next local acceptance exposed a separate physical-paint blocker: fresh GNU and
+canonical MSVC release windows, as well as minimal red Slint probes using standard
+software, line-by-line software, and FemtoVG, were black in the available Windows
+capture. This does not justify changing renderer or UI architecture without a
+trustworthy physical-paint reproducer. The previous opaque-window claim is superseded;
+no release or interactive acceptance is claimed.
+
 ## 2026-07-24 — First safe-import status
 
 Fresh portable launches could spend their first full archive replay behind the atomic
@@ -4432,3 +4476,23 @@ rule. The next product slice is a truthful published partial first-import snapsh
 equivalent resumable architecture; it must not expose staging as canonical data. This is
 a product correctness/UX blocker, not an audit-hardening loop, and it does not claim M0,
 package, release candidate, or stable release.
+
+## 2026-07-25 — partial-replay source/work deadlock correction
+
+Local acceptance found a concrete import deadlock: after the first event-bearing source
+queued session-classification work, the partial-current append API rejected every later
+known source because *any* pending work was treated as a reason to stop ingestion. The
+archive could therefore remain partial forever even though its source manifest was
+already known. The fix keeps the exact manifest-membership CAS guard and removes the
+unrelated queue-count guard; queued work is then resolved through the existing bounded
+continuation after sources advance. The regression contract creates the exact two-source
+case, queues missing-parent work in the first source, proves the second source appends,
+and then proves completion.
+
+The same slice closes two adjacent safe recovery seams: a proven zero-payload EOF closes
+its source state, and an invalid opaque resume can be repaired only when every other
+caught-up checkpoint field matches exactly. Startup discards abandoned staging before a
+published current revision. Store incremental (10/10), replay archive (49/49), runtime
+incremental (14/14), and recovery (7/7) contracts pass; a GNU warnings-denied release
+build passes. The full workspace command outlived the shell receipt limit, so this entry
+does not claim a full-green baseline, M0, package, or release acceptance.

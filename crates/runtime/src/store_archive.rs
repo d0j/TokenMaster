@@ -4,15 +4,16 @@ use tokenmaster_engine::{
     AdapterCompletion, AdapterSourceProgress, AdapterSourceState, Archive, ArchiveEpoch,
     ArchiveReplay, ArchiveRevisionId, ArchiveScanSetId, CanonicalBatch, CompletionQuality,
     DiscoveredSource, PortError, PortErrorCode, ReplayContinuation, ReplayContinuationState,
-    ScopeIdentity, ScopeManifest, SourceIdentity,
+    ReplaySourceStart, ScopeIdentity, ScopeManifest, SourceIdentity,
 };
 use tokenmaster_store::{
-    AppendBatch, AppendBatchParts, ArchiveGeneration, ArchiveMode, CurrentReplayAppendBatch,
-    CurrentReplayAppendBatchParts, CurrentScanPublication, CurrentScanPublicationParts,
-    ReplayAppendBatch, ReplayAppendBatchParts, ReplayEpoch, ReplayRevisionId, ScanCounters, ScanId,
-    ScanOutcome, ScanScope, ScanSetId, ScanSetManifest, SourceKey, SourceRegistration,
-    SourceRegistrationParts, StoredCheckpoint, StoredCheckpointParts, StoredSourceChunk,
-    StoredVerification, UsageStore,
+    AccountingVersions, AppendBatch, AppendBatchParts, ArchiveGeneration, ArchiveMode,
+    ArchivePublicationQuality, CurrentReplayAppendBatch, CurrentReplayAppendBatchParts,
+    CurrentReplaySourceExpectation, CurrentScanPublication, CurrentScanPublicationParts,
+    ReplayAppendBatch, ReplayAppendBatchParts, ReplayEpoch, ReplayRevisionId, ReplayRevisionStatus,
+    ReplaySourceState, ScanCounters, ScanId, ScanOutcome, ScanScope, ScanSetId, ScanSetManifest,
+    SourceKey, SourceRegistration, SourceRegistrationParts, StoreErrorCode, StoredCheckpoint,
+    StoredCheckpointParts, StoredSourceChunk, StoredVerification, UsageStore,
 };
 
 use crate::error::store_port_error;
@@ -64,6 +65,57 @@ impl StoreArchive {
         let observed = self.timestamp_ms()?;
         self.last_timestamp_ms = observed.max(floor);
         Ok(self.last_timestamp_ms)
+    }
+
+    pub(crate) fn publish_initial_replay_partial(
+        &mut self,
+        replay: ArchiveReplay,
+    ) -> Result<Option<ArchiveReplay>, PortError> {
+        let publication = self
+            .store
+            .archive_publication()
+            .map_err(|error| store_port_error(&error))?;
+        if publication.quality() != ArchivePublicationQuality::Empty
+            || publication.current_revision().is_some()
+        {
+            return Ok(None);
+        }
+        let revision = store_revision_id(replay.revision_id())?;
+        match self
+            .store
+            .publish_initial_replay_partial(revision, store_epoch(replay.epoch())?)
+        {
+            Ok(snapshot) => archive_replay(snapshot.id(), snapshot.epoch()).map(Some),
+            Err(error) if error.code() == StoreErrorCode::PendingContinuation => Ok(None),
+            Err(error) => Err(store_port_error(&error)),
+        }
+    }
+
+    fn current_cursor_for_replay(
+        &self,
+        replay: ArchiveReplay,
+    ) -> Result<Option<CurrentCursor>, PortError> {
+        let revision_id = store_revision_id(replay.revision_id())?;
+        let publication = self
+            .store
+            .archive_publication()
+            .map_err(|error| store_port_error(&error))?;
+        if publication.current_revision() != Some(revision_id) {
+            return Ok(None);
+        }
+        let current = self
+            .store
+            .current_replay_revision()
+            .map_err(|error| store_port_error(&error))?
+            .ok_or_else(|| PortError::new(PortErrorCode::StaleState))?;
+        if current.id() != revision_id || current.epoch() != store_epoch(replay.epoch())? {
+            return Err(PortError::new(PortErrorCode::StaleState));
+        }
+        Ok(Some(CurrentCursor {
+            revision_id,
+            epoch: current.epoch(),
+            archive_generation: publication.generation(),
+        }))
     }
 
     fn scan_for_scope(
@@ -243,6 +295,78 @@ impl StoreArchive {
         ))
     }
 
+    pub(crate) fn complete_current_source(
+        &mut self,
+        cursor: CurrentCursor,
+        source: &SourceIdentity,
+    ) -> Result<(CurrentCursor, bool), PortError> {
+        let source_key = source_key(source);
+        let current = self
+            .store
+            .generation_snapshot(source_key)
+            .map_err(|error| store_port_error(&error))?
+            .ok_or_else(|| PortError::new(PortErrorCode::StaleState))?;
+        let committed = self
+            .store
+            .complete_current_replay_source(
+                CurrentReplaySourceExpectation::new(
+                    cursor.revision_id,
+                    cursor.epoch,
+                    cursor.archive_generation,
+                    source_key,
+                    current.generation(),
+                ),
+                current.checkpoint(),
+            )
+            .map_err(|error| store_port_error(&error))?;
+        Ok((
+            CurrentCursor {
+                revision_id: cursor.revision_id,
+                epoch: committed.epoch(),
+                archive_generation: committed.archive_generation(),
+            },
+            committed.remaining_work(),
+        ))
+    }
+
+    pub(crate) fn repair_current_source_resume(
+        &mut self,
+        cursor: CurrentCursor,
+        source: &SourceIdentity,
+        repaired_progress: &AdapterSourceProgress,
+    ) -> Result<(CurrentCursor, bool), PortError> {
+        let source_key = source_key(source);
+        let current = self
+            .store
+            .generation_snapshot(source_key)
+            .map_err(|error| store_port_error(&error))?
+            .ok_or_else(|| PortError::new(PortErrorCode::StaleState))?;
+        let repaired_checkpoint =
+            stored_checkpoint_from_progress(repaired_progress, CheckpointStorage::Progress)?;
+        let committed = self
+            .store
+            .repair_current_replay_source(
+                CurrentReplaySourceExpectation::new(
+                    cursor.revision_id,
+                    cursor.epoch,
+                    cursor.archive_generation,
+                    source_key,
+                    current.generation(),
+                ),
+                current.checkpoint(),
+                &repaired_checkpoint,
+            )
+            .map_err(|error| store_port_error(&error))?;
+        Ok((
+            CurrentCursor {
+                revision_id: cursor.revision_id,
+                epoch: committed.epoch(),
+                archive_generation: committed.archive_generation(),
+            },
+            committed.remaining_work(),
+        ))
+    }
+
     pub(crate) fn continue_current(
         &mut self,
         cursor: CurrentCursor,
@@ -270,6 +394,23 @@ impl StoreArchive {
         let archive_generation = self
             .store
             .mark_current_rebuild_required(cursor.revision_id, cursor.archive_generation)
+            .map_err(|error| store_port_error(&error))?;
+        Ok(CurrentCursor {
+            archive_generation,
+            ..cursor
+        })
+    }
+
+    pub(crate) fn restore_partial_after_abandoned_rebuild(
+        &mut self,
+        cursor: CurrentCursor,
+    ) -> Result<CurrentCursor, PortError> {
+        let archive_generation = self
+            .store
+            .restore_current_partial_after_abandoned_rebuild(
+                cursor.revision_id,
+                cursor.archive_generation,
+            )
             .map_err(|error| store_port_error(&error))?;
         Ok(CurrentCursor {
             archive_generation,
@@ -406,11 +547,69 @@ impl Archive for StoreArchive {
     }
 
     fn begin_replay(&mut self, scan_set: ArchiveScanSetId) -> Result<ArchiveReplay, PortError> {
+        let scan_set = store_scan_set_id(scan_set)?;
+        if let Some(staging) = self
+            .store
+            .staging_replay_revision()
+            .map_err(|error| store_port_error(&error))?
+        {
+            let reusable = staging.status() == ReplayRevisionStatus::Staging
+                && staging.versions() == AccountingVersions::compiled()
+                && !staging.sealed()
+                && self
+                    .store
+                    .staging_replay_matches_scan_set(staging.id(), scan_set)
+                    .map_err(|error| store_port_error(&error))?;
+            if reusable {
+                let rebound = self
+                    .store
+                    .rebind_staging_replay_to_scan_set(staging.id(), staging.epoch(), scan_set)
+                    .map_err(|error| store_port_error(&error))?;
+                return archive_replay(rebound.id(), rebound.epoch());
+            }
+            self.store
+                .discard_replay_revision(staging.id(), staging.epoch())
+                .map_err(|error| store_port_error(&error))?;
+        }
         let snapshot = self
             .store
-            .begin_replay_revision_for_scan_set(store_scan_set_id(scan_set)?)
+            .begin_replay_revision_for_scan_set(scan_set)
             .map_err(|error| store_port_error(&error))?;
         archive_replay(snapshot.id(), snapshot.epoch())
+    }
+
+    fn replay_source_start(
+        &mut self,
+        replay: ArchiveReplay,
+        source: &DiscoveredSource,
+    ) -> Result<ReplaySourceStart, PortError> {
+        if self.current_cursor_for_replay(replay)?.is_some() {
+            // Initial partial publication turns the replay current before every source has been
+            // prepared. Those remaining sources must retain their adapter-provided fresh state;
+            // only a private replacement staging revision can resume a stored checkpoint here.
+            return Ok(ReplaySourceStart::Fresh);
+        }
+        let revision = store_revision_id(replay.revision_id())?;
+        let source_key = source_key(source.identity());
+        let state = self
+            .store
+            .replay_source_state(revision, source_key)
+            .map_err(|error| store_port_error(&error))?;
+        let snapshot = self
+            .store
+            .replay_generation_snapshot(revision, source_key)
+            .map_err(|error| store_port_error(&error))?;
+        let progress = progress_from_stored(snapshot.checkpoint(), source.identity())?;
+        match state {
+            ReplaySourceState::Complete => Ok(ReplaySourceStart::Complete(progress)),
+            ReplaySourceState::Pending
+                if snapshot.checkpoint().committed_offset() == 0
+                    && snapshot.checkpoint().scan_offset() == 0 =>
+            {
+                Ok(ReplaySourceStart::Fresh)
+            }
+            ReplaySourceState::Pending => Ok(ReplaySourceStart::Resume(progress)),
+        }
     }
 
     fn prepare_replay_source(
@@ -419,6 +618,9 @@ impl Archive for StoreArchive {
         source: &DiscoveredSource,
         initial_state: &AdapterSourceState,
     ) -> Result<ArchiveReplay, PortError> {
+        if self.current_cursor_for_replay(replay)?.is_some() {
+            return Ok(replay);
+        }
         let checkpoint = stored_checkpoint_from_progress(
             initial_state.progress(),
             CheckpointStorage::ReplayStart,
@@ -442,6 +644,10 @@ impl Archive for StoreArchive {
         source: &SourceIdentity,
         batch: CanonicalBatch,
     ) -> Result<ArchiveReplay, PortError> {
+        if let Some(cursor) = self.current_cursor_for_replay(replay)? {
+            let (next, _, _) = self.append_current_batch(cursor, source, batch)?;
+            return archive_replay(store_revision_id(replay.revision_id())?, next.epoch);
+        }
         let source_key = source_key(source);
         let revision = store_revision_id(replay.revision_id())?;
         let current = self
@@ -486,10 +692,41 @@ impl Archive for StoreArchive {
             .store
             .apply_replay_append_batch(&replay_batch)
             .map_err(|error| store_port_error(&error))?;
-        archive_replay(revision, next_epoch)
+        let next = archive_replay(revision, next_epoch)?;
+        Ok(self.publish_initial_replay_partial(next)?.unwrap_or(next))
     }
 
     fn continue_replay(&mut self, replay: ArchiveReplay) -> Result<ReplayContinuation, PortError> {
+        if let Some(cursor) = self.current_cursor_for_replay(replay)? {
+            let publication = self
+                .store
+                .archive_publication()
+                .map_err(|error| store_port_error(&error))?;
+            if publication.quality() == ArchivePublicationQuality::Complete {
+                return Ok(ReplayContinuation::new(
+                    replay,
+                    ReplayContinuationState::Complete,
+                ));
+            }
+            if publication.quality() != ArchivePublicationQuality::Partial {
+                return Err(PortError::new(PortErrorCode::StaleState));
+            }
+            let (next, remaining_work, processed_count, complete) =
+                self.continue_current(cursor)?;
+            if !complete && !remaining_work {
+                return Err(PortError::new(PortErrorCode::StaleState));
+            }
+            let next = archive_replay(store_revision_id(replay.revision_id())?, next.epoch)?;
+            let state = if remaining_work {
+                ReplayContinuationState::Pending
+            } else {
+                ReplayContinuationState::Complete
+            };
+            if remaining_work && processed_count == 0 && next.epoch() == replay.epoch() {
+                return Err(PortError::new(PortErrorCode::StaleState));
+            }
+            return Ok(ReplayContinuation::new(next, state));
+        }
         let revision = store_revision_id(replay.revision_id())?;
         let continuation = self
             .store
@@ -511,6 +748,17 @@ impl Archive for StoreArchive {
     }
 
     fn seal_replay(&mut self, replay: ArchiveReplay) -> Result<ArchiveReplay, PortError> {
+        if self.current_cursor_for_replay(replay)?.is_some() {
+            let quality = self
+                .store
+                .archive_publication()
+                .map_err(|error| store_port_error(&error))?
+                .quality();
+            if quality != ArchivePublicationQuality::Complete {
+                return Err(PortError::new(PortErrorCode::StaleState));
+            }
+            return Ok(replay);
+        }
         let revision = store_revision_id(replay.revision_id())?;
         let snapshot = self
             .store
@@ -520,6 +768,18 @@ impl Archive for StoreArchive {
     }
 
     fn promote_replay(&mut self, replay: ArchiveReplay) -> Result<(), PortError> {
+        if self.current_cursor_for_replay(replay)?.is_some() {
+            let quality = self
+                .store
+                .archive_publication()
+                .map_err(|error| store_port_error(&error))?
+                .quality();
+            return if quality == ArchivePublicationQuality::Complete {
+                Ok(())
+            } else {
+                Err(PortError::new(PortErrorCode::StaleState))
+            };
+        }
         self.store
             .promote_replay_revision(
                 store_revision_id(replay.revision_id())?,

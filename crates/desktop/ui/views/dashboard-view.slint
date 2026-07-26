@@ -87,7 +87,7 @@ component InitialImportCard inherits Rectangle {
     border-width: 1px;
     border-radius: UiTokens.radius-lg;
     accessible-role: groupbox;
-    accessible-label: root.phase-label + " " + @tr("Charts and totals will appear after the first safe import completes.");
+    accessible-label: root.phase-label + " " + @tr("TokenMaster keeps available safe data visible while it imports the rest.");
 
     HorizontalLayout {
         padding: UiTokens.space;
@@ -101,7 +101,7 @@ component InitialImportCard inherits Rectangle {
         VerticalLayout {
             spacing: UiTokens.space-xs;
             Text { text: root.phase-label; color: UiTokens.text-primary; font-size: 13px; font-weight: 750; }
-            Text { text: @tr("Charts and totals will appear after the first safe import completes."); color: UiTokens.text-secondary; font-size: 11px; wrap: word-wrap; }
+            Text { text: @tr("TokenMaster keeps available safe data visible while it imports the rest."); color: UiTokens.text-secondary; font-size: 11px; wrap: word-wrap; }
         }
     }
 }
@@ -401,6 +401,7 @@ export component DashboardView inherits Rectangle {
     in property <string> header-events;
     in property <string> header-evidence;
     in property <bool> initial-import-in-progress;
+    in property <bool> startup-import-in-progress;
     in property <int> initial-import-stage;
     in property <bool> reduced-motion;
     in property <string> code-commits;
@@ -410,6 +411,7 @@ export component DashboardView inherits Rectangle {
     in property <string> code-efficiency;
     in property <string> code-evidence;
     out property <bool> narrow: root.width < 760px;
+    out property <bool> initial-import-visible: root.initial-import-in-progress || root.startup-import-in-progress;
     out property <string> initial-import-phase-label: root.initial-import-stage >= 2 ? @tr("Importing local usage history…") : (root.initial-import-stage == 1 ? @tr("Starting safe import…") : @tr("Checking local usage history…"));
     out property <string> layout-mode: root.narrow ? "narrow" : "wide";
     out property <string> layout-preset: root.layout-id == 2 ? "workbench" : (root.layout-id == 1 ? "control_center" : "refined");
@@ -426,7 +428,7 @@ export component DashboardView inherits Rectangle {
             width: parent.width;
             padding: UiTokens.space;
             spacing: UiTokens.space;
-            if root.initial-import-in-progress: InitialImportCard {
+            if root.initial-import-visible: InitialImportCard {
                 phase-label: root.initial-import-phase-label;
                 reduced-motion: root.reduced-motion;
             }
@@ -437,7 +439,7 @@ export component DashboardView inherits Rectangle {
             width: parent.width;
             padding: UiTokens.space;
             spacing: UiTokens.space;
-            if root.initial-import-in-progress: InitialImportCard {
+            if root.initial-import-visible: InitialImportCard {
                 phase-label: root.initial-import-phase-label;
                 reduced-motion: root.reduced-motion;
             }
@@ -459,7 +461,7 @@ export component DashboardView inherits Rectangle {
             width: parent.width;
             padding: UiTokens.space;
             spacing: UiTokens.space;
-            if root.initial-import-in-progress: InitialImportCard {
+            if root.initial-import-visible: InitialImportCard {
                 phase-label: root.initial-import-phase-label;
                 reduced-motion: root.reduced-motion;
             }
@@ -481,7 +483,7 @@ export component DashboardView inherits Rectangle {
             width: parent.width;
             padding: UiTokens.space;
             spacing: UiTokens.space;
-            if root.initial-import-in-progress: InitialImportCard {
+            if root.initial-import-visible: InitialImportCard {
                 phase-label: root.initial-import-phase-label;
                 reduced-motion: root.reduced-motion;
             }
