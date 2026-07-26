@@ -37,8 +37,12 @@ the preceding step is closed.
   paint remains unconfirmed rather than diagnosed as a renderer defect.
 - The integrated restart-safe replay and current-day first-use slice passed one
   independent review, its focused correction contracts, and the complete workspace
-  quality gate. A clean commit, package/secret receipts, and physical packaged-UI
-  confirmation remain.
+  quality gate.
+- The clean-commit deterministic unsigned package, package validator, committed-history
+  secret scan, closed-ZIP secret scan, and isolated packaged functional launch pass.
+- Windows UI Automation exposes real current metrics, routes, import state, and graph
+  semantics. Trustworthy physical pixels remain open because the available capture API
+  fails independently of the proven software pixel buffer and accessibility tree.
 - Stable-release acceptance additionally requires signing and external acceptance. The
   24-hour soak stays deferred until the operator explicitly starts it.
 
@@ -72,9 +76,9 @@ renderer defect unless physical presentation or a real pixel buffer reproduces i
 | Time to useful data | fresh portable current-day event publication | local green |
 | Memory | bounded, stable smoke samples | local green |
 | UI frame | non-black/non-uniform software pixel buffer | focused green |
-| Core UI functions | compiled route/control contracts and packaged physical check | compiled focused green; physical open |
+| Core UI functions | compiled route/control contracts and packaged functional check | green; physical pixels open |
 | Integrated correctness | focused replay/runtime/store contracts | green |
 | Workspace quality | clean-root, fmt, strict Clippy, full locked tests | green, 21m03s |
-| Git | intentional clean commit | open |
-| Package | deterministic unsigned portable ZIP from exact clean commit | open |
+| Git | intentional clean commit | green |
+| Package | deterministic unsigned portable ZIP plus exact secret receipt | green |
 | Stable release | signing plus external acceptance and operator-started soak | deferred/external |

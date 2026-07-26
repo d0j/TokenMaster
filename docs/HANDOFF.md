@@ -27,15 +27,21 @@ unchanged and stalled sources. The one final workspace gate passed clean-root, f
 warnings-as-errors locked workspace Clippy, and all locked workspace tests in 21 minutes
 3 seconds. No audit parser or P4 feature changed. `AUDIT_HARDENING_LOOP` is not active.
 
-Release blockers: commit cleanly, build/validate the deterministic unsigned portable
-0.1.0 candidate and secret-scan receipt, and physically inspect that packaged
-executable. Signing and external interactive acceptance remain open; the operator
-deferred the 24-hour soak.
+Package/evidence state: the exact-clean deterministic unsigned 0.1.0 producer and package
+validator pass. Pinned Gitleaks 8.30.1 passes the committed history and the validated
+closed ZIP. An isolated packaged launch stayed responsive, exposed all primary routes,
+the in-app import state, current Today metrics, and the Daily token trend through Windows
+UI Automation, and was closed by exact PID. Its task-owned extracted data was removed.
+The capture API still cannot provide trustworthy physical pixels.
 
-Git state: preserve the dirty integrated slice until its one intentional release commit;
-do not split or revert its prior replay work. The task-owned UI, gate, and portable smoke
-processes/data were stopped or completed and removed as applicable. Follow
-`docs/RELEASE_EXIT_PLAN.md` at every cycle.
+Release blockers: physical packaged-window presentation, signing, and external
+interactive acceptance remain open; the operator deferred the 24-hour soak. Do not call
+the unsigned local candidate stable or signed.
+
+Git state: the integrated slice is committed on the feature branch and remains local
+ahead of upstream. The task-owned UI, gate, package, secret-scan, and portable smoke
+processes are complete and no longer running. Follow `docs/RELEASE_EXIT_PLAN.md` at every
+cycle.
 
 ## Restart-safe staged rebuild continuation (2026-07-25)
 

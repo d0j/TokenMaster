@@ -4,10 +4,10 @@ The active release rail is `docs/RELEASE_EXIT_PLAN.md`. New P4 work remains froz
 immediate milestone is a locally accepted deterministic unsigned Windows x64 portable
 0.1.0 candidate under Apache-2.0, not a stable or signed release. Current-day first-use
 recovery, integrated replay validation, the single independent review, and the final
-workspace gate are green. The shortest remaining path is a clean commit, deterministic
-package/secret validation, and physical inspection of the packaged UI. Signing and
-authenticated external acceptance remain separate, and the 24-hour soak is deferred
-until the operator explicitly starts it.
+workspace gate are green. The clean-commit deterministic unsigned package, package
+validator, secret scans, and isolated packaged functional launch are green. Trustworthy
+physical pixels, signing, and authenticated external acceptance remain separate, and the
+24-hour soak is deferred until the operator explicitly starts it.
 
 The active delivery mode is release-driven: new P4 improvements are frozen. The
 production GNU release binary builds and passes one isolated portable-stage launch

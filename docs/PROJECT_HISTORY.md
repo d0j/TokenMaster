@@ -18,9 +18,15 @@ The one independent review then exposed four production defects in reconciliatio
 Partial continuation, import-state lifetime, and duplicate startup submission. Their
 focused regressions pass after correction, including quiescence when a source makes no
 durable replay-generation progress. The final clean-root/format/strict-Clippy/all-tests
-workspace gate passed in 21 minutes 3 seconds. This was production time-to-first-use and
-recovery correctness work, not audit hardening; the clean commit, unsigned package
-candidate, secret-scan receipt, and physical packaged-UI confirmation remain.
+workspace gate passed in 21 minutes 3 seconds.
+
+The slice was committed and produced a validated deterministic unsigned 0.1.0 Windows
+ZIP. Pinned Gitleaks passed both committed history and the package. The packaged
+executable remained responsive, exposed current metrics, graph and route semantics
+through Windows UI Automation, and was stopped and cleaned by exact ownership. This was
+production time-to-first-use and recovery correctness work, not audit hardening.
+Trustworthy physical pixels, signing, external acceptance, and the operator-deferred
+24-hour soak remain.
 
 ## 2026-07-25 — Restart-safe replacement replay
 

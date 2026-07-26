@@ -33,16 +33,22 @@ submits the normal startup refresh once. Focused regressions pass. The final wor
 gate passed clean-root, formatting, warnings-as-errors locked workspace Clippy, and all
 locked workspace tests in 21 minutes 3 seconds.
 
-Release blockers: create an intentional clean commit, produce and validate the
-deterministic unsigned portable 0.1.0 candidate and its secret-scan receipt, and
-physically confirm the packaged UI. Signing and authenticated external acceptance remain
-separate. The 24-hour soak is explicitly deferred by the operator.
+The clean-commit deterministic unsigned portable 0.1.0 producer and validator pass.
+Pinned Gitleaks 8.30.1 passes both committed history and the validated closed ZIP. An
+isolated launch of the packaged executable remained responsive, exposed the complete
+route tree, import state, current Today metrics, and the Daily token trend through
+Windows UI Automation, then closed by exact PID. Its private memory was 48.4 MiB and
+working set 77.9 MiB at close. The extracted task-owned copy was removed.
 
-Git state: the feature branch is ahead of its upstream and intentionally dirty with the
-integrated replay/startup/import slice pending its one release commit. No task-owned
-TokenMaster, Cargo, compiler, test, or temporary portable process remains after the
-completed gate. The two observed `pythonw.exe` processes are unrelated user processes
-and were not touched.
+Release blockers: trustworthy physical pixel presentation of the packaged window,
+signing, and authenticated external acceptance remain separate. The 24-hour soak is
+explicitly deferred by the operator. This artifact is an unsigned local release
+candidate, not a stable or signed release.
+
+Git state: the integrated replay/startup/import slice is committed on the feature branch,
+which remains ahead of its upstream. No task-owned TokenMaster, Cargo, compiler, test, or
+temporary portable process remains. The two observed `pythonw.exe` processes are
+unrelated user processes and were not touched.
 
 ## 2026-07-25 — Restart-safe staged rebuild continuation
 
