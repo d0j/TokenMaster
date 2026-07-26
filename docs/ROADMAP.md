@@ -5,9 +5,10 @@ immediate milestone is a locally accepted deterministic unsigned Windows x64 por
 0.1.0 candidate under Apache-2.0, not a stable or signed release. Current-day first-use
 recovery, integrated replay validation, the single independent review, and the final
 workspace gate are green. The clean-commit deterministic unsigned package, package
-validator, secret scans, and isolated packaged functional launch are green. Trustworthy
-physical pixels, signing, and authenticated external acceptance remain separate, and the
-24-hour soak is deferred until the operator explicitly starts it.
+validator, secret scans, isolated packaged functional launch, and local native
+physical-paint check are green. Signing and authenticated disposable-host interactive/
+DPI/accessibility acceptance remain separate, and the 24-hour soak is deferred until the
+operator explicitly starts it.
 
 The active delivery mode is release-driven: new P4 improvements are frozen. The
 production GNU release binary builds and passes one isolated portable-stage launch

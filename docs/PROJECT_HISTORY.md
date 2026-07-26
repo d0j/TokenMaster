@@ -25,8 +25,15 @@ ZIP. Pinned Gitleaks passed both committed history and the package. The packaged
 executable remained responsive, exposed current metrics, graph and route semantics
 through Windows UI Automation, and was stopped and cleaned by exact ownership. This was
 production time-to-first-use and recovery correctness work, not audit hardening.
-Trustworthy physical pixels, signing, external acceptance, and the operator-deferred
-24-hour soak remain.
+
+A later independent native `PrintWindow` pass closed the local physical-paint question:
+the exact packaged process returned a real 1,133 by 756 frame with 142 sampled colors,
+thousands of non-black samples, and a visibly complete shell/Dashboard. The native API
+retained an older compositor frame while Windows Automation observed current values and
+the graph, so no synchronized-image claim is made. Both task-owned runs stayed
+responsive, were stopped by exact PID, and had their extracted data and captures
+removed. Signing, authenticated disposable-host interactive/DPI/accessibility
+acceptance, external acceptance, and the operator-deferred 24-hour soak remain.
 
 ## 2026-07-25 — Restart-safe replacement replay
 

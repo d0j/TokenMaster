@@ -40,8 +40,17 @@ route tree, import state, current Today metrics, and the Daily token trend throu
 Windows UI Automation, then closed by exact PID. Its private memory was 48.4 MiB and
 working set 77.9 MiB at close. The extracted task-owned copy was removed.
 
-Release blockers: trustworthy physical pixel presentation of the packaged window,
-signing, and authenticated external acceptance remain separate. The 24-hour soak is
+Native `PrintWindow` capture of the exact packaged executable produced a real 1,133 by
+756 frame with 142 sampled colors and thousands of non-black samples. Direct inspection
+confirmed the complete header, sidebar, import card, and Dashboard cards with no black
+or transparent window failure. Later Windows Automation from the same responsive
+process exposed current Today values, route controls, and the Daily token trend. The
+capture API retained an older compositor frame and direct screen copy was denied, so no
+claim is made that one retained image proves the later semantic update. Together with
+the existing software-pixel contract, this closes the local physical-paint blocker.
+
+Release blockers: authenticated disposable-host interactive/DPI/accessibility
+acceptance, signing, and external acceptance remain separate. The 24-hour soak is
 explicitly deferred by the operator. This artifact is an unsigned local release
 candidate, not a stable or signed release.
 

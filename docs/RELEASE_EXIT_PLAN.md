@@ -33,16 +33,16 @@ the preceding step is closed.
 - The startup Dashboard exposes a truthful in-app import state while retaining available
   safe data.
 - A software-rendered pixel contract proves the startup Dashboard frame is non-black and
-  non-uniform. The available Windows window-capture API still returns black, so physical
-  paint remains unconfirmed rather than diagnosed as a renderer defect.
+  non-uniform. Native `PrintWindow` of the exact packaged executable independently
+  proves a real non-black, non-uniform physical shell/Dashboard frame.
 - The integrated restart-safe replay and current-day first-use slice passed one
   independent review, its focused correction contracts, and the complete workspace
   quality gate.
 - The clean-commit deterministic unsigned package, package validator, committed-history
   secret scan, closed-ZIP secret scan, and isolated packaged functional launch pass.
-- Windows UI Automation exposes real current metrics, routes, import state, and graph
-  semantics. Trustworthy physical pixels remain open because the available capture API
-  fails independently of the proven software pixel buffer and accessibility tree.
+- Windows Automation exposes real current metrics, routes, import state, and graph
+  semantics. Native capture retains an older compositor frame, so it is not represented
+  as a synchronized image of those later values; local physical paint itself is green.
 - Stable-release acceptance additionally requires signing and external acceptance. The
   24-hour soak stays deferred until the operator explicitly starts it.
 
@@ -75,8 +75,8 @@ renderer defect unless physical presentation or a real pixel buffer reproduces i
 | Import truth | visible active state plus retained safe publication | focused green |
 | Time to useful data | fresh portable current-day event publication | local green |
 | Memory | bounded, stable smoke samples | local green |
-| UI frame | non-black/non-uniform software pixel buffer | focused green |
-| Core UI functions | compiled route/control contracts and packaged functional check | green; physical pixels open |
+| UI frame | software pixel buffer plus native packaged-window capture | green |
+| Core UI functions | compiled route/control contracts and packaged functional check | green |
 | Integrated correctness | focused replay/runtime/store contracts | green |
 | Workspace quality | clean-root, fmt, strict Clippy, full locked tests | green, 21m03s |
 | Git | intentional clean commit | green |

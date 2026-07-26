@@ -31,12 +31,15 @@ Package/evidence state: the exact-clean deterministic unsigned 0.1.0 producer an
 validator pass. Pinned Gitleaks 8.30.1 passes the committed history and the validated
 closed ZIP. An isolated packaged launch stayed responsive, exposed all primary routes,
 the in-app import state, current Today metrics, and the Daily token trend through Windows
-UI Automation, and was closed by exact PID. Its task-owned extracted data was removed.
-The capture API still cannot provide trustworthy physical pixels.
+Automation, and was closed by exact PID. Native `PrintWindow` independently captured a
+real 1,133 by 756, 142-sampled-color packaged frame with the complete shell and Dashboard
+cards. It retained an older compositor frame while Automation exposed the later data, so
+the two receipts are complementary rather than represented as one synchronized image.
+The task-owned extracted data and captures were removed.
 
-Release blockers: physical packaged-window presentation, signing, and external
-interactive acceptance remain open; the operator deferred the 24-hour soak. Do not call
-the unsigned local candidate stable or signed.
+Release blockers: signing and authenticated disposable-host interactive/DPI/
+accessibility acceptance remain open; the operator deferred the 24-hour soak. Local
+physical paint is green. Do not call the unsigned local candidate stable or signed.
 
 Git state: the integrated slice is committed on the feature branch and remains local
 ahead of upstream. The task-owned UI, gate, package, secret-scan, and portable smoke
