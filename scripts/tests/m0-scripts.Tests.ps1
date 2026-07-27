@@ -89,12 +89,10 @@ Describe "TokenMaster M0 script contracts" {
         $Text | Should -Not -Match 'mingw = \$MingwVersion'
     }
 
-    It "packaging uses root-only paths" {
-        foreach ($Name in @("package-product.ps1")) {
-            $Text = Get-Content -LiteralPath (Join-Path $ScriptsRoot $Name) -Raw
-            $Text | Should -Match 'Join-Path \$RepositoryRoot "Cargo\.toml"'
-            $Text | Should -Not -Match '(?i)\bgo\.exe\b|\bnode\.exe\b|\bpython\.exe\b'
-        }
+    It "packaging resolves an absolute repository root and uses no foreign runtime" {
+        $Text = Get-Content -LiteralPath (Join-Path $ScriptsRoot "package-product.ps1") -Raw
+        $Text | Should -Match '\[IO\.Path\]::GetFullPath\(\(Resolve-Path -LiteralPath \$RepositoryRoot\)\.Path\)'
+        $Text | Should -Not -Match '(?i)\bgo\.exe\b|\bnode\.exe\b|\bpython\.exe\b'
     }
 
     It "verification runs the surviving script contracts" {

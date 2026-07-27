@@ -40,7 +40,11 @@ jobs:
           Install-Module Pester -RequiredVersion 5.7.1 -Scope CurrentUser -Force -SkipPublisherCheck
       - name: Install Rust 1.97.0
         shell: pwsh
-        run: rustup toolchain install 1.97.0 --profile minimal --component rustfmt --component clippy --target x86_64-pc-windows-msvc
+        run: rustup toolchain install 1.97.0-x86_64-pc-windows-msvc --profile minimal --component rustfmt --component clippy
+      - name: Cache Cargo registry and build artifacts
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          cache-all-crates: true
       - name: Verify TokenMaster M0
         shell: pwsh
         run: ./scripts/verify-m0.ps1 -RepositoryRoot $PWD.Path

@@ -109,11 +109,15 @@ package, M0, release-candidate, or stable-release acceptance.
 
 ## Verification
 
+`rust-toolchain.toml` pins the exact toolchain and host triple, so no `+toolchain`
+override belongs in a command or a script. Everything builds and tests
+`x86_64-pc-windows-msvc`, which is the target that ships.
+
 Run the narrowest relevant test first. The baseline quality gate is:
 
 ```powershell
 pwsh -NoProfile -File scripts\audit-clean-root.ps1 -RepositoryRoot (Get-Location).Path
-cargo +1.97.0 fmt --all -- --check
-$env:RUSTFLAGS = '-Dwarnings'; cargo +1.97.0 clippy --workspace --all-targets --locked
-cargo +1.97.0 test --workspace --locked
+cargo fmt --all -- --check
+$env:RUSTFLAGS = '-Dwarnings'; cargo clippy --workspace --all-targets --locked
+cargo test --workspace --locked
 ```

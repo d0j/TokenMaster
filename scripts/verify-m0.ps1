@@ -88,11 +88,11 @@ Invoke-PesterChecked "pester-immutable-actions" (Join-Path $PSScriptRoot "tests\
 Invoke-PesterChecked "pester-release-artifact-workflow" (Join-Path $PSScriptRoot "tests\release-artifact-workflow.Tests.ps1")
 Invoke-PesterChecked "pester-dependency-policy" (Join-Path $PSScriptRoot "tests\dependency-policy.Tests.ps1")
 Invoke-PesterChecked "pester-secret-scan" (Join-Path $PSScriptRoot "tests\secret-scan.Tests.ps1")
-Invoke-Checked "fmt" $Cargo @("+1.97.0", "fmt", "--manifest-path", $Manifest, "--all", "--", "--check")
+Invoke-Checked "fmt" $Cargo @("fmt", "--manifest-path", $Manifest, "--all", "--", "--check")
 $PreviousRustFlags = $env:RUSTFLAGS
 try {
     $env:RUSTFLAGS = "$PreviousRustFlags -Dwarnings".Trim()
-    Invoke-Checked "clippy" $Cargo @("+1.97.0", "clippy", "--manifest-path", $Manifest, "--workspace", "--all-targets", "--locked")
+    Invoke-Checked "clippy" $Cargo @("clippy", "--manifest-path", $Manifest, "--workspace", "--all-targets", "--locked")
 }
 finally {
     if ($null -eq $PreviousRustFlags) {
@@ -101,9 +101,9 @@ finally {
         $env:RUSTFLAGS = $PreviousRustFlags
     }
 }
-Invoke-Checked "sqlite-one-million" $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "-p", "tokenmaster-store", "--test", "sqlite_contract", "--locked", "--", "one_million_rows_remain_page_bounded", "--ignored", "--exact")
-Invoke-Checked "workspace-tests" $Cargo @("+1.97.0", "test", "--manifest-path", $Manifest, "--workspace", "--locked")
-Invoke-Checked "product-release-build" $Cargo @("+1.97.0", "build", "--manifest-path", $Manifest, "-p", "tokenmaster-app", "--release", "--locked")
+Invoke-Checked "sqlite-one-million" $Cargo @("test", "--manifest-path", $Manifest, "-p", "tokenmaster-store", "--test", "sqlite_contract", "--locked", "--", "one_million_rows_remain_page_bounded", "--ignored", "--exact")
+Invoke-Checked "workspace-tests" $Cargo @("test", "--manifest-path", $Manifest, "--workspace", "--locked")
+Invoke-Checked "product-release-build" $Cargo @("build", "--manifest-path", $Manifest, "-p", "tokenmaster-app", "--release", "--locked")
 
 $Summary = [ordered]@{
     schemaVersion = 1

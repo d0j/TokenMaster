@@ -78,7 +78,7 @@ try {
 
     $TargetDirectory = Get-CanonicalProductTargetDirectory -RepositoryRoot $Repository
     Invoke-Checked {
-        cargo +1.97.0 build -p tokenmaster-app --release --locked `
+        cargo build -p tokenmaster-app --release --locked `
             --target x86_64-pc-windows-msvc --target-dir $TargetDirectory
     } "canonical MSVC product build failed"
 
@@ -90,7 +90,7 @@ try {
         throw "canonical MSVC product validation failed"
     }
 
-    $MetadataJson = & cargo +1.97.0 metadata --locked --format-version 1
+    $MetadataJson = & cargo metadata --locked --format-version 1
     if ($LASTEXITCODE -ne 0) {
         throw "locked Cargo metadata failed"
     }
@@ -105,7 +105,7 @@ try {
     }
 
     $DependencyKeys = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    $TreeLines = & cargo +1.97.0 tree -p tokenmaster-app --target x86_64-pc-windows-msvc `
+    $TreeLines = & cargo tree -p tokenmaster-app --target x86_64-pc-windows-msvc `
         --locked --edges "normal,build" --prefix none --format "{p}"
     if ($LASTEXITCODE -ne 0) {
         throw "locked MSVC dependency tree failed"
@@ -210,7 +210,7 @@ try {
         commit = $Commit
         target = "x86_64-pc-windows-msvc"
         executableSha256 = $ExecutableHash
-        rust = (& rustc +1.97.0 --version).Trim()
+        rust = (& rustc --version).Trim()
     } | ConvertTo-Json
 
     $TemporaryRoot = [IO.Directory]::CreateTempSubdirectory(

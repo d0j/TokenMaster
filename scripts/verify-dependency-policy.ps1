@@ -43,7 +43,7 @@ New-Item -ItemType Directory -Path $ScratchRoot -Force | Out-Null
 
 $Cargo = (Get-Command cargo.exe -CommandType Application -ErrorAction Stop |
         Select-Object -First 1).Source
-$Metadata = @(& $Cargo "+1.97.0" "metadata" "--manifest-path" $Manifest `
+$Metadata = @(& $Cargo "metadata" "--manifest-path" $Manifest `
         "--format-version" "1" "--locked" "--all-features")
 if ($LASTEXITCODE -ne 0) {
     throw "locked dependency metadata failed"

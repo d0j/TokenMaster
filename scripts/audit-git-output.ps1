@@ -22,7 +22,7 @@ function Get-ProductionRustText {
     return $text
 }
 
-$metadataJson = & cargo +1.97.0 metadata --locked --format-version 1 --manifest-path $manifest
+$metadataJson = & cargo metadata --locked --format-version 1 --manifest-path $manifest
 if ($LASTEXITCODE -ne 0) {
     throw 'cargo metadata failed'
 }
@@ -262,7 +262,7 @@ if ($unexpectedThirdParty.Count -ne 0 -or $thirdPartyFiles.Count -ne $allowedThi
     throw 'third_party contains vendored or unexpected upstream source'
 }
 
-& cargo +1.97.0 build --release --locked --manifest-path $manifest `
+& cargo build --release --locked --manifest-path $manifest `
     -p tokenmaster-git -p tokenmaster-store -p tokenmaster-query -p tokenmaster-runtime
 if ($LASTEXITCODE -ne 0) {
     throw 'release Git production libraries build failed'
