@@ -1,5 +1,70 @@
 # TokenMaster handoff
 
+## Cold-reader proof-cache correction (2026-07-27)
+
+Product state: a reproduced cold-import blocker legitimately reopened the otherwise
+frozen importer. Codex parsing was already forward-only; the SHA-256 chunk-proof path
+was not. Every event-bounded batch reread the growing prefix of its active 1-MiB chunk.
+The runtime now carries one descriptor-local SHA-256 state across direct and prefetched
+batches. A restart performs one bounded prefix reconstruction, then returns to
+forward-only extension.
+
+Audit/evidence state: the 1,038,170-byte/32-batch optimized benchmark reduced repeated
+prefix reads from 16,060,240 bytes to zero and elapsed time from 23 ms to 15 ms.
+Full-prefix verification and final checkpoints are identical. Codex reader tests pass
+14 with one release-only benchmark ignored; runtime incremental tests pass 14 with one
+release-only benchmark ignored; the complete Codex test package, focused provider
+runtime/checkpoint suites, and strict focused Clippy pass. The sole Sol review rejected
+the first draft because mutation plus append could reuse stale SHA state. Cache
+validity now includes physical/logical identity, observed length, and modification
+time, and the existing mutation contract runs through the stateful path.
+The final clean-root, format, warnings-as-errors workspace Clippy, and complete
+workspace test/doc-test baseline passed in 1,046.9 seconds.
+
+Release blockers: this is deterministic reader and runtime evidence, not real
+modified-app acceptance. The operator-retained pre-fix application was not closed, so
+no second instance or competing archive writer was started. After that instance is
+closed, the shortest next action is one isolated real cold-import A/B receipt against
+the same source set, followed by the already planned package path. WMT superiority,
+signing, authenticated accessibility/DPI acceptance, and the operator-deferred soak
+remain unproven.
+
+Git state: this performance correction is uncommitted and shares the worktree with the
+previous uncommitted UI acceptance slice. Stage and commit the backend/test files
+intentionally; do not absorb or revert unrelated work. No interactive process was
+created by this correction. `AUDIT_HARDENING_LOOP` is not active.
+
+## WMT-inspired Windows UI acceptance (2026-07-27)
+
+Product state: the default desktop shell now presents TokenMaster as a focused usage
+product rather than a wide administration console. It has a compact brand/header,
+full-width dashboard, fixed Dashboard/Alerts/Settings/route footer on the two primary
+surfaces, WMT-like dense cards and dark amber/teal hierarchy, preserved bounded scroll,
+trend hover geometry, and responsive breakpoints that account for the removed sidebar.
+Deep routes recover the footer height and all eleven routes remain reachable through
+the header palette; no product capability was removed.
+
+Audit/evidence state: targeted WMT source comparison preceded edits. Palette contrast,
+compiled route switching, full desktop UI contract, and software paint pass 21/21.
+The warnings-as-errors release build passes. In the final real launch, safe Partial
+data became visible during import with `990 / 4,008` progress, 3,154,237 tokens,
+36 events, populated Trend and Sessions, a working scroll surface, and an on-screen
+fixed footer. The exact task-owned UI/background process count was zero after close.
+
+Release blockers: this is local UI acceptance, not a package or release claim.
+Cost and quota remain unavailable when their independent evidence is absent; Git
+output remains degraded when its scan is stale/incomplete. The remaining shortest
+path is the exact-clean deterministic Windows package/secret receipt pair, attribution
+and signing/publication acceptance; the 24-hour soak remains operator-deferred.
+
+Git state: this UI slice is not yet committed at this handoff entry. It changes desktop
+presentation and its fixed palette contract only. `AUDIT_HARDENING_LOOP` is not active;
+the backend/P4 performance freeze remains active.
+
+Next action: close this slice with one intentional commit, then resume only the
+minimum Windows package/release path. Do not reopen importer tuning or speculative UI
+polish unless a reproduced release blocker requires it.
+
 ## Exact replay batching and schema-v15 compatibility (2026-07-27)
 
 Product state: UI is frozen. The accepted backend slice batches bounded current replay

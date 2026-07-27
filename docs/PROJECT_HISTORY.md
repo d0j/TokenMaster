@@ -1,5 +1,37 @@
 # TokenMaster project history
 
+## 2026-07-27 — Cold proof construction became forward-only
+
+A live large-history run disproved the earlier assumption that source reading was
+already cheap: parsing was forward-only, but integrity proof construction repeatedly
+hashed the growing prefix of every active 1-MiB chunk. Event-bounded sources therefore
+created quadratic logical reads inside each chunk.
+
+The Codex adapter now owns one bounded, descriptor-local SHA-256 continuation state.
+Normal batches extend it; restart or a changed file observation reconstructs at most
+one partial chunk. An optimized 1,038,170-byte/32-batch comparison removed 16,060,240
+bytes of prefix rereads and reduced the measured reader segment from 23 to 15 ms while
+preserving the exact checkpoint and full-prefix proof. A final review caught and
+closed mutation-plus-append invalidation before acceptance. Real application A/B
+remains pending until the operator-retained pre-fix instance can be closed.
+
+## 2026-07-27 — The release UI became a focused usage product
+
+The desktop shell was compared against the pinned WhereMyTokens reference before any
+build. TokenMaster kept its own modular routes and Slint implementation, but adopted
+the reference's strongest observable product patterns: compact fixed chrome, dense
+full-width cards, a primary-surface bottom action bar, restrained amber/teal dark hierarchy,
+clear loading progress, one scrolling content surface, and readable responsive
+stacking. Removing the sidebar recovered 184 pixels; all affected breakpoints were
+shifted so 880–900 pixel windows retain the intended single-column dashboard.
+
+Palette, shell, paint, and responsive contracts passed 21 tests. A release launch
+showed real Partial data during the 4,008-source cold import, including `990 / 4,008`
+progress, 3,154,237 tokens, 36 events, Trend and Sessions. A visual follow-up caught
+the original 900-pixel height placing the footer beyond the current screen; the
+default was corrected to 760 pixels and reverified. Scroll worked and the exact
+interactive/background process was removed afterward.
+
 ## 2026-07-27 — Bounded exact replay batching improved real cold progress
 
 The cold-import writer now groups bounded current replay commands across sources and

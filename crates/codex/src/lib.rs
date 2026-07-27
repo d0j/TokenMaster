@@ -64,9 +64,9 @@ pub use reader::{
     MAX_BATCH_COMPLETE_BYTES, MAX_BATCH_EVENTS, MAX_RESUME_BYTES, READ_BUFFER_BYTES,
     READER_CHECKPOINT_SCHEMA_VERSION, ReadBatch, ReaderCheckpointError, ReaderCheckpointErrorCode,
     ReaderCheckpointParts, ReaderCheckpointV1, ReaderDiagnosticCode, ReaderDiagnostics,
-    ReaderError, ReaderErrorCode, ReaderOutcome, RebuildReason, SOURCE_CHUNK_BYTES,
-    SourceCheckpointStatus, SourceChunkDigest, SourceProbe, VerificationLevel,
+    ReaderError, ReaderErrorCode, ReaderOutcome, ReaderProofCache, RebuildReason,
+    SOURCE_CHUNK_BYTES, SourceCheckpointStatus, SourceChunkDigest, SourceProbe, VerificationLevel,
     initialize_source_checkpoint, logical_file_identity, read_source_batch,
-    validate_source_checkpoint, verify_full_prefix,
+    read_source_batch_with_cache, validate_source_checkpoint, verify_full_prefix,
 };
 pub use roots::{CodexRootInput, ConfiguredCodexRoot, build_discovery_request};

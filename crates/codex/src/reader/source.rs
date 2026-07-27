@@ -7,12 +7,18 @@ use sha2::{Digest, Sha256};
 use tokenmaster_platform::{PhysicalFileIdentity, PhysicalIdentityError};
 
 use super::{
-    BoundaryAnchor, MAX_ANCHOR_BYTES, ReaderError, ReaderErrorCode, SOURCE_CHUNK_BYTES,
-    SourceChunkDigest,
+    BoundaryAnchor, MAX_ANCHOR_BYTES, ReaderError, ReaderErrorCode, ReaderProofCache,
+    SOURCE_CHUNK_BYTES, SourceChunkDigest,
 };
 use crate::SourceFileDescriptor;
 
 const HASH_BUFFER_BYTES: usize = 64 * 1024;
+
+pub(super) struct ChunkProofValidation {
+    pub(super) observed_sha256: [u8; 32],
+    pub(super) chunks: Vec<SourceChunkDigest>,
+    pub(super) previous_partial: Option<SourceChunkDigest>,
+}
 
 pub(super) struct OpenSource {
     pub(super) file: File,
@@ -147,61 +153,57 @@ pub(super) fn boundary_anchor(
     .map_err(|_| ReaderError::new(ReaderErrorCode::CheckpointInvalid))
 }
 
-pub(super) fn source_chunks_for_range(
+pub(super) fn validate_and_extend_chunk_proofs(
     file: &mut File,
-    first_chunk: u64,
-    covered: u64,
-) -> Result<Vec<SourceChunkDigest>, ReaderError> {
-    let first_start = first_chunk
-        .checked_mul(SOURCE_CHUNK_BYTES)
+    start: u64,
+    observed_len: u64,
+    verified_end: u64,
+    cache: &mut ReaderProofCache,
+) -> Result<ChunkProofValidation, ReaderError> {
+    let observed_end = start
+        .checked_add(observed_len)
         .ok_or_else(|| ReaderError::new(ReaderErrorCode::CheckpointInvalid))?;
-    if first_start >= covered {
-        return Ok(Vec::new());
-    }
-
-    let chunk_count = covered
-        .saturating_sub(first_start)
-        .div_ceil(SOURCE_CHUNK_BYTES);
-    let capacity = usize::try_from(chunk_count)
-        .map_err(|_| ReaderError::new(ReaderErrorCode::CapacityExceeded))?;
-    let mut chunks = Vec::with_capacity(capacity);
-    for relative_index in 0..chunk_count {
-        let index = first_chunk.saturating_add(relative_index);
-        let start = index
-            .checked_mul(SOURCE_CHUNK_BYTES)
-            .ok_or_else(|| ReaderError::new(ReaderErrorCode::CheckpointInvalid))?;
-        let len = covered.saturating_sub(start).min(SOURCE_CHUNK_BYTES);
-        let sha256 = hash_range(file, start, len)?;
-        chunks.push(SourceChunkDigest::from_verified_parts(
-            index,
-            u32::try_from(len).map_err(|_| ReaderError::new(ReaderErrorCode::CheckpointInvalid))?,
-            sha256,
-        ));
-    }
-    Ok(chunks)
-}
-
-pub(super) fn extended_partial_chunk(
-    file: &mut File,
-    previous_offset: u64,
-    covered: u64,
-) -> Result<(SourceChunkDigest, SourceChunkDigest), ReaderError> {
-    let previous_len = previous_offset % SOURCE_CHUNK_BYTES;
-    if previous_len == 0 || covered <= previous_offset {
+    if verified_end > observed_end {
         return Err(ReaderError::new(ReaderErrorCode::CheckpointInvalid));
     }
-    let index = previous_offset / SOURCE_CHUNK_BYTES;
-    let start = index
-        .checked_mul(SOURCE_CHUNK_BYTES)
-        .ok_or_else(|| ReaderError::new(ReaderErrorCode::CheckpointInvalid))?;
-    let covered_len = covered.saturating_sub(start).min(SOURCE_CHUNK_BYTES);
+
+    let advances_proof = verified_end > start;
+    let (chunk_index, previous_len) = (start / SOURCE_CHUNK_BYTES, start % SOURCE_CHUNK_BYTES);
+    if advances_proof
+        && (cache.chunk_index != chunk_index || u64::from(cache.covered_len) != previous_len)
+    {
+        cache.chunk_index = chunk_index;
+        cache.covered_len = 0;
+        cache.hasher = Sha256::new();
+        if previous_len != 0 {
+            let chunk_start = chunk_index
+                .checked_mul(SOURCE_CHUNK_BYTES)
+                .ok_or_else(|| ReaderError::new(ReaderErrorCode::CheckpointInvalid))?;
+            file.seek(SeekFrom::Start(chunk_start))
+                .map_err(|_| ReaderError::new(ReaderErrorCode::SeekFailed))?;
+            update_hasher_from_file(file, previous_len, &mut cache.hasher)?;
+            cache.covered_len = u32::try_from(previous_len)
+                .map_err(|_| ReaderError::new(ReaderErrorCode::CheckpointInvalid))?;
+            cache.recovery_bytes_read = cache
+                .recovery_bytes_read
+                .checked_add(previous_len)
+                .ok_or_else(|| ReaderError::new(ReaderErrorCode::CapacityExceeded))?;
+        }
+    }
+
+    let previous_partial_chunk = (advances_proof && previous_len != 0).then(|| {
+        SourceChunkDigest::from_verified_parts(
+            chunk_index,
+            cache.covered_len,
+            cache.hasher.clone().finalize().into(),
+        )
+    });
     file.seek(SeekFrom::Start(start))
         .map_err(|_| ReaderError::new(ReaderErrorCode::SeekFailed))?;
-
-    let mut remaining = covered_len;
-    let mut hashed = 0_u64;
-    let mut hasher = Sha256::new();
-    let mut previous_sha256 = None;
+    let mut observed_hasher = Sha256::new();
+    let mut remaining = observed_len;
+    let mut position = start;
+    let mut chunks = Vec::new();
     let mut buffer = [0_u8; HASH_BUFFER_BYTES];
     while remaining > 0 {
         let requested = usize::try_from(remaining.min(buffer.len() as u64)).unwrap_or(buffer.len());
@@ -211,36 +213,80 @@ pub(super) fn extended_partial_chunk(
         if read == 0 {
             return Err(ReaderError::new(ReaderErrorCode::SourceChanged));
         }
-        let read_u64 = read as u64;
-        if hashed < previous_len && hashed.saturating_add(read_u64) >= previous_len {
-            let prefix = usize::try_from(previous_len.saturating_sub(hashed))
-                .map_err(|_| ReaderError::new(ReaderErrorCode::CheckpointInvalid))?;
-            hasher.update(&buffer[..prefix]);
-            previous_sha256 = Some(hasher.clone().finalize().into());
-            hasher.update(&buffer[prefix..read]);
-        } else {
-            hasher.update(&buffer[..read]);
-        }
-        hashed = hashed.saturating_add(read_u64);
-        remaining = remaining.saturating_sub(read_u64);
-    }
+        observed_hasher.update(&buffer[..read]);
 
-    let previous_sha256 =
-        previous_sha256.ok_or_else(|| ReaderError::new(ReaderErrorCode::CheckpointInvalid))?;
-    Ok((
-        SourceChunkDigest::from_verified_parts(
-            index,
-            u32::try_from(previous_len)
-                .map_err(|_| ReaderError::new(ReaderErrorCode::CheckpointInvalid))?,
-            previous_sha256,
-        ),
-        SourceChunkDigest::from_verified_parts(
-            index,
-            u32::try_from(covered_len)
-                .map_err(|_| ReaderError::new(ReaderErrorCode::CheckpointInvalid))?,
-            hasher.finalize().into(),
-        ),
-    ))
+        let verified_read = if advances_proof {
+            verified_end.saturating_sub(position).min(read as u64) as usize
+        } else {
+            0
+        };
+        let mut verified_offset = 0_usize;
+        while verified_offset < verified_read {
+            let room =
+                usize::try_from(SOURCE_CHUNK_BYTES.saturating_sub(u64::from(cache.covered_len)))
+                    .map_err(|_| ReaderError::new(ReaderErrorCode::CheckpointInvalid))?;
+            let take = room.min(verified_read.saturating_sub(verified_offset));
+            cache
+                .hasher
+                .update(&buffer[verified_offset..verified_offset.saturating_add(take)]);
+            cache.covered_len = cache
+                .covered_len
+                .checked_add(
+                    u32::try_from(take)
+                        .map_err(|_| ReaderError::new(ReaderErrorCode::CheckpointInvalid))?,
+                )
+                .ok_or_else(|| ReaderError::new(ReaderErrorCode::CheckpointInvalid))?;
+            verified_offset = verified_offset.saturating_add(take);
+            if u64::from(cache.covered_len) == SOURCE_CHUNK_BYTES {
+                chunks.push(SourceChunkDigest::from_verified_parts(
+                    cache.chunk_index,
+                    cache.covered_len,
+                    cache.hasher.clone().finalize().into(),
+                ));
+                cache.chunk_index = cache
+                    .chunk_index
+                    .checked_add(1)
+                    .ok_or_else(|| ReaderError::new(ReaderErrorCode::CapacityExceeded))?;
+                cache.covered_len = 0;
+                cache.hasher = Sha256::new();
+            }
+        }
+        position = position.saturating_add(read as u64);
+        remaining = remaining.saturating_sub(read as u64);
+    }
+    if advances_proof && cache.covered_len != 0 {
+        chunks.push(SourceChunkDigest::from_verified_parts(
+            cache.chunk_index,
+            cache.covered_len,
+            cache.hasher.clone().finalize().into(),
+        ));
+    }
+    Ok(ChunkProofValidation {
+        observed_sha256: observed_hasher.finalize().into(),
+        chunks,
+        previous_partial: previous_partial_chunk,
+    })
+}
+
+fn update_hasher_from_file(
+    file: &mut File,
+    len: u64,
+    hasher: &mut Sha256,
+) -> Result<(), ReaderError> {
+    let mut remaining = len;
+    let mut buffer = [0_u8; HASH_BUFFER_BYTES];
+    while remaining > 0 {
+        let requested = usize::try_from(remaining.min(buffer.len() as u64)).unwrap_or(buffer.len());
+        let read = file
+            .read(&mut buffer[..requested])
+            .map_err(|_| ReaderError::new(ReaderErrorCode::ReadFailed))?;
+        if read == 0 {
+            return Err(ReaderError::new(ReaderErrorCode::SourceChanged));
+        }
+        hasher.update(&buffer[..read]);
+        remaining = remaining.saturating_sub(read as u64);
+    }
+    Ok(())
 }
 
 pub(super) fn revalidate_path_identity(

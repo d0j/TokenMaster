@@ -29,6 +29,74 @@ const LOGICAL_FILE_DOMAIN: &[u8] = b"tm-source-path-v1";
 const PROFILE_HISTORY_CLASS: &[u8] = b"profile-history";
 const DIRECT_CLASS: &[u8] = b"direct";
 
+#[derive(Clone)]
+pub struct ReaderProofCache {
+    logical_identity: Option<LogicalFileIdentity>,
+    physical_identity: Option<PhysicalFileIdentity>,
+    observed_file_length: u64,
+    modified_time_ns: Option<i64>,
+    chunk_index: u64,
+    covered_len: u32,
+    hasher: Sha256,
+    recovery_bytes_read: u64,
+}
+
+impl Default for ReaderProofCache {
+    fn default() -> Self {
+        Self {
+            logical_identity: None,
+            physical_identity: None,
+            observed_file_length: 0,
+            modified_time_ns: None,
+            chunk_index: 0,
+            covered_len: 0,
+            hasher: Sha256::new(),
+            recovery_bytes_read: 0,
+        }
+    }
+}
+
+impl ReaderProofCache {
+    fn bind(
+        &mut self,
+        logical_identity: LogicalFileIdentity,
+        physical_identity: Option<PhysicalFileIdentity>,
+        observed_file_length: u64,
+        modified_time_ns: Option<i64>,
+    ) {
+        if self.logical_identity != Some(logical_identity)
+            || self.physical_identity != physical_identity
+            || self.observed_file_length != observed_file_length
+            || self.modified_time_ns != modified_time_ns
+        {
+            self.logical_identity = Some(logical_identity);
+            self.physical_identity = physical_identity;
+            self.observed_file_length = observed_file_length;
+            self.modified_time_ns = modified_time_ns;
+            self.chunk_index = 0;
+            self.covered_len = 0;
+            self.hasher = Sha256::new();
+        }
+    }
+
+    #[must_use]
+    pub const fn recovery_bytes_read(&self) -> u64 {
+        self.recovery_bytes_read
+    }
+}
+
+impl fmt::Debug for ReaderProofCache {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ReaderProofCache")
+            .field("bound", &self.logical_identity.is_some())
+            .field("chunk_index", &self.chunk_index)
+            .field("covered_len", &self.covered_len)
+            .field("recovery_bytes_read", &self.recovery_bytes_read)
+            .finish_non_exhaustive()
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReaderErrorCode {
@@ -510,11 +578,31 @@ pub fn read_source_batch(
     checkpoint: Option<&ReaderCheckpointV1>,
     mut should_cancel: impl FnMut() -> bool,
 ) -> Result<ReaderOutcome, ReaderError> {
+    read_source_batch_with_cache(
+        descriptor,
+        checkpoint,
+        &mut ReaderProofCache::default(),
+        &mut should_cancel,
+    )
+}
+
+pub fn read_source_batch_with_cache(
+    descriptor: &SourceFileDescriptor,
+    checkpoint: Option<&ReaderCheckpointV1>,
+    proof_cache: &mut ReaderProofCache,
+    mut should_cancel: impl FnMut() -> bool,
+) -> Result<ReaderOutcome, ReaderError> {
     if should_cancel() {
         return Err(ReaderError::new(ReaderErrorCode::Cancelled));
     }
     let logical_identity = logical_file_identity(descriptor);
     let mut source = source::open_source(descriptor)?;
+    proof_cache.bind(
+        logical_identity,
+        source.physical_identity,
+        source.file_length,
+        source.modified_time_ns,
+    );
     let probe = SourceProbe {
         physical_identity: source.physical_identity,
         logical_identity,
@@ -598,43 +686,25 @@ pub fn read_source_batch(
     if should_cancel() {
         return Err(ReaderError::new(ReaderErrorCode::Cancelled));
     }
-    let observed_range_sha256 = source::hash_range(&mut file, start_offset, framed.bytes_read)
-        .map_err(|_| ReaderError::new(ReaderErrorCode::SourceChanged))?;
-    if observed_range_sha256 != framed.consumed_sha256 {
-        return Err(ReaderError::new(ReaderErrorCode::SourceChanged));
-    }
-
-    let anchor = source::boundary_anchor(&mut file, framed.committed_offset)
-        .map_err(|_| ReaderError::new(ReaderErrorCode::SourceChanged))?;
     let verified_chunk_end = if framed.discarding_oversized_line {
         framed.scan_offset
     } else {
         framed.committed_offset
     };
-    let (source_chunks, previous_partial_chunk) = if verified_chunk_end > start_offset {
-        let first_chunk = start_offset / SOURCE_CHUNK_BYTES;
-        if start_offset % SOURCE_CHUNK_BYTES == 0 {
-            (
-                source::source_chunks_for_range(&mut file, first_chunk, verified_chunk_end)
-                    .map_err(|_| ReaderError::new(ReaderErrorCode::SourceChanged))?,
-                None,
-            )
-        } else {
-            let (previous, current) =
-                source::extended_partial_chunk(&mut file, start_offset, verified_chunk_end)
-                    .map_err(|_| ReaderError::new(ReaderErrorCode::SourceChanged))?;
-            let mut chunks = source::source_chunks_for_range(
-                &mut file,
-                first_chunk.saturating_add(1),
-                verified_chunk_end,
-            )
-            .map_err(|_| ReaderError::new(ReaderErrorCode::SourceChanged))?;
-            chunks.insert(0, current);
-            (chunks, Some(previous))
-        }
-    } else {
-        (Vec::new(), None)
-    };
+    let proof_validation = source::validate_and_extend_chunk_proofs(
+        &mut file,
+        start_offset,
+        framed.bytes_read,
+        verified_chunk_end,
+        proof_cache,
+    )
+    .map_err(|_| ReaderError::new(ReaderErrorCode::SourceChanged))?;
+    if proof_validation.observed_sha256 != framed.consumed_sha256 {
+        return Err(ReaderError::new(ReaderErrorCode::SourceChanged));
+    }
+
+    let anchor = source::boundary_anchor(&mut file, framed.committed_offset)
+        .map_err(|_| ReaderError::new(ReaderErrorCode::SourceChanged))?;
     let (final_identity, final_length, final_modified_time_ns) =
         source::current_handle_observation(&file)
             .map_err(|_| ReaderError::new(ReaderErrorCode::SourceChanged))?;
@@ -677,8 +747,8 @@ pub fn read_source_batch(
         parser_diagnostics: framed.parser_diagnostics,
         bytes_read: framed.bytes_read,
         reached_snapshot_end: framed.reached_snapshot_end,
-        source_chunks,
-        previous_partial_chunk,
+        source_chunks: proof_validation.chunks,
+        previous_partial_chunk: proof_validation.previous_partial,
         latest_repository_activity_hint,
     }))
 }

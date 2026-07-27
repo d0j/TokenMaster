@@ -4,10 +4,10 @@ use std::thread::JoinHandle;
 use tokenmaster_codex::{
     BoundaryAnchor, CodexCheckpointV1, CodexProvider, EnumerationCompletion, LogicalFileIdentity,
     ParserDiagnosticCode, ParserResumeState, ReaderCheckpointParts, ReaderCheckpointV1,
-    ReaderDiagnosticCode, ReaderError, ReaderErrorCode, ReaderOutcome, SinkDecision,
-    SourceCheckpointStatus, SourceChunkDigest, SourceFileDescriptor, enumerate_profile_sources,
-    initialize_source_checkpoint, logical_file_identity, read_source_batch,
-    validate_source_checkpoint,
+    ReaderDiagnosticCode, ReaderError, ReaderErrorCode, ReaderOutcome, ReaderProofCache,
+    SinkDecision, SourceCheckpointStatus, SourceChunkDigest, SourceFileDescriptor,
+    enumerate_profile_sources, initialize_source_checkpoint, logical_file_identity,
+    read_source_batch_with_cache, validate_source_checkpoint,
 };
 use tokenmaster_engine::{
     Adapter, AdapterBatch, AdapterBatchParts, AdapterCheckpoint, AdapterCompletion,
@@ -250,6 +250,7 @@ impl Adapter for CodexAdapter {
                 latest_repository_activity_hint: None,
                 repository_hint_ingress: self.repository_hint_ingress.clone(),
                 prefetched: None,
+                proof_cache: ReaderProofCache::default(),
             };
             sink.on_source(source, state, &mut reader)
         })
@@ -281,20 +282,30 @@ struct CodexSourceBatchReader {
     latest_repository_activity_hint: Option<tokenmaster_provider::RepositoryActivityHint>,
     repository_hint_ingress: Option<crate::GitRepositoryHintIngress>,
     prefetched: Option<PrefetchedBatch>,
+    proof_cache: ReaderProofCache,
 }
 
 struct PrefetchedBatch {
     checkpoint: ReaderCheckpointV1,
-    handle: JoinHandle<Result<ReaderOutcome, ReaderError>>,
+    handle: JoinHandle<(Result<ReaderOutcome, ReaderError>, ReaderProofCache)>,
 }
 
 impl CodexSourceBatchReader {
     fn start_prefetch(&mut self, checkpoint: ReaderCheckpointV1) {
         let descriptor = self.descriptor.clone();
         let worker_checkpoint = checkpoint.clone();
+        let mut proof_cache = self.proof_cache.clone();
         let Ok(handle) = std::thread::Builder::new()
             .name("tokenmaster-codex-prefetch".into())
-            .spawn(move || read_source_batch(&descriptor, Some(&worker_checkpoint), || false))
+            .spawn(move || {
+                let outcome = read_source_batch_with_cache(
+                    &descriptor,
+                    Some(&worker_checkpoint),
+                    &mut proof_cache,
+                    || false,
+                );
+                (outcome, proof_cache)
+            })
         else {
             return;
         };
@@ -390,15 +401,19 @@ impl SourceBatchReader for CodexSourceBatchReader {
                 let _ = prefetched.handle.join();
                 return Err(PortError::new(PortErrorCode::InvalidData));
             }
-            prefetched
+            let (outcome, proof_cache) = prefetched
                 .handle
                 .join()
-                .map_err(|_| PortError::new(PortErrorCode::Failed))?
-                .map_err(|error| reader_port_error(error.code()))?
+                .map_err(|_| PortError::new(PortErrorCode::Failed))?;
+            self.proof_cache = proof_cache;
+            outcome.map_err(|error| reader_port_error(error.code()))?
         } else {
-            read_source_batch(&self.descriptor, Some(&reader_checkpoint), || {
-                control.check().is_err()
-            })
+            read_source_batch_with_cache(
+                &self.descriptor,
+                Some(&reader_checkpoint),
+                &mut self.proof_cache,
+                || control.check().is_err(),
+            )
             .map_err(|error| {
                 if error.code() == ReaderErrorCode::Cancelled {
                     control

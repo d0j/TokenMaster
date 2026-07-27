@@ -2263,3 +2263,25 @@ compact aggregate ledger. Further micro-tuning has low expected return and alrea
 triggered the performance stop. The release-critical next outcome is therefore
 working UI/package acceptance; a later projection redesign must earn its scope with a
 measured blocker and an end-to-end A/B receipt.
+
+## ADR-094 — Continue only the active source-chunk proof in memory
+
+Decision: ADR-093's importer freeze is reopened only for the reproduced quadratic
+logical-read defect in chunk-proof construction. One descriptor-bound Codex reader may
+retain the SHA-256 state of exactly one current partial 1-MiB source chunk. The state is
+ephemeral, nonserializable, path-free, and invalidated by a different logical or
+physical identity, observed file length, or modification time. Sequential batches
+extend it; restart or invalidation rereads at most the current partial prefix before
+emitting the prior proof.
+
+Persisted checkpoints and chunk digests do not change. Full-prefix verification,
+source mutation/replacement classification, cancellation, bounded event batches,
+single-writer replay, and FULL durability remain authoritative. The cache never spans
+sources and cannot replace durable proof verification. Parser rewrites, larger
+batches, SQLite tuning, parallel writers, and deferred projection remain outside this
+correction.
+
+Rationale: parsing already consumed bytes once, but rebuilding every partial digest
+from the chunk boundary made B event-bounded batches perform quadratic prefix reads.
+An in-memory continuation makes normal proof work linear while a bounded reconstruction
+preserves restart and mutation safety.

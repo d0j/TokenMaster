@@ -1,5 +1,60 @@
 # TokenMaster current state
 
+## 2026-07-27 — Quadratic cold-reader prefix rereads removed
+
+Product behavior changed only in the Codex reader/runtime adapter. The release importer
+was reopened under ADR-093's demonstrated-production-defect exception after a live
+4,008-source run accumulated extreme logical reads while remaining responsive. The
+reader had reparsed each byte once but rebuilt the SHA-256 proof for the active 1-MiB
+chunk by rereading its entire growing prefix after every event-bounded batch. That made
+proof construction quadratic in the number of batches inside a chunk.
+
+One descriptor-bound `ReaderProofCache` now retains only the SHA-256 state for the
+current partial chunk. Sequential bytes extend that state once; restart reconstructs
+at most one partial prefix smaller than 1 MiB. File identity, length, and modification
+observation bind cache validity, so mutation plus append forces reconstruction before
+the prior partial proof is emitted. Checkpoints, persisted chunk proofs, FULL
+durability, one-source ownership, cancellation, source-change detection, and bounded
+memory are unchanged.
+
+The optimized release benchmark used a 1,038,170-byte, 32-batch source. The stateless
+control reread 16,060,240 prefix bytes and completed in 23 ms; the stateful path reread
+zero prefix bytes and completed in 15 ms, with the same final checkpoint and verified
+full-prefix proof. The broader 49,152-event synthetic cold pipeline completed at
+2,330.7 events/s, but it is not an old/new end-to-end comparison. Codex tests, focused
+runtime restart/incremental/provider contracts, and strict focused Clippy pass. The
+single final review found one High mutation-plus-append cache invalidation defect; the
+observation binding and stateful regression test close it.
+The final clean-root, format, warnings-as-errors workspace Clippy, and complete
+workspace test/doc-test baseline passed in 1,046.9 seconds.
+
+Real modified-binary cold-import acceptance remains open because the operator requested
+that the already running pre-fix application stay open. No second interactive instance
+was started and no end-to-end speed superiority over WhereMyTokens is claimed yet.
+This cycle changed product performance and integrity correctness, not audit machinery;
+`AUDIT_HARDENING_LOOP` is not active.
+
+## 2026-07-27 — WMT-inspired release UI slice accepted locally
+
+Product behavior changed only in the desktop presentation layer. The main window now
+uses a compact fixed header and four-action Dashboard/Alerts footer instead of the 184-pixel
+sidebar, retains every advanced route through the bounded All views palette, and uses
+a denser card rhythm, amber/teal dark hierarchy, readable high-contrast copy, and
+responsive breakpoints adjusted for the recovered content width. The default
+880-by-760 window keeps the Dashboard footer on-screen while deep routes recover the
+full viewport and remain reachable through the header palette.
+
+A real release launch published safe Partial data during the active 4,008-source
+import: at about 40 seconds the Dashboard showed progress `990 / 4,008`, 3,154,237
+tokens, 36 events, a populated two-series Trend, Sessions rows, and the fixed footer.
+Scroll exposed the lower Sessions and Activity sections without moving the shell.
+Unavailable cost/quota and degraded Git labels remained explicit instead of invented.
+
+Focused palette, compiled shell, software-paint, and responsive UI contracts pass
+21/21; format and the warnings-as-errors release build pass. The interactive window
+and its background process were closed after inspection. This slice did not change
+the frozen importer, data, provider, package, signing, or audit machinery.
+
 ## 2026-07-27 — Exact cold replay batching accepted; absolute WMT speed remains open
 
 Product behavior changed only in the import/store path; UI stays frozen. Current replay

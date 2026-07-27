@@ -4,14 +4,14 @@ use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 #[cfg(windows)]
 use std::process::{Command, Stdio};
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use tempfile::TempDir;
 use tokenmaster_codex::{
     IntegrityReport, ReadBatch, ReaderCheckpointParts, ReaderCheckpointV1, ReaderErrorCode,
-    ReaderOutcome, RebuildReason, SOURCE_CHUNK_BYTES, SinkDecision, SourceChunkDigest,
-    SourceFileDescriptor, VerificationLevel, enumerate_profile_sources, read_source_batch,
-    verify_full_prefix,
+    ReaderOutcome, ReaderProofCache, RebuildReason, SOURCE_CHUNK_BYTES, SinkDecision,
+    SourceChunkDigest, SourceFileDescriptor, VerificationLevel, enumerate_profile_sources,
+    read_source_batch, read_source_batch_with_cache, verify_full_prefix,
 };
 use tokenmaster_provider::{ProfileId, SourceDescriptor, SourceId, SourceKind};
 
@@ -418,6 +418,222 @@ fn full_prefix_finds_old_chunk_mutation_outside_incremental_anchor() {
 }
 
 #[test]
+fn sequential_batches_reuse_partial_chunk_hash_state() {
+    let root = TempDir::new().expect("temporary directory");
+    let path = root.path().join("proof-cache-private.jsonl");
+    let mut file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&path)
+        .expect("create proof-cache fixture");
+    for input in 0..4_096 {
+        file.write_all(&usage_line(input))
+            .expect("write proof-cache event");
+    }
+    drop(file);
+
+    let descriptor = only_descriptor(&source(root.path(), "proof-cache"));
+    let mut cache = ReaderProofCache::default();
+    let mut checkpoint = None;
+    let mut batches = 0_u64;
+    let mut expected = BTreeMap::<u64, SourceChunkDigest>::new();
+    loop {
+        let batch = expect_batch(
+            read_source_batch_with_cache(&descriptor, checkpoint.as_ref(), &mut cache, || false)
+                .expect("stateful read must pass"),
+        );
+        for chunk in batch.source_chunks() {
+            expected.insert(chunk.index(), *chunk);
+        }
+        batches = batches.saturating_add(1);
+        let reached_end = batch.reached_snapshot_end();
+        checkpoint = Some(batch.checkpoint().clone());
+        if reached_end {
+            break;
+        }
+    }
+    assert!(batches >= 16, "fixture must exercise event-bounded batches");
+    assert_eq!(
+        cache.recovery_bytes_read(),
+        0,
+        "a sequential cold read must never rehash an earlier chunk prefix"
+    );
+
+    let checkpoint = checkpoint.expect("final checkpoint");
+    assert_eq!(
+        verify_full_prefix(
+            &descriptor,
+            &checkpoint,
+            |index| expected.get(&index).copied(),
+            || false,
+        )
+        .expect("stateful proofs must verify"),
+        IntegrityReport::Verified {
+            chunks: checkpoint.committed_offset().div_ceil(SOURCE_CHUNK_BYTES),
+            covered_bytes: checkpoint.committed_offset(),
+        }
+    );
+    let mut resumed_cache = ReaderProofCache::default();
+    let unchanged =
+        read_source_batch_with_cache(&descriptor, Some(&checkpoint), &mut resumed_cache, || false)
+            .expect("resumed read must pass");
+    assert!(matches!(unchanged, ReaderOutcome::Unchanged(_)));
+    assert_eq!(
+        resumed_cache.recovery_bytes_read(),
+        0,
+        "an unchanged source needs no proof reconstruction"
+    );
+}
+
+#[test]
+fn resumed_partial_chunk_reconstructs_its_prefix_only_once() {
+    let root = TempDir::new().expect("temporary directory");
+    let path = root.path().join("proof-resume-private.jsonl");
+    let mut file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&path)
+        .expect("create proof-resume fixture");
+    for input in 0..4_096 {
+        file.write_all(&usage_line(input))
+            .expect("write proof-resume event");
+    }
+    drop(file);
+
+    let descriptor = only_descriptor(&source(root.path(), "proof-resume"));
+    let mut initial_cache = ReaderProofCache::default();
+    let mut checkpoint = None;
+    for _ in 0..8 {
+        let batch = expect_batch(
+            read_source_batch_with_cache(
+                &descriptor,
+                checkpoint.as_ref(),
+                &mut initial_cache,
+                || false,
+            )
+            .expect("initial stateful read must pass"),
+        );
+        assert!(!batch.reached_snapshot_end());
+        checkpoint = Some(batch.checkpoint().clone());
+    }
+
+    let mut resumed_cache = ReaderProofCache::default();
+    let first = expect_batch(
+        read_source_batch_with_cache(&descriptor, checkpoint.as_ref(), &mut resumed_cache, || {
+            false
+        })
+        .expect("resumed stateful read must pass"),
+    );
+    let one_time_recovery = resumed_cache.recovery_bytes_read();
+    assert!(one_time_recovery > 0);
+    assert!(one_time_recovery < SOURCE_CHUNK_BYTES);
+    checkpoint = Some(first.checkpoint().clone());
+
+    let second = expect_batch(
+        read_source_batch_with_cache(&descriptor, checkpoint.as_ref(), &mut resumed_cache, || {
+            false
+        })
+        .expect("continued stateful read must pass"),
+    );
+    assert_eq!(
+        resumed_cache.recovery_bytes_read(),
+        one_time_recovery,
+        "continued reading must reuse the reconstructed SHA-256 state"
+    );
+    assert!(second.checkpoint().scan_offset() > first.checkpoint().scan_offset());
+}
+
+#[test]
+#[ignore = "release-only reader proof benchmark"]
+fn sequential_proof_cache_benchmark_receipt() {
+    let root = TempDir::new().expect("temporary directory");
+    let path = root.path().join("proof-benchmark-private.jsonl");
+    let mut file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&path)
+        .expect("create proof benchmark fixture");
+    for input in 0..8_192 {
+        file.write_all(&usage_line(input))
+            .expect("write proof benchmark event");
+    }
+    drop(file);
+    let file_len = std::fs::metadata(&path)
+        .expect("proof benchmark metadata")
+        .len();
+    let descriptor = only_descriptor(&source(root.path(), "proof-benchmark"));
+
+    let legacy_start = Instant::now();
+    let mut legacy_checkpoint = None;
+    let mut legacy_recovery_bytes = 0_u64;
+    let mut legacy_batches = 0_u64;
+    loop {
+        let mut cache = ReaderProofCache::default();
+        let batch = expect_batch(
+            read_source_batch_with_cache(
+                &descriptor,
+                legacy_checkpoint.as_ref(),
+                &mut cache,
+                || false,
+            )
+            .expect("stateless benchmark read must pass"),
+        );
+        legacy_recovery_bytes = legacy_recovery_bytes
+            .checked_add(cache.recovery_bytes_read())
+            .expect("legacy recovery byte count fits");
+        legacy_batches = legacy_batches.saturating_add(1);
+        let reached_end = batch.reached_snapshot_end();
+        legacy_checkpoint = Some(batch.checkpoint().clone());
+        if reached_end {
+            break;
+        }
+    }
+    let legacy_elapsed = legacy_start.elapsed();
+
+    let stateful_start = Instant::now();
+    let mut stateful_checkpoint = None;
+    let mut stateful_cache = ReaderProofCache::default();
+    let mut stateful_batches = 0_u64;
+    loop {
+        let batch = expect_batch(
+            read_source_batch_with_cache(
+                &descriptor,
+                stateful_checkpoint.as_ref(),
+                &mut stateful_cache,
+                || false,
+            )
+            .expect("stateful benchmark read must pass"),
+        );
+        stateful_batches = stateful_batches.saturating_add(1);
+        let reached_end = batch.reached_snapshot_end();
+        stateful_checkpoint = Some(batch.checkpoint().clone());
+        if reached_end {
+            break;
+        }
+    }
+    let stateful_elapsed = stateful_start.elapsed();
+
+    assert_eq!(stateful_batches, legacy_batches);
+    assert_eq!(stateful_checkpoint, legacy_checkpoint);
+    assert_eq!(stateful_cache.recovery_bytes_read(), 0);
+    assert!(
+        legacy_recovery_bytes > file_len.saturating_mul(4),
+        "fixture must reproduce material prefix rereads"
+    );
+    eprintln!(
+        "reader-proof-benchmark file_bytes={file_len} batches={stateful_batches} \
+         legacy_prefix_reread_bytes={legacy_recovery_bytes} \
+         stateful_prefix_reread_bytes={} legacy_ms={} stateful_ms={}",
+        stateful_cache.recovery_bytes_read(),
+        legacy_elapsed.as_millis(),
+        stateful_elapsed.as_millis()
+    );
+}
+
+#[test]
 fn oversized_discard_emits_only_bounded_chunk_updates() {
     let root = TempDir::new().expect("temporary directory");
     let path = root.path().join("oversized-private.jsonl");
@@ -507,8 +723,10 @@ fn append_proves_the_previous_partial_chunk_before_replacing_its_digest() {
     initial_line.push(b'\n');
     std::fs::write(&path, initial_line).expect("write partial chunk fixture");
     let descriptor = only_descriptor(&source(root.path(), "partial-proof"));
+    let mut proof_cache = ReaderProofCache::default();
     let initial = expect_batch(
-        read_source_batch(&descriptor, None, || false).expect("initial read must pass"),
+        read_source_batch_with_cache(&descriptor, None, &mut proof_cache, || false)
+            .expect("initial read must pass"),
     );
     let original = *initial
         .source_chunks()
@@ -529,7 +747,7 @@ fn append_proves_the_previous_partial_chunk_before_replacing_its_digest() {
     drop(file);
 
     let append = expect_batch(
-        read_source_batch(&descriptor, Some(&checkpoint), || false)
+        read_source_batch_with_cache(&descriptor, Some(&checkpoint), &mut proof_cache, || false)
             .expect("mutation outside anchor remains incrementally classifiable"),
     );
     let proof = append
